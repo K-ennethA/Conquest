@@ -1,0 +1,27 @@
+[gd_scene load_steps=4 format=3 uid="uid://drsoawee04foj"]
+
+[ext_resource type="PackedScene" uid="uid://b4crwqobpux1l" path="res://menus/battle_menu.tscn" id="1_4fb2m"]
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_ri4hc"]
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_qmq5j"]
+viewport_path = NodePath("MeshInstance3D/SubViewport")
+
+[node name="Node3D" type="Node3D"]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("CapsuleMesh_ri4hc")
+
+[node name="SubViewport" type="SubViewport" parent="MeshInstance3D"]
+disable_3d = true
+transparent_bg = true
+
+[node name="BattleMenu" parent="MeshInstance3D/SubViewport" instance=ExtResource("1_4fb2m")]
+
+[node name="Camera3D" type="Camera3D" parent="MeshInstance3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 5)
+
+[node name="Sprite3D" type="Sprite3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1)
+billboard = 1
+texture = SubResource("ViewportTexture_qmq5j")

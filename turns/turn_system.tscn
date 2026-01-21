@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://d0mcaievouka5"]
+
+[ext_resource type="Script" uid="uid://btl1rgcpavkjo" path="res://turns/turn_system.gd" id="1_8kxf4"]
+
+[node name="TurnSystem" type="Node3D"]
+script = ExtResource("1_8kxf4")

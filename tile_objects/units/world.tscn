@@ -1,0 +1,151 @@
+[gd_scene load_steps=11 format=3 uid="uid://bgu0hiw6pegs6"]
+
+[ext_resource type="Script" uid="uid://d2rcgxfeac8ne" path="res://tile_objects/units/board.gd" id="1_06plp"]
+[ext_resource type="PackedScene" uid="uid://d1ns1do7xeq6w" path="res://tile_objects/units/unit.tscn" id="2_jaitw"]
+[ext_resource type="PackedScene" uid="uid://bnda2yyqh6ms1" path="res://board/cursor/cursor.tscn" id="3_jaitw"]
+[ext_resource type="PackedScene" uid="uid://cuuwmkvne012k" path="res://tile_objects/tiles/tile.tscn" id="5_4sndg"]
+[ext_resource type="Texture2D" uid="uid://ds8jp3fdxs3ka" path="res://icon.svg" id="5_da2ce"]
+[ext_resource type="PackedScene" uid="uid://b4crwqobpux1l" path="res://menus/battle_menu.tscn" id="6_u6eor"]
+[ext_resource type="PackedScene" uid="uid://duix4er7w81dd" path="res://menus/selected_items.tscn" id="7_kdbhr"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_l2ndf"]
+sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
+ground_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
+
+[sub_resource type="Sky" id="Sky_jaitw"]
+sky_material = SubResource("ProceduralSkyMaterial_l2ndf")
+
+[sub_resource type="Environment" id="Environment_06plp"]
+background_mode = 2
+sky = SubResource("Sky_jaitw")
+tonemap_mode = 2
+glow_enabled = true
+
+[node name="CanvasLayer" type="CanvasLayer"]
+
+[node name="World" type="Node3D" parent="."]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="World"]
+environment = SubResource("Environment_06plp")
+
+[node name="Board" type="Node3D" parent="World"]
+script = ExtResource("1_06plp")
+
+[node name="Cursor" parent="World/Board" instance=ExtResource("3_jaitw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, 0)
+
+[node name="Tiles" type="Node3D" parent="World/Board"]
+
+[node name="Tile" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+
+[node name="Tile2" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+
+[node name="Tile3" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+
+[node name="Tile4" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
+
+[node name="Tile5" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
+
+[node name="Tile6" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
+
+[node name="Tile7" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 1)
+
+[node name="Tile8" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 1)
+
+[node name="Tile9" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 1)
+
+[node name="Tile10" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 2)
+
+[node name="Tile11" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 2)
+
+[node name="Tile12" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 2)
+
+[node name="Tile13" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 2)
+
+[node name="Tile14" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 3)
+
+[node name="Tile15" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 3)
+
+[node name="Tile16" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 3)
+
+[node name="Tile17" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 3)
+
+[node name="Tile18" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
+
+[node name="Tile19" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
+
+[node name="Tile20" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
+
+[node name="Tile21" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 4)
+
+[node name="Tile22" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 4)
+
+[node name="Tile23" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 4)
+
+[node name="Tile24" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 4)
+
+[node name="Tile25" parent="World/Board/Tiles" instance=ExtResource("5_4sndg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
+
+[node name="Player1" type="Node3D" parent="World/Board"]
+
+[node name="Unit" parent="World/Board/Player1" instance=ExtResource("2_jaitw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 2)
+
+[node name="Player2" type="Node3D" parent="World/Board"]
+
+[node name="Unit2" parent="World/Board/Player2" instance=ExtResource("2_jaitw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+
+[node name="Sprite3D" type="Sprite3D" parent="World"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 5)
+texture = ExtResource("5_da2ce")
+
+[node name="SubViewportContainer" type="SubViewportContainer" parent="World"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="SubViewport" type="SubViewport" parent="World/SubViewportContainer"]
+handle_input_locally = false
+size = Vector2i(1280, 720)
+render_target_update_mode = 4
+
+[node name="Camera3D" type="Camera3D" parent="World/SubViewportContainer/SubViewport"]
+transform = Transform3D(0.965926, -0.109742, 0.234401, -0.0669873, 0.768796, 0.635976, -0.25, -0.630008, 0.735248, 6.06131, 16.6379, 16.8551)
+projection = 1
+size = 20.0
+
+[node name="Camera3D" type="Camera3D" parent="World"]
+transform = Transform3D(0.965926, -0.109742, 0.234401, -0.0669873, 0.768796, 0.635976, -0.25, -0.630008, 0.735248, 6.06131, 16.6379, 16.8551)
+projection = 1
+size = 20.0
+
+[node name="BattleMenu" parent="." instance=ExtResource("6_u6eor")]
+
+[node name="SelectedItems" parent="." instance=ExtResource("7_kdbhr")]

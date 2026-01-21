@@ -1,0 +1,24 @@
+[gd_scene load_steps=5 format=3 uid="uid://bnda2yyqh6ms1"]
+
+[ext_resource type="Script" uid="uid://0hp85b22o0ae" path="res://board/cursor/cursor.gd" id="1_g4xip"]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_4kubo"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_g4xip"]
+size = Vector2(1, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_g4xip"]
+albedo_color = Color(0.313726, 0.333333, 1, 1)
+
+[node name="Cursor" type="Node3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.557183, 0)
+script = ExtResource("1_g4xip")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.260793, 0, 0, 0, 0.43259, 0, 0, 0, 0.21793, 0, 2.00227, 0)
+mesh = SubResource("CylinderMesh_4kubo")
+
+[node name="MeshInstance3D2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.56971, 0)
+mesh = SubResource("PlaneMesh_g4xip")
+surface_material_override/0 = SubResource("StandardMaterial3D_g4xip")

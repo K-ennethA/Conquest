@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="PriorityQueue" load_steps=2 format=3 uid="uid://dd7e43tpbyhe1"]
+
+[ext_resource type="Script" uid="uid://dr1wqn4npkb2p" path="res://turns/priority_queue.gd" id="1_l3lip"]
+
+[resource]
+script = ExtResource("1_l3lip")
+metadata/_custom_type_script = "uid://dr1wqn4npkb2p"
