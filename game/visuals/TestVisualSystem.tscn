@@ -1,0 +1,45 @@
+[gd_scene load_steps=7 format=3 uid="uid://c44a2q14j7ps6"]
+
+[ext_resource type="PackedScene" path="res://game/units/scenes/WarriorUnit.tscn" id="1"]
+[ext_resource type="PackedScene" path="res://game/units/scenes/ArcherUnit.tscn" id="2"]
+[ext_resource type="Script" uid="uid://caigd006lbk7k" path="res://game/visuals/UnitVisualManager.gd" id="3"]
+[ext_resource type="Script" uid="uid://d1t1e44axno8n" path="res://game/visuals/test_visual_damage.gd" id="4"]
+[ext_resource type="Script" uid="uid://ytrmx586lol1" path="res://game/visuals/test_health_bar_positioning.gd" id="5"]
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 1
+background_color = Color(0.3, 0.3, 0.4, 1)
+
+[node name="TestVisualSystem" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 5, 5)
+
+[node name="UnitVisualManager" type="Node" parent="."]
+script = ExtResource("3")
+
+[node name="DamageTest" type="Node" parent="."]
+script = ExtResource("4")
+
+[node name="HealthBarTest" type="Node" parent="."]
+script = ExtResource("5")
+
+[node name="Player1" type="Node3D" parent="."]
+
+[node name="Warrior1" parent="Player1" instance=ExtResource("1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, 0)
+
+[node name="Archer1" parent="Player1" instance=ExtResource("2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, 0)
+
+[node name="Player2" type="Node3D" parent="."]
+
+[node name="Warrior2" parent="Player2" instance=ExtResource("1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+current_health_display = 90
+
+[node name="Archer2" parent="Player2" instance=ExtResource("2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)

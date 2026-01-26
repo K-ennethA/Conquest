@@ -1,0 +1,156 @@
+[gd_scene load_steps=13 format=3]
+
+[ext_resource type="Script" path="res://tile_objects/units/board.gd" id="1"]
+[ext_resource type="PackedScene" path="res://game/units/scenes/WarriorUnit.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://game/units/scenes/ArcherUnit.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://tile_objects/tiles/tile.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://board/cursor/cursor.tscn" id="5"]
+[ext_resource type="Script" path="res://game/visuals/UnitVisualManager.gd" id="6"]
+[ext_resource type="Script" path="res://game/world/test_gameworld_integration.gd" id="7"]
+[ext_resource type="PackedScene" path="res://game/ui/UnitInfoPanel.tscn" id="8"]
+[ext_resource type="Script" path="res://systems/test_player_management.gd" id="9"]
+[ext_resource type="PackedScene" path="res://game/ui/UnitActionsPanel.tscn" id="10"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
+sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
+ground_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
+
+[sub_resource type="Sky" id="Sky_1"]
+sky_material = SubResource("ProceduralSkyMaterial_1")
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 2
+sky = SubResource("Sky_1")
+tonemap_mode = 2
+glow_enabled = true
+
+[node name="GameWorld" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0.965926, -0.109742, 0.234401, -0.0669873, 0.768796, 0.635976, -0.25, -0.630008, 0.735248, 6.06131, 16.6379, 16.8551)
+projection = 1
+size = 20.0
+
+[node name="UnitVisualManager" type="Node" parent="."]
+script = ExtResource("6")
+
+[node name="GameWorldTest" type="Node" parent="."]
+script = ExtResource("7")
+
+[node name="PlayerManagementTest" type="Node" parent="."]
+script = ExtResource("9")
+
+[node name="UI" type="CanvasLayer" parent="."]
+script = preload("res://game/ui/GameUI.gd")
+
+[node name="UnitInfoPanel" parent="UI" instance=ExtResource("8")]
+
+[node name="UnitActionsPanel" parent="UI" instance=ExtResource("10")]
+
+[node name="Map" type="Node3D" parent="."]
+script = ExtResource("1")
+
+[node name="Cursor" parent="Map" instance=ExtResource("5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+
+[node name="Tiles" type="Node3D" parent="Map"]
+
+[node name="Tile_0_0" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0)
+
+[node name="Tile_1_0" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 2, 0, 0)
+
+[node name="Tile_2_0" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 4, 0, 0)
+
+[node name="Tile_3_0" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 6, 0, 0)
+
+[node name="Tile_4_0" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 8, 0, 0)
+
+[node name="Tile_0_1" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 2)
+
+[node name="Tile_1_1" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 2, 0, 2)
+
+[node name="Tile_2_1" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 4, 0, 2)
+
+[node name="Tile_3_1" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 6, 0, 2)
+
+[node name="Tile_4_1" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 8, 0, 2)
+
+[node name="Tile_0_2" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 4)
+
+[node name="Tile_1_2" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 2, 0, 4)
+
+[node name="Tile_2_2" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 4, 0, 4)
+
+[node name="Tile_3_2" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 6, 0, 4)
+
+[node name="Tile_4_2" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 8, 0, 4)
+
+[node name="Tile_0_3" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 6)
+
+[node name="Tile_1_3" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 2, 0, 6)
+
+[node name="Tile_2_3" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 4, 0, 6)
+
+[node name="Tile_3_3" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 6, 0, 6)
+
+[node name="Tile_4_3" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 8, 0, 6)
+
+[node name="Tile_0_4" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 8)
+
+[node name="Tile_1_4" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 2, 0, 8)
+
+[node name="Tile_2_4" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 4, 0, 8)
+
+[node name="Tile_3_4" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 6, 0, 8)
+
+[node name="Tile_4_4" parent="Map/Tiles" instance=ExtResource("4")]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 8, 0, 8)
+
+[node name="Player1" type="Node3D" parent="Map"]
+
+[node name="Warrior1" parent="Map/Player1" instance=ExtResource("2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1.5, 1)
+
+[node name="Warrior2" parent="Map/Player1" instance=ExtResource("2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 1.5, 1)
+
+[node name="Archer1" parent="Map/Player1" instance=ExtResource("3")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 1.5, 1)
+
+[node name="Player2" type="Node3D" parent="Map"]
+
+[node name="Warrior3" parent="Map/Player2" instance=ExtResource("2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 1.5, 7)
+
+[node name="Warrior4" parent="Map/Player2" instance=ExtResource("2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 1.5, 7)
+
+[node name="Archer2" parent="Map/Player2" instance=ExtResource("3")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 1.5, 7)

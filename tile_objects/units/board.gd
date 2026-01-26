@@ -1,145 +1,205 @@
 extends Node3D
 
-
-const DIRECTIONS = [Vector3.LEFT, Vector3.RIGHT, Vector3.FORWARD, Vector3.BACK]
+# Board manages the game state and coordinates between systems
+# Responds to events rather than directly managing other systems
 
 @export var grid: Resource = preload("res://board/Grid.tres")
-@onready var cursor := $Cursor
-var units := {} # Vector3 to List[Tile, Units]
 
+# Game state
+var units: Dictionary = {} # Vector3 -> Array[TileObject]
 var _selected_unit: Unit
-var selected_tile_objects : Array
+var _highlighted_tiles: Array[Vector3] = []
+var _turn_system: Node
 
 func _ready() -> void:
-	cursor.selected.connect(_is_selected)
 	initialize_units()
-	
-func _unhandled_input(event: InputEvent) -> void:
-	if _selected_unit and event.is_action_pressed("ui_cancel"):
-		print("cancelling")
-		_selected_unit.is_selected = false
-	
+	_connect_events()
+	_setup_turn_system()
+
+func _connect_events() -> void:
+	GameEvents.cursor_selected.connect(_on_cursor_selected)
+	GameEvents.unit_selected.connect(_on_unit_selected)
+	GameEvents.unit_deselected.connect(_on_unit_deselected)
+	GameEvents.turn_started.connect(_on_turn_started)
+	GameEvents.turn_ended.connect(_on_turn_ended)
+
+func _setup_turn_system() -> void:
+	_turn_system = get_node("../TurnSystem")
+	if _turn_system:
+		# Collect all units and initialize turn system
+		var all_units: Array[Unit] = []
+		for tile_objects in units.values():
+			for obj in tile_objects:
+				if obj is Unit:
+					all_units.append(obj)
+		
+		if not all_units.is_empty():
+			_turn_system.initialize_with_units(all_units)
+
 func initialize_units() -> void:
 	for child in get_children():
-		if child.get_children():
-			for nested in child.get_children():
-				if nested is TileObject:
-					var tile_position = grid.get_tile_position(nested.position)
-					if units.has(tile_position):
-						units[tile_position].append(nested)
-					else:
-						units[tile_position] = [nested]
+		_scan_node_for_tile_objects(child)
 
-func _is_selected(_position: Vector3) -> void:
-	if not selected_tile_objects:
-		select_tile_objects(_position)
-		select_movement_units(get_movement_tiles(_position, 10))
-		var unit = get_unit_at_position(_position)
-		if unit:
-			highlight_unit(unit.get_node("MeshInstance3D"))
-	elif selected_tile_objects:
-		print("move and deselect")
-		unhighlight_units(get_movement_tiles(_position, 1000, true))
-		if _selected_unit:
-			move_unit(_position)
-		selected_tile_objects = []
+func _scan_node_for_tile_objects(node: Node) -> void:
+	if node is TileObject:
+		var tile_position = grid.get_tile_position(node.position)
+		if not units.has(tile_position):
+			units[tile_position] = []
+		units[tile_position].append(node)
+	
+	for child in node.get_children():
+		_scan_node_for_tile_objects(child)
 
-func select_tile_objects(_position: Vector3) -> void:
-	var tile_position = grid.get_tile_position(_position)
+func _on_cursor_selected(position: Vector3) -> void:
+	if _selected_unit:
+		_attempt_move_unit(position)
+	else:
+		_attempt_select_unit(position)
+
+func _attempt_select_unit(position: Vector3) -> void:
+	var unit = _get_unit_at_position(position)
+	if unit and _can_select_unit(unit):
+		_selected_unit = unit
+		GameEvents.unit_selected.emit(unit, position)
+		_show_movement_range(unit, position)
+
+func _can_select_unit(unit: Unit) -> bool:
+	# Only allow selecting units during their turn
+	return _turn_system and _turn_system.is_unit_turn(unit)
+
+func _attempt_move_unit(position: Vector3) -> void:
+	if _can_move_to_position(position):
+		_move_unit_to_position(_selected_unit, position)
+	_clear_selection()
+
+func _get_unit_at_position(position: Vector3) -> Unit:
+	var tile_position = grid.get_tile_position(position)
 	if not units.has(tile_position):
-		return
-	selected_tile_objects = units[tile_position]
-	_select_unit(_position)
-
-func _select_unit(_position: Vector3) -> void:
-	var tile_position = grid.get_tile_position(_position)
-	var unit : Unit
-	if not units.has(tile_position):
-		return
+		return null
+	
 	for tile_object in units[tile_position]:
 		if tile_object is Unit:
-			unit = tile_object
-	
-	if unit:
-		_selected_unit = unit
-		_selected_unit.is_selected = true
-	
-func move_unit(_position: Vector3) -> void:
-	var unit_to_move : Unit
-	for tile_object in units[grid.get_tile_position(_selected_unit.position)]:
-		if tile_object is Unit:
-			unit_to_move =  tile_object
-			units[grid.get_tile_position(_selected_unit.position)].erase(tile_object)
-	if unit_to_move:
-		_selected_unit.position = grid.get_translated_position(_selected_unit.position, _position)
-		units[grid.get_tile_position(_selected_unit.position)].append(unit_to_move)
-		_selected_unit = null
+			return tile_object
+	return null
 
-
-func select_movement_units(units_to_highlight: Array) -> void:
-	#highlight_unit() get the current pos unit and select that one
+func _can_move_to_position(position: Vector3) -> bool:
+	if not _selected_unit:
+		return false
 	
-	for _tiles_pos in units_to_highlight:
-		var tile_objects = units[grid.get_tile_position(_tiles_pos)]
-		for tile_object in tile_objects:
-			if tile_object is not Unit:
-				var mesh_instance = tile_object.get_node("MeshInstance3D")
-				highlight_unit(mesh_instance)			
-
-func highlight_unit(mesh: MeshInstance3D) -> void:
-	var shader = load("res://selected_shader.gdshader")
-	var shader_material = ShaderMaterial.new()
-	shader_material.shader = shader
+	var current_pos = grid.get_tile_position(_selected_unit.position)
+	var target_pos = grid.get_tile_position(position)
+	var distance = _calculate_distance(current_pos, target_pos)
 	
-	var original_color = mesh.mesh.material.albedo_color
-	shader_material.set_shader_parameter("original_color", original_color)
-	shader_material.set_shader_parameter("is_selected", true)
-	mesh.set_surface_override_material(0, shader_material)
+	return distance <= _selected_unit.get_movement_range() and grid.is_within_bounds(target_pos)
 
-func unhighlight_units(units_to_highlight: Array):
-	for _tiles_pos in units_to_highlight:
-		var obj = units[grid.get_tile_position(_tiles_pos)]
-		for item in obj:
-			var mesh_instance = item.get_node("MeshInstance3D")
-			var material_override = mesh_instance.get_surface_override_material(0)
-			if material_override:
-				material_override.set_shader_parameter("is_selected", false)
+func _calculate_distance(from: Vector3, to: Vector3) -> int:
+	# Manhattan distance for grid-based movement
+	return int(abs(to.x - from.x) + abs(to.z - from.z))
+
+func _move_unit_to_position(unit: Unit, new_position: Vector3) -> void:
+	var old_tile_pos = grid.get_tile_position(unit.position)
+	var new_tile_pos = grid.get_tile_position(new_position)
 	
-func get_movement_tiles(tile_position: Vector3, max_distance: int, select_all: bool = false) -> Array:
-	var array := []
-	var stack := [tile_position]
-	if not _selected_unit && not select_all:
-		return [tile_position]
+	# Remove from old position
+	if units.has(old_tile_pos):
+		units[old_tile_pos].erase(unit)
+		if units[old_tile_pos].is_empty():
+			units.erase(old_tile_pos)
+	
+	# Add to new position
+	if not units.has(new_tile_pos):
+		units[new_tile_pos] = []
+	units[new_tile_pos].append(unit)
+	
+	# Update unit position
+	unit.position = grid.calculate_map_position(new_tile_pos)
+	
+	GameEvents.unit_moved.emit(unit, old_tile_pos, new_tile_pos)
+
+func _show_movement_range(unit: Unit, position: Vector3) -> void:
+	var reachable_positions = _calculate_movement_range(position, unit.get_movement_range())
+	_highlighted_tiles = reachable_positions
+	GameEvents.movement_range_calculated.emit(reachable_positions)
+	
+	# Highlight tiles
+	for pos in reachable_positions:
+		_highlight_tile_at_position(pos)
+
+func _calculate_movement_range(start_position: Vector3, max_distance: int) -> Array[Vector3]:
+	var reachable: Array[Vector3] = []
+	var queue: Array = [start_position]
+	var visited: Dictionary = {start_position: 0}
+	
+	while not queue.is_empty():
+		var current = queue.pop_front()
+		var current_distance = visited[current]
 		
-	while not stack.size() == 0:
-		var current = stack.pop_back()
-		if not grid.is_within_bounds(current):
-			continue
-		if current in array:
-			continue
-
-		array.append(current)
-		for direction in DIRECTIONS:
-			var coordinates: Vector3 = current + direction
-			if is_occupied(coordinates):
-				continue
-			if coordinates in array:
-				continue
-			# Minor optimization: If this neighbor is already queued
-			#	to be checked, we don't need to queue it again
-			if coordinates in stack:
-				continue
-
-			stack.append(coordinates)
-	return array
-
-func is_occupied(coordinates: Vector3) -> bool:
-	return false
+		if current_distance < max_distance:
+			for direction in [Vector3.LEFT, Vector3.RIGHT, Vector3.FORWARD, Vector3.BACK]:
+				var next_pos = current + direction
+				
+				if grid.is_within_bounds(next_pos) and not visited.has(next_pos):
+					visited[next_pos] = current_distance + 1
+					queue.append(next_pos)
+					reachable.append(next_pos)
 	
-func get_unit_at_position(_position: Vector3) -> Unit:
-	var tile_objects = units[grid.get_tile_position(_position)]
-	var unit : Unit
-	for tile_object in tile_objects:
-		if tile_object is Unit:
-			unit = tile_object
-	return unit
+	return reachable
+
+func _highlight_tile_at_position(position: Vector3) -> void:
+	var tile_position = grid.get_tile_position(position)
+	if not units.has(tile_position):
+		return
+	
+	for tile_object in units[tile_position]:
+		if tile_object is Tile:
+			var mesh_instance = tile_object.get_node("MeshInstance3D")
+			if mesh_instance:
+				var original_color = Color.WHITE
+				if mesh_instance.mesh and mesh_instance.mesh.material:
+					original_color = mesh_instance.mesh.material.get("albedo_color")
+				
+				var material = ResourceManager.get_selection_material(original_color)
+				ResourceManager.set_selection_state(material, true)
+				mesh_instance.set_surface_override_material(0, material)
+
+func _clear_selection() -> void:
+	if _selected_unit:
+		GameEvents.unit_deselected.emit(_selected_unit)
+		_selected_unit = null
+	
+	_clear_highlighted_tiles()
+
+func _clear_highlighted_tiles() -> void:
+	for position in _highlighted_tiles:
+		_unhighlight_tile_at_position(position)
+	_highlighted_tiles.clear()
+
+func _unhighlight_tile_at_position(position: Vector3) -> void:
+	var tile_position = grid.get_tile_position(position)
+	if not units.has(tile_position):
+		return
+	
+	for tile_object in units[tile_position]:
+		if tile_object is Tile:
+			var mesh_instance = tile_object.get_node("MeshInstance3D")
+			if mesh_instance:
+				var material = mesh_instance.get_surface_override_material(0)
+				if material:
+					ResourceManager.set_selection_state(material, false)
+
+func _on_unit_selected(unit: Unit, position: Vector3) -> void:
+	# Additional logic when a unit is selected
+	pass
+
+func _on_unit_deselected(unit: Unit) -> void:
+	# Additional logic when a unit is deselected
+	pass
+
+func _on_turn_started(unit: Unit) -> void:
+	# Visual feedback for whose turn it is
+	pass
+
+func _on_turn_ended(unit: Unit) -> void:
+	# Clean up after turn ends
+	if _selected_unit == unit:
+		_clear_selection()

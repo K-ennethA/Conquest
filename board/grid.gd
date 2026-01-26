@@ -8,7 +8,7 @@ class_name Grid
 # The grid's size in rows and columns.
 @export var size := Vector3(5, 0, 5)
 
-@export var cell_size := Vector3(1, 0, 1)
+@export var cell_size := Vector3(2, 0, 2)
 
 # Half of ``cell_size``.
 # We will use this to calculate the center of a grid cell in pixels, on the screen.

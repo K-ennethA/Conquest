@@ -1,0 +1,163 @@
+extends Node
+
+class_name UnitVisualManager
+
+# Manages visual appearance of units including materials, health bars, and type indicators
+
+@export var player_materials: PlayerMaterials
+
+var _health_bar_scene: PackedScene
+var _unit_health_bars: Dictionary = {}  # Unit -> HealthBar
+
+func _ready():
+	if not player_materials:
+		player_materials = PlayerMaterials.new()
+	
+	# Load health bar scene
+	_health_bar_scene = preload("res://game/visuals/HealthBar.tscn")
+
+func setup_unit_visuals(unit: Unit, player_assignment: PlayerMaterials.PlayerTeam) -> void:
+	"""Set up all visual elements for a unit"""
+	_apply_player_material(unit, player_assignment)
+	_setup_unit_type_indicator(unit)
+	_create_health_bar(unit)
+
+func setup_unit_visuals_for_player(unit: Unit, player: Player) -> void:
+	"""Set up all visual elements for a unit using new Player class"""
+	var player_assignment = _convert_player_to_assignment(player)
+	setup_unit_visuals(unit, player_assignment)
+
+func _convert_player_to_assignment(player: Player) -> PlayerMaterials.PlayerTeam:
+	"""Convert new Player class to PlayerMaterials.PlayerTeam enum"""
+	if not player:
+		return PlayerMaterials.PlayerTeam.NEUTRAL
+	
+	match player.player_id:
+		0:
+			return PlayerMaterials.PlayerTeam.PLAYER_1
+		1:
+			return PlayerMaterials.PlayerTeam.PLAYER_2
+		_:
+			return PlayerMaterials.PlayerTeam.NEUTRAL
+
+func _apply_player_material(unit: Unit, player: PlayerMaterials.PlayerTeam) -> void:
+	"""Apply player-specific material to unit"""
+	var mesh_instance = unit.get_node("MeshInstance3D")
+	if not mesh_instance:
+		push_warning("Unit has no MeshInstance3D node: " + str(unit))
+		return
+	
+	var unit_type = UnitType.Type.WARRIOR
+	if unit.unit_stats and unit.unit_stats.stats_resource and unit.unit_stats.stats_resource.unit_type:
+		unit_type = unit.unit_stats.stats_resource.unit_type.type
+	
+	var material = player_materials.get_player_material(player, unit_type)
+	mesh_instance.material_override = material
+	
+	# Add scale differences to make unit types more distinct
+	match unit_type:
+		UnitType.Type.WARRIOR:
+			mesh_instance.scale = Vector3(1.0, 1.0, 1.0)  # Normal size
+		UnitType.Type.ARCHER:
+			mesh_instance.scale = Vector3(0.8, 1.2, 0.8)  # Taller and thinner
+		UnitType.Type.SCOUT:
+			mesh_instance.scale = Vector3(1.2, 0.8, 1.2)  # Shorter and wider
+		UnitType.Type.TANK:
+			mesh_instance.scale = Vector3(1.3, 1.1, 1.3)  # Bigger overall
+
+func _setup_unit_type_indicator(unit: Unit) -> void:
+	"""Add visual indicators for unit type"""
+	if not unit.unit_stats or not unit.unit_stats.stats_resource:
+		return
+	
+	var unit_type = unit.unit_stats.stats_resource.unit_type
+	if not unit_type:
+		return
+	
+	# For now, we'll use material variations instead of mesh modifications
+	# This avoids property compatibility issues
+	# TODO: Add mesh shape variations once we determine correct property names
+	
+	# The material differences are already handled in _apply_player_material()
+	# so unit types will be distinguished by material properties (metallic, roughness, etc.)
+
+func _create_health_bar(unit: Unit) -> void:
+	"""Create and attach health bar to unit"""
+	if not _health_bar_scene:
+		push_warning("Health bar scene not loaded")
+		return
+	
+	var health_bar = _health_bar_scene.instantiate()
+	unit.add_child(health_bar)
+	
+	# Position health bar higher to avoid clipping with taller units (Archers are 1.2x height)
+	health_bar.position = Vector3(0, 1.8, 0)  # Higher to clear all unit types
+	
+	# Normal scale for good readability
+	health_bar.scale = Vector3(1.0, 1.0, 1.0)
+	
+	# Store reference
+	_unit_health_bars[unit] = health_bar
+	
+	# Initialize health bar
+	_update_health_bar(unit)
+
+func _update_health_bar(unit: Unit) -> void:
+	"""Update health bar display"""
+	if not _unit_health_bars.has(unit):
+		return
+	
+	var health_bar = _unit_health_bars[unit]
+	if not health_bar:
+		return
+	
+	var current_health = unit.current_health
+	var max_health = unit.max_health
+	
+	if max_health > 0:
+		var health_percentage = float(current_health) / float(max_health)
+		health_bar.update_health(health_percentage, current_health, max_health)
+
+func _on_unit_health_changed(unit: Unit, old_health: int, new_health: int) -> void:
+	"""Handle unit health changes"""
+	_update_health_bar(unit)
+
+func apply_selection_visual(unit: Unit, selected: bool) -> void:
+	"""Apply or remove selection visual effects"""
+	var mesh_instance = unit.get_node("MeshInstance3D")
+	if not mesh_instance:
+		return
+	
+	if selected:
+		# Add selection glow with enhanced visibility
+		var base_material = mesh_instance.material_override
+		if base_material:
+			var selection_material = base_material.duplicate()
+			selection_material.emission_enabled = true
+			selection_material.emission = Color(1.0, 1.0, 0.5, 1.0)  # Bright yellow glow
+			selection_material.rim_enabled = true
+			selection_material.rim = Color(1.0, 1.0, 0.0, 1.0)
+			selection_material.rim_tint = 0.5
+			mesh_instance.material_override = selection_material
+	else:
+		# Restore original material - need to reapply player material
+		var player = _determine_unit_player(unit)
+		_apply_player_material(unit, player)
+
+func _determine_unit_player(unit: Unit) -> PlayerMaterials.PlayerTeam:
+	"""Determine which player owns this unit based on scene tree position"""
+	var parent = unit.get_parent()
+	if parent and parent.name.contains("Player1"):
+		return PlayerMaterials.PlayerTeam.PLAYER_1
+	elif parent and parent.name.contains("Player2"):
+		return PlayerMaterials.PlayerTeam.PLAYER_2
+	else:
+		return PlayerMaterials.PlayerTeam.NEUTRAL
+
+func cleanup_unit_visuals(unit: Unit) -> void:
+	"""Clean up visual elements when unit is removed"""
+	if _unit_health_bars.has(unit):
+		var health_bar = _unit_health_bars[unit]
+		if health_bar:
+			health_bar.queue_free()
+		_unit_health_bars.erase(unit)

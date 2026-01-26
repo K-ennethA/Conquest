@@ -2,24 +2,36 @@ extends Resource
 
 class_name PriorityQueue
 
+# Generic priority queue implementation using a binary heap
+# Supports custom comparator functions for flexible ordering
+
 var heap: Array = []
-var comparator: Callable = func(a, b): return a - b  # Default: max-heap for numbers
+var comparator: Callable
 
-func _init(comp: Callable):
-	if comp.is_valid():
-		comparator = comp
+func _init(comp: Callable = _default_comparator):
+	comparator = comp
 
-func push(value):
+func _default_comparator(a, b) -> int:
+	# Default: max-heap for numbers
+	if typeof(a) == TYPE_INT or typeof(a) == TYPE_FLOAT:
+		return int(a - b)
+	return 0
+
+func push(value) -> void:
 	heap.append(value)
 	_heapify_up(heap.size() - 1)
 
 func pop():
 	if heap.is_empty():
 		return null
+	
 	var top = heap[0]
 	heap[0] = heap[heap.size() - 1]
 	heap.pop_back()
-	_heapify_down(0)
+	
+	if not heap.is_empty():
+		_heapify_down(0)
+	
 	return top
 
 func peek():
@@ -37,8 +49,10 @@ func build_heap(data: Array) -> void:
 	for i in range(last_parent, -1, -1):
 		_heapify_down(i)
 
-# Internal methods
+func clear() -> void:
+	heap.clear()
 
+# Internal heap operations
 func _heapify_up(index: int) -> void:
 	var current = index
 	while current > 0:
@@ -51,15 +65,16 @@ func _heapify_up(index: int) -> void:
 
 func _heapify_down(index: int) -> void:
 	var current = index
-	var size = heap.size()
+	var heap_size = heap.size()
+	
 	while true:
 		var left = 2 * current + 1
 		var right = 2 * current + 2
 		var best = current
 
-		if left < size and comparator.call(heap[left], heap[best]) > 0:
+		if left < heap_size and comparator.call(heap[left], heap[best]) > 0:
 			best = left
-		if right < size and comparator.call(heap[right], heap[best]) > 0:
+		if right < heap_size and comparator.call(heap[right], heap[best]) > 0:
 			best = right
 
 		if best != current:
@@ -67,6 +82,11 @@ func _heapify_down(index: int) -> void:
 			current = best
 		else:
 			break
+
+func _swap(i: int, j: int) -> void:
+	var temp = heap[i]
+	heap[i] = heap[j]
+	heap[j] = temp
 
 func _swap(i: int, j: int) -> void:
 	var temp = heap[i]

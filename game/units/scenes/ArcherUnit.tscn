@@ -1,0 +1,22 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://tile_objects/units/unit.gd" id="1"]
+[ext_resource type="Resource" path="res://game/units/resources/unit_types/Archer.tres" id="2"]
+[ext_resource type="Script" path="res://game/units/components/UnitStats.gd" id="3"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
+albedo_color = Color(0.2, 0.8, 0.2, 1)
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_1"]
+material = SubResource("StandardMaterial3D_1")
+
+[node name="ArcherUnit" type="Node3D"]
+script = ExtResource("1")
+stats_resource = ExtResource("2")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("CapsuleMesh_1")
+
+[node name="UnitStats" type="Node" parent="."]
+script = ExtResource("3")
+stats_resource = ExtResource("2")

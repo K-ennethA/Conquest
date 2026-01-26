@@ -1,0 +1,14 @@
+{
+  "dirs": [
+	"res://tests/unit",
+    "res://tests/integration"
+  ],
+  "should_maximize": true,
+  "should_exit": false,
+  "should_exit_on_success": false,
+  "log_level": 1,
+  "ignore_pause": false,
+  "hide_orphans": false,
+  "junit_xml_file": "res://tests/results/junit.xml",
+  "junit_xml_timestamp": false
+}

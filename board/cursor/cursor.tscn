@@ -1,24 +1,51 @@
-[gd_scene load_steps=5 format=3 uid="uid://bnda2yyqh6ms1"]
+[gd_scene load_steps=6 format=3 uid="uid://bnda2yyqh6ms1"]
 
 [ext_resource type="Script" uid="uid://0hp85b22o0ae" path="res://board/cursor/cursor.gd" id="1_g4xip"]
 
-[sub_resource type="CylinderMesh" id="CylinderMesh_4kubo"]
+[sub_resource type="SphereMesh" id="SphereMesh_diamond"]
+radius = 0.15
+height = 1.8
+radial_segments = 4
+rings = 2
 
-[sub_resource type="PlaneMesh" id="PlaneMesh_g4xip"]
-size = Vector2(1, 1)
+[sub_resource type="CylinderMesh" id="CylinderMesh_base"]
+top_radius = 0.6
+bottom_radius = 0.6
+height = 0.03
+radial_segments = 12
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_g4xip"]
-albedo_color = Color(0.313726, 0.333333, 1, 1)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cursor"]
+albedo_color = Color(1, 1, 0.2, 0.8)
+flags_transparent = true
+flags_unshaded = true
+emission_enabled = true
+emission = Color(1, 1, 0.3, 1)
+no_depth_test = true
+rim_enabled = true
+rim = 0.5
+rim_tint = 0.8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_base"]
+albedo_color = Color(1, 1, 0.2, 0.2)
+flags_transparent = true
+flags_unshaded = true
+emission_enabled = true
+emission = Color(1, 1, 0.3, 0.3)
+no_depth_test = true
+rim_enabled = true
+rim = 0.3
+rim_tint = 0.5
 
 [node name="Cursor" type="Node3D"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.557183, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
 script = ExtResource("1_g4xip")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
-transform = Transform3D(0.260793, 0, 0, 0, 0.43259, 0, 0, 0, 0.21793, 0, 2.00227, 0)
-mesh = SubResource("CylinderMesh_4kubo")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+mesh = SubResource("SphereMesh_diamond")
+surface_material_override/0 = SubResource("StandardMaterial3D_cursor")
 
-[node name="MeshInstance3D2" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.56971, 0)
-mesh = SubResource("PlaneMesh_g4xip")
-surface_material_override/0 = SubResource("StandardMaterial3D_g4xip")
+[node name="BaseMesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.9, 0)
+mesh = SubResource("CylinderMesh_base")
+surface_material_override/0 = SubResource("StandardMaterial3D_base")
