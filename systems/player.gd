@@ -109,8 +109,8 @@ func add_unit(unit: Unit) -> void:
 	owned_units.append(unit)
 	unit.set_owner_player(self)
 	
-	# Apply team visual identification
-	_apply_team_visuals(unit)
+	# Don't apply team visuals here - let UnitVisualManager handle it
+	# The UnitVisualManager will be notified through the unit_added signal
 	
 	unit_added.emit(self, unit)
 	
@@ -211,9 +211,8 @@ func set_team_color(color: Color) -> void:
 	team_color = color
 	_setup_team_materials()
 	
-	# Update existing unit visuals
-	for unit in owned_units:
-		_apply_team_visuals(unit)
+	# Don't update unit visuals here - let UnitVisualManager handle it
+	# The visual manager should listen for team color changes if needed
 
 # Debug and utility
 func get_debug_info() -> Dictionary:

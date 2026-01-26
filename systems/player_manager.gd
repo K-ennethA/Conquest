@@ -119,8 +119,8 @@ func start_game() -> void:
 	turn_number = 1
 	current_player_index = 0
 	
-	# Start first player's turn
-	_start_player_turn(players[current_player_index])
+	# Don't start player turn here - let the turn system handle it
+	# The TurnSystemManager will activate a turn system when game state changes
 	
 	game_state_changed.emit(current_game_state)
 	print("Game started! Turn " + str(turn_number))
@@ -232,6 +232,9 @@ func get_player_owning_unit(unit: Unit) -> Player:
 func can_player_select_unit(player: Player, unit: Unit) -> bool:
 	"""Check if a player can select a specific unit"""
 	if not player or not unit:
+		return false
+	
+	if current_game_state != GameState.IN_PROGRESS:
 		return false
 	
 	return player.can_select_unit(unit)

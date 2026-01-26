@@ -1,0 +1,100 @@
+[gd_scene load_steps=3 format=3 uid="uid://cqxvhqxqxqxqy"]
+
+[ext_resource type="Script" path="res://menus/TurnSystemSelection.gd" id="1_1"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_1"]
+font_size = 28
+font_color = Color(0.9, 0.9, 1, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_2"]
+font_size = 18
+font_color = Color(0.8, 0.8, 0.9, 1)
+
+[node name="TurnSystemSelection" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_1")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.1, 0.1, 0.15, 1)
+
+[node name="CenterContainer" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(600, 0)
+
+[node name="Title" type="Label" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+text = "SELECT TURN SYSTEM"
+label_settings = SubResource("LabelSettings_1")
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+text = "Choose how turns will be managed in your versus match"
+horizontal_alignment = 1
+
+[node name="Spacer1" type="Control" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+
+[node name="TurnSystemButtons" type="VBoxContainer" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="TraditionalButton" type="Button" parent="CenterContainer/VBoxContainer/TurnSystemButtons"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 50)
+text = "Traditional Turn System"
+
+[node name="InitiativeButton" type="Button" parent="CenterContainer/VBoxContainer/TurnSystemButtons"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 50)
+text = "Speed First Turn System"
+
+[node name="Spacer2" type="Control" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 20)
+
+[node name="DescriptionContainer" type="VBoxContainer" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="DescriptionTitle" type="Label" parent="CenterContainer/VBoxContainer/DescriptionContainer"]
+layout_mode = 2
+text = "Description:"
+label_settings = SubResource("LabelSettings_2")
+
+[node name="DescriptionLabel" type="Label" parent="CenterContainer/VBoxContainer/DescriptionContainer"]
+layout_mode = 2
+text = "Player-based turns. All units of one player act before switching to the next player."
+autowrap_mode = 2
+custom_minimum_size = Vector2(0, 60)
+
+[node name="Spacer3" type="Control" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 30)
+
+[node name="BackButton" type="Button" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 40)
+text = "Back to Main Menu"
+
+[node name="Spacer4" type="Control" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 20)
+
+[node name="Instructions" type="Label" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+text = "Press 1 for Traditional, 2 for Speed First, ESC to go back"
+horizontal_alignment = 1
+modulate = Color(0.7, 0.7, 0.7, 1)

@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://tile_objects/units/board.gd" id="1"]
 [ext_resource type="PackedScene" path="res://game/units/scenes/WarriorUnit.tscn" id="2"]
@@ -10,6 +10,10 @@
 [ext_resource type="PackedScene" path="res://game/ui/UnitInfoPanel.tscn" id="8"]
 [ext_resource type="Script" path="res://systems/test_player_management.gd" id="9"]
 [ext_resource type="PackedScene" path="res://game/ui/UnitActionsPanel.tscn" id="10"]
+[ext_resource type="Script" path="res://systems/test_traditional_turn_system.gd" id="11"]
+[ext_resource type="Script" path="res://game/world/GameWorldManager.gd" id="12"]
+[ext_resource type="PackedScene" path="res://game/ui/TurnIndicator.tscn" id="14"]
+[ext_resource type="PackedScene" path="res://game/ui/PlayerTurnPanel.tscn" id="15"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
@@ -25,6 +29,9 @@ tonemap_mode = 2
 glow_enabled = true
 
 [node name="GameWorld" type="Node3D"]
+
+[node name="GameWorldManager" type="Node" parent="."]
+script = ExtResource("12")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_1")
@@ -43,12 +50,18 @@ script = ExtResource("7")
 [node name="PlayerManagementTest" type="Node" parent="."]
 script = ExtResource("9")
 
+[node name="TurnSystemTest" type="Node" parent="."]
+script = ExtResource("11")
+
 [node name="UI" type="CanvasLayer" parent="."]
-script = preload("res://game/ui/GameUI.gd")
 
 [node name="UnitInfoPanel" parent="UI" instance=ExtResource("8")]
 
 [node name="UnitActionsPanel" parent="UI" instance=ExtResource("10")]
+
+[node name="TurnIndicator" parent="UI" instance=ExtResource("14")]
+
+[node name="PlayerTurnPanel" parent="UI" instance=ExtResource("15")]
 
 [node name="Map" type="Node3D" parent="."]
 script = ExtResource("1")

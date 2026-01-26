@@ -109,39 +109,58 @@ func _setup_cursor_visuals() -> void:
 		base_mesh.material_override = base_ring_material
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Handle keyboard input first (always works)
+	if event is InputEventKey and event.pressed:
+		if event.is_action_pressed("ui_accept"):
+			_handle_selection()
+			return
+		elif event.is_action_pressed("ui_cancel"):
+			_handle_deselection()
+			return
+		
+		# Handle movement input
+		var input_vector = Vector3.ZERO
+		
+		if event.is_action_pressed("ui_right"):
+			input_vector.x += 1
+		elif event.is_action_pressed("ui_left"):
+			input_vector.x -= 1
+		elif event.is_action_pressed("ui_down"):
+			input_vector.z += 1
+		elif event.is_action_pressed("ui_up"):
+			input_vector.z -= 1
+		
+		if input_vector != Vector3.ZERO:
+			var new_position = tile_position + input_vector
+			if grid.is_within_bounds(new_position):
+				self.tile_position = new_position
+			return
+	
 	# Handle mouse input
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			# Check if mouse is over UI elements first
+			var screen_size = get_viewport().get_visible_rect().size
+			var mouse_pos = event.position
+			
+			# If mouse is in the right 25% of screen (where UI typically is), don't handle it
+			if mouse_pos.x > screen_size.x * 0.75:
+				print("Mouse click in UI area - not handling in cursor")
+				return
+			
+			print("Mouse click in game area - handling cursor selection")
 			_handle_mouse_click(event.position)
 		return
 	
-	# Handle mouse movement for cursor positioning
+	# Handle mouse movement for cursor positioning (only if mouse enabled)
 	if event is InputEventMouseMotion and is_mouse_enabled:
-		_handle_mouse_movement(event.position)
+		var screen_size = get_viewport().get_visible_rect().size
+		var mouse_pos = event.position
+		
+		# Only move cursor with mouse if not over UI area
+		if mouse_pos.x <= screen_size.x * 0.75:
+			_handle_mouse_movement(event.position)
 		return
-	
-	# Handle keyboard input
-	if event.is_action_pressed("ui_accept"):
-		_handle_selection()
-	elif event.is_action_pressed("ui_cancel"):
-		_handle_deselection()
-	
-	# Handle movement input
-	var input_vector = Vector3.ZERO
-	
-	if event.is_action_pressed("ui_right"):
-		input_vector.x += 1
-	elif event.is_action_pressed("ui_left"):
-		input_vector.x -= 1
-	elif event.is_action_pressed("ui_down"):
-		input_vector.z += 1
-	elif event.is_action_pressed("ui_up"):
-		input_vector.z -= 1
-	
-	if input_vector != Vector3.ZERO:
-		var new_position = tile_position + input_vector
-		if grid.is_within_bounds(new_position):
-			self.tile_position = new_position
 
 func _handle_mouse_click(mouse_pos: Vector2) -> void:
 	"""Handle mouse click for unit selection"""
@@ -195,10 +214,24 @@ func _handle_selection() -> void:
 	if unit_at_cursor:
 		print("Unit found for selection: ", unit_at_cursor.name)
 		
-		# Validate selection through PlayerManager
+		# First check PlayerManager validation
 		if not PlayerManager.can_current_player_select_unit(unit_at_cursor):
 			print("Cannot select unit: not owned by current player or game not active")
 			return
+		
+		# Then check turn system validation
+		if TurnSystemManager.has_active_turn_system():
+			var turn_system = TurnSystemManager.get_active_turn_system()
+			if not turn_system.can_unit_act(unit_at_cursor):
+				if turn_system is TraditionalTurnSystem:
+					var trad_system = turn_system as TraditionalTurnSystem
+					if unit_at_cursor in trad_system.get_units_that_acted():
+						print("Cannot select unit: already acted this turn")
+					else:
+						print("Cannot select unit: turn system constraint")
+				else:
+					print("Cannot select unit: not allowed by turn system")
+				return
 		
 		if selected_unit == unit_at_cursor:
 			# Deselect if clicking same unit
@@ -316,3 +349,8 @@ func get_cursor_position() -> Vector3:
 func set_mouse_enabled(enabled: bool) -> void:
 	"""Enable or disable mouse cursor movement"""
 	is_mouse_enabled = enabled
+	print("Mouse cursor movement " + ("enabled" if enabled else "disabled"))
+
+func toggle_mouse_mode() -> void:
+	"""Toggle between mouse and keyboard-only mode"""
+	set_mouse_enabled(not is_mouse_enabled)

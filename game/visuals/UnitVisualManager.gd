@@ -15,6 +15,13 @@ func _ready():
 	
 	# Load health bar scene
 	_health_bar_scene = preload("res://game/visuals/HealthBar.tscn")
+	
+	# Connect to turn system events
+	if TurnSystemManager:
+		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
+	
+	# Connect to game events
+	GameEvents.unit_action_completed.connect(_on_unit_action_completed)
 
 func setup_unit_visuals(unit: Unit, player_assignment: PlayerMaterials.PlayerTeam) -> void:
 	"""Set up all visual elements for a unit"""
@@ -140,9 +147,78 @@ func apply_selection_visual(unit: Unit, selected: bool) -> void:
 			selection_material.rim_tint = 0.5
 			mesh_instance.material_override = selection_material
 	else:
-		# Restore original material - need to reapply player material
+		# Restore appropriate material based on unit's current state
+		_restore_unit_material(unit)
+
+func _restore_unit_material(unit: Unit) -> void:
+	"""Restore unit material based on current state (acted or not acted)"""
+	if not TurnSystemManager.has_active_turn_system():
+		# No turn system active, just apply base player material
 		var player = _determine_unit_player(unit)
 		_apply_player_material(unit, player)
+		return
+	
+	var turn_system = TurnSystemManager.get_active_turn_system()
+	var has_acted = false
+	
+	# Check if unit has acted in current turn
+	if turn_system is TraditionalTurnSystem:
+		var trad_system = turn_system as TraditionalTurnSystem
+		var acted_units = trad_system.get_units_that_acted()
+		has_acted = unit in acted_units
+	elif turn_system is SpeedFirstTurnSystem:
+		var speed_system = turn_system as SpeedFirstTurnSystem
+		has_acted = unit in speed_system.get_units_that_acted_this_round()
+	
+	# Apply appropriate visual state
+	if has_acted:
+		apply_acted_visual(unit, true)
+	else:
+		var player = _determine_unit_player(unit)
+		_apply_player_material(unit, player)
+
+func apply_acted_visual(unit: Unit, has_acted: bool) -> void:
+	"""Apply or remove visual effects for units that have acted"""
+	var mesh_instance = unit.get_node("MeshInstance3D")
+	if not mesh_instance:
+		return
+	
+	if has_acted:
+		# Gray out the unit by reducing saturation and brightness
+		var player = _determine_unit_player(unit)
+		var base_material = player_materials.get_player_material(player, _get_unit_type(unit))
+		
+		var acted_material = base_material.duplicate()
+		
+		# Reduce albedo brightness and saturation
+		var original_color = acted_material.albedo_color
+		var gray_color = Color(
+			original_color.r * 0.5 + 0.3,  # Mix with gray
+			original_color.g * 0.5 + 0.3,
+			original_color.b * 0.5 + 0.3,
+			original_color.a * 0.7  # Make slightly transparent
+		)
+		acted_material.albedo_color = gray_color
+		
+		# Reduce emission if present
+		if acted_material.emission_enabled:
+			acted_material.emission = acted_material.emission * 0.3
+		
+		# Reduce metallic and increase roughness for duller appearance
+		acted_material.metallic = acted_material.metallic * 0.5
+		acted_material.roughness = min(acted_material.roughness + 0.3, 1.0)
+		
+		mesh_instance.material_override = acted_material
+	else:
+		# Restore original material
+		var player = _determine_unit_player(unit)
+		_apply_player_material(unit, player)
+
+func _get_unit_type(unit: Unit) -> UnitType.Type:
+	"""Get the unit type for a unit"""
+	if unit.unit_stats and unit.unit_stats.stats_resource and unit.unit_stats.stats_resource.unit_type:
+		return unit.unit_stats.stats_resource.unit_type.type
+	return UnitType.Type.WARRIOR  # Default
 
 func _determine_unit_player(unit: Unit) -> PlayerMaterials.PlayerTeam:
 	"""Determine which player owns this unit based on scene tree position"""
@@ -154,6 +230,46 @@ func _determine_unit_player(unit: Unit) -> PlayerMaterials.PlayerTeam:
 	else:
 		return PlayerMaterials.PlayerTeam.NEUTRAL
 
+func update_all_unit_visuals() -> void:
+	"""Update visual state of all units based on current turn system"""
+	if not TurnSystemManager.has_active_turn_system():
+		return
+	
+	var turn_system = TurnSystemManager.get_active_turn_system()
+	
+	# Find all units in the scene
+	var all_units = _find_all_units()
+	
+	for unit in all_units:
+		var has_acted = false
+		
+		if turn_system is TraditionalTurnSystem:
+			var trad_system = turn_system as TraditionalTurnSystem
+			var acted_units = trad_system.get_units_that_acted()
+			has_acted = unit in acted_units
+		elif turn_system is SpeedFirstTurnSystem:
+			var speed_system = turn_system as SpeedFirstTurnSystem
+			has_acted = unit in speed_system.get_units_that_acted_this_round()
+		
+		apply_acted_visual(unit, has_acted)
+
+func _find_all_units() -> Array[Unit]:
+	"""Find all units in the current scene"""
+	var units: Array[Unit] = []
+	var scene_root = get_tree().current_scene
+	
+	# Look for units in Player1 and Player2 nodes
+	var player_nodes = ["Map/Player1", "Map/Player2"]
+	
+	for player_path in player_nodes:
+		var player_node = scene_root.get_node_or_null(player_path)
+		if player_node:
+			for child in player_node.get_children():
+				if child is Unit:
+					units.append(child)
+	
+	return units
+
 func cleanup_unit_visuals(unit: Unit) -> void:
 	"""Clean up visual elements when unit is removed"""
 	if _unit_health_bars.has(unit):
@@ -161,3 +277,45 @@ func cleanup_unit_visuals(unit: Unit) -> void:
 		if health_bar:
 			health_bar.queue_free()
 		_unit_health_bars.erase(unit)
+
+# Event handlers
+func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
+	"""Handle turn system activation"""
+	# Connect to turn system specific events
+	if turn_system.turn_started.is_connected(_on_turn_started):
+		turn_system.turn_started.disconnect(_on_turn_started)
+	if turn_system.turn_ended.is_connected(_on_turn_ended):
+		turn_system.turn_ended.disconnect(_on_turn_ended)
+	if turn_system.unit_action_completed.is_connected(_on_turn_system_unit_action):
+		turn_system.unit_action_completed.disconnect(_on_turn_system_unit_action)
+	
+	turn_system.turn_started.connect(_on_turn_started)
+	turn_system.turn_ended.connect(_on_turn_ended)
+	turn_system.unit_action_completed.connect(_on_turn_system_unit_action)
+	
+	# Update all unit visuals
+	update_all_unit_visuals()
+
+func _on_turn_started(player: Player) -> void:
+	"""Handle turn start - refresh unit visuals"""
+	update_all_unit_visuals()
+
+func _on_turn_ended(player: Player) -> void:
+	"""Handle turn end - refresh unit visuals"""
+	update_all_unit_visuals()
+
+func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
+	"""Handle unit action completion from GameEvents"""
+	# Update visuals after a short delay to ensure turn system has processed the action
+	await get_tree().create_timer(0.1).timeout
+	update_all_unit_visuals()
+
+func _on_turn_system_unit_action(unit: Unit, action_type: String) -> void:
+	"""Handle unit action completion from turn system"""
+	update_all_unit_visuals()
+
+# Public interface for manual updates
+func refresh_unit_visuals() -> void:
+	"""Manually refresh all unit visuals - useful for testing"""
+	update_all_unit_visuals()
+	print("Unit visuals refreshed")

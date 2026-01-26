@@ -279,18 +279,18 @@ Look for this EXACT text at the end:
   - [x] Ownership validation for all actions
 
 #### 2.2 Player Turn Management
-- [ ] Add player turn state tracking
-  - [ ] Current player identification
-  - [ ] Turn transition validation
-  - [ ] Player action validation
-- [ ] Implement turn-based restrictions
-  - [ ] Only current player can select/move units
-  - [ ] Prevent actions on opponent units
-  - [ ] Clear selection on turn change
-- [ ] Add player UI indicators
-  - [ ] Current player display
-  - [ ] Turn transition animations
-  - [ ] Player-specific UI themes
+- [x] Add player turn state tracking
+  - [x] Current player identification
+  - [x] Turn transition validation
+  - [x] Player action validation
+- [x] Implement turn-based restrictions
+  - [x] Only current player can select/move units
+  - [x] Prevent actions on opponent units
+  - [x] Clear selection on turn change
+- [x] Add player UI indicators
+  - [x] Current player display
+  - [x] Turn transition animations
+  - [x] Player-specific UI themes
 
 #### 2.2.1 Manual Testing - Player Turn Management
 **Test Scene**: Full game scene with 2 players

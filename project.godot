@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Conquest"
-run/main_scene="res://game/world/GameWorld.tscn"
+run/main_scene="res://menus/MainMenu.tscn"
 config/features=PackedStringArray("4.5", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -20,6 +20,8 @@ config/icon="res://icon.svg"
 GameEvents="*res://systems/game_events.gd"
 ResourceManager="*res://systems/resource_manager.gd"
 PlayerManager="*res://systems/player_manager.gd"
+TurnSystemManager="*res://systems/turn_system_manager.gd"
+GameSettings="*res://systems/game_settings.gd"
 
 [display]
 

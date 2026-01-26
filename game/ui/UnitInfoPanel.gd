@@ -24,15 +24,8 @@ func _ready() -> void:
 	GameEvents.unit_hover_started.connect(_on_unit_hover_started)
 	GameEvents.unit_hover_ended.connect(_on_unit_hover_ended)
 	
-	# Connect to player management events
-	if PlayerManager:
-		PlayerManager.player_turn_started.connect(_on_player_turn_started)
-		PlayerManager.player_turn_ended.connect(_on_player_turn_ended)
-		PlayerManager.game_state_changed.connect(_on_game_state_changed)
-	
 	# Hide panel initially
 	_hide_panel()
-	_update_turn_info()
 
 func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	"""Handle unit selection"""
@@ -64,27 +57,35 @@ func _update_unit_info(unit: Unit) -> void:
 	if not unit:
 		return
 	
-	# Basic info
-	unit_name_label.text = unit.get_display_name()
+	# Basic info - with null checks
+	if unit_name_label:
+		unit_name_label.text = unit.get_display_name()
+		
+		# Add player ownership info
+		var owner = unit.get_owner_player()
+		if owner:
+			unit_name_label.text += " (" + owner.get_display_name() + ")"
 	
-	var unit_type = unit.get_unit_type()
-	if unit_type:
-		unit_type_label.text = unit_type.get_type_name()
-	else:
-		unit_type_label.text = "Unknown"
+	if unit_type_label:
+		var unit_type = unit.get_unit_type()
+		if unit_type:
+			unit_type_label.text = unit_type.get_type_name()
+		else:
+			unit_type_label.text = "Unknown"
 	
-	# Add player ownership info
-	var owner = unit.get_owner_player()
-	if owner:
-		unit_name_label.text += " (" + owner.get_display_name() + ")"
-	
-	# Stats
-	health_label.text = "Health: " + str(unit.current_health) + "/" + str(unit.max_health)
-	attack_label.text = "Attack: " + str(unit.get_stat("attack"))
-	defense_label.text = "Defense: " + str(unit.get_stat("defense"))
-	speed_label.text = "Speed: " + str(unit.get_stat("speed"))
-	movement_label.text = "Movement: " + str(unit.get_stat("movement"))
-	range_label.text = "Range: " + str(unit.get_stat("range"))
+	# Stats - with null checks
+	if health_label:
+		health_label.text = "Health: " + str(unit.current_health) + "/" + str(unit.max_health)
+	if attack_label:
+		attack_label.text = "Attack: " + str(unit.get_stat("attack"))
+	if defense_label:
+		defense_label.text = "Defense: " + str(unit.get_stat("defense"))
+	if speed_label:
+		speed_label.text = "Speed: " + str(unit.get_stat("speed"))
+	if movement_label:
+		movement_label.text = "Movement: " + str(unit.get_stat("movement"))
+	if range_label:
+		range_label.text = "Range: " + str(unit.get_stat("range"))
 	
 	# Set portrait color based on unit type and player
 	_update_portrait(unit)
@@ -142,43 +143,3 @@ func get_current_unit() -> Unit:
 func is_showing_unit(unit: Unit) -> bool:
 	"""Check if panel is showing specific unit"""
 	return current_unit == unit
-
-# Player management event handlers
-func _on_player_turn_started(player: Player) -> void:
-	"""Handle player turn start"""
-	_update_turn_info()
-
-func _on_player_turn_ended(player: Player) -> void:
-	"""Handle player turn end"""
-	_update_turn_info()
-
-func _on_game_state_changed(new_state: PlayerManager.GameState) -> void:
-	"""Handle game state changes"""
-	_update_turn_info()
-
-func _update_turn_info() -> void:
-	"""Update turn information display"""
-	if not PlayerManager:
-		return
-	
-	var current_player = PlayerManager.get_current_player()
-	var game_info = PlayerManager.get_game_state_info()
-	
-	# Update instructions label to show current player and turn info
-	var turn_text = "Turn " + str(game_info.turn_number) + "\n"
-	
-	if current_player:
-		turn_text += "Current: " + current_player.get_display_name() + "\n"
-	else:
-		turn_text += "No active player\n"
-	
-	turn_text += "State: " + game_info.game_state + "\n\n"
-	turn_text += "Arrow Keys: Move Cursor\n"
-	turn_text += "Enter: Select Unit\n"
-	turn_text += "Escape: Deselect\n"
-	turn_text += "Select unit to see actions"
-	
-	# Find the instructions label and update it
-	var instructions_label = get_node_or_null("MarginContainer/VBoxContainer/InstructionsLabel")
-	if instructions_label:
-		instructions_label.text = turn_text

@@ -1,0 +1,10 @@
+res://game/world/GameWorldManager.gd
+res://systems/traditional_turn_system.gd
+res://systems/turn_system_base.gd
+res://systems/turn_system_manager.gd
+res://game/visuals/UnitVisualManager.gd
+res://game/ui/UnitInfoPanel.gd
+res://board/cursor/cursor.gd
+res://systems/player.gd
+res://systems/player_manager.gd
+res://systems/game_settings.gd

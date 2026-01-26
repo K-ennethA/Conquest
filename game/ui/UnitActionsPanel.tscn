@@ -1,7 +1,6 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://game/ui/UnitActionsPanel.gd" id="1"]
-[ext_resource type="Theme" uid="uid://b8ej4xqxqxqxq" path="res://game/ui/TacticalCombatTheme.tres" id="2"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1"]
 bg_color = Color(0.15, 0.15, 0.15, 0.9)
@@ -21,11 +20,10 @@ anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
 offset_left = -220.0
-offset_top = 20.0
+offset_top = 120.0
 offset_right = -20.0
-offset_bottom = 220.0
-custom_minimum_size = Vector2(200, 200)
-theme = ExtResource("2")
+offset_bottom = 300.0
+custom_minimum_size = Vector2(200, 180)
 script = ExtResource("1")
 
 [node name="Background" type="Panel" parent="."]
@@ -70,10 +68,10 @@ custom_minimum_size = Vector2(0, 36)
 text = "Move"
 theme_override_font_sizes/font_size = 14
 
-[node name="EndTurnButton" type="Button" parent="MarginContainer/VBoxContainer/ActionsContainer"]
+[node name="EndUnitTurnButton" type="Button" parent="MarginContainer/VBoxContainer/ActionsContainer"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 36)
-text = "End Turn"
+text = "End Unit Turn"
 theme_override_font_sizes/font_size = 14
 
 [node name="HSeparator2" type="HSeparator" parent="MarginContainer/VBoxContainer"]
