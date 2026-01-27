@@ -26,7 +26,8 @@ func _ready() -> void:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
 		print("TurnIndicator: Connected to TurnSystemManager")
 	
-	# Initial update
+	# Delay initial update to ensure turn system is fully initialized
+	await get_tree().process_frame
 	_update_display()
 	print("TurnIndicator: Initialized")
 
@@ -35,41 +36,34 @@ func _update_display() -> void:
 	if not player_name_label or not turn_info_label:
 		return
 	
-	# Get current player
+	# Get current player - prioritize TurnSystemManager over PlayerManager
 	var active_player = null
 	if TurnSystemManager.has_active_turn_system():
 		active_player = TurnSystemManager.get_current_active_player()
-	elif PlayerManager:
+		print("TurnIndicator: Got active player from TurnSystemManager: " + (active_player.get_display_name() if active_player else "None"))
+	
+	# Fallback to PlayerManager only if TurnSystemManager doesn't have an active player
+	if not active_player and PlayerManager:
 		active_player = PlayerManager.get_current_player()
+		print("TurnIndicator: Fallback to PlayerManager current player: " + (active_player.get_display_name() if active_player else "None"))
 	
 	if active_player:
 		current_player = active_player
 		
-		# Update player name
-		player_name_label.text = active_player.get_display_name() + "'s Turn"
-		
-		# Update turn info based on turn system
+		# Update display based on turn system type
 		if TurnSystemManager.has_active_turn_system():
 			var turn_system = TurnSystemManager.get_active_turn_system()
+			print("TurnIndicator: Updating display for " + active_player.get_display_name() + " with turn system " + turn_system.system_name)
 			
 			if turn_system is TraditionalTurnSystem:
-				var trad_system = turn_system as TraditionalTurnSystem
-				var progress = trad_system.get_current_turn_progress()
-				if progress.has("units_can_act"):
-					turn_info_label.text = "Turn " + str(turn_system.current_turn) + " - " + str(progress.units_can_act) + " units remaining"
-				else:
-					turn_info_label.text = "Turn " + str(turn_system.current_turn) + " - calculating..."
+				_update_traditional_display(turn_system, active_player)
 			elif turn_system is SpeedFirstTurnSystem:
-				var speed_system = turn_system as SpeedFirstTurnSystem
-				var acting_unit = speed_system.get_current_acting_unit()
-				if acting_unit:
-					turn_info_label.text = "Round " + str(turn_system.current_turn) + " - " + acting_unit.get_display_name() + " acting"
-				else:
-					turn_info_label.text = "Round " + str(turn_system.current_turn)
+				_update_speed_first_display(turn_system, active_player)
 			else:
-				turn_info_label.text = "Turn " + str(turn_system.current_turn)
+				_update_generic_display(turn_system, active_player)
 		else:
-			turn_info_label.text = "Turn in progress"
+			print("TurnIndicator: No active turn system, using fallback display")
+			_update_fallback_display(active_player)
 		
 		# Update background color
 		_update_background_color(active_player)
@@ -78,10 +72,61 @@ func _update_display() -> void:
 		visible = true
 	else:
 		# No active player
+		print("TurnIndicator: No active player found")
 		player_name_label.text = "Game Setup"
 		turn_info_label.text = "Waiting for players..."
 		_update_background_color(null)
 		visible = true
+
+func _update_traditional_display(turn_system: TraditionalTurnSystem, active_player: Player) -> void:
+	"""Update display for Traditional Turn System"""
+	player_name_label.text = active_player.get_display_name() + "'s Turn"
+	
+	var progress = turn_system.get_current_turn_progress()
+	if progress.has("units_can_act"):
+		turn_info_label.text = "Round " + str(turn_system.current_turn) + " - " + str(progress.units_can_act) + " units remaining"
+	else:
+		turn_info_label.text = "Round " + str(turn_system.current_turn) + " - calculating..."
+
+func _update_speed_first_display(turn_system: SpeedFirstTurnSystem, active_player: Player) -> void:
+	"""Update display for Speed First Turn System"""
+	var acting_unit = turn_system.get_current_acting_unit()
+	var progress = turn_system.get_current_round_progress()
+	
+	if acting_unit:
+		# Show current acting unit
+		player_name_label.text = acting_unit.get_display_name() + " Acting"
+		
+		# Show round info and speed
+		var speed_info = ""
+		if progress.has("current_unit_speed"):
+			speed_info = " (Speed: " + str(progress.current_unit_speed) + ")"
+		
+		var remaining_info = ""
+		if progress.has("units_remaining"):
+			remaining_info = " - " + str(progress.units_remaining) + " units left"
+		
+		turn_info_label.text = "Round " + str(progress.get("round_number", 1)) + speed_info + remaining_info
+		
+		# Add queue preview info
+		var queue_preview = progress.get("turn_queue_preview", [])
+		if queue_preview.size() > 1:  # More than just current unit
+			var next_unit = queue_preview[1]  # Next unit after current
+			turn_info_label.text += "\nNext: " + next_unit.get("name", "Unknown")
+	else:
+		# Fallback if no acting unit
+		player_name_label.text = active_player.get_display_name() + "'s Unit"
+		turn_info_label.text = "Round " + str(progress.get("round_number", 1))
+
+func _update_generic_display(turn_system: TurnSystemBase, active_player: Player) -> void:
+	"""Update display for generic turn system"""
+	player_name_label.text = active_player.get_display_name() + "'s Turn"
+	turn_info_label.text = "Round " + str(turn_system.current_turn)
+
+func _update_fallback_display(active_player: Player) -> void:
+	"""Update display when no turn system is active"""
+	player_name_label.text = active_player.get_display_name() + "'s Turn"
+	turn_info_label.text = "Turn in progress"
 
 func _update_background_color(player: Player) -> void:
 	"""Update background color based on current player"""
@@ -154,6 +199,15 @@ func show_turn_transition(from_player: Player, to_player: Player) -> void:
 func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
 	"""Handle turn system activation"""
 	print("TurnIndicator: Turn system activated - " + turn_system.system_name)
+	
+	# Hide TurnIndicator when Speed First is active (TurnQueue handles it)
+	if turn_system is SpeedFirstTurnSystem:
+		visible = false
+		print("TurnIndicator: Hidden for Speed First system (TurnQueue handles display)")
+		return
+	else:
+		visible = true
+		print("TurnIndicator: Visible for " + turn_system.system_name)
 	
 	# Disconnect from previous turn system if any
 	if turn_system.turn_started.is_connected(_on_turn_started):

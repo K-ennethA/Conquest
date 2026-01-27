@@ -11,11 +11,35 @@ func _ready():
 	await get_tree().process_frame
 	await get_tree().process_frame
 	
+	# Connect TurnQueue to UnitInfoPanel for portrait clicks
+	_connect_ui_components()
+	
+	# Check what turn system was selected
+	var selected_system = GameSettings.selected_turn_system
+	print("Selected turn system from GameSettings: " + TurnSystemBase.TurnSystemType.keys()[selected_system])
+	
 	_test_scene_structure()
 	_test_unit_systems()
 	_test_visual_systems()
 	_test_tile_systems()
 	_test_player_teams()
+	
+	# Only run turn system tests if Traditional was selected
+	# If Speed First was selected, let it run without interference
+	if selected_system == TurnSystemBase.TurnSystemType.TRADITIONAL:
+		print("\n--- Running Traditional Turn System Tests ---")
+		# The traditional tests will run
+	else:
+		print("\n--- Skipping Traditional Turn System Tests (Speed First selected) ---")
+	
+	# Reset turn system after tests complete to ensure UI shows Turn 1
+	print("\n--- Resetting Turn System After Tests ---")
+	if TurnSystemManager and TurnSystemManager.has_active_turn_system():
+		print("Resetting turn system to initial state...")
+		TurnSystemManager.reset_turn_system()
+		print("Turn system reset complete - UI should now show Turn 1")
+	else:
+		print("No active turn system to reset")
 	
 	print("=== GameWorld Integration Test Complete ===")
 	print("Manual verification:")
@@ -31,6 +55,73 @@ func _ready():
 	print("  Key 2: Heal random unit by 20")
 	print("  Key 3: Test tile highlighting system (random colors)")
 	print("  Key 4: Reset all health and clear tile highlights")
+	print("  Key S: Switch to Speed First turn system")
+	print("  Key T: Switch to Traditional turn system")
+	print("")
+	print("Unit Actions Panel Features:")
+	print("  - Select a unit to see Move and End Turn actions")
+	print("  - Click 'Unit Summary' button to view detailed stats")
+	print("  - Stats show current values including battle effects")
+	print("  - Keyboard shortcuts: M (Move), E (End Turn), S (Summary), C (Cancel)")
+	print("")
+	print("Speed First UI Features:")
+	print("  - Turn Queue centered with proper spacing from screen edges")
+	print("  - Click unit portraits to see details")
+	print("  - Use ◀ ▶ buttons to scroll through units (4 shown at a time)")
+	print("  - Only current acting unit can be selected")
+	print("  - Page info shows current page when scrolling needed")
+	print("  - Proper margins and padding for professional appearance")
+
+func _connect_ui_components():
+	"""Connect UI components for better integration"""
+	var ui_layout = get_node("../UI/GameUILayout")
+	if not ui_layout:
+		print("Could not find GameUILayout")
+		return
+	
+	var turn_queue = ui_layout.get_panel("turn_queue")
+	var unit_actions_panel = ui_layout.get_panel("unit_actions")
+	
+	if turn_queue and unit_actions_panel:
+		# Connect TurnQueue portrait clicks to UnitActionsPanel (which now has unit stats)
+		if not turn_queue.unit_portrait_clicked.is_connected(_on_turn_queue_portrait_clicked):
+			turn_queue.unit_portrait_clicked.connect(_on_turn_queue_portrait_clicked)
+		print("Connected TurnQueue to UnitActionsPanel")
+		
+		# Also connect hover events for better UX
+		if turn_queue.has_signal("unit_portrait_hovered") and not turn_queue.unit_portrait_hovered.is_connected(_on_turn_queue_portrait_hovered):
+			turn_queue.unit_portrait_hovered.connect(_on_turn_queue_portrait_hovered)
+		if turn_queue.has_signal("unit_portrait_unhovered") and not turn_queue.unit_portrait_unhovered.is_connected(_on_turn_queue_portrait_unhovered):
+			turn_queue.unit_portrait_unhovered.connect(_on_turn_queue_portrait_unhovered)
+		print("Connected TurnQueue hover events")
+	else:
+		print("Could not find UI components to connect")
+		if not turn_queue:
+			print("  - TurnQueue not found")
+		if not unit_actions_panel:
+			print("  - UnitActionsPanel not found")
+
+func _on_turn_queue_portrait_clicked(unit: Unit):
+	"""Handle turn queue portrait clicks"""
+	print("Turn queue portrait clicked: " + unit.get_display_name())
+	
+	# Select the unit to show actions panel with stats
+	GameEvents.unit_selected.emit(unit, unit.global_position)
+	
+	# Also highlight the unit in the game world
+	var cursor = get_node("../Map/Cursor")
+	if cursor and cursor.has_method("highlight_unit"):
+		cursor.highlight_unit(unit)
+
+func _on_turn_queue_portrait_hovered(unit: Unit):
+	"""Handle turn queue portrait hover"""
+	print("Turn queue portrait hovered: " + unit.get_display_name())
+	# Hover functionality is now integrated into the actions panel
+
+func _on_turn_queue_portrait_unhovered(unit: Unit):
+	"""Handle turn queue portrait unhover"""
+	print("Turn queue portrait unhovered: " + unit.get_display_name())
+	# Hover functionality is now integrated into the actions panel
 
 func _test_scene_structure():
 	print("\n--- Test 1: Scene Structure ---")
@@ -187,6 +278,40 @@ func _input(event):
 				_test_tile_highlighting()
 			KEY_4:
 				_reset_all_health()
+			KEY_S:
+				_switch_to_speed_first()
+			KEY_T:
+				_switch_to_traditional()
+
+func _switch_to_speed_first():
+	"""Switch to Speed First turn system for testing"""
+	print("=== SWITCHING TO SPEED FIRST TURN SYSTEM ===")
+	
+	# Create and register Speed First system
+	var speed_system = SpeedFirstTurnSystem.new()
+	TurnSystemManager.register_turn_system(speed_system)
+	
+	# Activate it
+	var success = TurnSystemManager.activate_turn_system(TurnSystemBase.TurnSystemType.INITIATIVE)
+	if success:
+		print("Successfully switched to Speed First turn system")
+	else:
+		print("Failed to switch to Speed First turn system")
+
+func _switch_to_traditional():
+	"""Switch to Traditional turn system for testing"""
+	print("=== SWITCHING TO TRADITIONAL TURN SYSTEM ===")
+	
+	# Create and register Traditional system
+	var trad_system = TraditionalTurnSystem.new()
+	TurnSystemManager.register_turn_system(trad_system)
+	
+	# Activate it
+	var success = TurnSystemManager.activate_turn_system(TurnSystemBase.TurnSystemType.TRADITIONAL)
+	if success:
+		print("Successfully switched to Traditional turn system")
+	else:
+		print("Failed to switch to Traditional turn system")
 
 func _test_damage_random_unit():
 	var all_units = get_node("../Map/Player1").get_children() + get_node("../Map/Player2").get_children()

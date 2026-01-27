@@ -64,6 +64,14 @@ func get_turn_order() -> Array:
 	push_error("get_turn_order() must be implemented by derived class")
 	return []
 
+# Virtual methods - can be overridden by derived classes
+func reset_turn_system() -> void:
+	"""Reset the turn system to initial state (for testing purposes)"""
+	# Default implementation - derived classes should override
+	current_turn = 1
+	is_turn_in_progress = false
+	print("TurnSystemBase: Basic reset completed")
+
 # Common implementation methods
 func register_unit(unit: Unit) -> void:
 	"""Register a unit with the turn system"""

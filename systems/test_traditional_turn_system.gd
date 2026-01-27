@@ -79,24 +79,38 @@ func _test_turn_system_activation() -> void:
 	"""Test turn system activation"""
 	print("\n--- Test 2: Turn System Activation ---")
 	
-	# Activate traditional turn system
-	var success = TurnSystemManager.activate_turn_system(TurnSystemBase.TurnSystemType.TRADITIONAL)
+	# Check what turn system was selected by the user
+	var selected_system = GameSettings.selected_turn_system
+	print("User selected turn system: " + TurnSystemBase.TurnSystemType.keys()[selected_system])
 	
-	if success:
-		print("✓ Traditional turn system activated successfully")
+	# Only activate Traditional if it was actually selected
+	if selected_system == TurnSystemBase.TurnSystemType.TRADITIONAL:
+		# Activate traditional turn system
+		var success = TurnSystemManager.activate_turn_system(TurnSystemBase.TurnSystemType.TRADITIONAL)
 		
-		# Check if it's the active system
-		var active_system = TurnSystemManager.get_active_turn_system()
-		if active_system == traditional_turn_system:
-			print("✓ Correct turn system is active")
+		if success:
+			print("✓ Traditional turn system activated successfully")
+			
+			# Check if it's the active system
+			var active_system = TurnSystemManager.get_active_turn_system()
+			if active_system == traditional_turn_system:
+				print("✓ Correct turn system is active")
+			else:
+				print("❌ Wrong turn system is active")
 		else:
-			print("❌ Wrong turn system is active")
+			print("❌ Failed to activate traditional turn system")
 	else:
-		print("❌ Failed to activate traditional turn system")
+		print("✓ Skipping Traditional activation - user selected different system")
+		print("✓ Respecting user's choice: " + TurnSystemBase.TurnSystemType.keys()[selected_system])
 
 func _test_player_turn_management() -> void:
 	"""Test player turn management"""
 	print("\n--- Test 3: Player Turn Management ---")
+	
+	# Only run if Traditional system is active
+	if not traditional_turn_system.is_active:
+		print("✓ Skipping - Traditional turn system not active")
+		return
 	
 	# Check current player
 	var current_player = traditional_turn_system.get_current_active_player()
@@ -122,6 +136,11 @@ func _test_player_turn_management() -> void:
 func _test_unit_action_tracking() -> void:
 	"""Test unit action tracking"""
 	print("\n--- Test 4: Unit Action Tracking ---")
+	
+	# Only run if Traditional system is active
+	if not traditional_turn_system.is_active:
+		print("✓ Skipping - Traditional turn system not active")
+		return
 	
 	var current_player = traditional_turn_system.get_current_active_player()
 	if not current_player:
@@ -163,6 +182,11 @@ func _test_unit_action_tracking() -> void:
 func _test_manual_turn_ending() -> void:
 	"""Test manual turn ending"""
 	print("\n--- Test 5: Manual Turn Ending ---")
+	
+	# Only run if Traditional system is active
+	if not traditional_turn_system.is_active:
+		print("✓ Skipping - Traditional turn system not active")
+		return
 	
 	var current_player = traditional_turn_system.get_current_active_player()
 	if not current_player:

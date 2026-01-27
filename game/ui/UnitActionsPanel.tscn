@@ -77,6 +77,66 @@ theme_override_font_sizes/font_size = 14
 [node name="HSeparator2" type="HSeparator" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
 
+[node name="UnitSummaryButton" type="Button" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 32)
+text = "Unit Summary ▼"
+theme_override_font_sizes/font_size = 12
+
+[node name="StatsContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+visible = false
+
+[node name="StatsTitle" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+layout_mode = 2
+text = "Unit Statistics"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
+
+[node name="HealthLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+layout_mode = 2
+text = "Health: 100/100"
+theme_override_font_sizes/font_size = 11
+
+[node name="AttackLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+layout_mode = 2
+text = "Attack: 25"
+theme_override_font_sizes/font_size = 11
+
+[node name="DefenseLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+layout_mode = 2
+text = "Defense: 15"
+theme_override_font_sizes/font_size = 11
+
+[node name="SpeedLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+layout_mode = 2
+text = "Speed: 8"
+theme_override_font_sizes/font_size = 11
+
+[node name="MovementLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+layout_mode = 2
+text = "Movement: 3"
+theme_override_font_sizes/font_size = 11
+
+[node name="RangeLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+layout_mode = 2
+text = "Range: 1"
+theme_override_font_sizes/font_size = 11
+
+[node name="HSeparator3" type="HSeparator" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="EndPlayerTurnButton" type="Button" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 36)
+text = "End Player Turn"
+theme_override_font_sizes/font_size = 14
+
+[node name="HSeparator4" type="HSeparator" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
 [node name="CancelButton" type="Button" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 32)

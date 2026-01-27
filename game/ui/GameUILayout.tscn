@@ -1,0 +1,109 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="PackedScene" path="res://game/ui/UnitInfoPanel.tscn" id="1"]
+[ext_resource type="PackedScene" path="res://game/ui/UnitActionsPanel.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://game/ui/TurnIndicator.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://game/ui/PlayerTurnPanel.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://game/ui/TurnQueue.tscn" id="5"]
+[ext_resource type="Script" path="res://game/ui/UILayoutManager.gd" id="6"]
+
+[node name="GameUILayout" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("6")
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 15
+theme_override_constants/margin_top = 15
+theme_override_constants/margin_right = 15
+theme_override_constants/margin_bottom = 15
+
+[node name="MainContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TopBar" type="HBoxContainer" parent="MarginContainer/MainContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 180)
+theme_override_constants/separation = 10
+
+[node name="LeftTopSpacer" type="Control" parent="MarginContainer/MainContainer/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CenterTopContainer" type="VBoxContainer" parent="MarginContainer/MainContainer/TopBar"]
+layout_mode = 2
+custom_minimum_size = Vector2(400, 0)
+theme_override_constants/separation = 5
+
+[node name="TurnQueue" parent="MarginContainer/MainContainer/TopBar/CenterTopContainer" instance=ExtResource("5")]
+layout_mode = 2
+anchors_preset = 0
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="TurnIndicator" parent="MarginContainer/MainContainer/TopBar/CenterTopContainer" instance=ExtResource("3")]
+layout_mode = 2
+anchors_preset = 0
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="RightTopSpacer" type="Control" parent="MarginContainer/MainContainer/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="MiddleArea" type="HBoxContainer" parent="MarginContainer/MainContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="LeftSidebar" type="VBoxContainer" parent="MarginContainer/MainContainer/MiddleArea"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 0)
+theme_override_constants/separation = 10
+
+[node name="GameArea" type="Control" parent="MarginContainer/MainContainer/MiddleArea"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="RightSidebar" type="VBoxContainer" parent="MarginContainer/MainContainer/MiddleArea"]
+layout_mode = 2
+custom_minimum_size = Vector2(220, 0)
+theme_override_constants/separation = 10
+
+[node name="UnitActionsPanel" parent="MarginContainer/MainContainer/MiddleArea/RightSidebar" instance=ExtResource("2")]
+layout_mode = 2
+anchors_preset = 0
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+size_flags_horizontal = 3
+size_flags_vertical = 3

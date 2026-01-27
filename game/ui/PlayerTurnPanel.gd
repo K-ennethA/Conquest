@@ -75,11 +75,13 @@ func _update_display() -> void:
 	if not player_name_label or not turn_info_label or not end_turn_button:
 		return
 	
-	# Get current player
+	# Get current player - prioritize TurnSystemManager over PlayerManager
 	var active_player = null
 	if TurnSystemManager.has_active_turn_system():
 		active_player = TurnSystemManager.get_current_active_player()
-	elif PlayerManager:
+	
+	# Fallback to PlayerManager only if TurnSystemManager doesn't have an active player
+	if not active_player and PlayerManager:
 		active_player = PlayerManager.get_current_player()
 	
 	if active_player:
@@ -96,9 +98,9 @@ func _update_display() -> void:
 				var trad_system = turn_system as TraditionalTurnSystem
 				var progress = trad_system.get_current_turn_progress()
 				if progress.has("units_can_act"):
-					turn_info_label.text = "Turn " + str(turn_system.current_turn) + " - " + str(progress.units_can_act) + " units remaining"
+					turn_info_label.text = "Round " + str(turn_system.current_turn) + " - " + str(progress.units_can_act) + " units remaining"
 				else:
-					turn_info_label.text = "Turn " + str(turn_system.current_turn)
+					turn_info_label.text = "Round " + str(turn_system.current_turn)
 			else:
 				turn_info_label.text = "Turn " + str(turn_system.current_turn)
 		else:

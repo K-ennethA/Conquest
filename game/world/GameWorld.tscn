@@ -14,6 +14,7 @@
 [ext_resource type="Script" path="res://game/world/GameWorldManager.gd" id="12"]
 [ext_resource type="PackedScene" path="res://game/ui/TurnIndicator.tscn" id="14"]
 [ext_resource type="PackedScene" path="res://game/ui/PlayerTurnPanel.tscn" id="15"]
+[ext_resource type="PackedScene" path="res://game/ui/GameUILayout.tscn" id="17"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
@@ -55,13 +56,7 @@ script = ExtResource("11")
 
 [node name="UI" type="CanvasLayer" parent="."]
 
-[node name="UnitInfoPanel" parent="UI" instance=ExtResource("8")]
-
-[node name="UnitActionsPanel" parent="UI" instance=ExtResource("10")]
-
-[node name="TurnIndicator" parent="UI" instance=ExtResource("14")]
-
-[node name="PlayerTurnPanel" parent="UI" instance=ExtResource("15")]
+[node name="GameUILayout" parent="UI" instance=ExtResource("17")]
 
 [node name="Map" type="Node3D" parent="."]
 script = ExtResource("1")

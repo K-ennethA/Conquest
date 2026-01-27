@@ -1,160 +1,217 @@
-extends Node
+extends Control
 
 class_name UILayoutManager
 
-# UI Layout Manager
-# Ensures proper positioning and prevents overlaps between UI elements
+# Comprehensive UI Layout Manager
+# Manages all UI components with proper container-based layout to prevent overlapping
 
-# Define UI zones to prevent overlaps
-enum UIZone {
-	TOP_LEFT,
-	TOP_CENTER, 
-	TOP_RIGHT,
-	MIDDLE_LEFT,
-	MIDDLE_CENTER,
-	MIDDLE_RIGHT,
-	BOTTOM_LEFT,
-	BOTTOM_CENTER,
-	BOTTOM_RIGHT
-}
+# UI Component References
+@onready var margin_container: MarginContainer = $MarginContainer
+@onready var main_container: VBoxContainer = $MarginContainer/MainContainer
+@onready var top_bar: HBoxContainer = $MarginContainer/MainContainer/TopBar
+@onready var center_top_container: VBoxContainer = $MarginContainer/MainContainer/TopBar/CenterTopContainer
+@onready var middle_area: HBoxContainer = $MarginContainer/MainContainer/MiddleArea
+@onready var left_sidebar: VBoxContainer = $MarginContainer/MainContainer/MiddleArea/LeftSidebar
+@onready var game_area: Control = $MarginContainer/MainContainer/MiddleArea/GameArea
+@onready var right_sidebar: VBoxContainer = $MarginContainer/MainContainer/MiddleArea/RightSidebar
 
-# UI element registry
-var ui_elements: Dictionary = {}
-var zone_occupancy: Dictionary = {}
+# UI Panel References
+@onready var turn_queue: Control = $MarginContainer/MainContainer/TopBar/CenterTopContainer/TurnQueue
+@onready var turn_indicator: Control = $MarginContainer/MainContainer/TopBar/CenterTopContainer/TurnIndicator
+@onready var unit_actions_panel: Control = $MarginContainer/MainContainer/MiddleArea/RightSidebar/UnitActionsPanel
+
+# Layout state
+var current_turn_system_type: TurnSystemBase.TurnSystemType = TurnSystemBase.TurnSystemType.TRADITIONAL
+var is_layout_initialized: bool = false
 
 func _ready() -> void:
-	name = "UILayoutManager"
-	print("UILayoutManager initialized")
+	print("UILayoutManager: Initializing comprehensive UI layout")
+	
+	# Connect to turn system events
+	if TurnSystemManager:
+		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
+		print("UILayoutManager: Connected to TurnSystemManager")
+	
+	# Initialize layout
+	_initialize_layout()
+	_update_layout_for_turn_system()
+	
+	is_layout_initialized = true
+	print("UILayoutManager: Layout initialization complete")
 
-func register_ui_element(element: Control, zone: UIZone, priority: int = 0) -> bool:
-	"""Register a UI element in a specific zone"""
-	var element_name = element.name
+func _initialize_layout() -> void:
+	"""Initialize the layout system with proper sizing and constraints"""
 	
-	# Check if zone is already occupied by higher priority element
-	if zone_occupancy.has(zone):
-		var existing_element = zone_occupancy[zone]
-		if existing_element.priority > priority:
-			print("UILayoutManager: Zone " + UIZone.keys()[zone] + " occupied by higher priority element")
-			return false
+	# Set minimum sizes for main areas with proper spacing
+	if top_bar:
+		top_bar.custom_minimum_size = Vector2(0, 180)  # Taller to accommodate TurnQueue
 	
-	# Register the element
-	ui_elements[element_name] = {
-		"element": element,
-		"zone": zone,
-		"priority": priority
-	}
+	if middle_area:
+		# This will expand to fill available space
+		middle_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
-	zone_occupancy[zone] = {
-		"element": element,
-		"priority": priority
-	}
+	# Set sidebar constraints - only right sidebar now
+	if left_sidebar:
+		left_sidebar.custom_minimum_size = Vector2(0, 0)  # No minimum width needed
+		left_sidebar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	
-	print("UILayoutManager: Registered " + element_name + " in zone " + UIZone.keys()[zone])
-	return true
+	if right_sidebar:
+		right_sidebar.custom_minimum_size = Vector2(220, 0)
+		right_sidebar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	
+	# Game area should expand to fill remaining space
+	if game_area:
+		game_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		game_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	
+	print("UILayoutManager: Layout constraints initialized with proper spacing")
 
-func unregister_ui_element(element: Control) -> void:
-	"""Unregister a UI element"""
-	var element_name = element.name
+func _update_layout_for_turn_system() -> void:
+	"""Update layout based on current turn system"""
 	
-	if ui_elements.has(element_name):
-		var element_data = ui_elements[element_name]
-		var zone = element_data.zone
-		
-		ui_elements.erase(element_name)
-		zone_occupancy.erase(zone)
-		
-		print("UILayoutManager: Unregistered " + element_name)
-
-func get_zone_bounds(zone: UIZone, screen_size: Vector2) -> Rect2:
-	"""Get the bounds for a specific UI zone"""
-	var margin = 20.0
-	var third_width = (screen_size.x - margin * 4) / 3.0
-	var third_height = (screen_size.y - margin * 4) / 3.0
-	
-	match zone:
-		UIZone.TOP_LEFT:
-			return Rect2(margin, margin, third_width, third_height)
-		UIZone.TOP_CENTER:
-			return Rect2(margin + third_width + margin, margin, third_width, third_height)
-		UIZone.TOP_RIGHT:
-			return Rect2(margin + (third_width + margin) * 2, margin, third_width, third_height)
-		UIZone.MIDDLE_LEFT:
-			return Rect2(margin, margin + third_height + margin, third_width, third_height)
-		UIZone.MIDDLE_CENTER:
-			return Rect2(margin + third_width + margin, margin + third_height + margin, third_width, third_height)
-		UIZone.MIDDLE_RIGHT:
-			return Rect2(margin + (third_width + margin) * 2, margin + third_height + margin, third_width, third_height)
-		UIZone.BOTTOM_LEFT:
-			return Rect2(margin, margin + (third_height + margin) * 2, third_width, third_height)
-		UIZone.BOTTOM_CENTER:
-			return Rect2(margin + third_width + margin, margin + (third_height + margin) * 2, third_width, third_height)
-		UIZone.BOTTOM_RIGHT:
-			return Rect2(margin + (third_width + margin) * 2, margin + (third_height + margin) * 2, third_width, third_height)
-	
-	return Rect2()
-
-func position_element_in_zone(element: Control, zone: UIZone) -> void:
-	"""Position an element within its assigned zone"""
-	var screen_size = get_viewport().get_visible_rect().size
-	var zone_bounds = get_zone_bounds(zone, screen_size)
-	
-	# Set element position and size constraints
-	element.position = zone_bounds.position
-	element.size = Vector2(min(element.custom_minimum_size.x, zone_bounds.size.x), 
-						   min(element.custom_minimum_size.y, zone_bounds.size.y))
-	
-	print("UILayoutManager: Positioned " + element.name + " at " + str(element.position) + " with size " + str(element.size))
-
-func check_overlaps() -> Array:
-	"""Check for overlapping UI elements"""
-	var overlaps = []
-	var elements = ui_elements.values()
-	
-	for i in range(elements.size()):
-		for j in range(i + 1, elements.size()):
-			var element1 = elements[i].element
-			var element2 = elements[j].element
-			
-			if _elements_overlap(element1, element2):
-				overlaps.append({
-					"element1": element1.name,
-					"element2": element2.name
-				})
-	
-	return overlaps
-
-func _elements_overlap(element1: Control, element2: Control) -> bool:
-	"""Check if two elements overlap"""
-	var rect1 = Rect2(element1.global_position, element1.size)
-	var rect2 = Rect2(element2.global_position, element2.size)
-	
-	return rect1.intersects(rect2)
-
-func print_layout_status() -> void:
-	"""Print current UI layout status"""
-	print("\n=== UI Layout Status ===")
-	print("Registered elements: " + str(ui_elements.size()))
-	
-	for element_name in ui_elements:
-		var data = ui_elements[element_name]
-		var element = data.element
-		print("  " + element_name + ": Zone " + UIZone.keys()[data.zone] + 
-			  " | Pos: " + str(element.position) + " | Size: " + str(element.size) + 
-			  " | Visible: " + str(element.visible))
-	
-	var overlaps = check_overlaps()
-	if overlaps.size() > 0:
-		print("OVERLAPS DETECTED:")
-		for overlap in overlaps:
-			print("  " + overlap.element1 + " overlaps with " + overlap.element2)
+	if current_turn_system_type == TurnSystemBase.TurnSystemType.INITIATIVE:
+		# Speed First mode: Show TurnQueue, hide TurnIndicator
+		_show_speed_first_layout()
 	else:
-		print("No overlaps detected")
-	
-	print("=== End Layout Status ===\n")
+		# Traditional mode: Show TurnIndicator, hide TurnQueue
+		_show_traditional_layout()
 
-# Utility methods for common UI positioning
-func position_ui_elements() -> void:
-	"""Position all registered UI elements in their zones"""
-	for element_name in ui_elements:
-		var data = ui_elements[element_name]
-		position_element_in_zone(data.element, data.zone)
+func _show_speed_first_layout() -> void:
+	"""Configure layout for Speed First turn system"""
+	print("UILayoutManager: Configuring Speed First layout")
+	
+	if turn_queue:
+		turn_queue.visible = true
+		turn_queue.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		turn_queue.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	
+	if turn_indicator:
+		turn_indicator.visible = false
+	
+	# Adjust top bar height for Speed First display
+	if top_bar:
+		top_bar.custom_minimum_size = Vector2(0, 180)  # Taller for queue with proper spacing
+
+func _show_traditional_layout() -> void:
+	"""Configure layout for Traditional turn system"""
+	print("UILayoutManager: Configuring Traditional layout")
+	
+	if turn_queue:
+		turn_queue.visible = false
+	
+	if turn_indicator:
+		turn_indicator.visible = true
+		turn_indicator.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		turn_indicator.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	
+	# Standard top bar height for Traditional display
+	if top_bar:
+		top_bar.custom_minimum_size = Vector2(0, 120)  # Smaller for traditional indicator
+
+func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
+	"""Handle turn system activation and update layout accordingly"""
+	print("UILayoutManager: Turn system activated - " + turn_system.system_name)
+	
+	var new_type = turn_system.system_type
+	if new_type != current_turn_system_type:
+		current_turn_system_type = new_type
+		_update_layout_for_turn_system()
+		print("UILayoutManager: Layout updated for " + turn_system.system_name)
+
+# Public interface for layout management
+func show_panel(panel_name: String, show: bool = true) -> void:
+	"""Show or hide a specific UI panel"""
+	match panel_name.to_lower():
+		"unit_actions":
+			if unit_actions_panel:
+				unit_actions_panel.visible = show
+		"turn_queue":
+			if turn_queue:
+				turn_queue.visible = show
+		"turn_indicator":
+			if turn_indicator:
+				turn_indicator.visible = show
+		_:
+			print("UILayoutManager: Unknown panel name: " + panel_name)
+
+func get_game_area() -> Control:
+	"""Get the game area control for 3D scene rendering"""
+	return game_area
+
+func get_panel(panel_name: String) -> Control:
+	"""Get a reference to a specific UI panel"""
+	match panel_name.to_lower():
+		"unit_actions":
+			return unit_actions_panel
+		"turn_queue":
+			return turn_queue
+		"turn_indicator":
+			return turn_indicator
+		_:
+			print("UILayoutManager: Unknown panel name: " + panel_name)
+			return null
+
+func is_mouse_over_ui(mouse_position: Vector2) -> bool:
+	"""Check if mouse position is over any UI element"""
+	# Check if mouse is over any visible UI panel
+	var panels = [unit_actions_panel]
+	
+	# Add turn system specific panels
+	if current_turn_system_type == TurnSystemBase.TurnSystemType.INITIATIVE and turn_queue and turn_queue.visible:
+		panels.append(turn_queue)
+	elif turn_indicator and turn_indicator.visible:
+		panels.append(turn_indicator)
+	
+	for panel in panels:
+		if panel and panel.visible:
+			var panel_rect = Rect2(panel.global_position, panel.size)
+			if panel_rect.has_point(mouse_position):
+				return true
+	
+	return false
+
+func get_layout_info() -> Dictionary:
+	"""Get information about current layout state"""
+	return {
+		"turn_system_type": TurnSystemBase.TurnSystemType.keys()[current_turn_system_type],
+		"is_initialized": is_layout_initialized,
+		"visible_panels": {
+			"unit_actions": unit_actions_panel.visible if unit_actions_panel else false,
+			"turn_queue": turn_queue.visible if turn_queue else false,
+			"turn_indicator": turn_indicator.visible if turn_indicator else false
+		},
+		"layout_areas": {
+			"top_bar_height": top_bar.custom_minimum_size.y if top_bar else 0,
+			"left_sidebar_width": 0,  # No longer used
+			"right_sidebar_width": right_sidebar.custom_minimum_size.x if right_sidebar else 0
+		}
+	}
+
+# Responsive layout adjustments
+func _on_viewport_size_changed() -> void:
+	"""Handle viewport size changes for responsive layout"""
+	var viewport_size = get_viewport().get_visible_rect().size
+	
+	# Adjust sidebar visibility based on screen width - only right sidebar now
+	if viewport_size.x < 1200:
+		# On smaller screens, make right sidebar slightly smaller
+		if right_sidebar:
+			right_sidebar.custom_minimum_size.x = 180  # Slightly smaller
+	else:
+		# On larger screens, use full sidebar width
+		if right_sidebar:
+			right_sidebar.custom_minimum_size.x = 220
+	
+	print("UILayoutManager: Layout adjusted for viewport size: " + str(viewport_size))
+
+func force_layout_update() -> void:
+	"""Force a complete layout update (useful for debugging)"""
+	print("UILayoutManager: Forcing layout update")
+	_initialize_layout()
+	_update_layout_for_turn_system()
+	
+	# Force container updates
+	if main_container:
+		main_container.queue_sort()
+	
+	print("UILayoutManager: Forced layout update complete")

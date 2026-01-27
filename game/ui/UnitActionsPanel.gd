@@ -7,25 +7,43 @@ class_name UnitActionsPanel
 
 @onready var move_button: Button = $MarginContainer/VBoxContainer/ActionsContainer/MoveButton
 @onready var end_unit_turn_button: Button = $MarginContainer/VBoxContainer/ActionsContainer/EndUnitTurnButton
+@onready var unit_summary_button: Button = $MarginContainer/VBoxContainer/UnitSummaryButton
+@onready var stats_container: VBoxContainer = $MarginContainer/VBoxContainer/StatsContainer
+@onready var health_label: Label = $MarginContainer/VBoxContainer/StatsContainer/HealthLabel
+@onready var attack_label: Label = $MarginContainer/VBoxContainer/StatsContainer/AttackLabel
+@onready var defense_label: Label = $MarginContainer/VBoxContainer/StatsContainer/DefenseLabel
+@onready var speed_label: Label = $MarginContainer/VBoxContainer/StatsContainer/SpeedLabel
+@onready var movement_label: Label = $MarginContainer/VBoxContainer/StatsContainer/MovementLabel
+@onready var range_label: Label = $MarginContainer/VBoxContainer/StatsContainer/RangeLabel
+@onready var end_player_turn_button: Button = $MarginContainer/VBoxContainer/EndPlayerTurnButton
 @onready var cancel_button: Button = $MarginContainer/VBoxContainer/CancelButton
 
 var selected_unit: Unit = null
+var stats_expanded: bool = false
 
 func _ready() -> void:
-	print("UnitActionsPanel _ready() called")
+	print("=== UnitActionsPanel _ready() called ===")
 	
 	# Ensure proper mouse handling
 	mouse_filter = Control.MOUSE_FILTER_STOP  # Make sure panel stops mouse events
 	
 	# Connect to game events
-	GameEvents.unit_selected.connect(_on_unit_selected)
-	GameEvents.unit_deselected.connect(_on_unit_deselected)
+	print("Connecting to GameEvents...")
+	if GameEvents:
+		GameEvents.unit_selected.connect(_on_unit_selected)
+		GameEvents.unit_deselected.connect(_on_unit_deselected)
+		print("GameEvents connections established")
+	else:
+		print("ERROR: GameEvents not found!")
 	
 	# Connect to player management events
 	if PlayerManager:
 		PlayerManager.player_turn_started.connect(_on_player_turn_changed)
 		PlayerManager.player_turn_ended.connect(_on_player_turn_changed)
 		PlayerManager.game_state_changed.connect(_on_game_state_changed)
+		print("PlayerManager connections established")
+	else:
+		print("ERROR: PlayerManager not found!")
 	
 	# Connect button signals and ensure they can receive mouse input
 	if move_button:
@@ -43,6 +61,20 @@ func _ready() -> void:
 		print("End Unit Turn button connected")
 	else:
 		print("ERROR: End Unit Turn button not found!")
+	
+	if unit_summary_button:
+		unit_summary_button.mouse_filter = Control.MOUSE_FILTER_STOP
+		unit_summary_button.pressed.connect(_on_unit_summary_pressed)
+		print("Unit Summary button connected")
+	else:
+		print("ERROR: Unit Summary button not found!")
+	
+	if end_player_turn_button:
+		end_player_turn_button.mouse_filter = Control.MOUSE_FILTER_STOP
+		end_player_turn_button.pressed.connect(_on_end_player_turn_pressed)
+		print("End Player Turn button connected")
+	else:
+		print("ERROR: End Player Turn button not found!")
 		
 	if cancel_button:
 		cancel_button.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -57,7 +89,9 @@ func _ready() -> void:
 
 func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	"""Handle unit selection - show actions for selected unit"""
-	print("Unit selection attempted: " + unit.name)
+	print("=== UnitActionsPanel: Unit selection received ===")
+	print("Unit: " + unit.name)
+	print("Position: " + str(position))
 	
 	# Only show if this is the current player's unit
 	if not PlayerManager.can_current_player_select_unit(unit):
@@ -74,12 +108,73 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	print("Unit selection accepted: " + unit.name)
 	selected_unit = unit
 	_update_actions()
+	_update_unit_stats()
 	_show_panel()
+	print("=== UnitActionsPanel: Unit selection processing complete ===")
+
+func _update_unit_stats() -> void:
+	"""Update the unit stats display"""
+	if not selected_unit:
+		return
+	
+	# Update all stat labels
+	if health_label:
+		health_label.text = "Health: " + str(selected_unit.current_health) + "/" + str(selected_unit.max_health)
+	
+	if attack_label:
+		var attack = selected_unit.get_stat("attack") if selected_unit.has_method("get_stat") else 0
+		attack_label.text = "Attack: " + str(attack)
+	
+	if defense_label:
+		var defense = selected_unit.get_stat("defense") if selected_unit.has_method("get_stat") else 0
+		defense_label.text = "Defense: " + str(defense)
+	
+	if speed_label:
+		var speed = selected_unit.get_stat("speed") if selected_unit.has_method("get_stat") else 0
+		# Show current speed if different from base (due to battle effects)
+		var current_speed = speed
+		if TurnSystemManager.has_active_turn_system():
+			var turn_system = TurnSystemManager.get_active_turn_system()
+			if turn_system is SpeedFirstTurnSystem:
+				current_speed = (turn_system as SpeedFirstTurnSystem).get_unit_current_speed(selected_unit)
+		
+		if current_speed != speed:
+			speed_label.text = "Speed: " + str(current_speed) + " (base: " + str(speed) + ")"
+		else:
+			speed_label.text = "Speed: " + str(speed)
+	
+	if movement_label:
+		var movement = selected_unit.get_stat("movement") if selected_unit.has_method("get_stat") else 0
+		movement_label.text = "Movement: " + str(movement)
+	
+	if range_label:
+		var range_val = selected_unit.get_stat("range") if selected_unit.has_method("get_stat") else 0
+		range_label.text = "Range: " + str(range_val)
+
+func _on_unit_summary_pressed() -> void:
+	"""Handle Unit Summary button press - toggle stats display"""
+	stats_expanded = not stats_expanded
+	
+	if stats_container:
+		stats_container.visible = stats_expanded
+	
+	if unit_summary_button:
+		if stats_expanded:
+			unit_summary_button.text = "Unit Summary ▲"
+		else:
+			unit_summary_button.text = "Unit Summary ▼"
+	
+	print("Unit stats " + ("expanded" if stats_expanded else "collapsed"))
 
 func _on_unit_deselected(unit: Unit) -> void:
 	"""Handle unit deselection - hide actions"""
 	if selected_unit == unit:
 		selected_unit = null
+		stats_expanded = false
+		if stats_container:
+			stats_container.visible = false
+		if unit_summary_button:
+			unit_summary_button.text = "Unit Summary ▼"
 		_hide_panel()
 
 func _on_player_turn_changed(player: Player) -> void:
@@ -116,6 +211,17 @@ func _update_actions() -> void:
 					turn_system_reason = "not your unit"
 				else:
 					turn_system_reason = "cannot act"
+			elif turn_system is SpeedFirstTurnSystem:
+				var speed_system = turn_system as SpeedFirstTurnSystem
+				var current_acting_unit = speed_system.get_current_acting_unit()
+				if selected_unit in speed_system.get_units_that_acted_this_round():
+					turn_system_reason = "already acted this round"
+				elif current_acting_unit and selected_unit != current_acting_unit:
+					turn_system_reason = "not this unit's turn"
+				elif not current_player.owns_unit(selected_unit):
+					turn_system_reason = "not your unit"
+				else:
+					turn_system_reason = "cannot act"
 			else:
 				turn_system_reason = "not your turn"
 	
@@ -142,6 +248,16 @@ func _update_actions() -> void:
 			end_unit_turn_button.text = "End Unit Turn (E) - " + turn_system_reason
 		else:
 			end_unit_turn_button.text = "End Unit Turn (E) - unavailable"
+	
+	# Update End Player Turn button
+	if end_player_turn_button:
+		var can_end_player_turn = can_control and game_active
+		end_player_turn_button.disabled = not can_end_player_turn
+		
+		if can_end_player_turn:
+			end_player_turn_button.text = "End Player Turn (P)"
+		else:
+			end_player_turn_button.text = "End Player Turn (P) - unavailable"
 	
 	# Cancel button is always available when unit is selected
 	if cancel_button:
@@ -235,6 +351,40 @@ func _on_end_unit_turn_pressed() -> void:
 	
 	print("=== END UNIT TURN PROCESSING COMPLETE ===")
 
+func _on_end_player_turn_pressed() -> void:
+	"""Handle End Player Turn button press - ends the entire player's turn"""
+	print("=== END PLAYER TURN BUTTON PRESSED ===")
+	
+	if not PlayerManager:
+		print("PlayerManager not available")
+		return
+	
+	var current_player = PlayerManager.get_current_player()
+	if not current_player:
+		print("No current player")
+		return
+	
+	print("Ending turn for player: " + current_player.player_name)
+	
+	# Use the turn system to end the player's turn
+	if TurnSystemManager.has_active_turn_system():
+		var turn_system = TurnSystemManager.get_active_turn_system()
+		print("Using turn system to end player turn: " + turn_system.system_name)
+		
+		# End the player's turn through the turn system
+		if turn_system.has_method("end_player_turn"):
+			turn_system.end_player_turn()
+		else:
+			# Fallback: use PlayerManager directly
+			print("Turn system doesn't have end_player_turn method, using PlayerManager")
+			PlayerManager.end_current_player_turn()
+	else:
+		# Fallback: use PlayerManager directly
+		print("No active turn system, using PlayerManager")
+		PlayerManager.end_current_player_turn()
+	
+	print("=== END PLAYER TURN PROCESSING COMPLETE ===")
+
 # Add mouse event debugging
 func _gui_input(event: InputEvent) -> void:
 	print("UnitActionsPanel received GUI input: " + str(event))
@@ -287,6 +437,9 @@ func _input(event: InputEvent) -> void:
 			KEY_F3:
 				print("F3 pressed - hiding panel")
 				_hide_panel()
+			KEY_F4:
+				print("F4 pressed - testing manual unit selection")
+				_test_manual_unit_selection()
 			
 			# Keyboard shortcuts for actions (only when panel is visible and unit selected)
 			KEY_M:
@@ -297,7 +450,33 @@ func _input(event: InputEvent) -> void:
 				if visible and selected_unit:
 					print("E key pressed - triggering End Unit Turn action")
 					_on_end_unit_turn_pressed()
+			KEY_P:
+				if visible and selected_unit:
+					print("P key pressed - triggering End Player Turn action")
+					_on_end_player_turn_pressed()
+			KEY_S:
+				if visible and selected_unit:
+					print("S key pressed - triggering Unit Summary toggle")
+					_on_unit_summary_pressed()
 			KEY_C, KEY_ESCAPE:
 				if visible and selected_unit:
 					print("C/ESC key pressed - triggering Cancel action")
 					_on_cancel_pressed()
+
+func _test_manual_unit_selection() -> void:
+	"""Test manual unit selection for debugging"""
+	print("=== Testing manual unit selection ===")
+	
+	# Find a unit to test with
+	var scene_root = get_tree().current_scene
+	var player1_node = scene_root.get_node_or_null("Map/Player1")
+	if player1_node:
+		for child in player1_node.get_children():
+			if child is Unit:
+				print("Found test unit: " + child.name)
+				var world_pos = child.global_position
+				print("Manually triggering unit selection...")
+				_on_unit_selected(child, world_pos)
+				return
+	
+	print("No units found for testing")

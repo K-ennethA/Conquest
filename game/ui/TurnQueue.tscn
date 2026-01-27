@@ -1,0 +1,96 @@
+[gd_scene load_steps=3 format=3 uid="uid://bvxhqxqxqxqxq"]
+
+[ext_resource type="Script" path="res://game/ui/TurnQueue.gd" id="1_turnqueue"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1"]
+bg_color = Color(0.1, 0.1, 0.1, 0.8)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.5, 0.5, 0.5, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_left = 8
+corner_radius_bottom_right = 8
+
+[node name="TurnQueue" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 400.0
+offset_bottom = 180.0
+script = ExtResource("1_turnqueue")
+
+[node name="Background" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_1")
+
+[node name="MainContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+theme_override_constants/separation = 8
+
+[node name="CurrentUnitContainer" type="VBoxContainer" parent="MainContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="CurrentUnitLabel" type="Label" parent="MainContainer/CurrentUnitContainer"]
+layout_mode = 2
+text = "Archer Acting (Player 1)"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 16
+
+[node name="RoundInfoLabel" type="Label" parent="MainContainer/CurrentUnitContainer"]
+layout_mode = 2
+text = "Round 1 • Speed: 12 • 5 units left"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
+theme_override_font_sizes/font_size = 12
+
+[node name="HSeparator" type="HSeparator" parent="MainContainer"]
+layout_mode = 2
+
+[node name="QueueSection" type="VBoxContainer" parent="MainContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 6
+
+[node name="QueueTitle" type="Label" parent="MainContainer/QueueSection"]
+layout_mode = 2
+text = "Upcoming Turns (6 shown)"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 12
+
+[node name="QueueControls" type="HBoxContainer" parent="MainContainer/QueueSection"]
+layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="ScrollLeftButton" type="Button" parent="MainContainer/QueueSection/QueueControls"]
+layout_mode = 2
+custom_minimum_size = Vector2(32, 32)
+text = "◀"
+theme_override_font_sizes/font_size = 14
+
+[node name="QueueContainer" type="HBoxContainer" parent="MainContainer/QueueSection/QueueControls"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+alignment = 1
+
+[node name="ScrollRightButton" type="Button" parent="MainContainer/QueueSection/QueueControls"]
+layout_mode = 2
+custom_minimum_size = Vector2(32, 32)
+text = "▶"
+theme_override_font_sizes/font_size = 14

@@ -278,6 +278,15 @@ func _on_all_units_acted() -> void:
 	"""Handle all units having acted"""
 	print("Turn System: All units have acted")
 
+# Turn system reset (for testing)
+func reset_turn_system() -> void:
+	"""Reset the active turn system to initial state (for testing purposes)"""
+	if active_turn_system and active_turn_system.has_method("reset_turn_system"):
+		active_turn_system.reset_turn_system()
+		print("TurnSystemManager: Turn system reset completed")
+	else:
+		print("TurnSystemManager: No active turn system to reset or reset not supported")
+
 # Debug and utility
 func get_turn_system_info() -> Dictionary:
 	"""Get information about the turn system manager"""
