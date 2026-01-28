@@ -52,7 +52,7 @@ func _ready() -> void:
 	GameEvents.unit_selected.connect(_on_unit_selected)
 	GameEvents.unit_deselected.connect(_on_unit_deselected)
 	
-	# Connect to turn system events for auto-positioning
+	# Connect to turn system events for cursor positioning
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
 
@@ -143,51 +143,80 @@ func _unhandled_input(event: InputEvent) -> void:
 			if grid.is_within_bounds(new_position):
 				self.tile_position = new_position
 			return
-
-func _input(event: InputEvent) -> void:
-	"""Handle mouse input with higher priority"""
-	# Debug: Print all input events to see what we're receiving
-	if event is InputEventMouseButton:
-		print("=== Mouse Button Event Received ===")
-		print("Button: " + str(event.button_index))
-		print("Pressed: " + str(event.pressed))
-		print("Position: " + str(event.position))
-	elif event is InputEventMouseMotion:
-		# Only print occasionally to avoid spam
-		if randf() < 0.01:  # Print ~1% of mouse motion events
-			print("Mouse motion: " + str(event.position))
 	
-	# Handle mouse input
+	# Handle mouse input (only if not handled by UI)
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-			print("=== Left Mouse Click Detected ===")
+			print("=== Left Mouse Click Detected (Unhandled) ===")
 			print("Mouse position: " + str(event.position))
 			
-			# Check if mouse is over UI elements first
-			var screen_size = get_viewport().get_visible_rect().size
-			var mouse_pos = event.position
-			print("Screen size: " + str(screen_size))
-			print("UI threshold (80%): " + str(screen_size.x * 0.8))
-			
-			# More lenient UI detection - only block if in right sidebar area
-			if mouse_pos.x > screen_size.x * 0.8:  # Changed from 0.75 to 0.8
-				print("Mouse click in UI area - not handling in cursor")
-				return
+			# Check if mouse is over UI elements using UILayoutManager
+			var ui_layout = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
+			if ui_layout and ui_layout.has_method("is_mouse_over_ui"):
+				if ui_layout.is_mouse_over_ui(event.position):
+					print("Mouse click blocked by UILayoutManager - over UI element")
+					return
+				else:
+					print("Mouse click allowed by UILayoutManager - not over UI")
+			else:
+				print("UILayoutManager not found - using fallback detection")
+				# Fallback: Check if mouse is over UI elements using screen position
+				var screen_size = get_viewport().get_visible_rect().size
+				var mouse_pos = event.position
+				print("Screen size: " + str(screen_size))
+				print("UI threshold (80%): " + str(screen_size.x * 0.8))
+				
+				# More lenient UI detection - only block if in right sidebar area
+				if mouse_pos.x > screen_size.x * 0.8:  # Changed from 0.75 to 0.8
+					print("Mouse click in UI area - not handling in cursor")
+					return
 			
 			print("Mouse click in game area - handling cursor selection")
 			_handle_mouse_click(event.position)
-			get_viewport().set_input_as_handled()  # Consume the event
 		return
 	
 	# Handle mouse movement for cursor positioning (only if mouse enabled)
 	if event is InputEventMouseMotion and is_mouse_enabled:
-		var screen_size = get_viewport().get_visible_rect().size
-		var mouse_pos = event.position
+		var ui_layout = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
+		if ui_layout and ui_layout.has_method("is_mouse_over_ui"):
+			if ui_layout.is_mouse_over_ui(event.position):
+				return  # Don't move cursor when over UI
+		else:
+			# Fallback detection
+			var screen_size = get_viewport().get_visible_rect().size
+			var mouse_pos = event.position
+			
+			# Only move cursor with mouse if not over UI area
+			if mouse_pos.x > screen_size.x * 0.8:  # Changed from 0.75 to 0.8
+				return
 		
-		# Only move cursor with mouse if not over UI area
-		if mouse_pos.x <= screen_size.x * 0.8:  # Changed from 0.75 to 0.8
-			_handle_mouse_movement(event.position)
+		_handle_mouse_movement(event.position)
 		return
+
+func _input(event: InputEvent) -> void:
+	"""Handle high-priority input - currently unused to let UI have priority"""
+	# Debug: Print all input events to see what we're receiving
+	if event is InputEventMouseButton:
+		print("=== Mouse Button Event Received (High Priority) ===")
+		print("Button: " + str(event.button_index))
+		print("Pressed: " + str(event.pressed))
+		print("Position: " + str(event.position))
+		print("Letting UI handle this event first...")
+		
+		# Add debug key to bypass UI and force unit selection
+		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			print("=== RIGHT CLICK - FORCING UNIT SELECTION TEST ===")
+			_handle_mouse_click(event.position)
+			get_viewport().set_input_as_handled()
+			return
+			
+	elif event is InputEventMouseMotion:
+		# Only print occasionally to avoid spam
+		if randf() < 0.01:  # Print ~1% of mouse motion events
+			print("Mouse motion (high priority): " + str(event.position))
+	
+	# Don't handle mouse events here - let UI have priority
+	# Mouse events will be handled in _unhandled_input() if UI doesn't consume them
 
 func _handle_mouse_click(mouse_pos: Vector2) -> void:
 	"""Handle mouse click for unit selection"""
@@ -290,7 +319,7 @@ func _handle_selection() -> void:
 			var turn_system = TurnSystemManager.get_active_turn_system()
 			print("Cursor: Active turn system is " + turn_system.system_name)
 			
-			# Special handling for Speed First turn system
+			# Special handling for Speed First turn system - allow selection but UI will handle action restrictions
 			if turn_system is SpeedFirstTurnSystem:
 				var speed_system = turn_system as SpeedFirstTurnSystem
 				var current_acting_unit = speed_system.get_current_acting_unit()
@@ -298,14 +327,14 @@ func _handle_selection() -> void:
 				print("Cursor: Speed First mode - current acting unit: " + (current_acting_unit.get_display_name() if current_acting_unit else "None"))
 				print("Cursor: Attempted selection: " + unit_at_cursor.get_display_name())
 				
-				# In Speed First mode, only allow selection of the currently acting unit
-				if unit_at_cursor != current_acting_unit:
-					print("Cursor: BLOCKED - Cannot select unit: not the currently acting unit in Speed First mode")
-					return
+				# In Speed First mode, allow selection of any unit - UI will handle action availability
+				if unit_at_cursor == current_acting_unit:
+					print("Cursor: ALLOWED - Unit is the currently acting unit (can act)")
 				else:
-					print("Cursor: ALLOWED - Unit is the currently acting unit")
-			
-			if not turn_system.can_unit_act(unit_at_cursor):
+					print("Cursor: ALLOWED - Unit can be selected for inspection (actions disabled)")
+				
+				# Skip the general can_unit_act check for Speed First - let UI handle it
+			elif not turn_system.can_unit_act(unit_at_cursor):
 				if turn_system is TraditionalTurnSystem:
 					var trad_system = turn_system as TraditionalTurnSystem
 					if unit_at_cursor in trad_system.get_units_that_acted():
@@ -421,45 +450,6 @@ func _on_unit_deselected(unit: Unit) -> void:
 	# Visual feedback is handled in _deselect_unit
 	pass
 
-func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
-	"""Handle turn system activation"""
-	if turn_system is SpeedFirstTurnSystem:
-		var speed_system = turn_system as SpeedFirstTurnSystem
-		
-		# Connect to turn events
-		if speed_system.turn_started.is_connected(_on_speed_first_turn_started):
-			speed_system.turn_started.disconnect(_on_speed_first_turn_started)
-		speed_system.turn_started.connect(_on_speed_first_turn_started)
-		
-		# Auto-position cursor on current acting unit
-		_auto_position_on_current_unit(speed_system)
-
-func _on_speed_first_turn_started(unit_or_player) -> void:
-	"""Handle turn start in Speed First system"""
-	if TurnSystemManager.has_active_turn_system():
-		var turn_system = TurnSystemManager.get_active_turn_system()
-		if turn_system is SpeedFirstTurnSystem:
-			_auto_position_on_current_unit(turn_system as SpeedFirstTurnSystem)
-
-func _auto_position_on_current_unit(speed_system: SpeedFirstTurnSystem) -> void:
-	"""Auto-position cursor on the current acting unit"""
-	var current_unit = speed_system.get_current_acting_unit()
-	if current_unit:
-		# Move cursor to unit's position
-		var unit_world_pos = current_unit.global_position
-		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
-		
-		print("Auto-positioning cursor on current acting unit: " + current_unit.get_display_name())
-		print("  Unit world pos: " + str(unit_world_pos))
-		print("  Unit grid pos: " + str(unit_grid_pos))
-		
-		# Set cursor position (this will trigger position update and selection check)
-		self.tile_position = unit_grid_pos
-		
-		# Auto-select the unit
-		await get_tree().process_frame  # Wait for position to update
-		_select_unit(current_unit)
-
 # Public interface
 func get_selected_unit() -> Unit:
 	"""Get currently selected unit"""
@@ -481,6 +471,92 @@ func set_mouse_enabled(enabled: bool) -> void:
 func toggle_mouse_mode() -> void:
 	"""Toggle between mouse and keyboard-only mode"""
 	set_mouse_enabled(not is_mouse_enabled)
+
+func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
+	"""Handle turn system activation"""
+	if turn_system is SpeedFirstTurnSystem:
+		var speed_system = turn_system as SpeedFirstTurnSystem
+		
+		# Connect to turn events for cursor positioning
+		if speed_system.turn_started.is_connected(_on_speed_first_turn_started):
+			speed_system.turn_started.disconnect(_on_speed_first_turn_started)
+		speed_system.turn_started.connect(_on_speed_first_turn_started)
+		
+		# Position cursor on current acting unit
+		_position_cursor_on_current_unit(speed_system)
+	elif turn_system is TraditionalTurnSystem:
+		var trad_system = turn_system as TraditionalTurnSystem
+		
+		# Connect to turn events for cursor positioning
+		if trad_system.turn_started.is_connected(_on_traditional_turn_started):
+			trad_system.turn_started.disconnect(_on_traditional_turn_started)
+		trad_system.turn_started.connect(_on_traditional_turn_started)
+		
+		# Position cursor on a unit owned by current player
+		_position_cursor_on_player_unit(trad_system)
+
+func _on_speed_first_turn_started(unit_or_player) -> void:
+	"""Handle turn start in Speed First system"""
+	if TurnSystemManager.has_active_turn_system():
+		var turn_system = TurnSystemManager.get_active_turn_system()
+		if turn_system is SpeedFirstTurnSystem:
+			_position_cursor_on_current_unit(turn_system as SpeedFirstTurnSystem)
+
+func _on_traditional_turn_started(player: Player) -> void:
+	"""Handle turn start in Traditional system"""
+	if TurnSystemManager.has_active_turn_system():
+		var turn_system = TurnSystemManager.get_active_turn_system()
+		if turn_system is TraditionalTurnSystem:
+			_position_cursor_on_player_unit(turn_system as TraditionalTurnSystem)
+
+func _position_cursor_on_current_unit(speed_system: SpeedFirstTurnSystem) -> void:
+	"""Position cursor on the current acting unit (no auto-selection)"""
+	var current_unit = speed_system.get_current_acting_unit()
+	if current_unit:
+		# Move cursor to unit's position
+		var unit_world_pos = current_unit.global_position
+		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
+		
+		print("Positioning cursor on current acting unit: " + current_unit.get_display_name())
+		print("  Moving cursor to grid position: " + str(unit_grid_pos))
+		
+		# Set cursor position (this will trigger position update)
+		self.tile_position = unit_grid_pos
+		
+		# Note: We don't auto-select the unit - player must manually select it
+
+func _position_cursor_on_player_unit(trad_system: TraditionalTurnSystem) -> void:
+	"""Position cursor on a unit owned by the current player that can still act"""
+	if not PlayerManager:
+		return
+	
+	var current_player = PlayerManager.get_current_player()
+	if not current_player:
+		return
+	
+	# Find a unit owned by current player that hasn't acted yet
+	var player_units = current_player.get_units()
+	var acted_units = trad_system.get_units_that_acted()
+	
+	var available_unit: Unit = null
+	for unit in player_units:
+		if unit not in acted_units:
+			available_unit = unit
+			break
+	
+	# If no units can act, just pick the first unit
+	if not available_unit and player_units.size() > 0:
+		available_unit = player_units[0]
+	
+	if available_unit:
+		var unit_world_pos = available_unit.global_position
+		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
+		
+		print("Positioning cursor on player unit: " + available_unit.get_display_name())
+		print("  Moving cursor to grid position: " + str(unit_grid_pos))
+		
+		# Set cursor position
+		self.tile_position = unit_grid_pos
 
 func _test_unit_selection_signal() -> void:
 	"""Test GameEvents.unit_selected signal emission"""

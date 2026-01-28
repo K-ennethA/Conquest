@@ -27,6 +27,10 @@ var is_layout_initialized: bool = false
 func _ready() -> void:
 	print("UILayoutManager: Initializing comprehensive UI layout")
 	
+	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	print("UILayoutManager: Set mouse_filter to IGNORE for click passthrough")
+	
 	# Connect to turn system events
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
@@ -41,6 +45,26 @@ func _ready() -> void:
 
 func _initialize_layout() -> void:
 	"""Initialize the layout system with proper sizing and constraints"""
+	
+	# CRITICAL: Set mouse filters for all container elements to allow click passthrough
+	if margin_container:
+		margin_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if main_container:
+		main_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if top_bar:
+		top_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if center_top_container:
+		center_top_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if middle_area:
+		middle_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if left_sidebar:
+		left_sidebar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if game_area:
+		game_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if right_sidebar:
+		right_sidebar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	print("UILayoutManager: Set mouse_filter to IGNORE for all container elements")
 	
 	# Set minimum sizes for main areas with proper spacing
 	if top_bar:
@@ -153,21 +177,34 @@ func get_panel(panel_name: String) -> Control:
 
 func is_mouse_over_ui(mouse_position: Vector2) -> bool:
 	"""Check if mouse position is over any UI element"""
+	print("UILayoutManager: Checking mouse position " + str(mouse_position) + " against UI elements")
+	
 	# Check if mouse is over any visible UI panel
-	var panels = [unit_actions_panel]
+	var panels = []
+	
+	# Always check right sidebar (unit actions panel)
+	if unit_actions_panel and unit_actions_panel.visible:
+		panels.append({"name": "unit_actions_panel", "panel": unit_actions_panel})
 	
 	# Add turn system specific panels
 	if current_turn_system_type == TurnSystemBase.TurnSystemType.INITIATIVE and turn_queue and turn_queue.visible:
-		panels.append(turn_queue)
+		panels.append({"name": "turn_queue", "panel": turn_queue})
 	elif turn_indicator and turn_indicator.visible:
-		panels.append(turn_indicator)
+		panels.append({"name": "turn_indicator", "panel": turn_indicator})
 	
-	for panel in panels:
+	print("UILayoutManager: Checking " + str(panels.size()) + " panels")
+	
+	for panel_info in panels:
+		var panel = panel_info.panel
+		var panel_name = panel_info.name
 		if panel and panel.visible:
 			var panel_rect = Rect2(panel.global_position, panel.size)
+			print("UILayoutManager: " + panel_name + " rect: " + str(panel_rect))
 			if panel_rect.has_point(mouse_position):
+				print("UILayoutManager: Mouse is over " + panel_name + " - blocking click")
 				return true
 	
+	print("UILayoutManager: Mouse is not over any UI element - allowing click")
 	return false
 
 func get_layout_info() -> Dictionary:

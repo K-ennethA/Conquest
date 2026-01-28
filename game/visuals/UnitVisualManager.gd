@@ -150,79 +150,6 @@ func apply_selection_visual(unit: Unit, selected: bool) -> void:
 		# Restore appropriate material based on unit's current state
 		_restore_unit_material(unit)
 
-func apply_current_acting_highlight(unit: Unit, is_current: bool) -> void:
-	"""Apply or remove highlighting for the current acting unit in Speed First mode"""
-	var mesh_instance = unit.get_node("MeshInstance3D")
-	if not mesh_instance:
-		return
-	
-	if is_current:
-		# Add bright pulsing highlight for current acting unit
-		var base_material = mesh_instance.material_override
-		if base_material:
-			var highlight_material = base_material.duplicate()
-			highlight_material.emission_enabled = true
-			highlight_material.emission = Color(0.0, 1.0, 1.0, 1.0)  # Bright cyan glow
-			highlight_material.rim_enabled = true
-			highlight_material.rim = 0.8  # Float value, not Color
-			highlight_material.rim_tint = 0.8
-			# Make it more prominent
-			highlight_material.metallic = 0.3
-			highlight_material.roughness = 0.2
-			mesh_instance.material_override = highlight_material
-			
-			# Add pulsing animation
-			_add_pulsing_animation(unit)
-	else:
-		# Remove pulsing animation
-		_remove_pulsing_animation(unit)
-		# Restore appropriate material
-		_restore_unit_material(unit)
-
-func _add_pulsing_animation(unit: Unit) -> void:
-	"""Add pulsing animation to unit"""
-	var mesh_instance = unit.get_node("MeshInstance3D")
-	if not mesh_instance:
-		return
-	
-	# Remove existing tween if any
-	_remove_pulsing_animation(unit)
-	
-	# Create pulsing tween
-	var tween = unit.create_tween()
-	tween.set_loops()
-	tween.tween_property(mesh_instance, "scale", mesh_instance.scale * 1.1, 0.8)
-	tween.tween_property(mesh_instance, "scale", mesh_instance.scale, 0.8)
-	
-	# Store tween reference for cleanup
-	unit.set_meta("_acting_tween", tween)
-
-func _remove_pulsing_animation(unit: Unit) -> void:
-	"""Remove pulsing animation from unit"""
-	if unit.has_meta("_acting_tween"):
-		var tween = unit.get_meta("_acting_tween")
-		if tween and tween.is_valid():
-			tween.kill()
-		unit.remove_meta("_acting_tween")
-	
-	# Reset scale to original
-	var mesh_instance = unit.get_node("MeshInstance3D")
-	if mesh_instance:
-		# Reset to unit type appropriate scale
-		var unit_type = UnitType.Type.WARRIOR
-		if unit.unit_stats and unit.unit_stats.stats_resource and unit.unit_stats.stats_resource.unit_type:
-			unit_type = unit.unit_stats.stats_resource.unit_type.type
-		
-		match unit_type:
-			UnitType.Type.WARRIOR:
-				mesh_instance.scale = Vector3(1.0, 1.0, 1.0)
-			UnitType.Type.ARCHER:
-				mesh_instance.scale = Vector3(0.8, 1.2, 0.8)
-			UnitType.Type.SCOUT:
-				mesh_instance.scale = Vector3(1.2, 0.8, 1.2)
-			UnitType.Type.TANK:
-				mesh_instance.scale = Vector3(1.3, 1.1, 1.3)
-
 func _restore_unit_material(unit: Unit) -> void:
 	"""Restore unit material based on current state (acted or not acted)"""
 	if not TurnSystemManager.has_active_turn_system():
@@ -368,44 +295,14 @@ func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
 	
 	# Update all unit visuals
 	update_all_unit_visuals()
-	
-	# Special handling for Speed First system
-	if turn_system is SpeedFirstTurnSystem:
-		_update_speed_first_highlights(turn_system as SpeedFirstTurnSystem)
-
-func _update_speed_first_highlights(speed_system: SpeedFirstTurnSystem) -> void:
-	"""Update highlighting for Speed First turn system"""
-	var current_acting_unit = speed_system.get_current_acting_unit()
-	var all_units = _find_all_units()
-	
-	# Clear all current acting highlights
-	for unit in all_units:
-		apply_current_acting_highlight(unit, false)
-	
-	# Highlight the current acting unit
-	if current_acting_unit:
-		apply_current_acting_highlight(current_acting_unit, true)
-		print("UnitVisualManager: Highlighted current acting unit: " + current_acting_unit.get_display_name())
 
 func _on_turn_started(player: Player) -> void:
 	"""Handle turn start - refresh unit visuals"""
 	update_all_unit_visuals()
-	
-	# Special handling for Speed First system
-	if TurnSystemManager.has_active_turn_system():
-		var turn_system = TurnSystemManager.get_active_turn_system()
-		if turn_system is SpeedFirstTurnSystem:
-			_update_speed_first_highlights(turn_system as SpeedFirstTurnSystem)
 
 func _on_turn_ended(player: Player) -> void:
 	"""Handle turn end - refresh unit visuals"""
 	update_all_unit_visuals()
-	
-	# Special handling for Speed First system
-	if TurnSystemManager.has_active_turn_system():
-		var turn_system = TurnSystemManager.get_active_turn_system()
-		if turn_system is SpeedFirstTurnSystem:
-			_update_speed_first_highlights(turn_system as SpeedFirstTurnSystem)
 
 func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
 	"""Handle unit action completion from GameEvents"""

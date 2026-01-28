@@ -106,4 +106,4 @@ offset_top = 0.0
 offset_right = 0.0
 offset_bottom = 0.0
 size_flags_horizontal = 3
-size_flags_vertical = 3
+size_flags_vertical = 0

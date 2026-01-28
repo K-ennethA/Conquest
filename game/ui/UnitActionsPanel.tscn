@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://game/ui/UnitActionsPanel.gd" id="1"]
 
@@ -14,7 +14,167 @@ corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
-[node name="UnitActionsPanel" type="Control"]
+[sub_resource type="StyleBoxFlat" id="ActionButtonNormal"]
+bg_color = Color(0.25, 0.35, 0.5, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.4, 0.5, 0.7, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_left = 6
+corner_radius_bottom_right = 6
+content_margin_left = 8.0
+content_margin_top = 10.0
+content_margin_right = 8.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="ActionButtonHover"]
+bg_color = Color(0.3, 0.4, 0.6, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.5, 0.6, 0.8, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_left = 6
+corner_radius_bottom_right = 6
+content_margin_left = 8.0
+content_margin_top = 10.0
+content_margin_right = 8.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="ActionButtonPressed"]
+bg_color = Color(0.2, 0.25, 0.4, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3, 0.4, 0.6, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_left = 6
+corner_radius_bottom_right = 6
+content_margin_left = 8.0
+content_margin_top = 10.0
+content_margin_right = 8.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="ActionButtonDisabled"]
+bg_color = Color(0.15, 0.15, 0.15, 0.6)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3, 0.3, 0.3, 0.6)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_left = 6
+corner_radius_bottom_right = 6
+content_margin_left = 8.0
+content_margin_top = 10.0
+content_margin_right = 8.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="SecondaryButtonNormal"]
+bg_color = Color(0.2, 0.25, 0.3, 0.8)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.4, 0.4, 0.4, 0.8)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_left = 4
+corner_radius_bottom_right = 4
+content_margin_left = 8.0
+content_margin_top = 10.0
+content_margin_right = 8.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="SecondaryButtonHover"]
+bg_color = Color(0.25, 0.3, 0.35, 0.8)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.5, 0.5, 0.5, 0.8)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_left = 4
+corner_radius_bottom_right = 4
+content_margin_left = 8.0
+content_margin_top = 10.0
+content_margin_right = 8.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="SecondaryButtonPressed"]
+bg_color = Color(0.15, 0.2, 0.25, 0.8)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3, 0.3, 0.3, 0.8)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_left = 4
+corner_radius_bottom_right = 4
+content_margin_left = 8.0
+content_margin_top = 10.0
+content_margin_right = 8.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="ImportantButtonNormal"]
+bg_color = Color(0.5, 0.3, 0.2, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.7, 0.4, 0.3, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_left = 6
+corner_radius_bottom_right = 6
+content_margin_left = 8.0
+content_margin_top = 10.0
+content_margin_right = 8.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="ImportantButtonHover"]
+bg_color = Color(0.6, 0.35, 0.25, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.8, 0.5, 0.4, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_left = 6
+corner_radius_bottom_right = 6
+content_margin_left = 8.0
+content_margin_top = 10.0
+content_margin_right = 8.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="ImportantButtonPressed"]
+bg_color = Color(0.4, 0.25, 0.15, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.6, 0.3, 0.2, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_left = 6
+corner_radius_bottom_right = 6
+content_margin_left = 8.0
+content_margin_top = 10.0
+content_margin_right = 8.0
+content_margin_bottom = 10.0
+
+[node name="UnitActionsPanel" type="PanelContainer"]
 layout_mode = 3
 anchors_preset = 1
 anchor_left = 1.0
@@ -22,124 +182,172 @@ anchor_right = 1.0
 offset_left = -220.0
 offset_top = 120.0
 offset_right = -20.0
-offset_bottom = 300.0
-custom_minimum_size = Vector2(200, 180)
+offset_bottom = 200.0
+size_flags_vertical = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_1")
 script = ExtResource("1")
 
-[node name="Background" type="Panel" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_1")
-
 [node name="MarginContainer" type="MarginContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-theme_override_constants/margin_left = 12
-theme_override_constants/margin_top = 12
-theme_override_constants/margin_right = 12
-theme_override_constants/margin_bottom = 12
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 4
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+[node name="ContentContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="UnitHeaderContainer" type="HBoxContainer" parent="MarginContainer/ContentContainer"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer"]
-layout_mode = 2
-text = "Unit Actions"
-horizontal_alignment = 1
-vertical_alignment = 1
-theme_override_font_sizes/font_size = 16
+[node name="UnitHeaderBackground" type="Panel" parent="MarginContainer/ContentContainer/UnitHeaderContainer"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
 
-[node name="HSeparator" type="HSeparator" parent="MarginContainer/VBoxContainer"]
+[node name="UnitIcon" type="TextureRect" parent="MarginContainer/ContentContainer/UnitHeaderContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(36, 36)
+expand_mode = 1
+stretch_mode = 5
+
+[node name="UnitInfoContainer" type="VBoxContainer" parent="MarginContainer/ContentContainer/UnitHeaderContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 2
+
+[node name="UnitNameLabel" type="Label" parent="MarginContainer/ContentContainer/UnitHeaderContainer/UnitInfoContainer"]
+layout_mode = 2
+text = "Unit Name"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="UnitTypeLabel" type="Label" parent="MarginContainer/ContentContainer/UnitHeaderContainer/UnitInfoContainer"]
+layout_mode = 2
+text = "Unit Type"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
+
+[node name="HSeparator" type="HSeparator" parent="MarginContainer/ContentContainer"]
 layout_mode = 2
 
-[node name="ActionsContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer"]
+[node name="ActionsContainer" type="VBoxContainer" parent="MarginContainer/ContentContainer"]
 layout_mode = 2
-size_flags_vertical = 3
-theme_override_constants/separation = 6
+theme_override_constants/separation = 8
 
-[node name="MoveButton" type="Button" parent="MarginContainer/VBoxContainer/ActionsContainer"]
+[node name="MoveButton" type="Button" parent="MarginContainer/ContentContainer/ActionsContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 36)
 text = "Move"
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 12
+theme_override_styles/normal = SubResource("ActionButtonNormal")
+theme_override_styles/hover = SubResource("ActionButtonHover")
+theme_override_styles/pressed = SubResource("ActionButtonPressed")
+theme_override_styles/disabled = SubResource("ActionButtonDisabled")
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0.9, 0.9, 0.9, 1)
+theme_override_colors/font_disabled_color = Color(0.6, 0.6, 0.6, 1)
 
-[node name="EndUnitTurnButton" type="Button" parent="MarginContainer/VBoxContainer/ActionsContainer"]
+[node name="EndUnitTurnButton" type="Button" parent="MarginContainer/ContentContainer/ActionsContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 36)
 text = "End Unit Turn"
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 12
+theme_override_styles/normal = SubResource("ActionButtonNormal")
+theme_override_styles/hover = SubResource("ActionButtonHover")
+theme_override_styles/pressed = SubResource("ActionButtonPressed")
+theme_override_styles/disabled = SubResource("ActionButtonDisabled")
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0.9, 0.9, 0.9, 1)
+theme_override_colors/font_disabled_color = Color(0.6, 0.6, 0.6, 1)
 
-[node name="HSeparator2" type="HSeparator" parent="MarginContainer/VBoxContainer"]
+[node name="HSeparator2" type="HSeparator" parent="MarginContainer/ContentContainer"]
 layout_mode = 2
 
-[node name="UnitSummaryButton" type="Button" parent="MarginContainer/VBoxContainer"]
+[node name="UnitSummaryButton" type="Button" parent="MarginContainer/ContentContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 32)
 text = "Unit Summary ▼"
 theme_override_font_sizes/font_size = 12
+theme_override_styles/normal = SubResource("SecondaryButtonNormal")
+theme_override_styles/hover = SubResource("SecondaryButtonHover")
+theme_override_styles/pressed = SubResource("SecondaryButtonPressed")
+theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0.8, 0.8, 0.8, 1)
 
-[node name="StatsContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer"]
+[node name="StatsContainer" type="VBoxContainer" parent="MarginContainer/ContentContainer"]
 layout_mode = 2
-theme_override_constants/separation = 4
+theme_override_constants/separation = 2
 visible = false
 
-[node name="StatsTitle" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+[node name="StatsTitle" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
 layout_mode = 2
 text = "Unit Statistics"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 12
 theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
 
-[node name="HealthLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+[node name="HealthLabel" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
 layout_mode = 2
 text = "Health: 100/100"
 theme_override_font_sizes/font_size = 11
 
-[node name="AttackLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+[node name="AttackLabel" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
 layout_mode = 2
 text = "Attack: 25"
 theme_override_font_sizes/font_size = 11
 
-[node name="DefenseLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+[node name="DefenseLabel" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
 layout_mode = 2
 text = "Defense: 15"
 theme_override_font_sizes/font_size = 11
 
-[node name="SpeedLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+[node name="SpeedLabel" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
 layout_mode = 2
 text = "Speed: 8"
 theme_override_font_sizes/font_size = 11
 
-[node name="MovementLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+[node name="MovementLabel" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
 layout_mode = 2
 text = "Movement: 3"
 theme_override_font_sizes/font_size = 11
 
-[node name="RangeLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
+[node name="RangeLabel" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
 layout_mode = 2
 text = "Range: 1"
 theme_override_font_sizes/font_size = 11
 
-[node name="HSeparator3" type="HSeparator" parent="MarginContainer/VBoxContainer"]
+[node name="HSeparator3" type="HSeparator" parent="MarginContainer/ContentContainer"]
 layout_mode = 2
 
-[node name="EndPlayerTurnButton" type="Button" parent="MarginContainer/VBoxContainer"]
+[node name="EndPlayerTurnButton" type="Button" parent="MarginContainer/ContentContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 36)
 text = "End Player Turn"
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 12
+theme_override_styles/normal = SubResource("ImportantButtonNormal")
+theme_override_styles/hover = SubResource("ImportantButtonHover")
+theme_override_styles/pressed = SubResource("ImportantButtonPressed")
+theme_override_styles/disabled = SubResource("ActionButtonDisabled")
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0.9, 0.9, 0.9, 1)
+theme_override_colors/font_disabled_color = Color(0.6, 0.6, 0.6, 1)
 
-[node name="HSeparator4" type="HSeparator" parent="MarginContainer/VBoxContainer"]
+[node name="HSeparator4" type="HSeparator" parent="MarginContainer/ContentContainer"]
 layout_mode = 2
 
-[node name="CancelButton" type="Button" parent="MarginContainer/VBoxContainer"]
+[node name="CancelButton" type="Button" parent="MarginContainer/ContentContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 32)
 text = "Cancel"
 theme_override_font_sizes/font_size = 12
+theme_override_styles/normal = SubResource("SecondaryButtonNormal")
+theme_override_styles/hover = SubResource("SecondaryButtonHover")
+theme_override_styles/pressed = SubResource("SecondaryButtonPressed")
+theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
+theme_override_colors/font_hover_color = Color(0.9, 0.9, 0.9, 1)
+theme_override_colors/font_pressed_color = Color(0.7, 0.7, 0.7, 1)
 modulate = Color(0.9, 0.9, 0.9, 1)

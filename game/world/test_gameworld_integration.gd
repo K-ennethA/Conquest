@@ -107,11 +107,6 @@ func _on_turn_queue_portrait_clicked(unit: Unit):
 	
 	# Select the unit to show actions panel with stats
 	GameEvents.unit_selected.emit(unit, unit.global_position)
-	
-	# Also highlight the unit in the game world
-	var cursor = get_node("../Map/Cursor")
-	if cursor and cursor.has_method("highlight_unit"):
-		cursor.highlight_unit(unit)
 
 func _on_turn_queue_portrait_hovered(unit: Unit):
 	"""Handle turn queue portrait hover"""
