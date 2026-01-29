@@ -25,23 +25,18 @@ var current_turn_system_type: TurnSystemBase.TurnSystemType = TurnSystemBase.Tur
 var is_layout_initialized: bool = false
 
 func _ready() -> void:
-	print("UILayoutManager: Initializing comprehensive UI layout")
-	
 	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	print("UILayoutManager: Set mouse_filter to IGNORE for click passthrough")
 	
 	# Connect to turn system events
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
-		print("UILayoutManager: Connected to TurnSystemManager")
 	
 	# Initialize layout
 	_initialize_layout()
 	_update_layout_for_turn_system()
 	
 	is_layout_initialized = true
-	print("UILayoutManager: Layout initialization complete")
 
 func _initialize_layout() -> void:
 	"""Initialize the layout system with proper sizing and constraints"""
@@ -64,8 +59,6 @@ func _initialize_layout() -> void:
 	if right_sidebar:
 		right_sidebar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
-	print("UILayoutManager: Set mouse_filter to IGNORE for all container elements")
-	
 	# Set minimum sizes for main areas with proper spacing
 	if top_bar:
 		top_bar.custom_minimum_size = Vector2(0, 180)  # Taller to accommodate TurnQueue
@@ -87,8 +80,6 @@ func _initialize_layout() -> void:
 	if game_area:
 		game_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		game_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	
-	print("UILayoutManager: Layout constraints initialized with proper spacing")
 
 func _update_layout_for_turn_system() -> void:
 	"""Update layout based on current turn system"""
@@ -102,7 +93,6 @@ func _update_layout_for_turn_system() -> void:
 
 func _show_speed_first_layout() -> void:
 	"""Configure layout for Speed First turn system"""
-	print("UILayoutManager: Configuring Speed First layout")
 	
 	if turn_queue:
 		turn_queue.visible = true
@@ -118,7 +108,6 @@ func _show_speed_first_layout() -> void:
 
 func _show_traditional_layout() -> void:
 	"""Configure layout for Traditional turn system"""
-	print("UILayoutManager: Configuring Traditional layout")
 	
 	if turn_queue:
 		turn_queue.visible = false
@@ -134,13 +123,11 @@ func _show_traditional_layout() -> void:
 
 func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
 	"""Handle turn system activation and update layout accordingly"""
-	print("UILayoutManager: Turn system activated - " + turn_system.system_name)
 	
 	var new_type = turn_system.system_type
 	if new_type != current_turn_system_type:
 		current_turn_system_type = new_type
 		_update_layout_for_turn_system()
-		print("UILayoutManager: Layout updated for " + turn_system.system_name)
 
 # Public interface for layout management
 func show_panel(panel_name: String, show: bool = true) -> void:
@@ -156,7 +143,7 @@ func show_panel(panel_name: String, show: bool = true) -> void:
 			if turn_indicator:
 				turn_indicator.visible = show
 		_:
-			print("UILayoutManager: Unknown panel name: " + panel_name)
+			pass
 
 func get_game_area() -> Control:
 	"""Get the game area control for 3D scene rendering"""
@@ -172,13 +159,10 @@ func get_panel(panel_name: String) -> Control:
 		"turn_indicator":
 			return turn_indicator
 		_:
-			print("UILayoutManager: Unknown panel name: " + panel_name)
 			return null
 
 func is_mouse_over_ui(mouse_position: Vector2) -> bool:
 	"""Check if mouse position is over any UI element"""
-	print("UILayoutManager: Checking mouse position " + str(mouse_position) + " against UI elements")
-	
 	# Check if mouse is over any visible UI panel
 	var panels = []
 	
@@ -192,19 +176,13 @@ func is_mouse_over_ui(mouse_position: Vector2) -> bool:
 	elif turn_indicator and turn_indicator.visible:
 		panels.append({"name": "turn_indicator", "panel": turn_indicator})
 	
-	print("UILayoutManager: Checking " + str(panels.size()) + " panels")
-	
 	for panel_info in panels:
 		var panel = panel_info.panel
-		var panel_name = panel_info.name
 		if panel and panel.visible:
 			var panel_rect = Rect2(panel.global_position, panel.size)
-			print("UILayoutManager: " + panel_name + " rect: " + str(panel_rect))
 			if panel_rect.has_point(mouse_position):
-				print("UILayoutManager: Mouse is over " + panel_name + " - blocking click")
 				return true
 	
-	print("UILayoutManager: Mouse is not over any UI element - allowing click")
 	return false
 
 func get_layout_info() -> Dictionary:
@@ -238,17 +216,12 @@ func _on_viewport_size_changed() -> void:
 		# On larger screens, use full sidebar width
 		if right_sidebar:
 			right_sidebar.custom_minimum_size.x = 220
-	
-	print("UILayoutManager: Layout adjusted for viewport size: " + str(viewport_size))
 
 func force_layout_update() -> void:
 	"""Force a complete layout update (useful for debugging)"""
-	print("UILayoutManager: Forcing layout update")
 	_initialize_layout()
 	_update_layout_for_turn_system()
 	
 	# Force container updates
 	if main_container:
 		main_container.queue_sort()
-	
-	print("UILayoutManager: Forced layout update complete")

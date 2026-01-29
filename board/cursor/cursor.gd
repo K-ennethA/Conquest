@@ -304,6 +304,21 @@ func _handle_mouse_movement(mouse_pos: Vector2) -> void:
 
 func _handle_selection() -> void:
 	"""Handle unit selection at cursor position"""
+	print("DEBUG: Cursor _handle_selection called at position: " + str(tile_position))
+	
+	# FIRST: Check if we should handle movement destination selection
+	var unit_actions_panel = _get_unit_actions_panel()
+	if unit_actions_panel and unit_actions_panel.has_method("is_showing_movement_range"):
+		if unit_actions_panel.is_showing_movement_range():
+			print("DEBUG: Movement range is showing - handling as movement destination")
+			unit_actions_panel.handle_movement_destination_selected(tile_position)
+			return  # Exit early - don't do normal unit selection
+		else:
+			print("DEBUG: Movement range is NOT showing - proceeding with normal unit selection")
+	else:
+		print("DEBUG: UnitActionsPanel not found or missing method")
+	
+	# SECOND: Handle normal unit selection/deselection
 	var unit_at_cursor = _get_unit_at_position(tile_position)
 	
 	if unit_at_cursor:
@@ -352,8 +367,33 @@ func _handle_selection() -> void:
 			# Select new unit
 			_select_unit(unit_at_cursor)
 	else:
-		# No unit at cursor, deselect current
-		_deselect_unit()
+		# No unit at cursor - only deselect if we're not in movement mode
+		if unit_actions_panel and unit_actions_panel.has_method("is_showing_movement_range"):
+			if not unit_actions_panel.is_showing_movement_range():
+				print("DEBUG: No unit at cursor and no movement range - deselecting")
+				_deselect_unit()
+			else:
+				print("DEBUG: No unit at cursor but movement range is showing - ignoring click")
+		else:
+			print("DEBUG: No unit at cursor - deselecting")
+			_deselect_unit()
+
+func _get_unit_actions_panel() -> Node:
+	"""Get reference to UnitActionsPanel"""
+	var scene_root = get_tree().current_scene
+	print("DEBUG: Looking for UnitActionsPanel, scene_root: " + str(scene_root.name if scene_root else "null"))
+	
+	var ui_layout = scene_root.get_node_or_null("UI/GameUILayout")
+	print("DEBUG: UI/GameUILayout found: " + str(ui_layout != null))
+	
+	if ui_layout:
+		# The correct path is MarginContainer/MainContainer/MiddleArea/RightSidebar/UnitActionsPanel
+		var unit_actions_panel = ui_layout.get_node_or_null("MarginContainer/MainContainer/MiddleArea/RightSidebar/UnitActionsPanel")
+		print("DEBUG: UnitActionsPanel found: " + str(unit_actions_panel != null))
+		if unit_actions_panel:
+			print("DEBUG: UnitActionsPanel name: " + unit_actions_panel.name)
+		return unit_actions_panel
+	return null
 
 func _handle_deselection() -> void:
 	"""Handle unit deselection"""
@@ -534,25 +574,22 @@ func _position_cursor_on_player_unit(trad_system: TraditionalTurnSystem) -> void
 	if not current_player:
 		return
 	
-	# Find a unit owned by current player that hasn't acted yet
-	var player_units = current_player.get_units()
-	var acted_units = trad_system.get_units_that_acted()
+	# Get units that can still act this turn
+	var available_units = current_player.get_units_that_can_act()
 	
-	var available_unit: Unit = null
-	for unit in player_units:
-		if unit not in acted_units:
-			available_unit = unit
-			break
+	var target_unit: Unit = null
+	if available_units.size() > 0:
+		# Pick the first unit that can still act
+		target_unit = available_units[0]
+	elif current_player.owned_units.size() > 0:
+		# If no units can act, just pick the first unit for cursor positioning
+		target_unit = current_player.owned_units[0]
 	
-	# If no units can act, just pick the first unit
-	if not available_unit and player_units.size() > 0:
-		available_unit = player_units[0]
-	
-	if available_unit:
-		var unit_world_pos = available_unit.global_position
+	if target_unit:
+		var unit_world_pos = target_unit.global_position
 		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
 		
-		print("Positioning cursor on player unit: " + available_unit.get_display_name())
+		print("Positioning cursor on player unit: " + target_unit.get_display_name())
 		print("  Moving cursor to grid position: " + str(unit_grid_pos))
 		
 		# Set cursor position

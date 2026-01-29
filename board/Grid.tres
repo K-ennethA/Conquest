@@ -4,6 +4,6 @@
 
 [resource]
 script = ExtResource("1_4yl5l")
-size = null
-cell_size = null
+size = Vector3(5, 0, 5)
+cell_size = Vector3(2, 0, 2)
 metadata/_custom_type_script = "uid://dr1xyjsdjcf8f"

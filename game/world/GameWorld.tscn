@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=20 format=3]
 
 [ext_resource type="Script" path="res://tile_objects/units/board.gd" id="1"]
 [ext_resource type="PackedScene" path="res://game/units/scenes/WarriorUnit.tscn" id="2"]
@@ -12,9 +12,12 @@
 [ext_resource type="PackedScene" path="res://game/ui/UnitActionsPanel.tscn" id="10"]
 [ext_resource type="Script" path="res://systems/test_traditional_turn_system.gd" id="11"]
 [ext_resource type="Script" path="res://game/world/GameWorldManager.gd" id="12"]
+[ext_resource type="Script" path="res://game/visuals/MovementVisualizer.gd" id="13"]
 [ext_resource type="PackedScene" path="res://game/ui/TurnIndicator.tscn" id="14"]
 [ext_resource type="PackedScene" path="res://game/ui/PlayerTurnPanel.tscn" id="15"]
+[ext_resource type="Script" path="res://game/visuals/test_movement_system.gd" id="16"]
 [ext_resource type="PackedScene" path="res://game/ui/GameUILayout.tscn" id="17"]
+[ext_resource type="Script" path="res://game/visuals/debug_movement_range.gd" id="18"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
@@ -45,6 +48,27 @@ size = 20.0
 [node name="UnitVisualManager" type="Node" parent="."]
 script = ExtResource("6")
 
+[node name="MovementVisualizer" type="Node" parent="."]
+script = ExtResource("13")
+
+[node name="MapGridVisualizer" type="Node" parent="."]
+script = "res://game/visuals/MapGridVisualizer.gd"
+
+[node name="MovementSystemTest" type="Node" parent="."]
+script = ExtResource("16")
+
+[node name="DebugMovementRange" type="Node" parent="."]
+script = ExtResource("18")
+
+[node name="FireEmblemOverlayTest" type="Node" parent="."]
+script = "res://test_fire_emblem_overlay_system.gd"
+
+[node name="OverlayVisibilityTest" type="Node" parent="."]
+script = "res://test_overlay_visibility.gd"
+
+[node name="OverlaySystemDebug" type="Node" parent="."]
+script = "res://debug_overlay_system.gd"
+
 [node name="GameWorldTest" type="Node" parent="."]
 script = ExtResource("7")
 
@@ -57,6 +81,15 @@ script = ExtResource("11")
 [node name="UI" type="CanvasLayer" parent="."]
 
 [node name="GameUILayout" parent="UI" instance=ExtResource("17")]
+
+[node name="GridBorderTest" type="Node" parent="."]
+script = "res://test_grid_border_lines.gd"
+
+[node name="SimpleGridDebug" type="Node" parent="."]
+script = "res://debug_grid_lines_simple.gd"
+
+[node name="MapGridExistenceTest" type="Node" parent="."]
+script = "res://test_mapgrid_existence.gd"
 
 [node name="Map" type="Node3D" parent="."]
 script = ExtResource("1")

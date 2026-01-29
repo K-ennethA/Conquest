@@ -13,7 +13,10 @@ class_name Grid
 # Half of ``cell_size``.
 # We will use this to calculate the center of a grid cell in pixels, on the screen.
 # That's how we can place units in the center of a cell.
-var _half_cell_size = cell_size / 2
+var _half_cell_size: Vector3
+
+func _init():
+	_half_cell_size = cell_size / 2
 
 
 func get_tile_position(grid_position: Vector3) -> Vector3:
@@ -27,11 +30,14 @@ func calculate_map_position(grid_position: Vector3) -> Vector3:
 
 # Returns the coordinates of the cell on the grid given a position on the map.
 # This is the complementary of `calculate_map_position()` above.
-# When designing a level, you'll place units visually in the editor. We'll use this function to find
+# When designing a level, you place units visually in the editor. We'll use this function to find
 # the grid coordinates they're placed on, and call `calculate_map_position()` to snap them to the
 # cell's center.
 func calculate_grid_coordinates(map_position: Vector3) -> Vector3:
-	return (map_position / cell_size).floor()
+	var result = (map_position / cell_size).floor()
+	# Ensure Y coordinate is always 0 for 2D grid
+	result.y = 0
+	return result
 
 
 # Returns true if the `cell_coordinates` are within the grid.

@@ -1,6 +1,4 @@
-res://board/cursor/cursor.gd
-res://game/visuals/UnitVisualManager.gd
-res://game/world/test_gameworld_integration.gd
-res://game/ui/TurnQueue.gd
-res://game/ui/UILayoutManager.gd
-res://game/ui/UnitActionsPanel.gd
+res://game/visuals/MovementVisualizer.gd
+res://debug_overlay_system.gd
+res://test_overlay_visibility.gd
+res://game/visuals/MapGridVisualizer.gd

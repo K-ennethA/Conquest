@@ -17,6 +17,7 @@ signal cursor_selected(position: Vector3)
 
 # Movement and validation events
 signal movement_range_calculated(positions: Array[Vector3])
+signal movement_range_cleared()
 signal movement_validated(from_position: Vector3, to_position: Vector3, is_valid: bool)
 
 # UI events

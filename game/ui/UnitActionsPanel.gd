@@ -28,14 +28,10 @@ class_name UnitActionsPanel
 
 var selected_unit: Unit = null
 var stats_expanded: bool = false
+var movement_mode: bool = false
+var movement_range_tiles: Array[Vector3] = []
 
 func _ready() -> void:
-	print("=== UnitActionsPanel _ready() called ===")
-	
-	# Log initial container size
-	print("Initial panel size: ", size)
-	print("Initial panel position: ", position)
-	
 	# Ensure proper mouse handling
 	mouse_filter = Control.MOUSE_FILTER_STOP  # Make sure panel stops mouse events
 	
@@ -44,6 +40,7 @@ func _ready() -> void:
 	if GameEvents:
 		GameEvents.unit_selected.connect(_on_unit_selected)
 		GameEvents.unit_deselected.connect(_on_unit_deselected)
+		GameEvents.cursor_selected.connect(_on_cursor_selected)
 		print("GameEvents connections established")
 	else:
 		print("ERROR: GameEvents not found!")
@@ -100,21 +97,15 @@ func _ready() -> void:
 	
 	# Style the unit header background
 	_setup_unit_header_styling()
-	
-	print("UnitActionsPanel initialized and hidden")
 
 func _notification(what: int) -> void:
 	match what:
 		NOTIFICATION_RESIZED:
-			print("=== UnitActionsPanel RESIZED ===")
-			print("New size: ", size)
-			print("New position: ", position)
-			print("Content container size: ", content_container.size if content_container else "null")
-			print("Margin container size: ", margin_container.size if margin_container else "null")
+			# Resize notification - no logging to prevent spam
+			pass
 		NOTIFICATION_VISIBILITY_CHANGED:
-			print("=== UnitActionsPanel VISIBILITY CHANGED ===")
-			print("Visible: ", visible)
-			print("Current size: ", size)
+			# Visibility notification - no logging to prevent spam
+			pass
 
 func _setup_unit_header_styling() -> void:
 	"""Setup styling for the unit header background"""
@@ -137,6 +128,7 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	print("=== UnitActionsPanel: Unit selection received ===")
 	print("Unit: " + unit.name)
 	print("Position: " + str(position))
+	print("Current selected_unit before: " + (selected_unit.name if selected_unit else "None"))
 	
 	# Only show if this is the current player's unit
 	if not PlayerManager.can_current_player_select_unit(unit):
@@ -159,11 +151,26 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	
 	print("Unit selection accepted: " + unit.name)
 	selected_unit = unit
+	print("Selected unit set to: " + selected_unit.name)
+	
 	_update_unit_header()
 	_update_actions()
 	_update_unit_stats()
+	
+	# Show movement range immediately when unit is selected (Fire Emblem style)
+	print("About to call _show_movement_range_on_selection()...")
+	_show_movement_range_on_selection()
+	
 	_show_panel()
 	print("=== UnitActionsPanel: Unit selection processing complete ===")
+
+func _show_movement_range_on_selection() -> void:
+	"""Show movement range immediately when unit is selected (Fire Emblem style)"""
+	if not selected_unit:
+		return
+	
+	# Calculate and show movement range
+	_calculate_and_show_movement_range()
 
 func _update_unit_header() -> void:
 	"""Update the unit header with name, type, and icon"""
@@ -346,8 +353,17 @@ func _on_unit_deselected(unit: Unit) -> void:
 			stats_container.visible = false
 		if unit_summary_button:
 			unit_summary_button.text = "Unit Summary ▼"
+		
+		# Clear movement range when unit is deselected
+		_clear_movement_range()
+		
 		_clear_unit_header()
 		_hide_panel()
+
+func _clear_movement_range() -> void:
+	"""Clear movement range visualization"""
+	movement_range_tiles.clear()
+	GameEvents.movement_range_cleared.emit()
 
 func _clear_unit_header() -> void:
 	"""Clear the unit header information"""
@@ -485,53 +501,26 @@ func _update_actions() -> void:
 		cancel_button.text = "Cancel (C/ESC)"
 
 func _on_move_pressed() -> void:
-	"""Handle Move button press"""
+	"""Handle Move button press - enter movement mode"""
 	if not selected_unit:
 		print("Move pressed but no unit selected")
 		return
 	
 	print("Move action for unit: " + selected_unit.get_display_name())
 	
-	# Use turn system to validate and process the action
+	# Use turn system to validate the action
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
 		print("Validating move with turn system: " + turn_system.system_name)
 		
 		if turn_system.validate_turn_action(selected_unit, "move"):
-			print("Move validated by turn system")
-			# TODO: Implement actual movement system
-			# For now, just mark the unit as having acted
-			if turn_system is TraditionalTurnSystem:
-				print("Marking unit acted (Traditional)")
-				(turn_system as TraditionalTurnSystem).mark_unit_acted(selected_unit)
-			elif turn_system is SpeedFirstTurnSystem:
-				print("Marking unit acted (Speed First)")
-				(turn_system as SpeedFirstTurnSystem).mark_unit_acted(selected_unit)
-			
-			# Emit action completed signal
-			GameEvents.unit_action_completed.emit(selected_unit, "move")
-			
-			# Force update unit visuals immediately
-			var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
-			if visual_manager:
-				print("Updating unit visuals via UnitVisualManager")
-				visual_manager.update_all_unit_visuals()
-			else:
-				print("UnitVisualManager not found!")
-			
-			print("Unit has moved and used their action for this turn")
+			print("Move validated by turn system - entering movement mode")
+			_enter_movement_mode()
 		else:
 			print("Move action not allowed by turn system")
 	else:
-		print("Using fallback move system")
-		# Fallback to old system
-		if selected_unit.owner_player:
-			selected_unit.owner_player.mark_unit_acted(selected_unit)
-			selected_unit.mark_action_completed("move")
-		print("Unit has moved (fallback system)")
-	
-	# Update actions to reflect the unit has acted
-	_update_actions()
+		print("No active turn system - entering movement mode anyway")
+		_enter_movement_mode()
 
 func _on_end_unit_turn_pressed() -> void:
 	"""Handle End Unit Turn button press - only ends this unit's turn"""
@@ -607,32 +596,30 @@ func _on_end_player_turn_pressed() -> void:
 
 # Add mouse event debugging
 func _gui_input(event: InputEvent) -> void:
-	print("UnitActionsPanel received GUI input: " + str(event))
+	# Only log mouse button events, not movement
 	if event is InputEventMouseButton:
-		print("Mouse button event in UnitActionsPanel: " + str(event.button_index) + " pressed: " + str(event.pressed))
+		print("UnitActionsPanel mouse button: " + str(event.button_index) + " pressed: " + str(event.pressed))
 
 func _on_end_unit_turn_button_input(event: InputEvent) -> void:
-	print("End Unit Turn button received input: " + str(event))
+	# Only log mouse button events, not movement
 	if event is InputEventMouseButton:
-		print("End Unit Turn button mouse event: " + str(event.button_index) + " pressed: " + str(event.pressed))
+		print("End Unit Turn button mouse: " + str(event.button_index) + " pressed: " + str(event.pressed))
 
 func _on_cancel_pressed() -> void:
-	"""Handle Cancel button press - deselect unit"""
-	if selected_unit:
+	"""Handle Cancel button press - deselect unit or exit movement mode"""
+	if movement_mode:
+		print("Canceling movement mode")
+		_exit_movement_mode()
+	elif selected_unit:
 		GameEvents.unit_deselected.emit(selected_unit)
 
 func _show_panel() -> void:
 	"""Show the actions panel"""
-	print("=== Showing UnitActionsPanel ===")
-	print("Panel size before show: ", size)
 	visible = true
 	modulate.a = 1.0
 	
-	# Force a layout update and log the results
+	# Force a layout update
 	await get_tree().process_frame
-	print("Panel size after show: ", size)
-	print("Content container size: ", content_container.size if content_container else "null")
-	print("Margin container size: ", margin_container.size if margin_container else "null")
 	
 	# Try to resize to fit content
 	_try_resize_to_content()
@@ -640,14 +627,10 @@ func _show_panel() -> void:
 func _try_resize_to_content() -> void:
 	"""Attempt to resize the panel to fit its content"""
 	if not content_container:
-		print("No content container found for resizing")
 		return
-	
-	print("=== Attempting to resize panel to content ===")
 	
 	# Get the minimum size needed for content
 	var content_min_size = content_container.get_combined_minimum_size()
-	print("Content minimum size: ", content_min_size)
 	
 	# Add margin container padding
 	if margin_container:
@@ -656,31 +639,20 @@ func _try_resize_to_content() -> void:
 		var margin_top = margin_container.get_theme_constant("margin_top")
 		var margin_bottom = margin_container.get_theme_constant("margin_bottom")
 		
-		print("Margins - Left: ", margin_left, " Right: ", margin_right, " Top: ", margin_top, " Bottom: ", margin_bottom)
-		
 		var needed_size = Vector2(
 			content_min_size.x + margin_left + margin_right,
 			content_min_size.y + margin_top + margin_bottom
 		)
 		
-		print("Calculated needed size: ", needed_size)
-		print("Current panel size: ", size)
-		
 		# Try to set the size
 		custom_minimum_size = needed_size
 		size = needed_size
 		
-		print("Set custom_minimum_size to: ", custom_minimum_size)
-		print("Set size to: ", size)
-		
 		# Force layout update
 		await get_tree().process_frame
-		print("Final panel size after resize: ", size)
 
 func _hide_panel() -> void:
 	"""Hide the actions panel"""
-	print("=== Hiding UnitActionsPanel ===")
-	print("Panel size before hide: ", size)
 	visible = false
 
 # Public interface
@@ -711,22 +683,29 @@ func _input(event: InputEvent) -> void:
 			KEY_F4:
 				print("F4 pressed - testing manual unit selection")
 				_test_manual_unit_selection()
+			KEY_F5:
+				print("F5 pressed - testing movement range calculation directly")
+				_test_movement_range_calculation_direct()
 			
 			# Keyboard shortcuts for actions (only when panel is visible and unit selected)
 			KEY_M:
 				if visible and selected_unit:
-					print("M key pressed - triggering Move action")
-					_on_move_pressed()
+					if movement_mode:
+						print("M key pressed - canceling movement mode")
+						_exit_movement_mode()
+					else:
+						print("M key pressed - triggering Move action")
+						_on_move_pressed()
 			KEY_E:
-				if visible and selected_unit:
+				if visible and selected_unit and not movement_mode:
 					print("E key pressed - triggering End Unit Turn action")
 					_on_end_unit_turn_pressed()
 			KEY_P:
-				if visible and selected_unit:
+				if visible and selected_unit and not movement_mode:
 					print("P key pressed - triggering End Player Turn action")
 					_on_end_player_turn_pressed()
 			KEY_S:
-				if visible and selected_unit:
+				if visible and selected_unit and not movement_mode:
 					print("S key pressed - triggering Unit Summary toggle")
 					_on_unit_summary_pressed()
 			KEY_C, KEY_ESCAPE:
@@ -751,3 +730,379 @@ func _test_manual_unit_selection() -> void:
 				return
 	
 	print("No units found for testing")
+
+func _test_movement_range_calculation_direct() -> void:
+	"""Test movement range calculation directly"""
+	print("=== Testing Movement Range Calculation Directly ===")
+	
+	# Find a unit to test with
+	var scene_root = get_tree().current_scene
+	var player1_node = scene_root.get_node_or_null("Map/Player1")
+	if player1_node:
+		for child in player1_node.get_children():
+			if child is Unit:
+				print("Found test unit: " + child.name)
+				
+				# Set this as selected unit temporarily
+				selected_unit = child
+				
+				# Test movement range calculation
+				print("Testing movement range calculation...")
+				_calculate_and_show_movement_range()
+				
+				# Wait 3 seconds then clear
+				await get_tree().create_timer(3.0).timeout
+				_clear_movement_range()
+				selected_unit = null
+				return
+	
+	print("No units found for testing")
+
+# Movement system implementation
+func _enter_movement_mode() -> void:
+	"""Enter movement mode - show movement range and wait for destination selection"""
+	if not selected_unit:
+		return
+	
+	print("=== Entering Movement Mode ===")
+	movement_mode = true
+	
+	# Calculate and show movement range
+	_calculate_and_show_movement_range()
+	
+	# Update UI to show movement mode
+	_update_movement_ui()
+	
+	print("Movement mode active - select destination tile")
+
+func _exit_movement_mode() -> void:
+	"""Exit movement mode and return to normal selection"""
+	print("=== Exiting Movement Mode ===")
+	movement_mode = false
+	movement_range_tiles.clear()
+	
+	# Clear movement range visualization
+	GameEvents.movement_range_cleared.emit()
+	
+	# Update UI back to normal
+	_update_actions()
+
+func _calculate_and_show_movement_range() -> void:
+	"""Calculate movement range and show visual indicators"""
+	if not selected_unit:
+		print("DEBUG: No selected unit for movement range calculation")
+		return
+	
+	print("DEBUG: Calculating movement range for " + selected_unit.get_display_name())
+	
+	# Get unit's current position
+	var grid = preload("res://board/Grid.tres")
+	var unit_world_pos = selected_unit.global_position
+	var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
+	
+	print("DEBUG: Unit world pos: " + str(unit_world_pos))
+	print("DEBUG: Unit grid pos: " + str(unit_grid_pos))
+	
+	# Get movement range from unit
+	var movement_range = selected_unit.get_movement_range()
+	print("DEBUG: Movement range: " + str(movement_range))
+	
+	if movement_range <= 0:
+		print("DEBUG: Movement range is 0 or negative, aborting")
+		return
+	
+	# Calculate reachable tiles using BFS (similar to board.gd logic)
+	movement_range_tiles = _calculate_reachable_tiles(unit_grid_pos, movement_range, grid)
+	
+	print("DEBUG: Calculated " + str(movement_range_tiles.size()) + " reachable tiles")
+	
+	if movement_range_tiles.size() == 0:
+		print("DEBUG: No reachable tiles calculated, aborting")
+		return
+	
+	# Show first few tiles for debugging
+	for i in range(min(3, movement_range_tiles.size())):
+		print("DEBUG: Reachable tile " + str(i) + ": " + str(movement_range_tiles[i]))
+	
+	# Emit event to show movement range visually
+	print("DEBUG: Emitting movement_range_calculated signal with " + str(movement_range_tiles.size()) + " tiles")
+	GameEvents.movement_range_calculated.emit(movement_range_tiles)
+	print("DEBUG: Signal emitted")
+
+func _calculate_reachable_tiles(start_pos: Vector3, max_distance: int, grid: Grid) -> Array[Vector3]:
+	"""Calculate all tiles reachable within movement range using BFS"""
+	print("DEBUG: BFS starting from " + str(start_pos) + " with max distance " + str(max_distance))
+	
+	var reachable: Array[Vector3] = []
+	var queue: Array = [{pos = start_pos, distance = 0}]
+	var visited: Dictionary = {start_pos: 0}
+	
+	while not queue.is_empty():
+		var current = queue.pop_front()
+		var current_pos = current.pos
+		var current_distance = current.distance
+		
+		# Add adjacent tiles if within movement range
+		if current_distance < max_distance:
+			var directions = [Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 0, 1), Vector3(0, 0, -1)]
+			
+			for direction in directions:
+				var next_pos = current_pos + direction
+				
+				# Check if tile is valid and not visited
+				if grid.is_within_bounds(next_pos) and not visited.has(next_pos):
+					# Check if tile is passable (not occupied by another unit)
+					if _is_tile_passable(next_pos):
+						visited[next_pos] = current_distance + 1
+						queue.append({pos = next_pos, distance = current_distance + 1})
+						reachable.append(next_pos)
+	
+	print("DEBUG: BFS completed, found " + str(reachable.size()) + " reachable tiles")
+	return reachable
+
+func _is_tile_passable(grid_pos: Vector3) -> bool:
+	"""Check if a tile is passable (not occupied by another unit)"""
+	# Find all units in scene and check if any occupy this position
+	var units = _find_all_units_in_scene()
+	var grid = preload("res://board/Grid.tres")
+	
+	for unit in units:
+		if unit == selected_unit:
+			continue  # Skip the moving unit itself
+		
+		var unit_world_pos = unit.global_position
+		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
+		
+		# Check if positions match (with tolerance)
+		if abs(unit_grid_pos.x - grid_pos.x) < 0.1 and abs(unit_grid_pos.z - grid_pos.z) < 0.1:
+			return false  # Tile is occupied
+	
+	return true  # Tile is passable
+
+func _find_all_units_in_scene() -> Array[Unit]:
+	"""Find all units in the current scene"""
+	var units: Array[Unit] = []
+	var scene_root = get_tree().current_scene
+	
+	# Look for units in Player1 and Player2 nodes
+	var player_nodes = ["Map/Player1", "Map/Player2"]
+	
+	for player_path in player_nodes:
+		var player_node = scene_root.get_node_or_null(player_path)
+		if player_node:
+			for child in player_node.get_children():
+				if child is Unit:
+					units.append(child)
+	
+	return units
+
+func _update_movement_ui() -> void:
+	"""Update UI to show movement mode state"""
+	if move_button:
+		move_button.text = "Moving...\n(Select Destination)"
+		move_button.disabled = true
+	
+	if cancel_button:
+		cancel_button.text = "Cancel Move (C/ESC)"
+	
+	# Show movement range info in unit summary if expanded
+	if stats_expanded and selected_unit:
+		var movement_range = selected_unit.get_movement_range()
+		print("Movement mode active - unit can move " + str(movement_range) + " tiles")
+		print("Highlighted " + str(movement_range_tiles.size()) + " reachable tiles")
+
+func _on_cursor_selected(position: Vector3) -> void:
+	"""Handle cursor selection - used for movement destination"""
+	print("=== Cursor Selected ===")
+	print("Selected position: " + str(position))
+	
+	# Check if we're in movement mode or if there's a movement range displayed
+	var unit_actions_panel = _get_unit_actions_panel()
+	if unit_actions_panel and unit_actions_panel.has_method("is_showing_movement_range"):
+		if unit_actions_panel.is_showing_movement_range():
+			print("Movement range is showing - checking if position is valid destination")
+			# Let the UnitActionsPanel handle the movement
+			unit_actions_panel.handle_movement_destination_selected(position)
+			return
+	
+	# If not in movement mode, handle normal selection
+	if not movement_mode or not selected_unit:
+		return
+	
+	print("Movement mode active - processing destination selection")
+	
+	# Check if position is within movement range
+	if position in movement_range_tiles:
+		print("Valid movement destination - executing move")
+		_execute_movement(position)
+	else:
+		print("Invalid movement destination - not in range")
+
+func _get_unit_actions_panel() -> Node:
+	"""Get reference to UnitActionsPanel"""
+	var scene_root = get_tree().current_scene
+	var ui_layout = scene_root.get_node_or_null("UI/GameUILayout")
+	if ui_layout:
+		return ui_layout.get_node_or_null("MarginContainer/MainContainer/MiddleArea/RightSidebar/UnitActionsPanel")
+	return null
+
+func _execute_movement(destination: Vector3) -> void:
+	"""Execute the actual unit movement"""
+	if not selected_unit:
+		return
+	
+	print("=== Executing Unit Movement ===")
+	print("Moving " + selected_unit.get_display_name() + " to " + str(destination))
+	
+	# Get grid for position calculations
+	var grid = preload("res://board/Grid.tres")
+	var old_world_pos = selected_unit.global_position
+	var old_grid_pos = grid.calculate_grid_coordinates(old_world_pos)
+	
+	# Calculate new world position
+	var new_world_pos = grid.calculate_map_position(destination)
+	
+	# Animate the unit movement
+	_animate_unit_movement(selected_unit, old_world_pos, new_world_pos)
+	
+	print("Unit moved from " + str(old_grid_pos) + " to " + str(destination))
+	
+	# Emit movement event
+	GameEvents.unit_moved.emit(selected_unit, old_grid_pos, destination)
+	
+	# Mark unit as having acted
+	_complete_movement_action()
+	
+	# Exit movement mode
+	_exit_movement_mode()
+
+func _animate_unit_movement(unit: Unit, from_pos: Vector3, to_pos: Vector3) -> void:
+	"""Animate unit movement with a smooth tween"""
+	if not unit:
+		return
+	
+	print("Animating movement from " + str(from_pos) + " to " + str(to_pos))
+	
+	# Create a tween for smooth movement
+	var tween = create_tween()
+	tween.set_ease(Tween.EASE_OUT)
+	tween.set_trans(Tween.TRANS_QUART)
+	
+	# Animate the movement over 0.5 seconds
+	tween.tween_property(unit, "global_position", to_pos, 0.5)
+	
+	# Optional: Add a small bounce effect
+	tween.tween_callback(_on_movement_animation_complete.bind(unit))
+
+func _complete_movement_action() -> void:
+	"""Complete the movement action and update turn system"""
+	if not selected_unit:
+		return
+	
+	print("=== Completing Movement Action ===")
+	
+	# Mark unit as having acted in turn system
+	if TurnSystemManager.has_active_turn_system():
+		var turn_system = TurnSystemManager.get_active_turn_system()
+		
+		if turn_system is TraditionalTurnSystem:
+			print("Marking unit acted (Traditional)")
+			(turn_system as TraditionalTurnSystem).mark_unit_acted(selected_unit)
+		elif turn_system is SpeedFirstTurnSystem:
+			print("Marking unit acted (Speed First)")
+			(turn_system as SpeedFirstTurnSystem).mark_unit_acted(selected_unit)
+	
+	# Mark unit action completed
+	selected_unit.mark_action_completed("move")
+	
+	# Emit action completed signal
+	GameEvents.unit_action_completed.emit(selected_unit, "move")
+	
+	# Force update unit visuals
+	var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
+	if visual_manager:
+		print("Updating unit visuals via UnitVisualManager")
+		visual_manager.update_all_unit_visuals()
+	
+	print("Movement action completed")
+
+func _on_movement_animation_complete(unit: Unit) -> void:
+	"""Called when movement animation finishes"""
+	print("Movement animation completed for " + unit.get_display_name())
+
+# Fire Emblem style movement handling
+func is_showing_movement_range() -> bool:
+	"""Check if movement range is currently displayed"""
+	var showing = movement_range_tiles.size() > 0
+	print("DEBUG: is_showing_movement_range() = " + str(showing) + " (tiles: " + str(movement_range_tiles.size()) + ")")
+	return showing
+
+func handle_movement_destination_selected(destination: Vector3) -> void:
+	"""Handle selection of a movement destination (Fire Emblem style)"""
+	print("DEBUG: handle_movement_destination_selected called with destination: " + str(destination))
+	
+	if not selected_unit:
+		print("DEBUG: No unit selected for movement")
+		return
+	
+	print("DEBUG: Selected unit: " + selected_unit.get_display_name())
+	print("DEBUG: Available movement tiles: " + str(movement_range_tiles.size()))
+	
+	# Check if destination is in movement range
+	var is_valid_destination = false
+	for tile in movement_range_tiles:
+		if abs(tile.x - destination.x) < 0.1 and abs(tile.z - destination.z) < 0.1:
+			is_valid_destination = true
+			print("DEBUG: Found matching tile: " + str(tile) + " for destination: " + str(destination))
+			break
+	
+	print("DEBUG: Is valid destination: " + str(is_valid_destination))
+	
+	if is_valid_destination:
+		print("DEBUG: Valid destination - executing movement")
+		
+		# Validate with turn system
+		if TurnSystemManager.has_active_turn_system():
+			var turn_system = TurnSystemManager.get_active_turn_system()
+			if turn_system.validate_turn_action(selected_unit, "move"):
+				_execute_movement_to_destination(destination)
+			else:
+				print("DEBUG: Movement not allowed by turn system")
+		else:
+			_execute_movement_to_destination(destination)
+	else:
+		print("DEBUG: Invalid destination - not in movement range")
+		# Could play error sound or show message here
+
+func _execute_movement_to_destination(destination: Vector3) -> void:
+	"""Execute movement to destination (Fire Emblem style)"""
+	if not selected_unit:
+		return
+	
+	print("=== Executing Movement to Destination ===")
+	print("Moving " + selected_unit.get_display_name() + " to " + str(destination))
+	
+	# Get grid for position calculations
+	var grid = preload("res://board/Grid.tres")
+	var old_world_pos = selected_unit.global_position
+	var old_grid_pos = grid.calculate_grid_coordinates(old_world_pos)
+	
+	# Calculate new world position
+	var new_world_pos = grid.calculate_map_position(destination)
+	
+	# Clear movement range first
+	_clear_movement_range()
+	
+	# Animate the unit movement
+	_animate_unit_movement(selected_unit, old_world_pos, new_world_pos)
+	
+	print("Unit moved from " + str(old_grid_pos) + " to " + str(destination))
+	
+	# Emit movement event
+	GameEvents.unit_moved.emit(selected_unit, old_grid_pos, destination)
+	
+	# Mark unit as having acted
+	_complete_movement_action()
+	
+	# Update UI to reflect unit has moved
+	_update_actions()

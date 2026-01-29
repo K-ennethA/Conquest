@@ -17,3 +17,4 @@ base_health = 120
 base_attack = 25
 base_defense = 15
 base_speed = 8
+base_movement = 3
