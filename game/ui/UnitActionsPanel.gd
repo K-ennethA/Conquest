@@ -961,6 +961,8 @@ func _execute_movement(destination: Vector3) -> void:
 	
 	# Calculate new world position
 	var new_world_pos = grid.calculate_map_position(destination)
+	# Preserve the unit's original Y height (units are at Y=1.5)
+	new_world_pos.y = selected_unit.global_position.y
 	
 	# Animate the unit movement
 	_animate_unit_movement(selected_unit, old_world_pos, new_world_pos)
@@ -1089,6 +1091,8 @@ func _execute_movement_to_destination(destination: Vector3) -> void:
 	
 	# Calculate new world position
 	var new_world_pos = grid.calculate_map_position(destination)
+	# Preserve the unit's original Y height (units are at Y=1.5)
+	new_world_pos.y = selected_unit.global_position.y
 	
 	# Clear movement range first
 	_clear_movement_range()

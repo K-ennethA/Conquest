@@ -112,7 +112,10 @@ func _move_unit_to_position(unit: Unit, new_position: Vector3) -> void:
 	units[new_tile_pos].append(unit)
 	
 	# Update unit position
-	unit.position = grid.calculate_map_position(new_tile_pos)
+	var new_world_pos = grid.calculate_map_position(new_tile_pos)
+	# Preserve the unit's Y height (units should be at Y=1.5)
+	new_world_pos.y = 1.5
+	unit.position = new_world_pos
 	
 	GameEvents.unit_moved.emit(unit, old_tile_pos, new_tile_pos)
 

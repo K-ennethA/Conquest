@@ -1,4 +1,2 @@
-res://game/visuals/MovementVisualizer.gd
-res://debug_overlay_system.gd
-res://test_overlay_visibility.gd
-res://game/visuals/MapGridVisualizer.gd
+res://game/ui/UnitActionsPanel.gd
+res://tile_objects/units/board.gd
