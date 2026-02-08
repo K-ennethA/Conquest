@@ -12,6 +12,7 @@ enum GameMode {
 # Game configuration
 var game_mode: GameMode = GameMode.VERSUS
 var selected_turn_system: TurnSystemBase.TurnSystemType = TurnSystemBase.TurnSystemType.TRADITIONAL
+var selected_map_path: String = "res://game/maps/resources/default_skirmish.tres"  # Default map
 
 # Player configuration
 var player_count: int = 2
@@ -52,6 +53,18 @@ func set_player_name(player_index: int, name: String) -> void:
 	if player_index >= 0 and player_index < player_names.size():
 		player_names[player_index] = name
 		print("Player " + str(player_index + 1) + " name set to: " + name)
+
+func set_selected_map(map_path: String) -> void:
+	"""Set the selected map path"""
+	selected_map_path = map_path
+	print("Selected map set to: " + map_path)
+
+func get_selected_map() -> String:
+	"""Get the selected map path"""
+	# Return default map if none selected
+	if selected_map_path.is_empty():
+		return "res://game/maps/resources/default_skirmish.tres"
+	return selected_map_path
 
 # Query methods
 func get_game_mode_string() -> String:
@@ -111,6 +124,7 @@ func reset_to_defaults() -> void:
 	"""Reset all settings to default values"""
 	game_mode = GameMode.VERSUS
 	selected_turn_system = TurnSystemBase.TurnSystemType.TRADITIONAL
+	selected_map_path = "res://game/maps/resources/default_skirmish.tres"  # Default map
 	player_count = 2
 	player_names = ["Player 1", "Player 2"]
 	auto_end_turn = false
@@ -125,6 +139,7 @@ func get_settings_info() -> Dictionary:
 	return {
 		"game_mode": get_game_mode_string(),
 		"turn_system": get_turn_system_string(),
+		"selected_map": selected_map_path,
 		"player_count": player_count,
 		"player_names": player_names.duplicate(),
 		"auto_end_turn": auto_end_turn,

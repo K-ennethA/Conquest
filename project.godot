@@ -21,12 +21,15 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+AutoClientDetector="*res://AutoClientDetector.gd"
 GameEvents="*res://systems/game_events.gd"
 ResourceManager="*res://systems/resource_manager.gd"
 PlayerManager="*res://systems/player_manager.gd"
 TurnSystemManager="*res://systems/turn_system_manager.gd"
 GameSettings="*res://systems/game_settings.gd"
 BattleEffectsManager="*res://systems/battle_effects_manager.gd"
+GameModeManager="*res://systems/game_core/GameModeManager.gd"
+MultiplayerLauncher="*res://systems/multiplayer_launcher.gd"
 
 [display]
 
@@ -35,4 +38,4 @@ window/size/viewport_height=720
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/gut/plugin.cfg")
+enabled=PackedStringArray("res://addons/gut/plugin.cfg", "res://addons/unit_creator/plugin.cfg")

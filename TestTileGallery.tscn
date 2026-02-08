@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bxvn8k2qr8y7h"]
+
+[ext_resource type="Script" path="res://test_tile_gallery.gd" id="1_0k8vx"]
+
+[node name="TestTileGallery" type="Node"]
+script = ExtResource("1_0k8vx")

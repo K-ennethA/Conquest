@@ -208,16 +208,16 @@ func is_at_full_health() -> bool:
 	return current_health >= max_health
 
 # Unit type and properties
-func get_unit_type() -> UnitType:
+func get_unit_type() -> String:
 	"""Get the unit's type"""
 	if unit_stats and unit_stats.stats_resource:
 		return unit_stats.stats_resource.unit_type
-	return null
+	return ""
 
 func get_display_name() -> String:
 	"""Get the unit's display name"""
 	if unit_stats and unit_stats.stats_resource:
-		return unit_stats.stats_resource.get_display_name()
+		return unit_stats.stats_resource.unit_name
 	return "Unknown Unit"
 
 func is_ranged_unit() -> bool:

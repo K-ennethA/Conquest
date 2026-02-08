@@ -89,12 +89,11 @@ func _start_game_with_turn_system() -> void:
 	print("Starting game with turn system: " + TurnSystemBase.TurnSystemType.keys()[selected_turn_system])
 	
 	# Store the selected turn system for the game to use
-	# We'll use a simple autoload to pass this information
 	GameSettings.selected_turn_system = selected_turn_system
 	GameSettings.game_mode = GameSettings.GameMode.VERSUS
 	
-	# Load the game scene
-	get_tree().change_scene_to_file("res://game/world/GameWorld.tscn")
+	# Go to map selection instead of directly to game
+	get_tree().change_scene_to_file("res://menus/MapSelection.tscn")
 
 func _show_not_implemented_message(system_name: String) -> void:
 	"""Show a message for unimplemented turn systems"""

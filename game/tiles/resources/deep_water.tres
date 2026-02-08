@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="TileResource" format=3]
+
+[ext_resource type="Script" path="res://game/tiles/resources/TileResource.gd" id="1_cm0rv"]
+
+[resource]
+resource_name = "TileResource"
+script = ExtResource("1_cm0rv")
+tile_name = "Deep Water"
+tile_type = 2
+description = "Deep water that slows movement but can be crossed by most units."
+base_movement_cost = 3
+base_color = Color(0.2, 0.4, 0.8, 1)
+metallic = 0.8
+roughness = 0.1
+elevation = -1
+generation_weight = 0.8

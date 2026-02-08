@@ -56,7 +56,33 @@ func _apply_player_material(unit: Unit, player: PlayerMaterials.PlayerTeam) -> v
 	
 	var unit_type = UnitType.Type.WARRIOR
 	if unit.unit_stats and unit.unit_stats.stats_resource and unit.unit_stats.stats_resource.unit_type:
-		unit_type = unit.unit_stats.stats_resource.unit_type.type
+		var type_data = unit.unit_stats.stats_resource.unit_type
+		if type_data is String:
+			# Handle string type - convert to enum
+			var type_string = type_data.to_upper()
+			match type_string:
+				"WARRIOR":
+					unit_type = UnitType.Type.WARRIOR
+				"ARCHER":
+					unit_type = UnitType.Type.ARCHER
+				"MAGE":
+					unit_type = UnitType.Type.MAGE
+				_:
+					unit_type = UnitType.Type.WARRIOR
+		elif typeof(type_data) == TYPE_OBJECT and type_data != null and type_data.has_method("get_type"):
+			unit_type = type_data.get_type()
+		else:
+			# Handle string type - convert to enum
+			var type_string = str(type_data).to_upper()
+			match type_string:
+				"WARRIOR":
+					unit_type = UnitType.Type.WARRIOR
+				"ARCHER":
+					unit_type = UnitType.Type.ARCHER
+				"MAGE":
+					unit_type = UnitType.Type.MAGE
+				_:
+					unit_type = UnitType.Type.WARRIOR
 	
 	var material = player_materials.get_player_material(player, unit_type)
 	mesh_instance.material_override = material
@@ -217,7 +243,33 @@ func apply_acted_visual(unit: Unit, has_acted: bool) -> void:
 func _get_unit_type(unit: Unit) -> UnitType.Type:
 	"""Get the unit type for a unit"""
 	if unit.unit_stats and unit.unit_stats.stats_resource and unit.unit_stats.stats_resource.unit_type:
-		return unit.unit_stats.stats_resource.unit_type.type
+		var type_data = unit.unit_stats.stats_resource.unit_type
+		if type_data is String:
+			# Handle string type - convert to enum
+			var type_string = type_data.to_upper()
+			match type_string:
+				"WARRIOR":
+					return UnitType.Type.WARRIOR
+				"ARCHER":
+					return UnitType.Type.ARCHER
+				"MAGE":
+					return UnitType.Type.MAGE
+				_:
+					return UnitType.Type.WARRIOR
+		elif typeof(type_data) == TYPE_OBJECT and type_data != null and type_data.has_method("get_type"):
+			return type_data.get_type()
+		else:
+			# Handle string type - convert to enum
+			var type_string = str(type_data).to_upper()
+			match type_string:
+				"WARRIOR":
+					return UnitType.Type.WARRIOR
+				"ARCHER":
+					return UnitType.Type.ARCHER
+				"MAGE":
+					return UnitType.Type.MAGE
+				_:
+					return UnitType.Type.WARRIOR
 	return UnitType.Type.WARRIOR  # Default
 
 func _determine_unit_player(unit: Unit) -> PlayerMaterials.PlayerTeam:

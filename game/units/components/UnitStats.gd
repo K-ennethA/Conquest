@@ -45,12 +45,12 @@ func _ready() -> void:
 
 func _initialize_current_stats() -> void:
 	"""Initialize current stats from the base resource"""
-	current_health = stats_resource.base_health
+	current_health = stats_resource.max_health
 	current_attack = stats_resource.base_attack
 	current_defense = stats_resource.base_defense
 	current_speed = stats_resource.base_speed
-	current_movement = stats_resource.base_movement
-	current_actions = stats_resource.base_actions
+	current_movement = stats_resource.movement_range
+	current_actions = 1  # Default to 1 action per turn
 	current_range = stats_resource.attack_range
 
 # Stat getter methods
@@ -286,7 +286,7 @@ func _set_base_stat(stat_name: String, value: int) -> void:
 	
 	match stat_name.to_lower():
 		"health", "hp":
-			stats_resource.base_health = value
+			stats_resource.max_health = value
 		"attack", "atk":
 			stats_resource.base_attack = value
 		"defense", "def":
@@ -294,9 +294,10 @@ func _set_base_stat(stat_name: String, value: int) -> void:
 		"speed", "spd":
 			stats_resource.base_speed = value
 		"movement", "move":
-			stats_resource.base_movement = value
+			stats_resource.movement_range = value
 		"actions", "act":
-			stats_resource.base_actions = value
+			# Actions not stored in resource, only in current stats
+			pass
 		"range":
 			stats_resource.attack_range = value
 
@@ -356,8 +357,8 @@ func _to_string() -> String:
 		return "UnitStats: No resource loaded"
 	
 	return "UnitStats[%s]: HP:%d/%d ATK:%d DEF:%d SPD:%d MOV:%d ACT:%d RNG:%d" % [
-		stats_resource.get_display_name(),
-		current_health, stats_resource.base_health,
+		stats_resource.unit_name,
+		current_health, stats_resource.max_health,
 		current_attack, current_defense, current_speed,
 		current_movement, current_actions, current_range
 	]
@@ -366,7 +367,7 @@ func get_debug_info() -> Dictionary:
 	"""Get detailed debug information about the component"""
 	return {
 		"resource_loaded": stats_resource != null,
-		"resource_name": stats_resource.get_display_name() if stats_resource else "None",
+		"resource_name": stats_resource.unit_name if stats_resource else "None",
 		"current_stats": get_all_stats(),
 		"base_stats": get_all_base_stats(),
 		"active_modifiers": _stat_modifiers.size(),

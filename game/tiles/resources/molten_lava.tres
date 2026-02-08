@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="TileResource" format=3]
+
+[ext_resource type="Script" path="res://game/tiles/TileEffect.gd" id="1_dhbn0"]
+[ext_resource type="Script" path="res://game/tiles/resources/TileResource.gd" id="2_lcd6e"]
+
+[sub_resource type="Resource" id="Resource_xk26l"]
+resource_name = "TileEffect"
+script = ExtResource("1_dhbn0")
+effect_name = "Lava Burn"
+effect_type = 1
+strength = 10
+triggers_on_turn_start = true
+
+[resource]
+resource_name = "TileResource"
+script = ExtResource("2_lcd6e")
+tile_name = "Molten Lava"
+tile_type = 5
+description = "Dangerous molten rock that burns anything that steps on it. Deals 10 fire damage per turn to units standing on it."
+base_movement_cost = 2
+base_color = Color(1, 0.2, 0, 1)
+emission_enabled = true
+emission_color = Color(1, 0.3, 0, 1)
+roughness = 0.8
+has_default_effects = true
+default_effects = [SubResource("Resource_xk26l")]
+rarity = "Rare"
+generation_weight = 0.3

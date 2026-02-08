@@ -31,6 +31,12 @@ var stats_expanded: bool = false
 var movement_mode: bool = false
 var movement_range_tiles: Array[Vector3] = []
 
+# Move system variables
+var move_selection_panel: MoveSelectionPanel
+var moves_button: Button
+var move_mode: bool = false
+var selected_move_index: int = -1
+
 func _ready() -> void:
 	# Ensure proper mouse handling
 	mouse_filter = Control.MOUSE_FILTER_STOP  # Make sure panel stops mouse events
@@ -97,6 +103,9 @@ func _ready() -> void:
 	
 	# Style the unit header background
 	_setup_unit_header_styling()
+	
+	# Initialize move system
+	_setup_move_system()
 
 func _notification(what: int) -> void:
 	match what:
@@ -130,24 +139,51 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	print("Position: " + str(position))
 	print("Current selected_unit before: " + (selected_unit.name if selected_unit else "None"))
 	
-	# Only show if this is the current player's unit
-	if not PlayerManager.can_current_player_select_unit(unit):
-		print("Selection rejected by PlayerManager")
-		return
-	
-	# For Speed First mode, allow selection of any unit but actions will be restricted in _update_actions
-	# For Traditional mode, still check turn system constraints
-	if TurnSystemManager.has_active_turn_system():
-		var turn_system = TurnSystemManager.get_active_turn_system()
+	# Check if we're in multiplayer mode and validate ownership
+	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
+		print("Multiplayer mode detected - validating unit ownership")
 		
-		# Only block selection in Traditional mode if unit can't act
-		if turn_system is TraditionalTurnSystem and not turn_system.can_unit_act(unit):
-			print("Selection rejected by Traditional turn system: " + turn_system.system_name)
+		# Get local player ID and unit owner
+		var local_player_id_raw = GameModeManager.get_local_player_id()
+		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
+		var unit_owner = PlayerManager.get_player_owning_unit(unit)
+		
+		print("Local player ID: " + str(local_player_id))
+		print("Unit owner: " + (unit_owner.player_name if unit_owner else "None"))
+		print("Unit owner ID: " + str(unit_owner.player_id if unit_owner else -1))
+		
+		if not unit_owner:
+			print("Selection rejected: Unit has no owner")
 			return
 		
-		# In Speed First mode, allow selection but _update_actions will handle restrictions
-		if turn_system is SpeedFirstTurnSystem:
-			print("Speed First mode: Allowing selection, actions will be restricted as needed")
+		# Ensure player_id is int for comparison and arithmetic
+		var owner_player_id = int(unit_owner.player_id) if unit_owner.player_id is String else unit_owner.player_id
+		
+		if owner_player_id != local_player_id:
+			print("Selection rejected: Unit belongs to Player " + str(owner_player_id + 1) + ", you are Player " + str(local_player_id + 1))
+			# Could show a message to the player here
+			return
+		
+		print("Unit ownership validated - selection allowed")
+	else:
+		# Only show if this is the current player's unit
+		if not PlayerManager.can_current_player_select_unit(unit):
+			print("Selection rejected by PlayerManager")
+			return
+		
+		# For Speed First mode, allow selection of any unit but actions will be restricted in _update_actions
+		# For Traditional mode, still check turn system constraints
+		if TurnSystemManager.has_active_turn_system():
+			var turn_system = TurnSystemManager.get_active_turn_system()
+			
+			# Only block selection in Traditional mode if unit can't act
+			if turn_system is TraditionalTurnSystem and not turn_system.can_unit_act(unit):
+				print("Selection rejected by Traditional turn system: " + turn_system.system_name)
+				return
+			
+			# In Speed First mode, allow selection but _update_actions will handle restrictions
+			if turn_system is SpeedFirstTurnSystem:
+				print("Speed First mode: Allowing selection, actions will be restricted as needed")
 	
 	print("Unit selection accepted: " + unit.name)
 	selected_unit = unit
@@ -499,6 +535,9 @@ func _update_actions() -> void:
 	if cancel_button:
 		cancel_button.disabled = false
 		cancel_button.text = "Cancel (C/ESC)"
+	
+	# Update Moves button availability
+	_update_moves_button_availability()
 
 func _on_move_pressed() -> void:
 	"""Handle Move button press - enter movement mode"""
@@ -508,7 +547,38 @@ func _on_move_pressed() -> void:
 	
 	print("Move action for unit: " + selected_unit.get_display_name())
 	
-	# Use turn system to validate the action
+	# Check if we're in multiplayer mode and submit action through GameModeManager
+	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
+		# Validate that this is our unit and our turn
+		var local_player_id_raw = GameModeManager.get_local_player_id()
+		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
+		var unit_owner = PlayerManager.get_player_owning_unit(selected_unit)
+		
+		# Ensure player_id is int for comparison
+		var owner_player_id = int(unit_owner.player_id) if (unit_owner and unit_owner.player_id is String) else (unit_owner.player_id if unit_owner else -1)
+		
+		if not unit_owner or owner_player_id != local_player_id:
+			print("Move action rejected: not your unit")
+			return
+		
+		if not GameModeManager.is_my_turn():
+			print("Move action rejected: not your turn in multiplayer")
+			return
+		
+		# Submit move action through multiplayer system
+		var action_data = {
+			"unit_id": selected_unit.get_display_name(),
+			"player_id": local_player_id
+		}
+		
+		if GameModeManager.submit_action("unit_move_start", action_data):
+			print("Move action submitted to multiplayer system")
+			_enter_movement_mode()
+		else:
+			print("Move action rejected by multiplayer system")
+		return
+	
+	# Local game logic (existing)
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
 		print("Validating move with turn system: " + turn_system.system_name)
@@ -531,7 +601,38 @@ func _on_end_unit_turn_pressed() -> void:
 		print("No unit selected")
 		return
 	
-	# Mark this unit as having acted (ends their turn)
+	# Check if we're in multiplayer mode and submit action through GameModeManager
+	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
+		# Validate that this is our unit and our turn
+		var local_player_id_raw = GameModeManager.get_local_player_id()
+		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
+		var unit_owner = PlayerManager.get_player_owning_unit(selected_unit)
+		
+		# Ensure player_id is int for comparison
+		var owner_player_id = int(unit_owner.player_id) if (unit_owner and unit_owner.player_id is String) else (unit_owner.player_id if unit_owner else -1)
+		
+		if not unit_owner or owner_player_id != local_player_id:
+			print("End unit turn action rejected: not your unit")
+			return
+		
+		if not GameModeManager.is_my_turn():
+			print("End unit turn action rejected: not your turn in multiplayer")
+			return
+		
+		# Submit end unit turn action through multiplayer system
+		var action_data = {
+			"unit_id": selected_unit.get_display_name(),
+			"player_id": local_player_id
+		}
+		
+		if GameModeManager.submit_action("end_unit_turn", action_data):
+			print("End unit turn action submitted to multiplayer system")
+			# The action will be processed when received back from network
+		else:
+			print("End unit turn action rejected by multiplayer system")
+		return
+	
+	# Local game logic (existing)
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
 		
@@ -575,7 +676,36 @@ func _on_end_player_turn_pressed() -> void:
 	
 	print("Ending turn for player: " + current_player.player_name)
 	
-	# Use the turn system to end the player's turn
+	# Check if we're in multiplayer mode and submit action through GameModeManager
+	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
+		# Validate that it's our turn
+		var local_player_id_raw = GameModeManager.get_local_player_id()
+		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
+		
+		# Ensure player_id is int for comparison
+		var current_player_id = int(current_player.player_id) if current_player.player_id is String else current_player.player_id
+		
+		if current_player_id != local_player_id:
+			print("End player turn action rejected: not your turn (current: " + str(current_player_id) + ", local: " + str(local_player_id) + ")")
+			return
+		
+		if not GameModeManager.is_my_turn():
+			print("End player turn action rejected: not your turn in multiplayer")
+			return
+		
+		# Submit end turn action through multiplayer system
+		var action_data = {
+			"player_id": local_player_id
+		}
+		
+		if GameModeManager.submit_action("end_turn", action_data):
+			print("End player turn action submitted to multiplayer system")
+			# The action will be processed when received back from network
+		else:
+			print("End player turn action rejected by multiplayer system")
+		return
+	
+	# Local game logic (existing)
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
 		print("Using turn system to end player turn: " + turn_system.system_name)
@@ -1003,7 +1133,33 @@ func _complete_movement_action() -> void:
 	
 	print("=== Completing Movement Action ===")
 	
-	# Mark unit as having acted in turn system
+	# Check if we're in multiplayer mode and submit action through GameModeManager
+	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
+		# Validate that this is our unit
+		var local_player_id_raw = GameModeManager.get_local_player_id()
+		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
+		var unit_owner = PlayerManager.get_player_owning_unit(selected_unit)
+		
+		# Ensure player_id is int for comparison
+		var owner_player_id = int(unit_owner.player_id) if (unit_owner and unit_owner.player_id is String) else (unit_owner.player_id if unit_owner else -1)
+		
+		if unit_owner and owner_player_id == local_player_id:
+			# Submit movement completion action through multiplayer system
+			var action_data = {
+				"unit_id": selected_unit.get_display_name(),
+				"player_id": local_player_id,
+				"from_position": selected_unit.global_position,
+				"to_position": selected_unit.global_position  # Current position after move
+			}
+			
+			if GameModeManager.submit_action("unit_move_complete", action_data):
+				print("Movement completion action submitted to multiplayer system")
+			else:
+				print("Movement completion action rejected by multiplayer system")
+		
+		# Still do local processing for immediate feedback
+	
+	# Local game logic (existing)
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
 		
@@ -1110,3 +1266,208 @@ func _execute_movement_to_destination(destination: Vector3) -> void:
 	
 	# Update UI to reflect unit has moved
 	_update_actions()
+
+# Move System Implementation
+func _setup_move_system() -> void:
+	"""Initialize the move system"""
+	# Create move selection panel
+	move_selection_panel = MoveSelectionPanel.new()
+	add_child(move_selection_panel)
+	
+	# Connect move selection signals
+	move_selection_panel.move_selected.connect(_on_move_selected)
+	move_selection_panel.move_cancelled.connect(_on_move_cancelled)
+	
+	# Create moves button and add it to the actions container
+	moves_button = Button.new()
+	moves_button.text = "MOVES"
+	moves_button.custom_minimum_size = Vector2(120, 40)
+	moves_button.pressed.connect(_on_moves_pressed)
+	
+	# Add moves button to the actions container (after move button)
+	var actions_container = get_node_or_null("MarginContainer/ContentContainer/ActionsContainer")
+	if actions_container:
+		# Insert after move button
+		var move_button_index = -1
+		for i in range(actions_container.get_child_count()):
+			if actions_container.get_child(i) == move_button:
+				move_button_index = i
+				break
+		
+		if move_button_index >= 0:
+			actions_container.add_child(moves_button)
+			actions_container.move_child(moves_button, move_button_index + 1)
+		else:
+			actions_container.add_child(moves_button)
+	
+	print("Move system initialized")
+
+func _on_moves_pressed() -> void:
+	"""Handle Moves button press"""
+	if not selected_unit:
+		return
+	
+	print("Moves button pressed for " + selected_unit.name)
+	
+	# Check if unit has MoveManager
+	var move_manager = selected_unit.get_node_or_null("MoveManager")
+	if not move_manager:
+		print("Unit has no MoveManager - creating default moves")
+		_create_default_moves_for_unit(selected_unit)
+		move_manager = selected_unit.get_node_or_null("MoveManager")
+	
+	if move_manager:
+		# Show move selection panel
+		move_selection_panel.show_moves_for_unit(selected_unit)
+	else:
+		print("Failed to create MoveManager for unit")
+
+func _on_move_selected(move_index: int) -> void:
+	"""Handle move selection from the move panel"""
+	if not selected_unit:
+		return
+	
+	var move_manager = selected_unit.get_node_or_null("MoveManager")
+	if not move_manager:
+		return
+	
+	selected_move_index = move_index
+	var move = move_manager.moves[move_index]
+	
+	print("Move selected: " + move.name + " (index: " + str(move_index) + ")")
+	
+	# Check if move requires a target
+	if move.range > 0:
+		# Enter move targeting mode
+		move_mode = true
+		_show_move_targeting(move)
+	else:
+		# Self-target move, execute immediately
+		_execute_move_on_target(selected_unit)
+
+func _on_move_cancelled() -> void:
+	"""Handle move selection cancellation"""
+	selected_move_index = -1
+	move_mode = false
+	print("Move selection cancelled")
+
+func _show_move_targeting(move: Move) -> void:
+	"""Show targeting interface for a move"""
+	print("Showing targeting for move: " + move.name)
+	print("Range: " + str(move.range))
+	
+	# Calculate valid targets based on move range
+	var valid_targets = _calculate_move_targets(move)
+	
+	if valid_targets.is_empty():
+		print("No valid targets for move")
+		move_mode = false
+		selected_move_index = -1
+		return
+	
+	# For now, just show a message - in a full implementation you'd highlight valid targets
+	print("Select a target within range " + str(move.range))
+	print("Valid targets: " + str(valid_targets.size()))
+
+func _calculate_move_targets(move: Move) -> Array[Node]:
+	"""Calculate valid targets for a move"""
+	var targets: Array[Node] = []
+	
+	if not selected_unit:
+		return targets
+	
+	var caster_pos = selected_unit.global_position
+	var all_units = _find_all_units_in_scene()
+	
+	for unit in all_units:
+		var target_pos = unit.global_position
+		
+		# Check if target is within range
+		if move.can_target(caster_pos, target_pos):
+			# For damage moves, only target enemies
+			# For heal/buff moves, only target allies
+			# For now, allow all targets
+			targets.append(unit)
+	
+	return targets
+
+func _execute_move_on_target(target: Node) -> void:
+	"""Execute the selected move on the target"""
+	if not selected_unit or selected_move_index < 0:
+		return
+	
+	var move_manager = selected_unit.get_node_or_null("MoveManager")
+	if not move_manager:
+		return
+	
+	print("Executing move on target: " + target.name)
+	
+	# Execute the move
+	var result = move_manager.use_move(selected_move_index, target)
+	
+	# Show result message
+	if result.success:
+		print("Move executed successfully: " + result.message)
+		
+		# Update UI to reflect move usage
+		_update_actions()
+		
+		# Update move selection panel if it's still visible
+		if move_selection_panel.visible:
+			move_selection_panel.update_move_cooldowns()
+	else:
+		print("Move failed: " + result.message)
+	
+	# Exit move mode
+	move_mode = false
+	selected_move_index = -1
+
+func _create_default_moves_for_unit(unit: Node) -> void:
+	"""Create default moves for a unit that doesn't have any"""
+	# Add MoveManager component
+	var move_manager = MoveManager.new()
+	unit.add_child(move_manager)
+	
+	# Determine unit type and add appropriate moves
+	var unit_name = unit.name.to_lower()
+	var moves: Array[Move] = []
+	
+	if "warrior" in unit_name:
+		moves = MoveFactory.get_warrior_moves()
+	elif "archer" in unit_name:
+		moves = MoveFactory.get_archer_moves()
+	elif "mage" in unit_name:
+		moves = MoveFactory.get_mage_moves()
+	else:
+		# Default moves for unknown unit types
+		moves = [
+			MoveFactory.create_basic_attack(),
+			MoveFactory.create_heal(),
+			MoveFactory.create_shield_wall()
+		]
+	
+	# Add moves to the unit
+	for move in moves:
+		move_manager.add_move(move)
+	
+	print("Created default moves for " + unit.name + ": " + str(moves.size()) + " moves")
+
+func _update_moves_button_availability() -> void:
+	"""Update the availability of the moves button"""
+	if not moves_button or not selected_unit:
+		return
+	
+	var move_manager = selected_unit.get_node_or_null("MoveManager")
+	if not move_manager:
+		moves_button.disabled = false  # Will create default moves
+		moves_button.text = "MOVES"
+		return
+	
+	# Check if any moves are available
+	var available_moves = move_manager.get_available_moves()
+	moves_button.disabled = available_moves.is_empty()
+	
+	if available_moves.is_empty():
+		moves_button.text = "MOVES (All on cooldown)"
+	else:
+		moves_button.text = "MOVES (" + str(available_moves.size()) + " available)"

@@ -9,7 +9,6 @@ extends Node3D
 var units: Dictionary = {} # Vector3 -> Array[TileObject]
 var _selected_unit: Unit
 var _highlighted_tiles: Array[Vector3] = []
-var _turn_system: Node
 
 func _ready() -> void:
 	initialize_units()
@@ -24,17 +23,23 @@ func _connect_events() -> void:
 	GameEvents.turn_ended.connect(_on_turn_ended)
 
 func _setup_turn_system() -> void:
-	_turn_system = get_node("../TurnSystem")
-	if _turn_system:
-		# Collect all units and initialize turn system
-		var all_units: Array[Unit] = []
-		for tile_objects in units.values():
-			for obj in tile_objects:
-				if obj is Unit:
-					all_units.append(obj)
+	# The turn system is now managed by autoloads (TurnSystemManager, PlayerManager)
+	# We don't need to access a local TurnSystem node anymore
+	# The PlayerManager will handle unit ownership and turn validation
+	
+	# Initialize units with PlayerManager instead
+	if PlayerManager:
+		# Set up default players if not already done
+		PlayerManager.setup_default_players()
 		
-		if not all_units.is_empty():
-			_turn_system.initialize_with_units(all_units)
+		# Assign units to players based on their parent nodes
+		PlayerManager.assign_units_by_parent()
+		
+		# Start the game if not already started
+		if PlayerManager.current_game_state == PlayerManager.GameState.SETUP:
+			PlayerManager.start_game()
+	else:
+		print("WARNING: PlayerManager not found - turn system not initialized")
 
 func initialize_units() -> void:
 	for child in get_children():
@@ -64,8 +69,12 @@ func _attempt_select_unit(position: Vector3) -> void:
 		_show_movement_range(unit, position)
 
 func _can_select_unit(unit: Unit) -> bool:
-	# Only allow selecting units during their turn
-	return _turn_system and _turn_system.is_unit_turn(unit)
+	# Use PlayerManager to check if unit can be selected
+	if PlayerManager:
+		return PlayerManager.can_current_player_select_unit(unit)
+	
+	# Fallback - allow selection if no PlayerManager
+	return true
 
 func _attempt_move_unit(position: Vector3) -> void:
 	if _can_move_to_position(position):

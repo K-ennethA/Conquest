@@ -34,7 +34,48 @@ func _ready() -> void:
 	GameEvents.unit_selected.connect(_on_unit_selected)
 	GameEvents.unit_action_completed.connect(_on_unit_action_completed)
 	
-	print("PlayerManager initialized")
+	print(_get_log_prefix() + "PlayerManager: Initializing...")
+	
+	# Connect to GameModeManager for multiplayer turn synchronization
+	if GameModeManager:
+		print(_get_log_prefix() + "PlayerManager: GameModeManager found")
+		GameModeManager.game_started.connect(_on_game_mode_manager_game_started)
+		GameModeManager.game_ended.connect(_on_game_mode_manager_game_ended)
+		
+		# Try to connect to GameManager immediately
+		_try_connect_to_game_manager()
+		
+		# Also try again after a short delay in case GameManager isn't ready yet
+		await get_tree().create_timer(0.1).timeout
+		_try_connect_to_game_manager()
+	else:
+		print(_get_log_prefix() + "PlayerManager: WARNING - GameModeManager not found")
+	
+	print(_get_log_prefix() + "PlayerManager initialized")
+
+func _try_connect_to_game_manager() -> void:
+	"""Try to connect to GameManager's turn_changed signal"""
+	if not GameModeManager:
+		print(_get_log_prefix() + "PlayerManager: GameModeManager is null")
+		return
+	
+	var game_manager = GameModeManager._game_manager
+	if game_manager:
+		print(_get_log_prefix() + "PlayerManager: GameManager found - " + str(game_manager))
+		
+		# Check if already connected to avoid duplicate connections
+		if not game_manager.turn_changed.is_connected(_on_network_turn_changed):
+			print(_get_log_prefix() + "PlayerManager: Connecting to GameManager.turn_changed signal")
+			var connection_result = game_manager.turn_changed.connect(_on_network_turn_changed)
+			if connection_result == OK:
+				print(_get_log_prefix() + "PlayerManager: Successfully connected to GameManager.turn_changed")
+			else:
+				print(_get_log_prefix() + "PlayerManager: Failed to connect to GameManager.turn_changed - error: " + str(connection_result))
+		else:
+			print(_get_log_prefix() + "PlayerManager: Already connected to GameManager.turn_changed")
+	else:
+		print(_get_log_prefix() + "PlayerManager: WARNING - GameManager not found in GameModeManager")
+		print(_get_log_prefix() + "PlayerManager: GameModeManager._game_manager is: " + str(GameModeManager._game_manager))
 
 # Player registration and setup
 func register_player(player_name: String = "") -> Player:
@@ -91,18 +132,22 @@ func assign_units_by_parent() -> void:
 	"""Auto-assign units based on their parent node names"""
 	var scene_root = get_tree().current_scene
 	
+	if not scene_root:
+		print("ERROR: No current scene found")
+		return
+	
 	# Look for Player1 and Player2 nodes
 	for i in range(players.size()):
 		var player_node_name = "Map/Player" + str(i + 1)
 		var player_node = scene_root.get_node_or_null(player_node_name)
 		
-		if player_node:
+		if player_node and is_instance_valid(player_node):
 			print("Found player node: " + player_node_name)
 			for child in player_node.get_children():
-				if child is Unit:
+				if child is Unit and is_instance_valid(child):
 					assign_unit_to_player(child, i)
 		else:
-			print("Player node not found: " + player_node_name)
+			print("Player node not found or invalid: " + player_node_name)
 
 # Game state management
 func start_game() -> void:
@@ -203,6 +248,10 @@ func get_current_player() -> Player:
 		return players[current_player_index]
 	return null
 
+func get_current_player_index() -> int:
+	"""Get the current player index"""
+	return current_player_index
+
 func get_player_by_id(player_id: int) -> Player:
 	"""Get player by ID"""
 	if player_id >= 0 and player_id < players.size():
@@ -242,10 +291,37 @@ func can_player_select_unit(player: Player, unit: Unit) -> bool:
 func can_current_player_select_unit(unit: Unit) -> bool:
 	"""Check if current player can select a unit"""
 	var current_player = get_current_player()
+	print("DEBUG: can_current_player_select_unit - current_player: " + (current_player.player_name if current_player else "None"))
+	print("DEBUG: current_player_index: " + str(current_player_index))
+	print("DEBUG: players.size(): " + str(players.size()))
+	print("DEBUG: current_game_state: " + GameState.keys()[current_game_state])
+	
 	if not current_player:
+		print("DEBUG: No current player found")
 		return false
 	
-	return can_player_select_unit(current_player, unit)
+	# In multiplayer mode, check if the unit belongs to the local player
+	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
+		var local_player_id = GameModeManager.get_local_player_id()
+		var unit_owner = get_player_owning_unit(unit)
+		
+		print("DEBUG: Multiplayer mode - local_player_id: " + str(local_player_id))
+		print("DEBUG: Unit owner: " + (unit_owner.player_name if unit_owner else "None"))
+		print("DEBUG: Unit owner ID: " + str(unit_owner.player_id if unit_owner else -1))
+		
+		if not unit_owner:
+			print("DEBUG: Unit has no owner")
+			return false
+		
+		if unit_owner.player_id != local_player_id:
+			print("DEBUG: Unit belongs to different player (owner: " + str(unit_owner.player_id) + ", local: " + str(local_player_id) + ")")
+			return false
+		
+		print("DEBUG: Unit belongs to local player - selection allowed")
+	
+	var can_select = can_player_select_unit(current_player, unit)
+	print("DEBUG: can_player_select_unit result: " + str(can_select))
+	return can_select
 
 func validate_unit_action(unit: Unit) -> bool:
 	"""Validate if a unit can perform an action"""
@@ -268,6 +344,55 @@ func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
 	var owner = get_player_owning_unit(unit)
 	if owner:
 		owner.mark_unit_acted(unit)
+
+func _on_network_turn_changed(current_player_id: int) -> void:
+	"""Handle turn changes from network multiplayer"""
+	print(_get_log_prefix() + "=== CLIENT TURN SYNC DEBUG ===")
+	print(_get_log_prefix() + "PlayerManager: _on_network_turn_changed called!")
+	print(_get_log_prefix() + "Network turn change received: player %d" % current_player_id)
+	print(_get_log_prefix() + "Current local state before sync:")
+	print(_get_log_prefix() + "  current_player_index: %d" % current_player_index)
+	print(_get_log_prefix() + "  players.size(): %d" % players.size())
+	print(_get_log_prefix() + "  GameModeManager exists: %s" % str(GameModeManager != null))
+	print(_get_log_prefix() + "  Is multiplayer active: %s" % str(GameModeManager.is_multiplayer_active() if GameModeManager else false))
+	
+	# Update local player manager state
+	if current_player_id >= 0 and current_player_id < players.size():
+		print(_get_log_prefix() + "Valid player ID - updating local state")
+		current_player_index = current_player_id
+		
+		# Update player states
+		for i in range(players.size()):
+			var player = players[i]
+			var old_state = player.current_state
+			if i == current_player_id:
+				player.set_state(Player.PlayerState.ACTIVE)
+				print(_get_log_prefix() + "  Set Player %d (%s) to ACTIVE (was %s)" % [i, player.player_name, Player.PlayerState.keys()[old_state]])
+			else:
+				if player.current_state != Player.PlayerState.ELIMINATED:
+					player.set_state(Player.PlayerState.WAITING)
+					print(_get_log_prefix() + "  Set Player %d (%s) to WAITING (was %s)" % [i, player.player_name, Player.PlayerState.keys()[old_state]])
+		
+		# Emit local signals for UI updates
+		var current_player = get_current_player()
+		if current_player:
+			print(_get_log_prefix() + "Emitting player_turn_started for: %s" % current_player.get_display_name())
+			player_turn_started.emit(current_player)
+			print(_get_log_prefix() + "Turn synchronized: %s is now active" % current_player.get_display_name())
+		else:
+			print(_get_log_prefix() + "ERROR: Could not get current player after sync")
+	else:
+		print(_get_log_prefix() + "ERROR: Invalid player ID %d (valid range: 0-%d)" % [current_player_id, players.size() - 1])
+	
+	print(_get_log_prefix() + "=== END CLIENT TURN SYNC DEBUG ===")
+
+func _on_game_mode_manager_game_started(mode: GameManager.GameMode) -> void:
+	"""Handle game started from GameModeManager"""
+	print("Game started via GameModeManager in mode: %s" % GameManager.GameMode.keys()[mode])
+
+func _on_game_mode_manager_game_ended(winner_id: int) -> void:
+	"""Handle game ended from GameModeManager"""
+	print("Game ended via GameModeManager, winner: %d" % winner_id)
 
 func _on_player_state_changed(player: Player, old_state: Player.PlayerState, new_state: Player.PlayerState) -> void:
 	"""Handle player state changes"""
@@ -294,6 +419,23 @@ func _on_player_unit_removed(player: Player, unit: Unit) -> void:
 			end_game(winner)
 
 # Debug and utility
+func _get_log_prefix() -> String:
+	"""Get a log prefix to identify host vs client"""
+	var prefix = "[UNKNOWN] "
+	
+	if GameModeManager and GameModeManager.is_multiplayer_active():
+		var local_player_id = GameModeManager.get_local_player_id()
+		if local_player_id == 0:
+			prefix = "[HOST] "
+		elif local_player_id == 1:
+			prefix = "[CLIENT] "
+		else:
+			prefix = "[PLAYER" + str(local_player_id) + "] "
+	else:
+		prefix = "[SINGLE] "
+	
+	return prefix
+
 func get_game_state_info() -> Dictionary:
 	"""Get current game state information"""
 	var current_player = get_current_player()

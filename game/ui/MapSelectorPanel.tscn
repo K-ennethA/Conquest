@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://b80gr6jscuqwr"]
+
+[ext_resource type="Script" path="res://game/ui/MapSelectorPanel.gd" id="1_map_selector"]
+
+[node name="MapSelectorPanel" type="VBoxContainer"]
+script = ExtResource("1_map_selector")
+show_title = true
+title_text = "Map Selection:"
+show_description = true
+show_details = true
+gallery_mode = true
+compact_mode = false
+auto_select_first = true
+preview_size = Vector2(200, 150)
+columns = 3

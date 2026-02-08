@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="TileResource" format=3]
+
+[ext_resource type="Script" path="res://game/tiles/resources/TileResource.gd" id="1_ho5u0"]
+
+[resource]
+resource_name = "TileResource"
+script = ExtResource("1_ho5u0")
+tile_name = "Stone Wall"
+tile_type = 3
+description = "Solid stone wall that blocks movement and provides cover from attacks."
+base_movement_cost = 999
+is_passable = false
+blocks_line_of_sight = true
+base_color = Color(0.3, 0.3, 0.3, 1)
+metallic = 0.2
+roughness = 0.9
+provides_cover = true
+cover_bonus = 3
+elevation = 2
+generation_weight = 0.5

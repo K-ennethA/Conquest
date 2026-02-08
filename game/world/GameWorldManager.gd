@@ -2,12 +2,149 @@ extends Node
 
 # GameWorldManager
 # Manages the initialization and setup of the game world based on GameSettings
+# Now supports both local and network multiplayer modes and dynamic map loading
+
+var map_loader: MapLoader
+var current_map_path: String = ""
 
 func _ready() -> void:
 	print("=== GameWorld Initializing ===")
 	
+	# Initialize map loader
+	map_loader = MapLoader.new()
+	add_child(map_loader)
+	
+	# Connect map loader signals
+	map_loader.map_loaded.connect(_on_map_loaded)
+	map_loader.map_load_failed.connect(_on_map_load_failed)
+	
 	# Wait a frame for all singletons to be ready
 	await get_tree().process_frame
+	
+	# Load the selected map or default map
+	await _load_selected_map()
+	
+	# Check if this is a network multiplayer game
+	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
+		print("Network multiplayer mode detected")
+		await _setup_network_multiplayer()
+	else:
+		print("Local game mode detected")
+		await _setup_local_game()
+	
+	print("=== GameWorld Initialization Complete ===")
+
+func _load_selected_map() -> void:
+	"""Load the selected map or create a default one"""
+	print("Loading selected map...")
+	
+	# Get selected map from GameSettings or use default
+	var selected_map = GameSettings.get_selected_map() if GameSettings.has_method("get_selected_map") else ""
+	
+	if selected_map.is_empty():
+		print("No map selected, using default map")
+		# Create and save default map if none exists
+		var available_maps = MapLoader.get_available_maps()
+		if available_maps.is_empty():
+			var default_map = MapLoader.create_default_map()
+			MapLoader.save_map(default_map, "default_skirmish")
+			selected_map = "res://game/maps/resources/default_skirmish.tres"
+		else:
+			selected_map = available_maps[0]
+	
+	current_map_path = selected_map
+	
+	# Find the Map node in the scene
+	var map_node = get_tree().current_scene.get_node_or_null("Map")
+	if not map_node:
+		print("ERROR: Map node not found in scene")
+		return
+	
+	# Clear existing map content but keep the Map node structure
+	_clear_existing_map_content(map_node)
+	
+	# Load the new map
+	var success = map_loader.load_map_from_file(selected_map, map_node)
+	if not success:
+		print("Failed to load map, creating default")
+		var default_map = MapLoader.create_default_map()
+		map_loader.load_map(default_map, map_node)
+
+func _clear_existing_map_content(map_node: Node3D) -> void:
+	"""Clear existing hardcoded map content while preserving structure"""
+	# Remove existing tiles
+	var tiles_node = map_node.get_node_or_null("Tiles")
+	if tiles_node:
+		for child in tiles_node.get_children():
+			child.free()  # Immediate deletion
+		tiles_node.free()  # Immediate deletion
+	
+	# Remove existing player containers
+	var player1_node = map_node.get_node_or_null("Player1")
+	if player1_node:
+		for child in player1_node.get_children():
+			child.free()  # Immediate deletion
+		player1_node.free()  # Immediate deletion
+	
+	var player2_node = map_node.get_node_or_null("Player2")
+	if player2_node:
+		for child in player2_node.get_children():
+			child.free()  # Immediate deletion
+		player2_node.free()  # Immediate deletion
+	
+	print("Cleared existing map content")
+
+func _on_map_loaded(map_resource: MapResource) -> void:
+	"""Handle successful map loading"""
+	print("Map loaded successfully: " + map_resource.map_name)
+	
+	# Update GameSettings with map info if available
+	if GameSettings.has_method("set_current_map"):
+		GameSettings.set_current_map(map_resource)
+
+func _on_map_load_failed(error_message: String) -> void:
+	"""Handle map loading failure"""
+	print("Map loading failed: " + error_message)
+	
+	# Try to load default map as fallback
+	var default_map = MapLoader.create_default_map()
+	var map_node = get_tree().current_scene.get_node_or_null("Map")
+	if map_node:
+		map_loader.load_map(default_map, map_node)
+
+func _setup_network_multiplayer() -> void:
+	"""Set up network multiplayer game"""
+	print("Setting up network multiplayer...")
+	
+	# Check if GameModeManager is already handling multiplayer
+	if GameModeManager and GameModeManager.is_multiplayer_active():
+		print("Network multiplayer already active via GameModeManager")
+		
+		# Connect to GameModeManager signals
+		if not GameModeManager.game_ended.is_connected(_on_multiplayer_game_ended):
+			GameModeManager.game_ended.connect(_on_multiplayer_game_ended)
+		
+		# Set up players for network multiplayer
+		await _setup_multiplayer_players()
+		
+		# Apply settings but don't start game (GameModeManager handles this)
+		if GameSettings:
+			GameSettings.apply_settings_to_game()
+		
+		# Wait one more frame before starting the game
+		await get_tree().process_frame
+		
+		# Start the game for multiplayer
+		_start_game()
+		
+		print("Network multiplayer setup complete")
+	else:
+		print("No active network multiplayer found, falling back to local mode")
+		await _setup_local_game()
+
+func _setup_local_game() -> void:
+	"""Set up local single-player or local multiplayer game"""
+	print("Setting up local game...")
 	
 	# Initialize player management first
 	_setup_players()
@@ -24,8 +161,46 @@ func _ready() -> void:
 	
 	# Start the game
 	_start_game()
+
+func _setup_multiplayer_players() -> void:
+	"""Set up players for network multiplayer"""
+	print("Setting up multiplayer players...")
 	
-	print("=== GameWorld Initialization Complete ===")
+	# Get player info from GameModeManager
+	var multiplayer_status = GameModeManager.get_multiplayer_status()
+	var network_players = multiplayer_status.get("players", {})
+	var local_player_id = GameModeManager.get_local_player_id()
+	
+	print("Network players found: " + str(network_players.size()))
+	print("Local player ID: " + str(local_player_id))
+	
+	# Clear existing players
+	if PlayerManager.players.size() > 0:
+		print("Clearing existing players for multiplayer setup")
+		PlayerManager.players.clear()
+	
+	# Set up multiplayer players with proper IDs
+	# Always create 2 players for multiplayer
+	var player1 = PlayerManager.register_player("Player 1")
+	var player2 = PlayerManager.register_player("Player 2")
+	
+	print("Registered multiplayer players: Player 1 (ID: 0), Player 2 (ID: 1)")
+	var local_player_id_int = int(local_player_id) if local_player_id is String else local_player_id
+	print("This client is Player " + str(local_player_id_int + 1) + " (ID: " + str(local_player_id_int) + ")")
+	
+	# Assign units to players based on scene structure
+	PlayerManager.assign_units_by_parent()
+	
+	print("Multiplayer players set up: " + str(PlayerManager.players.size()) + " players")
+	
+	# Debug: Print player unit assignments
+	for i in range(PlayerManager.players.size()):
+		var player = PlayerManager.players[i]
+		var is_local = (i == local_player_id_int)
+		var local_indicator = " (LOCAL)" if is_local else " (REMOTE)"
+		print("Player " + str(i) + " (" + player.player_name + ")" + local_indicator + " has " + str(player.owned_units.size()) + " units")
+		for unit in player.owned_units:
+			print("  - " + unit.get_display_name())
 
 func _setup_players() -> void:
 	"""Set up players and assign units"""
@@ -48,6 +223,14 @@ func _start_game() -> void:
 	PlayerManager.start_game()
 	
 	print("Game started successfully!")
+
+func _on_multiplayer_game_ended(winner_id: int) -> void:
+	"""Handle multiplayer game ended"""
+	print("Multiplayer game ended, winner: " + str(winner_id))
+	
+	# Show game over screen or return to menu
+	await get_tree().create_timer(2.0).timeout
+	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
 
 # Current UI Layout (1920x1080 reference):
 # 

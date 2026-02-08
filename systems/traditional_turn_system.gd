@@ -125,6 +125,9 @@ func _start_player_turn(player: Player) -> void:
 	# Reset all unit actions for the new turn
 	reset_all_unit_actions()
 	
+	# Notify GameManager of turn change for network synchronization
+	_notify_game_manager_of_turn_change(player)
+	
 	# Emit turn started signal
 	turn_started.emit(player)
 	
@@ -519,6 +522,23 @@ func get_unit_speed_info(unit: Unit) -> Dictionary:
 		}
 
 # Reset mechanism for testing
+func _get_log_prefix() -> String:
+	"""Get a log prefix to identify host vs client"""
+	var prefix = "[UNKNOWN] "
+	
+	if GameModeManager and GameModeManager.is_multiplayer_active():
+		var local_player_id = GameModeManager.get_local_player_id()
+		if local_player_id == 0:
+			prefix = "[HOST] "
+		elif local_player_id == 1:
+			prefix = "[CLIENT] "
+		else:
+			prefix = "[PLAYER" + str(local_player_id) + "] "
+	else:
+		prefix = "[SINGLE] "
+	
+	return prefix
+
 func reset_turn_system() -> void:
 	"""Reset the turn system to initial state (for testing purposes)"""
 	print("Traditional Turn System: Resetting to initial state...")
@@ -572,3 +592,84 @@ func _to_string() -> String:
 	"""String representation for debugging"""
 	var player_name = current_player.get_display_name() if current_player else "No Player"
 	return system_name + " (Round " + str(current_turn) + " - " + player_name + ")"
+
+func _notify_game_manager_of_turn_change(player: Player) -> void:
+	"""Notify GameManager of turn change for network synchronization"""
+	print(_get_log_prefix() + "=== TURN SYNC DEBUG ===")
+	print(_get_log_prefix() + "Traditional Turn System: _notify_game_manager_of_turn_change called for " + player.get_display_name())
+	
+	# Check if we're in multiplayer mode and need to sync turns
+	if GameModeManager and GameModeManager.is_multiplayer_active():
+		print(_get_log_prefix() + "Multiplayer mode detected - proceeding with network sync")
+		
+		# Get the GameManager through GameModeManager
+		var game_manager = GameModeManager._game_manager
+		if game_manager:
+			print(_get_log_prefix() + "GameManager found - looking up player ID")
+			
+			# Find the player index in the GameManager's player list
+			var players = game_manager.get_players()
+			var player_id = -1
+			
+			print(_get_log_prefix() + "Available players in GameManager:")
+			for pid in players:
+				var p = players[pid]
+				print(_get_log_prefix() + "  Player " + str(pid) + ": " + str(p.get("name", "Unknown")))
+			
+			print(_get_log_prefix() + "Looking for match for: " + player.get_display_name())
+			print(_get_log_prefix() + "Player ID from Traditional Turn System: " + str(player.player_id))
+			
+			# Strategy 1: Direct player ID match (most reliable)
+			if players.has(player.player_id):
+				player_id = player.player_id
+				print(_get_log_prefix() + "  -> MATCH found by player ID: " + str(player_id))
+			else:
+				# Strategy 2: Name matching (should work now with simplified names)
+				for pid in players:
+					var p = players[pid]
+					var gm_name = p.get("name", "")
+					
+					if gm_name == player.get_display_name():
+						player_id = pid
+						print(_get_log_prefix() + "  -> MATCH found by name '" + player.get_display_name() + "' -> Player " + str(pid))
+						break
+			
+			if player_id >= 0:
+				print(_get_log_prefix() + "Setting GameManager current player to " + str(player_id))
+				game_manager._current_turn_player = player_id
+				
+				print(_get_log_prefix() + "Emitting turn_changed signal")
+				game_manager.turn_changed.emit(player_id)
+				
+				# Also trigger network sync if we're the host
+				if game_manager._network_handler and game_manager._network_handler.is_host():
+					print(_get_log_prefix() + "We are host - sending turn_change action to network")
+					var turn_action = {
+						"type": "turn_change",
+						"data": {
+							"current_player": player_id,
+							"timestamp": Time.get_ticks_msec()
+						}
+					}
+					var success = game_manager._network_handler.submit_action(turn_action)
+					print(_get_log_prefix() + "Network action submitted: " + str(success))
+				else:
+					print(_get_log_prefix() + "Not host or no network handler - skipping network send")
+			else:
+				print(_get_log_prefix() + "ERROR: Could not find player ID for " + player.get_display_name())
+				print(_get_log_prefix() + "Available GameManager players:")
+				for pid in players:
+					var p = players[pid]
+					print(_get_log_prefix() + "  ID " + str(pid) + ": '" + str(p.get("name", "")) + "'")
+				print(_get_log_prefix() + "Traditional Turn System player:")
+				print(_get_log_prefix() + "  ID " + str(player.player_id) + ": '" + player.get_display_name() + "' (base name: '" + player.player_name + "')")
+		else:
+			print(_get_log_prefix() + "ERROR: GameManager not found in GameModeManager")
+	else:
+		print(_get_log_prefix() + "Not in multiplayer mode - skipping network sync")
+		if not GameModeManager:
+			print(_get_log_prefix() + "  -> GameModeManager is null")
+		elif not GameModeManager.is_multiplayer_active():
+			print(_get_log_prefix() + "  -> GameModeManager.is_multiplayer_active() returned false")
+	
+	print(_get_log_prefix() + "=== END TURN SYNC DEBUG ===")

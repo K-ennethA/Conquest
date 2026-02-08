@@ -200,7 +200,7 @@ func get_active_unit_count() -> int:
 
 func get_display_name() -> String:
 	"""Get formatted display name"""
-	return player_name + " (Player " + str(player_id + 1) + ")"
+	return player_name
 
 func get_team_color() -> Color:
 	"""Get team color"""
