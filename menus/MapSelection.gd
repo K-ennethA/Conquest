@@ -8,11 +8,11 @@ signal map_selected(map_path: String)
 signal back_pressed()
 
 # UI Elements
-@onready var map_list: ItemList = $VBoxContainer/MapListContainer/MapList
-@onready var map_preview_container: Control = $VBoxContainer/MapPreviewContainer
-@onready var map_name_label: Label = $VBoxContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer/MapNameLabel
-@onready var map_description_label: Label = $VBoxContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer/MapDescriptionLabel
-@onready var map_details_label: Label = $VBoxContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer/MapDetailsLabel
+@onready var map_list: ItemList = $VBoxContainer/MainContainer/MapListContainer/MapList
+@onready var map_preview_container: Control = $VBoxContainer/MainContainer/MapPreviewContainer
+@onready var map_name_label: Label = $VBoxContainer/MainContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer/MapNameLabel
+@onready var map_description_label: Label = $VBoxContainer/MainContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer/MapDescriptionLabel
+@onready var map_details_label: Label = $VBoxContainer/MainContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer/MapDetailsLabel
 @onready var select_button: Button = $VBoxContainer/ButtonContainer/SelectButton
 @onready var back_button: Button = $VBoxContainer/ButtonContainer/BackButton
 @onready var refresh_button: Button = $VBoxContainer/ButtonContainer/RefreshButton
