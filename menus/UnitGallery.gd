@@ -591,7 +591,7 @@ func _update_unit_moves(unit: UnitStatsResource) -> void:
 		child.queue_free()
 	
 	# For now, show placeholder since moves aren't stored in UnitStatsResource
-	# In a full implementation, you'd load the unit's scene and check its MoveManager
+	# In a full implementation, you'd load the unit's scene and check its moveset
 	var moves_info = _get_unit_moves(unit)
 	
 	if moves_info.is_empty():
@@ -607,7 +607,7 @@ func _update_unit_moves(unit: UnitStatsResource) -> void:
 
 func _get_unit_moves(unit: UnitStatsResource) -> Array[Dictionary]:
 	"""Get moves for a unit (placeholder implementation)"""
-	# This would ideally load the unit scene and check its MoveManager
+	# This would ideally load the unit scene and check its moveset
 	# For now, return default moves based on unit type
 	var moves: Array[Dictionary] = []
 	

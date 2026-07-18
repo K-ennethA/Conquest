@@ -3,8 +3,7 @@ extends Control
 class_name MoveSelectionPanel
 
 # UI for selecting and using a unit's real MoveResource moveset (up to 4 slots).
-# Reads unit.get_moveset() / unit.get_moveset_controller() directly — no
-# MoveManager/MoveFactory/Move.gd involved.
+# Reads unit.get_moveset() / unit.get_moveset_controller() directly.
 
 signal move_selected(move_index: int)
 signal move_cancelled

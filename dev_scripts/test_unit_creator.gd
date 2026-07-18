@@ -29,7 +29,7 @@ func _ready() -> void:
 	print("Generated Files:")
 	print("- Unit resource (.tres) in res://game/units/resources/")
 	print("- Unit scene (.tscn) in res://game/units/scenes/")
-	print("- Automatically includes UnitStats and MoveManager components")
+	print("- Automatically includes UnitStats component")
 	print("")
 	print("Press F11 to test unit creation programmatically")
 	print("Press F12 to validate existing unit resources")

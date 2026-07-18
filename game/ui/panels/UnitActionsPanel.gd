@@ -1435,8 +1435,7 @@ func _on_moves_pressed() -> void:
 
 	Gated on the unit still having its action for the turn. Character-backed units
 	expose their authored MoveResource moveset via get_moveset(); legacy
-	(non-character) units have no moveset, so the panel degrades to an empty list.
-	The old MoveManager/MoveFactory bootstrap has been removed."""
+	(non-character) units have no moveset, so the panel degrades to an empty list."""
 	if not selected_unit:
 		return
 
@@ -1651,7 +1650,7 @@ func _has_eligible_unit_at(board, move: MoveResource, aim: Vector2i) -> bool:
 func _update_moves_button_availability() -> void:
 	"""Enable the Moves button only when the (character-backed) unit still has its
 	action and at least one usable move. Reads the real moveset + MovesetController
-	directly; no MoveManager involved."""
+	directly."""
 	if not moves_button or not selected_unit:
 		return
 
