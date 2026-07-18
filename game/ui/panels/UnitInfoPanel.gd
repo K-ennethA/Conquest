@@ -5,8 +5,8 @@ class_name UnitInfoPanel
 # UI panel that displays information about the selected unit
 # Updated to work with separate Unit Actions Panel
 
-@onready var unit_name_label: Label = $MarginContainer/VBoxContainer/BasicInfoContainer/UnitNameLabel
-@onready var unit_type_label: Label = $MarginContainer/VBoxContainer/BasicInfoContainer/UnitTypeLabel
+@onready var unit_name_label: Label = $MarginContainer/VBoxContainer/PortraitContainer/BasicInfoContainer/UnitNameLabel
+@onready var unit_type_label: Label = $MarginContainer/VBoxContainer/PortraitContainer/BasicInfoContainer/UnitTypeLabel
 @onready var health_label: Label = $MarginContainer/VBoxContainer/StatsContainer/HealthLabel
 @onready var attack_label: Label = $MarginContainer/VBoxContainer/StatsContainer/AttackLabel
 @onready var defense_label: Label = $MarginContainer/VBoxContainer/StatsContainer/DefenseLabel
@@ -16,6 +16,17 @@ class_name UnitInfoPanel
 @onready var unit_portrait: ColorRect = $MarginContainer/VBoxContainer/PortraitContainer/UnitPortrait
 
 var current_unit: Unit = null
+
+## Turn a snake_case id ("torvald_ironhide") into a display string
+## ("Torvald Ironhide"). Empty in -> empty out.
+func _humanize_id(id: String) -> String:
+	if id == "":
+		return ""
+	var out: PackedStringArray = []
+	for w in id.replace("_", " ").split(" ", false):
+		if w.length() > 0:
+			out.append(w.substr(0, 1).to_upper() + w.substr(1))
+	return " ".join(out)
 
 func _ready() -> void:
 	# Connect to game events
@@ -67,11 +78,9 @@ func _update_unit_info(unit: Unit) -> void:
 			unit_name_label.text += " (" + owner.get_display_name() + ")"
 	
 	if unit_type_label:
-		var unit_type = unit.get_unit_type()
-		if unit_type:
-			unit_type_label.text = unit_type.get_type_name()
-		else:
-			unit_type_label.text = "Unknown"
+		# get_unit_type() returns a String (character id) post-migration.
+		var unit_type: String = unit.get_unit_type()
+		unit_type_label.text = _humanize_id(unit_type) if unit_type != "" else "Unknown"
 	
 	# Stats - with null checks
 	if health_label:
@@ -109,20 +118,12 @@ func _update_portrait(unit: Unit) -> void:
 			elif parent.name.to_lower().contains("player2"):
 				player_color = Color.RED
 	
-	# Adjust color based on unit type
-	var unit_type = unit.get_unit_type()
-	if unit_type:
-		match unit_type.type:
-			UnitType.Type.WARRIOR:
-				unit_portrait.color = player_color
-			UnitType.Type.ARCHER:
-				unit_portrait.color = player_color.lightened(0.3)
-			UnitType.Type.SCOUT:
-				unit_portrait.color = player_color.darkened(0.2)
-			UnitType.Type.TANK:
-				unit_portrait.color = player_color.darkened(0.4)
-			_:
-				unit_portrait.color = player_color
+	# Tint the portrait per character (unit_type is a String id now), blended
+	# toward the player's colour so team still reads at a glance.
+	var unit_type: String = unit.get_unit_type()
+	if unit_type != "":
+		var tint := Color.from_hsv(float(absi(hash(unit_type)) % 360) / 360.0, 0.5, 0.9, 1.0)
+		unit_portrait.color = player_color.lerp(tint, 0.35)
 	else:
 		unit_portrait.color = player_color
 

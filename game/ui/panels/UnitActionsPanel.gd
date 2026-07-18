@@ -221,13 +221,17 @@ func _update_unit_header() -> void:
 			player_info = " (" + player.get_display_name() + ")"
 		unit_name_label.text = selected_unit.get_display_name() + player_info
 	
-	# Update unit type
+	# Update unit type. Post-migration get_unit_type() returns a String (the
+	# character_id), not an object -- show a humanized form, and hide the label
+	# when it would just duplicate the unit's name.
 	if unit_type_label:
-		var unit_type = selected_unit.get_unit_type()
-		if unit_type:
-			unit_type_label.text = unit_type.display_name
+		var unit_type: String = selected_unit.get_unit_type()
+		var type_text := _humanize_id(unit_type)
+		if type_text == "" or type_text == selected_unit.get_display_name():
+			unit_type_label.visible = false
 		else:
-			unit_type_label.text = "Unknown Type"
+			unit_type_label.visible = true
+			unit_type_label.text = type_text
 	
 	# Update unit icon
 	if unit_icon:
@@ -236,6 +240,26 @@ func _update_unit_header() -> void:
 	# Update header background color based on player
 	if unit_header_background:
 		_update_header_background_color()
+
+## Turn a snake_case id ("torvald_ironhide") into a display string
+## ("Torvald Ironhide"). Empty in -> empty out.
+func _humanize_id(id: String) -> String:
+	if id == "":
+		return ""
+	var out: PackedStringArray = []
+	for w in id.replace("_", " ").split(" ", false):
+		if w.length() > 0:
+			out.append(w.substr(0, 1).to_upper() + w.substr(1))
+	return " ".join(out)
+
+
+## Deterministic vibrant tint for a character id, so portraits read distinctly.
+func _color_for_type(unit_type: String) -> Color:
+	if unit_type == "":
+		return Color(0.6, 0.6, 0.6, 1.0)
+	var hue := float(absi(hash(unit_type)) % 360) / 360.0
+	return Color.from_hsv(hue, 0.55, 0.85, 1.0)
+
 
 func _update_unit_icon() -> void:
 	"""Update the unit icon based on unit type and player"""
@@ -249,15 +273,10 @@ func _update_unit_icon() -> void:
 	
 	# Create a simple colored texture based on unit type and player
 	var image = Image.create(36, 36, false, Image.FORMAT_RGBA8)
-	
-	# Base color based on unit type
-	var base_color: Color
-	if unit_type and unit_type.display_name == "Warrior":
-		base_color = Color(0.8, 0.6, 0.2, 1.0)  # Golden for warriors
-	elif unit_type and unit_type.display_name == "Archer":
-		base_color = Color(0.2, 0.8, 0.2, 1.0)  # Green for archers
-	else:
-		base_color = Color(0.6, 0.6, 0.6, 1.0)  # Gray for unknown
+
+	# Base color derived from the character id (unit_type is a String now), so
+	# each character gets a distinct, vibrant portrait tint.
+	var base_color: Color = _color_for_type(unit_type)
 	
 	# Tint based on player
 	if player:

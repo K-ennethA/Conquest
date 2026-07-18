@@ -360,14 +360,12 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 	unit_icon.position = Vector2.ZERO
 	unit_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
-	# Set icon color based on unit type
-	var unit_type = unit.get_unit_type()
-	if unit_type and unit_type.display_name == "Warrior":
-		unit_icon.color = Color(0.8, 0.6, 0.2, 1.0)  # Golden for warriors
-	elif unit_type and unit_type.display_name == "Archer":
-		unit_icon.color = Color(0.2, 0.8, 0.2, 1.0)  # Green for archers
+	# Icon color from the character id (get_unit_type() returns a String now).
+	var unit_type: String = unit.get_unit_type()
+	if unit_type == "":
+		unit_icon.color = Color(0.6, 0.6, 0.6, 1.0)
 	else:
-		unit_icon.color = Color(0.6, 0.6, 0.6, 1.0)  # Gray for unknown
+		unit_icon.color = Color.from_hsv(float(absi(hash(unit_type)) % 360) / 360.0, 0.55, 0.85, 1.0)
 	
 	icon_container.add_child(unit_icon)
 	portrait_container.add_child(icon_container)
