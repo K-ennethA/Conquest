@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3]
+[gd_scene load_steps=20 format=3]
 
 [ext_resource type="Script" path="res://tile_objects/units/board.gd" id="1"]
 [ext_resource type="PackedScene" path="res://tile_objects/tiles/tile.tscn" id="4"]
@@ -17,6 +17,7 @@
 [ext_resource type="PackedScene" path="res://game/ui/layout/GameUILayout.tscn" id="17"]
 [ext_resource type="Script" path="res://game/visuals/debug_movement_range.gd" id="18"]
 [ext_resource type="Script" path="res://game/visuals/TargetingVisualizer.gd" id="21_tviz"]
+[ext_resource type="Script" path="res://game/visuals/CameraController.gd" id="22_camctl"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
@@ -43,6 +44,7 @@ environment = SubResource("Environment_1")
 transform = Transform3D(0.965926, -0.109742, 0.234401, -0.0669873, 0.768796, 0.635976, -0.25, -0.630008, 0.735248, 6.06131, 16.6379, 16.8551)
 projection = 1
 size = 20.0
+script = ExtResource("22_camctl")
 
 [node name="UnitVisualManager" type="Node" parent="."]
 script = ExtResource("6")
