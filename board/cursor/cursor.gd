@@ -42,7 +42,13 @@ var tile_position := Vector3.ZERO:
 		var old_position = tile_position
 		tile_position = new_position
 		position = grid.calculate_map_position(tile_position)
-		position.y = 3.0  # Keep cursor above units and tiles
+		# Sit the bracket just above the tile top so it reads as ON the tile. Under a
+		# tilted orthographic view any vertical offset shifts the cursor's SCREEN
+		# position off the ground cell (~offset*sin(tilt)); a large lift (the old 3.0)
+		# floated it well above the tile under the mouse. The bracket material uses
+		# no_depth_test, so this small lift only prevents z-fighting with the tile top
+		# and never causes occlusion.
+		position.y = 0.15
 		
 		# Emit movement event
 		GameEvents.cursor_moved.emit(tile_position)
@@ -72,7 +78,7 @@ var is_mouse_enabled: bool = true
 func _ready() -> void:
 	_setup_cursor_visuals()
 	position = grid.calculate_map_position(tile_position)
-	position.y = 3.0  # Keep cursor above everything
+	position.y = 0.15  # Sit on the tile (see the tile_position setter for why)
 	GameEvents.cursor_moved.emit(tile_position)
 	_check_unit_at_cursor()
 	
@@ -303,7 +309,12 @@ func _handle_mouse_click(mouse_pos: Vector2) -> void:
 	"""Handle mouse click for unit selection"""
 	print("=== _handle_mouse_click called ===")
 	print("Mouse position: " + str(mouse_pos))
-	
+
+	# The camera is cached in _ready, but get_camera_3d() can be null there if the
+	# Camera3D has not yet registered as current. Re-fetch lazily so mouse picking
+	# is never permanently dead when that race loses.
+	if not camera:
+		camera = get_viewport().get_camera_3d()
 	if not camera:
 		print("ERROR: No camera found!")
 		return
@@ -357,11 +368,17 @@ func _handle_mouse_click(mouse_pos: Vector2) -> void:
 
 func _handle_mouse_movement(mouse_pos: Vector2) -> void:
 	"""Handle mouse movement for cursor positioning"""
+	# Re-fetch lazily (see _handle_mouse_click): a null camera cached at _ready would
+	# otherwise silently kill mouse-hover cursor tracking -- and with it the
+	# GameEvents.cursor_moved emissions that drive TerrainInfoPanel.
+	if not camera:
+		camera = get_viewport().get_camera_3d()
 	if not camera:
 		return
 	
-	# Check if mouse is over UI using the layout manager
-	var ui_layout = get_tree().current_scene.get_node("UI/GameUILayout")
+	# Check if mouse is over UI using the layout manager (get_node_or_null so a
+	# missing HUD never throws and silently kills mouse-hover cursor tracking).
+	var ui_layout = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
 	if ui_layout and ui_layout.has_method("is_mouse_over_ui"):
 		if ui_layout.is_mouse_over_ui(mouse_pos):
 			return  # Don't move cursor when over UI

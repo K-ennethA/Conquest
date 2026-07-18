@@ -42,7 +42,11 @@ extends Camera3D
 @export var zoom_max: float = 40.0
 
 ## Extra headroom around the board when fitting (1.0 = exact, 1.15 = 15% margin).
-@export var fit_margin: float = 1.18
+## Kept small so the steeper, more top-down camera fills the frame (less sky). The
+## vertical fit need is computed from the un-foreshortened board depth (see
+## fit_to_map), which is already a conservative over-estimate, so a slim margin
+## still guarantees the whole board stays visible.
+@export var fit_margin: float = 1.08
 
 ## How far (world units) past the board edge the view may be panned before it is
 ## clamped back, so the player can nudge the edge into view but not fly into the void.

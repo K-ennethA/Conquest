@@ -143,8 +143,11 @@ func show_for_cell(cell: Vector2i) -> void:
 	else:
 		_move_label.text = "Move Cost: -- (Impassable)"
 
-	_populate_effects(cell)
+	# Reveal BEFORE populating effects: the name/move rows are already valid, so
+	# even if effect population ever failed we still surface the terrain instead of
+	# leaving a wired-but-hidden panel (the reported "never appears" symptom).
 	show()
+	_populate_effects(cell)
 
 
 ## Hide the panel and reset its tracked cell so the next show_for_cell always

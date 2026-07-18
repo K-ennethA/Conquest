@@ -41,7 +41,7 @@ script = ExtResource("12")
 environment = SubResource("Environment_1")
 
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(0.965926, -0.109742, 0.234401, -0.0669873, 0.768796, 0.635976, -0.25, -0.630008, 0.735248, 6.06131, 16.6379, 16.8551)
+transform = Transform3D(1, 0, 0, 0, 0.5, 0.866025, 0, -0.866025, 0.5, 13, 24, 23)
 projection = 1
 size = 20.0
 script = ExtResource("22_camctl")

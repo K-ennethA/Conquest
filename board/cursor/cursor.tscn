@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://0hp85b22o0ae" path="res://board/cursor/cursor.gd" id="1_g4xip"]
 
 [node name="Cursor" type="Node3D"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, 0)
 script = ExtResource("1_g4xip")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
