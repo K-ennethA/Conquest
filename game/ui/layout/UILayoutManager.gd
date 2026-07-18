@@ -35,8 +35,29 @@ func _ready() -> void:
 	# Initialize layout
 	_initialize_layout()
 	_update_layout_for_turn_system()
-	
+
+	# Apply the Conquest "Fire Emblem amber" theme to the whole HUD subtree, and
+	# give every panel background the amber card look so text reads on a single
+	# consistent ground (children have already run _ready, so this wins).
+	_apply_theme()
+
 	is_layout_initialized = true
+
+func _apply_theme() -> void:
+	"""Apply ConquestTheme to this HUD, amber-ify all panel backgrounds, and clear
+	hardcoded font colours so text uses the theme's readable ink on the amber
+	ground (labels styled via a LabelSettings resource keep their own look)."""
+	theme = ConquestTheme.build()
+	_restyle_tree(self)
+
+func _restyle_tree(node: Node) -> void:
+	for child in node.get_children():
+		if child is Panel or child is PanelContainer:
+			ConquestTheme.style_panel_background(child)
+		# Drop baked-in white/grey font colours -> fall back to the theme ink.
+		if (child is Label or child is Button) and child.has_theme_color_override("font_color"):
+			child.remove_theme_color_override("font_color")
+		_restyle_tree(child)
 
 func _initialize_layout() -> void:
 	"""Initialize the layout system with proper sizing and constraints"""
