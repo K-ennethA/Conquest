@@ -1,10 +1,10 @@
 extends SceneTree
 
-# Script to run the Fire Emblem overlay test
-# Usage: godot --script run_fire_emblem_test.gd
+# Script to run the Tactical overlay test
+# Usage: godot --script run_tactical_test.gd
 
 func _init():
-	print("=== Running Fire Emblem Overlay Movement Test ===")
+	print("=== Running Tactical Overlay Movement Test ===")
 	
 	# Load the GameWorld scene
 	var game_world_scene = load("res://game/world/GameWorld.tscn")
@@ -20,7 +20,7 @@ func _init():
 	current_scene = game_world
 	
 	print("GameWorld scene instantiated and set as current scene")
-	print("The FireEmblemOverlayTest node should run automatically")
+	print("The TacticalOverlayTest node should run automatically")
 	print("Press F6-F9 for manual tests, or wait for automatic test")
 	
 	# Let the scene run for a while to see the test results

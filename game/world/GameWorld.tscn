@@ -7,16 +7,16 @@
 [ext_resource type="PackedScene" path="res://board/cursor/cursor.tscn" id="5"]
 [ext_resource type="Script" path="res://game/visuals/UnitVisualManager.gd" id="6"]
 [ext_resource type="Script" path="res://game/world/test_gameworld_integration.gd" id="7"]
-[ext_resource type="PackedScene" path="res://game/ui/UnitInfoPanel.tscn" id="8"]
+[ext_resource type="PackedScene" path="res://game/ui/panels/UnitInfoPanel.tscn" id="8"]
 [ext_resource type="Script" path="res://systems/test_player_management.gd" id="9"]
-[ext_resource type="PackedScene" path="res://game/ui/UnitActionsPanel.tscn" id="10"]
+[ext_resource type="PackedScene" path="res://game/ui/panels/UnitActionsPanel.tscn" id="10"]
 [ext_resource type="Script" path="res://systems/test_traditional_turn_system.gd" id="11"]
 [ext_resource type="Script" path="res://game/world/GameWorldManager.gd" id="12"]
 [ext_resource type="Script" path="res://game/visuals/MovementVisualizer.gd" id="13"]
-[ext_resource type="PackedScene" path="res://game/ui/TurnIndicator.tscn" id="14"]
-[ext_resource type="PackedScene" path="res://game/ui/PlayerTurnPanel.tscn" id="15"]
+[ext_resource type="PackedScene" path="res://game/ui/hud/TurnIndicator.tscn" id="14"]
+[ext_resource type="PackedScene" path="res://game/ui/panels/PlayerTurnPanel.tscn" id="15"]
 [ext_resource type="Script" path="res://game/visuals/test_movement_system.gd" id="16"]
-[ext_resource type="PackedScene" path="res://game/ui/GameUILayout.tscn" id="17"]
+[ext_resource type="PackedScene" path="res://game/ui/layout/GameUILayout.tscn" id="17"]
 [ext_resource type="Script" path="res://game/visuals/debug_movement_range.gd" id="18"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
@@ -60,8 +60,8 @@ script = ExtResource("16")
 [node name="DebugMovementRange" type="Node" parent="."]
 script = ExtResource("18")
 
-[node name="FireEmblemOverlayTest" type="Node" parent="."]
-script = "res://test_fire_emblem_overlay_system.gd"
+[node name="TacticalOverlayTest" type="Node" parent="."]
+script = "res://test_tactical_overlay_system.gd"
 
 [node name="OverlayVisibilityTest" type="Node" parent="."]
 script = "res://test_overlay_visibility.gd"

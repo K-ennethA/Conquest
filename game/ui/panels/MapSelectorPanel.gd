@@ -257,6 +257,8 @@ func _select_map_card(index: int) -> void:
 
 func _format_map_name(map_resource: MapResource) -> String:
 	"""Format map name for display"""
+	if map_resource == null:
+		return "Unknown Map"
 	var name = map_resource.map_name
 	if name.is_empty():
 		name = "Unnamed Map"

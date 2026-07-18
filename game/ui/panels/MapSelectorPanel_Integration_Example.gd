@@ -34,7 +34,7 @@ func _create_lobby_ui_with_map_selector() -> void:
 	lobby_container.add_child(map_section_title)
 	
 	# OPTION 1: Compact dropdown mode (recommended for lobby)
-	var map_selector = preload("res://game/ui/MapSelectorPanel.tscn").instantiate()
+	var map_selector = preload("res://game/ui/panels/MapSelectorPanel.tscn").instantiate()
 	map_selector.compact_mode = true  # Uses dropdown
 	map_selector.show_title = false  # We have our own title above
 	map_selector.show_details = false  # Keep lobby clean
@@ -42,7 +42,7 @@ func _create_lobby_ui_with_map_selector() -> void:
 	lobby_container.add_child(map_selector)
 	
 	# OPTION 2: Full gallery mode (if you have space)
-	# var map_selector = preload("res://game/ui/MapSelectorPanel.tscn").instantiate()
+	# var map_selector = preload("res://game/ui/panels/MapSelectorPanel.tscn").instantiate()
 	# map_selector.gallery_mode = true
 	# map_selector.preview_size = Vector2(150, 100)  # Smaller for lobby
 	# map_selector.columns = 2  # Fewer columns
@@ -95,7 +95,7 @@ func _add_map_selector_to_lobby() -> void:
 	lobby_container.add_child(map_title)
 	
 	# Map selector (compact dropdown)
-	var map_selector = preload("res://game/ui/MapSelectorPanel.tscn").instantiate()
+	var map_selector = preload("res://game/ui/panels/MapSelectorPanel.tscn").instantiate()
 	map_selector.compact_mode = true
 	map_selector.show_title = false
 	map_selector.show_details = false

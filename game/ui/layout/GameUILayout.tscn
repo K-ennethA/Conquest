@@ -1,11 +1,11 @@
 [gd_scene load_steps=7 format=3]
 
-[ext_resource type="PackedScene" path="res://game/ui/UnitInfoPanel.tscn" id="1"]
-[ext_resource type="PackedScene" path="res://game/ui/UnitActionsPanel.tscn" id="2"]
-[ext_resource type="PackedScene" path="res://game/ui/TurnIndicator.tscn" id="3"]
-[ext_resource type="PackedScene" path="res://game/ui/PlayerTurnPanel.tscn" id="4"]
-[ext_resource type="PackedScene" path="res://game/ui/TurnQueue.tscn" id="5"]
-[ext_resource type="Script" path="res://game/ui/UILayoutManager.gd" id="6"]
+[ext_resource type="PackedScene" path="res://game/ui/panels/UnitInfoPanel.tscn" id="1"]
+[ext_resource type="PackedScene" path="res://game/ui/panels/UnitActionsPanel.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://game/ui/hud/TurnIndicator.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://game/ui/panels/PlayerTurnPanel.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://game/ui/hud/TurnQueue.tscn" id="5"]
+[ext_resource type="Script" path="res://game/ui/layout/UILayoutManager.gd" id="6"]
 
 [node name="GameUILayout" type="Control"]
 layout_mode = 3

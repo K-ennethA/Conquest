@@ -28,7 +28,7 @@ func _setup_materials():
 	_health_material.flags_unshaded = true
 
 func _setup_meshes():
-	# Create background quad (readable Fire Emblem style)
+	# Create background quad (readable tactical style)
 	var bg_mesh = QuadMesh.new()
 	bg_mesh.size = Vector2(1.2, 0.25)  # Larger for better visibility
 	background.mesh = bg_mesh
@@ -41,7 +41,7 @@ func _setup_meshes():
 	health_fill.material_override = _health_material
 	health_fill.position.z = 0.01  # Slightly in front of background
 	
-	# Position label above the health bar (Pokemon style)
+	# Position label above the health bar (overhead style)
 	if label:
 		label.position = Vector3(0, 0.2, 0)  # Above the health bar for clean separation
 		label.font_size = 16  # Large, readable text

@@ -1,10 +1,10 @@
 extends Node
 
-# Verification script for Fire Emblem movement system
+# Verification script for Tactical movement system
 # This confirms the system is working as expected
 
 func _ready() -> void:
-	print("🔥 Fire Emblem Movement System Verification")
+	print("🔥 Tactical Movement System Verification")
 	print("==========================================")
 	
 	await get_tree().process_frame
@@ -66,7 +66,7 @@ func _verify_system_components() -> void:
 	
 	if all_good:
 		print("\n🎉 ALL SYSTEMS READY!")
-		print("\n📋 How to use Fire Emblem Movement:")
+		print("\n📋 How to use Tactical Movement:")
 		print("1. Click on any unit")
 		print("2. Blue highlighted tiles should appear immediately")
 		print("3. Click on any blue tile to move the unit there")

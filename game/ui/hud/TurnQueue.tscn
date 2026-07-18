@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3 uid="uid://bvxhqxqxqxqxq"]
 
-[ext_resource type="Script" path="res://game/ui/TurnQueue.gd" id="1_turnqueue"]
+[ext_resource type="Script" path="res://game/ui/hud/TurnQueue.gd" id="1_turnqueue"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1"]
 bg_color = Color(0.1, 0.1, 0.1, 0.8)

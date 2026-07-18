@@ -1,20 +1,20 @@
 extends Node
 
-# Debug script for Fire Emblem movement - press F12 to test
+# Debug script for Tactical movement - press F12 to test
 
 func _ready() -> void:
-	print("🔥 Fire Emblem Debug Script Ready - Press F12 to test")
+	print("🔥 Tactical Debug Script Ready - Press F12 to test")
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_F12:
-			print("F12 pressed - running Fire Emblem debug test")
-			_debug_fire_emblem_system()
+			print("F12 pressed - running Tactical debug test")
+			_debug_tactical_system()
 
-func _debug_fire_emblem_system() -> void:
-	"""Debug the Fire Emblem system step by step"""
+func _debug_tactical_system() -> void:
+	"""Debug the Tactical system step by step"""
 	
-	print("=== Fire Emblem System Debug ===")
+	print("=== Tactical System Debug ===")
 	
 	# Step 1: Check scene structure
 	print("Step 1: Checking scene structure...")

@@ -1,7 +1,7 @@
 extends Node
 
 # Test script to verify the overlay mesh system works
-# This script simulates the Fire Emblem movement system to test visual display
+# This script simulates the Tactical movement system to test visual display
 
 func _ready() -> void:
 	print("=== Testing Overlay Mesh Movement System ===")

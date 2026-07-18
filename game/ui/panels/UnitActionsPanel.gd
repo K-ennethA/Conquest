@@ -193,7 +193,7 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	_update_actions()
 	_update_unit_stats()
 	
-	# Show movement range immediately when unit is selected (Fire Emblem style)
+	# Show movement range immediately when unit is selected (tactical style)
 	print("About to call _show_movement_range_on_selection()...")
 	_show_movement_range_on_selection()
 	
@@ -201,7 +201,7 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	print("=== UnitActionsPanel: Unit selection processing complete ===")
 
 func _show_movement_range_on_selection() -> void:
-	"""Show movement range immediately when unit is selected (Fire Emblem style)"""
+	"""Show movement range immediately when unit is selected (tactical style)"""
 	if not selected_unit:
 		return
 	
@@ -1188,7 +1188,7 @@ func _on_movement_animation_complete(unit: Unit) -> void:
 	"""Called when movement animation finishes"""
 	print("Movement animation completed for " + unit.get_display_name())
 
-# Fire Emblem style movement handling
+# tactical style movement handling
 func is_showing_movement_range() -> bool:
 	"""Check if movement range is currently displayed"""
 	var showing = movement_range_tiles.size() > 0
@@ -1196,7 +1196,7 @@ func is_showing_movement_range() -> bool:
 	return showing
 
 func handle_movement_destination_selected(destination: Vector3) -> void:
-	"""Handle selection of a movement destination (Fire Emblem style)"""
+	"""Handle selection of a movement destination (tactical style)"""
 	print("DEBUG: handle_movement_destination_selected called with destination: " + str(destination))
 	
 	if not selected_unit:
@@ -1233,7 +1233,7 @@ func handle_movement_destination_selected(destination: Vector3) -> void:
 		# Could play error sound or show message here
 
 func _execute_movement_to_destination(destination: Vector3) -> void:
-	"""Execute movement to destination (Fire Emblem style)"""
+	"""Execute movement to destination (tactical style)"""
 	if not selected_unit:
 		return
 	

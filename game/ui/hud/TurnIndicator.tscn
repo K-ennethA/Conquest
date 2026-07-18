@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3 uid="uid://bqxvhqxqxqxq0"]
 
-[ext_resource type="Script" path="res://game/ui/TurnIndicator.gd" id="1_1"]
+[ext_resource type="Script" path="res://game/ui/hud/TurnIndicator.gd" id="1_1"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_1"]
 font_size = 24

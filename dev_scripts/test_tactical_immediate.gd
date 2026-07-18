@@ -1,9 +1,9 @@
 extends Node
 
-# Test Fire Emblem immediate movement range display
+# Test Tactical immediate movement range display
 
 func _ready() -> void:
-	print("🔥 Testing Fire Emblem Immediate Movement Range Display")
+	print("🔥 Testing Tactical Immediate Movement Range Display")
 	
 	# Wait for scene initialization
 	await get_tree().process_frame
@@ -54,7 +54,7 @@ func _test_immediate_movement_display() -> void:
 	if movement_visualizer.has_method("is_highlighting_movement_range"):
 		if movement_visualizer.is_highlighting_movement_range():
 			print("✅ SUCCESS! Blue tiles are being displayed!")
-			print("🎯 Fire Emblem movement is working!")
+			print("🎯 Tactical movement is working!")
 		else:
 			print("❌ Movement range not being highlighted")
 	else:
@@ -80,5 +80,5 @@ func _find_all_units() -> Array[Unit]:
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_F10:
-			print("F10 pressed - testing Fire Emblem immediate movement")
+			print("F10 pressed - testing Tactical immediate movement")
 			_test_immediate_movement_display()

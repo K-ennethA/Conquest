@@ -7,7 +7,7 @@ var map_selector_script: Script
 
 func before_each():
 	"""Setup before each test"""
-	map_selector_script = load("res://game/ui/MapSelectorPanel.gd")
+	map_selector_script = load("res://game/ui/panels/MapSelectorPanel.gd")
 	map_selector = VBoxContainer.new()
 	map_selector.set_script(map_selector_script)
 	add_child_autofree(map_selector)

@@ -1,11 +1,11 @@
 extends Node
 
-# Test script to verify Fire Emblem-style health bar positioning and integration
+# Test script to verify tactical-style health bar positioning and integration
 # Run this in TestVisualSystem scene to validate health bar improvements
 
 func _ready():
 	print("=== Health Bar Positioning Test ===")
-	print("Testing Fire Emblem-style health bar positioning and text integration...")
+	print("Testing tactical-style health bar positioning and text integration...")
 	
 	# Wait a frame for scene to initialize
 	await get_tree().process_frame
@@ -17,7 +17,7 @@ func _ready():
 	print("=== Health Bar Test Complete ===")
 	print("Manual verification needed:")
 	print("1. Health bars should be positioned at Y=1.8 (high enough to clear taller units)")
-	print("2. Health text should be ABOVE the health bar (Pokemon style)")
+	print("2. Health text should be ABOVE the health bar (overhead style)")
 	print("3. Health bars should be readable (1.2x0.25 size) with 16pt font")
 	print("4. Text should be very readable with thick black outline (3px)")
 	print("5. Press keys 1-4 to test damage/healing and health bar updates")
@@ -57,7 +57,7 @@ func _test_health_bar_text_integration():
 				print("Health bar text position: " + str(label.position))
 				print("Health bar text: '" + label.text + "'")
 				print("Font size: " + str(label.font_size))
-				print("Text should be at Y=0.2 (above health bar, Pokemon style)")
+				print("Text should be at Y=0.2 (above health bar, overhead style)")
 				if abs(label.position.y - 0.2) < 0.01:
 					print("✓ Text properly positioned above health bar")
 				else:

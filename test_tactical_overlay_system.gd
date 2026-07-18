@@ -1,10 +1,10 @@
 extends Node
 
-# Comprehensive test for Fire Emblem movement system with overlay meshes
+# Comprehensive test for Tactical movement system with overlay meshes
 # This test verifies that the overlay mesh approach works correctly
 
 func _ready() -> void:
-	print("=== Fire Emblem Overlay Movement System Test ===")
+	print("=== Tactical Overlay Movement System Test ===")
 	print("Testing the refactored MovementVisualizer with overlay meshes")
 	
 	# Wait for scene initialization
@@ -14,8 +14,8 @@ func _ready() -> void:
 	await _run_comprehensive_test()
 
 func _run_comprehensive_test() -> void:
-	"""Run comprehensive test of the Fire Emblem movement system"""
-	print("\n=== COMPREHENSIVE FIRE EMBLEM MOVEMENT TEST ===")
+	"""Run comprehensive test of the Tactical movement system"""
+	print("\n=== COMPREHENSIVE TACTICAL MOVEMENT TEST ===")
 	
 	# Step 1: Verify scene structure
 	print("\n--- Step 1: Verifying Scene Structure ---")
@@ -38,15 +38,15 @@ func _run_comprehensive_test() -> void:
 		return
 	print("PASSED: Unit selection movement test completed")
 	
-	# Step 4: Test Fire Emblem workflow
-	print("\n--- Step 4: Testing Complete Fire Emblem Workflow ---")
-	if not await _test_fire_emblem_workflow():
-		print("FAILED: Fire Emblem workflow test failed")
+	# Step 4: Test Tactical workflow
+	print("\n--- Step 4: Testing Complete Tactical Workflow ---")
+	if not await _test_tactical_workflow():
+		print("FAILED: Tactical workflow test failed")
 		return
-	print("PASSED: Fire Emblem workflow test completed")
+	print("PASSED: Tactical workflow test completed")
 	
 	print("\n=== ALL TESTS PASSED ===")
-	print("Fire Emblem movement system with overlay meshes is working correctly!")
+	print("Tactical movement system with overlay meshes is working correctly!")
 
 func _verify_scene_structure() -> bool:
 	"""Verify that all required nodes are present in the scene"""
@@ -234,9 +234,9 @@ func _test_unit_selection_movement() -> bool:
 	
 	return true
 
-func _test_fire_emblem_workflow() -> bool:
-	"""Test the complete Fire Emblem workflow"""
-	print("Testing complete Fire Emblem workflow...")
+func _test_tactical_workflow() -> bool:
+	"""Test the complete Tactical workflow"""
+	print("Testing complete Tactical workflow...")
 	
 	var scene_root = get_tree().current_scene
 	var cursor = scene_root.get_node_or_null("Map/Cursor")
@@ -257,7 +257,7 @@ func _test_fire_emblem_workflow() -> bool:
 		print("ERROR: No unit found")
 		return false
 	
-	print("Testing Fire Emblem workflow with unit: " + test_unit.name)
+	print("Testing Tactical workflow with unit: " + test_unit.name)
 	
 	# Step 1: Position cursor on unit
 	var grid = preload("res://board/Grid.tres")
@@ -267,8 +267,8 @@ func _test_fire_emblem_workflow() -> bool:
 	cursor.tile_position = unit_grid_pos
 	await get_tree().process_frame
 	
-	# Step 2: Select unit (Fire Emblem style - immediate movement range display)
-	print("Selecting unit (Fire Emblem style)...")
+	# Step 2: Select unit (tactical style - immediate movement range display)
+	print("Selecting unit (tactical style)...")
 	var children_before = scene_root.get_child_count()
 	
 	# Simulate cursor selection
@@ -283,7 +283,7 @@ func _test_fire_emblem_workflow() -> bool:
 	var overlays_created = children_after > children_before
 	
 	if overlays_created:
-		print("✓ Fire Emblem style: Movement range displayed immediately on unit selection")
+		print("✓ tactical style: Movement range displayed immediately on unit selection")
 		
 		# Count overlays
 		var overlay_count = 0
@@ -291,9 +291,9 @@ func _test_fire_emblem_workflow() -> bool:
 			if child.name.begins_with("MovementOverlay_"):
 				overlay_count += 1
 		
-		print("✓ Fire Emblem style: " + str(overlay_count) + " blue tiles showing movement range")
+		print("✓ tactical style: " + str(overlay_count) + " blue tiles showing movement range")
 	else:
-		print("✗ Fire Emblem style: No movement range displayed on unit selection")
+		print("✗ tactical style: No movement range displayed on unit selection")
 		return false
 	
 	# Step 3: Test movement destination selection
@@ -314,7 +314,7 @@ func _test_fire_emblem_workflow() -> bool:
 	await get_tree().process_frame
 	await get_tree().create_timer(1.0).timeout
 	
-	print("✓ Fire Emblem workflow test completed")
+	print("✓ Tactical workflow test completed")
 	
 	# Clean up
 	GameEvents.movement_range_cleared.emit()
@@ -336,5 +336,5 @@ func _input(event: InputEvent) -> void:
 				print("F8 pressed - testing unit selection")
 				await _test_unit_selection_movement()
 			KEY_F9:
-				print("F9 pressed - testing Fire Emblem workflow")
-				await _test_fire_emblem_workflow()
+				print("F9 pressed - testing Tactical workflow")
+				await _test_tactical_workflow()

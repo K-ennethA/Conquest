@@ -1,20 +1,20 @@
 extends Node
 
-# Simple test to verify Fire Emblem style movement is working
+# Simple test to verify tactical style movement is working
 # This script tests the immediate movement range display when selecting units
 
 func _ready() -> void:
-	print("=== Fire Emblem Movement Test ===")
+	print("=== Tactical Movement Test ===")
 	
 	# Wait for scene to initialize
 	await get_tree().process_frame
 	await get_tree().process_frame
 	
-	_test_fire_emblem_movement()
+	_test_tactical_movement()
 
-func _test_fire_emblem_movement() -> void:
-	"""Test Fire Emblem style movement system"""
-	print("Testing Fire Emblem style movement...")
+func _test_tactical_movement() -> void:
+	"""Test tactical style movement system"""
+	print("Testing tactical style movement...")
 	
 	# Find a unit to test with
 	var units = _find_all_units()
@@ -50,7 +50,7 @@ func _test_fire_emblem_movement() -> void:
 	print("✅ MovementVisualizer found")
 	
 	# Test unit selection (should trigger immediate movement range display)
-	print("🔥 Testing Fire Emblem style selection...")
+	print("🔥 Testing tactical style selection...")
 	var world_pos = test_unit.global_position
 	
 	print("Emitting unit_selected signal...")
@@ -63,7 +63,7 @@ func _test_fire_emblem_movement() -> void:
 	# Check if movement range is displayed
 	if unit_actions_panel.has_method("is_showing_movement_range"):
 		if unit_actions_panel.is_showing_movement_range():
-			print("✅ Movement range is displayed! Fire Emblem style working!")
+			print("✅ Movement range is displayed! tactical style working!")
 			print("🎯 You should see blue highlighted tiles around the unit")
 			print("🎯 Click on any blue tile to move the unit there")
 		else:
@@ -97,7 +97,7 @@ func _test_fire_emblem_movement() -> void:
 	print("Deselecting unit...")
 	GameEvents.unit_deselected.emit(test_unit)
 	
-	print("=== Fire Emblem Movement Test Complete ===")
+	print("=== Tactical Movement Test Complete ===")
 
 func _find_all_units() -> Array[Unit]:
 	"""Find all units in the scene"""
@@ -128,5 +128,5 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:
 		match event.keycode:
 			KEY_F8:
-				print("F8 pressed - running Fire Emblem movement test")
-				_test_fire_emblem_movement()
+				print("F8 pressed - running Tactical movement test")
+				_test_tactical_movement()

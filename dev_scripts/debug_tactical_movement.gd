@@ -1,22 +1,22 @@
 extends Node
 
-# Debug script for Fire Emblem movement system
+# Debug script for Tactical movement system
 # Add this to your GameWorld scene and press F11 to test
 
 func _ready() -> void:
-	print("🔥 Fire Emblem Movement Debug Script Ready")
-	print("Press F11 to test Fire Emblem movement")
+	print("🔥 Tactical Movement Debug Script Ready")
+	print("Press F11 to test Tactical movement")
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_F11:
-			print("F11 pressed - testing Fire Emblem movement system")
-			_debug_fire_emblem_movement()
+			print("F11 pressed - testing Tactical movement system")
+			_debug_tactical_movement()
 
-func _debug_fire_emblem_movement() -> void:
-	"""Debug the Fire Emblem movement system step by step"""
+func _debug_tactical_movement() -> void:
+	"""Debug the Tactical movement system step by step"""
 	
-	print("=== Fire Emblem Movement Debug ===")
+	print("=== Tactical Movement Debug ===")
 	
 	# Step 1: Check if all components exist
 	print("Step 1: Checking components...")
@@ -64,7 +64,7 @@ func _debug_fire_emblem_movement() -> void:
 	print("  Unit position: " + str(test_unit.global_position))
 	print("  Movement range: " + str(test_unit.get_movement_range()))
 	
-	# Step 4: Test unit selection (should trigger Fire Emblem movement)
+	# Step 4: Test unit selection (should trigger Tactical movement)
 	print("Step 4: Testing unit selection...")
 	print("🔥 Selecting unit - this should show blue tiles immediately!")
 	
@@ -90,7 +90,7 @@ func _debug_fire_emblem_movement() -> void:
 			print("❌ MovementVisualizer reports highlighting is NOT active")
 	
 	print("=== Debug Complete ===")
-	print("If you see blue tiles around the unit, Fire Emblem movement is working!")
+	print("If you see blue tiles around the unit, Tactical movement is working!")
 	print("If not, check the debug output above for issues.")
 
 func _find_all_units() -> Array[Unit]:
