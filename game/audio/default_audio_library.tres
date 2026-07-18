@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AudioLibrary" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/audio/AudioLibrary.gd" id="1_audiolib"]
+
+[resource]
+script = ExtResource("1_audiolib")
+sfx_select = null
+sfx_move = null
+sfx_attack = null
+sfx_hit = null
+sfx_heal = null
+sfx_death = null
+sfx_turn_start = null
+sfx_victory = null
+sfx_defeat = null
+sfx_ui_click = null
+music_battle = null
+sfx_volume_db = 0.0
+music_volume_db = -6.0
+sfx_pitch_variance = 0.0
+metadata/_custom_type_script = "res://game/audio/AudioLibrary.gd"

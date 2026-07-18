@@ -32,6 +32,8 @@ GameModeManager="*res://systems/game_core/GameModeManager.gd"
 MultiplayerLauncher="*res://systems/multiplayer_launcher.gd"
 NetSession="*res://systems/net/NetSession.gd"
 CombatServices="*res://game/combat/CombatServices.gd"
+AudioManager="*res://game/audio/AudioManager.gd"
+UnitAnimator="*res://game/visuals/UnitAnimator.gd"
 
 [display]
 
