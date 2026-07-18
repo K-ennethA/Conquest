@@ -8,6 +8,7 @@ class_name UnitInfoPanel
 @onready var unit_name_label: Label = $MarginContainer/VBoxContainer/PortraitContainer/BasicInfoContainer/UnitNameLabel
 @onready var unit_type_label: Label = $MarginContainer/VBoxContainer/PortraitContainer/BasicInfoContainer/UnitTypeLabel
 @onready var health_label: Label = $MarginContainer/VBoxContainer/StatsContainer/HealthLabel
+@onready var health_bar: ProgressBar = $MarginContainer/VBoxContainer/StatsContainer/HealthBar
 @onready var attack_label: Label = $MarginContainer/VBoxContainer/StatsContainer/AttackLabel
 @onready var defense_label: Label = $MarginContainer/VBoxContainer/StatsContainer/DefenseLabel
 @onready var speed_label: Label = $MarginContainer/VBoxContainer/StatsContainer/SpeedLabel
@@ -85,6 +86,9 @@ func _update_unit_info(unit: Unit) -> void:
 	# Stats - with null checks
 	if health_label:
 		health_label.text = "Health: " + str(unit.current_health) + "/" + str(unit.max_health)
+	if health_bar:
+		health_bar.max_value = maxf(1.0, float(unit.max_health))
+		health_bar.value = clampf(float(unit.current_health), 0.0, health_bar.max_value)
 	if attack_label:
 		attack_label.text = "Attack: " + str(unit.get_stat("attack"))
 	if defense_label:
