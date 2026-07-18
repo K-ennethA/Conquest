@@ -323,10 +323,12 @@ func _find_all_units() -> Array[Unit]:
 	return units
 
 func cleanup_unit_visuals(unit: Unit) -> void:
-	"""Clean up visual elements when unit is removed"""
+	"""Clean up visual elements when unit is removed (e.g. on death)."""
 	if _unit_health_bars.has(unit):
 		var health_bar = _unit_health_bars[unit]
-		if health_bar:
+		# The bar is a child of the unit, so freeing the unit frees it too; guard
+		# so we don't queue_free a node that is already gone / already queued.
+		if health_bar and is_instance_valid(health_bar) and not health_bar.is_queued_for_deletion():
 			health_bar.queue_free()
 		_unit_health_bars.erase(unit)
 

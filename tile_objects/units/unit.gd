@@ -66,6 +66,11 @@ var max_health: int:
 var _mesh_instance: MeshInstance3D
 var _original_material: Material
 
+# Death guard: death resolution (signals + despawn) must run exactly once, no
+# matter how many code paths observe HP hitting 0 (take_damage, the health_changed
+# signal, or a heal-then-lethal edge). Latches true on the first death.
+var _is_dead: bool = false
+
 func _ready() -> void:
 	_setup_stats_component()
 	_setup_visuals()
@@ -267,7 +272,7 @@ func heal(amount: int) -> void:
 
 func is_alive() -> bool:
 	"""Check if unit is alive"""
-	return current_health > 0
+	return not _is_dead and current_health > 0
 
 func is_at_full_health() -> bool:
 	"""Check if unit is at full health"""
@@ -460,9 +465,34 @@ func _on_stat_changed(stat_name: String, old_value: int, new_value: int) -> void
 	pass
 
 func _on_unit_died() -> void:
-	"""Handle unit death"""
+	"""Handle unit death: fire the death signals ONCE, then remove the unit from
+	the board and scene so it stops occupying a cell, blocking turns, or lingering
+	visually. Idempotent via _is_dead -- multiple observers of HP == 0 (take_damage,
+	the health_changed signal) all funnel here but death only resolves once."""
+	if _is_dead:
+		return
+	_is_dead = true
+
+	# 1. Notify listeners while the node is still valid:
+	#    - the owning Player removes it from owned_units (and self-eliminates when
+	#      its last unit dies, which PlayerManager turns into a win/lose result),
+	#    - the active turn system unregisters it and re-checks turn completion so a
+	#      side whose last actable unit just died doesn't stall the turn.
 	unit_died.emit(self)
 	GameEvents.unit_eliminated.emit(self, null)  # null = no killer specified
+
+	# 2. Tear down this unit's floating health bar (erases it from the visual
+	#    manager's registry so no dangling reference remains).
+	if visual_manager and visual_manager.has_method("cleanup_unit_visuals"):
+		visual_manager.cleanup_unit_visuals(self)
+
+	# 3. Remove the unit from play. Hide immediately so it disappears this frame,
+	#    then free the node deferred -- deferring lets the signal handlers above
+	#    (and anything mid-iteration over the board/units this same frame) unwind
+	#    before the node is actually gone.
+	visible = false
+	if is_inside_tree() and not is_queued_for_deletion():
+		queue_free()
 
 # Visual feedback (updated to use visual manager)
 func _on_unit_selected(unit: Unit) -> void:

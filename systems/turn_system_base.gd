@@ -77,23 +77,40 @@ func register_unit(unit: Unit) -> void:
 	"""Register a unit with the turn system"""
 	if unit not in registered_units:
 		registered_units.append(unit)
-		
+
 		# Connect to unit signals
 		if unit.has_signal("unit_action_completed"):
 			unit.unit_action_completed.connect(_on_unit_action_completed)
-		
+
+		# Watch for this unit's death so the turn system can drop it and re-check
+		# turn completion (a side whose last actable unit dies must not stall the turn).
+		if unit.has_signal("unit_died") and not unit.unit_died.is_connected(_on_registered_unit_died):
+			unit.unit_died.connect(_on_registered_unit_died)
+
 		print("Turn System: Registered unit " + unit.get_display_name())
 
 func unregister_unit(unit: Unit) -> void:
 	"""Unregister a unit from the turn system"""
 	if unit in registered_units:
 		registered_units.erase(unit)
-		
+
 		# Disconnect from unit signals
 		if unit.has_signal("unit_action_completed") and unit.unit_action_completed.is_connected(_on_unit_action_completed):
 			unit.unit_action_completed.disconnect(_on_unit_action_completed)
-		
+		if unit.has_signal("unit_died") and unit.unit_died.is_connected(_on_registered_unit_died):
+			unit.unit_died.disconnect(_on_registered_unit_died)
+
 		print("Turn System: Unregistered unit " + unit.get_display_name())
+
+func _on_registered_unit_died(unit: Unit) -> void:
+	"""A registered unit died. Drop it from the turn system NOW -- this fires inside
+	the unit's unit_died emission, where the unit is still a valid instance
+	(queue_free happens at end of frame), so we must not pass it through a deferred
+	call (it would be freed by then -> 'cannot convert freed Object'). Only the
+	completion re-check is deferred, since it can advance the turn (re-entrant)."""
+	if unit != null and is_instance_valid(unit) and unit in registered_units:
+		unregister_unit(unit)
+	call_deferred("_check_turn_completion")
 
 func register_player(player: Player) -> void:
 	"""Register a player with the turn system"""

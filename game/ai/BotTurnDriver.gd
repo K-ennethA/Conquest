@@ -213,12 +213,39 @@ func _execute_move_decision(unit: Unit, decision: Dictionary, board) -> bool:
 		return false
 	var result: Dictionary = unit.perform_move(slot, aim_cell, board)
 	if result != null and bool(result.get("success", false)):
+		# Concise, diagnosable proof the attack LANDED: target + damage + target HP
+		# after. Mirrors the take_damage log in the fallback path so both AI attack
+		# routes are visible in the live game's output.
+		_log_attack_landed(unit, move, result)
 		var mc := unit.get_moveset_controller()
 		if mc != null and mc.has_method("on_used"):
 			mc.on_used(move)
 		unit.mark_action_completed("move")
 		return true
 	return false
+
+
+## Log the damage a resolved move dealt (one line per damaged target), reading the
+## structured events MoveExecutor returned. Silent when the move dealt no damage
+## (e.g. a pure buff/move) so only real hits print.
+func _log_attack_landed(unit: Unit, move, result: Dictionary) -> void:
+	var events = result.get("events", [])
+	if not (events is Array):
+		return
+	for ev in events:
+		if not (ev is Dictionary):
+			continue
+		if ev.get("effect", "") != "damage" or ev.get("missed", false):
+			continue
+		var target = ev.get("target", null)
+		if target == null:
+			continue
+		var amount: int = int(ev.get("amount", 0))
+		var hp_after: int = target.get_hp() if target.has_method("get_hp") else -1
+		var tname: String = target.get_display_name() if target.has_method("get_display_name") else "enemy"
+		var crit_tag: String = " CRIT" if ev.get("crit", false) else ""
+		print("[BotAI] %s hits %s with %s for %d%s (%s HP now %d)"
+			% [unit.get_display_name(), tname, _move_name(move), amount, crit_tag, tname, hp_after])
 
 
 ## Index of [param move] within the unit's moveset (what [Unit.perform_move]
@@ -276,7 +303,9 @@ func _fallback_attack(unit: Unit, target: Unit) -> void:
 	var dmg: int = _stat(unit, "attack", 10)
 	if target.has_method("take_damage"):
 		target.take_damage(dmg)
-	print("[BotAI] %s attacks %s for %d" % [unit.get_display_name(), target.get_display_name(), dmg])
+	var hp_after: int = target.get_hp() if target.has_method("get_hp") else -1
+	print("[BotAI] %s attacks %s for %d (%s HP now %d)"
+		% [unit.get_display_name(), target.get_display_name(), dmg, target.get_display_name(), hp_after])
 
 
 func _finish(unit: Unit, action: String) -> void:

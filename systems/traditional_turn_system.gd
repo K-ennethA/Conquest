@@ -431,24 +431,10 @@ func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
 	# Mark unit as having acted
 	mark_unit_acted(unit)
 
-# Override unit (un)registration to also watch unit deaths. If a player's LAST actable
-# unit dies mid-turn, nothing else triggers _check_turn_completion and the turn would
-# stall with no units able to act -- so a death re-checks completion (deferred, so the
-# death handling / any node freeing unwinds first).
-func register_unit(unit: Unit) -> void:
-	super.register_unit(unit)
-	if unit and unit.has_signal("unit_died") and not unit.unit_died.is_connected(_on_registered_unit_died):
-		unit.unit_died.connect(_on_registered_unit_died)
-
-func unregister_unit(unit: Unit) -> void:
-	if unit and unit.has_signal("unit_died") and unit.unit_died.is_connected(_on_registered_unit_died):
-		unit.unit_died.disconnect(_on_registered_unit_died)
-	super.unregister_unit(unit)
-
-func _on_registered_unit_died(_unit: Unit) -> void:
-	"""A registered unit died -> re-check turn completion (deferred) so the current
-	player's turn ends if that death left them with no units able to act."""
-	call_deferred("_check_turn_completion")
+# NOTE: watching unit deaths (unregister + re-check turn completion when a unit dies)
+# now lives in TurnSystemBase.register_unit / _on_registered_unit_died, so BOTH the
+# Traditional and Speed First systems get it. The old per-system override here was
+# removed to avoid a double connection.
 
 # Query methods
 func get_units_that_acted() -> Array[Unit]:
