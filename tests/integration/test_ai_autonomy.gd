@@ -75,6 +75,13 @@ func _spawn_character_unit(map_root: Node3D, character_id: StringName, cell: Vec
 ## Build a live board with an AI-owned attacker and a human-owned target [param apart]
 ## cells apart along Z. Returns {} (skip signal) if a roster character fails to load.
 func _build_scene(apart: int) -> Dictionary:
+	return await _build_scene_cells(Vector2i(0, 0), Vector2i(0, apart))
+
+
+## Build a live board with the AI attacker on [param ai_cell] and the human target
+## on [param target_cell] (both must lie within the 5x5 grid). Returns {} if a
+## roster character fails to load.
+func _build_scene_cells(ai_cell: Vector2i, target_cell: Vector2i) -> Dictionary:
 	_map_root = Node3D.new()
 	_map_root.name = "Map"
 	add_child_autofree(_map_root)
@@ -84,8 +91,8 @@ func _build_scene(apart: int) -> Dictionary:
 	var ai_player := Player.new(1, "AI")
 	ai_player.is_ai = true
 
-	var ai_unit := _spawn_character_unit(_map_root, ATTACKER_ID, Vector2i(0, 0), ai_player)
-	var human_unit := _spawn_character_unit(_map_root, TARGET_ID, Vector2i(0, apart), human_player)
+	var ai_unit := _spawn_character_unit(_map_root, ATTACKER_ID, ai_cell, ai_player)
+	var human_unit := _spawn_character_unit(_map_root, TARGET_ID, target_cell, human_player)
 	if ai_unit == null or human_unit == null:
 		return {}
 
@@ -172,6 +179,79 @@ func test_traditional_ai_advances_toward_distant_enemy() -> void:
 	assert_ne(end_cell, start_cell, "AI with no enemy in range should move (its cell changes)")
 	assert_lt(_manhattan(end_cell, board.cell_of(human_unit)), start_dist,
 		"the AI's move should reduce the distance to the enemy (advance toward it)")
+
+
+# --- Traditional: AI closes the gap AND attacks in the same turn -------------
+
+## The key move-then-attack fix: an enemy 3 cells away is beyond every move's range
+## from the origin, but reachable within the unit's movement range. In ONE turn the
+## AI must walk adjacent and strike -- the cell changes AND the target takes damage.
+func test_traditional_ai_moves_into_range_and_attacks_same_turn() -> void:
+	var scene: Dictionary = await _build_scene(3)  # 2 cells past cleave range 1, inside move+attack
+	if scene.is_empty() or scene["board"] == null:
+		pending("Could not build live board (roster/board unavailable); skipping.")
+		return
+
+	var ts := TraditionalTurnSystem.new()
+	add_child_autofree(ts)
+	ts.register_player(scene["human_player"])
+	ts.register_player(scene["ai_player"])
+	ts.start_turn_system()
+	ts.end_turn_manually()  # -> AI turn
+	assert_true(ts.get_current_active_player() == scene["ai_player"], "should reach AI turn")
+
+	var board = scene["board"]
+	var ai_unit: Unit = scene["ai_unit"]
+	var human_unit: Unit = scene["human_unit"]
+	var start_cell: Vector2i = board.cell_of(ai_unit)
+	var start_hp := human_unit.get_hp()
+
+	var driver := _make_driver()
+	var acted := driver.act_for_turn_system(ts)
+
+	assert_true(acted, "the driver should act for the AI player (not sit inert)")
+	assert_ne(board.cell_of(ai_unit), start_cell,
+		"the AI must move up to the enemy (it starts out of every move's range)")
+	assert_lt(human_unit.get_hp(), start_hp,
+		"after closing the gap the AI must attack the SAME turn, so the enemy's HP drops")
+
+
+# --- Traditional: AI advances its FULL move range, not one cell --------------
+
+## Regression for the "creeps one cell" bug: with the enemy too far to reach even
+## after a full move, the AI must still advance MORE THAN ONE cell (about its whole
+## movement range) toward it -- not inch forward a single tile.
+func test_traditional_ai_advances_full_move_range_not_one_cell() -> void:
+	# Enemy at the far corner (Manhattan 8 away) on the 5x5 grid: movement range 3
+	# cannot bring it into any move's range (max reach 1), so this is a pure advance.
+	var scene: Dictionary = await _build_scene_cells(Vector2i(0, 0), Vector2i(4, 4))
+	if scene.is_empty() or scene["board"] == null:
+		pending("Could not build live board (roster/board unavailable); skipping.")
+		return
+
+	var ts := TraditionalTurnSystem.new()
+	add_child_autofree(ts)
+	ts.register_player(scene["human_player"])
+	ts.register_player(scene["ai_player"])
+	ts.start_turn_system()
+	ts.end_turn_manually()  # -> AI turn
+	assert_true(ts.get_current_active_player() == scene["ai_player"], "should reach AI turn")
+
+	var board = scene["board"]
+	var ai_unit: Unit = scene["ai_unit"]
+	var human_unit: Unit = scene["human_unit"]
+	var start_cell: Vector2i = board.cell_of(ai_unit)
+	var start_dist := _manhattan(start_cell, board.cell_of(human_unit))
+
+	var driver := _make_driver()
+	var acted := driver.act_for_turn_system(ts)
+
+	assert_true(acted, "the driver should act for the AI player (not sit inert)")
+	var end_cell: Vector2i = board.cell_of(ai_unit)
+	assert_gt(_manhattan(start_cell, end_cell), 1,
+		"the AI must use its full movement range in one turn, not creep a single cell")
+	assert_lt(_manhattan(end_cell, board.cell_of(human_unit)), start_dist,
+		"advancing must reduce the distance to the enemy")
 
 
 # --- Speed First: parity (same AI driving, only the order differs) ------------

@@ -27,6 +27,14 @@ func decide(actor, moveset: Array, board) -> Dictionary:
 	return super.decide(actor, _effective_moveset(moveset), board)
 
 
+## Movement-aware planning (see [method BotController.plan]) with the same phase
+## advance + expanded moveset a boss uses for [method decide], so a boss also uses
+## its FULL move range and unlocked specials when closing on / striking a target.
+func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
+	_advance_phase(actor)
+	return super.plan(actor, _effective_moveset(moveset), board, reachable)
+
+
 ## Bosses are hostile to anything that is not itself and not another boss.
 func _is_hostile(actor, other, _board) -> bool:
 	return other != actor and not _unit_is_boss(other)

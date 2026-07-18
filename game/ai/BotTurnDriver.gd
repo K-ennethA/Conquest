@@ -22,6 +22,11 @@ class_name BotTurnDriver
 ## Seconds between AI unit actions.
 @export var action_interval: float = 0.4
 
+## When true, log extra diagnostics (e.g. "AI turn but no actable unit"). Off by
+## default so a normal match only prints the concise one-line-per-action summary
+## the execute paths emit.
+@export var verbose: bool = false
+
 var _timer: Timer
 var _busy: bool = false
 
@@ -71,20 +76,14 @@ func act_for_turn_system(ts: TurnSystemBase) -> bool:
 	if player == null or not player.is_ai:
 		return false
 
-	# Diagnostic (AI-turn only, so it does not spam human turns): reveals whether
-	# the driver is reaching the AI turn and finding actable units live.
 	var unit := _next_actable_ai_unit(ts, player)
 	if unit == null:
-		var active := ts.get_active_units()
-		var owned := 0
-		for u in ts.registered_units:
-			if u and is_instance_valid(u) and u.get_owner_player() == player:
-				owned += 1
-		print("[BotAI] %s's turn but no actable unit (active_units=%d, ai-owned registered=%d, total registered=%d)"
-			% [player.get_display_name(), active.size(), owned, ts.registered_units.size()])
+		# Rare once the AI acts every unit; only surface it when diagnosing.
+		if verbose:
+			print("[BotAI] %s's turn but no actable unit (active_units=%d)"
+				% [player.get_display_name(), ts.get_active_units().size()])
 		return false
 
-	print("[BotAI] driving %s for AI %s" % [unit.get_display_name(), player.get_display_name()])
 	_busy = true
 	_act(unit)
 	_busy = false
@@ -121,28 +120,88 @@ func _ai_difficulty() -> int:
 
 
 
-## Plan via [BotController]/[BossController] and execute a real move / step.
+## Plan via [BotController]/[BossController] using the unit's FULL reachable cell
+## set, then execute a move-then-attack or a full advance.
 func _act_character(unit: Unit, board) -> void:
 	var controller = BossController.new() if unit.is_boss() else BotController.new()
 	controller.difficulty = _ai_difficulty()
-	var decision = controller.decide(unit, unit.get_moveset(), board)
+
+	var origin: Vector2i = board.cell_of(unit)
+	# Cells the unit can actually reach this turn (movement profile + terrain +
+	# blockers + occupancy), via the live board. The planner walks up to an enemy
+	# and strikes the same turn instead of creeping one cell.
+	var reachable := _reachable_cells(unit, origin, board)
+	var decision = controller.plan(unit, unit.get_moveset(), board, reachable)
 	if decision == null or decision.is_empty():
 		_finish(unit, "wait")
 		return
 
 	match int(decision.get("action", BotController.ActionType.WAIT)):
 		BotController.ActionType.MOVE:
-			if not _execute_move_decision(unit, decision, board):
-				_finish(unit, "wait")
+			_execute_plan_attack(unit, decision, board)
 		BotController.ActionType.STEP:
-			_execute_step(unit, decision, controller, board)
+			_execute_plan_advance(unit, decision, board)
 		_:
+			if verbose:
+				print("[BotAI] %s waits (%s)" % [unit.get_display_name(), str(decision.get("reason", ""))])
 			_finish(unit, "wait")
+
+
+## Cells [param unit] can reach this turn under its movement profile, via the live
+## board. Empty when the unit has no profile -- planning then considers only the
+## origin cell (attack in place, or wait).
+func _reachable_cells(unit: Unit, origin: Vector2i, board) -> Array:
+	var profile = unit.get_movement_profile()
+	if profile == null:
+		return []
+	return MovementResolver.new().reachable_cells(origin, profile, board)
+
+
+## Move the unit to the planned stand cell (if any), then resolve the chosen attack
+## from there. The destination came from the reachable set (already validated as a
+## legal stopping cell) and the move was validated to hit the target FROM it.
+func _execute_plan_attack(unit: Unit, decision: Dictionary, board) -> void:
+	var origin: Vector2i = board.cell_of(unit)
+	var dest: Vector2i = decision.get("dest_cell", origin)
+	var moved := dest != origin
+	if moved:
+		board.move_unit(unit, dest)
+		unit.mark_moved()
+
+	if _execute_move_decision(unit, decision, board):
+		if moved:
+			print("[BotAI] %s advances to %s then %s at %s"
+				% [unit.get_display_name(), str(dest), _move_name(decision.get("move")), str(decision.get("aim_cell"))])
+		else:
+			print("[BotAI] %s uses %s at %s"
+				% [unit.get_display_name(), _move_name(decision.get("move")), str(decision.get("aim_cell"))])
+		return
+
+	# The move failed to resolve after moving (rare). End the turn cleanly -- the
+	# unit still spent its move if it walked.
+	_finish(unit, "move" if moved else "wait")
+
+
+## Move the unit its full advance toward the nearest enemy. The destination is a
+## reachable cell the planner chose to minimize distance to that enemy.
+func _execute_plan_advance(unit: Unit, decision: Dictionary, board) -> void:
+	var origin: Vector2i = board.cell_of(unit)
+	var dest: Vector2i = decision.get("dest_cell", origin)
+	if dest == origin:
+		_finish(unit, "wait")
+		return
+	board.move_unit(unit, dest)
+	unit.mark_moved()
+	var target = decision.get("target", null)
+	var tname: String = target.get_display_name() if target != null and target.has_method("get_display_name") else "enemy"
+	print("[BotAI] %s advances to %s toward %s" % [unit.get_display_name(), str(dest), tname])
+	_finish(unit, "move")
 
 
 ## Execute an attack/use-move decision (a chosen move + aim cell) through
 ## [Unit.perform_move] / [MoveExecutor]. Returns true if the move resolved
-## successfully AND the unit's action was consumed (turn ended).
+## successfully AND the unit's action was consumed (turn ended). Logging is left to
+## the caller so a move-then-attack reports as a single concise line.
 func _execute_move_decision(unit: Unit, decision: Dictionary, board) -> bool:
 	var move = decision.get("move", null)
 	if move == null:
@@ -158,45 +217,8 @@ func _execute_move_decision(unit: Unit, decision: Dictionary, board) -> bool:
 		if mc != null and mc.has_method("on_used"):
 			mc.on_used(move)
 		unit.mark_action_completed("move")
-		print("[BotAI] %s uses %s at %s" % [unit.get_display_name(), _move_name(move), str(aim_cell)])
 		return true
 	return false
-
-
-## Execute a one-cell advance toward the nearest hostile. Validates the target
-## cell is actually reachable under the unit's movement profile, moves via the
-## shared adapter, then optionally attacks if a move is now in range.
-func _execute_step(unit: Unit, decision: Dictionary, controller, board) -> void:
-	var origin: Vector2i = board.cell_of(unit)
-	var step_cell: Vector2i = decision.get("step_to", origin)
-	if step_cell == origin:
-		_finish(unit, "wait")
-		return
-
-	var profile = unit.get_movement_profile()
-	if profile == null:
-		# Without a movement profile we cannot validate reachability; do nothing
-		# rather than teleport the unit onto a possibly-illegal cell.
-		_finish(unit, "wait")
-		return
-
-	var reachable := MovementResolver.new().reachable_cells(origin, profile, board)
-	if not reachable.has(step_cell):
-		_finish(unit, "wait")
-		return
-
-	board.move_unit(unit, step_cell)
-	unit.mark_moved()
-	print("[BotAI] %s advances to %s" % [unit.get_display_name(), str(step_cell)])
-
-	# Now in a new position: if a damaging move can reach an enemy, take it;
-	# otherwise end the turn.
-	var follow = controller.decide(unit, unit.get_moveset(), board)
-	if follow != null and not follow.is_empty() \
-			and int(follow.get("action", BotController.ActionType.WAIT)) == BotController.ActionType.MOVE:
-		if _execute_move_decision(unit, follow, board):
-			return
-	_finish(unit, "move")
 
 
 ## Index of [param move] within the unit's moveset (what [Unit.perform_move]

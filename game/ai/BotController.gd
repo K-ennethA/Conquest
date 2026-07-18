@@ -79,6 +79,60 @@ func decide(actor, moveset: Array, board) -> Dictionary:
 	return _step_toward_nearest(origin, hostiles, board)
 
 
+## Plan a FULL-movement turn using the set of cells the unit can actually reach
+## this turn ([param reachable], computed by [MovementResolver] against the live
+## board). Where [method decide] only ever considers the unit's current cell and
+## takes a single step, this walks the unit up to an enemy and strikes the SAME
+## turn -- Fire-Emblem-style enemy behaviour:
+##
+##   1. MOVE-THEN-ATTACK -- over every candidate stand cell (the origin plus each
+##      reachable cell) find the (dest_cell, move, target) that does the most good;
+##      the move must legally hit the target FROM that stand cell
+##      ([method MoveResource.can_aim_at]). The difficulty tiers pick among the
+##      ranked options exactly as [method decide] does (so HARD still secures kills,
+##      BRUTAL still focus-fires, EASY still dithers, NORMAL stays deterministic).
+##   2. FULL ADVANCE -- if no attack is reachable from ANY cell, move to the
+##      reachable cell that minimizes distance to the nearest enemy, closing the
+##      unit's whole move range rather than a single cell.
+##   3. WAIT -- only when there are no hostiles, or nothing gets the unit closer.
+##
+## The returned dictionary is [method decide]'s shape plus a "dest_cell" key (the
+## cell to stand on before acting):
+##   action MOVE -> walk to dest_cell (may equal the origin), then use `move` at
+##                  `aim_cell`.
+##   action STEP -> walk to dest_cell (a full advance; no attack this turn).
+##   action WAIT -> do nothing.
+## [param reachable] is an Array of [Vector2i] (empty is valid -- planning then only
+## considers the origin cell, matching a unit with no movement profile).
+func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
+	if actor == null or board == null or not board.has_method("cell_of"):
+		return _wait("no_actor_or_board")
+
+	var origin: Vector2i = board.cell_of(actor)
+	var hostiles := _list_hostiles(actor, board)
+	if hostiles.is_empty():
+		return _wait("no_hostiles")
+
+	# Candidate stand cells: the origin (attack without moving) plus every cell the
+	# unit can reach this turn. Reachable cells are already legal stopping cells.
+	var stand_cells: Array = [origin]
+	stand_cells.append_array(reachable)
+
+	# All reachable damaging plays, best-first (one per move+target, standing on the
+	# cheapest cell that can hit it). Difficulty decides which we take -- identical
+	# selection logic to decide()'s origin-only ranking.
+	var ranked := _ranked_attacks_from_cells(actor, origin, stand_cells, moveset, hostiles, board)
+	var choice := _choose_attack(ranked)
+	if not choice.is_empty():
+		return choice
+
+	# No attack (none reachable, or EASY declined). Advance the full distance --
+	# unless EASY hesitates this turn.
+	if difficulty == Difficulty.EASY and _get_rng().randf() < 0.30:
+		return _wait("hesitate")
+	return _advance_full(origin, hostiles, board, reachable)
+
+
 ## Lazily-created RNG for EASY's stochastic behaviour.
 func _get_rng() -> RandomNumberGenerator:
 	if rng == null:
@@ -202,6 +256,116 @@ func _attack_is_better(a: Dictionary, b: Dictionary) -> bool:
 	return int(a["target_hp"]) < int(b["target_hp"])
 
 
+## Every reachable damaging play this turn, best-first, for the movement-aware
+## [method plan]. For each move+target that can be hit from at least one candidate
+## stand cell, keeps ONLY the single cheapest such cell (least movement, then lowest
+## cell coord) and records it as "dest_cell". Collapsing to one entry per move+target
+## keeps the ranked list -- and therefore [method _choose_attack] / HARD / BRUTAL --
+## behaving exactly as they do for the origin-only [method _ranked_attacks].
+func _ranked_attacks_from_cells(actor, origin: Vector2i, stand_cells: Array, moveset: Array, hostiles: Array, board) -> Array:
+	var best_by_key := {}  # "move_id:target_id" -> best candidate for that pairing
+	for move in moveset:
+		if move == null or move.targeting == null or not _move_has_damage(move):
+			continue
+		for target in hostiles:
+			var tcell: Vector2i = board.cell_of(target)
+			# Cheapest stand cell (least movement) that can legally hit this target.
+			var dest_cell := origin
+			var dest_cost := 1 << 30
+			var found := false
+			for c in stand_cells:
+				if not move.can_aim_at(c, tcell):
+					continue
+				var cost := _manhattan(origin, c)
+				if not found or cost < dest_cost or (cost == dest_cost and _cell_less(c, dest_cell)):
+					dest_cost = cost
+					dest_cell = c
+					found = true
+			if not found:
+				continue
+			var estimate := _estimate_damage(move, actor, target)
+			if estimate <= 0:
+				continue
+			var thp := _unit_hp(target)
+			var key := "%d:%d" % [move.get_instance_id(), target.get_instance_id()]
+			best_by_key[key] = {
+				"action": ActionType.MOVE,
+				"move": move,
+				"target": target,
+				"aim_cell": tcell,
+				"dest_cell": dest_cell,
+				"estimated_damage": estimate,
+				"target_hp": thp,
+				"reduction": mini(estimate, maxi(0, thp)),
+				"move_cost": dest_cost,
+				"step_to": dest_cell,
+				"reason": "move_then_attack",
+			}
+	var candidates: Array = best_by_key.values()
+	candidates.sort_custom(_attack_from_cells_is_better)
+	return candidates
+
+
+## Strict "a ranks before b" comparator for [method _ranked_attacks_from_cells].
+## Same primary ordering as [method _attack_is_better] (most HP removed, then most
+## raw damage, then lower-HP target) with deterministic tie-breaks (least movement,
+## then cell order) so NORMAL's pick is stable regardless of dictionary iteration.
+func _attack_from_cells_is_better(a: Dictionary, b: Dictionary) -> bool:
+	var ra := int(a["reduction"]); var rb := int(b["reduction"])
+	if ra != rb:
+		return ra > rb
+	var ea := int(a["estimated_damage"]); var eb := int(b["estimated_damage"])
+	if ea != eb:
+		return ea > eb
+	var ta := int(a["target_hp"]); var tb := int(b["target_hp"])
+	if ta != tb:
+		return ta < tb
+	var ca := int(a["move_cost"]); var cb := int(b["move_cost"])
+	if ca != cb:
+		return ca < cb
+	return _cell_less(a["dest_cell"], b["dest_cell"])
+
+
+## Advance as far as possible toward the nearest hostile: choose the reachable cell
+## that minimizes distance to that enemy (closing the unit's whole move range, not a
+## single cell). Returns WAIT only when no reachable cell gets the unit closer.
+func _advance_full(origin: Vector2i, hostiles: Array, board, reachable: Array) -> Dictionary:
+	var nearest = null
+	var best_dist := 1 << 30
+	for target in hostiles:
+		var d := _manhattan(origin, board.cell_of(target))
+		if d < best_dist:
+			best_dist = d
+			nearest = target
+	if nearest == null:
+		return _wait("no_hostiles")
+
+	var goal: Vector2i = board.cell_of(nearest)
+	var dest := origin
+	var dest_dist := _manhattan(origin, goal)
+	for c in reachable:
+		var d := _manhattan(c, goal)
+		if d < dest_dist:
+			dest_dist = d
+			dest = c
+		elif d == dest_dist and dest != origin and _cell_less(c, dest):
+			dest = c
+	if dest == origin:
+		# Nothing reachable gets us closer (blocked in, or an empty reachable set).
+		return _wait("no_progress")
+	return {
+		"action": ActionType.STEP,
+		"move": null,
+		"target": nearest,
+		"aim_cell": origin,
+		"dest_cell": dest,
+		"estimated_damage": 0,
+		"target_hp": _unit_hp(nearest),
+		"step_to": dest,
+		"reason": "advance_full",
+	}
+
+
 ## Non-mutating estimate of the damage [param move] would deal to [param target].
 ## Mirrors [DamageEffect]'s scaling + mitigation so planning matches execution.
 func _estimate_damage(move: MoveResource, actor, target) -> int:
@@ -318,6 +482,14 @@ static func _unit_is_boss(unit) -> bool:
 
 static func _manhattan(a: Vector2i, b: Vector2i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)
+
+
+## Total order over cells (column, then row) -- a deterministic tie-break so the
+## movement-aware planner picks the same cell every run on NORMAL.
+static func _cell_less(a: Vector2i, b: Vector2i) -> bool:
+	if a.x != b.x:
+		return a.x < b.x
+	return a.y < b.y
 
 
 ## One-cell step from [param origin] toward [param goal] (dominant axis first).
