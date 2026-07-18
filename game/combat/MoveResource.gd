@@ -19,6 +19,9 @@ class_name MoveResource
 @export var energy_cost: int = 0
 ## Limited charges per battle. -1 = unlimited.
 @export var max_uses: int = -1
+## Turns that must pass after use before the move is available again.
+## 0 = no cooldown (usable every turn, subject to [member max_uses]).
+@export var cooldown: int = 0
 ## Hit chance 0..1 (resolved by the executor / RNG layer).
 @export var accuracy: float = 1.0
 
