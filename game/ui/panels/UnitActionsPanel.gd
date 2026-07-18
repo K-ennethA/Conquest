@@ -407,13 +407,21 @@ func _on_unit_summary_pressed() -> void:
 func _on_unit_deselected(unit: Unit) -> void:
 	"""Handle unit deselection - hide actions"""
 	if selected_unit == unit:
+		# Catch-all: a deselect can arrive mid-targeting (right-click / ui_cancel via
+		# the cursor, or the player selecting a different unit). Route it through the
+		# single reset so the attack/AoE highlight, SELECT MOVE popup and forecast are
+		# always torn down -- otherwise targeting state would outlive the unit and the
+		# stale highlight would be stuck with no way to clear it. Idempotent when not
+		# targeting.
+		_cancel_move_targeting()
+
 		selected_unit = null
 		stats_expanded = false
 		if stats_container:
 			stats_container.visible = false
 		if unit_summary_button:
 			unit_summary_button.text = "Unit Summary ▼"
-		
+
 		# Clear movement range when unit is deselected
 		_clear_movement_range()
 		
@@ -853,8 +861,18 @@ func _on_end_unit_turn_button_input(event: InputEvent) -> void:
 		print("End Unit Turn button mouse: " + str(event.button_index) + " pressed: " + str(event.pressed))
 
 func _on_cancel_pressed() -> void:
-	"""Handle Cancel button press - deselect unit or exit movement mode"""
-	if movement_mode:
+	"""Handle Cancel button press (also C/ESC via _input) - back out of whatever
+	interaction is active. Move-targeting is checked FIRST: while aiming a move the
+	SELECT MOVE popup has already hidden itself, so without this branch a Cancel here
+	would fall through to unit_deselected and drop the unit WITHOUT clearing the
+	targeting highlight/forecast -- leaving the stale on-board selection stuck (the
+	reported bug, most visible on self/ally/tile/no-valid-target moves that the
+	player backs out of instead of committing)."""
+	if is_targeting_move():
+		print("Canceling move targeting")
+		_cancel_move_targeting()
+		_update_actions()
+	elif movement_mode:
 		print("Canceling movement mode")
 		_exit_movement_mode()
 	elif selected_unit:
@@ -1717,12 +1735,31 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 	_update_actions()
 
 func _cancel_move_targeting() -> void:
-	"""Leave move-targeting mode without acting and clear any targeting highlights."""
+	"""THE single move-targeting reset path. Every exit from a move interaction --
+	BACK/ESC/right-click cancel, successful execution, failed execution, and the
+	'no valid target / on cooldown' dead-ends -- funnels through here so no branch
+	can leave stale UI. Fully idempotent (safe to call when not targeting):
+
+	  - exits targeting mode (is_targeting_move() -> false),
+	  - clears the on-board attack-range AND AoE-preview highlights
+	    (GameEvents.targeting_cleared -> TargetingVisualizer),
+	  - hides the SELECT MOVE popup,
+	  - hides the combat forecast overlay.
+
+	It intentionally does NOT touch selected_unit / the action panel; callers that
+	also want to refresh or drop selection do that around this call."""
 	move_mode = false
 	selected_move_index = -1
+	# Clears both the attack-range and AoE-preview overlay meshes (the visualizer's
+	# _on_targeting_cleared wipes both dictionaries). Covers cancel via BACK/ESC/
+	# right-click AND move resolution, since every path funnels through here.
 	GameEvents.targeting_cleared.emit()
-	# Drop the FE forecast too (covers cancel via BACK/ESC AND move resolution,
-	# since _execute_move_on_target funnels through here).
+	# Hide the SELECT MOVE popup. It normally hides itself when a move is picked or
+	# BACK is pressed, but routing it through the single reset guarantees it is gone
+	# on every exit (e.g. a deselect that happens while the popup is still up).
+	if move_selection_panel:
+		move_selection_panel.hide()
+	# Drop the FE forecast too (cancel via BACK/ESC/right-click AND move resolution).
 	if combat_forecast_panel:
 		combat_forecast_panel.hide_forecast()
 
