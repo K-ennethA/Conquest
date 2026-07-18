@@ -742,13 +742,23 @@ func _on_end_player_turn_pressed() -> void:
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
 		print("Using turn system to end player turn: " + turn_system.system_name)
-		
-		# End the player's turn through the turn system
-		if turn_system.has_method("end_player_turn"):
+
+		# End the player's turn THROUGH THE TURN SYSTEM so it actually advances to the
+		# next player (and, in single-player, reaches the AI player so BotTurnDriver can
+		# act). Previously this looked for a non-existent end_player_turn() method and
+		# fell back to PlayerManager.end_current_player_turn(), which advanced
+		# PlayerManager WITHOUT advancing the turn system -- leaving the two desynced and
+		# the turn system stuck on the current player (so the banner froze and the AI
+		# never got a turn). Match PlayerTurnPanel's working end-turn path.
+		if turn_system is TraditionalTurnSystem:
+			(turn_system as TraditionalTurnSystem).end_turn_manually()
+		elif turn_system is SpeedFirstTurnSystem:
+			(turn_system as SpeedFirstTurnSystem).end_turn_manually()
+		elif turn_system.has_method("end_player_turn"):
 			turn_system.end_player_turn()
 		else:
-			# Fallback: use PlayerManager directly
-			print("Turn system doesn't have end_player_turn method, using PlayerManager")
+			# Last-resort fallback: use PlayerManager directly.
+			print("Turn system has no manual end-turn method, using PlayerManager")
 			PlayerManager.end_current_player_turn()
 	else:
 		# Fallback: use PlayerManager directly
@@ -960,7 +970,16 @@ func _calculate_and_show_movement_range() -> void:
 	if not selected_unit:
 		print("DEBUG: No selected unit for movement range calculation")
 		return
-	
+
+	# A unit that has already moved this turn shows NO movement range and cannot
+	# move again (until reset at its next turn start, or an extra-move grant). This
+	# gates BOTH the select-time tactical highlight (_show_movement_range_on_selection)
+	# and movement mode (_enter_movement_mode), since both funnel through here.
+	if selected_unit.has_method("can_move") and not selected_unit.can_move():
+		print("DEBUG: " + selected_unit.get_display_name() + " has already moved this turn - no movement range shown")
+		_clear_movement_range()
+		return
+
 	print("DEBUG: Calculating movement range for " + selected_unit.get_display_name())
 
 	# Character-backed units route the range through MovementResolver + the shared
@@ -1339,7 +1358,14 @@ func handle_movement_destination_selected(destination: Vector3) -> void:
 	if not selected_unit:
 		print("DEBUG: No unit selected for movement")
 		return
-	
+
+	# Hard gate: a unit that already moved this turn cannot move again, even if a
+	# stale range highlight is somehow still present (no active turn system, etc.).
+	if selected_unit.has_method("can_move") and not selected_unit.can_move():
+		print("DEBUG: " + selected_unit.get_display_name() + " has already moved this turn - destination ignored")
+		_clear_movement_range()
+		return
+
 	print("DEBUG: Selected unit: " + selected_unit.get_display_name())
 	print("DEBUG: Available movement tiles: " + str(movement_range_tiles.size()))
 	

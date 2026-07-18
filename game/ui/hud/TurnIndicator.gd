@@ -12,6 +12,13 @@ class_name TurnIndicator
 var current_player: Player = null
 var is_transitioning: bool = false
 
+# Safety-net watcher state (see _process): the turn system may activate on a frame
+# the panel never observes, so the one-shot turn_system_activated signal can be
+# missed and the banner freezes on its fallback text. We poll the manager and
+# reconcile on any actual change, so the banner reliably tracks the current player.
+var _watched_system: TurnSystemBase = null
+var _last_seen_player: Player = null
+
 # Player colors for background
 var player_colors = {
 	0: Color(0.2, 0.4, 0.8, 0.8),  # Blue - Player 1
@@ -38,6 +45,33 @@ func _ready() -> void:
 	else:
 		_update_display()
 	print("TurnIndicator: Initialized")
+
+func _process(_delta: float) -> void:
+	"""Reconcile the banner with the active turn system every frame, but only ACT on
+	a real change. This guarantees the banner shows and updates the current player
+	even when the turn_system_activated / turn_started signals are missed due to
+	activation timing (the original freeze-on-'Turn in progress' bug)."""
+	if not TurnSystemManager:
+		return
+
+	var sys: TurnSystemBase = TurnSystemManager.get_active_turn_system()
+
+	# The active system changed (activated, switched, or deactivated) since we last
+	# looked -- (re)wire to it and refresh once.
+	if sys != _watched_system:
+		_watched_system = sys
+		if sys:
+			_on_turn_system_activated(sys)
+		return
+
+	# Speed First is owned by the TurnQueue; this banner stays hidden for it.
+	if sys == null or sys is SpeedFirstTurnSystem:
+		return
+
+	# Same system, but the current player advanced -- run the normal turn-start path.
+	var active: Player = sys.get_current_active_player()
+	if active != _last_seen_player:
+		_on_turn_started(active)
 
 func _update_display() -> void:
 	"""Update the turn indicator display"""
@@ -137,19 +171,24 @@ func _update_fallback_display(active_player: Player) -> void:
 	turn_info_label.text = "Turn in progress"
 
 func _update_background_color(player: Player) -> void:
-	"""Amber banner (matching the HUD) with the current player's colour as the
-	frame, so whose turn it is still reads at a glance."""
-	if not background_panel:
-		return
+	"""Keep the standard amber ConquestTheme frame so the banner matches every other
+	HUD panel (a bright player-coloured border clashed with the amber FE theme).
+	Convey whose turn it is more subtly, by tinting just the player-name label text
+	with that player's colour."""
+	if background_panel:
+		# Default amber card look -- no player-coloured border.
+		background_panel.add_theme_stylebox_override("panel", ConquestTheme.panel_box())
 
-	var style_box := ConquestTheme.panel_box()
-	if player and player.player_id in player_colors:
-		var c: Color = player_colors[player.player_id]
-		c.a = 1.0
-		style_box.border_color = c
-		style_box.set_border_width_all(5)
-
-	background_panel.add_theme_stylebox_override("panel", style_box)
+	# Subtle player cue: tint the name text with the player's colour (lightened a
+	# touch so it stays legible on the amber ground). Clear it when no player.
+	if player_name_label:
+		if player and player.player_id in player_colors:
+			var c: Color = player_colors[player.player_id]
+			c.a = 1.0
+			c = c.lerp(Color.WHITE, 0.25)
+			player_name_label.add_theme_color_override("font_color", c)
+		else:
+			player_name_label.remove_theme_color_override("font_color")
 
 func show_turn_transition(from_player: Player, to_player: Player) -> void:
 	"""Show turn transition animation"""
@@ -217,14 +256,24 @@ func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
 	# Connect to new turn system events
 	turn_system.turn_started.connect(_on_turn_started)
 	turn_system.turn_ended.connect(_on_turn_ended)
-	
+
+	# Keep the watcher's baseline in sync so it only fires on genuine future changes.
+	_watched_system = turn_system
+	_last_seen_player = turn_system.get_current_active_player()
+
 	print("TurnIndicator: Connected to turn system events")
 	_update_display()
 
 func _on_turn_started(player: Player) -> void:
 	"""Handle turn start"""
+	# Record what we've now observed so the _process watcher and the signal path
+	# converge on the same state and never double-fire the transition.
+	_last_seen_player = player
+	if not player:
+		_update_display()
+		return
 	print("TurnIndicator: Turn started for " + player.get_display_name())
-	
+
 	if current_player != player:
 		print("TurnIndicator: Showing transition from " + (current_player.get_display_name() if current_player else "None") + " to " + player.get_display_name())
 		show_turn_transition(current_player, player)

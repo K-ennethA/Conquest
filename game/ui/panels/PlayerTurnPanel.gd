@@ -11,6 +11,12 @@ class_name PlayerTurnPanel
 
 var current_player: Player = null
 
+# Safety-net watcher state (see _process): guarantees this panel tracks the active
+# turn system even if the one-shot turn_system_activated signal is missed due to
+# activation timing (which otherwise froze the display on its fallback text).
+var _watched_system: TurnSystemBase = null
+var _last_seen_player: Player = null
+
 func _ready() -> void:
 	print("PlayerTurnPanel _ready() called")
 	
@@ -48,6 +54,29 @@ func _ready() -> void:
 	_update_display()
 	print("PlayerTurnPanel initialized")
 
+func _process(_delta: float) -> void:
+	"""Reconcile with the active turn system each frame, acting only on a real change.
+	Backstops the turn_system_activated / turn_started signals so the panel reliably
+	shows and updates the current player even when activation timing hides those
+	one-shot signals."""
+	if not TurnSystemManager:
+		return
+
+	var sys: TurnSystemBase = TurnSystemManager.get_active_turn_system()
+	if sys != _watched_system:
+		_watched_system = sys
+		if sys:
+			_on_turn_system_activated(sys)
+		return
+
+	if sys == null:
+		return
+
+	var active: Player = sys.get_current_active_player()
+	if active != _last_seen_player:
+		_last_seen_player = active
+		_update_display()
+
 func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
 	"""Handle turn system activation"""
 	# Connect to turn system specific events
@@ -58,12 +87,17 @@ func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
 	
 	turn_system.turn_started.connect(_on_turn_started)
 	turn_system.turn_ended.connect(_on_turn_ended)
-	
+
+	# Keep the watcher baseline in sync so it only fires on genuine future changes.
+	_watched_system = turn_system
+	_last_seen_player = turn_system.get_current_active_player()
+
 	_update_display()
 
 func _on_turn_started(player: Player) -> void:
 	"""Handle turn start"""
 	current_player = player
+	_last_seen_player = player
 	_update_display()
 
 func _on_turn_ended(player: Player) -> void:
