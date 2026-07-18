@@ -423,9 +423,19 @@ func _update_actions() -> void:
 	if not selected_unit or not PlayerManager:
 		return
 	
-	var current_player = PlayerManager.get_current_player()
+	# Use the turn system's current player as the source of truth for "whose turn
+	# it is" — PlayerManager's current-player index and player ACTIVE state can
+	# drift out of sync with the turn system, which is what movement validation
+	# (can_unit_act) actually uses. Falling back to PlayerManager if no system.
+	var current_player: Player = null
+	if TurnSystemManager and TurnSystemManager.has_active_turn_system():
+		current_player = TurnSystemManager.get_active_turn_system().get_current_active_player()
+	if not current_player:
+		current_player = PlayerManager.get_current_player()
 	var game_active = PlayerManager.current_game_state == PlayerManager.GameState.IN_PROGRESS
-	var can_control = current_player and current_player.can_control_unit(selected_unit)
+	# Ownership only (same basis as movement); the turn system's can_unit_act
+	# handles the "has this unit already acted" gating separately.
+	var can_control = current_player != null and current_player.owns_unit(selected_unit)
 	
 	# Determine action availability based on turn system
 	var can_perform_unit_actions = false
