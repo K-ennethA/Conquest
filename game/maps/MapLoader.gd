@@ -221,6 +221,7 @@ func _resolve_tile_resource(resource_path: String, tile_type: String) -> TileRes
 		"WATER": "res://game/tiles/resources/deep_water.tres",
 		"WALL": "res://game/tiles/resources/stone_wall.tres",
 		"LAVA": "res://game/tiles/resources/molten_lava.tres",
+		"SACRED_GROUND": "res://game/tiles/resources/sacred_ground.tres",
 	}
 	var path: String = type_to_resource.get(String(tile_type).to_upper(), "")
 	if not path.is_empty() and ResourceLoader.exists(path):
