@@ -34,6 +34,32 @@ var _board: BoardAdapter = null
 ## are visible through [method tile_at] and vice-versa.
 var _tile_registry: Dictionary = {}
 
+# --- Tile effect lookup (T14) -----------------------------------------------
+#
+# Maps a cell to the [TileEffectResource]s acting on it, for the
+# [TileEffectSystem] (consumed via [GameWorldManager]). Two layers:
+#   * BASE    -- derived from the tile TYPE at the cell: fire on lava, empowering
+#                water on deep water, fortify on sacred ground. Immutable content,
+#                authored as .tres under game/tiles/effects/resources/.
+#   * APPLIED -- a per-cell runtime set that moves mutate to ignite/douse a tile
+#                (see [method add_tile_effect] / [method remove_tile_effect]).
+# [method tile_effects_at] merges base + applied, so a transform that adds a
+# runtime fire effect stacks on top of whatever the terrain already imposes.
+
+## Canonical tile id ([BoardAdapter]'s scheme: lowercased [enum Tile.TileType]
+## name) -> authored .tres effect paths for that terrain.
+const _TILE_EFFECT_PATHS := {
+	&"lava": ["res://game/tiles/effects/resources/fire.tres"],
+	&"water": ["res://game/tiles/effects/resources/empowering_water.tres"],
+	&"sacred_ground": ["res://game/tiles/effects/resources/fortify.tres"],
+}
+
+## Cache: canonical tile id -> [code]Array[TileEffectResource][/code] (base effects).
+var _base_tile_effects: Dictionary = {}
+
+## Runtime applied effects: cell ([Vector2i]) -> [code]Array[TileEffectResource][/code].
+var _applied_tile_effects: Dictionary = {}
+
 
 ## Rebuild the shared [BoardAdapter] against a freshly loaded map.
 ##
@@ -65,6 +91,8 @@ func clear() -> void:
 	# otherwise leave stale out-of-bounds tiles behind). Mutated in place so the
 	# reference handed to any adapter stays valid.
 	_tile_registry.clear()
+	# Drop any runtime tile effects (ignited/doused cells) from the old map.
+	_applied_tile_effects.clear()
 
 
 ## Register the [TileResource] backing [param cell] (called by [MapLoader]).
@@ -76,6 +104,99 @@ func register_tile(cell: Vector2i, res) -> void:
 func tile_at(cell: Vector2i) -> TileResource:
 	var r = _tile_registry.get(cell, null)
 	return r if r is TileResource else null
+
+
+## All [TileEffectResource]s acting on [param cell]: the BASE effects from the
+## tile type first, then the runtime APPLIED set. This is the cell->effects
+## lookup the [TileEffectSystem] consumes (fed in via [GameWorldManager] because
+## the live [BoardAdapter] does not expose one). Never returns null.
+func tile_effects_at(cell: Vector2i) -> Array:
+	var out: Array = []
+	var res := tile_at(cell)
+	if res != null:
+		for te in _base_effects_for_id(_tile_effect_id_of(res)):
+			if te != null:
+				out.append(te)
+	var applied = _applied_tile_effects.get(cell, null)
+	if applied is Array:
+		for te in applied:
+			if te != null and te not in out:
+				out.append(te)
+	return out
+
+
+## Add a runtime tile effect to [param cell] (e.g. a move ignites the ground into
+## fire). Idempotent; the effect layers on top of the tile's base effects.
+func add_tile_effect(cell: Vector2i, effect) -> void:
+	if effect == null:
+		return
+	var applied = _applied_tile_effects.get(cell, null)
+	if not (applied is Array):
+		applied = []
+		_applied_tile_effects[cell] = applied
+	if effect not in applied:
+		applied.append(effect)
+
+
+## Remove a runtime tile effect from [param cell] (e.g. a move douses the fire).
+## Only affects the runtime set; base terrain effects are never removed here.
+func remove_tile_effect(cell: Vector2i, effect) -> void:
+	var applied = _applied_tile_effects.get(cell, null)
+	if applied is Array:
+		applied.erase(effect)
+		if applied.is_empty():
+			_applied_tile_effects.erase(cell)
+
+
+## Canonical terrain id for a [TileResource] -- the lowercased [enum
+## Tile.TileType] name (LAVA -> &"lava"), matching [BoardAdapter]'s id scheme.
+func _tile_effect_id_of(res: TileResource) -> StringName:
+	if res == null:
+		return &""
+	var keys := Tile.TileType.keys()
+	var idx := int(res.tile_type)
+	if idx >= 0 and idx < keys.size():
+		return StringName(String(keys[idx]).to_lower())
+	return &""
+
+
+## Base [TileEffectResource]s for a canonical terrain id, lazily loaded from the
+## authored .tres and cached. Falls back to [TileEffectLibrary] if a .tres is
+## missing or fails to load, so the system still works without the files.
+func _base_effects_for_id(tile_id: StringName) -> Array:
+	if tile_id == &"":
+		return []
+	if _base_tile_effects.has(tile_id):
+		return _base_tile_effects[tile_id]
+	var out: Array = []
+	if _TILE_EFFECT_PATHS.has(tile_id):
+		for path in _TILE_EFFECT_PATHS[tile_id]:
+			var res = _load_tile_effect(path, tile_id)
+			if res != null:
+				out.append(res)
+	_base_tile_effects[tile_id] = out
+	return out
+
+
+## Load one authored [TileEffectResource], falling back to the code factory.
+func _load_tile_effect(path: String, tile_id: StringName):
+	if ResourceLoader.exists(path):
+		var res = load(path)
+		if res is TileEffectResource:
+			return res
+	return _fallback_tile_effect(tile_id)
+
+
+## Code-factory fallback mirroring the authored .tres content.
+func _fallback_tile_effect(tile_id: StringName):
+	match tile_id:
+		&"lava":
+			return TileEffectLibrary.fire()
+		&"water":
+			return TileEffectLibrary.empowering_water()
+		&"sacred_ground":
+			return TileEffectLibrary.fortify()
+	return null
 
 
 ## The single shared live adapter, or null before the first [method rebuild].

@@ -7,16 +7,28 @@ extends Node
 var map_loader: MapLoader
 var current_map_path: String = ""
 
+## Tile-effect runtime (T14): resolves terrain effects (fire ticks damage, water
+## buffs matching units, fortify) as units move and at each turn start. Created
+## once; reads per-cell effects from [code]CombatServices.tile_effects_at[/code]
+## via the system's injected lookup. Null-safe: handlers no-op until it and the
+## live board exist.
+var _tile_effect_system: TileEffectSystem = null
+
 func _ready() -> void:
 	print("=== GameWorld Initializing ===")
-	
+
 	# Initialize map loader
 	map_loader = MapLoader.new()
 	add_child(map_loader)
-	
+
 	# Connect map loader signals
 	map_loader.map_loaded.connect(_on_map_loaded)
 	map_loader.map_load_failed.connect(_on_map_load_failed)
+
+	# Stand up the tile-effect runtime and connect it to movement + turn events so
+	# terrain affects combat. Done before any map load so the hooks are live for
+	# the very first move/turn.
+	_setup_tile_effects()
 	
 	# Wait a frame for all singletons to be ready
 	await get_tree().process_frame
@@ -121,6 +133,66 @@ func _on_map_load_failed(error_message: String) -> void:
 	var map_node = get_tree().current_scene.get_node_or_null("Map")
 	if map_node:
 		map_loader.load_map(default_map, map_node)
+
+# --- Tile effects (T14) -----------------------------------------------------
+
+func _setup_tile_effects() -> void:
+	"""Instantiate the TileEffectSystem and wire it to movement + turn events."""
+	if _tile_effect_system == null:
+		_tile_effect_system = TileEffectSystem.new()
+		_tile_effect_system.name = "TileEffectSystem"
+		add_child(_tile_effect_system)
+
+	# Movement: run ON_EXIT on the tile a unit leaves, ON_ENTER on the tile it
+	# steps onto. GameEvents.unit_moved carries Vector3(col, 0, row) grid coords
+	# (the documented legacy contract), so we read cells straight off .x/.z.
+	if GameEvents and not GameEvents.unit_moved.is_connected(_on_unit_moved_tile_effects):
+		GameEvents.unit_moved.connect(_on_unit_moved_tile_effects)
+
+	# Turn start: tick ON_TURN_START_WHILE_OCCUPYING for each unit the active
+	# player owns. PlayerManager.player_turn_started is the signal that reliably
+	# fires per turn in the live loop.
+	if PlayerManager and not PlayerManager.player_turn_started.is_connected(_on_player_turn_started_tile_effects):
+		PlayerManager.player_turn_started.connect(_on_player_turn_started_tile_effects)
+
+func _prime_tile_effects(cell: Vector2i):
+	"""Feed the system the effects on `cell` (base + runtime) through its injected
+	lookup, recomputed each event so tile transforms and runtime ignite/douse are
+	always reflected. Returns the live board, or null if it/the system is absent."""
+	if _tile_effect_system == null:
+		return null
+	var board = CombatServices.board()
+	if board == null:
+		return null
+	_tile_effect_system.tile_effects[cell] = CombatServices.tile_effects_at(cell)
+	return board
+
+func _on_unit_moved_tile_effects(unit, from_position, to_position) -> void:
+	"""Terrain enter/exit hook. from/to are Vector3(col, 0, row) grid coords."""
+	if unit == null or _tile_effect_system == null:
+		return
+	var from_cell := Vector2i(int(round(from_position.x)), int(round(from_position.z)))
+	var to_cell := Vector2i(int(round(to_position.x)), int(round(to_position.z)))
+	var board = _prime_tile_effects(from_cell)
+	if board != null:
+		_tile_effect_system.on_exit(unit, from_cell, board)
+	board = _prime_tile_effects(to_cell)
+	if board != null:
+		_tile_effect_system.on_enter(unit, to_cell, board)
+
+func _on_player_turn_started_tile_effects(player) -> void:
+	"""At each player's turn start, tick occupying-tile effects for their units."""
+	if player == null or _tile_effect_system == null:
+		return
+	var board = CombatServices.board()
+	if board == null:
+		return
+	for unit in player.owned_units:
+		if unit == null:
+			continue
+		var cell: Vector2i = board.cell_of(unit)
+		_prime_tile_effects(cell)
+		_tile_effect_system.on_turn_start(unit, board)
 
 func _setup_network_multiplayer() -> void:
 	"""Set up network multiplayer game"""
