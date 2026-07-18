@@ -14,6 +14,12 @@ var current_map_path: String = ""
 ## live board exist.
 var _tile_effect_system: TileEffectSystem = null
 
+## Terrain / tile inspection HUD (Fire Emblem-style terrain window): shows the
+## terrain name, movement cost, and active tile effects for the cell under the
+## board cursor. Self-contained -- see [TerrainInfoPanel] -- this just
+## instantiates it and places it in the "UI" CanvasLayer once.
+var _terrain_info_panel: TerrainInfoPanel = null
+
 func _ready() -> void:
 	print("=== GameWorld Initializing ===")
 
@@ -29,10 +35,16 @@ func _ready() -> void:
 	# terrain affects combat. Done before any map load so the hooks are live for
 	# the very first move/turn.
 	_setup_tile_effects()
-	
+
 	# Wait a frame for all singletons to be ready
 	await get_tree().process_frame
-	
+
+	# Terrain inspection HUD: purely additive overlay, safe to add before the
+	# map finishes loading -- it resolves the live board lazily on each cursor
+	# move (via GameEvents.cursor_moved, wired in its own _ready) and simply
+	# stays hidden until a board and registered terrain exist.
+	_setup_terrain_info_panel()
+
 	# Load the selected map or default map
 	await _load_selected_map()
 	
@@ -133,6 +145,29 @@ func _on_map_load_failed(error_message: String) -> void:
 	var map_node = get_tree().current_scene.get_node_or_null("Map")
 	if map_node:
 		map_loader.load_map(default_map, map_node)
+
+# --- Terrain inspection HUD --------------------------------------------------
+
+func _setup_terrain_info_panel() -> void:
+	"""Instantiate TerrainInfoPanel and add it to the "UI" CanvasLayer (sibling of
+	this node in GameWorld.tscn -- see the "UI" CanvasLayer node there). The panel
+	builds its own UI, themes itself, and connects GameEvents.cursor_moved itself
+	in _ready, so there is nothing else to wire up here."""
+	if _terrain_info_panel != null:
+		return
+
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		push_warning("[GameWorldManager] No current_scene yet; TerrainInfoPanel not added.")
+		return
+
+	var ui_layer := scene_root.get_node_or_null("UI")
+	if ui_layer == null:
+		push_warning("[GameWorldManager] 'UI' CanvasLayer not found; TerrainInfoPanel not added.")
+		return
+
+	_terrain_info_panel = TerrainInfoPanel.new()
+	ui_layer.add_child(_terrain_info_panel)
 
 # --- Tile effects (T14) -----------------------------------------------------
 
