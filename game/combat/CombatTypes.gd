@@ -39,3 +39,6 @@ enum MovementKind {
 	FLYING,   ## ignores ground obstacles
 	PHASING,  ## ignores everything
 }
+
+## Damage multiplier applied on a critical hit.
+const CRIT_MULTIPLIER: float = 1.5

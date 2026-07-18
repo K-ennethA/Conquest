@@ -25,6 +25,13 @@ var aim_cell: Vector2i
 var affected_cells: Array[Vector2i]
 var results: Array[Dictionary] = []
 
+## RNG for hit/crit rolls. Injected by [MoveExecutor] (seedable for deterministic
+## replay / networked peers); a randomized one is created lazily if left null.
+var rng: RandomNumberGenerator = null
+## Per-target hit/crit resolution, cached so multiple effects on the same move
+## share one roll per target (a miss misses everything, a crit crits everything).
+var _hit_cache: Dictionary = {}
+
 
 func _init(p_caster, p_board, p_move: MoveResource, p_aim: Vector2i, p_cells: Array[Vector2i]) -> void:
 	caster = p_caster
@@ -37,6 +44,50 @@ func _init(p_caster, p_board, p_move: MoveResource, p_aim: Vector2i, p_cells: Ar
 func get_caster_stat(stat_name: String) -> int:
 	if caster and caster.has_method("get_stat"):
 		return caster.get_stat(stat_name)
+	return 0
+
+
+## Percent chance (0..100) this move lands on [param target]: move accuracy minus
+## the target's evasion.
+func hit_chance(target) -> float:
+	if move == null:
+		return 100.0
+	return clampf(move.accuracy * 100.0 - float(_stat(target, "evasion")), 0.0, 100.0)
+
+
+## Percent chance (0..100) of a critical hit on [param target]: the move's base
+## crit plus the caster's crit stat.
+func crit_chance(_target) -> float:
+	if move == null:
+		return 0.0
+	return clampf(move.crit_chance * 100.0 + float(get_caster_stat("crit")), 0.0, 100.0)
+
+
+## Resolve (once, then cache) whether this move hits [param target] and whether it
+## crits. Returns { hit, crit, hit_pct, crit_pct }.
+func resolve_hit(target) -> Dictionary:
+	if _hit_cache.has(target):
+		return _hit_cache[target]
+	var hp := hit_chance(target)
+	var cp := crit_chance(target)
+	var r := _get_rng()
+	var did_hit := r.randf() * 100.0 < hp
+	var did_crit := did_hit and r.randf() * 100.0 < cp
+	var out := { "hit": did_hit, "crit": did_crit, "hit_pct": hp, "crit_pct": cp }
+	_hit_cache[target] = out
+	return out
+
+
+func _get_rng() -> RandomNumberGenerator:
+	if rng == null:
+		rng = RandomNumberGenerator.new()
+		rng.randomize()
+	return rng
+
+
+func _stat(unit, stat_name: String) -> int:
+	if unit and unit.has_method("get_stat"):
+		return unit.get_stat(stat_name)
 	return 0
 
 

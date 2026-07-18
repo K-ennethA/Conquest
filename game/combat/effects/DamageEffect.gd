@@ -19,7 +19,20 @@ func apply(ctx: MoveContext) -> void:
 	var raw := power + bonus
 
 	for target in ctx.gather_targets():
+		var outcome := ctx.resolve_hit(target)
+		if not outcome.get("hit", true):
+			ctx.log_event({
+				"effect": "damage",
+				"target": target,
+				"amount": 0,
+				"category": category,
+				"missed": true,
+			})
+			continue
 		var dealt := _mitigate(raw, target)
+		var crit: bool = outcome.get("crit", false)
+		if crit:
+			dealt = maxi(1, int(round(dealt * CombatTypes.CRIT_MULTIPLIER)))
 		if target.has_method("take_damage"):
 			target.take_damage(dealt)
 		ctx.log_event({
@@ -27,6 +40,7 @@ func apply(ctx: MoveContext) -> void:
 			"target": target,
 			"amount": dealt,
 			"category": category,
+			"crit": crit,
 		})
 
 

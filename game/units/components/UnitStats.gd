@@ -20,6 +20,10 @@ var current_speed: int
 var current_movement: int
 var current_actions: int
 var current_range: int
+var current_magic: int
+var current_magic_defense: int
+var current_evasion: int  ## dodge chance (%), raised by moves/tiles/abilities
+var current_crit: int     ## bonus crit chance (%), raised by moves/abilities
 
 # Temporary stat modifiers (buffs/debuffs)
 var _stat_modifiers: Dictionary = {}
@@ -52,6 +56,12 @@ func _initialize_current_stats() -> void:
 	current_movement = stats_resource.movement_range
 	current_actions = 1  # Default to 1 action per turn
 	current_range = stats_resource.attack_range
+	current_magic = stats_resource.base_magic
+	# Not on the base resource yet -> default 0, raised at runtime by
+	# moves / tile effects / abilities via modify_stat.
+	current_magic_defense = 0
+	current_evasion = 0
+	current_crit = 0
 
 # Stat getter methods
 func get_stat(stat_name: String) -> int:
@@ -71,8 +81,17 @@ func get_stat(stat_name: String) -> int:
 			return current_actions
 		"range":
 			return current_range
+		"magic", "mag":
+			return current_magic
+		"magic_defense", "mdef", "resistance", "res":
+			return current_magic_defense
+		"evasion", "eva", "evade":
+			return current_evasion
+		"crit":
+			return current_crit
 		_:
-			push_warning("Unknown stat requested: " + stat_name)
+			# Arbitrary stat names are intentional in the data-driven design;
+			# an unknown stat is simply 0, not an error.
 			return 0
 
 func get_base_stat(stat_name: String) -> int:

@@ -22,8 +22,12 @@ class_name MoveResource
 ## Turns that must pass after use before the move is available again.
 ## 0 = no cooldown (usable every turn, subject to [member max_uses]).
 @export var cooldown: int = 0
-## Hit chance 0..1 (resolved by the executor / RNG layer).
+## Hit chance 0..1 before the target's evasion is subtracted (resolved by the
+## executor / RNG layer). 1.0 = always lands against a 0-evasion target.
 @export var accuracy: float = 1.0
+## Base critical-hit chance 0..1, added to the caster's "crit" stat. A crit deals
+## [constant CombatTypes.CRIT_MULTIPLIER]x damage.
+@export var crit_chance: float = 0.0
 
 @export var targeting: TargetingPattern
 @export var effects: Array[MoveEffect] = []
