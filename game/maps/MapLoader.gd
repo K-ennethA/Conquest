@@ -193,8 +193,17 @@ func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary) -> bool
 	# Set tile name and position
 	tile_instance.name = "Tile_" + str(grid_pos.x) + "_" + str(grid_pos.y)
 	
-	# Calculate world position (2x2 tiles with 2 unit spacing)
-	var world_pos = Vector3(grid_pos.x * 2, 0, grid_pos.y * 2)
+	# Calculate world position. The tile's BoxMesh (and BoxShape collision) is
+	# centered on the node origin and scaled to span one 2x2 cell, so the origin
+	# must sit at the CELL CENTER for the visible tile + its click/hover collider
+	# to coincide with the logical cell. Grid.calculate_map_position centers cell
+	# N at N*2 + 1 (half-cell), which is exactly where units spawn and where the
+	# cursor snaps -- so place the tile there too. A centered 2x2 mesh at grid*2+1
+	# then covers [grid*2, grid*2+2] == the logical cell, matching units, cursor,
+	# and mouse picking (calculate_grid_coordinates = floor(world/2)). The old
+	# origin grid*2 rendered the tile a half-cell off, which is why the mouse
+	# never lined up with the tile and terrain hover resolved to the wrong cell.
+	var world_pos = Vector3(grid_pos.x * 2 + 1, 0, grid_pos.y * 2 + 1)
 	tile_instance.transform.origin = world_pos
 	tile_instance.transform.basis = Basis().scaled(Vector3(2, 1, 2))
 	
