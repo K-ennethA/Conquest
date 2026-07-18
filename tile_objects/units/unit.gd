@@ -4,7 +4,11 @@ class_name Unit
 
 # Unit stats component integration
 @export var stats_resource: UnitStatsResource
-@onready var unit_stats: UnitStats = $UnitStats
+@onready var unit_stats: UnitStats = get_node_or_null("UnitStats")
+
+# Optional custom-character data (identity + base stats + moveset). When present,
+# this unit can perform data-authored moves via the combat model (MoveExecutor).
+@export var character_resource: CharacterResource
 
 @export var has_turn: bool = false
 
@@ -70,7 +74,7 @@ func _setup_visual_management() -> void:
 	# Find or create visual manager
 	visual_manager = _find_visual_manager()
 	if not visual_manager:
-		push_warning("No UnitVisualManager found in scene")
+		# No visual manager (e.g. headless / test harness). Visuals are cosmetic; skip silently.
 		return
 	
 	# Check if we have an owner player (new system)
@@ -89,12 +93,16 @@ func _find_visual_manager() -> UnitVisualManager:
 		var manager = scene_root.find_child("UnitVisualManager", true, false)
 		if manager:
 			return manager
-	
-	# If not found, create one
-	var manager = UnitVisualManager.new()
-	manager.name = "UnitVisualManager"
-	scene_root.add_child(manager)
-	return manager
+
+		# If not found, create one under the current scene
+		var new_manager = UnitVisualManager.new()
+		new_manager.name = "UnitVisualManager"
+		scene_root.add_child(new_manager)
+		return new_manager
+
+	# No current scene (e.g. running headless / under a test harness). Skip
+	# visual manager creation rather than dereferencing a null scene root.
+	return null
 
 func _determine_player_from_scene_tree() -> PlayerMaterials.PlayerTeam:
 	"""Determine player assignment based on parent node names"""
@@ -285,6 +293,38 @@ func can_be_selected_by_player(player: Player) -> bool:
 func can_be_controlled_by_player(player: Player) -> bool:
 	"""Check if a specific player can control this unit"""
 	return owner_player == player and can_act()
+
+# Character / move system integration
+func has_character() -> bool:
+	"""True if this unit is backed by a CharacterResource (custom moveset)."""
+	return character_resource != null
+
+func get_moveset() -> Array[MoveResource]:
+	"""The unit's moves, or an empty list when no character is assigned."""
+	if character_resource:
+		return character_resource.moveset
+	var empty: Array[MoveResource] = []
+	return empty
+
+func get_move(slot: int) -> MoveResource:
+	"""Move in the given slot (0..3), or null when empty/out of range."""
+	if character_resource:
+		return character_resource.get_move(slot)
+	return null
+
+func perform_move(slot: int, aim_cell: Vector2i, board_adapter) -> Dictionary:
+	"""Resolve the move in [param slot] aimed at [param aim_cell] against the
+	live board (a BoardAdapter). Delegates to MoveExecutor and returns its
+	structured result dictionary (see MoveExecutor.execute)."""
+	var move := get_move(slot)
+	if move == null:
+		return {
+			"success": false,
+			"reason": "no_move_in_slot",
+			"events": [],
+			"cells": [],
+		}
+	return MoveExecutor.execute(move, self, board_adapter, aim_cell)
 
 # Movement methods
 func get_movement_range() -> int:

@@ -82,7 +82,6 @@ func get_stat(stat_name: String) -> int:
 		"range":
 			return attack_range
 		_:
-			push_warning("Unknown stat requested: " + stat_name)
 			return 0
 
 func get_all_stats() -> Dictionary:

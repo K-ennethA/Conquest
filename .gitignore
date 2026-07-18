@@ -18,6 +18,9 @@ export_presets.cfg
 data_*/
 mono_crash.*.json
 
+# Claude Code worktrees (agent isolation dirs)
+.claude/worktrees/
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db
