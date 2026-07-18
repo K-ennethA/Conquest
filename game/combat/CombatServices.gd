@@ -24,6 +24,16 @@ signal board_ready
 ## The single live adapter. Null until the first successful [method rebuild].
 var _board: BoardAdapter = null
 
+## Shared terrain registry: cell ([Vector2i]) -> [TileResource].
+##
+## Populated by [MapLoader] via [method register_tile] as it instantiates tiles,
+## and read back by the live [BoardAdapter] (which is handed this exact
+## dictionary in [method rebuild]) to answer terrain queries -- move cost,
+## blocking, tile id/tag. Mutating in place (never reassigned) keeps the adapter
+## and this autoload pointed at the same data, so [BoardAdapter.set_tile] updates
+## are visible through [method tile_at] and vice-versa.
+var _tile_registry: Dictionary = {}
+
 
 ## Rebuild the shared [BoardAdapter] against a freshly loaded map.
 ##
@@ -36,6 +46,12 @@ func rebuild(map_root: Node3D) -> void:
 		push_warning("[CombatServices] rebuild called with null map_root; board not rebuilt.")
 		return
 	_board = BoardAdapter.new(GRID, map_root)
+	# Hand the adapter the shared terrain registry (same dictionary MapLoader just
+	# populated for this map) so terrain queries and set_tile stay in sync with
+	# tile_at(). The registry is intentionally NOT cleared here: MapLoader fills it
+	# during load_map(), which runs BEFORE this rebuild -- it is cleared in
+	# clear() (invoked before each map reload) instead.
+	_board.set_tile_registry(_tile_registry)
 	_assert_units_round_trip(_board, map_root)
 	board_ready.emit()
 
@@ -45,6 +61,21 @@ func rebuild(map_root: Node3D) -> void:
 ## After this [method board] returns null again until the next [method rebuild].
 func clear() -> void:
 	_board = null
+	# Wipe the terrain registry so the next map starts clean (a smaller map would
+	# otherwise leave stale out-of-bounds tiles behind). Mutated in place so the
+	# reference handed to any adapter stays valid.
+	_tile_registry.clear()
+
+
+## Register the [TileResource] backing [param cell] (called by [MapLoader]).
+func register_tile(cell: Vector2i, res) -> void:
+	_tile_registry[cell] = res
+
+
+## The [TileResource] bound to [param cell], or null if none is registered.
+func tile_at(cell: Vector2i) -> TileResource:
+	var r = _tile_registry.get(cell, null)
+	return r if r is TileResource else null
 
 
 ## The single shared live adapter, or null before the first [method rebuild].

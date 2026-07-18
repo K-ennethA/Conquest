@@ -1431,204 +1431,258 @@ func _setup_move_system() -> void:
 	print("Move system initialized")
 
 func _on_moves_pressed() -> void:
-	"""Handle Moves button press"""
-	if not selected_unit:
-		return
-	
-	print("Moves button pressed for " + selected_unit.name)
-	
-	# Check if unit has MoveManager
-	var move_manager = selected_unit.get_node_or_null("MoveManager")
-	if not move_manager:
-		print("Unit has no MoveManager - creating default moves")
-		_create_default_moves_for_unit(selected_unit)
-		move_manager = selected_unit.get_node_or_null("MoveManager")
-	
-	if move_manager:
-		# Show move selection panel
-		move_selection_panel.show_moves_for_unit(selected_unit)
-	else:
-		print("Failed to create MoveManager for unit")
+	"""Handle Moves button press - list the selected unit's real moveset.
 
-func _on_move_selected(move_index: int) -> void:
-	"""Handle move selection from the move panel"""
+	Gated on the unit still having its action for the turn. Character-backed units
+	expose their authored MoveResource moveset via get_moveset(); legacy
+	(non-character) units have no moveset, so the panel degrades to an empty list.
+	The old MoveManager/MoveFactory bootstrap has been removed."""
 	if not selected_unit:
 		return
-	
-	var move_manager = selected_unit.get_node_or_null("MoveManager")
-	if not move_manager:
+
+	# The unit must still have its action available this turn.
+	if selected_unit.has_method("can_act") and not selected_unit.can_act():
+		print("Moves unavailable: " + selected_unit.get_display_name() + " has no action left")
 		return
-	
-	selected_move_index = move_index
-	var move = move_manager.moves[move_index]
-	
-	print("Move selected: " + move.name + " (index: " + str(move_index) + ")")
-	
-	# Check if move requires a target
-	if move.range > 0:
-		# Enter move targeting mode
-		move_mode = true
-		_show_move_targeting(move)
-	else:
-		# Self-target move, execute immediately
-		_execute_move_on_target(selected_unit)
+
+	print("Moves button pressed for " + selected_unit.get_display_name())
+
+	# MoveSelectionPanel reads unit.get_moveset() / get_moveset_controller() itself,
+	# so this works for both character units (real moveset) and legacy units (empty).
+	if not selected_unit.has_character():
+		# LEGACY guard: no CharacterResource -> no MoveResource moveset. Show the
+		# panel anyway (it renders "No moves available") instead of fabricating moves.
+		print("Legacy unit has no character moveset - showing empty move panel")
+	move_selection_panel.show_moves_for_unit(selected_unit)
+
+func _on_move_selected(slot: int) -> void:
+	"""A move slot was chosen from the panel: enter targeting for that move and
+	publish its in-range aim cells so the TargetingVisualizer can highlight them."""
+	if not selected_unit:
+		return
+
+	var move: MoveResource = selected_unit.get_move(slot)
+	if move == null or move.targeting == null:
+		print("Move slot " + str(slot) + " is empty or has no targeting pattern - ignoring")
+		return
+
+	selected_move_index = slot
+	move_mode = true
+
+	print("Move selected: " + move.display_name + " (slot " + str(slot) + ")")
+
+	# Compute every legal aim cell (within [min_range, max_range]) from the unit's
+	# current board cell and emit them as Vector3 grid coords for the visualizer.
+	var aim_cells := _compute_in_range_aim_cells(move)
+	GameEvents.attack_range_calculated.emit(_cells_to_grid_vec3(aim_cells))
+	print("Targeting active for " + move.display_name + " - " + str(aim_cells.size()) + " in-range cell(s)")
 
 func _on_move_cancelled() -> void:
-	"""Handle move selection cancellation"""
-	selected_move_index = -1
-	move_mode = false
+	"""Handle move selection cancellation (panel BACK button)."""
 	print("Move selection cancelled")
-
-func _show_move_targeting(move: Move) -> void:
-	"""Enter targeting mode: wait for the player to click a target within range."""
-	move_mode = true
-	print("Targeting mode for " + move.name + " (range " + str(move.range) + ") - click a target unit")
+	_cancel_move_targeting()
 
 func is_targeting_move() -> bool:
 	"""True while waiting for the player to click a move/attack target."""
 	return move_mode and selected_move_index >= 0
 
 func handle_move_target_selected(grid_pos: Vector3) -> void:
-	"""Cursor clicked a cell while targeting a move - execute on the unit there."""
+	"""Cursor clicked a cell (Vector3 grid coord) while targeting a move. Validate
+	the aim against the move's TargetingPattern, then resolve it through
+	perform_move -> MoveExecutor. Stays in targeting mode on an illegal aim."""
 	if not is_targeting_move() or not selected_unit:
 		return
 
-	var move_manager = selected_unit.get_node_or_null("MoveManager")
-	if not move_manager or selected_move_index >= move_manager.moves.size():
+	var move: MoveResource = selected_unit.get_move(selected_move_index)
+	if move == null or move.targeting == null:
 		_cancel_move_targeting()
 		return
 
-	var move: Move = move_manager.moves[selected_move_index]
-	var target_unit := _find_unit_at_grid_cell(grid_pos)
-	if not target_unit:
-		print("No target unit at that cell - click a unit within range")
+	var board = CombatServices.board()
+	if board == null:
+		print("No live board (CombatServices.board() is null) - cannot resolve move target")
+		_cancel_move_targeting()
+		return
+
+	var origin: Vector2i = board.cell_of(selected_unit)
+	# Vector3(col, 0, row) grid coord -> Vector2i(col, row) board cell.
+	var aim := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+
+	# Must be a legal aim point for this pattern (respects min/max range).
+	if not move.can_aim_at(origin, aim):
+		print("Aim cell " + str(aim) + " out of range for " + move.display_name + " - keep targeting")
 		return  # stay in targeting mode
 
-	# Range is measured from the unit's CURRENT position (after any move this turn).
-	if not move.can_target(selected_unit.global_position, target_unit.global_position):
-		print("Target out of range for " + move.name)
-		return
+	# Preview the full area footprint this aim would affect.
+	var area_cells := move.targeting.resolve_cells(origin, aim)
+	GameEvents.aoe_preview_calculated.emit(_cells_to_grid_vec3(area_cells))
 
-	# _execute_move_on_target applies the move and ends the unit's turn.
-	_execute_move_on_target(target_unit)
+	# Unit-target moves (ENEMY / ALLY / ANY_UNIT) require an eligible occupant at
+	# the aim cell; tile-target moves accept any in-range cell.
+	if _move_requires_unit_target(move):
+		if not _has_eligible_unit_at(board, move, aim):
+			print("No eligible target unit at " + str(aim) + " for " + move.display_name + " - keep targeting")
+			return  # stay in targeting mode
 
-func _cancel_move_targeting() -> void:
-	"""Leave move-targeting mode without acting."""
-	move_mode = false
-	selected_move_index = -1
-	_clear_movement_range()
+	_execute_move_on_target(aim, move, selected_move_index)
 
-func _find_unit_at_grid_cell(grid_pos: Vector3) -> Node:
-	"""Return the unit whose grid cell matches grid_pos, or null."""
-	var grid = preload("res://board/Grid.tres")
-	for u in _find_all_units_in_scene():
-		var ug = grid.calculate_grid_coordinates(u.global_position)
-		if int(round(ug.x)) == int(round(grid_pos.x)) and int(round(ug.z)) == int(round(grid_pos.z)):
-			return u
-	return null
-
-func _calculate_move_targets(move: Move) -> Array[Node]:
-	"""Calculate valid targets for a move"""
-	var targets: Array[Node] = []
-	
+func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) -> void:
+	"""Resolve the selected move at aim_cell through the unit's perform_move
+	(-> MoveExecutor). On success: record the use for cooldown/charges, print the
+	resolved events, consume the unit's action, and clear targeting."""
 	if not selected_unit:
-		return targets
-	
-	var caster_pos = selected_unit.global_position
-	var all_units = _find_all_units_in_scene()
-	
-	for unit in all_units:
-		var target_pos = unit.global_position
-		
-		# Check if target is within range
-		if move.can_target(caster_pos, target_pos):
-			# For damage moves, only target enemies
-			# For heal/buff moves, only target allies
-			# For now, allow all targets
-			targets.append(unit)
-	
-	return targets
-
-func _execute_move_on_target(target: Node) -> void:
-	"""Execute the selected move on the target"""
-	if not selected_unit or selected_move_index < 0:
 		return
-	
-	var move_manager = selected_unit.get_node_or_null("MoveManager")
-	if not move_manager:
-		return
-	
-	print("Executing move on target: " + target.name)
-	
-	# Execute the move
-	var result = move_manager.use_move(selected_move_index, target)
-	
-	# Show result message
-	if result.success:
-		print("Move executed successfully: " + result.message)
 
-		# Update move selection panel if it's still visible
-		if move_selection_panel.visible:
+	var board = CombatServices.board()
+	if board == null:
+		_cancel_move_targeting()
+		return
+
+	print("Executing " + move.display_name + " aimed at cell " + str(aim_cell))
+
+	var result: Dictionary = selected_unit.perform_move(slot, aim_cell, board)
+
+	if result.get("success", false):
+		# Cooldown / charge bookkeeping (null-safe: legacy units have no controller).
+		var controller = selected_unit.get_moveset_controller()
+		if controller and controller.has_method("on_used"):
+			controller.on_used(move)
+
+		# Surface the resolved effect events for downstream systems / debugging.
+		print("Move resolved successfully. Events: " + str(result.get("events", [])))
+
+		# Using a move consumes the unit's action for the turn.
+		if selected_unit.has_method("mark_action_completed"):
+			selected_unit.mark_action_completed("move")
+
+		# Refresh the move panel's cooldown display if it is still visible.
+		if move_selection_panel and move_selection_panel.visible:
 			move_selection_panel.update_move_cooldowns()
 
-		# Using a move is this unit's action for the turn - end its turn.
-		if selected_unit and selected_unit.has_method("mark_action_completed"):
-			selected_unit.mark_action_completed("move_action")
-	else:
-		print("Move failed: " + result.message)
+		# Clear targeting highlights (also re-emitted by _cancel_move_targeting below).
+		GameEvents.targeting_cleared.emit()
 
-	# Exit move-targeting mode and refresh the UI
-	move_mode = false
-	selected_move_index = -1
-	_clear_movement_range()
+		# Force an immediate unit-visual refresh, mirroring the movement path.
+		var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
+		if visual_manager:
+			visual_manager.update_all_unit_visuals()
+	else:
+		print("Move failed: " + str(result.get("reason", "unknown")))
+
+	# Reset targeting state (and emit targeting_cleared) and refresh the action UI.
+	_cancel_move_targeting()
 	_update_actions()
 
-func _create_default_moves_for_unit(unit: Node) -> void:
-	"""Create default moves for a unit that doesn't have any"""
-	# Add MoveManager component
-	var move_manager = MoveManager.new()
-	unit.add_child(move_manager)
-	
-	# Determine unit type and add appropriate moves
-	var unit_name = unit.name.to_lower()
-	var moves: Array[Move] = []
-	
-	if "warrior" in unit_name:
-		moves = MoveFactory.get_warrior_moves()
-	elif "archer" in unit_name:
-		moves = MoveFactory.get_archer_moves()
-	elif "mage" in unit_name:
-		moves = MoveFactory.get_mage_moves()
-	else:
-		# Default moves for unknown unit types
-		moves = [
-			MoveFactory.create_basic_attack(),
-			MoveFactory.create_heal(),
-			MoveFactory.create_shield_wall()
-		]
-	
-	# Add moves to the unit
-	for move in moves:
-		move_manager.add_move(move)
-	
-	print("Created default moves for " + unit.name + ": " + str(moves.size()) + " moves")
+func _cancel_move_targeting() -> void:
+	"""Leave move-targeting mode without acting and clear any targeting highlights."""
+	move_mode = false
+	selected_move_index = -1
+	GameEvents.targeting_cleared.emit()
+
+# --- Move targeting helpers -------------------------------------------------
+
+func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector2i]:
+	"""Every legal aim cell for [param move] from the unit's current board cell,
+	i.e. cells whose Manhattan distance is within [min_range, max_range]."""
+	var cells: Array[Vector2i] = []
+	if not selected_unit or move == null or move.targeting == null:
+		return cells
+
+	var board = CombatServices.board()
+	if board == null:
+		return cells
+
+	var origin: Vector2i = board.cell_of(selected_unit)
+	var pattern := move.targeting
+	var max_r: int = pattern.max_range
+	for dx in range(-max_r, max_r + 1):
+		for dy in range(-max_r, max_r + 1):
+			var aim := origin + Vector2i(dx, dy)
+			if pattern.in_range(origin, aim):
+				cells.append(aim)
+	return cells
+
+func _cells_to_grid_vec3(cells: Array[Vector2i]) -> Array:
+	"""Vector2i(col, row) board cells -> Vector3(col, 0, row) grid coords, the form
+	GameEvents.attack_range_calculated / aoe_preview_calculated (and the
+	TargetingVisualizer) expect."""
+	var out: Array = []
+	for c in cells:
+		out.append(Vector3(c.x, 0, c.y))
+	return out
+
+func _move_requires_unit_target(move: MoveResource) -> bool:
+	"""True when the move must be aimed at an occupied cell (unit-target kinds)."""
+	if move == null or move.targeting == null:
+		return false
+	match move.targeting.target_kind:
+		CombatTypes.TargetKind.ENEMY, CombatTypes.TargetKind.ALLY, CombatTypes.TargetKind.ANY_UNIT:
+			return true
+		_:
+			return false
+
+func _has_eligible_unit_at(board, move: MoveResource, aim: Vector2i) -> bool:
+	"""True when the aim cell holds a unit the move may legally target, per its
+	TargetKind (allegiance checked through the shared BoardAdapter)."""
+	var occupants: Array = board.units_at(aim)
+	if occupants.is_empty():
+		return false
+
+	var kind = move.targeting.target_kind
+	for occupant in occupants:
+		if occupant == null:
+			continue
+		match kind:
+			CombatTypes.TargetKind.ENEMY:
+				if board.are_enemies(selected_unit, occupant):
+					return true
+			CombatTypes.TargetKind.ALLY:
+				if occupant == selected_unit:
+					if move.targeting.affects_caster_tile:
+						return true
+				elif board.are_allies(selected_unit, occupant):
+					return true
+			CombatTypes.TargetKind.ANY_UNIT:
+				return true
+			_:
+				return true
+	return false
 
 func _update_moves_button_availability() -> void:
-	"""Update the availability of the moves button"""
+	"""Enable the Moves button only when the (character-backed) unit still has its
+	action and at least one usable move. Reads the real moveset + MovesetController
+	directly; no MoveManager involved."""
 	if not moves_button or not selected_unit:
 		return
-	
-	var move_manager = selected_unit.get_node_or_null("MoveManager")
-	if not move_manager:
-		moves_button.disabled = false  # Will create default moves
-		moves_button.text = "MOVES"
+
+	# Legacy (non-character) units have no authored MoveResource moveset.
+	if not selected_unit.has_character():
+		moves_button.disabled = true
+		moves_button.text = "MOVES (None)"
 		return
-	
-	# Check if any moves are available
-	var available_moves = move_manager.get_available_moves()
-	moves_button.disabled = available_moves.is_empty()
-	
-	if available_moves.is_empty():
+
+	var moveset: Array[MoveResource] = selected_unit.get_moveset()
+	var controller = selected_unit.get_moveset_controller()
+
+	var usable := 0
+	for move in moveset:
+		if move == null:
+			continue
+		if controller and controller.has_method("can_use"):
+			if controller.can_use(move):
+				usable += 1
+		else:
+			usable += 1
+
+	var has_action := true
+	if selected_unit.has_method("can_act"):
+		has_action = selected_unit.can_act()
+
+	moves_button.disabled = usable == 0 or not has_action
+
+	if moveset.is_empty():
+		moves_button.text = "MOVES (None)"
+	elif usable == 0:
 		moves_button.text = "MOVES (All on cooldown)"
 	else:
-		moves_button.text = "MOVES (" + str(available_moves.size()) + " available)"
+		moves_button.text = "MOVES (" + str(usable) + " available)"

@@ -184,13 +184,51 @@ func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary) -> bool
 	tile_instance.transform.origin = world_pos
 	tile_instance.transform.basis = Basis().scaled(Vector3(2, 1, 2))
 	
-	# Set tile type if the tile supports it
+	# Bind terrain data: resolve a TileResource (explicit path, else a type->
+	# resource map for the built-in families) and assign it to the live tile so
+	# the board becomes terrain-aware. Assign BEFORE add_child so Tile._ready()
+	# applies the resource visuals. Register the cell->TileResource mapping with
+	# CombatServices so the shared BoardAdapter reads real terrain. Fall back to
+	# the legacy set_tile_type() visuals when no resource resolves.
 	var tile_type = tile_data.get("tile_type", "NORMAL")
-	if tile_instance.has_method("set_tile_type"):
+	var resolved_tile_resource := _resolve_tile_resource(tile_resource_path, tile_type)
+	if resolved_tile_resource != null and tile_instance.has_method("set_tile_resource"):
+		tile_instance.set_tile_resource(resolved_tile_resource)
+		# Guarded so headless/tool loads without the autoload don't crash.
+		if CombatServices:
+			CombatServices.register_tile(grid_pos, resolved_tile_resource)
+	elif tile_instance.has_method("set_tile_type"):
 		tile_instance.set_tile_type(tile_type)
-	
+
 	tiles_container.add_child(tile_instance)
 	return true
+
+func _resolve_tile_resource(resource_path: String, tile_type: String) -> TileResource:
+	"""Resolve the TileResource for a tile from its map data.
+
+	Prefers an explicit resource_path when it actually loads as a TileResource
+	(the same field doubles as a custom-scene path above, so a scene path simply
+	won't cast here and is ignored). Otherwise maps the tile_type string onto the
+	built-in terrain families (grass/water/wall/lava). Returns null when nothing
+	matches, letting the caller fall back to the legacy set_tile_type() path.
+	"""
+	if not resource_path.is_empty() and ResourceLoader.exists(resource_path):
+		var res = load(resource_path)
+		if res is TileResource:
+			return res
+
+	var type_to_resource := {
+		"NORMAL": "res://game/tiles/resources/grass_plains.tres",
+		"GRASS": "res://game/tiles/resources/grass_plains.tres",
+		"PLAINS": "res://game/tiles/resources/grass_plains.tres",
+		"WATER": "res://game/tiles/resources/deep_water.tres",
+		"WALL": "res://game/tiles/resources/stone_wall.tres",
+		"LAVA": "res://game/tiles/resources/molten_lava.tres",
+	}
+	var path: String = type_to_resource.get(String(tile_type).to_upper(), "")
+	if not path.is_empty() and ResourceLoader.exists(path):
+		return load(path) as TileResource
+	return null
 
 func _load_units() -> bool:
 	"""Load all unit spawns from the map resource"""

@@ -26,6 +26,13 @@ class_name BoardAdapter
 ##   is_occupied(cell: Vector2i) -> bool
 ##   move_cost(cell: Vector2i) -> int
 ##   tile_id_at(cell: Vector2i) -> StringName
+##   tile_tag_at(cell: Vector2i) -> StringName
+##
+## Terrain answers (is_blocked/move_cost/tile_id_at/tile_tag_at) come from a
+## shared cell -> [TileResource] registry owned by [CombatServices] and injected
+## via [method set_tile_registry]; with no registry (mocks/tests) the board reads
+## as flat, passable, cost-1 terrain. [method set_tile] mutates that registry and
+## the live tile node so terrain-changing effects update the visible board.
 ##
 ## Construct with the grid and a units provider. The provider is flexible so the
 ## adapter works both in the live game and against a lightweight mock in tests:
@@ -43,11 +50,35 @@ class_name BoardAdapter
 var _grid                 ## Grid resource (col=X, row=Z); may be null in mocks.
 var _units_provider       ## See class docs for accepted shapes.
 var _tile_overrides: Dictionary = {}  ## Vector2i -> tile_id, best-effort terrain state.
+var _tile_registry: Dictionary = {}   ## Vector2i -> TileResource; injected by CombatServices (empty in mocks).
+
+## Terrain ids ([method set_tile] / [TileTransformEffect]) -> the [TileResource]
+## to swap a live tile to. Keyed by the canonical id (lowercased TileType name)
+## plus friendly aliases so effects can request &"lava", &"water", etc.
+const _TILE_ID_TO_PATH := {
+	&"grass": "res://game/tiles/resources/grass_plains.tres",
+	&"plains": "res://game/tiles/resources/grass_plains.tres",
+	&"normal": "res://game/tiles/resources/grass_plains.tres",
+	&"water": "res://game/tiles/resources/deep_water.tres",
+	&"deep_water": "res://game/tiles/resources/deep_water.tres",
+	&"wall": "res://game/tiles/resources/stone_wall.tres",
+	&"stone_wall": "res://game/tiles/resources/stone_wall.tres",
+	&"lava": "res://game/tiles/resources/molten_lava.tres",
+	&"molten_lava": "res://game/tiles/resources/molten_lava.tres",
+}
 
 
 func _init(grid, units_provider) -> void:
 	_grid = grid
 	_units_provider = units_provider
+
+
+## Inject the shared cell -> [TileResource] terrain registry (owned by
+## [CombatServices]). Passed by reference so terrain queries and [method set_tile]
+## stay consistent with [code]CombatServices.tile_at()[/code]. Left empty in tests
+## that construct the adapter directly, which then behave like flat terrain.
+func set_tile_registry(registry: Dictionary) -> void:
+	_tile_registry = registry
 
 
 # --- MoveContext board interface -------------------------------------------
@@ -88,13 +119,22 @@ func are_allies(a, b) -> bool:
 	return oa == ob
 
 
-## Record a terrain change for [param cell].
+## Apply a terrain change to [param cell] (used by [TileTransformEffect]).
+##
+## Records the raw id override, and -- when [param tile_id] resolves to a known
+## [TileResource] -- updates the shared terrain registry AND the live tile node's
+## bound resource/visual so the change is visible on the board and drives future
+## move-cost/blocking/id queries. Resolution and the live-node update are
+## best-effort: an unknown id or a mock (non-Node) provider simply leaves the
+## override recorded, so tests and headless logic still observe a consistent id.
 func set_tile(cell: Vector2i, tile_id) -> void:
 	_tile_overrides[cell] = tile_id
-	# TODO: Wire this to the live terrain system (tile_objects/tiles/tile.gd) so
-	#       terrain-changing effects (e.g. TileTransformEffect) update the board
-	#       visuals and pathing/occupancy. For now the override is recorded so
-	#       logic and tests that query get_tile() observe a consistent result.
+	var res := _resolve_tile_resource(tile_id)
+	if res != null:
+		_tile_registry[cell] = res
+		var node = _tile_node_at(cell)
+		if node != null and node.has_method("set_tile_resource"):
+			node.set_tile_resource(res)
 
 
 ## Move [param unit] onto [param to_cell], snapping to the cell's world center
@@ -142,29 +182,51 @@ func is_occupied(cell: Vector2i) -> bool:
 	return false
 
 
-## True when [param cell] is impassable terrain.
-## TODO(P5): wire this to the live terrain/tile system once terrain blocking lands;
-##           for now no cell is considered blocked.
+## True when [param cell] is impassable terrain (its [TileResource] is not
+## passable). Cells with no registered terrain (e.g. mocks) are never blocked.
 func is_blocked(cell: Vector2i) -> bool:
+	var res := _resource_at(cell)
+	if res != null:
+		return not res.is_tile_passable()
 	return false
 
 
-## Cost to enter [param cell].
-## TODO(P5): derive this from terrain once terrain costs are wired in; for now
-##           every cell costs a flat 1 to enter.
+## Cost to enter [param cell]: the terrain's movement cost (clamped to at least
+## 1), or a flat 1 when [param cell] has no registered terrain.
 func move_cost(cell: Vector2i) -> int:
+	var res := _resource_at(cell)
+	if res != null:
+		return maxi(1, res.base_movement_cost)
 	return 1
 
 
-## Best-effort terrain id for [param cell], read from the [method set_tile]
-## override store. Returns [code]&""[/code] when no override has been recorded.
+## Terrain id for [param cell]. A [method set_tile] override wins (so a just-applied
+## transform reads back its id); otherwise the registered [TileResource]'s canonical
+## id. Returns [code]&""[/code] when neither is present.
 func tile_id_at(cell: Vector2i) -> StringName:
 	var t = _tile_overrides.get(cell, null)
-	if t == null:
-		return &""
-	if t is StringName:
-		return t
-	return StringName(str(t))
+	if t != null:
+		return t if t is StringName else StringName(str(t))
+	var res := _resource_at(cell)
+	if res != null:
+		return _resource_tile_id(res)
+	return &""
+
+
+## Terrain tag for [param cell]: the registered [TileResource]'s primary tag (its
+## first special_property, else its canonical id). Falls back to a [method set_tile]
+## override id, then [code]&""[/code]. Used for broad terrain-keyed rules
+## ("empowered on water") and movement cost overrides.
+func tile_tag_at(cell: Vector2i) -> StringName:
+	var res := _resource_at(cell)
+	if res != null:
+		if res.special_properties != null and not res.special_properties.is_empty():
+			return StringName(str(res.special_properties[0]))
+		return _resource_tile_id(res)
+	var t = _tile_overrides.get(cell, null)
+	if t != null:
+		return t if t is StringName else StringName(str(t))
+	return &""
 
 
 # --- Coordinate mapping helpers --------------------------------------------
@@ -190,6 +252,43 @@ func get_tile(cell: Vector2i):
 
 
 # --- Internal helpers ------------------------------------------------------
+
+## The [TileResource] registered for [param cell], or null.
+func _resource_at(cell: Vector2i) -> TileResource:
+	var r = _tile_registry.get(cell, null)
+	return r if r is TileResource else null
+
+
+## Canonical terrain id for a resource: its lowercased [enum Tile.TileType] name
+## (e.g. LAVA -> &"lava"), matching the ids in [constant _TILE_ID_TO_PATH].
+func _resource_tile_id(res: TileResource) -> StringName:
+	var keys := Tile.TileType.keys()
+	var idx := int(res.tile_type)
+	if idx >= 0 and idx < keys.size():
+		return StringName(String(keys[idx]).to_lower())
+	return &""
+
+
+## Resolve a terrain id (StringName/String) to its [TileResource], or null.
+func _resolve_tile_resource(tile_id) -> TileResource:
+	var key := StringName(str(tile_id).to_lower())
+	var path: String = _TILE_ID_TO_PATH.get(key, "")
+	if path != "" and ResourceLoader.exists(path):
+		return load(path) as TileResource
+	return null
+
+
+## The live tile node at [param cell], found under the map root's "Tiles"
+## container (MapLoader names tiles "Tile_<x>_<y>"). Null for non-Node providers
+## (mocks) or if the tile is absent.
+func _tile_node_at(cell: Vector2i):
+	var root = _units_provider
+	if root is Node:
+		var tiles = root.get_node_or_null("Tiles")
+		if tiles != null:
+			return tiles.get_node_or_null("Tile_%d_%d" % [cell.x, cell.y])
+	return null
+
 
 func _unit_position(unit) -> Vector3:
 	if unit == null:

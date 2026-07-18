@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3]
+[gd_scene load_steps=21 format=3]
 
 [ext_resource type="Script" path="res://tile_objects/units/board.gd" id="1"]
 [ext_resource type="PackedScene" path="res://game/units/scenes/WarriorUnit.tscn" id="2"]
@@ -18,6 +18,7 @@
 [ext_resource type="Script" path="res://game/visuals/test_movement_system.gd" id="16"]
 [ext_resource type="PackedScene" path="res://game/ui/layout/GameUILayout.tscn" id="17"]
 [ext_resource type="Script" path="res://game/visuals/debug_movement_range.gd" id="18"]
+[ext_resource type="Script" path="res://game/visuals/TargetingVisualizer.gd" id="21_tviz"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
@@ -53,6 +54,9 @@ script = ExtResource("13")
 
 [node name="MapGridVisualizer" type="Node" parent="."]
 script = "res://game/visuals/MapGridVisualizer.gd"
+
+[node name="TargetingVisualizer" type="Node3D" parent="."]
+script = ExtResource("21_tviz")
 
 [node name="UI" type="CanvasLayer" parent="."]
 
