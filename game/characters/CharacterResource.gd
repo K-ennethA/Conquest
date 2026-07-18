@@ -29,6 +29,10 @@ const MAX_MOVES: int = 4
 
 @export_group("Profile")
 @export var movement_kind: CombatTypes.MovementKind = CombatTypes.MovementKind.GROUND
+## Optional authored movement profile. When unset, [method get_movement_profile]
+## synthesizes one from [member movement_kind] + [member base_movement] so
+## callers always have a valid profile to consume.
+@export var movement_profile: MovementProfile
 ## Marks bosses / map bosses so modes and AI can treat them specially.
 @export var is_boss: bool = false
 
@@ -46,6 +50,33 @@ func get_move(slot: int) -> MoveResource:
 	if slot < 0 or slot >= move_count():
 		return null
 	return moveset[slot]
+
+
+## Returns [member movement_profile] if authored, else synthesizes a
+## reasonable one at runtime from [member movement_kind] + [member base_movement].
+## Never returns null — safe for callers to consume unconditionally.
+func get_movement_profile() -> MovementProfile:
+	if movement_profile != null:
+		return movement_profile
+
+	# GROUND (and any future kind) falls through to the ORTHOGONAL default.
+	var shape := MovementProfile.Shape.ORTHOGONAL
+	match movement_kind:
+		CombatTypes.MovementKind.FLYING:
+			shape = MovementProfile.Shape.ALL8
+		CombatTypes.MovementKind.PHASING:
+			shape = MovementProfile.Shape.TELEPORT
+
+	var profile_id: StringName = character_id
+	if String(profile_id).is_empty():
+		profile_id = &"synthesized"
+
+	return MovementProfile.create(
+		profile_id,
+		"%s (synthesized)" % display_name,
+		movement_kind,
+		base_movement,
+		shape)
 
 
 func get_stat(stat_name: String) -> int:

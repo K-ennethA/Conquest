@@ -1,0 +1,124 @@
+extends Node
+
+## Autoload owning the single, shared, live [BoardAdapter] for a running match.
+##
+## Movement, attacks, AI and tile logic must all read board state through the
+## same adapter so they agree on where every unit is. Rather than each system
+## constructing its own [BoardAdapter] (and risking divergent snapshots), they
+## fetch the one instance owned here via [method board].
+##
+## The adapter is rebuilt once per map load (see [method rebuild]) because a new
+## map produces a fresh set of [Unit] nodes under a new "Map" root. Between the
+## autoload coming up and the first successful map load, [method board] returns
+## null -- callers MUST null-check.
+##
+## Wiring: [code]GameWorldManager[/code] calls [method rebuild] with the "Map"
+## node the [MapLoader] populated, and [method clear] when the map is torn down.
+
+## Grid resource shared by the whole board (col = X, row = Z, y = 0).
+const GRID: Grid = preload("res://board/Grid.tres")
+
+## Emitted after [method rebuild] installs a fresh, live [BoardAdapter].
+signal board_ready
+
+## The single live adapter. Null until the first successful [method rebuild].
+var _board: BoardAdapter = null
+
+
+## Rebuild the shared [BoardAdapter] against a freshly loaded map.
+##
+## [param map_root] is the "Map" node the [MapLoader] populated; it doubles as
+## the adapter's units provider (its [Unit] descendants are gathered live). After
+## constructing the adapter this runs [method _assert_units_round_trip] and emits
+## [signal board_ready].
+func rebuild(map_root: Node3D) -> void:
+	if map_root == null:
+		push_warning("[CombatServices] rebuild called with null map_root; board not rebuilt.")
+		return
+	_board = BoardAdapter.new(GRID, map_root)
+	_assert_units_round_trip(_board, map_root)
+	board_ready.emit()
+
+
+## Drop the current adapter (e.g. when the map is cleared/torn down).
+##
+## After this [method board] returns null again until the next [method rebuild].
+func clear() -> void:
+	_board = null
+
+
+## The single shared live adapter, or null before the first [method rebuild].
+##
+## Callers MUST null-check the result; there is intentionally no board between
+## the autoload starting and the first map load completing.
+func board() -> BoardAdapter:
+	return _board
+
+
+## Startup assertion: verify every spawned [Unit] round-trips through the board.
+##
+## For each unit we take its cell via [code]board.cell_of(unit)[/code], map that
+## cell back to a world center via [code]board.cell_to_world(cell)[/code], and
+## check it lands within one cell of the unit's [code]global_position[/code].
+##
+## This guards the known risk that [MapLoader] centers units at
+## [code]grid_pos * 2 + 1[/code] while [method Grid.calculate_map_position] may
+## center cells differently -- if the two ever disagree, movement and attacks
+## would target the wrong tiles. On mismatch we log loudly but never crash, so a
+## bad map surfaces in the log instead of taking down the game.
+func _assert_units_round_trip(board_adapter: BoardAdapter, map_root: Node3D) -> void:
+	if board_adapter == null or map_root == null:
+		return
+
+	var units: Array = _gather_units(map_root)
+	if units.is_empty():
+		print("[CombatServices] Board rebuilt; no units to verify.")
+		return
+
+	# Derive "one cell" in world units from the adapter itself so this stays
+	# correct if the grid's cell_size changes. The step between adjacent cell
+	# centers equals the grid's cell_size on each axis.
+	var origin: Vector3 = board_adapter.cell_to_world(Vector2i.ZERO)
+	var step_x: float = absf(board_adapter.cell_to_world(Vector2i(1, 0)).x - origin.x)
+	var step_z: float = absf(board_adapter.cell_to_world(Vector2i(0, 1)).z - origin.z)
+	var tolerance: float = maxf(maxf(step_x, step_z), 0.001)
+
+	var mismatches: int = 0
+	for unit in units:
+		if unit == null:
+			continue
+		var actual: Vector3 = unit.global_position
+		var cell: Vector2i = board_adapter.cell_of(unit)
+		var expected: Vector3 = board_adapter.cell_to_world(cell)
+		# Compare on the XZ plane only: MapLoader lifts units to Y = 1.5 while the
+		# grid centers cells at Y = 0, which is an intended height offset, not a
+		# cell mismatch.
+		var dx: float = actual.x - expected.x
+		var dz: float = actual.z - expected.z
+		var planar_dist: float = sqrt(dx * dx + dz * dz)
+		if planar_dist > tolerance:
+			mismatches += 1
+			push_warning(
+				"[CombatServices] Unit '%s' does NOT round-trip: global=%s -> cell=%s -> world=%s (XZ off by %.3f, tolerance %.3f). Likely MapLoader vs Grid.calculate_map_position centering mismatch."
+				% [unit.name, str(actual), str(cell), str(expected), planar_dist, tolerance]
+			)
+
+	if mismatches == 0:
+		print("[CombatServices] Board rebuilt; all %d unit(s) round-trip within one cell." % units.size())
+	else:
+		push_warning(
+			"[CombatServices] Board rebuilt with %d of %d unit(s) failing the cell round-trip. See warnings above."
+			% [mismatches, units.size()]
+		)
+
+
+## Recursively collect [Unit] descendants under [param node] (mirrors the way
+## [BoardAdapter] gathers units from a Node provider) so the assertion checks the
+## same set of units the adapter will serve.
+func _gather_units(node: Node) -> Array:
+	var out: Array = []
+	for child in node.get_children():
+		if child is Unit:
+			out.append(child)
+		out.append_array(_gather_units(child))
+	return out

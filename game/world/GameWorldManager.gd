@@ -72,6 +72,10 @@ func _load_selected_map() -> void:
 
 func _clear_existing_map_content(map_node: Node3D) -> void:
 	"""Clear existing hardcoded map content while preserving structure"""
+	# The old board's Unit nodes are about to be freed; drop the shared adapter
+	# so nothing reads stale units before the next rebuild on map load.
+	CombatServices.clear()
+
 	# Remove existing tiles
 	var tiles_node = map_node.get_node_or_null("Tiles")
 	if tiles_node:
@@ -97,7 +101,13 @@ func _clear_existing_map_content(map_node: Node3D) -> void:
 func _on_map_loaded(map_resource: MapResource) -> void:
 	"""Handle successful map loading"""
 	print("Map loaded successfully: " + map_resource.map_name)
-	
+
+	# Rebuild the shared live BoardAdapter against the freshly populated "Map"
+	# node so movement/attacks/AI/tiles all read the new board. map_loader.map_root
+	# is the target parent the loader just filled with units and tiles.
+	if map_loader and map_loader.map_root:
+		CombatServices.rebuild(map_loader.map_root)
+
 	# Update GameSettings with map info if available
 	if GameSettings.has_method("set_current_map"):
 		GameSettings.set_current_map(map_resource)

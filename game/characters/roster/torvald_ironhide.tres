@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://game/combat/effects/StatModifierEffect.gd" id="6_s1jws"]
 [ext_resource type="Script" path="res://game/combat/effects/KnockbackEffect.gd" id="7_n754x"]
 [ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="8_xuhj2"]
+[ext_resource type="Resource" path="res://game/movement/profiles/ground_standard.tres" id="9_mvprof"]
 
 [sub_resource type="Resource" id="Resource_rpluf"]
 script = ExtResource("4_3f7bh")
@@ -95,4 +96,5 @@ base_defense = 16
 base_magic = 4
 base_magic_defense = 8
 base_speed = 11
+movement_profile = ExtResource("9_mvprof")
 moveset = Array[ExtResource("2_oibsx")]([SubResource("Resource_tcpa7"), SubResource("Resource_webrr"), SubResource("Resource_f5vj4"), SubResource("Resource_kfnwx")])

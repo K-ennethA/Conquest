@@ -125,21 +125,76 @@ func _setup_stats_component() -> void:
 	if not unit_stats:
 		unit_stats = UnitStats.new()
 		unit_stats.name = "UnitStats"
-		
+
+		# Decide which UnitStatsResource drives the runtime stats. When a
+		# CharacterResource is assigned it is the canonical authoring data
+		# (D1): derive a UnitStatsResource from its base stats and feed the
+		# existing UnitStats component. A character always wins over any
+		# pre-assigned stats_resource. With no character, behaviour is
+		# unchanged from the legacy stats_resource-only path.
+		var effective_resource: UnitStatsResource = stats_resource
+		if character_resource:
+			effective_resource = _build_stats_resource_from_character(character_resource)
+
 		# Set up stats resource BEFORE adding to tree
-		if stats_resource:
-			unit_stats.stats_resource = stats_resource
+		if effective_resource:
+			unit_stats.stats_resource = effective_resource
 		else:
 			push_error("Unit requires a UnitStatsResource! Please assign one in the inspector.")
 			return
-		
+
 		# Now add to tree, _ready() will work properly
 		add_child(unit_stats)
-	
+
 	# Connect to stats events
 	if unit_stats:
 		unit_stats.health_changed.connect(_on_health_changed)
 		unit_stats.stat_changed.connect(_on_stat_changed)
+
+	# A character-backed unit also gets its combat companion components
+	# (moveset cooldown tracking + status conditions).
+	if character_resource:
+		_setup_character_components()
+
+
+## Build a runtime [UnitStatsResource] from a [CharacterResource]'s authoring
+## data. The character owns the base stat block (D1); the derived resource is
+## what the [UnitStats] component consumes, so take_damage/heal/get_stat keep
+## working unchanged. Note: CharacterResource.base_magic_defense has no
+## counterpart on UnitStatsResource and is intentionally not mapped.
+func _build_stats_resource_from_character(character: CharacterResource) -> UnitStatsResource:
+	var derived := UnitStatsResource.new()
+	derived.unit_name = character.display_name
+	derived.unit_type = String(character.character_id)
+	derived.max_health = character.base_health
+	derived.base_attack = character.base_attack
+	derived.base_defense = character.base_defense
+	derived.base_magic = character.base_magic
+	derived.base_speed = character.base_speed
+	derived.movement_range = character.base_movement
+	derived.attack_range = character.attack_range
+	return derived
+
+
+## Attach the combat companion components a character-backed unit needs, once.
+## Both are guarded so repeated setup calls never duplicate them.
+func _setup_character_components() -> void:
+	# Moveset cooldown / uses tracker. The controller tracks state lazily by
+	# move_id and needs no explicit seeding; if a sibling task adds a seeding
+	# hook, feed it the character's moveset via duck-typing.
+	if not has_node("MovesetController"):
+		var moveset_controller := MovesetController.new()
+		moveset_controller.name = "MovesetController"
+		if moveset_controller.has_method("seed_from_moveset"):
+			moveset_controller.call("seed_from_moveset", character_resource.moveset)
+		add_child(moveset_controller)
+
+	# Active status-condition tracker.
+	if not has_node("StatusController"):
+		var status_controller := StatusController.new()
+		status_controller.name = "StatusController"
+		status_controller.owner_unit = self
+		add_child(status_controller)
 
 func _setup_visuals() -> void:
 	"""Initialize visual components"""
@@ -316,6 +371,32 @@ func can_be_controlled_by_player(player: Player) -> bool:
 func has_character() -> bool:
 	"""True if this unit is backed by a CharacterResource (custom moveset)."""
 	return character_resource != null
+
+## Current health of the unit (0 when no stats component is present).
+func get_hp() -> int:
+	return current_health
+
+## True only for character-backed bosses; false for legacy / non-character units.
+func is_boss() -> bool:
+	if character_resource:
+		return character_resource.is_boss
+	return false
+
+## The MovesetController child (cooldown / uses tracking), or null if absent.
+func get_moveset_controller() -> Node:
+	return get_node_or_null("MovesetController")
+
+## The StatusController child (active status conditions), or null if absent.
+func get_status_controller() -> Node:
+	return get_node_or_null("StatusController")
+
+## The character's movement profile once T6 adds get_movement_profile() to
+## CharacterResource. Duck-typed so this compiles before that method exists;
+## returns null when there is no character or the method is not yet available.
+func get_movement_profile():
+	if character_resource and character_resource.has_method("get_movement_profile"):
+		return character_resource.get_movement_profile()
+	return null
 
 func get_moveset() -> Array[MoveResource]:
 	"""The unit's moves, or an empty list when no character is assigned."""

@@ -17,6 +17,16 @@ class_name BoardAdapter
 ##   set_tile(cell: Vector2i, tile_id) -> void
 ##   move_unit(unit, to_cell: Vector2i) -> void
 ##
+## Also implements the [BotController] board-query superset:
+##   all_units() -> Array
+##
+## Also implements the [MovementResolver] board interface:
+##   in_bounds(cell: Vector2i) -> bool
+##   is_blocked(cell: Vector2i) -> bool
+##   is_occupied(cell: Vector2i) -> bool
+##   move_cost(cell: Vector2i) -> int
+##   tile_id_at(cell: Vector2i) -> StringName
+##
 ## Construct with the grid and a units provider. The provider is flexible so the
 ## adapter works both in the live game and against a lightweight mock in tests:
 ##   * Array            - a plain list of units
@@ -101,6 +111,62 @@ func move_unit(unit, to_cell: Vector2i) -> void:
 	#       live world positions on every query.
 
 
+# --- BotController board interface ------------------------------------------
+
+## Every live unit in play (used by [BotController] to find targets).
+func all_units() -> Array:
+	var result: Array = []
+	for u in _all_units():
+		if u != null and _is_alive(u):
+			result.append(u)
+	return result
+
+
+# --- MovementResolver board interface ---------------------------------------
+
+## True when [param cell] lies within the grid's bounds. With no grid attached
+## (e.g. lightweight test doubles), every cell is considered in bounds.
+func in_bounds(cell: Vector2i) -> bool:
+	if _grid == null:
+		return true
+	if _grid.has_method("is_within_bounds"):
+		return bool(_grid.is_within_bounds(Vector3(cell.x, 0, cell.y)))
+	return true
+
+
+## True when a live unit currently occupies [param cell].
+func is_occupied(cell: Vector2i) -> bool:
+	for u in units_at(cell):
+		if _is_alive(u):
+			return true
+	return false
+
+
+## True when [param cell] is impassable terrain.
+## TODO(P5): wire this to the live terrain/tile system once terrain blocking lands;
+##           for now no cell is considered blocked.
+func is_blocked(cell: Vector2i) -> bool:
+	return false
+
+
+## Cost to enter [param cell].
+## TODO(P5): derive this from terrain once terrain costs are wired in; for now
+##           every cell costs a flat 1 to enter.
+func move_cost(cell: Vector2i) -> int:
+	return 1
+
+
+## Best-effort terrain id for [param cell], read from the [method set_tile]
+## override store. Returns [code]&""[/code] when no override has been recorded.
+func tile_id_at(cell: Vector2i) -> StringName:
+	var t = _tile_overrides.get(cell, null)
+	if t == null:
+		return &""
+	if t is StringName:
+		return t
+	return StringName(str(t))
+
+
 # --- Coordinate mapping helpers --------------------------------------------
 
 ## Vector2i(col, row) -> world position of that cell's center.
@@ -142,6 +208,19 @@ func _owner_of(unit):
 	if unit.has_method("get_owner_player"):
 		return unit.get_owner_player()
 	return unit.get("owner_player")
+
+
+## True while [param unit] is still alive (duck-typed: prefers is_alive(),
+## falls back to a readable hp > 0, defaults to true when neither is present).
+func _is_alive(unit) -> bool:
+	if unit == null:
+		return false
+	if unit.has_method("is_alive"):
+		return bool(unit.is_alive())
+	var hp = unit.get("hp")
+	if hp != null:
+		return int(hp) > 0
+	return true
 
 
 func _all_units() -> Array:

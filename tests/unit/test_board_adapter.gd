@@ -12,6 +12,7 @@ extends GutTest
 class MockUnit extends RefCounted:
 	var position: Vector3 = Vector3.ZERO
 	var owner_player = null
+	var hp = null  # left unset (null) means "alive" per BoardAdapter's duck-typed check
 
 # Opaque owner tokens (compared by identity inside the adapter).
 class MockOwner extends RefCounted:
@@ -138,3 +139,79 @@ func test_callable_units_provider():
 	var adapter := BoardAdapter.new(grid, provider)
 
 	assert_true(u in adapter.units_at(Vector2i(0, 4)), "Callable-provided units should be found by cell")
+
+
+# --- BotController board interface ------------------------------------------
+
+func test_all_units_returns_placed_units():
+	var a := _make_unit(Vector2i(0, 0), owner_a)
+	var b := _make_unit(Vector2i(1, 1), owner_b)
+	var adapter := BoardAdapter.new(grid, [a, b])
+
+	var all := adapter.all_units()
+	assert_eq(all.size(), 2, "all_units should return every placed unit")
+	assert_true(a in all and b in all, "all_units should include both placed units")
+
+
+func test_all_units_excludes_dead_units():
+	var alive := _make_unit(Vector2i(0, 0), owner_a)
+	var dead := _make_unit(Vector2i(1, 0), owner_a)
+	dead.hp = 0
+	var adapter := BoardAdapter.new(grid, [alive, dead])
+
+	var all := adapter.all_units()
+	assert_true(alive in all, "A living unit should be included in all_units")
+	assert_false(dead in all, "A unit with 0 hp should be excluded from all_units")
+
+
+# --- MovementResolver board interface ---------------------------------------
+
+func test_in_bounds_true_inside_grid():
+	var adapter := BoardAdapter.new(grid, [])
+	assert_true(adapter.in_bounds(Vector2i(0, 0)), "Origin cell should be in bounds")
+	assert_true(adapter.in_bounds(Vector2i(4, 4)), "Last cell of a 5x5 grid should be in bounds")
+
+
+func test_in_bounds_false_outside_grid():
+	var adapter := BoardAdapter.new(grid, [])
+	assert_false(adapter.in_bounds(Vector2i(5, 0)), "Cell past the grid's width should be out of bounds")
+	assert_false(adapter.in_bounds(Vector2i(0, -1)), "A negative cell should be out of bounds")
+
+
+func test_in_bounds_defaults_true_without_grid():
+	var adapter := BoardAdapter.new(null, [])
+	assert_true(adapter.in_bounds(Vector2i(999, 999)), "With no grid attached, bounds are unconstrained")
+
+
+func test_is_occupied_true_where_unit_stands():
+	var unit := _make_unit(Vector2i(2, 2), owner_a)
+	var adapter := BoardAdapter.new(grid, [unit])
+
+	assert_true(adapter.is_occupied(Vector2i(2, 2)), "A cell with a unit should be occupied")
+	assert_false(adapter.is_occupied(Vector2i(0, 0)), "An empty cell should not be occupied")
+
+
+func test_is_occupied_ignores_dead_units():
+	var dead := _make_unit(Vector2i(3, 3), owner_a)
+	dead.hp = 0
+	var adapter := BoardAdapter.new(grid, [dead])
+
+	assert_false(adapter.is_occupied(Vector2i(3, 3)), "A cell with only a dead unit should not be occupied")
+
+
+func test_is_blocked_defaults_to_false():
+	var adapter := BoardAdapter.new(grid, [])
+	assert_false(adapter.is_blocked(Vector2i(1, 1)), "is_blocked should default to false (terrain blocking is a later task)")
+
+
+func test_move_cost_defaults_to_one():
+	var adapter := BoardAdapter.new(grid, [])
+	assert_eq(adapter.move_cost(Vector2i(1, 1)), 1, "move_cost should default to 1")
+
+
+func test_tile_id_at_defaults_empty_then_reflects_set_tile():
+	var adapter := BoardAdapter.new(grid, [])
+	assert_eq(adapter.tile_id_at(Vector2i(2, 2)), &"", "Unset tile id should default to an empty StringName")
+
+	adapter.set_tile(Vector2i(2, 2), &"lava")
+	assert_eq(adapter.tile_id_at(Vector2i(2, 2)), &"lava", "tile_id_at should reflect a set_tile override")

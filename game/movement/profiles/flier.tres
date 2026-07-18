@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MovementProfile" format=3]
+
+[ext_resource type="Script" path="res://game/movement/MovementProfile.gd" id="1_fli3r"]
+
+[resource]
+script = ExtResource("1_fli3r")
+id = &"flier"
+display_name = "Flier"
+kind = 1
+range = 4
+shape = 2

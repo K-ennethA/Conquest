@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://game/combat/effects/StatModifierEffect.gd" id="6_yw3k5"]
 [ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="7_1l4dh"]
 [ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="8_85556"]
+[ext_resource type="Resource" path="res://game/movement/profiles/ground_standard.tres" id="9_mvprof"]
 
 [sub_resource type="Resource" id="Resource_r8hfn"]
 script = ExtResource("4_emu0e")
@@ -94,4 +95,5 @@ base_defense = 14
 base_magic = 24
 base_magic_defense = 22
 attack_range = 2
+movement_profile = ExtResource("9_mvprof")
 moveset = Array[ExtResource("2_g1ghn")]([SubResource("Resource_adsul"), SubResource("Resource_nts10"), SubResource("Resource_iso05"), SubResource("Resource_fytdi")])
