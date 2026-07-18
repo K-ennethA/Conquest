@@ -503,6 +503,10 @@ func _update_actions() -> void:
 		else:
 			move_button.text = "Move (M)\n[N/A]"
 	
+	# Update Moves (action) button - available if the unit still has its action.
+	if moves_button:
+		moves_button.disabled = not (can_control and can_perform_unit_actions and selected_unit.can_act())
+
 	# Update End Unit Turn button - only available if unit can perform actions
 	if end_unit_turn_button:
 		var can_end_unit_turn = can_control and can_perform_unit_actions and selected_unit.can_act()
@@ -1355,22 +1359,52 @@ func _on_move_cancelled() -> void:
 	print("Move selection cancelled")
 
 func _show_move_targeting(move: Move) -> void:
-	"""Show targeting interface for a move"""
-	print("Showing targeting for move: " + move.name)
-	print("Range: " + str(move.range))
-	
-	# Calculate valid targets based on move range
-	var valid_targets = _calculate_move_targets(move)
-	
-	if valid_targets.is_empty():
-		print("No valid targets for move")
-		move_mode = false
-		selected_move_index = -1
+	"""Enter targeting mode: wait for the player to click a target within range."""
+	move_mode = true
+	print("Targeting mode for " + move.name + " (range " + str(move.range) + ") - click a target unit")
+
+func is_targeting_move() -> bool:
+	"""True while waiting for the player to click a move/attack target."""
+	return move_mode and selected_move_index >= 0
+
+func handle_move_target_selected(grid_pos: Vector3) -> void:
+	"""Cursor clicked a cell while targeting a move - execute on the unit there."""
+	if not is_targeting_move() or not selected_unit:
 		return
-	
-	# For now, just show a message - in a full implementation you'd highlight valid targets
-	print("Select a target within range " + str(move.range))
-	print("Valid targets: " + str(valid_targets.size()))
+
+	var move_manager = selected_unit.get_node_or_null("MoveManager")
+	if not move_manager or selected_move_index >= move_manager.moves.size():
+		_cancel_move_targeting()
+		return
+
+	var move: Move = move_manager.moves[selected_move_index]
+	var target_unit := _find_unit_at_grid_cell(grid_pos)
+	if not target_unit:
+		print("No target unit at that cell - click a unit within range")
+		return  # stay in targeting mode
+
+	# Range is measured from the unit's CURRENT position (after any move this turn).
+	if not move.can_target(selected_unit.global_position, target_unit.global_position):
+		print("Target out of range for " + move.name)
+		return
+
+	# _execute_move_on_target applies the move and ends the unit's turn.
+	_execute_move_on_target(target_unit)
+
+func _cancel_move_targeting() -> void:
+	"""Leave move-targeting mode without acting."""
+	move_mode = false
+	selected_move_index = -1
+	_clear_movement_range()
+
+func _find_unit_at_grid_cell(grid_pos: Vector3) -> Node:
+	"""Return the unit whose grid cell matches grid_pos, or null."""
+	var grid = preload("res://board/Grid.tres")
+	for u in _find_all_units_in_scene():
+		var ug = grid.calculate_grid_coordinates(u.global_position)
+		if int(round(ug.x)) == int(round(grid_pos.x)) and int(round(ug.z)) == int(round(grid_pos.z)):
+			return u
+	return null
 
 func _calculate_move_targets(move: Move) -> Array[Node]:
 	"""Calculate valid targets for a move"""
@@ -1411,19 +1445,22 @@ func _execute_move_on_target(target: Node) -> void:
 	# Show result message
 	if result.success:
 		print("Move executed successfully: " + result.message)
-		
-		# Update UI to reflect move usage
-		_update_actions()
-		
+
 		# Update move selection panel if it's still visible
 		if move_selection_panel.visible:
 			move_selection_panel.update_move_cooldowns()
+
+		# Using a move is this unit's action for the turn - end its turn.
+		if selected_unit and selected_unit.has_method("mark_action_completed"):
+			selected_unit.mark_action_completed("move_action")
 	else:
 		print("Move failed: " + result.message)
-	
-	# Exit move mode
+
+	# Exit move-targeting mode and refresh the UI
 	move_mode = false
 	selected_move_index = -1
+	_clear_movement_range()
+	_update_actions()
 
 func _create_default_moves_for_unit(unit: Node) -> void:
 	"""Create default moves for a unit that doesn't have any"""

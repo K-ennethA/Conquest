@@ -306,8 +306,15 @@ func _handle_selection() -> void:
 	"""Handle unit selection at cursor position"""
 	print("DEBUG: Cursor _handle_selection called at position: " + str(tile_position))
 	
-	# FIRST: Check if we should handle movement destination selection
+	# FIRST: If a move/attack is being targeted, this click selects the target.
 	var unit_actions_panel = _get_unit_actions_panel()
+	if unit_actions_panel and unit_actions_panel.has_method("is_targeting_move"):
+		if unit_actions_panel.is_targeting_move():
+			print("DEBUG: Move targeting active - handling as move target")
+			unit_actions_panel.handle_move_target_selected(tile_position)
+			return
+
+	# SECOND: If movement range is showing, this click is a movement destination.
 	if unit_actions_panel and unit_actions_panel.has_method("is_showing_movement_range"):
 		if unit_actions_panel.is_showing_movement_range():
 			print("DEBUG: Movement range is showing - handling as movement destination")
