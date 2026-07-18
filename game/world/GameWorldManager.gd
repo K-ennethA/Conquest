@@ -227,7 +227,14 @@ func _setup_network_multiplayer() -> void:
 func _setup_local_game() -> void:
 	"""Set up local single-player or local multiplayer game"""
 	print("Setting up local game...")
-	
+
+	# Reset per-session autoload state FIRST. Autoloads survive scene changes, so on a
+	# second+ game these still hold the previous session's players (with freed units)
+	# and an active turn system -- which wedges turn advancement and leaves the game
+	# state stuck off SETUP so start_game() never re-activates a turn system.
+	PlayerManager.reset_for_new_game()
+	TurnSystemManager.reset_for_new_game()
+
 	# Initialize player management first
 	_setup_players()
 	
@@ -256,11 +263,13 @@ func _setup_multiplayer_players() -> void:
 	print("Network players found: " + str(network_players.size()))
 	print("Local player ID: " + str(local_player_id))
 	
-	# Clear existing players
-	if PlayerManager.players.size() > 0:
-		print("Clearing existing players for multiplayer setup")
-		PlayerManager.players.clear()
-	
+	# Reset per-session autoload state before registering players. Replaces the old
+	# ad-hoc players.clear(): also resets game state back to SETUP and tears down any
+	# turn system left over from a prior session (freed units). This runs BEFORE the
+	# Player 1/2 registration below so the registration order is preserved.
+	PlayerManager.reset_for_new_game()
+	TurnSystemManager.reset_for_new_game()
+
 	# Set up multiplayer players with proper IDs
 	# Always create 2 players for multiplayer
 	var player1 = PlayerManager.register_player("Player 1")

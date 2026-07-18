@@ -139,18 +139,12 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	print("Position: " + str(position))
 	print("Current selected_unit before: " + (selected_unit.name if selected_unit else "None"))
 
-	# Single-player hard gate: the human may never select an AI-owned unit (those act
-	# only via BotTurnDriver). This mirrors PlayerManager.can_current_player_select_unit
-	# and defends the case where the AI is the current player during its own turn --
-	# without it, the AI's units pass the current-player ownership check and the human
-	# could move the enemy.
-	if GameSettings.game_mode == GameSettings.GameMode.SINGLE_PLAYER:
-		var owner_for_gate = PlayerManager.get_player_owning_unit(unit)
-		if owner_for_gate != null and owner_for_gate.is_ai:
-			print("Selection rejected: AI-owned unit (single-player)")
-			return
-
-	# Check if we're in multiplayer mode and validate ownership
+	# Selection == inspection: any living unit may be selected so the player can read
+	# its info (including enemy / AI-owned units). Commanding is gated separately via
+	# _human_may_command() -- _update_actions() renders disabled buttons for units the
+	# player cannot command. The single-player AI hard-gate, the PlayerManager gate and
+	# the Traditional can-act gate that used to REJECT selection here are gone. The
+	# multiplayer rejection branch is intentionally kept for this pass.
 	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
 		print("Multiplayer mode detected - validating unit ownership")
 		
@@ -177,25 +171,10 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 		
 		print("Unit ownership validated - selection allowed")
 	else:
-		# Only show if this is the current player's unit
-		if not PlayerManager.can_current_player_select_unit(unit):
-			print("Selection rejected by PlayerManager")
-			return
-		
-		# For Speed First mode, allow selection of any unit but actions will be restricted in _update_actions
-		# For Traditional mode, still check turn system constraints
-		if TurnSystemManager.has_active_turn_system():
-			var turn_system = TurnSystemManager.get_active_turn_system()
-			
-			# Only block selection in Traditional mode if unit can't act
-			if turn_system is TraditionalTurnSystem and not turn_system.can_unit_act(unit):
-				print("Selection rejected by Traditional turn system: " + turn_system.system_name)
-				return
-			
-			# In Speed First mode, allow selection but _update_actions will handle restrictions
-			if turn_system is SpeedFirstTurnSystem:
-				print("Speed First mode: Allowing selection, actions will be restricted as needed")
-	
+		# Local (single-player / hotseat): accept every selection for inspection.
+		# _update_actions() gates the actual commands via _human_may_command().
+		print("Local mode: accepting selection for inspection (commands gated in _update_actions)")
+
 	print("Unit selection accepted: " + unit.name)
 	selected_unit = unit
 	print("Selected unit set to: " + selected_unit.name)
@@ -215,7 +194,14 @@ func _show_movement_range_on_selection() -> void:
 	"""Show movement range immediately when unit is selected (tactical style)"""
 	if not selected_unit:
 		return
-	
+
+	# Only show range for units the local human may actually command. Selecting an
+	# enemy / AI unit is inspection-only, so no range highlight (this also stops the
+	# cursor from hijacking clicks into a movement destination for enemy units).
+	if not _human_may_command(selected_unit):
+		_clear_movement_range()
+		return
+
 	# Calculate and show movement range
 	_calculate_and_show_movement_range()
 
@@ -448,6 +434,43 @@ func _on_game_state_changed(new_state: PlayerManager.GameState) -> void:
 	"""Handle game state changes"""
 	_update_actions()
 
+# --- Command gating (selection is inspection; commanding is separately gated) ---
+
+func _current_turn_player() -> Player:
+	"""The player whose turn it currently is, per the turn system (falling back to
+	PlayerManager). Same source of truth _update_actions uses for action gating."""
+	if TurnSystemManager and TurnSystemManager.has_active_turn_system():
+		var p = TurnSystemManager.get_active_turn_system().get_current_active_player()
+		if p:
+			return p
+	return PlayerManager.get_current_player() if PlayerManager else null
+
+func _player_is_human(player: Player) -> bool:
+	"""True when `player` is human-controlled locally. Single-player/hotseat: not AI.
+	Multiplayer: the player is this client. Essential for command gating: during the
+	AI's turn the AI IS the current player, so ownership alone is not enough."""
+	if player == null:
+		return false
+	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
+		var local_id_raw = GameModeManager.get_local_player_id() if GameModeManager else -1
+		var local_id = int(local_id_raw) if local_id_raw is String else local_id_raw
+		# player.player_id is statically typed int, so no String coercion needed.
+		return int(player.player_id) == local_id
+	return not player.is_ai
+
+func _human_may_command(unit: Unit) -> bool:
+	"""True only when the LOCAL human may issue commands to `unit` this turn: there is
+	a current turn player, that player owns the unit, AND that player is human. Any
+	living unit can still be SELECTED (inspected) -- this only gates commanding."""
+	if unit == null:
+		return false
+	var current_player := _current_turn_player()
+	if current_player == null:
+		return false
+	if not current_player.owns_unit(unit):
+		return false
+	return _player_is_human(current_player)
+
 func _update_actions() -> void:
 	"""Update available actions based on selected unit and game state"""
 	if not selected_unit or not PlayerManager:
@@ -463,9 +486,11 @@ func _update_actions() -> void:
 	if not current_player:
 		current_player = PlayerManager.get_current_player()
 	var game_active = PlayerManager.current_game_state == PlayerManager.GameState.IN_PROGRESS
-	# Ownership only (same basis as movement); the turn system's can_unit_act
-	# handles the "has this unit already acted" gating separately.
-	var can_control = current_player != null and current_player.owns_unit(selected_unit)
+	# Commanding is gated by _human_may_command: current turn player owns the unit AND
+	# is human-controlled. Selecting an enemy / AI unit still shows the panel (read-only
+	# inspection), but every command button below stays disabled for it. The turn
+	# system's can_unit_act handles the "has this unit already acted" gating separately.
+	var can_control = _human_may_command(selected_unit)
 	
 	# Determine action availability based on turn system
 	var can_perform_unit_actions = false
@@ -555,17 +580,23 @@ func _update_actions() -> void:
 		else:
 			end_unit_turn_button.text = "End Turn (E)\n[N/A]"
 	
-	# Update End Player Turn button - always available if you can control and game is active
+	# Update End Player Turn button - decoupled from the INSPECTED unit: it is about
+	# whose turn it is, not which unit is selected. Enabled only when the game is active
+	# AND the current turn player is human-controlled (so it stays disabled during the
+	# AI's turn / when it is not this client's turn).
 	if end_player_turn_button:
-		var can_end_player_turn = can_control and game_active
+		var current_is_human = _player_is_human(current_player)
+		var can_end_player_turn = game_active and current_is_human
 		end_player_turn_button.disabled = not can_end_player_turn
-		
+
 		if can_end_player_turn:
 			end_player_turn_button.text = "End Player Turn (P)"
-		elif not can_control:
-			end_player_turn_button.text = "End Player Turn (P)\n[Not Yours]"
-		else:
+		elif not game_active:
 			end_player_turn_button.text = "End Player Turn (P)\n[N/A]"
+		elif GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
+			end_player_turn_button.text = "End Player Turn (P)\n[Not Your Turn]"
+		else:
+			end_player_turn_button.text = "End Player Turn (P)\n[AI Turn]"
 	
 	# Unit Summary button is always available when unit is selected (handled in _on_unit_summary_pressed)
 	if unit_summary_button:
@@ -621,7 +652,13 @@ func _on_move_pressed() -> void:
 		else:
 			print("Move action rejected by multiplayer system")
 		return
-	
+
+	# Handler-level command guard: keyboard shortcut (KEY_M) bypasses the disabled
+	# button, so re-check command permission here before acting on an enemy / AI unit.
+	if not _human_may_command(selected_unit):
+		print("Move blocked: " + selected_unit.get_display_name() + " is not commandable by the local player")
+		return
+
 	# Local game logic (existing)
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
@@ -675,11 +712,18 @@ func _on_end_unit_turn_pressed() -> void:
 		else:
 			print("End unit turn action rejected by multiplayer system")
 		return
-	
+
+	# Handler-level command guard: the KEY_E shortcut bypasses the disabled button and
+	# the local path calls mark_unit_acted(selected_unit) unchecked, which would let the
+	# human end an enemy / AI unit's turn. Re-check command permission here.
+	if not _human_may_command(selected_unit):
+		print("End unit turn blocked: " + selected_unit.get_display_name() + " is not commandable by the local player")
+		return
+
 	# Local game logic (existing)
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
-		
+
 		if turn_system is TraditionalTurnSystem:
 			print("Marking unit acted (Traditional)")
 			(turn_system as TraditionalTurnSystem).mark_unit_acted(selected_unit)
@@ -748,7 +792,14 @@ func _on_end_player_turn_pressed() -> void:
 		else:
 			print("End player turn action rejected by multiplayer system")
 		return
-	
+
+	# Handler-level command guard: the KEY_P shortcut bypasses the disabled button.
+	# Only end the player turn when the current turn player is human-controlled (never
+	# during the AI's turn).
+	if not _player_is_human(_current_turn_player()):
+		print("End player turn blocked: it is not a human-controlled player's turn")
+		return
+
 	# Local game logic (existing)
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
@@ -762,9 +813,13 @@ func _on_end_player_turn_pressed() -> void:
 		# the turn system stuck on the current player (so the banner froze and the AI
 		# never got a turn). Match PlayerTurnPanel's working end-turn path.
 		if turn_system is TraditionalTurnSystem:
-			(turn_system as TraditionalTurnSystem).end_turn_manually()
+			var ended := (turn_system as TraditionalTurnSystem).end_turn_manually()
+			if not ended:
+				print("End Player Turn FAILED: TraditionalTurnSystem.end_turn_manually() returned false (invalid turn state)")
 		elif turn_system is SpeedFirstTurnSystem:
-			(turn_system as SpeedFirstTurnSystem).end_turn_manually()
+			var ended := (turn_system as SpeedFirstTurnSystem).end_turn_manually()
+			if not ended:
+				print("End Player Turn FAILED: SpeedFirstTurnSystem.end_turn_manually() returned false (invalid turn state)")
 		elif turn_system.has_method("end_player_turn"):
 			turn_system.end_player_turn()
 		else:
@@ -980,6 +1035,12 @@ func _calculate_and_show_movement_range() -> void:
 	"""Calculate movement range and show visual indicators"""
 	if not selected_unit:
 		print("DEBUG: No selected unit for movement range calculation")
+		return
+
+	# Inspection-only units (enemy / AI, or not this player's turn) show no range.
+	if not _human_may_command(selected_unit):
+		print("DEBUG: " + selected_unit.get_display_name() + " is not commandable by the local player - no movement range shown")
+		_clear_movement_range()
 		return
 
 	# A unit that has already moved this turn shows NO movement range and cannot
@@ -1495,6 +1556,12 @@ func _on_moves_pressed() -> void:
 	if not selected_unit:
 		return
 
+	# Handler-level command guard: the KEY_P/Moves shortcut bypasses the disabled
+	# button. Only the local human may open moves for a unit they command.
+	if not _human_may_command(selected_unit):
+		print("Moves blocked: " + selected_unit.get_display_name() + " is not commandable by the local player")
+		return
+
 	# The unit must still have its action available this turn.
 	if selected_unit.has_method("can_act") and not selected_unit.can_act():
 		print("Moves unavailable: " + selected_unit.get_display_name() + " has no action left")
@@ -1733,7 +1800,9 @@ func _update_moves_button_availability() -> void:
 	if selected_unit.has_method("can_act"):
 		has_action = selected_unit.can_act()
 
-	moves_button.disabled = usable == 0 or not has_action
+	# Also gate on command permission so an enemy / AI unit's Moves button stays
+	# disabled during inspection.
+	moves_button.disabled = usable == 0 or not has_action or not _human_may_command(selected_unit)
 
 	if moveset.is_empty():
 		moves_button.text = "MOVES (None)"

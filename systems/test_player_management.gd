@@ -112,19 +112,21 @@ func _test_player_validation():
 	
 	if player1 and player1.owned_units.size() > 0:
 		var player1_unit = player1.owned_units[0]
-		
-		# Test current player can select their own unit
-		var can_select_own = PlayerManager.can_current_player_select_unit(player1_unit)
+
+		# can_current_player_select_unit is now the COMMAND gate (selection/inspection is
+		# open to any unit; commanding is what stays owner-restricted). Its contract is
+		# unchanged: true for the current player's own units, false for opponents.
+		var can_command_own = PlayerManager.can_current_player_select_unit(player1_unit)
 		if current_player == player1:
-			if can_select_own:
-				print("✓ Current player can select their own unit")
+			if can_command_own:
+				print("✓ Current player can command their own unit")
 			else:
-				print("❌ Current player cannot select their own unit")
+				print("❌ Current player cannot command their own unit")
 		else:
-			if not can_select_own:
-				print("✓ Current player cannot select opponent's unit")
+			if not can_command_own:
+				print("✓ Current player cannot command opponent's unit")
 			else:
-				print("❌ Current player can select opponent's unit (should not be allowed)")
+				print("❌ Current player can command opponent's unit (should not be allowed)")
 
 # Input handling for interactive testing
 func _input(event):

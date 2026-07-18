@@ -278,6 +278,23 @@ func _on_all_units_acted() -> void:
 	"""Handle all units having acted"""
 	print("Turn System: All units have acted")
 
+# Per-session reset (for starting a fresh game in the same app run)
+func reset_for_new_game() -> void:
+	"""Tear down all turn-system state so a fresh game can be set up in the same app
+	run. Autoloads survive scene changes, so without this the previous session's
+	active_turn_system (with freed registered_units) persists and advancing a turn
+	script-errors or silently wraps. apply_settings_to_game() registers a fresh
+	turn-system instance on each load, so clearing the dict here is safe."""
+	if active_turn_system:
+		deactivate_turn_system()
+
+	# Unregister every available system (disconnects signals) then clear the dict.
+	for system in available_turn_systems.values().duplicate():
+		unregister_turn_system(system)
+	available_turn_systems.clear()
+
+	print("TurnSystemManager: Reset for new game session")
+
 # Turn system reset (for testing)
 func reset_turn_system() -> void:
 	"""Reset the active turn system to initial state (for testing purposes)"""

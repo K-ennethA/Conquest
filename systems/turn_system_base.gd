@@ -147,6 +147,9 @@ func get_units_for_player(player: Player) -> Array[Unit]:
 	"""Get all registered units for a specific player"""
 	var player_units: Array[Unit] = []
 	for unit in registered_units:
+		# Guard against freed units left over from a prior session / dead units.
+		if not is_instance_valid(unit):
+			continue
 		if unit.get_owner_player() == player:
 			player_units.append(unit)
 	return player_units
@@ -155,6 +158,9 @@ func get_active_units() -> Array[Unit]:
 	"""Get all units that can currently act"""
 	var active_units: Array[Unit] = []
 	for unit in registered_units:
+		# Guard against freed units left over from a prior session / dead units.
+		if not is_instance_valid(unit):
+			continue
 		if can_unit_act(unit):
 			active_units.append(unit)
 	return active_units

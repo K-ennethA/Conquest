@@ -10,6 +10,7 @@ var units_acted_this_turn: Array[Unit] = []
 var turn_completed_manually: bool = false
 var players_had_turn_this_round: Array[Player] = []  # Track which players have had a turn this round
 var just_started: bool = false  # Flag to prevent immediate turn completion on startup
+var _auto_advance_pending: bool = false  # Guard so an auto-end is deferred at most once per turn
 
 func _init() -> void:
 	super._init()
@@ -121,7 +122,15 @@ func _start_player_turn(player: Player) -> void:
 	is_turn_in_progress = true
 	units_acted_this_turn.clear()
 	turn_completed_manually = false
-	
+	# Clear the startup guard here (once a real player turn has begun, later
+	# _check_turn_completion calls must be honored). Previously just_started was only
+	# cleared inside _check_turn_completion, which swallowed the FIRST legitimate
+	# completion check of the game -- so the very first player's auto-end never fired.
+	just_started = false
+	# New turn -> clear the deferred auto-advance guard so this player's completion can
+	# schedule its own auto-end.
+	_auto_advance_pending = false
+
 	# Reset all unit actions for the new turn
 	reset_all_unit_actions()
 
@@ -198,6 +207,12 @@ func _advance_to_next_player() -> void:
 		
 		# Check if this player can play (not eliminated, has units, etc.)
 		if _can_player_take_turn_for_advance(next_player):
+			# If the only eligible player is the one we started from, the turn is
+			# wrapping back onto the SAME player instead of advancing. That usually
+			# means the other side's units are freed/stale (second-game state bug) --
+			# warn loudly rather than silently re-running the same player's turn.
+			if next_player == current_player:
+				push_warning("TraditionalTurnSystem: turn advance wrapped back to the same player (" + current_player.get_display_name() + ") - no other player could take a turn")
 			print("Player can take turn - starting their turn")
 			
 			# Increment round counter for each player switch (running counter)
@@ -308,13 +323,10 @@ func _handle_no_valid_players() -> void:
 func _check_turn_completion() -> void:
 	"""Check if the current player's turn should end"""
 	print("=== CHECKING TURN COMPLETION ===")
-	
-	# Don't check turn completion immediately after system starts
-	if just_started:
-		print("System just started - skipping turn completion check")
-		just_started = false
-		return
-	
+
+	# NOTE: the old just_started early-return lived here and swallowed the first real
+	# completion check. It is removed -- the is_active/current_player/is_turn_in_progress
+	# guard below already blocks checks during startup (before a turn is in progress).
 	if not is_active or not current_player or not is_turn_in_progress:
 		print("Turn completion check failed: invalid state")
 		print("  is_active: " + str(is_active))
@@ -356,9 +368,21 @@ func _check_turn_completion() -> void:
 	print("Units summary: " + str(units_acted) + " acted, " + str(units_can_act) + " can still act")
 	
 	if all_acted:
-		print("*** ALL UNITS HAVE ACTED - ADVANCING TURN ***")
+		print("*** ALL UNITS HAVE ACTED ***")
 		all_units_acted.emit()
-		advance_turn()
+		# Auto-end the player's turn only when enabled in settings.
+		if GameSettings and GameSettings.auto_end_turn:
+			if not _auto_advance_pending:
+				_auto_advance_pending = true
+				# Defer the advance: this check runs inside the unit's
+				# mark_action_completed signal emission, and advancing synchronously here
+				# would mutate turn state re-entrantly mid-signal. call_deferred runs it
+				# safely after the current signal unwinds. The guard prevents scheduling
+				# more than one advance for the same turn.
+				print("*** AUTO-ENDING TURN (deferred) ***")
+				call_deferred("advance_turn")
+		else:
+			print("Auto-end-turn disabled in settings - not auto-advancing")
 	else:
 		print("Turn continues - " + str(units_can_act) + " units can still act")
 	
@@ -403,9 +427,28 @@ func can_end_turn_manually() -> bool:
 func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
 	"""Handle unit action completion"""
 	super._on_unit_action_completed(unit, action_type)
-	
+
 	# Mark unit as having acted
 	mark_unit_acted(unit)
+
+# Override unit (un)registration to also watch unit deaths. If a player's LAST actable
+# unit dies mid-turn, nothing else triggers _check_turn_completion and the turn would
+# stall with no units able to act -- so a death re-checks completion (deferred, so the
+# death handling / any node freeing unwinds first).
+func register_unit(unit: Unit) -> void:
+	super.register_unit(unit)
+	if unit and unit.has_signal("unit_died") and not unit.unit_died.is_connected(_on_registered_unit_died):
+		unit.unit_died.connect(_on_registered_unit_died)
+
+func unregister_unit(unit: Unit) -> void:
+	if unit and unit.has_signal("unit_died") and unit.unit_died.is_connected(_on_registered_unit_died):
+		unit.unit_died.disconnect(_on_registered_unit_died)
+	super.unregister_unit(unit)
+
+func _on_registered_unit_died(_unit: Unit) -> void:
+	"""A registered unit died -> re-check turn completion (deferred) so the current
+	player's turn ends if that death left them with no units able to act."""
+	call_deferred("_check_turn_completion")
 
 # Query methods
 func get_units_that_acted() -> Array[Unit]:

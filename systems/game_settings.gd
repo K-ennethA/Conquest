@@ -19,7 +19,7 @@ var player_count: int = 2
 var player_names: Array[String] = ["Player 1", "Player 2"]
 
 # Game settings
-var auto_end_turn: bool = false  # Whether to automatically end turns when all units have acted
+var auto_end_turn: bool = true  # Whether to automatically end turns when all units have acted
 var show_turn_indicators: bool = true
 var enable_undo: bool = false  # For future expansion
 
@@ -138,7 +138,7 @@ func reset_to_defaults() -> void:
 	selected_map_path = "res://game/maps/resources/default_skirmish.tres"  # Default map
 	player_count = 2
 	player_names = ["Player 1", "Player 2"]
-	auto_end_turn = false
+	auto_end_turn = true
 	show_turn_indicators = true
 	enable_undo = false
 	ai_difficulty = 1  # NORMAL

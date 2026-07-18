@@ -170,6 +170,21 @@ func start_game() -> void:
 	game_state_changed.emit(current_game_state)
 	print("Game started! Turn " + str(turn_number))
 
+func reset_for_new_game() -> void:
+	"""Reset per-session state so a fresh game can be set up in the same app run.
+
+	Autoloads survive scene changes, so without this a SECOND game keeps stale
+	players (with freed Unit refs in owned_units) and, critically, leaves
+	current_game_state != SETUP -- which makes start_game() early-return and never
+	re-emit game_state_changed(IN_PROGRESS), so TurnSystemManager never activates a
+	turn system for the new session. Clearing players discards stale owned_units;
+	_setup_players recreates players when the array is empty."""
+	players.clear()
+	current_player_index = 0
+	turn_number = 0
+	current_game_state = GameState.SETUP
+	print("PlayerManager: Reset for new game session")
+
 func end_game(winner: Player = null) -> void:
 	"""End the game"""
 	current_game_state = GameState.FINISHED
@@ -345,11 +360,14 @@ func validate_unit_action(unit: Unit) -> bool:
 
 # Event handlers
 func _on_unit_selected(unit: Unit, position: Vector3) -> void:
-	"""Handle unit selection validation"""
+	"""Handle unit selection validation.
+
+	Selection == inspection: any living unit may be selected (commanding is gated
+	separately in UnitActionsPanel). We no longer force-deselect units the current
+	player cannot command -- doing so cancelled read-only inspection of enemy units.
+	Log-only now."""
 	if not can_current_player_select_unit(unit):
-		print("Cannot select unit: not owned by current player")
-		GameEvents.unit_deselected.emit(unit)
-		return
+		print("Note: selected unit is not commandable by the current player (inspection only)")
 
 func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
 	"""Handle unit action completion"""

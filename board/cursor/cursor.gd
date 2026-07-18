@@ -330,43 +330,30 @@ func _handle_selection() -> void:
 	
 	if unit_at_cursor:
 		print("Unit found for selection: ", unit_at_cursor.name)
-		
-		# First check PlayerManager validation
-		if not PlayerManager.can_current_player_select_unit(unit_at_cursor):
-			print("Cannot select unit: not owned by current player or game not active")
-			return
-		
-		# Then check turn system validation
+
+		# Selection == inspection: ANY living unit may be selected (including enemies /
+		# AI-owned units) so the player can read their info. Commanding a unit is gated
+		# separately in UnitActionsPanel (_human_may_command), so relaxing selection here
+		# is safe. We no longer reject via PlayerManager.can_current_player_select_unit
+		# or the turn system's can_unit_act.
 		if TurnSystemManager.has_active_turn_system():
 			var turn_system = TurnSystemManager.get_active_turn_system()
 			print("Cursor: Active turn system is " + turn_system.system_name)
-			
-			# Special handling for Speed First turn system - allow selection but UI will handle action restrictions
+
+			# Speed First inspection branch (log-only): any unit is selectable; the UI
+			# handles action availability for the current acting unit.
 			if turn_system is SpeedFirstTurnSystem:
 				var speed_system = turn_system as SpeedFirstTurnSystem
 				var current_acting_unit = speed_system.get_current_acting_unit()
-				
+
 				print("Cursor: Speed First mode - current acting unit: " + (current_acting_unit.get_display_name() if current_acting_unit else "None"))
 				print("Cursor: Attempted selection: " + unit_at_cursor.get_display_name())
-				
-				# In Speed First mode, allow selection of any unit - UI will handle action availability
+
 				if unit_at_cursor == current_acting_unit:
 					print("Cursor: ALLOWED - Unit is the currently acting unit (can act)")
 				else:
 					print("Cursor: ALLOWED - Unit can be selected for inspection (actions disabled)")
-				
-				# Skip the general can_unit_act check for Speed First - let UI handle it
-			elif not turn_system.can_unit_act(unit_at_cursor):
-				if turn_system is TraditionalTurnSystem:
-					var trad_system = turn_system as TraditionalTurnSystem
-					if unit_at_cursor in trad_system.get_units_that_acted():
-						print("Cannot select unit: already acted this turn")
-					else:
-						print("Cannot select unit: turn system constraint")
-				else:
-					print("Cannot select unit: not allowed by turn system")
-				return
-		
+
 		if selected_unit == unit_at_cursor:
 			# Deselect if clicking same unit
 			_deselect_unit()
