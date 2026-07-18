@@ -71,10 +71,20 @@ func act_for_turn_system(ts: TurnSystemBase) -> bool:
 	if player == null or not player.is_ai:
 		return false
 
+	# Diagnostic (AI-turn only, so it does not spam human turns): reveals whether
+	# the driver is reaching the AI turn and finding actable units live.
 	var unit := _next_actable_ai_unit(ts, player)
 	if unit == null:
+		var active := ts.get_active_units()
+		var owned := 0
+		for u in ts.registered_units:
+			if u and is_instance_valid(u) and u.get_owner_player() == player:
+				owned += 1
+		print("[BotAI] %s's turn but no actable unit (active_units=%d, ai-owned registered=%d, total registered=%d)"
+			% [player.get_display_name(), active.size(), owned, ts.registered_units.size()])
 		return false
 
+	print("[BotAI] driving %s for AI %s" % [unit.get_display_name(), player.get_display_name()])
 	_busy = true
 	_act(unit)
 	_busy = false
