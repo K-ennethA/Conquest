@@ -37,6 +37,14 @@ var moves_button: Button
 var move_mode: bool = false
 var selected_move_index: int = -1
 
+# FE-style combat forecast overlay (preview-only; never mutates state). Shown
+# while targeting an offensive move over an eligible enemy; updated live as the
+# cursor moves; hidden when targeting is cancelled/cleared or the move resolves.
+var combat_forecast_panel: CombatForecastPanel
+# Latest board-cursor tile (tracked from GameEvents.cursor_moved) so a move
+# selected while the cursor already rests on an enemy previews immediately.
+var _last_cursor_tile: Vector3 = Vector3.ZERO
+
 func _ready() -> void:
 	# Ensure proper mouse handling
 	mouse_filter = Control.MOUSE_FILTER_STOP  # Make sure panel stops mouse events
@@ -1522,7 +1530,16 @@ func _setup_move_system() -> void:
 	# Connect move selection signals
 	move_selection_panel.move_selected.connect(_on_move_selected)
 	move_selection_panel.move_cancelled.connect(_on_move_cancelled)
-	
+
+	# Combat forecast overlay: one instance, added like the move panel. It is a
+	# non-modal, mouse-ignoring floating overlay, so it never blocks targeting
+	# clicks. Driven live off GameEvents.cursor_moved (see _on_cursor_moved_forecast)
+	# so it updates as the player sweeps the cursor from one enemy to another.
+	combat_forecast_panel = CombatForecastPanel.new()
+	add_child(combat_forecast_panel)
+	if GameEvents and not GameEvents.cursor_moved.is_connected(_on_cursor_moved_forecast):
+		GameEvents.cursor_moved.connect(_on_cursor_moved_forecast)
+
 	# Create moves button and add it to the actions container
 	moves_button = Button.new()
 	moves_button.text = "MOVES"
@@ -1598,6 +1615,10 @@ func _on_move_selected(slot: int) -> void:
 	var aim_cells := _compute_in_range_aim_cells(move)
 	GameEvents.attack_range_calculated.emit(_cells_to_grid_vec3(aim_cells))
 	print("Targeting active for " + move.display_name + " - " + str(aim_cells.size()) + " in-range cell(s)")
+
+	# Seed the forecast off the cursor's current tile, so if it already rests on an
+	# enemy the prediction shows at once instead of waiting for the next move.
+	_refresh_move_forecast(_last_cursor_tile)
 
 func _on_move_cancelled() -> void:
 	"""Handle move selection cancellation (panel BACK button)."""
@@ -1700,6 +1721,69 @@ func _cancel_move_targeting() -> void:
 	move_mode = false
 	selected_move_index = -1
 	GameEvents.targeting_cleared.emit()
+	# Drop the FE forecast too (covers cancel via BACK/ESC AND move resolution,
+	# since _execute_move_on_target funnels through here).
+	if combat_forecast_panel:
+		combat_forecast_panel.hide_forecast()
+
+# --- Combat forecast (FE-style preview) -------------------------------------
+
+func _on_cursor_moved_forecast(tile_position: Vector3) -> void:
+	"""Live hook: the board cursor moved to a new tile. While targeting an
+	offensive move, refresh the forecast for whatever enemy now sits under the
+	cursor (or hide it) -- this is what gives the 'compare this enemy vs that'
+	feel as the player sweeps the cursor. Purely additive: reads only."""
+	_last_cursor_tile = tile_position
+	_refresh_move_forecast(tile_position)
+
+func _refresh_move_forecast(grid_pos: Vector3) -> void:
+	"""Show the forecast for the current move against an eligible ENEMY at grid_pos
+	(a legal aim cell), else hide it. Never mutates state -- CombatForecastPanel
+	reads MoveExecutor.preview_vs() only."""
+	if combat_forecast_panel == null:
+		return
+
+	# Only while actively aiming a move for a commandable unit.
+	if not is_targeting_move() or not selected_unit:
+		combat_forecast_panel.hide_forecast()
+		return
+
+	var move: MoveResource = selected_unit.get_move(selected_move_index)
+	if move == null or move.targeting == null:
+		combat_forecast_panel.hide_forecast()
+		return
+
+	var board = CombatServices.board()
+	if board == null:
+		combat_forecast_panel.hide_forecast()
+		return
+
+	var origin: Vector2i = board.cell_of(selected_unit)
+	# Vector3(col, 0, row) grid coord -> Vector2i(col, row) board cell.
+	var aim := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+
+	# Forecast only a legal aim that lands on an enemy the caster may attack.
+	if not move.can_aim_at(origin, aim):
+		combat_forecast_panel.hide_forecast()
+		return
+
+	var enemy = _first_enemy_at(board, aim)
+	if enemy == null:
+		combat_forecast_panel.hide_forecast()
+		return
+
+	combat_forecast_panel.show_forecast(selected_unit, enemy, move)
+
+func _first_enemy_at(board, cell: Vector2i):
+	"""First occupant of `cell` that is an enemy of selected_unit (per the shared
+	BoardAdapter), else null. Matches how targeting resolves units at a cell."""
+	var occupants: Array = board.units_at(cell)
+	for occupant in occupants:
+		if occupant == null or occupant == selected_unit:
+			continue
+		if board.are_enemies(selected_unit, occupant):
+			return occupant
+	return null
 
 # --- Move targeting helpers -------------------------------------------------
 
