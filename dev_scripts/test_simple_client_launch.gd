@@ -48,7 +48,7 @@ func test_client_launch() -> void:
 	
 	# Create a simple client launcher
 	var launcher = Node.new()
-	launcher.set_script(load("res://simple_client_launcher.gd"))
+	launcher.set_script(load("res://dev_scripts/simple_client_launcher.gd"))
 	add_child(launcher)
 	
 	print("Simple client launcher created")

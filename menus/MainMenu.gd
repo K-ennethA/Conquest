@@ -18,19 +18,19 @@ func _ready() -> void:
 	# Add AutoClientDetector test
 	var autoclient_test = Node.new()
 	autoclient_test.name = "AutoClientDetectorTest"
-	autoclient_test.set_script(load("res://test_autoclient_detector.gd"))
+	autoclient_test.set_script(load("res://dev_scripts/test_autoclient_detector.gd"))
 	add_child(autoclient_test)
 	
 	# Add debug test script for development
 	var debug_test = Node.new()
 	debug_test.name = "HostAutoClientDebugTest"
-	debug_test.set_script(load("res://test_host_auto_client_debug.gd"))
+	debug_test.set_script(load("res://dev_scripts/test_host_auto_client_debug.gd"))
 	add_child(debug_test)
 	
 	# Add end-to-end test script
 	var e2e_test = Node.new()
 	e2e_test.name = "EndToEndMultiplayerTest"
-	e2e_test.set_script(load("res://test_end_to_end_multiplayer.gd"))
+	e2e_test.set_script(load("res://dev_scripts/test_end_to_end_multiplayer.gd"))
 	add_child(e2e_test)
 	
 	# Note: AutoClientDetector now runs as an autoload, so client detection

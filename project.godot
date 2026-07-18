@@ -21,7 +21,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-AutoClientDetector="*res://AutoClientDetector.gd"
+AutoClientDetector="*res://systems/AutoClientDetector.gd"
 GameEvents="*res://systems/game_events.gd"
 ResourceManager="*res://systems/resource_manager.gd"
 PlayerManager="*res://systems/player_manager.gd"

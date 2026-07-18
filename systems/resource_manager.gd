@@ -7,7 +7,7 @@ var _shader_cache: Dictionary = {}
 var _material_cache: Dictionary = {}
 
 # Shader resources
-const SELECTION_SHADER = preload("res://selected_shader.gdshader")
+const SELECTION_SHADER = preload("res://board/selected_shader.gdshader")
 
 func _ready() -> void:
 	name = "ResourceManager"

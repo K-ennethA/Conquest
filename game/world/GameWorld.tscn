@@ -61,13 +61,13 @@ script = ExtResource("16")
 script = ExtResource("18")
 
 [node name="TacticalOverlayTest" type="Node" parent="."]
-script = "res://test_tactical_overlay_system.gd"
+script = "res://dev_scripts/test_tactical_overlay_system.gd"
 
 [node name="OverlayVisibilityTest" type="Node" parent="."]
-script = "res://test_overlay_visibility.gd"
+script = "res://dev_scripts/test_overlay_visibility.gd"
 
 [node name="OverlaySystemDebug" type="Node" parent="."]
-script = "res://debug_overlay_system.gd"
+script = "res://dev_scripts/debug_overlay_system.gd"
 
 [node name="GameWorldTest" type="Node" parent="."]
 script = ExtResource("7")
@@ -83,13 +83,13 @@ script = ExtResource("11")
 [node name="GameUILayout" parent="UI" instance=ExtResource("17")]
 
 [node name="GridBorderTest" type="Node" parent="."]
-script = "res://test_grid_border_lines.gd"
+script = "res://dev_scripts/test_grid_border_lines.gd"
 
 [node name="SimpleGridDebug" type="Node" parent="."]
-script = "res://debug_grid_lines_simple.gd"
+script = "res://dev_scripts/debug_grid_lines_simple.gd"
 
 [node name="MapGridExistenceTest" type="Node" parent="."]
-script = "res://test_mapgrid_existence.gd"
+script = "res://dev_scripts/test_mapgrid_existence.gd"
 
 [node name="Map" type="Node3D" parent="."]
 script = ExtResource("1")

@@ -60,7 +60,7 @@ func _ready() -> void:
 	# Add lobby system test for development
 	var lobby_test = Node.new()
 	lobby_test.name = "LobbySystemTest"
-	lobby_test.set_script(load("res://test_lobby_system.gd"))
+	lobby_test.set_script(load("res://dev_scripts/test_lobby_system.gd"))
 	add_child(lobby_test)
 	
 	# Get game mode manager from autoload
