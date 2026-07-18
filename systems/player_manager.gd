@@ -318,7 +318,19 @@ func can_current_player_select_unit(unit: Unit) -> bool:
 			return false
 		
 		print("DEBUG: Unit belongs to local player - selection allowed")
-	
+
+	# Single-player: the human (player 0) must never select or command AI-owned
+	# units -- those act only through BotTurnDriver. Selection below keys off the
+	# *current* player, so during the AI's OWN turn the AI is the current player and
+	# its units would pass the ownership check, letting the human drive the enemy.
+	# Reject any AI-owned unit outright. (Multiplayer is already gated by local-player
+	# id above; local hotseat has no AI players, so this is a no-op there.)
+	if GameSettings and GameSettings.game_mode == GameSettings.GameMode.SINGLE_PLAYER:
+		var ai_owner = get_player_owning_unit(unit)
+		if ai_owner != null and ai_owner.is_ai:
+			print("DEBUG: Unit is AI-owned in single-player - selection refused for human")
+			return false
+
 	var can_select = can_player_select_unit(current_player, unit)
 	print("DEBUG: can_player_select_unit result: " + str(can_select))
 	return can_select

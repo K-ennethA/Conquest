@@ -235,6 +235,16 @@ func _start_unit_turn(unit: Unit) -> void:
 	current_acting_unit = unit
 	is_turn_in_progress = true
 
+	# Reset THIS unit's per-turn action flags as its turn begins. Traditional resets
+	# every one of a player's units at player-turn start (reset_all_unit_actions in
+	# _start_player_turn); Speed First's analog is per-unit, since a unit's "turn" is
+	# the moment it acts. Without this, has_moved_this_turn / has_acted_this_turn are
+	# NEVER cleared during normal round flow, so can_move()/can_act() latch false after
+	# the unit's first move/action -- breaking 1-move-per-turn gating (and the Move /
+	# End-Turn buttons) in Speed First while it works in Traditional. Null-safe.
+	if unit != null and unit.has_method("reset_turn_actions"):
+		unit.reset_turn_actions()
+
 	# Tick this unit's move cooldowns and status conditions as its turn begins
 	# (null-safe for units without characters; idempotent per turn via the
 	# shared base helper).

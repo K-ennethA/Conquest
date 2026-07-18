@@ -138,7 +138,18 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	print("Unit: " + unit.name)
 	print("Position: " + str(position))
 	print("Current selected_unit before: " + (selected_unit.name if selected_unit else "None"))
-	
+
+	# Single-player hard gate: the human may never select an AI-owned unit (those act
+	# only via BotTurnDriver). This mirrors PlayerManager.can_current_player_select_unit
+	# and defends the case where the AI is the current player during its own turn --
+	# without it, the AI's units pass the current-player ownership check and the human
+	# could move the enemy.
+	if GameSettings.game_mode == GameSettings.GameMode.SINGLE_PLAYER:
+		var owner_for_gate = PlayerManager.get_player_owning_unit(unit)
+		if owner_for_gate != null and owner_for_gate.is_ai:
+			print("Selection rejected: AI-owned unit (single-player)")
+			return
+
 	# Check if we're in multiplayer mode and validate ownership
 	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
 		print("Multiplayer mode detected - validating unit ownership")

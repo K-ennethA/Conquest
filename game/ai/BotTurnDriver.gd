@@ -36,24 +36,49 @@ func _ready() -> void:
 
 
 func _tick() -> void:
+	# _act() is synchronous and never awaits, so no earlier _tick() can still be on
+	# the stack when the Timer fires again. If _busy is somehow still set here, a
+	# previous _act() errored out before clearing it -- self-heal instead of wedging
+	# the driver inert for the rest of the match. A stranded _busy is exactly what
+	# would leave the AI player's turn permanently incomplete (the AI never acts, so
+	# the turn never advances back to the human): the primary "AI inert" failure.
 	if _busy:
-		return
+		_busy = false
+	act_one_ai_unit()
+
+
+## Perform ONE AI action for the currently-active turn system (the Timer's entry
+## point). Returns true if an AI unit acted; false (harmlessly) when it is not an
+## AI turn. Public so tests can drive the AI a step at a time without the Timer.
+func act_one_ai_unit() -> bool:
 	if not TurnSystemManager or not TurnSystemManager.has_active_turn_system():
-		return
-	var ts: TurnSystemBase = TurnSystemManager.get_active_turn_system()
-	if not ts.is_active:
-		return
+		return false
+	return act_for_turn_system(TurnSystemManager.get_active_turn_system())
+
+
+## Perform ONE AI action against a SPECIFIC turn system. This is the shared core
+## used by BOTH Traditional (all units per player) and Speed First (one unit at a
+## time): it acts the current active player's next actable unit whenever that
+## player is AI, then lets the unit's completion signal advance the turn. Only the
+## turn ORDER differs between systems -- the AI driving is identical. Directly
+## callable (no autoload, no Timer) so headless tests can assert autonomy.
+func act_for_turn_system(ts: TurnSystemBase) -> bool:
+	if _busy:
+		return false
+	if ts == null or not ts.is_active:
+		return false
 	var player: Player = ts.get_current_active_player()
-	if not player or not player.is_ai:
-		return
+	if player == null or not player.is_ai:
+		return false
 
 	var unit := _next_actable_ai_unit(ts, player)
-	if not unit:
-		return
+	if unit == null:
+		return false
 
 	_busy = true
 	_act(unit)
 	_busy = false
+	return true
 
 
 ## First unit the AI player can still act with this turn.
