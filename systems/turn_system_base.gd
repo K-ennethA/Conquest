@@ -165,6 +165,44 @@ func reset_all_unit_actions() -> void:
 		if unit.has_method("reset_turn_actions"):
 			unit.reset_turn_actions()
 
+# --- Turn-boundary ticking (move cooldowns + status conditions) ---
+# Tracks the turn on which each unit was last ticked, keyed by unit reference.
+# This keeps ticking idempotent: a unit is ticked at most once per `current_turn`
+# value, so calling the helpers more than once for the same turn is harmless.
+var _last_tick_turn: Dictionary = {}
+
+func _tick_unit_turn_start(unit) -> void:
+	"""Advance a single unit's move cooldowns and status conditions.
+
+	Null-safe for units WITHOUT characters (no MovesetController /
+	StatusController) and idempotent within the same turn.
+	"""
+	if unit == null:
+		return
+
+	# Idempotency: never tick the same unit twice in the same turn.
+	if _last_tick_turn.get(unit, -1) == current_turn:
+		return
+	_last_tick_turn[unit] = current_turn
+
+	# Move cooldowns: only present when the unit has a MovesetController.
+	var moveset = unit.get_moveset_controller() if unit.has_method("get_moveset_controller") else null
+	if moveset != null and moveset.has_method("tick_cooldowns"):
+		moveset.tick_cooldowns()
+
+	# Status conditions: only present when the unit has a StatusController.
+	# tick_all() requires a board; CombatServices.board() may be null, so guard.
+	var status = unit.get_status_controller() if unit.has_method("get_status_controller") else null
+	if status != null and status.has_method("tick_all"):
+		var board = CombatServices.board() if CombatServices else null
+		if board != null:
+			status.tick_all(board)
+
+func _tick_all_units_turn_start(units: Array) -> void:
+	"""Convenience: tick every unit in `units` (each idempotent per turn)."""
+	for unit in units:
+		_tick_unit_turn_start(unit)
+
 # Debug and info methods
 func get_turn_system_info() -> Dictionary:
 	"""Get information about the current turn system state"""

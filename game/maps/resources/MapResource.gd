@@ -16,7 +16,11 @@ class_name MapResource
 
 # Map Layout Data
 @export var tile_layout: Array[Dictionary] = []  # Array of {position: Vector2i, tile_type: String, tile_resource_path: String}
-@export var unit_spawns: Array[Dictionary] = []  # Array of {position: Vector2i, player_id: int, unit_type: String, unit_resource_path: String}
+@export var unit_spawns: Array[Dictionary] = []  # Array of {position: Vector2i, player_id: int, unit_type: String, unit_resource_path: String, character_id: String}
+# NOTE on unit_spawns' "character_id": preferred over "unit_type" when set - it names a
+# CharacterResource id under res://game/characters/roster/ (see CharacterLibrary).
+# "unit_type" is kept for back-compat with maps authored before the character system
+# (MapLoader maps legacy WARRIOR/ARCHER/MAGE strings to a roster id).
 
 # Map Properties
 @export var max_players: int = 2
@@ -84,20 +88,41 @@ func get_unit_spawn_at_position(pos: Vector2i) -> Dictionary:
 	
 	return {}
 
-func set_unit_spawn_at_position(pos: Vector2i, player_id: int, unit_type: String, unit_resource_path: String = "") -> void:
-	"""Set unit spawn data at specific position"""
+func set_unit_spawn_at_position(pos: Vector2i, player_id: int, unit_type: String, unit_resource_path: String = "", character_id: String = "") -> void:
+	"""Set unit spawn data at specific position.
+
+	[param character_id] names a CharacterResource id (see CharacterLibrary) and takes
+	priority over [param unit_type] when loading. [param unit_type] is kept for
+	back-compat with legacy (pre-character) maps and as a display/authoring hint.
+	"""
 	# Remove existing spawn at position
 	for i in range(unit_spawns.size() - 1, -1, -1):
 		if unit_spawns[i].get("position", Vector2i(-1, -1)) == pos:
 			unit_spawns.remove_at(i)
-	
+
 	# Add new spawn data
 	unit_spawns.append({
 		"position": pos,
 		"player_id": player_id,
 		"unit_type": unit_type,
-		"unit_resource_path": unit_resource_path
+		"unit_resource_path": unit_resource_path,
+		"character_id": character_id
 	})
+
+
+func set_character_spawn_at_position(pos: Vector2i, player_id: int, character_id: String, unit_type: String = "") -> void:
+	"""Convenience wrapper for authoring character-backed spawns directly.
+
+	Equivalent to [method set_unit_spawn_at_position] with the [param character_id]
+	and [param unit_type] arguments swapped to the front, since character-backed
+	spawns are the primary authoring path going forward.
+	"""
+	set_unit_spawn_at_position(pos, player_id, unit_type, "", character_id)
+
+
+func get_character_id_at_position(pos: Vector2i) -> String:
+	"""Get the character_id (if any) of the spawn at a specific position"""
+	return get_unit_spawn_at_position(pos).get("character_id", "")
 
 func remove_unit_spawn_at_position(pos: Vector2i) -> void:
 	"""Remove unit spawn at specific position"""

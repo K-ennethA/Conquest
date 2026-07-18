@@ -20,6 +20,11 @@ signal movement_range_calculated(positions: Array[Vector3])
 signal movement_range_cleared()
 signal movement_validated(from_position: Vector3, to_position: Vector3, is_valid: bool)
 
+# Targeting and attack range events
+signal attack_range_calculated(cells: Array)
+signal aoe_preview_calculated(cells: Array)
+signal targeting_cleared()
+
 # UI events
 signal ui_unit_info_requested(unit: Unit)
 signal ui_action_menu_requested(unit: Unit, actions: Array)

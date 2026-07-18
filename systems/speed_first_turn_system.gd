@@ -234,7 +234,13 @@ func _start_unit_turn(unit: Unit) -> void:
 	"""Start a specific unit's turn"""
 	current_acting_unit = unit
 	is_turn_in_progress = true
-	
+
+	# Tick this unit's move cooldowns and status conditions as its turn begins
+	# (null-safe for units without characters; idempotent per turn via the
+	# shared base helper).
+	_tick_unit_turn_start(unit)
+
+
 	# Find the player who owns this unit
 	var owner_player = null
 	for player in registered_players:

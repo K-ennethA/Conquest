@@ -124,7 +124,12 @@ func _start_player_turn(player: Player) -> void:
 	
 	# Reset all unit actions for the new turn
 	reset_all_unit_actions()
-	
+
+	# Tick move cooldowns and status conditions for this player's whole side
+	# as it becomes active (null-safe for units without characters; idempotent
+	# per turn via the shared base helper).
+	_tick_all_units_turn_start(get_units_for_player(player))
+
 	# Notify GameManager of turn change for network synchronization
 	_notify_game_manager_of_turn_change(player)
 	

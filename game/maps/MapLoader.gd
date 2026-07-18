@@ -18,11 +18,26 @@ var default_tile_scene: PackedScene = preload("res://tile_objects/tiles/tile.tsc
 var warrior_unit_scene: PackedScene = preload("res://game/units/scenes/WarriorUnit.tscn")
 var archer_unit_scene: PackedScene = preload("res://game/units/scenes/ArcherUnit.tscn")
 
-# Unit type mapping
+# Generic character-backed unit scene: instantiated for every spawn once a
+# CharacterResource id is resolved (see _create_unit_from_spawn). Stats and
+# components come from the CharacterResource assigned to it, not from a
+# baked-in stats_resource - see game/characters/CharacterUnit.tscn.
+var character_unit_scene: PackedScene = preload("res://game/characters/CharacterUnit.tscn")
+
+# Unit type mapping (legacy/back-compat path, and custom unit_resource_path spawns)
 var unit_scene_map = {
 	"WARRIOR": "res://game/units/scenes/WarriorUnit.tscn",
 	"ARCHER": "res://game/units/scenes/ArcherUnit.tscn",
 	"MAGE": "res://game/units/scenes/MageUnit.tscn"
+}
+
+# Legacy "unit_type" string -> roster CharacterResource id. Used to resolve
+# spawns authored before the character system (no "character_id" set) to a
+# fitting character so old maps keep loading with character-backed units.
+const LEGACY_UNIT_TYPE_TO_CHARACTER_ID: Dictionary = {
+	"WARRIOR": &"torvald_ironhide",
+	"ARCHER": &"sable_quickarrow",
+	"MAGE": &"ysolde_emberwynn",
 }
 
 func _ready():
@@ -197,43 +212,67 @@ func _load_units() -> bool:
 func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> bool:
 	"""Create a unit from spawn data"""
 	print("[MapLoader] Creating unit from spawn data: " + str(spawn_data))
-	
+
 	var grid_pos = spawn_data.get("position", Vector2i(-1, -1))
 	var player_id_raw = spawn_data.get("player_id", 0)
-	
+
 	print("[MapLoader] player_id_raw type: " + str(typeof(player_id_raw)) + ", value: " + str(player_id_raw))
-	
+
 	var player_id = int(player_id_raw) if player_id_raw is String else player_id_raw  # Ensure int
-	
+
 	print("[MapLoader] player_id after conversion: " + str(player_id) + " (type: " + str(typeof(player_id)) + ")")
-	
+
 	var unit_type = spawn_data.get("unit_type", "WARRIOR")
 	var unit_resource_path = spawn_data.get("unit_resource_path", "")
-	
+	var character_id_raw = spawn_data.get("character_id", "")
+
 	if grid_pos == Vector2i(-1, -1):
 		print("[MapLoader] Invalid grid position, skipping unit")
 		return false
-	
-	# Get unit scene
-	var unit_scene = _get_unit_scene(unit_type, unit_resource_path)
-	if not unit_scene:
-		print("[MapLoader] Failed to get unit scene for type: " + unit_type)
-		return false
-	
-	# Instantiate unit
-	var unit_instance = unit_scene.instantiate()
+
+	# Resolve which CharacterResource should back this unit: prefer an explicit
+	# character_id on the spawn; fall back to the legacy unit_type alias table
+	# so maps authored before the character system still resolve to a character.
+	var character_id: String = _resolve_character_id(character_id_raw, unit_type)
+	var character_resource: CharacterResource = null
+	if not character_id.is_empty():
+		character_resource = CharacterLibrary.get_character(character_id)
+		if not character_resource:
+			print("[MapLoader] Could not resolve character '" + character_id + "', falling back to legacy unit scene")
+
+	# Instantiate unit: character-backed path first, legacy fixed-class scene
+	# as a fallback so a missing/bad character id never crashes map loading.
+	var unit_instance = null
+	if character_resource:
+		unit_instance = character_unit_scene.instantiate()
+		if unit_instance:
+			# Must be assigned BEFORE add_child: Unit._ready() (tile_objects/units/unit.gd)
+			# derives its UnitStats + combat components from character_resource only
+			# while it's already set when the node enters the tree.
+			unit_instance.character_resource = character_resource
+		else:
+			print("[MapLoader] Failed to instantiate CharacterUnit.tscn, falling back to legacy unit scene")
+
+	if not unit_instance:
+		var unit_scene = _get_unit_scene(unit_type, unit_resource_path)
+		if not unit_scene:
+			print("[MapLoader] Failed to get unit scene for type: " + unit_type)
+			return false
+		unit_instance = unit_scene.instantiate()
+
 	if not unit_instance:
 		print("[MapLoader] Failed to instantiate unit")
 		return false
-	
+
 	# Set unit name
-	unit_instance.name = unit_type + str(units_created + 1)
+	var name_hint = character_id if not character_id.is_empty() else unit_type
+	unit_instance.name = name_hint + str(units_created + 1)
 	print("[MapLoader] Created unit: " + unit_instance.name)
-	
+
 	# Calculate world position (units spawn at Y=1.5 above tiles)
 	var world_pos = Vector3(grid_pos.x * 2 + 1, 1.5, grid_pos.y * 2 + 1)
 	unit_instance.transform.origin = world_pos
-	
+
 	# Add to appropriate player container
 	print("[MapLoader] Looking for player container: Player" + str(player_id + 1))
 	var player_container = map_root.get_node_or_null("Player" + str(player_id + 1))
@@ -243,10 +282,25 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> bool
 		player_container = Node3D.new()
 		player_container.name = "Player" + str(player_id + 1)
 		map_root.add_child(player_container)
-	
+
 	player_container.add_child(unit_instance)
 	print("[MapLoader] Unit added to player container successfully")
 	return true
+
+func _resolve_character_id(character_id_raw, legacy_unit_type: String) -> String:
+	"""Resolve a spawn's roster character id.
+
+	Prefers an explicit character_id (String or StringName) from the spawn data.
+	Falls back to LEGACY_UNIT_TYPE_TO_CHARACTER_ID keyed by the legacy unit_type
+	string ("WARRIOR"/"ARCHER"/"MAGE") for spawns authored before the character
+	system. Returns "" if neither resolves to anything.
+	"""
+	var explicit_id := String(character_id_raw) if character_id_raw != null else ""
+	if not explicit_id.is_empty():
+		return explicit_id
+
+	var alias = LEGACY_UNIT_TYPE_TO_CHARACTER_ID.get(String(legacy_unit_type).to_upper(), &"")
+	return String(alias)
 
 func _get_unit_scene(unit_type: String, unit_resource_path: String) -> PackedScene:
 	"""Get the appropriate unit scene for the unit type"""
