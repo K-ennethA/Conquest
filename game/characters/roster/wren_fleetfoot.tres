@@ -1,0 +1,96 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="PackedScene" path="res://game/characters/models/scout_model.tscn" id="1_s3u7b"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="2_dfeea"]
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="3_7cd0d"]
+[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="4_p6s4u"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="5_b0ybn"]
+[ext_resource type="Script" path="res://game/combat/effects/KnockbackEffect.gd" id="6_vd38m"]
+[ext_resource type="Script" path="res://game/combat/effects/HealEffect.gd" id="7_ncfod"]
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="8_syfek"]
+
+[sub_resource type="Resource" id="Resource_p5mrs"]
+script = ExtResource("4_p6s4u")
+
+[sub_resource type="Resource" id="Resource_w7yya"]
+script = ExtResource("5_b0ybn")
+min_range = 2
+max_range = 4
+
+[sub_resource type="Resource" id="Resource_khqcs"]
+script = ExtResource("2_dfeea")
+move_id = &"piercing_shot"
+display_name = "Piercing Shot"
+description = "A precise ranged bolt that strikes a distant enemy."
+energy_cost = 1
+targeting = SubResource("Resource_w7yya")
+effects = Array[ExtResource("3_7cd0d")]([SubResource("Resource_p5mrs")])
+
+[sub_resource type="Resource" id="Resource_w27cl"]
+script = ExtResource("4_p6s4u")
+power = 22
+
+[sub_resource type="Resource" id="Resource_raekv"]
+script = ExtResource("5_b0ybn")
+
+[sub_resource type="Resource" id="Resource_hixee"]
+script = ExtResource("2_dfeea")
+move_id = &"cleave"
+display_name = "Cleave"
+description = "A heavy adjacent swing. Deal physical damage to one enemy."
+targeting = SubResource("Resource_raekv")
+effects = Array[ExtResource("3_7cd0d")]([SubResource("Resource_w27cl")])
+
+[sub_resource type="Resource" id="Resource_eibg3"]
+script = ExtResource("4_p6s4u")
+power = 10
+scale = 0.5
+
+[sub_resource type="Resource" id="Resource_0ahl3"]
+script = ExtResource("6_vd38m")
+distance = 2
+
+[sub_resource type="Resource" id="Resource_b2gy7"]
+script = ExtResource("5_b0ybn")
+
+[sub_resource type="Resource" id="Resource_ivivk"]
+script = ExtResource("2_dfeea")
+move_id = &"gale_shove"
+display_name = "Gale Shove"
+description = "A concussive push: light damage that knocks an enemy back two cells."
+targeting = SubResource("Resource_b2gy7")
+effects = Array[ExtResource("3_7cd0d")]([SubResource("Resource_eibg3"), SubResource("Resource_0ahl3")])
+
+[sub_resource type="Resource" id="Resource_1rlqq"]
+script = ExtResource("7_ncfod")
+amount = 24
+scaling_stat = "magic"
+
+[sub_resource type="Resource" id="Resource_qsq3j"]
+script = ExtResource("5_b0ybn")
+target_kind = 1
+max_range = 2
+
+[sub_resource type="Resource" id="Resource_o7q37"]
+script = ExtResource("2_dfeea")
+move_id = &"soothing_light"
+display_name = "Soothing Light"
+description = "Mend a wounded ally, restoring health scaled by magic."
+category = 1
+energy_cost = 2
+targeting = SubResource("Resource_qsq3j")
+effects = Array[ExtResource("3_7cd0d")]([SubResource("Resource_1rlqq")])
+
+[resource]
+script = ExtResource("8_syfek")
+character_id = &"wren_fleetfoot"
+display_name = "Wren Fleetfoot"
+description = "A darting skirmisher who strikes and repositions before retaliation."
+model_scene = ExtResource("1_s3u7b")
+base_health = 85
+base_defense = 9
+base_magic = 8
+base_speed = 20
+base_movement = 5
+movement_kind = 1
+moveset = Array[ExtResource("2_dfeea")]([SubResource("Resource_khqcs"), SubResource("Resource_hixee"), SubResource("Resource_ivivk"), SubResource("Resource_o7q37")])

@@ -1,0 +1,16 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_scout"]
+albedo_color = Color(0.85, 0.75, 0.25, 1)
+roughness = 0.7
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_scout"]
+material = SubResource("StandardMaterial3D_scout")
+radius = 0.4
+height = 1.8
+
+[node name="ScoutModel" type="Node3D"]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+mesh = SubResource("CapsuleMesh_scout")

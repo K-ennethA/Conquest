@@ -1,0 +1,102 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="PackedScene" path="res://game/characters/models/tank_model.tscn" id="1_dyntd"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="2_mpknp"]
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="3_0e46a"]
+[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="4_we5yv"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="5_usqvd"]
+[ext_resource type="Script" path="res://game/combat/effects/KnockbackEffect.gd" id="6_xurae"]
+[ext_resource type="Script" path="res://game/combat/effects/StatModifierEffect.gd" id="7_dlqjx"]
+[ext_resource type="Script" path="res://game/combat/effects/HealEffect.gd" id="8_ueuc0"]
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="9_iordq"]
+
+[sub_resource type="Resource" id="Resource_bpa7s"]
+script = ExtResource("4_we5yv")
+power = 22
+
+[sub_resource type="Resource" id="Resource_rjbty"]
+script = ExtResource("5_usqvd")
+
+[sub_resource type="Resource" id="Resource_uoqod"]
+script = ExtResource("2_mpknp")
+move_id = &"cleave"
+display_name = "Cleave"
+description = "A heavy adjacent swing. Deal physical damage to one enemy."
+targeting = SubResource("Resource_rjbty")
+effects = Array[ExtResource("3_0e46a")]([SubResource("Resource_bpa7s")])
+
+[sub_resource type="Resource" id="Resource_dfavx"]
+script = ExtResource("4_we5yv")
+power = 10
+scale = 0.5
+
+[sub_resource type="Resource" id="Resource_yyqxv"]
+script = ExtResource("6_xurae")
+distance = 2
+
+[sub_resource type="Resource" id="Resource_lv806"]
+script = ExtResource("5_usqvd")
+
+[sub_resource type="Resource" id="Resource_a76n6"]
+script = ExtResource("2_mpknp")
+move_id = &"gale_shove"
+display_name = "Gale Shove"
+description = "A concussive push: light damage that knocks an enemy back two cells."
+targeting = SubResource("Resource_lv806")
+effects = Array[ExtResource("3_0e46a")]([SubResource("Resource_dfavx"), SubResource("Resource_yyqxv")])
+
+[sub_resource type="Resource" id="Resource_dsyvi"]
+script = ExtResource("7_dlqjx")
+amount = 6
+
+[sub_resource type="Resource" id="Resource_55nyk"]
+script = ExtResource("5_usqvd")
+target_kind = 1
+max_range = 2
+area_shape = 3
+area_size = 1
+
+[sub_resource type="Resource" id="Resource_nopo3"]
+script = ExtResource("2_mpknp")
+move_id = &"rallying_hymn"
+display_name = "Rallying Hymn"
+description = "Embolden allies near the target cell, raising their attack for a few turns."
+category = 1
+energy_cost = 2
+targeting = SubResource("Resource_55nyk")
+effects = Array[ExtResource("3_0e46a")]([SubResource("Resource_dsyvi")])
+
+[sub_resource type="Resource" id="Resource_fxvhc"]
+script = ExtResource("8_ueuc0")
+amount = 24
+scaling_stat = "magic"
+
+[sub_resource type="Resource" id="Resource_4vuda"]
+script = ExtResource("5_usqvd")
+target_kind = 1
+max_range = 2
+
+[sub_resource type="Resource" id="Resource_s3nw8"]
+script = ExtResource("2_mpknp")
+move_id = &"soothing_light"
+display_name = "Soothing Light"
+description = "Mend a wounded ally, restoring health scaled by magic."
+category = 1
+energy_cost = 2
+targeting = SubResource("Resource_4vuda")
+effects = Array[ExtResource("3_0e46a")]([SubResource("Resource_fxvhc")])
+
+[resource]
+script = ExtResource("9_iordq")
+character_id = &"mabel_bulwark"
+display_name = "Mabel Bulwark"
+description = "An immovable guardian built to soak hits and hold ground."
+model_scene = ExtResource("1_dyntd")
+base_health = 180
+base_attack = 18
+base_defense = 30
+base_magic = 6
+base_magic_defense = 20
+base_speed = 7
+base_movement = 2
+moveset = Array[ExtResource("2_mpknp")]([SubResource("Resource_uoqod"), SubResource("Resource_a76n6"), SubResource("Resource_nopo3"), SubResource("Resource_s3nw8")])

@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_8oep1"]
+[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="2_l3j7c"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_okp6j"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="4_3jd6f"]
+
+[sub_resource type="Resource" id="Resource_wfpxi"]
+script = ExtResource("2_l3j7c")
+
+[sub_resource type="Resource" id="Resource_7pk3r"]
+script = ExtResource("4_3jd6f")
+min_range = 2
+max_range = 4
+
+[resource]
+script = ExtResource("3_okp6j")
+move_id = &"piercing_shot"
+display_name = "Piercing Shot"
+description = "A precise ranged bolt that strikes a distant enemy."
+energy_cost = 1
+targeting = SubResource("Resource_7pk3r")
+effects = Array[ExtResource("1_8oep1")]([SubResource("Resource_wfpxi")])

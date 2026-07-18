@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mage"]
+albedo_color = Color(0.5, 0.3, 0.72, 1)
+emission_enabled = true
+emission = Color(0.3, 0.12, 0.45, 1)
+emission_energy_multiplier = 0.4
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_mage"]
+material = SubResource("StandardMaterial3D_mage")
+radius = 0.45
+height = 1.95
+
+[node name="MageModel" type="Node3D"]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.98, 0)
+mesh = SubResource("CapsuleMesh_mage")
