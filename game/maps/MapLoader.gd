@@ -61,7 +61,14 @@ func load_map(map_resource: MapResource, target_parent: Node3D) -> bool:
 	# Set up map structure
 	current_map = map_resource
 	map_root = target_parent
-	
+
+	# Sync the shared board Grid to THIS map's dimensions. Grid.tres ships as a
+	# stale 5x5, and the cursor clamps to grid.size -- so on a bigger map the
+	# cursor would be stuck in a 5x5 corner and mouse bounds checks would fail.
+	# The cursor preloads the same cached Grid.tres, so mutating it here (in
+	# memory, not saved) propagates to every consumer for this map.
+	_sync_grid_size(map_resource)
+
 	# Create containers
 	if not _create_map_containers():
 		_emit_load_failed("Failed to create map containers")
@@ -80,6 +87,16 @@ func load_map(map_resource: MapResource, target_parent: Node3D) -> bool:
 	print("Map loaded successfully: " + map_resource.map_name)
 	map_loaded.emit(map_resource)
 	return true
+
+func _sync_grid_size(map_resource) -> void:
+	"""Resize the shared board grid to match the loaded map (see load_map)."""
+	var grid = load("res://board/Grid.tres")
+	if grid == null:
+		return
+	var w: int = maxi(1, int(map_resource.width))
+	var h: int = maxi(1, int(map_resource.height))
+	grid.size = Vector3(w, 0, h)
+	print("[MapLoader] Grid size synced to map: %dx%d" % [w, h])
 
 func load_map_from_file(map_path: String, target_parent: Node3D) -> bool:
 	"""Load a map from a .tres file"""
