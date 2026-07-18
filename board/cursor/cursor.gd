@@ -6,6 +6,33 @@ extends Node3D
 @export var grid: Resource = preload("res://board/Grid.tres")
 @export var move_speed: float = 10.0
 
+# --- Fire-Emblem style corner-bracket tile selector geometry ---
+# The tile is 2x2 world units (see Grid.tres cell_size), so half a tile = 1.0.
+# Brackets sit inset from the tile edge; the dark outline is drawn slightly
+# larger/thicker than the gold bracket so it reads as a crisp edge on any
+# terrain (light sand/stone as well as dark lava/water).
+const CORNER_GOLD := 0.86        # gold bracket corner distance from tile center
+const CORNER_OUTLINE := 0.90     # outline corner sits further out, framing the gold
+const ARM_LENGTH_GOLD := 0.5
+const ARM_LENGTH_OUTLINE := 0.54
+const ARM_WIDTH_GOLD := 0.11
+const ARM_WIDTH_OUTLINE := 0.17
+
+const COLOR_GOLD_IDLE := Color(1.0, 0.78, 0.25, 0.95)
+const EMISSION_GOLD_IDLE := Color(1.0, 0.65, 0.15)
+const COLOR_GOLD_SELECTED := Color(1.0, 0.92, 0.55, 1.0)
+const EMISSION_GOLD_SELECTED := Color(1.2, 0.85, 0.25)
+
+const COLOR_OUTLINE_IDLE := Color(0.12, 0.07, 0.02, 0.9)
+const EMISSION_OUTLINE_IDLE := Color(0.08, 0.04, 0.0)
+const COLOR_OUTLINE_SELECTED := Color(0.35, 0.18, 0.05, 0.95)
+const EMISSION_OUTLINE_SELECTED := Color(0.3, 0.15, 0.02)
+
+# Idle "breathing" animation applied to the gold brackets only, so the dark
+# outline stays put as a stable frame around the tile.
+const PULSE_SPEED := 2.2
+const PULSE_AMPLITUDE := 0.06
+
 var tile_position := Vector3.ZERO:
 	set(value):
 		var new_position = grid.grid_clamp(value)
@@ -34,6 +61,10 @@ var selection_material: StandardMaterial3D
 var base_ring_material: StandardMaterial3D
 var selection_ring_material: StandardMaterial3D
 
+# Idle pulse animation state (cheap _process oscillation, no per-frame allocations)
+var _pulse_time: float = 0.0
+var _bracket_base_scale: Vector3 = Vector3.ONE
+
 # Mouse support
 var camera: Camera3D
 var is_mouse_enabled: bool = true
@@ -57,60 +88,110 @@ func _ready() -> void:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
 
 func _setup_cursor_visuals() -> void:
-	"""Setup cursor visual materials"""
+	"""Build the Fire-Emblem style corner-bracket tile selector: four warm
+	gold corner brackets (mesh_instance) framed by a darker bracket outline
+	(base_mesh) so the selector reads clearly against any terrain. Everything
+	is mesh/material-generated here in _ready; _process only tweaks scale."""
 	if mesh_instance:
-		# Create base cursor material (bright yellow diamond with rim lighting)
-		base_material = StandardMaterial3D.new()
-		base_material.albedo_color = Color(1.0, 1.0, 0.2, 0.8)
-		base_material.flags_transparent = true
-		base_material.flags_unshaded = true
-		base_material.emission_enabled = true
-		base_material.emission = Color(1.0, 1.0, 0.3)
-		base_material.no_depth_test = true  # Always visible
-		base_material.rim_enabled = true
-		base_material.rim = 0.5
-		base_material.rim_tint = 0.8
-		
-		# Create selection material (bright green diamond with rim lighting)
-		selection_material = StandardMaterial3D.new()
-		selection_material.albedo_color = Color(0.2, 1.0, 0.2, 0.8)
-		selection_material.flags_transparent = true
-		selection_material.flags_unshaded = true
-		selection_material.emission_enabled = true
-		selection_material.emission = Color(0.3, 1.0, 0.3)
-		selection_material.no_depth_test = true  # Always visible
-		selection_material.rim_enabled = true
-		selection_material.rim = 0.6
-		selection_material.rim_tint = 0.9
-		
+		mesh_instance.mesh = _build_corner_bracket_mesh(CORNER_GOLD, ARM_LENGTH_GOLD, ARM_WIDTH_GOLD)
+		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+		# Idle gold brackets
+		base_material = _make_bracket_material(COLOR_GOLD_IDLE, EMISSION_GOLD_IDLE)
+		base_material.render_priority = 1
+
+		# Selected gold brackets (hotter, brighter gold - stays in the warm palette)
+		selection_material = _make_bracket_material(COLOR_GOLD_SELECTED, EMISSION_GOLD_SELECTED)
+		selection_material.render_priority = 1
+
 		mesh_instance.material_override = base_material
-	
+		_bracket_base_scale = mesh_instance.scale
+
 	if base_mesh:
-		# Create base ring material (subtle yellow with rim)
-		base_ring_material = StandardMaterial3D.new()
-		base_ring_material.albedo_color = Color(1.0, 1.0, 0.2, 0.2)
-		base_ring_material.flags_transparent = true
-		base_ring_material.flags_unshaded = true
-		base_ring_material.emission_enabled = true
-		base_ring_material.emission = Color(1.0, 1.0, 0.3, 0.3)
-		base_ring_material.no_depth_test = true
-		base_ring_material.rim_enabled = true
-		base_ring_material.rim = 0.3
-		base_ring_material.rim_tint = 0.5
-		
-		# Create selection ring material (subtle green with rim)
-		selection_ring_material = StandardMaterial3D.new()
-		selection_ring_material.albedo_color = Color(0.2, 1.0, 0.2, 0.3)
-		selection_ring_material.flags_transparent = true
-		selection_ring_material.flags_unshaded = true
-		selection_ring_material.emission_enabled = true
-		selection_ring_material.emission = Color(0.3, 1.0, 0.3, 0.4)
-		selection_ring_material.no_depth_test = true
-		selection_ring_material.rim_enabled = true
-		selection_ring_material.rim = 0.4
-		selection_ring_material.rim_tint = 0.7
-		
+		# Outline brackets are slightly larger/thicker than the gold ones so a
+		# thin dark edge frames the gold on every side - this is what keeps the
+		# cursor legible on light terrain (sand/stone) as well as dark (lava/water).
+		base_mesh.mesh = _build_corner_bracket_mesh(CORNER_OUTLINE, ARM_LENGTH_OUTLINE, ARM_WIDTH_OUTLINE)
+		base_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+		base_ring_material = _make_bracket_material(COLOR_OUTLINE_IDLE, EMISSION_OUTLINE_IDLE)
+		base_ring_material.render_priority = 0
+
+		selection_ring_material = _make_bracket_material(COLOR_OUTLINE_SELECTED, EMISSION_OUTLINE_SELECTED)
+		selection_ring_material.render_priority = 0
+
 		base_mesh.material_override = base_ring_material
+
+
+func _make_bracket_material(albedo: Color, emission: Color) -> StandardMaterial3D:
+	"""Shared material recipe for the cursor brackets: unshaded, always-on-top,
+	double-sided flat decal with a warm emissive glow and a soft rim."""
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = albedo
+	mat.flags_transparent = true
+	mat.flags_unshaded = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.emission_enabled = true
+	mat.emission = emission
+	mat.no_depth_test = true  # Always visible above terrain and units
+	mat.rim_enabled = true
+	mat.rim = 0.35
+	mat.rim_tint = 0.6
+	return mat
+
+
+func _build_corner_bracket_mesh(corner: float, arm_length: float, arm_width: float) -> ArrayMesh:
+	"""Procedurally build four L-shaped corner brackets (flat quads on the XZ
+	plane) framing a 2x2-unit tile, classic Fire-Emblem cursor style. `corner`
+	is each bracket's distance from the tile center (tile half-size is 1.0)."""
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+
+	var signs := [Vector2(1, 1), Vector2(-1, 1), Vector2(-1, -1), Vector2(1, -1)]
+	for s in signs:
+		var sx: float = s.x
+		var sz: float = s.y
+		var ex := sx * corner
+		var ez := sz * corner
+
+		# Arm running along the X edge (thin in Z)
+		_add_flat_quad(st, ex, ex - sx * arm_length, ez, ez - sz * arm_width)
+		# Arm running along the Z edge (thin in X)
+		_add_flat_quad(st, ex, ex - sx * arm_width, ez, ez - sz * arm_length)
+
+	return st.commit()
+
+
+func _add_flat_quad(st: SurfaceTool, x0: float, x1: float, z0: float, z1: float) -> void:
+	"""Add a two-triangle quad lying flat on the XZ plane (Y = 0, local space)."""
+	var p00 := Vector3(x0, 0.0, z0)
+	var p10 := Vector3(x1, 0.0, z0)
+	var p11 := Vector3(x1, 0.0, z1)
+	var p01 := Vector3(x0, 0.0, z1)
+
+	st.set_normal(Vector3.UP)
+	st.add_vertex(p00)
+	st.set_normal(Vector3.UP)
+	st.add_vertex(p10)
+	st.set_normal(Vector3.UP)
+	st.add_vertex(p11)
+
+	st.set_normal(Vector3.UP)
+	st.add_vertex(p00)
+	st.set_normal(Vector3.UP)
+	st.add_vertex(p11)
+	st.set_normal(Vector3.UP)
+	st.add_vertex(p01)
+
+
+func _process(delta: float) -> void:
+	"""Cheap idle "breathing" animation: the gold brackets gently pulse in
+	scale while the dark outline stays fixed as a stable frame on the tile."""
+	if not mesh_instance:
+		return
+	_pulse_time += delta
+	var pulse := 1.0 + sin(_pulse_time * PULSE_SPEED) * PULSE_AMPLITUDE
+	mesh_instance.scale = _bracket_base_scale * pulse
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Handle keyboard input first (always works)

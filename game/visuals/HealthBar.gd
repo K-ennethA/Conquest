@@ -60,13 +60,13 @@ func _setup_meshes():
 	health_fill.material_override = _health_material
 	health_fill.position.z = 0.01  # Slightly in front of background
 
-	# Position label above the health bar (overhead style)
+	# Fire-Emblem style: the map bar shows HP as a pure colored bar, no numbers.
+	# The Label3D node still exists in HealthBar.tscn, so hide it here rather
+	# than populating it - exact HP lives in the unit info panel / combat
+	# forecast, which are already the source of truth for numeric HP.
 	if label:
-		label.position = Vector3(0, 0.26, 0)  # Above the larger health bar for clean separation
-		label.font_size = 16  # Large, readable text
-		label.outline_size = 3  # Thick outline for excellent visibility
-		label.outline_modulate = Color.BLACK
-		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.visible = false
+		label.text = ""
 
 func update_health(percentage: float, current: int, maximum: int):
 	"""Update health bar display"""
@@ -88,11 +88,9 @@ func update_health(percentage: float, current: int, maximum: int):
 		else:
 			_health_material.albedo_color = COLOR_LOW
 
-	# Update text label
-	if label:
-		label.text = str(current) + "/" + str(maximum)
-		label.modulate = Color.WHITE
-		label.visible = true
+	# No numeric text on the map bar (Fire Emblem style) - current/maximum are
+	# intentionally unused here; the bar's fill/color is the only readout.
+	# Numeric HP is shown in the unit info panel and combat forecast instead.
 
 func set_visible_state(visible: bool):
 	"""Show or hide the health bar"""
