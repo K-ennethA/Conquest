@@ -35,7 +35,10 @@ func _ready() -> void:
 	GameEvents.unit_deselected.connect(_on_unit_deselected)
 	GameEvents.unit_hover_started.connect(_on_unit_hover_started)
 	GameEvents.unit_hover_ended.connect(_on_unit_hover_ended)
-	
+
+	# Match the amber HUD look (lives outside GameUILayout, so themes itself).
+	ConquestTheme.apply_to(self)
+
 	# Hide panel initially
 	_hide_panel()
 

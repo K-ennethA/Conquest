@@ -14,6 +14,7 @@ class_name MainMenu
 
 func _ready() -> void:
 	print("[DEBUG] MainMenu: _ready() called")
+	theme = MenuTheme.build()  # dark Legends-style menu look
 	
 	# Add AutoClientDetector test
 	var autoclient_test = Node.new()

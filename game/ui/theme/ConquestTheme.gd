@@ -151,6 +151,30 @@ static func style_panel_background(node: Control) -> void:
 		node.add_theme_stylebox_override("panel", panel_box())
 
 
+## Apply the whole amber look to [param root] and its subtree: set the theme,
+## amber-ify every panel background, and strip baked-in font colours / per-button
+## colour styleboxes so everything shares the one look. Each HUD panel calls this
+## on itself in _ready, so it works no matter when/where the panel is added.
+static func apply_to(root: Control) -> void:
+	if root == null:
+		return
+	root.theme = build()
+	_restyle(root)
+
+
+static func _restyle(node: Node) -> void:
+	for child in node.get_children():
+		if child is Panel or child is PanelContainer:
+			style_panel_background(child)
+		if (child is Label or child is Button) and child.has_theme_color_override("font_color"):
+			child.remove_theme_color_override("font_color")
+		if child is Button or child is OptionButton:
+			for s in ["normal", "hover", "pressed", "disabled", "focus"]:
+				if child.has_theme_stylebox_override(s):
+					child.remove_theme_stylebox_override(s)
+		_restyle(child)
+
+
 ## Colour for a move/ability element tag; falls back to amber for unknowns.
 static func element_color(element: String) -> Color:
 	match element.to_lower():

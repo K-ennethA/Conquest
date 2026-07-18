@@ -44,20 +44,8 @@ func _ready() -> void:
 	is_layout_initialized = true
 
 func _apply_theme() -> void:
-	"""Apply ConquestTheme to this HUD, amber-ify all panel backgrounds, and clear
-	hardcoded font colours so text uses the theme's readable ink on the amber
-	ground (labels styled via a LabelSettings resource keep their own look)."""
-	theme = ConquestTheme.build()
-	_restyle_tree(self)
-
-func _restyle_tree(node: Node) -> void:
-	for child in node.get_children():
-		if child is Panel or child is PanelContainer:
-			ConquestTheme.style_panel_background(child)
-		# Drop baked-in white/grey font colours -> fall back to the theme ink.
-		if (child is Label or child is Button) and child.has_theme_color_override("font_color"):
-			child.remove_theme_color_override("font_color")
-		_restyle_tree(child)
+	"""Apply the amber ConquestTheme to this HUD subtree (panels, buttons, text)."""
+	ConquestTheme.apply_to(self)
 
 func _initialize_layout() -> void:
 	"""Initialize the layout system with proper sizing and constraints"""

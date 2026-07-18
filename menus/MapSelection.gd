@@ -24,6 +24,7 @@ var map_resources: Array[MapResource] = []
 
 func _ready() -> void:
 	print("MapSelection: Initializing map selection UI")
+	theme = MenuTheme.build()  # dark Legends-style menu look
 	
 	# Connect signals
 	if map_list:

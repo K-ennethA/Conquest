@@ -18,6 +18,7 @@ var turn_system_descriptions = {
 var selected_turn_system: TurnSystemBase.TurnSystemType = TurnSystemBase.TurnSystemType.TRADITIONAL
 
 func _ready() -> void:
+	theme = MenuTheme.build()  # dark Legends-style menu look
 	# Connect button signals
 	if traditional_button:
 		traditional_button.pressed.connect(_on_traditional_pressed)

@@ -35,6 +35,10 @@ func _ready() -> void:
 	else:
 		print("ERROR: End Turn button not found!")
 	
+	# Match the amber HUD look (this panel lives outside GameUILayout, so it
+	# themes itself).
+	ConquestTheme.apply_to(self)
+
 	# Initial update
 	_update_display()
 	print("PlayerTurnPanel initialized")
