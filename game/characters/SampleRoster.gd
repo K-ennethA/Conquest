@@ -35,6 +35,7 @@ static func move_cleave() -> MoveResource:
 	var m := MoveResource.new()
 	m.move_id = &"cleave"
 	m.display_name = "Cleave"
+	m.element = &"steel"
 	m.description = "A heavy adjacent swing. Deal physical damage to one enemy."
 	m.category = CombatTypes.DamageCategory.PHYSICAL
 	m.targeting = _pattern(CombatTypes.TargetKind.ENEMY, 1, 1, CombatTypes.AreaShape.SINGLE, 0)
@@ -47,6 +48,7 @@ static func move_piercing_shot() -> MoveResource:
 	var m := MoveResource.new()
 	m.move_id = &"piercing_shot"
 	m.display_name = "Piercing Shot"
+	m.element = &"steel"
 	m.description = "A precise ranged bolt that strikes a distant enemy."
 	m.category = CombatTypes.DamageCategory.PHYSICAL
 	m.energy_cost = 1
@@ -60,6 +62,7 @@ static func move_ember_storm() -> MoveResource:
 	var m := MoveResource.new()
 	m.move_id = &"ember_storm"
 	m.display_name = "Ember Storm"
+	m.element = &"ember"
 	m.description = "Rain embers over an area, burning nearby enemies and scorching the ground."
 	m.category = CombatTypes.DamageCategory.MAGICAL
 	m.energy_cost = 3
@@ -75,6 +78,7 @@ static func move_soothing_light() -> MoveResource:
 	var m := MoveResource.new()
 	m.move_id = &"soothing_light"
 	m.display_name = "Soothing Light"
+	m.element = &"holy"
 	m.description = "Mend a wounded ally, restoring health scaled by magic."
 	m.category = CombatTypes.DamageCategory.MAGICAL
 	m.energy_cost = 2
@@ -92,6 +96,7 @@ static func move_rallying_hymn() -> MoveResource:
 	var m := MoveResource.new()
 	m.move_id = &"rallying_hymn"
 	m.display_name = "Rallying Hymn"
+	m.element = &"holy"
 	m.description = "Embolden allies near the target cell, raising their attack for a few turns."
 	m.category = CombatTypes.DamageCategory.MAGICAL
 	m.energy_cost = 2
@@ -109,6 +114,7 @@ static func move_sunder_guard() -> MoveResource:
 	var m := MoveResource.new()
 	m.move_id = &"sunder_guard"
 	m.display_name = "Sunder Guard"
+	m.element = &"steel"
 	m.description = "Batter an enemy's armor, lowering its defense for a short time."
 	m.category = CombatTypes.DamageCategory.PHYSICAL
 	m.targeting = _pattern(CombatTypes.TargetKind.ENEMY, 1, 2, CombatTypes.AreaShape.SINGLE, 0)
@@ -125,6 +131,7 @@ static func move_gale_shove() -> MoveResource:
 	var m := MoveResource.new()
 	m.move_id = &"gale_shove"
 	m.display_name = "Gale Shove"
+	m.element = &"nature"
 	m.description = "A concussive push: light damage that knocks an enemy back two cells."
 	m.category = CombatTypes.DamageCategory.PHYSICAL
 	m.targeting = _pattern(CombatTypes.TargetKind.ENEMY, 1, 1, CombatTypes.AreaShape.SINGLE, 0)
@@ -139,6 +146,7 @@ static func move_crushing_quake() -> MoveResource:
 	var m := MoveResource.new()
 	m.move_id = &"crushing_quake"
 	m.display_name = "Crushing Quake"
+	m.element = &"nature"
 	m.description = "Slam the earth: heavy area damage that knocks enemies back and leaves rubble."
 	m.category = CombatTypes.DamageCategory.MAGICAL
 	m.energy_cost = 4

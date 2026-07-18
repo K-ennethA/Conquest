@@ -15,6 +15,10 @@ class_name MoveResource
 @export var icon: Texture2D
 
 @export var category: CombatTypes.DamageCategory = CombatTypes.DamageCategory.PHYSICAL
+## Flavour/type element for UI colour-coding (Pokemon-style): e.g. &"ember",
+## &"frost", &"arcane", &"holy", &"nature", &"steel". Empty = neutral (amber).
+## See [method ConquestTheme.element_color].
+@export var element: StringName = &""
 ## Resource spent to use the move (energy/mana). 0 = free.
 @export var energy_cost: int = 0
 ## Limited charges per battle. -1 = unlimited.

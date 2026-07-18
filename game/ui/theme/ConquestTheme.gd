@@ -35,6 +35,7 @@ const EL_FROST := Color("3fa9e0")
 const EL_ARCANE := Color("a860e0")
 const EL_HOLY := Color("e8b93a")
 const EL_NATURE := Color("5fb84e")
+const EL_STEEL := Color("c9cbd6")
 
 
 # --- Public stylebox factories (reusable per-panel) ------------------------
@@ -189,5 +190,6 @@ static func element_color(element: String) -> Color:
 		"frost", "water", "ice": return EL_FROST
 		"arcane", "magic": return EL_ARCANE
 		"holy", "light": return EL_HOLY
-		"nature", "earth": return EL_NATURE
+		"nature", "earth", "wind": return EL_NATURE
+		"steel", "metal", "physical": return EL_STEEL
 		_: return AMBER

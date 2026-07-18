@@ -152,7 +152,18 @@ func _populate_moves(moveset: Array[MoveResource], controller: MovesetController
 		if move == null:
 			continue
 		var move_button = _create_move_button(move, slot, controller)
-		moves_container.add_child(move_button)
+		# Pokemon-style element cue: a colour-coded stripe down the left of each
+		# move, keyed to the move's element (see ConquestTheme.element_color).
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		var swatch := ColorRect.new()
+		swatch.color = ConquestTheme.element_color(String(move.element))
+		swatch.custom_minimum_size = Vector2(7, 0)
+		swatch.size_flags_vertical = Control.SIZE_FILL
+		row.add_child(swatch)
+		move_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(move_button)
+		moves_container.add_child(row)
 		move_buttons.append(move_button)
 
 func _create_move_button(move: MoveResource, slot: int, controller: MovesetController) -> Button:
@@ -193,6 +204,8 @@ func _show_move_info(move: MoveResource, controller: MovesetController) -> void:
 	"""Display detailed move information"""
 	var info_text = ""
 	info_text += "Name: %s\n" % move.display_name
+	if String(move.element) != "":
+		info_text += "Type: %s\n" % String(move.element).capitalize()
 	info_text += "Description: %s\n" % move.full_description()
 	if move.energy_cost > 0:
 		info_text += "Energy Cost: %d\n" % move.energy_cost
