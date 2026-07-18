@@ -121,10 +121,14 @@ func validate_turn_action(unit: Unit, action_type: String) -> bool:
 	"""Validate if a unit can perform an action"""
 	if not unit or not is_active:
 		return false
-	
+
 	if unit not in registered_units:
 		return false
-	
+
+	# A unit may move only once per turn (unless granted extra movement).
+	if action_type == "move" and unit.has_method("can_move") and not unit.can_move():
+		return false
+
 	return can_unit_act(unit)
 
 func _on_unit_action_completed(unit: Unit, action_type: String) -> void:

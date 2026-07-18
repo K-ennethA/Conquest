@@ -893,7 +893,12 @@ func _enter_movement_mode() -> void:
 	"""Enter movement mode - show movement range and wait for destination selection"""
 	if not selected_unit:
 		return
-	
+
+	# A unit that already moved this turn cannot move again.
+	if selected_unit.has_method("can_move") and not selected_unit.can_move():
+		print("Unit has already moved this turn - movement blocked")
+		return
+
 	print("=== Entering Movement Mode ===")
 	movement_mode = true
 	
