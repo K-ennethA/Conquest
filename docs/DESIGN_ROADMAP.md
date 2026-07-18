@@ -64,6 +64,16 @@ Consequences:
   effects through the effect pipeline. (Reconcile/replace the older `TileEffect.gd` /
   `TileEffectManager.gd`.)
 
+> **Migration status: DONE** (live gameplay path) — `CombatServices` wires cell → terrain →
+> `TileEffectResource` (`game/tiles/effects/resources/*.tres`) through `TileEffectSystem`;
+> movement, attacks, and enemy AI all resolve tile effects through this data-driven pipeline.
+> **Not yet retired**: `game/tiles/TileEffect.gd` / `TileEffectManager.gd` (the old classes)
+> are still hard-referenced by live code — `tile_objects/tiles/tile.gd` (the tile scene used
+> by every map) and `game/tiles/resources/TileResource.gd` both type against `TileEffect` and
+> constructs it directly, and `game/tiles/resources/molten_lava.tres` embeds a `TileEffect`
+> sub-resource. Deleting the old scripts today is a hard load error; see T19 sweep notes for
+> the rewiring needed before they can be removed.
+
 ### 3.2 Status / over-time conditions
 - **NEW `StatusCondition`** (Resource) — `{ id, duration_turns, tick_effects: Array[MoveEffect],
   on_apply, on_expire, stacking }`. Burn = damage tick; regen = heal tick; timed buff = stat mod.
@@ -122,11 +132,17 @@ Built: `NetSession` (server-authoritative, N-player), `GameModeRules`, map maker
 | Modes / win conditions | `game/modes/`: `WinCondition`, `DefeatAllEnemies`, `CaptureThrone`, `SurviveTurns`, `ProtectUnit`, `GameModeRules` |
 | Bots / bosses | `game/ai/`: `BotController`, `BossController` |
 | Maps | `game/maps/` + `game/mapmaker/`: `MapResource`, `MapLoader`, `MapMakerModel`, `TileTextureImporter`, `skirmish_arena.tres` |
-| Tiles | `game/tiles/`: `TileResource`, `TileEffect`/`TileEffectManager` (older — to reconcile) |
+| Tiles | `game/tiles/`: `TileResource`; data-driven effects **DONE** via `game/tiles/effects/`: `TileEffectResource`/`TileEffectSystem`/`TileEffectLibrary`, wired through `CombatServices`. `TileEffect`/`TileEffectManager` (old) still present — still referenced by `tile_objects/tiles/tile.gd` and `TileResource.gd`; not yet retirable (see §3.1 note) |
 | Networking | `systems/net/`: `NetSession`, `NetProtocol` (server-authoritative, N-player) |
 | Turns / board | `board/`, `turns/`, `systems/` turn systems, `PlayerManager` |
 
 Test coverage: ~158 passing unit tests across combat, characters, modes, AI, map maker, board adapter.
+
+> **Migration status: DONE** — movement, attacks, and enemy AI all run on the data-driven
+> stack above (`MoveResource`/`MoveExecutor`/`BoardAdapter` + `BotController`/`BossController`);
+> the old move/unit systems they replaced have been retired. Tiles are DONE for gameplay
+> resolution (see the Tiles row); the old `TileEffect`/`TileEffectManager` scripts remain only
+> as an unretired residual dependency, tracked in §3.1.
 
 ---
 
@@ -142,6 +158,8 @@ Test coverage: ~158 passing unit tests across combat, characters, modes, AI, map
 
 ### Phase 2 — Tiles, Abilities, Movement (the "easy to add" content systems)
 4. `TileEffectResource` + `TileEffectSystem` (fire/water/fortify/stealth as data); reconcile old tile code.
+   **Migration status: DONE** for gameplay (live via `CombatServices`); old-script retirement
+   still blocked — see §3.1 / §4 notes.
 5. `AbilityResource` + `AbilitySystem` + `CharacterResource.abilities` (passive/triggered, rule modifiers).
 6. `MovementProfile` + pathfinding integration.
 > Outcome: custom tiles, unit abilities, and movement patterns — all data-driven.
