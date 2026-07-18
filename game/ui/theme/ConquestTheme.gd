@@ -12,13 +12,16 @@ extends RefCounted
 ## background with [method style_panel_background].
 
 # --- Palette ---------------------------------------------------------------
+# INK / INK_SOFT are deliberately darker than a "brown" midtone -- deep
+# espresso, near-black -- so default and disabled text keep strong contrast
+# against the light AMBER / AMBER_LITE fills (see build()).
 const AMBER := Color("e6a64b")
 const AMBER_LITE := Color("f0c072")
 const AMBER_DK := Color("c6822f")
 const BROWN := Color("5a3a1e")
 const BROWN_DK := Color("37220f")
-const INK := Color("43290f")
-const INK_SOFT := Color("7a5a38")
+const INK := Color("2a1608")
+const INK_SOFT := Color("5c4020")
 const CREAM := Color("fcefd6")
 const CREAM_DIM := Color("e7d3ad")
 const PLATE_BG := Color("2c2114")
@@ -120,7 +123,11 @@ static func build() -> Theme:
 	t.set_stylebox("normal", "Button", _button_box(AMBER_LITE))
 	t.set_stylebox("hover", "Button", _button_box(AMBER_LITE.lightened(0.08)))
 	t.set_stylebox("pressed", "Button", _button_box(AMBER_DK))
-	t.set_stylebox("disabled", "Button", _button_box(AMBER.darkened(0.12), BROWN_DK))
+	# Disabled fill is pulled further from AMBER (and desaturated toward BROWN)
+	# than before so the "greyed out" state is visually obvious, while
+	# font_disabled_color (INK_SOFT, darkened below) still reads clearly on it
+	# instead of washing out.
+	t.set_stylebox("disabled", "Button", _button_box(AMBER.darkened(0.24).lerp(BROWN, 0.15), BROWN_DK))
 	t.set_stylebox("focus", "Button", _focus_box())
 	t.set_color("font_color", "Button", INK)
 	t.set_color("font_hover_color", "Button", BROWN_DK)

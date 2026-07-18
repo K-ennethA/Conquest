@@ -9,6 +9,7 @@ signal move_selected(move_index: int)
 signal move_cancelled
 
 const MAX_SLOTS := 4
+const CARD_WIDTH := 340.0
 
 @onready var moves_container: VBoxContainer
 @onready var move_info_label: Label
@@ -19,14 +20,62 @@ var move_buttons: Array[Button] = []
 
 func _ready() -> void:
 	name = "MoveSelectionPanel"
+
+	# This panel is add_child'd directly onto UnitActionsPanel (see
+	# UnitActionsPanel._setup_move_system), which is itself a small PanelContainer
+	# pinned to the right-edge sidebar. Left alone, that parent Container would
+	# force-fit us into its own tiny rect every layout pass (Container._resort()
+	# calls fit_child_in_rect() on every non-top_level child), and our real
+	# content (title + up to 4 move buttons + info label + back button) is far
+	# bigger than that -- hence it rendering stretched on top of / overlapping
+	# the sidebar's own text and buttons.
+	#
+	# top_level detaches our transform+anchors from the parent (they become
+	# relative to the viewport instead) and Container skips top_level children
+	# when laying out, so we can freely size and center ourselves as a real
+	# modal over the battlefield, entirely independent of the sidebar's rect.
+	top_level = true
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+	mouse_filter = Control.MOUSE_FILTER_STOP
+
+	# Draw above sibling HUD panels regardless of where we sit in the tree
+	# (z_as_relative = false makes z_index absolute within the canvas layer).
+	z_as_relative = false
+	z_index = 100
+
 	_create_ui()
 	visible = false
 
 func _create_ui() -> void:
-	"""Create the move selection UI"""
+	"""Create the move selection UI as a centered modal popup over the battlefield."""
+	# Dim backdrop: reads as a modal, and blocks clicks from reaching the
+	# battlefield/sidebar underneath while a move is being chosen.
+	var backdrop := ColorRect.new()
+	backdrop.name = "Backdrop"
+	backdrop.color = Color(0.0, 0.0, 0.0, 0.45)
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(backdrop)
+
+	# Centers the card in the middle of the viewport.
+	var center := CenterContainer.new()
+	center.name = "Center"
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(center)
+
+	# The card: an opaque amber panel (ConquestTheme.apply_to below turns this
+	# PanelContainer's background into the signature panel_box() look) so
+	# nothing behind it shows through.
+	var card := PanelContainer.new()
+	card.name = "Card"
+	card.custom_minimum_size = Vector2(CARD_WIDTH, 0)
+	card.mouse_filter = Control.MOUSE_FILTER_STOP
+	center.add_child(card)
+
 	# Main container
 	var main_container = VBoxContainer.new()
-	add_child(main_container)
+	card.add_child(main_container)
 
 	# Title
 	var title = Label.new()
@@ -58,6 +107,11 @@ func _create_ui() -> void:
 	back_button.text = "BACK"
 	back_button.pressed.connect(_on_back_pressed)
 	main_container.add_child(back_button)
+
+	# Apply the amber HUD theme to the whole subtree: amber-izes the Card's
+	# background, dark-inks the labels, themes the buttons -- so the popup
+	# matches the rest of the HUD instead of the default grey Control theme.
+	ConquestTheme.apply_to(self)
 
 func show_moves_for_unit(unit: Node) -> void:
 	"""Display the unit's real moveset (up to 4 MoveResource slots)."""
@@ -125,8 +179,13 @@ func _create_move_button(move: MoveResource, slot: int, controller: MovesetContr
 	button.mouse_entered.connect(func(): _show_move_info(move, controller))
 	button.mouse_exited.connect(func(): _clear_move_info())
 
-	if button.disabled:
-		button.modulate = Color(0.6, 0.6, 0.6, 1.0)
+	# NOTE: previously this also set `button.modulate = Color(0.6, 0.6, 0.6, 1.0)`
+	# on disabled buttons. That multiplies the *entire* button (background and
+	# text together) toward grey on top of the theme's own disabled stylebox /
+	# font_disabled_color, which is what made disabled move labels nearly
+	# invisible. ConquestTheme's disabled Button styling (darkened fill +
+	# INK_SOFT text, both tuned for contrast) already communicates "disabled"
+	# on its own, so the extra modulate is removed rather than fighting it.
 
 	return button
 
