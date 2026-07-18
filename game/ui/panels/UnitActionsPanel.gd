@@ -477,7 +477,7 @@ func _update_actions() -> void:
 	
 	# Update Move button - only available if unit can perform actions
 	if move_button:
-		var can_move = can_control and can_perform_unit_actions and selected_unit.can_act()
+		var can_move = can_control and can_perform_unit_actions and selected_unit.can_move()
 		move_button.disabled = not can_move
 		
 		if can_move:
@@ -1159,22 +1159,10 @@ func _complete_movement_action() -> void:
 		
 		# Still do local processing for immediate feedback
 	
-	# Local game logic (existing)
-	if TurnSystemManager.has_active_turn_system():
-		var turn_system = TurnSystemManager.get_active_turn_system()
-		
-		if turn_system is TraditionalTurnSystem:
-			print("Marking unit acted (Traditional)")
-			(turn_system as TraditionalTurnSystem).mark_unit_acted(selected_unit)
-		elif turn_system is SpeedFirstTurnSystem:
-			print("Marking unit acted (Speed First)")
-			(turn_system as SpeedFirstTurnSystem).mark_unit_acted(selected_unit)
-	
-	# Mark unit action completed
-	selected_unit.mark_action_completed("move")
-	
-	# Emit action completed signal
-	GameEvents.unit_action_completed.emit(selected_unit, "move")
+	# Moving consumes only the unit's MOVE for this turn, not its action: the unit
+	# can still attack / use a move, or End Turn. Re-moving is blocked by can_move()
+	# until an ability or move effect grants extra movement.
+	selected_unit.mark_moved()
 	
 	# Force update unit visuals
 	var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")

@@ -209,11 +209,28 @@ func _setup_players() -> void:
 	# Ensure we have the right number of players
 	if PlayerManager.players.is_empty():
 		PlayerManager.setup_default_players()
-	
+
 	# Assign units to players based on scene structure
 	PlayerManager.assign_units_by_parent()
-	
+
+	# Single-player: every player after the first is bot-controlled.
+	if GameSettings and GameSettings.game_mode == GameSettings.GameMode.SINGLE_PLAYER:
+		for i in range(1, PlayerManager.players.size()):
+			PlayerManager.players[i].is_ai = true
+			print("Player " + str(i) + " set to AI control")
+		_ensure_bot_driver()
+
 	print("Players set up: " + str(PlayerManager.players.size()) + " players")
+
+func _ensure_bot_driver() -> void:
+	"""Add the bot turn driver to the scene if not already present"""
+	var scene_root = get_tree().current_scene
+	if not scene_root or scene_root.get_node_or_null("BotTurnDriver"):
+		return
+	var driver := BotTurnDriver.new()
+	driver.name = "BotTurnDriver"
+	scene_root.add_child(driver)
+	print("BotTurnDriver added for single-player AI")
 
 func _start_game() -> void:
 	"""Start the game"""

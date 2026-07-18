@@ -9,6 +9,8 @@ class_name Player
 @export var player_name: String = "Player"
 @export var team_color: Color = Color.WHITE
 @export var is_active: bool = false
+## When true, this player's turns are driven by the bot AI (single-player).
+@export var is_ai: bool = false
 
 # Player state tracking
 enum PlayerState {

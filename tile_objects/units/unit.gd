@@ -15,6 +15,9 @@ class_name Unit
 # Player ownership
 var owner_player: Player = null
 var has_acted_this_turn: bool = false
+## Set once the unit has moved this turn. A unit may move only once per turn
+## unless an ability or move effect grants extra movement (see [method grant_extra_move]).
+var has_moved_this_turn: bool = false
 
 # Signals
 signal unit_died(unit: Unit)
@@ -275,15 +278,30 @@ func _get_player_assignment_from_player(player: Player) -> PlayerMaterials.Playe
 func reset_turn_actions() -> void:
 	"""Reset unit's actions for a new turn"""
 	has_acted_this_turn = false
+	has_moved_this_turn = false
 
 func mark_action_completed(action_type: String) -> void:
-	"""Mark that this unit has completed an action"""
+	"""Mark that this unit has completed its action (ends its turn)"""
 	has_acted_this_turn = true
 	unit_action_completed.emit(self, action_type)
 
+func mark_moved() -> void:
+	"""Mark that this unit has used its move for the turn (does NOT end its turn;
+	the unit can still take an action). Moving again is blocked until reset or an
+	extra-move grant."""
+	has_moved_this_turn = true
+
+func grant_extra_move() -> void:
+	"""Allow the unit to move again this turn (for abilities / move effects)."""
+	has_moved_this_turn = false
+
 func can_act() -> bool:
-	"""Check if unit can still act this turn"""
+	"""Check if unit can still take its action this turn"""
 	return not has_acted_this_turn and is_alive()
+
+func can_move() -> bool:
+	"""Check if unit can move this turn (once, unless granted extra movement)"""
+	return is_alive() and not has_acted_this_turn and not has_moved_this_turn
 
 # Validation methods
 func can_be_selected_by_player(player: Player) -> bool:
