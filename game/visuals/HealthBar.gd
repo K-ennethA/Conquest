@@ -8,6 +8,19 @@ class_name HealthBar
 @onready var health_fill: MeshInstance3D = $HealthFill
 @onready var label: Label3D = $Label
 
+# Bar dimensions (kept as constants so update_health() doesn't re-derive them)
+const BG_SIZE := Vector2(1.5, 0.32)
+const FILL_MAX_WIDTH := 1.4  # BG_SIZE.x minus a thin bronze border margin
+const FILL_HEIGHT := 0.26
+
+# HP thresholds for color transitions
+const HP_THRESHOLD_HIGH := 0.5
+const HP_THRESHOLD_MID := 0.25
+
+const COLOR_HIGH := Color(0.30, 0.72, 0.28, 1.0)   # Green - healthy
+const COLOR_MID := Color(0.92, 0.62, 0.13, 1.0)    # Amber - matches the fantasy UI vibe
+const COLOR_LOW := Color(0.82, 0.18, 0.16, 1.0)    # Red - critical
+
 var _background_material: StandardMaterial3D
 var _health_material: StandardMaterial3D
 
@@ -16,69 +29,70 @@ func _ready():
 	_setup_meshes()
 
 func _setup_materials():
-	# Background material (subtle dark border)
+	# Background material: dark bronze frame so the bar reads as a border, not a void
 	_background_material = StandardMaterial3D.new()
-	_background_material.albedo_color = Color(0.0, 0.0, 0.0, 0.8)  # Dark border
+	_background_material.albedo_color = Color(0.09, 0.06, 0.04, 0.9)  # Dark bronze border
 	_background_material.flags_transparent = true
 	_background_material.flags_unshaded = true
-	
-	# Health fill material (classic RPG style)
+	_background_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	_background_material.billboard_keep_scale = true
+	_background_material.render_priority = 1
+
+	# Health fill material (classic RPG style, recolored per current HP)
 	_health_material = StandardMaterial3D.new()
-	_health_material.albedo_color = Color(0.2, 0.8, 0.2, 1.0)  # Slightly darker green
+	_health_material.albedo_color = COLOR_HIGH
 	_health_material.flags_unshaded = true
+	_health_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	_health_material.billboard_keep_scale = true
+	_health_material.render_priority = 2
 
 func _setup_meshes():
-	# Create background quad (readable tactical style)
+	# Create background quad (dark bronze frame, sized for readability at camera distance)
 	var bg_mesh = QuadMesh.new()
-	bg_mesh.size = Vector2(1.2, 0.25)  # Larger for better visibility
+	bg_mesh.size = BG_SIZE
 	background.mesh = bg_mesh
 	background.material_override = _background_material
-	
-	# Create health fill quad (fits inside background)
+
+	# Create health fill quad (fits inside background, leaving a thin border visible)
 	var health_mesh = QuadMesh.new()
-	health_mesh.size = Vector2(1.1, 0.2)  # Slightly smaller than background
+	health_mesh.size = Vector2(FILL_MAX_WIDTH, FILL_HEIGHT)
 	health_fill.mesh = health_mesh
 	health_fill.material_override = _health_material
 	health_fill.position.z = 0.01  # Slightly in front of background
-	
+
 	# Position label above the health bar (overhead style)
 	if label:
-		label.position = Vector3(0, 0.2, 0)  # Above the health bar for clean separation
+		label.position = Vector3(0, 0.26, 0)  # Above the larger health bar for clean separation
 		label.font_size = 16  # Large, readable text
 		label.outline_size = 3  # Thick outline for excellent visibility
 		label.outline_modulate = Color.BLACK
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 
 func update_health(percentage: float, current: int, maximum: int):
 	"""Update health bar display"""
 	# Clamp percentage
 	percentage = clamp(percentage, 0.0, 1.0)
-	
-	# Update fill width
+
+	# Update fill width, keeping it left-aligned within the background frame
 	if health_fill and health_fill.mesh:
 		var mesh = health_fill.mesh as QuadMesh
-		mesh.size.x = 1.1 * percentage  # Scale based on background size
-		
-		# Adjust position to keep left-aligned
-		health_fill.position.x = (1.1 * percentage - 1.1) * 0.5
-	
-	# Update color based on health percentage (classic RPG style)
+		mesh.size.x = FILL_MAX_WIDTH * percentage
+		health_fill.position.x = (FILL_MAX_WIDTH * percentage - FILL_MAX_WIDTH) * 0.5
+
+	# Update color based on health percentage: green -> amber -> red
 	if _health_material:
-		if percentage > 0.7:
-			_health_material.albedo_color = Color(0.2, 0.8, 0.2, 1.0)  # Green
-		elif percentage > 0.4:
-			_health_material.albedo_color = Color(0.9, 0.9, 0.2, 1.0)  # Yellow
-		elif percentage > 0.2:
-			_health_material.albedo_color = Color(0.9, 0.5, 0.1, 1.0)  # Orange
+		if percentage > HP_THRESHOLD_HIGH:
+			_health_material.albedo_color = COLOR_HIGH
+		elif percentage > HP_THRESHOLD_MID:
+			_health_material.albedo_color = COLOR_MID
 		else:
-			_health_material.albedo_color = Color(0.8, 0.2, 0.2, 1.0)  # Red
-	
+			_health_material.albedo_color = COLOR_LOW
+
 	# Update text label
 	if label:
 		label.text = str(current) + "/" + str(maximum)
 		label.modulate = Color.WHITE
 		label.visible = true
-		# Make sure text is readable and always faces camera
-		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 
 func set_visible_state(visible: bool):
 	"""Show or hide the health bar"""
