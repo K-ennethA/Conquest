@@ -153,27 +153,15 @@ func _receive_p2p_message(message: Dictionary) -> void:
 		log_network_event("P2P receive failed", "multiplayer API not available")
 		return
 	
-	var sender_id = _multiplayer_api.get_remote_sender_id()
-	if sender_id == 0:
-		sender_id = _local_peer_id  # Local message
-	
-	# Ensure sender_id is an int for string concatenation
-	var sender_id_int = int(sender_id) if sender_id is String else sender_id
-	
+	var sender_id_int := _multiplayer_api.get_remote_sender_id()
+	if sender_id_int == 0:
+		sender_id_int = _local_peer_id  # Local message
+
 	# Update connection quality metrics
 	if message.has("p2p_timestamp"):
 		var latency = Time.get_ticks_msec() - message["p2p_timestamp"]
 		_update_peer_latency(sender_id_int, latency)
-		
-	print("Sender id")
-	print(type_string(typeof(sender_id)))
 
-	print("Sender id int is")
-	print(type_string(typeof(str(sender_id_int))))
-
-
-	
-	log_network_event("P2P message received", "from peer " + str(sender_id_int))
 	message_received.emit(sender_id_int, message)
 
 func disconnect_network() -> void:

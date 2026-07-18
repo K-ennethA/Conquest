@@ -10,13 +10,11 @@ class_name Grid
 
 @export var cell_size := Vector3(2, 0, 2)
 
-# Half of ``cell_size``.
-# We will use this to calculate the center of a grid cell in pixels, on the screen.
-# That's how we can place units in the center of a cell.
-var _half_cell_size: Vector3
-
-func _init():
-	_half_cell_size = cell_size / 2
+# Half of ``cell_size``, used to place units in the center of a cell.
+# Computed on read so it stays correct if ``cell_size`` is changed after construction.
+var _half_cell_size: Vector3:
+	get:
+		return cell_size / 2.0
 
 
 func get_tile_position(grid_position: Vector3) -> Vector3:
@@ -63,8 +61,9 @@ func get_translated_position(original_position: Vector3, new_position: Vector3) 
 ## Makes the `grid_position` fit within the grid's bounds.
 func grid_clamp(grid_position: Vector3) -> Vector3:
 	var out := grid_position
-	out.x = clamp(out.x, 0, size.x - 1.0)
-	out.y = clamp(out.y, 0, size.y - 1.0)
+	out.x = clampf(out.x, 0.0, size.x - 1.0)
+	out.z = clampf(out.z, 0.0, size.z - 1.0)
+	out.y = 0.0
 	return out
 
 # Given Vector2 coordinates, calculates and returns the corresponding integer index. You can use
