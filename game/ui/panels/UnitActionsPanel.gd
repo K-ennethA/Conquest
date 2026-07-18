@@ -943,7 +943,13 @@ func _calculate_and_show_movement_range() -> void:
 		return
 	
 	print("DEBUG: Calculating movement range for " + selected_unit.get_display_name())
-	
+
+	# Character-backed units route the range through MovementResolver + the shared
+	# BoardAdapter (CombatServices.board()). Non-character units, or the case where
+	# no live board exists yet, fall through to the legacy BFS below.
+	if _try_show_movement_range_via_resolver():
+		return
+
 	# Get unit's current position
 	var grid = preload("res://board/Grid.tres")
 	var unit_world_pos = selected_unit.global_position
@@ -977,6 +983,105 @@ func _calculate_and_show_movement_range() -> void:
 	print("DEBUG: Emitting movement_range_calculated signal with " + str(movement_range_tiles.size()) + " tiles")
 	GameEvents.movement_range_calculated.emit(movement_range_tiles)
 	print("DEBUG: Signal emitted")
+
+# --- MovementResolver / BoardAdapter integration (character-backed units) ----
+
+func _try_show_movement_range_via_resolver() -> bool:
+	"""Compute + publish the movement range through MovementResolver on the shared
+	BoardAdapter. Returns true when it handled the range (so the caller must not run
+	the legacy BFS); returns false to signal a fallback (non-character unit, no live
+	board, or no movement profile)."""
+	if not selected_unit or not selected_unit.has_character():
+		return false
+
+	var board = CombatServices.board()
+	if board == null:
+		return false
+
+	var profile = selected_unit.get_movement_profile()
+	if profile == null:
+		# Character present but no usable profile yet -> let the BFS fallback run.
+		return false
+
+	# origin cell (Vector2i(col, row)) straight from the board.
+	var origin: Vector2i = board.cell_of(selected_unit)
+	var cells: Array[Vector2i] = MovementResolver.new().reachable_cells(origin, profile, board)
+
+	# Convert each Vector2i(col, row) into the Vector3(col, 0, row) grid-coord form the
+	# visualizer + GameEvents.movement_range_calculated + downstream validation expect.
+	movement_range_tiles = _cells_to_grid_tiles(cells)
+
+	print("DEBUG: Resolver produced " + str(movement_range_tiles.size()) + " reachable tiles from origin " + str(origin))
+
+	# Keep the same highlight flow: emit the calculated range for the visualizer.
+	GameEvents.movement_range_calculated.emit(movement_range_tiles)
+	return true
+
+
+func _cells_to_grid_tiles(cells: Array[Vector2i]) -> Array[Vector3]:
+	"""Vector2i(col, row) cells -> Vector3(col, 0, row) grid coords used everywhere
+	downstream (movement_range_tiles, the visualizer, GameEvents)."""
+	var out: Array[Vector3] = []
+	for cell in cells:
+		out.append(Vector3(cell.x, 0, cell.y))
+	return out
+
+
+func _grid_tile_to_cell(grid_pos: Vector3) -> Vector2i:
+	"""Vector3(col, 0, row) grid coord -> Vector2i(col, row) board cell."""
+	return Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+
+
+func _is_grid_pos_in_range(grid_pos: Vector3) -> bool:
+	"""True when grid_pos matches a tile in the current reachable set (which, for
+	character-backed units, is the MovementResolver output)."""
+	for tile in movement_range_tiles:
+		if abs(tile.x - grid_pos.x) < 0.1 and abs(tile.z - grid_pos.z) < 0.1:
+			return true
+	return false
+
+
+func _try_execute_move_via_board(destination: Vector3) -> bool:
+	"""Execute a character-backed unit's move through the shared BoardAdapter while
+	preserving the existing tween animation, GameEvents.unit_moved emission, and
+	mark_moved() semantics. Returns true when it handled the move (including a
+	rejected out-of-range destination); false to fall back to the legacy path."""
+	if not selected_unit or not selected_unit.has_character():
+		return false
+
+	var board = CombatServices.board()
+	if board == null:
+		return false
+
+	var dest_cell: Vector2i = _grid_tile_to_cell(destination)
+
+	# Validate the destination is within the reachable set before moving.
+	if not _is_grid_pos_in_range(destination):
+		print("DEBUG: Destination cell " + str(dest_cell) + " not in reachable set - move rejected")
+		return true  # handled (rejected); do NOT fall back to BFS for a character unit
+
+	var old_world_pos: Vector3 = selected_unit.global_position
+	var old_cell: Vector2i = board.cell_of(selected_unit)
+
+	# Authoritative board move: snaps the unit onto the cell center (preserving its
+	# height). We then rewind the world position so the existing tween can animate
+	# from the old spot to the cell's world center.
+	board.move_unit(selected_unit, dest_cell)
+
+	var new_world_pos: Vector3 = board.cell_to_world(dest_cell)
+	new_world_pos.y = old_world_pos.y
+	selected_unit.global_position = old_world_pos
+	_animate_unit_movement(selected_unit, old_world_pos, new_world_pos)
+
+	# Preserve the legacy unit_moved contract: Vector3(col, 0, row) grid coords.
+	var old_grid_pos := Vector3(old_cell.x, 0, old_cell.y)
+	print("Unit moved from " + str(old_grid_pos) + " to " + str(destination) + " (via BoardAdapter)")
+	GameEvents.unit_moved.emit(selected_unit, old_grid_pos, destination)
+
+	# mark_moved() semantics: consumes the move but NOT the action.
+	_complete_movement_action()
+	return true
+
 
 func _calculate_reachable_tiles(start_pos: Vector3, max_distance: int, grid: Grid) -> Array[Vector3]:
 	"""Calculate all tiles reachable within movement range using BFS"""
@@ -1102,28 +1207,34 @@ func _execute_movement(destination: Vector3) -> void:
 	
 	print("=== Executing Unit Movement ===")
 	print("Moving " + selected_unit.get_display_name() + " to " + str(destination))
-	
+
+	# Character-backed units route through the shared BoardAdapter (resolver-backed).
+	if _try_execute_move_via_board(destination):
+		_exit_movement_mode()
+		return
+
+	# FALLBACK: legacy grid-based movement for non-character units / no live board.
 	# Get grid for position calculations
 	var grid = preload("res://board/Grid.tres")
 	var old_world_pos = selected_unit.global_position
 	var old_grid_pos = grid.calculate_grid_coordinates(old_world_pos)
-	
+
 	# Calculate new world position
 	var new_world_pos = grid.calculate_map_position(destination)
 	# Preserve the unit's original Y height (units are at Y=1.5)
 	new_world_pos.y = selected_unit.global_position.y
-	
+
 	# Animate the unit movement
 	_animate_unit_movement(selected_unit, old_world_pos, new_world_pos)
-	
+
 	print("Unit moved from " + str(old_grid_pos) + " to " + str(destination))
-	
+
 	# Emit movement event
 	GameEvents.unit_moved.emit(selected_unit, old_grid_pos, destination)
-	
+
 	# Mark unit as having acted
 	_complete_movement_action()
-	
+
 	# Exit movement mode
 	_exit_movement_mode()
 
@@ -1246,31 +1357,41 @@ func _execute_movement_to_destination(destination: Vector3) -> void:
 	
 	print("=== Executing Movement to Destination ===")
 	print("Moving " + selected_unit.get_display_name() + " to " + str(destination))
-	
+
+	# Character-backed units route through the shared BoardAdapter (resolver-backed).
+	# Validation happens against the reachable set inside the helper before it moves.
+	if _try_execute_move_via_board(destination):
+		# Clear the highlighted range now that the move is under way.
+		_clear_movement_range()
+		# Update UI to reflect unit has moved
+		_update_actions()
+		return
+
+	# FALLBACK: legacy grid-based movement for non-character units / no live board.
 	# Get grid for position calculations
 	var grid = preload("res://board/Grid.tres")
 	var old_world_pos = selected_unit.global_position
 	var old_grid_pos = grid.calculate_grid_coordinates(old_world_pos)
-	
+
 	# Calculate new world position
 	var new_world_pos = grid.calculate_map_position(destination)
 	# Preserve the unit's original Y height (units are at Y=1.5)
 	new_world_pos.y = selected_unit.global_position.y
-	
+
 	# Clear movement range first
 	_clear_movement_range()
-	
+
 	# Animate the unit movement
 	_animate_unit_movement(selected_unit, old_world_pos, new_world_pos)
-	
+
 	print("Unit moved from " + str(old_grid_pos) + " to " + str(destination))
-	
+
 	# Emit movement event
 	GameEvents.unit_moved.emit(selected_unit, old_grid_pos, destination)
-	
+
 	# Mark unit as having acted
 	_complete_movement_action()
-	
+
 	# Update UI to reflect unit has moved
 	_update_actions()
 
