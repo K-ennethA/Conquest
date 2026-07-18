@@ -39,6 +39,11 @@ func _ready() -> void:
 	# themes itself).
 	ConquestTheme.apply_to(self)
 
+	# Wire to an already-active turn system so we don't miss the one-shot
+	# activation signal (which would freeze the display on the first player).
+	if TurnSystemManager and TurnSystemManager.has_active_turn_system():
+		_on_turn_system_activated(TurnSystemManager.get_active_turn_system())
+
 	# Initial update
 	_update_display()
 	print("PlayerTurnPanel initialized")

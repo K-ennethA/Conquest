@@ -25,10 +25,18 @@ func _ready() -> void:
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
 		print("TurnIndicator: Connected to TurnSystemManager")
-	
+
 	# Delay initial update to ensure turn system is fully initialized
 	await get_tree().process_frame
-	_update_display()
+
+	# If a turn system is ALREADY active (it usually is by the time the HUD
+	# loads), wire up to it now -- otherwise we'd miss the one-shot
+	# turn_system_activated signal and never hear turn_started, leaving the
+	# banner frozen on the first player.
+	if TurnSystemManager and TurnSystemManager.has_active_turn_system():
+		_on_turn_system_activated(TurnSystemManager.get_active_turn_system())
+	else:
+		_update_display()
 	print("TurnIndicator: Initialized")
 
 func _update_display() -> void:
@@ -129,27 +137,18 @@ func _update_fallback_display(active_player: Player) -> void:
 	turn_info_label.text = "Turn in progress"
 
 func _update_background_color(player: Player) -> void:
-	"""Update background color based on current player"""
+	"""Amber banner (matching the HUD) with the current player's colour as the
+	frame, so whose turn it is still reads at a glance."""
 	if not background_panel:
 		return
-	
-	var style_box = StyleBoxFlat.new()
-	
+
+	var style_box := ConquestTheme.panel_box()
 	if player and player.player_id in player_colors:
-		style_box.bg_color = player_colors[player.player_id]
-	else:
-		style_box.bg_color = Color(0.3, 0.3, 0.3, 0.8)  # Default gray
-	
-	style_box.corner_radius_top_left = 12
-	style_box.corner_radius_top_right = 12
-	style_box.corner_radius_bottom_left = 12
-	style_box.corner_radius_bottom_right = 12
-	style_box.border_width_left = 2
-	style_box.border_width_top = 2
-	style_box.border_width_right = 2
-	style_box.border_width_bottom = 2
-	style_box.border_color = Color.WHITE
-	
+		var c: Color = player_colors[player.player_id]
+		c.a = 1.0
+		style_box.border_color = c
+		style_box.set_border_width_all(5)
+
 	background_panel.add_theme_stylebox_override("panel", style_box)
 
 func show_turn_transition(from_player: Player, to_player: Player) -> void:
