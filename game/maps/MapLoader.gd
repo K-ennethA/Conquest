@@ -15,21 +15,18 @@ var units_container: Node3D
 
 # Tile and unit scene references
 var default_tile_scene: PackedScene = preload("res://tile_objects/tiles/tile.tscn")
-var warrior_unit_scene: PackedScene = preload("res://game/units/scenes/WarriorUnit.tscn")
-var archer_unit_scene: PackedScene = preload("res://game/units/scenes/ArcherUnit.tscn")
 
-# Generic character-backed unit scene: instantiated for every spawn once a
-# CharacterResource id is resolved (see _create_unit_from_spawn). Stats and
-# components come from the CharacterResource assigned to it, not from a
-# baked-in stats_resource - see game/characters/CharacterUnit.tscn.
+# Generic character-backed unit scene: instantiated for every spawn (see
+# _create_unit_from_spawn). Stats and components come from the CharacterResource
+# assigned to it, not from a baked-in stats_resource - see
+# game/characters/CharacterUnit.tscn. The fixed-class per-type unit scenes
+# have been retired; every spawn now resolves to a roster character id
+# (explicit or via LEGACY_UNIT_TYPE_TO_CHARACTER_ID / DEFAULT_CHARACTER_ID).
 var character_unit_scene: PackedScene = preload("res://game/characters/CharacterUnit.tscn")
 
-# Unit type mapping (legacy/back-compat path, and custom unit_resource_path spawns)
-var unit_scene_map = {
-	"WARRIOR": "res://game/units/scenes/WarriorUnit.tscn",
-	"ARCHER": "res://game/units/scenes/ArcherUnit.tscn",
-	"MAGE": "res://game/units/scenes/MageUnit.tscn"
-}
+# Fallback roster id used when a spawn's character_id (explicit or aliased)
+# doesn't resolve to a real CharacterResource, so map loading never fails.
+const DEFAULT_CHARACTER_ID: StringName = &"torvald_ironhide"
 
 # Legacy "unit_type" string -> roster CharacterResource id. Used to resolve
 # spawns authored before the character system (no "character_id" set) to a
@@ -261,7 +258,6 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> bool
 	print("[MapLoader] player_id after conversion: " + str(player_id) + " (type: " + str(typeof(player_id)) + ")")
 
 	var unit_type = spawn_data.get("unit_type", "WARRIOR")
-	var unit_resource_path = spawn_data.get("unit_resource_path", "")
 	var character_id_raw = spawn_data.get("character_id", "")
 
 	if grid_pos == Vector2i(-1, -1):
@@ -270,37 +266,33 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> bool
 
 	# Resolve which CharacterResource should back this unit: prefer an explicit
 	# character_id on the spawn; fall back to the legacy unit_type alias table
-	# so maps authored before the character system still resolve to a character.
+	# so maps authored before the character system still resolve to a character;
+	# finally fall back to DEFAULT_CHARACTER_ID so a missing/bad id never fails
+	# to spawn a unit (the fixed-class scenes this used to fall back to are gone).
 	var character_id: String = _resolve_character_id(character_id_raw, unit_type)
-	var character_resource: CharacterResource = null
-	if not character_id.is_empty():
+	if character_id.is_empty():
+		character_id = String(DEFAULT_CHARACTER_ID)
+
+	var character_resource: CharacterResource = CharacterLibrary.get_character(character_id)
+	if not character_resource:
+		print("[MapLoader] Could not resolve character '" + character_id + "', falling back to default character '" + String(DEFAULT_CHARACTER_ID) + "'")
+		character_id = String(DEFAULT_CHARACTER_ID)
 		character_resource = CharacterLibrary.get_character(character_id)
-		if not character_resource:
-			print("[MapLoader] Could not resolve character '" + character_id + "', falling back to legacy unit scene")
 
-	# Instantiate unit: character-backed path first, legacy fixed-class scene
-	# as a fallback so a missing/bad character id never crashes map loading.
-	var unit_instance = null
-	if character_resource:
-		unit_instance = character_unit_scene.instantiate()
-		if unit_instance:
-			# Must be assigned BEFORE add_child: Unit._ready() (tile_objects/units/unit.gd)
-			# derives its UnitStats + combat components from character_resource only
-			# while it's already set when the node enters the tree.
-			unit_instance.character_resource = character_resource
-		else:
-			print("[MapLoader] Failed to instantiate CharacterUnit.tscn, falling back to legacy unit scene")
-
-	if not unit_instance:
-		var unit_scene = _get_unit_scene(unit_type, unit_resource_path)
-		if not unit_scene:
-			print("[MapLoader] Failed to get unit scene for type: " + unit_type)
-			return false
-		unit_instance = unit_scene.instantiate()
-
-	if not unit_instance:
-		print("[MapLoader] Failed to instantiate unit")
+	if not character_resource:
+		print("[MapLoader] Failed to resolve default character '" + String(DEFAULT_CHARACTER_ID) + "', skipping unit")
 		return false
+
+	# Every unit is a CharacterUnit.tscn instance backed by a CharacterResource.
+	var unit_instance = character_unit_scene.instantiate()
+	if not unit_instance:
+		print("[MapLoader] Failed to instantiate CharacterUnit.tscn")
+		return false
+
+	# Must be assigned BEFORE add_child: Unit._ready() (tile_objects/units/unit.gd)
+	# derives its UnitStats + combat components from character_resource only
+	# while it's already set when the node enters the tree.
+	unit_instance.character_resource = character_resource
 
 	# Set unit name
 	var name_hint = character_id if not character_id.is_empty() else unit_type
@@ -339,22 +331,6 @@ func _resolve_character_id(character_id_raw, legacy_unit_type: String) -> String
 
 	var alias = LEGACY_UNIT_TYPE_TO_CHARACTER_ID.get(String(legacy_unit_type).to_upper(), &"")
 	return String(alias)
-
-func _get_unit_scene(unit_type: String, unit_resource_path: String) -> PackedScene:
-	"""Get the appropriate unit scene for the unit type"""
-	# Try custom unit resource path first
-	if not unit_resource_path.is_empty() and ResourceLoader.exists(unit_resource_path):
-		var custom_scene = load(unit_resource_path) as PackedScene
-		if custom_scene:
-			return custom_scene
-	
-	# Fall back to default unit scenes
-	var scene_path = unit_scene_map.get(unit_type.to_upper(), "")
-	if not scene_path.is_empty() and ResourceLoader.exists(scene_path):
-		return load(scene_path) as PackedScene
-	
-	# Default to warrior if nothing else works
-	return warrior_unit_scene
 
 func _emit_load_failed(error_message: String) -> void:
 	"""Emit load failed signal with error message"""

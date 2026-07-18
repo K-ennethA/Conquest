@@ -8,10 +8,9 @@ func _ready():
 	
 	# Test 1: Create unit with stats resource
 	print("\n--- Test 1: Unit with Stats Resource ---")
-	var warrior_resource = load("res://game/units/resources/unit_types/Warrior.tres") as UnitStatsResource
-	if not warrior_resource:
-		# Create programmatically if .tres file doesn't exist
-		warrior_resource = create_warrior_stats()
+	# The fixed-class unit_types .tres files were retired; build the stats
+	# resource programmatically instead of loading a deleted asset.
+	var warrior_resource = create_warrior_stats()
 	
 	var test_unit = Unit.new()
 	test_unit.stats_resource = warrior_resource

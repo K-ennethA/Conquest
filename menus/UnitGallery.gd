@@ -239,36 +239,44 @@ func _setup_connections() -> void:
 		sort_option.item_selected.connect(_on_sort_changed)
 
 func _load_all_units() -> void:
-	"""Load all available unit resources"""
+	"""Load all available unit resources.
+
+	Units are no longer authored as standalone UnitStatsResource .tres files
+	(the fixed-class "unit_types" resource directory was retired). Instead this pulls
+	every roster CharacterResource (game/characters/roster/*.tres, see
+	CharacterLibrary) and derives a UnitStatsResource per character - the same
+	conversion tile_objects/units/unit.gd uses at spawn time - so the rest of
+	this gallery's display logic keeps working unchanged."""
 	all_units.clear()
-	
-	var resources_dir = "res://game/units/resources/unit_types/"
-	if not DirAccess.dir_exists_absolute(resources_dir):
-		print("No unit resources directory found")
-		return
-	
-	var dir = DirAccess.open(resources_dir)
-	if not dir:
-		print("Failed to open resources directory")
-		return
-	
-	dir.list_dir_begin()
-	var file_name = dir.get_next()
-	
-	while file_name != "":
-		if file_name.ends_with(".tres"):
-			var resource_path = resources_dir + file_name
-			if ResourceLoader.exists(resource_path):
-				var resource = load(resource_path)
-				if resource is UnitStatsResource:
-					all_units.append(resource)
-					print("Loaded unit: " + resource.unit_name)
-		file_name = dir.get_next()
-	
-	dir.list_dir_end()
-	
+
+	for character_id in CharacterLibrary.all_ids():
+		var character: CharacterResource = CharacterLibrary.get_character(character_id)
+		if character:
+			var resource := _stats_resource_from_character(character)
+			all_units.append(resource)
+			print("Loaded unit: " + resource.unit_name)
+
 	# Apply initial filter and sort
 	_apply_filters()
+
+func _stats_resource_from_character(character: CharacterResource) -> UnitStatsResource:
+	"""Derive a display-ready UnitStatsResource from a roster CharacterResource."""
+	var derived := UnitStatsResource.new()
+	derived.unit_name = character.display_name
+	derived.unit_type = String(character.character_id)
+	derived.description = character.description
+	derived.max_health = character.base_health
+	derived.base_attack = character.base_attack
+	derived.base_defense = character.base_defense
+	derived.base_magic = character.base_magic
+	derived.base_speed = character.base_speed
+	derived.movement_range = character.base_movement
+	derived.attack_range = character.attack_range
+	if character.portrait:
+		derived.profile_image_path = character.portrait.resource_path
+	if character.model_scene:
+		derived.model_scene_path = character.model_scene.resource_path
+	return derived
 
 func _apply_filters() -> void:
 	"""Apply current search, filter, and sort settings"""

@@ -3,19 +3,22 @@ extends GutTest
 # Unit tests for UnitStatsResource (game/units/resources/UnitStatsResource.gd).
 #
 # SCHEMA MISMATCH (documented for follow-up):
-# The .tres data files under game/units/resources/unit_types/ (Warrior.tres etc.)
-# were authored against an OLDER schema: they set `base_health`, `base_movement`,
-# and `unit_type` as a UnitType sub-resource. The CURRENT UnitStatsResource.gd
-# instead defines `max_health`, `movement_range`, and a plain String `unit_type`
-# (and has no UnitType field, no MIN_HEALTH const, and validate_stats() returns a
+# The old fixed-class .tres data files (Warrior.tres etc., under the
+# game/units/resources unit-types resource directory) were authored against an
+# OLDER schema: they set `base_health`, `base_movement`, and `unit_type` as a
+# UnitType sub-resource. The CURRENT UnitStatsResource.gd instead defines
+# `max_health`, `movement_range`, and a plain String `unit_type` (and has no
+# UnitType field, no MIN_HEALTH const, and validate_stats() returns a
 # Dictionary rather than a bool).
 #
 # The previous test loaded those .tres files and asserted the old schema, so it
 # could never pass against the current script. UnitStatsResource.gd is OUTSIDE
 # this change's editable scope, so -- per the task's instruction -- these tests
 # are written against the CURRENT script API using in-code resources (not the
-# stale .tres). FOLLOW-UP: reconcile UnitStatsResource.gd to the data (base_*/
-# UnitType), then restore .tres-driven assertions.
+# stale .tres). Those fixed-class .tres files (and their scenes) have since
+# been deleted as part of the fixed-class unit retirement (T18). FOLLOW-UP:
+# reconcile UnitStatsResource.gd to the data (base_*/UnitType), then restore
+# .tres-driven assertions against roster-derived data instead.
 
 func _make_warrior() -> UnitStatsResource:
 	var res := UnitStatsResource.new()
