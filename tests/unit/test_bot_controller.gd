@@ -151,3 +151,92 @@ func test_boss_unlocks_special_move_in_later_phase():
 	assert_eq(boss_ai.current_phase, 1, "boss entered phase 1")
 	assert_eq(decision["action"], BotController.ActionType.MOVE, "special move lets the boss attack")
 	assert_eq(decision["move"].move_id, &"flame_burst", "boss uses the unlocked special move")
+
+# --- Difficulty levels -----------------------------------------------------
+
+func test_hard_secures_a_kill_over_a_bigger_hit():
+	# Two enemies in reach. `full` takes the most raw damage; `weak` would die to
+	# the same hit. NORMAL maximizes HP removed (full); HARD takes the guaranteed
+	# kill (weak) even though it removes fewer HP.
+	var actor := MockUnit.new(0, { "attack": 10 })
+	var full := MockUnit.new(1, { "health": 100, "defense": 0 })  # est 34, survives
+	var weak := MockUnit.new(1, { "health": 20, "defense": 0 })   # est 34 >= 20, lethal
+	var board := MockBoard.new()
+	board.place(actor, Vector2i(0, 0))
+	board.place(full, Vector2i(1, 0))
+	board.place(weak, Vector2i(0, 1))
+	var strike = MoveLibrary.basic_strike()
+
+	var normal := BotController.new()  # default NORMAL
+	assert_eq(normal.decide(actor, [strike], board)["target"], full, "NORMAL removes the most HP")
+
+	var hard := BotController.new()
+	hard.difficulty = BotController.Difficulty.HARD
+	assert_eq(hard.decide(actor, [strike], board)["target"], weak, "HARD secures the guaranteed kill")
+
+func test_brutal_focus_fires_the_weakest_enemy():
+	# No kill is available this turn. NORMAL chips the target it hits hardest;
+	# BRUTAL instead focus-fires the lowest-HP enemy to set up a kill next turn.
+	var actor := MockUnit.new(0, { "attack": 10 })
+	var tanky := MockUnit.new(1, { "health": 100, "defense": 0 })  # est 34, biggest hit
+	var weak := MockUnit.new(1, { "health": 50, "defense": 20 })   # est 14, lowest HP
+	var board := MockBoard.new()
+	board.place(actor, Vector2i(0, 0))
+	board.place(tanky, Vector2i(1, 0))
+	board.place(weak, Vector2i(0, 1))
+	var strike = MoveLibrary.basic_strike()
+
+	var normal := BotController.new()
+	assert_eq(normal.decide(actor, [strike], board)["target"], tanky, "NORMAL takes the biggest hit")
+
+	var brutal := BotController.new()
+	brutal.difficulty = BotController.Difficulty.BRUTAL
+	assert_eq(brutal.decide(actor, [strike], board)["target"], weak, "BRUTAL focus-fires the weakest")
+
+func test_easy_squanders_openings_that_normal_always_takes():
+	# One enemy, in range. NORMAL must attack every time; EASY must sometimes
+	# dither (skip/hesitate) across seeds -- proving the tier is genuinely weaker.
+	var actor := MockUnit.new(0, { "attack": 10 })
+	var enemy := MockUnit.new(1, { "health": 100, "defense": 0 })
+	var board := MockBoard.new()
+	board.place(actor, Vector2i(0, 0))
+	board.place(enemy, Vector2i(1, 0))
+	var strike = MoveLibrary.basic_strike()
+
+	var normal_non_attacks := 0
+	var easy_non_attacks := 0
+	for s in range(40):
+		var n := BotController.new()  # NORMAL never touches rng, but inject for parity
+		var nr := RandomNumberGenerator.new(); nr.seed = s; n.rng = nr
+		if n.decide(actor, [strike], board)["action"] != BotController.ActionType.MOVE:
+			normal_non_attacks += 1
+		var e := BotController.new()
+		e.difficulty = BotController.Difficulty.EASY
+		var er := RandomNumberGenerator.new(); er.seed = s; e.rng = er
+		if e.decide(actor, [strike], board)["action"] != BotController.ActionType.MOVE:
+			easy_non_attacks += 1
+
+	assert_eq(normal_non_attacks, 0, "NORMAL always takes an available attack")
+	assert_gt(easy_non_attacks, 0, "EASY sometimes squanders the opening")
+
+func test_easy_is_reproducible_for_a_fixed_seed():
+	# Same seed -> same plan, so replays / networked runs stay deterministic.
+	var actor := MockUnit.new(0, { "attack": 10 })
+	var enemy := MockUnit.new(1, { "health": 100, "defense": 0 })
+	var board := MockBoard.new()
+	board.place(actor, Vector2i(0, 0))
+	board.place(enemy, Vector2i(1, 0))
+	var strike = MoveLibrary.basic_strike()
+
+	var a := BotController.new(); a.difficulty = BotController.Difficulty.EASY
+	var ar := RandomNumberGenerator.new(); ar.seed = 7; a.rng = ar
+	var b := BotController.new(); b.difficulty = BotController.Difficulty.EASY
+	var br := RandomNumberGenerator.new(); br.seed = 7; b.rng = br
+	assert_eq(a.decide(actor, [strike], board)["action"], b.decide(actor, [strike], board)["action"],
+		"identical seed -> identical action")
+
+func test_difficulty_name_labels():
+	assert_eq(BotController.difficulty_name(BotController.Difficulty.EASY), "Easy")
+	assert_eq(BotController.difficulty_name(BotController.Difficulty.NORMAL), "Normal")
+	assert_eq(BotController.difficulty_name(BotController.Difficulty.HARD), "Hard")
+	assert_eq(BotController.difficulty_name(BotController.Difficulty.BRUTAL), "Brutal")

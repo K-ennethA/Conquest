@@ -23,6 +23,12 @@ var auto_end_turn: bool = false  # Whether to automatically end turns when all u
 var show_turn_indicators: bool = true
 var enable_undo: bool = false  # For future expansion
 
+# AI difficulty for bot-controlled enemies. Int mirrors BotController.Difficulty
+# (EASY=0, NORMAL=1, HARD=2, BRUTAL=3); the driver reads this when it builds a
+# controller. Kept as a plain int so this settings singleton need not depend on
+# BotController's load order.
+var ai_difficulty: int = 1  # NORMAL
+
 func _ready() -> void:
 	name = "GameSettings"
 	print("GameSettings initialized")
@@ -58,6 +64,11 @@ func set_selected_map(map_path: String) -> void:
 	"""Set the selected map path"""
 	selected_map_path = map_path
 	print("Selected map set to: " + map_path)
+
+func set_ai_difficulty(difficulty: int) -> void:
+	"""Set the AI difficulty (BotController.Difficulty: EASY=0..BRUTAL=3)."""
+	ai_difficulty = clampi(difficulty, 0, 3)
+	print("AI difficulty set to: " + str(ai_difficulty))
 
 func get_selected_map() -> String:
 	"""Get the selected map path"""
@@ -130,7 +141,8 @@ func reset_to_defaults() -> void:
 	auto_end_turn = false
 	show_turn_indicators = true
 	enable_undo = false
-	
+	ai_difficulty = 1  # NORMAL
+
 	print("Game settings reset to defaults")
 
 # Debug and info
@@ -144,7 +156,8 @@ func get_settings_info() -> Dictionary:
 		"player_names": player_names.duplicate(),
 		"auto_end_turn": auto_end_turn,
 		"show_turn_indicators": show_turn_indicators,
-		"enable_undo": enable_undo
+		"enable_undo": enable_undo,
+		"ai_difficulty": ai_difficulty
 	}
 
 func print_settings() -> void:

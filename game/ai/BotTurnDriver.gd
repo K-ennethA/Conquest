@@ -76,9 +76,20 @@ func _act(unit: Unit) -> void:
 
 # --- Character planning path -----------------------------------------------
 
+## The configured AI difficulty from the shared game settings, defaulting to
+## NORMAL when the settings singleton is unavailable (e.g. isolated tests).
+func _ai_difficulty() -> int:
+	var gs = get_node_or_null("/root/GameSettings")
+	if gs != null and "ai_difficulty" in gs:
+		return int(gs.ai_difficulty)
+	return BotController.Difficulty.NORMAL
+
+
+
 ## Plan via [BotController]/[BossController] and execute a real move / step.
 func _act_character(unit: Unit, board) -> void:
 	var controller = BossController.new() if unit.is_boss() else BotController.new()
+	controller.difficulty = _ai_difficulty()
 	var decision = controller.decide(unit, unit.get_moveset(), board)
 	if decision == null or decision.is_empty():
 		_finish(unit, "wait")

@@ -39,9 +39,47 @@ func _ready() -> void:
 	
 	if refresh_button:
 		refresh_button.pressed.connect(_on_refresh_button_pressed)
-	
+
+	# AI difficulty picker (single-player). Built in code so it slots into the
+	# existing layout without a .tscn edit; the UI restyle will formalize it.
+	_setup_difficulty_picker()
+
 	# Load available maps
 	_load_available_maps()
+
+var _difficulty_option: OptionButton
+
+func _setup_difficulty_picker() -> void:
+	"""Insert an 'Enemy AI' difficulty dropdown above the button row."""
+	var vbox := get_node_or_null("VBoxContainer")
+	if vbox == null:
+		return
+
+	var row := HBoxContainer.new()
+	row.name = "DifficultyRow"
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+
+	var label := Label.new()
+	label.text = "Enemy AI"
+	row.add_child(label)
+
+	_difficulty_option = OptionButton.new()
+	for i in range(4):  # BotController.Difficulty: EASY..BRUTAL
+		_difficulty_option.add_item(BotController.difficulty_name(i), i)
+	_difficulty_option.select(clampi(GameSettings.ai_difficulty, 0, 3))
+	_difficulty_option.item_selected.connect(_on_difficulty_selected)
+	row.add_child(_difficulty_option)
+
+	vbox.add_child(row)
+	# Sit the picker just above the Select/Back button row.
+	var button_row := get_node_or_null("VBoxContainer/ButtonContainer")
+	if button_row != null:
+		vbox.move_child(row, button_row.get_index())
+
+func _on_difficulty_selected(index: int) -> void:
+	"""Store the chosen AI difficulty for the game to read."""
+	GameSettings.set_ai_difficulty(_difficulty_option.get_item_id(index))
 
 func _load_available_maps() -> void:
 	"""Load all available map files"""

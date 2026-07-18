@@ -26,6 +26,32 @@ enum ActionType {
 	WAIT,  ## do nothing this turn
 }
 
+## How sharply the AI plays. Higher tiers target better, secure kills, and never
+## hesitate; EASY deliberately dithers and misplays so it is beatable.
+enum Difficulty {
+	EASY,    ## dithers: often skips its attack, mis-targets, hesitates to advance
+	NORMAL,  ## greedy best-damage (the baseline strategy)
+	HARD,    ## NORMAL + secures guaranteed kills when reachable
+	BRUTAL,  ## HARD + focus-fires the weakest enemy and never hesitates
+}
+
+## Which tier this planner plays at. Set by the driver from the game settings.
+var difficulty: int = Difficulty.NORMAL
+
+## RNG used only by EASY's dithering/mis-targeting. Injectable so tests stay
+## deterministic; created (and randomized) lazily on first EASY use, so NORMAL /
+## HARD / BRUTAL never touch it and remain fully deterministic.
+var rng: RandomNumberGenerator = null
+
+
+## Human-readable name for a [enum Difficulty] value (UI / logs).
+static func difficulty_name(d: int) -> String:
+	match d:
+		Difficulty.EASY: return "Easy"
+		Difficulty.HARD: return "Hard"
+		Difficulty.BRUTAL: return "Brutal"
+		_: return "Normal"
+
 
 ## Plan this unit's turn. [param moveset] is an Array of [MoveResource].
 ## Returns a decision dictionary with keys: "action" ([enum ActionType]), "move",
@@ -39,12 +65,77 @@ func decide(actor, moveset: Array, board) -> Dictionary:
 	if hostiles.is_empty():
 		return _wait("no_hostiles")
 
-	var best := _best_attack(actor, origin, moveset, hostiles, board)
-	if not best.is_empty():
-		return best
+	# All reachable damaging plays this turn, best-first (index 0 == the greedy
+	# pick NORMAL has always made). Difficulty decides which of them we take.
+	var ranked := _ranked_attacks(actor, origin, moveset, hostiles, board)
+	var choice := _choose_attack(ranked)
+	if not choice.is_empty():
+		return choice
 
-	# No damaging option in range: close on the nearest enemy.
+	# No attack taken (none in range, or EASY chose to hold). Advance -- unless
+	# EASY hesitates this turn, in which case do nothing.
+	if difficulty == Difficulty.EASY and _get_rng().randf() < 0.30:
+		return _wait("hesitate")
 	return _step_toward_nearest(origin, hostiles, board)
+
+
+## Lazily-created RNG for EASY's stochastic behaviour.
+func _get_rng() -> RandomNumberGenerator:
+	if rng == null:
+		rng = RandomNumberGenerator.new()
+		rng.randomize()
+	return rng
+
+
+## Pick which of the ranked attacks (best-first) to actually take, per difficulty.
+## Returns {} to decline attacking (advance/hesitate instead).
+func _choose_attack(ranked: Array) -> Dictionary:
+	if ranked.is_empty():
+		return {}
+	match difficulty:
+		Difficulty.EASY:
+			# Dither: sometimes skip a clear attack, sometimes hit the wrong target.
+			var roll := _get_rng().randf()
+			if roll < 0.35:
+				return {}  # squanders the opening
+			if roll < 0.65 and ranked.size() > 1:
+				return ranked[_get_rng().randi_range(0, ranked.size() - 1)]
+			return ranked[0]
+		Difficulty.HARD:
+			return _first_kill_or_best(ranked)
+		Difficulty.BRUTAL:
+			# Secure a kill if possible; otherwise focus-fire the weakest enemy to
+			# set one up next turn (rather than chipping the highest-HP target).
+			var kill := _first_kill_or_best(ranked, true)
+			if not kill.is_empty() and bool(kill.get("_is_kill", false)):
+				return kill
+			return _focus_weakest(ranked)
+		_:  # NORMAL
+			return ranked[0]
+
+
+## First candidate that outright kills its target (estimate >= target HP), or the
+## best-damage candidate if none can. When [param tag] is true the returned dict
+## carries "_is_kill" so BRUTAL can tell a secured kill from a fallback.
+func _first_kill_or_best(ranked: Array, tag: bool = false) -> Dictionary:
+	for c in ranked:
+		if int(c.get("estimated_damage", 0)) >= int(c.get("target_hp", 1 << 30)):
+			if tag:
+				c = c.duplicate()
+				c["_is_kill"] = true
+			return c
+	return ranked[0]
+
+
+## Candidate hitting the lowest-current-HP target (tie-break: more damage).
+func _focus_weakest(ranked: Array) -> Dictionary:
+	var best: Dictionary = ranked[0]
+	for c in ranked:
+		var chp := int(c.get("target_hp", 1 << 30))
+		var bhp := int(best.get("target_hp", 1 << 30))
+		if chp < bhp or (chp == bhp and int(c.get("estimated_damage", 0)) > int(best.get("estimated_damage", 0))):
+			best = c
+	return best
 
 
 # --- Target selection ------------------------------------------------------
@@ -68,12 +159,12 @@ func _is_hostile(actor, other, board) -> bool:
 	return false
 
 
-## Best damaging move+target, or an empty dict if none can reach a hostile.
-func _best_attack(actor, origin: Vector2i, moveset: Array, hostiles: Array, board) -> Dictionary:
-	var best := {}
-	var best_reduction := 0
-	var best_estimate := 0
-	var best_hp := 0
+## Every reachable damaging move+target this turn, sorted best-first. Element 0 is
+## the greedy pick NORMAL has always made; higher difficulties may choose others.
+## Ranking (matches the historical tie-break): most HP removed, then most raw
+## damage, then the lower-HP target (so a kill is secured on ties).
+func _ranked_attacks(actor, origin: Vector2i, moveset: Array, hostiles: Array, board) -> Array:
+	var candidates: Array = []
 	for move in moveset:
 		if move == null or move.targeting == null or not _move_has_damage(move):
 			continue
@@ -85,26 +176,30 @@ func _best_attack(actor, origin: Vector2i, moveset: Array, hostiles: Array, boar
 			if estimate <= 0:
 				continue
 			var thp := _unit_hp(target)
-			var reduction := mini(estimate, maxi(0, thp))
-			# Prefer the biggest HP removed; tie-break by raw damage, then by
-			# hitting the weaker (lower-HP) target to secure a kill.
-			if best.is_empty() \
-					or reduction > best_reduction \
-					or (reduction == best_reduction and estimate > best_estimate) \
-					or (reduction == best_reduction and estimate == best_estimate and thp < best_hp):
-				best_reduction = reduction
-				best_estimate = estimate
-				best_hp = thp
-				best = {
-					"action": ActionType.MOVE,
-					"move": move,
-					"target": target,
-					"aim_cell": tcell,
-					"estimated_damage": estimate,
-					"step_to": origin,
-					"reason": "attack_best_target",
-				}
-	return best
+			candidates.append({
+				"action": ActionType.MOVE,
+				"move": move,
+				"target": target,
+				"aim_cell": tcell,
+				"estimated_damage": estimate,
+				"target_hp": thp,
+				"reduction": mini(estimate, maxi(0, thp)),
+				"step_to": origin,
+				"reason": "attack_best_target",
+			})
+	candidates.sort_custom(_attack_is_better)
+	return candidates
+
+
+## Strict "a ranks before b" comparator for [method _ranked_attacks].
+func _attack_is_better(a: Dictionary, b: Dictionary) -> bool:
+	var ra := int(a["reduction"]); var rb := int(b["reduction"])
+	if ra != rb:
+		return ra > rb
+	var ea := int(a["estimated_damage"]); var eb := int(b["estimated_damage"])
+	if ea != eb:
+		return ea > eb
+	return int(a["target_hp"]) < int(b["target_hp"])
 
 
 ## Non-mutating estimate of the damage [param move] would deal to [param target].
