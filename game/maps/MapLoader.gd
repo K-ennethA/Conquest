@@ -365,23 +365,42 @@ func _emit_load_failed(error_message: String) -> void:
 	map_load_failed.emit(error_message)
 
 # Static helper functions for map management
-static func get_available_maps() -> Array[String]:
-	"""Get list of available map files"""
+static func get_available_maps(include_drafts: bool = false) -> Array[String]:
+	"""Get list of available map files.
+
+	By default this returns only maps whose status is "Active" -- work-in-progress
+	drafts (status "Inactive") are saved and loadable but kept out of the
+	player-facing selection screens. Pass include_drafts = true for authoring
+	tools (e.g. the Map Creator's load dialog) that should see everything.
+	"""
 	var maps: Array[String] = []
 	var dir = DirAccess.open("res://game/maps/resources/")
-	
+
 	if dir:
 		dir.list_dir_begin()
 		var file_name = dir.get_next()
-		
+
 		while file_name != "":
 			if file_name.ends_with(".tres") and not file_name.begins_with("."):
-				maps.append("res://game/maps/resources/" + file_name)
+				var map_path: String = "res://game/maps/resources/" + file_name
+				if include_drafts or _is_active_map(map_path):
+					maps.append(map_path)
 			file_name = dir.get_next()
-		
+
 		dir.list_dir_end()
-	
+
 	return maps
+
+
+## Load just enough of a map to decide whether it is player-facing. A file that
+## fails to load is treated as inactive rather than crashing the menus.
+static func _is_active_map(map_path: String) -> bool:
+	if not ResourceLoader.exists(map_path):
+		return false
+	var res = load(map_path)
+	if res is MapResource:
+		return (res as MapResource).is_active()
+	return false
 
 static func create_default_map() -> MapResource:
 	"""Create a default 5x5 map for testing"""

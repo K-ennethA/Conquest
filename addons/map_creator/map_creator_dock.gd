@@ -32,6 +32,7 @@ var description_input: TextEdit
 var author_input: LineEdit
 var difficulty_option: OptionButton
 var map_type_option: OptionButton
+var status_option: OptionButton
 
 # Map Size Section
 var width_input: SpinBox
@@ -104,6 +105,7 @@ var tile_types = ["NORMAL", "DIFFICULT_TERRAIN", "WATER", "WALL", "SPECIAL", "LA
 var unit_types = ["WARRIOR", "ARCHER", "MAGE"]
 var difficulties = ["Easy", "Normal", "Hard", "Expert"]
 var map_types = ["Skirmish", "Campaign", "Custom"]
+var map_statuses = ["Active", "Inactive"]
 var tool_modes = ["Place Tiles", "Place Units", "Rect Fill", "Bucket Fill", "Erase"]
 
 # Colors for visual feedback
@@ -246,6 +248,23 @@ func _create_map_info_section():
 	map_type_option.selected = 0  # Skirmish
 	map_type_option.item_selected.connect(_on_map_info_changed)
 	type_container.add_child(map_type_option)
+
+	# Status: "Inactive" is a work-in-progress draft -- it saves without needing to
+	# be playable yet and stays out of the in-game map lists. "Active" publishes it
+	# to players, and is only allowed once the map actually validates.
+	var status_container = VBoxContainer.new()
+	properties_container.add_child(status_container)
+
+	var status_label = Label.new()
+	status_label.text = "Status:"
+	status_container.add_child(status_label)
+
+	status_option = OptionButton.new()
+	for status_name in map_statuses:
+		status_option.add_item(status_name)
+	status_option.selected = 1  # Inactive - new maps start as drafts
+	status_option.item_selected.connect(_on_map_info_changed)
+	status_container.add_child(status_option)
 
 func _create_map_size_section():
 	"""Create map size configuration section"""
@@ -677,6 +696,8 @@ func _create_new_map():
 	current_map.author = "Map Creator"
 	current_map.width = 5
 	current_map.height = 5
+	# New maps start as drafts, so they can be saved long before they are playable.
+	current_map.status = "Inactive"
 	current_map.create_default_layout()
 	
 	_update_ui_from_map()
@@ -1654,6 +1675,8 @@ func _on_map_info_changed(new_text: String = ""):
 	current_map.description = description_input.text
 	current_map.difficulty = difficulties[difficulty_option.selected]
 	current_map.map_type = map_types[map_type_option.selected]
+	if status_option:
+		current_map.status = map_statuses[status_option.selected]
 	
 	_update_preview()
 
@@ -1677,7 +1700,14 @@ func _update_ui_from_map():
 		if map_types[i] == current_map.map_type:
 			map_type_option.selected = i
 			break
-	
+
+	# Set status (Active / Inactive draft)
+	if status_option:
+		for i in range(map_statuses.size()):
+			if map_statuses[i] == current_map.status:
+				status_option.selected = i
+				break
+
 	width_input.value = current_map.width
 	height_input.value = current_map.height
 	
@@ -1763,6 +1793,14 @@ func _on_save_map():
 		return
 
 	var blockers := _get_save_blockers()
+
+	# Publishing as Active means players will see it, so it must actually be
+	# playable. Drafts (Inactive) skip this and save in whatever state they are in.
+	if current_map.status != "Inactive":
+		var playable := _playability_warning()
+		if playable != "":
+			blockers.append(playable + " - set Status to Inactive to save it as a draft")
+
 	if not blockers.is_empty():
 		_set_status("Not saved - " + ", ".join(blockers), true)
 		return
@@ -1783,9 +1821,8 @@ func _on_save_map():
 	_rescan_editor_filesystem()
 
 	var note := "Saved: " + saved_path
-	var playable := _playability_warning()
-	if playable != "":
-		note += "  (note: " + playable + ")"
+	if current_map.status == "Inactive":
+		note += "  [Draft - hidden from in-game map selection until set Active]"
 	_set_status(note, false)
 
 

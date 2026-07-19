@@ -10,6 +10,12 @@ class_name MapResource
 @export var author: String = ""
 @export var version: String = "1.0"
 
+## Publication state. "Active" maps are offered to players in the map-selection
+## screens; "Inactive" ones are work-in-progress drafts that save freely but stay
+## out of the player-facing lists (see [method MapLoader.get_available_maps]).
+## Defaults to "Active" so maps authored before this field existed keep showing up.
+@export_enum("Active", "Inactive") var status: String = "Active"
+
 # Map Dimensions
 @export var width: int = 5
 @export var height: int = 5
@@ -196,6 +202,12 @@ func validate_map() -> Dictionary:
 		"issues": issues,
 		"warnings": warnings
 	}
+
+## True when this map should be offered to players. Inactive maps are drafts:
+## they save and load normally but are filtered out of map-selection lists.
+func is_active() -> bool:
+	return status != "Inactive"
+
 
 func get_display_info() -> Dictionary:
 	"""Get formatted info for UI display"""

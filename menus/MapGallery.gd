@@ -236,6 +236,10 @@ func _populate_map_list() -> void:
 		var display_text := map_res.map_name
 		if display_text.is_empty():
 			display_text = "(Unnamed Map)"
+		# Drafts are shown here (handy for reviewing work in progress in 3D) but
+		# flagged, since the in-game selection screens hide them.
+		if not map_res.is_active():
+			display_text = "[Draft] " + display_text
 		map_list.add_item(display_text)
 
 	if map_list.get_item_count() == 0:
@@ -272,6 +276,7 @@ func _update_metadata(map_res: MapResource) -> void:
 
 	var victory := ", ".join(map_res.victory_conditions) if not map_res.victory_conditions.is_empty() else "None"
 	var rows := [
+		["Status", map_res.status if map_res.is_active() else map_res.status + " (draft - not in map selection)"],
 		["Size", str(map_res.width) + "x" + str(map_res.height)],
 		["Difficulty", map_res.difficulty],
 		["Players", str(map_res.recommended_players) + " recommended, " + str(map_res.max_players) + " max"],

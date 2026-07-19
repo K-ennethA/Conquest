@@ -145,7 +145,9 @@ func _load_available_maps():
 		return
 	
 	item_list.clear()
-	var available_maps = MapLoader.get_available_maps()
+	# include_drafts: this is the authoring tool, so Inactive work-in-progress maps
+	# must be listed here even though the in-game selection screens hide them.
+	var available_maps = MapLoader.get_available_maps(true)
 	
 	for map_path in available_maps:
 		var map_resource = load(map_path) as MapResource
