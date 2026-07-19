@@ -9,7 +9,6 @@ class_name MainMenu
 @onready var versus_button: Button = $CenterContainer/VBoxContainer/MenuButtons/VersusButton
 @onready var unit_gallery_button: Button = $CenterContainer/VBoxContainer/MenuButtons/UnitGalleryButton
 @onready var tile_gallery_button: Button = $CenterContainer/VBoxContainer/MenuButtons/TileGalleryButton
-@onready var multiplayer_button: Button = $CenterContainer/VBoxContainer/MenuButtons/MultiplayerButton
 @onready var quit_button: Button = $CenterContainer/VBoxContainer/MenuButtons/QuitButton
 
 func _ready() -> void:
