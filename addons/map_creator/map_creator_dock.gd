@@ -97,6 +97,7 @@ var load_map_button: Button
 var test_map_button: Button
 var save_template_button: Button
 var load_template_button: Button
+var save_status_label: Label
 
 # Data
 var tile_types = ["NORMAL", "DIFFICULT_TERRAIN", "WATER", "WALL", "SPECIAL", "LAVA", "ICE", "SWAMP", "SACRED_GROUND", "CORRUPTED"]
@@ -611,6 +612,14 @@ func _create_action_buttons():
 	test_map_button.custom_minimum_size = Vector2(120, 40)
 	test_map_button.pressed.connect(_on_test_map)
 	test_row.add_child(test_map_button)
+
+	# Status line: save/load used to report ONLY via print(), so a refused save
+	# looked like the button did nothing. Every outcome now shows up right here.
+	save_status_label = Label.new()
+	save_status_label.text = ""
+	save_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	save_status_label.custom_minimum_size = Vector2(0, 0)
+	button_container.add_child(save_status_label)
 
 func _create_grid():
 	"""Create the interactive grid for map editing"""
@@ -1710,27 +1719,101 @@ func _on_new_map():
 	_create_new_map()
 	print("Created new map")
 
+## Show a save/load outcome in the dock (and mirror it to the Output panel).
+func _set_status(message: String, is_error: bool) -> void:
+	if not save_status_label:
+		print(message)
+		return
+	save_status_label.text = message
+	save_status_label.add_theme_color_override(
+		"font_color", Color(0.9, 0.35, 0.3) if is_error else Color(0.4, 0.8, 0.45)
+	)
+	print(message)
+
+
+## Problems that genuinely prevent writing a valid file. Deliberately NOT the same
+## as validate_map()'s full list: "needs 2 players with unit spawns" is a
+## PLAYABILITY rule, and refusing to save on it meant a half-built map could not be
+## saved at all. Drafts save; playability is reported as a warning instead.
+func _get_save_blockers() -> Array[String]:
+	var blockers: Array[String] = []
+	if not current_map:
+		return ["No map loaded"]
+
+	if current_map.map_name.strip_edges().is_empty():
+		blockers.append("Map name is required")
+	if current_map.width < 3 or current_map.width > 20:
+		blockers.append("Width must be 3-20 (currently %d)" % current_map.width)
+	if current_map.height < 3 or current_map.height > 20:
+		blockers.append("Height must be 3-20 (currently %d)" % current_map.height)
+
+	for tile_data in current_map.tile_layout:
+		var pos: Vector2i = tile_data.get("position", Vector2i(-1, -1))
+		if pos.x < 0 or pos.x >= current_map.width or pos.y < 0 or pos.y >= current_map.height:
+			blockers.append("Tile position out of bounds: %s" % str(pos))
+			break
+
+	return blockers
+
+
 func _on_save_map():
 	"""Save the current map"""
 	if not current_map:
+		_set_status("Nothing to save - create or load a map first.", true)
 		return
-	
-	if current_map.map_name.is_empty():
-		print("Error: Map name is required")
+
+	var blockers := _get_save_blockers()
+	if not blockers.is_empty():
+		_set_status("Not saved - " + ", ".join(blockers), true)
 		return
-	
-	var validation = current_map.validate_map()
-	if not validation.valid:
-		print("Error: Cannot save invalid map")
-		for issue in validation.issues:
-			print("  - " + issue)
-		return
-	
+
 	var success = MapLoader.save_map(current_map, current_map.map_name)
-	if success:
-		print("Map saved successfully: " + current_map.map_name)
-	else:
-		print("Failed to save map")
+	if not success:
+		_set_status("Failed to write the map file (see Output for details).", true)
+		return
+
+	var clean_name := current_map.map_name.to_lower().replace(" ", "_")
+	if not clean_name.ends_with(".tres"):
+		clean_name += ".tres"
+	var saved_path := "res://game/maps/resources/" + clean_name
+
+	# A fresh file written to res:// does not appear in the FileSystem dock (or in
+	# anything scanning the directory) until the editor rescans -- without this the
+	# save looks like it did nothing.
+	_rescan_editor_filesystem()
+
+	var note := "Saved: " + saved_path
+	var playable := _playability_warning()
+	if playable != "":
+		note += "  (note: " + playable + ")"
+	_set_status(note, false)
+
+
+## Non-blocking playability note, so the user still learns the map is not yet
+## battle-ready even though it saved fine.
+func _playability_warning() -> String:
+	if not current_map:
+		return ""
+	var players: Dictionary = {}
+	for spawn_data in current_map.unit_spawns:
+		var player_id: int = int(spawn_data.get("player_id", -1))
+		if player_id >= 0:
+			players[player_id] = true
+	if players.size() < 2:
+		return "not playable yet - needs unit spawns for at least 2 players"
+	return ""
+
+
+## Ask the editor to rescan res:// so a newly saved map shows up immediately.
+func _rescan_editor_filesystem() -> void:
+	if not Engine.has_singleton("EditorInterface"):
+		return
+	var editor_interface: Object = Engine.get_singleton("EditorInterface")
+	if editor_interface == null or not editor_interface.has_method("get_resource_filesystem"):
+		return
+	var fs: Object = editor_interface.call("get_resource_filesystem")
+	if fs != null and fs.has_method("scan"):
+		fs.call("scan")
 
 func _on_load_map():
 	"""Load an existing map"""
