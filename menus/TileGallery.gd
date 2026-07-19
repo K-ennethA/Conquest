@@ -193,14 +193,14 @@ func _setup_preview_viewport() -> void:
 	"""Set up the 3D tile preview viewport with camera and lighting"""
 	# Add camera
 	var camera = Camera3D.new()
-	camera.position = Vector3(2, 3, 2)
-	camera.look_at(Vector3(0, 0, 0), Vector3.UP)
+	# look_at_from_position orients without requiring the node be in the tree yet
+	# (plain look_at() errors here because it is called before add_child()).
+	camera.look_at_from_position(Vector3(2, 3, 2), Vector3(0, 0, 0), Vector3.UP)
 	tile_preview_viewport.add_child(camera)
-	
+
 	# Add lighting
 	var light = DirectionalLight3D.new()
-	light.position = Vector3(2, 3, 2)
-	light.look_at(Vector3(0, 0, 0), Vector3.UP)
+	light.look_at_from_position(Vector3(2, 3, 2), Vector3(0, 0, 0), Vector3.UP)
 	light.light_energy = 1.0
 	tile_preview_viewport.add_child(light)
 	
