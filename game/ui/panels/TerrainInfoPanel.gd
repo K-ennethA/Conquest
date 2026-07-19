@@ -42,7 +42,15 @@ func _ready() -> void:
 	# MoveSelectionPanel._ready): top_level makes our anchors viewport-relative
 	# so we float freely instead of being force-fit into a parent layout cell.
 	top_level = true
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# A top_level Control IGNORES anchors, so PRESET_FULL_RECT left our size at
+	# (0,0) -- the bottom-anchored card then resolved against height 0 and floated
+	# to a NEGATIVE y, off-screen (the "hover shows nothing" bug). So we do NOT use
+	# an anchor preset here (which would also warn about being overridden); instead
+	# we size our rect to the viewport explicitly and keep it in sync on resize.
+	# The card inside is a normal (non-top_level) child, so ITS bottom anchor
+	# resolves correctly against this rect.
+	_fit_to_viewport()
+	get_viewport().size_changed.connect(_fit_to_viewport)
 
 	# Passive readout only -- never eat mouse input. The whole subtree is set
 	# IGNORE below too, so this panel can never block a click reaching the
@@ -60,6 +68,16 @@ func _ready() -> void:
 
 	if GameEvents and not GameEvents.cursor_moved.is_connected(_on_cursor_moved):
 		GameEvents.cursor_moved.connect(_on_cursor_moved)
+
+
+## Pin our rect to the whole viewport so the bottom-left-anchored card lands on
+## screen. A top_level Control ignores its parent, so it will not size itself.
+func _fit_to_viewport() -> void:
+	var vp := get_viewport()
+	if vp == null:
+		return
+	position = Vector2.ZERO
+	size = vp.get_visible_rect().size
 
 
 func _create_ui() -> void:
