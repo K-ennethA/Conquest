@@ -4,6 +4,11 @@ extends Node
 # Manages the initialization and setup of the game world based on GameSettings
 # Now supports both local and network multiplayer modes and dynamic map loading
 
+## The animated end-of-battle overlay scene (VICTORY / DEFEAT). Preloaded so the
+## PackedScene is validated at load time; instantiated once in
+## _setup_game_over_screen() and added to the "UI" CanvasLayer.
+const GAME_OVER_SCREEN_SCENE := preload("res://game/ui/screens/GameOverScreen.tscn")
+
 var map_loader: MapLoader
 var current_map_path: String = ""
 
@@ -27,6 +32,10 @@ var _terrain_info_panel: TerrainInfoPanel = null
 ## scene root (NOT the "UI" CanvasLayer). Rebuilds itself reactively off
 ## CombatServices.board_ready / tile_effects_changed.
 var _tile_effect_overlay: TileEffectOverlay = null
+
+## Animated end screen (see [GameOverScreen]). Instantiated once during setup and
+## kept hidden; revealed by _on_player_eliminated() when the battle is decided.
+var _game_over_screen: GameOverScreen = null
 
 func _ready() -> void:
 	print("=== GameWorld Initializing ===")
@@ -52,6 +61,11 @@ func _ready() -> void:
 	# move (via GameEvents.cursor_moved, wired in its own _ready) and simply
 	# stays hidden until a board and registered terrain exist.
 	_setup_terrain_info_panel()
+
+	# End-of-battle overlay: additive, hidden until an elimination decides the
+	# game. Added to the same "UI" CanvasLayer as the terrain panel and safe to
+	# create now -- nobody is eliminated at boot, so it just sits hidden.
+	_setup_game_over_screen()
 
 	# Tile-effect 3D overlay: additive Node3D floating effect pips over affected
 	# cells. Added to the 3D scene root (not the CanvasLayer) and, like the terrain
@@ -182,6 +196,90 @@ func _setup_terrain_info_panel() -> void:
 
 	_terrain_info_panel = TerrainInfoPanel.new()
 	ui_layer.add_child(_terrain_info_panel)
+
+# --- End-of-battle screen ----------------------------------------------------
+
+func _setup_game_over_screen() -> void:
+	"""Instantiate GameOverScreen and add it to the "UI" CanvasLayer (mirrors
+	_setup_terrain_info_panel), then connect the elimination signals that drive it.
+	The screen builds/themes itself and stays hidden until an outcome is decided.
+	We connect BOTH PlayerManager.player_eliminated (the one that reliably fires,
+	see player_manager.gd ~line 440) and GameEvents.player_eliminated (fallback);
+	the handler + the screen's own _shown guard make a double-fire harmless."""
+	if _game_over_screen != null:
+		return
+
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		push_warning("[GameWorldManager] No current_scene yet; GameOverScreen not added.")
+		return
+
+	var ui_layer := scene_root.get_node_or_null("UI")
+	if ui_layer == null:
+		push_warning("[GameWorldManager] 'UI' CanvasLayer not found; GameOverScreen not added.")
+		return
+
+	_game_over_screen = GAME_OVER_SCREEN_SCENE.instantiate() as GameOverScreen
+	ui_layer.add_child(_game_over_screen)
+
+	if PlayerManager and not PlayerManager.player_eliminated.is_connected(_on_player_eliminated):
+		PlayerManager.player_eliminated.connect(_on_player_eliminated)
+	if GameEvents and not GameEvents.player_eliminated.is_connected(_on_player_eliminated):
+		GameEvents.player_eliminated.connect(_on_player_eliminated)
+
+func _on_player_eliminated(_player) -> void:
+	"""Decide win/lose after a player is eliminated and reveal the end screen once.
+
+	Rule (using PlayerManager's real API): a player is "alive" when it is not
+	ELIMINATED and still owns units. In single-player the human is the sole non-AI
+	player (player 0; AI opponents have is_ai == true) -- if the human is no longer
+	alive it's a Defeat, otherwise it's a Victory only once no opponents remain,
+	else the game continues. In versus/multiplayer we end neutrally when at most
+	one player is left standing ("<NAME> WINS"). The screen is idempotent, so the
+	first decisive call wins."""
+	if _game_over_screen == null or _game_over_screen.is_shown():
+		return
+
+	var players: Array[Player] = PlayerManager.players
+
+	var alive: Array[Player] = []
+	for p in players:
+		if p != null and p.current_state != Player.PlayerState.ELIMINATED and p.has_units_remaining():
+			alive.append(p)
+
+	var single_player: bool = GameSettings != null and GameSettings.game_mode == GameSettings.GameMode.SINGLE_PLAYER
+
+	if single_player:
+		# The human is the one player not driven by the bot AI.
+		var human: Player = null
+		for p in players:
+			if p != null and not p.is_ai:
+				human = p
+				break
+		if human != null:
+			var human_alive: bool = human.current_state != Player.PlayerState.ELIMINATED and human.has_units_remaining()
+			if not human_alive:
+				_game_over_screen.show_defeat()
+				return
+			# Human still standing -> Victory only once every opponent is gone.
+			var opponents_alive: bool = false
+			for p in alive:
+				if p != human:
+					opponents_alive = true
+					break
+			if not opponents_alive:
+				_game_over_screen.show_victory()
+			return
+
+	# Versus / multiplayer (or single-player with no identifiable human): the game
+	# ends when at most one side is still standing.
+	if alive.size() <= 1:
+		var winner_name: String = alive[0].get_display_name() if alive.size() == 1 else "No one"
+		_game_over_screen.show_result(
+			GameOverScreen.OUTCOME_VICTORY,
+			winner_name.to_upper() + " WINS",
+			"The battle is decided."
+		)
 
 func _setup_tile_effect_overlay() -> void:
 	"""Instantiate TileEffectOverlay and add it to the 3D scene root (GameWorld
