@@ -39,14 +39,30 @@ const EFFECT_FOR_TILE := {
 
 const MAPS_DIR := "res://game/maps/resources/"
 
+# --- 3D preview tuning -------------------------------------------------------
+# Grid spacing between tile centres (world units). Each tile mesh is a little
+# smaller than the step so a thin gap reads as a grid.
+const TILE_STEP := 2.0
+const TILE_MESH_SIZE := Vector3(1.8, 0.3, 1.8)
+const SPAWN_RADIUS := 0.35
+const SPAWN_Y := 0.5  # sits on top of the tile surface
+# Gentle turntable so the depth/perspective is obvious at a glance.
+const TURNTABLE_SPEED := 0.35  # radians / second
+
 # UI Elements
 @onready var back_button: Button
 @onready var map_list: ItemList
 @onready var map_name_label: Label
 @onready var map_description: RichTextLabel
-@onready var map_painter: MapPainter
 @onready var metadata_container: VBoxContainer
 @onready var legend_container: HBoxContainer
+
+# 3D preview nodes (built in _create_map_display / _setup_map_viewport).
+@onready var map_viewport: SubViewport
+@onready var map_root: Node3D
+@onready var map_camera: Camera3D
+# Cached span of the current map so _process turntable / re-aims stay stable.
+var _map_span: float = TILE_STEP
 
 # Data
 var all_maps: Array[MapResource] = []
@@ -124,15 +140,20 @@ func _create_map_display(parent: VBoxContainer) -> void:
 	map_name_label.add_theme_font_size_override("font_size", 22)
 	parent.add_child(map_name_label)
 
-	# Top-down map picture, painted from tile data.
-	var picture_frame := PanelContainer.new()
-	picture_frame.custom_minimum_size = Vector2(420, 420)
-	parent.add_child(picture_frame)
+	# Real 3D render of the map, shown through a SubViewport for depth/perspective
+	# (mirrors TileGallery's 3D tile preview). The 2D "painted picture" is gone.
+	var viewport_container := SubViewportContainer.new()
+	viewport_container.custom_minimum_size = Vector2(420, 420)
+	viewport_container.stretch = true
+	parent.add_child(viewport_container)
 
-	map_painter = MapPainter.new()
-	map_painter.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	map_painter.set_v_size_flags(Control.SIZE_EXPAND_FILL)
-	picture_frame.add_child(map_painter)
+	map_viewport = SubViewport.new()
+	map_viewport.size = Vector2i(420, 420)
+	map_viewport.transparent_bg = false
+	map_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	viewport_container.add_child(map_viewport)
+
+	_setup_map_viewport()
 
 	# Description (wrapped)
 	var desc_label := Label.new()
@@ -234,9 +255,8 @@ func _display_map(map_res: MapResource) -> void:
 	if map_description:
 		map_description.text = map_res.description
 
-	# Repaint the top-down picture.
-	if map_painter:
-		map_painter.set_map(map_res)
+	# Rebuild the 3D render for this map.
+	_build_map_3d(map_res)
 
 	_update_metadata(map_res)
 	_update_legend(map_res)
@@ -344,81 +364,156 @@ func _input(event: InputEvent) -> void:
 
 
 # ---------------------------------------------------------------------------
-# MapPainter - paints a top-down width x height grid from a MapResource's
-# tile_layout, one coloured rect per tile, with spawn markers overlaid. Painting
-# from live tile data keeps the picture reliable and always current (there are no
-# pre-rendered previews on disk).
+# 3D map preview
 # ---------------------------------------------------------------------------
-class MapPainter extends Control:
-	var _map: MapResource
+# Builds a real 3D scene (one box mesh per tile, small spheres for spawns) inside
+# a SubViewport with an angled Fire-Emblem-style perspective camera, so the map
+# reads with genuine depth instead of a flat painted picture. Rendered from live
+# tile data so it is always current (there are no pre-rendered previews on disk).
 
-	func _ready() -> void:
-		# Repaint whenever the pane resizes so the grid always fits.
-		resized.connect(queue_redraw)
+func _setup_map_viewport() -> void:
+	"""Populate the SubViewport with a MapRoot, camera, light and environment."""
+	if not map_viewport:
+		return
 
-	func set_map(map_res: MapResource) -> void:
-		_map = map_res
-		queue_redraw()
+	# MapRoot holds all per-map geometry; rebuilt by _build_map_3d.
+	map_root = Node3D.new()
+	map_root.name = "MapRoot"
+	map_viewport.add_child(map_root)
 
-	func _draw() -> void:
-		var pane := size
-		if pane.x <= 0.0 or pane.y <= 0.0:
-			return
+	# Angled top-down perspective camera (aimed for real once a map loads).
+	map_camera = Camera3D.new()
+	map_camera.name = "MapCamera"
+	# look_at_from_position orients without needing the node in-tree first
+	# (plain look_at() errors before add_child()).
+	map_camera.look_at_from_position(
+		Vector3(0.0, _map_span * 0.9, _map_span * 0.7), Vector3.ZERO, Vector3.UP)
+	map_viewport.add_child(map_camera)
 
-		if _map == null or _map.tile_layout.is_empty() or _map.width <= 0 or _map.height <= 0:
-			var font := ThemeDB.fallback_font
-			if font:
-				draw_string(font, Vector2(12, 24), "No preview available",
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.7, 0.7, 0.7))
-			return
+	# Warm, slightly dark environment with ambient so nothing renders pure black.
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.09, 0.09, 0.12, 1.0)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.55, 0.5, 0.45, 1.0)
+	env.ambient_light_energy = 0.45
+	map_camera.environment = env
 
-		var cols := _map.width
-		var rows := _map.height
+	# Directional key light, angled to match the camera side for readable shading.
+	var light := DirectionalLight3D.new()
+	light.name = "MapLight"
+	light.look_at_from_position(
+		Vector3(_map_span * 0.6, _map_span * 1.2, _map_span * 0.4), Vector3.ZERO, Vector3.UP)
+	light.light_energy = 1.1
+	map_viewport.add_child(light)
 
-		# Square cells sized so the whole map fits the pane; centre the grid.
-		# Use minf/floorf (not the Variant-returning global min/floor) so the types
-		# stay concrete -- the project treats Variant inference as an error.
-		var cell: float = floorf(minf(pane.x / float(cols), pane.y / float(rows)))
-		if cell < 1.0:
-			cell = 1.0
-		var total_w: float = cell * float(cols)
-		var total_h: float = cell * float(rows)
-		var origin := Vector2((pane.x - total_w) * 0.5, (pane.y - total_h) * 0.5)
 
-		var grid_line := Color(0.0, 0.0, 0.0, 0.25)
+func _build_map_3d(map_res: MapResource) -> void:
+	"""Rebuild MapRoot's children (tiles + spawn markers) for the given map and
+	re-aim the camera to frame it. Guards nulls / empty layouts without crashing."""
+	if not map_root:
+		return
 
-		# Tiles.
-		for entry in _map.tile_layout:
-			var pos := _read_pos(entry.get("position", Vector2i.ZERO))
-			if pos.x < 0 or pos.x >= cols or pos.y < 0 or pos.y >= rows:
-				continue
-			var tile_type := str(entry.get("tile_type", "NORMAL")).to_upper()
-			var color: Color = MapGallery.TILE_COLORS.get(tile_type, MapGallery.TILE_FALLBACK)
-			var rect := Rect2(origin + Vector2(pos.x * cell, pos.y * cell), Vector2(cell, cell))
-			draw_rect(rect, color, true)
-			draw_rect(rect, grid_line, false, 1.0)
+	# Free previous geometry.
+	for child in map_root.get_children():
+		child.queue_free()
 
-		# Spawn markers.
-		for spawn in _map.unit_spawns:
-			var pos := _read_pos(spawn.get("position", Vector2i.ZERO))
-			if pos.x < 0 or pos.x >= cols or pos.y < 0 or pos.y >= rows:
-				continue
-			var player_id := int(spawn.get("player_id", -1))
-			var marker_color := MapGallery.PLAYER_FALLBACK
-			if player_id == 0:
-				marker_color = MapGallery.PLAYER0_COLOR
-			elif player_id == 1:
-				marker_color = MapGallery.PLAYER1_COLOR
-			var center := origin + Vector2(pos.x * cell + cell * 0.5, pos.y * cell + cell * 0.5)
-			draw_circle(center, cell * 0.3, marker_color)
-			draw_arc(center, cell * 0.3, 0.0, TAU, 16, Color(0, 0, 0, 0.5), 1.0)
+	# Reset turntable so each map starts square-on.
+	map_root.rotation = Vector3.ZERO
 
-	# Positions are normally Vector2i; handle a Dictionary {x, y} defensively too.
-	func _read_pos(value) -> Vector2i:
-		if value is Vector2i:
-			return value
-		if value is Vector2:
-			return Vector2i(value)
-		if value is Dictionary:
-			return Vector2i(int(value.get("x", 0)), int(value.get("y", 0)))
-		return Vector2i.ZERO
+	if map_res == null:
+		return
+
+	var cols: int = map_res.width
+	var rows: int = map_res.height
+	if cols < 1:
+		cols = 1
+	if rows < 1:
+		rows = 1
+
+	# Update span + re-aim camera for this map's size (stable framing).
+	_map_span = maxf(float(cols), float(rows)) * TILE_STEP
+	_aim_camera()
+
+	# Centre offsets so the whole grid is centred on the origin.
+	var offset_x: float = float(cols - 1) * TILE_STEP * 0.5
+	var offset_z: float = float(rows - 1) * TILE_STEP * 0.5
+
+	# Shared meshes (per-instance material overrides colour them).
+	var tile_mesh := BoxMesh.new()
+	tile_mesh.size = TILE_MESH_SIZE
+	var spawn_mesh := SphereMesh.new()
+	spawn_mesh.radius = SPAWN_RADIUS
+	spawn_mesh.height = SPAWN_RADIUS * 2.0
+
+	# Tiles.
+	for entry in map_res.tile_layout:
+		var pos := _read_pos(entry.get("position", Vector2i.ZERO))
+		if pos.x < 0 or pos.x >= cols or pos.y < 0 or pos.y >= rows:
+			continue
+		var tile_type := _read_tile_type(entry)
+		var color: Color = TILE_COLORS.get(tile_type, TILE_FALLBACK)
+
+		var mesh_instance := MeshInstance3D.new()
+		mesh_instance.mesh = tile_mesh
+		mesh_instance.material_override = _solid_material(color)
+		mesh_instance.position = Vector3(
+			float(pos.x) * TILE_STEP - offset_x,
+			0.0,
+			float(pos.y) * TILE_STEP - offset_z)
+		map_root.add_child(mesh_instance)
+
+	# Spawn markers, sitting on top of their tile.
+	for spawn in map_res.unit_spawns:
+		var pos := _read_pos(spawn.get("position", Vector2i.ZERO))
+		if pos.x < 0 or pos.x >= cols or pos.y < 0 or pos.y >= rows:
+			continue
+		var player_id := int(spawn.get("player_id", -1))
+		var marker_color := PLAYER_FALLBACK
+		if player_id == 0:
+			marker_color = PLAYER0_COLOR
+		elif player_id == 1:
+			marker_color = PLAYER1_COLOR
+
+		var marker := MeshInstance3D.new()
+		marker.mesh = spawn_mesh
+		marker.material_override = _solid_material(marker_color)
+		marker.position = Vector3(
+			float(pos.x) * TILE_STEP - offset_x,
+			SPAWN_Y,
+			float(pos.y) * TILE_STEP - offset_z)
+		map_root.add_child(marker)
+
+
+func _aim_camera() -> void:
+	"""Re-position the camera for the current _map_span (angled top-down)."""
+	if not map_camera:
+		return
+	map_camera.look_at_from_position(
+		Vector3(0.0, _map_span * 0.9, _map_span * 0.7), Vector3.ZERO, Vector3.UP)
+
+
+func _solid_material(color: Color) -> StandardMaterial3D:
+	"""A simple lit material with the given albedo."""
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.85
+	mat.metallic = 0.0
+	return mat
+
+
+# Slow turntable rotation so the perspective/depth is obvious at a glance.
+func _process(delta: float) -> void:
+	if map_root:
+		map_root.rotate_y(TURNTABLE_SPEED * delta)
+
+
+# Positions are normally Vector2i; handle a Dictionary {x, y} defensively too.
+func _read_pos(value) -> Vector2i:
+	if value is Vector2i:
+		return value
+	if value is Vector2:
+		return Vector2i(value)
+	if value is Dictionary:
+		return Vector2i(int(value.get("x", 0)), int(value.get("y", 0)))
+	return Vector2i.ZERO
