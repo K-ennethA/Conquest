@@ -20,6 +20,9 @@ const GRID: Grid = preload("res://board/Grid.tres")
 
 ## Emitted after [method rebuild] installs a fresh, live [BoardAdapter].
 signal board_ready
+## Emitted when a cell's RUNTIME tile effects change (a move ignited/doused it),
+## so the 3D map overlay can restack that cell's effect markers reactively.
+signal tile_effects_changed(cell: Vector2i)
 
 ## The single live adapter. Null until the first successful [method rebuild].
 var _board: BoardAdapter = null
@@ -128,6 +131,16 @@ func tile_effects_at(cell: Vector2i) -> Array:
 	return out
 
 
+## Just the RUNTIME (applied-this-battle) tile effects on [param cell], excluding
+## the terrain's inherent base effects. Lets the UI mark those as temporary. Never
+## returns null; the returned array is a copy, safe to iterate while mutating.
+func applied_tile_effects_at(cell: Vector2i) -> Array:
+	var applied = _applied_tile_effects.get(cell, null)
+	if applied is Array:
+		return applied.duplicate()
+	return []
+
+
 ## Add a runtime tile effect to [param cell] (e.g. a move ignites the ground into
 ## fire). Idempotent; the effect layers on top of the tile's base effects.
 func add_tile_effect(cell: Vector2i, effect) -> void:
@@ -139,16 +152,18 @@ func add_tile_effect(cell: Vector2i, effect) -> void:
 		_applied_tile_effects[cell] = applied
 	if effect not in applied:
 		applied.append(effect)
+		tile_effects_changed.emit(cell)
 
 
 ## Remove a runtime tile effect from [param cell] (e.g. a move douses the fire).
 ## Only affects the runtime set; base terrain effects are never removed here.
 func remove_tile_effect(cell: Vector2i, effect) -> void:
 	var applied = _applied_tile_effects.get(cell, null)
-	if applied is Array:
+	if applied is Array and effect in applied:
 		applied.erase(effect)
 		if applied.is_empty():
 			_applied_tile_effects.erase(cell)
+		tile_effects_changed.emit(cell)
 
 
 ## Canonical terrain id for a [TileResource] -- the lowercased [enum
