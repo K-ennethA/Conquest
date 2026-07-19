@@ -2,6 +2,25 @@
 extends Control
 
 # Map Creator Dock - Visual interface for creating maps
+#
+# Two editing surfaces stay in sync at all times:
+#   * the 2D button grid (original surface - strokes, brushes, rect/bucket fill)
+#   * a live 3D world view (SubViewport) that mirrors MapGallery's presentation
+#     and additionally accepts palette drag-and-drop and direct painting.
+
+# --- Tile resource palette ----------------------------------------------------
+# The palette is built from the REAL TileResource files so the map records an
+# actual resource path, not just a loose type string.
+const TILES_DIR := "res://game/tiles/resources/"
+
+# --- 3D world view tuning (ported verbatim from MapGallery) -------------------
+const TILE_STEP := 2.0
+const TILE_MESH_SIZE := Vector3(1.8, 0.3, 1.8)
+const SPAWN_RADIUS := 0.35
+const SPAWN_Y := 0.5  # sits on top of the tile surface
+
+# Sentinel returned by the ray->cell pick when the ray misses the ground plane.
+const NO_CELL := Vector2i(-1, -1)
 
 # UI Elements
 var scroll_container: ScrollContainer
@@ -23,6 +42,13 @@ var resize_button: Button
 var tile_palette_container: VBoxContainer
 var tile_buttons: Array[Button] = []
 var selected_tile_type: String = "NORMAL"
+# Resource path of the selected palette entry ("" when the hardcoded fallback is used)
+var selected_tile_resource_path: String = ""
+# One entry per palette button: {type_name: String, resource_path: String,
+#                                color: Color, display_name: String}
+var tile_palette_entries: Array[Dictionary] = []
+# type_name -> Color, harvested from the real TileResource.base_color values.
+var resource_tile_colors: Dictionary = {}
 
 # Unit Palette Section
 var unit_palette_container: VBoxContainer
@@ -48,6 +74,17 @@ var _rect_anchor: Vector2i = Vector2i(-1, -1)   # Anchor cell for the Rect Fill 
 var _rect_hover: Vector2i = Vector2i(-1, -1)    # Last hovered cell while dragging a rect (for tint cleanup)
 var _grid_width: int = 0                # Dimensions the current grid_buttons array was built with
 var _grid_height: int = 0
+var _last_world_cell: Vector2i = NO_CELL # Last cell painted during a 3D-view stroke
+
+# 3D World View Section
+var world_viewport_container: SubViewportContainer
+var world_viewport: SubViewport
+var world_root: Node3D
+var world_camera: Camera3D
+var _world_span: float = TILE_STEP
+# Cell -> mesh lookups so a stroke can repaint one cell instead of rebuilding.
+var _tile_meshes: Dictionary = {}
+var _spawn_meshes: Dictionary = {}
 
 # Preview Section
 var preview_container: VBoxContainer
@@ -127,6 +164,8 @@ func _create_ui():
 	_create_unit_palette_section()
 	_add_separator()
 	_create_map_grid_section()
+	_add_separator()
+	_create_world_3d_section()
 	_add_separator()
 	_create_preview_section()
 	_add_separator()
@@ -298,36 +337,110 @@ func _create_tool_mode_section():
 	hint_label.text = "(drag to paint, right-click to erase)"
 	brush_container.add_child(hint_label)
 
+func _load_tile_palette_entries() -> void:
+	"""Scan res://game/tiles/resources/ and build one palette entry per TileResource.
+
+	Each entry records the enum NAME string (e.g. "LAVA"), the .tres path and the
+	resource's real base_color. Falls back to the legacy hardcoded type list when
+	the directory is missing or contains no usable TileResource, so the palette is
+	never empty.
+	"""
+	tile_palette_entries.clear()
+	resource_tile_colors.clear()
+
+	var type_names: Array = Tile.TileType.keys()
+
+	if DirAccess.dir_exists_absolute(TILES_DIR):
+		var dir := DirAccess.open(TILES_DIR)
+		if dir:
+			var file_names: Array[String] = []
+			dir.list_dir_begin()
+			var file_name := dir.get_next()
+			while file_name != "":
+				if file_name.ends_with(".tres"):
+					file_names.append(file_name)
+				file_name = dir.get_next()
+			dir.list_dir_end()
+
+			# Stable, readable ordering regardless of filesystem enumeration order.
+			file_names.sort()
+
+			for entry_name in file_names:
+				var resource_path: String = TILES_DIR + entry_name
+				if not ResourceLoader.exists(resource_path):
+					continue
+				var resource = load(resource_path)
+				if not (resource is TileResource):
+					continue
+
+				var tile_resource := resource as TileResource
+				var type_index: int = int(tile_resource.tile_type)
+				if type_index < 0 or type_index >= type_names.size():
+					continue
+
+				var type_name: String = str(type_names[type_index])
+				var display_name: String = tile_resource.tile_name
+				if display_name.is_empty():
+					display_name = type_name.replace("_", " ")
+
+				tile_palette_entries.append({
+					"type_name": type_name,
+					"resource_path": resource_path,
+					"color": tile_resource.base_color,
+					"display_name": display_name
+				})
+				# Last resource for a type wins; good enough for display purposes.
+				resource_tile_colors[type_name] = tile_resource.base_color
+
+	if not tile_palette_entries.is_empty():
+		return
+
+	# Fallback: the original hardcoded type list, with no resource path attached.
+	for fallback_type in tile_types:
+		var fallback_name: String = str(fallback_type)
+		tile_palette_entries.append({
+			"type_name": fallback_name,
+			"resource_path": "",
+			"color": tile_colors.get(fallback_name, Color.WHITE),
+			"display_name": fallback_name.replace("_", " ")
+		})
+
 func _create_tile_palette_section():
-	"""Create tile selection palette"""
+	"""Create tile selection palette from the real TileResource files"""
 	var section_label = Label.new()
 	section_label.text = "TILE PALETTE"
 	section_label.add_theme_font_size_override("font_size", 14)
 	main_container.add_child(section_label)
-	
+
 	tile_palette_container = VBoxContainer.new()
 	main_container.add_child(tile_palette_container)
-	
+
+	_load_tile_palette_entries()
+
 	# Create tile buttons in rows of 3
 	var current_row: HBoxContainer = null
-	for i in range(tile_types.size()):
+	for i in range(tile_palette_entries.size()):
 		if i % 3 == 0:
 			current_row = HBoxContainer.new()
 			tile_palette_container.add_child(current_row)
-		
-		var tile_type = tile_types[i]
+
+		var entry: Dictionary = tile_palette_entries[i]
 		var button = Button.new()
-		button.text = tile_type.replace("_", " ")
+		button.text = str(entry.get("display_name", "Tile"))
 		button.custom_minimum_size = Vector2(80, 30)
-		button.modulate = tile_colors.get(tile_type, Color.WHITE)
-		button.pressed.connect(_on_tile_selected.bind(tile_type))
-		
-		current_row.add_child(button)
+		button.modulate = _entry_color(entry)
+		button.tooltip_text = "Click to select, or drag into the 3D world to paint"
+		button.pressed.connect(_on_tile_selected.bind(i))
+		# Palette buttons are drag sources only - they never accept drops
+		button.set_drag_forwarding(_tile_palette_get_drag_data.bind(i), Callable(), Callable())
+
+		if current_row:
+			current_row.add_child(button)
 		tile_buttons.append(button)
-	
+
 	# Select first tile by default
 	if tile_buttons.size() > 0:
-		_on_tile_selected(tile_types[0])
+		_on_tile_selected(0)
 
 func _create_unit_palette_section():
 	"""Create unit placement palette"""
@@ -387,6 +500,44 @@ func _create_map_grid_section():
 	main_container.add_child(grid_container)
 	
 	_create_grid()
+
+func _create_world_3d_section():
+	"""Create the live 3D world view (SubViewport) and make it a drop target"""
+	var section_label = Label.new()
+	section_label.text = "3D WORLD"
+	section_label.add_theme_font_size_override("font_size", 14)
+	main_container.add_child(section_label)
+
+	var hint_label = Label.new()
+	hint_label.text = "(drag palette tiles/units in, or paint directly)"
+	hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	main_container.add_child(hint_label)
+
+	world_viewport_container = SubViewportContainer.new()
+	world_viewport_container.custom_minimum_size = Vector2(320, 320)
+	world_viewport_container.stretch = true
+	world_viewport_container.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	# The container itself must receive mouse events so drops and painting work.
+	world_viewport_container.mouse_filter = Control.MOUSE_FILTER_STOP
+	main_container.add_child(world_viewport_container)
+
+	world_viewport = SubViewport.new()
+	world_viewport.size = Vector2i(320, 320)
+	world_viewport.transparent_bg = false
+	world_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	# Nothing inside the viewport consumes input; the container handles it all.
+	world_viewport.gui_disable_input = true
+	world_viewport_container.add_child(world_viewport)
+
+	_setup_world_viewport()
+
+	# Drop target only - the 3D view is never a drag source.
+	world_viewport_container.set_drag_forwarding(
+		Callable(), _world_can_drop_data, _world_drop_data)
+	world_viewport_container.gui_input.connect(_on_world_gui_input)
+
+	# Build whatever map already exists (normally nothing yet at UI-build time).
+	_build_world_3d()
 
 func _create_preview_section():
 	"""Create map preview and info section"""
@@ -473,6 +624,7 @@ func _create_grid():
 	_is_painting = false
 	_rect_anchor = Vector2i(-1, -1)
 	_rect_hover = Vector2i(-1, -1)
+	_last_world_cell = NO_CELL
 
 	var width = int(width_input.value)
 	var height = int(height_input.value)
@@ -506,6 +658,8 @@ func _create_grid():
 			grid_buttons.append(button)
 
 	_update_grid_display()
+	# New map / load / resize all funnel through here, so the 3D view rebuilds once.
+	_build_world_3d()
 
 func _create_new_map():
 	"""Create a new empty map"""
@@ -553,19 +707,47 @@ func _on_tool_mode_changed(index: int):
 
 	print("Tool mode changed to: " + tool_modes[index])
 
-func _on_tile_selected(tile_type: String):
-	"""Handle tile type selection"""
-	selected_tile_type = tile_type
-	
+func _entry_color(entry: Dictionary) -> Color:
+	"""Colour of a palette entry, guarded against a malformed dictionary"""
+	var value: Variant = entry.get("color", Color.WHITE)
+	if value is Color:
+		return value as Color
+	return Color.WHITE
+
+func _tile_color_for(type_name: String) -> Color:
+	"""Display colour for a tile type - the real resource colour wins, then the
+	legacy hardcoded map, then white."""
+	if resource_tile_colors.has(type_name):
+		var value: Variant = resource_tile_colors[type_name]
+		if value is Color:
+			return value as Color
+
+	var fallback: Variant = tile_colors.get(type_name, Color.WHITE)
+	if fallback is Color:
+		return fallback as Color
+
+	return Color.WHITE
+
+func _on_tile_selected(index: int):
+	"""Handle tile palette selection (index into tile_palette_entries)"""
+	if index < 0 or index >= tile_palette_entries.size():
+		return
+
+	var entry: Dictionary = tile_palette_entries[index]
+	selected_tile_type = str(entry.get("type_name", "NORMAL"))
+	selected_tile_resource_path = str(entry.get("resource_path", ""))
+
 	# Update button states
 	for i in range(tile_buttons.size()):
-		if i < tile_types.size() and tile_types[i] == tile_type:
-			tile_buttons[i].modulate = tile_colors.get(tile_type, Color.WHITE) * 1.5
-		else:
-			var button_tile_type = tile_types[i] if i < tile_types.size() else "NORMAL"
-			tile_buttons[i].modulate = tile_colors.get(button_tile_type, Color.WHITE)
-	
-	print("Selected tile type: " + tile_type)
+		var button := tile_buttons[i]
+		if not button:
+			continue
+		if i >= tile_palette_entries.size():
+			continue
+		var button_color: Color = _entry_color(tile_palette_entries[i])
+		button.modulate = button_color * 1.5 if i == index else button_color
+
+	print("Selected tile type: " + selected_tile_type + " (" + selected_tile_resource_path + ")")
 
 func _on_unit_selected(unit_type: String):
 	"""Handle unit type selection"""
@@ -726,20 +908,28 @@ func _is_valid_position(pos: Vector2i) -> bool:
 
 func _end_stroke() -> void:
 	"""Finish an edit gesture - the expensive refreshes happen once, here"""
+	_last_world_cell = NO_CELL
 	_update_preview()
 
 func _place_tile_at_position(pos: Vector2i):
-	"""Place selected tile at position"""
-	current_map.set_tile_at_position(pos, selected_tile_type, "")
+	"""Place selected tile at position, recording its real resource path"""
+	current_map.set_tile_at_position(pos, selected_tile_type, selected_tile_resource_path)
 
 func _place_unit_at_position(pos: Vector2i):
 	"""Place selected unit at position"""
 	current_map.set_unit_spawn_at_position(pos, selected_player_id, selected_unit_type, "")
 
+func _resource_path_for_type(type_name: String) -> String:
+	"""First palette resource path registered for a tile type, or "" if none"""
+	for entry in tile_palette_entries:
+		if str(entry.get("type_name", "")) == type_name:
+			return str(entry.get("resource_path", ""))
+	return ""
+
 func _erase_at_position(pos: Vector2i):
 	"""Erase tile/unit at position"""
-	# Reset tile to normal
-	current_map.set_tile_at_position(pos, "NORMAL", "")
+	# Reset tile to normal (using the real NORMAL resource when the palette has one)
+	current_map.set_tile_at_position(pos, "NORMAL", _resource_path_for_type("NORMAL"))
 	# Remove unit spawn
 	current_map.remove_unit_spawn_at_position(pos)
 
@@ -765,7 +955,7 @@ func _tint_rect_preview() -> void:
 	if _rect_anchor == Vector2i(-1, -1) or _rect_hover == Vector2i(-1, -1):
 		return
 
-	var tint: Color = tile_colors.get(selected_tile_type, Color.WHITE) * 1.4
+	var tint: Color = _tile_color_for(selected_tile_type) * 1.4
 	for cell in _get_rect_cells(_rect_anchor, _rect_hover):
 		var button := _get_button_at(cell)
 		if button:
@@ -787,7 +977,7 @@ func _commit_rect_fill(release_pos: Vector2i) -> void:
 
 	var cells := _get_rect_cells(anchor, corner)
 	for cell in cells:
-		current_map.set_tile_at_position(cell, selected_tile_type, "")
+		current_map.set_tile_at_position(cell, selected_tile_type, selected_tile_resource_path)
 		_refresh_cell(cell)
 
 	_end_stroke()
@@ -842,7 +1032,7 @@ func _bucket_fill_at_position(pos: Vector2i) -> void:
 		if cell_data.get("tile_type", "NORMAL") != target_type:
 			continue
 
-		current_map.set_tile_at_position(cell, selected_tile_type, "")
+		current_map.set_tile_at_position(cell, selected_tile_type, selected_tile_resource_path)
 		_refresh_cell(cell)
 		filled += 1
 
@@ -901,49 +1091,18 @@ func _grid_get_drag_data(_at_position: Vector2, pos: Vector2i) -> Variant:
 	return payload
 
 func _grid_can_drop_data(_at_position: Vector2, data: Variant, pos: Vector2i) -> bool:
-	"""Accept only well formed unit payloads landing on an in-bounds cell"""
+	"""Accept only well formed tile/unit payloads landing on an in-bounds cell"""
 	if not current_map or not _is_valid_position(pos):
 		return false
 
-	if not (data is Dictionary):
-		return false
-
-	var payload: Dictionary = data as Dictionary
-	var kind: String = str(payload.get("kind", ""))
-
-	if kind == "unit":
-		return payload.has("unit_type") and payload.has("player_id")
-
-	if kind == "unit_move":
-		return payload.has("unit_type") and payload.has("player_id") and payload.has("from")
-
-	return false
+	return _is_valid_payload(data)
 
 func _grid_drop_data(_at_position: Vector2, data: Variant, pos: Vector2i) -> void:
-	"""Place (or relocate) a unit spawn at the cell the payload was dropped on"""
+	"""Place a tile, or place/relocate a unit spawn, at the dropped-on cell"""
 	if not _grid_can_drop_data(_at_position, data, pos):
 		return
 
-	var payload: Dictionary = data as Dictionary
-	var kind: String = str(payload.get("kind", ""))
-	var unit_type: String = str(payload.get("unit_type", "WARRIOR"))
-	var player_id: int = int(payload.get("player_id", 0))
-
-	if kind == "unit_move":
-		var from_value: Variant = payload.get("from", Vector2i(-1, -1))
-		if not (from_value is Vector2i):
-			return
-		var from_pos: Vector2i = from_value as Vector2i
-		if from_pos == pos:
-			return
-		current_map.remove_unit_spawn_at_position(from_pos)
-		if _is_valid_position(from_pos):
-			_refresh_cell(from_pos)
-
-	current_map.set_unit_spawn_at_position(pos, player_id, unit_type, "")
-	_refresh_cell(pos)
-	_end_stroke()
-	print("Dropped " + unit_type + " for Player " + str(player_id + 1) + " at " + str(pos))
+	_apply_payload_at(data, pos)
 
 func _make_drag_preview(unit_type: String, player_id: int) -> Control:
 	"""Build the small floating label shown under the cursor during a drag"""
@@ -961,6 +1120,429 @@ func _make_drag_preview(unit_type: String, player_id: int) -> Control:
 
 	return preview
 
+func _tile_palette_get_drag_data(_at_position: Vector2, index: int) -> Variant:
+	"""Start a drag from a tile palette button (drop target: 2D grid or 3D world)"""
+	if index < 0 or index >= tile_palette_entries.size():
+		return null
+
+	# A drag supersedes any stroke that may have started
+	_is_painting = false
+
+	var entry: Dictionary = tile_palette_entries[index]
+	var type_name: String = str(entry.get("type_name", "NORMAL"))
+	var color: Color = _entry_color(entry)
+	var display_name: String = str(entry.get("display_name", type_name))
+
+	var payload: Dictionary = {
+		"kind": "tile",
+		"tile_type": type_name,
+		"resource_path": str(entry.get("resource_path", "")),
+		"color": color
+	}
+	set_drag_preview(_make_tile_drag_preview(display_name, color))
+	return payload
+
+func _make_tile_drag_preview(display_name: String, color: Color) -> Control:
+	"""Small floating swatch shown under the cursor while dragging a tile"""
+	var preview = Panel.new()
+	preview.custom_minimum_size = Vector2(72, 26)
+	preview.size = Vector2(72, 26)
+	preview.modulate = color
+
+	var label = Label.new()
+	label.text = display_name
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	preview.add_child(label)
+
+	return preview
+
+# --- 3D world view ------------------------------------------------------------
+# A live render of the map inside a SubViewport, using MapGallery's layout math so
+# both views agree: one BoxMesh per tile centred on the origin, SphereMesh markers
+# for spawns. Full rebuilds are rare (new/load/resize/clear/fill-all); everything
+# else goes through _refresh_cell_3d, which touches a single cell.
+
+func _setup_world_viewport() -> void:
+	"""Populate the SubViewport with a MapRoot, camera, light and environment"""
+	if not world_viewport:
+		return
+
+	world_root = Node3D.new()
+	world_root.name = "MapRoot"
+	world_viewport.add_child(world_root)
+
+	world_camera = Camera3D.new()
+	world_camera.name = "MapCamera"
+	# look_at_from_position orients without needing the node in-tree first
+	# (plain look_at() errors before add_child()).
+	world_camera.look_at_from_position(
+		Vector3(0.0, _world_span * 0.9, _world_span * 0.7), Vector3.ZERO, Vector3.UP)
+	world_viewport.add_child(world_camera)
+
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.09, 0.09, 0.12, 1.0)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.55, 0.5, 0.45, 1.0)
+	env.ambient_light_energy = 0.45
+	world_camera.environment = env
+
+	var light := DirectionalLight3D.new()
+	light.name = "MapLight"
+	light.look_at_from_position(
+		Vector3(_world_span * 0.6, _world_span * 1.2, _world_span * 0.4), Vector3.ZERO, Vector3.UP)
+	light.light_energy = 1.1
+	world_viewport.add_child(light)
+
+func _world_offsets() -> Vector2:
+	"""Centring offsets (x, z) so the grid straddles the origin"""
+	if not current_map:
+		return Vector2.ZERO
+	return Vector2(
+		float(current_map.width - 1) * TILE_STEP * 0.5,
+		float(current_map.height - 1) * TILE_STEP * 0.5)
+
+func _world_position_for(pos: Vector2i, y: float) -> Vector3:
+	"""World-space position of a cell centre at a given height"""
+	var offsets := _world_offsets()
+	return Vector3(
+		float(pos.x) * TILE_STEP - offsets.x,
+		y,
+		float(pos.y) * TILE_STEP - offsets.y)
+
+func _build_world_3d() -> void:
+	"""Full rebuild of the 3D view. Called on new map / load / resize / clear / fill all."""
+	if not world_root:
+		return
+
+	# Free previous geometry and drop the stale cell -> mesh lookups.
+	for child in world_root.get_children():
+		child.queue_free()
+	_tile_meshes.clear()
+	_spawn_meshes.clear()
+
+	if not current_map:
+		return
+
+	var cols: int = maxi(current_map.width, 1)
+	var rows: int = maxi(current_map.height, 1)
+
+	_world_span = maxf(float(cols), float(rows)) * TILE_STEP
+	_aim_world_camera()
+
+	for y in range(rows):
+		for x in range(cols):
+			var pos := Vector2i(x, y)
+			_create_tile_mesh(pos)
+			_sync_spawn_marker(pos)
+
+func _create_tile_mesh(pos: Vector2i) -> void:
+	"""Create the box mesh for a single cell and register it in _tile_meshes"""
+	if not world_root or not current_map:
+		return
+
+	var tile_mesh := BoxMesh.new()
+	tile_mesh.size = TILE_MESH_SIZE
+
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.mesh = tile_mesh
+	mesh_instance.material_override = _solid_material(_tile_color_at(pos))
+	mesh_instance.position = _world_position_for(pos, 0.0)
+	world_root.add_child(mesh_instance)
+
+	_tile_meshes[pos] = mesh_instance
+
+func _sync_spawn_marker(pos: Vector2i) -> void:
+	"""Create, recolour or free the spawn marker for a cell to match the map data"""
+	if not world_root or not current_map:
+		return
+
+	var spawn_data: Dictionary = current_map.get_unit_spawn_at_position(pos)
+
+	if spawn_data.is_empty():
+		if _spawn_meshes.has(pos):
+			var stale: MeshInstance3D = _spawn_meshes[pos] as MeshInstance3D
+			if is_instance_valid(stale):
+				stale.queue_free()
+			_spawn_meshes.erase(pos)
+		return
+
+	var player_id: int = int(spawn_data.get("player_id", 0))
+	var color_value: Variant = unit_colors.get(player_id, Color.WHITE)
+	var marker_color: Color = Color.WHITE
+	if color_value is Color:
+		marker_color = color_value as Color
+
+	if _spawn_meshes.has(pos):
+		var existing: MeshInstance3D = _spawn_meshes[pos] as MeshInstance3D
+		if is_instance_valid(existing):
+			var existing_material := existing.material_override as StandardMaterial3D
+			if existing_material:
+				existing_material.albedo_color = marker_color
+			return
+		_spawn_meshes.erase(pos)
+
+	var spawn_mesh := SphereMesh.new()
+	spawn_mesh.radius = SPAWN_RADIUS
+	spawn_mesh.height = SPAWN_RADIUS * 2.0
+
+	var marker := MeshInstance3D.new()
+	marker.mesh = spawn_mesh
+	marker.material_override = _solid_material(marker_color)
+	marker.position = _world_position_for(pos, SPAWN_Y)
+	world_root.add_child(marker)
+
+	_spawn_meshes[pos] = marker
+
+func _refresh_cell_3d(pos: Vector2i) -> void:
+	"""Cheap per-cell 3D update - recolour the tile, add/remove its spawn marker.
+
+	Deliberately never rebuilds the whole world, so drag strokes stay smooth.
+	"""
+	if not world_root or not current_map or not _is_valid_position(pos):
+		return
+
+	if _tile_meshes.has(pos):
+		var stored: MeshInstance3D = _tile_meshes[pos] as MeshInstance3D
+		if is_instance_valid(stored):
+			var material := stored.material_override as StandardMaterial3D
+			if material:
+				material.albedo_color = _tile_color_at(pos)
+		else:
+			_tile_meshes.erase(pos)
+			_create_tile_mesh(pos)
+	else:
+		_create_tile_mesh(pos)
+
+	_sync_spawn_marker(pos)
+
+func _tile_color_at(pos: Vector2i) -> Color:
+	"""Display colour of the tile currently stored at a cell"""
+	if not current_map:
+		return Color.WHITE
+	var tile_data: Dictionary = current_map.get_tile_at_position(pos)
+	return _tile_color_for(str(tile_data.get("tile_type", "NORMAL")))
+
+func _aim_world_camera() -> void:
+	"""Re-position the camera for the current _world_span (angled top-down)"""
+	if not world_camera:
+		return
+	world_camera.look_at_from_position(
+		Vector3(0.0, _world_span * 0.9, _world_span * 0.7), Vector3.ZERO, Vector3.UP)
+
+func _solid_material(color: Color) -> StandardMaterial3D:
+	"""A simple lit material with the given albedo (one instance per mesh, so a
+	per-cell recolour never bleeds into neighbouring tiles)."""
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.85
+	mat.metallic = 0.0
+	return mat
+
+# --- 3D picking ---------------------------------------------------------------
+
+func _world_cell_from_local_position(local_pos: Vector2) -> Vector2i:
+	"""Convert a SubViewportContainer-local point to a map cell.
+
+	1. container-local -> SubViewport coordinates (scaled when the container stretches)
+	2. build a camera ray from that viewport point
+	3. intersect the ground plane y = 0
+	4. invert the tile layout math to (col, row)
+	5. bounds-check; NO_CELL when the ray misses or lands off the map
+	"""
+	if not current_map or not world_camera or not world_viewport or not world_viewport_container:
+		return NO_CELL
+
+	var container_size: Vector2 = world_viewport_container.size
+	if container_size.x <= 0.0 or container_size.y <= 0.0:
+		return NO_CELL
+
+	var viewport_size := Vector2(world_viewport.size)
+	var vp_pos: Vector2 = local_pos
+	if world_viewport_container.stretch:
+		vp_pos = Vector2(
+			local_pos.x * viewport_size.x / container_size.x,
+			local_pos.y * viewport_size.y / container_size.y)
+
+	var origin: Vector3 = world_camera.project_ray_origin(vp_pos)
+	var direction: Vector3 = world_camera.project_ray_normal(vp_pos)
+
+	# Ray parallel to the ground plane - nothing to hit.
+	if absf(direction.y) < 0.00001:
+		return NO_CELL
+
+	var distance: float = -origin.y / direction.y
+	if distance < 0.0:
+		return NO_CELL
+
+	var point: Vector3 = origin + direction * distance
+
+	var offsets := _world_offsets()
+	var col: int = roundi((point.x + offsets.x) / TILE_STEP)
+	var row: int = roundi((point.z + offsets.y) / TILE_STEP)
+
+	var cell := Vector2i(col, row)
+	if not _is_valid_position(cell):
+		return NO_CELL
+
+	return cell
+
+# --- 3D drop target -----------------------------------------------------------
+
+func _payload_kind(data: Variant) -> String:
+	"""Kind string of a drag payload, or "" when the payload is malformed"""
+	if not (data is Dictionary):
+		return ""
+	var payload: Dictionary = data as Dictionary
+	return str(payload.get("kind", ""))
+
+func _is_valid_payload(data: Variant) -> bool:
+	"""Validate the shape of every payload kind the editor understands"""
+	var kind: String = _payload_kind(data)
+	if kind.is_empty():
+		return false
+
+	var payload: Dictionary = data as Dictionary
+
+	if kind == "tile":
+		return payload.has("tile_type") and payload.get("tile_type") is String
+
+	if kind == "unit":
+		return payload.has("unit_type") and payload.has("player_id")
+
+	if kind == "unit_move":
+		return payload.has("unit_type") and payload.has("player_id") \
+			and payload.get("from") is Vector2i
+
+	return false
+
+func _world_can_drop_data(at_position: Vector2, data: Variant) -> bool:
+	"""Accept well formed tile/unit payloads that land on an in-bounds cell"""
+	if not current_map:
+		return false
+	if not _is_valid_payload(data):
+		return false
+	return _world_cell_from_local_position(at_position) != NO_CELL
+
+func _world_drop_data(at_position: Vector2, data: Variant) -> void:
+	"""Apply a dropped payload at the picked cell"""
+	if not _world_can_drop_data(at_position, data):
+		return
+
+	var cell: Vector2i = _world_cell_from_local_position(at_position)
+	if cell == NO_CELL:
+		return
+
+	_apply_payload_at(data, cell)
+
+func _apply_payload_at(data: Variant, pos: Vector2i) -> void:
+	"""Shared drop handling for both editing surfaces"""
+	if not current_map or not _is_valid_position(pos):
+		return
+	if not _is_valid_payload(data):
+		return
+
+	var payload: Dictionary = data as Dictionary
+	var kind: String = str(payload.get("kind", ""))
+
+	if kind == "tile":
+		var tile_type: String = str(payload.get("tile_type", "NORMAL"))
+		var resource_path: String = str(payload.get("resource_path", ""))
+		# Honour the brush size, exactly like the 2D painting path does.
+		var place_tile := func(target: Vector2i) -> void:
+			current_map.set_tile_at_position(target, tile_type, resource_path)
+		_apply_brush(pos, place_tile)
+		_end_stroke()
+		print("Dropped tile " + tile_type + " at " + str(pos))
+		return
+
+	var unit_type: String = str(payload.get("unit_type", "WARRIOR"))
+	var player_id: int = int(payload.get("player_id", 0))
+
+	if kind == "unit_move":
+		var from_value: Variant = payload.get("from", NO_CELL)
+		if not (from_value is Vector2i):
+			return
+		var from_pos: Vector2i = from_value as Vector2i
+		if from_pos == pos:
+			return
+		current_map.remove_unit_spawn_at_position(from_pos)
+		if _is_valid_position(from_pos):
+			_refresh_cell(from_pos)
+
+	current_map.set_unit_spawn_at_position(pos, player_id, unit_type, "")
+	_refresh_cell(pos)
+	_end_stroke()
+	print("Dropped " + unit_type + " for Player " + str(player_id + 1) + " at " + str(pos))
+
+# --- Painting directly in the 3D view -----------------------------------------
+
+func _on_world_gui_input(event: InputEvent) -> void:
+	"""Mirror the 2D grid's stroke semantics against ray-picked cells.
+
+	Press applies the active tool and opens a stroke; motion continues it (skipping
+	repeats of the same cell); right-click erases. The global _input left-release
+	handler closes the stroke, same as the 2D grid.
+	"""
+	if not current_map:
+		return
+
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if not mouse_event.pressed:
+			return
+
+		var cell: Vector2i = _world_cell_from_local_position(mouse_event.position)
+		if cell == NO_CELL:
+			return
+
+		if mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			_apply_brush(cell, _erase_at_position)
+			_end_stroke()
+			return
+
+		if mouse_event.button_index != MOUSE_BUTTON_LEFT:
+			return
+
+		var tool_mode: String = _get_tool_mode()
+
+		if tool_mode == "Rect Fill":
+			_rect_anchor = cell
+			_rect_hover = cell
+			_tint_rect_preview()
+			return
+
+		if tool_mode == "Bucket Fill":
+			_bucket_fill_at_position(cell)
+			_end_stroke()
+			return
+
+		_is_painting = true
+		_last_world_cell = cell
+		_apply_tool_at_position(cell)
+		return
+
+	if event is InputEventMouseMotion:
+		var motion_event := event as InputEventMouseMotion
+
+		if _rect_anchor != NO_CELL:
+			var rect_cell: Vector2i = _world_cell_from_local_position(motion_event.position)
+			if rect_cell != NO_CELL:
+				_update_rect_preview(rect_cell)
+			return
+
+		if not _is_painting:
+			return
+
+		var moved_cell: Vector2i = _world_cell_from_local_position(motion_event.position)
+		if moved_cell == NO_CELL or moved_cell == _last_world_cell:
+			return
+
+		_last_world_cell = moved_cell
+		_apply_tool_at_position(moved_cell)
+
 func _on_clear_grid():
 	"""Clear the entire grid"""
 	if not current_map:
@@ -970,8 +1552,9 @@ func _on_clear_grid():
 	current_map.create_default_layout()
 	# Clear all unit spawns
 	current_map.unit_spawns.clear()
-	
+
 	_update_grid_display()
+	_build_world_3d()
 	_update_preview()
 	print("Grid cleared")
 
@@ -982,9 +1565,10 @@ func _on_fill_all():
 
 	for y in range(current_map.height):
 		for x in range(current_map.width):
-			current_map.set_tile_at_position(Vector2i(x, y), selected_tile_type, "")
+			current_map.set_tile_at_position(Vector2i(x, y), selected_tile_type, selected_tile_resource_path)
 
 	_update_grid_display()
+	_build_world_3d()
 	_update_preview()
 	print("Filled all tiles with " + selected_tile_type)
 
@@ -1016,15 +1600,19 @@ func _get_button_at(pos: Vector2i) -> Button:
 	return grid_buttons[index]
 
 func _refresh_cell(pos: Vector2i) -> void:
-	"""Repaint a single cell - used during strokes so we never redraw the whole grid"""
+	"""Repaint a single cell - used during strokes so we never redraw the whole grid.
+
+	Also drives the matching per-cell 3D update, so every existing caller keeps the
+	2D grid and the 3D world in sync for free (and never triggers a full rebuild).
+	"""
 	if not current_map:
 		return
 
 	var button := _get_button_at(pos)
-	if not button:
-		return
+	if button:
+		_paint_button(button, pos)
 
-	_paint_button(button, pos)
+	_refresh_cell_3d(pos)
 
 func _paint_button(button: Button, pos: Vector2i) -> void:
 	"""Apply the tile/unit appearance for a position to its button"""
@@ -1045,7 +1633,7 @@ func _paint_button(button: Button, pos: Vector2i) -> void:
 	else:
 		# Show tile
 		button.text = ""
-		button.modulate = tile_colors.get(tile_type, Color.WHITE)
+		button.modulate = _tile_color_for(str(tile_type))
 
 func _on_map_info_changed(new_text: String = ""):
 	"""Handle map information changes"""
@@ -1176,11 +1764,25 @@ func _on_test_map():
 	# Save map temporarily for testing
 	var temp_name = "temp_test_map"
 	var success = MapLoader.save_map(current_map, temp_name)
-	if success:
-		print("Map ready for testing. Load it from the Map Selection menu.")
-		# Could potentially launch the game scene directly here
-	else:
+	if not success:
 		print("Failed to prepare map for testing")
+		return
+
+	# Launch the game in the editor's play mode. NOTE: GameWorld loads whichever
+	# map the game is configured to load, so this is a "launch the game to try it"
+	# button rather than a direct load of the temp map - pick it from the Map
+	# Selection menu once the game is running.
+	var game_scene: String = "res://game/world/GameWorld.tscn"
+
+	if Engine.has_singleton("EditorInterface") and ResourceLoader.exists(game_scene):
+		var editor_interface: Object = Engine.get_singleton("EditorInterface")
+		if editor_interface and editor_interface.has_method("play_custom_scene"):
+			editor_interface.call("play_custom_scene", game_scene)
+			print("Launching " + game_scene + " - open Map Selection and pick '" + temp_name + "'")
+			return
+
+	# Fallback: the editor API is unreachable, so keep the original behaviour.
+	print("Map ready for testing. Load it from the Map Selection menu.")
 
 func _on_save_template():
 	"""Save current map as a template"""
