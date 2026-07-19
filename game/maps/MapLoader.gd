@@ -263,11 +263,32 @@ func _load_units() -> bool:
 	
 	var units_created = 0
 	for spawn_data in current_map.unit_spawns:
+		# Spawn POINTS describe when they produce units, not just where. Only the
+		# ones that seed a unit at load time are materialised here - a Reinforcement
+		# scheduled for turn 5 must stay empty until the turn system activates it.
+		# Maps authored before spawn_kind existed default to "Start", so they are
+		# all initial and load exactly as they always did.
+		if not current_map.is_initial_spawn(spawn_data):
+			print("[MapLoader] Deferred spawn point (kind %s, turn %d) at %s - not spawned at load" % [
+				current_map.get_spawn_kind(spawn_data),
+				int(spawn_data.get("spawn_turn", 1)),
+				str(spawn_data.get("position", Vector2i(-1, -1)))])
+			continue
+
+		# An initial point with no unit reference is an UNASSIGNED SLOT, filled at
+		# match setup - not an error, and specifically not a reason to conjure a
+		# default WARRIOR onto the board.
+		if not current_map.spawn_has_unit_reference(spawn_data):
+			print("[MapLoader] Unassigned spawn slot at %s (player %d) - left empty for match setup" % [
+				str(spawn_data.get("position", Vector2i(-1, -1))),
+				int(spawn_data.get("player_id", 0))])
+			continue
+
 		if _create_unit_from_spawn(spawn_data, units_created):
 			units_created += 1
 		else:
 			print("Failed to create unit from spawn: " + str(spawn_data))
-	
+
 	print("Created " + str(units_created) + " units")
 	return true
 

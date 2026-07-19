@@ -22,6 +22,30 @@ const SPAWN_Y := 0.5  # sits on top of the tile surface
 # Sentinel returned by the ray->cell pick when the ray misses the ground plane.
 const NO_CELL := Vector2i(-1, -1)
 
+# --- Spawn points -------------------------------------------------------------
+# A map defines spawn POINTS, not baked-in units: a cell, the player slot that owns
+# it, and what kind of spawning it does. The unit reference is optional - a "Start"
+# point without one is an empty slot filled at match setup.
+const NO_UNIT_TYPE := ""
+const NO_UNIT_LABEL := "(none / assigned at match setup)"
+
+# One-letter badge drawn on the 2D grid so a cell's kind reads at a glance.
+const SPAWN_KIND_INITIALS := {
+	"Start": "S",
+	"Respawn": "R",
+	"Endless": "E",
+	"Reinforcement": "F"
+}
+
+# 3D marker radius multiplier per kind, so the world view distinguishes them too
+# (colour still encodes the player slot).
+const SPAWN_KIND_MARKER_SCALE := {
+	"Start": 1.0,
+	"Respawn": 1.35,
+	"Endless": 1.6,
+	"Reinforcement": 0.7
+}
+
 # UI Elements
 var scroll_container: ScrollContainer
 var main_container: VBoxContainer
@@ -57,6 +81,18 @@ var unit_buttons: Array[Button] = []
 var selected_unit_type: String = "WARRIOR"
 var selected_player_id: int = 0
 var player_selector: OptionButton
+# Palette values in button order: "" (the no-unit slot) followed by unit_types.
+var unit_palette_values: Array[String] = []
+
+# Spawn Point Section - the configuration a newly placed spawn point is stamped with
+var spawn_kind_option: OptionButton
+var respawn_interval_input: SpinBox
+var max_spawns_input: SpinBox
+var spawn_turn_input: SpinBox
+var selected_spawn_kind: String = MapResource.SPAWN_KIND_START
+var selected_respawn_interval: int = 1
+var selected_max_spawns: int = 1
+var selected_spawn_turn: int = 1
 
 # Map Grid Section
 var grid_container: GridContainer
@@ -106,7 +142,7 @@ var unit_types = ["WARRIOR", "ARCHER", "MAGE"]
 var difficulties = ["Easy", "Normal", "Hard", "Expert"]
 var map_types = ["Skirmish", "Campaign", "Custom"]
 var map_statuses = ["Active", "Inactive"]
-var tool_modes = ["Place Tiles", "Place Units", "Rect Fill", "Bucket Fill", "Erase"]
+var tool_modes = ["Place Tiles", "Place Spawn", "Rect Fill", "Bucket Fill", "Erase"]
 
 # Colors for visual feedback
 var tile_colors = {
@@ -284,9 +320,11 @@ func _create_map_size_section():
 	width_label.text = "Width:"
 	width_container.add_child(width_label)
 	
+	# Bounds come from MapResource so the creator can never author a size that
+	# validate_map() would then reject.
 	width_input = SpinBox.new()
-	width_input.min_value = 3
-	width_input.max_value = 15
+	width_input.min_value = MapResource.MIN_MAP_SIZE
+	width_input.max_value = MapResource.MAX_MAP_SIZE
 	width_input.value = 5
 	width_container.add_child(width_input)
 	
@@ -299,8 +337,8 @@ func _create_map_size_section():
 	height_container.add_child(height_label)
 	
 	height_input = SpinBox.new()
-	height_input.min_value = 3
-	height_input.max_value = 15
+	height_input.min_value = MapResource.MIN_MAP_SIZE
+	height_input.max_value = MapResource.MAX_MAP_SIZE
 	height_input.value = 5
 	height_container.add_child(height_input)
 	
@@ -487,26 +525,116 @@ func _create_unit_palette_section():
 	player_selector.item_selected.connect(_on_player_selected)
 	player_container.add_child(player_selector)
 	
-	# Unit type buttons
+	# Unit type buttons. The first entry is the EMPTY slot: a spawn point placed with
+	# it selected records no unit reference, which is how a map author says "this is
+	# player 2's second slot, whoever they bring to the match fills it".
+	unit_palette_values.clear()
+	unit_palette_values.append(NO_UNIT_TYPE)
+	for unit_type in unit_types:
+		unit_palette_values.append(str(unit_type))
+
 	var unit_row = HBoxContainer.new()
 	unit_palette_container.add_child(unit_row)
-	
-	for unit_type in unit_types:
+
+	for i in range(unit_palette_values.size()):
+		var palette_value: String = unit_palette_values[i]
 		var button = Button.new()
-		button.text = unit_type
+		button.text = _unit_display_name(palette_value)
 		button.custom_minimum_size = Vector2(80, 30)
 		button.modulate = unit_colors.get(selected_player_id, Color.WHITE)
-		button.tooltip_text = "Click to select, or drag onto the grid to place"
-		button.pressed.connect(_on_unit_selected.bind(unit_type))
+		button.tooltip_text = "Click to select, or drag onto the grid to place a spawn point"
+		button.pressed.connect(_on_unit_selected.bind(palette_value))
 		# Palette buttons are drag sources only - they never accept drops
-		button.set_drag_forwarding(_palette_get_drag_data.bind(unit_type), Callable(), Callable())
+		button.set_drag_forwarding(_palette_get_drag_data.bind(palette_value), Callable(), Callable())
 
 		unit_row.add_child(button)
 		unit_buttons.append(button)
-	
-	# Select first unit by default
-	if unit_buttons.size() > 0:
-		_on_unit_selected(unit_types[0])
+
+	# Default to the first real unit type, so existing authoring habits are unchanged.
+	if not unit_types.is_empty():
+		_on_unit_selected(str(unit_types[0]))
+	elif not unit_palette_values.is_empty():
+		_on_unit_selected(unit_palette_values[0])
+
+	_create_spawn_point_section()
+
+func _create_spawn_point_section():
+	"""Controls describing WHAT KIND of spawn point the next placement creates.
+
+	Fields that do not apply to the chosen kind are disabled rather than hidden, so
+	the UI teaches which settings matter for which kind.
+	"""
+	var section_label = Label.new()
+	section_label.text = "SPAWN POINT"
+	section_label.add_theme_font_size_override("font_size", 14)
+	unit_palette_container.add_child(section_label)
+
+	# Spawn kind
+	var kind_row = HBoxContainer.new()
+	unit_palette_container.add_child(kind_row)
+
+	var kind_label = Label.new()
+	kind_label.text = "Spawn Kind:"
+	kind_row.add_child(kind_label)
+
+	spawn_kind_option = OptionButton.new()
+	for kind in MapResource.SPAWN_KINDS:
+		spawn_kind_option.add_item(str(kind))
+	spawn_kind_option.selected = 0  # Start
+	spawn_kind_option.tooltip_text = "Start = placed at map load. Respawn/Endless = keeps producing units. Reinforcement = arrives on a later turn."
+	spawn_kind_option.item_selected.connect(_on_spawn_kind_selected)
+	kind_row.add_child(spawn_kind_option)
+
+	# Numeric settings
+	var settings_row = HBoxContainer.new()
+	unit_palette_container.add_child(settings_row)
+
+	var interval_container = VBoxContainer.new()
+	settings_row.add_child(interval_container)
+
+	var interval_label = Label.new()
+	interval_label.text = "Respawn Interval:"
+	interval_container.add_child(interval_label)
+
+	respawn_interval_input = SpinBox.new()
+	respawn_interval_input.min_value = 1
+	respawn_interval_input.max_value = 20
+	respawn_interval_input.value = selected_respawn_interval
+	respawn_interval_input.tooltip_text = "Turns between spawns (Respawn / Endless only)"
+	respawn_interval_input.value_changed.connect(_on_respawn_interval_changed)
+	interval_container.add_child(respawn_interval_input)
+
+	var max_container = VBoxContainer.new()
+	settings_row.add_child(max_container)
+
+	var max_label = Label.new()
+	max_label.text = "Max Spawns:"
+	max_container.add_child(max_label)
+
+	max_spawns_input = SpinBox.new()
+	max_spawns_input.min_value = -1
+	max_spawns_input.max_value = 99
+	max_spawns_input.value = selected_max_spawns
+	max_spawns_input.tooltip_text = "Units this point may ever produce (-1 = unlimited)"
+	max_spawns_input.value_changed.connect(_on_max_spawns_changed)
+	max_container.add_child(max_spawns_input)
+
+	var turn_container = VBoxContainer.new()
+	settings_row.add_child(turn_container)
+
+	var turn_label = Label.new()
+	turn_label.text = "Spawn Turn:"
+	turn_container.add_child(turn_label)
+
+	spawn_turn_input = SpinBox.new()
+	spawn_turn_input.min_value = 1
+	spawn_turn_input.max_value = 99
+	spawn_turn_input.value = selected_spawn_turn
+	spawn_turn_input.tooltip_text = "Turn this point activates (Reinforcement only)"
+	spawn_turn_input.value_changed.connect(_on_spawn_turn_changed)
+	turn_container.add_child(spawn_turn_input)
+
+	_update_spawn_controls_enabled()
 
 func _create_map_grid_section():
 	"""Create the interactive map grid"""
@@ -779,28 +907,101 @@ func _on_tile_selected(index: int):
 
 	print("Selected tile type: " + selected_tile_type + " (" + selected_tile_resource_path + ")")
 
+func _unit_display_name(unit_type: String) -> String:
+	"""Palette label for a unit reference - the empty slot gets a spelled-out name"""
+	return NO_UNIT_LABEL if unit_type.is_empty() else unit_type
+
 func _on_unit_selected(unit_type: String):
-	"""Handle unit type selection"""
+	"""Handle unit palette selection ("" = the no-unit slot)"""
 	selected_unit_type = unit_type
-	
+
 	# Update button states
+	var base_color: Color = _player_color(selected_player_id)
 	for i in range(unit_buttons.size()):
-		if i < unit_types.size() and unit_types[i] == unit_type:
-			unit_buttons[i].modulate = unit_colors.get(selected_player_id, Color.WHITE) * 1.5
-		else:
-			unit_buttons[i].modulate = unit_colors.get(selected_player_id, Color.WHITE)
-	
-	print("Selected unit type: " + unit_type + " for Player " + str(selected_player_id + 1))
+		var button := unit_buttons[i]
+		if not button:
+			continue
+		var is_selected: bool = i < unit_palette_values.size() and unit_palette_values[i] == unit_type
+		button.modulate = base_color * 1.5 if is_selected else base_color
+
+	print("Selected unit type: " + _unit_display_name(unit_type) + " for Player " + str(selected_player_id + 1))
 
 func _on_player_selected(index: int):
 	"""Handle player selection"""
 	selected_player_id = index
-	
-	# Update unit button colors
-	for button in unit_buttons:
-		button.modulate = unit_colors.get(selected_player_id, Color.WHITE)
-	
+
+	# Recolour the palette for the new slot, keeping the current selection highlighted
+	_on_unit_selected(selected_unit_type)
+
 	print("Selected player: " + str(selected_player_id + 1))
+
+# --- Spawn point configuration ------------------------------------------------
+
+func _player_color(player_id: int) -> Color:
+	"""Slot colour, guarded against an unmapped player id"""
+	var value: Variant = unit_colors.get(player_id, Color.WHITE)
+	if value is Color:
+		return value as Color
+	return Color.WHITE
+
+func _on_spawn_kind_selected(index: int):
+	"""Handle spawn kind change, re-defaulting max_spawns and re-gating the fields"""
+	if index < 0 or index >= MapResource.SPAWN_KINDS.size():
+		return
+
+	selected_spawn_kind = str(MapResource.SPAWN_KINDS[index])
+
+	# Endless means unlimited by definition; every other kind starts at a single unit.
+	# Only nudge the SpinBox when it still holds the previous kind's default, so a
+	# deliberate value the user typed is never stomped.
+	var new_default: int = -1 if selected_spawn_kind == MapResource.SPAWN_KIND_ENDLESS else 1
+	if max_spawns_input and (selected_max_spawns == -1 or selected_max_spawns == 1):
+		selected_max_spawns = new_default
+		max_spawns_input.value = new_default
+
+	_update_spawn_controls_enabled()
+	print("Selected spawn kind: " + selected_spawn_kind)
+
+func _on_respawn_interval_changed(value: float):
+	"""Store the respawn interval (turns between spawns)"""
+	selected_respawn_interval = maxi(1, int(value))
+
+func _on_max_spawns_changed(value: float):
+	"""Store the spawn cap (-1 = unlimited)"""
+	selected_max_spawns = int(value)
+
+func _on_spawn_turn_changed(value: float):
+	"""Store the turn a Reinforcement point activates"""
+	selected_spawn_turn = maxi(1, int(value))
+
+func _update_spawn_controls_enabled() -> void:
+	"""Grey out the fields that are meaningless for the selected spawn kind"""
+	var is_repeating: bool = selected_spawn_kind == MapResource.SPAWN_KIND_RESPAWN \
+		or selected_spawn_kind == MapResource.SPAWN_KIND_ENDLESS
+	var is_reinforcement: bool = selected_spawn_kind == MapResource.SPAWN_KIND_REINFORCEMENT
+
+	if respawn_interval_input:
+		respawn_interval_input.editable = is_repeating
+		respawn_interval_input.modulate = Color.WHITE if is_repeating else Color(1, 1, 1, 0.45)
+
+	if max_spawns_input:
+		# A one-shot Start point always produces exactly one unit.
+		var caps_apply: bool = selected_spawn_kind != MapResource.SPAWN_KIND_START
+		max_spawns_input.editable = caps_apply
+		max_spawns_input.modulate = Color.WHITE if caps_apply else Color(1, 1, 1, 0.45)
+
+	if spawn_turn_input:
+		spawn_turn_input.editable = is_reinforcement
+		spawn_turn_input.modulate = Color.WHITE if is_reinforcement else Color(1, 1, 1, 0.45)
+
+func _spawn_opts() -> Dictionary:
+	"""Options dictionary describing the spawn point the palette currently defines"""
+	return {
+		"unit_type": selected_unit_type,
+		"max_spawns": selected_max_spawns,
+		"respawn_interval": selected_respawn_interval,
+		"spawn_turn": selected_spawn_turn
+	}
 
 # --- Grid input: strokes, brushes and tools -----------------------------------
 
@@ -891,8 +1092,8 @@ func _apply_tool_at_position(pos: Vector2i) -> void:
 	match tool_mode:
 		"Place Tiles":
 			_apply_brush(pos, _place_tile_at_position)
-		"Place Units":
-			_apply_brush(pos, _place_unit_at_position)
+		"Place Spawn":
+			_apply_brush(pos, _place_spawn_at_position)
 		"Bucket Fill":
 			_bucket_fill_at_position(pos)
 		"Erase":
@@ -945,9 +1146,16 @@ func _place_tile_at_position(pos: Vector2i):
 	"""Place selected tile at position, recording its real resource path"""
 	current_map.set_tile_at_position(pos, selected_tile_type, selected_tile_resource_path)
 
-func _place_unit_at_position(pos: Vector2i):
-	"""Place selected unit at position"""
-	current_map.set_unit_spawn_at_position(pos, selected_player_id, selected_unit_type, "")
+func _place_spawn_at_position(pos: Vector2i):
+	"""Place a spawn POINT at a position using the current palette configuration.
+
+	The unit reference is optional: with the "(none)" palette entry selected this
+	writes a bare slot for match setup to fill.
+	"""
+	if not current_map:
+		return
+	current_map.set_spawn_point_at_position(
+		pos, selected_player_id, selected_spawn_kind, _spawn_opts())
 
 func _resource_path_for_type(type_name: String) -> String:
 	"""First palette resource path registered for a tile type, or "" if none"""
@@ -1085,20 +1293,33 @@ func _bucket_fill_at_position(pos: Vector2i) -> void:
 # --- Drag and drop ------------------------------------------------------------
 
 func _palette_get_drag_data(_at_position: Vector2, unit_type: String) -> Variant:
-	"""Start a drag from a unit palette button"""
+	"""Start a drag from a unit palette button.
+
+	Emits the richer "spawn" payload, which carries the whole spawn point config, so
+	dropping is identical to painting with the Place Spawn tool. The older "unit"
+	payload is still ACCEPTED on drop, it is just no longer produced here.
+	"""
 	# A drag supersedes any stroke that may have started
 	_is_painting = false
 
 	var payload: Dictionary = {
-		"kind": "unit",
+		"kind": "spawn",
+		"player_id": selected_player_id,
+		"spawn_kind": selected_spawn_kind,
 		"unit_type": unit_type,
-		"player_id": selected_player_id
+		"max_spawns": selected_max_spawns,
+		"respawn_interval": selected_respawn_interval,
+		"spawn_turn": selected_spawn_turn
 	}
-	set_drag_preview(_make_drag_preview(unit_type, selected_player_id))
+	set_drag_preview(_make_drag_preview(_drag_preview_text(unit_type, selected_spawn_kind), selected_player_id))
 	return payload
 
 func _grid_get_drag_data(_at_position: Vector2, pos: Vector2i) -> Variant:
-	"""Start a drag from a grid cell that already holds a unit spawn (move gesture)"""
+	"""Start a drag from a grid cell that already holds a spawn point (move gesture).
+
+	The payload mirrors the point's OWN configuration, not the palette's, so moving a
+	Reinforcement point around never silently converts it into a Start point.
+	"""
 	if not current_map or not _is_valid_position(pos):
 		return null
 
@@ -1108,17 +1329,34 @@ func _grid_get_drag_data(_at_position: Vector2, pos: Vector2i) -> Variant:
 
 	_is_painting = false
 
-	var unit_type: String = str(spawn_data.get("unit_type", "WARRIOR"))
-	var player_id: int = int(spawn_data.get("player_id", 0))
+	var normalized: Dictionary = current_map.normalize_spawn(spawn_data)
+	var unit_type: String = str(normalized.get("unit_type", ""))
+	var player_id: int = int(normalized.get("player_id", 0))
+	var spawn_kind: String = str(normalized.get("spawn_kind", MapResource.SPAWN_KIND_START))
 
 	var payload: Dictionary = {
 		"kind": "unit_move",
 		"from": pos,
 		"unit_type": unit_type,
-		"player_id": player_id
+		"player_id": player_id,
+		"spawn_kind": spawn_kind,
+		"character_id": str(normalized.get("character_id", "")),
+		"unit_resource_path": str(normalized.get("unit_resource_path", "")),
+		"max_spawns": int(normalized.get("max_spawns", 1)),
+		"respawn_interval": int(normalized.get("respawn_interval", 1)),
+		"spawn_turn": int(normalized.get("spawn_turn", 1))
 	}
-	set_drag_preview(_make_drag_preview(unit_type, player_id))
+	set_drag_preview(_make_drag_preview(_drag_preview_text(unit_type, spawn_kind), player_id))
 	return payload
+
+func _drag_preview_text(unit_type: String, spawn_kind: String) -> String:
+	"""Label for the floating drag preview: the unit (or "Slot") plus the kind badge"""
+	var unit_label: String = unit_type if not unit_type.is_empty() else "Slot"
+	return unit_label + " [" + _spawn_kind_initial(spawn_kind) + "]"
+
+func _spawn_kind_initial(spawn_kind: String) -> String:
+	"""One-letter badge for a spawn kind (S/R/E/F), "S" for anything unrecognised"""
+	return str(SPAWN_KIND_INITIALS.get(spawn_kind, "S"))
 
 func _grid_can_drop_data(_at_position: Vector2, data: Variant, pos: Vector2i) -> bool:
 	"""Accept only well formed tile/unit payloads landing on an in-bounds cell"""
@@ -1134,15 +1372,15 @@ func _grid_drop_data(_at_position: Vector2, data: Variant, pos: Vector2i) -> voi
 
 	_apply_payload_at(data, pos)
 
-func _make_drag_preview(unit_type: String, player_id: int) -> Control:
+func _make_drag_preview(preview_text: String, player_id: int) -> Control:
 	"""Build the small floating label shown under the cursor during a drag"""
 	var preview = Panel.new()
-	preview.custom_minimum_size = Vector2(60, 26)
-	preview.size = Vector2(60, 26)
-	preview.modulate = unit_colors.get(player_id, Color.WHITE)
+	preview.custom_minimum_size = Vector2(84, 26)
+	preview.size = Vector2(84, 26)
+	preview.modulate = _player_color(player_id)
 
 	var label = Label.new()
-	label.text = unit_type
+	label.text = preview_text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1299,11 +1537,13 @@ func _sync_spawn_marker(pos: Vector2i) -> void:
 			_spawn_meshes.erase(pos)
 		return
 
-	var player_id: int = int(spawn_data.get("player_id", 0))
-	var color_value: Variant = unit_colors.get(player_id, Color.WHITE)
-	var marker_color: Color = Color.WHITE
-	if color_value is Color:
-		marker_color = color_value as Color
+	# Colour still encodes the player slot; the marker SIZE encodes the spawn kind, so
+	# a repeating point reads as bigger and a late Reinforcement as smaller.
+	var normalized: Dictionary = current_map.normalize_spawn(spawn_data)
+	var player_id: int = int(normalized.get("player_id", 0))
+	var spawn_kind: String = str(normalized.get("spawn_kind", MapResource.SPAWN_KIND_START))
+	var marker_color: Color = _player_color(player_id)
+	var radius: float = SPAWN_RADIUS * _spawn_kind_marker_scale(spawn_kind)
 
 	if _spawn_meshes.has(pos):
 		var existing: MeshInstance3D = _spawn_meshes[pos] as MeshInstance3D
@@ -1311,12 +1551,17 @@ func _sync_spawn_marker(pos: Vector2i) -> void:
 			var existing_material := existing.material_override as StandardMaterial3D
 			if existing_material:
 				existing_material.albedo_color = marker_color
+			# Resize in place so switching a point's kind is visible without a rebuild.
+			var existing_mesh := existing.mesh as SphereMesh
+			if existing_mesh:
+				existing_mesh.radius = radius
+				existing_mesh.height = radius * 2.0
 			return
 		_spawn_meshes.erase(pos)
 
 	var spawn_mesh := SphereMesh.new()
-	spawn_mesh.radius = SPAWN_RADIUS
-	spawn_mesh.height = SPAWN_RADIUS * 2.0
+	spawn_mesh.radius = radius
+	spawn_mesh.height = radius * 2.0
 
 	var marker := MeshInstance3D.new()
 	marker.mesh = spawn_mesh
@@ -1325,6 +1570,13 @@ func _sync_spawn_marker(pos: Vector2i) -> void:
 	world_root.add_child(marker)
 
 	_spawn_meshes[pos] = marker
+
+func _spawn_kind_marker_scale(spawn_kind: String) -> float:
+	"""3D marker radius multiplier for a spawn kind, defaulting to the Start size"""
+	var value: Variant = SPAWN_KIND_MARKER_SCALE.get(spawn_kind, 1.0)
+	if value is float:
+		return value as float
+	return 1.0
 
 func _refresh_cell_3d(pos: Vector2i) -> void:
 	"""Cheap per-cell 3D update - recolour the tile, add/remove its spawn marker.
@@ -1439,7 +1691,9 @@ func _is_valid_payload(data: Variant) -> bool:
 	if kind == "tile":
 		return payload.has("tile_type") and payload.get("tile_type") is String
 
-	if kind == "unit":
+	# "spawn" is the current palette payload; "unit" is the pre-spawn-point shape and
+	# is still accepted so nothing that emits it regresses (it means a Start point).
+	if kind == "spawn" or kind == "unit":
 		return payload.has("unit_type") and payload.has("player_id")
 
 	if kind == "unit_move":
@@ -1488,8 +1742,21 @@ func _apply_payload_at(data: Variant, pos: Vector2i) -> void:
 		print("Dropped tile " + tile_type + " at " + str(pos))
 		return
 
-	var unit_type: String = str(payload.get("unit_type", "WARRIOR"))
+	# Every remaining kind ("spawn", the legacy "unit", and "unit_move") writes a
+	# spawn point. Missing keys fall back to the plain Start-point defaults, which is
+	# exactly what a legacy "unit" payload should mean.
+	var unit_type: String = str(payload.get("unit_type", ""))
 	var player_id: int = int(payload.get("player_id", 0))
+	var spawn_kind: String = str(payload.get("spawn_kind", MapResource.SPAWN_KIND_START))
+
+	var opts: Dictionary = {
+		"unit_type": unit_type,
+		"character_id": str(payload.get("character_id", "")),
+		"unit_resource_path": str(payload.get("unit_resource_path", "")),
+		"max_spawns": int(payload.get("max_spawns", current_map.get_default_max_spawns(spawn_kind))),
+		"respawn_interval": int(payload.get("respawn_interval", 1)),
+		"spawn_turn": int(payload.get("spawn_turn", 1))
+	}
 
 	if kind == "unit_move":
 		var from_value: Variant = payload.get("from", NO_CELL)
@@ -1502,10 +1769,10 @@ func _apply_payload_at(data: Variant, pos: Vector2i) -> void:
 		if _is_valid_position(from_pos):
 			_refresh_cell(from_pos)
 
-	current_map.set_unit_spawn_at_position(pos, player_id, unit_type, "")
+	current_map.set_spawn_point_at_position(pos, player_id, spawn_kind, opts)
 	_refresh_cell(pos)
 	_end_stroke()
-	print("Dropped " + unit_type + " for Player " + str(player_id + 1) + " at " + str(pos))
+	print("Dropped " + spawn_kind + " spawn (" + _unit_display_name(unit_type) + ") for Player " + str(player_id + 1) + " at " + str(pos))
 
 # --- Painting directly in the 3D view -----------------------------------------
 
@@ -1655,11 +1922,17 @@ func _paint_button(button: Button, pos: Vector2i) -> void:
 
 	# Set button appearance
 	if not unit_data.is_empty():
-		# Show unit
-		var unit_type: String = str(unit_data.get("unit_type", "WARRIOR"))
-		var player_id = unit_data.get("player_id", 0)
-		button.text = unit_type.substr(0, 1)  # First letter of unit type
-		button.modulate = unit_colors.get(player_id, Color.WHITE)
+		# Show the spawn point: colour is the player slot, text is the kind's initial
+		# (S/R/E/F) plus the unit's first letter when the point names one. A bare "S"
+		# is therefore an unassigned Start slot, filled at match setup.
+		var normalized: Dictionary = current_map.normalize_spawn(unit_data)
+		var unit_type: String = str(normalized.get("unit_type", ""))
+		var player_id: int = int(normalized.get("player_id", 0))
+		var badge: String = _spawn_kind_initial(str(normalized.get("spawn_kind", MapResource.SPAWN_KIND_START)))
+		if not unit_type.is_empty():
+			badge += unit_type.substr(0, 1)
+		button.text = badge
+		button.modulate = _player_color(player_id)
 	else:
 		# Show tile
 		button.text = ""
@@ -1727,8 +2000,21 @@ func _update_preview():
 	preview_text.append("Size: " + info.get("size", "0x0"))
 	preview_text.append("Players: " + str(info.get("players", 0)))
 	preview_text.append("Difficulty: " + info.get("difficulty", "Normal"))
-	preview_text.append("Total Units: " + str(info.get("total_spawns", 0)))
-	
+	preview_text.append("Spawn Points: " + str(info.get("total_spawns", 0)))
+
+	# Break the points down by kind, listing only the kinds actually used so a plain
+	# Start-only map (i.e. every map authored before spawn kinds) reads unchanged.
+	var kind_counts: Variant = info.get("spawn_kinds", {})
+	if kind_counts is Dictionary:
+		var parts: Array[String] = []
+		for kind in MapResource.SPAWN_KINDS:
+			var count: int = int((kind_counts as Dictionary).get(kind, 0))
+			if count > 0:
+				parts.append("%s %d" % [str(kind), count])
+		if not parts.is_empty():
+			preview_text.append("  (" + ", ".join(parts) + ")")
+
+
 	if not validation.valid:
 		preview_text.append("")
 		preview_text.append("ISSUES:")
@@ -1772,10 +2058,10 @@ func _get_save_blockers() -> Array[String]:
 
 	if current_map.map_name.strip_edges().is_empty():
 		blockers.append("Map name is required")
-	if current_map.width < 3 or current_map.width > 20:
-		blockers.append("Width must be 3-20 (currently %d)" % current_map.width)
-	if current_map.height < 3 or current_map.height > 20:
-		blockers.append("Height must be 3-20 (currently %d)" % current_map.height)
+	if current_map.width < MapResource.MIN_MAP_SIZE or current_map.width > MapResource.MAX_MAP_SIZE:
+		blockers.append("Width must be %d-%d (currently %d)" % [MapResource.MIN_MAP_SIZE, MapResource.MAX_MAP_SIZE, current_map.width])
+	if current_map.height < MapResource.MIN_MAP_SIZE or current_map.height > MapResource.MAX_MAP_SIZE:
+		blockers.append("Height must be %d-%d (currently %d)" % [MapResource.MIN_MAP_SIZE, MapResource.MAX_MAP_SIZE, current_map.height])
 
 	for tile_data in current_map.tile_layout:
 		var pos: Vector2i = tile_data.get("position", Vector2i(-1, -1))

@@ -22,11 +22,45 @@ class_name MapResource
 
 # Map Layout Data
 @export var tile_layout: Array[Dictionary] = []  # Array of {position: Vector2i, tile_type: String, tile_resource_path: String}
-@export var unit_spawns: Array[Dictionary] = []  # Array of {position: Vector2i, player_id: int, unit_type: String, unit_resource_path: String, character_id: String}
-# NOTE on unit_spawns' "character_id": preferred over "unit_type" when set - it names a
+@export var unit_spawns: Array[Dictionary] = []  # Array of SPAWN POINTS - see the schema block below
+# A unit_spawns entry is a SPAWN POINT: a position, the player slot that owns it,
+# and what kind of spawning it does. Full schema (every key past "position" and
+# "player_id" is optional and read through .get(), so maps authored before a key
+# existed keep loading unchanged - see [method normalize_spawn]):
+#
+#   position           Vector2i  the cell this point occupies
+#   player_id          int       owning player slot (0-based)
+#   spawn_kind         String    "Start" / "Respawn" / "Endless" / "Reinforcement"
+#                                (default "Start" - i.e. exactly the old behaviour)
+#   unit_type          String    legacy class hint, OPTIONAL
+#   character_id       String    roster CharacterResource id, OPTIONAL
+#   unit_resource_path String    explicit resource override, OPTIONAL
+#   max_spawns         int       units this point may ever produce, -1 = unlimited
+#                                (default 1, or -1 for "Endless")
+#   respawn_interval   int       turns between spawns for Respawn/Endless (default 1)
+#   spawn_turn         int       turn a Reinforcement point activates (default 1)
+#
+# NOTE on "character_id": preferred over "unit_type" when set - it names a
 # CharacterResource id under res://game/characters/roster/ (see CharacterLibrary).
 # "unit_type" is kept for back-compat with maps authored before the character system
 # (MapLoader maps legacy WARRIOR/ARCHER/MAGE strings to a roster id).
+# The unit reference is OPTIONAL: a "Start" point with none is an EMPTY SLOT to be
+# filled at match setup; the spawner kinds use it to say WHAT they spawn.
+
+# --- Spawn kinds --------------------------------------------------------------
+const SPAWN_KIND_START := "Start"                  # places one unit at map load
+const SPAWN_KIND_RESPAWN := "Respawn"              # replaces its unit every N turns
+const SPAWN_KIND_ENDLESS := "Endless"              # respawns forever (max_spawns -1)
+const SPAWN_KIND_REINFORCEMENT := "Reinforcement"  # activates on spawn_turn
+
+const SPAWN_KINDS: Array[String] = [
+	SPAWN_KIND_START, SPAWN_KIND_RESPAWN, SPAWN_KIND_ENDLESS, SPAWN_KIND_REINFORCEMENT
+]
+
+# Size guardrails for shareable, player-authored maps. Kept as constants so the
+# Map Creator's SpinBoxes and validate_map() can never drift apart.
+const MIN_MAP_SIZE := 3
+const MAX_MAP_SIZE := 20
 
 # Map Properties
 @export var max_players: int = 2
@@ -87,29 +121,110 @@ func set_tile_at_position(pos: Vector2i, tile_type: String, tile_resource_path: 
 	})
 
 func get_unit_spawn_at_position(pos: Vector2i) -> Dictionary:
-	"""Get unit spawn data at specific position"""
+	"""Get the RAW spawn point entry at a position, or {} when there is none.
+
+	Deliberately raw (not normalized): callers rely on the empty dictionary meaning
+	"no spawn here". Pass the result through [method normalize_spawn] when you need
+	the optional keys filled in.
+	"""
 	for spawn_data in unit_spawns:
 		if spawn_data.get("position", Vector2i(-1, -1)) == pos:
 			return spawn_data
-	
+
 	return {}
 
-func set_unit_spawn_at_position(pos: Vector2i, player_id: int, unit_type: String, unit_resource_path: String = "", character_id: String = "") -> void:
-	"""Set unit spawn data at specific position.
+func get_spawn_kind(spawn_data: Dictionary) -> String:
+	"""Spawn kind of an entry, defaulting to "Start" for maps authored before the
+	key existed (and for any unrecognised value)."""
+	var kind: String = str(spawn_data.get("spawn_kind", SPAWN_KIND_START))
+	if not SPAWN_KINDS.has(kind):
+		return SPAWN_KIND_START
+	return kind
 
-	[param character_id] names a CharacterResource id (see CharacterLibrary) and takes
-	priority over [param unit_type] when loading. [param unit_type] is kept for
-	back-compat with legacy (pre-character) maps and as a display/authoring hint.
+func get_default_max_spawns(spawn_kind: String) -> int:
+	"""Default [code]max_spawns[/code] for a kind: unlimited for Endless, one otherwise."""
+	return -1 if spawn_kind == SPAWN_KIND_ENDLESS else 1
+
+func normalize_spawn(spawn_data: Dictionary) -> Dictionary:
+	"""Return a copy of a spawn point entry with every optional key filled in.
+
+	This is the ONE place spawn defaults live, so old maps (which carry none of the
+	newer keys) and freshly authored ones are read through identical rules.
+	"""
+	var kind: String = get_spawn_kind(spawn_data)
+	var normalized: Dictionary = {
+		"position": spawn_data.get("position", Vector2i(-1, -1)),
+		"player_id": int(spawn_data.get("player_id", 0)),
+		"unit_type": str(spawn_data.get("unit_type", "")),
+		"unit_resource_path": str(spawn_data.get("unit_resource_path", "")),
+		"character_id": str(spawn_data.get("character_id", "")),
+		"spawn_kind": kind,
+		"max_spawns": int(spawn_data.get("max_spawns", get_default_max_spawns(kind))),
+		"respawn_interval": int(spawn_data.get("respawn_interval", 1)),
+		"spawn_turn": int(spawn_data.get("spawn_turn", 1))
+	}
+	return normalized
+
+func spawn_has_unit_reference(spawn_data: Dictionary) -> bool:
+	"""True when an entry names WHAT to spawn (character id, legacy type or path).
+
+	False means an unassigned slot - legitimate for a "Start" point (filled at match
+	setup), but broken for a spawner kind, which has nothing to produce.
+	"""
+	var normalized: Dictionary = normalize_spawn(spawn_data)
+	return not (String(normalized["character_id"]).is_empty()
+		and String(normalized["unit_type"]).is_empty()
+		and String(normalized["unit_resource_path"]).is_empty())
+
+func is_initial_spawn(spawn_data: Dictionary) -> bool:
+	"""True when this point places a unit at MAP LOAD time.
+
+	Start points obviously do; Respawn/Endless points seed their first unit up front
+	too. Only a Reinforcement scheduled past turn 1 stays empty until its turn comes.
+	"""
+	if get_spawn_kind(spawn_data) != SPAWN_KIND_REINFORCEMENT:
+		return true
+	return int(spawn_data.get("spawn_turn", 1)) <= 1
+
+func set_spawn_point_at_position(pos: Vector2i, player_id: int, spawn_kind: String, opts: Dictionary = {}) -> void:
+	"""Write a spawn POINT at a position - the primary authoring entry point.
+
+	A point is a position + owning player slot + kind. [param opts] optionally carries
+	[code]unit_type[/code], [code]character_id[/code], [code]unit_resource_path[/code],
+	[code]max_spawns[/code], [code]respawn_interval[/code] and [code]spawn_turn[/code];
+	anything omitted falls back to the schema defaults.
 	"""
 	# Remove existing spawn at position
 	for i in range(unit_spawns.size() - 1, -1, -1):
 		if unit_spawns[i].get("position", Vector2i(-1, -1)) == pos:
 			unit_spawns.remove_at(i)
 
+	var kind: String = spawn_kind
+	if not SPAWN_KINDS.has(kind):
+		kind = SPAWN_KIND_START
+
 	# Add new spawn data
 	unit_spawns.append({
 		"position": pos,
 		"player_id": player_id,
+		"unit_type": str(opts.get("unit_type", "")),
+		"unit_resource_path": str(opts.get("unit_resource_path", "")),
+		"character_id": str(opts.get("character_id", "")),
+		"spawn_kind": kind,
+		"max_spawns": int(opts.get("max_spawns", get_default_max_spawns(kind))),
+		"respawn_interval": maxi(1, int(opts.get("respawn_interval", 1))),
+		"spawn_turn": maxi(1, int(opts.get("spawn_turn", 1)))
+	})
+
+func set_unit_spawn_at_position(pos: Vector2i, player_id: int, unit_type: String, unit_resource_path: String = "", character_id: String = "") -> void:
+	"""Set a plain "Start" spawn point at a position.
+
+	Kept for the many existing callers; delegates to [method set_spawn_point_at_position].
+	[param character_id] names a CharacterResource id (see CharacterLibrary) and takes
+	priority over [param unit_type] when loading. [param unit_type] is kept for
+	back-compat with legacy (pre-character) maps and as a display/authoring hint.
+	"""
+	set_spawn_point_at_position(pos, player_id, SPAWN_KIND_START, {
 		"unit_type": unit_type,
 		"unit_resource_path": unit_resource_path,
 		"character_id": character_id
@@ -136,13 +251,33 @@ func remove_unit_spawn_at_position(pos: Vector2i) -> void:
 		if unit_spawns[i].get("position", Vector2i(-1, -1)) == pos:
 			unit_spawns.remove_at(i)
 
-func get_player_spawn_positions(player_id: int) -> Array[Vector2i]:
-	"""Get all spawn positions for a specific player"""
+func get_player_spawn_positions(player_id: int, spawn_kind: String = "") -> Array[Vector2i]:
+	"""Get all spawn positions for a specific player.
+
+	Pass [param spawn_kind] to keep only points of that kind (e.g. "Start" for the
+	slots a match-setup screen should offer); the default "" returns every point.
+	"""
 	var positions: Array[Vector2i] = []
 	for spawn_data in unit_spawns:
-		if spawn_data.get("player_id", -1) == player_id:
-			positions.append(spawn_data.get("position", Vector2i(-1, -1)))
+		if spawn_data.get("player_id", -1) != player_id:
+			continue
+		if not spawn_kind.is_empty() and get_spawn_kind(spawn_data) != spawn_kind:
+			continue
+		positions.append(spawn_data.get("position", Vector2i(-1, -1)))
 	return positions
+
+func get_spawn_kind_counts() -> Dictionary:
+	"""How many points of each kind this map defines, e.g. {"Start": 6, "Endless": 1}.
+
+	Every kind is present (zeroed) so UIs can lay out a fixed set of rows.
+	"""
+	var counts: Dictionary = {}
+	for kind in SPAWN_KINDS:
+		counts[kind] = 0
+	for spawn_data in unit_spawns:
+		var kind_name: String = get_spawn_kind(spawn_data)
+		counts[kind_name] = int(counts.get(kind_name, 0)) + 1
+	return counts
 
 func get_total_units_for_player(player_id: int) -> int:
 	"""Get total number of units for a specific player"""
@@ -162,12 +297,12 @@ func validate_map() -> Dictionary:
 		issues.append("Map name is required")
 	
 	# Check dimensions
-	if width < 3 or width > 20:
-		issues.append("Map width should be between 3 and 20")
-	
-	if height < 3 or height > 20:
-		issues.append("Map height should be between 3 and 20")
-	
+	if width < MIN_MAP_SIZE or width > MAX_MAP_SIZE:
+		issues.append("Map width should be between %d and %d" % [MIN_MAP_SIZE, MAX_MAP_SIZE])
+
+	if height < MIN_MAP_SIZE or height > MAX_MAP_SIZE:
+		issues.append("Map height should be between %d and %d" % [MIN_MAP_SIZE, MAX_MAP_SIZE])
+
 	# Check player spawns
 	var player_counts = {}
 	for spawn_data in unit_spawns:
@@ -196,7 +331,22 @@ func validate_map() -> Dictionary:
 		var pos = spawn_data.get("position", Vector2i(-1, -1))
 		if pos.x < 0 or pos.x >= width or pos.y < 0 or pos.y >= height:
 			issues.append("Unit spawn position out of bounds: " + str(pos))
-	
+
+	# Spawn point sanity. Only genuinely broken configurations are issues: a bare
+	# "Start" point is FINE (it is an empty slot filled at match setup), but a
+	# respawning point with nothing to spawn can never do its job.
+	for spawn_data in unit_spawns:
+		var normalized: Dictionary = normalize_spawn(spawn_data)
+		var kind: String = String(normalized["spawn_kind"])
+		var spawn_pos = normalized["position"]
+
+		var is_spawner: bool = kind == SPAWN_KIND_RESPAWN or kind == SPAWN_KIND_ENDLESS
+		if is_spawner and not spawn_has_unit_reference(spawn_data):
+			issues.append("Spawn point at %s is a %s point - a respawning point must specify which unit it spawns" % [str(spawn_pos), kind])
+
+		if int(normalized["respawn_interval"]) < 1:
+			issues.append("Spawn point at %s has a respawn interval below 1 turn" % str(spawn_pos))
+
 	return {
 		"valid": issues.is_empty(),
 		"issues": issues,
@@ -228,6 +378,7 @@ func get_display_info() -> Dictionary:
 		"map_type": map_type,
 		"total_tiles": tile_layout.size(),
 		"total_spawns": unit_spawns.size(),
+		"spawn_kinds": get_spawn_kind_counts(),
 		"creation_date": creation_date,
 		"tags": tags
 	}
