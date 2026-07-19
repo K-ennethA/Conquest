@@ -290,11 +290,16 @@ func _input(event: InputEvent) -> void:
 		print("Position: " + str(event.position))
 		print("Letting UI handle this event first...")
 		
-		# Add debug key to bypass UI and force unit selection
+		# RIGHT CLICK = CANCEL (Fire-Emblem style back-out). While a unit interaction
+		# is staged (aiming a move, a tentative move, movement mode, or just a
+		# selection), route the click to UnitActionsPanel.request_cancel() so it backs
+		# out one level (drop targeting -> revert tentative move -> deselect). When
+		# nothing is staged this is a harmless no-op.
 		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			print("=== RIGHT CLICK - FORCING UNIT SELECTION TEST ===")
-			_handle_mouse_click(event.position)
-			get_viewport().set_input_as_handled()
+			var panel := _get_unit_actions_panel()
+			if panel and panel.has_method("request_cancel"):
+				panel.request_cancel()
+				get_viewport().set_input_as_handled()
 			return
 			
 	elif event is InputEventMouseMotion:
@@ -304,6 +309,43 @@ func _input(event: InputEvent) -> void:
 	
 	# Don't handle mouse events here - let UI have priority
 	# Mouse events will be handled in _unhandled_input() if UI doesn't consume them
+
+func _cell_under_mouse(mouse_pos: Vector2):
+	"""GROUND-PLANE mouse pick, shared by the hover and click paths. Casts the camera
+	ray through `mouse_pos` and intersects it with the board plane (y = 0):
+
+	    origin = camera.project_ray_origin(mouse_pos)
+	    dir    = camera.project_ray_normal(mouse_pos)
+	    t      = -origin.y / dir.y      (solve origin.y + dir.y * t = 0)
+	    point  = origin + dir * t
+
+	then converts the world hit `point` to a cell via grid.calculate_grid_coordinates.
+	Returns the Vector3(col, 0, row) grid coordinate, or null when the ray is parallel
+	to the plane (no dir.y) or the plane is behind the camera. This replaces the old
+	PhysicsRayQueryParameters3D raycast, which depended on tile colliders/layers and
+	could silently "miss" the board -- the plane math always resolves a cell."""
+	# Re-fetch the camera lazily: get_camera_3d() can be null at _ready if the
+	# Camera3D has not registered as current yet, which would otherwise kill picking.
+	if not camera:
+		camera = get_viewport().get_camera_3d()
+	if not camera:
+		return null
+
+	var origin: Vector3 = camera.project_ray_origin(mouse_pos)
+	var dir: Vector3 = camera.project_ray_normal(mouse_pos)
+
+	# Ray parallel to the ground plane -> no intersection.
+	if absf(dir.y) < 0.00001:
+		return null
+
+	var t: float = -origin.y / dir.y
+	# Intersection behind the camera (looking away from the board).
+	if t < 0.0:
+		return null
+
+	var point: Vector3 = origin + dir * t
+	return grid.calculate_grid_coordinates(point)
+
 
 func _handle_mouse_click(mouse_pos: Vector2) -> void:
 	"""Handle mouse click for unit selection"""
@@ -328,43 +370,26 @@ func _handle_mouse_click(mouse_pos: Vector2) -> void:
 			print("Mouse click in UI area - not handling in cursor")
 			return
 	
-	print("Mouse click in game area - proceeding with raycast")
-	
-	# Cast ray from camera through mouse position
-	var from = camera.project_ray_origin(mouse_pos)
-	var to = from + camera.project_ray_normal(mouse_pos) * 1000
-	
-	print("Ray from: " + str(from))
-	print("Ray to: " + str(to))
-	
-	var space_state = get_world_3d().direct_space_state
-	var query = PhysicsRayQueryParameters3D.create(from, to)
-	var result = space_state.intersect_ray(query)
-	
-	if result:
-		print("Ray hit something!")
-		print("Hit position: " + str(result.position))
-		print("Hit collider: " + str(result.collider))
-		
-		# Convert world position to grid position
-		var world_pos = result.position
-		var grid_pos = grid.calculate_grid_coordinates(world_pos)
-		print("Ray hit at world pos: " + str(world_pos))
-		print("Converted to grid pos: " + str(grid_pos))
-		
-		# Move cursor to clicked position
-		if grid.is_within_bounds(grid_pos):
-			print("Grid position is within bounds - moving cursor")
-			self.tile_position = grid_pos
-			_handle_selection()
-		else:
-			print("Grid position out of bounds: " + str(grid_pos))
+	print("Mouse click in game area - proceeding with ground-plane pick")
+
+	# GROUND-PLANE picking (replaces the old physics raycast). Intersect the camera
+	# ray with the board plane (y = 0) so a click can never "miss" the board because
+	# of tile colliders/layers -- the plane is infinite and always solvable.
+	var grid_pos = _cell_under_mouse(mouse_pos)
+	if grid_pos == null:
+		print("Ground-plane pick failed (ray parallel to / behind the board) - ignoring click")
+		return
+
+	print("Ground-plane pick -> grid pos: " + str(grid_pos))
+
+	# Move cursor to clicked position (same tile_position setter + bounds check the
+	# hover path uses, so selection targets exactly the hovered/clicked cell).
+	if grid.is_within_bounds(grid_pos):
+		print("Grid position is within bounds - moving cursor")
+		self.tile_position = grid_pos
+		_handle_selection()
 	else:
-		print("Ray cast did not hit anything - no collision detected")
-		print("This might mean:")
-		print("1. No collision bodies in the scene")
-		print("2. Ray is not hitting the ground/tiles")
-		print("3. Collision layers are not set up correctly")
+		print("Grid position out of bounds: " + str(grid_pos))
 
 func _handle_mouse_movement(mouse_pos: Vector2) -> void:
 	"""Handle mouse movement for cursor positioning"""
@@ -383,22 +408,17 @@ func _handle_mouse_movement(mouse_pos: Vector2) -> void:
 		if ui_layout.is_mouse_over_ui(mouse_pos):
 			return  # Don't move cursor when over UI
 	
-	# Cast ray from camera through mouse position
-	var from = camera.project_ray_origin(mouse_pos)
-	var to = from + camera.project_ray_normal(mouse_pos) * 1000
-	
-	var space_state = get_world_3d().direct_space_state
-	var query = PhysicsRayQueryParameters3D.create(from, to)
-	var result = space_state.intersect_ray(query)
-	
-	if result:
-		# Convert world position to grid position
-		var world_pos = result.position
-		var grid_pos = grid.calculate_grid_coordinates(world_pos)
-		
-		# Move cursor to mouse position (but don't auto-select)
-		if grid.is_within_bounds(grid_pos):
-			self.tile_position = grid_pos
+	# GROUND-PLANE picking (replaces the old physics raycast). Intersecting the
+	# camera ray with the board plane (y = 0) cannot miss the board, so hovering
+	# ANY board cell now moves the cursor there and fires GameEvents.cursor_moved
+	# (via the tile_position setter) -- which is exactly what drives TerrainInfoPanel.
+	var grid_pos = _cell_under_mouse(mouse_pos)
+	if grid_pos == null:
+		return
+
+	# Move cursor to mouse position (but don't auto-select)
+	if grid.is_within_bounds(grid_pos):
+		self.tile_position = grid_pos
 
 func _handle_selection() -> void:
 	"""Handle unit selection at cursor position"""

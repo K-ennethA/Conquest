@@ -45,6 +45,33 @@ var combat_forecast_panel: CombatForecastPanel
 # selected while the cursor already rests on an enemy previews immediately.
 var _last_cursor_tile: Vector3 = Vector3.ZERO
 
+# --- Fire-Emblem TENTATIVE-MOVE state ----------------------------------------
+# Canonical FE loop: clicking a reachable cell moves the unit there TENTATIVELY
+# (visual + logical position updated, but NOT committed -- mark_moved / the
+# unit_moved event / action-consumption are deferred). The player then picks an
+# action; CONFIRM commits the move and executes, CANCEL reverts the unit to its
+# origin cell with the unit still fully available.
+#
+# Because BoardAdapter derives each unit's cell live from its world position,
+# snapping the unit onto the destination cell (board.move_unit) makes
+# board.cell_of(unit) == dest immediately, so the movement-range / targeting /
+# forecast / execution math all read the tentative position with no extra
+# plumbing. Nothing is "committed" until _commit_tentative_move() runs, because
+# commit is the only place mark_moved() + GameEvents.unit_moved fire.
+var _tentative_active: bool = false
+var _tentative_unit: Unit = null
+var _tentative_origin_cell: Vector2i = Vector2i.ZERO
+var _tentative_dest_cell: Vector2i = Vector2i.ZERO
+var _tentative_origin_world: Vector3 = Vector3.ZERO
+
+# Frame on which the SELECT MOVE popup closed itself in response to ESC/BACK
+# (MoveSelectionPanel emits move_cancelled -> _on_move_cancelled). Both that panel
+# and this one process the same ESC in the _input phase, in an order Godot does not
+# guarantee; when the popup already consumed an ESC on THIS frame, _on_cancel_pressed
+# must not also back out a further level. Exact-frame equality avoids a stale flag
+# (a mouse BACK on an earlier frame never matches the current frame).
+var _popup_closed_frame: int = -1
+
 func _ready() -> void:
 	# Ensure proper mouse handling
 	mouse_filter = Control.MOUSE_FILTER_STOP  # Make sure panel stops mouse events
@@ -415,6 +442,12 @@ func _on_unit_deselected(unit: Unit) -> void:
 		# targeting.
 		_cancel_move_targeting()
 
+		# A deselect can also arrive with a tentative (uncommitted) move still staged
+		# -- the player clicked away, selected another unit, or the turn ended. Revert
+		# the unit's visual position to its origin so no half-finished move is left on
+		# the board. Nothing was committed, so the unit stays fully available.
+		_revert_tentative_move()
+
 		selected_unit = null
 		stats_expanded = false
 		if stats_container:
@@ -556,11 +589,14 @@ func _update_actions() -> void:
 		if not can_perform_unit_actions:
 			action_restriction_reason = "no turn system active"
 	
-	# Update Move button - only available if unit can perform actions
+	# Update Move button - only available if unit can perform actions. Also disabled
+	# while a tentative move is staged: the unit has already moved (pending confirm),
+	# so re-entering movement would let it move twice. It reverts to available if the
+	# tentative move is cancelled.
 	if move_button:
-		var can_move = can_control and can_perform_unit_actions and selected_unit.can_move()
+		var can_move = can_control and can_perform_unit_actions and selected_unit.can_move() and not _tentative_active
 		move_button.disabled = not can_move
-		
+
 		if can_move:
 			move_button.text = "Move (M)"
 		elif not can_control:
@@ -736,6 +772,12 @@ func _on_end_unit_turn_pressed() -> void:
 		print("End unit turn blocked: " + selected_unit.get_display_name() + " is not commandable by the local player")
 		return
 
+	# WAIT: ending the unit's turn is the "commit move, take no action" branch of the
+	# FE loop. Drop any half-aimed move UI, then commit the tentative move (if one is
+	# staged) so the unit stays where it previewed before its turn ends.
+	_cancel_move_targeting()
+	_commit_tentative_move()
+
 	# Local game logic (existing)
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
@@ -868,15 +910,59 @@ func _on_cancel_pressed() -> void:
 	targeting highlight/forecast -- leaving the stale on-board selection stuck (the
 	reported bug, most visible on self/ally/tile/no-valid-target moves that the
 	player backs out of instead of committing)."""
-	if is_targeting_move():
+	# Staged Fire-Emblem back-out, one level per press (ESC / right-click / this
+	# button all funnel here). Precedence, most-nested first:
+	#   1. SELECT MOVE popup open (choosing a move, pre-targeting) -> just close it.
+	#   2. Aiming a move (targeting) -> drop the forecast + aim highlights, stay on
+	#      the tentative position with the action menu (first ESC cancels targeting).
+	#   3. Tentative move staged -> revert the unit to its origin cell, restore full
+	#      availability, and re-show its movement range (second ESC undoes the move).
+	#   4. Legacy movement mode -> exit it.
+	#   5. Otherwise -> deselect the unit.
+	# If the SELECT MOVE popup already consumed this same ESC by closing itself
+	# (MoveSelectionPanel ran first this frame), stop -- do not back out further.
+	if Engine.get_process_frames() == _popup_closed_frame:
+		print("Cancel: SELECT MOVE popup already handled this ESC - stopping here")
+		return
+	if move_selection_panel and move_selection_panel.visible:
+		print("Canceling: closing SELECT MOVE popup")
+		move_selection_panel.hide()
+	elif is_targeting_move():
 		print("Canceling move targeting")
 		_cancel_move_targeting()
+		_update_actions()
+	elif _tentative_active:
+		print("Canceling tentative move - reverting to origin")
+		_revert_tentative_move()
+		# Unit is fully available again: re-show its movement range and refresh actions.
+		_calculate_and_show_movement_range()
 		_update_actions()
 	elif movement_mode:
 		print("Canceling movement mode")
 		_exit_movement_mode()
 	elif selected_unit:
 		GameEvents.unit_deselected.emit(selected_unit)
+
+func request_cancel() -> void:
+	"""Public entry point for an external cancel request (the board cursor's
+	right-click back-out). Only acts while a unit is selected; routes through the
+	same staged FE back-out as ESC / the Cancel button."""
+	if selected_unit:
+		_on_cancel_pressed()
+
+
+func has_active_interaction() -> bool:
+	"""True when there is a staged interaction the panel can back out of (move
+	popup open, aiming a move, a tentative move, movement mode, or a selection).
+	Lets callers decide whether to route a cancel here rather than plain deselect."""
+	return (
+		(move_selection_panel != null and move_selection_panel.visible)
+		or is_targeting_move()
+		or _tentative_active
+		or movement_mode
+		or selected_unit != null
+	)
+
 
 func _show_panel() -> void:
 	"""Show the actions panel"""
@@ -977,6 +1063,12 @@ func _input(event: InputEvent) -> void:
 				if visible and selected_unit:
 					print("C/ESC key pressed - triggering Cancel action")
 					_on_cancel_pressed()
+					# Consume ESC so the board cursor's own ui_cancel handler does not
+					# ALSO fire and deselect the unit -- that would collapse the staged
+					# FE back-out (drop targeting -> revert tentative -> deselect) into a
+					# single press. This panel's _input runs before the cursor's
+					# _unhandled_input, so marking it handled keeps the staging intact.
+					get_viewport().set_input_as_handled()
 
 func _test_manual_unit_selection() -> void:
 	"""Test manual unit selection for debugging"""
@@ -1027,6 +1119,13 @@ func _test_movement_range_calculation_direct() -> void:
 func _enter_movement_mode() -> void:
 	"""Enter movement mode - show movement range and wait for destination selection"""
 	if not selected_unit:
+		return
+
+	# A tentative move is already staged (unit visually at its destination, awaiting
+	# confirm/cancel). Re-entering movement here would let it move a second time, so
+	# block until the tentative move is confirmed or cancelled.
+	if _tentative_active:
+		print("Tentative move in progress - re-entering movement blocked")
 		return
 
 	# A unit that already moved this turn cannot move again.
@@ -1478,20 +1577,39 @@ func handle_movement_destination_selected(destination: Vector3) -> void:
 	print("DEBUG: Is valid destination: " + str(is_valid_destination))
 	
 	if is_valid_destination:
-		print("DEBUG: Valid destination - executing movement")
-		
+		print("DEBUG: Valid destination - moving to destination")
+
 		# Validate with turn system
 		if TurnSystemManager.has_active_turn_system():
 			var turn_system = TurnSystemManager.get_active_turn_system()
 			if turn_system.validate_turn_action(selected_unit, "move"):
-				_execute_movement_to_destination(destination)
+				_move_to_destination(destination)
 			else:
 				print("DEBUG: Movement not allowed by turn system")
 		else:
-			_execute_movement_to_destination(destination)
+			_move_to_destination(destination)
 	else:
 		print("DEBUG: Invalid destination - not in movement range")
 		# Could play error sound or show message here
+
+
+func _move_to_destination(destination: Vector3) -> void:
+	"""Route a validated destination click to either the Fire-Emblem TENTATIVE move
+	(character-backed unit, live board, single-player) or the legacy INSTANT-commit
+	move (non-character unit / no board / multiplayer, which keeps its existing
+	authoritative networked flow). The tentative path is the canonical FE loop:
+	the unit moves for preview only and does not commit until the player confirms
+	an action (attack or Wait)."""
+	var use_tentative := (
+		selected_unit.has_character()
+		and CombatServices.board() != null
+		and GameSettings.game_mode != GameSettings.GameMode.MULTIPLAYER
+	)
+	if use_tentative:
+		_begin_tentative_move(destination)
+	else:
+		# Legacy / multiplayer: commit immediately (unchanged behavior).
+		_execute_movement_to_destination(destination)
 
 func _execute_movement_to_destination(destination: Vector3) -> void:
 	"""Execute movement to destination (tactical style)"""
@@ -1537,6 +1655,143 @@ func _execute_movement_to_destination(destination: Vector3) -> void:
 
 	# Update UI to reflect unit has moved
 	_update_actions()
+
+# --- Fire-Emblem tentative move: begin / commit / revert ---------------------
+
+func _begin_tentative_move(destination: Vector3) -> void:
+	"""Stage a TENTATIVE move to [param destination] (a Vector3(col,0,row) grid coord):
+	snap the unit onto the destination cell so its VISUAL position updates and
+	board.cell_of(unit) reads the new cell (which is what the move-range / targeting
+	/ forecast / execution math all key off), remember the ORIGIN cell, but do NOT
+	commit -- no mark_moved(), no GameEvents.unit_moved, no action consumed. The
+	movement-range highlight is cleared so the action menu (Moves / End Turn) takes
+	over, exactly like Fire Emblem's post-move menu.
+
+	Commit happens only on confirm (_commit_tentative_move, from an attack or Wait);
+	cancel reverts to the origin (_revert_tentative_move)."""
+	if not selected_unit:
+		return
+
+	var board = CombatServices.board()
+	if board == null:
+		# Shouldn't happen (the caller gates on a live board), but stay safe: fall
+		# back to the legacy committed move rather than staging a broken preview.
+		_execute_movement_to_destination(destination)
+		return
+
+	var dest_cell: Vector2i = _grid_tile_to_cell(destination)
+	_tentative_origin_cell = board.cell_of(selected_unit)
+	_tentative_origin_world = selected_unit.global_position
+	_tentative_dest_cell = dest_cell
+	_tentative_unit = selected_unit
+	_tentative_active = true
+
+	# Snap the unit onto the destination cell (preserves its height). This updates
+	# the visual position AND makes board.cell_of(unit) == dest immediately, with no
+	# tween race: every subsequent cell query reads the tentative position at once.
+	board.move_unit(selected_unit, dest_cell)
+
+	# The post-move action menu replaces the movement-range highlight.
+	_clear_movement_range()
+	movement_mode = false
+
+	# Refresh unit visuals (health bar etc. follow the moved node) and the action UI
+	# (Move now disabled; Moves / End Turn drive confirm-or-Wait).
+	var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
+	if visual_manager:
+		visual_manager.update_all_unit_visuals()
+	_update_actions()
+
+	print("Tentative move: " + selected_unit.get_display_name()
+		+ " " + str(_tentative_origin_cell) + " -> " + str(dest_cell)
+		+ " (preview only, awaiting confirm/cancel)")
+
+
+func _commit_tentative_move() -> void:
+	"""COMMIT the staged tentative move for real: snap the unit exactly onto the
+	destination cell, mark_moved() (consumes the move but not the action), and emit
+	GameEvents.unit_moved so downstream systems (tile effects, visuals) observe it.
+	This is the ONLY place the tentative move touches committed board/turn state.
+	Idempotent no-op when no tentative move is staged. Callers that also execute an
+	attack call this FIRST so the attack resolves from the committed destination."""
+	if not _tentative_active or _tentative_unit == null:
+		return
+
+	var unit := _tentative_unit
+	var origin_cell := _tentative_origin_cell
+	var dest_cell := _tentative_dest_cell
+	# Drop the tentative bookkeeping up front so a re-entrant call can't double-commit.
+	_clear_tentative_state()
+
+	var board = CombatServices.board()
+	if board != null:
+		# Re-snap to the exact cell center (the unit is already visually here) so the
+		# committed logical position is exact regardless of any in-flight animation.
+		board.move_unit(unit, dest_cell)
+
+	# mark_moved(): consumes only the MOVE for the turn, not the action. The unit may
+	# still have an action pending (the attack we're about to run, or it just Waited).
+	if unit.has_method("mark_moved"):
+		unit.mark_moved()
+
+	var from_grid := Vector3(origin_cell.x, 0, origin_cell.y)
+	var to_grid := Vector3(dest_cell.x, 0, dest_cell.y)
+	GameEvents.unit_moved.emit(unit, from_grid, to_grid)
+
+	var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
+	if visual_manager:
+		visual_manager.update_all_unit_visuals()
+
+	print("Committed tentative move: " + unit.get_display_name()
+		+ " " + str(origin_cell) + " -> " + str(dest_cell))
+
+
+func _revert_tentative_move() -> void:
+	"""CANCEL the staged tentative move: snap the unit back onto its ORIGIN cell and
+	drop the tentative state. Nothing was ever committed, so there is no board/turn
+	state to undo -- the unit stays fully available (it did not move or act). This
+	does NOT re-show the movement range or refresh the action UI; callers that return
+	to the normal selection state do that around this call. Idempotent no-op when no
+	tentative move is staged."""
+	if not _tentative_active or _tentative_unit == null:
+		_clear_tentative_state()
+		return
+
+	var unit := _tentative_unit
+	var origin_cell := _tentative_origin_cell
+	var origin_world := _tentative_origin_world  # capture BEFORE clearing (which zeroes it)
+	_clear_tentative_state()
+
+	var board = CombatServices.board()
+	if board != null:
+		# Snap straight back to the origin cell -> board.cell_of(unit) == origin again,
+		# so a re-shown movement range is computed correctly from the original spot.
+		board.move_unit(unit, origin_cell)
+	else:
+		# No board (shouldn't happen for a staged tentative move): fall back to the
+		# remembered world position.
+		unit.global_position = origin_world
+
+	var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
+	if visual_manager:
+		visual_manager.update_all_unit_visuals()
+
+	print("Reverted tentative move: " + unit.get_display_name() + " back to " + str(origin_cell))
+
+
+func _clear_tentative_state() -> void:
+	"""Drop all tentative-move bookkeeping (does NOT move the unit)."""
+	_tentative_active = false
+	_tentative_unit = null
+	_tentative_origin_cell = Vector2i.ZERO
+	_tentative_dest_cell = Vector2i.ZERO
+	_tentative_origin_world = Vector3.ZERO
+
+
+func is_tentative_move_active() -> bool:
+	"""True while a tentative (uncommitted) move is staged, awaiting confirm/cancel."""
+	return _tentative_active
+
 
 # Move System Implementation
 func _setup_move_system() -> void:
@@ -1639,8 +1894,11 @@ func _on_move_selected(slot: int) -> void:
 	_refresh_move_forecast(_last_cursor_tile)
 
 func _on_move_cancelled() -> void:
-	"""Handle move selection cancellation (panel BACK button)."""
+	"""Handle move selection cancellation (panel BACK button / its own ESC)."""
 	print("Move selection cancelled")
+	# Stamp the frame so a same-frame _on_cancel_pressed (ESC seen by both panels)
+	# knows the popup already consumed this ESC and does not back out a further level.
+	_popup_closed_frame = Engine.get_process_frames()
 	_cancel_move_targeting()
 
 func is_targeting_move() -> bool:
@@ -1698,6 +1956,13 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 	if board == null:
 		_cancel_move_targeting()
 		return
+
+	# CONFIRM: clicking a valid target commits the whole action. First lock in the
+	# tentative move (snap onto the destination, mark_moved, emit unit_moved) so the
+	# attack resolves from the committed cell, THEN execute the move for real below.
+	# No-op when there was no tentative move (e.g. attacking without moving, or a
+	# legacy/multiplayer committed move already applied).
+	_commit_tentative_move()
 
 	print("Executing " + move.display_name + " aimed at cell " + str(aim_cell))
 
