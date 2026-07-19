@@ -52,7 +52,10 @@ func get_caster_stat(stat_name: String) -> int:
 func hit_chance(target) -> float:
 	if move == null:
 		return 100.0
-	return clampf(move.accuracy * 100.0 - float(_stat(target, "evasion")), 0.0, 100.0)
+	# Terrain avoid (FE model): the tile under the defender adds to its evasion,
+	# summed at combat time from the cell's passive tile effects.
+	var evasion := float(_stat(target, "evasion")) + float(TerrainStats.bonus_for(target, "evasion", board))
+	return clampf(move.accuracy * 100.0 - evasion, 0.0, 100.0)
 
 
 ## Percent chance (0..100) of a critical hit on [param target]: the move's base

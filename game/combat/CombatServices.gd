@@ -52,6 +52,9 @@ const _TILE_EFFECT_PATHS := {
 	&"lava": ["res://game/tiles/effects/resources/fire.tres"],
 	&"water": ["res://game/tiles/effects/resources/empowering_water.tres"],
 	&"sacred_ground": ["res://game/tiles/effects/resources/fortify.tres"],
+	# Forest / tall grass: grants terrain avoid (+evasion). This is a BASE effect,
+	# so a fire move can layer a burn on top and both show up in tile_effects_at.
+	&"difficult_terrain": ["res://game/tiles/effects/resources/tall_grass.tres"],
 }
 
 ## Cache: canonical tile id -> [code]Array[TileEffectResource][/code] (base effects).

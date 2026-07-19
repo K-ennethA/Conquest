@@ -45,7 +45,9 @@ static func preview_vs(move: MoveResource, caster, target) -> Dictionary:
 	var crit_pct := 0.0
 	var dmg := 0
 	if move != null:
-		hit_pct = clampf(move.accuracy * 100.0 - float(_stat(target, "evasion")), 0.0, 100.0)
+		# Include terrain avoid so the forecast matches what resolve_hit will roll.
+		var evasion := float(_stat(target, "evasion")) + float(TerrainStats.bonus_for(target, "evasion"))
+		hit_pct = clampf(move.accuracy * 100.0 - evasion, 0.0, 100.0)
 		crit_pct = clampf(move.crit_chance * 100.0 + float(_stat(caster, "crit")), 0.0, 100.0)
 		for effect in move.effects:
 			if effect is DamageEffect:
