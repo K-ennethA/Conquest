@@ -133,9 +133,13 @@ func fit_to_map() -> void:
 
 	# Orthographic size (KEEP_HEIGHT) = vertical world span. The tilted board maps
 	# its X extent to ~screen-horizontal and its Z (depth) to ~screen-vertical.
-	# Cover both: vertically we need the depth; horizontally we need width/aspect.
-	# Foreshortening only reveals MORE depth, so ignoring it is conservative (safe).
-	var need_vertical: float = world_d
+	# The board's depth foreshortens by the camera tilt -- at a shallower angle it
+	# takes LESS screen-vertical space -- so scale the vertical need by the tilt
+	# factor (|forward.y| = sin(pitch)) so the board fills the frame at any angle
+	# instead of leaving a big sky margin. Clamped so a near-horizontal angle can't
+	# over-zoom into the board.
+	var tilt: float = clampf(absf((-global_transform.basis.z).y), 0.5, 1.0)
+	var need_vertical: float = world_d * tilt
 	var need_horizontal: float = world_w / maxf(aspect, 0.001)
 	var target: float = maxf(need_vertical, need_horizontal) * fit_margin
 
