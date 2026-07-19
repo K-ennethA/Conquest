@@ -31,8 +31,11 @@ func _ready():
 func _setup_materials():
 	# Background material: dark bronze frame so the bar reads as a border, not a void
 	_background_material = StandardMaterial3D.new()
-	_background_material.albedo_color = Color(0.09, 0.06, 0.04, 0.9)  # Dark bronze border
-	_background_material.flags_transparent = true
+	# OPAQUE neutral-dark track. Was a semi-transparent (a=0.9) bronze, which let a
+	# red enemy unit bleed through the empty part of the bar -- reading as green fill
+	# + red track ("green but also red"). Opaque + neutral removes that.
+	_background_material.albedo_color = Color(0.07, 0.07, 0.08, 1.0)
+	_background_material.flags_transparent = false
 	_background_material.flags_unshaded = true
 	_background_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	_background_material.billboard_keep_scale = true
