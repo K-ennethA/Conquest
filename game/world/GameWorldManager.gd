@@ -20,6 +20,14 @@ var _tile_effect_system: TileEffectSystem = null
 ## instantiates it and places it in the "UI" CanvasLayer once.
 var _terrain_info_panel: TerrainInfoPanel = null
 
+## Tile-effect map overlay (Node3D): floats a row of colored, billboarded pips
+## over every cell that has one or more tile effects, so stacking (e.g. tall
+## grass + a fire ignited on top) is visible on the 3D battlefield. Self-contained
+## -- see [TileEffectOverlay] -- this just instantiates it and adds it to the 3D
+## scene root (NOT the "UI" CanvasLayer). Rebuilds itself reactively off
+## CombatServices.board_ready / tile_effects_changed.
+var _tile_effect_overlay: TileEffectOverlay = null
+
 func _ready() -> void:
 	print("=== GameWorld Initializing ===")
 
@@ -44,6 +52,12 @@ func _ready() -> void:
 	# move (via GameEvents.cursor_moved, wired in its own _ready) and simply
 	# stays hidden until a board and registered terrain exist.
 	_setup_terrain_info_panel()
+
+	# Tile-effect 3D overlay: additive Node3D floating effect pips over affected
+	# cells. Added to the 3D scene root (not the CanvasLayer) and, like the terrain
+	# panel, safe to add before the map loads -- it rebuilds itself on
+	# CombatServices.board_ready and stays empty until a board/effects exist.
+	_setup_tile_effect_overlay()
 
 	# Load the selected map or default map
 	await _load_selected_map()
@@ -168,6 +182,23 @@ func _setup_terrain_info_panel() -> void:
 
 	_terrain_info_panel = TerrainInfoPanel.new()
 	ui_layer.add_child(_terrain_info_panel)
+
+func _setup_tile_effect_overlay() -> void:
+	"""Instantiate TileEffectOverlay and add it to the 3D scene root (GameWorld
+	scene root / get_tree().current_scene). Unlike TerrainInfoPanel this is a
+	Node3D, so it goes in the 3D world -- NOT the "UI" CanvasLayer. The overlay
+	builds its own pips and connects CombatServices.board_ready /
+	tile_effects_changed itself in _ready, so there is nothing else to wire up."""
+	if _tile_effect_overlay != null:
+		return
+
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		push_warning("[GameWorldManager] No current_scene yet; TileEffectOverlay not added.")
+		return
+
+	_tile_effect_overlay = TileEffectOverlay.new()
+	scene_root.add_child(_tile_effect_overlay)
 
 # --- Tile effects (T14) -----------------------------------------------------
 

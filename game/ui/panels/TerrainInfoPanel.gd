@@ -163,12 +163,18 @@ func _populate_effects(cell: Vector2i) -> void:
 	for child in _effects_container.get_children():
 		child.queue_free()
 
+	# ALL effects (base terrain + runtime), plus the runtime-only set so we can flag
+	# which chips are temporary. A tile can now hold several at once (e.g. tall
+	# grass + a fire ignited on top), and each gets its own colour-coded chip.
 	var effects: Array = CombatServices.tile_effects_at(cell)
+	var applied: Array = CombatServices.applied_tile_effects_at(cell)
 
 	if effects.is_empty():
 		var none_label := Label.new()
-		none_label.text = "No effects"
+		none_label.text = "No special effects"
 		none_label.add_theme_font_size_override("font_size", 13)
+		# Muted so the "nothing here" state reads as secondary, not a real effect.
+		none_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
 		none_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_effects_container.add_child(none_label)
 		return
@@ -176,33 +182,66 @@ func _populate_effects(cell: Vector2i) -> void:
 	for te in effects:
 		if te == null:
 			continue
-		var line := Label.new()
-		line.text = "• " + _describe_effect(te)
-		line.add_theme_font_size_override("font_size", 13)
-		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_effects_container.add_child(line)
+		# Temporary iff this effect is in the runtime (applied-this-battle) set --
+		# i.e. NOT an inherent terrain effect.
+		_effects_container.add_child(_build_effect_chip(te, te in applied))
 
 
-## Short human label for a TileEffectResource, e.g. "Fire: Deal 15 physical
-## damage" or "Empowering Water: +4 attack for 1 turns". Falls back to just
-## the display_name/id when the effect exposes nothing describable.
-func _describe_effect(te: TileEffectResource) -> String:
-	var label := te.display_name
-	if label == "":
-		label = String(te.id) if te.id != &"" else "Effect"
+## Build one colour-coded chip for a tile effect: a rounded PanelContainer whose
+## fill is a dim version of the effect colour, framed by a 1px border in the
+## effect colour, holding a tiny colour swatch + the effect name (both from
+## [TileEffectVisuals], the shared source of truth the 3D overlay pips also use).
+##
+## Temporary (runtime-applied) effects are marked with a "· temp" suffix on the
+## label rather than a different border colour. Chosen over swapping the border to
+## TEMPORARY_TINT because a text tag is unambiguous regardless of the effect's own
+## hue (an orange TEMPORARY_TINT border could read as just another Fire-ish frame),
+## and it keeps every chip's frame consistent with its swatch colour.
+func _build_effect_chip(te: TileEffectResource, is_temporary: bool) -> PanelContainer:
+	var info: Dictionary = TileEffectVisuals.info_for(te)
+	var color: Color = info.get("color", ConquestTheme.AMBER)
+	var label_text: String = String(info.get("name", "Effect"))
+	if is_temporary:
+		label_text += " · temp"
 
-	var detail := ""
-	if te.effects != null and not te.effects.is_empty():
-		var first: MoveEffect = te.effects[0]
-		if first != null and first.has_method("describe"):
-			var d: String = first.describe()
-			if d != "":
-				detail = d
+	var chip := PanelContainer.new()
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	if detail != "":
-		return "%s: %s" % [label, detail]
-	return label
+	# Dim fill + effect-colour frame, rounded to match the amber HUD's soft corners.
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = color.darkened(0.35)
+	sb.set_corner_radius_all(6)
+	sb.set_border_width_all(1)
+	sb.border_color = color
+	sb.content_margin_left = 6
+	sb.content_margin_right = 6
+	sb.content_margin_top = 3
+	sb.content_margin_bottom = 3
+	chip.add_theme_stylebox_override("panel", sb)
+
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 5)
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.add_child(hb)
+
+	# Tiny colour swatch echoing the effect colour (and the 3D overlay pip).
+	var swatch := ColorRect.new()
+	swatch.color = color
+	swatch.custom_minimum_size = Vector2(10, 10)
+	swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.add_child(swatch)
+
+	var label := Label.new()
+	label.text = label_text
+	label.add_theme_font_size_override("font_size", 13)
+	# CREAM reads clearly on the dim (darkened) chip fill, unlike the theme's
+	# default INK which is tuned for the light amber panel background.
+	label.add_theme_color_override("font_color", ConquestTheme.CREAM)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.add_child(label)
+
+	return chip
 
 
 ## GameEvents.cursor_moved carries the cursor's grid coordinates directly, as
