@@ -129,19 +129,25 @@ func _create_ui() -> void:
 ## returns) when the cell has no registered terrain -- e.g. off the loaded
 ## map, or no map/board loaded yet.
 func show_for_cell(cell: Vector2i) -> void:
+	# NOTE: a null tile here means the cursor is on an IN-BOUNDS cell whose terrain
+	# isn't registered (a registry miss), NOT off-board -- _on_cursor_moved already
+	# rejected off-board cells. Blanking the whole panel in that case was the
+	# "hovering shows no UI" symptom, so instead show the cell as Unknown Terrain
+	# and still surface any tile effects. The panel appears whenever the cursor is
+	# over the board.
 	var tile: TileResource = CombatServices.tile_at(cell)
-	if tile == null:
-		hide_panel()
-		return
 
 	_current_cell = cell
 
-	_name_label.text = tile.tile_name if tile.tile_name != "" else "Unknown Terrain"
-
-	if tile.is_tile_passable():
-		_move_label.text = "Move Cost: %d" % maxi(1, tile.base_movement_cost)
+	if tile != null:
+		_name_label.text = tile.tile_name if tile.tile_name != "" else "Unknown Terrain"
+		if tile.is_tile_passable():
+			_move_label.text = "Move Cost: %d" % maxi(1, tile.base_movement_cost)
+		else:
+			_move_label.text = "Move Cost: -- (Impassable)"
 	else:
-		_move_label.text = "Move Cost: -- (Impassable)"
+		_name_label.text = "Unknown Terrain"
+		_move_label.text = "Move Cost: 1"
 
 	# Reveal BEFORE populating effects: the name/move rows are already valid, so
 	# even if effect population ever failed we still surface the terrain instead of
