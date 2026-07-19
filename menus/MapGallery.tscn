@@ -1,0 +1,17 @@
+[gd_scene format=3 uid="uid://bxvn8k2qr8y7m"]
+
+[ext_resource type="Script" path="res://menus/MapGallery.gd" id="1_0k8vm"]
+
+[node name="MapGallery" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_0k8vm")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.1, 0.1, 0.15, 1)

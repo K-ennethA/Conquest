@@ -9,6 +9,7 @@ class_name MainMenu
 @onready var versus_button: Button = $CenterContainer/VBoxContainer/MenuButtons/VersusButton
 @onready var unit_gallery_button: Button = $CenterContainer/VBoxContainer/MenuButtons/UnitGalleryButton
 @onready var tile_gallery_button: Button = $CenterContainer/VBoxContainer/MenuButtons/TileGalleryButton
+@onready var map_gallery_button: Button = $CenterContainer/VBoxContainer/MenuButtons/MapGalleryButton
 @onready var quit_button: Button = $CenterContainer/VBoxContainer/MenuButtons/QuitButton
 
 func _ready() -> void:
@@ -46,6 +47,8 @@ func _ready() -> void:
 		unit_gallery_button.pressed.connect(_on_unit_gallery_pressed)
 	if tile_gallery_button:
 		tile_gallery_button.pressed.connect(_on_tile_gallery_pressed)
+	if map_gallery_button:
+		map_gallery_button.pressed.connect(_on_map_gallery_pressed)
 	if quit_button:
 		quit_button.pressed.connect(_on_quit_pressed)
 	
@@ -114,6 +117,11 @@ func _on_tile_gallery_pressed() -> void:
 	print("Tile Gallery selected")
 	get_tree().change_scene_to_file("res://menus/TileGallery.tscn")
 
+func _on_map_gallery_pressed() -> void:
+	"""Handle Map Gallery button press"""
+	print("Map Gallery selected")
+	get_tree().change_scene_to_file("res://menus/MapGallery.tscn")
+
 func _on_quit_pressed() -> void:
 	"""Handle Quit button press"""
 	print("Quitting game")
@@ -146,5 +154,7 @@ func _input(event: InputEvent) -> void:
 				_on_unit_gallery_pressed()
 			KEY_4:
 				_on_tile_gallery_pressed()
+			KEY_5:
+				_on_map_gallery_pressed()
 			KEY_ESCAPE:
 				_on_quit_pressed()
