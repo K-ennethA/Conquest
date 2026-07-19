@@ -24,18 +24,51 @@ const COLOR_LOW := Color(0.82, 0.18, 0.16, 1.0)    # Red - critical
 var _background_material: StandardMaterial3D
 var _health_material: StandardMaterial3D
 
+# The unit this bar tracks. Bound via bind_unit() so the bar refreshes itself the
+# instant HP changes, instead of relying on the UnitVisualManager -> unit
+# ._on_health_changed indirection (which silently no-ops if the unit never
+# resolved its visual_manager -- the "bar stays full green while losing HP" bug).
+var _bound_unit = null
+
 func _ready():
 	_setup_materials()
 	_setup_meshes()
+	# If bind_unit ran before _ready (materials/meshes not built yet), paint now.
+	if _bound_unit != null:
+		_refresh_from_unit()
+
+## Track [param unit] directly: connect to its stat signal and refresh on every HP
+## change. Idempotent and safe to call before or after _ready.
+func bind_unit(unit) -> void:
+	_bound_unit = unit
+	if unit != null and unit.unit_stats != null:
+		if not unit.unit_stats.health_changed.is_connected(_on_bound_health_changed):
+			unit.unit_stats.health_changed.connect(_on_bound_health_changed)
+	_refresh_from_unit()
+
+func _on_bound_health_changed(_old_health: int, _new_health: int) -> void:
+	_refresh_from_unit()
+
+func _refresh_from_unit() -> void:
+	# Guard: unit freed, or _ready hasn't built the materials/meshes yet.
+	if not is_instance_valid(_bound_unit) or _health_material == null:
+		return
+	var mx: int = _bound_unit.max_health
+	if mx <= 0:
+		return
+	var cur: int = _bound_unit.current_health
+	update_health(float(cur) / float(mx), cur, mx)
 
 func _setup_materials():
 	# Background material: dark bronze frame so the bar reads as a border, not a void
 	_background_material = StandardMaterial3D.new()
-	# OPAQUE neutral-dark track. Was a semi-transparent (a=0.9) bronze, which let a
-	# red enemy unit bleed through the empty part of the bar -- reading as green fill
-	# + red track ("green but also red"). Opaque + neutral removes that.
-	_background_material.albedo_color = Color(0.07, 0.07, 0.08, 1.0)
+	# OPAQUE "depleted" track. Must be fully opaque so the terrain/units behind the
+	# bar never bleed through the empty portion (the "shows the map colour when it's
+	# clear" report). A dark crimson also reads as lost health, so a low bar is
+	# clearly a health bar (green fill over red track) rather than a stray sliver.
+	_background_material.albedo_color = Color(0.16, 0.04, 0.05, 1.0)
 	_background_material.flags_transparent = false
+	_background_material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 	_background_material.flags_unshaded = true
 	_background_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	_background_material.billboard_keep_scale = true

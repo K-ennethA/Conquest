@@ -131,9 +131,15 @@ func _create_health_bar(unit: Unit) -> void:
 	
 	# Store reference
 	_unit_health_bars[unit] = health_bar
-	
+
 	# Initialize health bar
 	_update_health_bar(unit)
+
+	# Bind the bar directly to the unit's HP signal so it self-refreshes on every
+	# damage/heal -- not just on the action-completed sweep. This is the reliable
+	# path; the older visual_manager indirection could silently miss updates.
+	if health_bar.has_method("bind_unit"):
+		health_bar.bind_unit(unit)
 
 func _update_health_bar(unit: Unit) -> void:
 	"""Update health bar display"""
