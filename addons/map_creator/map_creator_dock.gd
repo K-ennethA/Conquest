@@ -39,6 +39,15 @@ var current_map: MapResource
 # Tool Mode Section
 var tool_mode_option: OptionButton
 var clear_grid_button: Button
+var fill_all_button: Button
+var brush_size_input: SpinBox
+
+# Painting State (drag-to-paint strokes)
+var _is_painting: bool = false          # True between a left press on a cell and the left release
+var _rect_anchor: Vector2i = Vector2i(-1, -1)   # Anchor cell for the Rect Fill drag, (-1,-1) when idle
+var _rect_hover: Vector2i = Vector2i(-1, -1)    # Last hovered cell while dragging a rect (for tint cleanup)
+var _grid_width: int = 0                # Dimensions the current grid_buttons array was built with
+var _grid_height: int = 0
 
 # Preview Section
 var preview_container: VBoxContainer
@@ -57,7 +66,7 @@ var tile_types = ["NORMAL", "DIFFICULT_TERRAIN", "WATER", "WALL", "SPECIAL", "LA
 var unit_types = ["WARRIOR", "ARCHER", "MAGE"]
 var difficulties = ["Easy", "Normal", "Hard", "Expert"]
 var map_types = ["Skirmish", "Campaign", "Custom"]
-var tool_modes = ["Place Tiles", "Place Units", "Erase"]
+var tool_modes = ["Place Tiles", "Place Units", "Rect Fill", "Bucket Fill", "Erase"]
 
 # Colors for visual feedback
 var tile_colors = {
@@ -264,6 +273,31 @@ func _create_tool_mode_section():
 	clear_grid_button.pressed.connect(_on_clear_grid)
 	tool_container.add_child(clear_grid_button)
 
+	fill_all_button = Button.new()
+	fill_all_button.text = "FILL ALL"
+	fill_all_button.tooltip_text = "Set every tile to the selected tile type (unit spawns are kept)"
+	fill_all_button.pressed.connect(_on_fill_all)
+	tool_container.add_child(fill_all_button)
+
+	# Brush size row - painting applies to an NxN block anchored at the clicked cell
+	var brush_container = HBoxContainer.new()
+	main_container.add_child(brush_container)
+
+	var brush_label = Label.new()
+	brush_label.text = "Brush Size:"
+	brush_container.add_child(brush_label)
+
+	brush_size_input = SpinBox.new()
+	brush_size_input.min_value = 1
+	brush_size_input.max_value = 5
+	brush_size_input.value = 1
+	brush_size_input.tooltip_text = "Paints an NxN block with the clicked cell as the top-left corner"
+	brush_container.add_child(brush_size_input)
+
+	var hint_label = Label.new()
+	hint_label.text = "(drag to paint, right-click to erase)"
+	brush_container.add_child(hint_label)
+
 func _create_tile_palette_section():
 	"""Create tile selection palette"""
 	var section_label = Label.new()
@@ -329,8 +363,11 @@ func _create_unit_palette_section():
 		button.text = unit_type
 		button.custom_minimum_size = Vector2(80, 30)
 		button.modulate = unit_colors.get(selected_player_id, Color.WHITE)
+		button.tooltip_text = "Click to select, or drag onto the grid to place"
 		button.pressed.connect(_on_unit_selected.bind(unit_type))
-		
+		# Palette buttons are drag sources only - they never accept drops
+		button.set_drag_forwarding(_palette_get_drag_data.bind(unit_type), Callable(), Callable())
+
 		unit_row.add_child(button)
 		unit_buttons.append(button)
 	
@@ -431,27 +468,43 @@ func _create_grid():
 		if button:
 			button.queue_free()
 	grid_buttons.clear()
-	
+
+	# Rebuilding invalidates any in-flight stroke or rect drag
+	_is_painting = false
+	_rect_anchor = Vector2i(-1, -1)
+	_rect_hover = Vector2i(-1, -1)
+
 	var width = int(width_input.value)
 	var height = int(height_input.value)
-	
+
+	_grid_width = width
+	_grid_height = height
 	grid_container.columns = width
-	
+
 	# Create grid buttons
 	for y in range(height):
 		for x in range(width):
+			var pos = Vector2i(x, y)
 			var button = Button.new()
 			button.custom_minimum_size = Vector2(30, 30)
 			button.text = ""
 			button.modulate = Color.WHITE
-			
+
 			# Store position in button metadata
-			button.set_meta("grid_pos", Vector2i(x, y))
-			button.pressed.connect(_on_grid_button_pressed.bind(Vector2i(x, y)))
-			
+			button.set_meta("grid_pos", pos)
+			# Stroke input: press starts a stroke, hover continues it while held
+			button.gui_input.connect(_on_grid_cell_gui_input.bind(pos))
+			button.mouse_entered.connect(_on_grid_cell_mouse_entered.bind(pos))
+			# Cells are both drop targets (palette units) and drag sources (existing spawns)
+			button.set_drag_forwarding(
+				_grid_get_drag_data.bind(pos),
+				_grid_can_drop_data.bind(pos),
+				_grid_drop_data.bind(pos)
+			)
+
 			grid_container.add_child(button)
 			grid_buttons.append(button)
-	
+
 	_update_grid_display()
 
 func _create_new_map():
@@ -491,6 +544,13 @@ func _on_resize_grid():
 
 func _on_tool_mode_changed(index: int):
 	"""Handle tool mode change"""
+	# Abandon any gesture that belonged to the previous tool
+	_is_painting = false
+	if _rect_anchor != Vector2i(-1, -1):
+		_rect_anchor = Vector2i(-1, -1)
+		_rect_hover = Vector2i(-1, -1)
+		_update_grid_display()
+
 	print("Tool mode changed to: " + tool_modes[index])
 
 func _on_tile_selected(tile_type: String):
@@ -530,33 +590,151 @@ func _on_player_selected(index: int):
 	
 	print("Selected player: " + str(selected_player_id + 1))
 
-func _on_grid_button_pressed(pos: Vector2i):
-	"""Handle grid button press"""
+# --- Grid input: strokes, brushes and tools -----------------------------------
+
+func _input(event: InputEvent) -> void:
+	"""Global watch for the left mouse release that ends a paint stroke.
+
+	A per-cell release is unreliable because the pointer is often over a different
+	cell (or outside the dock entirely) by the time the button comes back up.
+	"""
+	if not is_visible_in_tree():
+		return
+
+	if not (event is InputEventMouseButton):
+		return
+
+	var mouse_event := event as InputEventMouseButton
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT or mouse_event.pressed:
+		return
+
+	# Rect Fill commits on release, everything else just closes the stroke
+	if _rect_anchor != Vector2i(-1, -1):
+		_commit_rect_fill(_rect_hover)
+
+	if _is_painting:
+		_is_painting = false
+		_end_stroke()
+
+func _on_grid_cell_gui_input(event: InputEvent, pos: Vector2i) -> void:
+	"""Handle a mouse press on a single grid cell"""
+	if not current_map or not _is_valid_position(pos):
+		return
+
+	if not (event is InputEventMouseButton):
+		return
+
+	var mouse_event := event as InputEventMouseButton
+	if not mouse_event.pressed:
+		return
+
+	if mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+		# Right-click always erases, whatever the active tool is
+		_apply_brush(pos, _erase_at_position)
+		_end_stroke()
+		return
+
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT:
+		return
+
+	var tool_mode: String = _get_tool_mode()
+
+	if tool_mode == "Rect Fill":
+		# Anchor the rect; the fill happens on release
+		_rect_anchor = pos
+		_rect_hover = pos
+		_tint_rect_preview()
+		return
+
+	if tool_mode == "Bucket Fill":
+		# One-shot tool - dragging must not re-flood every cell it crosses
+		_bucket_fill_at_position(pos)
+		_end_stroke()
+		return
+
+	_is_painting = true
+	_apply_tool_at_position(pos)
+
+func _on_grid_cell_mouse_entered(pos: Vector2i) -> void:
+	"""Continue a stroke (or update the rect preview) as the pointer crosses cells"""
+	if not current_map or not _is_valid_position(pos):
+		return
+
+	if _rect_anchor != Vector2i(-1, -1):
+		_update_rect_preview(pos)
+		return
+
+	if not _is_painting:
+		return
+
+	_apply_tool_at_position(pos)
+
+func _apply_tool_at_position(pos: Vector2i) -> void:
+	"""Apply the active tool at a position, refreshing only the affected cells"""
 	if not current_map:
 		return
-	
-	var tool_mode = tool_modes[tool_mode_option.selected]
-	
+
+	var tool_mode: String = _get_tool_mode()
+
 	match tool_mode:
 		"Place Tiles":
-			_place_tile_at_position(pos)
+			_apply_brush(pos, _place_tile_at_position)
 		"Place Units":
-			_place_unit_at_position(pos)
+			_apply_brush(pos, _place_unit_at_position)
+		"Bucket Fill":
+			_bucket_fill_at_position(pos)
 		"Erase":
-			_erase_at_position(pos)
-	
-	_update_grid_display()
+			_apply_brush(pos, _erase_at_position)
+		_:
+			# "Rect Fill" is handled entirely by the press/release path
+			pass
+
+func _apply_brush(pos: Vector2i, cell_action: Callable) -> void:
+	"""Run a per-cell action over the NxN brush block anchored at pos (top-left)"""
+	var brush: int = _get_brush_size()
+
+	for dy in range(brush):
+		for dx in range(brush):
+			var target = Vector2i(pos.x + dx, pos.y + dy)
+			if not _is_valid_position(target):
+				continue
+			cell_action.call(target)
+			_refresh_cell(target)
+
+func _get_tool_mode() -> String:
+	"""Name of the active tool, guarded against an unset OptionButton selection"""
+	if not tool_mode_option:
+		return "Place Tiles"
+
+	var index: int = tool_mode_option.selected
+	if index < 0 or index >= tool_modes.size():
+		return "Place Tiles"
+
+	return tool_modes[index]
+
+func _get_brush_size() -> int:
+	"""Current brush edge length, clamped to the supported range"""
+	if not brush_size_input:
+		return 1
+	return clampi(int(brush_size_input.value), 1, 5)
+
+func _is_valid_position(pos: Vector2i) -> bool:
+	"""Bounds check against the map the grid was built for"""
+	if not current_map:
+		return false
+	return pos.x >= 0 and pos.y >= 0 and pos.x < current_map.width and pos.y < current_map.height
+
+func _end_stroke() -> void:
+	"""Finish an edit gesture - the expensive refreshes happen once, here"""
 	_update_preview()
 
 func _place_tile_at_position(pos: Vector2i):
 	"""Place selected tile at position"""
 	current_map.set_tile_at_position(pos, selected_tile_type, "")
-	print("Placed " + selected_tile_type + " at " + str(pos))
 
 func _place_unit_at_position(pos: Vector2i):
 	"""Place selected unit at position"""
 	current_map.set_unit_spawn_at_position(pos, selected_player_id, selected_unit_type, "")
-	print("Placed " + selected_unit_type + " for Player " + str(selected_player_id + 1) + " at " + str(pos))
 
 func _erase_at_position(pos: Vector2i):
 	"""Erase tile/unit at position"""
@@ -564,7 +742,224 @@ func _erase_at_position(pos: Vector2i):
 	current_map.set_tile_at_position(pos, "NORMAL", "")
 	# Remove unit spawn
 	current_map.remove_unit_spawn_at_position(pos)
-	print("Erased at " + str(pos))
+
+# --- Rect Fill ----------------------------------------------------------------
+
+func _update_rect_preview(pos: Vector2i) -> void:
+	"""Move the rect preview to a new hover cell, repainting the old region first"""
+	if pos == _rect_hover:
+		return
+
+	var previous := _rect_hover
+	_rect_hover = pos
+
+	# Restore the cells the old rect covered, then tint the new one
+	if previous != Vector2i(-1, -1):
+		for cell in _get_rect_cells(_rect_anchor, previous):
+			_refresh_cell(cell)
+
+	_tint_rect_preview()
+
+func _tint_rect_preview() -> void:
+	"""Brighten every cell inside the pending rect so the region is visible"""
+	if _rect_anchor == Vector2i(-1, -1) or _rect_hover == Vector2i(-1, -1):
+		return
+
+	var tint: Color = tile_colors.get(selected_tile_type, Color.WHITE) * 1.4
+	for cell in _get_rect_cells(_rect_anchor, _rect_hover):
+		var button := _get_button_at(cell)
+		if button:
+			button.modulate = tint
+
+func _commit_rect_fill(release_pos: Vector2i) -> void:
+	"""Fill the anchored rect with the selected tile type, then reset the anchor"""
+	var anchor := _rect_anchor
+	var corner := release_pos
+	_rect_anchor = Vector2i(-1, -1)
+	_rect_hover = Vector2i(-1, -1)
+
+	if not current_map or anchor == Vector2i(-1, -1):
+		return
+
+	# If the pointer left the grid we still fill up to the last known cell
+	if not _is_valid_position(corner):
+		corner = anchor
+
+	var cells := _get_rect_cells(anchor, corner)
+	for cell in cells:
+		current_map.set_tile_at_position(cell, selected_tile_type, "")
+		_refresh_cell(cell)
+
+	_end_stroke()
+	print("Rect filled " + str(cells.size()) + " tiles with " + selected_tile_type)
+
+func _get_rect_cells(a: Vector2i, b: Vector2i) -> Array[Vector2i]:
+	"""Inclusive cell list for the normalized rect between two corners (any drag direction)"""
+	var cells: Array[Vector2i] = []
+	if not current_map:
+		return cells
+
+	var min_x: int = mini(a.x, b.x)
+	var max_x: int = maxi(a.x, b.x)
+	var min_y: int = mini(a.y, b.y)
+	var max_y: int = maxi(a.y, b.y)
+
+	for y in range(min_y, max_y + 1):
+		for x in range(min_x, max_x + 1):
+			var cell = Vector2i(x, y)
+			if _is_valid_position(cell):
+				cells.append(cell)
+
+	return cells
+
+# --- Bucket Fill --------------------------------------------------------------
+
+func _bucket_fill_at_position(pos: Vector2i) -> void:
+	"""Flood fill the contiguous 4-way region sharing the clicked cell's tile type.
+
+	Iterative (stack based) with a visited set, so a large map can never blow the
+	call stack and no cell is ever queued twice.
+	"""
+	if not current_map or not _is_valid_position(pos):
+		return
+
+	var origin_data: Dictionary = current_map.get_tile_at_position(pos)
+	var target_type: String = origin_data.get("tile_type", "NORMAL")
+
+	# Nothing to do - the region is already the selected type
+	if target_type == selected_tile_type:
+		return
+
+	var visited: Dictionary = {}
+	var stack: Array[Vector2i] = [pos]
+	visited[pos] = true
+	var filled: int = 0
+
+	while stack.size() > 0:
+		var cell: Vector2i = stack.pop_back()
+
+		var cell_data: Dictionary = current_map.get_tile_at_position(cell)
+		if cell_data.get("tile_type", "NORMAL") != target_type:
+			continue
+
+		current_map.set_tile_at_position(cell, selected_tile_type, "")
+		_refresh_cell(cell)
+		filled += 1
+
+		var neighbors: Array[Vector2i] = [
+			Vector2i(cell.x + 1, cell.y),
+			Vector2i(cell.x - 1, cell.y),
+			Vector2i(cell.x, cell.y + 1),
+			Vector2i(cell.x, cell.y - 1)
+		]
+		for neighbor in neighbors:
+			if not _is_valid_position(neighbor):
+				continue
+			if visited.has(neighbor):
+				continue
+			visited[neighbor] = true
+			stack.append(neighbor)
+
+	print("Bucket filled " + str(filled) + " tiles with " + selected_tile_type)
+
+# --- Drag and drop ------------------------------------------------------------
+
+func _palette_get_drag_data(_at_position: Vector2, unit_type: String) -> Variant:
+	"""Start a drag from a unit palette button"""
+	# A drag supersedes any stroke that may have started
+	_is_painting = false
+
+	var payload: Dictionary = {
+		"kind": "unit",
+		"unit_type": unit_type,
+		"player_id": selected_player_id
+	}
+	set_drag_preview(_make_drag_preview(unit_type, selected_player_id))
+	return payload
+
+func _grid_get_drag_data(_at_position: Vector2, pos: Vector2i) -> Variant:
+	"""Start a drag from a grid cell that already holds a unit spawn (move gesture)"""
+	if not current_map or not _is_valid_position(pos):
+		return null
+
+	var spawn_data: Dictionary = current_map.get_unit_spawn_at_position(pos)
+	if spawn_data.is_empty():
+		return null
+
+	_is_painting = false
+
+	var unit_type: String = str(spawn_data.get("unit_type", "WARRIOR"))
+	var player_id: int = int(spawn_data.get("player_id", 0))
+
+	var payload: Dictionary = {
+		"kind": "unit_move",
+		"from": pos,
+		"unit_type": unit_type,
+		"player_id": player_id
+	}
+	set_drag_preview(_make_drag_preview(unit_type, player_id))
+	return payload
+
+func _grid_can_drop_data(_at_position: Vector2, data: Variant, pos: Vector2i) -> bool:
+	"""Accept only well formed unit payloads landing on an in-bounds cell"""
+	if not current_map or not _is_valid_position(pos):
+		return false
+
+	if not (data is Dictionary):
+		return false
+
+	var payload: Dictionary = data as Dictionary
+	var kind: String = str(payload.get("kind", ""))
+
+	if kind == "unit":
+		return payload.has("unit_type") and payload.has("player_id")
+
+	if kind == "unit_move":
+		return payload.has("unit_type") and payload.has("player_id") and payload.has("from")
+
+	return false
+
+func _grid_drop_data(_at_position: Vector2, data: Variant, pos: Vector2i) -> void:
+	"""Place (or relocate) a unit spawn at the cell the payload was dropped on"""
+	if not _grid_can_drop_data(_at_position, data, pos):
+		return
+
+	var payload: Dictionary = data as Dictionary
+	var kind: String = str(payload.get("kind", ""))
+	var unit_type: String = str(payload.get("unit_type", "WARRIOR"))
+	var player_id: int = int(payload.get("player_id", 0))
+
+	if kind == "unit_move":
+		var from_value: Variant = payload.get("from", Vector2i(-1, -1))
+		if not (from_value is Vector2i):
+			return
+		var from_pos: Vector2i = from_value as Vector2i
+		if from_pos == pos:
+			return
+		current_map.remove_unit_spawn_at_position(from_pos)
+		if _is_valid_position(from_pos):
+			_refresh_cell(from_pos)
+
+	current_map.set_unit_spawn_at_position(pos, player_id, unit_type, "")
+	_refresh_cell(pos)
+	_end_stroke()
+	print("Dropped " + unit_type + " for Player " + str(player_id + 1) + " at " + str(pos))
+
+func _make_drag_preview(unit_type: String, player_id: int) -> Control:
+	"""Build the small floating label shown under the cursor during a drag"""
+	var preview = Panel.new()
+	preview.custom_minimum_size = Vector2(60, 26)
+	preview.size = Vector2(60, 26)
+	preview.modulate = unit_colors.get(player_id, Color.WHITE)
+
+	var label = Label.new()
+	label.text = unit_type
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	preview.add_child(label)
+
+	return preview
 
 func _on_clear_grid():
 	"""Clear the entire grid"""
@@ -580,36 +975,77 @@ func _on_clear_grid():
 	_update_preview()
 	print("Grid cleared")
 
-func _update_grid_display():
-	"""Update the visual display of the grid"""
+func _on_fill_all():
+	"""Set every tile to the selected tile type, leaving unit spawns untouched"""
 	if not current_map:
 		return
-	
+
+	for y in range(current_map.height):
+		for x in range(current_map.width):
+			current_map.set_tile_at_position(Vector2i(x, y), selected_tile_type, "")
+
+	_update_grid_display()
+	_update_preview()
+	print("Filled all tiles with " + selected_tile_type)
+
+func _update_grid_display():
+	"""Update the visual display of the whole grid"""
+	if not current_map:
+		return
+
 	for i in range(grid_buttons.size()):
 		var button = grid_buttons[i]
+		if not button:
+			continue
 		var pos = button.get_meta("grid_pos", Vector2i(-1, -1))
-		
+
 		if pos == Vector2i(-1, -1):
 			continue
-		
-		# Get tile data
-		var tile_data = current_map.get_tile_at_position(pos)
-		var tile_type = tile_data.get("tile_type", "NORMAL")
-		
-		# Get unit data
-		var unit_data = current_map.get_unit_spawn_at_position(pos)
-		
-		# Set button appearance
-		if not unit_data.is_empty():
-			# Show unit
-			var unit_type = unit_data.get("unit_type", "WARRIOR")
-			var player_id = unit_data.get("player_id", 0)
-			button.text = unit_type[0]  # First letter of unit type
-			button.modulate = unit_colors.get(player_id, Color.WHITE)
-		else:
-			# Show tile
-			button.text = ""
-			button.modulate = tile_colors.get(tile_type, Color.WHITE)
+
+		_paint_button(button, pos)
+
+func _get_button_at(pos: Vector2i) -> Button:
+	"""Look up the grid button for a position, or null if it is off the grid"""
+	if pos.x < 0 or pos.y < 0 or pos.x >= _grid_width or pos.y >= _grid_height:
+		return null
+
+	var index: int = pos.y * _grid_width + pos.x
+	if index < 0 or index >= grid_buttons.size():
+		return null
+
+	return grid_buttons[index]
+
+func _refresh_cell(pos: Vector2i) -> void:
+	"""Repaint a single cell - used during strokes so we never redraw the whole grid"""
+	if not current_map:
+		return
+
+	var button := _get_button_at(pos)
+	if not button:
+		return
+
+	_paint_button(button, pos)
+
+func _paint_button(button: Button, pos: Vector2i) -> void:
+	"""Apply the tile/unit appearance for a position to its button"""
+	# Get tile data
+	var tile_data = current_map.get_tile_at_position(pos)
+	var tile_type = tile_data.get("tile_type", "NORMAL")
+
+	# Get unit data
+	var unit_data = current_map.get_unit_spawn_at_position(pos)
+
+	# Set button appearance
+	if not unit_data.is_empty():
+		# Show unit
+		var unit_type: String = str(unit_data.get("unit_type", "WARRIOR"))
+		var player_id = unit_data.get("player_id", 0)
+		button.text = unit_type.substr(0, 1)  # First letter of unit type
+		button.modulate = unit_colors.get(player_id, Color.WHITE)
+	else:
+		# Show tile
+		button.text = ""
+		button.modulate = tile_colors.get(tile_type, Color.WHITE)
 
 func _on_map_info_changed(new_text: String = ""):
 	"""Handle map information changes"""
