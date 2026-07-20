@@ -1571,16 +1571,17 @@ func _build_type_model_paths() -> void:
 			continue
 		_type_model_paths[type_name] = tile_resource.model_path
 
-func _tile_model_path_at(pos: Vector2i) -> String:
-	"""Model scene path for a cell, or "" when it should render as a coloured box.
-
-	Mirrors MapLoader._resolve_tile_resource's order so the preview shows what the
-	game will actually build: the cell's OWN tile_id wins (it names the exact tile
-	the author painted, and survives the asset moving), then its legacy
-	tile_resource_path, and only then the coarse type fallback.
-	"""
+## The exact TileResource a cell holds, or null when only a coarse type is known.
+##
+## Mirrors MapLoader._resolve_tile_resource's order so the editor shows what the
+## game will actually build: the cell's OWN tile_id wins (it names the exact tile
+## the author painted, and survives the asset moving), then its legacy
+## tile_resource_path. Resolving the real tile -- rather than just its TYPE -- is
+## what lets two tiles sharing a type look different, which they must: NORMAL alone
+## now covers grass, dirt, obsidian and frozen tundra.
+func _tile_resource_at(pos: Vector2i) -> TileResource:
 	if not current_map:
-		return ""
+		return null
 
 	var tile_data: Dictionary = current_map.get_tile_at_position(pos)
 
@@ -1588,14 +1589,28 @@ func _tile_model_path_at(pos: Vector2i) -> String:
 	if not tile_id.is_empty():
 		var by_id := TileCatalog.find_by_id(StringName(tile_id))
 		if by_id != null:
-			return by_id.model_path
+			return by_id
 
 	var resource_path: String = str(tile_data.get("tile_resource_path", ""))
 	if not resource_path.is_empty():
 		var tile_resource := _load_tile_resource(resource_path)
 		if tile_resource:
-			return tile_resource.model_path
+			return tile_resource
 
+	return null
+
+
+func _tile_model_path_at(pos: Vector2i) -> String:
+	"""Model scene path for a cell, or "" when it should render as a coloured box."""
+	if not current_map:
+		return ""
+
+	var resolved := _tile_resource_at(pos)
+	if resolved != null:
+		return resolved.model_path
+
+	# Only a coarse type is known (bare "NORMAL" cells from create_default_layout).
+	var tile_data: Dictionary = current_map.get_tile_at_position(pos)
 	_build_type_model_paths()
 	return str(_type_model_paths.get(str(tile_data.get("tile_type", "NORMAL")), ""))
 
@@ -1743,9 +1758,18 @@ func _refresh_cell_3d(pos: Vector2i) -> void:
 	_sync_spawn_marker(pos)
 
 func _tile_color_at(pos: Vector2i) -> Color:
-	"""Display colour of the tile currently stored at a cell"""
+	"""Display colour of the tile currently stored at a cell.
+
+	Uses the RESOLVED tile's own base_color, not its type's colour. Colouring by
+	type made every tile sharing a TileType render identically -- with biome
+	folders, NORMAL alone covers grass, dirt, obsidian and frozen tundra, so
+	painting them looked like nothing changed.
+	"""
 	if not current_map:
 		return Color.WHITE
+	var resolved := _tile_resource_at(pos)
+	if resolved != null:
+		return resolved.base_color
 	var tile_data: Dictionary = current_map.get_tile_at_position(pos)
 	return _tile_color_for(str(tile_data.get("tile_type", "NORMAL")))
 
@@ -2076,11 +2100,34 @@ func _paint_button(button: Button, pos: Vector2i) -> void:
 		if not unit_type.is_empty():
 			badge += unit_type.substr(0, 1)
 		button.text = badge
-		button.modulate = _player_color(player_id)
+		_apply_cell_swatch(button, _player_color(player_id))
 	else:
-		# Show tile
+		# Show tile: the RESOLVED tile's own colour, so two tiles sharing a
+		# TileType (grass vs dirt vs obsidian, all NORMAL) still look different.
 		button.text = ""
-		button.modulate = _tile_color_for(str(tile_type))
+		_apply_cell_swatch(button, _tile_color_at(pos))
+
+
+## Paint a grid cell as a solid colour swatch.
+##
+## modulate() alone only TINTS the editor's grey button stylebox, so distinct tile
+## colours washed out into near-identical greens. Overriding the styleboxes paints
+## the actual colour, with a subtle border so the grid stays readable.
+func _apply_cell_swatch(button: Button, color: Color) -> void:
+	button.modulate = Color.WHITE  # colour comes from the stylebox now, not a tint
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var box := StyleBoxFlat.new()
+		box.bg_color = color
+		if state == "hover":
+			box.bg_color = color.lightened(0.15)
+		elif state == "pressed":
+			box.bg_color = color.darkened(0.15)
+		box.border_width_left = 1
+		box.border_width_right = 1
+		box.border_width_top = 1
+		box.border_width_bottom = 1
+		box.border_color = Color(0.0, 0.0, 0.0, 0.35)
+		button.add_theme_stylebox_override(state, box)
 
 func _on_map_info_changed(new_text: String = ""):
 	"""Handle map information changes"""
