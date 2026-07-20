@@ -338,7 +338,17 @@ def main() -> None:
     footprint_factor = float(opts["max_footprint"]) / src_footprint
     factor = min(height_factor, footprint_factor)
     bound_by = "height" if height_factor <= footprint_factor else "footprint"
-    ob.scale = (factor, factor, factor)
+    # MULTIPLY into the object's existing scale, never overwrite it. A sculpt may
+    # carry an unapplied, NON-UNIFORM scale (the ancient tree ships at
+    # 2.509 x 2.238 x 5.325), and the measured bounds above already include it.
+    # Assigning (factor, factor, factor) would throw that authored scale away, so
+    # the model would come out both the wrong SIZE and the wrong PROPORTIONS --
+    # silently, since it still exports and still fits the cell. Harmless no-op for
+    # a sculpt already at scale 1.
+    ob.scale = mathutils.Vector((
+        ob.scale.x * factor,
+        ob.scale.y * factor,
+        ob.scale.z * factor))
     bpy.context.view_layer.update()
     log("scale candidates: height %.5f (%.3f -> %.3f), footprint %.5f (%.3f -> %.3f)" % (
         height_factor, src_height, float(opts["target_height"]),

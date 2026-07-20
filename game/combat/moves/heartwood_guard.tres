@@ -1,0 +1,43 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/ApplyStatusEffect.gd" id="2_applystatus"]
+[ext_resource type="Script" path="res://game/combat/effects/StatModifierEffect.gd" id="3_statmod"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="4_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="5_targp"]
+[ext_resource type="Resource" path="res://game/combat/status/guarded.tres" id="6_guarded"]
+
+[sub_resource type="Resource" id="Resource_hg_guard"]
+script = ExtResource("2_applystatus")
+condition = ExtResource("6_guarded")
+chance = 1.0
+
+[sub_resource type="Resource" id="Resource_hg_defense"]
+script = ExtResource("3_statmod")
+stat_name = "defense"
+amount = 10
+duration = 3
+
+[sub_resource type="Resource" id="Resource_hg_tgt"]
+script = ExtResource("5_targp")
+target_kind = 0
+min_range = 0
+max_range = 0
+area_shape = 0
+area_size = 0
+affects_caster_tile = true
+
+[resource]
+script = ExtResource("4_mvres")
+move_id = &"heartwood_guard"
+display_name = "Heartwood Guard"
+description = "Eldroot draws its bark closed over the hollow at its core. Nothing gets through at all for a moment, and what comes after still finds it harder wood."
+category = 0
+element = &"nature"
+energy_cost = 0
+max_uses = -1
+cooldown = 2
+accuracy = 1.0
+crit_chance = 0.0
+targeting = SubResource("Resource_hg_tgt")
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_hg_guard"), SubResource("Resource_hg_defense")])

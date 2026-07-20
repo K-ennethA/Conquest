@@ -445,6 +445,22 @@ func status_stack_count(condition_id: StringName) -> int:
 func is_immobilized() -> bool:
 	return has_status_rule_flag(&"immobilized")
 
+## True while a status makes this unit skip its next turn (Flinched). The one place
+## the "stunned" flag name is spelled for turn-flow purposes.
+##
+## NOTE this is the LIVE flag, not "is being skipped right now". A 1-turn stun is
+## expired by the very tick that opens the unit's turn, so the turn systems latch
+## the answer at the top of the turn instead of re-asking mid-turn — ask
+## [method TurnSystemBase.is_turn_skipped] for that. This accessor is for UI and
+## for anything wanting to know the status is present.
+func is_stunned() -> bool:
+	return has_status_rule_flag(&"stunned")
+
+## True while a status makes this unit take no damage at all (Guarded). The one
+## place the "invulnerable" flag name is spelled; [DamageEffect] short-circuits on it.
+func is_invulnerable() -> bool:
+	return has_status_rule_flag(&"invulnerable")
+
 # Validation methods
 func can_be_selected_by_player(player: Player) -> bool:
 	"""Check if a specific player can select this unit"""

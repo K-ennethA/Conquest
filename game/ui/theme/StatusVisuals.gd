@@ -29,7 +29,15 @@ const _TABLE := {
 	# the violet/rose restraints an ENEMY put on you.
 	&"ingrained":  { "name": "Ingrained",  "color": Color("6f8f4e"), "kind": "buff" },
 	&"burn":       { "name": "Burn",       "color": Color("e0552b"), "kind": "debuff" },
+	# Timberfall's flinch: the unit loses its whole next turn. Deep ember rather
+	# than the violet restraints, because it is a CONCUSSIVE effect (you were hit
+	# too hard) rather than something binding you in place.
+	&"flinched":   { "name": "Flinched",   "color": Color("b03a3a"), "kind": "debuff" },
 	# --- Buffs ---------------------------------------------------------------
+	# Heartwood Guard: one turn of taking no damage at all. Pale bark-grey blue --
+	# deliberately the coolest, most inert hue in the table, since the fantasy is
+	# "closed up and unreachable" rather than "empowered".
+	&"guarded":    { "name": "Guarded",    "color": Color("8fa8c9"), "kind": "buff" },
 	&"regen":      { "name": "Regeneration", "color": Color("4fbf6a"), "kind": "buff" },
 	&"fortified":  { "name": "Fortified",  "color": Color("c79a3b"), "kind": "buff" },
 	&"hastened":   { "name": "Hastened",   "color": Color("3fa9e0"), "kind": "buff" },
@@ -56,6 +64,8 @@ const _RULE_FLAG_WORDS := {
 	"silenced": "Cannot use moves",
 	"untargetable": "Cannot be targeted",
 	"cannot_act": "Cannot act",
+	"invulnerable": "Takes no damage",
+	"stunned": "Skips its next turn",
 }
 
 

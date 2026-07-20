@@ -277,6 +277,32 @@ func tile_tag_at(cell: Vector2i) -> StringName:
 	return &""
 
 
+## EVERY terrain tag on [param cell], not just the primary one.
+##
+## [method tile_tag_at] returns only the tile's FIRST special property, which is
+## fine for "what biome is this" but loses every secondary tag: a volcano tile
+## tagged ["volcano", "difficult"] reports only "volcano" through it. Rules that
+## ask "does this tile carry tag X" (see [OnTerrainTagCondition]) need the whole
+## list, so they read this instead. Never returns null; an unregistered cell, or
+## one known only through a [method set_tile] override, yields the override id (or
+## the canonical id) as a single-entry list so a tag-less tile can still be named.
+func tile_tags_at(cell: Vector2i) -> Array[String]:
+	var out: Array[String] = []
+	var res := _resource_at(cell)
+	if res != null:
+		if res.special_properties != null:
+			for p in res.special_properties:
+				out.append(String(p))
+		var canonical := String(_resource_tile_id(res))
+		if canonical != "" and not out.has(canonical):
+			out.append(canonical)
+		return out
+	var t = _tile_overrides.get(cell, null)
+	if t != null:
+		out.append(str(t))
+	return out
+
+
 # --- Coordinate mapping helpers --------------------------------------------
 
 ## Vector2i(col, row) -> world position of that cell's center.

@@ -24,6 +24,12 @@ enum AreaShape {
 	SQUARE,   ## Chebyshev radius area_size (a filled (2n+1)² block)
 	DIAMOND,  ## Manhattan radius area_size (a filled rhombus)
 	LINE,     ## a straight run from the aim, length area_size, aimed away from caster
+	## A 3-cell frontal arc: the aimed cell plus the two cells flanking it
+	## PERPENDICULAR to the caster->aim direction — the face of the caster the
+	## swing sweeps across. area_size is ignored. Appended LAST: these enum values
+	## serialise as integers into authored .tres files, so inserting mid-list would
+	## silently re-point every existing pattern to a different shape.
+	ARC,
 }
 
 ## How damage interacts with a defender's stats.

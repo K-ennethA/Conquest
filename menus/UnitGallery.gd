@@ -1075,6 +1075,8 @@ func _area_shape_name(shape: int) -> String:
 			return "diamond"
 		CombatTypes.AreaShape.LINE:
 			return "line"
+		CombatTypes.AreaShape.ARC:
+			return "arc"
 	return "unknown"
 
 

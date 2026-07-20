@@ -93,7 +93,15 @@ func can_unit_act(unit: Unit) -> bool:
 	# Unit must not have acted this turn (once they act, they can't act again)
 	if unit in units_acted_this_turn:
 		return false
-	
+
+	# A stunned unit forfeits this turn entirely. Checked here rather than by
+	# dropping it from the player's unit list so it still gets ticked by
+	# _start_player_turn's _tick_all_units_turn_start -- which is what expires the
+	# stun. _check_turn_completion() reads can_unit_act() too, so a side whose only
+	# remaining unit is stunned still completes its turn instead of stalling.
+	if is_turn_skipped(unit):
+		return false
+
 	# Unit must be able to act (not eliminated, has actions, etc.)
 	if unit.has_method("can_act"):
 		return unit.can_act()
@@ -588,7 +596,10 @@ func reset_turn_system() -> void:
 	turn_completed_manually = false
 	players_had_turn_this_round.clear()
 	just_started = true
-	
+	# Drop per-turn tick / stun-skip bookkeeping: current_turn just rewound to 1, so
+	# a stale entry from the previous battle's turn 1 would read as a live skip.
+	clear_turn_tick_state()
+
 	# Reset BattleEffectsManager
 	if BattleEffectsManager:
 		BattleEffectsManager.start_battle()  # This resets battle state

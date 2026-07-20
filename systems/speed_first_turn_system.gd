@@ -98,7 +98,15 @@ func can_unit_act(unit: Unit) -> bool:
 	"""Check if a unit can act in the current turn"""
 	if not is_active or not is_turn_in_progress:
 		return false
-	
+
+	# A stunned unit forfeits this turn. It deliberately stays IN the turn queue and
+	# still has _start_unit_turn() run for it -- that is what ticks its statuses and
+	# expires the stun. It just cannot do anything while its turn is up; the human
+	# ends it with the End Turn button (can_end_turn_manually is independent of this)
+	# and BotTurnDriver advances past it automatically.
+	if is_turn_skipped(unit):
+		return false
+
 	# Only the current acting unit can act
 	return unit == current_acting_unit
 
@@ -556,7 +564,10 @@ func reset_turn_system() -> void:
 	turn_queue.clear()
 	units_acted_this_round.clear()
 	current_acting_unit = null
-	
+	# Drop per-turn tick / stun-skip bookkeeping: current_turn just rewound to 1, so
+	# a stale entry from the previous battle's turn 1 would read as a live skip.
+	clear_turn_tick_state()
+
 	# Reset BattleEffectsManager
 	if BattleEffectsManager:
 		BattleEffectsManager.start_battle()  # This resets battle state

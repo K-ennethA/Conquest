@@ -78,6 +78,20 @@ func act_for_turn_system(ts: TurnSystemBase) -> bool:
 
 	var unit := _next_actable_ai_unit(ts, player)
 	if unit == null:
+		# STUN STALL GUARD. A stunned unit is skipped by the turn system but stays in
+		# the turn order (that is what lets its statuses tick and the stun expire).
+		# Under Speed First that unit is still `current_acting_unit`, so with nothing
+		# actable the AI would sit here forever and the match would wedge -- the
+		# human's End Turn button has no AI equivalent. Advance past it explicitly.
+		# Deliberately narrow: it fires only when a stun is actually the cause, and
+		# advancing always makes progress (the next unit / player takes over), so it
+		# cannot loop.
+		if _has_stun_skipped_unit(ts, player):
+			if verbose:
+				print("[BotAI] %s's units are stunned this turn -- advancing past the skip"
+					% player.get_display_name())
+			ts.advance_turn()
+			return true
 		# Rare once the AI acts every unit; only surface it when diagnosing.
 		if verbose:
 			print("[BotAI] %s's turn but no actable unit (active_units=%d)"
@@ -91,11 +105,34 @@ func act_for_turn_system(ts: TurnSystemBase) -> bool:
 
 
 ## First unit the AI player can still act with this turn.
+##
+## get_active_units() already filters stunned units out (both turn systems check
+## is_turn_skipped in can_unit_act), but the check is repeated here explicitly: this
+## is the one place that decides what the AI touches, and a stunned unit reaching
+## the action path would act during a turn it is supposed to be skipping.
 func _next_actable_ai_unit(ts: TurnSystemBase, player: Player) -> Unit:
 	for u in ts.get_active_units():
-		if u and is_instance_valid(u) and u.get_owner_player() == player:
-			return u
+		if u == null or not is_instance_valid(u):
+			continue
+		if u.get_owner_player() != player:
+			continue
+		if ts.has_method("is_turn_skipped") and ts.is_turn_skipped(u):
+			continue
+		return u
 	return null
+
+
+## True if any of [param player]'s registered units is having its turn skipped by a
+## stun right now -- i.e. "there is nothing to act BECAUSE of a stun".
+func _has_stun_skipped_unit(ts: TurnSystemBase, player: Player) -> bool:
+	if ts == null or player == null or not ts.has_method("is_turn_skipped"):
+		return false
+	for u in ts.registered_units:
+		if u == null or not is_instance_valid(u):
+			continue
+		if u.get_owner_player() == player and ts.is_turn_skipped(u):
+			return true
+	return false
 
 
 ## Relocate a unit AND announce it, mirroring the player's movement contract.

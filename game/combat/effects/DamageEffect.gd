@@ -29,14 +29,38 @@ func apply(ctx: MoveContext) -> void:
 				"missed": true,
 			})
 			continue
+		# Invulnerability short-circuits the ENTIRE damage pipeline, ahead of
+		# mitigation, both scaling steps and crit. It is not "very high defense" --
+		# it is a hard zero, and every later step has a maxi(1, ...) floor that would
+		# otherwise drag it back up to 1. Logged explicitly so the combat log can say
+		# the hit was NEGATED rather than silently reporting a 0 that reads like a bug.
+		if is_invulnerable(target):
+			_announce(ctx, target, 0)
+			ctx.log_event({
+				"effect": "damage",
+				"target": target,
+				"amount": 0,
+				"category": category,
+				"crit": false,
+				"negated": true,
+			})
+			continue
 		var dealt := _mitigate(raw, target)
-		# Predation bonus: a caster whose passives declare "damage_vs_restricted"
-		# hits harder into a target that cannot get away. Applied AFTER mitigation
-		# and BEFORE crit, so it scales what the defender actually takes and a crit
-		# then multiplies the already-boosted number.
+		# --- Damage order, after mitigation ---------------------------------
+		# 1. Predation bonus: a caster whose passives declare "damage_vs_restricted"
+		#    hits harder into a target that cannot get away.
+		# 2. Defender's own "damage_taken_scale" (Eldroot's Grovebound).
+		# 3. Crit.
+		# Attacker's bonus is applied BEFORE the defender's reduction so the two are
+		# commutative multipliers on the mitigated number and neither one silently
+		# dominates; crit stays LAST so it multiplies whatever actually got through,
+		# which is what the forecast's crit_damage column claims it does.
 		var restricted_scale: float = _restricted_scale(ctx, target)
 		if restricted_scale > 1.0:
 			dealt = maxi(1, int(round(float(dealt) * restricted_scale)))
+		var taken_scale: float = damage_taken_scale_for(target, ctx.board)
+		if not is_equal_approx(taken_scale, 1.0):
+			dealt = maxi(1, int(round(float(dealt) * taken_scale)))
 		var crit: bool = outcome.get("crit", false)
 		if crit:
 			dealt = maxi(1, int(round(dealt * CombatTypes.CRIT_MULTIPLIER)))
@@ -142,6 +166,79 @@ static func _restricted_modifier_of(caster, board) -> float:
 		return 0.0
 	var modifiers: Dictionary = system.passive_modifiers(caster, board)
 	return float(modifiers.get("damage_vs_restricted", 0.0))
+
+
+# --- Defender-side damage reduction -----------------------------------------
+#
+# The mirror image of the predation bonus above. That one reads the ATTACKER's
+# passives; nothing let a DEFENDER's passives change what it TAKES, which is what
+# "boosted defenses while standing in my grove" needs -- and which a plain defense
+# stat modifier cannot express, because defense is subtractive and a fortress boss
+# needs the reduction to hold up against big hits too.
+#
+# Same mechanism, same vocabulary: a PASSIVE AbilityResource on the DEFENDER
+# contributes `rule_modifiers = { "damage_taken_scale": 0.75 }` (= takes 25% less)
+# and AbilitySystem merges it exactly like every other rule modifier.
+#
+# CAVEAT ON MERGING: AbilitySystem._merge_modifiers SUMS numeric keys, so two
+# passives each declaring 0.75 merge to 1.5 -- i.e. they would AMPLIFY damage, not
+# stack their reductions. That is inherent to the shared merge (it is built for
+# additive quantities like extra_movement), so the key is documented as
+# author-at-most-one-per-unit. The value is floored at 0 here so a mis-authored
+# negative can never flip damage into healing.
+
+
+## Multiplier the TARGET's own passives apply to incoming damage: 1.0 normally,
+## below 1.0 for a damage reduction, above 1.0 for a vulnerability.
+##
+## Static and addressed by TARGET/BOARD (not by MoveContext) for exactly the same
+## reason as [method restricted_scale_for]: [method MoveExecutor.preview_vs] has no
+## context, and the forecast must never disagree with the hit. Deterministic -- it
+## depends only on the defender's current state -- so previewing it is honest
+## information, not an exploit.
+static func damage_taken_scale_for(target, board = null) -> float:
+	if target == null:
+		return 1.0
+	var system = null
+	# A live Unit exposes its component; a test mock may BE the ability system.
+	if target.has_method("get_ability_system"):
+		system = target.get_ability_system()
+	elif target.has_method("passive_modifiers"):
+		system = target
+	if system == null or not system.has_method("passive_modifiers"):
+		return 1.0
+	var modifiers: Dictionary = system.passive_modifiers(target, board)
+	if not modifiers.has("damage_taken_scale"):
+		return 1.0
+	return maxf(0.0, float(modifiers["damage_taken_scale"]))
+
+
+## True while [param target] takes NO damage at all.
+##
+## Sourced from the "invulnerable" RULE FLAG, so it is a timed [StatusCondition]
+## (Eldroot's Heartwood Guard grants `guarded`) rather than a stat -- the same
+## queried-not-applied mechanism as "immobilized". A PASSIVE ability may also
+## declare it as a boolean rule modifier. Duck-typed and independently optional at
+## every step, so a mock exposing none of the accessors is simply never invulnerable.
+static func is_invulnerable(target) -> bool:
+	if target == null:
+		return false
+	if target.has_method("is_invulnerable") and bool(target.is_invulnerable()):
+		return true
+	if target.has_method("has_status_rule_flag") and bool(target.has_status_rule_flag(&"invulnerable")):
+		return true
+	if target.has_method("get_status_controller"):
+		var controller = target.get_status_controller()
+		if controller != null and controller.has_method("has_rule_flag") \
+			and bool(controller.has_rule_flag(&"invulnerable")):
+			return true
+	if target.has_method("get_ability_system"):
+		var system = target.get_ability_system()
+		if system != null and system.has_method("passive_modifiers"):
+			var modifiers: Dictionary = system.passive_modifiers(target, null)
+			if bool(modifiers.get("invulnerable", false)):
+				return true
+	return false
 
 
 ## Is [param target] movement-restricted right now?

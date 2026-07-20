@@ -225,8 +225,13 @@ func _ranked_attacks(actor, origin: Vector2i, moveset: Array, hostiles: Array, b
 		for target in hostiles:
 			var tcell: Vector2i = board.cell_of(target)
 			# Pass the actor so the AI plans against its own EFFECTIVE reach
-			# (Ingrained and the like), not the authored pattern alone.
-			if not move.can_aim_at(origin, tcell, actor):
+			# (Ingrained and the like), not the authored pattern alone, and the
+			# board so a move whose aim constraints the AI cannot satisfy by aiming
+			# AT the target (a leap wants an empty cell BESIDE it) is skipped during
+			# planning instead of being chosen and then rejected by the executor,
+			# wasting the turn. A move that declares no board constraints resolves
+			# here exactly as it did before.
+			if not move.can_target(origin, tcell, actor, board):
 				continue
 			var estimate := _estimate_damage(move, actor, target)
 			if estimate <= 0:
@@ -276,7 +281,8 @@ func _ranked_attacks_from_cells(actor, origin: Vector2i, stand_cells: Array, mov
 			var dest_cost := 1 << 30
 			var found := false
 			for c in stand_cells:
-				if not move.can_aim_at(c, tcell, actor):
+				# Board-aware, exactly as in _ranked_attacks above.
+				if not move.can_target(c, tcell, actor, board):
 					continue
 				var cost := _manhattan(origin, c)
 				if not found or cost < dest_cost or (cost == dest_cost and _cell_less(c, dest_cell)):

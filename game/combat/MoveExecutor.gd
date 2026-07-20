@@ -48,7 +48,17 @@ static func execute(move: MoveResource, caster, board, aim_cell: Vector2i, rng: 
 ## Non-mutating combat forecast of [param move] from [param caster] against
 ## [param target] -- what the FE-style forecast panel shows. Never rolls RNG.
 ## Returns { hit_pct, crit_pct, damage, crit_damage, target_hp, remaining, lethal }.
-static func preview_vs(move: MoveResource, caster, target) -> Dictionary:
+##
+## [param board] is optional and trailing, so every existing call site is
+## unaffected: omitted, it resolves to the live board exactly as before. It exists
+## because a passive that changes damage may be gated on a CONDITION that needs a
+## board to answer -- Eldroot's Grovebound only reduces damage while it stands on
+## forest. Without a board those conditions fail closed, and the forecast would
+## quietly under-report the boss's toughness while resolution applied it. Callers
+## holding a board (and tests using a mock one) should pass it.
+static func preview_vs(move: MoveResource, caster, target, board = null) -> Dictionary:
+	if board == null:
+		board = _live_board()
 	var hit_pct := 100.0
 	var crit_pct := 0.0
 	var dmg := 0
@@ -59,7 +69,7 @@ static func preview_vs(move: MoveResource, caster, target) -> Dictionary:
 		crit_pct = clampf(move.crit_chance * 100.0 + float(_stat(caster, "crit")), 0.0, 100.0)
 		for effect in move.effects:
 			if effect is DamageEffect:
-				dmg += _preview_damage(effect, caster, target)
+				dmg += _preview_damage(effect, caster, target, board)
 	var hp := _hp(target)
 	return {
 		"hit_pct": hit_pct,
@@ -72,7 +82,13 @@ static func preview_vs(move: MoveResource, caster, target) -> Dictionary:
 	}
 
 
-static func _preview_damage(effect: DamageEffect, caster, target) -> int:
+static func _preview_damage(effect: DamageEffect, caster, target, board = null) -> int:
+	# An invulnerable defender takes nothing, so the forecast must SAY nothing --
+	# short-circuited here exactly as DamageEffect.apply() short-circuits, ahead of
+	# mitigation and every scaling step. Showing a mitigated number against a target
+	# that will take 0 is the forecast telling a straight lie.
+	if DamageEffect.is_invulnerable(target):
+		return 0
 	var bonus := 0
 	if effect.scaling_stat != "":
 		bonus = int(round(_stat(caster, effect.scaling_stat) * effect.scale))
@@ -96,9 +112,17 @@ static func _preview_damage(effect: DamageEffect, caster, target) -> int:
 	# Routed through DamageEffect's own helper (rather than reimplemented) so the
 	# preview and the actual resolution cannot drift apart. Applied after mitigation
 	# and before crit, matching DamageEffect.apply() exactly.
-	var scale: float = DamageEffect.restricted_scale_for(caster, target, _live_board())
+	var scale: float = DamageEffect.restricted_scale_for(caster, target, board)
 	if scale > 1.0:
 		mitigated = maxi(1, roundi(float(mitigated) * scale))
+
+	# The DEFENDER's own reduction (e.g. Eldroot's Grovebound while it stands in the
+	# grove). Applied after the attacker's bonus and before crit, matching the order
+	# in DamageEffect.apply() step for step, and routed through the same shared
+	# helper so the two cannot drift.
+	var taken: float = DamageEffect.damage_taken_scale_for(target, board)
+	if not is_equal_approx(taken, 1.0):
+		mitigated = maxi(1, roundi(float(mitigated) * taken))
 	return mitigated
 
 

@@ -156,6 +156,30 @@ func resolve_cells(origin: Vector2i, aim: Vector2i) -> Array[Vector2i]:
 			var dir := _cardinal_dir(origin, aim)
 			for step in range(0, maxi(area_size, 1)):
 				cells.append(aim + dir * step)
+		CombatTypes.AreaShape.ARC:
+			# A 3-cell sweep across the face of the caster it is aimed at: the aimed
+			# cell plus its two neighbours PERPENDICULAR to the caster->aim heading.
+			# Aim north and it covers the three cells along the north face; aim east
+			# and it covers the three down the east face.
+			#
+			# WHY AIM-DERIVED: units in this game have no facing, so there is nothing
+			# else to ask which way "in front" points. Deriving it from the aim gives
+			# a directional attack with no facing system to build, own, sync over the
+			# network, or explain -- and the player already chooses the aim, so the
+			# ordinary targeting UI IS the choice of which face to sweep.
+			#
+			# DIAGONAL AIMS: _cardinal_dir collapses the heading to its DOMINANT axis
+			# (ties favour X), exactly as LINE already does, so a diagonal aim sweeps
+			# the nearer clean face rather than producing a staircase of cells. Sharing
+			# LINE's rule matters more than any bespoke diagonal handling: two
+			# direction-derived shapes that disagreed about what a diagonal means would
+			# be indefensible to a player and a standing bug source. Note this is the
+			# heading only -- the arc is still centred on the cell actually aimed at.
+			var facing := _cardinal_dir(origin, aim)
+			var flank := Vector2i(-facing.y, facing.x)  # 90-degree rotation
+			cells.append(aim)
+			cells.append(aim + flank)
+			cells.append(aim - flank)
 	if not affects_caster_tile:
 		cells.erase(origin)
 	return cells

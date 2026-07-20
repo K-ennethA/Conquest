@@ -194,6 +194,60 @@ func reset_all_unit_actions() -> void:
 # value, so calling the helpers more than once for the same turn is harmless.
 var _last_tick_turn: Dictionary = {}
 
+# --- Stun (skip-a-turn) bookkeeping -----------------------------------------
+#
+# unit -> the `current_turn` value on which that unit's turn was skipped by a
+# "stunned" rule flag. Both turn systems consult it from can_unit_act(), so the
+# skip lands in get_active_units(), in Traditional's completion check and in the
+# AI driver from ONE place.
+#
+# WHY A LATCH AND NOT A LIVE QUERY: this is the whole trick, and getting it wrong
+# is a permanent unit lockout. A 1-turn status is decremented and EXPIRED by the
+# very tick that opens the unit's turn (StatusController.tick_all decrements then
+# expires at 0), so a can_unit_act() that asked "are you stunned right now?" would
+# always be asking AFTER the flag had already gone -- the stun would never skip
+# anything at all. So the flag is sampled at the top of the unit's turn, BEFORE
+# statuses tick, and remembered for the rest of that turn.
+#
+# The mirror-image failure is worse and is the one worth pinning in tests: if a
+# stunned unit were instead dropped from the turn order (or its tick skipped), its
+# status would never tick, the stun would never expire, and the unit would be
+# locked out FOREVER. Hence a stunned unit still starts its turn and still ticks
+# everything -- it simply cannot act during it.
+var _stun_skipped_turn: Dictionary = {}
+
+## True if [param unit]'s turn is being skipped by a stun THIS turn. Consulted by
+## both turn systems' can_unit_act() and by the AI driver.
+func is_turn_skipped(unit) -> bool:
+	if unit == null:
+		return false
+	return int(_stun_skipped_turn.get(unit, -1)) == current_turn
+
+## Forget all per-turn tick / stun-skip bookkeeping. Called by the derived
+## systems' reset_turn_system(), which rewinds current_turn to 1 -- without this a
+## stale entry recorded on the old turn 1 would read as a live skip after the reset.
+func clear_turn_tick_state() -> void:
+	_last_tick_turn.clear()
+	_stun_skipped_turn.clear()
+
+## True if any active status on [param unit] sets the "stunned" rule flag.
+## Duck-typed and independently optional at every step, mirroring how
+## DamageEffect probes for "immobilized", so a mock exposing none of the
+## accessors is simply never stunned.
+func _has_stun_flag(unit) -> bool:
+	if unit == null:
+		return false
+	if unit.has_method("is_stunned") and bool(unit.is_stunned()):
+		return true
+	if unit.has_method("has_status_rule_flag") and bool(unit.has_status_rule_flag(&"stunned")):
+		return true
+	if unit.has_method("get_status_controller"):
+		var controller = unit.get_status_controller()
+		if controller != null and controller.has_method("has_rule_flag") \
+			and bool(controller.has_rule_flag(&"stunned")):
+			return true
+	return false
+
 func _tick_unit_turn_start(unit) -> void:
 	"""Advance a single unit's move cooldowns and status conditions, then fire its
 	ON_TURN_START abilities.
@@ -208,6 +262,15 @@ func _tick_unit_turn_start(unit) -> void:
 	if _last_tick_turn.get(unit, -1) == current_turn:
 		return
 	_last_tick_turn[unit] = current_turn
+
+	# Sample "stunned" FIRST, ahead of every tick below. The status ticks that
+	# follow are what EXPIRE the stun, so by the time they have run the flag is
+	# gone; latching it here is what makes the skip land on this turn while still
+	# letting the stun run out (see the _stun_skipped_turn docs above).
+	if _has_stun_flag(unit):
+		_stun_skipped_turn[unit] = current_turn
+		var who: String = unit.get_display_name() if unit.has_method("get_display_name") else str(unit)
+		print("Turn System: " + who + " is stunned and skips this turn")
 
 	# Timed STAT modifiers expire here. Unit.process_turn_start() ->
 	# UnitStats.process_modifier_durations() was called by nothing in the live game
