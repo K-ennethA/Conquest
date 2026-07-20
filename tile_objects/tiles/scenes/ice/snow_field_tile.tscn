@@ -1,0 +1,75 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
+[ext_resource type="Resource" path="res://game/tiles/resources/ice/snow_field.tres" id="2_res"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="SphereMesh" id="SphereMesh_mound"]
+radius = 1.0
+height = 2.0
+radial_segments = 10
+rings = 4
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_slab"]
+albedo_color = Color(0.9, 0.93, 0.98, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mound"]
+albedo_color = Color(0.96, 0.97, 1, 1)
+roughness = 0.9
+
+[node name="SnowFieldTile" type="Node3D"]
+script = ExtResource("1_tile")
+tile_resource = ExtResource("2_res")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_base")
+material_override = SubResource("StandardMaterial3D_slab")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+shape = SubResource("BoxShape3D_base")
+
+[node name="SnowVisual" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+
+[node name="Mound1" type="MeshInstance3D" parent="SnowVisual"]
+transform = Transform3D(0.4243, 0, -0.2449, 0, 0.1, 0, 0.3674, 0, 0.2828, -0.4, 0.026, -0.42)
+mesh = SubResource("SphereMesh_mound")
+material_override = SubResource("StandardMaterial3D_mound")
+
+[node name="Mound2" type="MeshInstance3D" parent="SnowVisual"]
+transform = Transform3D(0.3021, 0, 0.2536, 0, 0.08, 0, -0.3804, 0, 0.4532, 0.42, 0.021, -0.52)
+mesh = SubResource("SphereMesh_mound")
+material_override = SubResource("StandardMaterial3D_mound")
+
+[node name="Mound3" type="MeshInstance3D" parent="SnowVisual"]
+transform = Transform3D(0.3, 0, -0.5196, 0, 0.12, 0, 0.3118, 0, 0.18, 0.56, 0.031, 0.36)
+mesh = SubResource("SphereMesh_mound")
+material_override = SubResource("StandardMaterial3D_mound")
+
+[node name="Mound4" type="MeshInstance3D" parent="SnowVisual"]
+transform = Transform3D(0.4436, 0, 0.1188, 0, 0.07, 0, -0.2772, 0, 0.1902, -0.56, 0.018, 0.5)
+mesh = SubResource("SphereMesh_mound")
+material_override = SubResource("StandardMaterial3D_mound")
+
+[node name="Mound5" type="MeshInstance3D" parent="SnowVisual"]
+transform = Transform3D(0.1436, 0, -0.3945, 0, 0.09, 0, 0.5638, 0, 0.2052, 0.04, 0.024, 0.02)
+mesh = SubResource("SphereMesh_mound")
+material_override = SubResource("StandardMaterial3D_mound")
+
+[node name="Mound6" type="MeshInstance3D" parent="SnowVisual"]
+transform = Transform3D(0.2188, 0, 0.3789, 0, 0.06, 0, -0.5684, 0, 0.3281, 0.68, 0.016, -0.08)
+mesh = SubResource("SphereMesh_mound")
+material_override = SubResource("StandardMaterial3D_mound")
+
+[node name="Mound7" type="MeshInstance3D" parent="SnowVisual"]
+transform = Transform3D(0.3801, 0, -0.1384, 0, 0.085, 0, 0.4151, 0, 0.1267, -0.14, 0.022, 0.7)
+mesh = SubResource("SphereMesh_mound")
+material_override = SubResource("StandardMaterial3D_mound")

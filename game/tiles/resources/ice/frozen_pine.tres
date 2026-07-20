@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="TileResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/tiles/resources/TileResource.gd" id="1_tres"]
+
+[resource]
+script = ExtResource("1_tres")
+tile_name = "Frozen Pine"
+tile_type = 3
+description = "A conifer bowed under a winter's worth of snow. Too dense to push through and too tall to see past, but solid cover for anyone behind it."
+base_movement_cost = 1
+is_passable = false
+blocks_line_of_sight = true
+material_style = 0
+base_color = Color(0.16, 0.28, 0.22, 1)
+emission_enabled = false
+emission_color = Color(0, 0, 0, 1)
+metallic = 0.0
+roughness = 1.0
+texture_path = ""
+model_path = "res://tile_objects/tiles/scenes/ice/frozen_pine_tile.tscn"
+has_default_effects = false
+default_effects = []
+provides_cover = true
+cover_bonus = 2
+elevation = 0
+special_properties = Array[String](["tundra", "wall"])
+rarity = "Common"
+generation_weight = 0.8

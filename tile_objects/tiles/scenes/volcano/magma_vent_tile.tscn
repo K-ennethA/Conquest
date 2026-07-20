@@ -1,0 +1,92 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
+[ext_resource type="Resource" path="res://game/tiles/resources/volcano/magma_vent.tres" id="2_res"]
+[ext_resource type="Material" uid="uid://c0burntile0001" path="res://tile_objects/tiles/materials/stylized_burn_material.tres" id="3_burn"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxMesh" id="BoxMesh_fissure"]
+size = Vector3(0.7, 0.04, 0.09)
+
+[sub_resource type="SphereMesh" id="SphereMesh_rock"]
+radius = 1.0
+height = 2.0
+radial_segments = 6
+rings = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_glow"]
+albedo_color = Color(1, 0.45, 0.08, 1)
+roughness = 0.5
+emission_enabled = true
+emission = Color(1, 0.42, 0.06, 1)
+emission_energy_multiplier = 3.5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rock"]
+albedo_color = Color(0.16, 0.13, 0.12, 1)
+roughness = 0.95
+
+[node name="MagmaVentTile" type="Node3D"]
+script = ExtResource("1_tile")
+tile_resource = ExtResource("2_res")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_base")
+material_override = ExtResource("3_burn")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+shape = SubResource("BoxShape3D_base")
+
+[node name="VentVisual" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+
+[node name="Fissure1" type="MeshInstance3D" parent="VentVisual"]
+transform = Transform3D(0.9397, 0, -0.342, 0, 1, 0, 0.342, 0, 0.9397, -0.32, 0.021, -0.36)
+mesh = SubResource("BoxMesh_fissure")
+material_override = SubResource("StandardMaterial3D_glow")
+
+[node name="Fissure2" type="MeshInstance3D" parent="VentVisual"]
+transform = Transform3D(0.4924, 0, 0.618, 0, 1, 0, -0.618, 0, 0.4924, 0.35, 0.019, 0.14)
+mesh = SubResource("BoxMesh_fissure")
+material_override = SubResource("StandardMaterial3D_glow")
+
+[node name="Fissure3" type="MeshInstance3D" parent="VentVisual"]
+transform = Transform3D(-0.1736, 0, -0.9848, 0, 1, 0, 0.9848, 0, -0.1736, 0.12, 0.023, 0.6)
+mesh = SubResource("BoxMesh_fissure")
+material_override = SubResource("StandardMaterial3D_glow")
+
+[node name="Fissure4" type="MeshInstance3D" parent="VentVisual"]
+transform = Transform3D(0.7314, 0, 0.4132, 0, 1, 0, -0.5509, 0, 0.5486, -0.5, 0.018, 0.48)
+mesh = SubResource("BoxMesh_fissure")
+material_override = SubResource("StandardMaterial3D_glow")
+
+[node name="Ember1" type="MeshInstance3D" parent="VentVisual"]
+transform = Transform3D(0.06, 0, 0, 0, 0.04, 0, 0, 0, 0.06, 0.62, 0.045, -0.55)
+mesh = SubResource("SphereMesh_rock")
+material_override = SubResource("StandardMaterial3D_glow")
+
+[node name="Ember2" type="MeshInstance3D" parent="VentVisual"]
+transform = Transform3D(0.045, 0, 0, 0, 0.03, 0, 0, 0, 0.045, -0.68, 0.038, -0.1)
+mesh = SubResource("SphereMesh_rock")
+material_override = SubResource("StandardMaterial3D_glow")
+
+[node name="Rock1" type="MeshInstance3D" parent="VentVisual"]
+transform = Transform3D(0.2078, 0, -0.1199, 0, 0.09, 0, 0.1799, 0, 0.1385, -0.18, 0.03, -0.66)
+mesh = SubResource("SphereMesh_rock")
+material_override = SubResource("StandardMaterial3D_rock")
+
+[node name="Rock2" type="MeshInstance3D" parent="VentVisual"]
+transform = Transform3D(0.1414, 0, 0.1414, 0, 0.07, 0, -0.1697, 0, 0.1697, 0.66, 0.024, 0.52)
+mesh = SubResource("SphereMesh_rock")
+material_override = SubResource("StandardMaterial3D_rock")
+
+[node name="Rock3" type="MeshInstance3D" parent="VentVisual"]
+transform = Transform3D(0.1039, 0, -0.18, 0, 0.11, 0, 0.216, 0, 0.1247, -0.05, 0.036, -0.02)
+mesh = SubResource("SphereMesh_rock")
+material_override = SubResource("StandardMaterial3D_rock")

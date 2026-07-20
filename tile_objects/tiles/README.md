@@ -10,15 +10,44 @@ tile_objects/tiles/
 ├── tile.gd / tile.tscn      Base tile (BoxMesh + collision). All tiles build on this.
 ├── shaders/                 Shader SOURCE (.gdshader) + noise_lib.gdshaderinc (shared helpers)
 ├── materials/               Reusable ShaderMaterial PRESETS (.tres) — the "brushes"
-├── scenes/                  Tile scenes with extra geometry (e.g. tree_tile.tscn)
+├── scenes/<biome>/          Tile scenes with extra geometry, grouped by biome
 └── assets/                  Misc tile data (tile_map.tres)
 ```
 
 Related data lives with the rest of the game (kept where the Tile Creator plugin writes):
 
 ```
-game/tiles/resources/        TileResource data (.tres) incl. tree.tres  ← plugin output dir
+game/tiles/resources/<biome>/   TileResource data (.tres)   ← plugin output dir
+game/tiles/effects/resources/   TileEffectResource data (.tres)
 ```
+
+## Biome folders
+
+Tiles are grouped by biome, and a biome is **two mirrored folders** — nothing else:
+
+```
+game/tiles/resources/<biome>/       the TileResource .tres  (gameplay + look)
+tile_objects/tiles/scenes/<biome>/  the .tscn geometry it points at
+```
+
+Current biomes: `common/`, `forest/`, `volcano/`, `ice/`.
+
+**Adding a biome needs no code change.** `TileCatalog` (`game/tiles/TileCatalog.gd`)
+walks `game/tiles/resources/` *recursively* and indexes every `.tres` that loads as a
+`TileResource`, so a brand-new folder shows up in the Map Creator palette and the Map
+Gallery on the next scan (call `TileCatalog.rescan()` after writing tiles at runtime).
+`TileCatalog.find()` also falls back to matching a tile's **file name** anywhere in the
+tree, so moving an asset between biome folders won't break maps that saved the old path.
+
+A tile renders through its **`model_path`** — the `TileResource` field that names the
+scene MapLoader instantiates for that cell (see *Getting it onto the board* below).
+A tile with an empty `model_path` falls back to the plain `tile.tscn` slab.
+
+Per-tile behaviour is authored the same way: effects live in
+`game/tiles/effects/resources/` and are attached by setting `has_default_effects = true`
+and listing them in `default_effects`. Effects are resolved **per tile**, not per tile
+type — e.g. `volcano/magma_vent.tres` → `scorching_vent.tres` (damage on turn start),
+`ice/ice_sheet.tres` → `slippery_ice.tres` (passive evasion penalty).
 
 ## The material-style system
 
@@ -31,7 +60,7 @@ per style means adjacent tiles form one seamless, batched field.
 1. **Tile Creator dock** → *Material Style* dropdown → Grass / Water / Burn. Fastest.
 2. **Assign a preset directly**: drop a `materials/*.tres` onto a MeshInstance3D's
    `material_override` (e.g. for a one-off decorative mesh).
-3. **Instance a scene**: `scenes/tree_tile.tscn` for tiles that need geometry.
+3. **Instance a scene**: `scenes/forest/tree_tile.tscn` for tiles that need geometry.
 
 ## Add a NEW flat material style (e.g. "SAND")
 1. `shaders/stylized_sand.gdshader` — `#include "res://tile_objects/tiles/shaders/noise_lib.gdshaderinc"`.
@@ -43,9 +72,11 @@ per style means adjacent tiles form one seamless, batched field.
 That's it — dock preview, save, and in-game all work automatically.
 
 ## Add a NEW geometry tile (like the tree)
-Copy `scenes/tree_tile.tscn`. Its base `MeshInstance3D` gets a `materials/*` preset; add
-child meshes for the geometry (use `materials/stylized_foliage_material.tres` for wind-swayed
-canopy). Give it a `TileResource` in `game/tiles/resources/` for gameplay (movement/cover/LOS).
+Copy `scenes/forest/tree_tile.tscn` into your biome's `scenes/<biome>/` folder. Its base
+`MeshInstance3D` gets a `materials/*` preset (or a small inline `StandardMaterial3D` for a
+FLAT tile); add child meshes for the geometry (use `materials/stylized_foliage_material.tres`
+for wind-swayed canopy). Give it a `TileResource` in `game/tiles/resources/<biome>/` for
+gameplay (movement/cover/LOS), and point that resource's `model_path` back at the scene.
 
 ### Getting it onto the board — `TileResource.model_path`
 
@@ -53,8 +84,8 @@ canopy). Give it a `TileResource` in `game/tiles/resources/` for gameplay (movem
 instantiates that scene for every cell using this terrain.
 
 ```
-# game/tiles/resources/tall_grass.tres
-model_path = "res://tile_objects/tiles/scenes/tall_grass_tile.tscn"
+# game/tiles/resources/forest/tall_grass.tres
+model_path = "res://tile_objects/tiles/scenes/forest/tall_grass_tile.tscn"
 ```
 
 `MapLoader._create_tile_at_position()` resolves the cell's `TileResource` first, then picks

@@ -1,0 +1,68 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
+[ext_resource type="Resource" path="res://game/tiles/resources/volcano/basalt_column.tres" id="2_res"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_column"]
+top_radius = 0.42
+bottom_radius = 0.48
+height = 1.6
+radial_segments = 6
+rings = 1
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_stub"]
+top_radius = 0.2
+bottom_radius = 0.24
+height = 0.6
+radial_segments = 6
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_slab"]
+albedo_color = Color(0.19, 0.17, 0.16, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_column"]
+albedo_color = Color(0.25, 0.22, 0.2, 1)
+roughness = 0.9
+
+[node name="BasaltColumnTile" type="Node3D"]
+script = ExtResource("1_tile")
+tile_resource = ExtResource("2_res")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_base")
+material_override = SubResource("StandardMaterial3D_slab")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+shape = SubResource("BoxShape3D_base")
+
+[node name="ColumnVisual" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+
+[node name="Column" type="MeshInstance3D" parent="ColumnVisual"]
+transform = Transform3D(0.9962, 0, 0.0872, 0, 1, 0, -0.0872, 0, 0.9962, -0.06, 0.8, 0.04)
+mesh = SubResource("CylinderMesh_column")
+material_override = SubResource("StandardMaterial3D_column")
+
+[node name="Stub1" type="MeshInstance3D" parent="ColumnVisual"]
+transform = Transform3D(0.7071, 0, 0.7071, 0, 1.15, 0, -0.7071, 0, 0.7071, 0.52, 0.345, -0.4)
+mesh = SubResource("CylinderMesh_stub")
+material_override = SubResource("StandardMaterial3D_column")
+
+[node name="Stub2" type="MeshInstance3D" parent="ColumnVisual"]
+transform = Transform3D(0.342, 0, -0.9397, 0, 0.8, 0, 0.9397, 0, 0.342, -0.5, 0.24, 0.52)
+mesh = SubResource("CylinderMesh_stub")
+material_override = SubResource("StandardMaterial3D_column")
+
+[node name="Stub3" type="MeshInstance3D" parent="ColumnVisual"]
+transform = Transform3D(0.866, 0, 0.5, 0, 0.55, 0, -0.5, 0, 0.866, 0.42, 0.165, 0.58)
+mesh = SubResource("CylinderMesh_stub")
+material_override = SubResource("StandardMaterial3D_column")
