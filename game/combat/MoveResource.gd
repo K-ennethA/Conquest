@@ -41,9 +41,37 @@ func is_valid() -> bool:
 	return targeting != null and not effects.is_empty()
 
 
+## Extra reach [param caster] currently grants to EVERY move it uses, read from
+## the unit's [code]"range_bonus"[/code] stat.
+##
+## Modelled as a stat (rather than, say, a status rule flag) precisely so a plain
+## [StatModifierEffect] can grant it with a duration and the existing modifier
+## bookkeeping expires it — no new timing code. Null-safe and duck-typed: a null
+## caster, or one with no [code]get_stat[/code] (mock boards, legacy units),
+## contributes 0.
+static func range_bonus_of(caster) -> int:
+	if caster == null or not caster.has_method("get_stat"):
+		return 0
+	return maxi(0, int(caster.get_stat("range_bonus")))
+
+
+## This move's reach for [param caster] — the authored
+## [member TargetingPattern.max_range] plus that caster's range bonus. THE single
+## helper every range question resolves through (validation in [MoveExecutor],
+## the player's targetable-cell highlight in [UnitActionsPanel], and the AI's
+## reachability tests in [BotController]) so they cannot drift apart.
+func effective_max_range(caster = null) -> int:
+	if targeting == null:
+		return 0
+	return targeting.effective_max_range(range_bonus_of(caster))
+
+
 ## True if a caster on [param origin] may legally aim this move at [param aim].
-func can_aim_at(origin: Vector2i, aim: Vector2i) -> bool:
-	return targeting != null and targeting.in_range(origin, aim)
+##
+## [param caster] is optional and trailing: omitted, this resolves exactly as it
+## always has (no bonus). Pass the acting unit to honour its range bonus.
+func can_aim_at(origin: Vector2i, aim: Vector2i, caster = null) -> bool:
+	return targeting != null and targeting.in_range(origin, aim, range_bonus_of(caster))
 
 
 ## Build a full description from the effect list (for tooltips).

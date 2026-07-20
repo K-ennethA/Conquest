@@ -1938,8 +1938,9 @@ func handle_move_target_selected(grid_pos: Vector3) -> void:
 	# Vector3(col, 0, row) grid coord -> Vector2i(col, row) board cell.
 	var aim := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
 
-	# Must be a legal aim point for this pattern (respects min/max range).
-	if not move.can_aim_at(origin, aim):
+	# Must be a legal aim point for this pattern (respects min/max range, plus the
+	# unit's own range bonus -- see MoveResource.effective_max_range).
+	if not move.can_aim_at(origin, aim, selected_unit):
 		print("Aim cell " + str(aim) + " out of range for " + move.display_name + " - keep targeting")
 		return  # stay in targeting mode
 
@@ -2076,7 +2077,7 @@ func _refresh_move_forecast(grid_pos: Vector3) -> void:
 	var aim := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
 
 	# Forecast only a legal aim that lands on an enemy the caster may attack.
-	if not move.can_aim_at(origin, aim):
+	if not move.can_aim_at(origin, aim, selected_unit):
 		combat_forecast_panel.hide_forecast()
 		return
 
@@ -2102,7 +2103,12 @@ func _first_enemy_at(board, cell: Vector2i):
 
 func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector2i]:
 	"""Every legal aim cell for [param move] from the unit's current board cell,
-	i.e. cells whose Manhattan distance is within [min_range, max_range]."""
+	i.e. cells whose Manhattan distance is within [min_range, effective max range].
+
+	The sweep bound and the per-cell test both come from the unit's EFFECTIVE reach
+	(MoveResource.effective_max_range / can_aim_at), so the highlighted cells are
+	exactly the cells MoveExecutor will accept -- a range bonus can never light up
+	a cell the executor then rejects, or hide one it would allow."""
 	var cells: Array[Vector2i] = []
 	if not selected_unit or move == null or move.targeting == null:
 		return cells
@@ -2112,12 +2118,11 @@ func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector2i]:
 		return cells
 
 	var origin: Vector2i = board.cell_of(selected_unit)
-	var pattern := move.targeting
-	var max_r: int = pattern.max_range
+	var max_r: int = move.effective_max_range(selected_unit)
 	for dx in range(-max_r, max_r + 1):
 		for dy in range(-max_r, max_r + 1):
 			var aim := origin + Vector2i(dx, dy)
-			if pattern.in_range(origin, aim):
+			if move.can_aim_at(origin, aim, selected_unit):
 				cells.append(aim)
 	return cells
 

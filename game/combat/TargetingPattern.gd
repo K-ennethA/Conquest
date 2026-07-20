@@ -22,10 +22,25 @@ class_name TargetingPattern
 @export var affects_caster_tile: bool = false
 
 
+## This pattern's reach once a caster's per-unit range bonus is folded in.
+##
+## [member max_range] is authored per MOVE and the resource is SHARED by every
+## unit that knows the move, so a per-unit bonus must never be written back into
+## it — it is added here, at resolution time, instead. Negative bonuses are
+## clamped away so a debuff can never shrink a move below its authored reach
+## (that would need its own, separately-tuned rule).
+func effective_max_range(range_bonus: int = 0) -> int:
+	return max_range + maxi(0, range_bonus)
+
+
 ## True if [param aim] is a legal aim point for a caster standing on [param origin].
-func in_range(origin: Vector2i, aim: Vector2i) -> bool:
+## [param range_bonus] is the caster's extra reach (0 = the authored pattern,
+## byte-identical to the behaviour before per-unit range bonuses existed).
+## [member min_range] is deliberately NOT shifted: a bonus extends how FAR a move
+## reaches, it does not open up the dead zone a long-range move has up close.
+func in_range(origin: Vector2i, aim: Vector2i, range_bonus: int = 0) -> bool:
 	var d := _manhattan(origin, aim)
-	return d >= min_range and d <= max_range
+	return d >= min_range and d <= effective_max_range(range_bonus)
 
 
 ## Expand the aim point into every cell the move touches.

@@ -78,6 +78,37 @@ func has_status(condition_id: StringName) -> bool:
 	return _find_by_id(condition_id) != null
 
 
+## True if ANY active condition sets [param flag_name] in its
+## [member StatusCondition.rule_flags] (values OR together, mirroring how
+## [method AbilitySystem.passive_modifiers] merges boolean rule modifiers).
+##
+## This is how a status expresses "your rules differ" without applying anything:
+## [method Unit.can_move] asks for [code]&"immobilized"[/code], and any other
+## system can ask for its own flag without this controller knowing about it.
+func has_rule_flag(flag_name: StringName) -> bool:
+	for condition in _active:
+		if condition == null or condition.rule_flags.is_empty():
+			continue
+		# Author the key as a plain String in the inspector; accept either form.
+		if bool(condition.rule_flags.get(String(flag_name), false)):
+			return true
+		if bool(condition.rule_flags.get(flag_name, false)):
+			return true
+	return false
+
+
+## Every rule flag currently set to true across the active conditions. Handy for
+## debug/UI ("why can't this unit move?"); the hot path is [method has_rule_flag].
+func active_rule_flags() -> Dictionary:
+	var merged: Dictionary = {}
+	for condition in _active:
+		if condition == null:
+			continue
+		for key in condition.rule_flags:
+			merged[key] = bool(merged.get(key, false)) or bool(condition.rule_flags[key])
+	return merged
+
+
 ## Remove every condition, firing each on_expire hook. [param board] is optional.
 func clear(board = null) -> void:
 	for condition in _active:

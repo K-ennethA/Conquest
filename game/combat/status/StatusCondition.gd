@@ -30,6 +30,15 @@ enum Stacking {
 @export var tick_effects: Array[MoveEffect] = []
 @export var stacking: Stacking = Stacking.REFRESH
 
+## Standing rules the condition imposes while it is active, queried rather than
+## applied — the status-side mirror of [member TileEffectResource.rule_flags].
+## A tick effect MUTATES the unit; a rule flag simply says the unit's rules are
+## different right now, e.g. [code]{ "immobilized": true }[/code] (cannot move).
+## Merged across every active condition by
+## [method StatusController.has_rule_flag]; empty (the default) is inert, so a
+## condition authored before this existed behaves exactly as it always did.
+@export var rule_flags: Dictionary = {}
+
 ## Remaining turns for a live instance. Seeded from [member duration_turns] when
 ## the condition is added to a [StatusController]; -1 means permanent.
 var turns_left: int = 0

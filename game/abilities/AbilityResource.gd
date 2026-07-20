@@ -18,6 +18,10 @@ class_name AbilityResource
 ##   "extra_actions"       (int)  additional actions per turn ("act/move twice")
 ##   "extra_movement"      (int)  additional movement range this turn
 ##   "ignore_terrain_cost" (bool) movement ignores per-tile move cost
+##   "damage_vs_restricted" (float) fractional bonus damage this unit deals to a
+##                          movement-restricted target (0.5 = +50%); read by
+##                          [DamageEffect] — see its _is_movement_restricted for
+##                          exactly what counts as restricted
 ## Integer keys sum across active abilities; bool keys OR together
 ## (see [method AbilitySystem.passive_modifiers]).
 ##

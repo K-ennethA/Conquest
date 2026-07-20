@@ -224,7 +224,9 @@ func _ranked_attacks(actor, origin: Vector2i, moveset: Array, hostiles: Array, b
 			continue
 		for target in hostiles:
 			var tcell: Vector2i = board.cell_of(target)
-			if not move.can_aim_at(origin, tcell):
+			# Pass the actor so the AI plans against its own EFFECTIVE reach
+			# (Ingrained and the like), not the authored pattern alone.
+			if not move.can_aim_at(origin, tcell, actor):
 				continue
 			var estimate := _estimate_damage(move, actor, target)
 			if estimate <= 0:
@@ -274,7 +276,7 @@ func _ranked_attacks_from_cells(actor, origin: Vector2i, stand_cells: Array, mov
 			var dest_cost := 1 << 30
 			var found := false
 			for c in stand_cells:
-				if not move.can_aim_at(c, tcell):
+				if not move.can_aim_at(c, tcell, actor):
 					continue
 				var cost := _manhattan(origin, c)
 				if not found or cost < dest_cost or (cost == dest_cost and _cell_less(c, dest_cell)):

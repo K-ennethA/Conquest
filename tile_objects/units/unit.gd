@@ -413,8 +413,26 @@ func can_act() -> bool:
 	return not has_acted_this_turn and is_alive()
 
 func can_move() -> bool:
-	"""Check if unit can move this turn (once, unless granted extra movement)"""
-	return is_alive() and not has_acted_this_turn and not has_moved_this_turn
+	"""Check if unit can move this turn (once, unless granted extra movement, and
+	never while an active status roots the unit in place)"""
+	return is_alive() and not has_acted_this_turn and not has_moved_this_turn \
+		and not is_immobilized()
+
+## True if any active [StatusCondition] on this unit sets [param flag_name] in its
+## rule_flags. Null-safe: a unit with no StatusController (legacy / non-character
+## units) never carries a flag, so every caller degrades to today's behaviour.
+func has_status_rule_flag(flag_name: StringName) -> bool:
+	# Deliberately untyped: get_status_controller() is declared -> Node, and calling
+	# has_rule_flag() on a Node-typed variable would not compile.
+	var controller = get_status_controller()
+	if controller == null or not controller.has_method("has_rule_flag"):
+		return false
+	return bool(controller.has_rule_flag(flag_name))
+
+## True while a status roots this unit in place (Ensnared, Ingrained, …). The one
+## place the "immobilized" flag name is spelled for movement purposes.
+func is_immobilized() -> bool:
+	return has_status_rule_flag(&"immobilized")
 
 # Validation methods
 func can_be_selected_by_player(player: Player) -> bool:

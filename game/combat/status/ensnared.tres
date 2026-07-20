@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="StatusCondition" format=3]
+
+[ext_resource type="Script" path="res://game/combat/status/StatusCondition.gd" id="1_status"]
+
+[resource]
+script = ExtResource("1_status")
+id = &"ensnared"
+display_name = "Ensnared"
+duration_turns = 1
+stacking = 0
+rule_flags = {
+"immobilized": true
+}

@@ -24,6 +24,12 @@ var current_magic: int
 var current_magic_defense: int
 var current_evasion: int  ## dodge chance (%), raised by moves/tiles/abilities
 var current_crit: int     ## bonus crit chance (%), raised by moves/abilities
+## Extra reach added to the max range of EVERY move this unit uses (see
+## [method MoveResource.effective_max_range]). Not a base stat -- it starts at 0
+## and is granted temporarily by a [StatModifierEffect], which is what lets a
+## move like Ingrained extend the whole kit for a few turns without touching the
+## shared, per-move TargetingPattern resources.
+var current_range_bonus: int
 
 # Temporary stat modifiers (buffs/debuffs)
 var _stat_modifiers: Dictionary = {}
@@ -62,6 +68,7 @@ func _initialize_current_stats() -> void:
 	current_magic_defense = 0
 	current_evasion = 0
 	current_crit = 0
+	current_range_bonus = 0
 
 # Stat getter methods
 func get_stat(stat_name: String) -> int:
@@ -89,6 +96,8 @@ func get_stat(stat_name: String) -> int:
 			return current_evasion
 		"crit":
 			return current_crit
+		"range_bonus":
+			return current_range_bonus
 		_:
 			# Arbitrary stat names are intentional in the data-driven design;
 			# an unknown stat is simply 0, not an error.
@@ -288,6 +297,8 @@ func _set_current_stat(stat_name: String, value: int) -> void:
 			current_actions = value
 		"range":
 			current_range = value
+		"range_bonus":
+			current_range_bonus = value
 
 func _modify_base_stat(stat_name: String, amount: int) -> void:
 	"""Modify base stat in resource (permanent change)"""

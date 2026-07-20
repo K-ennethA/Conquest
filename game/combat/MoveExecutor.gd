@@ -19,7 +19,9 @@ static func execute(move: MoveResource, caster, board, aim_cell: Vector2i, rng: 
 		return _fail("board_missing_cell_of")
 
 	var origin: Vector2i = board.cell_of(caster)
-	if not move.targeting.in_range(origin, aim_cell):
+	# Through can_aim_at (not targeting.in_range directly) so the caster's own
+	# range bonus is honoured -- the same helper the UI and the AI validate with.
+	if not move.can_aim_at(origin, aim_cell, caster):
 		return _fail("out_of_range")
 
 	var cells := move.targeting.resolve_cells(origin, aim_cell)
