@@ -21,8 +21,10 @@ class_name Tile
 
 # Visual components
 @onready var mesh_instance: MeshInstance3D = $MeshInstance3D
-var base_material: StandardMaterial3D
-var current_material: StandardMaterial3D
+# Typed as Material (not StandardMaterial3D) so a TileResource can drive the tile
+# with a ShaderMaterial style (e.g. animated grass) as well as a flat material.
+var base_material: Material
+var current_material: Material
 var highlight_material: StandardMaterial3D
 
 # Effect system integration
@@ -73,41 +75,43 @@ func _setup_base_materials() -> void:
 	if not mesh_instance:
 		return
 	
-	# Create base material based on tile type
-	base_material = StandardMaterial3D.new()
-	
+	# Create base material based on tile type. Built as a local StandardMaterial3D
+	# (base_material is typed Material so it can also hold a ShaderMaterial style).
+	var mat := StandardMaterial3D.new()
+
 	match tile_type:
 		TileType.NORMAL:
-			base_material.albedo_color = Color(0.8, 0.8, 0.8, 1.0)  # Light gray
+			mat.albedo_color = Color(0.8, 0.8, 0.8, 1.0)  # Light gray
 		TileType.DIFFICULT_TERRAIN:
-			base_material.albedo_color = Color(0.6, 0.4, 0.2, 1.0)  # Brown
+			mat.albedo_color = Color(0.6, 0.4, 0.2, 1.0)  # Brown
 		TileType.WATER:
-			base_material.albedo_color = Color(0.2, 0.4, 0.8, 1.0)  # Blue
-			base_material.metallic = 0.8
-			base_material.roughness = 0.1
+			mat.albedo_color = Color(0.2, 0.4, 0.8, 1.0)  # Blue
+			mat.metallic = 0.8
+			mat.roughness = 0.1
 		TileType.WALL:
-			base_material.albedo_color = Color(0.3, 0.3, 0.3, 1.0)  # Dark gray
+			mat.albedo_color = Color(0.3, 0.3, 0.3, 1.0)  # Dark gray
 		TileType.SPECIAL:
-			base_material.albedo_color = Color(0.8, 0.8, 0.2, 1.0)  # Yellow
+			mat.albedo_color = Color(0.8, 0.8, 0.2, 1.0)  # Yellow
 		TileType.LAVA:
-			base_material.albedo_color = Color(1.0, 0.2, 0.0, 1.0)  # Red
-			base_material.emission_enabled = true
-			base_material.emission = Color(1.0, 0.3, 0.0)
+			mat.albedo_color = Color(1.0, 0.2, 0.0, 1.0)  # Red
+			mat.emission_enabled = true
+			mat.emission = Color(1.0, 0.3, 0.0)
 		TileType.ICE:
-			base_material.albedo_color = Color(0.8, 0.9, 1.0, 0.9)  # Light blue
-			base_material.metallic = 0.9
-			base_material.roughness = 0.0
+			mat.albedo_color = Color(0.8, 0.9, 1.0, 0.9)  # Light blue
+			mat.metallic = 0.9
+			mat.roughness = 0.0
 		TileType.SWAMP:
-			base_material.albedo_color = Color(0.3, 0.5, 0.2, 1.0)  # Dark green
+			mat.albedo_color = Color(0.3, 0.5, 0.2, 1.0)  # Dark green
 		TileType.SACRED_GROUND:
-			base_material.albedo_color = Color(1.0, 1.0, 0.9, 1.0)  # Light gold
-			base_material.emission_enabled = true
-			base_material.emission = Color(0.9, 0.9, 0.7)
+			mat.albedo_color = Color(1.0, 1.0, 0.9, 1.0)  # Light gold
+			mat.emission_enabled = true
+			mat.emission = Color(0.9, 0.9, 0.7)
 		TileType.CORRUPTED:
-			base_material.albedo_color = Color(0.4, 0.2, 0.4, 1.0)  # Dark purple
-			base_material.emission_enabled = true
-			base_material.emission = Color(0.3, 0.1, 0.3)
-	
+			mat.albedo_color = Color(0.4, 0.2, 0.4, 1.0)  # Dark purple
+			mat.emission_enabled = true
+			mat.emission = Color(0.3, 0.1, 0.3)
+	base_material = mat
+
 	# Create highlight material (for selection/movement preview)
 	highlight_material = StandardMaterial3D.new()
 	highlight_material.albedo_color = Color(0.2, 0.8, 0.2, 0.7)  # Semi-transparent green
@@ -425,7 +429,14 @@ func _apply_effect_material(effect: TileEffect):
 		return
 	
 	var effect_material = base_material.duplicate()
-	
+
+	# Effect tints assume a StandardMaterial3D. If the base is a shader style
+	# (e.g. animated grass), overlay a fresh tinted StandardMaterial3D instead so
+	# the effect still reads without poking non-existent shader properties.
+	if not (effect_material is StandardMaterial3D):
+		effect_material = StandardMaterial3D.new()
+		effect_material.flags_transparent = true
+
 	match effect.effect_type:
 		TileEffect.EffectType.FIRE_DAMAGE:
 			effect_material.albedo_color = Color(1.0, 0.3, 0.1, 0.8)

@@ -9,4 +9,4 @@ tile_name = "Grass Plains"
 description = "Standard grassy terrain that's easy to traverse. No special effects."
 material_style = 1
 base_color = Color(0.4, 0.8, 0.3, 1)
-model_path = "res://tile_objects/tiles/scenes/grass_tile.tscn"
+model_path = "res://tile_objects/tiles/scenes/forest/grass_tile.tscn"

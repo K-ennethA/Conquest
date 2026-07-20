@@ -270,19 +270,24 @@ func _resolve_tile_resource(resource_path: String, tile_type: String) -> TileRes
 	built-in terrain families (grass/water/wall/lava). Returns null when nothing
 	matches, letting the caller fall back to the legacy set_tile_type() path.
 	"""
-	if not resource_path.is_empty() and ResourceLoader.exists(resource_path):
-		var res = load(resource_path)
-		if res is TileResource:
-			return res
+	# TileCatalog.find resolves the exact path, then falls back to the same file
+	# NAME elsewhere in the tree. Tile assets are grouped into biome folders
+	# (forest/, volcano/, ...), and a map stores its tiles as path STRINGS -- so
+	# without that fallback, reorganising assets would silently break every map
+	# (including user-authored ones shared between players) that referenced the
+	# old location.
+	var found := TileCatalog.find(resource_path)
+	if found != null:
+		return found
 
 	var type_to_resource := {
-		"NORMAL": "res://game/tiles/resources/grass_plains.tres",
-		"GRASS": "res://game/tiles/resources/grass_plains.tres",
-		"PLAINS": "res://game/tiles/resources/grass_plains.tres",
-		"WATER": "res://game/tiles/resources/deep_water.tres",
-		"WALL": "res://game/tiles/resources/stone_wall.tres",
-		"LAVA": "res://game/tiles/resources/molten_lava.tres",
-		"SACRED_GROUND": "res://game/tiles/resources/sacred_ground.tres",
+		"NORMAL": "res://game/tiles/resources/forest/grass_plains.tres",
+		"GRASS": "res://game/tiles/resources/forest/grass_plains.tres",
+		"PLAINS": "res://game/tiles/resources/forest/grass_plains.tres",
+		"WATER": "res://game/tiles/resources/common/deep_water.tres",
+		"WALL": "res://game/tiles/resources/common/stone_wall.tres",
+		"LAVA": "res://game/tiles/resources/volcano/molten_lava.tres",
+		"SACRED_GROUND": "res://game/tiles/resources/common/sacred_ground.tres",
 	}
 	var path: String = type_to_resource.get(String(tile_type).to_upper(), "")
 	if not path.is_empty() and ResourceLoader.exists(path):

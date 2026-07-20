@@ -6,7 +6,7 @@ extends GutTest
 # effects by type alone would give trees evasion and the meadow a defence buff
 # instead of healing.
 
-const TILE_DIR := "res://game/tiles/resources/%s.tres"
+const TILE_DIR := "res://game/tiles/resources/forest/%s.tres"
 
 
 func after_each() -> void:

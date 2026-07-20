@@ -423,47 +423,33 @@ func _load_tile_palette_entries() -> void:
 
 	var type_names: Array = Tile.TileType.keys()
 
-	if DirAccess.dir_exists_absolute(TILES_DIR):
-		var dir := DirAccess.open(TILES_DIR)
-		if dir:
-			var file_names: Array[String] = []
-			dir.list_dir_begin()
-			var file_name := dir.get_next()
-			while file_name != "":
-				if file_name.ends_with(".tres"):
-					file_names.append(file_name)
-				file_name = dir.get_next()
-			dir.list_dir_end()
+	# TileCatalog walks the whole tree, so tiles grouped into biome folders
+	# (forest/, volcano/, common/, ...) all show up without touching this code
+	# when a new theme is added. Already sorted, for stable palette ordering.
+	TileCatalog.rescan()
+	for resource_path in TileCatalog.all_paths():
+		var resource = load(resource_path)
+		if not (resource is TileResource):
+			continue
 
-			# Stable, readable ordering regardless of filesystem enumeration order.
-			file_names.sort()
+		var tile_resource := resource as TileResource
+		var type_index: int = int(tile_resource.tile_type)
+		if type_index < 0 or type_index >= type_names.size():
+			continue
 
-			for entry_name in file_names:
-				var resource_path: String = TILES_DIR + entry_name
-				if not ResourceLoader.exists(resource_path):
-					continue
-				var resource = load(resource_path)
-				if not (resource is TileResource):
-					continue
+		var type_name: String = str(type_names[type_index])
+		var display_name: String = tile_resource.tile_name
+		if display_name.is_empty():
+			display_name = type_name.replace("_", " ")
 
-				var tile_resource := resource as TileResource
-				var type_index: int = int(tile_resource.tile_type)
-				if type_index < 0 or type_index >= type_names.size():
-					continue
-
-				var type_name: String = str(type_names[type_index])
-				var display_name: String = tile_resource.tile_name
-				if display_name.is_empty():
-					display_name = type_name.replace("_", " ")
-
-				tile_palette_entries.append({
-					"type_name": type_name,
-					"resource_path": resource_path,
-					"color": tile_resource.base_color,
-					"display_name": display_name
-				})
-				# Last resource for a type wins; good enough for display purposes.
-				resource_tile_colors[type_name] = tile_resource.base_color
+		tile_palette_entries.append({
+			"type_name": type_name,
+			"resource_path": resource_path,
+			"color": tile_resource.base_color,
+			"display_name": display_name
+		})
+		# Last resource for a type wins; good enough for display purposes.
+		resource_tile_colors[type_name] = tile_resource.base_color
 
 	if not tile_palette_entries.is_empty():
 		return

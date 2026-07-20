@@ -15,6 +15,24 @@ class_name TileResource
 @export var blocks_line_of_sight: bool = false
 
 # Visual Properties
+
+## How the tile's surface is rendered.
+## FLAT  = classic solid-color StandardMaterial3D (uses the color/metallic/
+##         roughness/emission fields below) -- the original behaviour.
+## GRASS = shared animated stylized-grass ShaderMaterial. Every tile using a
+##         non-FLAT style shares ONE material instance, so they form a single
+##         seamless, batched field. Add future stylized shaders (water, lava...)
+##         to the enum and to MATERIAL_STYLE_SHADERS below.
+enum MaterialStyle { FLAT, GRASS, WATER, BURN }
+@export var material_style: MaterialStyle = MaterialStyle.FLAT
+
+## Maps a non-FLAT MaterialStyle to its ShaderMaterial resource.
+const MATERIAL_STYLE_SHADERS := {
+	MaterialStyle.GRASS: "res://tile_objects/tiles/materials/stylized_grass_material.tres",
+	MaterialStyle.WATER: "res://tile_objects/tiles/materials/stylized_water_material.tres",
+	MaterialStyle.BURN: "res://tile_objects/tiles/materials/stylized_burn_material.tres",
+}
+
 @export var base_color: Color = Color.WHITE
 @export var emission_enabled: bool = false
 @export var emission_color: Color = Color.BLACK
@@ -181,24 +199,39 @@ func validate_configuration() -> Dictionary:
 		"warnings": warnings
 	}
 
-func create_material() -> StandardMaterial3D:
-	"""Create material based on tile configuration"""
-	var material = StandardMaterial3D.new()
-	
+func create_material() -> Material:
+	"""Create the tile surface material based on tile configuration.
+
+	Non-FLAT styles (e.g. GRASS) return a SHARED ShaderMaterial so all tiles of
+	that style form one seamless, batched field. FLAT builds the classic
+	per-tile StandardMaterial3D from the color/metallic/roughness/emission fields.
+	"""
+	# Stylized shader styles: return the shared material instance (load() caches,
+	# so every grass tile references the same resource -- seamless + batched).
+	if material_style != MaterialStyle.FLAT and MATERIAL_STYLE_SHADERS.has(material_style):
+		var shader_path: String = MATERIAL_STYLE_SHADERS[material_style]
+		if ResourceLoader.exists(shader_path):
+			var shader_mat = load(shader_path)
+			if shader_mat is ShaderMaterial:
+				return shader_mat
+		push_warning("TileResource: material_style shader missing at " + shader_path + "; falling back to FLAT.")
+
+	var material := StandardMaterial3D.new()
+
 	material.albedo_color = base_color
 	material.metallic = metallic
 	material.roughness = roughness
-	
+
 	if emission_enabled:
 		material.emission_enabled = true
 		material.emission = emission_color
-	
+
 	# Load texture if specified
 	if not texture_path.is_empty() and ResourceLoader.exists(texture_path):
 		var texture = load(texture_path) as Texture2D
 		if texture:
 			material.albedo_texture = texture
-	
+
 	return material
 
 func export_to_json() -> String:
@@ -229,7 +262,8 @@ func export_to_json() -> String:
 			"metallic": metallic,
 			"roughness": roughness,
 			"texture_path": texture_path,
-			"model_path": model_path
+			"model_path": model_path,
+			"material_style": MaterialStyle.keys()[material_style]
 		},
 		"gameplay": {
 			"provides_cover": provides_cover,
@@ -299,6 +333,10 @@ static func import_from_json(json_string: String) -> TileResource:
 	resource.roughness = visual.get("roughness", 1.0)
 	resource.texture_path = visual.get("texture_path", "")
 	resource.model_path = visual.get("model_path", "")
+
+	var style_name = visual.get("material_style", "FLAT")
+	var style_idx = MaterialStyle.keys().find(style_name)
+	resource.material_style = style_idx if style_idx >= 0 else MaterialStyle.FLAT
 	
 	# Gameplay
 	var gameplay = data.get("gameplay", {})

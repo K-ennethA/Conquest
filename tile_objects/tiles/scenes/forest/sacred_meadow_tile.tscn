@@ -1,7 +1,7 @@
 [gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
-[ext_resource type="Resource" path="res://game/tiles/resources/sacred_meadow.tres" id="2_res"]
+[ext_resource type="Resource" path="res://game/tiles/resources/forest/sacred_meadow.tres" id="2_res"]
 [ext_resource type="Material" uid="uid://c0grasstile001" path="res://tile_objects/tiles/materials/stylized_grass_material.tres" id="3_grass"]
 [ext_resource type="Material" uid="uid://c0foliage00001" path="res://tile_objects/tiles/materials/stylized_foliage_material.tres" id="4_foliage"]
 

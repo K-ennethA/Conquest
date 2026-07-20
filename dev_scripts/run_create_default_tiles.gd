@@ -45,7 +45,7 @@ func _create_grass_tile():
 	grass_tile.rarity = "Common"
 	grass_tile.generation_weight = 1.0
 	
-	var result = ResourceSaver.save(grass_tile, "res://game/tiles/resources/grass_plains.tres")
+	var result = ResourceSaver.save(grass_tile, "res://game/tiles/resources/forest/grass_plains.tres")
 	if result == OK:
 		print("✓ Created: Grass Plains tile")
 	else:
@@ -85,7 +85,7 @@ func _create_fire_tile():
 	
 	fire_tile.default_effects = [fire_effect]
 	
-	var result = ResourceSaver.save(fire_tile, "res://game/tiles/resources/molten_lava.tres")
+	var result = ResourceSaver.save(fire_tile, "res://game/tiles/resources/volcano/molten_lava.tres")
 	if result == OK:
 		print("✓ Created: Molten Lava tile with 10 fire damage per turn")
 	else:
@@ -112,7 +112,7 @@ func _create_water_tile():
 	water_tile.rarity = "Common"
 	water_tile.generation_weight = 0.8
 	
-	var result = ResourceSaver.save(water_tile, "res://game/tiles/resources/deep_water.tres")
+	var result = ResourceSaver.save(water_tile, "res://game/tiles/resources/common/deep_water.tres")
 	if result == OK:
 		print("✓ Created: Deep Water tile")
 	else:
@@ -139,7 +139,7 @@ func _create_wall_tile():
 	wall_tile.rarity = "Common"
 	wall_tile.generation_weight = 0.5
 	
-	var result = ResourceSaver.save(wall_tile, "res://game/tiles/resources/stone_wall.tres")
+	var result = ResourceSaver.save(wall_tile, "res://game/tiles/resources/common/stone_wall.tres")
 	if result == OK:
 		print("✓ Created: Stone Wall tile")
 	else:
@@ -178,7 +178,7 @@ func _create_ice_tile():
 	
 	ice_tile.default_effects = [slow_effect]
 	
-	var result = ResourceSaver.save(ice_tile, "res://game/tiles/resources/frozen_ice.tres")
+	var result = ResourceSaver.save(ice_tile, "res://game/tiles/resources/common/frozen_ice.tres")
 	if result == OK:
 		print("✓ Created: Frozen Ice tile with slow effect")
 	else:

@@ -9,6 +9,7 @@ tile_name = "Deep Water"
 tile_type = 2
 description = "Deep water that slows movement but can be crossed by most units."
 base_movement_cost = 3
+material_style = 2
 base_color = Color(0.2, 0.4, 0.8, 1)
 metallic = 0.8
 roughness = 0.1

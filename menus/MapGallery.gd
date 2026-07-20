@@ -540,28 +540,12 @@ func _build_type_model_paths() -> void:
 		return
 	_type_model_paths_built = true
 
-	if not DirAccess.dir_exists_absolute(TILES_DIR):
-		return
-
-	var dir := DirAccess.open(TILES_DIR)
-	if not dir:
-		return
-
-	var file_names: Array[String] = []
-	dir.list_dir_begin()
-	var file_name := dir.get_next()
-	while file_name != "":
-		if file_name.ends_with(".tres"):
-			file_names.append(file_name)
-		file_name = dir.get_next()
-	dir.list_dir_end()
-
-	# Stable ordering, so which resource claims a shared type never varies by run.
-	file_names.sort()
-
+	# TileCatalog walks the whole tree (already sorted, so which resource claims a
+	# shared type never varies by run), which is what lets tiles live in biome
+	# folders -- forest/, volcano/, common/ -- without changing this code.
 	var type_names: Array = Tile.TileType.keys()
-	for entry_name in file_names:
-		var tile_resource := _load_tile_resource(TILES_DIR + entry_name)
+	for tile_path in TileCatalog.all_paths():
+		var tile_resource := _load_tile_resource(tile_path)
 		if not tile_resource or tile_resource.model_path.is_empty():
 			continue
 		var type_index: int = int(tile_resource.tile_type)

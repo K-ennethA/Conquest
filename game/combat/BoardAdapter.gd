@@ -64,15 +64,15 @@ var _tile_registry: Dictionary = {}   ## Vector2i -> TileResource; injected by C
 ## to swap a live tile to. Keyed by the canonical id (lowercased TileType name)
 ## plus friendly aliases so effects can request &"lava", &"water", etc.
 const _TILE_ID_TO_PATH := {
-	&"grass": "res://game/tiles/resources/grass_plains.tres",
-	&"plains": "res://game/tiles/resources/grass_plains.tres",
-	&"normal": "res://game/tiles/resources/grass_plains.tres",
-	&"water": "res://game/tiles/resources/deep_water.tres",
-	&"deep_water": "res://game/tiles/resources/deep_water.tres",
-	&"wall": "res://game/tiles/resources/stone_wall.tres",
-	&"stone_wall": "res://game/tiles/resources/stone_wall.tres",
-	&"lava": "res://game/tiles/resources/molten_lava.tres",
-	&"molten_lava": "res://game/tiles/resources/molten_lava.tres",
+	&"grass": "res://game/tiles/resources/forest/grass_plains.tres",
+	&"plains": "res://game/tiles/resources/forest/grass_plains.tres",
+	&"normal": "res://game/tiles/resources/forest/grass_plains.tres",
+	&"water": "res://game/tiles/resources/common/deep_water.tres",
+	&"deep_water": "res://game/tiles/resources/common/deep_water.tres",
+	&"wall": "res://game/tiles/resources/common/stone_wall.tres",
+	&"stone_wall": "res://game/tiles/resources/common/stone_wall.tres",
+	&"lava": "res://game/tiles/resources/volcano/molten_lava.tres",
+	&"molten_lava": "res://game/tiles/resources/volcano/molten_lava.tres",
 }
 
 

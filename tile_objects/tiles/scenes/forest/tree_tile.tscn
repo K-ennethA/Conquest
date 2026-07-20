@@ -1,7 +1,7 @@
 [gd_scene load_steps=10 format=3 uid="uid://c0treetile0001"]
 
 [ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
-[ext_resource type="Resource" uid="uid://c0treeres00001" path="res://game/tiles/resources/tree.tres" id="2_res"]
+[ext_resource type="Resource" uid="uid://c0treeres00001" path="res://game/tiles/resources/forest/tree.tres" id="2_res"]
 [ext_resource type="Material" uid="uid://c0grasstile001" path="res://tile_objects/tiles/materials/stylized_grass_material.tres" id="3_grass"]
 [ext_resource type="Material" uid="uid://c0foliage00001" path="res://tile_objects/tiles/materials/stylized_foliage_material.tres" id="4_foliage"]
 
