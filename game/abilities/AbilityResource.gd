@@ -28,13 +28,35 @@ class_name AbilityResource
 @export var display_name: String = "New Ability"
 @export_multiline var description: String = ""
 
+## Optional inspector art for ability lists / tooltips. Purely cosmetic.
+@export var icon: Texture2D
+
 @export var trigger: AbilityTrigger.Trigger = AbilityTrigger.Trigger.PASSIVE
-## Optional gate; null means unconditional (always met).
+## Optional gate; null means unconditional (always met). Compose several with
+## [AllCondition] / [AnyCondition] / [NotCondition].
 @export var condition: AbilityCondition
 ## Pipeline effects fired when the ability runs (see [method run_effects]).
 @export var effects: Array[MoveEffect] = []
 ## Action-economy tweaks read by the turn system (see class docs for the keys).
 @export var rule_modifiers: Dictionary = {}
+
+## Optional area the effects cover, exactly as a [MoveResource] uses one.
+## Null (the default) keeps the legacy self-targeted behaviour; set it to reach
+## allies in a radius, adjacent enemies, and so on (see [method run_effects]).
+@export var targeting: TargetingPattern
+
+## When true the effects are anchored on the unit that CAUSED the trigger — the
+## attacker for ON_DAMAGED, the victim for ON_ATTACK / ON_KILL — instead of on
+## this ability's own unit. No-ops when no triggering unit was supplied.
+@export var targets_triggering_unit: bool = false
+
+## Turns that must pass between activations (0 = every time it triggers).
+## Tracked per unit by [AbilitySystem], counted down by its
+## [method AbilitySystem.tick_cooldowns] — never stored on this shared resource.
+@export var cooldown: int = 0
+## Total activations allowed per battle (-1 = unlimited, 1 = once per battle).
+## Also tracked per unit by [AbilitySystem].
+@export var max_activations: int = -1
 
 
 ## True when this ability's condition currently holds for [param unit]. A null
@@ -45,37 +67,73 @@ func is_condition_met(unit, board) -> bool:
 	return condition.is_met(unit, board)
 
 
-## Apply every effect to [param unit] once, resolved through the shared effect
-## pipeline. Builds a minimal self-targeted [MoveContext] over the unit's own cell
-## — the same resolution path a move or a [StatusCondition] tick uses — so effects
-## like [HealEffect] / [StatModifierEffect] land on the unit itself. Returns the
-## accumulated event log. Does not check [member condition]; callers gate first
-## via [method is_condition_met] (as [AbilitySystem] does).
-func run_effects(unit, board) -> Array:
+## Apply every effect once, resolved through the shared effect pipeline — the
+## same resolution path a move or a [StatusCondition] tick uses, so effects like
+## [HealEffect] / [DamageEffect] / [StatModifierEffect] need no ability-specific
+## code. [param other] is the unit that caused the trigger (the attacker for
+## ON_DAMAGED, the victim for ON_ATTACK / ON_KILL), or null.
+##
+## The acting unit is ALWAYS the caster, so ALLY / ENEMY targeting stays relative
+## to it. What changes is the area:
+##   - no [member targeting] — exactly the anchor's own cell, as it has always
+##     been. With [member targets_triggering_unit] off this is the legacy
+##     self-buff behaviour, byte for byte.
+##   - a [member targeting] pattern — the pattern resolved from the acting unit's
+##     cell (the origin) toward the anchor cell (the aim), so an ability can heal
+##     allies in a radius, strike adjacent enemies, and so on.
+## The anchor is the acting unit itself, or [param other] when
+## [member targets_triggering_unit] is set (and nothing happens if there is none).
+##
+## Returns the accumulated event log. Does not check [member condition]; callers
+## gate first via [method is_condition_met] (as [AbilitySystem] does).
+func run_effects(unit, board, other = null) -> Array:
 	if unit == null or board == null or effects.is_empty():
 		return []
-	var cell := Vector2i.ZERO
-	if board.has_method("cell_of"):
-		cell = board.cell_of(unit)
-	var ctx := MoveContext.new(unit, board, _self_move(), cell, [cell] as Array[Vector2i])
+	var anchor = unit
+	if targets_triggering_unit:
+		if other == null:
+			return []  # nothing caused this trigger — nothing to affect
+		anchor = other
+	var origin := _cell_of(board, unit)
+	var aim: Vector2i = origin if anchor == unit else _cell_of(board, anchor)
+	var cells: Array[Vector2i] = [aim] as Array[Vector2i]
+	if targeting != null:
+		cells = targeting.resolve_cells(origin, aim)
+	var ctx := MoveContext.new(unit, board, _synthetic_move(), aim, cells)
 	for effect in effects:
 		if effect:
 			effect.apply(ctx)
 	return ctx.results
 
 
-## Synthetic self-targeted move used to route ability effects through a
-## [MoveContext]. SELF targeting + affects_caster_tile makes
-## [method MoveContext.gather_targets] return exactly the acting unit.
-func _self_move() -> MoveResource:
+## Synthetic move used to route ability effects through a [MoveContext] — it
+## carries the targeting pattern that decides WHICH units in the resolved cells
+## are gathered.
+##
+## Three cases, in order: an authored [member targeting] is used verbatim; else a
+## triggering-unit ability gets ANY_UNIT (the attacker/victim is gathered whatever
+## side it is on); else the historical SELF pattern, where SELF + affects_caster_tile
+## makes [method MoveContext.gather_targets] return exactly the acting unit.
+func _synthetic_move() -> MoveResource:
 	var m := MoveResource.new()
 	m.move_id = id if id != &"" else &"ability"
 	m.display_name = display_name
+	if targeting != null:
+		m.targeting = targeting
+		return m
 	var pattern := TargetingPattern.new()
-	pattern.target_kind = CombatTypes.TargetKind.SELF
+	pattern.target_kind = CombatTypes.TargetKind.ANY_UNIT if targets_triggering_unit else CombatTypes.TargetKind.SELF
 	pattern.min_range = 0
 	pattern.max_range = 0
 	pattern.area_shape = CombatTypes.AreaShape.SINGLE
 	pattern.affects_caster_tile = true
 	m.targeting = pattern
 	return m
+
+
+## The board cell [param who] stands on, or [code]Vector2i.ZERO[/code] when the
+## board cannot report one (mock boards in tests may omit the accessor).
+func _cell_of(board, who) -> Vector2i:
+	if board.has_method("cell_of"):
+		return board.cell_of(who)
+	return Vector2i.ZERO

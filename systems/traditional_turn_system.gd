@@ -153,7 +153,11 @@ func _end_player_turn(player: Player) -> void:
 		return
 	
 	is_turn_in_progress = false
-	
+
+	# Fire ON_TURN_END abilities for every unit on the side that just finished --
+	# the mirror of the _tick_all_units_turn_start call in _start_player_turn.
+	_tick_all_units_turn_end(get_units_for_player(player))
+
 	# Emit turn ended signal
 	turn_ended.emit(player)
 	

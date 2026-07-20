@@ -35,6 +35,7 @@ func apply(ctx: MoveContext) -> void:
 			dealt = maxi(1, int(round(dealt * CombatTypes.CRIT_MULTIPLIER)))
 		if target.has_method("take_damage"):
 			target.take_damage(dealt)
+		_announce(ctx, target, dealt)
 		ctx.log_event({
 			"effect": "damage",
 			"target": target,
@@ -48,6 +49,31 @@ func describe() -> String:
 	if description_override != "":
 		return description_override
 	return "Deal %d %s damage" % [power, CombatTypes.DamageCategory.keys()[category].to_lower()]
+
+
+## Announce one landed hit on the game-wide bus as
+## [code]damage_dealt(attacker, defender, damage)[/code].
+##
+## This is the single emit point for that signal, and it is what finally lights up
+## everything already listening for it — the hit flash and the attack/hit clips in
+## [UnitAnimator], and the ON_ATTACK / ON_DAMAGED ability triggers routed by
+## [AbilitySystem].
+##
+## Routed through [member MoveContext.event_bus] when a bus is injected, else the
+## [code]GameEvents[/code] autoload. Guarded end to end so a headless or mocked
+## context never errors: no bus, no such signal, or non-[Unit] participants (the
+## autoload's signal is typed, so mocks must not reach it) all simply no-op.
+static func _announce(ctx: MoveContext, target, dealt: int) -> void:
+	if ctx == null or target == null:
+		return
+	var bus = ctx.event_bus
+	if bus == null:
+		if not (ctx.caster is Unit and target is Unit):
+			return
+		bus = GameEvents
+	if bus == null or not bus.has_signal(&"damage_dealt"):
+		return
+	bus.emit_signal(&"damage_dealt", ctx.caster, target, dealt)
 
 
 func _mitigate(raw: int, target) -> int:

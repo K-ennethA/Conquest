@@ -228,15 +228,45 @@ func _tick_unit_turn_start(unit) -> void:
 	# on the side that just became active -- so an ON_TURN_START ability fires
 	# exactly once per unit per turn in either order. Effects need a board.
 	var ability_system = unit.get_ability_system() if unit.has_method("get_ability_system") else null
-	if ability_system != null and ability_system.has_method("trigger"):
-		var ability_board = CombatServices.board() if CombatServices else null
-		if ability_board != null:
-			ability_system.trigger(AbilityTrigger.Trigger.ON_TURN_START, unit, ability_board)
+	if ability_system != null:
+		# Ability cooldowns count down here, exactly like move cooldowns above and
+		# for the same reason: one tick per unit per turn, before anything gets the
+		# chance to fire. Needs no board.
+		if ability_system.has_method("tick_cooldowns"):
+			ability_system.tick_cooldowns()
+		if ability_system.has_method("trigger"):
+			var ability_board = CombatServices.board() if CombatServices else null
+			if ability_board != null:
+				ability_system.trigger(AbilityTrigger.Trigger.ON_TURN_START, unit, ability_board)
+
+func _tick_unit_turn_end(unit) -> void:
+	"""Fire a single unit's ON_TURN_END abilities as its turn closes.
+
+	The mirror of `_tick_unit_turn_start`, and the shared per-unit turn-END hook
+	the two turn systems previously lacked: Speed First closes one unit's turn
+	(`_end_unit_turn`) while Traditional closes a whole side's (`_end_player_turn`),
+	so each calls this for the unit(s) it is finishing. Null-safe for units without
+	an AbilitySystem, and deliberately NOT idempotency-tracked -- both systems end a
+	given unit's turn exactly once.
+	"""
+	if unit == null:
+		return
+	var ability_system = unit.get_ability_system() if unit.has_method("get_ability_system") else null
+	if ability_system == null or not ability_system.has_method("trigger"):
+		return
+	var ability_board = CombatServices.board() if CombatServices else null
+	if ability_board != null:
+		ability_system.trigger(AbilityTrigger.Trigger.ON_TURN_END, unit, ability_board)
 
 func _tick_all_units_turn_start(units: Array) -> void:
 	"""Convenience: tick every unit in `units` (each idempotent per turn)."""
 	for unit in units:
 		_tick_unit_turn_start(unit)
+
+func _tick_all_units_turn_end(units: Array) -> void:
+	"""Convenience: close out every unit in `units`."""
+	for unit in units:
+		_tick_unit_turn_end(unit)
 
 # Debug and info methods
 func get_turn_system_info() -> Dictionary:

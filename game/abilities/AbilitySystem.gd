@@ -12,6 +12,11 @@ class_name AbilitySystem
 ##     tweaks of all currently-in-force PASSIVE abilities, e.g. "how many extra
 ##     actions / movement does this unit have on its current tile right now?".
 ##
+## While in the scene tree it ALSO listens on the game-wide [code]GameEvents[/code]
+## bus and raises the combat triggers for its own unit (see [method _wire_events]),
+## which is what makes ON_ATTACK / ON_DAMAGED / ON_KILL / ON_MOVE fire without any
+## caller having to remember to. Instantiated bare (as tests do) it stays inert.
+##
 ## Ability effects and rule-modifier vocabulary live on [AbilityResource].
 
 ## The unit these abilities belong to; passed as the acting unit when an explicit
@@ -20,10 +25,26 @@ var owner_unit
 
 var abilities: Array[AbilityResource] = []
 
+## Per-UNIT activation state, keyed by the [AbilityResource] INSTANCE:
+##   ability -> { "cooldown": int (turns remaining), "uses": int (spent) }
+##
+## This lives here, on the per-unit component, and deliberately NOT on the
+## resource: a single authored .tres is shared by every unit that has the
+## ability (and by the character resource itself), so state stored there would
+## leak across units — one soldier's once-per-battle power would exhaust the
+## whole squad's. Keyed by instance rather than by [member AbilityResource.id]
+## so abilities with blank or duplicated ids still track independently.
+var _ability_state: Dictionary = {}
+
+## The last unit this one damaged, used to attribute a kill when the elimination
+## signal carries no eliminator (see [method _on_unit_eliminated]).
+var _last_damaged = null
+
 
 func _ready() -> void:
 	if owner_unit == null:
 		owner_unit = get_parent()
+	_wire_events()
 
 
 ## Convenience: register an ability. Returns it for chaining in setup code.
@@ -36,17 +57,89 @@ func add_ability(ability: AbilityResource) -> AbilityResource:
 ## Fire every ability whose [member AbilityResource.trigger] equals [param event]
 ## and whose condition currently holds, applying each one's pipeline effects to
 ## [param unit] (defaults to [member owner_unit]). Returns the combined event log.
-func trigger(event: AbilityTrigger.Trigger, unit = null, board = null) -> Array:
+##
+## [param other] is the unit that caused the event — the attacker for ON_DAMAGED,
+## the victim for ON_ATTACK / ON_KILL — and is what an ability with
+## [member AbilityResource.targets_triggering_unit] set reaches out to. Both
+## [param board] and [param other] are optional and trailing, so every existing
+## call site is unaffected.
+##
+## Abilities that are on cooldown or out of activations are skipped (see
+## [method can_activate]); one that actually runs records the activation.
+func trigger(event: AbilityTrigger.Trigger, unit = null, board = null, other = null) -> Array:
 	var acting = unit if unit != null else _unit()
 	var events: Array = []
 	for ability in abilities:
 		if ability == null or ability.trigger != event:
 			continue
+		if not can_activate(ability):
+			continue
 		if not ability.is_condition_met(acting, board):
 			continue
-		for e in ability.run_effects(acting, board):
+		_note_activation(ability)
+		for e in ability.run_effects(acting, board, other):
 			events.append(e)
 	return events
+
+
+## True if [param ability] is ready for THIS unit: off cooldown and with
+## activations left. Mirrors [method MovesetController.can_use] for moves.
+func can_activate(ability: AbilityResource) -> bool:
+	if ability == null:
+		return false
+	var state: Dictionary = _state_for(ability)
+	if int(state["cooldown"]) > 0:
+		return false
+	if ability.max_activations >= 0 and int(state["uses"]) >= ability.max_activations:
+		return false
+	return true
+
+
+## Cooldown turns still remaining on [param ability] for this unit (0 = ready).
+func cooldown_remaining(ability: AbilityResource) -> int:
+	if ability == null:
+		return 0
+	return int(_state_for(ability)["cooldown"])
+
+
+## Activations left before [param ability] hits its
+## [member AbilityResource.max_activations]. Returns -1 for unlimited abilities.
+func activations_left(ability: AbilityResource) -> int:
+	if ability == null or ability.max_activations < 0:
+		return -1
+	return maxi(0, ability.max_activations - int(_state_for(ability)["uses"]))
+
+
+## Count every active ability cooldown down by one turn. Called once per unit per
+## turn by the turn system's ON_TURN_START tick, exactly like move cooldowns.
+func tick_cooldowns() -> void:
+	for ability in _ability_state.keys():
+		var state: Dictionary = _ability_state[ability]
+		var left := int(state["cooldown"])
+		if left > 0:
+			state["cooldown"] = left - 1
+
+
+## Forget all cooldown / activation tracking (e.g. at the start of a new battle).
+func reset_activations() -> void:
+	_ability_state.clear()
+
+
+## This unit's tracking record for [param ability], created on first use.
+func _state_for(ability: AbilityResource) -> Dictionary:
+	var state = _ability_state.get(ability, null)
+	if not (state is Dictionary):
+		state = { "cooldown": 0, "uses": 0 }
+		_ability_state[ability] = state
+	return state
+
+
+## Spend one activation and start the ability's cooldown for THIS unit.
+func _note_activation(ability: AbilityResource) -> void:
+	var state: Dictionary = _state_for(ability)
+	state["uses"] = int(state["uses"]) + 1
+	if ability.cooldown > 0:
+		state["cooldown"] = ability.cooldown
 
 
 ## Merged [member AbilityResource.rule_modifiers] of every PASSIVE ability whose
@@ -100,3 +193,77 @@ func _merge_modifiers(into: Dictionary, from: Dictionary) -> void:
 
 func _unit():
 	return owner_unit if owner_unit != null else get_parent()
+
+
+# --- Combat trigger routing -------------------------------------------------
+#
+# The trigger enum used to be mostly decorative: only ON_TURN_START was ever
+# raised. Rather than sprinkle `trigger(...)` calls through the combat, movement
+# and death paths, each unit's own AbilitySystem subscribes ONCE to the existing
+# game-wide signals and filters them down to its own unit. One place to read, and
+# a unit with no abilities simply loops over an empty list.
+#
+# ON_TILE_ENTER is deliberately NOT wired: the only tile-entry notification in the
+# codebase is unit_moved itself (see GameWorldManager._on_unit_moved_tile_effects),
+# so wiring it here would just fire twice for one movement. It stays dormant until
+# a real per-step hook exists.
+
+
+## Subscribe to the shared event bus. No-op without the autoload (headless tests,
+## mock harnesses) or if already connected.
+func _wire_events() -> void:
+	var bus = GameEvents
+	if bus == null:
+		return
+	if bus.has_signal(&"damage_dealt") and not bus.damage_dealt.is_connected(_on_damage_dealt):
+		bus.damage_dealt.connect(_on_damage_dealt)
+	if bus.has_signal(&"unit_eliminated") and not bus.unit_eliminated.is_connected(_on_unit_eliminated):
+		bus.unit_eliminated.connect(_on_unit_eliminated)
+	if bus.has_signal(&"unit_moved") and not bus.unit_moved.is_connected(_on_unit_moved):
+		bus.unit_moved.connect(_on_unit_moved)
+
+
+## One resolved hit anywhere on the board. Raises ON_ATTACK for the attacker and
+## ON_DAMAGED for the defender, each passing the OTHER party as the triggering
+## unit so a retaliation ability can reach it.
+func _on_damage_dealt(attacker, defender, _amount) -> void:
+	var me = _unit()
+	if me == null:
+		return
+	if attacker == me:
+		_last_damaged = defender
+		trigger(AbilityTrigger.Trigger.ON_ATTACK, me, _board(), defender)
+	elif defender == me:
+		trigger(AbilityTrigger.Trigger.ON_DAMAGED, me, _board(), attacker)
+
+
+## A unit died. Fires ON_KILL for its killer. [code]unit_eliminated[/code] is
+## emitted with a null eliminator from Unit._on_unit_died (nothing there knows who
+## landed the blow), so we fall back to attributing the kill to whoever last
+## damaged the victim — which is exactly what this component just recorded.
+func _on_unit_eliminated(unit, eliminator) -> void:
+	var me = _unit()
+	if me == null or unit == null or unit == me:
+		return
+	if eliminator != null:
+		if eliminator != me:
+			return
+	elif unit != _last_damaged:
+		return  # we never touched this unit — not our kill
+	_last_damaged = null
+	trigger(AbilityTrigger.Trigger.ON_KILL, me, _board(), unit)
+
+
+## This unit finished a movement.
+func _on_unit_moved(unit, _from_position, _to_position) -> void:
+	var me = _unit()
+	if me == null or unit != me:
+		return
+	trigger(AbilityTrigger.Trigger.ON_MOVE, me, _board())
+
+
+## The live board, or null before a map is loaded (effects need one; the trigger
+## helpers pass it straight through and [method AbilityResource.run_effects]
+## no-ops on null).
+func _board():
+	return CombatServices.board() if CombatServices else null

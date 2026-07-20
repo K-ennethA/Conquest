@@ -25,6 +25,11 @@ var aim_cell: Vector2i
 var affected_cells: Array[Vector2i]
 var results: Array[Dictionary] = []
 
+## Optional event-bus override for effects that announce themselves (see
+## [DamageEffect]). Left null in the live game, where those effects fall back to
+## the [code]GameEvents[/code] autoload; tests inject a mock bus here.
+var event_bus = null
+
 ## RNG for hit/crit rolls. Injected by [MoveExecutor] (seedable for deterministic
 ## replay / networked peers); a randomized one is created lazily if left null.
 var rng: RandomNumberGenerator = null

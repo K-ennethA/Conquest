@@ -277,6 +277,9 @@ func _end_unit_turn(unit: Unit) -> void:
 	# Mark unit as having acted this round
 	if unit not in units_acted_this_round:
 		units_acted_this_round.append(unit)
+
+	# Fire this unit's ON_TURN_END abilities (null-safe via the shared base helper).
+	_tick_unit_turn_end(unit)
 	
 	# Find the player who owns this unit
 	var owner_player = null
