@@ -55,9 +55,10 @@ const _TILE_EFFECT_PATHS := {
 	&"lava": ["res://game/tiles/effects/resources/fire.tres"],
 	&"water": ["res://game/tiles/effects/resources/empowering_water.tres"],
 	&"sacred_ground": ["res://game/tiles/effects/resources/fortify.tres"],
-	# Forest / tall grass: grants terrain avoid (+evasion). This is a BASE effect,
-	# so a fire move can layer a burn on top and both show up in tile_effects_at.
-	&"difficult_terrain": ["res://game/tiles/effects/resources/tall_grass.tres"],
+	# NOTE: DIFFICULT_TERRAIN is deliberately NOT mapped here. Both Tall Grass and
+	# Trees use that type but must differ (grass grants evasion, trees do nothing),
+	# so each declares its own effects on the TileResource instead -- see
+	# _base_effects_for_tile.
 }
 
 ## Cache: canonical tile id -> [code]Array[TileEffectResource][/code] (base effects).
@@ -120,7 +121,7 @@ func tile_effects_at(cell: Vector2i) -> Array:
 	var out: Array = []
 	var res := tile_at(cell)
 	if res != null:
-		for te in _base_effects_for_id(_tile_effect_id_of(res)):
+		for te in _base_effects_for_tile(res):
 			if te != null:
 				out.append(te)
 	var applied = _applied_tile_effects.get(cell, null)
@@ -176,6 +177,28 @@ func _tile_effect_id_of(res: TileResource) -> StringName:
 	if idx >= 0 and idx < keys.size():
 		return StringName(String(keys[idx]).to_lower())
 	return &""
+
+
+## Base [TileEffectResource]s for a specific tile.
+##
+## A tile's OWN declaration wins: when [member TileResource.has_default_effects] is
+## set, [member TileResource.default_effects] is authoritative (an empty list then
+## means "explicitly no effects"). Only tiles that declare nothing fall back to the
+## per-TileType table below.
+##
+## This is what lets two tiles of the SAME [enum Tile.TileType] behave differently
+## -- e.g. Tall Grass and Trees are both DIFFICULT_TERRAIN, but only the grass
+## grants evasion. Keying effects purely by type could never express that.
+func _base_effects_for_tile(res: TileResource) -> Array:
+	if res == null:
+		return []
+	if res.has_default_effects:
+		var declared: Array = []
+		for te in res.default_effects:
+			if te is TileEffectResource:
+				declared.append(te)
+		return declared
+	return _base_effects_for_id(_tile_effect_id_of(res))
 
 
 ## Base [TileEffectResource]s for a canonical terrain id, lazily loaded from the
