@@ -195,10 +195,11 @@ func reset_all_unit_actions() -> void:
 var _last_tick_turn: Dictionary = {}
 
 func _tick_unit_turn_start(unit) -> void:
-	"""Advance a single unit's move cooldowns and status conditions.
+	"""Advance a single unit's move cooldowns and status conditions, then fire its
+	ON_TURN_START abilities.
 
 	Null-safe for units WITHOUT characters (no MovesetController /
-	StatusController) and idempotent within the same turn.
+	StatusController / AbilitySystem) and idempotent within the same turn.
 	"""
 	if unit == null:
 		return
@@ -220,6 +221,17 @@ func _tick_unit_turn_start(unit) -> void:
 		var board = CombatServices.board() if CombatServices else null
 		if board != null:
 			status.tick_all(board)
+
+	# Character abilities: only present when the character declares some. This is
+	# the one per-unit turn-start hook BOTH turn systems share -- SpeedFirst calls
+	# it for the single unit whose turn began, Traditional calls it for every unit
+	# on the side that just became active -- so an ON_TURN_START ability fires
+	# exactly once per unit per turn in either order. Effects need a board.
+	var ability_system = unit.get_ability_system() if unit.has_method("get_ability_system") else null
+	if ability_system != null and ability_system.has_method("trigger"):
+		var ability_board = CombatServices.board() if CombatServices else null
+		if ability_board != null:
+			ability_system.trigger(AbilityTrigger.Trigger.ON_TURN_START, unit, ability_board)
 
 func _tick_all_units_turn_start(units: Array) -> void:
 	"""Convenience: tick every unit in `units` (each idempotent per turn)."""

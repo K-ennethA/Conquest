@@ -45,9 +45,20 @@ const MAX_MOVES: int = 4
 ## Up to [constant MAX_MOVES] moves. Extra entries are ignored by [method get_move].
 @export var moveset: Array[MoveResource] = []
 
+@export_group("Abilities")
+## Always-on / triggered passives the character owns for free. Distinct from
+## [member moveset]: the player never selects one of these — the unit's
+## [AbilitySystem] fires each on its own [member AbilityResource.trigger]
+## (turn start, kill, …) or reads it as a standing rule modifier. Unbounded.
+@export var abilities: Array[AbilityResource] = []
+
 
 func move_count() -> int:
 	return mini(moveset.size(), MAX_MOVES)
+
+
+func ability_count() -> int:
+	return abilities.size()
 
 
 ## Move in [param slot] (0..3), or null if empty/out of range.
@@ -121,4 +132,7 @@ func validate() -> Dictionary:
 	for i in range(move_count()):
 		if moveset[i] == null:
 			issues.append("move slot %d is empty" % i)
+	for i in range(abilities.size()):
+		if abilities[i] == null:
+			issues.append("ability slot %d is empty" % i)
 	return { "valid": issues.is_empty(), "issues": issues }

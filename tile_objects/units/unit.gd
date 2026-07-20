@@ -208,6 +208,18 @@ func _setup_character_components() -> void:
 		status_controller.owner_unit = self
 		add_child(status_controller)
 
+	# Character abilities (always-on / triggered passives). Attached as a CHILD
+	# so AbilitySystem._unit() resolves to this unit naturally, and only when the
+	# character actually declares abilities -- a character with none keeps the
+	# exact node layout it had before.
+	if not has_node("AbilitySystem") and not character_resource.abilities.is_empty():
+		var ability_system := AbilitySystem.new()
+		ability_system.name = "AbilitySystem"
+		ability_system.owner_unit = self
+		for ability in character_resource.abilities:
+			ability_system.add_ability(ability)
+		add_child(ability_system)
+
 func _setup_visuals() -> void:
 	"""Initialize visual components"""
 	# Only set up visuals if MeshInstance3D exists (for testing compatibility)
@@ -488,6 +500,11 @@ func get_moveset_controller() -> Node:
 ## The StatusController child (active status conditions), or null if absent.
 func get_status_controller() -> Node:
 	return get_node_or_null("StatusController")
+
+## The AbilitySystem child (character abilities), or null when the character
+## declares none / there is no character at all.
+func get_ability_system() -> Node:
+	return get_node_or_null("AbilitySystem")
 
 ## The character's movement profile once T6 adds get_movement_profile() to
 ## CharacterResource. Duck-typed so this compiles before that method exists;

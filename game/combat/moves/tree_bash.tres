@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_mvefx"]
+[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="2_dmgef"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="4_targp"]
+
+[sub_resource type="Resource" id="Resource_tb1dm"]
+script = ExtResource("2_dmgef")
+power = 14
+
+[sub_resource type="Resource" id="Resource_tb2tg"]
+script = ExtResource("4_targp")
+
+[resource]
+script = ExtResource("3_mvres")
+move_id = &"tree_bash"
+display_name = "Tree Bash"
+description = "A blunt swing of a knotted limb. Deal physical damage to one adjacent enemy."
+element = &"nature"
+accuracy = 0.9
+crit_chance = 0.05
+targeting = SubResource("Resource_tb2tg")
+effects = Array[ExtResource("1_mvefx")]([SubResource("Resource_tb1dm")])

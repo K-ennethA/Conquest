@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AbilityResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_mvefx"]
+[ext_resource type="Script" path="res://game/combat/effects/HealEffect.gd" id="2_healf"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="3_abres"]
+[ext_resource type="Script" path="res://game/abilities/AlwaysCondition.gd" id="4_alwys"]
+
+[sub_resource type="Resource" id="Resource_nb1hl"]
+script = ExtResource("2_healf")
+amount = 0
+percent_of_max_health = 0.1
+
+[sub_resource type="Resource" id="Resource_nb2cd"]
+script = ExtResource("4_alwys")
+
+[resource]
+script = ExtResource("3_abres")
+id = &"natures_blessing"
+display_name = "Nature's Blessing"
+description = "The forest tends its own. Restore 10% of max health at the start of every turn."
+trigger = 1
+condition = SubResource("Resource_nb2cd")
+effects = Array[ExtResource("1_mvefx")]([SubResource("Resource_nb1hl")])
