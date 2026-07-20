@@ -21,7 +21,23 @@ class_name MapResource
 @export var height: int = 5
 
 # Map Layout Data
-@export var tile_layout: Array[Dictionary] = []  # Array of {position: Vector2i, tile_type: String, tile_resource_path: String}
+@export var tile_layout: Array[Dictionary] = []  # Array of TILE ENTRIES - see the schema block below
+# A tile_layout entry names which terrain occupies one cell. Every key past
+# "position" is optional and read through .get(), so maps authored before a key
+# existed keep loading unchanged:
+#
+#   position           Vector2i  the cell this entry occupies
+#   tile_id            String    STABLE TileResource id (see TileResource.id) --
+#                                the PREFERRED reference and the durable one
+#   tile_resource_path String    res:// path to the .tres, LEGACY/fallback
+#   tile_type          String    Tile.TileType enum name, coarse last-resort hint
+#
+# NOTE on "tile_id" vs "tile_resource_path": a path breaks the moment the asset is
+# moved or renamed, and maps are authored by PLAYERS and SHARED, so a map must keep
+# resolving on an install where the tiles were reorganised. The id never changes,
+# so it is what MapLoader tries first (see MapLoader._resolve_tile_resource).
+# "tile_resource_path" is still written by the authoring tools for back-compat with
+# anything that reads it, and is still honoured when a map carries no tile_id.
 @export var unit_spawns: Array[Dictionary] = []  # Array of SPAWN POINTS - see the schema block below
 # A unit_spawns entry is a SPAWN POINT: a position, the player slot that owns it,
 # and what kind of spawning it does. Full schema (every key past "position" and
@@ -103,11 +119,20 @@ func get_tile_at_position(pos: Vector2i) -> Dictionary:
 	return {
 		"position": pos,
 		"tile_type": "NORMAL",
-		"tile_resource_path": ""
+		"tile_resource_path": "",
+		"tile_id": ""
 	}
 
-func set_tile_at_position(pos: Vector2i, tile_type: String, tile_resource_path: String = "") -> void:
-	"""Set tile data at specific position"""
+func set_tile_at_position(pos: Vector2i, tile_type: String, tile_resource_path: String = "", tile_id = "") -> void:
+	"""Set tile data at specific position.
+
+	[param tile_id] is the STABLE [member TileResource.id] and is what makes the
+	entry survive the asset being moved or renamed - always pass it when the tile
+	is known. It is an optional TRAILING parameter so every existing two- and
+	three-argument caller keeps working unchanged; those entries simply store an
+	empty tile_id and resolve through the legacy path (see the schema block above).
+	Accepts a String or a StringName.
+	"""
 	# Remove existing tile at position
 	for i in range(tile_layout.size() - 1, -1, -1):
 		if tile_layout[i].get("position", Vector2i(-1, -1)) == pos:
@@ -117,7 +142,8 @@ func set_tile_at_position(pos: Vector2i, tile_type: String, tile_resource_path: 
 	tile_layout.append({
 		"position": pos,
 		"tile_type": tile_type,
-		"tile_resource_path": tile_resource_path
+		"tile_resource_path": tile_resource_path,
+		"tile_id": String(tile_id)
 	})
 
 func get_unit_spawn_at_position(pos: Vector2i) -> Dictionary:

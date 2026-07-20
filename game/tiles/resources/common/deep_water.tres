@@ -5,6 +5,7 @@
 [resource]
 resource_name = "TileResource"
 script = ExtResource("1_cm0rv")
+id = &"deep_water"
 tile_name = "Deep Water"
 tile_type = 2
 description = "Deep water that slows movement but can be crossed by most units."

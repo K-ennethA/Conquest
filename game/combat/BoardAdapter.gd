@@ -60,19 +60,24 @@ var _units_provider       ## See class docs for accepted shapes.
 var _tile_overrides: Dictionary = {}  ## Vector2i -> tile_id, best-effort terrain state.
 var _tile_registry: Dictionary = {}   ## Vector2i -> TileResource; injected by CombatServices (empty in mocks).
 
-## Terrain ids ([method set_tile] / [TileTransformEffect]) -> the [TileResource]
-## to swap a live tile to. Keyed by the canonical id (lowercased TileType name)
-## plus friendly aliases so effects can request &"lava", &"water", etc.
-const _TILE_ID_TO_PATH := {
-	&"grass": "res://game/tiles/resources/forest/grass_plains.tres",
-	&"plains": "res://game/tiles/resources/forest/grass_plains.tres",
-	&"normal": "res://game/tiles/resources/forest/grass_plains.tres",
-	&"water": "res://game/tiles/resources/common/deep_water.tres",
-	&"deep_water": "res://game/tiles/resources/common/deep_water.tres",
-	&"wall": "res://game/tiles/resources/common/stone_wall.tres",
-	&"stone_wall": "res://game/tiles/resources/common/stone_wall.tres",
-	&"lava": "res://game/tiles/resources/volcano/molten_lava.tres",
-	&"molten_lava": "res://game/tiles/resources/volcano/molten_lava.tres",
+## Terrain ids ([method set_tile] / [TileTransformEffect]) -> the STABLE
+## [member TileResource.id] of the tile to swap a live tile to. Keyed by the
+## canonical terrain id (lowercased TileType name) plus friendly aliases, so
+## effects can request &"lava", &"water", etc.
+##
+## The VALUES are tile ids resolved through [TileCatalog], not res:// paths: the
+## tile assets are grouped into biome folders and get reorganised, and a path here
+## would break silently the next time one moves.
+const _TERRAIN_ID_TO_TILE_ID := {
+	&"grass": &"grass_plains",
+	&"plains": &"grass_plains",
+	&"normal": &"grass_plains",
+	&"water": &"deep_water",
+	&"deep_water": &"deep_water",
+	&"wall": &"stone_wall",
+	&"stone_wall": &"stone_wall",
+	&"lava": &"molten_lava",
+	&"molten_lava": &"molten_lava",
 }
 
 
@@ -303,7 +308,7 @@ func _resource_at(cell: Vector2i) -> TileResource:
 
 
 ## Canonical terrain id for a resource: its lowercased [enum Tile.TileType] name
-## (e.g. LAVA -> &"lava"), matching the ids in [constant _TILE_ID_TO_PATH].
+## (e.g. LAVA -> &"lava"), matching the keys in [constant _TERRAIN_ID_TO_TILE_ID].
 func _resource_tile_id(res: TileResource) -> StringName:
 	var keys := Tile.TileType.keys()
 	var idx := int(res.tile_type)
@@ -313,12 +318,14 @@ func _resource_tile_id(res: TileResource) -> StringName:
 
 
 ## Resolve a terrain id (StringName/String) to its [TileResource], or null.
+##
+## Maps the terrain id onto a stable tile id and asks [TileCatalog] for it, so no
+## filesystem layout is baked in here. A terrain id that is already a tile id
+## (e.g. &"sacred_meadow") resolves directly through the catalog too.
 func _resolve_tile_resource(tile_id) -> TileResource:
 	var key := StringName(str(tile_id).to_lower())
-	var path: String = _TILE_ID_TO_PATH.get(key, "")
-	if path != "" and ResourceLoader.exists(path):
-		return load(path) as TileResource
-	return null
+	var mapped: StringName = _TERRAIN_ID_TO_TILE_ID.get(key, key)
+	return TileCatalog.find_by_id(mapped)
 
 
 ## The live tile node at [param cell], found under the map root's "Tiles"

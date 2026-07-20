@@ -14,6 +14,7 @@ triggers_on_turn_start = true
 [resource]
 resource_name = "TileResource"
 script = ExtResource("2_lcd6e")
+id = &"molten_lava"
 tile_name = "Molten Lava"
 tile_type = 5
 description = "Dangerous molten rock that burns anything that steps on it. Deals 10 fire damage per turn to units standing on it."

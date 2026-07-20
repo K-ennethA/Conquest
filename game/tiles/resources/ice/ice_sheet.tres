@@ -5,6 +5,7 @@
 
 [resource]
 script = ExtResource("1_tres")
+id = &"ice_sheet"
 tile_name = "Ice Sheet"
 tile_type = 6
 description = "A pane of hard blue ice, polished by wind. Footing is quick but treacherous - nobody sidesteps well on a surface that slides back."

@@ -5,6 +5,7 @@
 
 [resource]
 script = ExtResource("1_tres")
+id = &"magma_vent"
 tile_name = "Magma Vent"
 tile_type = 4
 description = "Cracked crust over a live heat channel. The fissures glow and breathe - anything that lingers here starts its turn scorched."

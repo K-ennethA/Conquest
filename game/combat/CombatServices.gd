@@ -51,6 +51,18 @@ var _tile_registry: Dictionary = {}
 
 ## Canonical tile id ([BoardAdapter]'s scheme: lowercased [enum Tile.TileType]
 ## name) -> authored .tres effect paths for that terrain.
+##
+## These stay PATH-addressed on purpose, unlike the tile tables in [BoardAdapter]
+## and [MapLoader] which now resolve stable [member TileResource.id]s through
+## [TileCatalog]. Two reasons: EFFECTS are a separate resource family with no
+## equivalent index (there is no catalog scanning game/tiles/effects/resources/,
+## which is a flat directory that has never been reorganised), and this table is
+## ENGINE-INTERNAL - it is not written into player-authored maps, so a stale entry
+## here is a build-time bug someone fixes, not a shared map that silently breaks on
+## another install. Path fragility is only worth designing around where the
+## reference escapes the codebase. If the effect resources ever get grouped into
+## subfolders, give [TileEffectResource] the same treatment: index its existing
+## [code]id[/code] and look these up by it.
 const _TILE_EFFECT_PATHS := {
 	&"lava": ["res://game/tiles/effects/resources/fire.tres"],
 	&"water": ["res://game/tiles/effects/resources/empowering_water.tres"],

@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_tres")
+id = &"obsidian"
 tile_name = "Obsidian"
 tile_type = 0
 description = "A sheet of cooled volcanic glass, black and mirror-slick. Solid footing, but every shard underfoot is sharp enough to cut a bootsole."

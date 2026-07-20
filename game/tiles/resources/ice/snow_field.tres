@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_tres")
+id = &"snow_field"
 tile_name = "Snow Field"
 tile_type = 1
 description = "Fresh powder banked into soft mounds. Every stride sinks to the shin, so it takes twice as long to cross."

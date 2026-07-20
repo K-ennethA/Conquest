@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_tres")
+id = &"ash_field"
 tile_name = "Ash Field"
 tile_type = 1
 description = "Drifts of soft grey fallout, ankle-deep and shifting. It swallows every step, so crossing it costs twice the effort."

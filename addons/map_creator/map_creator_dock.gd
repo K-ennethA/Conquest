@@ -69,8 +69,12 @@ var tile_buttons: Array[Button] = []
 var selected_tile_type: String = "NORMAL"
 # Resource path of the selected palette entry ("" when the hardcoded fallback is used)
 var selected_tile_resource_path: String = ""
+# STABLE TileResource id of the selected palette entry ("" for the hardcoded
+# fallback). This is what gets written into the map, so an authored map survives
+# the tile assets being moved or renamed - see MapResource's tile_layout schema.
+var selected_tile_id: String = ""
 # One entry per palette button: {type_name: String, resource_path: String,
-#                                color: Color, display_name: String}
+#                                tile_id: String, color: Color, display_name: String}
 var tile_palette_entries: Array[Dictionary] = []
 # type_name -> Color, harvested from the real TileResource.base_color values.
 var resource_tile_colors: Dictionary = {}
@@ -445,6 +449,9 @@ func _load_tile_palette_entries() -> void:
 		tile_palette_entries.append({
 			"type_name": type_name,
 			"resource_path": resource_path,
+			# The durable reference painted into the map. The path is kept alongside
+			# it for tools that still read tile_resource_path.
+			"tile_id": String(tile_resource.get_id()),
 			"color": tile_resource.base_color,
 			"display_name": display_name
 		})
@@ -460,6 +467,7 @@ func _load_tile_palette_entries() -> void:
 		tile_palette_entries.append({
 			"type_name": fallback_name,
 			"resource_path": "",
+			"tile_id": "",
 			"color": tile_colors.get(fallback_name, Color.WHITE),
 			"display_name": fallback_name.replace("_", " ")
 		})
@@ -895,6 +903,7 @@ func _on_tile_selected(index: int):
 	var entry: Dictionary = tile_palette_entries[index]
 	selected_tile_type = str(entry.get("type_name", "NORMAL"))
 	selected_tile_resource_path = str(entry.get("resource_path", ""))
+	selected_tile_id = str(entry.get("tile_id", ""))
 
 	# Update button states
 	for i in range(tile_buttons.size()):
@@ -1144,8 +1153,13 @@ func _end_stroke() -> void:
 	_update_preview()
 
 func _place_tile_at_position(pos: Vector2i):
-	"""Place selected tile at position, recording its real resource path"""
-	current_map.set_tile_at_position(pos, selected_tile_type, selected_tile_resource_path)
+	"""Place selected tile at position, recording its STABLE id (and its path).
+
+	The id is the durable reference: a map authored here keeps resolving after the
+	tile assets are reorganised, on this install or on whoever it gets shared with.
+	"""
+	current_map.set_tile_at_position(
+		pos, selected_tile_type, selected_tile_resource_path, selected_tile_id)
 
 func _place_spawn_at_position(pos: Vector2i):
 	"""Place a spawn POINT at a position using the current palette configuration.
@@ -1165,10 +1179,18 @@ func _resource_path_for_type(type_name: String) -> String:
 			return str(entry.get("resource_path", ""))
 	return ""
 
+func _tile_id_for_type(type_name: String) -> String:
+	"""First palette tile id registered for a tile type, or "" if none"""
+	for entry in tile_palette_entries:
+		if str(entry.get("type_name", "")) == type_name:
+			return str(entry.get("tile_id", ""))
+	return ""
+
 func _erase_at_position(pos: Vector2i):
 	"""Erase tile/unit at position"""
 	# Reset tile to normal (using the real NORMAL resource when the palette has one)
-	current_map.set_tile_at_position(pos, "NORMAL", _resource_path_for_type("NORMAL"))
+	current_map.set_tile_at_position(
+		pos, "NORMAL", _resource_path_for_type("NORMAL"), _tile_id_for_type("NORMAL"))
 	# Remove unit spawn
 	current_map.remove_unit_spawn_at_position(pos)
 
@@ -1216,7 +1238,8 @@ func _commit_rect_fill(release_pos: Vector2i) -> void:
 
 	var cells := _get_rect_cells(anchor, corner)
 	for cell in cells:
-		current_map.set_tile_at_position(cell, selected_tile_type, selected_tile_resource_path)
+		current_map.set_tile_at_position(
+			cell, selected_tile_type, selected_tile_resource_path, selected_tile_id)
 		_refresh_cell(cell)
 
 	_end_stroke()
@@ -1271,7 +1294,8 @@ func _bucket_fill_at_position(pos: Vector2i) -> void:
 		if cell_data.get("tile_type", "NORMAL") != target_type:
 			continue
 
-		current_map.set_tile_at_position(cell, selected_tile_type, selected_tile_resource_path)
+		current_map.set_tile_at_position(
+			cell, selected_tile_type, selected_tile_resource_path, selected_tile_id)
 		_refresh_cell(cell)
 		filled += 1
 
@@ -1406,6 +1430,7 @@ func _tile_palette_get_drag_data(_at_position: Vector2, index: int) -> Variant:
 		"kind": "tile",
 		"tile_type": type_name,
 		"resource_path": str(entry.get("resource_path", "")),
+		"tile_id": str(entry.get("tile_id", "")),
 		"color": color
 	}
 	set_drag_preview(_make_tile_drag_preview(display_name, color))
@@ -1549,13 +1574,22 @@ func _build_type_model_paths() -> void:
 func _tile_model_path_at(pos: Vector2i) -> String:
 	"""Model scene path for a cell, or "" when it should render as a coloured box.
 
-	The cell's OWN tile_resource_path wins - it names the exact tile the author
-	painted. Only when that is empty (or unloadable) do we fall back to the type.
+	Mirrors MapLoader._resolve_tile_resource's order so the preview shows what the
+	game will actually build: the cell's OWN tile_id wins (it names the exact tile
+	the author painted, and survives the asset moving), then its legacy
+	tile_resource_path, and only then the coarse type fallback.
 	"""
 	if not current_map:
 		return ""
 
 	var tile_data: Dictionary = current_map.get_tile_at_position(pos)
+
+	var tile_id: String = str(tile_data.get("tile_id", ""))
+	if not tile_id.is_empty():
+		var by_id := TileCatalog.find_by_id(StringName(tile_id))
+		if by_id != null:
+			return by_id.model_path
+
 	var resource_path: String = str(tile_data.get("tile_resource_path", ""))
 	if not resource_path.is_empty():
 		var tile_resource := _load_tile_resource(resource_path)
@@ -1842,9 +1876,10 @@ func _apply_payload_at(data: Variant, pos: Vector2i) -> void:
 	if kind == "tile":
 		var tile_type: String = str(payload.get("tile_type", "NORMAL"))
 		var resource_path: String = str(payload.get("resource_path", ""))
+		var tile_id: String = str(payload.get("tile_id", ""))
 		# Honour the brush size, exactly like the 2D painting path does.
 		var place_tile := func(target: Vector2i) -> void:
-			current_map.set_tile_at_position(target, tile_type, resource_path)
+			current_map.set_tile_at_position(target, tile_type, resource_path, tile_id)
 		_apply_brush(pos, place_tile)
 		_end_stroke()
 		print("Dropped tile " + tile_type + " at " + str(pos))
@@ -1970,7 +2005,8 @@ func _on_fill_all():
 
 	for y in range(current_map.height):
 		for x in range(current_map.width):
-			current_map.set_tile_at_position(Vector2i(x, y), selected_tile_type, selected_tile_resource_path)
+			current_map.set_tile_at_position(
+				Vector2i(x, y), selected_tile_type, selected_tile_resource_path, selected_tile_id)
 
 	_update_grid_display()
 	_build_world_3d()

@@ -1,9 +1,28 @@
+@tool
 extends Resource
 
 class_name TileResource
 
 # Resource for storing tile configurations and properties
 # Used by the Tile Creator tool and tile system
+#
+# @tool because this resource is read by EDITOR tooling (the Tile Creator and Map
+# Creator docks, and TileCatalog's id index). Without it the editor only ever
+# holds placeholder instances, and calling get_id()/get_movement_cost() on one
+# fails with "Attempt to call a method on a placeholder instance" -- which silently
+# emptied the catalog's id index inside the dock. Safe here: this is pure data,
+# _init only sets resource_name, and nothing has runtime side effects.
+
+## STABLE LOGICAL IDENTITY of this tile -- how maps and code refer to it.
+##
+## This is the ONE field that must never change once the tile ships: it survives
+## the file being moved into a different biome folder or renamed, which a
+## [code]res://[/code] path does not. Maps are authored by players and SHARED, so
+## their tile references have to keep resolving on an install where the assets
+## were reorganised. Use lowercase snake_case matching the file name stem
+## (&"grass_plains", &"molten_lava"), and keep it UNIQUE across every tile --
+## [TileCatalog] indexes by it and warns on collisions.
+@export var id: StringName = &""
 
 @export var tile_name: String = ""
 @export var tile_type: Tile.TileType = Tile.TileType.NORMAL
@@ -61,6 +80,18 @@ const MATERIAL_STYLE_SHADERS := {
 
 func _init():
 	resource_name = "TileResource"
+
+## The stable identity to reference this tile by (see [member id]).
+##
+## Falls back to the resource's own FILE NAME STEM when [member id] was never set,
+## so an un-migrated authored tile, or one a player just created with the Tile
+## Creator, still has a usable identity instead of an empty key. Returns &"" only
+## for an in-memory resource that has neither an id nor a file on disk.
+func get_id() -> StringName:
+	if not String(id).is_empty():
+		return id
+	var stem: String = resource_path.get_file().get_basename()
+	return StringName(stem)
 
 func create_tile_effects() -> Array[TileEffect]:
 	"""Create tile effects based on configuration"""

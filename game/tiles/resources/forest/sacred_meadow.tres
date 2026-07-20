@@ -5,6 +5,7 @@
 
 [resource]
 script = ExtResource("1_tres")
+id = &"sacred_meadow"
 tile_name = "Sacred Meadow"
 tile_type = 8
 description = "Wildflowers grown over old forest shrines. The ground itself mends those who rest on it, healing a little each turn."

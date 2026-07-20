@@ -5,6 +5,7 @@
 [resource]
 resource_name = "TileResource"
 script = ExtResource("1_ho5u0")
+id = &"stone_wall"
 tile_name = "Stone Wall"
 tile_type = 3
 description = "Solid stone wall that blocks movement and provides cover from attacks."

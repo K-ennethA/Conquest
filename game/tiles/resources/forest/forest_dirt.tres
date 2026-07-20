@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_tres")
+id = &"forest_dirt"
 tile_name = "Dirt"
 tile_type = 0
 description = "Bare packed earth worn down by old trails. Open, plain footing with no advantage either way."

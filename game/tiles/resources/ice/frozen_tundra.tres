@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_tres")
+id = &"frozen_tundra"
 tile_name = "Frozen Tundra"
 tile_type = 0
 description = "Bare ground frozen hard as flagstone, rimed white at the edges. Plain open footing - the tundra's honest, unremarkable middle."

@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_tres")
+id = &"frozen_pine"
 tile_name = "Frozen Pine"
 tile_type = 3
 description = "A conifer bowed under a winter's worth of snow. Too dense to push through and too tall to see past, but solid cover for anyone behind it."

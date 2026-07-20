@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_tres")
+id = &"basalt_column"
 tile_name = "Basalt Column"
 tile_type = 3
 description = "A six-sided pillar of old lava, cooled into stone taller than a rider. Nothing moves through it and nothing sees past it."

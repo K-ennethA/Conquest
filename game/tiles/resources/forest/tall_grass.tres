@@ -5,6 +5,7 @@
 
 [resource]
 script = ExtResource("1_tres")
+id = &"tall_grass"
 tile_name = "Tall Grass"
 tile_type = 1
 description = "Waist-high grass that swallows a crouching figure. Harder to move through, but much harder to hit anyone standing in it."

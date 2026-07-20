@@ -178,11 +178,12 @@ func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary) -> bool
 	"""Create a tile at the specified grid position"""
 	var tile_resource_path = tile_data.get("tile_resource_path", "")
 	var tile_type = tile_data.get("tile_type", "NORMAL")
+	var tile_id = tile_data.get("tile_id", "")
 
 	# Resolve the terrain data FIRST: the TileResource is what decides which
 	# visual scene this tile gets (via its model_path), so it has to be known
 	# before we choose a scene to instantiate.
-	var resolved_tile_resource := _resolve_tile_resource(tile_resource_path, tile_type)
+	var resolved_tile_resource := _resolve_tile_resource(tile_resource_path, tile_type, tile_id)
 
 	# Pick the scene to instantiate, most specific first:
 	#  1. resolved_tile_resource.model_path -- a hand-authored geometry scene under
@@ -261,38 +262,56 @@ func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary) -> bool
 	tiles_container.add_child(tile_instance)
 	return true
 
-func _resolve_tile_resource(resource_path: String, tile_type: String) -> TileResource:
+## Tile.TileType enum name (plus friendly aliases) -> the STABLE
+## [member TileResource.id] of the tile that represents that family. This is the
+## LAST-RESORT mapping for map entries that name only a coarse type. Ids rather
+## than res:// paths, so reorganising the tile assets into different biome folders
+## cannot break it (see [TileCatalog]).
+const TYPE_TO_TILE_ID: Dictionary = {
+	"NORMAL": &"grass_plains",
+	"GRASS": &"grass_plains",
+	"PLAINS": &"grass_plains",
+	"WATER": &"deep_water",
+	"WALL": &"stone_wall",
+	"LAVA": &"molten_lava",
+	"SACRED_GROUND": &"sacred_ground",
+}
+
+func _resolve_tile_resource(resource_path: String, tile_type: String, tile_id = "") -> TileResource:
 	"""Resolve the TileResource for a tile from its map data.
 
-	Prefers an explicit resource_path when it actually loads as a TileResource
-	(the same field doubles as a custom-scene path above, so a scene path simply
-	won't cast here and is ignored). Otherwise maps the tile_type string onto the
-	built-in terrain families (grass/water/wall/lava). Returns null when nothing
-	matches, letting the caller fall back to the legacy set_tile_type() path.
+	Resolution order, most durable reference first:
+	  1. tile_id  -- the STABLE TileResource id, via TileCatalog.find_by_id(). This
+	     is the reference that survives an asset being moved or renamed, which is
+	     what player-authored maps shared between installs depend on.
+	  2. tile_resource_path -- via TileCatalog.find(), which tries the exact path
+	     and then the same file NAME elsewhere in the tree. LEGACY: this is how
+	     maps authored before ids stored their tiles, and the basename fallback can
+	     only guess when two files share a name.
+	  3. tile_type -- the coarse built-in terrain families (grass/water/wall/lava),
+	     resolved through TYPE_TO_TILE_ID and the catalog. Last resort.
+
+	The same tile_resource_path field doubles as a custom-scene path in the caller,
+	so a scene path simply won't cast to a TileResource here and is ignored.
+	Returns null when nothing matches, letting the caller fall back to the legacy
+	set_tile_type() path.
+
+	[param tile_id] is an optional TRAILING parameter (String or StringName) so the
+	pre-existing two-argument call signature keeps working.
 	"""
-	# TileCatalog.find resolves the exact path, then falls back to the same file
-	# NAME elsewhere in the tree. Tile assets are grouped into biome folders
-	# (forest/, volcano/, ...), and a map stores its tiles as path STRINGS -- so
-	# without that fallback, reorganising assets would silently break every map
-	# (including user-authored ones shared between players) that referenced the
-	# old location.
+	# 1. Stable id -- the durable reference.
+	var by_id := TileCatalog.find_by_id(StringName(String(tile_id)))
+	if by_id != null:
+		return by_id
+
+	# 2. Legacy path addressing, with TileCatalog's basename fallback.
 	var found := TileCatalog.find(resource_path)
 	if found != null:
 		return found
 
-	var type_to_resource := {
-		"NORMAL": "res://game/tiles/resources/forest/grass_plains.tres",
-		"GRASS": "res://game/tiles/resources/forest/grass_plains.tres",
-		"PLAINS": "res://game/tiles/resources/forest/grass_plains.tres",
-		"WATER": "res://game/tiles/resources/common/deep_water.tres",
-		"WALL": "res://game/tiles/resources/common/stone_wall.tres",
-		"LAVA": "res://game/tiles/resources/volcano/molten_lava.tres",
-		"SACRED_GROUND": "res://game/tiles/resources/common/sacred_ground.tres",
-	}
-	var path: String = type_to_resource.get(String(tile_type).to_upper(), "")
-	if not path.is_empty() and ResourceLoader.exists(path):
-		return load(path) as TileResource
-	return null
+	# 3. Coarse tile_type family.
+	var family_id: StringName = TYPE_TO_TILE_ID.get(String(tile_type).to_upper(), &"")
+	return TileCatalog.find_by_id(family_id)
 
 func _load_units() -> bool:
 	"""Load all unit spawns from the map resource"""

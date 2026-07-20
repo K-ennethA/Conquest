@@ -5,6 +5,7 @@
 [resource]
 resource_name = "TileResource"
 script = ExtResource("1_vbfya")
+id = &"grass_plains"
 tile_name = "Grass Plains"
 description = "Standard grassy terrain that's easy to traverse. No special effects."
 material_style = 1

@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_tres")
+id = &"tree"
 tile_name = "Tree"
 tile_type = 1
 description = "An old trunk too dense to push through. Blocks movement and line of sight entirely - units must path around it."
