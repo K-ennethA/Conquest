@@ -1,0 +1,80 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
+[ext_resource type="Resource" path="res://game/tiles/resources/tall_grass.tres" id="2_res"]
+[ext_resource type="Material" uid="uid://c0grasstile001" path="res://tile_objects/tiles/materials/stylized_grass_material.tres" id="3_grass"]
+[ext_resource type="Material" uid="uid://c0foliage00001" path="res://tile_objects/tiles/materials/stylized_foliage_material.tres" id="4_foliage"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_blade"]
+top_radius = 0.02
+bottom_radius = 0.09
+height = 0.9
+radial_segments = 4
+rings = 1
+
+[node name="TallGrassTile" type="Node3D"]
+script = ExtResource("1_tile")
+tile_resource = ExtResource("2_res")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_base")
+material_override = ExtResource("3_grass")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+shape = SubResource("BoxShape3D_base")
+
+[node name="GrassVisual" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+
+[node name="Blade1" type="MeshInstance3D" parent="GrassVisual"]
+transform = Transform3D(0.9397, 0, -0.342, 0, 0.95, 0, 0.342, 0, 0.9397, -0.6, 0.4275, -0.55)
+mesh = SubResource("CylinderMesh_blade")
+material_override = ExtResource("4_foliage")
+
+[node name="Blade2" type="MeshInstance3D" parent="GrassVisual"]
+transform = Transform3D(0.8192, 0, 0.5736, 0, 0.82, 0, -0.5736, 0, 0.8192, -0.15, 0.369, -0.7)
+mesh = SubResource("CylinderMesh_blade")
+material_override = ExtResource("4_foliage")
+
+[node name="Blade3" type="MeshInstance3D" parent="GrassVisual"]
+transform = Transform3D(0.5736, 0, -0.8192, 0, 1, 0, 0.8192, 0, 0.5736, 0.5, 0.45, -0.45)
+mesh = SubResource("CylinderMesh_blade")
+material_override = ExtResource("4_foliage")
+
+[node name="Blade4" type="MeshInstance3D" parent="GrassVisual"]
+transform = Transform3D(0.9848, -0.1736, 0, 0.1528, 0.8666, 0, 0, 0, 1, 0.72, 0.39, 0.1)
+mesh = SubResource("CylinderMesh_blade")
+material_override = ExtResource("4_foliage")
+
+[node name="Blade5" type="MeshInstance3D" parent="GrassVisual"]
+transform = Transform3D(0.342, 0, 0.9397, 0, 0.93, 0, -0.9397, 0, 0.342, 0.25, 0.4185, 0.4)
+mesh = SubResource("CylinderMesh_blade")
+material_override = ExtResource("4_foliage")
+
+[node name="Blade6" type="MeshInstance3D" parent="GrassVisual"]
+transform = Transform3D(0.766, 0, -0.6428, 0, 1.05, 0, 0.6428, 0, 0.766, -0.35, 0.4725, 0.25)
+mesh = SubResource("CylinderMesh_blade")
+material_override = ExtResource("4_foliage")
+
+[node name="Blade7" type="MeshInstance3D" parent="GrassVisual"]
+transform = Transform3D(0.9781, 0.2079, 0, -0.1767, 0.8314, 0, 0, 0, 1, -0.7, 0.374, 0.62)
+mesh = SubResource("CylinderMesh_blade")
+material_override = ExtResource("4_foliage")
+
+[node name="Blade8" type="MeshInstance3D" parent="GrassVisual"]
+transform = Transform3D(0.1736, 0, -0.9848, 0, 1, 0, 0.9848, 0, 0.1736, 0.05, 0.45, -0.1)
+mesh = SubResource("CylinderMesh_blade")
+material_override = ExtResource("4_foliage")
+
+[node name="Blade9" type="MeshInstance3D" parent="GrassVisual"]
+transform = Transform3D(0.6428, 0, 0.766, 0, 0.9, 0, -0.766, 0, 0.6428, 0.62, 0.405, 0.68)
+mesh = SubResource("CylinderMesh_blade")
+material_override = ExtResource("4_foliage")

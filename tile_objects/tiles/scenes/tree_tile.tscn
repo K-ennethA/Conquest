@@ -1,0 +1,65 @@
+[gd_scene load_steps=10 format=3 uid="uid://c0treetile0001"]
+
+[ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
+[ext_resource type="Resource" uid="uid://c0treeres00001" path="res://game/tiles/resources/tree.tres" id="2_res"]
+[ext_resource type="Material" uid="uid://c0grasstile001" path="res://tile_objects/tiles/materials/stylized_grass_material.tres" id="3_grass"]
+[ext_resource type="Material" uid="uid://c0foliage00001" path="res://tile_objects/tiles/materials/stylized_foliage_material.tres" id="4_foliage"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_trunk"]
+top_radius = 0.14
+bottom_radius = 0.18
+height = 0.8
+radial_segments = 6
+rings = 1
+
+[sub_resource type="SphereMesh" id="SphereMesh_leaf"]
+radius = 1.0
+height = 2.0
+radial_segments = 8
+rings = 5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_bark"]
+albedo_color = Color(0.36, 0.24, 0.14, 1)
+roughness = 1.0
+
+[node name="TreeTile" type="Node3D"]
+script = ExtResource("1_tile")
+tile_resource = ExtResource("2_res")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_base")
+material_override = ExtResource("3_grass")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+shape = SubResource("BoxShape3D_base")
+
+[node name="TreeVisual" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+
+[node name="Trunk" type="MeshInstance3D" parent="TreeVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
+mesh = SubResource("CylinderMesh_trunk")
+material_override = SubResource("StandardMaterial3D_bark")
+
+[node name="Leaf1" type="MeshInstance3D" parent="TreeVisual"]
+transform = Transform3D(0.62, 0, 0, 0, 0.62, 0, 0, 0, 0.62, 0, 1.05, 0)
+mesh = SubResource("SphereMesh_leaf")
+material_override = ExtResource("4_foliage")
+
+[node name="Leaf2" type="MeshInstance3D" parent="TreeVisual"]
+transform = Transform3D(0.46, 0, 0, 0, 0.46, 0, 0, 0, 0.46, 0.34, 0.9, 0.16)
+mesh = SubResource("SphereMesh_leaf")
+material_override = ExtResource("4_foliage")
+
+[node name="Leaf3" type="MeshInstance3D" parent="TreeVisual"]
+transform = Transform3D(0.42, 0, 0, 0, 0.42, 0, 0, 0, 0.42, -0.28, 0.96, -0.2)
+mesh = SubResource("SphereMesh_leaf")
+material_override = ExtResource("4_foliage")

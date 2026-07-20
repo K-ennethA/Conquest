@@ -176,15 +176,45 @@ func _load_tiles() -> bool:
 
 func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary) -> bool:
 	"""Create a tile at the specified grid position"""
-	var tile_scene = default_tile_scene
 	var tile_resource_path = tile_data.get("tile_resource_path", "")
-	
-	# Load custom tile scene if specified
-	if not tile_resource_path.is_empty() and ResourceLoader.exists(tile_resource_path):
+	var tile_type = tile_data.get("tile_type", "NORMAL")
+
+	# Resolve the terrain data FIRST: the TileResource is what decides which
+	# visual scene this tile gets (via its model_path), so it has to be known
+	# before we choose a scene to instantiate.
+	var resolved_tile_resource := _resolve_tile_resource(tile_resource_path, tile_type)
+
+	# Pick the scene to instantiate, most specific first:
+	#  1. resolved_tile_resource.model_path -- a hand-authored geometry scene under
+	#     tile_objects/tiles/scenes/ (tree, tall grass, meadow, dirt...). These are
+	#     built at FULL cell size already (a 2 x 0.2 x 2 slab + collision).
+	#  2. tile_resource_path when it is itself a PackedScene (legacy map data that
+	#     stored a scene path in this field).
+	#  3. default_tile_scene -- the plain unit-box tile.
+	# Every step is guarded: a missing or non-PackedScene path just falls through
+	# to the next option, so bad data can never fail map loading.
+	var tile_scene: PackedScene = default_tile_scene
+	var uses_authored_geometry: bool = false
+
+	if resolved_tile_resource != null:
+		var model_path: String = resolved_tile_resource.model_path
+		if not model_path.is_empty():
+			if ResourceLoader.exists(model_path):
+				var model_scene = load(model_path) as PackedScene
+				if model_scene != null:
+					tile_scene = model_scene
+					uses_authored_geometry = true
+				else:
+					push_warning("MapLoader: model_path is not a PackedScene, using default tile: " + model_path)
+			else:
+				push_warning("MapLoader: model_path not found, using default tile: " + model_path)
+
+	# Legacy fallback: the same field may hold a scene path instead of a TileResource.
+	if not uses_authored_geometry and not tile_resource_path.is_empty() and ResourceLoader.exists(tile_resource_path):
 		var custom_scene = load(tile_resource_path) as PackedScene
 		if custom_scene:
 			tile_scene = custom_scene
-	
+
 	# Instantiate tile
 	var tile_instance = tile_scene.instantiate()
 	if not tile_instance:
@@ -205,16 +235,21 @@ func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary) -> bool
 	# never lined up with the tile and terrain hover resolved to the wrong cell.
 	var world_pos = Vector3(grid_pos.x * 2 + 1, 0, grid_pos.y * 2 + 1)
 	tile_instance.transform.origin = world_pos
-	tile_instance.transform.basis = Basis().scaled(Vector3(2, 1, 2))
-	
-	# Bind terrain data: resolve a TileResource (explicit path, else a type->
-	# resource map for the built-in families) and assign it to the live tile so
+	# default_tile_scene (and legacy custom scenes) use a UNIT 1x1x1 box, so they
+	# are stretched to span the 2x2 cell here. Authored geometry scenes already
+	# ship a 2 x 0.2 x 2 slab (see tile_objects/tiles/scenes/tree_tile.tscn and the
+	# CELL = 2.0 layout in dev_scripts/grass_preview.gd), so applying the same
+	# scale would double them to 4x4 and overlap their neighbours -- they stay at
+	# identity. This does not change the scaling of any pre-existing path.
+	if not uses_authored_geometry:
+		tile_instance.transform.basis = Basis().scaled(Vector3(2, 1, 2))
+
+	# Bind terrain data: the TileResource resolved above (explicit path, else a
+	# type->resource map for the built-in families) is assigned to the live tile so
 	# the board becomes terrain-aware. Assign BEFORE add_child so Tile._ready()
 	# applies the resource visuals. Register the cell->TileResource mapping with
 	# CombatServices so the shared BoardAdapter reads real terrain. Fall back to
 	# the legacy set_tile_type() visuals when no resource resolves.
-	var tile_type = tile_data.get("tile_type", "NORMAL")
-	var resolved_tile_resource := _resolve_tile_resource(tile_resource_path, tile_type)
 	if resolved_tile_resource != null and tile_instance.has_method("set_tile_resource"):
 		tile_instance.set_tile_resource(resolved_tile_resource)
 		# Guarded so headless/tool loads without the autoload don't crash.

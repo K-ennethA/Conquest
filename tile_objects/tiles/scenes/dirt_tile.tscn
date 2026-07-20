@@ -1,0 +1,65 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
+[ext_resource type="Resource" path="res://game/tiles/resources/forest_dirt.tres" id="2_res"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="SphereMesh" id="SphereMesh_pebble"]
+radius = 1.0
+height = 2.0
+radial_segments = 6
+rings = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_dirt"]
+albedo_color = Color(0.45, 0.34, 0.23, 1)
+roughness = 1.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pebble"]
+albedo_color = Color(0.36, 0.33, 0.3, 1)
+roughness = 1.0
+
+[node name="DirtTile" type="Node3D"]
+script = ExtResource("1_tile")
+tile_resource = ExtResource("2_res")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_base")
+material_override = SubResource("StandardMaterial3D_dirt")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+shape = SubResource("BoxShape3D_base")
+
+[node name="DirtVisual" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+
+[node name="Pebble1" type="MeshInstance3D" parent="DirtVisual"]
+transform = Transform3D(0.12, 0, 0, 0, 0.07, 0, 0, 0, 0.12, -0.45, 0.03, 0.3)
+mesh = SubResource("SphereMesh_pebble")
+material_override = SubResource("StandardMaterial3D_pebble")
+
+[node name="Pebble2" type="MeshInstance3D" parent="DirtVisual"]
+transform = Transform3D(0.09, 0, 0, 0, 0.055, 0, 0, 0, 0.09, 0.5, 0.025, -0.2)
+mesh = SubResource("SphereMesh_pebble")
+material_override = SubResource("StandardMaterial3D_pebble")
+
+[node name="Pebble3" type="MeshInstance3D" parent="DirtVisual"]
+transform = Transform3D(0.14, 0, 0, 0, 0.08, 0, 0, 0, 0.11, -0.2, 0.035, -0.55)
+mesh = SubResource("SphereMesh_pebble")
+material_override = SubResource("StandardMaterial3D_pebble")
+
+[node name="Pebble4" type="MeshInstance3D" parent="DirtVisual"]
+transform = Transform3D(0.08, 0, 0, 0, 0.06, 0, 0, 0, 0.1, 0.62, 0.028, 0.6)
+mesh = SubResource("SphereMesh_pebble")
+material_override = SubResource("StandardMaterial3D_pebble")
+
+[node name="Pebble5" type="MeshInstance3D" parent="DirtVisual"]
+transform = Transform3D(0.11, 0, 0, 0, 0.065, 0, 0, 0, 0.09, 0.05, 0.03, 0.05)
+mesh = SubResource("SphereMesh_pebble")
+material_override = SubResource("StandardMaterial3D_pebble")
