@@ -119,9 +119,21 @@ var world_viewport: SubViewport
 var world_root: Node3D
 var world_camera: Camera3D
 var _world_span: float = TILE_STEP
-# Cell -> mesh lookups so a stroke can repaint one cell instead of rebuilding.
-var _tile_meshes: Dictionary = {}
+# Cell -> node lookups so a stroke can rebuild one cell instead of the whole world.
+# _tile_visuals holds a Node3D: usually an instance of the tile's authored scene,
+# or the fallback coloured box for tiles that have no model.
+var _tile_visuals: Dictionary = {}
 var _spawn_meshes: Dictionary = {}
+
+# --- 3D tile geometry caches --------------------------------------------------
+# The 3D view instantiates each tile's REAL authored scene (TileResource.model_path)
+# instead of a flat coloured box. Everything here is keyed by path and loaded once,
+# so a 20x20 rebuild never re-reads a file per cell. A cached null means "already
+# tried, unusable" - a broken path falls back to the box and is never retried.
+var _tile_resource_cache: Dictionary = {}   # .tres path -> TileResource (or null)
+var _tile_model_cache: Dictionary = {}      # .tscn path -> PackedScene (or null)
+var _type_model_paths: Dictionary = {}      # type_name -> model scene path
+var _type_model_paths_built: bool = false
 
 # Preview Section
 var preview_container: VBoxContainer
@@ -405,6 +417,9 @@ func _load_tile_palette_entries() -> void:
 	"""
 	tile_palette_entries.clear()
 	resource_tile_colors.clear()
+	# The type -> model lookup is derived from the palette, so a rescan invalidates it.
+	_type_model_paths.clear()
+	_type_model_paths_built = false
 
 	var type_names: Array = Tile.TileType.keys()
 
@@ -1428,9 +1443,10 @@ func _make_tile_drag_preview(display_name: String, color: Color) -> Control:
 
 # --- 3D world view ------------------------------------------------------------
 # A live render of the map inside a SubViewport, using MapGallery's layout math so
-# both views agree: one BoxMesh per tile centred on the origin, SphereMesh markers
-# for spawns. Full rebuilds are rare (new/load/resize/clear/fill-all); everything
-# else goes through _refresh_cell_3d, which touches a single cell.
+# both views agree: each tile is an instance of its OWN authored scene (falling back
+# to a coloured box when it has no model), with SphereMesh markers for spawns. Full
+# rebuilds are rare (new/load/resize/clear/fill-all); everything else goes through
+# _refresh_cell_3d, which touches a single cell.
 
 func _setup_world_viewport() -> void:
 	"""Populate the SubViewport with a MapRoot, camera, light and environment"""
@@ -1487,8 +1503,9 @@ func _build_world_3d() -> void:
 
 	# Free previous geometry and drop the stale cell -> mesh lookups.
 	for child in world_root.get_children():
+		world_root.remove_child(child)
 		child.queue_free()
-	_tile_meshes.clear()
+	_tile_visuals.clear()
 	_spawn_meshes.clear()
 
 	if not current_map:
@@ -1503,24 +1520,126 @@ func _build_world_3d() -> void:
 	for y in range(rows):
 		for x in range(cols):
 			var pos := Vector2i(x, y)
-			_create_tile_mesh(pos)
+			_create_tile_visual(pos)
 			_sync_spawn_marker(pos)
 
-func _create_tile_mesh(pos: Vector2i) -> void:
-	"""Create the box mesh for a single cell and register it in _tile_meshes"""
+func _load_tile_resource(resource_path: String) -> TileResource:
+	"""Cached TileResource load; null for an empty, missing or wrong-typed path"""
+	if resource_path.is_empty():
+		return null
+
+	if _tile_resource_cache.has(resource_path):
+		return _tile_resource_cache[resource_path] as TileResource
+
+	var tile_resource: TileResource = null
+	if ResourceLoader.exists(resource_path):
+		var loaded = load(resource_path)
+		if loaded is TileResource:
+			tile_resource = loaded as TileResource
+
+	_tile_resource_cache[resource_path] = tile_resource
+	return tile_resource
+
+func _build_type_model_paths() -> void:
+	"""Map each tile TYPE to a palette resource that actually has geometry.
+
+	Only consulted when a cell records no resource path of its own (maps authored
+	before that field, and create_default_layout's bare "NORMAL" cells). Types whose
+	resources are all model-less are simply absent, so those cells keep the box.
+	"""
+	if _type_model_paths_built:
+		return
+	_type_model_paths_built = true
+
+	for entry in tile_palette_entries:
+		var type_name: String = str(entry.get("type_name", ""))
+		if type_name.is_empty() or _type_model_paths.has(type_name):
+			continue
+		var tile_resource := _load_tile_resource(str(entry.get("resource_path", "")))
+		if not tile_resource or tile_resource.model_path.is_empty():
+			continue
+		_type_model_paths[type_name] = tile_resource.model_path
+
+func _tile_model_path_at(pos: Vector2i) -> String:
+	"""Model scene path for a cell, or "" when it should render as a coloured box.
+
+	The cell's OWN tile_resource_path wins - it names the exact tile the author
+	painted. Only when that is empty (or unloadable) do we fall back to the type.
+	"""
+	if not current_map:
+		return ""
+
+	var tile_data: Dictionary = current_map.get_tile_at_position(pos)
+	var resource_path: String = str(tile_data.get("tile_resource_path", ""))
+	if not resource_path.is_empty():
+		var tile_resource := _load_tile_resource(resource_path)
+		if tile_resource:
+			return tile_resource.model_path
+
+	_build_type_model_paths()
+	return str(_type_model_paths.get(str(tile_data.get("tile_type", "NORMAL")), ""))
+
+func _load_tile_model(scene_path: String) -> PackedScene:
+	"""Cached PackedScene load for a model_path; null when missing or not a scene"""
+	if scene_path.is_empty():
+		return null
+
+	if _tile_model_cache.has(scene_path):
+		return _tile_model_cache[scene_path] as PackedScene
+
+	var packed: PackedScene = null
+	if ResourceLoader.exists(scene_path):
+		var loaded = load(scene_path)
+		if loaded is PackedScene:
+			packed = loaded as PackedScene
+
+	_tile_model_cache[scene_path] = packed
+	return packed
+
+func _instantiate_tile_model(pos: Vector2i) -> Node3D:
+	"""Instance of the cell's authored tile scene, or null when it has none.
+
+	tile.gd is not a @tool script, so the editor renders the scene's geometry and
+	materials without ever running its gameplay logic.
+	"""
+	var packed := _load_tile_model(_tile_model_path_at(pos))
+	if not packed:
+		return null
+
+	var instance = packed.instantiate()
+	if instance is Node3D:
+		return instance as Node3D
+
+	# Something non-spatial was authored there - drop it and use the box instead.
+	if instance:
+		instance.free()
+	return null
+
+func _create_tile_visual(pos: Vector2i) -> void:
+	"""Build the 3D visual for a single cell and register it in _tile_visuals.
+
+	The authored tile scenes are already a full cell (a 2 x 0.2 x 2 slab matching
+	TILE_STEP), so they go in at IDENTITY scale - TILE_MESH_SIZE belongs to the
+	fallback box alone. Tiles with no model (water, lava, wall) keep that box.
+	"""
 	if not world_root or not current_map:
 		return
 
-	var tile_mesh := BoxMesh.new()
-	tile_mesh.size = TILE_MESH_SIZE
+	var visual: Node3D = _instantiate_tile_model(pos)
 
-	var mesh_instance := MeshInstance3D.new()
-	mesh_instance.mesh = tile_mesh
-	mesh_instance.material_override = _solid_material(_tile_color_at(pos))
-	mesh_instance.position = _world_position_for(pos, 0.0)
-	world_root.add_child(mesh_instance)
+	if not visual:
+		var tile_mesh := BoxMesh.new()
+		tile_mesh.size = TILE_MESH_SIZE
 
-	_tile_meshes[pos] = mesh_instance
+		var mesh_instance := MeshInstance3D.new()
+		mesh_instance.mesh = tile_mesh
+		mesh_instance.material_override = _solid_material(_tile_color_at(pos))
+		visual = mesh_instance
+
+	world_root.add_child(visual)
+	visual.position = _world_position_for(pos, 0.0)
+
+	_tile_visuals[pos] = visual
 
 func _sync_spawn_marker(pos: Vector2i) -> void:
 	"""Create, recolour or free the spawn marker for a cell to match the map data"""
@@ -1579,25 +1698,28 @@ func _spawn_kind_marker_scale(spawn_kind: String) -> float:
 	return 1.0
 
 func _refresh_cell_3d(pos: Vector2i) -> void:
-	"""Cheap per-cell 3D update - recolour the tile, add/remove its spawn marker.
+	"""Cheap per-cell 3D update - REBUILD the tile, add/remove its spawn marker.
 
-	Deliberately never rebuilds the whole world, so drag strokes stay smooth.
+	A repaint can swap a coloured box for a whole authored scene (or the reverse), so
+	the cell's node is rebuilt rather than recoloured. Only this one cell is touched,
+	so drag strokes stay smooth. Spawn markers live in their own dictionary as
+	siblings of the tile, so freeing the tile never wipes one - and _sync_spawn_marker
+	below re-asserts it either way.
 	"""
 	if not world_root or not current_map or not _is_valid_position(pos):
 		return
 
-	if _tile_meshes.has(pos):
-		var stored: MeshInstance3D = _tile_meshes[pos] as MeshInstance3D
-		if is_instance_valid(stored):
-			var material := stored.material_override as StandardMaterial3D
-			if material:
-				material.albedo_color = _tile_color_at(pos)
-		else:
-			_tile_meshes.erase(pos)
-			_create_tile_mesh(pos)
-	else:
-		_create_tile_mesh(pos)
+	if _tile_visuals.has(pos):
+		var stale: Node3D = _tile_visuals[pos] as Node3D
+		if is_instance_valid(stale):
+			# Detach before the deferred free so old and new never overlap for a frame.
+			var stale_parent := stale.get_parent()
+			if stale_parent:
+				stale_parent.remove_child(stale)
+			stale.queue_free()
+		_tile_visuals.erase(pos)
 
+	_create_tile_visual(pos)
 	_sync_spawn_marker(pos)
 
 func _tile_color_at(pos: Vector2i) -> Color:

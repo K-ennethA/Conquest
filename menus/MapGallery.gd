@@ -38,6 +38,7 @@ const EFFECT_FOR_TILE := {
 }
 
 const MAPS_DIR := "res://game/maps/resources/"
+const TILES_DIR := "res://game/tiles/resources/"
 
 # --- 3D preview tuning -------------------------------------------------------
 # Grid spacing between tile centres (world units). Each tile mesh is a little
@@ -63,6 +64,16 @@ const TURNTABLE_SPEED := 0.35  # radians / second
 @onready var map_camera: Camera3D
 # Cached span of the current map so _process turntable / re-aims stay stable.
 var _map_span: float = TILE_STEP
+
+# --- 3D tile geometry caches -------------------------------------------------
+# Tiles render as their REAL authored scene (TileResource.model_path) rather than a
+# flat coloured box. Everything here is keyed by path and loaded once, so switching
+# maps in the list never re-reads a file per cell. A cached null means "already
+# tried, unusable" - a broken path falls back to the box and is never retried.
+var _tile_resource_cache: Dictionary = {}   # .tres path -> TileResource (or null)
+var _tile_model_cache: Dictionary = {}      # .tscn path -> PackedScene (or null)
+var _type_model_paths: Dictionary = {}      # type_name -> model scene path
+var _type_model_paths_built: bool = false
 
 # Data
 var all_maps: Array[MapResource] = []
@@ -419,8 +430,10 @@ func _build_map_3d(map_res: MapResource) -> void:
 	if not map_root:
 		return
 
-	# Free previous geometry.
+	# Free previous geometry. Detach first so the outgoing map is never visible for
+	# a frame underneath the incoming one (queue_free is deferred).
 	for child in map_root.get_children():
+		map_root.remove_child(child)
 		child.queue_free()
 
 	# Reset turntable so each map starts square-on.
@@ -444,7 +457,8 @@ func _build_map_3d(map_res: MapResource) -> void:
 	var offset_x: float = float(cols - 1) * TILE_STEP * 0.5
 	var offset_z: float = float(rows - 1) * TILE_STEP * 0.5
 
-	# Shared meshes (per-instance material overrides colour them).
+	# Shared meshes (per-instance material overrides colour them). The tile box is only
+	# the fallback now - tiles that name a model get their authored scene instead.
 	var tile_mesh := BoxMesh.new()
 	tile_mesh.size = TILE_MESH_SIZE
 	var spawn_mesh := SphereMesh.new()
@@ -457,16 +471,23 @@ func _build_map_3d(map_res: MapResource) -> void:
 		if pos.x < 0 or pos.x >= cols or pos.y < 0 or pos.y >= rows:
 			continue
 		var tile_type := _read_tile_type(entry)
-		var color: Color = TILE_COLORS.get(tile_type, TILE_FALLBACK)
 
-		var mesh_instance := MeshInstance3D.new()
-		mesh_instance.mesh = tile_mesh
-		mesh_instance.material_override = _solid_material(color)
-		mesh_instance.position = Vector3(
+		# The authored scenes are already a full cell (a 2 x 0.2 x 2 slab matching
+		# TILE_STEP), so they go in at IDENTITY scale; TILE_MESH_SIZE is the box's.
+		var visual: Node3D = _instantiate_tile_model(entry, tile_type)
+
+		if not visual:
+			var color: Color = TILE_COLORS.get(tile_type, TILE_FALLBACK)
+			var mesh_instance := MeshInstance3D.new()
+			mesh_instance.mesh = tile_mesh
+			mesh_instance.material_override = _solid_material(color)
+			visual = mesh_instance
+
+		map_root.add_child(visual)
+		visual.position = Vector3(
 			float(pos.x) * TILE_STEP - offset_x,
 			0.0,
 			float(pos.y) * TILE_STEP - offset_z)
-		map_root.add_child(mesh_instance)
 
 	# Spawn markers, sitting on top of their tile.
 	for spawn in map_res.unit_spawns:
@@ -488,6 +509,121 @@ func _build_map_3d(map_res: MapResource) -> void:
 			SPAWN_Y,
 			float(pos.y) * TILE_STEP - offset_z)
 		map_root.add_child(marker)
+
+
+func _load_tile_resource(resource_path: String) -> TileResource:
+	"""Cached TileResource load; null for an empty, missing or wrong-typed path."""
+	if resource_path.is_empty():
+		return null
+
+	if _tile_resource_cache.has(resource_path):
+		return _tile_resource_cache[resource_path] as TileResource
+
+	var tile_resource: TileResource = null
+	if ResourceLoader.exists(resource_path):
+		var loaded = load(resource_path)
+		if loaded is TileResource:
+			tile_resource = loaded as TileResource
+
+	_tile_resource_cache[resource_path] = tile_resource
+	return tile_resource
+
+
+func _build_type_model_paths() -> void:
+	"""Map each tile TYPE to a tile resource that actually has geometry.
+
+	Only consulted when a layout entry records no tile_resource_path of its own
+	(maps authored before that field, and create_default_layout's bare "NORMAL"
+	cells). Types with no modelled resource are simply absent, so they keep the box.
+	"""
+	if _type_model_paths_built:
+		return
+	_type_model_paths_built = true
+
+	if not DirAccess.dir_exists_absolute(TILES_DIR):
+		return
+
+	var dir := DirAccess.open(TILES_DIR)
+	if not dir:
+		return
+
+	var file_names: Array[String] = []
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if file_name.ends_with(".tres"):
+			file_names.append(file_name)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+	# Stable ordering, so which resource claims a shared type never varies by run.
+	file_names.sort()
+
+	var type_names: Array = Tile.TileType.keys()
+	for entry_name in file_names:
+		var tile_resource := _load_tile_resource(TILES_DIR + entry_name)
+		if not tile_resource or tile_resource.model_path.is_empty():
+			continue
+		var type_index: int = int(tile_resource.tile_type)
+		if type_index < 0 or type_index >= type_names.size():
+			continue
+		var type_name: String = str(type_names[type_index])
+		if not _type_model_paths.has(type_name):
+			_type_model_paths[type_name] = tile_resource.model_path
+
+
+func _load_tile_model(scene_path: String) -> PackedScene:
+	"""Cached PackedScene load for a model_path; null when missing or not a scene."""
+	if scene_path.is_empty():
+		return null
+
+	if _tile_model_cache.has(scene_path):
+		return _tile_model_cache[scene_path] as PackedScene
+
+	var packed: PackedScene = null
+	if ResourceLoader.exists(scene_path):
+		var loaded = load(scene_path)
+		if loaded is PackedScene:
+			packed = loaded as PackedScene
+
+	_tile_model_cache[scene_path] = packed
+	return packed
+
+
+func _tile_model_path(entry: Dictionary, tile_type: String) -> String:
+	"""Model scene path for a layout entry, or "" when it renders as a coloured box.
+
+	The entry's OWN tile_resource_path wins - it names the exact tile the author
+	painted. Only when that is empty (or unloadable) do we fall back to the type.
+	"""
+	var resource_path := str(entry.get("tile_resource_path", ""))
+	if not resource_path.is_empty():
+		var tile_resource := _load_tile_resource(resource_path)
+		if tile_resource:
+			return tile_resource.model_path
+
+	_build_type_model_paths()
+	return str(_type_model_paths.get(tile_type, ""))
+
+
+func _instantiate_tile_model(entry: Dictionary, tile_type: String) -> Node3D:
+	"""Instance of a layout entry's authored tile scene, or null when it has none.
+
+	Fully guarded: this is the real game scene (tile.gd DOES run here, exactly as on
+	the board), so one bad tile resource must never take the gallery down with it.
+	"""
+	var packed := _load_tile_model(_tile_model_path(entry, tile_type))
+	if not packed:
+		return null
+
+	var instance = packed.instantiate()
+	if instance is Node3D:
+		return instance as Node3D
+
+	# Something non-spatial was authored there - drop it and use the box instead.
+	if instance:
+		instance.free()
+	return null
 
 
 func _aim_camera() -> void:
