@@ -21,6 +21,8 @@ class_name BoardAdapter
 ##   all_units() -> Array
 ##
 ## Also implements the [MovementResolver] board interface:
+##   cells_of(unit) -> Array[Vector2i]
+##   can_fit(unit, anchor: Vector2i) -> bool
 ##   in_bounds(cell: Vector2i) -> bool
 ##   is_blocked(cell: Vector2i) -> bool
 ##   is_occupied(cell: Vector2i) -> bool
@@ -46,6 +48,12 @@ class_name BoardAdapter
 ## ``owner_player`` (or ``get_owner_player()``) works. ``units_at`` derives each
 ## unit's cell live from its world ``position`` every call, so moving a unit only
 ## needs to reposition it -- there is no separate occupancy index to keep in sync.
+##
+## A unit may span more than one cell. Its ``cell_of`` anchor is the minimum
+## corner and its optional ``get_footprint() -> Vector2i`` gives the span, so it
+## covers ``anchor .. anchor + footprint - 1``. Units without that method (mocks)
+## read as 1x1. ``units_at`` matches ANY covered cell, which is what makes a large
+## boss block, and be attackable from, every tile it stands on.
 
 var _grid                 ## Grid resource (col=X, row=Z); may be null in mocks.
 var _units_provider       ## See class docs for accepted shapes.
@@ -90,15 +98,50 @@ func cell_of(unit) -> Vector2i:
 	return world_to_cell(_unit_position(unit))
 
 
-## Every known unit whose current cell equals [param cell].
+## Every cell [param unit] covers: its [method cell_of] anchor plus the rest of its
+## footprint span. A normal 1x1 unit returns exactly [code][anchor][/code].
+func cells_of(unit) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if unit == null:
+		return out
+	var anchor := cell_of(unit)
+	var fp := _footprint_of(unit)
+	for dx in range(fp.x):
+		for dy in range(fp.y):
+			out.append(Vector2i(anchor.x + dx, anchor.y + dy))
+	return out
+
+
+## Every known unit covering [param cell] -- for a multi-cell unit that is any cell
+## of its footprint, not just its anchor, so a large boss is found from all of them.
 func units_at(cell: Vector2i) -> Array:
 	var result: Array = []
 	for u in _all_units():
 		if u == null:
 			continue
-		if world_to_cell(_unit_position(u)) == cell:
+		if _covers(u, cell):
 			result.append(u)
 	return result
+
+
+## True when [param unit] could stand with its anchor at [param anchor]: every cell
+## it would then cover is in bounds, passable terrain, and free of any OTHER living
+## unit. The unit's own current cells never count against it, so a large unit is
+## never blocked by itself when shuffling within its own footprint. This is the
+## primitive [MovementResolver] uses to place multi-cell units.
+func can_fit(unit, anchor: Vector2i) -> bool:
+	var fp := _footprint_of(unit)
+	for dx in range(fp.x):
+		for dy in range(fp.y):
+			var c := Vector2i(anchor.x + dx, anchor.y + dy)
+			if not in_bounds(c):
+				return false
+			if is_blocked(c):
+				return false
+			for other in units_at(c):
+				if other != unit and _is_alive(other):
+					return false
+	return true
 
 
 ## True when [param a] and [param b] belong to different (non-null) owners.
@@ -288,6 +331,24 @@ func _tile_node_at(cell: Vector2i):
 		if tiles != null:
 			return tiles.get_node_or_null("Tile_%d_%d" % [cell.x, cell.y])
 	return null
+
+
+## [param unit]'s cell span, read duck-typed. Anything without get_footprint()
+## (mock units in tests, legacy units) is a normal 1x1, as is an invalid value.
+func _footprint_of(unit) -> Vector2i:
+	if unit != null and unit.has_method("get_footprint"):
+		var fp = unit.get_footprint()
+		if fp is Vector2i:
+			return Vector2i(maxi(1, fp.x), maxi(1, fp.y))
+	return Vector2i.ONE
+
+
+## True when [param cell] falls inside [param unit]'s footprint span.
+func _covers(unit, cell: Vector2i) -> bool:
+	var anchor := world_to_cell(_unit_position(unit))
+	var fp := _footprint_of(unit)
+	return cell.x >= anchor.x and cell.x < anchor.x + fp.x \
+		and cell.y >= anchor.y and cell.y < anchor.y + fp.y
 
 
 func _unit_position(unit) -> Vector3:

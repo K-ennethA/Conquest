@@ -66,6 +66,13 @@ var max_health: int:
 var _mesh_instance: MeshInstance3D
 var _original_material: Material
 
+# Board footprint. Cells are 2 world units across (see Grid.cell_size); the mesh
+# scale a large unit was built from is cached the first time apply_footprint_visual()
+# runs so re-applying it never multiplies the scale again.
+const CELL_SIZE: float = 2.0
+var _footprint_base_scale: Vector3 = Vector3.ONE
+var _has_footprint_base_scale: bool = false
+
 # Death guard: death resolution (signals + despawn) must run exactly once, no
 # matter how many code paths observe HP hitting 0 (take_damage, the health_changed
 # signal, or a heal-then-lethal edge). Latches true on the first death.
@@ -208,6 +215,9 @@ func _setup_visuals() -> void:
 		_mesh_instance = get_node("MeshInstance3D")
 		if _mesh_instance and _mesh_instance.mesh and _mesh_instance.mesh.material:
 			_original_material = _mesh_instance.mesh.material
+		# Size the model to the unit's footprint even when no visual manager is
+		# present (headless / test harness). No-op for normal 1x1 units.
+		apply_footprint_visual()
 
 func _connect_events() -> void:
 	"""Connect to game events"""
@@ -380,6 +390,59 @@ func has_character() -> bool:
 ## Current health of the unit (0 when no stats component is present).
 func get_hp() -> int:
 	return current_health
+
+## How many board cells this unit spans. Vector2i.ONE (a normal 1x1 unit) for
+## anything without a character resource or with an invalid authored value; the
+## unit's anchor cell (BoardAdapter.cell_of) is the minimum corner of that span.
+## This is the ONE place other systems ask a unit about its size.
+func get_footprint() -> Vector2i:
+	if character_resource == null:
+		return Vector2i.ONE
+	if character_resource.has_method("get_footprint"):
+		return character_resource.get_footprint()
+	var fp = character_resource.get("footprint")
+	if fp is Vector2i:
+		return Vector2i(maxi(1, fp.x), maxi(1, fp.y))
+	return Vector2i.ONE
+
+## Offset from the anchor cell's center to the center of the whole footprint.
+## Cells are CELL_SIZE world units across and the unit node sits at its anchor
+## cell's center, so a (w,h) span reaches (w-1) cells along +X and (h-1) along +Z.
+## Vector3.ZERO for a 1x1 unit.
+func get_footprint_offset() -> Vector3:
+	var fp := get_footprint()
+	return Vector3(
+		float(fp.x - 1) * CELL_SIZE * 0.5,
+		0.0,
+		float(fp.y - 1) * CELL_SIZE * 0.5)
+
+## Scale the unit's MeshInstance3D to fill its footprint and slide it so the model
+## centers over the whole covered block instead of sitting on the anchor cell.
+##
+## Applied to the VISUAL child only -- moving the unit node itself would change the
+## world position BoardAdapter.cell_of() derives the anchor from. A 1x1 unit is a
+## no-op, so normal units keep exactly the scale/offset the scene and the visual
+## manager gave them. The pre-footprint scale is cached on first use so repeated
+## calls (the visual manager re-applies materials + type scale on every refresh)
+## never compound.
+func apply_footprint_visual() -> void:
+	var mesh := get_node_or_null("MeshInstance3D") as MeshInstance3D
+	if mesh == null:
+		return
+	var fp := get_footprint()
+	if fp == Vector2i.ONE:
+		return
+	if not _has_footprint_base_scale:
+		_footprint_base_scale = mesh.scale
+		_has_footprint_base_scale = true
+	# Wide/deep by the span; height follows the larger axis so a 2x2 boss reads
+	# as genuinely big rather than a flattened slab.
+	var tall: float = float(maxi(fp.x, fp.y))
+	mesh.scale = Vector3(
+		_footprint_base_scale.x * float(fp.x),
+		_footprint_base_scale.y * tall,
+		_footprint_base_scale.z * float(fp.y))
+	mesh.position = get_footprint_offset()
 
 ## True only for character-backed bosses; false for legacy / non-character units.
 func is_boss() -> bool:

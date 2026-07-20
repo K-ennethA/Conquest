@@ -98,6 +98,11 @@ func _apply_player_material(unit: Unit, player: PlayerMaterials.PlayerTeam) -> v
 		UnitType.Type.TANK:
 			mesh_instance.scale = Vector3(1.3, 1.1, 1.3)  # Bigger overall
 
+	# A multi-cell unit (e.g. a 2x2 boss) then fills and centers over its whole
+	# footprint. No-op for normal 1x1 units, so the per-type scales above stand.
+	if unit and unit.has_method("apply_footprint_visual"):
+		unit.apply_footprint_visual()
+
 func _setup_unit_type_indicator(unit: Unit) -> void:
 	"""Add visual indicators for unit type"""
 	if not unit.unit_stats or not unit.unit_stats.stats_resource:
@@ -123,8 +128,18 @@ func _create_health_bar(unit: Unit) -> void:
 	var health_bar = _health_bar_scene.instantiate()
 	unit.add_child(health_bar)
 	
-	# Position health bar higher to avoid clipping with taller units (Archers are 1.2x height)
-	health_bar.position = Vector3(0, 1.8, 0)  # Higher to clear all unit types
+	# Position health bar higher to avoid clipping with taller units (Archers are 1.2x height).
+	# A multi-cell unit is scaled up by its footprint, so lift the bar to clear the
+	# bigger model and slide it over the center of the covered block. Both offsets
+	# are zero for a normal 1x1 unit, leaving the classic (0, 1.8, 0) placement.
+	var bar_offset: Vector3 = Vector3.ZERO
+	var bar_height: float = 1.8
+	if unit and unit.has_method("get_footprint_offset"):
+		bar_offset = unit.get_footprint_offset()
+	if unit and unit.has_method("get_footprint"):
+		var fp: Vector2i = unit.get_footprint()
+		bar_height += 1.2 * float(maxi(fp.x, fp.y) - 1)
+	health_bar.position = Vector3(bar_offset.x, bar_height, bar_offset.z)
 	
 	# Normal scale for good readability
 	health_bar.scale = Vector3(1.0, 1.0, 1.0)

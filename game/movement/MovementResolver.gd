@@ -19,7 +19,15 @@ class_name MovementResolver
 ## board.is_occupied(cell: Vector2i) -> bool      # a unit stands here; default: false
 ## board.tile_id_at(cell: Vector2i) -> StringName # for terrain_cost_overrides; optional
 ## board.tile_tag_at(cell: Vector2i) -> StringName# for terrain_cost_overrides; optional
+## board.can_fit(unit, anchor: Vector2i) -> bool  # whole-footprint placement; optional
+## board.units_at(cell: Vector2i) -> Array        # for self-excluding occupancy; optional
 ## [/codeblock]
+##
+## [b]Multi-cell units:[/b] pass the moving unit as the optional [code]unit[/code]
+## argument and a unit spanning more than one cell (its ``get_footprint()``) may
+## only enter or stop where its WHOLE span is legal. With no unit, a 1x1 unit, or a
+## unit whose footprint is unknown, every footprint check short-circuits to the
+## original single-cell rules -- so normal units are entirely unaffected.
 ##
 ## [b]Per-kind rules[/b] ([enum CombatTypes.MovementKind]):
 ## [ul]
@@ -48,20 +56,22 @@ const KNIGHT_OFFSETS: Array[Vector2i] = [
 
 
 ## Returns the sorted, de-duplicated set of cells reachable from [param origin]
-## within the profile's budget. The origin itself is never included.
-func reachable_cells(origin: Vector2i, profile: MovementProfile, board) -> Array[Vector2i]:
+## within the profile's budget. The origin itself is never included. [param unit] is
+## the moving unit, used only to honour a multi-cell footprint; omit it (or pass a
+## 1x1 unit) for the original single-cell behaviour.
+func reachable_cells(origin: Vector2i, profile: MovementProfile, board, unit = null) -> Array[Vector2i]:
 	var raw: Array = []
 	match profile.shape:
 		MovementProfile.Shape.ORTHOGONAL:
-			raw = _flood(origin, profile, board, ORTHOGONAL_OFFSETS)
+			raw = _flood(origin, profile, board, ORTHOGONAL_OFFSETS, unit)
 		MovementProfile.Shape.DIAGONAL:
-			raw = _flood(origin, profile, board, DIAGONAL_OFFSETS)
+			raw = _flood(origin, profile, board, DIAGONAL_OFFSETS, unit)
 		MovementProfile.Shape.ALL8:
-			raw = _flood(origin, profile, board, ALL8_OFFSETS)
+			raw = _flood(origin, profile, board, ALL8_OFFSETS, unit)
 		MovementProfile.Shape.KNIGHT:
-			raw = _knight(origin, profile, board)
+			raw = _knight(origin, profile, board, unit)
 		MovementProfile.Shape.TELEPORT:
-			raw = _teleport(origin, profile, board)
+			raw = _teleport(origin, profile, board, unit)
 
 	var seen := {}
 	var out: Array[Vector2i] = []
@@ -80,10 +90,10 @@ func reachable_cells(origin: Vector2i, profile: MovementProfile, board) -> Array
 
 ## True if [param target] can be reached from [param origin] under [param profile].
 ## The origin is trivially reachable (distance 0).
-func can_reach(origin: Vector2i, target: Vector2i, profile: MovementProfile, board) -> bool:
+func can_reach(origin: Vector2i, target: Vector2i, profile: MovementProfile, board, unit = null) -> bool:
 	if target == origin:
 		return true
-	return reachable_cells(origin, profile, board).has(target)
+	return reachable_cells(origin, profile, board, unit).has(target)
 
 
 # --- Shape strategies ------------------------------------------------------
@@ -91,7 +101,7 @@ func can_reach(origin: Vector2i, target: Vector2i, profile: MovementProfile, boa
 ## Uniform-cost flood for stepping shapes. Expands only through traversable
 ## cells, accumulates entry cost, and keeps cells whose total cost is within
 ## range and on which the kind is allowed to stop.
-func _flood(origin: Vector2i, profile: MovementProfile, board, offsets: Array[Vector2i]) -> Array:
+func _flood(origin: Vector2i, profile: MovementProfile, board, offsets: Array[Vector2i], unit = null) -> Array:
 	var best := { origin: 0 }
 	var open: Array[Vector2i] = [origin]
 	while not open.is_empty():
@@ -106,7 +116,7 @@ func _flood(origin: Vector2i, profile: MovementProfile, board, offsets: Array[Ve
 			var n: Vector2i = cur + off
 			if not _in_bounds(board, n):
 				continue
-			if not _can_traverse(n, profile.kind, board):
+			if not _can_enter(unit, n, profile.kind, board):
 				continue
 			var nc: int = cur_cost + _enter_cost(n, profile, board)
 			if nc > profile.range:
@@ -121,14 +131,14 @@ func _flood(origin: Vector2i, profile: MovementProfile, board, offsets: Array[Ve
 	for c in best.keys():
 		if c == origin:
 			continue
-		if _can_stop(c, profile.kind, board):
+		if _can_finish(unit, c, profile.kind, board):
 			out.append(c)
 	return out
 
 
 ## Breadth-first search over L-jumps. Each jump ignores intervening cells but
 ## must land on a cell the kind may stop on; range caps the number of jumps.
-func _knight(origin: Vector2i, profile: MovementProfile, board) -> Array:
+func _knight(origin: Vector2i, profile: MovementProfile, board, unit = null) -> Array:
 	var out: Array = []
 	var visited := { origin: true }
 	var frontier: Array[Vector2i] = [origin]
@@ -142,7 +152,7 @@ func _knight(origin: Vector2i, profile: MovementProfile, board) -> Array:
 					continue
 				if not _in_bounds(board, n):
 					continue
-				if not _can_stop(n, profile.kind, board):
+				if not _can_finish(unit, n, profile.kind, board):
 					continue
 				visited[n] = true
 				out.append(n)
@@ -152,7 +162,7 @@ func _knight(origin: Vector2i, profile: MovementProfile, board) -> Array:
 
 
 ## Every cell within direct (Manhattan) range, obstacles ignored for pathing.
-func _teleport(origin: Vector2i, profile: MovementProfile, board) -> Array:
+func _teleport(origin: Vector2i, profile: MovementProfile, board, unit = null) -> Array:
 	var out: Array = []
 	var r: int = maxi(0, profile.range)
 	for dx in range(-r, r + 1):
@@ -164,7 +174,7 @@ func _teleport(origin: Vector2i, profile: MovementProfile, board) -> Array:
 			var n := Vector2i(origin.x + dx, origin.y + dy)
 			if not _in_bounds(board, n):
 				continue
-			if not _can_stop(n, profile.kind, board):
+			if not _can_finish(unit, n, profile.kind, board):
 				continue
 			out.append(n)
 	return out
@@ -192,6 +202,88 @@ static func _can_stop(cell: Vector2i, kind: CombatTypes.MovementKind, board) -> 
 			return not _is_blocked(board, cell) and not _is_occupied(board, cell)
 		_:
 			return not _is_occupied(board, cell)
+
+
+# --- Footprint-aware wrappers ----------------------------------------------
+
+## Traversal check that also honours a multi-cell mover. A 1x1 (or unknown) unit
+## falls straight through to [method _can_traverse], so single-cell behaviour is
+## byte-for-byte the pre-footprint logic.
+static func _can_enter(unit, cell: Vector2i, kind: CombatTypes.MovementKind, board) -> bool:
+	var fp := _footprint_of(unit)
+	if fp == Vector2i.ONE:
+		return _can_traverse(cell, kind, board)
+	return _span_allows(unit, cell, fp, kind, board, false)
+
+
+## Stopping check that also honours a multi-cell mover (see [method _can_enter]).
+## For GROUND this is exactly the board's own [code]can_fit[/code] when it exposes
+## one; the other kinds are span-checked here because they ignore walls.
+static func _can_finish(unit, cell: Vector2i, kind: CombatTypes.MovementKind, board) -> bool:
+	var fp := _footprint_of(unit)
+	if fp == Vector2i.ONE:
+		return _can_stop(cell, kind, board)
+	if kind == CombatTypes.MovementKind.GROUND and board != null and board.has_method("can_fit"):
+		return bool(board.can_fit(unit, cell))
+	return _span_allows(unit, cell, fp, kind, board, true)
+
+
+## Per-kind legality across every cell a footprint covers from [param anchor].
+## Occupancy excludes the mover itself, so a large unit's own body never blocks the
+## step it is trying to take. [param stopping] applies the end-of-move rule (no kind
+## may finish on a cell another living unit holds).
+static func _span_allows(unit, anchor: Vector2i, fp: Vector2i, kind: CombatTypes.MovementKind, board, stopping: bool) -> bool:
+	for dx in range(fp.x):
+		for dy in range(fp.y):
+			var c := Vector2i(anchor.x + dx, anchor.y + dy)
+			if not _in_bounds(board, c):
+				return false
+			match kind:
+				CombatTypes.MovementKind.GROUND:
+					if _is_blocked(board, c) or _occupied_by_other(board, unit, c):
+						return false
+				CombatTypes.MovementKind.FLYING:
+					if _occupied_by_other(board, unit, c):
+						return false
+				CombatTypes.MovementKind.PHASING:
+					# Phases through everything while pathing; still cannot land on a unit.
+					if stopping and _occupied_by_other(board, unit, c):
+						return false
+	return true
+
+
+## [param unit]'s cell span, read duck-typed; Vector2i.ONE when unknown or invalid.
+static func _footprint_of(unit) -> Vector2i:
+	if unit != null and unit.has_method("get_footprint"):
+		var fp = unit.get_footprint()
+		if fp is Vector2i:
+			return Vector2i(maxi(1, fp.x), maxi(1, fp.y))
+	return Vector2i.ONE
+
+
+## True when a living unit OTHER than [param mover] stands on [param cell]. Falls
+## back to the plain occupancy query on boards without units_at.
+static func _occupied_by_other(board, mover, cell: Vector2i) -> bool:
+	if board == null:
+		return false
+	if mover != null and board.has_method("units_at"):
+		for u in board.units_at(cell):
+			if u != null and u != mover and _unit_alive(u):
+				return true
+		return false
+	return _is_occupied(board, cell)
+
+
+## Duck-typed liveness: prefers is_alive(), then a readable hp, else assumes alive.
+static func _unit_alive(unit) -> bool:
+	if unit == null:
+		return false
+	if unit.has_method("is_alive"):
+		return bool(unit.is_alive())
+	var hp = unit.get("hp")
+	if hp != null:
+		return int(hp) > 0
+	return true
 
 
 # --- Duck-typed board accessors -------------------------------------------

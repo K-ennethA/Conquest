@@ -154,7 +154,9 @@ func _reachable_cells(unit: Unit, origin: Vector2i, board) -> Array:
 	var profile = unit.get_movement_profile()
 	if profile == null:
 		return []
-	return MovementResolver.new().reachable_cells(origin, profile, board)
+	# Pass the unit so a multi-cell unit (e.g. a 2x2 boss) only considers cells where
+	# its WHOLE footprint fits; omitting it would path the boss as if it were 1x1.
+	return MovementResolver.new().reachable_cells(origin, profile, board, unit)
 
 
 ## Move the unit to the planned stand cell (if any), then resolve the chosen attack

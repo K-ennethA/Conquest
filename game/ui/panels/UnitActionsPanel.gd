@@ -1240,7 +1240,9 @@ func _try_show_movement_range_via_resolver() -> bool:
 
 	# origin cell (Vector2i(col, row)) straight from the board.
 	var origin: Vector2i = board.cell_of(selected_unit)
-	var cells: Array[Vector2i] = MovementResolver.new().reachable_cells(origin, profile, board)
+	# Pass the unit so a multi-cell unit (e.g. a 2x2 boss) only gets cells where its
+	# WHOLE footprint fits. Omitting it would resolve every unit as 1x1.
+	var cells: Array[Vector2i] = MovementResolver.new().reachable_cells(origin, profile, board, selected_unit)
 
 	# Convert each Vector2i(col, row) into the Vector3(col, 0, row) grid-coord form the
 	# visualizer + GameEvents.movement_range_calculated + downstream validation expect.

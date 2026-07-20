@@ -35,6 +35,11 @@ const MAX_MOVES: int = 4
 @export var movement_profile: MovementProfile
 ## Marks bosses / map bosses so modes and AI can treat them specially.
 @export var is_boss: bool = false
+## How many board cells this character spans — [code]Vector2i(1, 1)[/code] for a
+## normal unit, [code]Vector2i(2, 2)[/code] for a large boss such as a Great Tree.
+## The character's anchor cell (what [code]BoardAdapter.cell_of()[/code] reports)
+## is the MINIMUM corner of the span, which extends toward +col / +row from there.
+@export var footprint: Vector2i = Vector2i.ONE
 
 @export_group("Moveset")
 ## Up to [constant MAX_MOVES] moves. Extra entries are ignored by [method get_move].
@@ -77,6 +82,12 @@ func get_movement_profile() -> MovementProfile:
 		movement_kind,
 		base_movement,
 		shape)
+
+
+## [member footprint] guarded so each axis is at least 1 — a zero or negative
+## value authored in the inspector still reads back as a usable span.
+func get_footprint() -> Vector2i:
+	return Vector2i(maxi(1, footprint.x), maxi(1, footprint.y))
 
 
 func get_stat(stat_name: String) -> int:
