@@ -231,40 +231,32 @@ func _setup_connections() -> void:
 		sort_option.item_selected.connect(_on_sort_changed)
 
 func _load_all_tiles() -> void:
-	"""Load all available tile resources"""
+	"""Load all available tile resources, via TileCatalog.
+
+	This used to scan res://game/tiles/resources/ NON-RECURSIVELY and, finding
+	nothing, call _create_default_tiles() to "helpfully" regenerate a starter set.
+	Once tiles moved into biome folders (forest/, volcano/, ice/, common/) that
+	flat scan matched zero files, so every visit to this gallery wrote four
+	STALE-format tiles (no id, no model_path) back into the root -- shadowing the
+	real ones and tripping TileCatalog's duplicate-id guard. Hosting the gallery
+	inside the Compendium turned that from occasional into routine.
+
+	TileCatalog walks the whole tree and is the same index the map creator, the
+	map gallery and MapLoader use, so the gallery now sees exactly what the game
+	sees. The regeneration fallback is deliberately gone: 17 tiles ship with the
+	project, and recreating obsolete copies can only corrupt the catalog.
+	"""
 	all_tiles.clear()
-	
-	var resources_dir = "res://game/tiles/resources/"
-	if not DirAccess.dir_exists_absolute(resources_dir):
-		print("No tile resources directory found")
-		_create_default_tiles()
-		return
-	
-	var dir = DirAccess.open(resources_dir)
-	if not dir:
-		print("Failed to open resources directory")
-		_create_default_tiles()
-		return
-	
-	dir.list_dir_begin()
-	var file_name = dir.get_next()
-	
-	while file_name != "":
-		if file_name.ends_with(".tres"):
-			var resource_path = resources_dir + file_name
-			if ResourceLoader.exists(resource_path):
-				var resource = load(resource_path)
-				if resource is TileResource:
-					all_tiles.append(resource)
-					print("Loaded tile: " + resource.tile_name)
-		file_name = dir.get_next()
-	
-	dir.list_dir_end()
-	
-	# If no tiles found, create defaults
+
+	TileCatalog.rescan()
+	for resource_path in TileCatalog.all_paths():
+		var resource = load(resource_path)
+		if resource is TileResource:
+			all_tiles.append(resource)
+
 	if all_tiles.is_empty():
-		_create_default_tiles()
-	
+		push_warning("[TileGallery] No TileResource found under " + TileCatalog.ROOT)
+
 	# Apply initial filter and sort
 	_apply_filters()
 
