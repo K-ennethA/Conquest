@@ -97,3 +97,28 @@ Two behaviours worth knowing:
 - A `death` clip REPLACES the shrink tween (shrinking a model mid-death-animation
   just erases the animation). A `hit` clip suppresses the squash-punch but keeps
   the red damage flash, which stays readable either way.
+
+## Iterating on a sculpt
+
+A `.glb` is a **derived artifact** — editing your `.blend` changes nothing in game
+until it is re-exported. Nothing watches the source file.
+
+Re-export is one command:
+
+```bash
+tools/blender/reingest.sh              # rebuild anything whose .blend is newer
+tools/blender/reingest.sh --all        # rebuild everything
+tools/blender/reingest.sh tree_grunt   # rebuild one asset
+```
+
+Add a line to `tools/blender/assets.conf` per unit and the script handles the
+rest. The no-argument form compares timestamps, so it is cheap to run habitually.
+
+**Nothing downstream breaks on re-export.** The `CharacterResource` references the
+`.glb` by path and Godot's `.import` settings file persists, so stats, id,
+footprint and import settings all survive — Godot just re-imports the new mesh.
+Verified: after a rebuild the character still reports its stats and the model is
+still 1.8 tall with its origin at the feet.
+
+This also means re-rigging or adding animations later needs no code or resource
+changes: re-run, and the new clips are picked up by the animation bridge.
