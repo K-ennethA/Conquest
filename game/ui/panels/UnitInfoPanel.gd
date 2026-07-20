@@ -18,6 +18,19 @@ class_name UnitInfoPanel
 
 var current_unit: Unit = null
 
+## "Active Effects" section, built in CODE rather than in UnitInfoPanel.tscn so
+## the scene file is untouched: the header, the chip list, and the separator above
+## them are appended to the existing MarginContainer/VBoxContainer in _ready.
+## Null when that container could not be resolved (a stripped test harness), in
+## which case every effects path below no-ops and the panel behaves as before.
+var _effects_header: Label = null
+var _effects_container: VBoxContainer = null
+
+## The panel's authored height in UnitInfoPanel.tscn. The effects list grows the
+## content, so _fit_height() expands the panel past this but never shrinks it
+## below -- a unit with no statuses keeps exactly the panel size it always had.
+const _BASE_HEIGHT := 280.0
+
 ## Turn a snake_case id ("torvald_ironhide") into a display string
 ## ("Torvald Ironhide"). Empty in -> empty out.
 func _humanize_id(id: String) -> String:
@@ -35,6 +48,10 @@ func _ready() -> void:
 	GameEvents.unit_deselected.connect(_on_unit_deselected)
 	GameEvents.unit_hover_started.connect(_on_unit_hover_started)
 	GameEvents.unit_hover_ended.connect(_on_unit_hover_ended)
+
+	# Append the effects section BEFORE theming, so the new controls pick up the
+	# amber theme along with the scene-authored ones.
+	_build_effects_section()
 
 	# Match the amber HUD look (lives outside GameUILayout, so themes itself).
 	ConquestTheme.apply_to(self)
@@ -102,9 +119,156 @@ func _update_unit_info(unit: Unit) -> void:
 		movement_label.text = "Movement: " + str(unit.get_stat("movement"))
 	if range_label:
 		range_label.text = "Range: " + str(unit.get_stat("range"))
-	
+
+	# Active status conditions (immobilise, slows, buffs) -- otherwise invisible.
+	_update_effects(unit)
+
 	# Set portrait color based on unit type and player
 	_update_portrait(unit)
+
+
+# --- Active effects section ---------------------------------------------------
+
+## Append the "Active Effects" header + chip list to the scene's stat VBox.
+## Silently does nothing if the container is missing, leaving the panel exactly
+## as authored.
+func _build_effects_section() -> void:
+	var vb := get_node_or_null("MarginContainer/VBoxContainer") as VBoxContainer
+	if vb == null:
+		return
+
+	var sep := HSeparator.new()
+	sep.name = "EffectsSeparator"
+	vb.add_child(sep)
+
+	_effects_header = Label.new()
+	_effects_header.name = "EffectsLabel"
+	_effects_header.text = "Active Effects"
+	_effects_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_effects_header.add_theme_font_size_override("font_size", 14)
+	vb.add_child(_effects_header)
+
+	_effects_container = VBoxContainer.new()
+	_effects_container.name = "EffectsContainer"
+	_effects_container.add_theme_constant_override("separation", 3)
+	vb.add_child(_effects_container)
+
+
+## Repopulate the chip list for [param unit]. Always leaves exactly one of two
+## states on screen: one chip per active condition, or a single muted
+## "No active effects" line -- never an empty gap.
+func _update_effects(unit) -> void:
+	if _effects_container == null or not is_instance_valid(_effects_container):
+		return
+
+	# remove_child BEFORE queue_free: a queued-but-still-parented chip would keep
+	# contributing to get_combined_minimum_size(), so _fit_height() below would
+	# size the panel against the OLD unit's chips as well as the new one's.
+	for child in _effects_container.get_children():
+		_effects_container.remove_child(child)
+		child.queue_free()
+
+	# Empty for a null/freed unit, a unit with no StatusController, or no statuses.
+	var conditions: Array = StatusVisuals.active_conditions(unit)
+
+	if conditions.is_empty():
+		var none_label := Label.new()
+		none_label.text = "No active effects"
+		none_label.add_theme_font_size_override("font_size", 12)
+		# Muted so "nothing here" reads as secondary, not as a real effect --
+		# mirrors TerrainInfoPanel's "No special effects" row.
+		none_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
+		_effects_container.add_child(none_label)
+	else:
+		for condition in conditions:
+			if condition == null:
+				continue
+			_effects_container.add_child(_build_status_chip(condition))
+
+	# Content changed height; resize after this layout pass rather than during it.
+	call_deferred("_fit_height")
+
+
+## One colour-coded chip for a status: a rounded panel filled with a dim version
+## of the status colour and framed in that colour, holding a swatch, the status
+## name, its remaining turns, and a second line describing what it does.
+##
+## Same construction as TerrainInfoPanel._build_effect_chip, with [StatusVisuals]
+## standing in for TileEffectVisuals -- so a status chip and a tile-effect chip
+## read as members of one family.
+func _build_status_chip(condition) -> PanelContainer:
+	var info: Dictionary = StatusVisuals.info_for(condition)
+	var color: Color = info.get("color", ConquestTheme.AMBER)
+	var status_name: String = String(info.get("name", "Status"))
+
+	var chip := PanelContainer.new()
+
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = color.darkened(0.35)
+	sb.set_corner_radius_all(6)
+	sb.set_border_width_all(1)
+	sb.border_color = color
+	sb.content_margin_left = 6
+	sb.content_margin_right = 6
+	sb.content_margin_top = 3
+	sb.content_margin_bottom = 3
+	chip.add_theme_stylebox_override("panel", sb)
+
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 1)
+	chip.add_child(rows)
+
+	# Row 1: swatch + "Ensnared" + "1 turn"
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 5)
+	rows.add_child(head)
+
+	var swatch := ColorRect.new()
+	swatch.color = color
+	swatch.custom_minimum_size = Vector2(10, 10)
+	swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(swatch)
+
+	var name_label := Label.new()
+	name_label.text = status_name
+	name_label.add_theme_font_size_override("font_size", 12)
+	# CREAM reads on the dim chip fill; the theme's default INK is tuned for the
+	# light amber panel background instead.
+	name_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(name_label)
+
+	var turns_label := Label.new()
+	turns_label.text = StatusVisuals.turns_label(StatusVisuals.turns_left_of(condition))
+	turns_label.add_theme_font_size_override("font_size", 11)
+	turns_label.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
+	head.add_child(turns_label)
+
+	# Row 2: what it actually does ("Cannot move", "-2 movement for 1 turns", …).
+	# Omitted entirely when the condition has nothing describable, so a bare
+	# marker status shows a one-line chip instead of a blank second row.
+	var detail: String = StatusVisuals.describe_condition(condition)
+	if detail != "":
+		var detail_label := Label.new()
+		detail_label.text = detail
+		detail_label.add_theme_font_size_override("font_size", 11)
+		detail_label.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
+		detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		rows.add_child(detail_label)
+
+	return chip
+
+
+## Grow the panel so the effects list is not clipped by the authored 300x280 rect,
+## never shrinking below the original height.
+func _fit_height() -> void:
+	var vb := get_node_or_null("MarginContainer/VBoxContainer") as VBoxContainer
+	if vb == null:
+		return
+	# +24 covers the MarginContainer's 12px top and bottom margins.
+	var wanted: float = vb.get_combined_minimum_size().y + 24.0
+	custom_minimum_size.y = maxf(_BASE_HEIGHT, wanted)
+	size.y = custom_minimum_size.y
 
 func _update_portrait(unit: Unit) -> void:
 	"""Update unit portrait based on type and player"""

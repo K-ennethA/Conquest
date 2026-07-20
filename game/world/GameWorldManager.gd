@@ -25,6 +25,12 @@ var _tile_effect_system: TileEffectSystem = null
 ## instantiates it and places it in the "UI" CanvasLayer once.
 var _terrain_info_panel: TerrainInfoPanel = null
 
+## Unit inspection HUD (bottom-right): shows the name, HP, and active status
+## conditions of whatever unit is under the board cursor, WITHOUT requiring
+## selection. Self-contained -- see [UnitHoverPanel] -- this just instantiates it
+## and places it in the "UI" CanvasLayer once, exactly like the terrain panel.
+var _unit_hover_panel: UnitHoverPanel = null
+
 ## Tile-effect map overlay (Node3D): floats a row of colored, billboarded pips
 ## over every cell that has one or more tile effects, so stacking (e.g. tall
 ## grass + a fire ignited on top) is visible on the 3D battlefield. Self-contained
@@ -61,6 +67,10 @@ func _ready() -> void:
 	# move (via GameEvents.cursor_moved, wired in its own _ready) and simply
 	# stays hidden until a board and registered terrain exist.
 	_setup_terrain_info_panel()
+
+	# Unit inspection HUD: same deal -- additive, resolves the live board lazily on
+	# each cursor move, and stays hidden until the cursor is over an actual unit.
+	_setup_unit_hover_panel()
 
 	# End-of-battle overlay: additive, hidden until an elimination decides the
 	# game. Added to the same "UI" CanvasLayer as the terrain panel and safe to
@@ -196,6 +206,28 @@ func _setup_terrain_info_panel() -> void:
 
 	_terrain_info_panel = TerrainInfoPanel.new()
 	ui_layer.add_child(_terrain_info_panel)
+
+func _setup_unit_hover_panel() -> void:
+	"""Instantiate UnitHoverPanel and add it to the "UI" CanvasLayer. Mirrors
+	_setup_terrain_info_panel exactly, including its null guards: the panel builds
+	its own UI, themes itself, and connects GameEvents.cursor_moved in its own
+	_ready, so there is nothing else to wire up here. It anchors bottom-right, the
+	one HUD corner the terrain panel / right sidebar / turn banner do not use."""
+	if _unit_hover_panel != null:
+		return
+
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		push_warning("[GameWorldManager] No current_scene yet; UnitHoverPanel not added.")
+		return
+
+	var ui_layer := scene_root.get_node_or_null("UI")
+	if ui_layer == null:
+		push_warning("[GameWorldManager] 'UI' CanvasLayer not found; UnitHoverPanel not added.")
+		return
+
+	_unit_hover_panel = UnitHoverPanel.new()
+	ui_layer.add_child(_unit_hover_panel)
 
 # --- End-of-battle screen ----------------------------------------------------
 
