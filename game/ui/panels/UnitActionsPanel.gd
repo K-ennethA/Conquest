@@ -1350,7 +1350,16 @@ func _calculate_reachable_tiles(start_pos: Vector3, max_distance: int, grid: Gri
 	return reachable
 
 func _is_tile_passable(grid_pos: Vector3) -> bool:
-	"""Check if a tile is passable (not occupied by another unit)"""
+	"""Check if a tile can be entered: impassable TERRAIN blocks it, as does another
+	unit standing on it."""
+	# Terrain first. A wall or a tree is impassable regardless of occupancy, and
+	# this legacy BFS previously only looked at units -- which made solid trees show
+	# up as reachable instead of forcing a path around them.
+	var cell := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var tile: TileResource = CombatServices.tile_at(cell)
+	if tile != null and not tile.is_tile_passable():
+		return false
+
 	# Find all units in scene and check if any occupy this position
 	var units = _find_all_units_in_scene()
 	var grid = preload("res://board/Grid.tres")

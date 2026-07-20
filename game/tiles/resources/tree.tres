@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="TileResource" load_steps=2 format=3 uid="uid://c0treeres00001"]
+
+[ext_resource type="Script" uid="uid://t8b7cimcr6bw" path="res://game/tiles/resources/TileResource.gd" id="1_tres"]
+
+[resource]
+script = ExtResource("1_tres")
+tile_name = "Tree"
+tile_type = 1
+description = "An old trunk too dense to push through. Blocks movement and line of sight entirely - units must path around it."
+base_movement_cost = 2
+is_passable = false
+blocks_line_of_sight = true
+material_style = 1
+base_color = Color(0.3, 0.5, 0.2, 1)
+emission_enabled = false
+emission_color = Color(0, 0, 0, 1)
+metallic = 0.0
+roughness = 1.0
+texture_path = ""
+model_path = ""
+has_default_effects = false
+default_effects = []
+provides_cover = true
+cover_bonus = 2
+elevation = 0
+special_properties = Array[String](["forest"])
+rarity = "Common"
+generation_weight = 1.0

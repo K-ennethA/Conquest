@@ -66,6 +66,24 @@ func test_forest_movement_costs() -> void:
 	assert_eq((load(TILE_DIR % "sacred_meadow") as TileResource).base_movement_cost, 1)
 
 
+func test_trees_are_impassable_and_block_pathing() -> void:
+	# Trees function as walls: you must path around them.
+	var tree: TileResource = load(TILE_DIR % "tree")
+	assert_false(tree.is_tile_passable(), "a tree cannot be walked through")
+	assert_true(tree.blocks_line_of_sight, "and it blocks sight")
+	# The board's blocking check is what MovementResolver consults.
+	_register("tree", Vector2i(7, 7))
+	var board = CombatServices.board()
+	if board != null:
+		assert_true(board.is_blocked(Vector2i(7, 7)), "board reports the tree cell blocked")
+
+
+func test_walkable_forest_tiles_stay_passable() -> void:
+	for name in ["tall_grass", "grass_plains", "forest_dirt", "sacred_meadow"]:
+		var t: TileResource = load(TILE_DIR % name)
+		assert_true(t.is_tile_passable(), "%s must stay walkable" % name)
+
+
 func test_runtime_effects_still_stack_on_forest_tiles() -> void:
 	# A move can ignite tall grass: the evasion stays AND the fire layers on top.
 	_register("tall_grass", Vector2i(5, 5))
