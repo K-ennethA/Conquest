@@ -275,6 +275,59 @@ func test_bonus_damage_applies_to_an_immobilized_target():
 	var dealt := _hit(_damage_effect(20, CombatTypes.DamageCategory.PHYSICAL), board, caster, target)
 	assert_eq(dealt, 30, "thornlust's +50% turns 20 into 30 against a held target")
 
+func test_forecast_shows_the_bonus_and_matches_what_is_dealt():
+	# The predation bonus is DETERMINISTIC, so the forecast must include it -- a
+	# forecast that under-reports damage against a held target teaches the player
+	# the wrong thing. The property that matters is that preview and resolution
+	# AGREE; they now share one helper precisely so they cannot drift.
+	var caster := MockUnit.new(0, {})
+	var target := MockUnit.new(1, { "health": 100, "defense": 0 })
+	target.restricted = true
+	caster.ability_system = _ability_system_with(caster, _thornlust())
+	var board := MockBoard.new()
+	board.place(caster, Vector2i(0, 0))
+	board.place(target, Vector2i(1, 0))
+
+	var effect := _damage_effect(20, CombatTypes.DamageCategory.PHYSICAL)
+	var move := MoveResource.new()
+	move.effects = [effect] as Array[MoveEffect]
+
+	var forecast: Dictionary = MoveExecutor.preview_vs(move, caster, target)
+	assert_eq(int(forecast["damage"]), 30, "forecast includes thornlust's +50%")
+
+	var dealt := _hit(effect, board, caster, target)
+	assert_eq(int(forecast["damage"]), dealt, "forecast and resolution must agree")
+
+
+func test_forecast_omits_the_bonus_for_an_unrestricted_target():
+	var caster := MockUnit.new(0, {})
+	var target := MockUnit.new(1, { "health": 100, "defense": 0 })
+	target.restricted = false
+	caster.ability_system = _ability_system_with(caster, _thornlust())
+	var move := MoveResource.new()
+	move.effects = [_damage_effect(20, CombatTypes.DamageCategory.PHYSICAL)] as Array[MoveEffect]
+	var forecast: Dictionary = MoveExecutor.preview_vs(move, caster, target)
+	assert_eq(int(forecast["damage"]), 20, "no bonus shown when the target is free to move")
+
+
+func test_forecast_never_rolls_crit():
+	# Crit stays a PROBABILITY in the forecast. If it were resolved here, a player
+	# could cancel and re-aim to fish for a favourable roll -- so preview reports
+	# crit_pct and a hypothetical crit_damage, and rolls nothing.
+	var caster := MockUnit.new(0, { "crit": 50 })
+	var target := MockUnit.new(1, { "health": 100, "defense": 0 })
+	var move := MoveResource.new()
+	move.crit_chance = 0.25
+	move.effects = [_damage_effect(20, CombatTypes.DamageCategory.PHYSICAL)] as Array[MoveEffect]
+
+	var first: Dictionary = MoveExecutor.preview_vs(move, caster, target)
+	for i in range(8):
+		var again: Dictionary = MoveExecutor.preview_vs(move, caster, target)
+		assert_eq(int(again["damage"]), int(first["damage"]), "repeat previews are identical")
+		assert_eq(float(again["crit_pct"]), float(first["crit_pct"]), "crit stays a percentage")
+	assert_gt(float(first["crit_pct"]), 0.0, "crit chance is reported, not resolved")
+
+
 func test_no_bonus_damage_against_an_unrestricted_target():
 	var caster := MockUnit.new(0, {})
 	var target := MockUnit.new(1, { "health": 100, "defense": 0 })

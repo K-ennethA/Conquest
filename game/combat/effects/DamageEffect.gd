@@ -96,11 +96,25 @@ static func _announce(ctx: MoveContext, target, dealt: int) -> void:
 ## Multiplier to apply to one hit: 1.0 normally, or 1.0 + the caster's merged
 ## "damage_vs_restricted" modifier when the TARGET is movement-restricted.
 static func _restricted_scale(ctx: MoveContext, target) -> float:
-	if ctx == null or target == null:
+	if ctx == null:
+		return 1.0
+	return restricted_scale_for(ctx.caster, target, ctx.board)
+
+
+## Same predation multiplier, addressed by CASTER/TARGET rather than a MoveContext.
+##
+## This is the shared entry point so the combat FORECAST and the actual resolution
+## can never disagree: MoveExecutor.preview_vs has no MoveContext (it deliberately
+## rolls nothing), and duplicating the rule there would drift the moment either
+## side was retuned. The bonus is fully deterministic -- it depends only on the
+## target's current state -- so previewing it reveals nothing a player could game,
+## unlike crit, which the forecast reports as a PROBABILITY and never rolls.
+static func restricted_scale_for(caster, target, board = null) -> float:
+	if caster == null or target == null:
 		return 1.0
 	if not _is_movement_restricted(target):
 		return 1.0
-	var bonus: float = _caster_restricted_modifier(ctx)
+	var bonus: float = _restricted_modifier_of(caster, board)
 	if bonus <= 0.0:
 		return 1.0
 	return 1.0 + bonus
@@ -109,7 +123,13 @@ static func _restricted_scale(ctx: MoveContext, target) -> float:
 ## The caster's merged "damage_vs_restricted" rule modifier (0.0 when it has no
 ## ability system, or no in-force passive that declares one).
 static func _caster_restricted_modifier(ctx: MoveContext) -> float:
-	var caster = ctx.caster
+	if ctx == null:
+		return 0.0
+	return _restricted_modifier_of(ctx.caster, ctx.board)
+
+
+## The caster's merged "damage_vs_restricted" rule modifier, addressed directly.
+static func _restricted_modifier_of(caster, board) -> float:
 	if caster == null:
 		return 0.0
 	# A live Unit exposes its component; a test mock may BE the ability system.
@@ -120,7 +140,7 @@ static func _caster_restricted_modifier(ctx: MoveContext) -> float:
 		system = caster
 	if system == null or not system.has_method("passive_modifiers"):
 		return 0.0
-	var modifiers: Dictionary = system.passive_modifiers(caster, ctx.board)
+	var modifiers: Dictionary = system.passive_modifiers(caster, board)
 	return float(modifiers.get("damage_vs_restricted", 0.0))
 
 

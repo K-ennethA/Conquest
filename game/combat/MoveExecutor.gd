@@ -71,14 +71,38 @@ static func _preview_damage(effect: DamageEffect, caster, target) -> int:
 	if effect.scaling_stat != "":
 		bonus = int(round(_stat(caster, effect.scaling_stat) * effect.scale))
 	var raw: int = effect.power + bonus
+	var mitigated: int = 0
 	match effect.category:
 		CombatTypes.DamageCategory.TRUE:
-			return maxi(1, raw)
+			mitigated = maxi(1, raw)
 		CombatTypes.DamageCategory.MAGICAL:
 			var res := _stat_or(target, "magic_defense", _stat_or(target, "defense", 0))
-			return maxi(1, raw - res)
+			mitigated = maxi(1, raw - res)
 		_:
-			return maxi(1, raw - _stat_or(target, "defense", 0))
+			mitigated = maxi(1, raw - _stat_or(target, "defense", 0))
+
+	# Predation bonus (e.g. Petalfang's Thornlust vs a snared target). Shown in the
+	# forecast because it is DETERMINISTIC: it depends only on the target's current
+	# state, so revealing it gives the player information, not an exploit. Crit is
+	# deliberately NOT resolved here -- the forecast reports it as a probability and
+	# never rolls, so re-aiming or cancelling can never fish for a favourable roll.
+	#
+	# Routed through DamageEffect's own helper (rather than reimplemented) so the
+	# preview and the actual resolution cannot drift apart. Applied after mitigation
+	# and before crit, matching DamageEffect.apply() exactly.
+	var scale: float = DamageEffect.restricted_scale_for(caster, target, _live_board())
+	if scale > 1.0:
+		mitigated = maxi(1, roundi(float(mitigated) * scale))
+	return mitigated
+
+
+## The live board, when there is one. Only needed so a passive's CONDITION can be
+## evaluated during a preview; null is fine and simply fails those conditions shut.
+static func _live_board():
+	var services = Engine.get_main_loop().root.get_node_or_null("CombatServices") if Engine.get_main_loop() is SceneTree else null
+	if services != null and services.has_method("board"):
+		return services.board()
+	return null
 
 
 static func _stat(unit, stat_name: String) -> int:
