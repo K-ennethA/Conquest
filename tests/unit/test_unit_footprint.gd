@@ -139,6 +139,83 @@ func test_can_fit_on_clear_ground():
 		"A 2x2 unit should fit on clear ground with room to spare")
 
 
+# --- Non-square footprints -----------------------------------------------------
+# A square footprint hides an axis swap: with 2x2, mixing up width/height or
+# col/row looks identical. These rectangle cases are what actually prove the
+# span is oriented correctly.
+
+func test_two_wide_unit_spans_columns_not_rows():
+	var wide := _make_unit(Vector2i(1, 1), owner_a, Vector2i(2, 1))  # 2 wide, 1 deep
+	var adapter := BoardAdapter.new(grid, [wide])
+	var cells := adapter.cells_of(wide)
+	assert_eq(cells.size(), 2)
+	assert_has(cells, Vector2i(1, 1), "anchor")
+	assert_has(cells, Vector2i(2, 1), "extends along +col")
+	assert_does_not_have(cells, Vector2i(1, 2), "must NOT extend along +row")
+
+
+func test_two_long_unit_spans_rows_not_columns():
+	var long_unit := _make_unit(Vector2i(1, 1), owner_a, Vector2i(1, 2))  # 1 wide, 2 deep
+	var adapter := BoardAdapter.new(grid, [long_unit])
+	var cells := adapter.cells_of(long_unit)
+	assert_eq(cells.size(), 2)
+	assert_has(cells, Vector2i(1, 1), "anchor")
+	assert_has(cells, Vector2i(1, 2), "extends along +row")
+	assert_does_not_have(cells, Vector2i(2, 1), "must NOT extend along +col")
+
+
+func test_units_at_finds_a_rectangular_unit_from_each_covered_cell():
+	var wide := _make_unit(Vector2i(0, 0), owner_a, Vector2i(3, 1))
+	var adapter := BoardAdapter.new(grid, [wide])
+	for cell in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)]:
+		assert_has(adapter.units_at(cell), wide, "found from %s" % str(cell))
+	assert_eq(adapter.units_at(Vector2i(0, 1)).size(), 0, "the row below is free")
+
+
+func test_rectangular_fit_is_blocked_on_the_correct_axis():
+	var wide := _make_unit(Vector2i(0, 0), owner_a, Vector2i(2, 1))
+	var adapter := BoardAdapter.new(grid, [wide])
+	# Wall sits to the RIGHT of anchor (1,1): blocks a 2-wide span, not a 2-deep one.
+	adapter.set_tile_registry({ Vector2i(2, 1): _wall() })
+	assert_false(adapter.can_fit(wide, Vector2i(1, 1)), "2-wide span hits the wall at +col")
+
+	var long_unit := _make_unit(Vector2i(0, 0), owner_b, Vector2i(1, 2))
+	var adapter2 := BoardAdapter.new(grid, [long_unit])
+	adapter2.set_tile_registry({ Vector2i(2, 1): _wall() })
+	assert_true(adapter2.can_fit(long_unit, Vector2i(1, 1)), "2-deep span misses that wall")
+
+
+func _unit_with_footprint(fp: Vector2i) -> Unit:
+	# Drive the REAL Unit.get_footprint()/get_footprint_offset() through a character
+	# resource, rather than re-deriving the offset with the same formula.
+	var character := CharacterResource.new()
+	character.footprint = fp
+	var u := Unit.new()
+	u.character_resource = character
+	return u
+
+
+func test_rectangular_visual_offset_is_asymmetric():
+	# The model must slide along the axis it actually spans, or a 2-wide unit would
+	# sit centred over the wrong pair of cells.
+	var wide := _unit_with_footprint(Vector2i(2, 1))
+	assert_eq(wide.get_footprint(), Vector2i(2, 1))
+	assert_eq(wide.get_footprint_offset(), Vector3(1.0, 0.0, 0.0), "2-wide shifts along X only")
+	wide.free()
+
+	var long_unit := _unit_with_footprint(Vector2i(1, 2))
+	assert_eq(long_unit.get_footprint_offset(), Vector3(0.0, 0.0, 1.0), "2-deep shifts along Z only")
+	long_unit.free()
+
+	var square := _unit_with_footprint(Vector2i(2, 2))
+	assert_eq(square.get_footprint_offset(), Vector3(1.0, 0.0, 1.0), "2x2 shifts on both axes")
+	square.free()
+
+	var normal := _unit_with_footprint(Vector2i.ONE)
+	assert_eq(normal.get_footprint_offset(), Vector3.ZERO, "a 1x1 unit is never offset")
+	normal.free()
+
+
 func test_can_fit_false_when_a_covered_cell_is_blocked():
 	var boss := _make_unit(Vector2i(0, 0), owner_a, Vector2i(2, 2))
 	var adapter := BoardAdapter.new(grid, [boss])
