@@ -7,9 +7,10 @@ class_name MainMenu
 
 @onready var single_player_button: Button = $CenterContainer/VBoxContainer/MenuButtons/SinglePlayerButton
 @onready var versus_button: Button = $CenterContainer/VBoxContainer/MenuButtons/VersusButton
-@onready var unit_gallery_button: Button = $CenterContainer/VBoxContainer/MenuButtons/UnitGalleryButton
-@onready var tile_gallery_button: Button = $CenterContainer/VBoxContainer/MenuButtons/TileGalleryButton
-@onready var map_gallery_button: Button = $CenterContainer/VBoxContainer/MenuButtons/MapGalleryButton
+# One entry point for the whole in-game reference. The Unit, Tile and Map
+# galleries are no longer separate menu items -- they are sections of
+# Compendium.tscn, which also covers Statuses (and, later, Weather).
+@onready var compendium_button: Button = $CenterContainer/VBoxContainer/MenuButtons/CompendiumButton
 @onready var quit_button: Button = $CenterContainer/VBoxContainer/MenuButtons/QuitButton
 
 func _ready() -> void:
@@ -43,12 +44,8 @@ func _ready() -> void:
 		single_player_button.pressed.connect(_on_single_player_pressed)
 	if versus_button:
 		versus_button.pressed.connect(_on_versus_pressed)
-	if unit_gallery_button:
-		unit_gallery_button.pressed.connect(_on_unit_gallery_pressed)
-	if tile_gallery_button:
-		tile_gallery_button.pressed.connect(_on_tile_gallery_pressed)
-	if map_gallery_button:
-		map_gallery_button.pressed.connect(_on_map_gallery_pressed)
+	if compendium_button:
+		compendium_button.pressed.connect(_on_compendium_pressed)
 	if quit_button:
 		quit_button.pressed.connect(_on_quit_pressed)
 	
@@ -107,20 +104,10 @@ func _on_versus_pressed() -> void:
 	# Load multiplayer mode selection scene (restored)
 	get_tree().change_scene_to_file("res://menus/MultiplayerModeSelection.tscn")
 
-func _on_unit_gallery_pressed() -> void:
-	"""Handle Unit Gallery button press"""
-	print("Unit Gallery selected")
-	get_tree().change_scene_to_file("res://menus/UnitGallery.tscn")
-
-func _on_tile_gallery_pressed() -> void:
-	"""Handle Tile Gallery button press"""
-	print("Tile Gallery selected")
-	get_tree().change_scene_to_file("res://menus/TileGallery.tscn")
-
-func _on_map_gallery_pressed() -> void:
-	"""Handle Map Gallery button press"""
-	print("Map Gallery selected")
-	get_tree().change_scene_to_file("res://menus/MapGallery.tscn")
+func _on_compendium_pressed() -> void:
+	"""Handle Compendium button press"""
+	print("Compendium selected")
+	get_tree().change_scene_to_file("res://menus/Compendium.tscn")
 
 func _on_quit_pressed() -> void:
 	"""Handle Quit button press"""
@@ -151,10 +138,6 @@ func _input(event: InputEvent) -> void:
 			KEY_2:
 				_on_versus_pressed()
 			KEY_3:
-				_on_unit_gallery_pressed()
-			KEY_4:
-				_on_tile_gallery_pressed()
-			KEY_5:
-				_on_map_gallery_pressed()
+				_on_compendium_pressed()
 			KEY_ESCAPE:
 				_on_quit_pressed()

@@ -58,20 +58,10 @@ layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
 text = "Versus"
 
-[node name="UnitGalleryButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
+[node name="CompendiumButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
-text = "Unit Gallery"
-
-[node name="TileGalleryButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 50)
-text = "Tile Gallery"
-
-[node name="MapGalleryButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 50)
-text = "Map Gallery"
+text = "Compendium"
 
 [node name="Spacer2" type="Control" parent="CenterContainer/VBoxContainer/MenuButtons"]
 layout_mode = 2
@@ -88,6 +78,6 @@ custom_minimum_size = Vector2(0, 50)
 
 [node name="Instructions" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-text = "Press 1 for Single Player, 2 for Versus, 3 for Unit Gallery, 4 for Tile Gallery, 5 for Map Gallery, ESC to Quit"
+text = "Press 1 for Single Player, 2 for Versus, 3 for Compendium, ESC to Quit"
 horizontal_alignment = 1
 modulate = Color(0.7, 0.7, 0.7, 1)
