@@ -98,6 +98,28 @@ func _next_actable_ai_unit(ts: TurnSystemBase, player: Player) -> Unit:
 	return null
 
 
+## Relocate a unit AND announce it, mirroring the player's movement contract.
+##
+## [BoardAdapter.move_unit] deliberately does not emit [signal GameEvents.unit_moved]:
+## [UnitActionsPanel] calls it and emits separately, so emitting inside the shared
+## primitive would fire every consumer TWICE for the player (double trap damage,
+## double ON_MOVE ability, double glide) and would even fire on a tentative-move
+## REVERT, which is not a move at all.
+##
+## The AI moved units through the bare primitive, so nothing downstream ever heard
+## about it -- enemy units walked over vine traps for free, their ON_MOVE abilities
+## never fired, and terrain enter/exit never ran for them. Emitting HERE keeps the
+## player and AI paths symmetric without touching the primitive. Grid coords match
+## the legacy contract: Vector3(col, 0, row).
+func _relocate(unit, board, from_cell: Vector2i, to_cell: Vector2i) -> void:
+	board.move_unit(unit, to_cell)
+	if GameEvents:
+		GameEvents.unit_moved.emit(
+			unit,
+			Vector3(from_cell.x, 0, from_cell.y),
+			Vector3(to_cell.x, 0, to_cell.y))
+
+
 ## Route the unit to the planning path (character-backed + live board) or to the
 ## take_damage fallback (legacy units, or no board loaded yet).
 func _act(unit: Unit) -> void:
@@ -151,6 +173,15 @@ func _act_character(unit: Unit, board) -> void:
 ## board. Empty when the unit has no profile -- planning then considers only the
 ## origin cell (attack in place, or wait).
 func _reachable_cells(unit: Unit, origin: Vector2i, board) -> Array:
+	# A rooted unit reaches nothing. The AI movement path walks the unit with
+	# board.move_unit() directly and therefore never consults Unit.can_move(), so
+	# immobilisation has to be honoured HERE -- returning an empty reachable set
+	# leaves the planner with only the origin cell (exactly the no-profile case),
+	# which makes the AI attack in place or wait instead of sliding out of the
+	# vines. Gated on immobilisation alone, not the whole can_move(), so the
+	# planner's existing behaviour is untouched for every other unit.
+	if _is_immobilized(unit):
+		return []
 	var profile = unit.get_movement_profile()
 	if profile == null:
 		return []
@@ -165,9 +196,13 @@ func _reachable_cells(unit: Unit, origin: Vector2i, board) -> Array:
 func _execute_plan_attack(unit: Unit, decision: Dictionary, board) -> void:
 	var origin: Vector2i = board.cell_of(unit)
 	var dest: Vector2i = decision.get("dest_cell", origin)
-	var moved := dest != origin
+	# Second gate on the same rule _reachable_cells applies. The planner should
+	# never hand back a foreign dest_cell for a rooted unit (its reachable set was
+	# empty), but this is the line that actually relocates the unit, so it refuses
+	# to walk one that cannot move rather than trusting the plan.
+	var moved := dest != origin and not _is_immobilized(unit)
 	if moved:
-		board.move_unit(unit, dest)
+		_relocate(unit, board, origin, dest)
 		unit.mark_moved()
 
 	if _execute_move_decision(unit, decision, board):
@@ -189,10 +224,10 @@ func _execute_plan_attack(unit: Unit, decision: Dictionary, board) -> void:
 func _execute_plan_advance(unit: Unit, decision: Dictionary, board) -> void:
 	var origin: Vector2i = board.cell_of(unit)
 	var dest: Vector2i = decision.get("dest_cell", origin)
-	if dest == origin:
+	if dest == origin or _is_immobilized(unit):
 		_finish(unit, "wait")
 		return
-	board.move_unit(unit, dest)
+	_relocate(unit, board, origin, dest)
 	unit.mark_moved()
 	var target = decision.get("target", null)
 	var tname: String = target.get_display_name() if target != null and target.has_method("get_display_name") else "enemy"
@@ -260,6 +295,16 @@ func _slot_of_move(unit: Unit, move) -> int:
 	return -1
 
 
+## True while a status roots [param unit] in place. Duck-typed and null-safe so
+## the legacy/mocked units this driver also handles simply report false.
+func _is_immobilized(unit) -> bool:
+	if unit == null:
+		return false
+	if unit.has_method("is_immobilized"):
+		return bool(unit.is_immobilized())
+	return false
+
+
 func _move_name(move) -> String:
 	if move != null and "display_name" in move and String(move.display_name) != "":
 		return String(move.display_name)
@@ -296,7 +341,7 @@ func _act_fallback(unit: Unit, board) -> void:
 	else:
 		var move_range: int = maxi(1, _stat(unit, "movement", 3))
 		var dest := _step_toward_cell(ucell, tcell, move_range)
-		board.move_unit(unit, dest)
+		_relocate(unit, board, ucell, dest)
 		print("[BotAI] %s moves toward %s" % [unit.get_display_name(), target.get_display_name()])
 		_finish(unit, "move")
 

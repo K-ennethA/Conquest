@@ -209,6 +209,19 @@ func _tick_unit_turn_start(unit) -> void:
 		return
 	_last_tick_turn[unit] = current_turn
 
+	# Timed STAT modifiers expire here. Unit.process_turn_start() ->
+	# UnitStats.process_modifier_durations() was called by nothing in the live game
+	# (only by tests), so every duration-limited modifier persisted FOREVER in a real
+	# battle: a 3-turn defence buff, a 1-turn movement slow and a 5-turn range bonus
+	# all became permanent the moment they were applied.
+	#
+	# ORDER MATTERS: this must run BEFORE status conditions tick below. A status's
+	# tick can APPLY a modifier (entangled's slow does exactly that), and expiring
+	# afterwards would decrement a modifier on the same turn it was granted --
+	# cancelling a one-turn slow before it ever took effect.
+	if unit.has_method("process_turn_start"):
+		unit.process_turn_start()
+
 	# Move cooldowns: only present when the unit has a MovesetController.
 	var moveset = unit.get_moveset_controller() if unit.has_method("get_moveset_controller") else null
 	if moveset != null and moveset.has_method("tick_cooldowns"):
