@@ -218,6 +218,37 @@ func _setup_visuals() -> void:
 		# Size the model to the unit's footprint even when no visual manager is
 		# present (headless / test harness). No-op for normal 1x1 units.
 		apply_footprint_visual()
+	# Swap in the character's authored model, if it has one.
+	_setup_character_model()
+
+
+## Instantiate the character's authored model (a Blender export -- see
+## tools/blender/prepare_unit.py) in place of the placeholder capsule.
+##
+## Models are exported origin-at-feet and already scaled to their real height, so
+## they need no runtime correction: dropping one in at the unit's origin puts its
+## feet on the tile. The capsule is HIDDEN rather than removed, because
+## UnitVisualManager still drives team colour/selection through it and other code
+## looks it up by name.
+func _setup_character_model() -> void:
+	if character_resource == null or character_resource.model_scene == null:
+		return
+	if get_node_or_null("CharacterModel") != null:
+		return  # already built
+
+	var model := character_resource.model_scene.instantiate()
+	if model == null:
+		push_warning("[Unit] model_scene failed to instantiate for %s" % name)
+		return
+	model.name = "CharacterModel"
+	add_child(model)
+
+	# Centre a multi-cell model over its whole footprint, exactly like the capsule.
+	if model is Node3D:
+		(model as Node3D).position = get_footprint_offset()
+
+	if _mesh_instance:
+		_mesh_instance.visible = false
 
 func _connect_events() -> void:
 	"""Connect to game events"""
