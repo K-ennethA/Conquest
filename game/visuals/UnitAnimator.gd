@@ -40,6 +40,32 @@ extends Node
 ## frees the unit on the same frame, there is nothing left to animate.
 @export_range(0.0, 1.5, 0.01) var death_shrink_time: float = 0.25
 
+# --- Authored animation clips ---------------------------------------------
+#
+# When a character ships a model with an AnimationPlayer (a Blender export -- see
+# tools/blender/README.md), these clip names are played in response to the same
+# game events that drive the procedural tweens below. A model that has no clips,
+# or is missing one, silently falls back to the tween, so placeholder capsules and
+# half-rigged models keep animating exactly as before.
+#
+# This is the ONE piece of naming an artist has to honour.
+const CLIP_IDLE := "idle"
+const CLIP_WALK := "walk"
+const CLIP_ATTACK := "attack"
+const CLIP_HIT := "hit"
+const CLIP_DEATH := "death"
+
+@export_group("Authored Clips")
+## Play authored clips when a model provides them. Turn off to force the
+## procedural tweens everywhere (useful for comparing feel).
+@export var use_authored_clips: bool = true
+## Seconds to blend between clips.
+@export_range(0.0, 1.0, 0.01) var clip_blend_time: float = 0.12
+
+# unit instance id -> AnimationPlayer, or null when that unit has none. Caching
+# the MISS matters too: without it every event re-walks the unit's whole subtree.
+var _anim_players: Dictionary = {}
+
 # Tracks each unit's last known world position so we can compute a glide start
 # even though unit_moved carries tile coords (not world coords) from some
 # emitters. Keyed by instance id -> Vector3.
@@ -82,6 +108,10 @@ func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 		_remember(unit)
 		return
 
+	# A walk clip animates the LEGS; the glide below still has to carry the model
+	# across the tile, so these layer rather than replace each other.
+	play_clip(unit, CLIP_WALK)
+
 	var dest: Vector3 = (unit as Node3D).global_position
 	var start: Vector3 = _last_world_pos.get(unit.get_instance_id(), dest)
 	_last_world_pos[unit.get_instance_id()] = dest
@@ -100,7 +130,10 @@ func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 
 # --- Hit flash ------------------------------------------------------------
 
-func _on_damage_dealt(_attacker = null, defender = null, _damage = null) -> void:
+func _on_damage_dealt(attacker = null, defender = null, _damage = null) -> void:
+	# The attacker swings, the defender reacts. Both are best-effort.
+	play_clip(attacker, CLIP_ATTACK)
+	play_clip(defender, CLIP_HIT)
 	_flash(defender)
 
 func _flash(unit) -> void:
@@ -109,6 +142,12 @@ func _flash(unit) -> void:
 	var mesh := _get_mesh(unit)
 	if mesh == null:
 		return
+
+	# A model with its own hit clip supplies the MOTION, so skip the squash punch
+	# (two competing motions read as a glitch) but keep the colour flash, which
+	# stays legible and reads as damage regardless of the animation.
+	var has_hit_clip := _anim_player_for(unit) != null \
+		and not _find_clip(_anim_player_for(unit), CLIP_HIT).is_empty()
 
 	# Color flash via a temporary material_override; the prior override (usually
 	# null) is captured and restored exactly, so the base look is untouched.
@@ -127,7 +166,7 @@ func _flash(unit) -> void:
 				mesh.material_override = prev_override)
 
 	# Squash punch (always safe -- no material knowledge needed).
-	if hit_punch_scale > 1.0:
+	if hit_punch_scale > 1.0 and not has_hit_clip:
 		var base_scale := mesh.scale
 		var pt := mesh.create_tween()
 		pt.tween_property(mesh, "scale", base_scale * hit_punch_scale, hit_flash_time * 0.5)\
@@ -138,7 +177,14 @@ func _flash(unit) -> void:
 # --- Death ----------------------------------------------------------------
 
 func _on_unit_eliminated(unit = null, _eliminator = null) -> void:
-	_last_world_pos.erase(unit.get_instance_id() if is_instance_valid(unit) else 0)
+	var id: int = unit.get_instance_id() if is_instance_valid(unit) else 0
+	# An authored death clip replaces the shrink entirely -- shrinking a model
+	# that is playing its own death animation just deletes the animation.
+	var played_death: bool = play_clip(unit, CLIP_DEATH, false)
+	_last_world_pos.erase(id)
+	_anim_players.erase(id)
+	if played_death:
+		return
 	if not (unit is Node3D) or not is_instance_valid(unit) or death_shrink_time <= 0.0:
 		return
 	var mesh := _get_mesh(unit)
@@ -169,3 +215,76 @@ func _find_mesh_recursive(node: Node) -> MeshInstance3D:
 		if found != null:
 			return found
 	return null
+
+# --- Authored clip bridge --------------------------------------------------
+
+## The AnimationPlayer inside a unit's authored model, or null when it has none.
+## Both the hit AND the miss are cached: re-walking the subtree on every signal
+## for every capsule unit would be pure waste.
+func _anim_player_for(unit) -> AnimationPlayer:
+	if not use_authored_clips or not is_instance_valid(unit) or not (unit is Node):
+		return null
+	var key: int = unit.get_instance_id()
+	if _anim_players.has(key):
+		var cached = _anim_players[key]
+		return cached if is_instance_valid(cached) else null
+	var found: AnimationPlayer = _find_anim_player(unit as Node)
+	_anim_players[key] = found
+	return found
+
+
+func _find_anim_player(node: Node) -> AnimationPlayer:
+	for child in node.get_children():
+		if child is AnimationPlayer:
+			return child as AnimationPlayer
+		var deeper := _find_anim_player(child)
+		if deeper != null:
+			return deeper
+	return null
+
+
+## Resolve a logical clip name to a real animation on [param ap].
+##
+## Exporters rarely give you the bare name: glTF commonly emits "Armature|Idle",
+## and casing varies. So match the exact name first, then the part after a "|",
+## then any clip containing the base word -- all case-insensitively. Returns ""
+## when the model has nothing suitable.
+func _find_clip(ap: AnimationPlayer, base: String) -> String:
+	if ap == null:
+		return ""
+	var want := base.to_lower()
+	var names: PackedStringArray = ap.get_animation_list()
+	for n in names:
+		if String(n).to_lower() == want:
+			return String(n)
+	for n in names:
+		var tail: String = String(n).get_slice("|", String(n).get_slice_count("|") - 1)
+		if tail.to_lower() == want:
+			return String(n)
+	for n in names:
+		if String(n).to_lower().contains(want):
+			return String(n)
+	return ""
+
+
+## Play an authored clip on a unit. Returns true when one was actually found and
+## started -- callers use that to decide whether the procedural fallback is still
+## needed, so "no clip" degrades instead of leaving the unit with no feedback.
+func play_clip(unit, base: String, loop_idle_after: bool = true) -> bool:
+	var ap := _anim_player_for(unit)
+	if ap == null:
+		return false
+	var clip := _find_clip(ap, base)
+	if clip.is_empty():
+		return false
+	ap.play(clip, clip_blend_time)
+	if loop_idle_after and base != CLIP_IDLE and base != CLIP_DEATH:
+		_queue_idle(ap)
+	return true
+
+
+## After a one-shot clip, fall back to idle when the model has one.
+func _queue_idle(ap: AnimationPlayer) -> void:
+	var idle := _find_clip(ap, CLIP_IDLE)
+	if not idle.is_empty():
+		ap.queue(idle)

@@ -69,3 +69,31 @@ final size w=2.455 d=1.107 h=1.800
 final origin_at_feet_z=0.0000 centred_x=0.0000 centred_y=0.0000
 NOTE footprint 2.45 x 1.11 exceeds one 2.0 cell -- consider a multi-cell footprint
 ```
+
+## Animations
+
+Rig and animate in Blender, then name your actions so the game can find them:
+
+| Clip | Plays when |
+|---|---|
+| `idle` | At rest; also queued automatically after any one-shot clip |
+| `walk` | The unit moves to a new tile |
+| `attack` | This unit deals damage |
+| `hit` | This unit takes damage |
+| `death` | This unit is eliminated |
+
+Naming is forgiving: `idle`, `Idle` and glTF's `Armature|Idle` all resolve, and
+matching is case-insensitive. Only the clip's own name matters, not the action's
+position in the file.
+
+Anything missing simply falls back to the built-in procedural animation, so a
+model with only `idle` and `death` still works — the rest keeps using tweens. Set
+`use_authored_clips = false` on the UnitAnimator autoload to force the procedural
+path everywhere and compare feel.
+
+Two behaviours worth knowing:
+- A `walk` clip animates the legs; the engine still glides the model across the
+  tile, so the two layer rather than fight.
+- A `death` clip REPLACES the shrink tween (shrinking a model mid-death-animation
+  just erases the animation). A `hit` clip suppresses the squash-punch but keeps
+  the red damage flash, which stays readable either way.
