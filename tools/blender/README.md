@@ -18,26 +18,80 @@ never saved over.
 |---|---|
 | `--output` | Where the `.glb` lands (inside the project) |
 | `--name` | Object/mesh name in the export |
-| `--target-height` | Final height in world units (see scale below) |
+| `--target-height` | Height ceiling in world units (default `1.8`) — see scale below |
+| `--max-footprint` | Width/depth ceiling in world units (default `1.9`) — see scale below |
 | `--target-faces` | Decimation budget. Note the result is in TRIANGLES, so a quad-based sculpt lands near 2x this |
+| `--thorns` | Scatter N procedural spikes over the surface. Default `0` (off) |
 
 ## What it does
 
 1. Joins all meshes into one object.
-2. Decimates to the budget (a sculpt is hundreds of thousands of polys).
-3. Shades smooth, then Smart-UV-unwraps — **after** decimating, since decimation
+2. **Optional** — scatters `--thorns N` spikes (see below). Off by default.
+3. Decimates to the budget (a sculpt is hundreds of thousands of polys).
+4. Shades smooth, then Smart-UV-unwraps — **after** decimating, since decimation
    destroys any earlier UV layout.
-4. Adds a simple Principled material when the sculpt has none.
-5. Scales so the model is `--target-height` tall.
-6. Moves the origin to the **feet**, centred in X/Y.
-7. Applies transforms and exports `.glb` with +Y up.
+5. Adds a simple Principled material when the sculpt has none.
+6. Scales to fit one cell (both height *and* footprint).
+7. Moves the origin to the **feet**, centred in X/Y.
+8. Applies transforms and exports `.glb` with +Y up.
 
 It prints a report and warns when the model overhangs a single cell.
+
+## Scale — one unit, one cell
+
+Every unit occupies exactly **one 2.0-unit cell**, so the pipeline satisfies two
+constraints at once and takes whichever is tighter:
+
+```
+scale = min( target_height / height , max_footprint / max(width, depth) )
+```
+
+Scaling by height alone breaks on anything that sprawls. The `petalfang` sculpt is
+12.4 × 8.8 × 5.0 — only 5 units *tall*, so height-scaling it to 1.8 would have made
+it **4.5 units wide**, over two cells, overlapping its neighbours on the board.
+
+`--max-footprint` defaults to **1.9**, deliberately just under the 2.0 cell so
+adjacent units never visually touch.
+
+**A sprawling model will come out shorter than `--target-height`, and that is
+correct.** The run tells you which constraint bound it:
+
+```
+scale candidates: height 0.34739 (5.181 -> 1.800), footprint 0.15352 (12.376 -> 1.900)
+BOUND BY FOOTPRINT -- scaled by 0.15352
+```
+
+So if a model looks unexpectedly small, read that line: `BOUND BY FOOTPRINT` means
+the sculpt is wide relative to its height, and raising `--target-height` will do
+**nothing**. Sculpt it more compact, or give the character a multi-cell `footprint`.
+
+The old "exceeds one cell" NOTE is still there as a backstop, but it should no
+longer ever fire.
+
+## Thorns (`--thorns N`)
+
+An opt-in extra pass for spiky creatures — it is off by default, so nothing else in
+the registry is affected. It scatters `N` small cones over the surface and joins
+them in **before** decimation and unwrapping, so the spikes are budgeted and UV'd
+along with the body rather than bolted on afterwards.
+
+Placement is biased toward the **thin, protruding** parts — on a vine creature the
+thorns belong on the tendrils, not the bulky central body. Two cheap heuristics are
+blended, since either alone misplaces them: distance from the mesh's centre of mass,
+and radial distance from the vertical body axis. The inner half of the range is
+dropped outright, and a minimum-separation pass stops thorns clumping wherever the
+sculpt happens to be most densely tessellated.
+
+Each thorn points along its face **normal**, with randomised length, base radius,
+roll and a slight tilt so they don't look stamped. Size is ~3.8% of the model's
+largest dimension (pre-rescale).
+
+Tune `N` by eye and re-render. `petalfang` uses `--thorns 40`.
 
 ## The conventions that matter
 
 - **Scale** — board cells are **2.0 world units**. A regular humanoid is ~1.8.
-  You don't need to sculpt at that size; the pipeline rescales by height.
+  You don't need to sculpt at that size; the pipeline rescales to fit the cell.
 - **Origin at the feet** — units sit at `y = 0` on a cell centre. Handled for you.
 - **Facing** — face **−Y in Blender**. The +Y-up export turns that into Godot's
   −Z forward. This is the one thing worth getting right while sculpting.
@@ -64,11 +118,32 @@ source faces=240562
 decimated 240562 -> 9889 faces (ratio 0.0208)
 smart UV unwrap done
 added default material 'tree_grunt_mat'
-scaled by 0.09728 (height 18.503 -> 1.800)
-final size w=2.455 d=1.107 h=1.800
+scale candidates: height 0.09728 (18.503 -> 1.800), footprint 0.07529 (25.235 -> 1.900)
+BOUND BY FOOTPRINT -- scaled by 0.07529
+final size w=1.900 d=0.857 h=1.393
 final origin_at_feet_z=0.0000 centred_x=0.0000 centred_y=0.0000
-NOTE footprint 2.45 x 1.11 exceeds one 2.0 cell -- consider a multi-cell footprint
 ```
+
+Its arms span wide, so the footprint binds and it lands 1.393 tall rather than 1.8.
+Under the old height-only scaling it came out **2.455 wide** and tripped the
+"exceeds one cell" NOTE; now it fits, and the NOTE is gone.
+
+## Worked example — `petalfang` (with thorns)
+
+```
+source faces=68368
+thorns: 40 spikes, len~0.470 (3.8% of maxdim 12.36), joined -> 68648 faces
+decimated 68648 -> 9408 faces (ratio 0.0728)
+smart UV unwrap done
+added default material 'petalfang_mat'
+scale candidates: height 0.34739 (5.181 -> 1.800), footprint 0.15352 (12.376 -> 1.900)
+BOUND BY FOOTPRINT -- scaled by 0.15352
+final size w=1.900 d=1.386 h=0.795
+final origin_at_feet_z=0.0000 centred_x=0.0000 centred_y=0.0000
+```
+
+A sprawling vine-serpent: wide and low, so it fills the cell at 1.900 × 1.386 and
+is only 0.795 tall. That is the footprint constraint working as intended.
 
 ## Animations
 
@@ -113,6 +188,12 @@ tools/blender/reingest.sh tree_grunt   # rebuild one asset
 
 Add a line to `tools/blender/assets.conf` per unit and the script handles the
 rest. The no-argument form compares timestamps, so it is cheap to run habitually.
+
+> **Caveat — `petalfang` and `--thorns`.** `assets.conf` has five columns
+> (`name|source|output|height|faces`) with nowhere to put extra flags, so
+> `reingest.sh` cannot pass `--thorns 40` and will rebuild petalfang **smooth**,
+> silently dropping every spike. Re-export it with the full command in the comment
+> at the bottom of `assets.conf` until the registry grows an options column.
 
 **Nothing downstream breaks on re-export.** The `CharacterResource` references the
 `.glb` by path and Godot's `.import` settings file persists, so stats, id,

@@ -8,21 +8,28 @@ Run headless:
 
     blender --background <input.blend> --factory-startup \
         --python tools/blender/prepare_unit.py -- \
-        --output <out.glb> [--target-height 1.8] [--target-faces 10000] [--name Foo]
+        --output <out.glb> [--target-height 1.8] [--max-footprint 1.9] \
+        [--target-faces 10000] [--thorns 0] [--name Foo]
 
 What it does, in order:
   1. Joins every mesh in the file into one object (sculpts often end up split).
-  2. Decimates to a target face count -- a sculpt is millions of polys; a tactics
+  2. OPTIONAL (--thorns N): scatters N procedural spikes over the surface, biased
+     toward thin protruding parts. Off by default; runs BEFORE decimation and
+     unwrapping so thorns are budgeted and UV'd along with everything else.
+  3. Decimates to a target face count -- a sculpt is millions of polys; a tactics
      unit rendered small on an angled camera needs a fraction of that.
-  3. Shades smooth, then Smart-UV-unwraps. The unwrap MUST happen after decimation,
+  4. Shades smooth, then Smart-UV-unwraps. The unwrap MUST happen after decimation,
      because decimating destroys the old UV layout.
-  4. Adds a simple Principled material when the sculpt has none, so it imports as
+  5. Adds a simple Principled material when the sculpt has none, so it imports as
      something deliberate rather than default grey.
-  5. Normalises SCALE by height: the board's cells are 2.0 world units, so a unit
-     is authored to a real height in metres regardless of the sculpt's size.
-  6. Moves the ORIGIN to the feet, centred in X/Y -- units sit at y=0 on a cell
+  6. Normalises SCALE against BOTH height and footprint. Every unit occupies one
+     2.0-unit cell, so scaling by height alone breaks for sprawling creatures: a
+     wide, low flower scaled to 1.8 tall can end up 4+ cells across. The factor is
+     therefore min(target_height/height, max_footprint/max(width, depth)), and the
+     binding constraint is reported so the artist knows why a model came out small.
+  7. Moves the ORIGIN to the feet, centred in X/Y -- units sit at y=0 on a cell
      centre, so a hip-centred origin makes them float or sink.
-  7. Applies all transforms and exports .glb with +Y up (Blender is Z-up, Godot is
+  8. Applies all transforms and exports .glb with +Y up (Blender is Z-up, Godot is
      Y-up; the exporter converts, and a model facing -Y in Blender ends up facing
      Godot's -Z forward).
 
@@ -31,6 +38,8 @@ Everything is reported so a bad asset is caught here rather than in game.
 
 import bpy
 import sys
+import math
+import random
 import mathutils
 
 
@@ -44,16 +53,18 @@ def parse_args() -> dict:
         "output": "",
         "name": "unit",
         "target_height": 1.8,
+        "max_footprint": 1.9,
         "target_faces": 10000,
+        "thorns": 0,
     }
     i = 0
     while i < len(argv):
         key = argv[i].lstrip("-").replace("-", "_")
         if key in opts and i + 1 < len(argv):
             raw = argv[i + 1]
-            if key in ("target_height",):
+            if key in ("target_height", "max_footprint"):
                 opts[key] = float(raw)
-            elif key in ("target_faces",):
+            elif key in ("target_faces", "thorns"):
                 opts[key] = int(raw)
             else:
                 opts[key] = raw
@@ -105,6 +116,133 @@ def world_bounds(ob):
     return mn, mx
 
 
+def add_thorns(ob, count: int, seed: int = 1337) -> None:
+    """Scatter `count` cone spikes over the mesh surface and join them in.
+
+    Opt-in (--thorns). Runs BEFORE decimation/unwrapping so the thorns are part of
+    the same poly budget and the same UV layout as the body.
+
+    Placement is biased toward the THIN, PROTRUDING parts -- on a vine creature the
+    thorns belong on the tendrils, not smeared over the bulky central body. Two
+    cheap heuristics are combined, because either alone misplaces thorns:
+
+      * distance from the centre of mass -- vine TIPS score high, but so does the
+        outer rim of a wide flat body;
+      * radial distance from the vertical body axis -- catches vines that sweep
+        outward, but not one that rears straight up.
+
+    The blend is then cubed, which turns a mild preference into a strong one, and
+    faces in the inner half of the range are dropped outright. A minimum-separation
+    rejection pass stops thorns clumping on whichever tendril happens to have the
+    densest topology (the sculpt is not evenly tessellated, so weight-only sampling
+    piles them up). Separation relaxes if the mesh cannot fit the requested count
+    rather than looping forever.
+    """
+    if count <= 0:
+        return
+
+    rng = random.Random(seed)
+    me = ob.data
+    mw = ob.matrix_world
+    # Normals need the inverse-transpose in general; identity-safe here either way.
+    nm = mw.to_3x3().inverted().transposed()
+
+    if not me.polygons:
+        log("WARNING --thorns given but mesh has no faces")
+        return
+
+    # Centre of mass, approximated by the vertex average. Good enough as an anchor
+    # for "far from the middle" and immune to the bounding box being dragged around
+    # by one long tendril.
+    com = mathutils.Vector((0.0, 0.0, 0.0))
+    for v in me.vertices:
+        com += mw @ v.co
+    com /= len(me.vertices)
+
+    mn, mx = world_bounds(ob)
+    maxdim = max((mx - mn).x, (mx - mn).y, (mx - mn).z)
+
+    # Score every face on the two heuristics, normalised independently so neither
+    # dominates purely because the model is wider than it is tall.
+    faces = []
+    for p in me.polygons:
+        c = mw @ p.center
+        off = c - com
+        faces.append((p.index, c, (nm @ p.normal).normalized(), off.length,
+                      math.hypot(off.x, off.y)))
+
+    d_max = max(f[3] for f in faces) or 1.0
+    r_max = max(f[4] for f in faces) or 1.0
+
+    scored = []
+    for idx, c, n, d, r in faces:
+        s = 0.5 * (d / d_max) + 0.5 * (r / r_max)
+        scored.append((s, c, n))
+
+    # Drop the inner half outright: the central body should stay smooth.
+    s_hi = max(s for s, _, _ in scored)
+    cutoff = s_hi * 0.5
+    pool = [(s, c, n) for s, c, n in scored if s >= cutoff]
+    if len(pool) < count:
+        pool = scored
+    # Squared, not cubed: cubing pulled almost everything onto the vine TIPS and
+    # left the mid-tendril bare. Squared still favours the extremities but spreads
+    # thorns along the whole length of each vine.
+    weights = [s ** 2 for s, _, _ in pool]
+
+    # Weighted sampling with a minimum-separation rejection test.
+    chosen = []
+    min_sep = maxdim * 0.05
+    attempts = 0
+    max_attempts = count * 400
+    while len(chosen) < count and attempts < max_attempts:
+        attempts += 1
+        s, c, n = rng.choices(pool, weights=weights, k=1)[0]
+        if all((c - pc).length >= min_sep for pc, _ in chosen):
+            chosen.append((c, n))
+        elif attempts % (count * 40) == 0:
+            min_sep *= 0.7  # mesh is too cramped for the requested count; relax
+    if len(chosen) < count:
+        log("WARNING placed only %d of %d thorns (mesh too small to separate them)" % (
+            len(chosen), count))
+
+    # Thorn scale: ~3-6% of the model's largest dimension, pre-rescale, so the
+    # silhouette reads as spiky without the spikes becoming the silhouette.
+    base_len = maxdim * 0.038
+    spikes = []
+    for c, n in chosen:
+        length = base_len * rng.uniform(0.75, 1.35)
+        # Narrow cones. A wider base looked like a mushroom cap where a vine was
+        # thinner than the thorn, and fat cones lose their point to decimation.
+        radius = length * rng.uniform(0.20, 0.30)
+        # Point +Z (the cone's own axis) along the face normal, then roll randomly
+        # so the low-poly cones do not all share a silhouette.
+        quat = n.to_track_quat("Z", "Y")
+        quat = quat @ mathutils.Quaternion((0.0, 0.0, 1.0), rng.uniform(0, math.tau))
+        # Slight tilt keeps them from looking machine-stamped.
+        quat = quat @ mathutils.Quaternion(
+            mathutils.Vector((rng.uniform(-1, 1), rng.uniform(-1, 1), 0.0)).normalized(),
+            rng.uniform(0.0, 0.30))
+        # Sink the base under the surface so no gap shows at the join.
+        loc = c + (quat @ mathutils.Vector((0.0, 0.0, 1.0))) * (length * 0.5 - length * 0.25)
+        bpy.ops.mesh.primitive_cone_add(
+            vertices=6, radius1=radius, radius2=0.0, depth=length,
+            location=loc, rotation=quat.to_euler())
+        spikes.append(bpy.context.view_layer.objects.active)
+
+    if not spikes:
+        return
+
+    deselect_all()
+    for s in spikes:
+        s.select_set(True)
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.join()
+    log("thorns: %d spikes, len~%.3f (%.1f%% of maxdim %.2f), joined -> %d faces" % (
+        len(spikes), base_len, 100.0 * base_len / maxdim, maxdim, len(ob.data.polygons)))
+
+
 def main() -> None:
     opts = parse_args()
     if not opts.get("output"):
@@ -135,10 +273,17 @@ def main() -> None:
     ob.name = opts["name"]
     ob.data.name = opts["name"] + "_mesh"
 
-    faces_before = len(ob.data.polygons)
-    log("source faces=%d" % faces_before)
+    log("source faces=%d" % len(ob.data.polygons))
 
-    # 2. Decimate to the poly budget.
+    # 2. Optional procedural thorns, BEFORE decimation and unwrapping.
+    if int(opts["thorns"]) > 0:
+        select_only(ob)
+        add_thorns(ob, int(opts["thorns"]))
+        ob = bpy.context.view_layer.objects.active
+
+    faces_before = len(ob.data.polygons)
+
+    # 3. Decimate to the poly budget.
     target_faces = int(opts["target_faces"])
     if faces_before > target_faces:
         select_only(ob)
@@ -150,7 +295,7 @@ def main() -> None:
     else:
         log("no decimation needed (under budget)")
 
-    # 3. Smooth shading + a fresh UV unwrap (the old layout dies with decimation).
+    # 4. Smooth shading + a fresh UV unwrap (the old layout dies with decimation).
     select_only(ob)
     bpy.ops.object.shade_smooth()
     bpy.ops.object.mode_set(mode="EDIT")
@@ -162,7 +307,7 @@ def main() -> None:
         log("WARNING uv unwrap failed: %s" % exc)
     bpy.ops.object.mode_set(mode="OBJECT")
 
-    # 4. Give it a material if the sculpt had none.
+    # 5. Give it a material if the sculpt had none.
     if not ob.data.materials:
         mat = bpy.data.materials.new(name=opts["name"] + "_mat")
         mat.use_nodes = True
@@ -174,17 +319,31 @@ def main() -> None:
         ob.data.materials.append(mat)
         log("added default material '%s'" % mat.name)
 
-    # 5. Normalise scale by HEIGHT (Blender is Z-up, so height is Z).
+    # 6. Normalise scale against BOTH height and footprint (Blender is Z-up, so
+    #    height is Z and the footprint is the X/Y extent).
+    #
+    #    Height alone is wrong for anything that sprawls: a 12.4 x 8.8 x 4.98 flower
+    #    scaled to 1.8 tall comes out 4.5 metres wide -- more than two cells -- and
+    #    every unit occupies exactly ONE 2.0-unit cell. Taking the smaller of the two
+    #    factors means the model always fits, and whichever constraint bound it is
+    #    reported so a model that comes out unexpectedly short is self-explaining.
     mn, mx = world_bounds(ob)
     size = mx - mn
     src_height = size.z
-    if src_height <= 0.0:
-        log("ERROR degenerate height")
+    src_footprint = max(size.x, size.y)
+    if src_height <= 0.0 or src_footprint <= 0.0:
+        log("ERROR degenerate bounds w=%.4f d=%.4f h=%.4f" % (size.x, size.y, size.z))
         return
-    factor = float(opts["target_height"]) / src_height
+    height_factor = float(opts["target_height"]) / src_height
+    footprint_factor = float(opts["max_footprint"]) / src_footprint
+    factor = min(height_factor, footprint_factor)
+    bound_by = "height" if height_factor <= footprint_factor else "footprint"
     ob.scale = (factor, factor, factor)
     bpy.context.view_layer.update()
-    log("scaled by %.5f (height %.3f -> %.3f)" % (factor, src_height, float(opts["target_height"])))
+    log("scale candidates: height %.5f (%.3f -> %.3f), footprint %.5f (%.3f -> %.3f)" % (
+        height_factor, src_height, float(opts["target_height"]),
+        footprint_factor, src_footprint, float(opts["max_footprint"])))
+    log("BOUND BY %s -- scaled by %.5f" % (bound_by.upper(), factor))
 
     # 6. Origin to the feet, centred in X/Y.
     #    Done with the 3D cursor + origin_set rather than shifting vertices by hand:
@@ -201,7 +360,7 @@ def main() -> None:
     bpy.context.scene.cursor.location = (0.0, 0.0, 0.0)
     bpy.context.view_layer.update()
 
-    # 7. Bake transforms so the exported mesh needs no runtime correction.
+    # 8. Bake transforms so the exported mesh needs no runtime correction.
     select_only(ob)
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
@@ -212,14 +371,15 @@ def main() -> None:
     log("final faces=%d verts=%d uv_layers=%d materials=%d" % (
         len(ob.data.polygons), len(ob.data.vertices), len(ob.data.uv_layers), len(ob.data.materials)))
 
-    # Warn when the model overhangs a single 2.0-unit cell, so the author can decide
-    # between rescaling and giving the character a multi-cell footprint.
+    # Kept as a backstop. Now that scale is clamped by --max-footprint this should
+    # never fire; if it does, something upstream is wrong (a stray object dragging
+    # the bounds out, or --max-footprint raised above the cell size).
     CELL = 2.0
     if size.x > CELL or size.y > CELL:
         log("NOTE footprint %.2f x %.2f exceeds one %.1f cell -- consider a multi-cell footprint" % (
             size.x, size.y, CELL))
 
-    # 8. Export. +Y up converts Blender's Z-up to Godot's Y-up; a model facing -Y
+    # 9. Export. +Y up converts Blender's Z-up to Godot's Y-up; a model facing -Y
     #    here therefore faces Godot's -Z (forward).
     select_only(ob)
     bpy.ops.export_scene.gltf(

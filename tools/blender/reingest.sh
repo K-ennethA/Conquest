@@ -41,7 +41,7 @@ esac
 processed=0
 skipped=0
 
-while IFS='|' read -r name src out height faces; do
+while IFS='|' read -r name src out height faces extra; do
   # Skip comments and blank lines.
   case "${name:-}" in ''|\#*) continue ;; esac
   name="$(echo "$name" | xargs)"
@@ -49,6 +49,10 @@ while IFS='|' read -r name src out height faces; do
   out="$(echo "$out" | xargs)"
   height="$(echo "$height" | xargs)"
   faces="$(echo "$faces" | xargs)"
+  # Optional 6th column: extra prepare_unit.py flags (e.g. "--thorns 40").
+  # Without this, a rebuild silently dropped per-asset options -- petalfang came
+  # back SMOOTH, losing every thorn, with nothing in the output to say so.
+  extra="$(echo "${extra:-}" | xargs)"
 
   [ -n "$ONLY" ] && [ "$ONLY" != "$name" ] && continue
 
@@ -67,11 +71,12 @@ while IFS='|' read -r name src out height faces; do
     continue
   fi
 
-  echo "BUILD $name  ($src -> $out)"
+  echo "BUILD $name  ($src -> $out)${extra:+  [$extra]}"
   mkdir -p "$(dirname "$abs_out")"
+  # $extra is intentionally UNQUOTED so "--thorns 40" splits into two arguments.
   "$BLENDER" --background "$src" --factory-startup --python "$SCRIPT" -- \
       --output "$abs_out" --name "$name" \
-      --target-height "$height" --target-faces "$faces" 2>&1 \
+      --target-height "$height" --target-faces "$faces" $extra 2>&1 \
     | grep -E "^PIPELINE" | sed 's/^PIPELINE/      /'
   processed=$((processed+1))
 done < "$CONF"
