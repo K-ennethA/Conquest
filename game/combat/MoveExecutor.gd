@@ -23,6 +23,12 @@ static func execute(move: MoveResource, caster, board, aim_cell: Vector2i, rng: 
 	# range bonus is honoured -- the same helper the UI and the AI validate with.
 	if not move.can_aim_at(origin, aim_cell, caster):
 		return _fail("out_of_range")
+	# Then the pattern's BOARD-aware constraints (an empty landing cell for a leap,
+	# adjacency to an enemy, ...). Reported separately from range so the UI/AI can
+	# tell "too far" apart from "you cannot land there"; a pattern that declares
+	# none of them passes this unconditionally.
+	if not move.can_target(origin, aim_cell, caster, board):
+		return _fail("invalid_target_cell")
 
 	var cells := move.targeting.resolve_cells(origin, aim_cell)
 	var ctx := MoveContext.new(caster, board, move, aim_cell, cells)

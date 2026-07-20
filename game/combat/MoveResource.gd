@@ -74,6 +74,21 @@ func can_aim_at(origin: Vector2i, aim: Vector2i, caster = null) -> bool:
 	return targeting != null and targeting.in_range(origin, aim, range_bonus_of(caster))
 
 
+## The FULL legality test: [method can_aim_at]'s range answer PLUS the pattern's
+## board-aware constraints (an empty landing cell, adjacency to an enemy — see
+## [method TargetingPattern.is_aim_allowed]).
+##
+## Split from [method can_aim_at] rather than folded into it because the two
+## answer different questions and not every caller has a board: "is this within
+## reach?" is pure geometry and drives range previews, while THIS is "may the move
+## actually be used here?" and is what [MoveExecutor] validates with. A null board,
+## or a pattern declaring no board constraints, makes the two identical.
+func can_target(origin: Vector2i, aim: Vector2i, caster = null, board = null) -> bool:
+	if targeting == null:
+		return false
+	return targeting.is_aim_allowed(origin, aim, caster, board, range_bonus_of(caster))
+
+
 ## Build a full description from the effect list (for tooltips).
 func full_description() -> String:
 	if description != "":

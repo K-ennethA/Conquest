@@ -1098,6 +1098,8 @@ func _trigger_label(trigger: int) -> String:
 			return "On damaged"
 		AbilityTrigger.Trigger.ON_KILL:
 			return "On kill"
+		AbilityTrigger.Trigger.ON_DEATH:
+			return "On death"
 	return "Unknown trigger"
 
 

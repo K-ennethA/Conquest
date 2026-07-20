@@ -40,7 +40,15 @@ func add_status(condition: StatusCondition) -> StatusCondition:
 			StatusCondition.Stacking.IGNORE:
 				return existing
 			StatusCondition.Stacking.STACK:
-				pass  # fall through and add a second instance
+				if _stack_cap_reached(condition):
+					# At the severity ceiling. Refresh the OLDEST instance rather
+					# than dropping the application on the floor: re-applying a
+					# maxed poison keeps it alive on the target, it just cannot
+					# make it any worse. _find_by_id returns the first (oldest)
+					# match, so this is also the instance about to expire.
+					existing.turns_left = condition.duration_turns
+					return existing
+				# Otherwise fall out of the match and add another instance.
 	var instance: StatusCondition = condition.duplicate(true)
 	instance.turns_left = instance.duration_turns
 	_active.append(instance)
@@ -76,6 +84,32 @@ func get_active() -> Array[StatusCondition]:
 ## True if a condition with [param condition_id] is active.
 func has_status(condition_id: StringName) -> bool:
 	return _find_by_id(condition_id) != null
+
+
+## How many independent instances of [param condition_id] are live on the unit.
+##
+## 0 when absent and 1 for an ordinary REFRESH/IGNORE condition; for a
+## [constant StatusCondition.Stacking.STACK] one this is its current SEVERITY, and
+## it is what the status UI reads to render "Poisoned x3" rather than three
+## identical badges. Exposed here (instead of leaving every caller to count
+## [method get_active] itself) so severity has exactly one definition.
+func stack_count(condition_id: StringName) -> int:
+	var count: int = 0
+	for condition in _active:
+		if condition != null and condition.id == condition_id:
+			count += 1
+	return count
+
+
+## Condition id -> live instance count, in first-applied order. The whole-unit
+## version of [method stack_count], for debug/UI that renders the full list.
+func stacks_by_id() -> Dictionary:
+	var counts: Dictionary = {}
+	for condition in _active:
+		if condition == null:
+			continue
+		counts[condition.id] = int(counts.get(condition.id, 0)) + 1
+	return counts
 
 
 ## True if ANY active condition sets [param flag_name] in its
@@ -114,6 +148,18 @@ func clear(board = null) -> void:
 	for condition in _active:
 		condition.on_expire(_target(), board)
 	_active = []
+
+
+## True when [param condition] is already at its
+## [member StatusCondition.max_stacks] ceiling on this unit. A negative cap (the
+## default) is unbounded and never reached, which is exactly how STACK behaved
+## before the cap existed. A mis-authored 0 is read as 1 so a condition can always
+## land at least once.
+func _stack_cap_reached(condition: StatusCondition) -> bool:
+	var cap: int = condition.max_stacks
+	if cap < 0:
+		return false
+	return stack_count(condition.id) >= maxi(1, cap)
 
 
 func _find_by_id(condition_id: StringName) -> StatusCondition:

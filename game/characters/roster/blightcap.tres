@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/blightcap.glb" id="2_model"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Resource" path="res://game/combat/moves/blight_burst.tres" id="4_burst"]
+[ext_resource type="Resource" path="res://game/combat/moves/sporeleap.tres" id="5_leap"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="6_abres"]
+[ext_resource type="Resource" path="res://game/abilities/deathbloom.tres" id="7_deathbloom"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"blightcap"
+display_name = "Blightcap"
+description = "A squat, wet-looking fungus that walks on a knot of root-legs and smells like a turned log. It cannot chase anything down, so it waits, throws itself the last few paces, and hammers at whatever it reaches until the rot it carries does the rest. Killing one is not the end of the exchange -- the cap ruptures and coats everything standing over it."
+model_scene = ExtResource("2_model")
+base_health = 52
+base_attack = 14
+base_defense = 9
+base_magic = 6
+base_magic_defense = 11
+base_speed = 6
+base_movement = 2
+attack_range = 1
+movement_kind = 0
+is_boss = false
+footprint = Vector2i(1, 1)
+moveset = Array[ExtResource("3_mvres")]([ExtResource("4_burst"), ExtResource("5_leap")])
+abilities = Array[ExtResource("6_abres")]([ExtResource("7_deathbloom")])

@@ -429,6 +429,17 @@ func has_status_rule_flag(flag_name: StringName) -> bool:
 		return false
 	return bool(controller.has_rule_flag(flag_name))
 
+## How many live instances of [param condition_id] this unit carries — the
+## SEVERITY of a stacking condition (Poisoned x3), 0 when it has none. Null-safe
+## in the same way as [method has_status_rule_flag]: a unit with no
+## StatusController simply carries nothing.
+func status_stack_count(condition_id: StringName) -> int:
+	# Deliberately untyped, for the same reason as has_status_rule_flag above.
+	var controller = get_status_controller()
+	if controller == null or not controller.has_method("stack_count"):
+		return 0
+	return int(controller.stack_count(condition_id))
+
 ## True while a status roots this unit in place (Ensnared, Ingrained, …). The one
 ## place the "immobilized" flag name is spelled for movement purposes.
 func is_immobilized() -> bool:
@@ -602,7 +613,17 @@ func _on_unit_died() -> void:
 		return
 	_is_dead = true
 
-	# 1. Notify listeners while the node is still valid:
+	# 1. Death-triggered abilities (ON_DEATH), FIRST -- while this unit is still in
+	#    the tree, still standing on its cell, and still reported by the board's
+	#    units_at(). Everything below takes that away: the signals in step 2
+	#    unregister the unit from its owning Player and the turn system, and step 4
+	#    hides and frees the node. A death burst has to explode from SOMEWHERE, so
+	#    it must resolve before its origin stops existing. Running here also orders
+	#    the victim's death throes ahead of the killer's ON_KILL, which
+	#    unit_eliminated raises below. _is_dead above already makes this fire once.
+	_fire_death_abilities()
+
+	# 2. Notify listeners while the node is still valid:
 	#    - the owning Player removes it from owned_units (and self-eliminates when
 	#      its last unit dies, which PlayerManager turns into a win/lose result),
 	#    - the active turn system unregisters it and re-checks turn completion so a
@@ -610,18 +631,40 @@ func _on_unit_died() -> void:
 	unit_died.emit(self)
 	GameEvents.unit_eliminated.emit(self, null)  # null = no killer specified
 
-	# 2. Tear down this unit's floating health bar (erases it from the visual
+	# 3. Tear down this unit's floating health bar (erases it from the visual
 	#    manager's registry so no dangling reference remains).
 	if visual_manager and visual_manager.has_method("cleanup_unit_visuals"):
 		visual_manager.cleanup_unit_visuals(self)
 
-	# 3. Remove the unit from play. Hide immediately so it disappears this frame,
+	# 4. Remove the unit from play. Hide immediately so it disappears this frame,
 	#    then free the node deferred -- deferring lets the signal handlers above
 	#    (and anything mid-iteration over the board/units this same frame) unwind
 	#    before the node is actually gone.
 	visible = false
 	if is_inside_tree() and not is_queued_for_deletion():
 		queue_free()
+
+## Raise ON_DEATH on this unit's OWN AbilitySystem (the victim's side of ON_KILL,
+## which AbilitySystem raises for the killer instead). Called from
+## _on_unit_died only, at the point documented there.
+##
+## Guarded end to end so nothing here can turn a death into an error: a unit whose
+## character declares no abilities has no AbilitySystem child at all, a headless /
+## pre-map run has no live board (ability effects need one -- AbilityResource.
+## run_effects no-ops on null anyway, so there is nothing to gain by calling), and
+## a node already on its way out is left alone.
+func _fire_death_abilities() -> void:
+	if is_queued_for_deletion():
+		return
+	# Deliberately untyped: get_ability_system() is declared -> Node, and calling
+	# trigger() on a Node-typed variable would not compile.
+	var ability_system = get_ability_system()
+	if ability_system == null or not ability_system.has_method("trigger"):
+		return
+	var board = CombatServices.board() if CombatServices else null
+	if board == null:
+		return
+	ability_system.trigger(AbilityTrigger.Trigger.ON_DEATH, self, board)
 
 # Visual feedback (updated to use visual manager)
 func _on_unit_selected(unit: Unit) -> void:

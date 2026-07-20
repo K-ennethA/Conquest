@@ -21,6 +21,38 @@ class_name TargetingPattern
 ## If true, self-targeting / area moves may also include the caster's own cell.
 @export var affects_caster_tile: bool = false
 
+## --- Board-aware aim constraints --------------------------------------------
+##
+## [member min_range] / [member max_range] are pure geometry and need no world to
+## answer. These two need the BOARD, so they are checked separately in
+## [method is_aim_allowed] (which [MoveExecutor] and the targeting UI validate
+## with) rather than in [method in_range]. Both default to false, so a pattern
+## authored before they existed resolves through range alone exactly as it always
+## has -- they only ever NARROW what may be aimed at, never widen it.
+
+## The aim cell must be somewhere the CASTER could actually stand: in bounds,
+## passable, and free of other living units. Independent of [member target_kind]
+## on purpose -- a move can require an empty LANDING cell while its target kind
+## still says which units the effects then hit.
+@export var requires_empty_cell: bool = false
+
+## The aim cell must be orthogonally adjacent to at least one enemy of the caster.
+##
+## Together with [member requires_empty_cell] this expresses "a free tile beside
+## an enemy", which is how a dash/leap gets its landing choice for free: the
+## player aims at the DESTINATION, so the ordinary targeting UI *is* the choice of
+## which side to land on, and "there is no room beside the target" needs no
+## special case at all -- no cell passes, so nothing can be aimed at and the move
+## simply cannot be used. Adjacency is measured from the aim cell to each enemy's
+## anchor cell.
+@export var requires_adjacent_enemy: bool = false
+
+## The four orthogonal neighbours -- the sides a leap may land on. Diagonals are
+## excluded to match the game's orthogonal movement.
+const ORTHOGONAL_STEPS: Array[Vector2i] = [
+	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+]
+
 
 ## This pattern's reach once a caster's per-unit range bonus is folded in.
 ##
@@ -41,6 +73,61 @@ func effective_max_range(range_bonus: int = 0) -> int:
 func in_range(origin: Vector2i, aim: Vector2i, range_bonus: int = 0) -> bool:
 	var d := _manhattan(origin, aim)
 	return d >= min_range and d <= effective_max_range(range_bonus)
+
+
+## The FULL legality test for aiming at [param aim]: [method in_range] plus every
+## board-aware constraint this pattern declares (see [member requires_empty_cell] /
+## [member requires_adjacent_enemy]).
+##
+## [param board] is optional and may be null (previews, mock harnesses, anything
+## with no world to ask); a null board falls back to the range answer alone, which
+## is what every caller got before these constraints existed. A pattern that
+## declares neither constraint resolves identically to [method in_range] whatever
+## the board says, so this is safe to call everywhere in place of it.
+func is_aim_allowed(origin: Vector2i, aim: Vector2i, caster = null, board = null, range_bonus: int = 0) -> bool:
+	if not in_range(origin, aim, range_bonus):
+		return false
+	if board == null:
+		return true
+	if requires_empty_cell and not _is_free_cell(aim, caster, board):
+		return false
+	if requires_adjacent_enemy and not _has_adjacent_enemy(aim, caster, board):
+		return false
+	return true
+
+
+## Could [param caster] stand at [param cell]?
+##
+## Asks the board's [code]can_fit[/code] when it has one, because that is the
+## primitive that already knows about bounds, blocking terrain, other living units
+## AND multi-cell footprints -- a 2x2 unit must not leap into a 1-cell gap.
+## Boards without it (lightweight mocks) fall back to whichever of the individual
+## queries they do expose, defaulting to "free" for the ones they don't.
+func _is_free_cell(cell: Vector2i, caster, board) -> bool:
+	if board.has_method("can_fit"):
+		return bool(board.can_fit(caster, cell))
+	if board.has_method("in_bounds") and not bool(board.in_bounds(cell)):
+		return false
+	if board.has_method("is_blocked") and bool(board.is_blocked(cell)):
+		return false
+	if board.has_method("is_occupied"):
+		return not bool(board.is_occupied(cell))
+	if board.has_method("units_at"):
+		return board.units_at(cell).is_empty()
+	return true
+
+
+## True when any of [param cell]'s four orthogonal neighbours holds a unit the
+## board calls an enemy of [param caster]. False without a caster or without the
+## allegiance query, so this can never invent hostility a board cannot confirm.
+func _has_adjacent_enemy(cell: Vector2i, caster, board) -> bool:
+	if caster == null or not board.has_method("units_at") or not board.has_method("are_enemies"):
+		return false
+	for step in ORTHOGONAL_STEPS:
+		for unit in board.units_at(cell + step):
+			if unit != null and unit != caster and board.are_enemies(caster, unit):
+				return true
+	return false
 
 
 ## Expand the aim point into every cell the move touches.

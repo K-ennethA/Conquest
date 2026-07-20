@@ -12,11 +12,31 @@ class_name ApplyStatusEffect
 ## a condition whose tick_effects = [DamageEffect]).
 @export var condition: StatusCondition
 
+## Probability (0..1) that the condition actually lands, rolled INDEPENDENTLY per
+## target through [method MoveContext.roll] — i.e. against the executor's injected,
+## seedable RNG, so a "30% chance to poison" replays identically on every peer and
+## a test can pin it with a seeded generator.
+##
+## 1.0 (the default) always applies and consumes no roll at all, so every move
+## authored before this field existed behaves exactly as it did. Deliberately a
+## field here rather than a bespoke roll inside one move: any move, tile or ability
+## that inflicts a status gets a chance for free by authoring a number.
+@export_range(0.0, 1.0, 0.01) var chance: float = 1.0
+
 
 func apply(ctx: MoveContext) -> void:
 	if condition == null:
 		return
 	for target in ctx.gather_targets():
+		if not ctx.roll(chance):
+			ctx.log_event({
+				"effect": "apply_status",
+				"target": target,
+				"status": condition.id,
+				"applied": false,
+				"chance": chance,
+			})
+			continue
 		var applied := false
 		if target.has_method("add_status"):
 			target.add_status(condition.duplicate(true))
@@ -38,4 +58,6 @@ func describe() -> String:
 	if description_override != "":
 		return description_override
 	var label := condition.display_name if condition != null and condition.display_name != "" else "a condition"
+	if chance < 1.0:
+		return "%d%% chance to inflict %s" % [roundi(chance * 100.0), label]
 	return "Inflict %s" % label

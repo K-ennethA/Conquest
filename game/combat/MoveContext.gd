@@ -86,6 +86,21 @@ func resolve_hit(target) -> Dictionary:
 	return out
 
 
+## One independent probability roll (0..1) against THIS context's RNG — the same
+## generator [method resolve_hit] uses, so any effect built on it inherits the
+## executor's seeding and stays deterministic for replays and networked peers.
+##
+## Certainties short-circuit WITHOUT touching the generator: an effect left at its
+## default 1.0 chance consumes no roll, so adding a probability field to an
+## existing effect cannot shift the RNG stream for anything resolved after it.
+func roll(probability: float) -> bool:
+	if probability >= 1.0:
+		return true
+	if probability <= 0.0:
+		return false
+	return _get_rng().randf() < probability
+
+
 func _get_rng() -> RandomNumberGenerator:
 	if rng == null:
 		rng = RandomNumberGenerator.new()

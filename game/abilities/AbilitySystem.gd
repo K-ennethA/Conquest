@@ -237,7 +237,15 @@ func _on_damage_dealt(attacker, defender, _amount) -> void:
 		trigger(AbilityTrigger.Trigger.ON_DAMAGED, me, _board(), attacker)
 
 
-## A unit died. Fires ON_KILL for its killer. [code]unit_eliminated[/code] is
+## A unit died. Fires ON_KILL for its KILLER, and only for the killer -- the
+## VICTIM's side of the same moment is [constant AbilityTrigger.Trigger.ON_DEATH],
+## which is deliberately NOT raised from here. This handler runs on every unit's
+## component in signal order, long after the emitter has moved on; an on-death
+## burst instead has to resolve at a precise point inside
+## [method Unit._on_unit_died], while the dying unit is still on its cell, so the
+## victim raises it on itself there.
+##
+## [code]unit_eliminated[/code] is
 ## emitted with a null eliminator from Unit._on_unit_died (nothing there knows who
 ## landed the blow), so we fall back to attributing the kill to whoever last
 ## damaged the victim — which is exactly what this component just recorded.

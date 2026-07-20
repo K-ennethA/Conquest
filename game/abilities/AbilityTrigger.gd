@@ -17,4 +17,11 @@ enum Trigger {
 	ON_ATTACK,      ## the unit resolves an attack
 	ON_DAMAGED,     ## the unit takes damage
 	ON_KILL,        ## the unit defeats another unit
+	## the unit ITSELF dies -- the victim's side of ON_KILL. Raised by
+	## [method Unit._on_unit_died] while the dying unit is still in the tree and
+	## still standing on its cell, so a death burst has an origin to explode from.
+	## New values MUST be appended here: the enum is serialized as an integer into
+	## every authored ability .tres, so inserting one in the middle would silently
+	## re-point existing content at a different trigger.
+	ON_DEATH,
 }

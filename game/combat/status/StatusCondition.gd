@@ -30,6 +30,19 @@ enum Stacking {
 @export var tick_effects: Array[MoveEffect] = []
 @export var stacking: Stacking = Stacking.REFRESH
 
+## Ceiling on how many independent instances of this condition may be live on one
+## unit at once — its SEVERITY cap. Only [constant Stacking.STACK] can ever reach
+## it (REFRESH and IGNORE never add a second instance), and once it is reached a
+## further application refreshes the OLDEST live instance instead of deepening the
+## severity: re-applying a maxed poison keeps it on the target but cannot make it
+## worse. Enforced by [method StatusController.add_status].
+##
+## -1 (the default) means UNBOUNDED, which is precisely how STACK behaved before
+## this field existed — so every status authored until now is unchanged. It is the
+## default rather than 1 for that reason: 1 would have silently demoted every
+## existing STACK condition to REFRESH.
+@export var max_stacks: int = -1
+
 ## Standing rules the condition imposes while it is active, queried rather than
 ## applied — the status-side mirror of [member TileEffectResource.rule_flags].
 ## A tick effect MUTATES the unit; a rule flag simply says the unit's rules are
