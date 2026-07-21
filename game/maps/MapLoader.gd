@@ -28,6 +28,10 @@ var character_unit_scene: PackedScene = preload("res://game/characters/Character
 # doesn't resolve to a real CharacterResource, so map loading never fails.
 const DEFAULT_CHARACTER_ID: StringName = &"torvald_ironhide"
 
+## World Y a unit's origin sits at: the tile box top (tiles are 0.2 tall, centered on
+## y=0). Models are feet-at-origin, so this rests their feet on the tile surface.
+const UNIT_GROUND_Y: float = 0.1
+
 # Legacy "unit_type" string -> roster CharacterResource id. Used to resolve
 # spawns authored before the character system (no "character_id" set) to a
 # fitting character so old maps keep loading with character-backed units.
@@ -425,8 +429,11 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> Node
 	unit_instance.name = name_hint + str(units_created + 1)
 	print("[MapLoader] Created unit: " + unit_instance.name)
 
-	# Calculate world position (units spawn at Y=1.5 above tiles)
-	var world_pos = Vector3(grid_pos.x * 2 + 1, 1.5, grid_pos.y * 2 + 1)
+	# Calculate world position. Y sits at the TILE SURFACE (tile box top = 0.1): unit
+	# models are exported feet-at-origin (see Unit._setup_character_model), so their
+	# feet rest on the tile. The old Y=1.5 left every unit floating above the ground,
+	# which only became visible once the camera went perspective.
+	var world_pos = Vector3(grid_pos.x * 2 + 1, UNIT_GROUND_Y, grid_pos.y * 2 + 1)
 	unit_instance.transform.origin = world_pos
 
 	# Add to appropriate player container
