@@ -15,7 +15,9 @@ class_name CombatForecastPanel
 # Positioned top-center so it never overlaps the right-edge sidebar.
 
 const CARD_WIDTH := 360.0
-const TOP_MARGIN := 16.0
+## Distance from the bottom edge the card floats at. It lives at BOTTOM-center now,
+## clear of the top-center turn banner it used to overlap and the right-edge sidebar.
+const BOTTOM_MARGIN := 20.0
 
 # --- Node references (built once in _ready, only re-populated in show_forecast) --
 var _card: PanelContainer
@@ -53,19 +55,22 @@ func _ready() -> void:
 	visible = false
 
 func _create_ui() -> void:
-	# The floating card, anchored to the TOP-CENTER of the viewport so it stays
-	# clear of the right-edge sidebar regardless of window size.
+	# The floating card, anchored to the BOTTOM-CENTER of the viewport: clear of the
+	# top-center turn banner (which it used to render on top of) and the right-edge
+	# sidebar, in the otherwise-empty bottom strip. Grows UPWARD from the bottom margin
+	# to fit its content, so it can never push off the bottom of the screen.
 	_card = PanelContainer.new()
 	_card.name = "ForecastCard"
 	_card.anchor_left = 0.5
 	_card.anchor_right = 0.5
-	_card.anchor_top = 0.0
-	_card.anchor_bottom = 0.0
+	_card.anchor_top = 1.0
+	_card.anchor_bottom = 1.0
 	_card.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_card.grow_vertical = Control.GROW_DIRECTION_END
+	_card.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_card.offset_left = -CARD_WIDTH * 0.5
 	_card.offset_right = CARD_WIDTH * 0.5
-	_card.offset_top = TOP_MARGIN
+	_card.offset_top = -BOTTOM_MARGIN
+	_card.offset_bottom = -BOTTOM_MARGIN
 	_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_card)
 
@@ -272,7 +277,23 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 		_show_stat_row(_result_value, false)
 		_lethal_label.visible = false
 
+	_fit_to_viewport()
 	visible = true
+
+## Keep the card width within the viewport on small/narrow windows: it never exceeds
+## CARD_WIDTH, but shrinks to fit when the screen is narrower than that plus a margin,
+## so the damage prediction always fits fully on screen. Re-centres via the offsets.
+func _fit_to_viewport() -> void:
+	if _card == null:
+		return
+	var vp := get_viewport()
+	if vp == null:
+		return
+	var vw: float = vp.get_visible_rect().size.x
+	var margin: float = 24.0
+	var w: float = minf(CARD_WIDTH, maxf(220.0, vw - margin * 2.0))
+	_card.offset_left = -w * 0.5
+	_card.offset_right = w * 0.5
 
 func hide_forecast() -> void:
 	"""Hide the forecast (targeting cancelled/cleared, or the move resolved)."""
