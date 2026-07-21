@@ -59,3 +59,19 @@ func test_map_passes_its_own_validator() -> void:
 	var report: Dictionary = _map.validate_map()
 	assert_true(bool(report.get("valid", false)),
 		"validate_map issues: %s" % str(report.get("issues", [])))
+
+
+func test_draft_is_offered_in_single_player_but_hidden_from_shared_lists() -> void:
+	# The solo map picker (MapSelection) includes drafts so you can play-test a map
+	# you just built; the default/shared list (used by network setup) hides them.
+	var with_drafts: Array = MapLoader.get_available_maps(true)
+	var without_drafts: Array = MapLoader.get_available_maps(false)
+	assert_true(MAP_PATH in with_drafts, "the draft is offered when drafts are included (single-player picker)")
+	assert_false(MAP_PATH in without_drafts, "the draft stays out of the draft-free shared list")
+
+
+func test_win_condition_is_defeat_the_boss() -> void:
+	# The whole point of the encounter: it ends when Eldroot dies, not when every
+	# spawn is cleared (the Hard+ parasites would make elimination the wrong goal).
+	assert_true("Defeat Boss" in _map.victory_conditions,
+		"victory_conditions should be Defeat Boss, got %s" % str(_map.victory_conditions))
