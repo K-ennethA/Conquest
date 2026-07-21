@@ -74,6 +74,20 @@ class FakeBoard extends RefCounted:
 			and cell.y >= bounds_min.y and cell.y <= bounds_max.y)
 
 
+# Minimal stand-ins for the live turn-signal source: SpawnManager now listens to the
+# ACTIVE turn system's turn_ended (not PlayerManager), so these let us prove that
+# wiring headlessly -- a fake turn system that carries the same turn_ended(player)
+# signal, and a fake player exposing player_id (the owner gate reads it).
+class FakeTurnSystem extends RefCounted:
+	signal turn_started(player)
+	signal turn_ended(player)
+
+class FakePlayer extends RefCounted:
+	var player_id: int = 0
+	func _init(pid: int) -> void:
+		player_id = pid
+
+
 var _loader: FakeMapLoader
 var _manager: SpawnManager
 
@@ -377,3 +391,33 @@ func test_runtime_spawned_unit_is_marked_acted_so_it_cannot_move_this_turn() -> 
 	assert_eq(_loader.produced.size(), 1, "one unit was produced")
 	assert_true((_loader.produced[0] as FakeUnit).acted,
 		"a unit that spawns mid-turn is marked acted, so it can't move until next turn")
+
+
+# --- Live turn-signal wiring: driven by the ACTIVE TURN SYSTEM, not PlayerManager -
+# Regression guard for the "endless never spawned live" bug: PlayerManager.player_turn_ended
+# only fires on the human End-Turn button, never for AI turns, so endless (AI-owned) never
+# ran. SpawnManager now rides the active turn system's turn_ended, which fires every turn.
+
+func test_endless_fires_off_the_active_turn_systems_turn_ended() -> void:
+	var map := _map_with(MapResource.SPAWN_KIND_ENDLESS, Vector2i(2, 2), 1, {
+		"respawn_interval": 1,
+	})
+	_manager.initialize(_loader, map)
+
+	# Simulate the turn system activating (what setup() does live via TurnSystemManager).
+	var ts := FakeTurnSystem.new()
+	_manager._on_turn_system_activated(ts)
+
+	# The OWNER (player 1) ends their turn -> one endless spawn.
+	ts.turn_ended.emit(FakePlayer.new(1))
+	assert_eq(_loader.spawn_calls, 1,
+		"endless must fire when the active turn system ends its owner's turn")
+
+	# A non-owner (player 0) ending their turn -> no endless spawn from the p1 point.
+	ts.turn_ended.emit(FakePlayer.new(0))
+	assert_eq(_loader.spawn_calls, 1,
+		"endless must not fire on a non-owner's turn end")
+
+	# Next owner turn -> another (interval 1 = every owner turn).
+	ts.turn_ended.emit(FakePlayer.new(1))
+	assert_eq(_loader.spawn_calls, 2, "endless keeps producing one per owner turn end")

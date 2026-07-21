@@ -67,6 +67,9 @@ var _current_turn: int = 0
 # is a Dictionary; see _register_point for the exact fields.
 var _points: Dictionary = {}
 
+# The turn system we're currently listening to for turn_ended (re-wired if it switches).
+var _watched_ts = null
+
 
 # --- Setup ------------------------------------------------------------------
 
@@ -76,9 +79,28 @@ func setup(map_loader, map_resource) -> void:
 	GameWorldManager once the board has been rebuilt for the new map."""
 	initialize(map_loader, map_resource)
 	_resolve_seed_units()
-	# Spawn at END of turn (see _on_player_turn_ended) so waves land on a cleared cell.
-	if PlayerManager != null and not PlayerManager.player_turn_ended.is_connected(_on_player_turn_ended):
-		PlayerManager.player_turn_ended.connect(_on_player_turn_ended)
+	# Spawn at the END of each turn, driven by the ACTIVE TURN SYSTEM's turn_ended --
+	# the reliable per-turn signal that fires for EVERY player's turn (human and AI).
+	# (PlayerManager.player_turn_ended only fires on the human's End-Turn button, never
+	# for AI turns, so endless waves never ran off it -- the "endless doesn't spawn" bug.)
+	# Mirrors how TurnIndicator wires to the turn system.
+	if TurnSystemManager != null:
+		if not TurnSystemManager.turn_system_activated.is_connected(_on_turn_system_activated):
+			TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
+		if TurnSystemManager.has_active_turn_system():
+			_on_turn_system_activated(TurnSystemManager.get_active_turn_system())
+
+
+## (Re)wire to the active turn system's turn_ended when it activates or switches.
+func _on_turn_system_activated(ts) -> void:
+	if _watched_ts == ts:
+		return
+	if _watched_ts != null and is_instance_valid(_watched_ts) \
+			and _watched_ts.turn_ended.is_connected(_on_turn_ended):
+		_watched_ts.turn_ended.disconnect(_on_turn_ended)
+	_watched_ts = ts
+	if ts != null and not ts.turn_ended.is_connected(_on_turn_ended):
+		ts.turn_ended.connect(_on_turn_ended)
 
 
 func initialize(map_loader, map_resource) -> void:
@@ -176,7 +198,7 @@ func _find_unit_at(board, cell: Vector2i, player_id: int):
 
 # --- Per-turn scheduling ----------------------------------------------------
 
-func _on_player_turn_ended(player) -> void:
+func _on_turn_ended(player) -> void:
 	# Fire at the END of a turn, not the start: by now the owner's units have moved
 	# off their spawn cells (endless seeds are force-aggressive and charge away), so
 	# the home cell is clear and the wave actually lands instead of deferring on an
@@ -433,5 +455,7 @@ func _point_key(pos: Vector2i, player_id: int) -> Vector3i:
 func _exit_tree() -> void:
 	# Freeing the node already auto-disconnects it from the autoload, but disconnect
 	# explicitly so intent is clear and a reused instance can't double-subscribe.
-	if PlayerManager != null and PlayerManager.player_turn_ended.is_connected(_on_player_turn_ended):
-		PlayerManager.player_turn_ended.disconnect(_on_player_turn_ended)
+	if TurnSystemManager != null and TurnSystemManager.turn_system_activated.is_connected(_on_turn_system_activated):
+		TurnSystemManager.turn_system_activated.disconnect(_on_turn_system_activated)
+	if _watched_ts != null and is_instance_valid(_watched_ts) and _watched_ts.turn_ended.is_connected(_on_turn_ended):
+		_watched_ts.turn_ended.disconnect(_on_turn_ended)

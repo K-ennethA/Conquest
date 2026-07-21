@@ -218,10 +218,13 @@ func _shake(unit) -> void:
 		_kill_motion(unit)
 		node.position = base
 		return
-	# A quick forward lunge (local -Z) sells the strike, then a pair of decaying
-	# side jitters and a snappy settle read as recoil rather than an idle wiggle.
+	# Snap to the rest position FIRST. The AI almost always moves-then-attacks in one
+	# action, so a move glide may have just displaced the model; without this reset the
+	# lunge would start from the old cell and read as a slide-correction, not a strike.
+	# Starting every lunge from base makes the attack a clean, always-visible tell.
 	var seg: float = total / 4.0
 	var tw := _begin_motion(unit, node)
+	node.position = base
 	tw.set_trans(Tween.TRANS_SINE)
 	tw.tween_property(node, "position", base + Vector3(0.0, 0.0, -d), seg)\
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)

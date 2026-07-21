@@ -37,6 +37,8 @@ var _fade: ColorRect = null
 var _turn_label: Label = null
 var _accent: ColorRect = null
 var _tween: Tween = null
+# The turn system we're currently listening to for turn_started (re-wired on switch).
+var _watched_ts = null
 
 
 func _ready() -> void:
@@ -44,11 +46,27 @@ func _ready() -> void:
 	_build_ui()
 	_set_idle()
 
-	# Listen for turn starts (null-safe; guard the signal so a stripped/minimal
-	# PlayerManager can't crash us).
-	if PlayerManager != null and PlayerManager.has_signal("player_turn_started"):
-		if not PlayerManager.player_turn_started.is_connected(_on_player_turn_started):
-			PlayerManager.player_turn_started.connect(_on_player_turn_started)
+	# Listen for turn starts from the ACTIVE TURN SYSTEM -- the reliable per-turn signal.
+	# (PlayerManager.player_turn_started only fires on game start + the human's End-Turn
+	# button, never for AI-driven advances, so the wipe barely ran off it.) Mirrors how
+	# TurnIndicator wires to the turn system, incl. picking up an already-active one.
+	if TurnSystemManager != null:
+		if not TurnSystemManager.turn_system_activated.is_connected(_on_turn_system_activated):
+			TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
+		if TurnSystemManager.has_active_turn_system():
+			_on_turn_system_activated(TurnSystemManager.get_active_turn_system())
+
+
+## (Re)wire to the active turn system's turn_started when it activates or switches.
+func _on_turn_system_activated(ts) -> void:
+	if _watched_ts == ts:
+		return
+	if _watched_ts != null and is_instance_valid(_watched_ts) \
+			and _watched_ts.turn_started.is_connected(_on_player_turn_started):
+		_watched_ts.turn_started.disconnect(_on_player_turn_started)
+	_watched_ts = ts
+	if ts != null and not ts.turn_started.is_connected(_on_player_turn_started):
+		ts.turn_started.connect(_on_player_turn_started)
 
 
 # --- UI construction --------------------------------------------------------
