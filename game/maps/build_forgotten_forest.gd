@@ -25,12 +25,20 @@ const MAP_PATH := "res://game/maps/resources/forgotten_forest.tres"
 
 # type name -> real forest tile id. The author's layout is kept cell-for-cell; only
 # the tile IDENTITY is upgraded so the terrain gains its authored mechanics.
+#
+# DIFFICULT_TERRAIN -> tree: the old tile system had NO separate tree type -- trees
+# and cover both lived under DIFFICULT_TERRAIN -- so the author's forest was painted
+# as difficult terrain. Restoring it as TREE (an impassable wall) brings the forest
+# back. Any cell that should be tall-grass cover instead can be repainted in the
+# Map Creator now that it loads again.
 const TYPE_TO_FOREST_ID := {
 	"NORMAL": "grass_plains",
 	"SACRED_GROUND": "sacred_meadow",
-	"DIFFICULT_TERRAIN": "tall_grass",
+	"DIFFICULT_TERRAIN": "tree",
 }
 const DEFAULT_FOREST_ID := "grass_plains"
+# Impassable tile ids a unit must never be spawned on.
+const BLOCKING_TILE_IDS := ["tree"]
 
 
 func _initialize() -> void:
@@ -140,7 +148,8 @@ func _add_spawn(res: MapResource, player_id: int, character_id: String, pref: Ve
 	res.set_character_spawn_at_position(cell, player_id, character_id, "")
 
 
-## First in-bounds, unoccupied cell spiralling out from [param pref].
+## First in-bounds, unoccupied, PASSABLE cell spiralling out from [param pref].
+## Skips trees so a unit is never stranded on an impassable tile.
 func _free_cell_near(res: MapResource, pref: Vector2i, occupied: Dictionary) -> Vector2i:
 	for radius in range(0, maxi(res.width, res.height)):
 		for dy in range(-radius, radius + 1):
@@ -150,8 +159,17 @@ func _free_cell_near(res: MapResource, pref: Vector2i, occupied: Dictionary) -> 
 					continue
 				if occupied.has(cell):
 					continue
+				if _tile_id_at(res, cell) in BLOCKING_TILE_IDS:
+					continue
 				return cell
 	return pref  # fallback: map is full (won't happen at these sizes)
+
+
+func _tile_id_at(res: MapResource, cell: Vector2i) -> String:
+	for tile in res.tile_layout:
+		if tile.get("position", Vector2i(-1, -1)) == cell:
+			return str(tile.get("tile_id", ""))
+	return ""
 
 
 func _validate(anchor: Vector2i) -> bool:
