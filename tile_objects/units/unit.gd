@@ -268,9 +268,16 @@ func _setup_character_model() -> void:
 	model.name = "CharacterModel"
 	add_child(model)
 
-	# Centre a multi-cell model over its whole footprint, exactly like the capsule.
+	# Centre a multi-cell model over its whole footprint, exactly like the capsule,
+	# then apply the character's authored yaw (a sculpt that faces the wrong way) and
+	# scale (a small creature). Scale is about the feet-at-origin so it stays grounded.
 	if model is Node3D:
-		(model as Node3D).position = get_footprint_offset()
+		var m := model as Node3D
+		m.position = get_footprint_offset()
+		var yaw: float = character_resource.model_yaw_deg if "model_yaw_deg" in character_resource else 0.0
+		var model_scale: float = character_resource.model_scale if "model_scale" in character_resource else 1.0
+		m.rotation = Vector3(0.0, deg_to_rad(yaw), 0.0)
+		m.scale = Vector3.ONE * maxf(0.05, model_scale)
 
 	if _mesh_instance:
 		_mesh_instance.visible = false

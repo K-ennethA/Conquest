@@ -47,6 +47,15 @@ const MAX_MOVES: int = 4
 ## is the MINIMUM corner of the span, which extends toward +col / +row from there.
 @export var footprint: Vector2i = Vector2i.ONE
 
+@export_group("Model")
+## Extra yaw (Y rotation, degrees) applied to the authored model when it enters the
+## board -- use 180 for a sculpt that faces the wrong way. 0 = as authored.
+@export var model_yaw_deg: float = 0.0
+## Uniform scale multiplier on the model (1.0 = the pipeline-fit size). Scales about
+## the feet-at-origin, so the unit stays grounded. Use < 1 for a small creature
+## (e.g. a mushroom) that should read smaller than the others.
+@export var model_scale: float = 1.0
+
 @export_group("AI Behavior")
 ## Default combat stance for a unit of this character. "aggressive" units close on
 ## the nearest enemy every turn (the classic behaviour); "defensive" units hold
