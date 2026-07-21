@@ -11,12 +11,23 @@ class_name DamageEffect
 @export var scale: float = 1.0
 @export var category: CombatTypes.DamageCategory = CombatTypes.DamageCategory.PHYSICAL
 
+## Fraction (0..1) of the TOTAL damage this cast deals that heals the CASTER after
+## resolution. 0.0 (the default) is a no-op, so every DamageEffect authored before
+## this field is regression-safe. Reusable by any move (Siphon Bite drains half of
+## what it deals). Healing is routed through the caster's own heal path, exactly
+## like [HealEffect], and floored to whole HP via round().
+@export_range(0.0, 1.0, 0.01) var lifesteal: float = 0.0
+
 
 func apply(ctx: MoveContext) -> void:
 	var bonus := 0
 	if scaling_stat != "":
 		bonus = int(round(ctx.get_caster_stat(scaling_stat) * scale))
 	var raw := power + bonus
+
+	# Running total of HP actually removed this cast, so lifesteal can heal a fixed
+	# fraction of it once all targets are resolved.
+	var total_dealt: int = 0
 
 	for target in ctx.gather_targets():
 		var outcome := ctx.resolve_hit(target)
@@ -66,6 +77,7 @@ func apply(ctx: MoveContext) -> void:
 			dealt = maxi(1, int(round(dealt * CombatTypes.CRIT_MULTIPLIER)))
 		if target.has_method("take_damage"):
 			target.take_damage(dealt)
+		total_dealt += dealt
 		_announce(ctx, target, dealt)
 		ctx.log_event({
 			"effect": "damage",
@@ -74,6 +86,19 @@ func apply(ctx: MoveContext) -> void:
 			"category": category,
 			"crit": crit,
 		})
+
+	# Lifesteal: heal the caster for a fraction of everything this cast dealt. A no-op
+	# at the default 0.0 (never touches the caster or the log), so it cannot perturb
+	# any move that does not author it.
+	if lifesteal > 0.0 and total_dealt > 0 and ctx.caster != null and ctx.caster.has_method("heal"):
+		var healed: int = int(round(float(total_dealt) * lifesteal))
+		if healed > 0:
+			ctx.caster.heal(healed)
+			ctx.log_event({
+				"effect": "lifesteal",
+				"target": ctx.caster,
+				"amount": healed,
+			})
 
 
 func describe() -> String:
@@ -199,6 +224,19 @@ static func _restricted_modifier_of(caster, board) -> float:
 static func damage_taken_scale_for(target, board = null) -> float:
 	if target == null:
 		return 1.0
+	# Two INDEPENDENT sources combine multiplicatively: the defender's PASSIVE ability
+	# scale (Eldroot's Grovebound) and its STATUS scale (Braced). One of each -- passive
+	# x status -- is not compounding a single source: the status side is itself already
+	# reduced to a single "take the strongest" value (see StatusController), and the
+	# passive side is a single merged modifier. So a boss standing in its grove that ALSO
+	# braces genuinely gets both, while re-bracing can never deepen the status half.
+	return _passive_taken_scale(target, board) * _status_taken_scale(target)
+
+
+## The defender's own PASSIVE "damage_taken_scale" rule modifier (1.0 when it has no
+## ability system or no in-force passive declaring one). Floored at 0 so a mis-authored
+## negative can never flip damage into healing.
+static func _passive_taken_scale(target, board) -> float:
 	var system = null
 	# A live Unit exposes its component; a test mock may BE the ability system.
 	if target.has_method("get_ability_system"):
@@ -211,6 +249,20 @@ static func damage_taken_scale_for(target, board = null) -> float:
 	if not modifiers.has("damage_taken_scale"):
 		return 1.0
 	return maxf(0.0, float(modifiers["damage_taken_scale"]))
+
+
+## The single strongest STATUS "damage_taken_scale" on the defender (Braced), 1.0 when
+## none. Duck-typed and null-safe: a target with no status controller simply carries no
+## status reduction. Reads the "take the strongest" aggregate so two same-kind
+## reductions never compound (see StatusController.status_damage_taken_scale).
+static func _status_taken_scale(target) -> float:
+	if target.has_method("status_damage_taken_scale"):
+		return maxf(0.0, float(target.status_damage_taken_scale()))
+	if target.has_method("get_status_controller"):
+		var controller = target.get_status_controller()
+		if controller != null and controller.has_method("status_damage_taken_scale"):
+			return maxf(0.0, float(controller.status_damage_taken_scale()))
+	return 1.0
 
 
 ## True while [param target] takes NO damage at all.

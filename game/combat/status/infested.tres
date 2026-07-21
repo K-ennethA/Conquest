@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="StatusCondition" format=3]
+
+[ext_resource type="Script" path="res://game/combat/status/StatusCondition.gd" id="1_status"]
+
+[resource]
+script = ExtResource("1_status")
+id = &"infested"
+display_name = "Infested"
+duration_turns = 3
+stacking = 1
+max_stacks = 2
+rule_flags = {}

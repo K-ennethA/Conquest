@@ -52,6 +52,21 @@ enum Stacking {
 ## condition authored before this existed behaves exactly as it always did.
 @export var rule_flags: Dictionary = {}
 
+## Multiplier this condition applies to damage its unit TAKES while active: 1.0
+## (the default) is inert, below 1.0 is a reduction (0.6 = takes 40% less), above
+## 1.0 a vulnerability. This is the STATUS-side mirror of the passive
+## "damage_taken_scale" rule modifier a defender's ability can carry
+## ([DamageEffect.damage_taken_scale_for]).
+##
+## AGGREGATION IS "TAKE THE STRONGEST", NOT "COMPOUND". If several DIFFERENT active
+## statuses each carry a scale, [method StatusController.status_damage_taken_scale]
+## returns the single most-protective one (the MINIMUM) -- never their product and
+## never their sum. Two same-kind reductions must not amplify or deepen each other;
+## a reduction status is authored as [constant Stacking.REFRESH] so re-applying it
+## only refreshes its timer. Appended LAST so every status .tres authored before it
+## reads back the inert 1.0 default.
+@export var damage_taken_scale: float = 1.0
+
 ## Remaining turns for a live instance. Seeded from [member duration_turns] when
 ## the condition is added to a [StatusController]; -1 means permanent.
 var turns_left: int = 0

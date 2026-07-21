@@ -35,6 +35,12 @@ const MAX_MOVES: int = 4
 @export var movement_profile: MovementProfile
 ## Marks bosses / map bosses so modes and AI can treat them specially.
 @export var is_boss: bool = false
+## Minimum AI difficulty at which this character is allowed to spawn, matching
+## [code]GameSettings.ai_difficulty[/code] (0 = Easy, 1 = Normal, 2 = Hard,
+## 3 = Brutal). 0 = always available. A harder-only enemy (e.g. a parasite that
+## only infests you on Hard+) sets this to 2, and the spawner skips it on lower
+## difficulties. Applies to every spawn path -- initial placement and runtime waves.
+@export_enum("Easy", "Normal", "Hard", "Brutal") var min_difficulty: int = 0
 ## How many board cells this character spans — [code]Vector2i(1, 1)[/code] for a
 ## normal unit, [code]Vector2i(2, 2)[/code] for a large boss such as a Great Tree.
 ## The character's anchor cell (what [code]BoardAdapter.cell_of()[/code] reports)
@@ -117,6 +123,11 @@ func get_movement_profile() -> MovementProfile:
 ## value authored in the inspector still reads back as a usable span.
 func get_footprint() -> Vector2i:
 	return Vector2i(maxi(1, footprint.x), maxi(1, footprint.y))
+
+
+## Minimum spawn difficulty, clamped to the valid 0..3 range.
+func get_min_difficulty() -> int:
+	return clampi(min_difficulty, 0, 3)
 
 
 ## Default stance, guaranteed to be one of the two valid values.

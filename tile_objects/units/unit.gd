@@ -474,6 +474,40 @@ func is_stunned() -> bool:
 func is_invulnerable() -> bool:
 	return has_status_rule_flag(&"invulnerable")
 
+## Set true for the duration of a single forced-control action while the turn system
+## puppeteers this unit. Because the 1-turn Enthralled status is EXPIRED by the tick
+## that opens the unit's turn (the anti-lockout mechanism), the "controlled" rule flag
+## is already gone by the time the deferred forced-drive resolves its move -- so this
+## transient marker carries the control state through that one action, keeping
+## [method is_controlled] true so both the AI allegiance inversion and the gather-target
+## inversion ([MoveContext]) treat the unit as hijacked while it strikes its own ally.
+var _forced_control_action: bool = false
+
+## Turn the transient forced-control marker on/off around a puppeteered action.
+func set_forced_control(active: bool) -> void:
+	_forced_control_action = active
+
+## True while a status (Enthralled) has hijacked this unit, OR while the turn system is
+## mid-way through force-driving it -- on its turn it is forced to turn on one of its OWN
+## allies. The one place the "controlled" flag name is spelled. Mirror of
+## [method is_stunned] / [method is_immobilized]: the turn systems LATCH this at turn
+## start (before statuses tick) so a 1-turn control lasts exactly one turn and can never
+## lock the unit out -- ask [method TurnSystemBase.is_turn_forced_control] for "is being
+## puppeteered this turn". This accessor drives UI, the AI allegiance inversion
+## ([BotController]), and the gather-target inversion ([MoveContext]).
+func is_controlled() -> bool:
+	return _forced_control_action or has_status_rule_flag(&"controlled")
+
+## Damage-reduction aggregate contributed by this unit's active statuses (Braced) --
+## the single most-protective [member StatusCondition.damage_taken_scale] in force, or
+## 1.0 when none. Delegates to the [StatusController]; null-safe for units without one.
+## [DamageEffect] reads this to combine the status reduction with the passive one.
+func status_damage_taken_scale() -> float:
+	var controller = get_status_controller()
+	if controller == null or not controller.has_method("status_damage_taken_scale"):
+		return 1.0
+	return float(controller.status_damage_taken_scale())
+
 # Validation methods
 func can_be_selected_by_player(player: Player) -> bool:
 	"""Check if a specific player can select this unit"""

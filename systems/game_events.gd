@@ -42,6 +42,35 @@ signal game_started()
 signal game_ended(winner: Player)
 signal unit_action_completed(unit: Unit, action_type: String)
 
+# Traveling-hazard events (Forest Barrage and any future crawling lane hazard).
+# APPENDED, never reordered -- existing signals above keep their positions. Params
+# are deliberately untyped: the payloads are a TravelingHazard (a RefCounted script
+# class) plus plain Arrays/int, and leaving them untyped keeps this autoload free of
+# any load-order dependency on that class while letting the emitter pass it freely.
+#
+# hazard_spawn_requested : an effect asks the live HazardManager to adopt a freshly
+#                          cast vine (the loose effect->manager seam).
+# hazard_advanced        : the vine entered a new band this tick. Carries the band
+#                          just entered AND the band the NEXT tick will enter, so the
+#                          visual layer can TELEGRAPH where it goes -- the counterplay
+#                          that makes a 5-wide undodgeable lane fair.
+# hazard_expired         : the vine finished its travel and was dropped.
+signal hazard_spawn_requested(hazard)
+signal hazard_advanced(hazard, cells, next_cells, damage)
+signal hazard_expired(hazard)
+
+# Mind-control events (Mycothrall's infection -> control). APPENDED, never reordered.
+# Params are deliberately UNTYPED (mirroring the hazard signals above): the payloads
+# are Units in the live game but duck-typed mocks in tests, and leaving them untyped
+# keeps this autoload emittable from a headless harness.
+#
+# unit_controlled          : a unit has just been hijacked (Enthralled applied) by
+#                            `source` -- the UI/log can announce the betrayal begins.
+# unit_acted_under_control : the hijacked `unit` was forced to strike its own ally
+#                            `victim` on its turn.
+signal unit_controlled(unit, source)
+signal unit_acted_under_control(unit, victim)
+
 func _ready() -> void:
 	# Make this a singleton
 	name = "GameEvents"

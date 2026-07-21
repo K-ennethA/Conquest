@@ -102,10 +102,16 @@ func can_unit_act(unit: Unit) -> bool:
 	if is_turn_skipped(unit):
 		return false
 
+	# A CONTROLLED unit is barred from the player exactly like a stun -- it does not get
+	# to act of its own accord. The turn system force-drives it against its own side
+	# instead (see _drive_controlled_units), scheduled deferred at turn start.
+	if is_turn_forced_control(unit):
+		return false
+
 	# Unit must be able to act (not eliminated, has actions, etc.)
 	if unit.has_method("can_act"):
 		return unit.can_act()
-	
+
 	return true
 
 func get_current_active_player() -> Player:
@@ -146,6 +152,11 @@ func _start_player_turn(player: Player) -> void:
 	# as it becomes active (null-safe for units without characters; idempotent
 	# per turn via the shared base helper).
 	_tick_all_units_turn_start(get_units_for_player(player))
+
+	# Any unit hijacked at the top of this turn is force-driven against its own side.
+	# Deferred so executing real moves (damage/deaths/signals) runs after this
+	# turn-start call unwinds rather than re-entering it.
+	call_deferred("_drive_controlled_units", get_units_for_player(player))
 
 	# Notify GameManager of turn change for network synchronization
 	_notify_game_manager_of_turn_change(player)

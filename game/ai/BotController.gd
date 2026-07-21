@@ -43,6 +43,16 @@ var difficulty: int = Difficulty.NORMAL
 ## HARD / BRUTAL never touch it and remain fully deterministic.
 var rng: RandomNumberGenerator = null
 
+## When set, allegiance is INVERTED: the actor's own ALLIES are treated as its
+## hostiles, so the ordinary planner turns it on its own side. This is how a hijacked
+## (mind-controlled) unit is force-driven -- the caller sets it before plan()/decide().
+## It is ALSO inverted whenever the actor itself reports is_controlled() (so a live
+## controlled unit inverts with no external flag), but the explicit field lets the turn
+## system drive the inversion by the latched control state even after the 1-turn
+## Enthralled status has already ticked away. Off (the default) is byte-for-byte the
+## historical behaviour.
+var force_control: bool = false
+
 
 ## Human-readable name for a [enum Difficulty] value (UI / logs).
 static func difficulty_name(d: int) -> String:
@@ -227,12 +237,29 @@ func _list_hostiles(actor, board) -> Array:
 
 ## Hostility test. Base rule: whatever the board reports as an enemy.
 ## Overridden by [BossController] for faction-agnostic aggression.
+##
+## INVERTED while the actor is mind-controlled ([method _actor_is_controlled]): its own
+## ALLIES become its targets, so the unchanged planner drives it to attack its own side.
+## A non-controlled actor takes the historical enemy branch, byte for byte.
 func _is_hostile(actor, other, board) -> bool:
 	if other == actor:
+		return false
+	if _actor_is_controlled(actor):
+		if board.has_method("are_allies"):
+			return board.are_allies(actor, other)
 		return false
 	if board.has_method("are_enemies"):
 		return board.are_enemies(actor, other)
 	return false
+
+
+## True while [param actor] should target its own side: either the caller set
+## [member force_control], or the actor itself reports [method Unit.is_controlled].
+## Duck-typed and null-safe, so a bare mock without is_controlled() is never controlled.
+func _actor_is_controlled(actor) -> bool:
+	if force_control:
+		return true
+	return actor != null and actor.has_method("is_controlled") and bool(actor.is_controlled())
 
 
 ## Every reachable damaging move+target this turn, sorted best-first. Element 0 is

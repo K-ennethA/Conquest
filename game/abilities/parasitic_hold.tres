@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="AbilityResource" format=3]
+
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="1_abres"]
+[ext_resource type="Script" path="res://game/abilities/AlwaysCondition.gd" id="2_always"]
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="3_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/InfestEffect.gd" id="4_infest"]
+[ext_resource type="Resource" path="res://game/combat/status/infested.tres" id="5_infested"]
+[ext_resource type="Resource" path="res://game/combat/status/enthralled.tres" id="6_enthralled"]
+
+[sub_resource type="Resource" id="Resource_parasitic_cond"]
+script = ExtResource("2_always")
+
+[sub_resource type="Resource" id="Resource_parasitic_infest"]
+script = ExtResource("4_infest")
+infested = ExtResource("5_infested")
+enthralled = ExtResource("6_enthralled")
+control_threshold = 2
+
+[resource]
+script = ExtResource("1_abres")
+id = &"parasitic_hold"
+display_name = "Parasitic Hold"
+description = "Every strike drives a little more of the fungus into the wound. Once it has taken root twice over, the host stops being its own -- the Mycothrall pulls the strings and the body turns on whatever stood beside it."
+trigger = 5
+condition = SubResource("Resource_parasitic_cond")
+effects = Array[ExtResource("3_moveeffect")]([SubResource("Resource_parasitic_infest")])
+targets_triggering_unit = true
+cooldown = 0
+max_activations = -1

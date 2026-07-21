@@ -107,6 +107,11 @@ func can_unit_act(unit: Unit) -> bool:
 	if is_turn_skipped(unit):
 		return false
 
+	# A CONTROLLED unit is barred from the player exactly like a stun; the turn system
+	# force-drives it against its own side instead (see _drive_controlled_units).
+	if is_turn_forced_control(unit):
+		return false
+
 	# Only the current acting unit can act
 	return unit == current_acting_unit
 
@@ -257,6 +262,12 @@ func _start_unit_turn(unit: Unit) -> void:
 	# (null-safe for units without characters; idempotent per turn via the
 	# shared base helper).
 	_tick_unit_turn_start(unit)
+
+	# If this unit was hijacked at the top of its turn, force-drive it against its own
+	# side. Deferred so executing a real move (which can end the turn and advance the
+	# queue) runs after this turn-start call unwinds rather than re-entering it.
+	if is_turn_forced_control(unit):
+		call_deferred("_drive_controlled_units", [unit])
 
 
 	# Find the player who owns this unit

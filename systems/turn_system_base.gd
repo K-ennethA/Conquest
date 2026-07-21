@@ -216,6 +216,22 @@ var _last_tick_turn: Dictionary = {}
 # everything -- it simply cannot act during it.
 var _stun_skipped_turn: Dictionary = {}
 
+# --- Control (forced-turn) bookkeeping --------------------------------------
+#
+# unit -> the `current_turn` value on which that unit was found "controlled" at the
+# top of its turn. The EXACT same latch shape as the stun skip above, and for the
+# same reason: Enthralled is a 1-turn status, so the tick that opens the unit's turn
+# both drives the puppeteering AND expires the flag. A live query at act time would
+# always be too late; sampling it at turn start (before statuses tick) is what makes
+# the control land on this turn while still letting it wear off, so a unit can never
+# be hijacked permanently -- the mirror of the stun lockout.
+#
+# Unlike a stun (which merely skips), a controlled unit is FORCED to act against its
+# own side. The turn systems block the player from commanding it (can_unit_act returns
+# false, exactly like a skip) and hand it to _drive_controlled_units(), which
+# auto-resolves it through the AI planner with allegiance inverted.
+var _control_forced_turn: Dictionary = {}
+
 ## True if [param unit]'s turn is being skipped by a stun THIS turn. Consulted by
 ## both turn systems' can_unit_act() and by the AI driver.
 func is_turn_skipped(unit) -> bool:
@@ -223,12 +239,38 @@ func is_turn_skipped(unit) -> bool:
 		return false
 	return int(_stun_skipped_turn.get(unit, -1)) == current_turn
 
-## Forget all per-turn tick / stun-skip bookkeeping. Called by the derived
+## True if [param unit] was hijacked (Enthralled) at the top of THIS turn and is being
+## force-driven against its own side. Consulted by both turn systems' can_unit_act()
+## (to bar the player from commanding it) and by the forced-control driver.
+func is_turn_forced_control(unit) -> bool:
+	if unit == null:
+		return false
+	return int(_control_forced_turn.get(unit, -1)) == current_turn
+
+## True if any active status on [param unit] sets the "controlled" rule flag. Duck-typed
+## and independently optional at every step, mirroring [method _has_stun_flag], so a
+## mock exposing none of the accessors is simply never controlled.
+func _has_control_flag(unit) -> bool:
+	if unit == null:
+		return false
+	if unit.has_method("is_controlled") and bool(unit.is_controlled()):
+		return true
+	if unit.has_method("has_status_rule_flag") and bool(unit.has_status_rule_flag(&"controlled")):
+		return true
+	if unit.has_method("get_status_controller"):
+		var controller = unit.get_status_controller()
+		if controller != null and controller.has_method("has_rule_flag") \
+			and bool(controller.has_rule_flag(&"controlled")):
+			return true
+	return false
+
+## Forget all per-turn tick / stun-skip / control bookkeeping. Called by the derived
 ## systems' reset_turn_system(), which rewinds current_turn to 1 -- without this a
-## stale entry recorded on the old turn 1 would read as a live skip after the reset.
+## stale entry recorded on the old turn 1 would read as a live skip/control after reset.
 func clear_turn_tick_state() -> void:
 	_last_tick_turn.clear()
 	_stun_skipped_turn.clear()
+	_control_forced_turn.clear()
 
 ## True if any active status on [param unit] sets the "stunned" rule flag.
 ## Duck-typed and independently optional at every step, mirroring how
@@ -271,6 +313,16 @@ func _tick_unit_turn_start(unit) -> void:
 		_stun_skipped_turn[unit] = current_turn
 		var who: String = unit.get_display_name() if unit.has_method("get_display_name") else str(unit)
 		print("Turn System: " + who + " is stunned and skips this turn")
+
+	# Sample "controlled" alongside the stun, and for the identical reason: the status
+	# ticks below EXPIRE Enthralled, so latching it here is what makes the hijack land
+	# on this turn while still letting it wear off (never a permanent puppet). The
+	# turn system then bars the player from the unit and force-drives it against its
+	# own side (see _drive_controlled_units in each system).
+	if _has_control_flag(unit):
+		_control_forced_turn[unit] = current_turn
+		var puppet: String = unit.get_display_name() if unit.has_method("get_display_name") else str(unit)
+		print("Turn System: " + puppet + " is CONTROLLED and turns on its own side this turn")
 
 	# Timed STAT modifiers expire here. Unit.process_turn_start() ->
 	# UnitStats.process_modifier_durations() was called by nothing in the live game
@@ -343,6 +395,129 @@ func _tick_all_units_turn_end(units: Array) -> void:
 	"""Convenience: close out every unit in `units`."""
 	for unit in units:
 		_tick_unit_turn_end(unit)
+
+# --- Forced-control resolution ----------------------------------------------
+#
+# The other half of the control latch: latching bars a controlled unit from being
+# commanded (can_unit_act returns false), and THIS drives it against its own side.
+# One shared implementation for BOTH turn systems and BOTH owners (human units the
+# player can no longer command AND the AI's own units): it reuses the existing AI
+# planner (BotController, with allegiance inverted via force_control) and the ordinary
+# move-execution path (Unit.perform_move), then marks the unit acted so its turn ends
+# and the enthralled status expires normally. If nothing hostile-to-its-allies is
+# reachable it simply spends the turn -- control still wore off. Called DEFERRED from
+# each system's turn start so executing a real move (damage, deaths, signals) never
+# re-enters the turn-start call stack.
+
+## Force-drive every forced-control unit in [param units] against its own side.
+func _drive_controlled_units(units: Array) -> void:
+	var board = CombatServices.board() if CombatServices else null
+	if board == null:
+		return
+	for unit in units:
+		if unit == null or not is_instance_valid(unit):
+			continue
+		if is_turn_forced_control(unit):
+			_auto_resolve_control(unit, board)
+
+## Resolve one controlled unit's forced turn: plan an attack on an ally (inverted
+## planner) and execute it, else spend the turn. Guarded end to end so a legacy /
+## non-character unit, or one with nothing to hit, still cleanly ends its turn.
+func _auto_resolve_control(unit, board) -> void:
+	if unit == null or not is_instance_valid(unit):
+		return
+	# Already resolved (e.g. driven once, or died mid-turn)? Nothing to do.
+	if unit.has_method("can_act") and not unit.can_act():
+		return
+	if not (unit.has_method("perform_move") and unit.has_method("has_character") and unit.has_character()):
+		_spend_forced_turn(unit)
+		return
+
+	# Mark the unit controlled for the whole of this action. Enthralled has already
+	# ticked away (that is the anti-lockout), so this transient marker is what keeps
+	# is_controlled() true so BOTH the planner's allegiance inversion AND the move's
+	# gather-target inversion (MoveContext) treat allies as valid victims while it acts.
+	if unit.has_method("set_forced_control"):
+		unit.set_forced_control(true)
+
+	var controller := BotController.new()
+	controller.difficulty = _forced_control_difficulty()
+	# Belt-and-suspenders inversion: force_control makes the planner treat the unit's
+	# ALLIES as its targets even if is_controlled() ever read false (see
+	# BotController._is_hostile).
+	controller.force_control = true
+
+	var origin: Vector2i = board.cell_of(unit)
+	var reachable: Array = _control_reachable_cells(unit, origin, board)
+	var decision = controller.plan(unit, unit.get_moveset(), board, reachable)
+	if decision == null or decision.is_empty() \
+		or int(decision.get("action", BotController.ActionType.WAIT)) != BotController.ActionType.MOVE:
+		# No ally reachable -> do nothing, but the turn is still spent and control
+		# still expires (the anti-lockout guarantee holds regardless of outcome).
+		if unit.has_method("set_forced_control"):
+			unit.set_forced_control(false)
+		_spend_forced_turn(unit)
+		return
+
+	# Walk to the planned stand cell first (if any), then strike the ally from there.
+	var dest: Vector2i = decision.get("dest_cell", origin)
+	if dest != origin and not (unit.has_method("is_immobilized") and unit.is_immobilized()):
+		board.move_unit(unit, dest)
+		if GameEvents:
+			GameEvents.unit_moved.emit(unit,
+				Vector3(origin.x, 0, origin.y), Vector3(dest.x, 0, dest.y))
+		if unit.has_method("mark_moved"):
+			unit.mark_moved()
+
+	var move = decision.get("move", null)
+	var aim_cell: Vector2i = decision.get("aim_cell", board.cell_of(unit))
+	var victim = decision.get("target", null)
+	var slot: int = _slot_of_move(unit, move)
+	if slot >= 0:
+		unit.perform_move(slot, aim_cell, board)
+		if GameEvents and GameEvents.has_signal(&"unit_acted_under_control"):
+			GameEvents.emit_signal(&"unit_acted_under_control", unit, victim)
+
+	# Control resolved: drop the transient marker so the unit is its own again next turn.
+	if unit.has_method("set_forced_control"):
+		unit.set_forced_control(false)
+	_spend_forced_turn(unit)
+
+## End a forced-control unit's turn (marks it acted, which flows turn completion /
+## advance through the normal signal path).
+func _spend_forced_turn(unit) -> void:
+	if unit != null and is_instance_valid(unit) and unit.has_method("mark_action_completed") \
+		and unit.has_method("can_act") and unit.can_act():
+		unit.mark_action_completed("controlled")
+
+## Cells a controlled unit can reach this turn, via its movement profile and the live
+## board (empty when it has none -- the planner then only strikes from its own cell).
+func _control_reachable_cells(unit, origin: Vector2i, board) -> Array:
+	if unit.has_method("is_immobilized") and unit.is_immobilized():
+		return []
+	if not unit.has_method("get_movement_profile"):
+		return []
+	var profile = unit.get_movement_profile()
+	if profile == null:
+		return []
+	return MovementResolver.new().reachable_cells(origin, profile, board, unit)
+
+## Index of [param move] in [param unit]'s moveset (what perform_move expects), or -1.
+func _slot_of_move(unit, move) -> int:
+	if unit == null or not unit.has_method("get_moveset"):
+		return -1
+	var moveset: Array = unit.get_moveset()
+	for i in range(moveset.size()):
+		if moveset[i] == move:
+			return i
+	return -1
+
+## The configured AI difficulty (NORMAL when GameSettings is unavailable, e.g. tests).
+func _forced_control_difficulty() -> int:
+	var gs = get_node_or_null("/root/GameSettings")
+	if gs != null and "ai_difficulty" in gs:
+		return int(gs.ai_difficulty)
+	return BotController.Difficulty.NORMAL
 
 # Debug and info methods
 func get_turn_system_info() -> Dictionary:

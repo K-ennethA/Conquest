@@ -401,6 +401,14 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> Node
 		print("[MapLoader] Failed to resolve default character '" + String(DEFAULT_CHARACTER_ID) + "', skipping unit")
 		return null
 
+	# Difficulty gate: a character can require a minimum AI difficulty (e.g. a
+	# parasite that only appears on Hard+). Applies to every spawn path because both
+	# _load_units and SpawnManager route through here. Skips quietly below the bar.
+	if not _difficulty_allows(character_resource):
+		print("[MapLoader] Skipping '%s' -- min_difficulty %d exceeds current difficulty %d" % [
+			character_id, character_resource.get_min_difficulty(), _current_ai_difficulty()])
+		return null
+
 	# Every unit is a CharacterUnit.tscn instance backed by a CharacterResource.
 	var unit_instance = character_unit_scene.instantiate()
 	if not unit_instance:
@@ -447,6 +455,32 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> Node
 			int(norm.get("leash_radius", -1)))
 
 	return unit_instance
+
+func _difficulty_allows(character_resource) -> bool:
+	"""True unless [param character_resource] demands a higher AI difficulty than the
+	game is currently set to. A min_difficulty of 0 (Easy / the default) always
+	passes, so this is a no-op for every character that has not opted in."""
+	if character_resource == null or not character_resource.has_method("get_min_difficulty"):
+		return true
+	var required: int = character_resource.get_min_difficulty()
+	if required <= 0:
+		return true
+	return _current_ai_difficulty() >= required
+
+
+func _current_ai_difficulty() -> int:
+	"""The live GameSettings.ai_difficulty (0..3), read off the autoload defensively
+	so a headless/mock context with no autoload simply defaults to Normal and never
+	gates anything out spuriously."""
+	var loop = Engine.get_main_loop()
+	if loop is SceneTree:
+		var gs = (loop as SceneTree).root.get_node_or_null("GameSettings")
+		if gs != null:
+			var value = gs.get("ai_difficulty")
+			if value != null:
+				return int(value)
+	return 1
+
 
 func _resolve_character_id(character_id_raw, legacy_unit_type: String) -> String:
 	"""Resolve a spawn's roster character id.

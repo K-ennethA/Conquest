@@ -131,6 +131,44 @@ func has_rule_flag(flag_name: StringName) -> bool:
 	return false
 
 
+## The single most-protective [member StatusCondition.damage_taken_scale] across
+## every active condition -- i.e. the MINIMUM scale (1.0 when none carries one).
+##
+## DELIBERATELY "TAKE THE STRONGEST", NOT A PRODUCT OR A SUM. Compounding two
+## same-kind reductions would let a unit re-cast its way to near-invulnerability
+## (0.6 * 0.6 = 0.36), and summing is the additive-merge bug the passive side warns
+## about. Exactly one reduction applies -- the best one in force -- so stacking timed
+## defensive buffs can refresh but never deepen. [DamageEffect.damage_taken_scale_for]
+## combines THIS single status scale with the defender's single passive scale
+## (passive x status), which is one of each source, not compounding one source.
+func status_damage_taken_scale() -> float:
+	var best: float = 1.0
+	for condition in _active:
+		if condition == null:
+			continue
+		var scale: float = maxf(0.0, condition.damage_taken_scale)
+		if scale < best:
+			best = scale
+	return best
+
+
+## Remove every live instance of [param condition_id], firing each on_expire hook.
+## Returns how many were removed (0 if none were present). Used by effects that
+## CONSUME a status -- e.g. the infection promoting to control clears the counter it
+## spent. [param board] is optional (passed to on_expire).
+func remove_status(condition_id: StringName, board = null) -> int:
+	var survivors: Array[StatusCondition] = []
+	var removed: int = 0
+	for condition in _active:
+		if condition != null and condition.id == condition_id:
+			condition.on_expire(_target(), board)
+			removed += 1
+		else:
+			survivors.append(condition)
+	_active = survivors
+	return removed
+
+
 ## Every rule flag currently set to true across the active conditions. Handy for
 ## debug/UI ("why can't this unit move?"); the hot path is [method has_rule_flag].
 func active_rule_flags() -> Dictionary:

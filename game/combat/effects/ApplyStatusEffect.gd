@@ -23,9 +23,31 @@ class_name ApplyStatusEffect
 ## that inflicts a status gets a chance for free by authoring a number.
 @export_range(0.0, 1.0, 0.01) var chance: float = 1.0
 
+## When true the condition is inflicted on the CASTER itself, ignoring the move's
+## gathered targets. This is how an ENEMY-targeted move (e.g. Infesting Lunge, which
+## leaps at and strikes a foe) also grants the caster a self-buff (Braced) in the same
+## cast, without a bespoke effect. false (the default) is the historical
+## affect-the-targets behaviour, so every move authored before this field is unchanged.
+@export var to_caster: bool = false
+
 
 func apply(ctx: MoveContext) -> void:
 	if condition == null:
+		return
+	if to_caster:
+		# Self-application: one roll, one target (the caster). SELF-targeted moves could
+		# reach the caster through gather_targets, but this lets an ENEMY-targeted move
+		# buff its own caster too.
+		if ctx.caster != null:
+			var self_applied := false
+			if ctx.roll(chance):
+				self_applied = _inflict(ctx.caster)
+			ctx.log_event({
+				"effect": "apply_status",
+				"target": ctx.caster,
+				"status": condition.id,
+				"applied": self_applied,
+			})
 		return
 	for target in ctx.gather_targets():
 		if not ctx.roll(chance):
@@ -37,21 +59,29 @@ func apply(ctx: MoveContext) -> void:
 				"chance": chance,
 			})
 			continue
-		var applied := false
-		if target.has_method("add_status"):
-			target.add_status(condition.duplicate(true))
-			applied = true
-		elif target.has_method("get_status_controller"):
-			var controller = target.get_status_controller()
-			if controller != null and controller.has_method("add_status"):
-				controller.add_status(condition.duplicate(true))
-				applied = true
+		var applied := _inflict(target)
 		ctx.log_event({
 			"effect": "apply_status",
 			"target": target,
 			"status": condition.id,
 			"applied": applied,
 		})
+
+
+## Inflict a fresh duplicate of [member condition] on [param unit] through whichever
+## status entry point it exposes. Returns true if it landed.
+func _inflict(unit) -> bool:
+	if unit == null:
+		return false
+	if unit.has_method("add_status"):
+		unit.add_status(condition.duplicate(true))
+		return true
+	if unit.has_method("get_status_controller"):
+		var controller = unit.get_status_controller()
+		if controller != null and controller.has_method("add_status"):
+			controller.add_status(condition.duplicate(true))
+			return true
+	return false
 
 
 func describe() -> String:

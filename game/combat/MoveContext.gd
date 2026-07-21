@@ -133,4 +133,22 @@ func _matches_target_kind(unit) -> bool:
 	# gathering and a TravelingHazard's per-band filter can never drift apart. TILE /
 	# EMPTY_TILE fall through to the helper's default (false) -- those effects don't
 	# gather units.
-	return CombatTypes.unit_matches_target_kind(move.targeting.target_kind, caster, unit, board)
+	#
+	# CONTROL INVERSION: while the caster is mind-controlled, ENEMY and ALLY swap, so an
+	# ENEMY-targeted move (the hijacked unit's own attack) actually LANDS on its allies
+	# rather than gathering nobody. Gated on the caster reporting is_controlled(), so a
+	# normal caster resolves exactly as before.
+	var kind: int = move.targeting.target_kind
+	if caster != null and caster.has_method("is_controlled") and caster.is_controlled():
+		kind = _invert_allegiance(kind)
+	return CombatTypes.unit_matches_target_kind(kind, caster, unit, board)
+
+
+## Swap ENEMY <-> ALLY, leaving SELF / ANY_UNIT / tile kinds untouched. The one place
+## the control allegiance flip is spelled for target gathering.
+func _invert_allegiance(kind: int) -> int:
+	if kind == CombatTypes.TargetKind.ENEMY:
+		return CombatTypes.TargetKind.ALLY
+	if kind == CombatTypes.TargetKind.ALLY:
+		return CombatTypes.TargetKind.ENEMY
+	return kind
