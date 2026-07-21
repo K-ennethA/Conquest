@@ -58,7 +58,13 @@ void fragment() {
 	// Vertical blade streaks (stretched noise) + soft tuft clumps.
 	float blades = vnoise(vec2(wp.x * blade_scale, wp.y * blade_scale * 0.22));
 	float tuft = fbm(wp * tuft_scale + wind * 2.0);
-	float t = mix(blades, tuft, 0.5);
+	// Fade the FINE blade detail out with camera distance: procedural detail has no
+	// mipmaps, so far tiles otherwise shimmer into muddy noise. Near, keep the
+	// blades+tuft mix; far, fall back to the smooth low-frequency tuft clumps.
+	float cam_dist = length(world_pos - CAMERA_POSITION_WORLD);
+	float near_amt = 1.0 - smoothstep(10.0, 42.0, cam_dist);
+	float detailed = mix(blades, tuft, 0.5);
+	float t = mix(tuft, detailed, near_amt);
 	t = clamp((t - 0.5) * pattern_contrast + 0.5, 0.0, 1.0);
 
 	// Three-tone stylized ramp.
