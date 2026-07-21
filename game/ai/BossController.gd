@@ -32,7 +32,17 @@ func decide(actor, moveset: Array, board) -> Dictionary:
 ## its FULL move range and unlocked specials when closing on / striking a target.
 func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
 	_advance_phase(actor)
-	return super.plan(actor, _effective_moveset(moveset), board, reachable)
+	var full := _effective_moveset(moveset)
+	# LANE PRE-EMPTION: an anchored boss's answer to a kiter. Before the generic
+	# planner (which values only DamageEffect moves and would score a hazard at 0),
+	# fire a ready lane hazard at a hostile already aligned in a cardinal line within
+	# range. Only ever pre-empts when such a hostile really exists and the move is
+	# ready; otherwise it falls straight through to the normal plan, so no ordinary
+	# behaviour regresses.
+	var lane := _hazard_lane_plan(actor, full, board)
+	if not lane.is_empty():
+		return lane
+	return super.plan(actor, full, board, reachable)
 
 
 ## Bosses are hostile to anything that is not itself and not another boss.
@@ -50,6 +60,91 @@ func _advance_phase(actor) -> int:
 			reached += 1
 	current_phase = maxi(current_phase, reached)
 	return current_phase
+
+
+## A ready lane-hazard cast at an aligned hostile, or {} to fall through to the
+## normal planner. GENERAL (not keyed to "forest_barrage"): it fires ANY off-cooldown
+## move whose effects include a [SpawnHazardEffect] when a hostile lies in a cardinal
+## line from the boss (same row or column) within that move's max range -- so
+## [method TargetingPattern._cardinal_dir] aimed at it sweeps a lane straight through
+## it. The nearest such hostile is chosen (a kiter the boss cannot otherwise reach is
+## exactly who this punishes). Casting doesn't move the boss, so the leash is
+## irrelevant; it never moves to line up, only fires when ALREADY aligned.
+func _hazard_lane_plan(actor, moveset: Array, board) -> Dictionary:
+	if actor == null or board == null or not board.has_method("cell_of"):
+		return {}
+	var origin: Vector2i = board.cell_of(actor)
+	var hostiles := _list_hostiles(actor, board)
+	if hostiles.is_empty():
+		return {}
+
+	for move in moveset:
+		if move == null or move.targeting == null or not _move_has_hazard(move):
+			continue
+		if not _move_is_ready(actor, move):
+			continue
+		var max_range: int = move.effective_max_range(actor)
+		var best_target = null
+		var best_dist: int = 1 << 30
+		for h in hostiles:
+			var hc: Vector2i = board.cell_of(h)
+			if not _is_cardinally_aligned(origin, hc):
+				continue
+			var d := _manhattan(origin, hc)
+			# Reserve the lane for a KITER: distance >= 2 (beyond melee reach). An
+			# adjacent aligned foe is left to the boss's normal kit (bough_sweep /
+			# timberfall) so this pre-emption never displaces its melee identity -- it
+			# only fires at the ranged threat the anchored boss otherwise cannot answer.
+			# The lane still sweeps its full travel_range, so aiming at the nearest
+			# qualifying kiter also carries through anything farther down the same lane.
+			if d < 2 or d > max_range:
+				continue
+			if d < best_dist:
+				best_dist = d
+				best_target = h
+		if best_target == null:
+			continue
+		var tcell: Vector2i = board.cell_of(best_target)
+		return {
+			"action": ActionType.MOVE,
+			"move": move,
+			"target": best_target,
+			"aim_cell": tcell,
+			"dest_cell": origin,
+			"estimated_damage": 0,
+			"target_hp": _unit_hp(best_target),
+			"step_to": origin,
+			"reason": "hazard_lane",
+		}
+	return {}
+
+
+## True if [param move]'s effects include a [SpawnHazardEffect] (a lane hazard).
+func _move_has_hazard(move) -> bool:
+	for e in move.effects:
+		if e is SpawnHazardEffect:
+			return true
+	return false
+
+
+## Cooldown/charge readiness, duck-typed off the actor's MovesetController. An actor
+## that predates the moveset system (a bare mock) reports ready -- harmless, because
+## _move_has_hazard has already filtered the moveset to hazard moves such an actor
+## does not carry in practice.
+func _move_is_ready(actor, move) -> bool:
+	if actor != null and actor.has_method("get_moveset_controller"):
+		var mc = actor.get_moveset_controller()
+		if mc != null and mc.has_method("can_use"):
+			return bool(mc.can_use(move))
+	return true
+
+
+## Same row or column as [param a], and not the same cell -- the alignment under
+## which a cardinal aim sweeps a lane through [param b].
+static func _is_cardinally_aligned(a: Vector2i, b: Vector2i) -> bool:
+	if a == b:
+		return false
+	return a.x == b.x or a.y == b.y
 
 
 ## Base moveset plus every special move unlocked up to [member current_phase].

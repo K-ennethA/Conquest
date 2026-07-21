@@ -8,6 +8,7 @@
 [ext_resource type="Resource" path="res://game/combat/moves/timberfall.tres" id="6_timber"]
 [ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="7_abres"]
 [ext_resource type="Resource" path="res://game/abilities/grovebound.tres" id="8_grovebound"]
+[ext_resource type="Resource" path="res://game/combat/moves/forest_barrage.tres" id="9_barrage"]
 
 [resource]
 script = ExtResource("1_char")
@@ -29,5 +30,5 @@ footprint = Vector2i(2, 2)
 default_ai_stance = "defensive"
 default_aggro_range = 3
 default_leash_radius = 2
-moveset = Array[ExtResource("3_mvres")]([ExtResource("4_bough"), ExtResource("5_guard"), ExtResource("6_timber")])
+moveset = Array[ExtResource("3_mvres")]([ExtResource("4_bough"), ExtResource("5_guard"), ExtResource("6_timber"), ExtResource("9_barrage")])
 abilities = Array[ExtResource("7_abres")]([ExtResource("8_grovebound")])

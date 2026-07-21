@@ -129,14 +129,8 @@ func log_event(event: Dictionary) -> void:
 
 
 func _matches_target_kind(unit) -> bool:
-	match move.targeting.target_kind:
-		CombatTypes.TargetKind.SELF:
-			return unit == caster
-		CombatTypes.TargetKind.ALLY:
-			return unit != caster and board.are_allies(caster, unit)
-		CombatTypes.TargetKind.ENEMY:
-			return board.are_enemies(caster, unit)
-		CombatTypes.TargetKind.ANY_UNIT:
-			return true
-		_:
-			return false  # TILE / EMPTY_TILE effects don't gather units
+	# Resolved through the shared CombatTypes helper so an instant move's target
+	# gathering and a TravelingHazard's per-band filter can never drift apart. TILE /
+	# EMPTY_TILE fall through to the helper's default (false) -- those effects don't
+	# gather units.
+	return CombatTypes.unit_matches_target_kind(move.targeting.target_kind, caster, unit, board)

@@ -870,7 +870,7 @@ func test_grovebound_is_a_passive_forest_damage_reduction():
 	assert_gt(scale, 0.0, "but not immunity")
 
 
-func test_eldroot_loads_as_a_2x2_boss_with_three_moves_and_one_ability():
+func test_eldroot_loads_as_a_2x2_boss_with_four_moves_and_one_ability():
 	var eldroot := _eldroot()
 	if eldroot == null:
 		pending("eldroot.tres could not load (its .glb needs an editor import); skipping.")
@@ -879,14 +879,16 @@ func test_eldroot_loads_as_a_2x2_boss_with_three_moves_and_one_ability():
 	assert_eq(eldroot.display_name, "Eldroot, the Hollow Crown")
 	assert_true(eldroot.is_boss, "is_boss drives BossController")
 	assert_eq(eldroot.footprint, Vector2i(2, 2), "a 2x2 footprint")
-	assert_eq(eldroot.moveset.size(), 3, "three moves")
+	# Forest Barrage fills the 4th slot (MAX_MOVES == 4): the boss's ranged answer to
+	# being kited, added without disturbing the original three.
+	assert_eq(eldroot.moveset.size(), 4, "four moves")
 	assert_eq(eldroot.abilities.size(), 1, "one ability")
 	assert_ne(eldroot.description, "", "it has a description")
 
 	var move_ids: Array = []
 	for m in eldroot.moveset:
 		move_ids.append(m.move_id)
-	for expected in [&"bough_sweep", &"heartwood_guard", &"timberfall"]:
+	for expected in [&"bough_sweep", &"heartwood_guard", &"timberfall", &"forest_barrage"]:
 		assert_true(expected in move_ids, "moveset contains %s" % expected)
 	assert_eq(eldroot.abilities[0].id, &"grovebound")
 

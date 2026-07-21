@@ -50,6 +50,13 @@ var _game_over_screen: GameOverScreen = null
 ## counter reset cleanly between games. Null before the first map finishes loading.
 var _spawn_manager: SpawnManager = null
 
+## Runtime hazard runtime (see [HazardManager]): advances every live [TravelingHazard]
+## (Forest Barrage's crawling vine) one band per player-turn. Created fresh per battle
+## in _setup_hazard_manager() beside the spawn manager, and freed + recreated on the
+## next map load so no in-flight vine leaks between battles. Null before the first map
+## finishes loading.
+var _hazard_manager: HazardManager = null
+
 func _ready() -> void:
 	print("=== GameWorld Initializing ===")
 
@@ -180,6 +187,10 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# Stand up the runtime spawn scheduler for THIS battle. Done after the rebuild so
 	# it can adopt the load-time seed units off the fresh board (to time their deaths).
 	_setup_spawn_manager()
+
+	# Stand up the per-battle hazard runtime alongside it, so crawling vines cast this
+	# battle tick forward and none leak into the next one.
+	_setup_hazard_manager()
 
 	# Update GameSettings with map info if available
 	if GameSettings.has_method("set_current_map"):
@@ -360,6 +371,20 @@ func _setup_spawn_manager() -> void:
 	_spawn_manager.name = "SpawnManager"
 	add_child(_spawn_manager)
 	_spawn_manager.setup(map_loader, map_loader.current_map)
+
+func _setup_hazard_manager() -> void:
+	"""Create (or recreate) the per-battle HazardManager, mirroring _setup_spawn_manager.
+	Frees any prior instance first so a second+ battle starts with no leftover vines --
+	this node is battle-scoped, unlike the autoloads that survive scene changes. setup()
+	wires it to the per-turn tick and the GameEvents spawn-request seam."""
+	if _hazard_manager != null and is_instance_valid(_hazard_manager):
+		_hazard_manager.queue_free()
+	_hazard_manager = null
+
+	_hazard_manager = HazardManager.new()
+	_hazard_manager.name = "HazardManager"
+	add_child(_hazard_manager)
+	_hazard_manager.setup()
 
 # --- Tile effects (T14) -----------------------------------------------------
 

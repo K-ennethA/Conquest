@@ -48,3 +48,32 @@ enum MovementKind {
 
 ## Damage multiplier applied on a critical hit.
 const CRIT_MULTIPLIER: float = 1.5
+
+
+## Does [param unit] match [param kind] evaluated RELATIVE TO [param source]?
+##
+## The single shared implementation of "who does this affect" so every system that
+## asks the question agrees. [MoveContext._matches_target_kind] (for an instant
+## move's gathered targets) and [TravelingHazard.advance] (for a persistent hazard's
+## per-band victims) both resolve through here, so a hazard and a plain AoE reading
+## the SAME [enum TargetKind] can never disagree about allegiance.
+##
+## Duck-typed and null-safe: allegiance is only asserted when the board can answer
+## it ([code]are_enemies[/code] / [code]are_allies[/code]), so a mock board missing
+## those simply never matches ALLY/ENEMY (never inventing hostility). ANY_UNIT is
+## true for every unit INCLUDING the source -- callers that must exclude the source
+## (a hazard never damages its own caster) filter that out themselves.
+static func unit_matches_target_kind(kind: int, source, unit, board) -> bool:
+	match kind:
+		TargetKind.SELF:
+			return unit == source
+		TargetKind.ALLY:
+			return unit != source and board != null and board.has_method("are_allies") \
+				and board.are_allies(source, unit)
+		TargetKind.ENEMY:
+			return board != null and board.has_method("are_enemies") \
+				and board.are_enemies(source, unit)
+		TargetKind.ANY_UNIT:
+			return true
+		_:
+			return false

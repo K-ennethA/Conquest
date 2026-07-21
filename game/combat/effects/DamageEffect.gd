@@ -274,7 +274,15 @@ static func _is_movement_restricted(target) -> bool:
 
 
 func _mitigate(raw: int, target) -> int:
-	match category:
+	return _mitigate_for(raw, target, category)
+
+
+## Category-aware mitigation, addressed by an explicit [param category] rather than
+## the effect's own field so it can be reused off-instance (the hazard path below,
+## which has no MoveEffect). The instance [method _mitigate] delegates here, so the
+## live damage pipeline and the hazard resolve mitigation identically.
+static func _mitigate_for(raw: int, target, category_arg) -> int:
+	match category_arg:
 		CombatTypes.DamageCategory.TRUE:
 			return maxi(1, raw)
 		CombatTypes.DamageCategory.MAGICAL:
@@ -282,6 +290,30 @@ func _mitigate(raw: int, target) -> int:
 			return maxi(1, raw - res)
 		_:  # PHYSICAL
 			return maxi(1, raw - _stat_or(target, "defense", 0))
+
+
+## Resolve ONE guaranteed hazard hit against [param target] and return the HP it
+## should lose. This is the shared seam a [TravelingHazard] tick calls so that
+## environmental lane damage honours the SAME defender-side rules as a normal hit:
+##
+##   1. "invulnerable" (Heartwood Guard's Guarded) -> a hard 0, short-circuited
+##      ahead of everything, exactly as [method apply] does.
+##   2. category mitigation (defense / magic_defense; TRUE ignores it).
+##   3. the defender's own "damage_taken_scale" passive (Eldroot's Grovebound).
+##
+## A hazard is environmental, so there is deliberately NO accuracy roll and NO crit
+## here -- it always lands and never multiplies. The raw number is snapshotted by
+## the caster at CAST time, so a later buff/debuff cannot retune an in-flight vine.
+static func resolve_hazard_damage(target, raw: int, category_arg, board) -> int:
+	if target == null:
+		return 0
+	if is_invulnerable(target):
+		return 0
+	var dealt := _mitigate_for(raw, target, category_arg)
+	var taken_scale: float = damage_taken_scale_for(target, board)
+	if not is_equal_approx(taken_scale, 1.0):
+		dealt = maxi(1, int(round(float(dealt) * taken_scale)))
+	return dealt
 
 
 static func _stat_or(unit, stat_name: String, fallback: int) -> int:
