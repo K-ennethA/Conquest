@@ -21,9 +21,20 @@ func apply(ctx: MoveContext) -> void:
 	# the BoardAdapter, so add them there. add_tile_effect is idempotent and stacks
 	# on top of the cell's base effects.
 	if CombatServices:
+		# Stamp the placed effect with its OWNER (the caster's player) so a trap only
+		# springs on the placer's enemies -- see TileEffectResource.owner_player /
+		# _faction_ok. Duplicate first so different placers don't share one owner and the
+		# authored resource is never mutated. Shallow (sub-effects are shared, immutable).
+		var owner = null
+		if ctx.caster != null and ctx.caster.has_method("get_owner_player"):
+			owner = ctx.caster.get_owner_player()
+		var placed = effect
+		if owner != null:
+			placed = effect.duplicate()
+			placed.owner_player = owner
 		for cell in ctx.affected_cells:
-			CombatServices.add_tile_effect(cell, effect)
-			ctx.log_event({ "effect": "apply_tile_effect", "cell": cell, "tile_effect": effect })
+			CombatServices.add_tile_effect(cell, placed)
+			ctx.log_event({ "effect": "apply_tile_effect", "cell": cell, "tile_effect": placed })
 
 
 func describe() -> String:

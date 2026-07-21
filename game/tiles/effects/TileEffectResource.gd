@@ -46,6 +46,14 @@ enum AffectedFactions {
 ## Effects applied to the occupant when the trigger fires, in order.
 @export var effects: Array[MoveEffect] = []
 
+## RUNTIME owner of a PLACED effect (a trap laid by a unit), stamped by
+## ApplyTileEffect at cast time; null for map-authored terrain. When set, the
+## OCCUPANT_ENEMIES / OCCUPANT_ALLIES faction check is resolved against THIS owner
+## (via the occupant's own get_owner_player) instead of the board perspective -- so a
+## trap only springs on its placer's enemies and spares the placer's own side. Not
+## exported: it is set live, per placement.
+var owner_player = null
+
 ## Passive states that are queried rather than applied, e.g.
 ## [code]{ "untargetable": true }[/code] (stealth) or
 ## [code]{ "fortified": true }[/code]. Merged by [method TileEffectSystem.passive_flags].
@@ -86,13 +94,27 @@ func run(unit, board) -> Array:
 func _faction_ok(unit, board) -> bool:
 	match affected_factions:
 		AffectedFactions.OCCUPANT_ENEMIES:
+			# A PLACED trap knows its owner: only its owner's ENEMIES spring it. A unit
+			# with no owner (or the placer's own side) is spared.
+			if owner_player != null:
+				var occ = _unit_owner(unit)
+				return occ != null and occ != owner_player
 			var ref = _perspective(board)
 			return ref != null and board.has_method("are_enemies") and board.are_enemies(ref, unit)
 		AffectedFactions.OCCUPANT_ALLIES:
+			if owner_player != null:
+				return _unit_owner(unit) == owner_player
 			var ref = _perspective(board)
 			return ref != null and board.has_method("are_allies") and board.are_allies(ref, unit)
 		_:  # ALL
 			return true
+
+
+## The owning Player of [param unit], or null (duck-typed for mocks).
+static func _unit_owner(unit):
+	if unit != null and unit.has_method("get_owner_player"):
+		return unit.get_owner_player()
+	return null
 
 
 func _tag_ok(unit) -> bool:

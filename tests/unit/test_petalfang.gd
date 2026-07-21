@@ -50,6 +50,9 @@ class MockUnit:
 		return restricted
 	func get_ability_system():
 		return ability_system
+	# Stand-in owner: the team int doubles as the "player" for owner-aware trap factions.
+	func get_owner_player() -> int:
+		return team
 
 class MockBoard:
 	var placements: Array = []  # { unit, cell }
@@ -389,9 +392,13 @@ func test_low_base_movement_alone_is_not_restricted():
 # --- GAP 4: the vine trap ----------------------------------------------------
 
 func test_stepping_onto_a_trapped_cell_damages_and_holds():
-	var trap := load("res://game/tiles/effects/resources/vine_trap.tres") as TileEffectResource
+	# The trap is owner-aware now: it springs on the PLACER's enemies, not allies.
+	# Duplicate so we don't mutate the shared cached resource; stamp owner = player 0
+	# (Petalfang's side), then walk an ENEMY (player 1) onto it.
+	var trap := (load("res://game/tiles/effects/resources/vine_trap.tres") as TileEffectResource).duplicate()
 	assert_not_null(trap, "vine_trap.tres loads")
 	assert_eq(trap.trigger, TileEffectResource.Trigger.ON_ENTER, "the trap fires on entry")
+	trap.owner_player = 0  # placed by player 0's side
 
 	var victim := MockUnit.new(1, { "health": 100, "magic_defense": 0, "defense": 0 })
 	var board := MockBoard.new()
@@ -401,12 +408,28 @@ func test_stepping_onto_a_trapped_cell_damages_and_holds():
 	system.tile_effects[Vector2i(4, 4)] = [trap]
 	var events: Array = system.on_enter(victim, Vector2i(4, 4), board)
 
-	assert_lt(victim.hp, 100, "entering the trapped cell deals damage")
+	assert_lt(victim.hp, 100, "entering the trapped cell deals damage to an enemy")
 	assert_eq(victim.statuses.size(), 1, "and applies exactly one status")
 	assert_eq(victim.statuses[0].id, &"ensnared", "that status is ensnared")
 	assert_true(victim.statuses[0].rule_flags.get("immobilized", false),
 		"which immobilizes the victim")
 	assert_gt(events.size(), 0, "the entry is logged")
+
+
+func test_a_trap_spares_the_placers_own_ally():
+	# An ally of the placer (same owner) walks over the trap and takes NOTHING.
+	var trap := (load("res://game/tiles/effects/resources/vine_trap.tres") as TileEffectResource).duplicate()
+	trap.owner_player = 0
+	var ally := MockUnit.new(0, { "health": 100, "magic_defense": 0, "defense": 0 })
+	var board := MockBoard.new()
+	board.place(ally, Vector2i(4, 4))
+
+	var system: TileEffectSystem = autofree(TileEffectSystem.new())
+	system.tile_effects[Vector2i(4, 4)] = [trap]
+	system.on_enter(ally, Vector2i(4, 4), board)
+
+	assert_eq(ally.hp, 100, "a friendly unit does not trigger its own side's trap")
+	assert_eq(ally.statuses.size(), 0, "and is not ensnared")
 
 func test_trap_damage_is_flat_so_the_victim_does_not_scale_it():
 	# TileEffectResource.run() makes the OCCUPANT the MoveContext caster, so a
