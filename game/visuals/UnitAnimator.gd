@@ -81,6 +81,18 @@ var _anim_players: Dictionary = {}
 # emitters. Keyed by instance id -> Vector3.
 var _last_world_pos: Dictionary = {}
 
+# The authored REST local-position of each unit's anim root (CharacterModel/mesh),
+# captured once. Every motion tween settles back to THIS, never to a live reading
+# of node.position -- otherwise a shake that starts mid-glide would capture the
+# displaced position as its rest and leave the model stranded a full move-offset
+# away (it looks like the unit vanished). Keyed by instance id -> Vector3.
+var _anim_base: Dictionary = {}
+
+# The unit's current motion tween (shake OR glide), keyed by instance id. A new
+# motion kills the previous one so two tweens never fight over the same position
+# property (which also stranded the model). Death/flash use their own tweens.
+var _motion_tween: Dictionary = {}
+
 func _ready() -> void:
 	name = "UnitAnimator"
 	var bus := get_node_or_null("/root/GameEvents")
@@ -119,9 +131,9 @@ func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 		_remember(unit)
 		return
 
-	# The model may carry an authored offset/scale, so glide relative to its OWN
-	# current position -- never assume Vector3.ZERO, which would wipe that offset.
-	var base: Vector3 = node.position
+	# Glide relative to the model's fixed authored REST position (cached once), never
+	# a live reading -- a live reading taken mid-animation would drift the model.
+	var base: Vector3 = _base_pos(unit, node)
 
 	# A walk clip animates the LEGS; the glide below still has to carry the model
 	# across the tile, so these layer rather than replace each other. (play_clip
@@ -135,17 +147,19 @@ func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 	var offset := start - dest
 	# Animations off, negligible move, or zero glide time -> snap to base instantly.
 	if not _anims_on() or offset.length() < 0.001 or move_glide_time <= 0.0:
+		_kill_motion(unit)
 		node.position = base
 		return
 	var t: float = _scaled(move_glide_time)
 	if t <= 0.0:
+		_kill_motion(unit)
 		node.position = base
 		return
 
 	# Place the model (visually) back at the old spot -- offset from its OWN base --
 	# then slide it home. Only the child model moves; the unit node stays put.
+	var tw := _begin_motion(unit, node)
 	node.position = base + offset
-	var tw := node.create_tween()
 	tw.set_trans(move_glide_trans).set_ease(move_glide_ease)
 	tw.tween_property(node, "position", base, t)
 
@@ -178,20 +192,22 @@ func _shake(unit) -> void:
 	var node := _get_anim_root(unit)
 	if node == null:
 		return
-	var base: Vector3 = node.position
+	var base: Vector3 = _base_pos(unit, node)
 	# Animations off -> ensure the model sits at its base, no motion.
 	if not _anims_on():
+		_kill_motion(unit)
 		node.position = base
 		return
 	var total: float = _scaled(move_shake_time)
 	var d: float = move_shake_distance
 	if total <= 0.0 or d <= 0.0:
+		_kill_motion(unit)
 		node.position = base
 		return
 	# A quick forward lunge (local -Z) sells the strike, then a pair of decaying
 	# side jitters and a snappy settle read as recoil rather than an idle wiggle.
 	var seg: float = total / 4.0
-	var tw := node.create_tween()
+	var tw := _begin_motion(unit, node)
 	tw.set_trans(Tween.TRANS_SINE)
 	tw.tween_property(node, "position", base + Vector3(0.0, 0.0, -d), seg)\
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -252,8 +268,14 @@ func _on_unit_eliminated(unit = null, _eliminator = null) -> void:
 	# An authored death clip replaces the shrink entirely -- shrinking a model
 	# that is playing its own death animation just deletes the animation.
 	var played_death: bool = play_clip(unit, CLIP_DEATH, false)
+	# A lingering shake/glide tween would fight the death shrink; stop it and drop
+	# the per-unit caches so a freed instance id can't leak or be reused stale.
+	if is_instance_valid(unit):
+		_kill_motion(unit)
 	_last_world_pos.erase(id)
 	_anim_players.erase(id)
+	_anim_base.erase(id)
+	_motion_tween.erase(id)
 	if played_death:
 		return
 	if not (unit is Node3D) or not is_instance_valid(unit) or death_shrink_time <= 0.0:
@@ -313,6 +335,34 @@ func _find_mesh_recursive(node: Node) -> MeshInstance3D:
 		if found != null:
 			return found
 	return null
+
+## The authored rest local-position of [param node], captured ONCE per unit. All
+## motion animations settle back to this fixed value, so overlapping shakes/glides
+## can never drift the model away from the unit.
+func _base_pos(unit, node: Node3D) -> Vector3:
+	var id: int = unit.get_instance_id()
+	if not _anim_base.has(id):
+		_anim_base[id] = node.position
+	return _anim_base[id]
+
+## Start a fresh motion tween on [param node], killing any in-flight motion tween
+## for this unit first so the two never fight over `position`.
+func _begin_motion(unit, node: Node3D) -> Tween:
+	var id: int = unit.get_instance_id()
+	var prev = _motion_tween.get(id, null)
+	if prev is Tween and prev.is_valid():
+		prev.kill()
+	var tw := node.create_tween()
+	_motion_tween[id] = tw
+	return tw
+
+## Kill any in-flight motion tween for [param unit] (used before instant snaps).
+func _kill_motion(unit) -> void:
+	var id: int = unit.get_instance_id()
+	var prev = _motion_tween.get(id, null)
+	if prev is Tween and prev.is_valid():
+		prev.kill()
+	_motion_tween.erase(id)
 
 # --- Authored clip bridge --------------------------------------------------
 
