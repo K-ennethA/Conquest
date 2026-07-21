@@ -86,7 +86,11 @@ const SPAWN_KINDS: Array[String] = [
 # Size guardrails for shareable, player-authored maps. Kept as constants so the
 # Map Creator's SpinBoxes and validate_map() can never drift apart.
 const MIN_MAP_SIZE := 3
-const MAX_MAP_SIZE := 20
+## Soft ceiling on a map's width/height. Raise it here (the single source) to allow
+## larger maps -- the Map Creator's SpinBoxes and validate_map() both read this, so
+## they can never drift apart. Larger values grow the editor grid (WxH buttons +
+## tile meshes) so keep it within what the creator dock stays responsive at.
+const MAX_MAP_SIZE := 40
 
 # Map Properties
 @export var max_players: int = 2

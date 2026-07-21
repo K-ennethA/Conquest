@@ -105,4 +105,5 @@ func test_spawner_without_a_unit_is_a_validation_issue() -> void:
 
 func test_size_guardrails_exist_for_shared_maps() -> void:
 	assert_eq(MapResource.MIN_MAP_SIZE, 3)
-	assert_eq(MapResource.MAX_MAP_SIZE, 20)
+	# Soft ceiling; raised from the original 20 to give boss arenas more room.
+	assert_eq(MapResource.MAX_MAP_SIZE, 40)
