@@ -51,6 +51,16 @@ extends Camera3D
 ## CINEMATIC mode dollies IN to when currently zoomed far out. Clamped to [dist_min,
 ## runtime max], so it never punches through the near clamp on tiny boards.
 @export var cinematic_close_distance: float = 24.0
+## Auto-focus HIT PUNCH: the close distance a hit (damage_dealt) dollies IN to for
+## emphasis, in BOTH QUICK and CINEMATIC (never OFF). Clamped to [dist_min, runtime max]
+## and never pushed past the resting distance, so it reads as a shove-in, not a lurch.
+@export var action_zoom_distance: float = 18.0
+## Seconds for the fast push-IN on a hit (the punch). Kept short so it snaps.
+@export var action_zoom_in_dur: float = 0.25
+## Seconds the camera holds at the close framing before easing back out.
+@export var action_zoom_hold_dur: float = 0.12
+## Seconds for the ease back OUT to the resting distance, so hits don't creep ever-closer.
+@export var action_zoom_out_dur: float = 0.5
 ## Skip an auto-focus request whose destination is already this near the current focus
 ## (world units) -- no point gliding a hair, and it stops jitter during AI bursts.
 @export var auto_focus_min_move: float = 1.5
@@ -89,6 +99,13 @@ var _game_settings: Node = null
 var _game_events: Node = null
 ## The live focus glide, if any -- killed/replaced rather than stacked.
 var _focus_tween: Tween = null
+## Hit-punch burst state: true while a hit-zoom (in->hold->out) is in flight. Used so a
+## flurry of hits captures the RESTING distance only once (the first punch) and returns
+## there, instead of each hit stacking its zoom-in atop the previous close framing.
+var _action_zoom_active: bool = false
+## The distance to ease back OUT to after a hit punch -- captured before the first hit of
+## a burst so repeated hits never treat an already-zoomed-in frame as "resting".
+var _action_resting_distance: float = 0.0
 ## Time.get_ticks_msec() of the last event-driven auto-focus, for the cooldown gate.
 var _last_auto_focus_ms: int = 0
 
@@ -391,10 +408,11 @@ func _text_field_has_focus() -> bool:
 ## (auto_focus_cooldown) further keeps a burst of hits from snapping the camera rapidly.
 ## Gated by GameSettings.camera_auto_focus:
 ##   OFF       -- never auto-moves.
-##   QUICK     -- a calm pan-only glide, keeps the current zoom.
-##   CINEMATIC -- the same calm pan for hits/heals, but a spawn ALSO dollies IN once
-##                toward cinematic_close_distance when currently zoomed far out (the
-##                dolly happens on spawns only, never per-hit, so the zoom never churns).
+##   QUICK     -- a calm pan glide for heals; a HIT still PUNCHES in (fast dolly in, hold,
+##                ease back out) so combat reads impactful even in the lighter mode.
+##   CINEMATIC -- the same for heals plus the hit punch, and a spawn ALSO dollies IN once
+##                toward cinematic_close_distance when currently zoomed far out (the spawn
+##                dolly settles closer and stays; the hit punch always returns to resting).
 ## Everything here only ever translates focus (and, in cinematic, dollies distance
 ## within [dist_min, runtime max]); it never touches the authored basis or fov.
 ## Both autoloads are optional: absent GameSettings behaves as OFF, so headless
@@ -437,7 +455,8 @@ func _should_auto_focus() -> bool:
 ## the request if another auto-focus happened within auto_focus_cooldown, UNLESS [param
 ## bypass_cooldown] is set (spawns are rare enough to always frame). The min-move / drag
 ## / text-focus guards still apply (via _should_auto_focus and focus_on itself).
-func _request_auto_focus(world_pos: Vector3, cinematic: bool, bypass_cooldown: bool) -> void:
+func _request_auto_focus(world_pos: Vector3, cinematic: bool, bypass_cooldown: bool,
+		hit_zoom: bool = false) -> void:
 	if not _should_auto_focus():
 		return
 	var now: int = Time.get_ticks_msec()
@@ -446,7 +465,10 @@ func _request_auto_focus(world_pos: Vector3, cinematic: bool, bypass_cooldown: b
 		if now - _last_auto_focus_ms < cooldown_ms:
 			return
 	_last_auto_focus_ms = now
-	focus_on(world_pos, cinematic)
+	if hit_zoom:
+		_focus_hit(world_pos)
+	else:
+		focus_on(world_pos, cinematic)
 
 
 func _kill_focus_tween() -> void:
@@ -464,6 +486,10 @@ func _kill_focus_tween() -> void:
 func focus_on(world_pos: Vector3, cinematic: bool = false) -> void:
 	if not is_inside_tree():
 		return
+
+	# A plain pan / spawn glide takes over from any hit-punch burst: end it so the next
+	# hit re-captures a fresh resting distance instead of returning to a stale one.
+	_action_zoom_active = false
 
 	var start: Vector3 = _camera_focus_ground()
 	var dest: Vector3 = Vector3(world_pos.x, 0.0, world_pos.z)
@@ -519,10 +545,96 @@ func focus_on(world_pos: Vector3, cinematic: bool = false) -> void:
 	_focus_tween.chain().tween_callback(_clamp_to_board)
 
 
+## HIT PUNCH: pan to the impact point AND shove the camera IN fast for emphasis, hold a
+## beat, then ease back OUT to the resting distance. Runs in BOTH QUICK and CINEMATIC (the
+## caller gates OFF via _should_auto_focus). Unlike focus_on's spawn dolly, this always
+## zooms -- the whole point is a visible punch -- but returns so a turn of hits can't creep
+## ever-closer. Killed/replaced rather than stacked; a burst captures the resting distance
+## only once so repeated hits don't treat the already-close frame as their return target.
+func _focus_hit(world_pos: Vector3) -> void:
+	if not is_inside_tree():
+		return
+
+	var start: Vector3 = _camera_focus_ground()
+	var dest: Vector3 = Vector3(world_pos.x, 0.0, world_pos.z)
+	var moved: float = Vector2(dest.x - start.x, dest.z - start.z).length()
+
+	var cur_dist: float = _current_distance()
+	# Capture the resting distance ONCE per burst -- the very first hit, before any punch
+	# has pulled us in. Subsequent hits mid-burst keep returning to that same frame.
+	if not _action_zoom_active:
+		_action_resting_distance = cur_dist
+	var resting: float = _action_resting_distance
+	# Never push past the resting frame: if already closer than action_zoom_distance, hold.
+	var close: float = clampf(minf(resting, action_zoom_distance), dist_min, _dist_max_runtime)
+	var zoom_delta: float = absf(close - cur_dist)
+
+	# Already framed here at the close distance (e.g. a second hit on the same tile while
+	# still punched in) -- nothing worth churning.
+	if moved < auto_focus_min_move and zoom_delta < 0.5:
+		return
+
+	_kill_focus_tween()
+
+	# Animations off => snap the pan and settle at the resting distance (mirrors the FX
+	# layer treating a zero authored duration as an instant cut); no punch to animate.
+	var animate: bool = true
+	if _game_settings != null and not _game_settings.animations_on():
+		animate = false
+
+	if not animate:
+		if moved >= auto_focus_min_move:
+			_move_focus_to(dest)
+		_set_distance(resting)
+		_clamp_to_board()
+		_action_zoom_active = false
+		return
+
+	# Let battle-speed nudge the timings, but floor them so a fast speed can't turn the
+	# punch into a single-frame jump-cut.
+	var in_dur: float = action_zoom_in_dur
+	var hold_dur: float = maxf(action_zoom_hold_dur, 0.0)
+	var out_dur: float = action_zoom_out_dur
+	if _game_settings != null:
+		in_dur = _game_settings.scaled_time(action_zoom_in_dur)
+		out_dur = _game_settings.scaled_time(action_zoom_out_dur)
+	in_dur = clampf(in_dur, 0.15, 1.0)
+	out_dur = clampf(out_dur, 0.3, 1.5)
+
+	_action_zoom_active = true
+
+	_focus_tween = create_tween()
+	# In-phase: the pan and the shove-in run together, fast, easing OUT so they snap in
+	# and settle (the punch). TRANS_CUBIC + EASE_OUT front-loads the motion.
+	_focus_tween.set_parallel(true)
+	if moved >= auto_focus_min_move:
+		_focus_tween.tween_method(Callable(self, "_move_focus_to"), start, dest, in_dur) \
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_focus_tween.tween_method(Callable(self, "_set_distance"), cur_dist, close, in_dur) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	# Then hold, then ease back OUT to resting -- sequential from here so it always settles.
+	_focus_tween.chain()
+	_focus_tween.set_parallel(false)
+	if hold_dur > 0.0:
+		_focus_tween.tween_interval(hold_dur)
+	_focus_tween.tween_method(Callable(self, "_set_distance"), close, resting, out_dur) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_focus_tween.tween_callback(_on_hit_zoom_done)
+
+
+## End of a hit-punch burst: settle inside the board bounds and clear the burst flag so the
+## next hit re-captures a fresh resting distance. Killed tweens (a rapid follow-up hit or a
+## spawn/settings change taking over) simply never reach here, which is what we want.
+func _on_hit_zoom_done() -> void:
+	_action_zoom_active = false
+	_clamp_to_board()
+
+
 func _on_settings_changed() -> void:
 	# If the player just switched auto-focus off, drop any glide in flight.
 	if _auto_focus_mode() == _AUTO_OFF:
 		_kill_focus_tween()
+		_action_zoom_active = false
 
 
 ## Frame only RUNTIME spawns (reinforcements / endless waves); skip the initial flood
@@ -541,12 +653,13 @@ func _on_event_unit_spawned(unit, runtime: bool) -> void:
 ## target) rather than move_performed (which fires for every move, including non-
 ## damaging ones and the attacker itself) so a damaging attack focuses exactly once, on
 ## where it lands. Attacks are framed regardless of owner: a hit on a player unit is
-## just as worth showing as a hit the AI lands. Pan-only (no dolly) and cooldown-gated
-## so a flurry of hits can't rapid-fire the camera.
+## just as worth showing as a hit the AI lands. This fires a HIT PUNCH (pan + fast dolly
+## IN, hold, then ease back OUT) in QUICK and CINEMATIC alike, cooldown-gated so a flurry
+## of hits can't rapid-fire the camera. See _focus_hit.
 func _on_event_damage_dealt(_attacker, defender, _damage) -> void:
 	if not is_instance_valid(defender) or not (defender is Node3D):
 		return
-	_request_auto_focus((defender as Node3D).global_position, false, false)
+	_request_auto_focus((defender as Node3D).global_position, false, false, true)
 
 
 ## Frame a heal on the unit that received it -- an occasional, meaningful beat. Same as

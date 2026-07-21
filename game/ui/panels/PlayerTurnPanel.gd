@@ -113,6 +113,13 @@ func _on_game_state_changed(new_state: PlayerManager.GameState) -> void:
 	"""Handle game state changes"""
 	_update_display()
 
+func _turn_title(player: Player) -> String:
+	"""Ally/enemy framing for the panel -- reads better than "Player 1/2" in
+	single-player. Keyed off Player.is_ai."""
+	if player != null and player.is_ai:
+		return "Enemy Turn"
+	return "Your Turn"
+
 func _update_display() -> void:
 	"""Update the display with current player and turn information"""
 	if not player_name_label or not turn_info_label or not end_turn_button:
@@ -129,9 +136,10 @@ func _update_display() -> void:
 	
 	if active_player:
 		current_player = active_player
-		
-		# Update player name
-		player_name_label.text = active_player.get_display_name() + "'s Turn"
+
+		# Update player name -- ally/enemy framing reads better than "Player 1/2"
+		# in single-player (keyed off Player.is_ai).
+		player_name_label.text = _turn_title(active_player)
 		
 		# Update turn info based on turn system
 		if TurnSystemManager.has_active_turn_system():
@@ -164,7 +172,7 @@ func _update_display() -> void:
 		end_turn_button.disabled = not can_end_turn
 		
 		if can_end_turn:
-			end_turn_button.text = "End " + active_player.get_display_name() + "'s Turn"
+			end_turn_button.text = ("End Enemy Turn" if active_player.is_ai else "End Your Turn")
 		else:
 			end_turn_button.text = "Cannot End Turn"
 		

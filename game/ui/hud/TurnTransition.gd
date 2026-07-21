@@ -13,21 +13,29 @@ class_name TurnTransition
 ## its mouse_filter to STOP while the overlay is actually opaque, so a stray click
 ## during the wipe is swallowed instead of reaching the board.
 ##
-## Timing (base, before Battle-Speed scaling): fade IN ~0.25s, hold ~0.5s, fade
-## OUT ~0.35s -- ~1.1s total. Honors GameSettings: if animations are OFF the wipe
-## is skipped entirely (no dead time); otherwise every duration is scaled by
-## GameSettings.scaled_time() so Battle Speed also drives the transition. When
-## GameSettings is absent (headless) it behaves as animations-on at 1x.
+## Timing (base, before Battle-Speed scaling). The ALLY (human) wipe is the full
+## cinematic: fade IN ~0.25s, hold ~0.5s, fade OUT ~0.35s -- ~1.1s total. The ENEMY
+## (AI) wipe is a deliberately lighter beat so the bot phase doesn't feel heavy
+## every round: fade IN ~0.18s, hold ~0.25s, fade OUT ~0.25s -- ~0.68s total. Both
+## sides DO play, so each turn hand-off reads clearly. Honors GameSettings: if
+## animations are OFF the wipe is skipped entirely (no dead time); otherwise every
+## duration is scaled by GameSettings.scaled_time() so Battle Speed also drives the
+## transition. When GameSettings is absent (headless) it behaves as animations-on
+## at 1x.
 ##
-## AI vs human: the full wipe only plays when a HUMAN player's turn begins. AI
-## turns skip it (no overlay at all), so the enemy phase doesn't eat a ~1s black
-## screen every round while the bot thinks -- the persistent turn chip still
-## announces the AI turn. A new transition interrupts any in-flight one.
+## Ally vs enemy: the wipe plays for BOTH turns; the AI side just uses the shorter
+## timings above and an "ENEMY TURN" label. A new transition interrupts any
+## in-flight one.
 
 # --- Base timing (seconds, pre-scale) --------------------------------------
+# Ally (human) side -- the full cinematic beat.
 const FADE_IN := 0.25
 const HOLD := 0.5
 const FADE_OUT := 0.35
+# Enemy (AI) side -- a quicker, lighter beat so the bot phase isn't heavy.
+const ENEMY_FADE_IN := 0.18
+const ENEMY_HOLD := 0.25
+const ENEMY_FADE_OUT := 0.25
 
 # High layer so the wipe covers the board and every HUD panel.
 const OVERLAY_LAYER := 128
@@ -103,7 +111,7 @@ func _build_ui() -> void:
 	# Big turn label.
 	_turn_label = Label.new()
 	_turn_label.name = "TurnLabel"
-	_turn_label.text = "PLAYER 1'S TURN"
+	_turn_label.text = "YOUR TURN"
 	_turn_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_turn_label.add_theme_font_size_override("font_size", 54)
 	_turn_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
@@ -165,10 +173,8 @@ func _scaled(base_seconds: float) -> float:
 # --- Playback ---------------------------------------------------------------
 
 func _on_player_turn_started(player: Player) -> void:
-	# Only the human phase gets the cinematic wipe; AI turns skip it so the enemy
-	# phase isn't a ~1s black screen every round.
-	if player != null and player.is_ai:
-		return
+	# BOTH sides get a wipe now so every turn hand-off reads clearly. The enemy
+	# (AI) side uses the shorter timings (see play) so its phase stays light.
 	play(player)
 
 
@@ -186,20 +192,27 @@ func play(player: Player) -> void:
 
 	_apply_player(player)
 
+	# Enemy (AI) turns get the quicker, lighter beat; ally (human) turns the full one.
+	var is_enemy: bool = player != null and player.is_ai
+	var fade_in: float = ENEMY_FADE_IN if is_enemy else FADE_IN
+	var hold: float = ENEMY_HOLD if is_enemy else HOLD
+	var fade_out: float = ENEMY_FADE_OUT if is_enemy else FADE_OUT
+
 	_overlay.visible = true
 	_overlay.modulate.a = 0.0
 	_set_blocking(true)
 
 	_tween = create_tween()
-	_tween.tween_property(_overlay, "modulate:a", 1.0, _scaled(FADE_IN))
-	_tween.tween_interval(_scaled(HOLD))
-	_tween.tween_property(_overlay, "modulate:a", 0.0, _scaled(FADE_OUT))
+	_tween.tween_property(_overlay, "modulate:a", 1.0, _scaled(fade_in))
+	_tween.tween_interval(_scaled(hold))
+	_tween.tween_property(_overlay, "modulate:a", 0.0, _scaled(fade_out))
 	_tween.tween_callback(_set_idle)
 
 
 func _apply_player(player: Player) -> void:
 	if player != null:
-		_turn_label.text = player.get_display_name().to_upper() + "'S TURN"
+		# Ally/enemy framing reads better than "Player 1/2" in single-player.
+		_turn_label.text = "ENEMY TURN" if player.is_ai else "YOUR TURN"
 		# Accent picks up the player's team colour (kept legible), falling back to
 		# amber when there isn't one.
 		var col: Color = player.get_team_color()

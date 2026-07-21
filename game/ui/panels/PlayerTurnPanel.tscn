@@ -49,7 +49,7 @@ theme_override_constants/separation = 6
 
 [node name="PlayerNameLabel" type="Label" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
-text = "Player 1's Turn"
+text = "Your Turn"
 horizontal_alignment = 1
 vertical_alignment = 1
 theme_override_font_sizes/font_size = 16
@@ -65,5 +65,5 @@ modulate = Color(0.8, 0.8, 0.8, 1)
 [node name="EndTurnButton" type="Button" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 32)
-text = "End Player 1's Turn"
+text = "End Your Turn"
 theme_override_font_sizes/font_size = 14

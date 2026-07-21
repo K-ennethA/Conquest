@@ -455,9 +455,15 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 	# holding guardian or an anchored boss. Read every turn by Bot/BossController.
 	if unit_instance.has_method("configure_ai_behavior"):
 		var norm: Dictionary = current_map.normalize_spawn(spawn_data)
+		# The character's OWN declared stance (raw field, "" = no preference) so a unit
+		# like blightcap (explicitly "aggressive") charges even when pre-placed.
+		var char_stance: String = ""
+		if character_resource != null and "default_ai_stance" in character_resource:
+			char_stance = String(character_resource.default_ai_stance)
 		var resolved_stance: String = resolve_default_ai_stance(
 			String(norm.get("spawn_kind", MapResource.SPAWN_KIND_START)),
-			String(norm.get("ai_stance", "")))
+			String(norm.get("ai_stance", "")),
+			char_stance)
 		unit_instance.configure_ai_behavior(
 			grid_pos,
 			resolved_stance,
@@ -484,17 +490,21 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 ## pre-placed enemies on ALL maps (Start now defaults to "defensive"); that is the
 ## intended "defenders defend" design. Any unrecognised value falls back to Start's
 ## "defensive" default. Static + pure so tests can assert it directly.
-static func resolve_default_ai_stance(spawn_kind: String, authored_stance: String) -> String:
+static func resolve_default_ai_stance(spawn_kind: String, authored_stance: String, character_default: String = "") -> String:
 	# 1. Endless/Respawn ALWAYS charge -- even over an authored stance. These reuse a
 	#    single home cell every wave, so a defensive unit that sat there would choke
 	#    the point; forcing aggressive keeps the spot clearing for the next spawn.
 	if spawn_kind == MapResource.SPAWN_KIND_ENDLESS \
 			or spawn_kind == MapResource.SPAWN_KIND_RESPAWN:
 		return "aggressive"
-	# 2. Otherwise an author override wins.
+	# 2. A per-placement author override wins next.
 	if authored_stance == "aggressive" or authored_stance == "defensive":
 		return authored_stance
-	# 3. Default by kind: reinforcements charge; pre-placed (Start) hold.
+	# 3. The character's OWN declared stance (e.g. blightcap = always aggressive). Only
+	#    an EXPLICIT value counts; "" means "no preference, use the kind default below".
+	if character_default == "aggressive" or character_default == "defensive":
+		return character_default
+	# 4. Default by kind: reinforcements charge; pre-placed (Start) hold.
 	if spawn_kind == MapResource.SPAWN_KIND_REINFORCEMENT:
 		return "aggressive"
 	return "defensive"

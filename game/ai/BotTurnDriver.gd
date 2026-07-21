@@ -41,6 +41,15 @@ class_name BotTurnDriver
 ## the execute paths emit.
 @export var verbose: bool = false
 
+## When true (default), a DEFENSIVE guard that is provably going to WAIT this turn is
+## short-circuited to a silent wait WITHOUT running the expensive reachable-cell flood
+## (a MovementResolver flood) or BotController.plan. On a big map most enemy units are
+## idle defenders far from the player, so skipping their planning is the bulk of the
+## enemy-turn cost. Behaviour-preserving -- it only fires when the planner would ALSO
+## have made the unit wait (see [method _defender_certain_to_wait]). Toggle off to
+## profile / debug the full planning path for every unit.
+@export var skip_idle_defender_planning: bool = true
+
 var _timer: Timer
 var _busy: bool = false
 # Set by _act() (via act_for_turn_system) to record whether the LAST resolved
@@ -285,6 +294,18 @@ func _ai_difficulty() -> int:
 ## Plan via [BotController]/[BossController] using the unit's FULL reachable cell
 ## set, then execute a move-then-attack or a full advance.
 func _act_character(unit: Unit, board) -> bool:
+	# IDLE-DEFENDER EARLY-OUT. A defensive guard that cannot wake (no hostile within its
+	# aggro range of home) AND cannot strike anything this turn is CERTAIN to wait, so
+	# resolve that wait now and skip the reachable-cell flood + BotController.plan --
+	# the expensive work this whole optimisation exists to avoid. Returning false marks
+	# it a silent wait so the tick loop fast-forwards past it. See the helper for why
+	# this is behaviour-preserving (it fires only when plan() would also have waited).
+	if _defender_certain_to_wait(unit, board):
+		if verbose:
+			print("[BotAI] %s holds (idle defender, skipped planning)" % unit.get_display_name())
+		_finish(unit, "wait")
+		return false
+
 	var controller = BossController.new() if unit.is_boss() else BotController.new()
 	controller.difficulty = _ai_difficulty()
 
@@ -329,6 +350,100 @@ func _reachable_cells(unit: Unit, origin: Vector2i, board) -> Array:
 	# Pass the unit so a multi-cell unit (e.g. a 2x2 boss) only considers cells where
 	# its WHOLE footprint fits; omitting it would path the boss as if it were 1x1.
 	return MovementResolver.new().reachable_cells(origin, profile, board, unit)
+
+
+## True when [param unit] is a DEFENSIVE guard that will DEMONSTRABLY wait this turn,
+## so the driver may skip the reachable-cell flood + [method BotController.plan] for it
+## and resolve the wait directly. Mirrors the TWO ways plan() waits a defensive actor:
+##
+##   * IT WON'T WAKE. A defensive actor only advances when a hostile has come within
+##     its [method Unit.get_aggro_range] Manhattan cells of its HOME cell -- exactly
+##     BotController._hostile_within_aggro (inclusive `<=`), measured from the same
+##     reference (its authored home, or the cell it stands on when it has none, per
+##     BotController._effective_home). No hostile inside that radius -> it holds.
+##   * IT CAN'T STRIKE. plan()'s attack branch runs for EVERY stance BEFORE the hold
+##     check, so a held guard still attacks anything it can reach (a turret with
+##     aggro_range 0 acts ONLY through that branch). We therefore ALSO require that no
+##     hostile is within the unit's max strike reach -- movement_range + the kit's
+##     longest reach. Any reachable stand cell is within movement_range Manhattan of the
+##     origin, so that sum is a sound UPPER bound on attack reach: it can never under-
+##     estimate, hence never skips a unit that could actually strike.
+##
+## Only when EVERY hostile is beyond BOTH radii is the unit certain to wait. Everything
+## is duck-typed and null-safe: a missing board, home, stance, or hostile list, or an
+## aggressive/boss/legacy unit, all fall through to normal planning (never a wrong skip).
+func _defender_certain_to_wait(unit: Unit, board) -> bool:
+	if not skip_idle_defender_planning:
+		return false
+	if unit == null or board == null or not board.has_method("cell_of"):
+		return false
+	# Bosses plan through BossController, which has its own engagement logic -- never
+	# short-circuit it with BotController's defensive rule.
+	if unit.has_method("is_boss") and unit.is_boss():
+		return false
+	# ONLY defensive units. Aggressive (and legacy/mock units reporting neither) always
+	# charge the nearest hostile, so they must still run the full plan.
+	if not (unit.has_method("is_defensive") and unit.is_defensive()):
+		return false
+	if not TurnSystemManager or not TurnSystemManager.has_active_turn_system():
+		return false
+
+	var ucell: Vector2i = board.cell_of(unit)
+	# Effective home: authored guard post if set, else the current cell (mirror
+	# BotController._effective_home so an unanchored guard reads home == origin).
+	var home: Vector2i = ucell
+	if unit.has_method("has_home_cell") and unit.has_home_cell() and unit.has_method("get_home_cell"):
+		home = unit.get_home_cell()
+	var aggro: int = 0
+	if unit.has_method("get_aggro_range"):
+		aggro = maxi(0, int(unit.get_aggro_range()))
+	var strike_reach: int = _defender_strike_reach(unit)
+
+	# Scan the same hostile set _nearest_hostile uses (living, human-owned, not self).
+	# Bail to normal planning the instant ANY hostile could wake OR be struck.
+	var ts: TurnSystemBase = TurnSystemManager.get_active_turn_system()
+	var saw_hostile: bool = false
+	for h in ts.registered_units:
+		if h == null or not is_instance_valid(h) or h == unit:
+			continue
+		if h.has_method("is_alive") and not h.is_alive():
+			continue
+		var owner := h.get_owner_player()
+		if owner == null or owner == unit.get_owner_player() or owner.is_ai:
+			continue
+		saw_hostile = true
+		var hcell: Vector2i = board.cell_of(h)
+		# WAKE (inclusive, home-referenced) -- would advance, so not certain to wait.
+		if _cell_manhattan(home, hcell) <= aggro:
+			return false
+		# STRIKE (origin-referenced upper bound) -- attack branch could fire.
+		if _cell_manhattan(ucell, hcell) <= strike_reach:
+			return false
+	# No hostiles at all -> fall through (task contract; don't skip on a bare board).
+	if not saw_hostile:
+		return false
+	# Every hostile is beyond both the wake radius and the strike reach: plan() would
+	# have returned a WAIT ("holding" / no reachable attack), so we can wait for free.
+	return true
+
+
+## Sound UPPER bound (Manhattan cells) on how far [param unit] could reach to STRIKE a
+## hostile this turn: its movement range plus its longest-reaching move. Any reachable
+## stand cell is within movement_range Manhattan of the origin, so a hostile farther
+## than this sum from the unit cannot be attacked this turn under any plan. Null-safe:
+## a unit with no moves contributes 0 reach beyond its movement.
+func _defender_strike_reach(unit: Unit) -> int:
+	var move_range: int = 0
+	if unit.has_method("get_movement_range"):
+		move_range = maxi(0, int(unit.get_movement_range()))
+	var max_atk: int = 0
+	if unit.has_method("get_moveset"):
+		for m in unit.get_moveset():
+			if m == null:
+				continue
+			if m.has_method("effective_max_range"):
+				max_atk = maxi(max_atk, int(m.effective_max_range(unit)))
+	return move_range + max_atk
 
 
 ## Move the unit to the planned stand cell (if any), then resolve the chosen attack

@@ -5,7 +5,7 @@
 [node name="TurnIndicator" type="Control"]
 layout_mode = 3
 anchors_preset = 0
-custom_minimum_size = Vector2(0, 46)
+custom_minimum_size = Vector2(240, 48)
 script = ExtResource("1_1")
 
 [node name="BackgroundPanel" type="Panel" parent="."]
@@ -26,7 +26,7 @@ theme_override_constants/separation = 0
 
 [node name="PlayerNameLabel" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-text = "Player 1's Turn"
+text = "Your Turn"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 15
 

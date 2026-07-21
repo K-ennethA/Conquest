@@ -101,8 +101,8 @@ func test_forest_barrage_is_a_ranged_lane_hazard_on_a_long_cooldown():
 	assert_eq(fx.width, 5, "5-wide band")
 	assert_eq(fx.speed, 2, "2 cells/turn")
 	assert_eq(fx.travel_range, 6, "6 cells of travel")
-	assert_eq(fx.affiliation, CombatTypes.TargetKind.ANY_UNIT,
-		"Forest Barrage is authored indiscriminate (hits allies too)")
+	assert_eq(fx.affiliation, CombatTypes.TargetKind.ENEMY,
+		"Forest Barrage hits ENEMIES only -- the boss no longer mows down its own horde")
 
 
 # ===========================================================================

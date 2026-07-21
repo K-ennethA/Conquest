@@ -120,9 +120,17 @@ func _update_display() -> void:
 		_update_background_color(null)
 		visible = true
 
+func _turn_title(player: Player) -> String:
+	"""Ally/enemy framing for the chip -- reads better than "Player 1/2" in
+	single-player. Keyed off Player.is_ai; the player-colour tint (see
+	_update_background_color) still conveys which side subtly."""
+	if player != null and player.is_ai:
+		return "Enemy Turn"
+	return "Your Turn"
+
 func _update_traditional_display(turn_system: TraditionalTurnSystem, active_player: Player) -> void:
 	"""Update display for Traditional Turn System"""
-	player_name_label.text = active_player.get_display_name() + "'s Turn"
+	player_name_label.text = _turn_title(active_player)
 	
 	var progress = turn_system.get_current_turn_progress()
 	if progress.has("units_can_act"):
@@ -162,12 +170,12 @@ func _update_speed_first_display(turn_system: SpeedFirstTurnSystem, active_playe
 
 func _update_generic_display(turn_system: TurnSystemBase, active_player: Player) -> void:
 	"""Update display for generic turn system"""
-	player_name_label.text = active_player.get_display_name() + "'s Turn"
+	player_name_label.text = _turn_title(active_player)
 	turn_info_label.text = "Round " + str(turn_system.current_turn)
 
 func _update_fallback_display(active_player: Player) -> void:
 	"""Update display when no turn system is active"""
-	player_name_label.text = active_player.get_display_name() + "'s Turn"
+	player_name_label.text = _turn_title(active_player)
 	turn_info_label.text = "Turn in progress"
 
 func _chip_box() -> StyleBoxFlat:

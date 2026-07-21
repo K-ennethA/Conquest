@@ -62,7 +62,12 @@ const MAX_MOVES: int = 4
 ## their ground and only engage once a hostile enters [member default_aggro_range]
 ## of their home cell. A spawn point may override this per placement (see
 ## MapResource's unit_spawns schema and [method Unit.configure_ai_behavior]).
-@export_enum("aggressive", "defensive") var default_ai_stance: String = "aggressive"
+## Empty "" = no per-character preference: the spawn KIND decides (pre-placed hold,
+## waves charge). Set it to "aggressive" to make a character always charge (e.g.
+## blightcap, a fast fungus) or "defensive" for a camper, even when pre-placed.
+## (Plain String, not @export_enum, because the enum annotation rejects an empty
+## default; the resolver only accepts "aggressive"/"defensive" and ignores anything else.)
+@export var default_ai_stance: String = ""
 ## How close (Manhattan cells) a hostile must come to a DEFENSIVE unit's home cell
 ## before it wakes and engages. 0 means it acts only when it can already strike a
 ## target from a reachable cell — a stationary turret / guardian. Ignored while the

@@ -302,3 +302,21 @@ func test_endless_and_respawn_force_aggressive_over_any_authored_stance() -> voi
 		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_RESPAWN, "defensive"),
 		"aggressive",
 		"a Respawn point forces aggressive for the same reason")
+
+
+func test_character_declared_stance_makes_a_pre_placed_unit_aggressive() -> void:
+	# A character with an explicit "aggressive" default (e.g. blightcap) charges even
+	# when pre-placed (Start), overriding the Start "hold" default -- but NOT an
+	# authored per-placement stance, and NOT the Endless/Respawn force.
+	assert_eq(
+		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_START, "", "aggressive"),
+		"aggressive",
+		"a character that declares aggressive charges even from a Start point")
+	assert_eq(
+		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_START, "", ""),
+		"defensive",
+		"no character preference (empty) falls back to the Start hold default")
+	assert_eq(
+		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_START, "defensive", "aggressive"),
+		"defensive",
+		"an authored per-placement stance still beats the character's own default")
