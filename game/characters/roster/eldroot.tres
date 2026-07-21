@@ -27,6 +27,6 @@ is_boss = true
 footprint = Vector2i(2, 2)
 default_ai_stance = "defensive"
 default_aggro_range = 3
-default_leash_radius = 2
+default_leash_radius = 0
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_bough"), ExtResource("5_guard"), ExtResource("6_timber"), ExtResource("9_barrage")])
 abilities = Array[ExtResource("7_abres")]([ExtResource("8_grovebound")])

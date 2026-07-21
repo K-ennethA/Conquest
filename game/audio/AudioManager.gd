@@ -143,6 +143,7 @@ func _connect_events() -> void:
 	_safe_connect(bus, &"cursor_selected", _on_cursor_selected)
 	_safe_connect(bus, &"combat_initiated", _on_combat_initiated)
 	_safe_connect(bus, &"damage_dealt", _on_damage_dealt)
+	_safe_connect(bus, &"unit_healed", _on_unit_healed)
 	_safe_connect(bus, &"unit_eliminated", _on_unit_eliminated)
 	_safe_connect(bus, &"game_started", _on_game_started)
 	_safe_connect(bus, &"game_ended", _on_game_ended)
@@ -180,6 +181,11 @@ func _on_combat_initiated(_attacker = null, _defender = null) -> void:
 
 func _on_damage_dealt(_attacker = null, _defender = null, _damage = null) -> void:
 	play_sfx(&"sfx_hit")
+
+func _on_unit_healed(_unit = null, _amount = null) -> void:
+	# The AudioLibrary defines a dedicated sfx_heal slot; play_sfx no-ops until an
+	# asset is assigned, so this is silent-but-safe rather than a fallback to another cue.
+	play_sfx(&"sfx_heal")
 
 func _on_unit_eliminated(_unit = null, _eliminator = null) -> void:
 	play_sfx(&"sfx_death")

@@ -34,6 +34,12 @@ signal combat_initiated(attacker: Unit, defender: Unit)
 signal damage_dealt(attacker: Unit, defender: Unit, damage: int)
 signal unit_eliminated(unit: Unit, eliminator: Unit)
 
+## Fired when a unit regains HP (a heal move, lifesteal, a healing tile/status).
+## `amount` is the HP actually restored (>= 0). Presentation systems listen to
+## flash the unit green, play a heal cue, and frame it, so healing reads as
+## clearly as damage does. The single emit point is HealEffect.
+signal unit_healed(unit, amount: int)
+
 ## Fired when a unit is materialised onto the board at runtime -- pre-placed units
 ## at load, reinforcements, and endless/respawn waves all emit this once the node
 ## is in the tree at its cell. Presentation systems (camera auto-focus) listen so

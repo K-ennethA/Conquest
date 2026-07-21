@@ -305,3 +305,41 @@ func test_start_points_are_never_scheduled() -> void:
 	_manager.initialize(_loader, map)
 	_tick(10)
 	assert_eq(_loader.spawn_calls, 0, "Start points do nothing at runtime")
+
+
+# --- Real Forgotten Forest map: endless + reinforcement actually fire ---------
+# Drives the REAL authored forgotten_forest.tres waves through the REAL scheduler
+# (only the loader/board are doubled), so a regression that breaks the map's own
+# endless or reinforcement points -- not just the generic scheduler -- is caught.
+
+const FOREST_PATH := "res://game/maps/resources/forgotten_forest.tres"
+
+## A copy of the forest map carrying ONLY its points of [param kind], so each wave
+## kind can be verified in isolation (spawn_calls then counts just that kind).
+func _forest_points_of(kind: String) -> MapResource:
+	var forest := load(FOREST_PATH) as MapResource
+	var sub: Array[Dictionary] = []
+	for s in forest.unit_spawns:
+		if String(forest.normalize_spawn(s).get("spawn_kind", "")) == kind:
+			sub.append((s as Dictionary).duplicate(true))
+	var m := MapResource.new()
+	m.width = forest.width
+	m.height = forest.height
+	m.unit_spawns = sub
+	return m
+
+func test_forgotten_forest_reinforcements_actually_spawn() -> void:
+	var map := _forest_points_of(MapResource.SPAWN_KIND_REINFORCEMENT)
+	assert_gt(map.unit_spawns.size(), 0, "forgotten_forest must author Reinforcement points")
+	_manager.initialize(_loader, map)
+	_tick(40)
+	assert_gt(_loader.spawn_calls, 0,
+		"the map's Reinforcement waves must produce units at runtime (got %d)" % _loader.spawn_calls)
+
+func test_forgotten_forest_endless_actually_spawns() -> void:
+	var map := _forest_points_of(MapResource.SPAWN_KIND_ENDLESS)
+	assert_gt(map.unit_spawns.size(), 0, "forgotten_forest must author Endless points")
+	_manager.initialize(_loader, map)
+	_tick(40)
+	assert_gt(_loader.spawn_calls, 0,
+		"the map's Endless waves must keep producing units at runtime (got %d)" % _loader.spawn_calls)

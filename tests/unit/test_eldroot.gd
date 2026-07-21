@@ -909,3 +909,16 @@ func test_eldroot_is_statted_as_an_immovable_fortress():
 	assert_lte(eldroot.base_movement, 2, "movement 1-2: it does not chase")
 	assert_gte(eldroot.base_movement, 1)
 	assert_eq(eldroot.attack_range, 1, "melee")
+
+
+# --- Anchored boss: leash 0 keeps it on its grove ----------------------------
+# Eldroot is a 2x2 boss on a 2x2 sacred meadow; ANY step drags it partly off its
+# area, so it must be a true turret -- default leash 0. It still attacks in range
+# (melee adjacency + its ranged lane hazard), it just never walks off.
+
+func test_eldroot_is_anchored_with_zero_leash() -> void:
+	var eldroot := load("res://game/characters/roster/eldroot.tres") as CharacterResource
+	assert_not_null(eldroot, "eldroot character resource should load")
+	assert_true(eldroot.is_boss, "eldroot is a boss")
+	assert_eq(eldroot.get_default_leash_radius(), 0,
+		"the boss must be anchored (leash 0) so it can never be dragged off its grove")

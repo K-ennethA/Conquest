@@ -34,6 +34,19 @@ extends Node
 ## Squash-punch scale applied on hit (1.0 = no punch). Adds tactile feedback.
 @export_range(1.0, 1.6, 0.01) var hit_punch_scale: float = 1.12
 
+# --- Heal flash -----------------------------------------------------------
+@export_group("Heal Flash")
+## Seconds the heal flash is held before restoring the original look. Mirrors
+## [member hit_flash_time] but reads as positive (a gentle green glow).
+@export_range(0.0, 1.0, 0.01) var heal_flash_time: float = 0.22
+## Color the mesh flashes to when it is healed (a positive green, not the red hit).
+@export var heal_flash_color: Color = Color(0.3, 1.0, 0.4)
+## Extra emission energy during the heal flash (makes the green pop in 3D lighting).
+@export_range(0.0, 8.0, 0.1) var heal_flash_emission: float = 2.0
+## Gentle upward hop (local +Y) on heal (0.0 = none). A small POSITIVE pop, the
+## opposite of the damage squash -- it reads as "revived", not "struck".
+@export_range(0.0, 0.6, 0.01) var heal_hop_height: float = 0.12
+
 # --- Move shake -----------------------------------------------------------
 @export_group("Move Shake")
 ## Default caster feedback for ANY move (attack, buff, heal, status) on a model
@@ -102,6 +115,7 @@ func _ready() -> void:
 	_safe_connect(bus, &"turn_started", _on_turn_started)
 	_safe_connect(bus, &"unit_moved", _on_unit_moved)
 	_safe_connect(bus, &"damage_dealt", _on_damage_dealt)
+	_safe_connect(bus, &"unit_healed", _on_unit_healed)
 	_safe_connect(bus, &"unit_eliminated", _on_unit_eliminated)
 	_safe_connect(bus, &"move_performed", _on_move_performed)
 
@@ -259,6 +273,60 @@ func _flash(unit) -> void:
 		pt.tween_property(mesh, "scale", base_scale * hit_punch_scale, punch_dur)\
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		pt.tween_property(mesh, "scale", base_scale, punch_dur)\
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+# --- Heal flash -----------------------------------------------------------
+
+func _on_unit_healed(unit = null, _amount = null) -> void:
+	# The healed unit's reaction: a positive green flash (+ a gentle hop), the
+	# counterpart to the red hit flash. Fires for any restored HP; the emitter
+	# already skips a 0-heal, so we always have something worth showing.
+	_heal_flash(unit)
+
+## Green emissive flash on the unit's mesh, the positive mirror of [method _flash].
+## Restores the prior material_override exactly like the hit flash, and adds a small
+## upward hop (NOT the damage squash) so the beat reads as "revived". Honors
+## _anims_on() (no-op when animations are off) and feeds every duration through
+## _scaled(). Self-contained: it drives the mesh via its OWN tweens and never touches
+## the shared motion-tween / base-position caches.
+func _heal_flash(unit) -> void:
+	if not (unit is Node3D) or not is_instance_valid(unit):
+		return
+	var mesh := _get_mesh(unit)
+	if mesh == null:
+		return
+
+	# Animations off -> no flash and no hop. We never touched material_override or
+	# position, so there is nothing to restore; the unit stays exactly as it is.
+	if not _anims_on():
+		return
+
+	# Color flash via a temporary material_override; the prior override (usually
+	# null) is captured and restored exactly, so the base look is untouched.
+	var flash_dur: float = _scaled(heal_flash_time)
+	if flash_dur > 0.0:
+		var prev_override := mesh.material_override
+		var flash_mat := StandardMaterial3D.new()
+		flash_mat.albedo_color = heal_flash_color
+		flash_mat.emission_enabled = true
+		flash_mat.emission = heal_flash_color
+		flash_mat.emission_energy_multiplier = heal_flash_emission
+		mesh.material_override = flash_mat
+		var ft := mesh.create_tween()
+		ft.tween_interval(flash_dur)
+		ft.tween_callback(func():
+			if is_instance_valid(mesh):
+				mesh.material_override = prev_override)
+
+	# Gentle upward hop (local +Y) and settle -- a small POSITIVE pop, restored to
+	# the mesh's own current position so it leaves nothing displaced.
+	var hop_dur: float = _scaled(heal_flash_time * 0.5)
+	if heal_hop_height > 0.0 and hop_dur > 0.0:
+		var base_mesh_pos := mesh.position
+		var ht := mesh.create_tween()
+		ht.tween_property(mesh, "position", base_mesh_pos + Vector3(0.0, heal_hop_height, 0.0), hop_dur)\
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		ht.tween_property(mesh, "position", base_mesh_pos, hop_dur)\
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 
 # --- Death ----------------------------------------------------------------

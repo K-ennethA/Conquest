@@ -19,8 +19,16 @@ class_name BotTurnDriver
 ## board is loaded yet) fall back to the simple take_damage behaviour so the game
 ## stays playable during the data-driven migration.
 
-## Seconds between AI unit actions.
-@export var action_interval: float = 0.4
+## Seconds between VISIBLE AI unit actions (a move or an attack). Silent no-op
+## waits are fast-forwarded within a single tick and do NOT cost an interval each.
+## The effective wait is additionally divided by the player's battle-speed setting
+## (see [method _effective_wait]) so "Fast" also speeds the AI.
+@export var action_interval: float = 0.18
+
+## Hard cap on how many silent no-op waits a single tick will fast-forward before
+## yielding back to the frame. Bounds the worst case (a huge army entirely out of
+## range) so the AI can never freeze a frame chewing through waits.
+@export var max_waits_per_tick: int = 32
 
 ## When true, log extra diagnostics (e.g. "AI turn but no actable unit"). Off by
 ## default so a normal match only prints the concise one-line-per-action summary
@@ -29,15 +37,50 @@ class_name BotTurnDriver
 
 var _timer: Timer
 var _busy: bool = false
+# Set by _act() (via act_for_turn_system) to record whether the LAST resolved
+# action was visible (a move/attack) or a silent wait. _tick() reads it to decide
+# whether to keep fast-forwarding waiting units or yield and let the Timer pace the
+# unit that just did something.
+var _last_action_visible: bool = false
 
 
 func _ready() -> void:
 	_timer = Timer.new()
-	_timer.wait_time = maxf(0.05, action_interval)
 	_timer.one_shot = false
 	add_child(_timer)
 	_timer.timeout.connect(_tick)
+	_apply_wait()
 	_timer.start()
+	# Update the pacing live if the player changes battle speed mid-match. Null-safe:
+	# GameSettings may be absent in headless tests, in which case the wait just stays
+	# at the unscaled action_interval floor.
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null:
+		if GameSettings.has_signal("settings_changed") \
+				and not GameSettings.settings_changed.is_connected(_on_settings_changed):
+			GameSettings.settings_changed.connect(_on_settings_changed)
+
+
+## Effective Timer wait: the base interval scaled DOWN by battle speed (so faster
+## battle speed -> shorter AI beats), with a hard floor so it can never hit zero.
+## Reads the GameSettings autoload null-safely; when it is absent (headless tests)
+## the unscaled interval is used.
+func _effective_wait() -> float:
+	var scaled: float = action_interval
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and "battle_speed" in GameSettings:
+		var speed: float = clampf(float(GameSettings.battle_speed), 0.5, 3.0)
+		scaled = action_interval / speed
+	return maxf(0.05, scaled)
+
+
+## Recompute and apply the Timer's wait. Call whenever the interval or battle speed
+## could have changed (startup, live settings change).
+func _apply_wait() -> void:
+	if _timer != null:
+		_timer.wait_time = _effective_wait()
+
+
+func _on_settings_changed() -> void:
+	_apply_wait()
 
 
 func _tick() -> void:
@@ -49,7 +92,29 @@ func _tick() -> void:
 	# the turn never advances back to the human): the primary "AI inert" failure.
 	if _busy:
 		_busy = false
-	act_one_ai_unit()
+
+	# FAST-FORWARD SILENT WAITS. Each visible action (move/attack) should get its own
+	# Timer-paced beat so the turn stays readable, but a unit that just WAITs (nothing
+	# visible happened) must not burn a whole interval of dead air. So loop the single
+	# synchronous act step while it keeps resolving to silent waits, and stop the
+	# instant one of these is true:
+	#   * a visible action happened  -> break, next unit is paced by the next tick;
+	#   * act_one_ai_unit() returned false -> it is no longer an AI turn (or nothing
+	#     is actable), so there is nothing to pace;
+	#   * we hit max_waits_per_tick   -> yield back to the frame so a huge out-of-range
+	#     army can never freeze it (the remaining waits resume on the next tick).
+	# Each iteration still performs exactly ONE synchronous act() that never awaits,
+	# preserving the re-entrancy contract; the loop just skips the idle delay between
+	# back-to-back non-events.
+	var waits: int = 0
+	while waits < max_waits_per_tick:
+		_last_action_visible = false
+		var acted: bool = act_one_ai_unit()
+		if not acted:
+			return
+		if _last_action_visible:
+			return
+		waits += 1
 
 
 ## Perform ONE AI action for the currently-active turn system (the Timer's entry
@@ -90,6 +155,10 @@ func act_for_turn_system(ts: TurnSystemBase) -> bool:
 			if verbose:
 				print("[BotAI] %s's units are stunned this turn -- advancing past the skip"
 					% player.get_display_name())
+			# Advancing is progress but nothing visible happened, so leave
+			# _last_action_visible false: _tick() may fast-forward straight on to the
+			# next player's units in the same beat instead of spending an interval here.
+			_last_action_visible = false
 			ts.advance_turn()
 			return true
 		# Rare once the AI acts every unit; only surface it when diagnosing.
@@ -99,7 +168,10 @@ func act_for_turn_system(ts: TurnSystemBase) -> bool:
 		return false
 
 	_busy = true
-	_act(unit)
+	# _act reports whether the action was visible (move/attack) or a silent wait; the
+	# tick loop reads _last_action_visible to decide whether to fast-forward the next
+	# waiting unit or yield and let the Timer pace this one.
+	_last_action_visible = _act(unit)
 	_busy = false
 	return true
 
@@ -158,13 +230,14 @@ func _relocate(unit, board, from_cell: Vector2i, to_cell: Vector2i) -> void:
 
 
 ## Route the unit to the planning path (character-backed + live board) or to the
-## take_damage fallback (legacy units, or no board loaded yet).
-func _act(unit: Unit) -> void:
+## take_damage fallback (legacy units, or no board loaded yet). Returns true when the
+## action was VISIBLE (the unit moved or attacked), false for a silent no-op wait --
+## the tick loop uses this to fast-forward past waits without spending an interval.
+func _act(unit: Unit) -> bool:
 	var board := CombatServices.board()
 	if board != null and unit.has_character():
-		_act_character(unit, board)
-	else:
-		_act_fallback(unit, board)
+		return _act_character(unit, board)
+	return _act_fallback(unit, board)
 
 
 # --- Character planning path -----------------------------------------------
@@ -181,7 +254,7 @@ func _ai_difficulty() -> int:
 
 ## Plan via [BotController]/[BossController] using the unit's FULL reachable cell
 ## set, then execute a move-then-attack or a full advance.
-func _act_character(unit: Unit, board) -> void:
+func _act_character(unit: Unit, board) -> bool:
 	var controller = BossController.new() if unit.is_boss() else BotController.new()
 	controller.difficulty = _ai_difficulty()
 
@@ -193,17 +266,18 @@ func _act_character(unit: Unit, board) -> void:
 	var decision = controller.plan(unit, unit.get_moveset(), board, reachable)
 	if decision == null or decision.is_empty():
 		_finish(unit, "wait")
-		return
+		return false
 
 	match int(decision.get("action", BotController.ActionType.WAIT)):
 		BotController.ActionType.MOVE:
-			_execute_plan_attack(unit, decision, board)
+			return _execute_plan_attack(unit, decision, board)
 		BotController.ActionType.STEP:
-			_execute_plan_advance(unit, decision, board)
+			return _execute_plan_advance(unit, decision, board)
 		_:
 			if verbose:
 				print("[BotAI] %s waits (%s)" % [unit.get_display_name(), str(decision.get("reason", ""))])
 			_finish(unit, "wait")
+			return false
 
 
 ## Cells [param unit] can reach this turn under its movement profile, via the live
@@ -230,7 +304,7 @@ func _reachable_cells(unit: Unit, origin: Vector2i, board) -> Array:
 ## Move the unit to the planned stand cell (if any), then resolve the chosen attack
 ## from there. The destination came from the reachable set (already validated as a
 ## legal stopping cell) and the move was validated to hit the target FROM it.
-func _execute_plan_attack(unit: Unit, decision: Dictionary, board) -> void:
+func _execute_plan_attack(unit: Unit, decision: Dictionary, board) -> bool:
 	var origin: Vector2i = board.cell_of(unit)
 	var dest: Vector2i = decision.get("dest_cell", origin)
 	# Second gate on the same rule _reachable_cells applies. The planner should
@@ -249,27 +323,30 @@ func _execute_plan_attack(unit: Unit, decision: Dictionary, board) -> void:
 		else:
 			print("[BotAI] %s uses %s at %s"
 				% [unit.get_display_name(), _move_name(decision.get("move")), str(decision.get("aim_cell"))])
-		return
+		# Attacked (and possibly moved first) -- always visible.
+		return true
 
 	# The move failed to resolve after moving (rare). End the turn cleanly -- the
-	# unit still spent its move if it walked.
+	# unit still spent its move if it walked. Visible only if it actually walked.
 	_finish(unit, "move" if moved else "wait")
+	return moved
 
 
 ## Move the unit its full advance toward the nearest enemy. The destination is a
 ## reachable cell the planner chose to minimize distance to that enemy.
-func _execute_plan_advance(unit: Unit, decision: Dictionary, board) -> void:
+func _execute_plan_advance(unit: Unit, decision: Dictionary, board) -> bool:
 	var origin: Vector2i = board.cell_of(unit)
 	var dest: Vector2i = decision.get("dest_cell", origin)
 	if dest == origin or _is_immobilized(unit):
 		_finish(unit, "wait")
-		return
+		return false
 	_relocate(unit, board, origin, dest)
 	unit.mark_moved()
 	var target = decision.get("target", null)
 	var tname: String = target.get_display_name() if target != null and target.has_method("get_display_name") else "enemy"
 	print("[BotAI] %s advances to %s toward %s" % [unit.get_display_name(), str(dest), tname])
 	_finish(unit, "move")
+	return true
 
 
 ## Execute an attack/use-move decision (a chosen move + aim cell) through
@@ -354,18 +431,18 @@ func _move_name(move) -> String:
 ## Uses the shared [BoardAdapter] for cell math when a board is present; when no
 ## board is loaded (defensive) it degrades to a direct take_damage on the nearest
 ## hostile.
-func _act_fallback(unit: Unit, board) -> void:
+func _act_fallback(unit: Unit, board) -> bool:
 	var target := _nearest_hostile(unit)
 	if not target:
 		_finish(unit, "wait")
-		return
+		return false
 
 	if board == null:
 		# No live board -> no reliable cell math. Just apply the legacy attack so
 		# AI units are not inert; movement is skipped in this degraded path.
 		_fallback_attack(unit, target)
 		_finish(unit, "attack")
-		return
+		return true
 
 	var ucell: Vector2i = board.cell_of(unit)
 	var tcell: Vector2i = board.cell_of(target)
@@ -375,12 +452,14 @@ func _act_fallback(unit: Unit, board) -> void:
 	if dist <= atk_range:
 		_fallback_attack(unit, target)
 		_finish(unit, "attack")
+		return true
 	else:
 		var move_range: int = maxi(1, _stat(unit, "movement", 3))
 		var dest := _step_toward_cell(ucell, tcell, move_range)
 		_relocate(unit, board, ucell, dest)
 		print("[BotAI] %s moves toward %s" % [unit.get_display_name(), target.get_display_name()])
 		_finish(unit, "move")
+		return true
 
 
 func _fallback_attack(unit: Unit, target: Unit) -> void:

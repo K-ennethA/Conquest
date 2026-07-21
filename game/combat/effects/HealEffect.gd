@@ -23,9 +23,50 @@ func apply(ctx: MoveContext) -> void:
 		# The percent term reads the TARGET's max health, so it is resolved here
 		# rather than once up front.
 		var total := flat + _percent_bonus(target)
+		# Snapshot HP around the heal so we emit the ACTUAL restored amount (clamped
+		# to max by the unit's own heal()), never the raw roll -- a heal into a nearly
+		# full unit should announce the sliver it actually recovered, or nothing.
+		var before: int = _current_health(target)
 		if target.has_method("heal"):
 			target.heal(total)
+		var healed_amount: int = _current_health(target) - before
+		if healed_amount < 0:
+			healed_amount = 0
 		ctx.log_event({ "effect": "heal", "target": target, "amount": total })
+		_announce_heal(target, healed_amount)
+
+
+## Announce one applied heal on the game-wide bus as
+## [code]unit_healed(target, amount)[/code], where amount is the HP ACTUALLY
+## restored (clamped to max, >= 0). This is the single emit point for that signal
+## -- mirroring how [DamageEffect] is the single emit point for damage_dealt -- and
+## it is what lights up the green heal flash in [UnitAnimator] and the heal cue in
+## [AudioManager].
+##
+## Skips a no-op heal (0 restored, e.g. already at full health) and is guarded end
+## to end so a headless test with no GameEvents autoload, or a build without the
+## signal, simply no-ops.
+func _announce_heal(target, healed_amount: int) -> void:
+	if target == null or healed_amount <= 0:
+		return
+	if typeof(GameEvents) == TYPE_OBJECT and GameEvents != null and GameEvents.has_signal(&"unit_healed"):
+		GameEvents.unit_healed.emit(target, healed_amount)
+
+
+## Read [param target]'s CURRENT health defensively. A live Unit answers through
+## [code]get_stat("health")[/code]; test mocks expose a plain [code]hp[/code] or
+## [code]current_health[/code]. Returns 0 when none is available, so the heal amount
+## simply reads as 0 (and the announce no-ops) rather than erroring.
+func _current_health(target) -> int:
+	if target == null:
+		return 0
+	if target.has_method("get_stat"):
+		return int(target.get_stat("health"))
+	if "current_health" in target:
+		return int(target.current_health)
+	if "hp" in target:
+		return int(target.hp)
+	return 0
 
 
 func describe() -> String:
