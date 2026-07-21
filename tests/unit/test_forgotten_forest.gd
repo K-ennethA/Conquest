@@ -14,10 +14,12 @@ func before_all() -> void:
 	_map = load(MAP_PATH) as MapResource
 
 
-func test_map_loads_as_the_forgotten_forest_draft() -> void:
+func test_map_loads_as_the_forgotten_forest() -> void:
+	# NOTE: status (Active/Inactive) is deliberately NOT asserted -- it is an
+	# author-editable field the user flips in the Map Creator (draft while building,
+	# Active once published), so pinning it here would fail the moment they publish.
 	assert_not_null(_map, "Forgotten Forest map resource should load")
 	assert_eq(_map.map_name, "Forgotten Forest")
-	assert_eq(_map.status, "Inactive", "it is authored as a draft")
 	assert_eq(_map.width, 20)
 	assert_eq(_map.height, 20)
 
@@ -61,13 +63,14 @@ func test_map_passes_its_own_validator() -> void:
 		"validate_map issues: %s" % str(report.get("issues", [])))
 
 
-func test_draft_is_offered_in_single_player_but_hidden_from_shared_lists() -> void:
-	# The solo map picker (MapSelection) includes drafts so you can play-test a map
-	# you just built; the default/shared list (used by network setup) hides them.
+func test_map_is_offered_in_the_single_player_picker() -> void:
+	# The solo map picker (MapSelection) lists get_available_maps(true), which includes
+	# drafts -- so the map is selectable whether it is still a draft or published. (We
+	# don't assert the draft-only "hidden from the shared list" behaviour here because
+	# the map's status is author-editable; that filtering is covered by spawn-point
+	# tests on a fixed-status resource.)
 	var with_drafts: Array = MapLoader.get_available_maps(true)
-	var without_drafts: Array = MapLoader.get_available_maps(false)
-	assert_true(MAP_PATH in with_drafts, "the draft is offered when drafts are included (single-player picker)")
-	assert_false(MAP_PATH in without_drafts, "the draft stays out of the draft-free shared list")
+	assert_true(MAP_PATH in with_drafts, "the map is offered in the single-player picker")
 
 
 func test_win_condition_is_defeat_the_boss() -> void:

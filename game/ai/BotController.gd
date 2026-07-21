@@ -147,6 +147,24 @@ func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
 	# Difficulty decides which we take -- identical selection logic to decide()'s.
 	var ranked := _ranked_attacks_from_cells(actor, origin, stand_cells, moveset, hostiles, board, home)
 	var choice := _choose_attack(ranked)
+
+	# SUPPORT BRANCH (damage-first). A unit's non-damage kit -- self-buffs, heals,
+	# pure debuffs -- is invisible to the attack ranking above (every such move
+	# estimates 0 damage), so without this branch Eldroot would never pop Heartwood
+	# Guard and a healer would never heal. Here we classify each USABLE support move
+	# and, ONLY when no lethal / clearly-strong attack is on the table this turn (see
+	# _support_beats_attack), take the best-triggered one instead.
+	#
+	# Skipped entirely for a force-driven / mind-controlled actor: it must keep
+	# attacking its own side (never "support" itself). The cast is resolved IN PLACE
+	# (dest_cell == origin), so a self / ally cast is unaffected by the leash. A unit
+	# whose kit is purely damaging produces no support candidate, so this branch is a
+	# no-op and the historical attack-then-advance behaviour is byte-for-byte intact.
+	if not _actor_is_controlled(actor):
+		var support := _best_support_play(actor, origin, moveset, hostiles, board)
+		if not support.is_empty() and _support_beats_attack(support, ranked, actor):
+			return support
+
 	if not choice.is_empty():
 		return choice
 
@@ -583,6 +601,275 @@ func _hostile_within_aggro(actor, home: Vector2i, hostiles: Array, board) -> boo
 		if _manhattan(home, board.cell_of(h)) <= radius:
 			return true
 	return false
+
+
+# --- Support moves (self-buff / heal / debuff) -----------------------------
+# Non-damage plays the attack ranking cannot see (they estimate 0 damage). All
+# duck-typed and null-safe so a bare mock without a moveset controller / status API
+# still classifies purely off the MoveResource's effects + targeting data (never a
+# hardcoded move id). See plan()'s SUPPORT BRANCH for how these gate against the
+# damage-first bias.
+
+## HP fraction (0..1) at or below which a heal target counts as "hurt enough".
+const HEAL_THRESHOLD: float = 0.60
+## Manhattan cells within which a hostile is treated as an immediate threat -- close
+## enough to strike the actor this turn -- the wake condition for a defensive buff.
+const THREAT_RANGE: int = 2
+## Baseline scores used to rank support candidates against one another (a heal is
+## ranked by the raw HP it would restore instead, which is naturally larger).
+const SUPPORT_SELF_BUFF_VALUE: int = 8
+const SUPPORT_DEBUFF_VALUE: int = 5
+
+
+## Best non-damage support cast for [param actor] this turn, or {} when none applies.
+## Considers only USABLE (off-cooldown / in-charges) non-damage moves, classifies each
+## as SELF-BUFF / HEAL / DEBUFF, and returns the highest-value TRIGGERED candidate as a
+## MOVE decision cast in place (dest_cell == origin, so the executor walks the unit
+## nowhere before it supports).
+func _best_support_play(actor, origin: Vector2i, moveset: Array, hostiles: Array, board) -> Dictionary:
+	var best: Dictionary = {}
+	var best_value: int = -1
+	for move in moveset:
+		if move == null or move.targeting == null:
+			continue
+		if _move_has_damage(move):
+			continue  # damaging moves are ranked by the attack branch, not here
+		if not _move_is_ready(actor, move):
+			continue  # cooldown / uses gate -- reuses MovesetController.can_use
+		var cand: Dictionary = _classify_support(move, actor, origin, hostiles, board)
+		if cand.is_empty() or not bool(cand.get("_triggered", false)):
+			continue
+		var value: int = int(cand.get("_value", 0))
+		if best.is_empty() or value > best_value \
+				or (value == best_value and _support_rank_less(cand, best)):
+			best = cand
+			best_value = value
+	return best
+
+
+## Classify [param move] and, if it applies right now, build its support decision
+## (carrying the internal "_triggered" / "_value" / "_category" keys plan() reads).
+## HEAL is checked first so a move that both heals and buffs is driven by its heal
+## target logic; a move fitting no category returns {}.
+func _classify_support(move: MoveResource, actor, origin: Vector2i, hostiles: Array, board) -> Dictionary:
+	if _move_is_heal(move):
+		return _heal_candidate(move, actor, origin, board)
+	if _move_is_self_buff(move):
+		return _self_buff_candidate(move, actor, origin, hostiles, board)
+	if _move_is_debuff(move):
+		return _debuff_candidate(move, actor, origin, hostiles, board)
+	return {}
+
+
+## SELF-BUFF (defensive) candidate -- e.g. Heartwood Guard. Triggered when a hostile
+## is within [constant THREAT_RANGE] of the actor (it can be struck this turn). The
+## cast aims at the actor's own cell. The damage-first gate in [method
+## _support_beats_attack] supplies the "and no strong attack available" half.
+func _self_buff_candidate(move: MoveResource, actor, origin: Vector2i, hostiles: Array, board) -> Dictionary:
+	var threatened: bool = _is_threatened(origin, hostiles, board)
+	return {
+		"action": ActionType.MOVE,
+		"move": move,
+		"target": actor,
+		"aim_cell": origin,
+		"dest_cell": origin,
+		"estimated_damage": 0,
+		"target_hp": _unit_hp(actor),
+		"step_to": origin,
+		"reason": "support_self_buff",
+		"_triggered": threatened,
+		"_value": SUPPORT_SELF_BUFF_VALUE,
+		"_category": 0,
+	}
+
+
+## HEAL candidate. Chooses the MOST-HURT valid target (self or ally) below
+## [constant HEAL_THRESHOLD] that the move can legally reach from the origin, and is
+## triggered only when such a target exists. Value scales with the HP it would restore
+## so a heal competes with the fixed buff/debuff scores by how badly it is needed.
+func _heal_candidate(move: MoveResource, actor, origin: Vector2i, board) -> Dictionary:
+	var best_target = null
+	var best_ratio: float = 2.0
+	var best_missing: int = 0
+	for u in _heal_targets(actor, board):
+		var tcell: Vector2i = board.cell_of(u)
+		if not move.can_target(origin, tcell, actor, board):
+			continue
+		var maxhp: int = _max_hp(u)
+		var cur: int = _unit_hp(u)
+		var ratio: float = float(cur) / float(maxhp)
+		if ratio >= HEAL_THRESHOLD:
+			continue
+		if best_target == null or ratio < best_ratio:
+			best_target = u
+			best_ratio = ratio
+			best_missing = maxi(1, maxhp - cur)
+	if best_target == null:
+		return {}
+	return {
+		"action": ActionType.MOVE,
+		"move": move,
+		"target": best_target,
+		"aim_cell": board.cell_of(best_target),
+		"dest_cell": origin,
+		"estimated_damage": 0,
+		"target_hp": _unit_hp(best_target),
+		"step_to": origin,
+		"reason": "support_heal",
+		"_triggered": true,
+		"_value": best_missing,
+		"_category": 1,
+	}
+
+
+## DEBUFF candidate -- an ENEMY-targeted status / stat-down with little or no damage.
+## Debuffs the highest-attack hostile the move can reach from the origin, so the turn
+## blunts the biggest threat when no strong attack is available.
+func _debuff_candidate(move: MoveResource, actor, origin: Vector2i, hostiles: Array, board) -> Dictionary:
+	var best_target = null
+	var best_threat: int = -1
+	for h in hostiles:
+		var hcell: Vector2i = board.cell_of(h)
+		if not move.can_target(origin, hcell, actor, board):
+			continue
+		var threat: int = _actor_stat(h, "attack")
+		if best_target == null or threat > best_threat:
+			best_target = h
+			best_threat = threat
+	if best_target == null:
+		return {}
+	return {
+		"action": ActionType.MOVE,
+		"move": move,
+		"target": best_target,
+		"aim_cell": board.cell_of(best_target),
+		"dest_cell": origin,
+		"estimated_damage": 0,
+		"target_hp": _unit_hp(best_target),
+		"step_to": origin,
+		"reason": "support_debuff",
+		"_triggered": true,
+		"_value": SUPPORT_DEBUFF_VALUE,
+		"_category": 2,
+	}
+
+
+## The DAMAGE-FIRST comparison: may [param support] be taken instead of attacking?
+## STRICT for buffs/debuffs -- they answer being UNABLE to retaliate: a SELF-BUFF or
+## DEBUFF may fire ONLY when no damaging attack is reachable this turn ([param ranked]
+## empty). If the actor can hit ANY enemy at all it attacks (so a full-HP unit standing
+## next to a foe strikes rather than guards; an anchored boss bough-sweeps the party on
+## it rather than shielding). HEAL is the single exception: a healer may save a badly
+## hurt target over a NON-lethal attack -- but never over a LETHAL one (never pass up a
+## kill). [param actor] is unused for buff/debuff but kept for signature symmetry.
+func _support_beats_attack(support: Dictionary, ranked: Array, actor) -> bool:
+	if not bool(support.get("_triggered", false)):
+		return false
+	if _has_lethal_attack(ranked):
+		return false  # a kill is always taken, over any support
+	if int(support.get("_category", 0)) == 1:  # HEAL
+		return true  # already gated above from ever beating a lethal attack
+	# SELF-BUFF / DEBUFF: only when there is nothing to hit this turn.
+	return ranked.is_empty()
+
+
+## True if any ranked attack outright kills its target this turn (the same kill test
+## HARD / BRUTAL use: estimate >= target HP).
+func _has_lethal_attack(ranked: Array) -> bool:
+	for c in ranked:
+		if int(c.get("estimated_damage", 0)) >= int(c.get("target_hp", 1 << 30)):
+			return true
+	return false
+
+
+## A hostile is within [constant THREAT_RANGE] of [param origin] -- close enough that
+## the actor is worth shielding this turn.
+func _is_threatened(origin: Vector2i, hostiles: Array, board) -> bool:
+	for h in hostiles:
+		if _manhattan(origin, board.cell_of(h)) <= THREAT_RANGE:
+			return true
+	return false
+
+
+## The actor plus every ally on the board -- the pool a heal may target.
+func _heal_targets(actor, board) -> Array:
+	var out: Array = [actor]
+	for u in _all_units(board):
+		if u != actor and board.has_method("are_allies") and board.are_allies(actor, u):
+			out.append(u)
+	return out
+
+
+## Deterministic tie-break between two equally-valued support candidates: lower
+## category first (heal-adjacent ordering is fixed), then lower move instance id.
+func _support_rank_less(a: Dictionary, b: Dictionary) -> bool:
+	var ca: int = int(a.get("_category", 9))
+	var cb: int = int(b.get("_category", 9))
+	if ca != cb:
+		return ca < cb
+	return a["move"].get_instance_id() < b["move"].get_instance_id()
+
+
+## A unit's max health, floored at 1 so a ratio never divides by zero.
+func _max_hp(unit) -> int:
+	return maxi(1, _actor_stat(unit, "health"))
+
+
+# --- Support-move classification (by effects + targeting, never by id) ------
+
+## HEAL: any move carrying a [HealEffect] (targeting self or an ally in practice).
+func _move_is_heal(move: MoveResource) -> bool:
+	for e in move.effects:
+		if e is HealEffect:
+			return true
+	return false
+
+
+## SELF-BUFF / defensive: no damage, and it applies a status or positive stat modifier
+## to the CASTER -- either a SELF-targeted move (Heartwood Guard) or an effect flagged
+## [member ApplyStatusEffect.to_caster] on an otherwise enemy/ally move.
+func _move_is_self_buff(move: MoveResource) -> bool:
+	if move.targeting == null:
+		return false
+	var self_targeted: bool = int(move.targeting.target_kind) == CombatTypes.TargetKind.SELF
+	# Untyped local so the subclass fields (to_caster / amount) are reachable -- the
+	# elements are typed Array[MoveEffect], mirroring test_eldroot's classification.
+	for e in move.effects:
+		var fx = e
+		if fx is ApplyStatusEffect and (self_targeted or fx.to_caster):
+			return true
+		if fx is StatModifierEffect and self_targeted and fx.amount >= 0:
+			return true
+	return false
+
+
+## DEBUFF: an ENEMY-targeted move that applies a status or a negative stat modifier to
+## its target (with no direct damage -- damaging moves are handled by the attack branch).
+func _move_is_debuff(move: MoveResource) -> bool:
+	if move.targeting == null:
+		return false
+	if int(move.targeting.target_kind) != CombatTypes.TargetKind.ENEMY:
+		return false
+	# Untyped local, as in _move_is_self_buff, so to_caster / amount are reachable.
+	for e in move.effects:
+		var fx = e
+		if fx is ApplyStatusEffect and not fx.to_caster:
+			return true
+		if fx is StatModifierEffect and fx.amount < 0:
+			return true
+	return false
+
+
+## Cooldown / charge readiness, duck-typed off the actor's MovesetController -- the
+## SAME check the execute path ([MovesetController.can_use]) and [BossController]'s
+## hazard-lane heuristic use. An actor that predates the moveset system (a bare mock)
+## reports ready; support classification then rests on the move's own effect data.
+func _move_is_ready(actor, move) -> bool:
+	if actor != null and actor.has_method("get_moveset_controller"):
+		var mc = actor.get_moveset_controller()
+		if mc != null and mc.has_method("can_use"):
+			return bool(mc.can_use(move))
+	return true
 
 
 # --- Movement --------------------------------------------------------------
