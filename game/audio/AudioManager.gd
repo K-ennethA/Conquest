@@ -27,9 +27,19 @@ extends Node
 ## Audio bus name for the music player.
 @export var music_bus: StringName = &"Master"
 
+## The cursor-move blip fires on every tile the cursor crosses, so it plays MUCH
+## quieter than a deliberate action sound (negative dB = quieter). Tune to taste;
+## 0.0 would match full SFX volume (too loud/disruptive for a constant tick).
+@export_range(-40.0, 0.0, 0.5) var cursor_move_volume_offset_db: float = -14.0
+## Minimum seconds between cursor-move blips, so sliding the cursor fast doesn't
+## machine-gun the sound across every voice. 0 disables throttling.
+@export_range(0.0, 0.5, 0.01) var cursor_move_min_interval: float = 0.05
+
 var _sfx_players: Array[AudioStreamPlayer] = []
 var _next_voice: int = 0
 var _music_player: AudioStreamPlayer
+## Timestamp (ms) of the last cursor-move blip, for throttling.
+var _last_cursor_sfx_ms: int = 0
 
 func _ready() -> void:
 	name = "AudioManager"
@@ -60,13 +70,13 @@ func _build_players() -> void:
 ## Play the SFX mapped to [param event_name] (e.g. &"sfx_attack").
 ## No-op when the library slot is empty or the event is unknown -- safe to call
 ## for events that have no sound assigned yet.
-func play_sfx(event_name: StringName) -> void:
+func play_sfx(event_name: StringName, volume_offset_db: float = 0.0) -> void:
 	if library == null:
 		return
 	var stream := library.get_stream(event_name)
 	if stream == null:
 		return
-	_play_stream_on_free_voice(stream)
+	_play_stream_on_free_voice(stream, volume_offset_db)
 
 ## Play an explicit AudioStream through the SFX pool (bypasses the library map).
 func play_stream(stream: AudioStream) -> void:
@@ -96,7 +106,7 @@ func stop_music() -> void:
 
 # --- Internal --------------------------------------------------------------
 
-func _play_stream_on_free_voice(stream: AudioStream) -> void:
+func _play_stream_on_free_voice(stream: AudioStream, volume_offset_db: float = 0.0) -> void:
 	if _sfx_players.is_empty():
 		return
 	# Prefer an idle player; otherwise round-robin (recycle the oldest).
@@ -110,7 +120,8 @@ func _play_stream_on_free_voice(stream: AudioStream) -> void:
 		_next_voice = (_next_voice + 1) % _sfx_players.size()
 
 	player.stream = stream
-	player.volume_db = library.sfx_volume_db if library != null else 0.0
+	var base_db: float = library.sfx_volume_db if library != null else 0.0
+	player.volume_db = base_db + volume_offset_db
 	var variance := library.sfx_pitch_variance if library != null else 0.0
 	player.pitch_scale = 1.0 + randf_range(-variance, variance) if variance > 0.0 else 1.0
 	player.play()
@@ -152,7 +163,14 @@ func _on_turn_started(_who = null) -> void:
 	play_sfx(&"sfx_turn_start")
 
 func _on_cursor_moved(_position = null) -> void:
-	play_sfx(&"sfx_ui_click")
+	# The cursor tick fires constantly as it crosses tiles, so it plays quietly and
+	# is rate-limited -- otherwise it dominates the mix and machine-guns the voices.
+	if cursor_move_min_interval > 0.0:
+		var now_ms: int = Time.get_ticks_msec()
+		if now_ms - _last_cursor_sfx_ms < int(cursor_move_min_interval * 1000.0):
+			return
+		_last_cursor_sfx_ms = now_ms
+	play_sfx(&"sfx_ui_click", cursor_move_volume_offset_db)
 
 func _on_cursor_selected(_position = null) -> void:
 	play_sfx(&"sfx_ui_click")
