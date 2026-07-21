@@ -2356,8 +2356,13 @@ func _apply_cell_swatch(button: Button, color: Color) -> void:
 		box.border_color = Color(0.0, 0.0, 0.0, 0.35)
 		button.add_theme_stylebox_override(state, box)
 
-func _on_map_info_changed(new_text: String = ""):
-	"""Handle map information changes"""
+func _on_map_info_changed(_arg = null):
+	"""Handle map information changes.
+
+	Connected to BOTH text_changed (passes a String) and OptionButton.item_selected
+	(passes an int) on difficulty/type/status. The argument is ignored -- every value
+	is re-read from the controls below -- so it is left untyped to accept either
+	signal without an int->String conversion error."""
 	if not current_map:
 		return
 	
