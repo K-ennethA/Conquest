@@ -203,6 +203,11 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# wipe -- same engine, different WinCondition list (see _evaluate_game_end).
 	_game_mode_rules = WinConditionLibrary.build_rules(map_resource.victory_conditions)
 
+	# Light the battle: a sun + sky ambient so the 3D map reads with depth and
+	# shadow instead of flat ambient. The scene shipped with a WorldEnvironment but
+	# NO key light, which is why everything looked washed out.
+	_setup_lighting(map_resource)
+
 	# Update GameSettings with map info if available
 	if GameSettings.has_method("set_current_map"):
 		GameSettings.set_current_map(map_resource)
@@ -263,6 +268,51 @@ func _setup_unit_hover_panel() -> void:
 	ui_layer.add_child(_unit_hover_panel)
 
 # --- End-of-battle screen ----------------------------------------------------
+
+func _setup_lighting(map_resource: MapResource) -> void:
+	"""Give the battle scene a proper key light + sky ambient so tiles and units read
+	with form and shadow. Older GameWorld scenes carry a WorldEnvironment (sky +
+	tonemap) but no DirectionalLight3D, so the map is lit by weak ambient alone and
+	looks flat. This creates the sun once (reused across map loads) and tunes it +
+	the ambient from the map's lighting_preset -- the field existed but nothing read
+	it. Best-effort: no scene / no environment simply skips."""
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
+
+	var sun := scene_root.get_node_or_null("Sun") as DirectionalLight3D
+	if sun == null:
+		sun = DirectionalLight3D.new()
+		sun.name = "Sun"
+		scene_root.add_child(sun)
+	# Angled from above-front so faces catch light and cast readable shadows.
+	sun.rotation_degrees = Vector3(-52.0, -38.0, 0.0)
+	sun.shadow_enabled = true
+
+	var sun_color := Color(1.0, 0.96, 0.88)
+	var sun_energy := 1.25
+	var ambient_energy := 0.35
+	match str(map_resource.lighting_preset):
+		"Night":
+			sun_color = Color(0.62, 0.70, 0.95)
+			sun_energy = 0.55
+			ambient_energy = 0.20
+		"Dawn", "Dusk":
+			sun_color = Color(1.0, 0.78, 0.62)
+			sun_energy = 1.0
+			ambient_energy = 0.30
+		_:
+			pass  # Day / Default: the warm values above
+	sun.light_color = sun_color
+	sun.light_energy = sun_energy
+
+	# Sky-sourced ambient so shadowed sides aren't crushed to black.
+	var we := scene_root.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if we != null and we.environment != null:
+		var env: Environment = we.environment
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+		env.ambient_light_energy = ambient_energy
+
 
 func _setup_game_over_screen() -> void:
 	"""Instantiate GameOverScreen and add it to the "UI" CanvasLayer (mirrors
