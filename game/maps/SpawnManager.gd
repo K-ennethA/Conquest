@@ -24,10 +24,12 @@ class_name SpawnManager
 # games without any manual teardown (autoloads persist; this node deliberately does
 # not).
 #
-# TURN SOURCE: it counts fires of PlayerManager.player_turn_started -- the exact
-# per-turn signal the tile-effect runtime already rides
-# (GameWorldManager._on_player_turn_started_tile_effects). We keep our OWN counter
-# (one increment per fire) rather than reading PlayerManager.turn_number, which
+# TURN SOURCE: it counts fires of PlayerManager.player_turn_ended -- spawning at the
+# END of a turn (not the start) so the owner's units have already vacated their spawn
+# cells, and an Endless wave lands on a cleared home cell once per its OWNER's turn
+# instead of deferring on the occupied cell. A unit that spawns this way is marked
+# already-acted, so it holds its post the turn it appears and only moves next turn.
+# We keep our OWN counter (one increment per fire) rather than reading turn_number, which
 # counts full rounds, not individual turns -- the scheduler wants a monotonic
 # per-turn clock and counting fires is the deterministic, testable choice.
 #
@@ -74,8 +76,9 @@ func setup(map_loader, map_resource) -> void:
 	GameWorldManager once the board has been rebuilt for the new map."""
 	initialize(map_loader, map_resource)
 	_resolve_seed_units()
-	if PlayerManager != null and not PlayerManager.player_turn_started.is_connected(_on_player_turn_started):
-		PlayerManager.player_turn_started.connect(_on_player_turn_started)
+	# Spawn at END of turn (see _on_player_turn_ended) so waves land on a cleared cell.
+	if PlayerManager != null and not PlayerManager.player_turn_ended.is_connected(_on_player_turn_ended):
+		PlayerManager.player_turn_ended.connect(_on_player_turn_ended)
 
 
 func initialize(map_loader, map_resource) -> void:
@@ -173,26 +176,42 @@ func _find_unit_at(board, cell: Vector2i, player_id: int):
 
 # --- Per-turn scheduling ----------------------------------------------------
 
-func _on_player_turn_started(_player) -> void:
-	process_turn()
+func _on_player_turn_ended(player) -> void:
+	# Fire at the END of a turn, not the start: by now the owner's units have moved
+	# off their spawn cells (endless seeds are force-aggressive and charge away), so
+	# the home cell is clear and the wave actually lands instead of deferring on an
+	# occupied cell. Endless is gated to the OWNER whose turn just ended, so it spawns
+	# exactly once per that player's turn.
+	var pid: int = -1
+	if player != null and "player_id" in player:
+		pid = int(player.player_id)
+	process_turn(pid)
 
 
-func process_turn() -> void:
+func process_turn(ending_player_id: int = -1) -> void:
 	"""Advance the turn clock by one and evaluate every scheduled point. Public so
-	tests can drive it directly without a live turn system."""
+	tests can drive it directly without a live turn system.
+
+	[param ending_player_id] is the id of the player whose turn just ended (the live
+	caller passes it); Endless points are only evaluated for their owner so an endless
+	wave fires once per owner turn, not on every player's turn. The default of -1
+	(tests / no owner context) evaluates every point, preserving the old behaviour."""
 	_current_turn += 1
 	for key in _points.keys():
-		_evaluate_point(_points[key])
+		_evaluate_point(_points[key], ending_player_id)
 
 
-func _evaluate_point(state: Dictionary) -> void:
+func _evaluate_point(state: Dictionary, ending_player_id: int = -1) -> void:
 	match String(state["kind"]):
 		MapResource.SPAWN_KIND_REINFORCEMENT:
 			_evaluate_reinforcement(state)
 		MapResource.SPAWN_KIND_RESPAWN:
 			_evaluate_respawn(state)
 		MapResource.SPAWN_KIND_ENDLESS:
-			_evaluate_endless(state)
+			# Only the owner's own turn-end drives their endless wave. -1 = no owner
+			# context (tests) -> evaluate regardless.
+			if ending_player_id < 0 or int(state["player_id"]) == ending_player_id:
+				_evaluate_endless(state)
 
 
 func _evaluate_reinforcement(state: Dictionary) -> void:
@@ -282,6 +301,12 @@ func _try_spawn(state: Dictionary) -> bool:
 	if new_unit == null:
 		print("[SpawnManager] spawn_unit_now returned null for point at %s; will retry." % str(home))
 		return false
+
+	# A unit that spawns mid/end-turn does NOT get to act on the turn it appeared --
+	# it stands its post this turn and can move next turn. Mark it acted (duck-typed so
+	# the test doubles, which have no turn state, are unaffected).
+	if new_unit != null and new_unit.has_method("mark_action_completed"):
+		new_unit.mark_action_completed("spawn")
 
 	state["produced"] = int(state["produced"]) + 1
 	state["last_spawn_turn"] = _current_turn
@@ -408,5 +433,5 @@ func _point_key(pos: Vector2i, player_id: int) -> Vector3i:
 func _exit_tree() -> void:
 	# Freeing the node already auto-disconnects it from the autoload, but disconnect
 	# explicitly so intent is clear and a reused instance can't double-subscribe.
-	if PlayerManager != null and PlayerManager.player_turn_started.is_connected(_on_player_turn_started):
-		PlayerManager.player_turn_started.disconnect(_on_player_turn_started)
+	if PlayerManager != null and PlayerManager.player_turn_ended.is_connected(_on_player_turn_ended):
+		PlayerManager.player_turn_ended.disconnect(_on_player_turn_ended)

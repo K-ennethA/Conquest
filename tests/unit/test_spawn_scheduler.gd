@@ -18,9 +18,15 @@ extends GutTest
 class FakeUnit extends RefCounted:
 	signal unit_died(unit)
 	var alive: bool = true
+	# Records whether the scheduler marked this unit as already-acted on spawn (so a
+	# freshly-spawned unit can't move the turn it appeared).
+	var acted: bool = false
 
 	func is_alive() -> bool:
 		return alive
+
+	func mark_action_completed(_action_type) -> void:
+		acted = true
 
 	func kill() -> void:
 		alive = false
@@ -343,3 +349,31 @@ func test_forgotten_forest_endless_actually_spawns() -> void:
 	_tick(40)
 	assert_gt(_loader.spawn_calls, 0,
 		"the map's Endless waves must keep producing units at runtime (got %d)" % _loader.spawn_calls)
+
+
+# --- Every-turn endless: owner-gated end-of-turn spawn, newborn can't act -----
+
+func test_endless_fires_only_on_its_owners_turn_end() -> void:
+	# Endless owned by player 1 must spawn when player 1's turn ends, NOT when
+	# player 0's does -- so a wave lands once per the owner's own turn.
+	var map := _map_with(MapResource.SPAWN_KIND_ENDLESS, Vector2i(2, 2), 1, {
+		"respawn_interval": 1,
+	})
+	_manager.initialize(_loader, map)
+
+	_manager.process_turn(0)  # player 0's turn ended -> not the endless owner
+	assert_eq(_loader.spawn_calls, 0, "endless must not fire on a non-owner's turn end")
+	_manager.process_turn(1)  # player 1's turn ended -> owner
+	assert_eq(_loader.spawn_calls, 1, "endless fires once on its owner's turn end")
+	_manager.process_turn(1)  # next owner turn end -> another (interval 1 = every turn)
+	assert_eq(_loader.spawn_calls, 2, "endless keeps producing one per owner turn")
+
+func test_runtime_spawned_unit_is_marked_acted_so_it_cannot_move_this_turn() -> void:
+	var map := _map_with(MapResource.SPAWN_KIND_ENDLESS, Vector2i(2, 2), 1, {
+		"respawn_interval": 1,
+	})
+	_manager.initialize(_loader, map)
+	_manager.process_turn(1)
+	assert_eq(_loader.produced.size(), 1, "one unit was produced")
+	assert_true((_loader.produced[0] as FakeUnit).acted,
+		"a unit that spawns mid-turn is marked acted, so it can't move until next turn")
