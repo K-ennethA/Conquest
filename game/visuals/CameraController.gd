@@ -2,58 +2,47 @@ extends Camera3D
 
 ## RTS / Fire-Emblem style camera controller for the tactical board.
 ##
-## Attached directly to the single [Camera3D] in GameWorld.tscn. It NEVER changes
-## the camera's tilt (basis) or projection type -- it only translates the camera
-## across the ground (XZ) plane (pan) and adjusts [member Camera3D.size] (zoom, the
-## camera is ORTHOGONAL). The camera therefore keeps its authored look/angle at all
-## times; only where it looks and how much it shows changes.
+## Attached to the single PERSPECTIVE [Camera3D] in GameWorld.tscn. It NEVER changes
+## the camera's tilt (basis) or field of view -- it only translates the camera
+## across the ground (XZ) plane (pan) and DOLLIES it along its view axis (zoom, by
+## changing the distance from the camera to the ground point it looks at). The
+## camera therefore keeps its authored ~50-degree angle at all times; only where it
+## looks and how close it is change.
 ##
 ## Controls:
-##   * PAN   -- WASD and arrow keys (smooth, polled in [method _process]),
-##              middle-mouse drag (grab-drag), and optional screen-edge scroll.
-##   * ZOOM  -- mouse wheel (zooms toward the cursor), clamped to a sane range.
-##   * FIT   -- on [signal CombatServices.board_ready] (fires when a map finishes
-##              loading) the camera auto-centers on the board and zooms so the
-##              whole board is visible.
+##   * PAN   -- WASD/arrows (smooth, in [method _process]), middle-mouse grab-drag,
+##              and optional screen-edge scroll.
+##   * ZOOM  -- mouse wheel (dollies toward the cursor), clamped to a distance range.
+##   * FIT   -- on [signal CombatServices.board_ready] the camera centers on the
+##              board and pulls back to a distance that frames it.
 ##
-## Input hygiene: mouse handling lives in [method _unhandled_input] so any UI that
-## consumes the event wins first, and it additionally consults the HUD's
-## [code]is_mouse_over_ui()[/code] so wheel/drag never fire over a panel. Keyboard
-## pan is suppressed while a text field has focus. The controller only reads input;
-## it never calls [code]set_input_as_handled()[/code], so the existing cursor
-## (board/cursor/cursor.gd) and unit selection keep working unchanged.
+## Input hygiene: mouse handling is in [method _unhandled_input] so UI wins first,
+## and consults the HUD's is_mouse_over_ui(). Keyboard pan is suppressed while a text
+## field has focus. It only reads input and never marks it handled, so the cursor and
+## unit selection keep working.
 
 # --- Tunables ---------------------------------------------------------------
 
-## Ground units / second for keyboard pan (scaled by current zoom so it feels
-## consistent whether zoomed in or out).
+## Ground units / second for keyboard pan (scaled by zoom so it feels consistent).
 @export var keyboard_pan_speed: float = 18.0
-
-## World units the view shifts per pixel of middle-mouse drag is derived from the
-## zoom; this multiplier lets it be tuned. 1.0 = 1:1 grab feel at screen center.
+## Grab-drag multiplier. 1.0 = 1:1 ground-follows-cursor at the view center.
 @export var drag_speed: float = 1.0
+## Mouse-wheel zoom: fraction of the current distance added/removed per notch.
+@export var zoom_step: float = 0.1
 
-## Mouse-wheel zoom: fraction of the current size added/removed per notch.
-@export var zoom_step: float = 0.12
+## Zoom is the camera's DISTANCE to its ground focus (perspective dolly). Smaller =
+## closer. The upper bound may be raised at fit time so a large map still frames.
+@export var dist_min: float = 10.0
+@export var dist_max: float = 90.0
 
-## Zoom clamp for the orthographic [member Camera3D.size]. The upper bound may be
-## raised at fit time for very large maps so the whole board stays visible.
-@export var zoom_min: float = 6.0
-@export var zoom_max: float = 40.0
+## Extra headroom around the board when fitting (1.0 = exact). A bit generous so the
+## whole board frames without the edges hugging the screen.
+@export var fit_margin: float = 1.12
 
-## Extra headroom around the board when fitting (1.0 = exact, 1.15 = 15% margin).
-## Kept small so the steeper, more top-down camera fills the frame (less sky). The
-## vertical fit need is computed from the un-foreshortened board depth (see
-## fit_to_map), which is already a conservative over-estimate, so a slim margin
-## still guarantees the whole board stays visible.
-@export var fit_margin: float = 1.08
-
-## How far (world units) past the board edge the view may be panned before it is
-## clamped back, so the player can nudge the edge into view but not fly into the void.
+## How far past the board edge the focus may pan before being clamped back.
 @export var pan_edge_margin: float = 6.0
 
-## Screen-edge scroll (RTS style). Off by default: it can feel intrusive and moves
-## the camera whenever the pointer nears a window edge. Flip on to enable.
+## Screen-edge scroll (RTS style). Off by default.
 @export var edge_scroll_enabled: bool = false
 @export var edge_scroll_margin_px: float = 24.0
 @export var edge_scroll_speed: float = 16.0
@@ -61,44 +50,40 @@ extends Camera3D
 # --- Internal state ---------------------------------------------------------
 
 ## Ground-plane (XZ) basis derived once from the authored camera angle: the screen
-## "right" and screen "forward/up" directions flattened onto the board. Panning is
-## expressed in these so movement always tracks the visible axes without rotating.
+## "right" and "forward" directions flattened onto the board, so pan tracks the
+## visible axes without rotating.
 var _ground_right: Vector3 = Vector3.RIGHT
 var _ground_forward: Vector3 = Vector3.FORWARD
 
-## Board bounds on the XZ plane (world units) and their center, set by the fit.
+## Board bounds on the XZ plane and their center, set by the fit.
 var _board_min: Vector2 = Vector2.ZERO
 var _board_max: Vector2 = Vector2.ZERO
 var _board_center: Vector3 = Vector3.ZERO
 var _has_bounds: bool = false
 
-## Effective upper zoom clamp (>= zoom_max; grows to fit oversized maps).
-var _zoom_max_runtime: float = 40.0
+## Effective upper distance clamp (>= dist_max; grows to frame oversized maps).
+var _dist_max_runtime: float = 90.0
 
-## Reference size captured at fit, used to scale keyboard/edge pan by zoom.
-var _base_size: float = 20.0
+## Reference distance captured at fit, used to scale pan speed by zoom.
+var _base_distance: float = 30.0
 
 ## Middle-mouse drag state.
 var _dragging: bool = false
 
 
 func _ready() -> void:
-	_zoom_max_runtime = zoom_max
-	_base_size = size
+	_dist_max_runtime = dist_max
 	_capture_ground_basis()
+	_base_distance = maxf(_current_distance(), 1.0)
 
-	# Fit whenever a map finishes loading and the live board is (re)built.
 	if CombatServices and not CombatServices.board_ready.is_connected(_on_board_ready):
 		CombatServices.board_ready.connect(_on_board_ready)
-
-	# If a board already exists (e.g. this node initialized after the first load),
-	# fit once on the next frame so tiles are settled in the tree.
 	if CombatServices and CombatServices.board() != null:
 		call_deferred("fit_to_map")
 
 
 ## Flatten the authored camera axes onto the ground plane. Called once; the basis
-## never changes afterward because pan only translates the camera.
+## never changes because pan only translates and zoom only dollies along -Z.
 func _capture_ground_basis() -> void:
 	var b := global_transform.basis
 	var right := Vector3(b.x.x, 0.0, b.x.z)
@@ -110,15 +95,28 @@ func _capture_ground_basis() -> void:
 		_ground_forward = fwd_flat.normalized()
 
 
+# --- Distance (perspective zoom) --------------------------------------------
+
+## Distance from the camera to the ground point its center ray hits.
+func _current_distance() -> float:
+	return global_position.distance_to(_camera_focus_ground())
+
+## Dolly the camera to [param d] units from its current ground focus, along the view
+## axis, so the focus stays put and only closeness changes. Clamped.
+func _set_distance(d: float) -> void:
+	var focus := _camera_focus_ground()
+	var fwd := (-global_transform.basis.z).normalized()
+	var clamped := clampf(d, dist_min, _dist_max_runtime)
+	global_position = focus - fwd * clamped
+
+
 # --- Fit to map -------------------------------------------------------------
 
 func _on_board_ready() -> void:
-	# Defer one frame: board_ready can fire in the same frame the tiles are added.
 	call_deferred("fit_to_map")
 
 
-## Center on the board and choose a zoom that shows the whole thing. Only the
-## camera's XZ position and orthographic size change; the tilt is preserved.
+## Center on the board and pull back to a distance that frames the whole thing.
 func fit_to_map() -> void:
 	if not _compute_board_bounds():
 		return
@@ -131,32 +129,25 @@ func fit_to_map() -> void:
 	if vp.y > 0.0:
 		aspect = vp.x / vp.y
 
-	# Orthographic size (KEEP_HEIGHT) = vertical world span. The tilted board maps
-	# its X extent to ~screen-horizontal and its Z (depth) to ~screen-vertical.
-	# The board's depth foreshortens by the camera tilt -- at a shallower angle it
-	# takes LESS screen-vertical space -- so scale the vertical need by the tilt
-	# factor (|forward.y| = sin(pitch)) so the board fills the frame at any angle
-	# instead of leaving a big sky margin. Clamped so a near-horizontal angle can't
-	# over-zoom into the board.
-	var tilt: float = clampf(absf((-global_transform.basis.z).y), 0.5, 1.0)
+	# The board's depth foreshortens by the camera tilt (|forward.y| = sin(pitch)),
+	# so it needs less screen-vertical at a shallower angle. Convert the larger of the
+	# (foreshortened depth) / (width scaled to aspect) into the vertical WORLD span the
+	# frame must cover, then solve the perspective distance for that span at this fov.
+	var tilt: float = clampf(absf((-global_transform.basis.z).y), 0.4, 1.0)
 	var need_vertical: float = world_d * tilt
 	var need_horizontal: float = world_w / maxf(aspect, 0.001)
-	var target: float = maxf(need_vertical, need_horizontal) * fit_margin
+	var span: float = maxf(need_vertical, need_horizontal) * fit_margin
+	var half_fov: float = deg_to_rad(fov) * 0.5
+	var dist: float = (span * 0.5) / maxf(tan(half_fov), 0.01)
 
-	# Allow the fit to exceed the normal wheel ceiling for large maps so the whole
-	# board is always visible; the raised ceiling then applies to wheel zoom too.
-	_zoom_max_runtime = maxf(zoom_max, target)
-	size = clampf(target, zoom_min, _zoom_max_runtime)
-	_base_size = size
-
-	# Recenter so the camera's center ray meets the ground at the board center.
+	_dist_max_runtime = maxf(dist_max, dist)
 	_move_focus_to(Vector3(_board_center.x, 0.0, _board_center.z))
+	_set_distance(clampf(dist, dist_min, _dist_max_runtime))
+	_base_distance = maxf(_current_distance(), 1.0)
 
 
-## Derive the board's XZ bounds from the live tiles under "Map/Tiles". Each tile is
-## a 2x2 world-unit cell whose origin sits at (col*2, 0, row*2); we take the AABB of
-## the tile origins and expand by one unit on each side to include the cell footprint.
-## Falls back to the Grid resource if no tiles are present.
+## Derive the board's XZ bounds from the live tiles under "Map/Tiles" (each tile a
+## 2x2 cell at (col*2, 0, row*2)); expand by the cell footprint. Falls back to Grid.
 func _compute_board_bounds() -> bool:
 	var tiles := _find_tiles_container()
 	var min_x := INF
@@ -176,8 +167,6 @@ func _compute_board_bounds() -> bool:
 				count += 1
 
 	if count > 0:
-		# Tile origins are the cell's near corner; each cell spans 2 units, so the
-		# far edge is +2 and the whole board runs from the first origin to last+2.
 		_board_min = Vector2(min_x, min_z)
 		_board_max = Vector2(max_x + 2.0, max_z + 2.0)
 		_board_center = Vector3((_board_min.x + _board_max.x) * 0.5, 0.0,
@@ -185,8 +174,6 @@ func _compute_board_bounds() -> bool:
 		_has_bounds = true
 		return true
 
-	# Fallback: use the shared Grid (col=X, row=Z; cell 2x2). May be stale but keeps
-	# the fit sane if the tiles could not be read.
 	if CombatServices and CombatServices.GRID:
 		var g = CombatServices.GRID
 		var w: float = g.size.x * g.cell_size.x
@@ -227,13 +214,11 @@ func _process(delta: float) -> void:
 
 	if dir != Vector3.ZERO:
 		# Scale by zoom so a keypress covers a consistent fraction of the view.
-		var zoom_scale: float = size / maxf(_base_size, 0.001)
+		var zoom_scale: float = _current_distance() / maxf(_base_distance, 0.001)
 		global_position += dir.normalized() * keyboard_pan_speed * zoom_scale * delta
 		_clamp_to_board()
 
 
-## Screen-edge scroll direction (zero unless the pointer is near a window edge, the
-## window is focused, and the pointer is not over the HUD).
 func _edge_scroll_dir() -> Vector3:
 	if not get_window().has_focus():
 		return Vector3.ZERO
@@ -259,7 +244,6 @@ func _edge_scroll_dir() -> Vector3:
 
 
 # --- Mouse: wheel zoom + middle-drag pan ------------------------------------
-# In _unhandled_input so UI that consumes the event takes priority.
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -283,20 +267,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		var vp_h: float = get_viewport().get_visible_rect().size.y
 		if vp_h <= 0.0:
 			return
-		# World units per screen pixel at the view center (orthographic, KEEP_HEIGHT).
-		var wpp: float = (size / vp_h) * drag_speed
-		# Grab-drag: the ground follows the cursor, so the camera moves opposite to
-		# the mouse in world space. (Signs are easily flipped if the feel is inverted.)
+		# World units per screen pixel at the focus depth (perspective): the visible
+		# vertical world span at distance d is 2*d*tan(fov/2).
+		var d: float = _current_distance()
+		var wpp: float = (2.0 * d * tan(deg_to_rad(fov) * 0.5) / vp_h) * drag_speed
 		var move := _ground_right * (-mm.relative.x) + _ground_forward * (mm.relative.y)
 		global_position += move * wpp
 		_clamp_to_board()
 
 
-## Zoom by [param factor] (<1 zooms in, >1 out) while keeping the ground point under
-## [param screen_pos] fixed on screen (cursor-anchored zoom).
+## Dolly by [param factor] (<1 closer, >1 farther) while keeping the ground point
+## under [param screen_pos] fixed on screen (cursor-anchored zoom).
 func _zoom_at(screen_pos: Vector2, factor: float) -> void:
-	var before = _ground_point_at(screen_pos)  # Vector3 or null (untyped)
-	size = clampf(size * factor, zoom_min, _zoom_max_runtime)
+	var before = _ground_point_at(screen_pos)  # Vector3 or null
+	_set_distance(_current_distance() * factor)
 	var after = _ground_point_at(screen_pos)
 	if before != null and after != null:
 		var delta: Vector3 = before - after
@@ -306,7 +290,7 @@ func _zoom_at(screen_pos: Vector2, factor: float) -> void:
 
 # --- Ground-plane helpers ---------------------------------------------------
 
-## World point where the ray through [param screen_pos] meets the y=0 plane, or null.
+## World point where the ray through [param screen_pos] meets y=0, or null.
 func _ground_point_at(screen_pos: Vector2):
 	var origin := project_ray_origin(screen_pos)
 	var normal := project_ray_normal(screen_pos)
@@ -318,7 +302,7 @@ func _ground_point_at(screen_pos: Vector2):
 	return origin + normal * t
 
 
-## World point where the camera's CENTER ray meets the y=0 plane (the focus point).
+## World point where the camera's CENTER ray meets y=0 (the focus point).
 func _camera_focus_ground() -> Vector3:
 	var o := global_position
 	var d := -global_transform.basis.z
@@ -328,7 +312,7 @@ func _camera_focus_ground() -> Vector3:
 	return o + d * t
 
 
-## Translate the camera so its focus lands on [param target] (XZ only; y unchanged).
+## Translate the camera so its focus lands on [param target] (XZ only).
 func _move_focus_to(target: Vector3) -> void:
 	var focus := _camera_focus_ground()
 	global_position += Vector3(target.x - focus.x, 0.0, target.z - focus.z)
@@ -350,7 +334,6 @@ func _clamp_to_board() -> void:
 
 # --- Input hygiene ----------------------------------------------------------
 
-## True when the pointer is over the HUD, consulting the layout manager's helper.
 func _is_mouse_over_ui(pos: Vector2) -> bool:
 	var scene := get_tree().current_scene
 	if scene == null:
@@ -361,7 +344,6 @@ func _is_mouse_over_ui(pos: Vector2) -> bool:
 	return false
 
 
-## True when a text-entry control has focus, so keyboard pan doesn't eat typing.
 func _text_field_has_focus() -> bool:
 	var vp := get_viewport()
 	if vp == null:

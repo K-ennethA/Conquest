@@ -31,9 +31,9 @@ func test_every_tile_is_populated_and_resolves() -> void:
 		assert_not_null(TileCatalog.find_by_id(StringName(tid)),
 			"tile_id '%s' must resolve via TileCatalog" % tid)
 	# The forest terrain the encounter needs is present (upgraded from the old
-	# type-only tiles): a healing sacred grove, evasion cover, and plain ground.
+	# type-only tiles): a healing sacred grove, the author's trees, and plain ground.
 	assert_gt(int(composition.get("sacred_meadow", 0)), 0, "has a sacred grove")
-	assert_gt(int(composition.get("tall_grass", 0)), 0, "has tall-grass cover")
+	assert_gt(int(composition.get("tree", 0)), 0, "has the author's trees")
 	assert_gt(int(composition.get("grass_plains", 0)), 0, "has plain ground")
 
 

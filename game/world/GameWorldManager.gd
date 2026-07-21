@@ -290,8 +290,8 @@ func _setup_lighting(map_resource: MapResource) -> void:
 	sun.shadow_enabled = true
 
 	var sun_color := Color(1.0, 0.96, 0.88)
-	var sun_energy := 1.25
-	var ambient_energy := 0.35
+	var sun_energy := 1.7
+	var ambient_energy := 0.6
 	match str(map_resource.lighting_preset):
 		"Night":
 			sun_color = Color(0.62, 0.70, 0.95)
