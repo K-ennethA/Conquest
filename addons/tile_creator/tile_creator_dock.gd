@@ -426,14 +426,15 @@ func _setup_preview_scene():
 	"""Set up the 3D preview scene"""
 	# Add camera
 	var camera = Camera3D.new()
-	camera.position = Vector3(2, 3, 2)
-	camera.look_at(Vector3(0, 0, 0), Vector3.UP)
+	# look_at() needs the node already in the tree; look_at_from_position orients it
+	# from an explicit position, so it is safe to call BEFORE add_child (avoids the
+	# "Node not inside tree" editor error).
+	camera.look_at_from_position(Vector3(2, 3, 2), Vector3(0, 0, 0), Vector3.UP)
 	preview_viewport.add_child(camera)
-	
+
 	# Add lighting
 	var light = DirectionalLight3D.new()
-	light.position = Vector3(2, 3, 2)
-	light.look_at(Vector3(0, 0, 0), Vector3.UP)
+	light.look_at_from_position(Vector3(2, 3, 2), Vector3(0, 0, 0), Vector3.UP)
 	light.light_energy = 1.0
 	preview_viewport.add_child(light)
 	

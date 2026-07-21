@@ -19,6 +19,9 @@ var dialog_mode: DialogMode
 var item_list: ItemList
 var name_input: LineEdit
 var description_label: Label
+## The map path the user has single-clicked (highlighted). The OK/"Load" button
+## loads THIS, so a single click + Load works -- not only a double-click.
+var _selected_map_path: String = ""
 
 func _init(mode: DialogMode):
 	dialog_mode = mode
@@ -63,9 +66,23 @@ func _setup_load_map_dialog():
 	description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	description_label.custom_minimum_size = Vector2(350, 50)
 	vbox.add_child(description_label)
-	
+
+	# The OK button loads the highlighted map (single click to select, then Load), so
+	# users don't have to discover that only a double-click works. A Cancel button
+	# lets them back out without loading.
+	get_ok_button().text = "Load"
+	add_cancel_button("Cancel")
+	if not confirmed.is_connected(_on_load_confirmed):
+		confirmed.connect(_on_load_confirmed)
+
 	# Load available maps
 	_load_available_maps()
+
+
+func _on_load_confirmed() -> void:
+	"""OK/"Load" pressed: load the highlighted map, if any."""
+	if not _selected_map_path.is_empty():
+		map_selected.emit(_selected_map_path)
 
 func _setup_save_map_dialog():
 	"""Set up dialog for saving maps"""
@@ -182,6 +199,7 @@ func _on_item_selected(index: int):
 	
 	var map_path = item_list.get_item_metadata(index)
 	if map_path:
+		_selected_map_path = str(map_path)
 		var map_resource = load(map_path) as MapResource
 		if map_resource:
 			# Read EXPORTED PROPERTIES, never call methods: in the editor a resource
