@@ -34,6 +34,15 @@ extends Node
 ## Squash-punch scale applied on hit (1.0 = no punch). Adds tactile feedback.
 @export_range(1.0, 1.6, 0.01) var hit_punch_scale: float = 1.12
 
+# --- Move shake -----------------------------------------------------------
+@export_group("Move Shake")
+## Default caster feedback for ANY move (attack, buff, heal, status) on a model
+## with no authored "attack" clip: a quick side-to-side jitter of the mesh, so no
+## move is ever silent. A model that ships an attack clip plays that instead.
+@export_range(0.0, 0.6, 0.01) var move_shake_distance: float = 0.14
+## Total seconds of the shake.
+@export_range(0.0, 1.0, 0.01) var move_shake_time: float = 0.26
+
 # --- Death ----------------------------------------------------------------
 @export_group("Death")
 ## Seconds to shrink a unit's mesh on elimination. Best-effort: if the emitter
@@ -81,6 +90,7 @@ func _ready() -> void:
 	_safe_connect(bus, &"unit_moved", _on_unit_moved)
 	_safe_connect(bus, &"damage_dealt", _on_damage_dealt)
 	_safe_connect(bus, &"unit_eliminated", _on_unit_eliminated)
+	_safe_connect(bus, &"move_performed", _on_move_performed)
 
 func _safe_connect(obj: Object, signal_name: StringName, callable: Callable) -> void:
 	if obj != null and obj.has_signal(signal_name) and not obj.is_connected(signal_name, callable):
@@ -130,11 +140,41 @@ func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 
 # --- Hit flash ------------------------------------------------------------
 
-func _on_damage_dealt(attacker = null, defender = null, _damage = null) -> void:
-	# The attacker swings, the defender reacts. Both are best-effort.
-	play_clip(attacker, CLIP_ATTACK)
+func _on_damage_dealt(_attacker = null, defender = null, _damage = null) -> void:
+	# Only the DEFENDER's reaction lives here now. The attacker's own cast animation
+	# is driven by move_performed instead -- that fires for every move (including
+	# non-damaging buffs/heals), so putting the caster animation there gives uniform
+	# feedback and avoids animating the attacker twice on a damaging move.
 	play_clip(defender, CLIP_HIT)
 	_flash(defender)
+
+# --- Move cast (every move) ------------------------------------------------
+
+func _on_move_performed(caster = null, _move = null) -> void:
+	# A model with an authored attack clip uses it; every other unit still gets
+	# feedback via a procedural shake, so a buff/heal/status cast is never silent.
+	if play_clip(caster, CLIP_ATTACK):
+		return
+	_shake(caster)
+
+## Quick side-to-side jitter of the unit's mesh -- the universal "I did something"
+## tell. Uses the mesh child offset (like the glide), so the unit's real position,
+## health bars, and targeting are untouched.
+func _shake(unit) -> void:
+	if not (unit is Node3D) or not is_instance_valid(unit):
+		return
+	var mesh := _get_mesh(unit)
+	if mesh == null or move_shake_time <= 0.0 or move_shake_distance <= 0.0:
+		return
+	var base: Vector3 = mesh.position
+	var d: float = move_shake_distance
+	var seg: float = move_shake_time / 4.0
+	var tw := mesh.create_tween()
+	tw.set_trans(Tween.TRANS_SINE)
+	tw.tween_property(mesh, "position", base + Vector3(d, 0.0, 0.0), seg)
+	tw.tween_property(mesh, "position", base + Vector3(-d, 0.0, 0.0), seg)
+	tw.tween_property(mesh, "position", base + Vector3(d * 0.5, 0.0, 0.0), seg)
+	tw.tween_property(mesh, "position", base, seg)
 
 func _flash(unit) -> void:
 	if not (unit is Node3D) or not is_instance_valid(unit):

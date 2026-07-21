@@ -92,26 +92,31 @@ func _load_available_maps() -> void:
 	if map_list:
 		map_list.clear()
 	
-	# Get available map files
-	available_maps = MapLoader.get_available_maps()
-	
+	# Get available map files. Drafts (Inactive) ARE included here: this is the
+	# local / single-player picker, and you must be able to play-test a map you just
+	# built. Network setup keeps its own draft-free list (see NetworkMultiplayerSetup).
+	available_maps = MapLoader.get_available_maps(true)
+
 	# If no maps exist, create a default one
 	if available_maps.is_empty():
 		print("No maps found, creating default map")
 		_create_default_map()
-		available_maps = MapLoader.get_available_maps()
-	
+		available_maps = MapLoader.get_available_maps(true)
+
 	# Load map resources and populate list
 	for map_path in available_maps:
 		var map_resource = load(map_path) as MapResource
 		if map_resource:
 			map_resources.append(map_resource)
-			
+
 			if map_list:
 				var display_name = map_resource.map_name
 				if display_name.is_empty():
 					display_name = map_path.get_file().get_basename()
-				
+				# Mark drafts so a work-in-progress map is obvious in the list.
+				if not map_resource.is_active():
+					display_name += "  (draft)"
+
 				map_list.add_item(display_name)
 		else:
 			print("Failed to load map: " + map_path)

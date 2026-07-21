@@ -145,7 +145,7 @@ func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
 	# (one per move+target, standing on the cheapest leashed cell that can hit it).
 	# A defensive turret still strikes anything reachable from a leashed stand cell.
 	# Difficulty decides which we take -- identical selection logic to decide()'s.
-	var ranked := _ranked_attacks_from_cells(actor, origin, stand_cells, moveset, hostiles, board)
+	var ranked := _ranked_attacks_from_cells(actor, origin, stand_cells, moveset, hostiles, board, home)
 	var choice := _choose_attack(ranked)
 	if not choice.is_empty():
 		return choice
@@ -272,16 +272,15 @@ func _ranked_attacks(actor, origin: Vector2i, moveset: Array, hostiles: Array, b
 		if move == null or move.targeting == null or not _move_has_damage(move):
 			continue
 		for target in hostiles:
-			var tcell: Vector2i = board.cell_of(target)
-			# Pass the actor so the AI plans against its own EFFECTIVE reach
-			# (Ingrained and the like), not the authored pattern alone, and the
-			# board so a move whose aim constraints the AI cannot satisfy by aiming
-			# AT the target (a leap wants an empty cell BESIDE it) is skipped during
-			# planning instead of being chosen and then rejected by the executor,
-			# wasting the turn. A move that declares no board constraints resolves
-			# here exactly as it did before.
-			if not move.can_target(origin, tcell, actor, board):
+			# The AIM cell for this move against the target. An ordinary move aims at
+			# the target's OWN cell (historical); a POSITIONAL move (a leap) aims at
+			# an empty LANDING cell beside it instead -- see _resolve_aim. The actor
+			# casts from its current cell here (decide() takes no movement), and this
+			# path has no leash model, so home == origin.
+			var aim_res := _resolve_aim(move, actor, origin, target, board, origin)
+			if not bool(aim_res["found"]):
 				continue
+			var aim_cell: Vector2i = aim_res["aim"]
 			var estimate := _estimate_damage(move, actor, target)
 			if estimate <= 0:
 				continue
@@ -290,7 +289,7 @@ func _ranked_attacks(actor, origin: Vector2i, moveset: Array, hostiles: Array, b
 				"action": ActionType.MOVE,
 				"move": move,
 				"target": target,
-				"aim_cell": tcell,
+				"aim_cell": aim_cell,
 				"estimated_damage": estimate,
 				"target_hp": thp,
 				"reduction": mini(estimate, maxi(0, thp)),
@@ -318,26 +317,43 @@ func _attack_is_better(a: Dictionary, b: Dictionary) -> bool:
 ## cell coord) and records it as "dest_cell". Collapsing to one entry per move+target
 ## keeps the ranked list -- and therefore [method _choose_attack] / HARD / BRUTAL --
 ## behaving exactly as they do for the origin-only [method _ranked_attacks].
-func _ranked_attacks_from_cells(actor, origin: Vector2i, stand_cells: Array, moveset: Array, hostiles: Array, board) -> Array:
+func _ranked_attacks_from_cells(actor, origin: Vector2i, stand_cells: Array, moveset: Array, hostiles: Array, board, home: Vector2i) -> Array:
 	var best_by_key := {}  # "move_id:target_id" -> best candidate for that pairing
 	for move in moveset:
 		if move == null or move.targeting == null or not _move_has_damage(move):
 			continue
+		var positional: bool = _is_positional_move(move)
 		for target in hostiles:
 			var tcell: Vector2i = board.cell_of(target)
-			# Cheapest stand cell (least movement) that can legally hit this target.
+			# Cheapest stand cell (least movement) that can legally hit this target,
+			# plus the AIM cell to use from there.
 			var dest_cell := origin
 			var dest_cost := 1 << 30
+			var aim_cell := tcell
 			var found := false
-			for c in stand_cells:
-				# Board-aware, exactly as in _ranked_attacks above.
-				if not move.can_target(c, tcell, actor, board):
-					continue
-				var cost := _manhattan(origin, c)
-				if not found or cost < dest_cost or (cost == dest_cost and _cell_less(c, dest_cell)):
-					dest_cost = cost
-					dest_cell = c
+			if positional:
+				# A leap is cast from the actor's CURRENT cell (it does not walk
+				# first), so the stand cell is fixed at the origin and the aim is a
+				# valid empty LANDING cell beside the target, chosen by _resolve_aim
+				# and already leash-checked against home. dest_cell == origin makes the
+				# executor relocate NOTHING before the leap (no double-move): the
+				# LeapEffect itself moves the caster onto the aimed landing cell.
+				var aim_res := _resolve_aim(move, actor, origin, target, board, home)
+				if bool(aim_res["found"]):
+					dest_cell = origin
+					dest_cost = 0
+					aim_cell = aim_res["aim"]
 					found = true
+			else:
+				for c in stand_cells:
+					# Board-aware, exactly as in _ranked_attacks above.
+					if not move.can_target(c, tcell, actor, board):
+						continue
+					var cost := _manhattan(origin, c)
+					if not found or cost < dest_cost or (cost == dest_cost and _cell_less(c, dest_cell)):
+						dest_cost = cost
+						dest_cell = c
+						found = true
 			if not found:
 				continue
 			var estimate := _estimate_damage(move, actor, target)
@@ -349,7 +365,7 @@ func _ranked_attacks_from_cells(actor, origin: Vector2i, stand_cells: Array, mov
 				"action": ActionType.MOVE,
 				"move": move,
 				"target": target,
-				"aim_cell": tcell,
+				"aim_cell": aim_cell,
 				"dest_cell": dest_cell,
 				"estimated_damage": estimate,
 				"target_hp": thp,
@@ -442,6 +458,65 @@ func _move_has_damage(move: MoveResource) -> bool:
 		if effect is DamageEffect:
 			return true
 	return false
+
+
+# --- Aim resolution (ordinary target-cell vs positional landing-cell) -------
+
+## True when [param move] is a POSITIONAL move -- one whose targeting requires an
+## empty LANDING cell (a leap / dash), so its aim is a free tile the caster relocates
+## to, NOT the target's own occupied cell. Detected purely by the targeting data
+## (never by move id), so any move authored with requires_empty_cell is handled.
+func _is_positional_move(move: MoveResource) -> bool:
+	return move.targeting != null and move.targeting.requires_empty_cell
+
+
+## The AIM cell [param move] should use against [param target] when cast from
+## [param cast_cell], plus whether any legal aim exists: { "found": bool, "aim": Vector2i }.
+##
+## ORDINARY move -> aims at the target's OWN cell, gated by [method MoveResource.can_target]
+## exactly as before (byte-for-byte: same call, same aim). A pattern with no board
+## constraints resolves here identically to the historical behaviour.
+##
+## POSITIONAL move (a leap) -> aims at an empty LANDING cell beside the target. The
+## candidates are the four cells orthogonally adjacent to the target; each is validated
+## through the SAME [method MoveResource.can_target] (range from cast_cell + the
+## pattern's requires_empty_cell / requires_adjacent_enemy board constraints), so the
+## AI reuses TargetingPattern's own legality rules rather than reimplementing them. A
+## leashed actor additionally rejects any landing beyond its leash of [param home].
+## Among the legal landings the best is the closest to the caster (fewest leap steps),
+## tie-broken by deterministic cell order.
+func _resolve_aim(move: MoveResource, actor, cast_cell: Vector2i, target, board, home: Vector2i) -> Dictionary:
+	var tcell: Vector2i = board.cell_of(target)
+	if not _is_positional_move(move):
+		if move.can_target(cast_cell, tcell, actor, board):
+			return { "found": true, "aim": tcell }
+		return { "found": false, "aim": tcell }
+	var best := Vector2i.ZERO
+	var best_cost := 1 << 30
+	var found := false
+	for step in TargetingPattern.ORTHOGONAL_STEPS:
+		var landing: Vector2i = tcell + step
+		if not move.can_target(cast_cell, landing, actor, board):
+			continue
+		if not _within_leash(actor, home, landing):
+			continue
+		var cost := _manhattan(cast_cell, landing)
+		if not found or cost < best_cost or (cost == best_cost and _cell_less(landing, best)):
+			best = landing
+			best_cost = cost
+			found = true
+	return { "found": found, "aim": best }
+
+
+## True when [param cell] is a legal stopping point for [param actor] under its leash:
+## untethered actors accept every cell (so the untethered leap path is unconstrained),
+## a leashed actor only a cell within its leash radius of [param home]. Mirrors
+## [method _leash_filter]'s rule for a single cell so a leap's landing obeys the same
+## tether as an ordinary advance.
+func _within_leash(actor, home: Vector2i, cell: Vector2i) -> bool:
+	if not _has_leash(actor):
+		return true
+	return _manhattan(cell, home) <= _leash_radius(actor)
 
 
 # --- Stance + leash (movement-aware planning only) -------------------------

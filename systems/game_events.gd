@@ -71,6 +71,11 @@ signal hazard_expired(hazard)
 signal unit_controlled(unit, source)
 signal unit_acted_under_control(unit, victim)
 
+## Fired once whenever a unit successfully performs a move (any move -- attack,
+## buff, heal, status), so the visual layer can give EVERY move feedback, not just
+## damaging ones. Carries the caster and the MoveResource. See UnitAnimator.
+signal move_performed(caster, move)
+
 func _ready() -> void:
 	# Make this a singleton
 	name = "GameEvents"

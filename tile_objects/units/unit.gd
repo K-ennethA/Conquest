@@ -702,7 +702,13 @@ func perform_move(slot: int, aim_cell: Vector2i, board_adapter) -> Dictionary:
 			"events": [],
 			"cells": [],
 		}
-	return MoveExecutor.execute(move, self, board_adapter, aim_cell)
+	var result: Dictionary = MoveExecutor.execute(move, self, board_adapter, aim_cell)
+	# Announce a successful cast so the visual layer animates EVERY move, not only
+	# the ones that deal damage (damage_dealt covers those). Best-effort + guarded so
+	# tests and headless runs without the autoload simply don't animate.
+	if bool(result.get("success", false)) and typeof(GameEvents) == TYPE_OBJECT and GameEvents != null:
+		GameEvents.move_performed.emit(self, move)
+	return result
 
 # Movement methods
 func get_movement_range() -> int:
