@@ -151,8 +151,10 @@ func _build_decor() -> ArrayMesh:
 	_tri(v, n, c, corners_bot[0], corners_bot[1], corners_bot[2], Vector3.DOWN, DIRT_DARK)
 	_tri(v, n, c, corners_bot[0], corners_bot[2], corners_bot[3], Vector3.DOWN, DIRT_DARK)
 
-	# Rocks on the dirt sides.
+	# Rocks on the dirt sides. DIRT reads as a stony path, so give it one extra.
 	var rock_count: int = 3
+	if style == Style.DIRT:
+		rock_count = 4
 	for r in range(rock_count):
 		var side: int = int(_rand() * 4.0) % 4
 		var along: float = _rand_range(-0.6, 0.6)
@@ -165,10 +167,20 @@ func _build_decor() -> ArrayMesh:
 			_: pos = Vector3(-d, yy, along)
 		_add_rock(v, n, c, pos, _rand_range(0.12, 0.2))
 
-	# Grass tufts poking up above the cap.
+	# Grass tufts poking up above the cap. Per-style density so each tile reads right:
+	#   TALL_GRASS -> dense & tall,  MEADOW -> slightly denser,
+	#   TREE       -> a few (tree prop owns the centre),
+	#   DIRT       -> 0-2 sparse blades (it's a dirt patch, not grassy).
 	var tuft_count: int = 5
-	if style == Style.TALL_GRASS:
-		tuft_count = 9
+	match style:
+		Style.TALL_GRASS:
+			tuft_count = 9
+		Style.MEADOW:
+			tuft_count = 7
+		Style.TREE:
+			tuft_count = 4
+		Style.DIRT:
+			tuft_count = int(_rand() * 3.0)
 	for t in range(tuft_count):
 		var bx := _rand_range(-0.7, 0.7)
 		var bz := _rand_range(-0.7, 0.7)
