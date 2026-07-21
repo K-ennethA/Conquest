@@ -1,22 +1,15 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
 [ext_resource type="Resource" path="res://game/tiles/resources/forest/grass_plains.tres" id="2_res"]
 [ext_resource type="Material" uid="uid://c0grasstile001" path="res://tile_objects/tiles/materials/stylized_grass_material.tres" id="3_grass"]
-[ext_resource type="Material" uid="uid://c0foliage00001" path="res://tile_objects/tiles/materials/stylized_foliage_material.tres" id="4_foliage"]
+[ext_resource type="Script" path="res://tile_objects/tiles/lowpoly/LowPolyTileBuilder.gd" id="4_lp"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_base"]
 size = Vector3(2, 0.2, 2)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_base"]
 size = Vector3(2, 0.2, 2)
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_tuft"]
-top_radius = 0.02
-bottom_radius = 0.07
-height = 0.2
-radial_segments = 4
-rings = 1
 
 [node name="GrassTile" type="Node3D"]
 script = ExtResource("1_tile")
@@ -31,30 +24,6 @@ material_override = ExtResource("3_grass")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
 shape = SubResource("BoxShape3D_base")
 
-[node name="GrassVisual" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
-
-[node name="Tuft1" type="MeshInstance3D" parent="GrassVisual"]
-transform = Transform3D(0.866, 0, -0.5, 0, 1, 0, 0.5, 0, 0.866, -0.5, 0.1, -0.4)
-mesh = SubResource("CylinderMesh_tuft")
-material_override = ExtResource("4_foliage")
-
-[node name="Tuft2" type="MeshInstance3D" parent="GrassVisual"]
-transform = Transform3D(0.7071, 0, 0.7071, 0, 0.85, 0, -0.7071, 0, 0.7071, 0.45, 0.085, -0.5)
-mesh = SubResource("CylinderMesh_tuft")
-material_override = ExtResource("4_foliage")
-
-[node name="Tuft3" type="MeshInstance3D" parent="GrassVisual"]
-transform = Transform3D(0.4226, 0, -0.9063, 0, 1, 0, 0.9063, 0, 0.4226, 0.6, 0.1, 0.45)
-mesh = SubResource("CylinderMesh_tuft")
-material_override = ExtResource("4_foliage")
-
-[node name="Tuft4" type="MeshInstance3D" parent="GrassVisual"]
-transform = Transform3D(0.9397, 0, 0.342, 0, 0.9, 0, -0.342, 0, 0.9397, -0.55, 0.09, 0.55)
-mesh = SubResource("CylinderMesh_tuft")
-material_override = ExtResource("4_foliage")
-
-[node name="Tuft5" type="MeshInstance3D" parent="GrassVisual"]
-transform = Transform3D(0.1736, 0, -0.9848, 0, 0.95, 0, 0.9848, 0, 0.1736, 0.05, 0.095, 0.1)
-mesh = SubResource("CylinderMesh_tuft")
-material_override = ExtResource("4_foliage")
+[node name="LowPoly" type="Node3D" parent="."]
+script = ExtResource("4_lp")
+style = 0
