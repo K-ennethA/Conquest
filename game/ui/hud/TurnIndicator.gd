@@ -170,14 +170,26 @@ func _update_fallback_display(active_player: Player) -> void:
 	player_name_label.text = active_player.get_display_name() + "'s Turn"
 	turn_info_label.text = "Turn in progress"
 
+func _chip_box() -> StyleBoxFlat:
+	"""A slimmed-down amber chip derived from ConquestTheme.panel_box(): same palette
+	and frame, but tight margins / smaller radius / no drop shadow so the persistent
+	indicator reads as a compact strip instead of a big card jutting from the top."""
+	var sb := ConquestTheme.panel_box()
+	sb.set_corner_radius_all(8)
+	sb.set_content_margin_all(6)
+	sb.content_margin_left = 12
+	sb.content_margin_right = 12
+	sb.shadow_size = 0
+	return sb
+
+
 func _update_background_color(player: Player) -> void:
-	"""Keep the standard amber ConquestTheme frame so the banner matches every other
-	HUD panel (a bright player-coloured border clashed with the amber FE theme).
-	Convey whose turn it is more subtly, by tinting just the player-name label text
-	with that player's colour."""
+	"""Keep the amber ConquestTheme frame (compact chip variant) so the banner matches
+	every other HUD panel. Convey whose turn it is subtly, by tinting just the
+	player-name label text with that player's colour."""
 	if background_panel:
-		# Default amber card look -- no player-coloured border.
-		background_panel.add_theme_stylebox_override("panel", ConquestTheme.panel_box())
+		# Compact amber chip -- no player-coloured border.
+		background_panel.add_theme_stylebox_override("panel", _chip_box())
 
 	# Subtle player cue: tint the name text with the player's colour (lightened a
 	# touch so it stays legible on the amber ground). Clear it when no player.
@@ -190,47 +202,14 @@ func _update_background_color(player: Player) -> void:
 		else:
 			player_name_label.remove_theme_color_override("font_color")
 
-func show_turn_transition(from_player: Player, to_player: Player) -> void:
-	"""Show turn transition animation"""
-	if not transition_label:
-		return
-	
-	is_transitioning = true
-	
-	# Show transition message
-	if from_player and to_player:
-		transition_label.text = from_player.get_display_name() + " → " + to_player.get_display_name()
-	elif to_player:
-		transition_label.text = "Starting " + to_player.get_display_name() + "'s Turn"
-	else:
-		transition_label.text = "Turn Transition"
-	
-	transition_label.visible = true
-	
-	# Animate the transition
-	var tween = create_tween()
-	tween.set_parallel(true)
-	
-	# Fade in transition
-	transition_label.modulate.a = 0.0
-	tween.tween_property(transition_label, "modulate:a", 1.0, 0.3)
-	
-	# Scale effect
-	transition_label.scale = Vector2(0.8, 0.8)
-	tween.tween_property(transition_label, "scale", Vector2(1.0, 1.0), 0.3)
-	
-	# Wait and fade out
-	await tween.finished
-	await get_tree().create_timer(1.5).timeout
-	
-	var fade_tween = create_tween()
-	fade_tween.tween_property(transition_label, "modulate:a", 0.0, 0.5)
-	await fade_tween.finished
-	
-	transition_label.visible = false
+func show_turn_transition(_from_player: Player, _to_player: Player) -> void:
+	"""Deprecated: the cinematic turn announcement now lives in the full-screen
+	TurnTransition overlay (game/ui/hud/TurnTransition.gd). Kept as a lightweight
+	refresh so any external caller still updates the compact chip without replaying
+	the old in-place scale/fade effect."""
 	is_transitioning = false
-	
-	# Update display for new player
+	if transition_label:
+		transition_label.visible = false
 	_update_display()
 
 # Event handlers
@@ -274,12 +253,9 @@ func _on_turn_started(player: Player) -> void:
 		return
 	print("TurnIndicator: Turn started for " + player.get_display_name())
 
-	if current_player != player:
-		print("TurnIndicator: Showing transition from " + (current_player.get_display_name() if current_player else "None") + " to " + player.get_display_name())
-		show_turn_transition(current_player, player)
-	else:
-		print("TurnIndicator: Same player, just updating display")
-		_update_display()
+	# The cinematic turn announcement is now owned by the full-screen TurnTransition
+	# overlay; this persistent chip just refreshes quietly so the two don't compete.
+	_update_display()
 
 func _on_turn_ended(player: Player) -> void:
 	"""Handle turn end"""

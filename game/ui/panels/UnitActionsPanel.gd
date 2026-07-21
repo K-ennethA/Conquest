@@ -985,20 +985,18 @@ func _try_resize_to_content() -> void:
 	
 	# Add margin container padding
 	if margin_container:
-		var margin_left = margin_container.get_theme_constant("margin_left")
-		var margin_right = margin_container.get_theme_constant("margin_right") 
 		var margin_top = margin_container.get_theme_constant("margin_top")
 		var margin_bottom = margin_container.get_theme_constant("margin_bottom")
-		
-		var needed_size = Vector2(
-			content_min_size.x + margin_left + margin_right,
-			content_min_size.y + margin_top + margin_bottom
-		)
-		
-		# Try to set the size
-		custom_minimum_size = needed_size
-		size = needed_size
-		
+
+		# HEIGHT ONLY: this panel lives in the RightSidebar VBoxContainer with
+		# size_flags_horizontal = EXPAND_FILL, so the sidebar (min width 220) drives
+		# its WIDTH. Forcing custom_minimum_size.x from content -- which a long unit
+		# name could inflate -- used to widen the whole sidebar and shove it over the
+		# game area. We now only grow the height to fit the content and let the
+		# container own the width; clip_text on the header labels keeps names in bounds.
+		var needed_height: float = content_min_size.y + float(margin_top) + float(margin_bottom)
+		custom_minimum_size.y = needed_height
+
 		# Force layout update
 		await get_tree().process_frame
 
@@ -1938,10 +1936,11 @@ func handle_move_target_selected(grid_pos: Vector3) -> void:
 	# Vector3(col, 0, row) grid coord -> Vector2i(col, row) board cell.
 	var aim := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
 
-	# Must be a legal aim point for this pattern (respects min/max range, plus the
-	# unit's own range bonus -- see MoveResource.effective_max_range).
-	if not move.can_aim_at(origin, aim, selected_unit):
-		print("Aim cell " + str(aim) + " out of range for " + move.display_name + " - keep targeting")
+	# Must be a legal aim point for this pattern (respects min/max range plus the
+	# unit's own range bonus -- see MoveResource.effective_max_range -- and the
+	# pattern's board constraints, e.g. a leap's empty landing cell).
+	if not move.can_target(origin, aim, selected_unit, board):
+		print("Aim cell " + str(aim) + " is not a legal target for " + move.display_name + " - keep targeting")
 		return  # stay in targeting mode
 
 	# Preview the full area footprint this aim would affect.
@@ -2103,12 +2102,17 @@ func _first_enemy_at(board, cell: Vector2i):
 
 func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector2i]:
 	"""Every legal aim cell for [param move] from the unit's current board cell,
-	i.e. cells whose Manhattan distance is within [min_range, effective max range].
+	i.e. cells whose Manhattan distance is within [min_range, effective max range]
+	AND that satisfy the pattern's board constraints (an empty landing cell beside
+	an enemy for a leap, ...).
 
 	The sweep bound and the per-cell test both come from the unit's EFFECTIVE reach
-	(MoveResource.effective_max_range / can_aim_at), so the highlighted cells are
+	(MoveResource.effective_max_range / can_target), so the highlighted cells are
 	exactly the cells MoveExecutor will accept -- a range bonus can never light up
-	a cell the executor then rejects, or hide one it would allow."""
+	a cell the executor then rejects, or hide one it would allow. can_target rather
+	than can_aim_at for the same reason: it is the check the executor runs, and the
+	live board is right here to answer it. A move with no board constraints is
+	unaffected -- the two agree cell for cell."""
 	var cells: Array[Vector2i] = []
 	if not selected_unit or move == null or move.targeting == null:
 		return cells
@@ -2122,7 +2126,7 @@ func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector2i]:
 	for dx in range(-max_r, max_r + 1):
 		for dy in range(-max_r, max_r + 1):
 			var aim := origin + Vector2i(dx, dy)
-			if move.can_aim_at(origin, aim, selected_unit):
+			if move.can_target(origin, aim, selected_unit, board):
 				cells.append(aim)
 	return cells
 
@@ -2138,6 +2142,11 @@ func _cells_to_grid_vec3(cells: Array[Vector2i]) -> Array:
 func _move_requires_unit_target(move: MoveResource) -> bool:
 	"""True when the move must be aimed at an occupied cell (unit-target kinds)."""
 	if move == null or move.targeting == null:
+		return false
+	# A pattern that demands an EMPTY landing cell (a leap/dash) is aimed at GROUND,
+	# not at a unit -- its TargetKind only picks out which units the effects then
+	# hit. Gating it on an occupant would make it impossible to aim.
+	if move.targeting.requires_empty_cell:
 		return false
 	match move.targeting.target_kind:
 		CombatTypes.TargetKind.ENEMY, CombatTypes.TargetKind.ALLY, CombatTypes.TargetKind.ANY_UNIT:

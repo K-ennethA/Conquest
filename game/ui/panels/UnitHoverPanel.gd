@@ -78,6 +78,13 @@ func _fit_to_viewport() -> void:
 	position = Vector2.ZERO
 	size = vp.get_visible_rect().size
 
+	# Cap the card to the viewport so it never clips off a narrow window. _card is
+	# built in _create_ui, which runs AFTER the first _fit_to_viewport call in
+	# _ready, so guard it here (and it stays valid on every later resize signal).
+	if _card != null and is_instance_valid(_card):
+		var w := minf(PANEL_WIDTH, size.x - MARGIN * 2.0)
+		_card.custom_minimum_size.x = maxf(0.0, w)
+
 
 func _create_ui() -> void:
 	# Pinned to the BOTTOM-RIGHT corner: grow_horizontal BEGIN / grow_vertical

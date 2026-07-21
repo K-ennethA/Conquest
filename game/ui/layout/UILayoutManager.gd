@@ -29,6 +29,11 @@ var is_layout_initialized: bool = false
 var settings_panel: SettingsPanel = null
 var settings_button: Button = null
 
+# Full-screen cinematic turn-transition wipe (fade-to-black + turn name). Mounted
+# on its own high CanvasLayer so it draws above every HUD panel. Starts hidden and
+# only blocks input while it is actually on screen.
+var turn_transition: TurnTransition = null
+
 func _ready() -> void:
 	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -50,7 +55,19 @@ func _ready() -> void:
 	# consistent ground (children have already run _ready, so this wins).
 	_apply_theme()
 
+	# Mount the turn-transition overlay AFTER theming: it is a CanvasLayer that
+	# self-styles with explicit ConquestTheme colours, so it must not be swept by
+	# _apply_theme's font-override stripping. It draws above everything on its own
+	# high layer and starts hidden.
+	_build_turn_transition()
+
 	is_layout_initialized = true
+
+func _build_turn_transition() -> void:
+	"""Create and mount the full-screen turn-transition wipe on its own CanvasLayer."""
+	turn_transition = TurnTransition.new()
+	turn_transition.name = "TurnTransition"
+	add_child(turn_transition)
 
 func _apply_theme() -> void:
 	"""Apply the amber ConquestTheme to this HUD subtree (panels, buttons, text)."""
@@ -170,12 +187,15 @@ func _show_traditional_layout() -> void:
 	
 	if turn_indicator:
 		turn_indicator.visible = true
-		turn_indicator.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		turn_indicator.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	
-	# Standard top bar height for Traditional display
+		# Compact chip: shrink-center so it sits as a small strip in the top bar
+		# instead of stretching into a big card across the whole center area.
+		turn_indicator.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		turn_indicator.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+	# Slim top bar height now that the turn is a compact chip (the cinematic
+	# announcement is handled by the full-screen TurnTransition overlay).
 	if top_bar:
-		top_bar.custom_minimum_size = Vector2(0, 120)  # Smaller for traditional indicator
+		top_bar.custom_minimum_size = Vector2(0, 56)
 
 func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
 	"""Handle turn system activation and update layout accordingly"""
@@ -219,6 +239,11 @@ func get_panel(panel_name: String) -> Control:
 
 func is_mouse_over_ui(mouse_position: Vector2) -> bool:
 	"""Check if mouse position is over any UI element"""
+	# The turn-transition wipe covers the whole screen while playing -- treat the
+	# entire viewport as "over UI" so a click during the fade doesn't reach the board.
+	if turn_transition and turn_transition.is_blocking_input():
+		return true
+
 	# The Settings overlay covers the whole screen while open, so any position is
 	# "over UI" -- keep board/camera input from leaking through underneath it.
 	if settings_panel and settings_panel.is_open():

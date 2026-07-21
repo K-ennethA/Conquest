@@ -39,7 +39,9 @@ UnitAnimator="*res://game/visuals/UnitAnimator.gd"
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/gut/plugin.cfg", "res://addons/unit_creator/plugin.cfg")
+enabled=PackedStringArray("res://addons/gut/plugin.cfg", "res://addons/map_creator/plugin.cfg", "res://addons/tile_creator/plugin.cfg", "res://addons/unit_creator/plugin.cfg")

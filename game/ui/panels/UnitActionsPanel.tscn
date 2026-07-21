@@ -223,12 +223,14 @@ theme_override_constants/separation = 2
 [node name="UnitNameLabel" type="Label" parent="MarginContainer/ContentContainer/UnitHeaderContainer/UnitInfoContainer"]
 layout_mode = 2
 text = "Unit Name"
+clip_text = true
 theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 
 [node name="UnitTypeLabel" type="Label" parent="MarginContainer/ContentContainer/UnitHeaderContainer/UnitInfoContainer"]
 layout_mode = 2
 text = "Unit Type"
+clip_text = true
 theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
 

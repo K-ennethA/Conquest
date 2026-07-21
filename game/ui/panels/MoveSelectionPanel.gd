@@ -10,6 +10,10 @@ signal move_cancelled
 
 const MAX_SLOTS := 4
 const CARD_WIDTH := 340.0
+## Never let the modal card exceed this fraction of the viewport width, so on a
+## narrow window it shrinks instead of clipping past the screen edges.
+const CARD_MAX_FRAC := 0.92
+const CARD_MIN_WIDTH := 200.0
 
 @onready var moves_container: VBoxContainer
 @onready var move_info_label: Label
@@ -17,6 +21,7 @@ const CARD_WIDTH := 340.0
 
 var current_unit: Node
 var move_buttons: Array[Button] = []
+var _card: PanelContainer
 
 func _ready() -> void:
 	name = "MoveSelectionPanel"
@@ -44,6 +49,13 @@ func _ready() -> void:
 	z_index = 100
 
 	_create_ui()
+
+	# Keep the card capped to the viewport as the window (and canvas_items scale)
+	# changes. get_viewport() can be null in a stripped harness -- guard it.
+	var vp := get_viewport()
+	if vp != null and not vp.size_changed.is_connected(_apply_responsive_width):
+		vp.size_changed.connect(_apply_responsive_width)
+
 	visible = false
 
 func _create_ui() -> void:
@@ -72,6 +84,7 @@ func _create_ui() -> void:
 	card.custom_minimum_size = Vector2(CARD_WIDTH, 0)
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	center.add_child(card)
+	_card = card
 
 	# Main container
 	var main_container = VBoxContainer.new()
@@ -98,7 +111,10 @@ func _create_ui() -> void:
 	move_info_label.name = "MoveInfoLabel"
 	move_info_label.text = "Hover over a move to see details"
 	move_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	move_info_label.custom_minimum_size = Vector2(300, 60)
+	# Width 0: let the label take the card's width (capped by _apply_responsive_width)
+	# and wrap, rather than forcing a 300px floor that could widen the card past a
+	# narrow viewport. Only the height floor is kept so the info area never collapses.
+	move_info_label.custom_minimum_size = Vector2(0, 60)
 	move_info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	main_container.add_child(move_info_label)
 
@@ -112,6 +128,19 @@ func _create_ui() -> void:
 	# background, dark-inks the labels, themes the buttons -- so the popup
 	# matches the rest of the HUD instead of the default grey Control theme.
 	ConquestTheme.apply_to(self)
+
+	_apply_responsive_width()
+
+## Cap the modal card to a fraction of the viewport width so it never clips off a
+## narrow window; falls back to the preferred CARD_WIDTH when there is no viewport.
+func _apply_responsive_width() -> void:
+	if _card == null or not is_instance_valid(_card):
+		return
+	var w := CARD_WIDTH
+	var vp := get_viewport()
+	if vp != null:
+		w = minf(CARD_WIDTH, vp.get_visible_rect().size.x * CARD_MAX_FRAC)
+	_card.custom_minimum_size.x = maxf(CARD_MIN_WIDTH, w)
 
 func show_moves_for_unit(unit: Node) -> void:
 	"""Display the unit's real moveset (up to 4 MoveResource slots)."""
@@ -183,7 +212,11 @@ func _create_move_button(move: MoveResource, slot: int, controller: MovesetContr
 	var range_text := move.targeting.describe_range() if move.targeting else "no range"
 	button.text = "%s (%s)%s" % [move.display_name, range_text, suffix]
 	button.disabled = controller != null and not can_use
-	button.custom_minimum_size = Vector2(250, 40)
+	# Height floor only; width 0 + EXPAND_FILL (set by the caller) lets the button
+	# fill the card, and clip_text ellipsizes a long move name instead of stretching
+	# the card past its responsive width.
+	button.custom_minimum_size = Vector2(0, 40)
+	button.clip_text = true
 
 	# Connect signals — slot is the index into the moveset (matches move_selected(slot)).
 	button.pressed.connect(func(): _on_move_selected(slot))

@@ -25,11 +25,19 @@ var current_unit: Unit = null
 ## which case every effects path below no-ops and the panel behaves as before.
 var _effects_header: Label = null
 var _effects_container: VBoxContainer = null
+## ScrollContainer wrapping _effects_container. When a unit has more statuses than
+## fit in EFFECTS_MAX_HEIGHT, the list scrolls instead of growing the card off the
+## bottom of the screen. Null in a stripped harness (same guard as the container).
+var _effects_scroll: ScrollContainer = null
 
 ## The panel's authored height in UnitInfoPanel.tscn. The effects list grows the
 ## content, so _fit_height() expands the panel past this but never shrinks it
 ## below -- a unit with no statuses keeps exactly the panel size it always had.
 const _BASE_HEIGHT := 280.0
+
+## Tallest the effects list may grow before it starts scrolling. Also clamped to a
+## fraction of the viewport height in _fit_height so it shrinks on short windows.
+const EFFECTS_MAX_HEIGHT := 150.0
 
 ## Turn a snake_case id ("torvald_ironhide") into a display string
 ## ("Torvald Ironhide"). Empty in -> empty out.
@@ -148,10 +156,20 @@ func _build_effects_section() -> void:
 	_effects_header.add_theme_font_size_override("font_size", 14)
 	vb.add_child(_effects_header)
 
+	# The chip list lives inside a ScrollContainer so a unit with many statuses
+	# scrolls rather than pushing the card past the bottom of the screen. Horizontal
+	# scrolling is disabled so chips wrap/ellipsize to the card width instead.
+	_effects_scroll = ScrollContainer.new()
+	_effects_scroll.name = "EffectsScroll"
+	_effects_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_effects_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_child(_effects_scroll)
+
 	_effects_container = VBoxContainer.new()
 	_effects_container.name = "EffectsContainer"
 	_effects_container.add_theme_constant_override("separation", 3)
-	vb.add_child(_effects_container)
+	_effects_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_effects_scroll.add_child(_effects_container)
 
 
 ## Repopulate the chip list for [param unit]. Always leaves exactly one of two
@@ -265,6 +283,18 @@ func _fit_height() -> void:
 	var vb := get_node_or_null("MarginContainer/VBoxContainer") as VBoxContainer
 	if vb == null:
 		return
+
+	# Cap the effects scroll: a short list sizes to its content (no scrollbar, no gap),
+	# a long one is bounded so it scrolls. The cap also shrinks on short windows.
+	if _effects_scroll != null and is_instance_valid(_effects_scroll) \
+			and _effects_container != null and is_instance_valid(_effects_container):
+		var content_h: float = _effects_container.get_combined_minimum_size().y
+		var cap := EFFECTS_MAX_HEIGHT
+		var vp := get_viewport()
+		if vp != null:
+			cap = minf(cap, vp.get_visible_rect().size.y * 0.35)
+		_effects_scroll.custom_minimum_size.y = minf(content_h, maxf(0.0, cap))
+
 	# +24 covers the MarginContainer's 12px top and bottom margins.
 	var wanted: float = vb.get_combined_minimum_size().y + 24.0
 	custom_minimum_size.y = maxf(_BASE_HEIGHT, wanted)
