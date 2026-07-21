@@ -34,6 +34,13 @@ signal combat_initiated(attacker: Unit, defender: Unit)
 signal damage_dealt(attacker: Unit, defender: Unit, damage: int)
 signal unit_eliminated(unit: Unit, eliminator: Unit)
 
+## Fired when a unit is materialised onto the board at runtime -- pre-placed units
+## at load, reinforcements, and endless/respawn waves all emit this once the node
+## is in the tree at its cell. Presentation systems (camera auto-focus) listen so
+## a fresh spawn can be framed for the player. `runtime` is false for the initial
+## load pass and true for later waves, so the camera can skip the opening flood.
+signal unit_spawned(unit, runtime: bool)
+
 # Player management events
 signal player_turn_started(player: Player)
 signal player_turn_ended(player: Player)

@@ -47,6 +47,14 @@ extends Camera3D
 @export var edge_scroll_margin_px: float = 24.0
 @export var edge_scroll_speed: float = 16.0
 
+## Auto-focus (see the AUTO_FOCUS section below): the comfortable close distance the
+## CINEMATIC mode dollies IN to when currently zoomed far out. Clamped to [dist_min,
+## runtime max], so it never punches through the near clamp on tiny boards.
+@export var cinematic_close_distance: float = 24.0
+## Skip an auto-focus request whose destination is already this near the current focus
+## (world units) -- no point gliding a hair, and it stops jitter during AI bursts.
+@export var auto_focus_min_move: float = 1.5
+
 # --- Internal state ---------------------------------------------------------
 
 ## Ground-plane (XZ) basis derived once from the authored camera angle: the screen
@@ -70,6 +78,18 @@ var _base_distance: float = 30.0
 ## Middle-mouse drag state.
 var _dragging: bool = false
 
+## Cached autoloads for auto-focus (either may be absent in headless/minimal scenes).
+var _game_settings: Node = null
+var _game_events: Node = null
+## The live focus glide, if any -- killed/replaced rather than stacked.
+var _focus_tween: Tween = null
+
+# AutoFocus mode ints, mirroring GameSettings.AutoFocus (kept local so we stay
+# null-safe when GameSettings is absent).
+const _AUTO_OFF: int = 0
+const _AUTO_QUICK: int = 1
+const _AUTO_CINEMATIC: int = 2
+
 
 func _ready() -> void:
 	_dist_max_runtime = dist_max
@@ -80,6 +100,8 @@ func _ready() -> void:
 		CombatServices.board_ready.connect(_on_board_ready)
 	if CombatServices and CombatServices.board() != null:
 		call_deferred("fit_to_map")
+
+	_setup_auto_focus()
 
 
 ## Flatten the authored camera axes onto the ground plane. Called once; the basis
@@ -350,3 +372,193 @@ func _text_field_has_focus() -> bool:
 		return false
 	var focused := vp.gui_get_focus_owner()
 	return focused is LineEdit or focused is TextEdit
+
+
+# --- Auto-focus on live combat events ---------------------------------------
+##
+## Glides the camera's ground focus to key battle events (spawns, enemy moves,
+## attacks) so the eye follows the action, GATED by GameSettings.camera_auto_focus:
+##   OFF       -- never auto-moves.
+##   QUICK     -- a fast pan-only glide (~0.25s), keeps the current zoom.
+##   CINEMATIC -- a slower framed glide (~0.6s) that also gently dollies IN toward
+##                cinematic_close_distance when currently zoomed far out.
+## Everything here only ever translates focus (and, in cinematic, dollies distance
+## within [dist_min, runtime max]); it never touches the authored basis or fov.
+## Both autoloads are optional: absent GameSettings behaves as OFF, so headless
+## tests and minimal scenes are never yanked around.
+
+func _setup_auto_focus() -> void:
+	_game_settings = get_node_or_null("/root/GameSettings")
+	_game_events = get_node_or_null("/root/GameEvents")
+
+	if _game_settings != null and _game_settings.has_signal("settings_changed"):
+		if not _game_settings.settings_changed.is_connected(_on_settings_changed):
+			_game_settings.settings_changed.connect(_on_settings_changed)
+
+	if _game_events == null:
+		return
+	if _game_events.has_signal("unit_spawned") and not _game_events.unit_spawned.is_connected(_on_event_unit_spawned):
+		_game_events.unit_spawned.connect(_on_event_unit_spawned)
+	if _game_events.has_signal("unit_moved") and not _game_events.unit_moved.is_connected(_on_event_unit_moved):
+		_game_events.unit_moved.connect(_on_event_unit_moved)
+	if _game_events.has_signal("damage_dealt") and not _game_events.damage_dealt.is_connected(_on_event_damage_dealt):
+		_game_events.damage_dealt.connect(_on_event_damage_dealt)
+
+
+## Current auto-focus mode, or OFF when GameSettings is absent.
+func _auto_focus_mode() -> int:
+	if _game_settings == null:
+		return _AUTO_OFF
+	return int(_game_settings.camera_auto_focus)
+
+
+## Whether an event-driven auto-move is allowed right now: not OFF, and not while the
+## player is actively driving the camera (mid grab-drag or typing in a text field).
+func _should_auto_focus() -> bool:
+	if _dragging or _text_field_has_focus():
+		return false
+	return _auto_focus_mode() != _AUTO_OFF
+
+
+## True when the unit is owned by an AI-driven player (so we can frame enemy moves
+## without fighting the human, who is already looking where they just moved). Defensive:
+## reads the owning Player's is_ai flag; anything we can't confirm as AI is treated as
+## player-owned and skipped.
+func _is_ai_unit(unit) -> bool:
+	if not is_instance_valid(unit):
+		return false
+	var owner_player = null
+	if unit.has_method("get_owner_player"):
+		owner_player = unit.get_owner_player()
+	elif "owner_player" in unit:
+		owner_player = unit.owner_player
+	if owner_player == null:
+		return false
+	if "is_ai" in owner_player:
+		return bool(owner_player.is_ai)
+	return false
+
+
+## Convert a grid Vector3(col, 0, row) to a world XZ point, matching the tile spacing
+## (tiles sit at col*cell). Only used as a fallback when the moving unit is not a live
+## Node3D; live units use their global_position directly.
+func _grid_to_world(grid: Vector3) -> Vector3:
+	var cell: float = 2.0
+	if CombatServices and CombatServices.GRID and "cell_size" in CombatServices.GRID:
+		cell = CombatServices.GRID.cell_size.x
+	return Vector3(grid.x * cell, 0.0, grid.z * cell)
+
+
+func _kill_focus_tween() -> void:
+	if _focus_tween != null and _focus_tween.is_valid():
+		_focus_tween.kill()
+	_focus_tween = null
+
+
+## Public entry point: glide the ground focus to [param world_pos]. When [param
+## cinematic] is true it uses the slower duration and dollies IN toward a comfortable
+## close distance if currently zoomed far out. Other systems may call this directly;
+## the signal handlers call it only after their mode/ownership checks. Killed/replaced
+## rather than stacked, and short no-op hops are ignored.
+func focus_on(world_pos: Vector3, cinematic: bool = false) -> void:
+	if not is_inside_tree():
+		return
+
+	var start: Vector3 = _camera_focus_ground()
+	var dest: Vector3 = Vector3(world_pos.x, 0.0, world_pos.z)
+	var moved: float = Vector2(dest.x - start.x, dest.z - start.z).length()
+
+	# CINEMATIC pulls in toward a close framing only when currently further out.
+	var cur_dist: float = _current_distance()
+	var want_dist: float = cur_dist
+	if cinematic:
+		want_dist = clampf(minf(cur_dist, cinematic_close_distance), dist_min, _dist_max_runtime)
+	var dist_delta: float = absf(want_dist - cur_dist)
+
+	# Nothing worth doing (already framed here at the right distance).
+	if moved < auto_focus_min_move and dist_delta < 0.5:
+		return
+
+	_kill_focus_tween()
+
+	# Animations off => snap instantly (mirrors how the rest of the FX layer treats a
+	# zero authored duration).
+	var animate: bool = true
+	if _game_settings != null and not _game_settings.animations_on():
+		animate = false
+
+	if not animate:
+		_move_focus_to(dest)
+		if cinematic and dist_delta >= 0.5:
+			_set_distance(want_dist)
+		_clamp_to_board()
+		return
+
+	var base_dur: float = 0.6 if cinematic else 0.25
+	var dur: float = base_dur
+	if _game_settings != null:
+		# Let battle-speed also speed the camera, but keep a sane floor/ceiling.
+		dur = _game_settings.scaled_time(base_dur)
+	dur = clampf(dur, 0.08, 2.0)
+
+	_focus_tween = create_tween()
+	_focus_tween.set_parallel(true)
+	# _move_focus_to lands the focus on the given target, so tweening the target from
+	# start -> dest produces a smooth glide (XZ only, distance preserved per step).
+	_focus_tween.tween_method(Callable(self, "_move_focus_to"), start, dest, dur) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	if cinematic and dist_delta >= 0.5:
+		_focus_tween.tween_method(Callable(self, "_set_distance"), cur_dist, want_dist, dur) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	# After the glide settles, snap the focus back inside the board bounds.
+	_focus_tween.chain().tween_callback(_clamp_to_board)
+
+
+func _on_settings_changed() -> void:
+	# If the player just switched auto-focus off, drop any glide in flight.
+	if _auto_focus_mode() == _AUTO_OFF:
+		_kill_focus_tween()
+
+
+## Frame only RUNTIME spawns (reinforcements / endless waves); skip the initial flood
+## of pre-placed units at load.
+func _on_event_unit_spawned(unit, runtime: bool) -> void:
+	if not runtime:
+		return
+	if not _should_auto_focus():
+		return
+	if not is_instance_valid(unit) or not (unit is Node3D):
+		return
+	focus_on((unit as Node3D).global_position, _auto_focus_mode() == _AUTO_CINEMATIC)
+
+
+## Frame AI/enemy moves only -- the human is already looking where they moved their own
+## unit, so auto-panning their moves just fights them.
+func _on_event_unit_moved(unit, _from_position, to_position) -> void:
+	if not _should_auto_focus():
+		return
+	if not is_instance_valid(unit):
+		return
+	if not _is_ai_unit(unit):
+		return
+	var pos: Vector3
+	if unit is Node3D:
+		pos = (unit as Node3D).global_position
+	elif to_position is Vector3:
+		pos = _grid_to_world(to_position)
+	else:
+		return
+	focus_on(pos, _auto_focus_mode() == _AUTO_CINEMATIC)
+
+
+## Frame the point of IMPACT -- the DEFENDER -- on a hit. We hook damage_dealt (per
+## target) rather than move_performed (which fires for every move, including non-
+## damaging ones and the attacker itself) so a damaging attack focuses exactly once, on
+## where it lands. Attacks are framed regardless of owner: a hit on a player unit is
+## just as worth showing as a hit the AI lands.
+func _on_event_damage_dealt(_attacker, defender, _damage) -> void:
+	if not _should_auto_focus():
+		return
+	if not is_instance_valid(defender) or not (defender is Node3D):
+		return
+	focus_on((defender as Node3D).global_position, _auto_focus_mode() == _AUTO_CINEMATIC)

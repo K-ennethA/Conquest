@@ -24,6 +24,11 @@ class_name UILayoutManager
 var current_turn_system_type: TurnSystemBase.TurnSystemType = TurnSystemBase.TurnSystemType.TRADITIONAL
 var is_layout_initialized: bool = false
 
+# In-game Settings/Options overlay + the HUD button that opens it. Created in
+# code so GameUILayout.tscn's existing node paths stay untouched.
+var settings_panel: SettingsPanel = null
+var settings_button: Button = null
+
 func _ready() -> void:
 	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -36,6 +41,10 @@ func _ready() -> void:
 	_initialize_layout()
 	_update_layout_for_turn_system()
 
+	# Build the Settings button (top-right of the HUD) + the overlay panel before
+	# theming so both pick up the amber ConquestTheme cascade below.
+	_build_settings_ui()
+
 	# Apply the Conquest "Fire Emblem amber" theme to the whole HUD subtree, and
 	# give every panel background the amber card look so text reads on a single
 	# consistent ground (children have already run _ready, so this wins).
@@ -46,6 +55,44 @@ func _ready() -> void:
 func _apply_theme() -> void:
 	"""Apply the amber ConquestTheme to this HUD subtree (panels, buttons, text)."""
 	ConquestTheme.apply_to(self)
+
+func _build_settings_ui() -> void:
+	"""Create the gear button (top-right) and the SettingsPanel overlay.
+
+	The button lives at the far right of the TopBar; the panel is mounted as the
+	last child of this layout root so it draws above the board and every other
+	HUD panel. Both start ready-to-theme."""
+	# Gear/Settings button, added at the end of the TopBar so it sits top-right.
+	if top_bar:
+		settings_button = Button.new()
+		settings_button.name = "SettingsButton"
+		settings_button.text = "⚙"  # gear glyph
+		settings_button.tooltip_text = "Settings"
+		settings_button.custom_minimum_size = Vector2(44, 44)
+		settings_button.mouse_filter = Control.MOUSE_FILTER_STOP
+		settings_button.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		settings_button.add_theme_font_size_override("font_size", 22)
+		settings_button.pressed.connect(_toggle_settings)
+		top_bar.add_child(settings_button)
+
+	# Overlay panel: full-screen, starts hidden, mounted on top of everything.
+	settings_panel = SettingsPanel.new()
+	settings_panel.name = "SettingsPanel"
+	add_child(settings_panel)
+
+func _toggle_settings() -> void:
+	if settings_panel:
+		settings_panel.toggle()
+
+func _unhandled_input(event: InputEvent) -> void:
+	# Escape (ui_cancel) closes the Settings overlay when it is open, and consumes
+	# the event so the board cursor's own ui_cancel handler (unit deselect) does
+	# not ALSO fire underneath. When the panel is closed we leave Escape alone so
+	# it keeps its in-game meaning (cancel targeting / deselect); the gear button
+	# is the opener.
+	if event.is_action_pressed("ui_cancel") and settings_panel and settings_panel.is_open():
+		settings_panel.close()
+		get_viewport().set_input_as_handled()
 
 func _initialize_layout() -> void:
 	"""Initialize the layout system with proper sizing and constraints"""
@@ -172,6 +219,17 @@ func get_panel(panel_name: String) -> Control:
 
 func is_mouse_over_ui(mouse_position: Vector2) -> bool:
 	"""Check if mouse position is over any UI element"""
+	# The Settings overlay covers the whole screen while open, so any position is
+	# "over UI" -- keep board/camera input from leaking through underneath it.
+	if settings_panel and settings_panel.is_open():
+		return true
+
+	# The Settings button itself is part of the HUD chrome.
+	if settings_button and settings_button.visible:
+		var btn_rect = Rect2(settings_button.global_position, settings_button.size)
+		if btn_rect.has_point(mouse_position):
+			return true
+
 	# Check if mouse is over any visible UI panel
 	var panels = []
 	

@@ -31,26 +31,26 @@ func _ready() -> void:
 
 func _setup_materials() -> void:
 	"""Create materials for attack-range and AoE preview visualization"""
-	# Attack range material (reddish, distinct from movement's blue)
+	# Attack range material (transparent glowy red - enemies show through)
 	attack_range_material = StandardMaterial3D.new()
-	attack_range_material.albedo_color = Color(1.0, 0.25, 0.25, 1.0)
-	attack_range_material.flags_transparent = false
+	attack_range_material.albedo_color = Color(1.0, 0.25, 0.25, 0.35)
+	attack_range_material.flags_transparent = true
 	attack_range_material.flags_unshaded = true
 	attack_range_material.emission_enabled = true
-	attack_range_material.emission = Color(1.0, 0.35, 0.35, 1.0)
-	attack_range_material.no_depth_test = true
+	attack_range_material.emission = Color(1.0, 0.35, 0.35, 0.35)
+	attack_range_material.no_depth_test = false  # Let unit models occlude the flat ground quads
 	attack_range_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	attack_range_material.flags_do_not_receive_shadows = true
 	attack_range_material.flags_disable_ambient_light = true
 
-	# AoE preview material (brighter orange, drawn above attack range)
+	# AoE preview material (transparent glowy orange, a touch stronger than attack range)
 	aoe_preview_material = StandardMaterial3D.new()
-	aoe_preview_material.albedo_color = Color(1.0, 0.55, 0.05, 1.0)
-	aoe_preview_material.flags_transparent = false
+	aoe_preview_material.albedo_color = Color(1.0, 0.55, 0.05, 0.45)
+	aoe_preview_material.flags_transparent = true
 	aoe_preview_material.flags_unshaded = true
 	aoe_preview_material.emission_enabled = true
-	aoe_preview_material.emission = Color(1.0, 0.65, 0.1, 1.0)
-	aoe_preview_material.no_depth_test = true
+	aoe_preview_material.emission = Color(1.0, 0.65, 0.1, 0.45)
+	aoe_preview_material.no_depth_test = false  # Let unit models occlude the flat ground quads
 	aoe_preview_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	aoe_preview_material.flags_do_not_receive_shadows = true
 	aoe_preview_material.flags_disable_ambient_light = true

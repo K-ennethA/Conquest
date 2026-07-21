@@ -364,9 +364,9 @@ func _load_units() -> bool:
 func spawn_unit_now(spawn_data: Dictionary, count_hint: int = 0) -> Node:
 	if not current_map or not map_root:
 		return null
-	return _create_unit_from_spawn(spawn_data, count_hint)
+	return _create_unit_from_spawn(spawn_data, count_hint, true)
 
-func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> Node:
+func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime: bool = false) -> Node:
 	"""Create a unit from spawn data. Returns the new unit node, or null on failure."""
 	print("[MapLoader] Creating unit from spawn data: " + str(spawn_data))
 
@@ -463,6 +463,11 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> Node
 			resolved_stance,
 			int(norm.get("aggro_range", -1)),
 			int(norm.get("leash_radius", -1)))
+
+	# Announce the spawn so presentation systems (camera auto-focus) can frame it.
+	# runtime=false for the initial load flood; true for reinforcement/endless waves.
+	if typeof(GameEvents) == TYPE_OBJECT and GameEvents != null and GameEvents.has_signal(&"unit_spawned"):
+		GameEvents.unit_spawned.emit(unit_instance, runtime)
 
 	return unit_instance
 

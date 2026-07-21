@@ -37,11 +37,12 @@ extends Node
 # --- Move shake -----------------------------------------------------------
 @export_group("Move Shake")
 ## Default caster feedback for ANY move (attack, buff, heal, status) on a model
-## with no authored "attack" clip: a quick side-to-side jitter of the mesh, so no
-## move is ever silent. A model that ships an attack clip plays that instead.
-@export_range(0.0, 0.6, 0.01) var move_shake_distance: float = 0.14
-## Total seconds of the shake.
-@export_range(0.0, 1.0, 0.01) var move_shake_time: float = 0.26
+## with no authored "attack" clip: a punchy forward lunge-and-recoil of the model,
+## so no move is ever silent and it reads as "I attacked". A model that ships an
+## attack clip plays that instead.
+@export_range(0.0, 0.6, 0.01) var move_shake_distance: float = 0.35
+## Total seconds of the lunge-and-recoil. Kept snappy so it reads as a strike.
+@export_range(0.0, 1.0, 0.01) var move_shake_time: float = 0.28
 
 # --- Death ----------------------------------------------------------------
 @export_group("Death")
@@ -113,13 +114,18 @@ func _on_turn_started(who = null) -> void:
 func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 	if not (unit is Node3D) or not is_instance_valid(unit):
 		return
-	var mesh := _get_mesh(unit)
-	if mesh == null:
+	var node := _get_anim_root(unit)
+	if node == null:
 		_remember(unit)
 		return
 
+	# The model may carry an authored offset/scale, so glide relative to its OWN
+	# current position -- never assume Vector3.ZERO, which would wipe that offset.
+	var base: Vector3 = node.position
+
 	# A walk clip animates the LEGS; the glide below still has to carry the model
-	# across the tile, so these layer rather than replace each other.
+	# across the tile, so these layer rather than replace each other. (play_clip
+	# is itself a no-op when animations are off.)
 	play_clip(unit, CLIP_WALK)
 
 	var dest: Vector3 = (unit as Node3D).global_position
@@ -127,16 +133,21 @@ func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 	_last_world_pos[unit.get_instance_id()] = dest
 
 	var offset := start - dest
-	if offset.length() < 0.001 or move_glide_time <= 0.0:
-		mesh.position = Vector3.ZERO
+	# Animations off, negligible move, or zero glide time -> snap to base instantly.
+	if not _anims_on() or offset.length() < 0.001 or move_glide_time <= 0.0:
+		node.position = base
+		return
+	var t: float = _scaled(move_glide_time)
+	if t <= 0.0:
+		node.position = base
 		return
 
-	# Place the mesh (visually) back at the old spot, then slide it home to the
-	# unit's real position. Only the child mesh moves; the unit node stays put.
-	mesh.position = offset
-	var tw := mesh.create_tween()
+	# Place the model (visually) back at the old spot -- offset from its OWN base --
+	# then slide it home. Only the child model moves; the unit node stays put.
+	node.position = base + offset
+	var tw := node.create_tween()
 	tw.set_trans(move_glide_trans).set_ease(move_glide_ease)
-	tw.tween_property(mesh, "position", Vector3.ZERO, move_glide_time)
+	tw.tween_property(node, "position", base, t)
 
 # --- Hit flash ------------------------------------------------------------
 
@@ -157,30 +168,48 @@ func _on_move_performed(caster = null, _move = null) -> void:
 		return
 	_shake(caster)
 
-## Quick side-to-side jitter of the unit's mesh -- the universal "I did something"
-## tell. Uses the mesh child offset (like the glide), so the unit's real position,
-## health bars, and targeting are untouched.
+## Punchy lunge-and-recoil of the unit's model -- the universal "I attacked" tell.
+## Drives the model root (CharacterModel/mesh) offset, so the unit's real position,
+## health bars, and targeting are untouched. Animates relative to the model's OWN
+## base position so an authored offset is preserved.
 func _shake(unit) -> void:
 	if not (unit is Node3D) or not is_instance_valid(unit):
 		return
-	var mesh := _get_mesh(unit)
-	if mesh == null or move_shake_time <= 0.0 or move_shake_distance <= 0.0:
+	var node := _get_anim_root(unit)
+	if node == null:
 		return
-	var base: Vector3 = mesh.position
+	var base: Vector3 = node.position
+	# Animations off -> ensure the model sits at its base, no motion.
+	if not _anims_on():
+		node.position = base
+		return
+	var total: float = _scaled(move_shake_time)
 	var d: float = move_shake_distance
-	var seg: float = move_shake_time / 4.0
-	var tw := mesh.create_tween()
+	if total <= 0.0 or d <= 0.0:
+		node.position = base
+		return
+	# A quick forward lunge (local -Z) sells the strike, then a pair of decaying
+	# side jitters and a snappy settle read as recoil rather than an idle wiggle.
+	var seg: float = total / 4.0
+	var tw := node.create_tween()
 	tw.set_trans(Tween.TRANS_SINE)
-	tw.tween_property(mesh, "position", base + Vector3(d, 0.0, 0.0), seg)
-	tw.tween_property(mesh, "position", base + Vector3(-d, 0.0, 0.0), seg)
-	tw.tween_property(mesh, "position", base + Vector3(d * 0.5, 0.0, 0.0), seg)
-	tw.tween_property(mesh, "position", base, seg)
+	tw.tween_property(node, "position", base + Vector3(0.0, 0.0, -d), seg)\
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(node, "position", base + Vector3(d * 0.5, 0.0, 0.0), seg)
+	tw.tween_property(node, "position", base + Vector3(-d * 0.35, 0.0, 0.0), seg)
+	tw.tween_property(node, "position", base, seg)\
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func _flash(unit) -> void:
 	if not (unit is Node3D) or not is_instance_valid(unit):
 		return
 	var mesh := _get_mesh(unit)
 	if mesh == null:
+		return
+
+	# Animations off -> no flash and no punch. We never touched material_override or
+	# scale, so there is nothing to restore; the unit stays exactly as it is.
+	if not _anims_on():
 		return
 
 	# A model with its own hit clip supplies the MOTION, so skip the squash punch
@@ -191,7 +220,8 @@ func _flash(unit) -> void:
 
 	# Color flash via a temporary material_override; the prior override (usually
 	# null) is captured and restored exactly, so the base look is untouched.
-	if hit_flash_time > 0.0:
+	var flash_dur: float = _scaled(hit_flash_time)
+	if flash_dur > 0.0:
 		var prev_override := mesh.material_override
 		var flash_mat := StandardMaterial3D.new()
 		flash_mat.albedo_color = hit_flash_color
@@ -200,18 +230,19 @@ func _flash(unit) -> void:
 		flash_mat.emission_energy_multiplier = hit_flash_emission
 		mesh.material_override = flash_mat
 		var ft := mesh.create_tween()
-		ft.tween_interval(hit_flash_time)
+		ft.tween_interval(flash_dur)
 		ft.tween_callback(func():
 			if is_instance_valid(mesh):
 				mesh.material_override = prev_override)
 
 	# Squash punch (always safe -- no material knowledge needed).
-	if hit_punch_scale > 1.0 and not has_hit_clip:
+	var punch_dur: float = _scaled(hit_flash_time * 0.5)
+	if hit_punch_scale > 1.0 and not has_hit_clip and punch_dur > 0.0:
 		var base_scale := mesh.scale
 		var pt := mesh.create_tween()
-		pt.tween_property(mesh, "scale", base_scale * hit_punch_scale, hit_flash_time * 0.5)\
+		pt.tween_property(mesh, "scale", base_scale * hit_punch_scale, punch_dur)\
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		pt.tween_property(mesh, "scale", base_scale, hit_flash_time * 0.5)\
+		pt.tween_property(mesh, "scale", base_scale, punch_dur)\
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 
 # --- Death ----------------------------------------------------------------
@@ -227,11 +258,18 @@ func _on_unit_eliminated(unit = null, _eliminator = null) -> void:
 		return
 	if not (unit is Node3D) or not is_instance_valid(unit) or death_shrink_time <= 0.0:
 		return
-	var mesh := _get_mesh(unit)
-	if mesh == null:
+	var node := _get_anim_root(unit)
+	if node == null:
 		return
-	var t := mesh.create_tween()
-	t.tween_property(mesh, "scale", Vector3.ZERO, death_shrink_time)\
+	# Animations off -> skip the shrink; the unit is being removed anyway, so there
+	# is no half-animated state to worry about.
+	if not _anims_on():
+		return
+	var t: float = _scaled(death_shrink_time)
+	if t <= 0.0:
+		return
+	var tw := node.create_tween()
+	tw.tween_property(node, "scale", Vector3.ZERO, t)\
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 
 # --- Helpers --------------------------------------------------------------
@@ -245,6 +283,26 @@ func _get_mesh(unit) -> MeshInstance3D:
 	var direct := (unit as Node).get_node_or_null("MeshInstance3D")
 	if direct is MeshInstance3D:
 		return direct
+	return _find_mesh_recursive(unit as Node)
+
+## Return the node to translate/scale for MOTION animations (shake, glide, death
+## shrink), or null. Real character units nest their whole model under a direct
+## child named "CharacterModel" (the instantiated .glb scene root); placeholder
+## capsules use a direct "MeshInstance3D". We prefer those whole-model roots over
+## the recursive first-MeshInstance3D search, which on a glb finds only a sub-part
+## (one limb/cap) -- animating that shakes a fragment, not the unit. _get_mesh (the
+## visible MeshInstance3D) stays the right target for the colour flash, which needs
+## material_override on a mesh; this is only for motion.
+func _get_anim_root(unit) -> Node3D:
+	if not is_instance_valid(unit) or not (unit is Node):
+		return null
+	var model := (unit as Node).get_node_or_null("CharacterModel")
+	if model is Node3D:
+		return model as Node3D
+	var direct := (unit as Node).get_node_or_null("MeshInstance3D")
+	if direct is Node3D:
+		return direct as Node3D
+	# Fall back to the visible mesh (a Node3D) so alternate rigs still animate.
 	return _find_mesh_recursive(unit as Node)
 
 func _find_mesh_recursive(node: Node) -> MeshInstance3D:
@@ -311,6 +369,11 @@ func _find_clip(ap: AnimationPlayer, base: String) -> String:
 ## started -- callers use that to decide whether the procedural fallback is still
 ## needed, so "no clip" degrades instead of leaving the unit with no feedback.
 func play_clip(unit, base: String, loop_idle_after: bool = true) -> bool:
+	# Authored clips are animation too: with animations off we skip them so the unit
+	# holds its final state instead of playing an attack/walk in place. Callers treat
+	# the false return as "no clip" and their procedural fallback is itself gated.
+	if not _anims_on():
+		return false
 	var ap := _anim_player_for(unit)
 	if ap == null:
 		return false
@@ -328,3 +391,36 @@ func _queue_idle(ap: AnimationPlayer) -> void:
 	var idle := _find_clip(ap, CLIP_IDLE)
 	if not idle.is_empty():
 		ap.queue(idle)
+
+# --- GameSettings bridge ---------------------------------------------------
+#
+# The optional GameSettings autoload governs presentation: whether animation runs
+# at all, and how battle speed scales every authored duration. It is accessed
+# null-safely -- when it is absent (e.g. headless tests) we behave as if animations
+# are ON at scale 1.0, so nothing here changes for callers that never load it.
+
+# Cached only on a HIT; a miss re-looks-up so late autoload registration is caught.
+var _game_settings_cached: Node = null
+
+func _game_settings() -> Node:
+	if _game_settings_cached != null and is_instance_valid(_game_settings_cached):
+		return _game_settings_cached
+	_game_settings_cached = get_node_or_null("/root/GameSettings")
+	return _game_settings_cached
+
+## True unless GameSettings is present AND reports animations off. Absent settings
+## default to ON so nothing that doesn't load the autoload is affected.
+func _anims_on() -> bool:
+	var gs := _game_settings()
+	if gs == null or not gs.has_method("animations_on"):
+		return true
+	return bool(gs.animations_on())
+
+## An authored duration scaled by battle speed. Absent settings pass the base value
+## through unscaled; a returned 0.0 means "instant" and callers set the final state
+## directly rather than tweening.
+func _scaled(base_seconds: float) -> float:
+	var gs := _game_settings()
+	if gs == null or not gs.has_method("scaled_time"):
+		return base_seconds
+	return float(gs.scaled_time(base_seconds))
