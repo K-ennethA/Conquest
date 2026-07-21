@@ -37,6 +37,9 @@ class_name HazardManager
 ## Active vines, advanced in registration order each tick.
 var _hazards: Array = []
 
+# The turn system we're currently listening to for turn_started (re-wired on switch).
+var _watched_ts = null
+
 
 # --- Setup ------------------------------------------------------------------
 
@@ -44,11 +47,30 @@ func setup() -> void:
 	"""Live entry point: clear state, then subscribe to the per-turn tick and the
 	spawn-request seam. Called by GameWorldManager once per battle."""
 	initialize()
-	if PlayerManager != null and not PlayerManager.player_turn_started.is_connected(_on_player_turn_started):
-		PlayerManager.player_turn_started.connect(_on_player_turn_started)
+	# Tick on the ACTIVE TURN SYSTEM's turn_started -- the reliable per-turn signal that
+	# fires every turn (human and AI). PlayerManager.player_turn_started only fires on
+	# game start + the human End-Turn button, so hazards never advanced during AI turns.
+	# Mirrors SpawnManager / TurnIndicator wiring.
+	if TurnSystemManager != null:
+		if not TurnSystemManager.turn_system_activated.is_connected(_on_turn_system_activated):
+			TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
+		if TurnSystemManager.has_active_turn_system():
+			_on_turn_system_activated(TurnSystemManager.get_active_turn_system())
 	if GameEvents != null and GameEvents.has_signal(&"hazard_spawn_requested") \
 			and not GameEvents.hazard_spawn_requested.is_connected(_on_hazard_spawn_requested):
 		GameEvents.hazard_spawn_requested.connect(_on_hazard_spawn_requested)
+
+
+## (Re)wire to the active turn system's turn_started when it activates or switches.
+func _on_turn_system_activated(ts) -> void:
+	if _watched_ts == ts:
+		return
+	if _watched_ts != null and is_instance_valid(_watched_ts) \
+			and _watched_ts.turn_started.is_connected(_on_player_turn_started):
+		_watched_ts.turn_started.disconnect(_on_player_turn_started)
+	_watched_ts = ts
+	if ts != null and not ts.turn_started.is_connected(_on_player_turn_started):
+		ts.turn_started.connect(_on_player_turn_started)
 
 
 func initialize() -> void:
@@ -131,8 +153,10 @@ func _emit_expired(hazard) -> void:
 func _exit_tree() -> void:
 	# Freeing the node auto-disconnects it, but disconnect explicitly so intent is
 	# clear and a reused instance can't double-subscribe (mirrors SpawnManager).
-	if PlayerManager != null and PlayerManager.player_turn_started.is_connected(_on_player_turn_started):
-		PlayerManager.player_turn_started.disconnect(_on_player_turn_started)
+	if TurnSystemManager != null and TurnSystemManager.turn_system_activated.is_connected(_on_turn_system_activated):
+		TurnSystemManager.turn_system_activated.disconnect(_on_turn_system_activated)
+	if _watched_ts != null and is_instance_valid(_watched_ts) and _watched_ts.turn_started.is_connected(_on_player_turn_started):
+		_watched_ts.turn_started.disconnect(_on_player_turn_started)
 	if GameEvents != null and GameEvents.has_signal(&"hazard_spawn_requested") \
 			and GameEvents.hazard_spawn_requested.is_connected(_on_hazard_spawn_requested):
 		GameEvents.hazard_spawn_requested.disconnect(_on_hazard_spawn_requested)

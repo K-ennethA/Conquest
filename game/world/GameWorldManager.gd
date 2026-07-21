@@ -18,6 +18,8 @@ var current_map_path: String = ""
 ## via the system's injected lookup. Null-safe: handlers no-op until it and the
 ## live board exist.
 var _tile_effect_system: TileEffectSystem = null
+# The turn system the tile-effect per-turn tick is currently bound to (re-wired on switch).
+var _tile_fx_watched_ts = null
 
 ## Terrain / tile inspection HUD (Fire Emblem-style terrain window): shows the
 ## terrain name, movement cost, and active tile effects for the cell under the
@@ -475,11 +477,28 @@ func _setup_tile_effects() -> void:
 	if GameEvents and not GameEvents.unit_moved.is_connected(_on_unit_moved_tile_effects):
 		GameEvents.unit_moved.connect(_on_unit_moved_tile_effects)
 
-	# Turn start: tick ON_TURN_START_WHILE_OCCUPYING for each unit the active
-	# player owns. PlayerManager.player_turn_started is the signal that reliably
-	# fires per turn in the live loop.
-	if PlayerManager and not PlayerManager.player_turn_started.is_connected(_on_player_turn_started_tile_effects):
-		PlayerManager.player_turn_started.connect(_on_player_turn_started_tile_effects)
+	# Turn start: tick ON_TURN_START_WHILE_OCCUPYING for each unit the active player
+	# owns. This rides the ACTIVE TURN SYSTEM's turn_started -- the signal that truly
+	# fires every turn (human and AI). PlayerManager.player_turn_started only fires on
+	# game start + the human's End-Turn button, so occupying-tile effects never ticked
+	# during the AI phase. Mirrors SpawnManager / TurnIndicator wiring.
+	if TurnSystemManager != null:
+		if not TurnSystemManager.turn_system_activated.is_connected(_on_turn_system_activated_tile_effects):
+			TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated_tile_effects)
+		if TurnSystemManager.has_active_turn_system():
+			_on_turn_system_activated_tile_effects(TurnSystemManager.get_active_turn_system())
+
+
+## (Re)wire the tile-effect turn tick to the active turn system's turn_started.
+func _on_turn_system_activated_tile_effects(ts) -> void:
+	if _tile_fx_watched_ts == ts:
+		return
+	if _tile_fx_watched_ts != null and is_instance_valid(_tile_fx_watched_ts) \
+			and _tile_fx_watched_ts.turn_started.is_connected(_on_player_turn_started_tile_effects):
+		_tile_fx_watched_ts.turn_started.disconnect(_on_player_turn_started_tile_effects)
+	_tile_fx_watched_ts = ts
+	if ts != null and not ts.turn_started.is_connected(_on_player_turn_started_tile_effects):
+		ts.turn_started.connect(_on_player_turn_started_tile_effects)
 
 func _prime_tile_effects(cell: Vector2i):
 	"""Feed the system the effects on `cell` (base + runtime) through its injected
