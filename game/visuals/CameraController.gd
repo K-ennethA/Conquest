@@ -57,7 +57,9 @@ extends Camera3D
 ## Minimum seconds between event-driven auto-focuses. Bursty events (a flurry of hits
 ## as the AI resolves a turn) can't snap the camera rapidly -- only the first within a
 ## window moves it. Spawns bypass this (they're rare and worth framing every time).
-@export var auto_focus_cooldown: float = 0.6
+## Kept short so the camera actually KEEPS UP with the AI turn (each enemy attack gets
+## a watchable dwell in BotTurnDriver) instead of lagging a beat behind the action.
+@export var auto_focus_cooldown: float = 0.25
 
 # --- Internal state ---------------------------------------------------------
 
@@ -493,14 +495,14 @@ func focus_on(world_pos: Vector3, cinematic: bool = false) -> void:
 		_clamp_to_board()
 		return
 
-	var base_dur: float = 0.75 if cinematic else 0.5
+	var base_dur: float = 0.5 if cinematic else 0.3
 	var dur: float = base_dur
 	if _game_settings != null:
 		# Let battle-speed also speed the camera, but keep a sane floor/ceiling.
 		dur = _game_settings.scaled_time(base_dur)
 	# Minimum-duration floor so a fast battle speed can never turn the pan into a
-	# jump-cut -- it should always read as a deliberate glide.
-	dur = clampf(dur, 0.35, 2.0)
+	# jump-cut, but snappy enough to arrive while the enemy's attack is still playing.
+	dur = clampf(dur, 0.2, 1.5)
 
 	_focus_tween = create_tween()
 	_focus_tween.set_parallel(true)

@@ -25,6 +25,12 @@ class_name BotTurnDriver
 ## (see [method _effective_wait]) so "Fast" also speeds the AI.
 @export var action_interval: float = 0.18
 
+## Longer beat AFTER a visible ATTACK, so the player can actually watch the strike
+## (the attacker's shake + the hit flash + the camera framing it) instead of the AI
+## blowing past it. A plain move or a skipped wait uses action_interval; only an
+## attack gets this dwell. Also divided by battle-speed.
+@export var attack_dwell: float = 0.55
+
 ## Hard cap on how many silent no-op waits a single tick will fast-forward before
 ## yielding back to the frame. Bounds the worst case (a huge army entirely out of
 ## range) so the AI can never freeze a frame chewing through waits.
@@ -42,15 +48,20 @@ var _busy: bool = false
 # whether to keep fast-forwarding waiting units or yield and let the Timer pace the
 # unit that just did something.
 var _last_action_visible: bool = false
+# Set true when the last resolved action was an ATTACK (a move that resolved through
+# perform_move), as opposed to a plain advance. _tick() reads it to give attacks a
+# longer, watchable beat.
+var _last_action_was_attack: bool = false
 
 
 func _ready() -> void:
 	_timer = Timer.new()
-	_timer.one_shot = false
+	# One-shot, re-armed at the end of every _tick with the NEXT beat's length, so an
+	# attack can dwell longer than a move without a second timer.
+	_timer.one_shot = true
 	add_child(_timer)
 	_timer.timeout.connect(_tick)
-	_apply_wait()
-	_timer.start()
+	_timer.start(_effective_wait())
 	# Update the pacing live if the player changes battle speed mid-match. Null-safe:
 	# GameSettings may be absent in headless tests, in which case the wait just stays
 	# at the unscaled action_interval floor.
@@ -106,15 +117,34 @@ func _tick() -> void:
 	# Each iteration still performs exactly ONE synchronous act() that never awaits,
 	# preserving the re-entrancy contract; the loop just skips the idle delay between
 	# back-to-back non-events.
+	var next_wait: float = _effective_wait()
 	var waits: int = 0
 	while waits < max_waits_per_tick:
 		_last_action_visible = false
+		_last_action_was_attack = false
 		var acted: bool = act_one_ai_unit()
 		if not acted:
-			return
+			break
 		if _last_action_visible:
-			return
+			# Pace this action. An attack dwells longer so the player can watch the
+			# strike land; a plain advance uses the shorter interval.
+			if _last_action_was_attack:
+				next_wait = _effective_dwell()
+			break
 		waits += 1
+
+	# Re-arm the one-shot timer for the next beat.
+	if _timer != null:
+		_timer.start(next_wait)
+
+
+## Effective post-attack dwell: attack_dwell scaled DOWN by battle speed, floored.
+func _effective_dwell() -> float:
+	var scaled: float = attack_dwell
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and "battle_speed" in GameSettings:
+		var speed: float = clampf(float(GameSettings.battle_speed), 0.5, 3.0)
+		scaled = attack_dwell / speed
+	return maxf(0.08, scaled)
 
 
 ## Perform ONE AI action for the currently-active turn system (the Timer's entry
@@ -372,6 +402,9 @@ func _execute_move_decision(unit: Unit, decision: Dictionary, board) -> bool:
 		if mc != null and mc.has_method("on_used"):
 			mc.on_used(move)
 		unit.mark_action_completed("move")
+		# This action used a move (an attack/cast) -- flag it so _tick dwells on it
+		# long enough for the player to see the strike.
+		_last_action_was_attack = true
 		return true
 	return false
 
