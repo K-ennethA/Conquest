@@ -113,24 +113,46 @@ func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
 	if hostiles.is_empty():
 		return _wait("no_hostiles")
 
-	# Candidate stand cells: the origin (attack without moving) plus every cell the
-	# unit can reach this turn. Reachable cells are already legal stopping cells.
-	var stand_cells: Array = [origin]
-	stand_cells.append_array(reachable)
+	# STANCE + LEASH. Every unit's effective home is its authored guard post if it
+	# has one, otherwise the cell it currently stands on (units spawned outside the
+	# map loader -- e.g. tests -- have no home). An untethered aggressive unit reads
+	# home == origin, an infinite leash, and an aggressive stance, so every branch
+	# below collapses to the historical attack-then-advance-full behaviour.
+	var home: Vector2i = _effective_home(actor, origin)
 
-	# All reachable damaging plays, best-first (one per move+target, standing on the
-	# cheapest cell that can hit it). Difficulty decides which we take -- identical
-	# selection logic to decide()'s origin-only ranking.
+	# LEASH FILTER on movement destinations: an anchored unit may only stop on cells
+	# within its leash radius of home. Untethered -> the reachable set is returned
+	# untouched. `origin` is always a legal stop (a unit already home is never
+	# stranded, even if a shrunk leash would exclude its own cell on an edge case).
+	var leashed_reachable: Array = _leash_filter(actor, home, reachable)
+
+	# Candidate stand cells: the origin (attack without moving) plus every leashed
+	# cell the unit can reach this turn. Reachable cells are already legal stops.
+	var stand_cells: Array = [origin]
+	stand_cells.append_array(leashed_reachable)
+
+	# ATTACK BRANCH (runs for EVERY stance): all reachable damaging plays, best-first
+	# (one per move+target, standing on the cheapest leashed cell that can hit it).
+	# A defensive turret still strikes anything reachable from a leashed stand cell.
+	# Difficulty decides which we take -- identical selection logic to decide()'s.
 	var ranked := _ranked_attacks_from_cells(actor, origin, stand_cells, moveset, hostiles, board)
 	var choice := _choose_attack(ranked)
 	if not choice.is_empty():
 		return choice
 
-	# No attack (none reachable, or EASY declined). Advance the full distance --
-	# unless EASY hesitates this turn.
+	# No attack (none reachable, or EASY declined). EASY may still hesitate.
 	if difficulty == Difficulty.EASY and _get_rng().randf() < 0.30:
 		return _wait("hesitate")
-	return _advance_full(origin, hostiles, board, reachable)
+
+	# ADVANCE BRANCH. A DEFENSIVE unit only wakes (advances) when a hostile has come
+	# within its aggro range of home; otherwise it holds. aggro_range 0 therefore
+	# never chases -- such a unit only ever acts through the attack branch above.
+	if _is_defensive(actor) and not _hostile_within_aggro(actor, home, hostiles, board):
+		return _wait("holding")
+
+	# Advance the full distance toward the nearest hostile, but only onto leashed
+	# cells (unchanged from the historical advance when the unit is untethered).
+	return _advance_full(origin, hostiles, board, leashed_reachable)
 
 
 ## Lazily-created RNG for EASY's stochastic behaviour.
@@ -391,6 +413,72 @@ func _estimate_damage(move: MoveResource, actor, target) -> int:
 func _move_has_damage(move: MoveResource) -> bool:
 	for effect in move.effects:
 		if effect is DamageEffect:
+			return true
+	return false
+
+
+# --- Stance + leash (movement-aware planning only) -------------------------
+# All duck-typed and guarded: an actor that predates the AI-behaviour contract
+# (a bare mock, or a legacy unit) reports aggressive + untethered, so plan()'s
+# stance/leash branches are no-ops and its behaviour is byte-for-byte the old
+# attack-then-advance-full path.
+
+## This actor's effective guard-post cell: its authored home if it has one, else
+## the cell it currently stands on ([param origin]).
+func _effective_home(actor, origin: Vector2i) -> Vector2i:
+	if actor != null and actor.has_method("has_home_cell") and actor.has_home_cell() \
+			and actor.has_method("get_home_cell"):
+		return actor.get_home_cell()
+	return origin
+
+
+## True only when the actor explicitly reports a defensive stance.
+func _is_defensive(actor) -> bool:
+	return actor != null and actor.has_method("is_defensive") and actor.is_defensive()
+
+
+## True only when the actor reports a finite leash (an anchored / guarding unit).
+func _has_leash(actor) -> bool:
+	return actor != null and actor.has_method("has_leash") and actor.has_leash()
+
+
+## The actor's leash radius (Manhattan cells from home). Meaningful only when
+## [method _has_leash] is true.
+func _leash_radius(actor) -> int:
+	if actor != null and actor.has_method("get_leash_radius"):
+		return int(actor.get_leash_radius())
+	return -1
+
+
+## The actor's defensive wake distance (Manhattan cells from home). 0 for a pure
+## turret that never chases.
+func _aggro_range(actor) -> int:
+	if actor != null and actor.has_method("get_aggro_range"):
+		return int(actor.get_aggro_range())
+	return 0
+
+
+## Restrict [param cells] to those within the actor's leash radius of [param home].
+## Untethered actors get the SAME array back untouched (so the untethered path is
+## unchanged). `origin` is not filtered here -- plan() always keeps it as a legal
+## stand cell and as _advance_full's stay-put fallback.
+func _leash_filter(actor, home: Vector2i, cells: Array) -> Array:
+	if not _has_leash(actor):
+		return cells
+	var radius: int = _leash_radius(actor)
+	var out: Array = []
+	for c in cells:
+		if _manhattan(c, home) <= radius:
+			out.append(c)
+	return out
+
+
+## True when any hostile has come within the actor's aggro range of [param home]
+## -- the wake condition for a defensive unit to leave its post and engage.
+func _hostile_within_aggro(actor, home: Vector2i, hostiles: Array, board) -> bool:
+	var radius: int = _aggro_range(actor)
+	for h in hostiles:
+		if _manhattan(home, board.cell_of(h)) <= radius:
 			return true
 	return false
 

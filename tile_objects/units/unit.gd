@@ -19,6 +19,19 @@ var has_acted_this_turn: bool = false
 ## unless an ability or move effect grants extra movement (see [method grant_extra_move]).
 var has_moved_this_turn: bool = false
 
+# --- AI behavior (resolved at spawn) ----------------------------------------
+# WHERE this unit was placed and HOW it should fight. The spawner (MapLoader at
+# load, SpawnManager for scheduled/endless waves) calls configure_ai_behavior()
+# once, resolving the spawn point's authored override against the character
+# default. Until configured, the getters fall back to the CharacterResource
+# defaults, so a unit spawned outside the map loader (e.g. in a test) still has a
+# sane stance. Bot/BossController read these every turn.
+var home_cell: Vector2i = Vector2i(-1, -1)
+var _ai_configured: bool = false
+var _ai_stance: String = ""
+var _aggro_range: int = -1
+var _leash_radius: int = -1
+
 # Signals
 signal unit_died(unit: Unit)
 signal unit_action_completed(unit: Unit, action_type: String)
@@ -537,6 +550,71 @@ func is_boss() -> bool:
 	if character_resource:
 		return character_resource.is_boss
 	return false
+
+
+# --- AI behavior API --------------------------------------------------------
+# Read by Bot/BossController; written once by the spawner. See the field block
+# near the top of this script for the resolve-then-fall-back contract.
+
+## Record this unit's home cell and combat behavior, resolved by the spawner.
+## [param stance] is "aggressive" or "defensive" ("" falls back to the character
+## default); [param aggro] is the defensive wake distance (< 0 falls back);
+## [param leash] is the max cells from home the unit may move (< 0 falls back,
+## and a fallen-back-to-negative resolves to untethered).
+func configure_ai_behavior(p_home: Vector2i, stance: String = "", aggro: int = -1, leash: int = -1) -> void:
+	home_cell = p_home
+	_ai_stance = stance if (stance == "aggressive" or stance == "defensive") else _default_stance()
+	_aggro_range = aggro if aggro >= 0 else _default_aggro()
+	_leash_radius = leash if leash >= 0 else _default_leash()
+	_ai_configured = true
+
+## True once [method configure_ai_behavior] has run (the unit came through a spawner).
+func has_ai_behavior() -> bool:
+	return _ai_configured
+
+## This unit's home / guard-post cell, or an invalid cell (-1,-1) if never set.
+func get_home_cell() -> Vector2i:
+	return home_cell
+
+func has_home_cell() -> bool:
+	return home_cell.x >= 0 and home_cell.y >= 0
+
+## "aggressive" or "defensive". Falls back to the character default until configured.
+func get_ai_stance() -> String:
+	return _ai_stance if _ai_configured else _default_stance()
+
+func is_aggressive() -> bool:
+	return get_ai_stance() == "aggressive"
+
+func is_defensive() -> bool:
+	return get_ai_stance() == "defensive"
+
+## Defensive wake distance (Manhattan) from the home cell. Falls back until configured.
+func get_aggro_range() -> int:
+	return _aggro_range if _ai_configured else _default_aggro()
+
+## Max cells from home this unit will move. < 0 means untethered (no leash).
+func get_leash_radius() -> int:
+	return _leash_radius if _ai_configured else _default_leash()
+
+## True when a finite leash caps this unit's movement (an anchored / guarding unit).
+func has_leash() -> bool:
+	return get_leash_radius() >= 0
+
+func _default_stance() -> String:
+	if character_resource and character_resource.has_method("get_default_ai_stance"):
+		return character_resource.get_default_ai_stance()
+	return "aggressive"
+
+func _default_aggro() -> int:
+	if character_resource and character_resource.has_method("get_default_aggro_range"):
+		return character_resource.get_default_aggro_range()
+	return 0
+
+func _default_leash() -> int:
+	if character_resource and character_resource.has_method("get_default_leash_radius"):
+		return character_resource.get_default_leash_radius()
+	return -1
 
 ## The MovesetController child (cooldown / uses tracking), or null if absent.
 func get_moveset_controller() -> Node:

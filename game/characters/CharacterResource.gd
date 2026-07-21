@@ -41,6 +41,24 @@ const MAX_MOVES: int = 4
 ## is the MINIMUM corner of the span, which extends toward +col / +row from there.
 @export var footprint: Vector2i = Vector2i.ONE
 
+@export_group("AI Behavior")
+## Default combat stance for a unit of this character. "aggressive" units close on
+## the nearest enemy every turn (the classic behaviour); "defensive" units hold
+## their ground and only engage once a hostile enters [member default_aggro_range]
+## of their home cell. A spawn point may override this per placement (see
+## MapResource's unit_spawns schema and [method Unit.configure_ai_behavior]).
+@export_enum("aggressive", "defensive") var default_ai_stance: String = "aggressive"
+## How close (Manhattan cells) a hostile must come to a DEFENSIVE unit's home cell
+## before it wakes and engages. 0 means it acts only when it can already strike a
+## target from a reachable cell — a stationary turret / guardian. Ignored while the
+## unit is aggressive.
+@export var default_aggro_range: int = 0
+## Max distance (Manhattan cells) a unit of this character will ever move from its
+## home cell, capping pursuit so an anchored boss can never be dragged off its
+## ground. -1 = untethered (roam freely). A small positive value (e.g. 2) keeps a
+## guardian on its post while still letting it face an adjacent attacker.
+@export var default_leash_radius: int = -1
+
 @export_group("Moveset")
 ## Up to [constant MAX_MOVES] moves. Extra entries are ignored by [method get_move].
 @export var moveset: Array[MoveResource] = []
@@ -99,6 +117,21 @@ func get_movement_profile() -> MovementProfile:
 ## value authored in the inspector still reads back as a usable span.
 func get_footprint() -> Vector2i:
 	return Vector2i(maxi(1, footprint.x), maxi(1, footprint.y))
+
+
+## Default stance, guaranteed to be one of the two valid values.
+func get_default_ai_stance() -> String:
+	return "defensive" if default_ai_stance == "defensive" else "aggressive"
+
+
+## Default aggro range, floored at 0 (a negative authored value reads as 0).
+func get_default_aggro_range() -> int:
+	return maxi(0, default_aggro_range)
+
+
+## Default leash radius. Any negative value normalises to -1 (untethered).
+func get_default_leash_radius() -> int:
+	return default_leash_radius if default_leash_radius >= 0 else -1
 
 
 func get_stat(stat_name: String) -> int:

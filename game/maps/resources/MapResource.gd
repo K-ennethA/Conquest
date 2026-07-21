@@ -55,6 +55,16 @@ class_name MapResource
 #                                (default 1, or -1 for "Endless")
 #   respawn_interval   int       turns between spawns for Respawn/Endless (default 1)
 #   spawn_turn         int       turn a Reinforcement point activates (default 1)
+#   ai_stance          String    "" (inherit character default) / "aggressive" /
+#                                "defensive". Aggressive units chase the nearest
+#                                enemy; defensive units hold and only engage once a
+#                                hostile enters aggro_range of their home cell.
+#   aggro_range        int       defensive wake distance (Manhattan) from the home
+#                                cell, or -1 to inherit the character default
+#   leash_radius       int       max cells the spawned unit will ever move from its
+#                                home cell (caps pursuit / anchors a boss), or -1 to
+#                                inherit the character default. A RESOLVED value < 0
+#                                means untethered (see Unit.configure_ai_behavior).
 #
 # NOTE on "character_id": preferred over "unit_type" when set - it names a
 # CharacterResource id under res://game/characters/roster/ (see CharacterLibrary).
@@ -187,7 +197,10 @@ func normalize_spawn(spawn_data: Dictionary) -> Dictionary:
 		"spawn_kind": kind,
 		"max_spawns": int(spawn_data.get("max_spawns", get_default_max_spawns(kind))),
 		"respawn_interval": int(spawn_data.get("respawn_interval", 1)),
-		"spawn_turn": int(spawn_data.get("spawn_turn", 1))
+		"spawn_turn": int(spawn_data.get("spawn_turn", 1)),
+		"ai_stance": str(spawn_data.get("ai_stance", "")),
+		"aggro_range": int(spawn_data.get("aggro_range", -1)),
+		"leash_radius": int(spawn_data.get("leash_radius", -1))
 	}
 	return normalized
 
@@ -239,7 +252,10 @@ func set_spawn_point_at_position(pos: Vector2i, player_id: int, spawn_kind: Stri
 		"spawn_kind": kind,
 		"max_spawns": int(opts.get("max_spawns", get_default_max_spawns(kind))),
 		"respawn_interval": maxi(1, int(opts.get("respawn_interval", 1))),
-		"spawn_turn": maxi(1, int(opts.get("spawn_turn", 1)))
+		"spawn_turn": maxi(1, int(opts.get("spawn_turn", 1))),
+		"ai_stance": str(opts.get("ai_stance", "")),
+		"aggro_range": int(opts.get("aggro_range", -1)),
+		"leash_radius": int(opts.get("leash_radius", -1))
 	})
 
 func set_unit_spawn_at_position(pos: Vector2i, player_id: int, unit_type: String, unit_resource_path: String = "", character_id: String = "") -> void:

@@ -88,6 +88,16 @@ var player_selector: OptionButton
 # Palette values in button order: "" (the no-unit slot) followed by unit_types.
 var unit_palette_values: Array[String] = []
 
+# Roster character picker. The map data model prefers a durable character_id (a
+# CharacterResource under res://game/characters/roster/) over the legacy unit_type
+# string, so this dropdown is how an author places a REAL roster unit. It is mutually
+# exclusive with the legacy unit buttons: choosing a character clears unit_type and
+# vice-versa. Index 0 is the same empty "(none)" slot as the unit palette.
+var character_option: OptionButton
+# One entry per roster character: {character_id: String, display_name: String}
+var character_palette_entries: Array[Dictionary] = []
+var selected_character_id: String = ""
+
 # Spawn Point Section - the configuration a newly placed spawn point is stamped with
 var spawn_kind_option: OptionButton
 var respawn_interval_input: SpinBox
@@ -97,6 +107,16 @@ var selected_spawn_kind: String = MapResource.SPAWN_KIND_START
 var selected_respawn_interval: int = 1
 var selected_max_spawns: int = 1
 var selected_spawn_turn: int = 1
+
+# Per-spawn AI behaviour overrides. Each overrides the placed character's OWN default
+# for this one point; the "inherit" value ("" / -1) leaves the character in charge.
+var stance_option: OptionButton
+var aggro_range_input: SpinBox
+var leash_radius_input: SpinBox
+# 0 = Inherit (""), 1 = Aggressive ("aggressive"), 2 = Defensive ("defensive").
+var selected_ai_stance_index: int = 0
+var selected_aggro_range: int = -1   # -1 = inherit the character default
+var selected_leash_radius: int = -1  # -1 = inherit the character default
 
 # Map Grid Section
 var grid_container: GridContainer
@@ -559,6 +579,10 @@ func _create_unit_palette_section():
 		unit_row.add_child(button)
 		unit_buttons.append(button)
 
+	# Roster character picker (real units - Eldroot, Tree Grunt, Petalfang, ...). The
+	# list is enumerated from disk so new characters appear automatically.
+	_create_character_picker()
+
 	# Default to the first real unit type, so existing authoring habits are unchanged.
 	if not unit_types.is_empty():
 		_on_unit_selected(str(unit_types[0]))
@@ -566,6 +590,57 @@ func _create_unit_palette_section():
 		_on_unit_selected(unit_palette_values[0])
 
 	_create_spawn_point_section()
+
+func _load_character_palette_entries() -> void:
+	"""Enumerate the roster into {character_id, display_name} entries.
+
+	Uses CharacterLibrary.all_ids() (which scans res://game/characters/roster/ and
+	falls back to its KNOWN_IDS list), then CharacterLibrary.get_character(id) for each
+	display name. Nothing here is hardcoded, so dropping a new CharacterResource into
+	the roster folder makes it show up in the picker with no code change.
+	"""
+	character_palette_entries.clear()
+	for character_id in CharacterLibrary.all_ids():
+		var id_string: String = String(character_id)
+		if id_string.is_empty():
+			continue
+		var character := CharacterLibrary.get_character(character_id)
+		var label: String = id_string
+		if character != null and not character.display_name.is_empty():
+			label = character.display_name
+		character_palette_entries.append({
+			"character_id": id_string,
+			"display_name": label
+		})
+
+func _create_character_picker() -> void:
+	"""Dropdown that assigns a roster CharacterResource to the next spawn point.
+
+	Index 0 is the empty "(none)" slot, identical in meaning to the unit palette's
+	empty button: the point records no unit reference and is filled at match setup.
+	Each real item stores its character_id as item metadata.
+	"""
+	_load_character_palette_entries()
+
+	var character_row = HBoxContainer.new()
+	unit_palette_container.add_child(character_row)
+
+	var character_label = Label.new()
+	character_label.text = "Character:"
+	character_row.add_child(character_label)
+
+	character_option = OptionButton.new()
+	character_option.tooltip_text = "Place a specific roster character (preferred over the legacy unit type). '(none)' leaves the slot open, filled at match setup."
+	character_option.add_item(NO_UNIT_LABEL)
+	character_option.set_item_metadata(0, "")
+	for i in range(character_palette_entries.size()):
+		var entry: Dictionary = character_palette_entries[i]
+		character_option.add_item(str(entry.get("display_name", "")))
+		var item_index: int = character_option.get_item_count() - 1
+		character_option.set_item_metadata(item_index, str(entry.get("character_id", "")))
+	character_option.selected = 0
+	character_option.item_selected.connect(_on_character_selected)
+	character_row.add_child(character_option)
 
 func _create_spawn_point_section():
 	"""Controls describing WHAT KIND of spawn point the next placement creates.
@@ -642,6 +717,62 @@ func _create_spawn_point_section():
 	spawn_turn_input.tooltip_text = "Turn this point activates (Reinforcement only)"
 	spawn_turn_input.value_changed.connect(_on_spawn_turn_changed)
 	turn_container.add_child(spawn_turn_input)
+
+	# --- Per-spawn AI behaviour -------------------------------------------------
+	# Overrides the placed character's own defaults for THIS point only. "Inherit"
+	# leaves the character in charge, written as "" / -1 into the spawn dict.
+	var ai_header = Label.new()
+	ai_header.text = "AI Behavior:"
+	unit_palette_container.add_child(ai_header)
+
+	var stance_row = HBoxContainer.new()
+	unit_palette_container.add_child(stance_row)
+
+	var stance_label = Label.new()
+	stance_label.text = "Stance:"
+	stance_row.add_child(stance_label)
+
+	stance_option = OptionButton.new()
+	stance_option.add_item("Inherit (character default)")  # index 0 -> ""
+	stance_option.add_item("Aggressive")                   # index 1 -> "aggressive"
+	stance_option.add_item("Defensive")                    # index 2 -> "defensive"
+	stance_option.selected = selected_ai_stance_index
+	stance_option.tooltip_text = "Aggressive closes on the nearest enemy; Defensive holds until a hostile enters aggro range. Inherit uses the character's own default."
+	stance_option.item_selected.connect(_on_stance_selected)
+	stance_row.add_child(stance_option)
+
+	var ai_row = HBoxContainer.new()
+	unit_palette_container.add_child(ai_row)
+
+	var aggro_container = VBoxContainer.new()
+	ai_row.add_child(aggro_container)
+
+	var aggro_label = Label.new()
+	aggro_label.text = "Aggro Range:"
+	aggro_container.add_child(aggro_label)
+
+	aggro_range_input = SpinBox.new()
+	aggro_range_input.min_value = -1
+	aggro_range_input.max_value = 99
+	aggro_range_input.value = selected_aggro_range
+	aggro_range_input.tooltip_text = "Defensive only: cells a hostile must approach before this unit wakes. -1 = inherit the character default."
+	aggro_range_input.value_changed.connect(_on_aggro_range_changed)
+	aggro_container.add_child(aggro_range_input)
+
+	var leash_container = VBoxContainer.new()
+	ai_row.add_child(leash_container)
+
+	var leash_label = Label.new()
+	leash_label.text = "Leash Radius:"
+	leash_container.add_child(leash_label)
+
+	leash_radius_input = SpinBox.new()
+	leash_radius_input.min_value = -1
+	leash_radius_input.max_value = 99
+	leash_radius_input.value = selected_leash_radius
+	leash_radius_input.tooltip_text = "Max cells this unit will move from where it spawns; anchors a boss. -1 = inherit the character default."
+	leash_radius_input.value_changed.connect(_on_leash_radius_changed)
+	leash_container.add_child(leash_radius_input)
 
 	_update_spawn_controls_enabled()
 
@@ -922,26 +1053,64 @@ func _unit_display_name(unit_type: String) -> String:
 	return NO_UNIT_LABEL if unit_type.is_empty() else unit_type
 
 func _on_unit_selected(unit_type: String):
-	"""Handle unit palette selection ("" = the no-unit slot)"""
-	selected_unit_type = unit_type
+	"""Handle unit palette selection ("" = the no-unit slot).
 
-	# Update button states
+	A legacy unit type and a roster character are mutually exclusive references, so
+	picking a unit button clears any character selection (and resets the picker to
+	its "(none)" slot).
+	"""
+	selected_unit_type = unit_type
+	selected_character_id = ""
+	if character_option:
+		character_option.selected = 0
+
+	_highlight_unit_buttons()
+
+	print("Selected unit type: " + _unit_display_name(unit_type) + " for Player " + str(selected_player_id + 1))
+
+func _highlight_unit_buttons() -> void:
+	"""Recolour the unit buttons for the current player, highlighting the selection"""
 	var base_color: Color = _player_color(selected_player_id)
 	for i in range(unit_buttons.size()):
 		var button := unit_buttons[i]
 		if not button:
 			continue
-		var is_selected: bool = i < unit_palette_values.size() and unit_palette_values[i] == unit_type
+		var is_selected: bool = i < unit_palette_values.size() and unit_palette_values[i] == selected_unit_type
 		button.modulate = base_color * 1.5 if is_selected else base_color
 
-	print("Selected unit type: " + _unit_display_name(unit_type) + " for Player " + str(selected_player_id + 1))
+func _on_character_selected(index: int) -> void:
+	"""Handle roster character picker selection (index 0 = the empty "(none)" slot).
+
+	Choosing a real character clears the legacy unit_type selection so _spawn_opts()
+	writes a clean character reference; the picker and the unit buttons never both hold
+	a value at once.
+	"""
+	if not character_option:
+		return
+	var meta: Variant = character_option.get_item_metadata(index)
+	selected_character_id = str(meta) if meta != null else ""
+
+	if not selected_character_id.is_empty():
+		selected_unit_type = ""
+		_highlight_unit_buttons()
+
+	var picked: String = selected_character_id if not selected_character_id.is_empty() else NO_UNIT_LABEL
+	print("Selected character: " + picked + " for Player " + str(selected_player_id + 1))
+
+func _character_display_for(character_id: String) -> String:
+	"""Display name for a roster id, falling back to the id itself when unknown"""
+	for entry in character_palette_entries:
+		if str(entry.get("character_id", "")) == character_id:
+			return str(entry.get("display_name", character_id))
+	return character_id
 
 func _on_player_selected(index: int):
 	"""Handle player selection"""
 	selected_player_id = index
 
-	# Recolour the palette for the new slot, keeping the current selection highlighted
-	_on_unit_selected(selected_unit_type)
+	# Recolour the palette for the new slot, keeping the current selection highlighted.
+	# (Recolour only - this must NOT disturb the character/unit selection.)
+	_highlight_unit_buttons()
 
 	print("Selected player: " + str(selected_player_id + 1))
 
@@ -984,6 +1153,29 @@ func _on_spawn_turn_changed(value: float):
 	"""Store the turn a Reinforcement point activates"""
 	selected_spawn_turn = maxi(1, int(value))
 
+func _on_stance_selected(index: int) -> void:
+	"""Store the AI stance override and re-gate the aggro-range field"""
+	selected_ai_stance_index = index
+	_update_spawn_controls_enabled()
+
+func _on_aggro_range_changed(value: float) -> void:
+	"""Store the aggro-range override (-1 = inherit the character default)"""
+	selected_aggro_range = maxi(-1, int(value))
+
+func _on_leash_radius_changed(value: float) -> void:
+	"""Store the leash-radius override (-1 = inherit the character default)"""
+	selected_leash_radius = maxi(-1, int(value))
+
+func _selected_ai_stance() -> String:
+	"""Map the stance dropdown to the schema string ("" = inherit)"""
+	match selected_ai_stance_index:
+		1:
+			return "aggressive"
+		2:
+			return "defensive"
+		_:
+			return ""
+
 func _update_spawn_controls_enabled() -> void:
 	"""Grey out the fields that are meaningless for the selected spawn kind"""
 	var is_repeating: bool = selected_spawn_kind == MapResource.SPAWN_KIND_RESPAWN \
@@ -1004,13 +1196,30 @@ func _update_spawn_controls_enabled() -> void:
 		spawn_turn_input.editable = is_reinforcement
 		spawn_turn_input.modulate = Color.WHITE if is_reinforcement else Color(1, 1, 1, 0.45)
 
+	# Aggro range is only consulted for a DEFENSIVE unit; grey it out when the stance is
+	# explicitly Aggressive. Inherit keeps it available, since the character's own
+	# default may itself be defensive.
+	if aggro_range_input:
+		var aggro_applies: bool = selected_ai_stance_index != 1
+		aggro_range_input.editable = aggro_applies
+		aggro_range_input.modulate = Color.WHITE if aggro_applies else Color(1, 1, 1, 0.45)
+
 func _spawn_opts() -> Dictionary:
-	"""Options dictionary describing the spawn point the palette currently defines"""
+	"""Options dictionary describing the spawn point the palette currently defines.
+
+	Writes all six data-model keys the placement contract reads: the unit reference
+	(character_id preferred, unit_type legacy hint) plus the three AI-behaviour
+	overrides (ai_stance / aggro_range / leash_radius) and the spawner counters.
+	"""
 	return {
 		"unit_type": selected_unit_type,
+		"character_id": selected_character_id,
 		"max_spawns": selected_max_spawns,
 		"respawn_interval": selected_respawn_interval,
-		"spawn_turn": selected_spawn_turn
+		"spawn_turn": selected_spawn_turn,
+		"ai_stance": _selected_ai_stance(),
+		"aggro_range": selected_aggro_range,
+		"leash_radius": selected_leash_radius
 	}
 
 # --- Grid input: strokes, brushes and tools -----------------------------------
@@ -1327,16 +1536,26 @@ func _palette_get_drag_data(_at_position: Vector2, unit_type: String) -> Variant
 	# A drag supersedes any stroke that may have started
 	_is_painting = false
 
-	var payload: Dictionary = {
-		"kind": "spawn",
-		"player_id": selected_player_id,
-		"spawn_kind": selected_spawn_kind,
-		"unit_type": unit_type,
-		"max_spawns": selected_max_spawns,
-		"respawn_interval": selected_respawn_interval,
-		"spawn_turn": selected_spawn_turn
-	}
-	set_drag_preview(_make_drag_preview(_drag_preview_text(unit_type, selected_spawn_kind), selected_player_id))
+	# Ride the full palette config (character_id + the three AI keys + spawner
+	# counters) so a dropped point is identical to one painted with Place Spawn.
+	var payload: Dictionary = _spawn_opts()
+	payload["kind"] = "spawn"
+	payload["player_id"] = selected_player_id
+	payload["spawn_kind"] = selected_spawn_kind
+	payload["unit_type"] = unit_type
+
+	# Dragging a CONCRETE unit button is an explicit legacy-type choice, so it drops
+	# the roster character reference. Dragging the empty "(none)" slot keeps whatever
+	# character the picker holds - that is how a roster character reaches the grid.
+	if not unit_type.is_empty():
+		payload["character_id"] = ""
+
+	var label_text: String = unit_type
+	if unit_type.is_empty():
+		var carried_id: String = str(payload.get("character_id", ""))
+		if not carried_id.is_empty():
+			label_text = _character_display_for(carried_id)
+	set_drag_preview(_make_drag_preview(_drag_preview_text(label_text, selected_spawn_kind), selected_player_id))
 	return payload
 
 func _grid_get_drag_data(_at_position: Vector2, pos: Vector2i) -> Variant:
@@ -1369,7 +1588,11 @@ func _grid_get_drag_data(_at_position: Vector2, pos: Vector2i) -> Variant:
 		"unit_resource_path": str(normalized.get("unit_resource_path", "")),
 		"max_spawns": int(normalized.get("max_spawns", 1)),
 		"respawn_interval": int(normalized.get("respawn_interval", 1)),
-		"spawn_turn": int(normalized.get("spawn_turn", 1))
+		"spawn_turn": int(normalized.get("spawn_turn", 1)),
+		# Carry the point's own AI overrides so relocating it never resets them.
+		"ai_stance": str(normalized.get("ai_stance", "")),
+		"aggro_range": int(normalized.get("aggro_range", -1)),
+		"leash_radius": int(normalized.get("leash_radius", -1))
 	}
 	set_drag_preview(_make_drag_preview(_drag_preview_text(unit_type, spawn_kind), player_id))
 	return payload
@@ -1922,7 +2145,11 @@ func _apply_payload_at(data: Variant, pos: Vector2i) -> void:
 		"unit_resource_path": str(payload.get("unit_resource_path", "")),
 		"max_spawns": int(payload.get("max_spawns", current_map.get_default_max_spawns(spawn_kind))),
 		"respawn_interval": int(payload.get("respawn_interval", 1)),
-		"spawn_turn": int(payload.get("spawn_turn", 1))
+		"spawn_turn": int(payload.get("spawn_turn", 1)),
+		# The three AI-behaviour overrides ride along too; missing keys mean "inherit".
+		"ai_stance": str(payload.get("ai_stance", "")),
+		"aggro_range": int(payload.get("aggro_range", -1)),
+		"leash_radius": int(payload.get("leash_radius", -1))
 	}
 
 	if kind == "unit_move":
@@ -2174,9 +2401,17 @@ func _update_ui_from_map():
 
 	width_input.value = current_map.width
 	height_input.value = current_map.height
-	
+
 	_create_grid()
 	_update_preview()
+	# NOTE: the new per-spawn keys (character_id / ai_stance / aggro_range /
+	# leash_radius) round-trip through save/load untouched - they live inside each
+	# spawn dict and _create_grid() renders them straight from current_map. There is
+	# no "click an existing spawn to edit its params" flow in this dock (clicking a
+	# cell in Place Spawn STAMPS the palette config; dragging RELOCATES a point,
+	# preserving its own values via _grid_get_drag_data). TODO: if such an edit-in-
+	# place flow is ever added, mirror the selected spawn's character/stance/aggro/
+	# leash back into the palette controls here.
 
 func _update_preview():
 	"""Update the map preview information"""

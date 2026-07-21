@@ -351,8 +351,19 @@ func _load_units() -> bool:
 	print("Created " + str(units_created) + " units")
 	return true
 
-func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> bool:
-	"""Create a unit from spawn data"""
+## Spawn a single unit from a spawn point RIGHT NOW, returning the new unit node
+## (or null on failure). This is the public entry for the runtime spawn scheduler
+## (SpawnManager): _load_units() only runs at map load, but a scheduled
+## Reinforcement arriving on its turn, or a Respawn/Endless point producing its
+## next unit, needs to materialise one point on demand. [param count_hint] only
+## feeds the generated node name — pass a running counter for uniqueness.
+func spawn_unit_now(spawn_data: Dictionary, count_hint: int = 0) -> Node:
+	if not current_map or not map_root:
+		return null
+	return _create_unit_from_spawn(spawn_data, count_hint)
+
+func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> Node:
+	"""Create a unit from spawn data. Returns the new unit node, or null on failure."""
 	print("[MapLoader] Creating unit from spawn data: " + str(spawn_data))
 
 	var grid_pos = spawn_data.get("position", Vector2i(-1, -1))
@@ -369,7 +380,7 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> bool
 
 	if grid_pos == Vector2i(-1, -1):
 		print("[MapLoader] Invalid grid position, skipping unit")
-		return false
+		return null
 
 	# Resolve which CharacterResource should back this unit: prefer an explicit
 	# character_id on the spawn; fall back to the legacy unit_type alias table
@@ -388,13 +399,13 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> bool
 
 	if not character_resource:
 		print("[MapLoader] Failed to resolve default character '" + String(DEFAULT_CHARACTER_ID) + "', skipping unit")
-		return false
+		return null
 
 	# Every unit is a CharacterUnit.tscn instance backed by a CharacterResource.
 	var unit_instance = character_unit_scene.instantiate()
 	if not unit_instance:
 		print("[MapLoader] Failed to instantiate CharacterUnit.tscn")
-		return false
+		return null
 
 	# Must be assigned BEFORE add_child: Unit._ready() (tile_objects/units/unit.gd)
 	# derives its UnitStats + combat components from character_resource only
@@ -422,7 +433,20 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> bool
 
 	player_container.add_child(unit_instance)
 	print("[MapLoader] Unit added to player container successfully")
-	return true
+
+	# Record the home cell and resolve AI behavior (spawn-point override -> character
+	# default). The spawner is the one place that knows BOTH the cell the unit was
+	# placed on AND the authored override, so it is where a placement becomes a
+	# holding guardian or an anchored boss. Read every turn by Bot/BossController.
+	if unit_instance.has_method("configure_ai_behavior"):
+		var norm: Dictionary = current_map.normalize_spawn(spawn_data)
+		unit_instance.configure_ai_behavior(
+			grid_pos,
+			String(norm.get("ai_stance", "")),
+			int(norm.get("aggro_range", -1)),
+			int(norm.get("leash_radius", -1)))
+
+	return unit_instance
 
 func _resolve_character_id(character_id_raw, legacy_unit_type: String) -> String:
 	"""Resolve a spawn's roster character id.

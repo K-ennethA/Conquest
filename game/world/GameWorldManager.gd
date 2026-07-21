@@ -43,6 +43,13 @@ var _tile_effect_overlay: TileEffectOverlay = null
 ## kept hidden; revealed by _on_player_eliminated() when the battle is decided.
 var _game_over_screen: GameOverScreen = null
 
+## Runtime spawn scheduler (see [SpawnManager]): fires the authored spawn KINDS that
+## MapLoader leaves inert -- staggered Reinforcements, Respawns after a unit dies, and
+## endless waves. Created fresh per battle in _setup_spawn_manager() after the board is
+## rebuilt, and freed + recreated on the next map load so its per-point state and turn
+## counter reset cleanly between games. Null before the first map finishes loading.
+var _spawn_manager: SpawnManager = null
+
 func _ready() -> void:
 	print("=== GameWorld Initializing ===")
 
@@ -169,6 +176,10 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# is the target parent the loader just filled with units and tiles.
 	if map_loader and map_loader.map_root:
 		CombatServices.rebuild(map_loader.map_root)
+
+	# Stand up the runtime spawn scheduler for THIS battle. Done after the rebuild so
+	# it can adopt the load-time seed units off the fresh board (to time their deaths).
+	_setup_spawn_manager()
 
 	# Update GameSettings with map info if available
 	if GameSettings.has_method("set_current_map"):
@@ -329,6 +340,26 @@ func _setup_tile_effect_overlay() -> void:
 
 	_tile_effect_overlay = TileEffectOverlay.new()
 	scene_root.add_child(_tile_effect_overlay)
+
+# --- Runtime spawn scheduler ------------------------------------------------
+
+func _setup_spawn_manager() -> void:
+	"""Create (or recreate) the per-battle SpawnManager and hand it the freshly loaded
+	map. Frees any prior instance first so a second+ battle in the same app run starts
+	with a clean schedule and turn counter -- this node is deliberately battle-scoped,
+	unlike the autoloads that survive scene changes. setup() wires it to the per-turn
+	signal and adopts the load-time seed units from the board rebuilt just above."""
+	if _spawn_manager != null and is_instance_valid(_spawn_manager):
+		_spawn_manager.queue_free()
+	_spawn_manager = null
+
+	if map_loader == null or map_loader.current_map == null:
+		return
+
+	_spawn_manager = SpawnManager.new()
+	_spawn_manager.name = "SpawnManager"
+	add_child(_spawn_manager)
+	_spawn_manager.setup(map_loader, map_loader.current_map)
 
 # --- Tile effects (T14) -----------------------------------------------------
 
