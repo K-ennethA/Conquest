@@ -184,13 +184,27 @@ func _on_item_selected(index: int):
 	if map_path:
 		var map_resource = load(map_path) as MapResource
 		if map_resource:
-			var info = map_resource.get_display_info()
+			# Read EXPORTED PROPERTIES, never call methods: in the editor a resource
+			# whose script only became @tool after the session started loads as a
+			# PLACEHOLDER instance -- its properties are readable but method calls throw
+			# ("Attempt to call a method on a placeholder instance"). Properties are
+			# placeholder-safe, so this works whether or not the editor has reloaded.
+			var w: int = int(map_resource.width)
+			var h: int = int(map_resource.height)
+			var players := {}
+			var spawns = map_resource.unit_spawns
+			if spawns is Array:
+				for s in spawns:
+					if s is Dictionary:
+						var pid = s.get("player_id", -1)
+						if pid != null and int(pid) >= 0:
+							players[int(pid)] = true
 			var description_text = []
-			description_text.append("Size: " + info.get("size", "Unknown"))
-			description_text.append("Players: " + str(info.get("players", 0)))
-			description_text.append("Difficulty: " + info.get("difficulty", "Normal"))
-			description_text.append("Author: " + info.get("author", "Unknown"))
-			
+			description_text.append("Size: %dx%d" % [w, h])
+			description_text.append("Players: " + str(players.size()))
+			description_text.append("Difficulty: " + str(map_resource.difficulty))
+			description_text.append("Author: " + str(map_resource.author))
+
 			description_label.text = "\n".join(description_text)
 
 func _on_item_activated(index: int):
