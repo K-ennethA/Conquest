@@ -177,11 +177,26 @@ func has_flag(flag_name: String, unit = null, board = null) -> bool:
 	return bool(passive_modifiers(unit, board).get(flag_name, false))
 
 
+## Rule-modifier keys that are MULTIPLICATIVE reduction SCALES (1.0 = no change,
+## < 1.0 = takes less / lasts less). These must NOT be summed across passives: two
+## "take 25% less" (0.75) passives summed to 1.5 would make the unit take 50% MORE.
+## Instead the STRONGEST (smallest) wins -- reductions refresh, they do not compound
+## -- matching StatusController.status_damage_taken_scale (min) and the reduction-
+## refresh rule. See DamageEffect.damage_taken_scale_for.
+const STRONGEST_WINS_KEYS: Array[String] = ["damage_taken_scale"]
+
+
 func _merge_modifiers(into: Dictionary, from: Dictionary) -> void:
 	for key in from:
 		var val = from[key]
 		if val is bool:
 			into[key] = bool(into.get(key, false)) or val
+		elif (val is int or val is float) and String(key) in STRONGEST_WINS_KEYS:
+			# Strongest reduction wins; never stack/sum/multiply.
+			if into.has(key):
+				into[key] = minf(float(into[key]), float(val))
+			else:
+				into[key] = float(val)
 		elif val is int or val is float:
 			var current = into.get(key, 0)
 			if current is bool:

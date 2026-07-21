@@ -120,6 +120,40 @@ func _pattern(kind: CombatTypes.TargetKind, shape: CombatTypes.AreaShape, size: 
 	p.area_size = size
 	return p
 
+func _passive_mods(ability_id: StringName, mods: Dictionary) -> AbilityResource:
+	var a := AbilityResource.new()
+	a.id = ability_id
+	a.trigger = AbilityTrigger.Trigger.PASSIVE
+	a.rule_modifiers = mods
+	return a
+
+# --- Rule-modifier merge: reductions refresh, additive keys sum -------------
+
+func test_two_damage_reductions_take_the_strongest_not_the_sum() -> void:
+	# The T61 bug: two "take 25% less" passives (0.75) summed to 1.5 -> take 50% MORE.
+	var sys := _system_for(null)
+	sys.add_ability(_passive_mods(&"reduce_a", {"damage_taken_scale": 0.75}))
+	sys.add_ability(_passive_mods(&"reduce_b", {"damage_taken_scale": 0.75}))
+	var mods: Dictionary = sys.passive_modifiers(null, null)
+	assert_almost_eq(float(mods.get("damage_taken_scale", 1.0)), 0.75, 0.001,
+		"two 0.75 reductions must resolve to the strongest (0.75), never sum to 1.5")
+
+func test_the_stronger_damage_reduction_wins() -> void:
+	var sys := _system_for(null)
+	sys.add_ability(_passive_mods(&"weak", {"damage_taken_scale": 0.9}))
+	sys.add_ability(_passive_mods(&"strong", {"damage_taken_scale": 0.5}))
+	var mods: Dictionary = sys.passive_modifiers(null, null)
+	assert_almost_eq(float(mods.get("damage_taken_scale", 1.0)), 0.5, 0.001,
+		"the strongest (smallest) reduction wins")
+
+func test_additive_rule_modifiers_still_sum() -> void:
+	var sys := _system_for(null)
+	sys.add_ability(_passive_mods(&"m1", {"extra_movement": 1}))
+	sys.add_ability(_passive_mods(&"m2", {"extra_movement": 1}))
+	var mods: Dictionary = sys.passive_modifiers(null, null)
+	assert_eq(int(mods.get("extra_movement", 0)), 2,
+		"additive keys like extra_movement still sum across passives")
+
 # --- Targeting: back-compat ------------------------------------------------
 
 func test_no_targeting_still_affects_only_its_own_unit():

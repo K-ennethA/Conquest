@@ -205,12 +205,11 @@ static func _restricted_modifier_of(caster, board) -> float:
 # contributes `rule_modifiers = { "damage_taken_scale": 0.75 }` (= takes 25% less)
 # and AbilitySystem merges it exactly like every other rule modifier.
 #
-# CAVEAT ON MERGING: AbilitySystem._merge_modifiers SUMS numeric keys, so two
-# passives each declaring 0.75 merge to 1.5 -- i.e. they would AMPLIFY damage, not
-# stack their reductions. That is inherent to the shared merge (it is built for
-# additive quantities like extra_movement), so the key is documented as
-# author-at-most-one-per-unit. The value is floored at 0 here so a mis-authored
-# negative can never flip damage into healing.
+# MERGING: AbilitySystem._merge_modifiers treats "damage_taken_scale" as a
+# STRONGEST-WINS key (it is in STRONGEST_WINS_KEYS), so two passives declaring 0.75
+# resolve to 0.75, NOT 1.5 -- reductions refresh to the strongest, they never
+# compound. The value is still floored at 0 here so a mis-authored negative can
+# never flip damage into healing.
 
 
 ## Multiplier the TARGET's own passives apply to incoming damage: 1.0 normally,
