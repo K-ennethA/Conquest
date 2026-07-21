@@ -10,10 +10,12 @@ class MockUnit:
 	var team: int
 	var hp: int
 	var unit_id: StringName
-	func _init(p_team: int, p_hp: int = 100, p_id: StringName = &"") -> void:
+	var is_boss: bool
+	func _init(p_team: int, p_hp: int = 100, p_id: StringName = &"", p_is_boss: bool = false) -> void:
 		team = p_team
 		hp = p_hp
 		unit_id = p_id
+		is_boss = p_is_boss
 
 class MockBoard:
 	var placements: Array = []  # { unit, cell }
@@ -181,3 +183,53 @@ func test_rules_require_all_win_needs_every_condition():
 	var enemy := MockUnit.new(1, 0)  # dead: defeat_all MET, but not enough turns
 	assert_eq(rules.evaluate({ "units": [ally, enemy], "turn": 2 }), GameModeRules.Outcome.ONGOING, "one of two met -> ONGOING")
 	assert_eq(rules.evaluate({ "units": [ally, enemy], "turn": 5 }), GameModeRules.Outcome.VICTORY, "both met -> VICTORY")
+
+# --- DefeatBoss ------------------------------------------------------------
+
+func test_defeat_boss_ongoing_while_enemy_boss_alive():
+	var cond := DefeatBoss.new()
+	cond.faction = 0
+	var boss := MockUnit.new(1, 200, &"boss", true)
+	var ally := MockUnit.new(0, 100)
+	assert_eq(cond.evaluate({ "units": [ally, boss] }), WinCondition.Status.ONGOING, "living enemy boss -> ONGOING")
+
+func test_defeat_boss_met_when_boss_dead_even_with_grunts_alive():
+	# The whole point of "kill the commander": the boss's death wins the map even
+	# while ordinary enemies are still standing.
+	var cond := DefeatBoss.new()
+	cond.faction = 0
+	var dead_boss := MockUnit.new(1, 0, &"boss", true)
+	var live_grunt := MockUnit.new(1, 50)
+	var ally := MockUnit.new(0, 100)
+	assert_eq(cond.evaluate({ "units": [ally, live_grunt, dead_boss] }), WinCondition.Status.MET, "boss dead -> MET despite grunts")
+
+func test_defeat_boss_ongoing_when_no_boss_present():
+	# A map with no boss must never be won by default -- there is nothing to kill.
+	var cond := DefeatBoss.new()
+	cond.faction = 0
+	var ally := MockUnit.new(0, 100)
+	var grunt := MockUnit.new(1, 50)
+	assert_eq(cond.evaluate({ "units": [ally, grunt] }), WinCondition.Status.ONGOING, "no boss -> never an instant win")
+
+# --- WinConditionLibrary (string -> condition factory) ---------------------
+
+func test_library_maps_strings_to_condition_types():
+	assert_true(WinConditionLibrary.build_one("Defeat Boss", 0) is DefeatBoss, "'Defeat Boss' -> DefeatBoss")
+	assert_true(WinConditionLibrary.build_one("Eliminate All Enemies", 0) is DefeatAllEnemies, "'Eliminate All Enemies' -> DefeatAllEnemies")
+	assert_true(WinConditionLibrary.build_one("Some Nonsense", 0) is DefeatAllEnemies, "unknown -> DefeatAllEnemies fallback")
+
+func test_library_rules_win_on_boss_death():
+	var rules := WinConditionLibrary.build_rules(["Defeat Boss"], 0)
+	var ally := MockUnit.new(0, 100)
+	var dead_boss := MockUnit.new(1, 0, &"boss", true)
+	assert_eq(rules.evaluate({ "units": [ally, dead_boss] }), GameModeRules.Outcome.VICTORY, "boss dead -> VICTORY")
+	var live_boss := MockUnit.new(1, 200, &"boss", true)
+	assert_eq(rules.evaluate({ "units": [ally, live_boss] }), GameModeRules.Outcome.ONGOING, "boss alive -> ONGOING")
+
+func test_library_rules_lose_when_player_side_wiped():
+	# Derived lose condition: even with the boss alive (win unmet), losing your whole
+	# side is a Defeat.
+	var rules := WinConditionLibrary.build_rules(["Defeat Boss"], 0)
+	var live_boss := MockUnit.new(1, 200, &"boss", true)
+	var dead_ally := MockUnit.new(0, 0)
+	assert_eq(rules.evaluate({ "units": [dead_ally, live_boss] }), GameModeRules.Outcome.DEFEAT, "player wiped -> DEFEAT")

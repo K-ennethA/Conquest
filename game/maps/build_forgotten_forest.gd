@@ -42,6 +42,9 @@ func _initialize() -> void:
 
 	# Name correction: the draft was authored "Forbidden Forest" by mistake.
 	res.map_name = "Forgotten Forest"
+	# This is a boss encounter: you win by defeating Eldroot, not by clearing every
+	# spawn (the Hard+ parasites would otherwise make elimination the wrong goal).
+	res.victory_conditions = ["Defeat Boss"]
 
 	var sacred_cells: Array[Vector2i] = _upgrade_tiles(res)
 	if sacred_cells.is_empty():

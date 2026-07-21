@@ -42,6 +42,12 @@ var _tile_effect_overlay: TileEffectOverlay = null
 ## Animated end screen (see [GameOverScreen]). Instantiated once during setup and
 ## kept hidden; revealed by _on_player_eliminated() when the battle is decided.
 var _game_over_screen: GameOverScreen = null
+## The current map's compiled win/lose objectives (built at map load from
+## MapResource.victory_conditions). Null until a map is loaded; when set, it drives
+## the single-player end check in _evaluate_game_end.
+var _game_mode_rules: GameModeRules = null
+## Human faction slot for win-condition scoring.
+const HUMAN_FACTION: int = 0
 
 ## Runtime spawn scheduler (see [SpawnManager]): fires the authored spawn KINDS that
 ## MapLoader leaves inert -- staggered Reinforcements, Respawns after a unit dies, and
@@ -192,6 +198,11 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# battle tick forward and none leak into the next one.
 	_setup_hazard_manager()
 
+	# Compile THIS map's authored win conditions into a live rule set. This is what
+	# makes objectives per-map: a boss map ends on the boss's death, a skirmish on a
+	# wipe -- same engine, different WinCondition list (see _evaluate_game_end).
+	_game_mode_rules = WinConditionLibrary.build_rules(map_resource.victory_conditions)
+
 	# Update GameSettings with map info if available
 	if GameSettings.has_method("set_current_map"):
 		GameSettings.set_current_map(map_resource)
@@ -280,53 +291,51 @@ func _setup_game_over_screen() -> void:
 		PlayerManager.player_eliminated.connect(_on_player_eliminated)
 	if GameEvents and not GameEvents.player_eliminated.is_connected(_on_player_eliminated):
 		GameEvents.player_eliminated.connect(_on_player_eliminated)
+	# Also re-check on any unit death: an objective like "Defeat Boss" is decided the
+	# instant the BOSS dies, which does NOT eliminate a whole player while its grunts
+	# still stand -- player_eliminated alone would miss that moment.
+	if GameEvents and not GameEvents.unit_eliminated.is_connected(_on_unit_eliminated):
+		GameEvents.unit_eliminated.connect(_on_unit_eliminated)
 
 func _on_player_eliminated(_player) -> void:
-	"""Decide win/lose after a player is eliminated and reveal the end screen once.
+	_evaluate_game_end(null)
 
-	Rule (using PlayerManager's real API): a player is "alive" when it is not
-	ELIMINATED and still owns units. In single-player the human is the sole non-AI
-	player (player 0; AI opponents have is_ai == true) -- if the human is no longer
-	alive it's a Defeat, otherwise it's a Victory only once no opponents remain,
-	else the game continues. In versus/multiplayer we end neutrally when at most
-	one player is left standing ("<NAME> WINS"). The screen is idempotent, so the
-	first decisive call wins."""
+
+func _on_unit_eliminated(unit, _eliminator) -> void:
+	_evaluate_game_end(unit)
+
+
+func _evaluate_game_end(just_removed) -> void:
+	"""Decide win/lose and reveal the end screen once (idempotent).
+
+	Single-player is MAP-DRIVEN: the map's compiled win/lose objectives
+	(_game_mode_rules, built at load from MapResource.victory_conditions) are scored
+	over the live board, so each map ends on its own terms -- kill the boss, clear
+	the field, hold an objective. [param just_removed] is the unit that just died (or
+	null for a player-elimination trigger); it is folded into the scored state so a
+	boss death is visible on the very tick it happens, even after the board has
+	dropped it. Versus/multiplayer keeps the neutral "last side standing wins"
+	fallback."""
 	if _game_over_screen == null or _game_over_screen.is_shown():
 		return
 
-	var players: Array[Player] = PlayerManager.players
-
-	var alive: Array[Player] = []
-	for p in players:
-		if p != null and p.current_state != Player.PlayerState.ELIMINATED and p.has_units_remaining():
-			alive.append(p)
-
 	var single_player: bool = GameSettings != null and GameSettings.game_mode == GameSettings.GameMode.SINGLE_PLAYER
 
-	if single_player:
-		# The human is the one player not driven by the bot AI.
-		var human: Player = null
-		for p in players:
-			if p != null and not p.is_ai:
-				human = p
-				break
-		if human != null:
-			var human_alive: bool = human.current_state != Player.PlayerState.ELIMINATED and human.has_units_remaining()
-			if not human_alive:
-				_game_over_screen.show_defeat()
-				return
-			# Human still standing -> Victory only once every opponent is gone.
-			var opponents_alive: bool = false
-			for p in alive:
-				if p != human:
-					opponents_alive = true
-					break
-			if not opponents_alive:
-				_game_over_screen.show_victory()
-			return
+	if single_player and _game_mode_rules != null:
+		var state: Dictionary = _build_win_state(just_removed)
+		var outcome: int = _game_mode_rules.evaluate(state)
+		if outcome == GameModeRules.Outcome.VICTORY:
+			_game_over_screen.show_victory()
+		elif outcome == GameModeRules.Outcome.DEFEAT:
+			_game_over_screen.show_defeat()
+		return
 
-	# Versus / multiplayer (or single-player with no identifiable human): the game
-	# ends when at most one side is still standing.
+	# Versus / multiplayer (or single-player before a map's rules are built): end
+	# when at most one side is still standing.
+	var alive: Array[Player] = []
+	for p in PlayerManager.players:
+		if p != null and p.current_state != Player.PlayerState.ELIMINATED and p.has_units_remaining():
+			alive.append(p)
 	if alive.size() <= 1:
 		var winner_name: String = alive[0].get_display_name() if alive.size() == 1 else "No one"
 		_game_over_screen.show_result(
@@ -334,6 +343,21 @@ func _on_player_eliminated(_player) -> void:
 			winner_name.to_upper() + " WINS",
 			"The battle is decided."
 		)
+
+
+## Assemble the neutral state dict a [WinCondition] scores against: every living
+## unit on the board, plus [param just_removed] (the unit that just died, which the
+## board may already have dropped -- including it is how "the boss is dead" is seen
+## on the death tick rather than a frame later). Schema: see WinCondition.gd.
+func _build_win_state(just_removed) -> Dictionary:
+	var units: Array = []
+	var board = CombatServices.board() if CombatServices != null else null
+	if board != null and board.has_method("all_units"):
+		for u in board.all_units():
+			units.append(u)
+	if just_removed != null and just_removed not in units:
+		units.append(just_removed)
+	return { "units": units, "board": board, "turn": 0 }
 
 func _setup_tile_effect_overlay() -> void:
 	"""Instantiate TileEffectOverlay and add it to the 3D scene root (GameWorld

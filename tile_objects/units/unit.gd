@@ -387,6 +387,12 @@ func get_owner_player() -> Player:
 	"""Get the player who owns this unit"""
 	return owner_player
 
+## Faction id for win-condition scoring (see [WinCondition]): the owning player's
+## slot, or -1 for an unowned/neutral unit. Lets DefeatBoss / DefeatAllEnemies tell
+## friend from foe on live units without knowing about the Player type.
+func get_team() -> int:
+	return owner_player.player_id if owner_player != null else -1
+
 func _get_player_assignment_from_player(player: Player) -> PlayerMaterials.PlayerTeam:
 	"""Convert Player to PlayerMaterials.PlayerTeam enum"""
 	if not player:

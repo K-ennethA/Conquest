@@ -11,6 +11,7 @@ author = "Kenneth"
 status = "Inactive"
 width = 20
 height = 20
+victory_conditions = Array[String](["Defeat Boss"])
 tile_layout = Array[Dictionary]([{
 "position": Vector2i(1, 1),
 "tile_id": "grass_plains",
