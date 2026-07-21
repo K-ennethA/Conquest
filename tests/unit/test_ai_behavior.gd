@@ -280,12 +280,25 @@ func test_wave_kinds_default_to_aggressive() -> void:
 
 
 func test_explicit_authored_stance_overrides_the_kind_default() -> void:
-	# Author override wins in BOTH directions, against either default.
+	# Author override wins for Start and Reinforcement.
 	assert_eq(
 		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_START, "aggressive"),
 		"aggressive",
 		"an explicit aggressive on a Start point beats the defensive default")
 	assert_eq(
-		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_ENDLESS, "defensive"),
+		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_REINFORCEMENT, "defensive"),
 		"defensive",
-		"an explicit defensive on an Endless point beats the aggressive default")
+		"an explicit defensive on a Reinforcement point beats the aggressive default")
+
+
+func test_endless_and_respawn_force_aggressive_over_any_authored_stance() -> void:
+	# Endless/Respawn reuse one home cell, so their units must ALWAYS charge to clear
+	# it -- an authored defensive is ignored, unlike every other kind.
+	assert_eq(
+		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_ENDLESS, "defensive"),
+		"aggressive",
+		"an Endless point forces aggressive so it never chokes its own spawn cell")
+	assert_eq(
+		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_RESPAWN, "defensive"),
+		"aggressive",
+		"a Respawn point forces aggressive for the same reason")

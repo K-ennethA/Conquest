@@ -480,13 +480,17 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> Node
 ## intended "defenders defend" design. Any unrecognised value falls back to Start's
 ## "defensive" default. Static + pure so tests can assert it directly.
 static func resolve_default_ai_stance(spawn_kind: String, authored_stance: String) -> String:
-	# 1. Author override wins.
+	# 1. Endless/Respawn ALWAYS charge -- even over an authored stance. These reuse a
+	#    single home cell every wave, so a defensive unit that sat there would choke
+	#    the point; forcing aggressive keeps the spot clearing for the next spawn.
+	if spawn_kind == MapResource.SPAWN_KIND_ENDLESS \
+			or spawn_kind == MapResource.SPAWN_KIND_RESPAWN:
+		return "aggressive"
+	# 2. Otherwise an author override wins.
 	if authored_stance == "aggressive" or authored_stance == "defensive":
 		return authored_stance
-	# 2. Default by spawn kind: reinforcements/respawns/endless charge; the rest hold.
-	if spawn_kind == MapResource.SPAWN_KIND_RESPAWN \
-			or spawn_kind == MapResource.SPAWN_KIND_ENDLESS \
-			or spawn_kind == MapResource.SPAWN_KIND_REINFORCEMENT:
+	# 3. Default by kind: reinforcements charge; pre-placed (Start) hold.
+	if spawn_kind == MapResource.SPAWN_KIND_REINFORCEMENT:
 		return "aggressive"
 	return "defensive"
 
