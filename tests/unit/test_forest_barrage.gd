@@ -15,6 +15,10 @@ class Stub:
 	var stats: Dictionary
 	var hp: int
 	var boss: bool
+	# Optional AI stance/aggro, used by the defensive-boss gate tests. Off by default so
+	# a plain Stub reports NOT defensive (is_defensive() false) and the gate is a no-op.
+	var defensive: bool = false
+	var aggro: int = 99
 
 	func _init(p_team: int, p_stats: Dictionary, p_boss: bool = false) -> void:
 		team = p_team
@@ -33,6 +37,12 @@ class Stub:
 
 	func is_boss() -> bool:
 		return boss
+
+	func is_defensive() -> bool:
+		return defensive
+
+	func get_aggro_range() -> int:
+		return aggro
 
 
 class MockBoard:
@@ -174,3 +184,36 @@ func test_boss_does_not_fire_the_lane_when_no_hostile_is_aligned():
 		"an unaligned hostile does not trigger the lane")
 	assert_ne(decision.get("move", null), move,
 		"and the hazard move is not selected off-axis")
+
+
+func test_defensive_boss_holds_the_lane_until_a_hostile_is_in_aggro_range():
+	# A DEFENSIVE guardian must NOT snipe a distant aligned enemy with its range-6 vine:
+	# it holds until something is within its aggro range. (User: the boss shouldn't attack
+	# unless enemies are in range.)
+	var move := _forest_barrage()
+	var boss := Stub.new(0, { "attack": 24, "health": 400 }, true)
+	boss.defensive = true
+	boss.aggro = 3
+	var enemy := Stub.new(1, { "health": 100, "defense": 0 })
+	var board := MockBoard.new()
+	board.place(boss, Vector2i(0, 0))
+	board.place(enemy, Vector2i(0, 6))  # aligned but distance 6 -> beyond aggro 3
+
+	var decision := BossController.new().plan(boss, [move], board, [])
+	assert_ne(decision.get("reason", ""), "hazard_lane",
+		"a defensive boss does not fire the vine at a hostile beyond its aggro range")
+
+
+func test_defensive_boss_fires_the_lane_once_a_hostile_enters_aggro_range():
+	var move := _forest_barrage()
+	var boss := Stub.new(0, { "attack": 24, "health": 400 }, true)
+	boss.defensive = true
+	boss.aggro = 3
+	var enemy := Stub.new(1, { "health": 100, "defense": 0 })
+	var board := MockBoard.new()
+	board.place(boss, Vector2i(0, 0))
+	board.place(enemy, Vector2i(0, 2))  # aligned AND within aggro 3
+
+	var decision := BossController.new().plan(boss, [move], board, [])
+	assert_eq(decision.get("reason", ""), "hazard_lane",
+		"once a hostile is in aggro range the defensive boss unleashes the vine")

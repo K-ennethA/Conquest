@@ -39,9 +39,22 @@ func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
 	# range. Only ever pre-empts when such a hostile really exists and the move is
 	# ready; otherwise it falls straight through to the normal plan, so no ordinary
 	# behaviour regresses.
-	var lane := _hazard_lane_plan(actor, full, board)
-	if not lane.is_empty():
-		return lane
+	#
+	# GATE (defensive boss only): a DEFENSIVE guardian holds its vine until a hostile is
+	# actually within its aggro range -- it must not snipe distant enemies with a range-6
+	# lane the instant one drifts into alignment. Once something is in range it unleashes
+	# the vine down the full lane as before. An aggressive boss keeps the always-on
+	# anti-kite pre-emption. (A mock that doesn't report a stance is not "defensive", so
+	# this gate is a no-op in unit tests.)
+	var fire_lane: bool = true
+	if _is_defensive(actor):
+		var origin: Vector2i = board.cell_of(actor) if (board != null and board.has_method("cell_of")) else Vector2i.ZERO
+		var home: Vector2i = _effective_home(actor, origin)
+		fire_lane = _hostile_within_aggro(actor, home, _list_hostiles(actor, board), board)
+	if fire_lane:
+		var lane := _hazard_lane_plan(actor, full, board)
+		if not lane.is_empty():
+			return lane
 	return super.plan(actor, full, board, reachable)
 
 
