@@ -1,5 +1,6 @@
 [gd_resource type="Resource" script_class="CharacterResource" format=3]
 
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="1_0lhqb"]
 [ext_resource type="PackedScene" path="res://game/characters/models/mage_model.tscn" id="1_aeds7"]
 [ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="2_0lhqb"]
 [ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="3_e1psb"]
@@ -107,6 +108,7 @@ base_defense = 8
 base_magic = 34
 base_magic_defense = 18
 base_speed = 13
+base_movement = 6
 attack_range = 2
 movement_kind = 1
 moveset = Array[ExtResource("2_0lhqb")]([SubResource("Resource_yunhm"), SubResource("Resource_fy3um"), SubResource("Resource_ww1lw"), SubResource("Resource_citek")])

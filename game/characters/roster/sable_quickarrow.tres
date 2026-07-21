@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="CharacterResource" format=3]
 
 [ext_resource type="PackedScene" path="res://game/characters/models/archer_model.tscn" id="1_4nm83"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="1_mtvkl"]
 [ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="2_odaqq"]
 [ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="3_mtvkl"]
 [ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="4_701r7"]
@@ -91,6 +92,7 @@ base_attack = 26
 base_defense = 10
 base_magic = 6
 base_speed = 15
+base_movement = 6
 attack_range = 3
 movement_profile = ExtResource("9_mvprof")
 moveset = Array[ExtResource("2_odaqq")]([SubResource("Resource_ko5eg"), SubResource("Resource_cchlk"), SubResource("Resource_pgvjo"), SubResource("Resource_eldn4")])

@@ -28,16 +28,44 @@ class FakeUnit extends RefCounted:
 
 
 # A stand-in for MapLoader: records how many times spawn_unit_now was asked to produce
-# a unit and returns a fresh FakeUnit each time.
+# a unit, the position each spawn was placed at (so spill tests can assert the unit
+# landed on a free neighbour), and returns a fresh FakeUnit each time.
 class FakeMapLoader extends RefCounted:
 	var spawn_calls: int = 0
 	var produced: Array = []
+	var spawn_positions: Array = []
 
-	func spawn_unit_now(_spawn_data, _count_hint = 0):
+	func spawn_unit_now(spawn_data, _count_hint = 0):
 		spawn_calls += 1
+		var pos = spawn_data.get("position", Vector2i(-1, -1)) if spawn_data is Dictionary else Vector2i(-1, -1)
+		spawn_positions.append(pos)
 		var u := FakeUnit.new()
 		produced.append(u)
 		return u
+
+
+# A lightweight board double for the occupancy / spill guard. Exposes the subset of
+# the BoardAdapter interface SpawnManager queries: is_occupied / is_blocked / in_bounds.
+# `all_occupied` blankets the whole board (to prove the scheduler defers when no free
+# cell exists); otherwise per-cell dictionaries drive individual answers.
+class FakeBoard extends RefCounted:
+	var all_occupied: bool = false
+	var occupied: Dictionary = {}   # Vector2i -> bool
+	var blocked: Dictionary = {}    # Vector2i -> bool
+	var bounds_min: Vector2i = Vector2i(0, 0)
+	var bounds_max: Vector2i = Vector2i(19, 19)
+
+	func is_occupied(cell: Vector2i) -> bool:
+		if all_occupied:
+			return true
+		return bool(occupied.get(cell, false))
+
+	func is_blocked(cell: Vector2i) -> bool:
+		return bool(blocked.get(cell, false))
+
+	func in_bounds(cell: Vector2i) -> bool:
+		return (cell.x >= bounds_min.x and cell.x <= bounds_max.x
+			and cell.y >= bounds_min.y and cell.y <= bounds_max.y)
 
 
 var _loader: FakeMapLoader
@@ -135,6 +163,72 @@ func test_endless_does_not_spawn_before_first_interval() -> void:
 	assert_eq(_loader.spawn_calls, 0, "Endless with interval 3 spawns nothing on turns 1-2")
 	_manager.process_turn()
 	assert_eq(_loader.spawn_calls, 1, "Endless with interval 3 spawns its first extra on turn 3")
+
+
+# --- Occupancy spill (BUG 1: Endless never produced past the first unit) -----
+
+func test_endless_spills_to_a_free_neighbour_when_home_is_permanently_occupied() -> void:
+	# The confirmed live bug: a unit lingers on the Endless home cell forever, so the
+	# old occupancy guard deferred every wave and Endless was dead. It must now spill
+	# to a free adjacent cell on the due turn instead.
+	var home := Vector2i(4, 3)
+	var map := _map_with(MapResource.SPAWN_KIND_ENDLESS, home, 0, {
+		"respawn_interval": 1,
+	})
+	var board := FakeBoard.new()
+	board.occupied[home] = true  # home occupant that never leaves
+	_manager._board_override = board
+	_manager.initialize(_loader, map)
+
+	# Interval 1 -> due on turn 1. Home is blocked, so it spills rather than defers.
+	_manager.process_turn()
+	assert_eq(_loader.spawn_calls, 1, "Endless spills to a free cell instead of deferring forever")
+	var placed: Vector2i = _loader.spawn_positions[0]
+	assert_ne(placed, home, "the spilled unit must NOT land on the occupied home cell")
+	assert_true(board.in_bounds(placed) and not board.is_occupied(placed),
+		"the spilled unit lands on a free, in-bounds neighbour")
+	var chebyshev: int = maxi(absi(placed.x - home.x), absi(placed.y - home.y))
+	assert_true(chebyshev >= 1 and chebyshev <= SpawnManager.SPILL_RADIUS,
+		"the spill stays within the search radius of home")
+
+
+func test_endless_defers_when_home_and_whole_neighbourhood_are_blocked() -> void:
+	# When there is genuinely no free cell nearby, spilling is impossible and the
+	# scheduler must fall back to deferring (produce nothing this turn).
+	var home := Vector2i(4, 3)
+	var map := _map_with(MapResource.SPAWN_KIND_ENDLESS, home, 0, {
+		"respawn_interval": 1,
+	})
+	var board := FakeBoard.new()
+	board.all_occupied = true  # home AND every neighbour blocked
+	_manager._board_override = board
+	_manager.initialize(_loader, map)
+
+	_tick(5)
+	assert_eq(_loader.spawn_calls, 0,
+		"Endless produces nothing while home and its whole neighbourhood are blocked")
+
+
+func test_respawn_spills_when_home_is_blocked_on_the_due_turn() -> void:
+	# Respawn shares the spill path: if the home cell is occupied when the replacement
+	# is due, it spills to a free neighbour rather than deferring.
+	var home := Vector2i(2, 2)
+	var map := _map_with(MapResource.SPAWN_KIND_RESPAWN, home, 0, {
+		"max_spawns": -1,
+		"respawn_interval": 1,
+	})
+	var board := FakeBoard.new()
+	board.occupied[home] = true
+	_manager._board_override = board
+	_manager.initialize(_loader, map)
+
+	var seed := FakeUnit.new()
+	_manager.track_seed_unit(home, 0, seed)
+	seed.kill()
+
+	_manager.process_turn()  # interval 1 elapsed -> replacement due, home blocked
+	assert_eq(_loader.spawn_calls, 1, "Respawn spills the replacement to a free cell")
+	assert_ne(_loader.spawn_positions[0], home, "the replacement avoids the blocked home cell")
 
 
 # --- Respawn ----------------------------------------------------------------

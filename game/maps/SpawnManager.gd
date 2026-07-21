@@ -46,6 +46,16 @@ class_name SpawnManager
 var _map_loader = null
 var _map_resource = null
 
+# Optional board seam. When null the live board is read off CombatServices; tests
+# inject a lightweight fake here so the occupancy guard / spill search can run
+# headless without an autoload or a live scene. See _board().
+var _board_override = null
+
+# How far (Chebyshev rings) a spawner will look for a free cell when its home cell
+# is occupied, before giving up and deferring. Radius 2 covers the 24 cells around
+# the home, which is plenty of breathing room for a loitering occupant.
+const SPILL_RADIUS: int = 2
+
 # Monotonic per-turn counter: 0 before the first turn, incremented once per
 # player_turn_started fire (or per process_turn() call in tests).
 var _current_turn: int = 0
@@ -235,29 +245,83 @@ func _under_cap(state: Dictionary) -> bool:
 
 func _try_spawn(state: Dictionary) -> bool:
 	"""Materialise one unit for this point, honouring the occupancy guard. Returns
-	true on success and updates the point's produced count / timers / tracked unit."""
-	# Occupancy guard: never stack onto a home cell that already holds a living unit,
-	# which would break the board (one cell, one occupant). Defer to a later eligible
-	# turn instead of stacking. Endless especially can catch its own previous unit
-	# loitering on the home cell -- deferring is the natural throttle there.
-	var cell: Vector2i = state["position"]
-	if _cell_blocked(cell):
-		print("[SpawnManager] Home cell %s occupied; deferring %s spawn to a later turn." % [
-			str(cell), String(state["kind"])])
-		return false
+	true on success and updates the point's produced count / timers / tracked unit.
+
+	Occupancy: one cell holds exactly one living unit, so we never stack onto a home
+	cell that is already occupied. Instead of deferring FOREVER (the old behaviour --
+	an Endless/Respawn point whose seed loiters on its home cell would then never
+	produce again), we SPILL to the nearest free, in-bounds, passable cell in a small
+	ring around home (see _find_spill_cell). Only when the whole neighbourhood is full
+	do we defer to a later turn. Headless (no board) never blocks, exactly as before."""
+	var home: Vector2i = state["position"]
+	var spawn_cell: Vector2i = home
+	if _cell_blocked(home):
+		var spill: Vector2i = _find_spill_cell(home)
+		if spill.x < 0:
+			print("[SpawnManager] Home cell %s and its neighbourhood are full; deferring %s spawn to a later turn." % [
+				str(home), String(state["kind"])])
+			return false
+		spawn_cell = spill
+		print("[SpawnManager] Home cell %s occupied; spilling %s spawn to %s." % [
+			str(home), String(state["kind"]), str(spawn_cell)])
 
 	if _map_loader == null:
 		return false
 
-	var new_unit = _map_loader.spawn_unit_now(state["spawn"], int(state["produced"]))
+	# When spilling, hand spawn_unit_now a home-cell override so the unit materialises
+	# on the free cell rather than the blocked home. The raw spawn dict is copied so
+	# the authored point is never mutated; every other key (character, player, kind...)
+	# is preserved.
+	var spawn_data = state["spawn"]
+	if spawn_cell != home:
+		var override: Dictionary = (state["spawn"] as Dictionary).duplicate()
+		override["position"] = spawn_cell
+		spawn_data = override
+
+	var new_unit = _map_loader.spawn_unit_now(spawn_data, int(state["produced"]))
 	if new_unit == null:
-		print("[SpawnManager] spawn_unit_now returned null for point at %s; will retry." % str(cell))
+		print("[SpawnManager] spawn_unit_now returned null for point at %s; will retry." % str(home))
 		return false
 
 	state["produced"] = int(state["produced"]) + 1
 	state["last_spawn_turn"] = _current_turn
 	state["death_turn"] = -1
 	_track_unit(state, new_unit)
+	return true
+
+
+func _find_spill_cell(home: Vector2i) -> Vector2i:
+	"""Nearest free, in-bounds, passable cell in a ring around `home` (Chebyshev rings
+	outward to SPILL_RADIUS), or (-1,-1) when the whole neighbourhood is blocked.
+
+	Null-safe: with no board (headless) there is nothing to spill onto, but there is
+	also nothing blocking home, so this path is never reached in that case."""
+	var board = _board()
+	if board == null:
+		return Vector2i(-1, -1)
+	for r in range(1, SPILL_RADIUS + 1):
+		for dx in range(-r, r + 1):
+			for dy in range(-r, r + 1):
+				# Only the cells ON this ring (Chebyshev distance == r); inner cells
+				# were already tested by a smaller ring.
+				if maxi(absi(dx), absi(dy)) != r:
+					continue
+				var cell: Vector2i = Vector2i(home.x + dx, home.y + dy)
+				if _cell_free_for_spawn(board, cell):
+					return cell
+	return Vector2i(-1, -1)
+
+
+func _cell_free_for_spawn(board, cell: Vector2i) -> bool:
+	"""True when `cell` can hold a freshly spawned unit: in bounds, passable terrain,
+	and not already occupied by a living unit. Each board query is feature-detected so
+	lightweight fakes need only provide what they exercise."""
+	if board.has_method("in_bounds") and not board.in_bounds(cell):
+		return false
+	if board.has_method("is_blocked") and board.is_blocked(cell):
+		return false
+	if board.has_method("is_occupied") and board.is_occupied(cell):
+		return false
 	return true
 
 
@@ -318,12 +382,21 @@ func _point_has_live_unit(state: Dictionary) -> bool:
 func _cell_blocked(cell: Vector2i) -> bool:
 	"""True when the live board reports a living unit on `cell`. Null-safe: before the
 	first board rebuild (or in headless tests) there is no board, so nothing blocks."""
-	if CombatServices == null:
-		return false
-	var board = CombatServices.board()
+	var board = _board()
 	if board == null:
 		return false
 	return board.is_occupied(cell)
+
+
+func _board():
+	"""The board this scheduler queries: an injected fake (tests) takes priority,
+	otherwise the live shared board off CombatServices. Null when neither exists
+	(headless with no override, or before the first map load)."""
+	if _board_override != null:
+		return _board_override
+	if CombatServices == null:
+		return null
+	return CombatServices.board()
 
 
 # --- Misc -------------------------------------------------------------------

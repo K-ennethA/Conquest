@@ -250,3 +250,42 @@ func test_boss_inherits_leash_filter() -> void:
 	var dest: Vector2i = decision["dest_cell"]
 	assert_true(_manhattan(dest, boss.home) <= 2,
 		"the boss's destination (%s) never leaves its leash radius" % dest)
+
+
+# --- Spawn-kind default AI stance (MapLoader.resolve_default_ai_stance) -------
+# Precedence: an explicit authored stance always wins; otherwise the default is
+# chosen by spawn kind -- Start defenders HOLD, waves (Respawn/Endless/Reinforcement)
+# CHARGE. Routes through both the initial load and every SpawnManager wave.
+
+func test_start_spawn_defaults_to_defensive() -> void:
+	assert_eq(
+		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_START, ""),
+		"defensive",
+		"a pre-placed Start enemy with no authored stance holds (defends)")
+
+
+func test_wave_kinds_default_to_aggressive() -> void:
+	assert_eq(
+		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_ENDLESS, ""),
+		"aggressive",
+		"Endless waves charge on arrival")
+	assert_eq(
+		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_RESPAWN, ""),
+		"aggressive",
+		"Respawn replacements charge on arrival")
+	assert_eq(
+		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_REINFORCEMENT, ""),
+		"aggressive",
+		"Reinforcements charge on arrival")
+
+
+func test_explicit_authored_stance_overrides_the_kind_default() -> void:
+	# Author override wins in BOTH directions, against either default.
+	assert_eq(
+		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_START, "aggressive"),
+		"aggressive",
+		"an explicit aggressive on a Start point beats the defensive default")
+	assert_eq(
+		MapLoader.resolve_default_ai_stance(MapResource.SPAWN_KIND_ENDLESS, "defensive"),
+		"defensive",
+		"an explicit defensive on an Endless point beats the aggressive default")

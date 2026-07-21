@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="CharacterResource" format=3]
 
 [ext_resource type="PackedScene" path="res://game/characters/models/support_model.tscn" id="1_7jfji"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="1_c5ed8"]
 [ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="2_g1ghn"]
 [ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="3_c5ed8"]
 [ext_resource type="Script" path="res://game/combat/effects/HealEffect.gd" id="4_emu0e"]
@@ -94,6 +95,7 @@ base_attack = 12
 base_defense = 14
 base_magic = 24
 base_magic_defense = 22
+base_movement = 6
 attack_range = 2
 movement_profile = ExtResource("9_mvprof")
 moveset = Array[ExtResource("2_g1ghn")]([SubResource("Resource_adsul"), SubResource("Resource_nts10"), SubResource("Resource_iso05"), SubResource("Resource_fytdi")])

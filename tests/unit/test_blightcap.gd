@@ -728,7 +728,7 @@ func test_blightcap_character_sheet():
 	if petalfang != null:
 		assert_gt(blightcap.base_health, petalfang.base_health, "tougher than Petalfang")
 		assert_lt(blightcap.base_speed, petalfang.base_speed, "and slower")
-		assert_lte(blightcap.base_movement, petalfang.base_movement, "with no more reach on foot")
+		assert_gt(blightcap.base_movement, petalfang.base_movement, "a fast runner -- more foot reach than the slow Petalfang")
 
 	var move_ids: Array[StringName] = []
 	for m in blightcap.moveset:

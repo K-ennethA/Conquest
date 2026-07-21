@@ -455,13 +455,40 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int) -> Node
 	# holding guardian or an anchored boss. Read every turn by Bot/BossController.
 	if unit_instance.has_method("configure_ai_behavior"):
 		var norm: Dictionary = current_map.normalize_spawn(spawn_data)
+		var resolved_stance: String = resolve_default_ai_stance(
+			String(norm.get("spawn_kind", MapResource.SPAWN_KIND_START)),
+			String(norm.get("ai_stance", "")))
 		unit_instance.configure_ai_behavior(
 			grid_pos,
-			String(norm.get("ai_stance", "")),
+			resolved_stance,
 			int(norm.get("aggro_range", -1)),
 			int(norm.get("leash_radius", -1)))
 
 	return unit_instance
+
+
+## Resolve the AI stance a spawned unit should hold, given its spawn KIND and the
+## authored `ai_stance` override. Precedence (highest first):
+##   1. An explicit authored stance ("aggressive" / "defensive") ALWAYS wins.
+##   2. Otherwise the default is chosen by spawn kind:
+##        - Start        -> "defensive"  (pre-placed defenders HOLD until an enemy
+##                          is in aggro range of their home cell)
+##        - Respawn / Endless / Reinforcement -> "aggressive"  (waves CHARGE on arrival)
+## This routes through BOTH the initial map load and every SpawnManager wave, because
+## both go through _create_unit_from_spawn. NOTE: this changes the default for
+## pre-placed enemies on ALL maps (Start now defaults to "defensive"); that is the
+## intended "defenders defend" design. Any unrecognised value falls back to Start's
+## "defensive" default. Static + pure so tests can assert it directly.
+static func resolve_default_ai_stance(spawn_kind: String, authored_stance: String) -> String:
+	# 1. Author override wins.
+	if authored_stance == "aggressive" or authored_stance == "defensive":
+		return authored_stance
+	# 2. Default by spawn kind: reinforcements/respawns/endless charge; the rest hold.
+	if spawn_kind == MapResource.SPAWN_KIND_RESPAWN \
+			or spawn_kind == MapResource.SPAWN_KIND_ENDLESS \
+			or spawn_kind == MapResource.SPAWN_KIND_REINFORCEMENT:
+		return "aggressive"
+	return "defensive"
 
 func _difficulty_allows(character_resource) -> bool:
 	"""True unless [param character_resource] demands a higher AI difficulty than the

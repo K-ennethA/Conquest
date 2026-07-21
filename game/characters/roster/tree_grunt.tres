@@ -11,7 +11,7 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"tree_grunt"
-display_name = "Tree Grunt"
+display_name = "Barkling"
 description = "A lurching sapling animated by the Great Tree's will. Slow and brittle alone, but the forest never sends just one."
 model_scene = ExtResource("2_model")
 base_health = 55
@@ -20,9 +20,5 @@ base_defense = 8
 base_magic = 2
 base_magic_defense = 6
 base_speed = 7
-base_movement = 2
-attack_range = 1
-is_boss = false
-footprint = Vector2i(1, 1)
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_bash"), ExtResource("5_rooted")])
 abilities = Array[ExtResource("6_abres")]([ExtResource("7_blessing")])

@@ -1,5 +1,6 @@
 [gd_resource type="Resource" script_class="CharacterResource" format=3]
 
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="1_dfeea"]
 [ext_resource type="PackedScene" path="res://game/characters/models/scout_model.tscn" id="1_s3u7b"]
 [ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="2_dfeea"]
 [ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="3_7cd0d"]
@@ -91,6 +92,6 @@ base_health = 85
 base_defense = 9
 base_magic = 8
 base_speed = 20
-base_movement = 5
+base_movement = 6
 movement_kind = 1
 moveset = Array[ExtResource("2_dfeea")]([SubResource("Resource_khqcs"), SubResource("Resource_hixee"), SubResource("Resource_ivivk"), SubResource("Resource_o7q37")])

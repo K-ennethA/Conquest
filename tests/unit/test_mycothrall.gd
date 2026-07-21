@@ -654,7 +654,7 @@ func test_mycothrall_character_sheet():
 		return
 
 	assert_eq(myco.character_id, &"mycothrall", "stable id")
-	assert_eq(myco.display_name, "Mycothrall, the Hollowing", "display name")
+	assert_eq(myco.display_name, "Mycothrall", "display name -- plain; titles are for bosses only")
 	assert_ne(myco.description, "", "it has flavour")
 	assert_eq(myco.footprint, Vector2i(1, 1), "a one-cell skirmisher")
 	assert_false(myco.is_boss, "not a boss")

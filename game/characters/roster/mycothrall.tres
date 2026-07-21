@@ -11,7 +11,7 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"mycothrall"
-display_name = "Mycothrall, the Hollowing"
+display_name = "Mycothrall"
 description = "A low, wet parasite that spreads flat across a tile like something poured. It cannot win a straight fight, so it doesn't try -- it lunges in, bites deep, and drinks. Left in a wound too long its threads hollow the host from the inside and take the reins, and the thing you were protecting turns and swings at the ally beside it."
 model_scene = ExtResource("2_model")
 base_health = 38
@@ -20,11 +20,7 @@ base_defense = 6
 base_magic = 6
 base_magic_defense = 7
 base_speed = 14
-base_movement = 3
-attack_range = 1
-movement_kind = 0
-is_boss = false
+base_movement = 5
 min_difficulty = 2
-footprint = Vector2i(1, 1)
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_lunge"), ExtResource("5_siphon")])
 abilities = Array[ExtResource("6_abres")]([ExtResource("7_parasitic")])

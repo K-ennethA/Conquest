@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="CharacterResource" format=3]
 
 [ext_resource type="PackedScene" path="res://game/characters/models/tank_model.tscn" id="1_dyntd"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="1_mpknp"]
 [ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="2_mpknp"]
 [ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="3_0e46a"]
 [ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="4_we5yv"]
@@ -98,5 +99,5 @@ base_defense = 30
 base_magic = 6
 base_magic_defense = 20
 base_speed = 7
-base_movement = 2
+base_movement = 6
 moveset = Array[ExtResource("2_mpknp")]([SubResource("Resource_uoqod"), SubResource("Resource_a76n6"), SubResource("Resource_nopo3"), SubResource("Resource_s3nw8")])

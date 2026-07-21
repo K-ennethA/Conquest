@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="CharacterResource" format=3]
 
 [ext_resource type="PackedScene" path="res://game/characters/models/bruiser_model.tscn" id="1_b5xr7"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="1_ufw07"]
 [ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="2_oibsx"]
 [ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="3_ufw07"]
 [ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="4_3f7bh"]
@@ -96,5 +97,6 @@ base_defense = 16
 base_magic = 4
 base_magic_defense = 8
 base_speed = 11
+base_movement = 6
 movement_profile = ExtResource("9_mvprof")
 moveset = Array[ExtResource("2_oibsx")]([SubResource("Resource_tcpa7"), SubResource("Resource_webrr"), SubResource("Resource_f5vj4"), SubResource("Resource_kfnwx")])
