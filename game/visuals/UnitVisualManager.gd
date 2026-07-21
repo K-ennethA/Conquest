@@ -9,10 +9,21 @@ class_name UnitVisualManager
 var _health_bar_scene: PackedScene
 var _unit_health_bars: Dictionary = {}  # Unit -> HealthBar
 
+# Shared "spent turn" dim wash (Fire Emblem style greying-out). One material is
+# reused across every unit and every frame -- never allocate per unit -- and it
+# is applied non-destructively via each MeshInstance3D's `material_overlay`, which
+# composites OVER the model's own materials without replacing them, so clearing it
+# (`material_overlay = null`) restores the original look exactly. Chosen over
+# GeometryInstance3D.transparency because a dark unshaded wash reads clearly as
+# "greyed / desaturated / spent" rather than merely fading the model out.
+var _dim_material: StandardMaterial3D = null
+
 func _ready():
 	if not player_materials:
 		player_materials = PlayerMaterials.new()
-	
+
+	_ensure_dim_material()
+
 	# Load health bar scene
 	_health_bar_scene = preload("res://game/visuals/HealthBar.tscn")
 	
@@ -20,8 +31,11 @@ func _ready():
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
 	
-	# Connect to game events
-	GameEvents.unit_action_completed.connect(_on_unit_action_completed)
+	# Connect to game events (null-safe: guard the signal exists and isn't already
+	# wired so a minimal/headless scene never crashes on a missing bus).
+	if GameEvents and GameEvents.has_signal("unit_action_completed") \
+			and not GameEvents.unit_action_completed.is_connected(_on_unit_action_completed):
+		GameEvents.unit_action_completed.connect(_on_unit_action_completed)
 
 func setup_unit_visuals(unit: Unit, player_assignment: PlayerMaterials.PlayerTeam) -> void:
 	"""Set up all visual elements for a unit"""
@@ -217,49 +231,86 @@ func _restore_unit_material(unit: Unit) -> void:
 		var speed_system = turn_system as SpeedFirstTurnSystem
 		has_acted = unit in speed_system.get_units_that_acted_this_round()
 	
-	# Apply appropriate visual state
-	if has_acted:
-		apply_acted_visual(unit, true)
-	else:
-		var player = _determine_unit_player(unit)
-		_apply_player_material(unit, player)
+	# Apply appropriate visual state. Restore the base player material first (clears
+	# any selection-glow material_override), then re-apply the dim overlay on top for
+	# a spent unit -- the two use independent channels (override vs overlay).
+	var player = _determine_unit_player(unit)
+	_apply_player_material(unit, player)
+	apply_acted_visual(unit, has_acted)
 
 func apply_acted_visual(unit: Unit, has_acted: bool) -> void:
-	"""Apply or remove visual effects for units that have acted"""
-	var mesh_instance = unit.get_node("MeshInstance3D")
-	if not mesh_instance:
+	"""Dim a unit that has spent its turn (or clear the dim when it can act again).
+
+	Non-destructive: we set a SHARED semi-transparent dark grey `material_overlay`
+	on every MeshInstance3D under the unit's visible model, which composites over
+	the model's own materials. Setting `material_overlay = null` restores the
+	original look exactly -- no material is duplicated, copied, or overwritten, so
+	this never fights UnitAnimator's transient hit/heal `material_override` flashes.
+	Resolves the model the same way UnitAnimator does (CharacterModel glb root, else
+	a placeholder MeshInstance3D, else the first mesh found)."""
+	if not is_instance_valid(unit):
 		return
-	
-	if has_acted:
-		# Gray out the unit by reducing saturation and brightness
-		var player = _determine_unit_player(unit)
-		var base_material = player_materials.get_player_material(player, _get_unit_type(unit))
-		
-		var acted_material = base_material.duplicate()
-		
-		# Reduce albedo brightness and saturation
-		var original_color = acted_material.albedo_color
-		var gray_color = Color(
-			original_color.r * 0.5 + 0.3,  # Mix with gray
-			original_color.g * 0.5 + 0.3,
-			original_color.b * 0.5 + 0.3,
-			original_color.a * 0.7  # Make slightly transparent
-		)
-		acted_material.albedo_color = gray_color
-		
-		# Reduce emission if present
-		if acted_material.emission_enabled:
-			acted_material.emission = acted_material.emission * 0.3
-		
-		# Reduce metallic and increase roughness for duller appearance
-		acted_material.metallic = acted_material.metallic * 0.5
-		acted_material.roughness = min(acted_material.roughness + 0.3, 1.0)
-		
-		mesh_instance.material_override = acted_material
-	else:
-		# Restore original material
-		var player = _determine_unit_player(unit)
-		_apply_player_material(unit, player)
+
+	var model_root: Node = _get_model_root(unit)
+	if model_root == null:
+		return
+
+	# Only living, spent units are dimmed; dead units are being removed, and a unit
+	# that can act again must read as fully active.
+	var should_dim: bool = has_acted and unit.is_alive()
+	var overlay: Material = _ensure_dim_material() if should_dim else null
+
+	var meshes: Array[MeshInstance3D] = []
+	_collect_meshes(model_root, meshes)
+	for mesh in meshes:
+		if is_instance_valid(mesh):
+			mesh.material_overlay = overlay
+
+## Build (once) and return the shared dim wash material. Lazily created so it is
+## always available even if apply_acted_visual runs before _ready.
+func _ensure_dim_material() -> StandardMaterial3D:
+	if _dim_material == null:
+		var mat: StandardMaterial3D = StandardMaterial3D.new()
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		# Unshaded so the wash is a consistent flat grey regardless of scene
+		# lighting -- it reads as "greyed out / spent" everywhere.
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = Color(0.11, 0.11, 0.15, 0.55)
+		_dim_material = mat
+	return _dim_material
+
+## Resolve a unit's visible model root, mirroring UnitAnimator._get_anim_root:
+## prefer the "CharacterModel" glb root, else the placeholder "MeshInstance3D",
+## else the first MeshInstance3D found anywhere below the unit. Null-safe.
+func _get_model_root(unit: Unit) -> Node:
+	if not is_instance_valid(unit):
+		return null
+	var model: Node = unit.get_node_or_null("CharacterModel")
+	if model is Node3D:
+		return model
+	var direct: Node = unit.get_node_or_null("MeshInstance3D")
+	if direct is Node3D:
+		return direct
+	return _find_first_mesh(unit)
+
+## Gather every MeshInstance3D at or below [param node] into [param out].
+func _collect_meshes(node: Node, out: Array[MeshInstance3D]) -> void:
+	if node == null:
+		return
+	if node is MeshInstance3D:
+		out.append(node as MeshInstance3D)
+	for child in node.get_children():
+		_collect_meshes(child, out)
+
+## First MeshInstance3D anywhere below [param node], or null.
+func _find_first_mesh(node: Node) -> MeshInstance3D:
+	for child in node.get_children():
+		if child is MeshInstance3D:
+			return child as MeshInstance3D
+		var found: MeshInstance3D = _find_first_mesh(child)
+		if found != null:
+			return found
+	return null
 
 func _get_unit_type(unit: Unit) -> UnitType.Type:
 	"""Get the unit type for a unit"""
@@ -304,26 +355,18 @@ func _determine_unit_player(unit: Unit) -> PlayerMaterials.PlayerTeam:
 		return PlayerMaterials.PlayerTeam.NEUTRAL
 
 func update_all_unit_visuals() -> void:
-	"""Update visual state of all units based on current turn system"""
-	if not TurnSystemManager.has_active_turn_system():
-		return
-	
-	var turn_system = TurnSystemManager.get_active_turn_system()
-	
+	"""Refresh the acted/spent dim for every unit from its own turn state.
+
+	Driven by the unit's authoritative `has_acted_this_turn` flag rather than a
+	turn-system side list, so a unit un-dims automatically the moment its actions
+	reset (reset_turn_actions() clears the flag, and this runs on turn start)."""
 	# Find all units in the scene
-	var all_units = _find_all_units()
-	
+	var all_units: Array[Unit] = _find_all_units()
+
 	for unit in all_units:
-		var has_acted = false
-		
-		if turn_system is TraditionalTurnSystem:
-			var trad_system = turn_system as TraditionalTurnSystem
-			var acted_units = trad_system.get_units_that_acted()
-			has_acted = unit in acted_units
-		elif turn_system is SpeedFirstTurnSystem:
-			var speed_system = turn_system as SpeedFirstTurnSystem
-			has_acted = unit in speed_system.get_units_that_acted_this_round()
-		
+		if not is_instance_valid(unit):
+			continue
+		var has_acted: bool = bool(unit.has_acted_this_turn)
 		apply_acted_visual(unit, has_acted)
 
 func _find_all_units() -> Array[Unit]:
@@ -381,7 +424,11 @@ func _on_turn_ended(player: Player) -> void:
 
 func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
 	"""Handle unit action completion from GameEvents"""
-	# Update visuals after a short delay to ensure turn system has processed the action
+	# Dim the acting unit immediately for instant feedback; the unit has already
+	# set has_acted_this_turn in mark_action_completed by the time this fires.
+	if is_instance_valid(unit):
+		apply_acted_visual(unit, bool(unit.has_acted_this_turn))
+	# Then sweep all units after a short delay so any turn-system side effects settle.
 	await get_tree().create_timer(0.1).timeout
 	update_all_unit_visuals()
 

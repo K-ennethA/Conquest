@@ -15,9 +15,10 @@ class_name CombatForecastPanel
 # Positioned top-center so it never overlaps the right-edge sidebar.
 
 const CARD_WIDTH := 360.0
-## Distance from the bottom edge the card floats at. It lives at BOTTOM-center now,
-## clear of the top-center turn banner it used to overlap and the right-edge sidebar.
-const BOTTOM_MARGIN := 20.0
+## Distance from the TOP edge the card floats at. Sits just below the slim turn chip
+## (~56px top bar), so it no longer overlaps the banner but still reliably renders
+## (a bottom-anchored grow collapsed to zero height -- the "forecast is gone" bug).
+const TOP_MARGIN := 70.0
 
 # --- Node references (built once in _ready, only re-populated in show_forecast) --
 var _card: PanelContainer
@@ -63,14 +64,13 @@ func _create_ui() -> void:
 	_card.name = "ForecastCard"
 	_card.anchor_left = 0.5
 	_card.anchor_right = 0.5
-	_card.anchor_top = 1.0
-	_card.anchor_bottom = 1.0
+	_card.anchor_top = 0.0
+	_card.anchor_bottom = 0.0
 	_card.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_card.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_card.grow_vertical = Control.GROW_DIRECTION_END
 	_card.offset_left = -CARD_WIDTH * 0.5
 	_card.offset_right = CARD_WIDTH * 0.5
-	_card.offset_top = -BOTTOM_MARGIN
-	_card.offset_bottom = -BOTTOM_MARGIN
+	_card.offset_top = TOP_MARGIN
 	_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_card)
 

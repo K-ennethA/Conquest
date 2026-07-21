@@ -109,6 +109,15 @@ var _action_resting_distance: float = 0.0
 ## Time.get_ticks_msec() of the last event-driven auto-focus, for the cooldown gate.
 var _last_auto_focus_ms: int = 0
 
+## Cached TurnSystemManager autoload (absent in headless/minimal scenes) plus the turn
+## system we're currently listening to for turn_started. SEPARATE from the GameEvents
+## auto-focus wiring above so the two never clash: that path rides GameEvents' spawn/
+## hit/heal signals; THIS path rides the active turn system's per-turn turn_started so
+## control returning to the human re-frames a player unit. Distinct member name (mirrors
+## SpawnManager/TurnIndicator's _watched_ts) keeps the (re)connect bookkeeping isolated.
+var _turn_system_manager: Node = null
+var _focus_watched_ts: Node = null
+
 # AutoFocus mode ints, mirroring GameSettings.AutoFocus (kept local so we stay
 # null-safe when GameSettings is absent).
 const _AUTO_OFF: int = 0
@@ -127,6 +136,7 @@ func _ready() -> void:
 		call_deferred("fit_to_map")
 
 	_setup_auto_focus()
+	_setup_turn_focus()
 
 
 ## Flatten the authored camera axes onto the ground plane. Called once; the basis
@@ -669,3 +679,127 @@ func _on_event_unit_healed(unit, _amount) -> void:
 	if not is_instance_valid(unit) or not (unit is Node3D):
 		return
 	_request_auto_focus((unit as Node3D).global_position, false, false)
+
+
+# --- Turn-start focus (re-frame the player's side when control returns) ------
+##
+## During the ENEMY phase the camera chases the AI's actions (via the GameEvents
+## hit/spawn/heal auto-focus above) and is left wherever the AI finished. When control
+## returns to the HUMAN, nothing re-framed the player's side. This ADDITIVE path rides
+## the ACTIVE TURN SYSTEM's turn_started -- the reliable per-turn signal that fires for
+## AI advances too (PlayerManager's own signals don't), which is why every per-turn
+## system in this project (TurnIndicator, SpawnManager) listens here rather than to
+## PlayerManager. On a human turn start it glides the focus back to a relevant player
+## unit; the AI's turns are ignored (their own actions already drive the camera).
+##
+## Deliberately reuses the existing auto-focus machinery: it honours _should_auto_focus()
+## (OFF mode / mid-drag / typing) and glides via focus_on() (a gentle cinematic pull-in
+## when the mode is CINEMATIC), so it inherits the same feel and gating as every other
+## auto-focus, and never touches the authored basis or fov.
+
+## Wire to the active turn system's turn_started, (re)connecting when it activates or
+## switches. Mirrors SpawnManager.setup / TurnIndicator._ready exactly, but with its OWN
+## member (_focus_watched_ts) so it never disturbs the GameEvents auto-focus connections.
+func _setup_turn_focus() -> void:
+	_turn_system_manager = get_node_or_null("/root/TurnSystemManager")
+	if _turn_system_manager == null:
+		return
+	if _turn_system_manager.has_signal("turn_system_activated") \
+			and not _turn_system_manager.turn_system_activated.is_connected(_on_turn_system_activated_focus):
+		_turn_system_manager.turn_system_activated.connect(_on_turn_system_activated_focus)
+	if _turn_system_manager.has_method("has_active_turn_system") \
+			and _turn_system_manager.has_active_turn_system():
+		_on_turn_system_activated_focus(_turn_system_manager.get_active_turn_system())
+
+
+## (Re)wire to the active turn system's turn_started when it activates or switches.
+func _on_turn_system_activated_focus(ts) -> void:
+	if _focus_watched_ts == ts:
+		return
+	if _focus_watched_ts != null and is_instance_valid(_focus_watched_ts) \
+			and _focus_watched_ts.has_signal("turn_started") \
+			and _focus_watched_ts.turn_started.is_connected(_on_turn_focus_started):
+		_focus_watched_ts.turn_started.disconnect(_on_turn_focus_started)
+	_focus_watched_ts = ts
+	if ts != null and ts.has_signal("turn_started") \
+			and not ts.turn_started.is_connected(_on_turn_focus_started):
+		ts.turn_started.connect(_on_turn_focus_started)
+
+
+## A turn began. Re-frame ONLY when it's a human player's turn (the AI's own actions
+## already drive the camera) and auto-focus isn't suppressed. Glides to a relevant player
+## unit -- the current acting unit (Speed First) or a sensible player unit (Traditional).
+func _on_turn_focus_started(player) -> void:
+	if player == null:
+		return
+	# Human turns only: skip AI advances (we don't re-frame for them).
+	if "is_ai" in player and bool(player.is_ai):
+		return
+	# Same gating as the event auto-focus: OFF mode / mid grab-drag / typing.
+	if not _should_auto_focus():
+		return
+
+	var ts = _focus_watched_ts
+	if ts == null or not is_instance_valid(ts):
+		if _turn_system_manager != null and _turn_system_manager.has_method("has_active_turn_system") \
+				and _turn_system_manager.has_active_turn_system():
+			ts = _turn_system_manager.get_active_turn_system()
+	if ts == null or not is_instance_valid(ts):
+		return
+
+	var unit = _resolve_turn_focus_unit(ts, player)
+	if unit == null or not is_instance_valid(unit) or not (unit is Node3D):
+		return
+
+	# Gentle glide back to the player's side; CINEMATIC also dollies in toward a close
+	# framing. Bypass the cooldown -- a turn start is a rare, deliberate re-frame.
+	var cinematic: bool = _auto_focus_mode() == _AUTO_CINEMATIC
+	_request_auto_focus((unit as Node3D).global_position, cinematic, true)
+
+
+## Resolve which of [param player]'s units to focus for the turn that just started.
+## Speed First exposes the unit whose turn it is via get_current_acting_unit(); prefer
+## that (it IS the next unit to move). Otherwise (Traditional / player-based) pick a
+## sensible one: the first of the player's units that can still act, else the first
+## living one. Duck-typed and null-safe throughout; returns null when nothing fits.
+func _resolve_turn_focus_unit(ts, player):
+	# Speed First: the current acting unit is exactly the next unit that will move.
+	if ts.has_method("get_current_acting_unit"):
+		var acting = ts.get_current_acting_unit()
+		if acting != null and is_instance_valid(acting):
+			return acting
+
+	# Traditional / player-based: scan this player's registered units.
+	var units: Array = []
+	if ts.has_method("get_units_for_player"):
+		var owned = ts.get_units_for_player(player)
+		if owned is Array:
+			units = owned
+
+	var first_living = null
+	for u in units:
+		if u == null or not is_instance_valid(u):
+			continue
+		# Skip the dead: we want a LIVING unit as the fallback focus.
+		if u.has_method("is_alive") and not bool(u.is_alive()):
+			continue
+		if first_living == null:
+			first_living = u
+		# Prefer the first unit that can still act this turn.
+		if u.has_method("can_act") and bool(u.can_act()):
+			return u
+	return first_living
+
+
+func _exit_tree() -> void:
+	# Explicitly drop the turn-system subscriptions (freeing auto-disconnects, but being
+	# explicit keeps a reused instance from double-subscribing). The GameEvents auto-focus
+	# connections are on autoloads and tear down with the node the same way.
+	if _turn_system_manager != null and is_instance_valid(_turn_system_manager) \
+			and _turn_system_manager.has_signal("turn_system_activated") \
+			and _turn_system_manager.turn_system_activated.is_connected(_on_turn_system_activated_focus):
+		_turn_system_manager.turn_system_activated.disconnect(_on_turn_system_activated_focus)
+	if _focus_watched_ts != null and is_instance_valid(_focus_watched_ts) \
+			and _focus_watched_ts.has_signal("turn_started") \
+			and _focus_watched_ts.turn_started.is_connected(_on_turn_focus_started):
+		_focus_watched_ts.turn_started.disconnect(_on_turn_focus_started)

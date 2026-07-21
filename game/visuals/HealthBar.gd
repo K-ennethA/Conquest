@@ -124,6 +124,9 @@ func _setup_meshes():
 	bg_mesh.size = BG_SIZE
 	background.mesh = bg_mesh
 	background.material_override = _background_material
+	# A UI overlay bar must never cast shadows onto the map (it billboards + is
+	# unshaded, so a cast shadow is just a floating dark rectangle artifact).
+	background.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 	# Create health fill quad (fits inside background, leaving a thin border visible)
 	var health_mesh = QuadMesh.new()
@@ -131,6 +134,7 @@ func _setup_meshes():
 	health_fill.mesh = health_mesh
 	health_fill.material_override = _health_material
 	health_fill.position.z = 0.01  # Slightly in front of background
+	health_fill.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 	# Fire-Emblem style: the map bar shows HP as a pure colored bar, no numbers.
 	# The Label3D node still exists in HealthBar.tscn, so hide it here rather
