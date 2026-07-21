@@ -168,6 +168,20 @@ func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
 	if not choice.is_empty():
 		return choice
 
+	# TRAP BRANCH. A unit carrying a READY trap-placement move proactively lays it on the
+	# enemy's likely approach instead of idling -- the damage-first ranking above scores
+	# such a move 0 and would never cast it. Priority is deliberate: this runs AFTER the
+	# attack branch (a reachable strike always wins) but BEFORE the defensive-hold /
+	# advance branches, so an otherwise-idle camper (e.g. Petalfang) sets its trap rather
+	# than doing nothing. Skipped for a force-driven / controlled actor (it must keep
+	# turning on its own side, mirroring the SUPPORT branch). Any unit without a ready
+	# trap move + a valid cell gets {} back, so every non-trap unit's behaviour is
+	# byte-for-byte unchanged.
+	if not _actor_is_controlled(actor):
+		var trap := _trap_plan(actor, moveset, board)
+		if not trap.is_empty():
+			return trap
+
 	# No attack (none reachable, or EASY declined). EASY may still hesitate.
 	if difficulty == Difficulty.EASY and _get_rng().randf() < 0.30:
 		return _wait("hesitate")
@@ -870,6 +884,164 @@ func _move_is_ready(actor, move) -> bool:
 		if mc != null and mc.has_method("can_use"):
 			return bool(mc.can_use(move))
 	return true
+
+
+# --- Trap-laying (proactive tile-effect placement) -------------------------
+# A trap move is detected GENERICALLY (never by move id): a MoveResource whose effects
+# include an ApplyTileEffect AND whose targeting aims at an EMPTY_TILE. A camper with
+# such a move ready lays it on the enemy's likely approach instead of idling. Every
+# board query is duck-typed / null-safe, so a unit without a ready trap move + a valid
+# cell yields {} and plans exactly as before.
+
+## True when [param move] places a tile effect on an empty tile -- an ApplyTileEffect
+## carried by an EMPTY_TILE-targeted move. This is the whole trap definition; no move
+## id is ever consulted (matches BotTurnDriver._is_trap_move).
+func _move_is_trap(move) -> bool:
+	if move == null or move.targeting == null:
+		return false
+	if int(move.targeting.target_kind) != CombatTypes.TargetKind.EMPTY_TILE:
+		return false
+	for e in move.effects:
+		if e is ApplyTileEffect:
+			return true
+	return false
+
+
+## The id of the tile effect [param move] would place (its ApplyTileEffect's effect
+## resource id), or &"" when it carries none. Used to skip a cell already trapped with it.
+func _trap_effect_id(move) -> StringName:
+	for e in move.effects:
+		if e is ApplyTileEffect:
+			# Untyped local so the ApplyTileEffect subclass field `effect` is reachable
+			# (the elements are typed Array[MoveEffect]), mirroring _move_is_self_buff.
+			var fx = e
+			if fx.effect != null:
+				return StringName(fx.effect.id)
+	return &""
+
+
+## PROACTIVE trap placement. Returns a MOVE decision casting the first READY trap move
+## at a smart empty cell WITHOUT relocating (dest_cell == origin, so the leash is
+## irrelevant and the driver's perform_move just places the trap), or {} to fall
+## through. Cell heuristic: prefer a cell BETWEEN the actor and the nearest hostile --
+## on the enemy's approach path and laid as far forward as range allows, so an advancing
+## foe is likely to cross it; with no hostiles, fall back to the closest valid empty cell
+## (an adjacent tile). Respects the move's authored min/max range (via effective_max_range
+## so a caster's range bonus counts) and only picks cells the move's own targeting accepts.
+func _trap_plan(actor, moveset: Array, board) -> Dictionary:
+	if actor == null or board == null or not board.has_method("cell_of"):
+		return {}
+	var trap_move: MoveResource = null
+	for move in moveset:
+		if _move_is_trap(move) and _move_is_ready(actor, move):
+			trap_move = move
+			break
+	if trap_move == null:
+		return {}
+
+	var origin: Vector2i = board.cell_of(actor)
+	var trap_id: StringName = _trap_effect_id(trap_move)
+	var max_r: int = trap_move.effective_max_range(actor)
+	var min_r: int = 1
+	if trap_move.targeting != null:
+		min_r = maxi(1, int(trap_move.targeting.min_range))
+	if max_r < min_r:
+		return {}
+
+	# Nearest hostile -> aim the trap onto its approach path.
+	var hostiles := _list_hostiles(actor, board)
+	var have_goal: bool = false
+	var goal: Vector2i = origin
+	var goal_dist: int = 1 << 30
+	for h in hostiles:
+		var hc: Vector2i = board.cell_of(h)
+		var gd := _manhattan(origin, hc)
+		if gd < goal_dist:
+			goal_dist = gd
+			goal = hc
+			have_goal = true
+
+	var chosen: Vector2i = origin
+	var found: bool = false
+	var best_detour: int = 1 << 30  # d(origin,cell)+d(cell,goal): lower == more "between"
+	var best_forward: int = -1      # d(origin,cell): lay it toward the goal (nearest when idle)
+	for dx in range(-max_r, max_r + 1):
+		for dy in range(-max_r, max_r + 1):
+			var cell := origin + Vector2i(dx, dy)
+			var d := _manhattan(origin, cell)
+			if d < min_r or d > max_r:
+				continue  # out of range (d >= min_r >= 1 excludes the actor's own cell)
+			if not _trap_cell_ok(trap_move, actor, origin, cell, board, trap_id):
+				continue
+			if have_goal:
+				# Minimise the path detour (best == cell on a shortest origin->goal path),
+				# then lay it as far forward toward the goal as range allows, then cell order.
+				var detour := d + _manhattan(cell, goal)
+				if not found or detour < best_detour \
+						or (detour == best_detour and d > best_forward) \
+						or (detour == best_detour and d == best_forward and _cell_less(cell, chosen)):
+					best_detour = detour
+					best_forward = d
+					chosen = cell
+					found = true
+			else:
+				# No hostile: the closest valid empty cell (an adjacent tile), deterministic.
+				if not found or d < best_forward \
+						or (d == best_forward and _cell_less(cell, chosen)):
+					best_forward = d
+					chosen = cell
+					found = true
+	if not found:
+		return {}
+	return {
+		"action": ActionType.MOVE,
+		"move": trap_move,
+		"target": null,
+		"aim_cell": chosen,
+		"dest_cell": origin,
+		"estimated_damage": 0,
+		"target_hp": 0,
+		"step_to": origin,
+		"reason": "lay_trap",
+	}
+
+
+## True when [param cell] is a legal trap target for [param actor] casting from
+## [param origin]: in bounds, unoccupied, accepted by the move's own targeting rules,
+## and not already carrying this trap. Board queries are duck-typed, so a mock lacking
+## in_bounds / is_occupied simply treats the cell as open.
+func _trap_cell_ok(move: MoveResource, actor, origin: Vector2i, cell: Vector2i, board, trap_id: StringName) -> bool:
+	if board.has_method("in_bounds") and not bool(board.in_bounds(cell)):
+		return false
+	if _trap_cell_occupied(board, cell):
+		return false
+	if not move.can_target(origin, cell, actor, board):
+		return false
+	if trap_id != &"" and _cell_has_trap(cell, trap_id):
+		return false
+	return true
+
+
+## Is [param cell] occupied by a living unit? Prefers the board's is_occupied, else
+## falls back to units_at; a board exposing neither reports the cell open.
+func _trap_cell_occupied(board, cell: Vector2i) -> bool:
+	if board.has_method("is_occupied"):
+		return bool(board.is_occupied(cell))
+	if board.has_method("units_at"):
+		return not board.units_at(cell).is_empty()
+	return false
+
+
+## True when [param cell] already carries a tile effect whose id is [param trap_id], so
+## the AI does not waste its turn re-laying a trap that is already there. Reads the shared
+## CombatServices tile-effect registry; null-safe when that autoload is unavailable.
+func _cell_has_trap(cell: Vector2i, trap_id: StringName) -> bool:
+	if not CombatServices or not CombatServices.has_method("tile_effects_at"):
+		return false
+	for te in CombatServices.tile_effects_at(cell):
+		if te != null and te is TileEffectResource and StringName(te.id) == trap_id:
+			return true
+	return false
 
 
 # --- Movement --------------------------------------------------------------

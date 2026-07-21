@@ -385,6 +385,12 @@ func _defender_certain_to_wait(unit: Unit, board) -> bool:
 	# charge the nearest hostile, so they must still run the full plan.
 	if not (unit.has_method("is_defensive") and unit.is_defensive()):
 		return false
+	# A defensive unit with a READY trap-placement move must reach the planner so it can
+	# proactively lay its trap even with no enemy in aggro / strike range -- so it is NOT
+	# certain to wait, and we must not short-circuit it here. Same generic trap detection
+	# BotController._move_is_trap uses (an ApplyTileEffect on an EMPTY_TILE-targeted move).
+	if _has_ready_trap_move(unit):
+		return false
 	if not TurnSystemManager or not TurnSystemManager.has_active_turn_system():
 		return false
 
@@ -444,6 +450,40 @@ func _defender_strike_reach(unit: Unit) -> int:
 			if m.has_method("effective_max_range"):
 				max_atk = maxi(max_atk, int(m.effective_max_range(unit)))
 	return move_range + max_atk
+
+
+## True when [param unit] carries a READY trap-placement move -- detected exactly as
+## BotController does (an ApplyTileEffect on an EMPTY_TILE-targeted move) AND usable this
+## turn per its MovesetController. Used by [method _defender_certain_to_wait] to exempt a
+## trap-layer from the idle-defender skip so it still reaches [method BotController.plan]
+## and lays its trap. Duck-typed / null-safe: a unit with no moveset (or no controller)
+## reports its trap moves as ready, so it is exempted rather than wrongly skipped.
+func _has_ready_trap_move(unit) -> bool:
+	if unit == null or not unit.has_method("get_moveset"):
+		return false
+	var mc = null
+	if unit.has_method("get_moveset_controller"):
+		mc = unit.get_moveset_controller()
+	for m in unit.get_moveset():
+		if not _is_trap_move(m):
+			continue
+		if mc != null and mc.has_method("can_use") and not bool(mc.can_use(m)):
+			continue
+		return true
+	return false
+
+
+## Generic trap-move test, mirroring BotController._move_is_trap: an ApplyTileEffect
+## carried by an EMPTY_TILE-targeted move. Never keyed to a move id.
+func _is_trap_move(move) -> bool:
+	if move == null or move.targeting == null:
+		return false
+	if int(move.targeting.target_kind) != CombatTypes.TargetKind.EMPTY_TILE:
+		return false
+	for e in move.effects:
+		if e is ApplyTileEffect:
+			return true
+	return false
 
 
 ## Move the unit to the planned stand cell (if any), then resolve the chosen attack
