@@ -33,6 +33,7 @@ var settings_button: Button = null
 # on its own high CanvasLayer so it draws above every HUD panel. Starts hidden and
 # only blocks input while it is actually on screen.
 var turn_transition: TurnTransition = null
+var battle_log: BattleLog = null
 
 func _ready() -> void:
 	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
@@ -61,6 +62,10 @@ func _ready() -> void:
 	# high layer and starts hidden.
 	_build_turn_transition()
 
+	# Bottom-left scrolling combat log. Self-styled (dark plate), so mounted AFTER
+	# theming to avoid the font-override sweep; anchors to this full-screen HUD root.
+	_build_battle_log()
+
 	is_layout_initialized = true
 
 func _build_turn_transition() -> void:
@@ -68,6 +73,12 @@ func _build_turn_transition() -> void:
 	turn_transition = TurnTransition.new()
 	turn_transition.name = "TurnTransition"
 	add_child(turn_transition)
+
+func _build_battle_log() -> void:
+	"""Create and mount the bottom-left battle log (records moves/attacks/deaths)."""
+	battle_log = BattleLog.new()
+	battle_log.name = "BattleLog"
+	add_child(battle_log)
 
 func _apply_theme() -> void:
 	"""Apply the amber ConquestTheme to this HUD subtree (panels, buttons, text)."""
