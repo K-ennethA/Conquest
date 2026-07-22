@@ -584,6 +584,7 @@ func _setup_local_game() -> void:
 	var arena_ctrl = get_node_or_null("/root/ArenaController")
 	if arena_ctrl != null and arena_ctrl.has_method("is_active") and arena_ctrl.is_active():
 		ArenaRoundBuilder.build_round(map_loader, arena_ctrl.run(), arena_ctrl.ruleset())
+		_mount_arena_run_hud()
 
 	# Initialize player management first
 	_setup_players()
@@ -637,6 +638,22 @@ func _setup_players() -> void:
 		for i in range(1, PlayerManager.players.size()):
 			PlayerManager.players[i].is_ai = true
 		_ensure_bot_driver()
+
+func _mount_arena_run_hud() -> void:
+	"""Add the Arena in-round HUD overlay to the battle scene when a run is active.
+	Runtime load (not preload) + fully guarded, so it is a harmless no-op if the scene
+	is absent or already mounted, and never affects a normal (non-arena) battle."""
+	var scene_root = get_tree().current_scene
+	if scene_root == null or scene_root.get_node_or_null("ArenaRunHUD") != null:
+		return
+	var hud_scene = load("res://game/arena/ui/ArenaRunHUD.tscn")
+	if hud_scene == null:
+		return
+	var hud = hud_scene.instantiate()
+	if hud != null:
+		hud.name = "ArenaRunHUD"
+		scene_root.add_child(hud)
+
 
 func _ensure_bot_driver() -> void:
 	"""Add the bot turn driver to the scene if not already present"""

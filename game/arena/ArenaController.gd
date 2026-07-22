@@ -32,9 +32,15 @@ const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 ## replace this with a proper pre-run draft / roster pick).
 const DEFAULT_SQUAD := ["wren_fleetfoot", "torvald_ironhide", "sable_quickarrow", "ysolde_emberwynn"]
 
+const RESULTS_SCENE := "res://game/arena/ui/ArenaResultsScreen.tscn"
+
 var _ruleset: ArenaRuleset = null
 var _run: ArenaRun = null
 var _phase: int = Phase.IDLE
+
+## Snapshot of the just-ended run, read by ArenaResultsScreen after the run/ruleset
+## are discarded. Populated by _finish_run(); empty before any run finishes.
+var last_result: Dictionary = {}
 
 
 func is_active() -> bool:
@@ -200,12 +206,31 @@ func _open_draft() -> void:
 
 func _finish_run(victory: bool) -> void:
 	_phase = Phase.FINISHED
+
+	# Capture a small, engine-agnostic snapshot BEFORE the run/ruleset are discarded, so
+	# the results screen can render it after the scene change.
+	var rounds_cleared: int = _run.round_index if _run != null else 0
+	var total_rounds: int = _ruleset.total_rounds if _ruleset != null else 0
+	var squad_summary: Array = []
+	if _run != null:
+		for unit_state in _run.squad:
+			if unit_state != null:
+				squad_summary.append({
+					"name": unit_state.character_id,
+					"augment_count": unit_state.augment_ids.size(),
+				})
+	last_result = {
+		"victory": victory,
+		"rounds_cleared": rounds_cleared,
+		"total_rounds": total_rounds,
+		"squad": squad_summary,
+	}
+
 	run_finished.emit(victory)
-	# A proper results screen is a later task; for now end the run and return to the menu.
 	_run = null
 	_ruleset = null
 	_phase = Phase.IDLE
-	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+	get_tree().change_scene_to_file(RESULTS_SCENE)
 
 
 func _grant_augment(augment: Augment) -> void:
