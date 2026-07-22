@@ -578,6 +578,13 @@ func _setup_local_game() -> void:
 	PlayerManager.reset_for_new_game()
 	TurnSystemManager.reset_for_new_game()
 
+	# ARENA: the arena maps ship unit-less, so fill the board with the run's squad (player
+	# 0) + this round's escalating enemy wave (player 1) BEFORE players are assigned, so
+	# the normal assign_units_by_parent pass below adopts them. No-op outside an arena run.
+	var arena_ctrl = get_node_or_null("/root/ArenaController")
+	if arena_ctrl != null and arena_ctrl.has_method("is_active") and arena_ctrl.is_active():
+		ArenaRoundBuilder.build_round(map_loader, arena_ctrl.run(), arena_ctrl.ruleset())
+
 	# Initialize player management first
 	_setup_players()
 	

@@ -104,11 +104,72 @@ func choose_augment(augment: Augment) -> void:
 	_begin_next_round()
 
 
-## Roll the augment options the draft screen presents. Real weighted rolling from the
-## ruleset's pool (rarity weights, no-dupes) is a content task; the skeleton returns an
-## empty list so the draft screen simply offers "Continue".
+## Roll the augment options the draft screen presents: a weighted-random, no-duplicates
+## draw of [member ArenaRuleset.augments_per_draft] Augments from the ruleset's pool
+## directory. The draw is DETERMINISTIC in the run's seed and the current round, so a
+## given run always rolls the same options for a given round (save/resume, and fair
+## versus later). Returns [] when there is no run or the pool is empty.
 func roll_draft_options() -> Array:
-	return []
+	if _run == null:
+		return []
+	var ruleset: ArenaRuleset = _ruleset if _ruleset != null else ArenaRuleset.new()
+
+	# Where to load the pool from (ruleset override, else the default augment dir).
+	var dir_path: String = ruleset.augment_pool_dir
+	if dir_path.strip_edges() == "":
+		dir_path = "res://game/arena/augments"
+
+	# Load every Augment .tres in the pool directory.
+	var pool: Array = []
+	var dir := DirAccess.open(dir_path)
+	if dir != null:
+		dir.list_dir_begin()
+		var file_name: String = dir.get_next()
+		while file_name != "":
+			if not dir.current_is_dir():
+				# Exported builds surface .tres as "<name>.tres.remap"; strip it back.
+				var load_name: String = file_name.trim_suffix(".remap")
+				var lower: String = load_name.to_lower()
+				if lower.ends_with(".tres") or lower.ends_with(".res"):
+					var res: Resource = ResourceLoader.load(dir_path + "/" + load_name)
+					if res is Augment:
+						pool.append(res)
+			file_name = dir.get_next()
+		dir.list_dir_end()
+
+	if pool.is_empty():
+		return []
+
+	var want: int = ruleset.augments_per_draft
+	if want <= 0:
+		return []
+	want = mini(want, pool.size())
+
+	# Deterministic RNG: same run seed + same round => same offered set.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = _run.rng_seed + _run.round_index
+
+	# Weighted draw without replacement: pick by draft_weight(), remove, repeat.
+	var chosen: Array = []
+	while chosen.size() < want and not pool.is_empty():
+		var total: float = 0.0
+		for aug in pool:
+			total += maxf(0.0, aug.draft_weight())
+		var pick_index: int = 0
+		if total > 0.0:
+			var roll: float = rng.randf_range(0.0, total)
+			var acc: float = 0.0
+			for i in pool.size():
+				acc += maxf(0.0, pool[i].draft_weight())
+				if roll <= acc:
+					pick_index = i
+					break
+		else:
+			pick_index = rng.randi_range(0, pool.size() - 1)
+		chosen.append(pool[pick_index])
+		pool.remove_at(pick_index)
+
+	return chosen
 
 
 # --- internals --------------------------------------------------------------

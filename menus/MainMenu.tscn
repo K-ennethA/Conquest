@@ -63,6 +63,11 @@ layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
 text = "Compendium"
 
+[node name="ArenaButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 50)
+text = "Arena"
+
 [node name="Spacer2" type="Control" parent="CenterContainer/VBoxContainer/MenuButtons"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 20)
@@ -78,6 +83,6 @@ custom_minimum_size = Vector2(0, 50)
 
 [node name="Instructions" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-text = "Press 1 for Single Player, 2 for Versus, 3 for Compendium, ESC to Quit"
+text = "Press 1 for Single Player, 2 for Versus, 3 for Compendium, 4 for Arena, ESC to Quit"
 horizontal_alignment = 1
 modulate = Color(0.7, 0.7, 0.7, 1)

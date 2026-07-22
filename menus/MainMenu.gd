@@ -11,6 +11,7 @@ class_name MainMenu
 # galleries are no longer separate menu items -- they are sections of
 # Compendium.tscn, which also covers Statuses (and, later, Weather).
 @onready var compendium_button: Button = $CenterContainer/VBoxContainer/MenuButtons/CompendiumButton
+@onready var arena_button: Button = $CenterContainer/VBoxContainer/MenuButtons/ArenaButton
 @onready var quit_button: Button = $CenterContainer/VBoxContainer/MenuButtons/QuitButton
 
 func _ready() -> void:
@@ -46,6 +47,8 @@ func _ready() -> void:
 		versus_button.pressed.connect(_on_versus_pressed)
 	if compendium_button:
 		compendium_button.pressed.connect(_on_compendium_pressed)
+	if arena_button:
+		arena_button.pressed.connect(_on_arena_pressed)
 	if quit_button:
 		quit_button.pressed.connect(_on_quit_pressed)
 	
@@ -109,6 +112,16 @@ func _on_compendium_pressed() -> void:
 	print("Compendium selected")
 	get_tree().change_scene_to_file("res://menus/Compendium.tscn")
 
+func _on_arena_pressed() -> void:
+	"""Handle Arena button press -- start a solo Arena roguelite run"""
+	print("Arena mode selected")
+	var ruleset = load("res://game/arena/rulesets/arena_solo.tres")
+	var arena = get_node_or_null("/root/ArenaController")
+	if arena and ruleset:
+		arena.start_run(ruleset)
+	else:
+		_show_not_implemented_message("Arena mode is not available.")
+
 func _on_quit_pressed() -> void:
 	"""Handle Quit button press"""
 	print("Quitting game")
@@ -139,5 +152,7 @@ func _input(event: InputEvent) -> void:
 				_on_versus_pressed()
 			KEY_3:
 				_on_compendium_pressed()
+			KEY_4:
+				_on_arena_pressed()
 			KEY_ESCAPE:
 				_on_quit_pressed()
