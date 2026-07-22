@@ -412,10 +412,17 @@ func update_all_unit_visuals() -> void:
 func _find_all_units() -> Array[Unit]:
 	"""Find all units in the current scene"""
 	var units: Array[Unit] = []
-	# Null-safe: during scene teardown / a mid-frame turn-system deactivation the tree or
-	# its current_scene can briefly be null, and this used to crash reading .current_scene.
+	# Null-safe with PLAIN ifs (not a ternary): during scene teardown / a mid-frame
+	# turn-system deactivation the node can be detached (get_tree() == null) and the scene
+	# can be null. A `tree.current_scene if tree != null else null` guard does NOT work --
+	# GDScript evaluates `tree.current_scene` eagerly there and crashes on null. Guard each
+	# step with its own if/return.
+	if not is_inside_tree():
+		return units
 	var tree = get_tree()
-	var scene_root = tree.current_scene if tree != null else null
+	if tree == null:
+		return units
+	var scene_root = tree.current_scene
 	if scene_root == null:
 		return units
 
