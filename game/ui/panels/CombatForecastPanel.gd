@@ -34,6 +34,10 @@ var _dmg_value: Label
 var _crit_value: Label
 var _result_value: Label
 var _lethal_label: Label
+## FE-style HP preview: a red rect over the DEFENDER bar covering exactly the chunk
+## that would be lost (remaining -> current HP), pulsing so it flashes.
+var _dmg_preview: ColorRect
+var _flash_tween: Tween
 
 func _ready() -> void:
 	name = "CombatForecastPanel"
@@ -123,6 +127,19 @@ func _create_ui() -> void:
 	_defender_name = defender_col["name"]
 	_defender_bar = defender_col["bar"]
 	_defender_hp = defender_col["hp"]
+	# Red "about to be lost" overlay, anchored to a fraction of the bar (set per forecast).
+	_dmg_preview = ColorRect.new()
+	_dmg_preview.name = "DamagePreview"
+	_dmg_preview.color = Color(1.0, 0.22, 0.16, 0.9)
+	_dmg_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_dmg_preview.anchor_top = 0.0
+	_dmg_preview.anchor_bottom = 1.0
+	_dmg_preview.offset_left = 0.0
+	_dmg_preview.offset_right = 0.0
+	_dmg_preview.offset_top = 0.0
+	_dmg_preview.offset_bottom = 0.0
+	_dmg_preview.visible = false
+	_defender_bar.add_child(_dmg_preview)  # children draw over the bar fill
 	defender_col["root"].size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sides.add_child(defender_col["root"])
 
@@ -275,6 +292,7 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 		_show_stat_row(_dmg_value, true)
 		_show_stat_row(_hit_value, true)
 		_lethal_label.visible = lethal
+		_show_damage_preview(remaining, target_hp, maxi(1, def_max))
 	else:
 		# Pure heal/buff/tile move aimed here: keep it clean, no fake damage.
 		_hit_value.text = "No damage"
@@ -283,6 +301,7 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 		_show_stat_row(_crit_value, false)
 		_show_stat_row(_result_value, false)
 		_lethal_label.visible = false
+		_hide_damage_preview()
 
 	_cover_viewport()
 	_fit_to_viewport()
@@ -318,7 +337,55 @@ func _fit_to_viewport() -> void:
 
 func hide_forecast() -> void:
 	"""Hide the forecast (targeting cancelled/cleared, or the move resolved)."""
+	_hide_damage_preview()
 	visible = false
+
+# --- Damage preview (FE-style flashing red HP chunk) ------------------------
+
+## Overlay the red "about to be lost" band on the defender bar, from `remaining` to
+## `current` HP as a fraction of the bar, and flash it.
+func _show_damage_preview(remaining: int, current: int, hp_max: int) -> void:
+	if _dmg_preview == null:
+		return
+	var lost: int = current - remaining
+	if lost <= 0 or hp_max <= 0:
+		_hide_damage_preview()
+		return
+	_dmg_preview.anchor_left = clampf(float(remaining) / float(hp_max), 0.0, 1.0)
+	_dmg_preview.anchor_right = clampf(float(current) / float(hp_max), 0.0, 1.0)
+	_dmg_preview.offset_left = 0.0
+	_dmg_preview.offset_right = 0.0
+	_dmg_preview.visible = true
+	_dmg_preview.modulate.a = 1.0
+	_start_damage_flash()
+
+func _hide_damage_preview() -> void:
+	_stop_damage_flash()
+	if _dmg_preview != null:
+		_dmg_preview.visible = false
+
+## Pulse the red band so it clearly reads as a warning. Honors the animations toggle:
+## when animations are off it just stays solid red (still shows the chunk, no motion).
+func _start_damage_flash() -> void:
+	_stop_damage_flash()
+	if _dmg_preview == null:
+		return
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null \
+			and GameSettings.has_method("animations_on") and not GameSettings.animations_on():
+		_dmg_preview.modulate.a = 1.0
+		return
+	_flash_tween = create_tween().set_loops()
+	_flash_tween.tween_property(_dmg_preview, "modulate:a", 0.35, 0.4) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_flash_tween.tween_property(_dmg_preview, "modulate:a", 1.0, 0.4) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+func _stop_damage_flash() -> void:
+	if _flash_tween != null and _flash_tween.is_valid():
+		_flash_tween.kill()
+	_flash_tween = null
+	if _dmg_preview != null:
+		_dmg_preview.modulate.a = 1.0
 
 # --- Helpers ----------------------------------------------------------------
 
