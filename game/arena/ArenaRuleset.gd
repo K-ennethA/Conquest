@@ -31,6 +31,13 @@ enum WinMode {
 @export var heal_policy: HealPolicy = HealPolicy.FULL_HEAL
 @export var win_condition: WinMode = WinMode.SURVIVE_ROUNDS
 
+## Which turn system every round of this run uses. Both are offered at setup; Traditional
+## is the default (you command your whole squad each turn, and extra-action augments work
+## cleanly). ArenaController pushes this into GameSettings before each round loads.
+## NOTE: "act twice" (ExtraActionEffect) is currently only wired for Traditional turns;
+## under Speed the extra action is swallowed by the interleaved queue (follow-up).
+@export var turn_system: TurnSystemBase.TurnSystemType = TurnSystemBase.TurnSystemType.TRADITIONAL
+
 @export var total_rounds: int = 6
 @export var squad_size: int = 4
 @export var starting_life: int = 1          ## versus life total; solo ignores it

@@ -113,14 +113,11 @@ func _on_compendium_pressed() -> void:
 	get_tree().change_scene_to_file("res://menus/Compendium.tscn")
 
 func _on_arena_pressed() -> void:
-	"""Handle Arena button press -- start a solo Arena roguelite run"""
+	"""Handle Arena button press -- open the Arena pre-run setup screen"""
 	print("Arena mode selected")
-	var ruleset = load("res://game/arena/rulesets/arena_solo.tres")
-	var arena = get_node_or_null("/root/ArenaController")
-	if arena and ruleset:
-		arena.start_run(ruleset)
-	else:
-		_show_not_implemented_message("Arena mode is not available.")
+	# Setup screen lets the player pick run length + turn system before ArenaController
+	# starts the run (it, not this menu, launches the actual GameWorld round).
+	get_tree().change_scene_to_file("res://game/arena/ui/ArenaSetupScreen.tscn")
 
 func _on_quit_pressed() -> void:
 	"""Handle Quit button press"""

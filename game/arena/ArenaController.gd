@@ -192,6 +192,10 @@ func _begin_next_round() -> void:
 	# task) rather than the map's own units.
 	if GameSettings != null:
 		GameSettings.set_game_mode(GameSettings.GameMode.SINGLE_PLAYER)
+		# Force the ruleset's turn system every round (apply_settings_to_game re-registers
+		# it on each round's scene load, so setting it here makes the choice stick).
+		if _ruleset != null and GameSettings.has_method("set_turn_system"):
+			GameSettings.set_turn_system(_ruleset.turn_system)
 		var map_path := _map_for_round(_run.round_index)
 		if map_path != "":
 			GameSettings.set_selected_map(map_path)
