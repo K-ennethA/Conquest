@@ -20,6 +20,10 @@ const MARGIN: float = 12.0
 ## ABOVE that band so it never overlaps them (it used to sit ~12px off the bottom, right
 ## on top of the turn indicator). 130 clears the 120px-tall turn indicator plus a gap.
 const BOTTOM_RESERVE: float = 130.0
+## Height when collapsed to just its clickable header (default). Click the header
+## to expand to PANEL_HEIGHT; click again to collapse. Starts collapsed so the log
+## stays out of the way until the player wants to read it.
+const COLLAPSED_HEIGHT: float = 30.0
 
 # Side tints (bbcode): the local/ally side reads cool, the AI/enemy side warm-red, so
 # you can scan who did what at a glance. Neutral events use cream.
@@ -31,24 +35,55 @@ const DIM_COLOR: String = "#b9a97f"
 var _log: RichTextLabel
 var _lines: Array[String] = []
 
+## Collapsed (header-only) until the player clicks the header to expand.
+var _expanded: bool = false
+## Clickable header that toggles expansion. It is the ONE part of the panel that
+## captures the mouse; everything else stays click-through over the board.
+var _header: Button
+## Lines logged while collapsed, shown as a "(N)" badge on the header so the player
+## knows something happened without expanding. Reset when expanded.
+var _unread: int = 0
+
 
 func _ready() -> void:
 	name = "BattleLog"
 	_build_ui()
 	# Bottom-left, but RAISED above the inspection cluster that shares this corner, and
-	# click-through so it never blocks the board underneath. Still bottom-anchored, so the
-	# whole left stack stays pinned to the window bottom and keeps its gaps as the window
-	# grows. At 1280x720 the log occupies x[12..342], y[432..590]: its right edge (342) is
-	# far left of the bottom-right hover card's left edge (1280-16-240 = 1024), and its
-	# bottom (590) sits ~10px above the TurnSystemIndicator's top (600) -- no overlap with
-	# either the hover UI or the turn/terrain readouts.
+	# click-through so it never blocks the board underneath (only the header captures
+	# clicks, to toggle expand/collapse). Still bottom-anchored, so the whole left stack
+	# stays pinned to the window bottom and keeps its gaps as the window grows.
 	set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	offset_left = MARGIN
 	offset_right = MARGIN + PANEL_WIDTH
-	offset_top = -(BOTTOM_RESERVE + PANEL_HEIGHT)
-	offset_bottom = -BOTTOM_RESERVE
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_apply_layout()
 	_connect_events()
+
+
+## Resize to header-only or full, and show/hide the scrollback, per _expanded.
+func _apply_layout() -> void:
+	var h: float = PANEL_HEIGHT if _expanded else COLLAPSED_HEIGHT
+	offset_top = -(BOTTOM_RESERVE + h)
+	offset_bottom = -BOTTOM_RESERVE
+	if _log:
+		_log.visible = _expanded
+	if _header:
+		_header.text = _header_text()
+
+
+func _header_text() -> String:
+	if _expanded:
+		return "BATTLE LOG  ▾"  # down triangle = open
+	if _unread > 0:
+		return "BATTLE LOG  ▸  (%d)" % _unread  # right triangle + unread badge
+	return "BATTLE LOG  ▸"
+
+
+func _toggle_expanded() -> void:
+	_expanded = not _expanded
+	if _expanded:
+		_unread = 0
+	_apply_layout()
 
 
 func _build_ui() -> void:
@@ -69,12 +104,24 @@ func _build_ui() -> void:
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(vb)
 
-	var title := Label.new()
-	title.text = "BATTLE LOG"
-	title.add_theme_font_size_override("font_size", 12)
-	title.add_theme_color_override("font_color", Color(0.85, 0.62, 0.30))
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vb.add_child(title)
+	# Clickable header (the only mouse-capturing part) toggles expand/collapse.
+	_header = Button.new()
+	_header.flat = true
+	_header.text = "BATTLE LOG  ▸"
+	_header.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_header.focus_mode = Control.FOCUS_NONE
+	_header.mouse_filter = Control.MOUSE_FILTER_STOP  # capture clicks even though the panel is IGNORE
+	_header.add_theme_font_size_override("font_size", 12)
+	_header.add_theme_color_override("font_color", Color(0.85, 0.62, 0.30))
+	_header.add_theme_color_override("font_hover_color", Color(1.0, 0.82, 0.45))
+	# Flat button still draws hover/pressed plates; blank them so it reads as a label.
+	var clear_sb := StyleBoxEmpty.new()
+	_header.add_theme_stylebox_override("normal", clear_sb)
+	_header.add_theme_stylebox_override("hover", clear_sb)
+	_header.add_theme_stylebox_override("pressed", clear_sb)
+	_header.add_theme_stylebox_override("focus", clear_sb)
+	_header.pressed.connect(_toggle_expanded)
+	vb.add_child(_header)
 
 	_log = RichTextLabel.new()
 	_log.bbcode_enabled = true
@@ -157,6 +204,11 @@ func _append(text: String, color: String) -> void:
 	if _lines.size() > MAX_LINES:
 		_lines = _lines.slice(_lines.size() - MAX_LINES)
 	_log.text = "\n".join(_lines)
+	# Collapsed: don't pop open, just badge the header so the player sees activity.
+	if not _expanded:
+		_unread += 1
+		if _header:
+			_header.text = _header_text()
 
 
 func _named(unit) -> String:

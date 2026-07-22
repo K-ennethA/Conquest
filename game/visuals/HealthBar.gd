@@ -358,7 +358,10 @@ func _setup_terrain_tag() -> void:
 	_terrain_tag.position = Vector3(0.0, TERRAIN_TAG_Y, 0.02)
 	_terrain_tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_terrain_tag.shaded = false
-	_terrain_tag.fixed_size = true  # constant on-screen size, like billboard_keep_scale
+	# NOTE: do NOT set fixed_size -- with it on, pixel_size*font_size stops mapping to
+	# world units and the label renders screen-huge (the "#AVO 15 plastered across the
+	# whole map" bug). Left off, the tag is a ~0.20 world-unit billboarded label that
+	# scales with the camera like every other world marker.
 	_terrain_tag.font_size = TERRAIN_TAG_FONT_SIZE
 	_terrain_tag.pixel_size = TERRAIN_TAG_PIXEL_SIZE
 	_terrain_tag.modulate = TERRAIN_LEAF_GREEN
