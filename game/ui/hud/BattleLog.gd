@@ -2,7 +2,7 @@ extends PanelContainer
 
 class_name BattleLog
 
-## Scrolling combat log (bottom-left of the HUD). Records what happens each turn --
+## Scrolling combat log (top-left of the HUD, collapsible). Records what happens each turn --
 ## moves, attacks, damage, heals, spawns, deaths -- off the GameEvents bus, so the
 ## player can read a running account ("Petalfang used Thorn Spit", "Torvald hit
 ## Blightcap for 20"). Purely additive and read-only: it never mutates game state.
@@ -14,15 +14,17 @@ const MAX_LINES: int = 60
 const PANEL_WIDTH: float = 330.0
 const PANEL_HEIGHT: float = 158.0
 const MARGIN: float = 12.0
-## Vertical band kept clear at the bottom-LEFT for the unit/terrain inspection cluster
-## that shares this corner: TurnSystemIndicator (x20-320, y-120..-20 => bottom 100px) and
-## the bottom-anchored TerrainInfoPanel/UnitHoverPanel readouts. The log is raised to sit
-## ABOVE that band so it never overlaps them (it used to sit ~12px off the bottom, right
-## on top of the turn indicator). 130 clears the 120px-tall turn indicator plus a gap.
-const BOTTOM_RESERVE: float = 130.0
+## The log lives in the TOP-LEFT corner, not the bottom-left. The bottom-left corner is
+## already shared by the TerrainInfoPanel (hover) and TurnSystemIndicator, and the log
+## kept overlapping / rendering behind the terrain card there (different CanvasLayers, so
+## raising it in-corner never reliably won the draw order). The top-left corner has no
+## persistent panel -- only the CombatForecastPanel appears there, and only briefly while
+## aiming a move -- so parking the log here keeps it clear of the inspection cluster. It
+## grows DOWNWARD from TOP_MARGIN.
+const TOP_MARGIN: float = 8.0
 ## Height when collapsed to just its clickable header (default). Click the header
 ## to expand to PANEL_HEIGHT; click again to collapse. Starts collapsed so the log
-## stays out of the way until the player wants to read it.
+## stays out of the way (a tiny header) until the player wants to read it.
 const COLLAPSED_HEIGHT: float = 30.0
 
 # Side tints (bbcode): the local/ally side reads cool, the AI/enemy side warm-red, so
@@ -48,11 +50,10 @@ var _unread: int = 0
 func _ready() -> void:
 	name = "BattleLog"
 	_build_ui()
-	# Bottom-left, but RAISED above the inspection cluster that shares this corner, and
-	# click-through so it never blocks the board underneath (only the header captures
-	# clicks, to toggle expand/collapse). Still bottom-anchored, so the whole left stack
-	# stays pinned to the window bottom and keeps its gaps as the window grows.
-	set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	# TOP-left corner (see TOP_MARGIN note): out of the contested bottom-left inspection
+	# cluster, so it no longer overlaps / hides behind the terrain card. Grows downward.
+	# Click-through except the header, which captures clicks to toggle expand/collapse.
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
 	offset_left = MARGIN
 	offset_right = MARGIN + PANEL_WIDTH
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -61,10 +62,11 @@ func _ready() -> void:
 
 
 ## Resize to header-only or full, and show/hide the scrollback, per _expanded.
+## Top-anchored: grows downward from TOP_MARGIN.
 func _apply_layout() -> void:
 	var h: float = PANEL_HEIGHT if _expanded else COLLAPSED_HEIGHT
-	offset_top = -(BOTTOM_RESERVE + h)
-	offset_bottom = -BOTTOM_RESERVE
+	offset_top = TOP_MARGIN
+	offset_bottom = TOP_MARGIN + h
 	if _log:
 		_log.visible = _expanded
 	if _header:

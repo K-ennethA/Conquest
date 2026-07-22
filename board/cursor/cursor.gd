@@ -392,9 +392,17 @@ func _handle_selection() -> void:
 			unit_actions_panel.handle_move_target_selected(tile_position)
 			return
 
-	# SECOND: If movement range is showing, this click is a movement destination.
+	# SECOND: If movement range is showing, this click is a movement destination --
+	# UNLESS the clicked cell holds a DIFFERENT unit, in which case switch selection
+	# to that unit instead of trying to move onto it.
 	if unit_actions_panel and unit_actions_panel.has_method("is_showing_movement_range"):
 		if unit_actions_panel.is_showing_movement_range():
+			var unit_under_click: Unit = _get_unit_at_position(tile_position)
+			if unit_under_click and unit_under_click != selected_unit:
+				# Clicking another unit switches selection (reverting any staged
+				# tentative move via _deselect_unit inside _select_unit).
+				_select_unit(unit_under_click)
+				return
 			unit_actions_panel.handle_movement_destination_selected(tile_position)
 			return  # Exit early - don't do normal unit selection
 

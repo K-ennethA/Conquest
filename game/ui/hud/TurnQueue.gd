@@ -19,10 +19,19 @@ class_name TurnQueue
 var turn_system: SpeedFirstTurnSystem = null
 var unit_portraits: Array[Control] = []
 
-# Portrait settings
-const PORTRAIT_SIZE = Vector2(64, 64)
-const PORTRAIT_MARGIN = 8
-const PORTRAITS_PER_PAGE = 4  # Show 4 portraits at a time
+# Chip settings -- compact so many units fit at once.
+# Row budget: 12 chips * 84 + 11 * 4 separation = ~1052px, well within a ~1100px top bar.
+const PORTRAIT_SIZE := Vector2(84, 54)
+const PORTRAIT_MARGIN := 4
+const PORTRAITS_PER_PAGE := 12  # Compact chips let us show a whole page at once
+
+# Warm/cool side colors (the amber theme is warm-only, so ally/enemy tints live here).
+const COLOR_ALLY_BG := Color(0.16, 0.30, 0.52, 0.92)      # cool blue
+const COLOR_ALLY_BORDER := Color(0.45, 0.66, 0.92, 1.0)
+const COLOR_ENEMY_BG := Color(0.52, 0.18, 0.16, 0.92)     # warm red
+const COLOR_ENEMY_BORDER := Color(0.92, 0.50, 0.45, 1.0)
+const COLOR_NEUTRAL_BG := Color(0.28, 0.26, 0.22, 0.92)
+const COLOR_NEUTRAL_BORDER := Color(0.6, 0.58, 0.52, 1.0)
 
 # Scroll state
 var scroll_offset: int = 0
@@ -36,16 +45,15 @@ signal unit_portrait_unhovered(unit: Unit)
 func _ready() -> void:
 	# Set proper mouse filtering - only capture events over actual UI elements
 	mouse_filter = Control.MOUSE_FILTER_IGNORE  # Let clicks pass through empty areas
-	
-	# Make visible initially for testing
+
 	visible = true
-	
+
 	# Connect scroll buttons
 	if scroll_left_button:
 		scroll_left_button.pressed.connect(_on_scroll_left_pressed)
 	if scroll_right_button:
 		scroll_right_button.pressed.connect(_on_scroll_right_pressed)
-	
+
 	# Connect to turn system events
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
@@ -54,9 +62,6 @@ func _ready() -> void:
 
 	# Initial setup
 	_update_display()
-
-	# Test display with dummy data
-	_test_display()
 
 func _on_turn_system_activated(system: TurnSystemBase) -> void:
 	"""Handle turn system activation"""
@@ -68,10 +73,10 @@ func _on_turn_system_activated(system: TurnSystemBase) -> void:
 			turn_system.turn_started.disconnect(_on_turn_started)
 		if turn_system.turn_ended.is_connected(_on_turn_ended):
 			turn_system.turn_ended.disconnect(_on_turn_ended)
-		
+
 		turn_system.turn_started.connect(_on_turn_started)
 		turn_system.turn_ended.connect(_on_turn_ended)
-		
+
 		_update_display()
 		visible = true
 	else:
@@ -79,11 +84,11 @@ func _on_turn_system_activated(system: TurnSystemBase) -> void:
 		turn_system = null
 		visible = false
 
-func _on_turn_started(player_or_unit) -> void:
+func _on_turn_started(_player_or_unit) -> void:
 	"""Handle turn start"""
 	_update_display()
 
-func _on_turn_ended(player_or_unit) -> void:
+func _on_turn_ended(_player_or_unit) -> void:
 	"""Handle turn end"""
 	_update_display()
 
@@ -94,11 +99,11 @@ func _update_display() -> void:
 
 	# Clear existing portraits (but preserve scroll_offset)
 	_clear_portraits()
-	
+
 	if not turn_system:
 		_show_inactive_state()
 		return
-	
+
 	# Get current turn information
 	var current_unit = turn_system.get_current_acting_unit()
 	var progress = turn_system.get_current_round_progress()
@@ -106,7 +111,7 @@ func _update_display() -> void:
 
 	# Update current unit display
 	_update_current_unit_display(current_unit, progress)
-	
+
 	# Update queue display
 	_update_queue_display(queue, current_unit)
 
@@ -123,18 +128,18 @@ func _update_current_unit_display(current_unit: Unit, progress: Dictionary) -> v
 	"""Update the current unit information display"""
 	if not current_unit_label or not round_info_label:
 		return
-	
+
 	if current_unit:
 		# Show current acting unit with player info
 		var player = current_unit.get_owner_player()
 		var player_name = player.get_display_name() if player else "Unknown"
 		current_unit_label.text = current_unit.get_display_name() + " Acting (" + player_name + ")"
-		
+
 		# Show detailed round and speed info (simplified for center display)
 		var round_num = progress.get("round_number", 1)
 		var current_speed = progress.get("current_unit_speed", 0)
 		var units_remaining = progress.get("units_remaining", 0)
-		
+
 		round_info_label.text = "Round " + str(round_num) + " • Speed: " + str(current_speed) + " • " + str(units_remaining) + " units left"
 	else:
 		current_unit_label.text = "No Acting Unit"
@@ -144,33 +149,33 @@ func _update_queue_display(queue: Array, current_unit: Unit) -> void:
 	"""Update the turn queue display with scroll functionality"""
 	if not queue_title_label:
 		return
-	
+
 	total_units = queue.size()
-	
+
 	# Ensure scroll_offset is within valid bounds
-	var max_scroll = max(0, total_units - PORTRAITS_PER_PAGE)
-	scroll_offset = clamp(scroll_offset, 0, max_scroll)
+	var max_scroll: int = maxi(0, total_units - PORTRAITS_PER_PAGE)
+	scroll_offset = clampi(scroll_offset, 0, max_scroll)
 
 	# Update queue title with scroll info
-	var visible_count = min(PORTRAITS_PER_PAGE, total_units)
-	var page_info = ""
+	var visible_count: int = mini(PORTRAITS_PER_PAGE, total_units)
+	var page_info := ""
 	if total_units > PORTRAITS_PER_PAGE:
-		var current_page = (scroll_offset / PORTRAITS_PER_PAGE) + 1
-		var total_pages = (total_units + PORTRAITS_PER_PAGE - 1) / PORTRAITS_PER_PAGE
+		var current_page: int = (scroll_offset / PORTRAITS_PER_PAGE) + 1
+		var total_pages: int = (total_units + PORTRAITS_PER_PAGE - 1) / PORTRAITS_PER_PAGE
 		page_info = " (Page " + str(current_page) + "/" + str(total_pages) + ")"
-	
+
 	queue_title_label.text = "Upcoming Turns (" + str(visible_count) + "/" + str(total_units) + " shown)" + page_info
-	
+
 	# Update scroll button states
 	_update_scroll_buttons()
-	
+
 	# Create portraits for visible units
-	var start_index = scroll_offset
-	var end_index = min(start_index + PORTRAITS_PER_PAGE, total_units)
+	var start_index: int = scroll_offset
+	var end_index: int = mini(start_index + PORTRAITS_PER_PAGE, total_units)
 
 	for i in range(start_index, end_index):
 		var unit = queue[i]
-		var is_current = (unit == current_unit)  # Fixed: check unit directly, not index
+		var is_current: bool = (unit == current_unit)
 		var portrait = _create_unit_portrait(unit, is_current, i)
 		queue_container.add_child(portrait)
 		unit_portraits.append(portrait)
@@ -179,30 +184,30 @@ func _update_scroll_buttons() -> void:
 	"""Update scroll button enabled states"""
 	if not scroll_left_button or not scroll_right_button:
 		return
-	
+
 	# Left button: enabled if we can scroll left
 	scroll_left_button.disabled = (scroll_offset <= 0)
-	
+
 	# Right button: enabled if we can scroll right
-	var max_scroll = max(0, total_units - PORTRAITS_PER_PAGE)
+	var max_scroll: int = maxi(0, total_units - PORTRAITS_PER_PAGE)
 	scroll_right_button.disabled = (scroll_offset >= max_scroll)
-	
+
 	# Hide buttons if not needed
-	var needs_scrolling = total_units > PORTRAITS_PER_PAGE
+	var needs_scrolling: bool = total_units > PORTRAITS_PER_PAGE
 	scroll_left_button.visible = needs_scrolling
 	scroll_right_button.visible = needs_scrolling
 
 func _on_scroll_left_pressed() -> void:
 	"""Handle left scroll button press"""
 	if scroll_offset > 0:
-		scroll_offset = max(0, scroll_offset - PORTRAITS_PER_PAGE)
+		scroll_offset = maxi(0, scroll_offset - PORTRAITS_PER_PAGE)
 		_update_display()
 
 func _on_scroll_right_pressed() -> void:
 	"""Handle right scroll button press"""
-	var max_scroll = max(0, total_units - PORTRAITS_PER_PAGE)
+	var max_scroll: int = maxi(0, total_units - PORTRAITS_PER_PAGE)
 	if scroll_offset < max_scroll:
-		scroll_offset = min(max_scroll, scroll_offset + PORTRAITS_PER_PAGE)
+		scroll_offset = mini(max_scroll, scroll_offset + PORTRAITS_PER_PAGE)
 		_update_display()
 
 func _clear_portraits() -> void:
@@ -211,216 +216,154 @@ func _clear_portraits() -> void:
 		if portrait and is_instance_valid(portrait):
 			portrait.queue_free()
 	unit_portraits.clear()
-	
+
 	# Also clear any remaining children
 	if queue_container:
 		for child in queue_container.get_children():
 			child.queue_free()
-	
+
 	# Note: Don't reset scroll_offset here - it should persist across updates
 
 func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) -> Control:
-	"""Create a portrait for a unit with position indicator"""
-	var portrait_container = Control.new()
-	portrait_container.custom_minimum_size = PORTRAIT_SIZE + Vector2(PORTRAIT_MARGIN * 2, PORTRAIT_MARGIN * 2 + 15)  # Extra space for position
-	portrait_container.mouse_filter = Control.MOUSE_FILTER_PASS
-	
-	# Store unit reference for interaction
-	portrait_container.set_meta("unit", unit)
-	
-	# Create clickable button for interaction - make it cover the entire portrait
-	var button = Button.new()
-	button.size = portrait_container.custom_minimum_size
-	button.position = Vector2.ZERO
-	button.flat = true
-	button.mouse_filter = Control.MOUSE_FILTER_STOP  # Changed to STOP to ensure it receives input
-	
-	# Make button more visible for debugging
-	button.modulate = Color(1.0, 1.0, 1.0, 0.2)  # Slightly more visible
-	
-	# Connect button signals with more robust approach
-	# Use both pressed signal and gui_input for maximum compatibility
-	button.pressed.connect(_on_portrait_clicked.bind(unit))
-	button.gui_input.connect(_on_portrait_button_input.bind(unit))
-	button.mouse_entered.connect(_on_portrait_hovered.bind(unit))
-	button.mouse_exited.connect(_on_portrait_unhovered.bind(unit))
-	
-	# Position indicator at the top
-	var position_label = Label.new()
-	if is_current:
-		position_label.text = "NOW"
-		position_label.add_theme_color_override("font_color", Color.YELLOW)
-	else:
-		position_label.text = str(queue_position + 1)
-		position_label.add_theme_color_override("font_color", Color.WHITE)
-	
-	position_label.size = Vector2(PORTRAIT_SIZE.x + PORTRAIT_MARGIN * 2, 15)
-	position_label.position = Vector2.ZERO
-	position_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	position_label.add_theme_font_size_override("font_size", 10)
-	position_label.add_theme_color_override("font_shadow_color", Color.BLACK)
-	position_label.add_theme_constant_override("shadow_offset_x", 1)
-	position_label.add_theme_constant_override("shadow_offset_y", 1)
-	position_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	portrait_container.add_child(position_label)
-	
-	# Background panel (moved down to make room for position)
-	var background = Panel.new()
-	background.size = PORTRAIT_SIZE + Vector2(PORTRAIT_MARGIN * 2, PORTRAIT_MARGIN * 2)
-	background.position = Vector2(0, 15)  # Offset for position label
+	"""Create a compact turn-order chip for a unit.
+
+	Layout (non-overlapping fixed rects, top to bottom):
+	  position/NOW  ->  unit name (elided)  ->  SPD:n
+	Colors: ally = cool blue, enemy = warm red, current = bright amber highlight.
+	"""
+	var chip := Control.new()
+	chip.custom_minimum_size = PORTRAIT_SIZE
+	chip.mouse_filter = Control.MOUSE_FILTER_PASS
+
+	# Store unit reference for interaction / highlight lookup
+	chip.set_meta("unit", unit)
+
+	var chip_w: float = PORTRAIT_SIZE.x
+	var chip_h: float = PORTRAIT_SIZE.y
+
+	# --- Background panel (must remain child index 0 for highlight_portrait) ---
+	var background := Panel.new()
+	background.size = PORTRAIT_SIZE
+	background.position = Vector2.ZERO
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	
-	# Style the background
-	var style_box = StyleBoxFlat.new()
+
+	var style_box := StyleBoxFlat.new()
+	var amber: Color = _theme_color("AMBER", Color(0.90, 0.65, 0.29))
+	var brown_dk: Color = _theme_color("BROWN_DK", Color(0.22, 0.13, 0.06))
 	if is_current:
-		style_box.bg_color = Color(1.0, 1.0, 0.3, 0.9)  # Bright yellow for current unit
-		style_box.border_color = Color(1.0, 1.0, 1.0, 1.0)  # White border
-		style_box.border_width_left = 3
-		style_box.border_width_top = 3
-		style_box.border_width_right = 3
-		style_box.border_width_bottom = 3
+		style_box.bg_color = amber
+		style_box.border_color = _theme_color("CREAM", Color(0.99, 0.94, 0.84))
+		style_box.set_border_width_all(3)
 	else:
-		# Get player color
 		var player = unit.get_owner_player()
 		if player and player.player_id == 0:
-			style_box.bg_color = Color(0.2, 0.4, 0.8, 0.7)  # Blue for Player 1
+			style_box.bg_color = COLOR_ALLY_BG
+			style_box.border_color = COLOR_ALLY_BORDER
 		elif player and player.player_id == 1:
-			style_box.bg_color = Color(0.8, 0.2, 0.2, 0.7)  # Red for Player 2
+			style_box.bg_color = COLOR_ENEMY_BG
+			style_box.border_color = COLOR_ENEMY_BORDER
 		else:
-			style_box.bg_color = Color(0.5, 0.5, 0.5, 0.7)  # Gray for neutral
-		
-		style_box.border_color = Color(0.8, 0.8, 0.8, 0.8)
-		style_box.border_width_left = 1
-		style_box.border_width_top = 1
-		style_box.border_width_right = 1
-		style_box.border_width_bottom = 1
-	
-	style_box.corner_radius_top_left = 8
-	style_box.corner_radius_top_right = 8
-	style_box.corner_radius_bottom_left = 8
-	style_box.corner_radius_bottom_right = 8
-	
+			style_box.bg_color = COLOR_NEUTRAL_BG
+			style_box.border_color = COLOR_NEUTRAL_BORDER
+		style_box.set_border_width_all(2)
+
+	style_box.set_corner_radius_all(7)
 	background.add_theme_stylebox_override("panel", style_box)
-	portrait_container.add_child(background)
-	
-	# Unit icon/representation
-	var icon_container = Control.new()
-	icon_container.size = PORTRAIT_SIZE
-	icon_container.position = Vector2(PORTRAIT_MARGIN, PORTRAIT_MARGIN + 15)  # Offset for position label
-	icon_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	
-	# For now, use a simple colored rectangle to represent the unit
-	var unit_icon = ColorRect.new()
-	unit_icon.size = PORTRAIT_SIZE
-	unit_icon.position = Vector2.ZERO
-	unit_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	
-	# Icon color from the character id (get_unit_type() returns a String now).
-	var unit_type: String = unit.get_unit_type()
-	if unit_type == "":
-		unit_icon.color = Color(0.6, 0.6, 0.6, 1.0)
+	chip.add_child(background)
+
+	# --- Position / NOW label (top strip) ---
+	var pos_label := Label.new()
+	if is_current:
+		pos_label.text = "NOW"
+		pos_label.add_theme_color_override("font_color", brown_dk)
 	else:
-		unit_icon.color = Color.from_hsv(float(absi(hash(unit_type)) % 360) / 360.0, 0.55, 0.85, 1.0)
-	
-	icon_container.add_child(unit_icon)
-	portrait_container.add_child(icon_container)
-	
-	# Unit name label
-	var name_label = Label.new()
+		pos_label.text = str(queue_position + 1)
+		pos_label.add_theme_color_override("font_color", _theme_color("CREAM", Color.WHITE))
+	pos_label.position = Vector2(0, 2)
+	pos_label.size = Vector2(chip_w, 14)
+	pos_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pos_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	pos_label.add_theme_font_size_override("font_size", 11)
+	pos_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	pos_label.add_theme_constant_override("shadow_offset_x", 1)
+	pos_label.add_theme_constant_override("shadow_offset_y", 1)
+	pos_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.add_child(pos_label)
+
+	# --- Unit name label (elided if long) ---
+	var name_label := Label.new()
 	name_label.text = unit.get_display_name()
-	name_label.size = Vector2(PORTRAIT_SIZE.x, 20)
-	name_label.position = Vector2(PORTRAIT_MARGIN, PORTRAIT_SIZE.y + PORTRAIT_MARGIN)  # Adjusted for position label
+	name_label.position = Vector2(3, 17)
+	name_label.size = Vector2(chip_w - 6, 16)
+	name_label.custom_minimum_size = Vector2(chip_w - 6, 16)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_label.add_theme_font_size_override("font_size", 9)
-	name_label.add_theme_color_override("font_color", Color.WHITE)
-	name_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.clip_text = true
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_label.add_theme_font_size_override("font_size", 11)
+	name_label.add_theme_color_override("font_color", brown_dk if is_current else Color(0.99, 0.94, 0.84))
+	name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
 	name_label.add_theme_constant_override("shadow_offset_x", 1)
 	name_label.add_theme_constant_override("shadow_offset_y", 1)
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	portrait_container.add_child(name_label)
-	
-	# Speed indicator
-	var speed_label = Label.new()
+	chip.add_child(name_label)
+
+	# --- Speed label (bottom strip) ---
+	var speed_label := Label.new()
 	var current_speed = turn_system.get_unit_current_speed(unit) if turn_system else unit.get_stat("speed")
 	speed_label.text = "SPD:" + str(current_speed)
-	speed_label.size = Vector2(PORTRAIT_SIZE.x, 12)
-	speed_label.position = Vector2(PORTRAIT_MARGIN, PORTRAIT_MARGIN + 17)  # Adjusted for position label
+	speed_label.position = Vector2(0, chip_h - 16)
+	speed_label.size = Vector2(chip_w, 14)
 	speed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	speed_label.add_theme_font_size_override("font_size", 8)
-	speed_label.add_theme_color_override("font_color", Color.WHITE)
-	speed_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	speed_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	speed_label.add_theme_font_size_override("font_size", 10)
+	speed_label.add_theme_color_override("font_color", brown_dk if is_current else Color(0.90, 0.90, 0.90))
+	speed_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
 	speed_label.add_theme_constant_override("shadow_offset_x", 1)
 	speed_label.add_theme_constant_override("shadow_offset_y", 1)
 	speed_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	portrait_container.add_child(speed_label)
-	
-	# Add the button on top for interaction - MUST be last to be on top
-	portrait_container.add_child(button)
-	
-	return portrait_container
+	chip.add_child(speed_label)
 
-func _test_display() -> void:
-	"""Test the display with dummy data"""
-	if not queue_container:
-		return
+	# --- Invisible click overlay (on top, receives input, draws nothing) ---
+	var button := Button.new()
+	button.size = PORTRAIT_SIZE
+	button.custom_minimum_size = PORTRAIT_SIZE
+	button.position = Vector2.ZERO
+	button.flat = true
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	# Fully transparent in every state so only the chip visuals show through.
+	var empty := StyleBoxEmpty.new()
+	button.add_theme_stylebox_override("normal", empty)
+	button.add_theme_stylebox_override("hover", empty)
+	button.add_theme_stylebox_override("pressed", empty)
+	button.add_theme_stylebox_override("focus", empty)
+	button.add_theme_stylebox_override("disabled", empty)
 
-	queue_title_label.text = "Turn Queue (TEST MODE)"
-	
-	# Create some test portraits
-	for i in range(3):
-		var test_portrait = _create_test_portrait("Test Unit " + str(i + 1), i == 0)
-		queue_container.add_child(test_portrait)
-		unit_portraits.append(test_portrait)
+	button.pressed.connect(_on_portrait_clicked.bind(unit))
+	button.mouse_entered.connect(_on_portrait_hovered.bind(unit))
+	button.mouse_exited.connect(_on_portrait_unhovered.bind(unit))
 
-func _create_test_portrait(unit_name: String, is_current: bool) -> Control:
-	"""Create a test portrait"""
-	var portrait_container = Control.new()
-	portrait_container.custom_minimum_size = PORTRAIT_SIZE + Vector2(PORTRAIT_MARGIN * 2, PORTRAIT_MARGIN * 2)
-	
-	# Background panel
-	var background = Panel.new()
-	background.size = PORTRAIT_SIZE + Vector2(PORTRAIT_MARGIN * 2, PORTRAIT_MARGIN * 2)
-	background.position = Vector2.ZERO
-	
-	# Style the background
-	var style_box = StyleBoxFlat.new()
-	if is_current:
-		style_box.bg_color = Color(1.0, 1.0, 0.3, 0.9)  # Bright yellow for current unit
-		style_box.border_color = Color(1.0, 1.0, 1.0, 1.0)  # White border
-		style_box.border_width_left = 3
-		style_box.border_width_top = 3
-		style_box.border_width_right = 3
-		style_box.border_width_bottom = 3
-	else:
-		style_box.bg_color = Color(0.2, 0.4, 0.8, 0.7)  # Blue
-		style_box.border_color = Color(0.8, 0.8, 0.8, 0.8)
-		style_box.border_width_left = 1
-		style_box.border_width_top = 1
-		style_box.border_width_right = 1
-		style_box.border_width_bottom = 1
-	
-	style_box.corner_radius_top_left = 8
-	style_box.corner_radius_top_right = 8
-	style_box.corner_radius_bottom_left = 8
-	style_box.corner_radius_bottom_right = 8
-	
-	background.add_theme_stylebox_override("panel", style_box)
-	portrait_container.add_child(background)
-	
-	# Unit name label
-	var name_label = Label.new()
-	name_label.text = unit_name
-	name_label.size = Vector2(PORTRAIT_SIZE.x, 20)
-	name_label.position = Vector2(PORTRAIT_MARGIN, PORTRAIT_SIZE.y + PORTRAIT_MARGIN - 15)
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_label.add_theme_font_size_override("font_size", 10)
-	name_label.add_theme_color_override("font_color", Color.WHITE)
-	name_label.add_theme_color_override("font_shadow_color", Color.BLACK)
-	name_label.add_theme_constant_override("shadow_offset_x", 1)
-	name_label.add_theme_constant_override("shadow_offset_y", 1)
-	portrait_container.add_child(name_label)
-	
-	return portrait_container
+	chip.add_child(button)
+
+	return chip
+
+func _theme_color(name: String, fallback: Color) -> Color:
+	"""Fetch a ConquestTheme palette color by constant name.
+
+	ConquestTheme is a global class_name in this project; we access its palette
+	constants directly here and fall back to a tasteful warm color if a name is
+	not mapped, so this HUD never depends on hardcoded magic numbers elsewhere.
+	"""
+	match name:
+		"AMBER":
+			return ConquestTheme.AMBER
+		"CREAM":
+			return ConquestTheme.CREAM
+		"BROWN_DK":
+			return ConquestTheme.BROWN_DK
+		_:
+			return fallback
 
 func _on_portrait_clicked(unit: Unit) -> void:
 	"""Handle portrait click - show unit details"""
@@ -436,16 +379,6 @@ func _on_portrait_hovered(unit: Unit) -> void:
 func _on_portrait_unhovered(unit: Unit) -> void:
 	"""Handle portrait unhover - hide preview info"""
 	unit_portrait_unhovered.emit(unit)
-
-func _on_portrait_button_input(event: InputEvent, unit: Unit) -> void:
-	"""Handle button input events directly"""
-	if event is InputEventMouseButton:
-		# Handle left mouse button click (press and release)
-		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-			# Call the click handler directly
-			_on_portrait_clicked(unit)
-			# Accept the event to prevent further processing
-			get_viewport().set_input_as_handled()
 
 # Public interface
 func get_displayed_queue_size() -> int:
@@ -468,17 +401,17 @@ func scroll_to_unit(unit: Unit) -> bool:
 	"""Scroll the queue to show a specific unit"""
 	if not turn_system:
 		return false
-	
+
 	var queue = turn_system.get_turn_queue()
-	var unit_index = queue.find(unit)
-	
+	var unit_index: int = queue.find(unit)
+
 	if unit_index >= 0:
 		# Calculate which page this unit is on
-		var target_page = unit_index / PORTRAITS_PER_PAGE
+		var target_page: int = unit_index / PORTRAITS_PER_PAGE
 		scroll_offset = target_page * PORTRAITS_PER_PAGE
 		_update_display()
 		return true
-	
+
 	return false
 
 func reset_scroll() -> void:
@@ -496,30 +429,6 @@ func get_scroll_info() -> Dictionary:
 		"total_pages": (total_units + PORTRAITS_PER_PAGE - 1) / PORTRAITS_PER_PAGE if total_units > 0 else 1
 	}
 
-# Debug methods for testing
-func _input(event: InputEvent) -> void:
-	"""Handle debug input for testing scroll functionality"""
-	if not event.is_pressed():
-		return
-	
-	if event is InputEventKey:
-		match event.keycode:
-			KEY_F6:
-				_on_scroll_right_pressed()
-			KEY_F7:
-				_on_scroll_left_pressed()
-			KEY_F9:
-				scroll_offset = 0
-				_update_display()
-
-func test_scroll_functionality() -> void:
-	"""Test scroll functionality programmatically"""
-	# Test right scroll
-	_on_scroll_right_pressed()
-
-	# Test left scroll
-	_on_scroll_left_pressed()
-
 func highlight_portrait(unit: Unit, highlight: bool) -> void:
 	"""Highlight a specific unit's portrait"""
 	for portrait in unit_portraits:
@@ -530,15 +439,9 @@ func highlight_portrait(unit: Unit, highlight: bool) -> void:
 				var style_box = background.get_theme_stylebox("panel").duplicate()
 				if highlight:
 					style_box.border_color = Color.YELLOW
-					style_box.border_width_left = 3
-					style_box.border_width_top = 3
-					style_box.border_width_right = 3
-					style_box.border_width_bottom = 3
+					style_box.set_border_width_all(3)
 				else:
 					style_box.border_color = Color(0.8, 0.8, 0.8, 0.8)
-					style_box.border_width_left = 1
-					style_box.border_width_top = 1
-					style_box.border_width_right = 1
-					style_box.border_width_bottom = 1
+					style_box.set_border_width_all(1)
 				background.add_theme_stylebox_override("panel", style_box)
 			break

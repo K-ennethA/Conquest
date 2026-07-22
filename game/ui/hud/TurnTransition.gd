@@ -47,6 +47,11 @@ var _accent: ColorRect = null
 var _tween: Tween = null
 # The turn system we're currently listening to for turn_started (re-wired on switch).
 var _watched_ts = null
+# The last announced acting SIDE: -1 unknown/unset, 0 ally, 1 enemy. The big wipe
+# only fires when the resolved side actually CHANGES, so a run of same-side unit
+# turns (Speed mode fires turn_started per unit) collapses to a single wipe at the
+# side transition. Reset to -1 on (re)wire so a fresh game re-announces turn one.
+var _last_side: int = -1
 
 
 func _ready() -> void:
@@ -73,6 +78,9 @@ func _on_turn_system_activated(ts) -> void:
 			and _watched_ts.turn_started.is_connected(_on_player_turn_started):
 		_watched_ts.turn_started.disconnect(_on_player_turn_started)
 	_watched_ts = ts
+	# A fresh turn system (new game / mode switch) should re-announce the first turn,
+	# so forget whichever side we last announced under the old system.
+	_last_side = -1
 	if ts != null and not ts.turn_started.is_connected(_on_player_turn_started):
 		ts.turn_started.connect(_on_player_turn_started)
 
@@ -173,9 +181,29 @@ func _scaled(base_seconds: float) -> float:
 # --- Playback ---------------------------------------------------------------
 
 func _on_player_turn_started(player: Player) -> void:
-	# BOTH sides get a wipe now so every turn hand-off reads clearly. The enemy
-	# (AI) side uses the shorter timings (see play) so its phase stays light.
-	play(player)
+	# The big wipe should announce a SIDE change (ally phase <-> enemy phase), NOT
+	# every unit hand-off. In Speed mode turn_started fires once PER UNIT (dozens of
+	# times within one side), so gating on the acting side collapses that run to a
+	# single wipe at the transition. In Traditional mode the side genuinely alternates
+	# every player-phase, so the gate still plays a wipe each phase (ally->enemy->...).
+	var side: int = _side_of(player)
+	# Play only when the side actually changed (or we've never announced one yet).
+	if side != _last_side:
+		play(player)
+	# Always remember the current side so a following same-side turn stays quiet.
+	_last_side = side
+
+
+## Resolve the acting SIDE of [param arg]: -1 unknown, 0 ally, 1 enemy.
+## Defensive: the signal passes a Player, but tolerate a null or a Unit that
+## exposes get_owner_player() by resolving to the owning Player first.
+func _side_of(arg) -> int:
+	var player = arg
+	if player != null and player.has_method("get_owner_player"):
+		player = player.get_owner_player()
+	if player == null:
+		return -1
+	return 1 if player.is_ai else 0
 
 
 ## Play the wipe for [param player]. Interrupts any in-flight transition.
