@@ -19,8 +19,16 @@ enum Target { SQUAD, SINGLE_UNIT, RUN }
 
 ## Generic per-unit stat deltas, applied by the augment applier with no bespoke code.
 ## Key = stat name ("max_health", "attack", "defense", "move", "evasion", ...);
-## value = integer delta. This alone expresses the bulk of a starter augment pool.
+## value = integer delta. A convenient shorthand for pure-stat augments; equivalent to a
+## list of StatEffects. Kept for the data-only starter pool.
 @export var stat_bonuses: Dictionary = {}
+
+## The composable, expressive form (mirrors MoveResource.effects): an ordered list of
+## AugmentEffects the applier runs at round setup. This is where the rich augments live --
+## a move that hits twice (MoveModEffect), an extra action (ExtraActionEffect), a granted
+## on-kill passive (GrantAbilityEffect), a run boon (RunEffect), or plain stats
+## (StatEffect). Any combination is legal, so one data format expresses everything.
+@export var effects: Array[AugmentEffect] = []
 
 
 ## Weight for weighted-random draft rolls, derived from rarity (commons show up most).

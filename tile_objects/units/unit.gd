@@ -414,14 +414,32 @@ func _get_player_assignment_from_player(player: Player) -> PlayerMaterials.Playe
 			return PlayerMaterials.PlayerTeam.NEUTRAL
 
 # Turn action management
+
+## Extra ACTIONS beyond the first this unit may take each turn (Arena "act twice"
+## augments grant this; 0 for every normal unit, so nothing else changes behaviour).
+## Consumed at mark_action_completed: while the unit still has budget this turn it does
+## NOT latch "done" and its move is refreshed, so the player/AI can command it again.
+var arena_extra_actions: int = 0
+## Actions already completed this turn, compared against arena_extra_actions.
+var _actions_taken_this_turn: int = 0
+
 func reset_turn_actions() -> void:
 	"""Reset unit's actions for a new turn"""
 	has_acted_this_turn = false
 	has_moved_this_turn = false
+	_actions_taken_this_turn = 0
 
 func mark_action_completed(action_type: String) -> void:
-	"""Mark that this unit has completed its action (ends its turn)"""
-	has_acted_this_turn = true
+	"""Mark that this unit has completed an action. Normally this ends its turn, but a
+	unit granted extra actions (arena_extra_actions) stays actable until its budget for
+	the turn is spent -- each extra action also refreshes its move, so it is a full
+	additional action, not just a second attack from the same spot."""
+	_actions_taken_this_turn += 1
+	if _actions_taken_this_turn <= maxi(0, arena_extra_actions):
+		# Budget remains: grant another full action this turn instead of latching done.
+		has_moved_this_turn = false
+	else:
+		has_acted_this_turn = true
 	unit_action_completed.emit(self, action_type)
 
 func mark_moved() -> void:

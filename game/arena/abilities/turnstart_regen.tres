@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="AbilityResource" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_mvefx"]
+[ext_resource type="Script" path="res://game/combat/effects/HealEffect.gd" id="2_healf"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="3_abres"]
+[ext_resource type="Script" path="res://game/abilities/AlwaysCondition.gd" id="4_alwys"]
+
+[sub_resource type="Resource" id="Resource_regen_heal"]
+script = ExtResource("2_healf")
+amount = 0
+scaling_stat = ""
+scale = 1.0
+percent_of_max_health = 0.08
+
+[sub_resource type="Resource" id="Resource_regen_cond"]
+script = ExtResource("4_alwys")
+
+[resource]
+script = ExtResource("3_abres")
+id = &"turnstart_regen"
+display_name = "Second Wind"
+description = "Recover with the dawn. Restore 8% of max health at the start of every turn."
+trigger = 1
+condition = SubResource("Resource_regen_cond")
+effects = Array[ExtResource("1_mvefx")]([SubResource("Resource_regen_heal")])
+rule_modifiers = {}
+targets_triggering_unit = false
+cooldown = 0
+max_activations = -1

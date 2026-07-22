@@ -64,9 +64,13 @@ static func apply(unit, unit_state: ArenaUnitState, run: ArenaRun) -> void:
 		if augment == null:
 			continue
 		_apply_stat_bonuses(unit, augment.stat_bonuses)
-		# Bespoke hook (move upgrades / granted passives) -- base is a no-op, so this is
-		# safe for the data-only augments in the starter pool.
+		# Bespoke hook (base is a no-op, safe for data-only augments).
 		augment.apply_to_unit(unit)
+		# Composable effects: the expressive path (move-mods, granted abilities, extra
+		# actions, stats). Each runs its unit-scoped hook; run-scoped ones no-op here.
+		for eff in augment.effects:
+			if eff != null:
+				eff.apply_to_unit(unit, run)
 
 
 ## Apply every run-wide augment's non-unit effect exactly once for the run (e.g. an extra
@@ -80,6 +84,9 @@ static func apply_run(run: ArenaRun) -> void:
 		var augment: Augment = _index.get(String(aid), null)
 		if augment != null:
 			augment.apply_to_run(run)
+			for eff in augment.effects:
+				if eff != null:
+					eff.apply_to_run(run)
 
 
 ## Look up a single Augment by id (null when unknown). Public so callers (e.g. the draft
@@ -94,21 +101,25 @@ static func augment_for_id(augment_id: String) -> Augment:
 static func _apply_stat_bonuses(unit, stat_bonuses: Dictionary) -> void:
 	if stat_bonuses == null or stat_bonuses.is_empty():
 		return
-	# The stats component, if this unit has one. Untyped on purpose: unit is untyped and
-	# UnitStats' current_<stat> fields are reached via get()/set() below.
-	var stats = unit.get("unit_stats")
 	for raw_key in stat_bonuses.keys():
-		var delta: int = int(stat_bonuses[raw_key])
-		if delta == 0:
-			continue
-		var key: String = _canonical_stat(String(raw_key))
-		if MODIFY_STAT_KEYS.has(key):
-			# Permanent so max_health/base_attack/... move with the current value, and so
-			# the change survives the per-turn modifier tick.
-			if unit.has_method("modify_stat"):
-				unit.modify_stat(key, delta, true)
-		else:
-			_bump_current_field(stats, key, delta)
+		apply_stat(unit, String(raw_key), int(stat_bonuses[raw_key]))
+
+
+## Add [param delta] to the unit's [param stat_name] through the engine's real path:
+## modify_stat (permanent) for engine-writable stats, a direct current_<stat> write for
+## evasion/crit/magic/magic_defense (which UnitStats has no setter branch for). Public so
+## StatEffect and other effects reuse the exact same application. Null-safe.
+static func apply_stat(unit, stat_name: String, delta: int) -> void:
+	if not is_instance_valid(unit) or delta == 0:
+		return
+	var key: String = _canonical_stat(stat_name)
+	if MODIFY_STAT_KEYS.has(key):
+		# Permanent so max_health/base_attack/... move with the current value, and so the
+		# change survives the per-turn modifier tick.
+		if unit.has_method("modify_stat"):
+			unit.modify_stat(key, delta, true)
+	else:
+		_bump_current_field(unit.get("unit_stats"), key, delta)
 
 
 ## Directly add [param delta] to UnitStats.current_<canonical> for the stats
