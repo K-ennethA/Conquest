@@ -30,6 +30,14 @@ const DIRT_DARK: Color = Color(0.66, 0.42, 0.26, 1.0)
 const ROCK_COLOR: Color = Color(0.86, 0.86, 0.83, 1.0)   # light stone
 const TUFT_COLOR: Color = Color(0.42, 0.78, 0.30, 1.0)
 
+# Tall-grass blade gradient: a dark green base rising to a bright, faintly
+# yellow-green tip -- the stylized "clump of pointed blades" look. Applied per
+# vertex (base verts dark, tip vert bright) so each blade reads as lit-from-above
+# even under flat shading, matching the reference tuft art.
+const GRASS_BLADE_BASE: Color = Color(0.06, 0.30, 0.11, 1.0)  # deep shadowed green
+const GRASS_BLADE_MID: Color = Color(0.18, 0.55, 0.20, 1.0)   # mid leaf green
+const GRASS_BLADE_TIP: Color = Color(0.44, 0.82, 0.32, 1.0)   # bright (but still green) lit tip
+
 var _rng: int = 1
 static var _decor_mat: StandardMaterial3D = null
 
@@ -167,27 +175,34 @@ func _build_decor() -> ArrayMesh:
 			_: pos = Vector3(-d, yy, along)
 		_add_rock(v, n, c, pos, _rand_range(0.12, 0.2))
 
-	# Grass tufts poking up above the cap. Per-style density so each tile reads right:
-	#   TALL_GRASS -> dense & tall,  MEADOW -> slightly denser,
-	#   TREE       -> a few (tree prop owns the centre),
-	#   DIRT       -> 0-2 sparse blades (it's a dirt patch, not grassy).
-	var tuft_count: int = 5
-	match style:
-		Style.TALL_GRASS:
-			tuft_count = 9
-		Style.MEADOW:
-			tuft_count = 7
-		Style.TREE:
-			tuft_count = 4
-		Style.DIRT:
-			tuft_count = int(_rand() * 3.0)
-	for t in range(tuft_count):
-		var bx := _rand_range(-0.7, 0.7)
-		var bz := _rand_range(-0.7, 0.7)
-		var th := _rand_range(0.14, 0.24)
-		if style == Style.TALL_GRASS:
-			th = _rand_range(0.4, 0.6)
-		_add_tuft(v, n, c, Vector3(bx, CAP_TOP, bz), th)
+	# Grass on top. TALL_GRASS gets lush, bushy blade-CLUMPS (fans of pointed blades,
+	# dark base -> bright tip) that fill the tile like the reference tuft art. Every
+	# other style keeps the simpler single-spike tufts, at per-style density:
+	#   MEADOW -> slightly denser,  TREE -> a few (tree prop owns the centre),
+	#   DIRT   -> 0-2 sparse blades (it's a dirt patch, not grassy).
+	if style == Style.TALL_GRASS:
+		# A patch of a few overlapping clumps reads as a full tile of tall grass
+		# while staying chunky/low-poly (each clump is a small fan of blades).
+		var clump_count: int = 5
+		for t in range(clump_count):
+			var cx: float = _rand_range(-0.6, 0.6)
+			var cz: float = _rand_range(-0.6, 0.6)
+			var ch: float = _rand_range(0.46, 0.64)
+			_add_grass_clump(v, n, c, Vector3(cx, CAP_TOP, cz), ch)
+	else:
+		var tuft_count: int = 5
+		match style:
+			Style.MEADOW:
+				tuft_count = 7
+			Style.TREE:
+				tuft_count = 4
+			Style.DIRT:
+				tuft_count = int(_rand() * 3.0)
+		for t in range(tuft_count):
+			var bx: float = _rand_range(-0.7, 0.7)
+			var bz: float = _rand_range(-0.7, 0.7)
+			var th: float = _rand_range(0.14, 0.24)
+			_add_tuft(v, n, c, Vector3(bx, CAP_TOP, bz), th)
 
 	return _mesh(v, n, c)
 
@@ -218,6 +233,34 @@ func _add_tuft(v: PackedVector3Array, n: PackedVector3Array, c: PackedColorArray
 	_tri(v, n, c, b2, b0, tip, Vector3(-1, 0, 1).normalized(), TUFT_COLOR)
 
 
+## A bushy clump of pointed grass blades fanning out from [param base] to roughly
+## [param s] tall -- the tall-grass "tuft" look. Each blade is one flat pointed
+## triangle (base wide, tip a point) leaning outward on its own yaw, with a dark
+## base -> bright tip vertex gradient, plus one tall upright central blade so the
+## clump peaks in the middle like the reference art. The decor material is
+## double-sided (see _get_decor_mat) so the flat blades read from every angle.
+func _add_grass_clump(v: PackedVector3Array, n: PackedVector3Array, c: PackedColorArray, base: Vector3, s: float) -> void:
+	var blades: int = 8 + int(_rand() * 3.0)   # 8-10 blades ringing the clump (dense)
+	var wdt: float = 0.062                      # half-width of a blade base
+	for i in range(blades):
+		var ang: float = TAU * float(i) / float(blades) + _rand_range(-0.35, 0.35)
+		var lean: float = _rand_range(0.10, 0.30)          # how far the tip leans out
+		var bh: float = s * _rand_range(0.62, 1.12)        # this blade's height
+		var dx: float = cos(ang)
+		var dz: float = sin(ang)
+		var tip: Vector3 = base + Vector3(dx * lean, bh, dz * lean)
+		var perp: Vector3 = Vector3(-dz, 0.0, dx) * wdt    # blade width across its lean
+		var b0: Vector3 = base - perp
+		var b1: Vector3 = base + perp
+		_tri_grad(v, n, c, b0, b1, tip, Vector3.UP,
+			GRASS_BLADE_BASE, GRASS_BLADE_MID, GRASS_BLADE_TIP)
+	# Tall upright central blade so the clump has a peaked, star-shaped silhouette.
+	var ctip: Vector3 = base + Vector3(_rand_range(-0.03, 0.03), s * 1.18, _rand_range(-0.03, 0.03))
+	var cperp: Vector3 = Vector3(wdt, 0.0, 0.0)
+	_tri_grad(v, n, c, base - cperp, base + cperp, ctip, Vector3.UP,
+		GRASS_BLADE_BASE, GRASS_BLADE_MID, GRASS_BLADE_TIP)
+
+
 # --- Mesh helpers -----------------------------------------------------------
 
 ## Append one flat triangle, winding so its normal points toward [param want].
@@ -242,6 +285,31 @@ func _tri(v: PackedVector3Array, n: PackedVector3Array, c, a: Vector3, b: Vector
 		c.append(col); c.append(col); c.append(col)
 
 
+## Like _tri, but carries a per-vertex colour (a base->tip gradient for grass blades).
+## Winding is flipped exactly as in _tri so the face is visible toward [param want];
+## the b/d colours swap with the verts so the gradient stays pinned to a/b/d.
+func _tri_grad(v: PackedVector3Array, n: PackedVector3Array, c: PackedColorArray, a: Vector3, b: Vector3, d: Vector3, want: Vector3, ca: Color, cb: Color, cd: Color) -> void:
+	var nrm: Vector3 = (b - a).cross(d - a)
+	if nrm.length_squared() < 0.000000001:
+		nrm = want
+	else:
+		nrm = nrm.normalized()
+	var bb: Vector3 = b
+	var dd: Vector3 = d
+	var cbb: Color = cb
+	var cdd: Color = cd
+	if nrm.dot(want) < 0.0:
+		nrm = -nrm
+	else:
+		bb = d
+		dd = b
+		cbb = cd
+		cdd = cb
+	v.append(a); v.append(bb); v.append(dd)
+	n.append(nrm); n.append(nrm); n.append(nrm)
+	c.append(ca); c.append(cbb); c.append(cdd)
+
+
 func _mesh(v: PackedVector3Array, n: PackedVector3Array, c) -> ArrayMesh:
 	var m := ArrayMesh.new()
 	if v.size() == 0:
@@ -262,4 +330,7 @@ func _get_decor_mat() -> StandardMaterial3D:
 		_decor_mat.vertex_color_use_as_albedo = true
 		_decor_mat.roughness = 1.0
 		_decor_mat.metallic = 0.0
+		# Grass blades are single flat triangles; render both faces so a clump reads
+		# from every camera angle (closed volumes -- dirt/rocks -- are unaffected).
+		_decor_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return _decor_mat
