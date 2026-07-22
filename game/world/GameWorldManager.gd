@@ -357,6 +357,26 @@ func _evaluate_game_end(just_removed) -> void:
 	if _game_over_screen == null or _game_over_screen.is_shown():
 		return
 
+	# ARENA rounds resolve into the Arena loop (draft / next round), NOT the normal end
+	# screen. A round is won when the enemy wave is routed and lost when the player squad
+	# is wiped. ArenaController owns what happens next; this is a no-op when not in a run.
+	var arena = get_node_or_null("/root/ArenaController")
+	if arena != null and arena.has_method("is_active") and arena.is_active():
+		var human_alive: bool = false
+		var enemy_alive: bool = false
+		for ap in PlayerManager.players:
+			if ap == null or not ap.has_units_remaining():
+				continue
+			if "is_ai" in ap and bool(ap.is_ai):
+				enemy_alive = true
+			else:
+				human_alive = true
+		if not enemy_alive:
+			arena.notify_round_ended(true)
+		elif not human_alive:
+			arena.notify_round_ended(false)
+		return
+
 	var single_player: bool = GameSettings != null and GameSettings.game_mode == GameSettings.GameMode.SINGLE_PLAYER
 
 	if single_player and _game_mode_rules != null:
