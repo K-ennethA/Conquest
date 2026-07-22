@@ -197,6 +197,31 @@ func _on_unit_health_changed(unit: Unit, old_health: int, new_health: int) -> vo
 	"""Handle unit health changes"""
 	_update_health_bar(unit)
 
+# --- Incoming-damage preview (overworld AoE) --------------------------------
+
+func preview_damage(previews: Dictionary) -> void:
+	"""Light up each affected unit's world-space bar with the HP a pending move
+	would remove, so an AoE that hits several units shows the damage on ALL of
+	their bars at once (not just the single enemy the forecast card covers).
+	[param previews] maps Unit -> predicted damage (int). Bars not in the map are
+	cleared, so moving the aim off a unit drops its band. Fully null-safe."""
+	for unit in _unit_health_bars:
+		var bar = _unit_health_bars[unit]
+		if bar == null or not is_instance_valid(bar):
+			continue
+		if previews.has(unit):
+			if bar.has_method("show_damage_preview"):
+				bar.show_damage_preview(int(previews[unit]))
+		elif bar.has_method("clear_damage_preview"):
+			bar.clear_damage_preview()
+
+func clear_damage_previews() -> void:
+	"""Drop every bar's incoming-damage band (targeting ended / aim left a cell)."""
+	for unit in _unit_health_bars:
+		var bar = _unit_health_bars[unit]
+		if bar != null and is_instance_valid(bar) and bar.has_method("clear_damage_preview"):
+			bar.clear_damage_preview()
+
 func apply_selection_visual(unit: Unit, selected: bool) -> void:
 	"""Apply or remove selection visual effects"""
 	var mesh_instance = unit.get_node("MeshInstance3D")

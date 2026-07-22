@@ -1814,6 +1814,10 @@ func _cancel_move_targeting() -> void:
 	# Drop the FE forecast too (cancel via BACK/ESC/right-click AND move resolution).
 	if combat_forecast_panel:
 		combat_forecast_panel.hide_forecast()
+	# Drop the overworld incoming-damage bands on every targeting exit.
+	var vm = get_tree().current_scene.get_node_or_null("UnitVisualManager") if get_tree().current_scene else null
+	if vm and vm.has_method("clear_damage_previews"):
+		vm.clear_damage_previews()
 
 # --- Combat forecast (FE-style preview) -------------------------------------
 
@@ -1829,6 +1833,11 @@ func _refresh_move_forecast(grid_pos: Vector3) -> void:
 	"""Show the forecast for the current move against an eligible ENEMY at grid_pos
 	(a legal aim cell), else hide it. Never mutates state -- CombatForecastPanel
 	reads MoveExecutor.preview_vs() only."""
+	# Overworld multi-unit preview: blink every affected enemy's world bar with the
+	# damage this aim would deal (the forecast card only covers the single enemy at
+	# the cursor). Self-clears when the aim is illegal or off any unit.
+	_refresh_overworld_damage_preview(grid_pos)
+
 	if combat_forecast_panel == null:
 		return
 
@@ -1862,6 +1871,50 @@ func _refresh_move_forecast(grid_pos: Vector3) -> void:
 		return
 
 	combat_forecast_panel.show_forecast(selected_unit, enemy, move)
+
+func _refresh_overworld_damage_preview(grid_pos: Vector3) -> void:
+	"""Blink the world-space health bar of EVERY enemy this aim would hit with the
+	damage it would take -- the overworld counterpart to the single-enemy forecast
+	card, so a multi-target AoE shows its potential damage on all victims at once.
+	Non-mutating (MoveExecutor.preview_vs only). Self-clears whenever the aim is
+	illegal, off any unit, or targeting has ended."""
+	var vm = get_tree().current_scene.get_node_or_null("UnitVisualManager") if get_tree().current_scene else null
+	if vm == null or not vm.has_method("preview_damage"):
+		return
+
+	if not is_targeting_move() or not selected_unit:
+		vm.clear_damage_previews()
+		return
+	var move: MoveResource = selected_unit.get_move(selected_move_index)
+	if move == null or move.targeting == null:
+		vm.clear_damage_previews()
+		return
+	var board = CombatServices.board()
+	if board == null:
+		vm.clear_damage_previews()
+		return
+
+	var origin: Vector2i = board.cell_of(selected_unit)
+	var aim := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	# Only preview a legal aim (respects range + pattern constraints, same test the
+	# executor runs), so bands never light up on a cell the move can't actually reach.
+	if not move.can_target(origin, aim, selected_unit, board):
+		vm.clear_damage_previews()
+		return
+
+	# Every cell this aim's pattern would strike, then each enemy standing on one.
+	var previews: Dictionary = {}
+	for cell in move.targeting.resolve_cells(origin, aim):
+		for occupant in board.units_at(cell):
+			if occupant == null or occupant == selected_unit or previews.has(occupant):
+				continue
+			if not board.are_enemies(selected_unit, occupant):
+				continue  # never paint a red band on an ally (heals/friendly AoE)
+			var preview: Dictionary = MoveExecutor.preview_vs(move, selected_unit, occupant, board)
+			var dmg: int = int(preview.get("damage", 0))
+			if dmg > 0:
+				previews[occupant] = dmg
+	vm.preview_damage(previews)
 
 func _first_enemy_at(board, cell: Vector2i):
 	"""First occupant of `cell` that is an enemy of selected_unit (per the shared

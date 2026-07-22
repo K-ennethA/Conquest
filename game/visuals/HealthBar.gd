@@ -55,6 +55,20 @@ const TERRAIN_LEAF_GREEN := Color("5fb84e")  # == ConquestTheme.EL_NATURE
 var _background_material: StandardMaterial3D
 var _health_material: StandardMaterial3D
 
+# --- Incoming-damage preview band --------------------------------------------
+# A blinking red band laid over the slice of the fill a pending move would remove,
+# so an AoE that hits several units lights up EVERY victim's bar in the overworld
+# (not just the one enemy the combat forecast card is showing). Driven by
+# UnitVisualManager.preview_damage() while a move is being aimed; cleared the
+# instant targeting ends. Built lazily -- a unit that is never in an AoE footprint
+# pays for no nodes. The band sits just in front of the fill and blinks its alpha.
+const DMG_BAND_COLOR := Color(0.98, 0.16, 0.13, 1.0)  # hot red -- "this much is about to go"
+const DMG_BAND_MIN_ALPHA := 0.35
+const DMG_BAND_BLINK_TIME := 0.45
+var _dmg_band: MeshInstance3D = null
+var _dmg_band_material: StandardMaterial3D = null
+var _dmg_band_tween: Tween = null
+
 ## Green "+AVO N" tag; built once in _setup_terrain_tag, then only shown/hidden
 ## and re-texted. Null until _ready.
 var _terrain_tag: Label3D = null
@@ -374,3 +388,113 @@ func _refresh_terrain_tag() -> void:
 		_terrain_tag.visible = true
 	else:
 		_terrain_tag.visible = false
+
+
+# --- Incoming-damage preview band --------------------------------------------
+
+## Lay a blinking red band over the [param amount] of HP a pending move would
+## remove from the bound unit, so the overworld shows -- on every affected bar at
+## once -- how much an AoE is about to take. amount <= 0 (a heal/miss/whiff) just
+## clears the band. Fully null-safe; safe to call before _ready (meshes absent ->
+## no-op until the next call once built).
+func show_damage_preview(amount: int) -> void:
+	if amount <= 0 or not is_instance_valid(_bound_unit):
+		clear_damage_preview()
+		return
+	var mx: int = _bound_unit.max_health
+	if mx <= 0:
+		clear_damage_preview()
+		return
+	var cur: int = _bound_unit.current_health
+	if cur <= 0:
+		clear_damage_preview()
+		return
+
+	# Fractions along the bar: the band covers [remaining .. current], i.e. the
+	# slice between where HP will land and where it is now.
+	var cur_frac: float = clampf(float(cur) / float(mx), 0.0, 1.0)
+	var rem_frac: float = clampf(float(cur - amount) / float(mx), 0.0, cur_frac)
+	var span: float = cur_frac - rem_frac
+	if span <= 0.001:
+		clear_damage_preview()
+		return
+
+	_ensure_damage_band()
+	var band_mesh := _dmg_band.mesh as QuadMesh
+	band_mesh.size = Vector2(FILL_MAX_WIDTH * span, FILL_HEIGHT)
+	# Fill maps fraction f -> x = -FILL_MAX_WIDTH/2 + FILL_MAX_WIDTH*f; centre the
+	# band on the midpoint of [rem_frac, cur_frac].
+	var mid: float = (rem_frac + cur_frac) * 0.5
+	_dmg_band.position.x = -FILL_MAX_WIDTH * 0.5 + FILL_MAX_WIDTH * mid
+	_dmg_band.visible = true
+	_start_damage_blink()
+
+
+## Remove the preview band (kills its blink tween). Idempotent.
+func clear_damage_preview() -> void:
+	if _dmg_band_tween != null and _dmg_band_tween.is_valid():
+		_dmg_band_tween.kill()
+	_dmg_band_tween = null
+	if _dmg_band != null and is_instance_valid(_dmg_band):
+		_dmg_band.visible = false
+
+
+func _ensure_damage_band() -> void:
+	if _dmg_band != null and is_instance_valid(_dmg_band):
+		return
+	_dmg_band_material = StandardMaterial3D.new()
+	_dmg_band_material.albedo_color = DMG_BAND_COLOR
+	_dmg_band_material.flags_unshaded = true
+	_dmg_band_material.flags_transparent = true
+	_dmg_band_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_dmg_band_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	_dmg_band_material.billboard_keep_scale = true
+	_dmg_band_material.render_priority = 3  # above bar background (1) and fill (2)
+
+	_dmg_band = MeshInstance3D.new()
+	_dmg_band.name = "DamagePreviewBand"
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(FILL_MAX_WIDTH, FILL_HEIGHT)
+	_dmg_band.mesh = mesh
+	_dmg_band.material_override = _dmg_band_material
+	_dmg_band.position = Vector3(0.0, 0.0, 0.02)  # in front of the fill (0.01)
+	_dmg_band.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_dmg_band.visible = false
+	add_child(_dmg_band)
+
+
+## Pulse the band's alpha so incoming damage reads as urgent. Honors the global
+## animations toggle: with animations off it holds a steady mid-alpha instead.
+func _start_damage_blink() -> void:
+	if _dmg_band_tween != null and _dmg_band_tween.is_valid():
+		_dmg_band_tween.kill()
+	_dmg_band_tween = null
+	if _dmg_band_material == null:
+		return
+
+	if not _blink_enabled():
+		var c := _dmg_band_material.albedo_color
+		c.a = 0.8
+		_dmg_band_material.albedo_color = c
+		return
+
+	_dmg_band_tween = create_tween()
+	_dmg_band_tween.set_loops()
+	_dmg_band_tween.tween_method(_set_band_alpha, 1.0, DMG_BAND_MIN_ALPHA, DMG_BAND_BLINK_TIME)
+	_dmg_band_tween.tween_method(_set_band_alpha, DMG_BAND_MIN_ALPHA, 1.0, DMG_BAND_BLINK_TIME)
+
+
+func _set_band_alpha(a: float) -> void:
+	if _dmg_band_material == null:
+		return
+	var c := _dmg_band_material.albedo_color
+	c.a = a
+	_dmg_band_material.albedo_color = c
+
+
+## True unless the player has turned animations off in GameSettings.
+func _blink_enabled() -> bool:
+	var gs = get_node_or_null("/root/GameSettings")
+	if gs != null and gs.has_method("animations_on"):
+		return bool(gs.animations_on())
+	return true
