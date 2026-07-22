@@ -69,14 +69,12 @@ func _ready() -> void:
 
 func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	"""Handle unit selection"""
-	print("UI: Selected unit: ", unit.name)
 	current_unit = unit
 	_update_unit_info(unit)
 	_show_panel()
 
 func _on_unit_deselected(unit: Unit) -> void:
 	"""Handle unit deselection"""
-	print("UI: Deselected unit: ", unit.name)
 	if current_unit == unit:
 		current_unit = null
 		_hide_panel()

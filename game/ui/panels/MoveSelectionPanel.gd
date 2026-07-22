@@ -264,7 +264,6 @@ func _clear_move_info() -> void:
 
 func _on_move_selected(move_index: int) -> void:
 	"""Handle move selection"""
-	print("Move selected: index %d" % move_index)
 	move_selected.emit(move_index)
 	hide()
 

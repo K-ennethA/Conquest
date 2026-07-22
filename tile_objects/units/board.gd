@@ -39,7 +39,7 @@ func _setup_turn_system() -> void:
 		if PlayerManager.current_game_state == PlayerManager.GameState.SETUP:
 			PlayerManager.start_game()
 	else:
-		print("WARNING: PlayerManager not found - turn system not initialized")
+		push_warning("PlayerManager not found - turn system not initialized")
 
 func initialize_units() -> void:
 	for child in get_children():

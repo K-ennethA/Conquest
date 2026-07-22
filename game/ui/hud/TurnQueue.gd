@@ -34,8 +34,6 @@ signal unit_portrait_hovered(unit: Unit)
 signal unit_portrait_unhovered(unit: Unit)
 
 func _ready() -> void:
-	print("TurnQueue: _ready() called")
-	
 	# Set proper mouse filtering - only capture events over actual UI elements
 	mouse_filter = Control.MOUSE_FILTER_IGNORE  # Let clicks pass through empty areas
 	
@@ -51,25 +49,20 @@ func _ready() -> void:
 	# Connect to turn system events
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
-		print("TurnQueue: Connected to TurnSystemManager")
 	else:
-		print("TurnQueue: TurnSystemManager not found!")
-	
+		push_warning("TurnQueue: TurnSystemManager not found!")
+
 	# Initial setup
 	_update_display()
-	print("TurnQueue: Initialized")
-	
+
 	# Test display with dummy data
 	_test_display()
 
 func _on_turn_system_activated(system: TurnSystemBase) -> void:
 	"""Handle turn system activation"""
-	print("TurnQueue: Turn system activated - " + system.system_name)
-	
 	if system is SpeedFirstTurnSystem:
 		turn_system = system as SpeedFirstTurnSystem
-		print("TurnQueue: Speed First system detected, connecting events")
-		
+
 		# Connect to turn system events
 		if turn_system.turn_started.is_connected(_on_turn_started):
 			turn_system.turn_started.disconnect(_on_turn_started)
@@ -81,12 +74,10 @@ func _on_turn_system_activated(system: TurnSystemBase) -> void:
 		
 		_update_display()
 		visible = true
-		print("TurnQueue: Made visible for Speed First system")
 	else:
 		# Hide for non-speed-first systems
 		turn_system = null
 		visible = false
-		print("TurnQueue: Hidden for non-Speed First system (" + system.system_name + ")")
 
 func _on_turn_started(player_or_unit) -> void:
 	"""Handle turn start"""
@@ -99,11 +90,8 @@ func _on_turn_ended(player_or_unit) -> void:
 func _update_display() -> void:
 	"""Update the unified turn display"""
 	if not queue_container:
-		print("TurnQueue: queue_container is null!")
 		return
-	
-	print("TurnQueue: Starting display update (scroll_offset: " + str(scroll_offset) + ")")
-	
+
 	# Clear existing portraits (but preserve scroll_offset)
 	_clear_portraits()
 	
@@ -115,16 +103,12 @@ func _update_display() -> void:
 	var current_unit = turn_system.get_current_acting_unit()
 	var progress = turn_system.get_current_round_progress()
 	var queue = turn_system.get_turn_queue()
-	
-	print("TurnQueue: Updating unified display with " + str(queue.size()) + " units in queue")
-	
+
 	# Update current unit display
 	_update_current_unit_display(current_unit, progress)
 	
 	# Update queue display
 	_update_queue_display(queue, current_unit)
-	
-	print("TurnQueue: Display update complete (final scroll_offset: " + str(scroll_offset) + ")")
 
 func _show_inactive_state() -> void:
 	"""Show inactive state when no turn system is active"""
@@ -134,7 +118,6 @@ func _show_inactive_state() -> void:
 		round_info_label.text = "Waiting for game to start..."
 	if queue_title_label:
 		queue_title_label.text = "Turn Queue (Inactive)"
-	print("TurnQueue: No turn system active")
 
 func _update_current_unit_display(current_unit: Unit, progress: Dictionary) -> void:
 	"""Update the current unit information display"""
@@ -167,9 +150,7 @@ func _update_queue_display(queue: Array, current_unit: Unit) -> void:
 	# Ensure scroll_offset is within valid bounds
 	var max_scroll = max(0, total_units - PORTRAITS_PER_PAGE)
 	scroll_offset = clamp(scroll_offset, 0, max_scroll)
-	
-	print("TurnQueue: Queue display - total_units: " + str(total_units) + ", scroll_offset: " + str(scroll_offset) + ", max_scroll: " + str(max_scroll))
-	
+
 	# Update queue title with scroll info
 	var visible_count = min(PORTRAITS_PER_PAGE, total_units)
 	var page_info = ""
@@ -186,16 +167,13 @@ func _update_queue_display(queue: Array, current_unit: Unit) -> void:
 	# Create portraits for visible units
 	var start_index = scroll_offset
 	var end_index = min(start_index + PORTRAITS_PER_PAGE, total_units)
-	
-	print("TurnQueue: Creating portraits from index " + str(start_index) + " to " + str(end_index) + " (scroll_offset: " + str(scroll_offset) + ")")
-	
+
 	for i in range(start_index, end_index):
 		var unit = queue[i]
 		var is_current = (unit == current_unit)  # Fixed: check unit directly, not index
 		var portrait = _create_unit_portrait(unit, is_current, i)
 		queue_container.add_child(portrait)
 		unit_portraits.append(portrait)
-		print("TurnQueue: Added portrait for " + unit.get_display_name() + " at queue position " + str(i))
 
 func _update_scroll_buttons() -> void:
 	"""Update scroll button enabled states"""
@@ -216,35 +194,16 @@ func _update_scroll_buttons() -> void:
 
 func _on_scroll_left_pressed() -> void:
 	"""Handle left scroll button press"""
-	print("=== LEFT SCROLL BUTTON PRESSED ===")
-	print("Current scroll_offset: " + str(scroll_offset))
-	print("PORTRAITS_PER_PAGE: " + str(PORTRAITS_PER_PAGE))
-	
 	if scroll_offset > 0:
-		var old_offset = scroll_offset
 		scroll_offset = max(0, scroll_offset - PORTRAITS_PER_PAGE)
-		print("Scrolled left from " + str(old_offset) + " to " + str(scroll_offset))
 		_update_display()
-	else:
-		print("Already at leftmost position")
 
 func _on_scroll_right_pressed() -> void:
 	"""Handle right scroll button press"""
-	print("=== RIGHT SCROLL BUTTON PRESSED ===")
-	print("Current scroll_offset: " + str(scroll_offset))
-	print("Total units: " + str(total_units))
-	print("PORTRAITS_PER_PAGE: " + str(PORTRAITS_PER_PAGE))
-	
 	var max_scroll = max(0, total_units - PORTRAITS_PER_PAGE)
-	print("Max scroll: " + str(max_scroll))
-	
 	if scroll_offset < max_scroll:
-		var old_offset = scroll_offset
 		scroll_offset = min(max_scroll, scroll_offset + PORTRAITS_PER_PAGE)
-		print("Scrolled right from " + str(old_offset) + " to " + str(scroll_offset))
 		_update_display()
-	else:
-		print("Already at rightmost position")
 
 func _clear_portraits() -> void:
 	"""Clear all unit portraits"""
@@ -280,15 +239,11 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 	button.modulate = Color(1.0, 1.0, 1.0, 0.2)  # Slightly more visible
 	
 	# Connect button signals with more robust approach
-	print("TurnQueue: Connecting button signals for " + unit.get_display_name())
-	print("TurnQueue: Button size: " + str(button.size) + ", position: " + str(button.position))
-	
 	# Use both pressed signal and gui_input for maximum compatibility
 	button.pressed.connect(_on_portrait_clicked.bind(unit))
 	button.gui_input.connect(_on_portrait_button_input.bind(unit))
 	button.mouse_entered.connect(_on_portrait_hovered.bind(unit))
 	button.mouse_exited.connect(_on_portrait_unhovered.bind(unit))
-	print("TurnQueue: Button signals connected for " + unit.get_display_name())
 	
 	# Position indicator at the top
 	var position_label = Label.new()
@@ -407,10 +362,8 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 func _test_display() -> void:
 	"""Test the display with dummy data"""
 	if not queue_container:
-		print("TurnQueue: queue_container not found!")
 		return
-	
-	print("TurnQueue: Creating test display")
+
 	queue_title_label.text = "Turn Queue (TEST MODE)"
 	
 	# Create some test portraits
@@ -418,8 +371,6 @@ func _test_display() -> void:
 		var test_portrait = _create_test_portrait("Test Unit " + str(i + 1), i == 0)
 		queue_container.add_child(test_portrait)
 		unit_portraits.append(test_portrait)
-	
-	print("TurnQueue: Test display created with " + str(unit_portraits.size()) + " portraits")
 
 func _create_test_portrait(unit_name: String, is_current: bool) -> Control:
 	"""Create a test portrait"""
@@ -473,44 +424,28 @@ func _create_test_portrait(unit_name: String, is_current: bool) -> Control:
 
 func _on_portrait_clicked(unit: Unit) -> void:
 	"""Handle portrait click - show unit details"""
-	print("=== TurnQueue: Portrait clicked for " + unit.get_display_name() + " ===")
 	unit_portrait_clicked.emit(unit)
-	
+
 	# Also trigger unit info panel to show details
-	print("TurnQueue: Emitting GameEvents.unit_selected for " + unit.get_display_name())
 	GameEvents.unit_selected.emit(unit, unit.global_position)
-	print("TurnQueue: GameEvents.unit_selected emitted")
 
 func _on_portrait_hovered(unit: Unit) -> void:
 	"""Handle portrait hover - show preview info"""
-	print("TurnQueue: Portrait hovered for " + unit.get_display_name())
 	unit_portrait_hovered.emit(unit)
 
 func _on_portrait_unhovered(unit: Unit) -> void:
 	"""Handle portrait unhover - hide preview info"""
-	print("TurnQueue: Portrait unhovered for " + unit.get_display_name())
 	unit_portrait_unhovered.emit(unit)
 
 func _on_portrait_button_input(event: InputEvent, unit: Unit) -> void:
 	"""Handle button input events directly"""
-	print("TurnQueue: Button input received for " + unit.get_display_name() + " - Event type: " + str(type_string(typeof(event))))
-	
 	if event is InputEventMouseButton:
-		print("TurnQueue: Mouse button event - Button: " + str(event.button_index) + " Pressed: " + str(event.pressed) + " Position: " + str(event.position))
-		
 		# Handle left mouse button click (press and release)
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-			print("TurnQueue: Left mouse button pressed on " + unit.get_display_name())
 			# Call the click handler directly
 			_on_portrait_clicked(unit)
 			# Accept the event to prevent further processing
 			get_viewport().set_input_as_handled()
-	elif event is InputEventMouseMotion:
-		# Only print occasionally to avoid spam
-		if randf() < 0.1:
-			print("TurnQueue: Mouse motion over " + unit.get_display_name() + " button")
-	else:
-		print("TurnQueue: Other input event: " + str(event))
 
 # Public interface
 func get_displayed_queue_size() -> int:
@@ -570,42 +505,20 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		match event.keycode:
 			KEY_F6:
-				print("=== F6 PRESSED - TESTING RIGHT SCROLL ===")
 				_on_scroll_right_pressed()
 			KEY_F7:
-				print("=== F7 PRESSED - TESTING LEFT SCROLL ===")
 				_on_scroll_left_pressed()
-			KEY_F8:
-				print("=== F8 PRESSED - SCROLL INFO ===")
-				var info = get_scroll_info()
-				print("Scroll info: " + str(info))
-				print("Current scroll_offset: " + str(scroll_offset))
-				print("Total units: " + str(total_units))
 			KEY_F9:
-				print("=== F9 PRESSED - RESET SCROLL ===")
 				scroll_offset = 0
 				_update_display()
 
 func test_scroll_functionality() -> void:
 	"""Test scroll functionality programmatically"""
-	print("=== TESTING SCROLL FUNCTIONALITY ===")
-	print("Initial state:")
-	print("  scroll_offset: " + str(scroll_offset))
-	print("  total_units: " + str(total_units))
-	
 	# Test right scroll
-	print("Testing right scroll...")
 	_on_scroll_right_pressed()
-	
-	print("After right scroll:")
-	print("  scroll_offset: " + str(scroll_offset))
-	
+
 	# Test left scroll
-	print("Testing left scroll...")
 	_on_scroll_left_pressed()
-	
-	print("After left scroll:")
-	print("  scroll_offset: " + str(scroll_offset))
 
 func highlight_portrait(unit: Unit, highlight: bool) -> void:
 	"""Highlight a specific unit's portrait"""

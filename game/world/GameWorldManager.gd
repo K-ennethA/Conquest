@@ -66,8 +66,6 @@ var _spawn_manager: SpawnManager = null
 var _hazard_manager: HazardManager = null
 
 func _ready() -> void:
-	print("=== GameWorld Initializing ===")
-
 	# Initialize map loader
 	map_loader = MapLoader.new()
 	add_child(map_loader)
@@ -110,23 +108,17 @@ func _ready() -> void:
 	
 	# Check if this is a network multiplayer game
 	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
-		print("Network multiplayer mode detected")
 		await _setup_network_multiplayer()
 	else:
-		print("Local game mode detected")
 		await _setup_local_game()
-	
-	print("=== GameWorld Initialization Complete ===")
 
 func _load_selected_map() -> void:
 	"""Load the selected map or create a default one"""
-	print("Loading selected map...")
-	
+
 	# Get selected map from GameSettings or use default
 	var selected_map = GameSettings.get_selected_map() if GameSettings.has_method("get_selected_map") else ""
 	
 	if selected_map.is_empty():
-		print("No map selected, using default map")
 		# Create and save default map if none exists
 		var available_maps = MapLoader.get_available_maps()
 		if available_maps.is_empty():
@@ -141,7 +133,6 @@ func _load_selected_map() -> void:
 	# Find the Map node in the scene
 	var map_node = get_tree().current_scene.get_node_or_null("Map")
 	if not map_node:
-		print("ERROR: Map node not found in scene")
 		return
 	
 	# Clear existing map content but keep the Map node structure
@@ -150,7 +141,6 @@ func _load_selected_map() -> void:
 	# Load the new map
 	var success = map_loader.load_map_from_file(selected_map, map_node)
 	if not success:
-		print("Failed to load map, creating default")
 		var default_map = MapLoader.create_default_map()
 		map_loader.load_map(default_map, map_node)
 
@@ -179,12 +169,9 @@ func _clear_existing_map_content(map_node: Node3D) -> void:
 		for child in player2_node.get_children():
 			child.free()  # Immediate deletion
 		player2_node.free()  # Immediate deletion
-	
-	print("Cleared existing map content")
 
 func _on_map_loaded(map_resource: MapResource) -> void:
 	"""Handle successful map loading"""
-	print("Map loaded successfully: " + map_resource.map_name)
 
 	# Rebuild the shared live BoardAdapter against the freshly populated "Map"
 	# node so movement/attacks/AI/tiles all read the new board. map_loader.map_root
@@ -216,8 +203,7 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 
 func _on_map_load_failed(error_message: String) -> void:
 	"""Handle map loading failure"""
-	print("Map loading failed: " + error_message)
-	
+
 	# Try to load default map as fallback
 	var default_map = MapLoader.create_default_map()
 	var map_node = get_tree().current_scene.get_node_or_null("Map")
@@ -541,12 +527,8 @@ func _on_player_turn_started_tile_effects(player) -> void:
 
 func _setup_network_multiplayer() -> void:
 	"""Set up network multiplayer game"""
-	print("Setting up network multiplayer...")
-	
 	# Check if GameModeManager is already handling multiplayer
 	if GameModeManager and GameModeManager.is_multiplayer_active():
-		print("Network multiplayer already active via GameModeManager")
-		
 		# Connect to GameModeManager signals
 		if not GameModeManager.game_ended.is_connected(_on_multiplayer_game_ended):
 			GameModeManager.game_ended.connect(_on_multiplayer_game_ended)
@@ -563,15 +545,11 @@ func _setup_network_multiplayer() -> void:
 		
 		# Start the game for multiplayer
 		_start_game()
-		
-		print("Network multiplayer setup complete")
 	else:
-		print("No active network multiplayer found, falling back to local mode")
 		await _setup_local_game()
 
 func _setup_local_game() -> void:
 	"""Set up local single-player or local multiplayer game"""
-	print("Setting up local game...")
 
 	# Reset per-session autoload state FIRST. Autoloads survive scene changes, so on a
 	# second+ game these still hold the previous session's players (with freed units)
@@ -598,16 +576,11 @@ func _setup_local_game() -> void:
 
 func _setup_multiplayer_players() -> void:
 	"""Set up players for network multiplayer"""
-	print("Setting up multiplayer players...")
-	
 	# Get player info from GameModeManager
 	var multiplayer_status = GameModeManager.get_multiplayer_status()
 	var network_players = multiplayer_status.get("players", {})
 	var local_player_id = GameModeManager.get_local_player_id()
-	
-	print("Network players found: " + str(network_players.size()))
-	print("Local player ID: " + str(local_player_id))
-	
+
 	# Reset per-session autoload state before registering players. Replaces the old
 	# ad-hoc players.clear(): also resets game state back to SETUP and tears down any
 	# turn system left over from a prior session (freed units). This runs BEFORE the
@@ -619,29 +592,12 @@ func _setup_multiplayer_players() -> void:
 	# Always create 2 players for multiplayer
 	var player1 = PlayerManager.register_player("Player 1")
 	var player2 = PlayerManager.register_player("Player 2")
-	
-	print("Registered multiplayer players: Player 1 (ID: 0), Player 2 (ID: 1)")
-	var local_player_id_int = int(local_player_id) if local_player_id is String else local_player_id
-	print("This client is Player " + str(local_player_id_int + 1) + " (ID: " + str(local_player_id_int) + ")")
-	
+
 	# Assign units to players based on scene structure
 	PlayerManager.assign_units_by_parent()
-	
-	print("Multiplayer players set up: " + str(PlayerManager.players.size()) + " players")
-	
-	# Debug: Print player unit assignments
-	for i in range(PlayerManager.players.size()):
-		var player = PlayerManager.players[i]
-		var is_local = (i == local_player_id_int)
-		var local_indicator = " (LOCAL)" if is_local else " (REMOTE)"
-		print("Player " + str(i) + " (" + player.player_name + ")" + local_indicator + " has " + str(player.owned_units.size()) + " units")
-		for unit in player.owned_units:
-			print("  - " + unit.get_display_name())
 
 func _setup_players() -> void:
 	"""Set up players and assign units"""
-	print("Setting up players...")
-	
 	# Ensure we have the right number of players
 	if PlayerManager.players.is_empty():
 		PlayerManager.setup_default_players()
@@ -653,10 +609,7 @@ func _setup_players() -> void:
 	if GameSettings and GameSettings.game_mode == GameSettings.GameMode.SINGLE_PLAYER:
 		for i in range(1, PlayerManager.players.size()):
 			PlayerManager.players[i].is_ai = true
-			print("Player " + str(i) + " set to AI control")
 		_ensure_bot_driver()
-
-	print("Players set up: " + str(PlayerManager.players.size()) + " players")
 
 func _ensure_bot_driver() -> void:
 	"""Add the bot turn driver to the scene if not already present"""
@@ -666,21 +619,14 @@ func _ensure_bot_driver() -> void:
 	var driver := BotTurnDriver.new()
 	driver.name = "BotTurnDriver"
 	scene_root.add_child(driver)
-	print("BotTurnDriver added for single-player AI")
 
 func _start_game() -> void:
 	"""Start the game"""
-	print("Starting game...")
-	
 	# Start the game in PlayerManager
 	PlayerManager.start_game()
-	
-	print("Game started successfully!")
 
 func _on_multiplayer_game_ended(winner_id: int) -> void:
 	"""Handle multiplayer game ended"""
-	print("Multiplayer game ended, winner: " + str(winner_id))
-	
 	# Show game over screen or return to menu
 	await get_tree().create_timer(2.0).timeout
 	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
@@ -724,10 +670,7 @@ func _input(event: InputEvent) -> void:
 
 func _test_unit_action() -> void:
 	"""Test unit action for debugging"""
-	print("\n=== Testing Unit Action ===")
-	
 	if not TurnSystemManager.has_active_turn_system():
-		print("No active turn system")
 		return
 	
 	var turn_system = TurnSystemManager.get_active_turn_system()
@@ -738,142 +681,66 @@ func _test_unit_action() -> void:
 		units_that_can_act = trad_system.get_units_that_can_act()
 	
 	if units_that_can_act.is_empty():
-		print("No units can act")
 		return
-	
+
 	var test_unit = units_that_can_act[0]
-	print("Testing action with unit: " + test_unit.get_display_name())
-	
+
 	if turn_system is TraditionalTurnSystem:
 		var trad_system = turn_system as TraditionalTurnSystem
 		trad_system.mark_unit_acted(test_unit)
-		print("Marked unit as acted")
-	
+
 	# Update visuals
 	var visual_manager = get_node_or_null("../UnitVisualManager")
 	if visual_manager:
 		visual_manager.update_all_unit_visuals()
-		print("Updated unit visuals")
-	
-	print("=== Unit Action Test Complete ===")
 
 func _debug_unit_ownership() -> void:
 	"""Debug unit ownership issues"""
-	print("\n=== DEBUGGING UNIT OWNERSHIP ===")
-	
-	# Check PlayerManager
-	if PlayerManager:
-		print("PlayerManager players: " + str(PlayerManager.players.size()))
-		for i in range(PlayerManager.players.size()):
-			var player = PlayerManager.players[i]
-			print("Player " + str(i) + ": " + player.get_display_name())
-			print("  Owned units: " + str(player.owned_units.size()))
-			for unit in player.owned_units:
-				print("    - " + unit.get_display_name() + " (owner: " + (unit.get_owner_player().get_display_name() if unit.get_owner_player() else "None") + ")")
-	
-	# Check TurnSystem
-	if TurnSystemManager.has_active_turn_system():
-		var turn_system = TurnSystemManager.get_active_turn_system()
-		print("Turn system registered units: " + str(turn_system.registered_units.size()))
-		for unit in turn_system.registered_units:
-			var owner = unit.get_owner_player()
-			print("  - " + unit.get_display_name() + " (owner: " + (owner.get_display_name() if owner else "None") + ")")
-	
-	print("=== UNIT OWNERSHIP DEBUG COMPLETE ===")
+	pass
 
 func _test_ui_separation() -> void:
 	"""Test the separation between unit actions and player turn actions"""
-	print("\n=== TESTING UI SEPARATION ===")
-	
 	# Find UI panels
 	var unit_panel = get_tree().current_scene.get_node_or_null("UI/UnitActionsPanel")
 	var player_panel = get_tree().current_scene.get_node_or_null("UI/PlayerTurnPanel")
-	
-	if unit_panel:
-		print("UnitActionsPanel found: " + str(unit_panel.visible))
-	else:
-		print("UnitActionsPanel NOT found")
-	
-	if player_panel:
-		print("PlayerTurnPanel found: " + str(player_panel.visible))
-	else:
-		print("PlayerTurnPanel NOT found")
-	
-	print("=== UI SEPARATION TEST COMPLETE ===")
 
 func _check_ui_layout() -> void:
 	"""Check UI layout for overlaps"""
-	print("\n=== CHECKING UI LAYOUT ===")
-	
 	var ui_manager = get_node_or_null("UILayoutManager")
 	if ui_manager:
 		ui_manager.print_layout_status()
 	else:
-		print("UILayoutManager not found - checking manually")
-		
 		var ui_layer = get_tree().current_scene.get_node_or_null("UI")
-		if ui_layer:
-			print("UI Elements found:")
-			for child in ui_layer.get_children():
-				if child is Control:
-					print("  " + child.name + ": Pos " + str(child.position) + " Size " + str(child.size) + " Visible: " + str(child.visible))
-		else:
-			print("No UI layer found")
-	
-	print("=== UI LAYOUT CHECK COMPLETE ===")
 
 func _return_to_main_menu() -> void:
 	"""Return to the main menu"""
-	print("Returning to main menu...")
 	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
 
 func _print_game_status() -> void:
 	"""Print current game status"""
-	print("\n=== Game Status ===")
 	if GameSettings:
 		GameSettings.print_settings()
 	if PlayerManager:
 		PlayerManager.print_game_status()
 	if TurnSystemManager:
 		TurnSystemManager.print_turn_system_status()
-	
+
 	# Print detailed turn system info
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
-		print("\n=== Turn System Details ===")
-		print("System: " + turn_system.system_name)
-		print("Registered units: " + str(turn_system.registered_units.size()))
-		print("Registered players: " + str(turn_system.registered_players.size()))
-		
+
 		if turn_system is TraditionalTurnSystem:
 			var trad_system = turn_system as TraditionalTurnSystem
 			var progress = trad_system.get_current_turn_progress()
-			print("Current player: " + str(progress.get("current_player", "None")))
-			print("Total units: " + str(progress.get("total_units", 0)))
-			print("Units acted: " + str(progress.get("units_acted", 0)))
-			print("Units can act: " + str(progress.get("units_can_act", 0)))
-			print("Turn complete: " + str(progress.get("turn_complete", false)))
-			
-			print("Units that acted this turn:")
-			for unit in trad_system.get_units_that_acted():
-				print("  - " + unit.get_display_name())
-			
-			print("Units that can still act:")
-			for unit in trad_system.get_units_that_can_act():
-				print("  - " + unit.get_display_name())
 
 func _refresh_unit_visuals() -> void:
 	"""Refresh unit visuals for testing"""
 	var visual_manager = get_node_or_null("../UnitVisualManager")
 	if visual_manager:
 		visual_manager.refresh_unit_visuals()
-	else:
-		print("UnitVisualManager not found")
 
 func _toggle_mouse_mode() -> void:
 	"""Toggle mouse cursor movement mode"""
 	var cursor = get_tree().current_scene.get_node_or_null("Map/Cursor")
 	if cursor:
 		cursor.toggle_mouse_mode()
-	else:
-		print("Cursor not found")

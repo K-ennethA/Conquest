@@ -42,16 +42,14 @@ const LEGACY_UNIT_TYPE_TO_CHARACTER_ID: Dictionary = {
 }
 
 func _ready():
-	print("MapLoader initialized")
+	pass
 
 func load_map(map_resource: MapResource, target_parent: Node3D) -> bool:
 	"""Load a map from MapResource into the scene"""
 	if not map_resource:
 		_emit_load_failed("Invalid map resource")
 		return false
-	
-	print("Loading map: " + map_resource.map_name)
-	
+
 	# Validate map
 	var validation = map_resource.validate_map()
 	if not validation.valid:
@@ -87,8 +85,7 @@ func load_map(map_resource: MapResource, target_parent: Node3D) -> bool:
 	if not _load_units():
 		_emit_load_failed("Failed to load units")
 		return false
-	
-	print("Map loaded successfully: " + map_resource.map_name)
+
 	map_loaded.emit(map_resource)
 	return true
 
@@ -100,7 +97,6 @@ func _sync_grid_size(map_resource) -> void:
 	var w: int = maxi(1, int(map_resource.width))
 	var h: int = maxi(1, int(map_resource.height))
 	grid.size = Vector3(w, 0, h)
-	print("[MapLoader] Grid size synced to map: %dx%d" % [w, h])
 
 func load_map_from_file(map_path: String, target_parent: Node3D) -> bool:
 	"""Load a map from a .tres file"""
@@ -126,7 +122,6 @@ func clear_current_map() -> void:
 		units_container = null
 	
 	current_map = null
-	print("Current map cleared")
 
 func get_current_map() -> MapResource:
 	"""Get the currently loaded map resource"""
@@ -163,8 +158,7 @@ func _load_tiles() -> bool:
 		return false
 	
 	var map_size = current_map.get_map_size()
-	print("Loading tiles for " + str(map_size.x) + "x" + str(map_size.y) + " map")
-	
+
 	# Create tiles for each position
 	for x in range(map_size.x):
 		for y in range(map_size.y):
@@ -172,10 +166,8 @@ func _load_tiles() -> bool:
 			var tile_data = current_map.get_tile_at_position(pos)
 			
 			if not _create_tile_at_position(pos, tile_data):
-				print("Failed to create tile at position: " + str(pos))
 				return false
-	
-	print("Loaded " + str(map_size.x * map_size.y) + " tiles")
+
 	return true
 
 func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary) -> bool:
@@ -322,8 +314,6 @@ func _load_units() -> bool:
 	if not current_map or not map_root:
 		return false
 	
-	print("Loading unit spawns...")
-	
 	var units_created = 0
 	for spawn_data in current_map.unit_spawns:
 		# Spawn POINTS describe when they produce units, not just where. Only the
@@ -332,27 +322,17 @@ func _load_units() -> bool:
 		# Maps authored before spawn_kind existed default to "Start", so they are
 		# all initial and load exactly as they always did.
 		if not current_map.is_initial_spawn(spawn_data):
-			print("[MapLoader] Deferred spawn point (kind %s, turn %d) at %s - not spawned at load" % [
-				current_map.get_spawn_kind(spawn_data),
-				int(spawn_data.get("spawn_turn", 1)),
-				str(spawn_data.get("position", Vector2i(-1, -1)))])
 			continue
 
 		# An initial point with no unit reference is an UNASSIGNED SLOT, filled at
 		# match setup - not an error, and specifically not a reason to conjure a
 		# default WARRIOR onto the board.
 		if not current_map.spawn_has_unit_reference(spawn_data):
-			print("[MapLoader] Unassigned spawn slot at %s (player %d) - left empty for match setup" % [
-				str(spawn_data.get("position", Vector2i(-1, -1))),
-				int(spawn_data.get("player_id", 0))])
 			continue
 
 		if _create_unit_from_spawn(spawn_data, units_created):
 			units_created += 1
-		else:
-			print("Failed to create unit from spawn: " + str(spawn_data))
 
-	print("Created " + str(units_created) + " units")
 	return true
 
 ## Spawn a single unit from a spawn point RIGHT NOW, returning the new unit node
@@ -368,22 +348,15 @@ func spawn_unit_now(spawn_data: Dictionary, count_hint: int = 0) -> Node:
 
 func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime: bool = false) -> Node:
 	"""Create a unit from spawn data. Returns the new unit node, or null on failure."""
-	print("[MapLoader] Creating unit from spawn data: " + str(spawn_data))
-
 	var grid_pos = spawn_data.get("position", Vector2i(-1, -1))
 	var player_id_raw = spawn_data.get("player_id", 0)
 
-	print("[MapLoader] player_id_raw type: " + str(typeof(player_id_raw)) + ", value: " + str(player_id_raw))
-
 	var player_id = int(player_id_raw) if player_id_raw is String else player_id_raw  # Ensure int
-
-	print("[MapLoader] player_id after conversion: " + str(player_id) + " (type: " + str(typeof(player_id)) + ")")
 
 	var unit_type = spawn_data.get("unit_type", "WARRIOR")
 	var character_id_raw = spawn_data.get("character_id", "")
 
 	if grid_pos == Vector2i(-1, -1):
-		print("[MapLoader] Invalid grid position, skipping unit")
 		return null
 
 	# Resolve which CharacterResource should back this unit: prefer an explicit
@@ -397,26 +370,21 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 
 	var character_resource: CharacterResource = CharacterLibrary.get_character(character_id)
 	if not character_resource:
-		print("[MapLoader] Could not resolve character '" + character_id + "', falling back to default character '" + String(DEFAULT_CHARACTER_ID) + "'")
 		character_id = String(DEFAULT_CHARACTER_ID)
 		character_resource = CharacterLibrary.get_character(character_id)
 
 	if not character_resource:
-		print("[MapLoader] Failed to resolve default character '" + String(DEFAULT_CHARACTER_ID) + "', skipping unit")
 		return null
 
 	# Difficulty gate: a character can require a minimum AI difficulty (e.g. a
 	# parasite that only appears on Hard+). Applies to every spawn path because both
 	# _load_units and SpawnManager route through here. Skips quietly below the bar.
 	if not _difficulty_allows(character_resource):
-		print("[MapLoader] Skipping '%s' -- min_difficulty %d exceeds current difficulty %d" % [
-			character_id, character_resource.get_min_difficulty(), _current_ai_difficulty()])
 		return null
 
 	# Every unit is a CharacterUnit.tscn instance backed by a CharacterResource.
 	var unit_instance = character_unit_scene.instantiate()
 	if not unit_instance:
-		print("[MapLoader] Failed to instantiate CharacterUnit.tscn")
 		return null
 
 	# Must be assigned BEFORE add_child: Unit._ready() (tile_objects/units/unit.gd)
@@ -427,7 +395,6 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 	# Set unit name
 	var name_hint = character_id if not character_id.is_empty() else unit_type
 	unit_instance.name = name_hint + str(units_created + 1)
-	print("[MapLoader] Created unit: " + unit_instance.name)
 
 	# Calculate world position. Y sits at the TILE SURFACE (tile box top = 0.1): unit
 	# models are exported feet-at-origin (see Unit._setup_character_model), so their
@@ -437,17 +404,14 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 	unit_instance.transform.origin = world_pos
 
 	# Add to appropriate player container
-	print("[MapLoader] Looking for player container: Player" + str(player_id + 1))
 	var player_container = map_root.get_node_or_null("Player" + str(player_id + 1))
 	if not player_container:
 		# Create player container if it doesn't exist
-		print("[MapLoader] Creating player container: Player" + str(player_id + 1))
 		player_container = Node3D.new()
 		player_container.name = "Player" + str(player_id + 1)
 		map_root.add_child(player_container)
 
 	player_container.add_child(unit_instance)
-	print("[MapLoader] Unit added to player container successfully")
 
 	# Record the home cell and resolve AI behavior (spawn-point override -> character
 	# default). The spawner is the one place that knows BOTH the cell the unit was
@@ -552,7 +516,6 @@ func _resolve_character_id(character_id_raw, legacy_unit_type: String) -> String
 
 func _emit_load_failed(error_message: String) -> void:
 	"""Emit load failed signal with error message"""
-	print("Map load failed: " + error_message)
 	map_load_failed.emit(error_message)
 
 # Static helper functions for map management
@@ -635,8 +598,6 @@ static func save_map(map_resource: MapResource, file_name: String) -> bool:
 	# Save resource
 	var result = ResourceSaver.save(map_resource, save_path)
 	if result == OK:
-		print("Map saved: " + save_path)
 		return true
 	else:
-		print("Failed to save map: " + str(result))
 		return false

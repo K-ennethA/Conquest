@@ -18,8 +18,6 @@ var _watched_system: TurnSystemBase = null
 var _last_seen_player: Player = null
 
 func _ready() -> void:
-	print("PlayerTurnPanel _ready() called")
-	
 	# Ensure proper mouse handling
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	
@@ -37,9 +35,8 @@ func _ready() -> void:
 	if end_turn_button:
 		end_turn_button.mouse_filter = Control.MOUSE_FILTER_STOP
 		end_turn_button.pressed.connect(_on_end_turn_pressed)
-		print("End Turn button connected")
 	else:
-		print("ERROR: End Turn button not found!")
+		push_error("End Turn button not found!")
 	
 	# Match the amber HUD look (this panel lives outside GameUILayout, so it
 	# themes itself).
@@ -52,7 +49,6 @@ func _ready() -> void:
 
 	# Initial update
 	_update_display()
-	print("PlayerTurnPanel initialized")
 
 func _process(_delta: float) -> void:
 	"""Reconcile with the active turn system each frame, acting only on a real change.
@@ -188,40 +184,23 @@ func _update_display() -> void:
 
 func _on_end_turn_pressed() -> void:
 	"""Handle End Turn button press - ends the entire player's turn"""
-	print("=== PLAYER END TURN BUTTON PRESSED ===")
-	print("Ending entire turn for player: " + (current_player.get_display_name() if current_player else "None"))
-	
 	var turn_ended = false
-	
+
 	# Use turn system if available
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
-		print("Using turn system: " + turn_system.system_name)
-		
+
 		if turn_system is TraditionalTurnSystem:
-			print("Ending turn manually (Traditional)")
 			turn_ended = (turn_system as TraditionalTurnSystem).end_turn_manually()
 		elif turn_system is SpeedFirstTurnSystem:
-			print("Ending turn manually (Speed First)")
 			turn_ended = (turn_system as SpeedFirstTurnSystem).end_turn_manually()
 		else:
-			print("Advancing turn (Generic)")
 			TurnSystemManager.advance_turn()
 			turn_ended = true
 	elif PlayerManager:
-		print("Using PlayerManager fallback")
 		# Fallback to PlayerManager
 		PlayerManager.end_current_player_turn()
 		turn_ended = true
-	else:
-		print("No turn system or PlayerManager available")
-	
-	if turn_ended:
-		print("Player turn ended successfully")
-	else:
-		print("Failed to end player turn")
-	
-	print("=== PLAYER END TURN PROCESSING COMPLETE ===")
 
 # Public interface
 func get_current_player() -> Player:
@@ -237,5 +216,4 @@ func _input(event: InputEvent) -> void:
 		match event.keycode:
 			KEY_P:
 				if current_player:
-					print("P key pressed - triggering Player End Turn action")
 					_on_end_turn_pressed()

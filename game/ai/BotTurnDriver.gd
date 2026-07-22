@@ -502,12 +502,6 @@ func _execute_plan_attack(unit: Unit, decision: Dictionary, board) -> bool:
 		unit.mark_moved()
 
 	if _execute_move_decision(unit, decision, board):
-		if moved:
-			print("[BotAI] %s advances to %s then %s at %s"
-				% [unit.get_display_name(), str(dest), _move_name(decision.get("move")), str(decision.get("aim_cell"))])
-		else:
-			print("[BotAI] %s uses %s at %s"
-				% [unit.get_display_name(), _move_name(decision.get("move")), str(decision.get("aim_cell"))])
 		# Attacked (and possibly moved first) -- always visible.
 		return true
 
@@ -529,7 +523,6 @@ func _execute_plan_advance(unit: Unit, decision: Dictionary, board) -> bool:
 	unit.mark_moved()
 	var target = decision.get("target", null)
 	var tname: String = target.get_display_name() if target != null and target.has_method("get_display_name") else "enemy"
-	print("[BotAI] %s advances to %s toward %s" % [unit.get_display_name(), str(dest), tname])
 	_finish(unit, "move")
 	return true
 
@@ -568,23 +561,8 @@ func _execute_move_decision(unit: Unit, decision: Dictionary, board) -> bool:
 ## structured events MoveExecutor returned. Silent when the move dealt no damage
 ## (e.g. a pure buff/move) so only real hits print.
 func _log_attack_landed(unit: Unit, move, result: Dictionary) -> void:
-	var events = result.get("events", [])
-	if not (events is Array):
-		return
-	for ev in events:
-		if not (ev is Dictionary):
-			continue
-		if ev.get("effect", "") != "damage" or ev.get("missed", false):
-			continue
-		var target = ev.get("target", null)
-		if target == null:
-			continue
-		var amount: int = int(ev.get("amount", 0))
-		var hp_after: int = target.get_hp() if target.has_method("get_hp") else -1
-		var tname: String = target.get_display_name() if target.has_method("get_display_name") else "enemy"
-		var crit_tag: String = " CRIT" if ev.get("crit", false) else ""
-		print("[BotAI] %s hits %s with %s for %d%s (%s HP now %d)"
-			% [unit.get_display_name(), tname, _move_name(move), amount, crit_tag, tname, hp_after])
+	# Per-hit combat logging removed to keep the console quiet during play.
+	pass
 
 
 ## Index of [param move] within the unit's moveset (what [Unit.perform_move]
@@ -645,7 +623,6 @@ func _act_fallback(unit: Unit, board) -> bool:
 		var move_range: int = maxi(1, _stat(unit, "movement", 3))
 		var dest := _step_toward_cell(ucell, tcell, move_range)
 		_relocate(unit, board, ucell, dest)
-		print("[BotAI] %s moves toward %s" % [unit.get_display_name(), target.get_display_name()])
 		_finish(unit, "move")
 		return true
 
@@ -654,9 +631,6 @@ func _fallback_attack(unit: Unit, target: Unit) -> void:
 	var dmg: int = _stat(unit, "attack", 10)
 	if target.has_method("take_damage"):
 		target.take_damage(dmg)
-	var hp_after: int = target.get_hp() if target.has_method("get_hp") else -1
-	print("[BotAI] %s attacks %s for %d (%s HP now %d)"
-		% [unit.get_display_name(), target.get_display_name(), dmg, target.get_display_name(), hp_after])
 
 
 func _finish(unit: Unit, action: String) -> void:

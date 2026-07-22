@@ -70,7 +70,6 @@ func reset_turn_system() -> void:
 	# Default implementation - derived classes should override
 	current_turn = 1
 	is_turn_in_progress = false
-	print("TurnSystemBase: Basic reset completed")
 
 # Common implementation methods
 func register_unit(unit: Unit) -> void:
@@ -87,8 +86,6 @@ func register_unit(unit: Unit) -> void:
 		if unit.has_signal("unit_died") and not unit.unit_died.is_connected(_on_registered_unit_died):
 			unit.unit_died.connect(_on_registered_unit_died)
 
-		print("Turn System: Registered unit " + unit.get_display_name())
-
 func unregister_unit(unit: Unit) -> void:
 	"""Unregister a unit from the turn system"""
 	if unit in registered_units:
@@ -99,8 +96,6 @@ func unregister_unit(unit: Unit) -> void:
 			unit.unit_action_completed.disconnect(_on_unit_action_completed)
 		if unit.has_signal("unit_died") and unit.unit_died.is_connected(_on_registered_unit_died):
 			unit.unit_died.disconnect(_on_registered_unit_died)
-
-		print("Turn System: Unregistered unit " + unit.get_display_name())
 
 func _on_registered_unit_died(unit: Unit) -> void:
 	"""A registered unit died. Drop it from the turn system NOW -- this fires inside
@@ -120,8 +115,6 @@ func register_player(player: Player) -> void:
 		# Register all player's units
 		for unit in player.owned_units:
 			register_unit(unit)
-		
-		print("Turn System: Registered player " + player.get_display_name())
 
 func unregister_player(player: Player) -> void:
 	"""Unregister a player from the turn system"""
@@ -131,8 +124,6 @@ func unregister_player(player: Player) -> void:
 		# Unregister all player's units
 		for unit in player.owned_units:
 			unregister_unit(unit)
-		
-		print("Turn System: Unregistered player " + player.get_display_name())
 
 func validate_turn_action(unit: Unit, action_type: String) -> bool:
 	"""Validate if a unit can perform an action"""
@@ -312,7 +303,6 @@ func _tick_unit_turn_start(unit) -> void:
 	if _has_stun_flag(unit):
 		_stun_skipped_turn[unit] = current_turn
 		var who: String = unit.get_display_name() if unit.has_method("get_display_name") else str(unit)
-		print("Turn System: " + who + " is stunned and skips this turn")
 
 	# Sample "controlled" alongside the stun, and for the identical reason: the status
 	# ticks below EXPIRE Enthralled, so latching it here is what makes the hijack land
@@ -322,7 +312,6 @@ func _tick_unit_turn_start(unit) -> void:
 	if _has_control_flag(unit):
 		_control_forced_turn[unit] = current_turn
 		var puppet: String = unit.get_display_name() if unit.has_method("get_display_name") else str(unit)
-		print("Turn System: " + puppet + " is CONTROLLED and turns on its own side this turn")
 
 	# Timed STAT modifiers expire here. Unit.process_turn_start() ->
 	# UnitStats.process_modifier_durations() was called by nothing in the live game

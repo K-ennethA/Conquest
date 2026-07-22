@@ -203,7 +203,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Handle keyboard input first (always works)
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_F5:
-			print("F5 pressed - testing GameEvents.unit_selected signal")
 			_test_unit_selection_signal()
 			return
 		elif event.is_action_pressed("ui_accept"):
@@ -234,31 +233,20 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Handle mouse input (only if not handled by UI)
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-			print("=== Left Mouse Click Detected (Unhandled) ===")
-			print("Mouse position: " + str(event.position))
-			
 			# Check if mouse is over UI elements using UILayoutManager
 			var ui_layout = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
 			if ui_layout and ui_layout.has_method("is_mouse_over_ui"):
 				if ui_layout.is_mouse_over_ui(event.position):
-					print("Mouse click blocked by UILayoutManager - over UI element")
 					return
-				else:
-					print("Mouse click allowed by UILayoutManager - not over UI")
 			else:
-				print("UILayoutManager not found - using fallback detection")
 				# Fallback: Check if mouse is over UI elements using screen position
 				var screen_size = get_viewport().get_visible_rect().size
 				var mouse_pos = event.position
-				print("Screen size: " + str(screen_size))
-				print("UI threshold (80%): " + str(screen_size.x * 0.8))
-				
+
 				# More lenient UI detection - only block if in right sidebar area
 				if mouse_pos.x > screen_size.x * 0.8:  # Changed from 0.75 to 0.8
-					print("Mouse click in UI area - not handling in cursor")
 					return
-			
-			print("Mouse click in game area - handling cursor selection")
+
 			_handle_mouse_click(event.position)
 		return
 	
@@ -284,12 +272,6 @@ func _input(event: InputEvent) -> void:
 	"""Handle high-priority input - currently unused to let UI have priority"""
 	# Debug: Print all input events to see what we're receiving
 	if event is InputEventMouseButton:
-		print("=== Mouse Button Event Received (High Priority) ===")
-		print("Button: " + str(event.button_index))
-		print("Pressed: " + str(event.pressed))
-		print("Position: " + str(event.position))
-		print("Letting UI handle this event first...")
-		
 		# RIGHT CLICK = CANCEL (Fire-Emblem style back-out). While a unit interaction
 		# is staged (aiming a move, a tentative move, movement mode, or just a
 		# selection), route the click to UnitActionsPanel.request_cancel() so it backs
@@ -302,11 +284,7 @@ func _input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 			return
 			
-	elif event is InputEventMouseMotion:
-		# Only print occasionally to avoid spam
-		if randf() < 0.01:  # Print ~1% of mouse motion events
-			print("Mouse motion (high priority): " + str(event.position))
-	
+
 	# Don't handle mouse events here - let UI have priority
 	# Mouse events will be handled in _unhandled_input() if UI doesn't consume them
 
@@ -349,47 +327,32 @@ func _cell_under_mouse(mouse_pos: Vector2):
 
 func _handle_mouse_click(mouse_pos: Vector2) -> void:
 	"""Handle mouse click for unit selection"""
-	print("=== _handle_mouse_click called ===")
-	print("Mouse position: " + str(mouse_pos))
-
 	# The camera is cached in _ready, but get_camera_3d() can be null there if the
 	# Camera3D has not yet registered as current. Re-fetch lazily so mouse picking
 	# is never permanently dead when that race loses.
 	if not camera:
 		camera = get_viewport().get_camera_3d()
 	if not camera:
-		print("ERROR: No camera found!")
 		return
-	
-	print("Camera found: " + camera.name)
-	
+
 	# Check if click is over UI using the layout manager
 	var ui_layout = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
 	if ui_layout and ui_layout.has_method("is_mouse_over_ui"):
 		if ui_layout.is_mouse_over_ui(mouse_pos):
-			print("Mouse click in UI area - not handling in cursor")
 			return
-	
-	print("Mouse click in game area - proceeding with ground-plane pick")
 
 	# GROUND-PLANE picking (replaces the old physics raycast). Intersect the camera
 	# ray with the board plane (y = 0) so a click can never "miss" the board because
 	# of tile colliders/layers -- the plane is infinite and always solvable.
 	var grid_pos = _cell_under_mouse(mouse_pos)
 	if grid_pos == null:
-		print("Ground-plane pick failed (ray parallel to / behind the board) - ignoring click")
 		return
-
-	print("Ground-plane pick -> grid pos: " + str(grid_pos))
 
 	# Move cursor to clicked position (same tile_position setter + bounds check the
 	# hover path uses, so selection targets exactly the hovered/clicked cell).
 	if grid.is_within_bounds(grid_pos):
-		print("Grid position is within bounds - moving cursor")
 		self.tile_position = grid_pos
 		_handle_selection()
-	else:
-		print("Grid position out of bounds: " + str(grid_pos))
 
 func _handle_mouse_movement(mouse_pos: Vector2) -> void:
 	"""Handle mouse movement for cursor positioning"""
@@ -422,33 +385,23 @@ func _handle_mouse_movement(mouse_pos: Vector2) -> void:
 
 func _handle_selection() -> void:
 	"""Handle unit selection at cursor position"""
-	print("DEBUG: Cursor _handle_selection called at position: " + str(tile_position))
-	
 	# FIRST: If a move/attack is being targeted, this click selects the target.
 	var unit_actions_panel = _get_unit_actions_panel()
 	if unit_actions_panel and unit_actions_panel.has_method("is_targeting_move"):
 		if unit_actions_panel.is_targeting_move():
-			print("DEBUG: Move targeting active - handling as move target")
 			unit_actions_panel.handle_move_target_selected(tile_position)
 			return
 
 	# SECOND: If movement range is showing, this click is a movement destination.
 	if unit_actions_panel and unit_actions_panel.has_method("is_showing_movement_range"):
 		if unit_actions_panel.is_showing_movement_range():
-			print("DEBUG: Movement range is showing - handling as movement destination")
 			unit_actions_panel.handle_movement_destination_selected(tile_position)
 			return  # Exit early - don't do normal unit selection
-		else:
-			print("DEBUG: Movement range is NOT showing - proceeding with normal unit selection")
-	else:
-		print("DEBUG: UnitActionsPanel not found or missing method")
-	
+
 	# SECOND: Handle normal unit selection/deselection
 	var unit_at_cursor = _get_unit_at_position(tile_position)
 	
 	if unit_at_cursor:
-		print("Unit found for selection: ", unit_at_cursor.name)
-
 		# Selection == inspection: ANY living unit may be selected (including enemies /
 		# AI-owned units) so the player can read their info. Commanding a unit is gated
 		# separately in UnitActionsPanel (_human_may_command), so relaxing selection here
@@ -456,7 +409,6 @@ func _handle_selection() -> void:
 		# or the turn system's can_unit_act.
 		if TurnSystemManager.has_active_turn_system():
 			var turn_system = TurnSystemManager.get_active_turn_system()
-			print("Cursor: Active turn system is " + turn_system.system_name)
 
 			# Speed First inspection branch (log-only): any unit is selectable; the UI
 			# handles action availability for the current acting unit.
@@ -464,13 +416,6 @@ func _handle_selection() -> void:
 				var speed_system = turn_system as SpeedFirstTurnSystem
 				var current_acting_unit = speed_system.get_current_acting_unit()
 
-				print("Cursor: Speed First mode - current acting unit: " + (current_acting_unit.get_display_name() if current_acting_unit else "None"))
-				print("Cursor: Attempted selection: " + unit_at_cursor.get_display_name())
-
-				if unit_at_cursor == current_acting_unit:
-					print("Cursor: ALLOWED - Unit is the currently acting unit (can act)")
-				else:
-					print("Cursor: ALLOWED - Unit can be selected for inspection (actions disabled)")
 
 		if selected_unit == unit_at_cursor:
 			# Deselect if clicking same unit
@@ -482,28 +427,19 @@ func _handle_selection() -> void:
 		# No unit at cursor - only deselect if we're not in movement mode
 		if unit_actions_panel and unit_actions_panel.has_method("is_showing_movement_range"):
 			if not unit_actions_panel.is_showing_movement_range():
-				print("DEBUG: No unit at cursor and no movement range - deselecting")
 				_deselect_unit()
-			else:
-				print("DEBUG: No unit at cursor but movement range is showing - ignoring click")
 		else:
-			print("DEBUG: No unit at cursor - deselecting")
 			_deselect_unit()
 
 func _get_unit_actions_panel() -> Node:
 	"""Get reference to UnitActionsPanel"""
 	var scene_root = get_tree().current_scene
-	print("DEBUG: Looking for UnitActionsPanel, scene_root: " + str(scene_root.name if scene_root else "null"))
-	
+
 	var ui_layout = scene_root.get_node_or_null("UI/GameUILayout")
-	print("DEBUG: UI/GameUILayout found: " + str(ui_layout != null))
-	
+
 	if ui_layout:
 		# The correct path is MarginContainer/MainContainer/MiddleArea/RightSidebar/UnitActionsPanel
 		var unit_actions_panel = ui_layout.get_node_or_null("MarginContainer/MainContainer/MiddleArea/RightSidebar/UnitActionsPanel")
-		print("DEBUG: UnitActionsPanel found: " + str(unit_actions_panel != null))
-		if unit_actions_panel:
-			print("DEBUG: UnitActionsPanel name: " + unit_actions_panel.name)
 		return unit_actions_panel
 	return null
 
@@ -518,25 +454,18 @@ func _select_unit(unit: Unit) -> void:
 	
 	selected_unit = unit
 	var world_pos = grid.calculate_map_position(tile_position)
-	print("=== Cursor: Selecting unit ===")
-	print("Unit: ", unit.name)
-	print("World position: ", world_pos)
-	print("Emitting GameEvents.unit_selected signal...")
 	GameEvents.unit_selected.emit(unit, world_pos)
-	print("GameEvents.unit_selected signal emitted")
-	
+
 	# Update cursor visuals
 	if mesh_instance:
 		mesh_instance.material_override = selection_material
 	if base_mesh:
 		base_mesh.material_override = selection_ring_material
-	print("=== Cursor: Unit selection complete ===")
 
 func _deselect_unit() -> void:
 	"""Deselect current unit"""
 	if selected_unit:
 		var unit = selected_unit
-		print("Deselecting unit: ", unit.name)
 		selected_unit = null
 		GameEvents.unit_deselected.emit(unit)
 	
@@ -618,7 +547,6 @@ func get_cursor_position() -> Vector3:
 func set_mouse_enabled(enabled: bool) -> void:
 	"""Enable or disable mouse cursor movement"""
 	is_mouse_enabled = enabled
-	print("Mouse cursor movement " + ("enabled" if enabled else "disabled"))
 
 func toggle_mouse_mode() -> void:
 	"""Toggle between mouse and keyboard-only mode"""
@@ -668,10 +596,7 @@ func _position_cursor_on_current_unit(speed_system: SpeedFirstTurnSystem) -> voi
 		# Move cursor to unit's position
 		var unit_world_pos = current_unit.global_position
 		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
-		
-		print("Positioning cursor on current acting unit: " + current_unit.get_display_name())
-		print("  Moving cursor to grid position: " + str(unit_grid_pos))
-		
+
 		# Set cursor position (this will trigger position update)
 		self.tile_position = unit_grid_pos
 		
@@ -700,25 +625,15 @@ func _position_cursor_on_player_unit(trad_system: TraditionalTurnSystem) -> void
 	if target_unit:
 		var unit_world_pos = target_unit.global_position
 		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
-		
-		print("Positioning cursor on player unit: " + target_unit.get_display_name())
-		print("  Moving cursor to grid position: " + str(unit_grid_pos))
-		
+
 		# Set cursor position
 		self.tile_position = unit_grid_pos
 
 func _test_unit_selection_signal() -> void:
 	"""Test GameEvents.unit_selected signal emission"""
-	print("=== Testing GameEvents.unit_selected signal ===")
-	
 	# Find a unit to test with
 	var units = _find_all_units()
 	if units.size() > 0:
 		var test_unit = units[0]
 		var test_position = test_unit.global_position
-		print("Emitting GameEvents.unit_selected for: " + test_unit.name)
-		print("Position: " + str(test_position))
 		GameEvents.unit_selected.emit(test_unit, test_position)
-		print("Signal emitted")
-	else:
-		print("No units found for testing")

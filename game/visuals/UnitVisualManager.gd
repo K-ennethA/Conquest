@@ -440,4 +440,3 @@ func _on_turn_system_unit_action(unit: Unit, action_type: String) -> void:
 func refresh_unit_visuals() -> void:
 	"""Manually refresh all unit visuals - useful for testing"""
 	update_all_unit_visuals()
-	print("Unit visuals refreshed")

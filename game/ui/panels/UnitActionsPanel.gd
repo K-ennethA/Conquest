@@ -77,61 +77,53 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP  # Make sure panel stops mouse events
 	
 	# Connect to game events
-	print("Connecting to GameEvents...")
 	if GameEvents:
 		GameEvents.unit_selected.connect(_on_unit_selected)
 		GameEvents.unit_deselected.connect(_on_unit_deselected)
 		GameEvents.cursor_selected.connect(_on_cursor_selected)
-		print("GameEvents connections established")
 	else:
-		print("ERROR: GameEvents not found!")
-	
+		push_error("GameEvents not found!")
+
 	# Connect to player management events
 	if PlayerManager:
 		PlayerManager.player_turn_started.connect(_on_player_turn_changed)
 		PlayerManager.player_turn_ended.connect(_on_player_turn_changed)
 		PlayerManager.game_state_changed.connect(_on_game_state_changed)
-		print("PlayerManager connections established")
 	else:
-		print("ERROR: PlayerManager not found!")
-	
+		push_error("PlayerManager not found!")
+
 	# Connect button signals and ensure they can receive mouse input
 	if move_button:
 		move_button.mouse_filter = Control.MOUSE_FILTER_STOP
 		move_button.pressed.connect(_on_move_pressed)
-		print("Move button connected")
 	else:
-		print("ERROR: Move button not found!")
-		
+		push_error("Move button not found!")
+
 	if end_unit_turn_button:
 		end_unit_turn_button.mouse_filter = Control.MOUSE_FILTER_STOP
 		end_unit_turn_button.pressed.connect(_on_end_unit_turn_pressed)
 		# Add mouse event debugging to the button
 		end_unit_turn_button.gui_input.connect(_on_end_unit_turn_button_input)
-		print("End Unit Turn button connected")
 	else:
-		print("ERROR: End Unit Turn button not found!")
-	
+		push_error("End Unit Turn button not found!")
+
 	if unit_summary_button:
 		unit_summary_button.mouse_filter = Control.MOUSE_FILTER_STOP
 		unit_summary_button.pressed.connect(_on_unit_summary_pressed)
-		print("Unit Summary button connected")
 	else:
-		print("ERROR: Unit Summary button not found!")
-	
+		push_error("Unit Summary button not found!")
+
 	if end_player_turn_button:
 		end_player_turn_button.mouse_filter = Control.MOUSE_FILTER_STOP
 		end_player_turn_button.pressed.connect(_on_end_player_turn_pressed)
-		print("End Player Turn button connected")
 	else:
-		print("ERROR: End Player Turn button not found!")
-		
+		push_error("End Player Turn button not found!")
+
 	if cancel_button:
 		cancel_button.mouse_filter = Control.MOUSE_FILTER_STOP
 		cancel_button.pressed.connect(_on_cancel_pressed)
-		print("Cancel button connected")
 	else:
-		print("ERROR: Cancel button not found!")
+		push_error("Cancel button not found!")
 	
 	# Hide panel initially
 	_hide_panel()
@@ -169,11 +161,6 @@ func _setup_unit_header_styling() -> void:
 
 func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	"""Handle unit selection - show actions for selected unit"""
-	print("=== UnitActionsPanel: Unit selection received ===")
-	print("Unit: " + unit.name)
-	print("Position: " + str(position))
-	print("Current selected_unit before: " + (selected_unit.name if selected_unit else "None"))
-
 	# Selection == inspection: any living unit may be selected so the player can read
 	# its info (including enemy / AI-owned units). Commanding is gated separately via
 	# _human_may_command() -- _update_actions() renders disabled buttons for units the
@@ -181,49 +168,35 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	# the Traditional can-act gate that used to REJECT selection here are gone. The
 	# multiplayer rejection branch is intentionally kept for this pass.
 	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
-		print("Multiplayer mode detected - validating unit ownership")
-		
 		# Get local player ID and unit owner
 		var local_player_id_raw = GameModeManager.get_local_player_id()
 		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
 		var unit_owner = PlayerManager.get_player_owning_unit(unit)
-		
-		print("Local player ID: " + str(local_player_id))
-		print("Unit owner: " + (unit_owner.player_name if unit_owner else "None"))
-		print("Unit owner ID: " + str(unit_owner.player_id if unit_owner else -1))
-		
+
 		if not unit_owner:
-			print("Selection rejected: Unit has no owner")
 			return
-		
+
 		# Ensure player_id is int for comparison and arithmetic
 		var owner_player_id = int(unit_owner.player_id) if unit_owner.player_id is String else unit_owner.player_id
-		
+
 		if owner_player_id != local_player_id:
-			print("Selection rejected: Unit belongs to Player " + str(owner_player_id + 1) + ", you are Player " + str(local_player_id + 1))
 			# Could show a message to the player here
 			return
-		
-		print("Unit ownership validated - selection allowed")
 	else:
 		# Local (single-player / hotseat): accept every selection for inspection.
 		# _update_actions() gates the actual commands via _human_may_command().
-		print("Local mode: accepting selection for inspection (commands gated in _update_actions)")
+		pass
 
-	print("Unit selection accepted: " + unit.name)
 	selected_unit = unit
-	print("Selected unit set to: " + selected_unit.name)
-	
+
 	_update_unit_header()
 	_update_actions()
 	_update_unit_stats()
 	
 	# Show movement range immediately when unit is selected (tactical style)
-	print("About to call _show_movement_range_on_selection()...")
 	_show_movement_range_on_selection()
-	
+
 	_show_panel()
-	print("=== UnitActionsPanel: Unit selection processing complete ===")
 
 func _show_movement_range_on_selection() -> void:
 	"""Show movement range immediately when unit is selected (tactical style)"""
@@ -428,8 +401,6 @@ func _on_unit_summary_pressed() -> void:
 			unit_summary_button.text = "Unit Summary ▲"
 		else:
 			unit_summary_button.text = "Unit Summary ▼"
-	
-	print("Unit stats " + ("expanded" if stats_expanded else "collapsed"))
 
 func _on_unit_deselected(unit: Unit) -> void:
 	"""Handle unit deselection - hide actions"""
@@ -669,11 +640,8 @@ func _update_actions() -> void:
 func _on_move_pressed() -> void:
 	"""Handle Move button press - enter movement mode"""
 	if not selected_unit:
-		print("Move pressed but no unit selected")
 		return
-	
-	print("Move action for unit: " + selected_unit.get_display_name())
-	
+
 	# Check if we're in multiplayer mode and submit action through GameModeManager
 	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
 		# Validate that this is our unit and our turn
@@ -685,53 +653,37 @@ func _on_move_pressed() -> void:
 		var owner_player_id = int(unit_owner.player_id) if (unit_owner and unit_owner.player_id is String) else (unit_owner.player_id if unit_owner else -1)
 		
 		if not unit_owner or owner_player_id != local_player_id:
-			print("Move action rejected: not your unit")
 			return
-		
+
 		if not GameModeManager.is_my_turn():
-			print("Move action rejected: not your turn in multiplayer")
 			return
-		
+
 		# Submit move action through multiplayer system
 		var action_data = {
 			"unit_id": selected_unit.get_display_name(),
 			"player_id": local_player_id
 		}
-		
+
 		if GameModeManager.submit_action("unit_move_start", action_data):
-			print("Move action submitted to multiplayer system")
 			_enter_movement_mode()
-		else:
-			print("Move action rejected by multiplayer system")
 		return
 
 	# Handler-level command guard: keyboard shortcut (KEY_M) bypasses the disabled
 	# button, so re-check command permission here before acting on an enemy / AI unit.
 	if not _human_may_command(selected_unit):
-		print("Move blocked: " + selected_unit.get_display_name() + " is not commandable by the local player")
 		return
 
 	# Local game logic (existing)
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
-		print("Validating move with turn system: " + turn_system.system_name)
-		
 		if turn_system.validate_turn_action(selected_unit, "move"):
-			print("Move validated by turn system - entering movement mode")
 			_enter_movement_mode()
-		else:
-			print("Move action not allowed by turn system")
 	else:
-		print("No active turn system - entering movement mode anyway")
 		_enter_movement_mode()
 
 func _on_end_unit_turn_pressed() -> void:
 	"""Handle End Unit Turn button press - only ends this unit's turn"""
-	print("=== END UNIT TURN BUTTON PRESSED ===")
-	print("Ending turn for unit: " + selected_unit.get_display_name())
-	
 	if not selected_unit:
-		print("No unit selected")
 		return
 	
 	# Check if we're in multiplayer mode and submit action through GameModeManager
@@ -745,31 +697,26 @@ func _on_end_unit_turn_pressed() -> void:
 		var owner_player_id = int(unit_owner.player_id) if (unit_owner and unit_owner.player_id is String) else (unit_owner.player_id if unit_owner else -1)
 		
 		if not unit_owner or owner_player_id != local_player_id:
-			print("End unit turn action rejected: not your unit")
 			return
-		
+
 		if not GameModeManager.is_my_turn():
-			print("End unit turn action rejected: not your turn in multiplayer")
 			return
-		
+
 		# Submit end unit turn action through multiplayer system
 		var action_data = {
 			"unit_id": selected_unit.get_display_name(),
 			"player_id": local_player_id
 		}
-		
+
 		if GameModeManager.submit_action("end_unit_turn", action_data):
-			print("End unit turn action submitted to multiplayer system")
 			# The action will be processed when received back from network
-		else:
-			print("End unit turn action rejected by multiplayer system")
+			pass
 		return
 
 	# Handler-level command guard: the KEY_E shortcut bypasses the disabled button and
 	# the local path calls mark_unit_acted(selected_unit) unchecked, which would let the
 	# human end an enemy / AI unit's turn. Re-check command permission here.
 	if not _human_may_command(selected_unit):
-		print("End unit turn blocked: " + selected_unit.get_display_name() + " is not commandable by the local player")
 		return
 
 	# WAIT: ending the unit's turn is the "commit move, take no action" branch of the
@@ -783,45 +730,30 @@ func _on_end_unit_turn_pressed() -> void:
 		var turn_system = TurnSystemManager.get_active_turn_system()
 
 		if turn_system is TraditionalTurnSystem:
-			print("Marking unit acted (Traditional)")
 			(turn_system as TraditionalTurnSystem).mark_unit_acted(selected_unit)
 		elif turn_system is SpeedFirstTurnSystem:
-			print("Marking unit acted (Speed First)")
 			(turn_system as SpeedFirstTurnSystem).mark_unit_acted(selected_unit)
-		
+
 		# Emit action completed signal
 		GameEvents.unit_action_completed.emit(selected_unit, "end_turn")
-		
+
 		# Force update unit visuals immediately
 		var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
 		if visual_manager:
-			print("Updating unit visuals via UnitVisualManager")
 			visual_manager.update_all_unit_visuals()
-		
-		print("Unit " + selected_unit.get_display_name() + " has ended their turn")
-	else:
-		print("No active turn system")
-	
+
 	# Update actions to reflect the unit has acted
 	_update_actions()
-	
-	print("=== END UNIT TURN PROCESSING COMPLETE ===")
 
 func _on_end_player_turn_pressed() -> void:
 	"""Handle End Player Turn button press - ends the entire player's turn"""
-	print("=== END PLAYER TURN BUTTON PRESSED ===")
-	
 	if not PlayerManager:
-		print("PlayerManager not available")
 		return
-	
+
 	var current_player = PlayerManager.get_current_player()
 	if not current_player:
-		print("No current player")
 		return
-	
-	print("Ending turn for player: " + current_player.player_name)
-	
+
 	# Check if we're in multiplayer mode and submit action through GameModeManager
 	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
 		# Validate that it's our turn
@@ -832,36 +764,30 @@ func _on_end_player_turn_pressed() -> void:
 		var current_player_id = int(current_player.player_id) if current_player.player_id is String else current_player.player_id
 		
 		if current_player_id != local_player_id:
-			print("End player turn action rejected: not your turn (current: " + str(current_player_id) + ", local: " + str(local_player_id) + ")")
 			return
-		
+
 		if not GameModeManager.is_my_turn():
-			print("End player turn action rejected: not your turn in multiplayer")
 			return
-		
+
 		# Submit end turn action through multiplayer system
 		var action_data = {
 			"player_id": local_player_id
 		}
-		
+
 		if GameModeManager.submit_action("end_turn", action_data):
-			print("End player turn action submitted to multiplayer system")
 			# The action will be processed when received back from network
-		else:
-			print("End player turn action rejected by multiplayer system")
+			pass
 		return
 
 	# Handler-level command guard: the KEY_P shortcut bypasses the disabled button.
 	# Only end the player turn when the current turn player is human-controlled (never
 	# during the AI's turn).
 	if not _player_is_human(_current_turn_player()):
-		print("End player turn blocked: it is not a human-controlled player's turn")
 		return
 
 	# Local game logic (existing)
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
-		print("Using turn system to end player turn: " + turn_system.system_name)
 
 		# End the player's turn THROUGH THE TURN SYSTEM so it actually advances to the
 		# next player (and, in single-player, reaches the AI player so BotTurnDriver can
@@ -873,34 +799,26 @@ func _on_end_player_turn_pressed() -> void:
 		if turn_system is TraditionalTurnSystem:
 			var ended := (turn_system as TraditionalTurnSystem).end_turn_manually()
 			if not ended:
-				print("End Player Turn FAILED: TraditionalTurnSystem.end_turn_manually() returned false (invalid turn state)")
+				push_warning("End Player Turn FAILED: TraditionalTurnSystem.end_turn_manually() returned false (invalid turn state)")
 		elif turn_system is SpeedFirstTurnSystem:
 			var ended := (turn_system as SpeedFirstTurnSystem).end_turn_manually()
 			if not ended:
-				print("End Player Turn FAILED: SpeedFirstTurnSystem.end_turn_manually() returned false (invalid turn state)")
+				push_warning("End Player Turn FAILED: SpeedFirstTurnSystem.end_turn_manually() returned false (invalid turn state)")
 		elif turn_system.has_method("end_player_turn"):
 			turn_system.end_player_turn()
 		else:
 			# Last-resort fallback: use PlayerManager directly.
-			print("Turn system has no manual end-turn method, using PlayerManager")
 			PlayerManager.end_current_player_turn()
 	else:
 		# Fallback: use PlayerManager directly
-		print("No active turn system, using PlayerManager")
 		PlayerManager.end_current_player_turn()
-	
-	print("=== END PLAYER TURN PROCESSING COMPLETE ===")
 
 # Add mouse event debugging
-func _gui_input(event: InputEvent) -> void:
-	# Only log mouse button events, not movement
-	if event is InputEventMouseButton:
-		print("UnitActionsPanel mouse button: " + str(event.button_index) + " pressed: " + str(event.pressed))
+func _gui_input(_event: InputEvent) -> void:
+	pass
 
-func _on_end_unit_turn_button_input(event: InputEvent) -> void:
-	# Only log mouse button events, not movement
-	if event is InputEventMouseButton:
-		print("End Unit Turn button mouse: " + str(event.button_index) + " pressed: " + str(event.pressed))
+func _on_end_unit_turn_button_input(_event: InputEvent) -> void:
+	pass
 
 func _on_cancel_pressed() -> void:
 	"""Handle Cancel button press (also C/ESC via _input) - back out of whatever
@@ -922,23 +840,18 @@ func _on_cancel_pressed() -> void:
 	# If the SELECT MOVE popup already consumed this same ESC by closing itself
 	# (MoveSelectionPanel ran first this frame), stop -- do not back out further.
 	if Engine.get_process_frames() == _popup_closed_frame:
-		print("Cancel: SELECT MOVE popup already handled this ESC - stopping here")
 		return
 	if move_selection_panel and move_selection_panel.visible:
-		print("Canceling: closing SELECT MOVE popup")
 		move_selection_panel.hide()
 	elif is_targeting_move():
-		print("Canceling move targeting")
 		_cancel_move_targeting()
 		_update_actions()
 	elif _tentative_active:
-		print("Canceling tentative move - reverting to origin")
 		_revert_tentative_move()
 		# Unit is fully available again: re-show its movement range and refresh actions.
 		_calculate_and_show_movement_range()
 		_update_actions()
 	elif movement_mode:
-		print("Canceling movement mode")
 		_exit_movement_mode()
 	elif selected_unit:
 		GameEvents.unit_deselected.emit(selected_unit)
@@ -1021,45 +934,34 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		match event.keycode:
 			KEY_F1:
-				print("F1 pressed - testing End Unit Turn button directly")
 				_on_end_unit_turn_pressed()
 			KEY_F2:
-				print("F2 pressed - showing panel for testing")
 				_show_panel()
 			KEY_F3:
-				print("F3 pressed - hiding panel")
 				_hide_panel()
 			KEY_F4:
-				print("F4 pressed - testing manual unit selection")
 				_test_manual_unit_selection()
 			KEY_F5:
-				print("F5 pressed - testing movement range calculation directly")
 				_test_movement_range_calculation_direct()
-			
+
 			# Keyboard shortcuts for actions (only when panel is visible and unit selected)
 			KEY_M:
 				if visible and selected_unit:
 					if movement_mode:
-						print("M key pressed - canceling movement mode")
 						_exit_movement_mode()
 					else:
-						print("M key pressed - triggering Move action")
 						_on_move_pressed()
 			KEY_E:
 				if visible and selected_unit and not movement_mode:
-					print("E key pressed - triggering End Unit Turn action")
 					_on_end_unit_turn_pressed()
 			KEY_P:
 				if visible and selected_unit and not movement_mode:
-					print("P key pressed - triggering End Player Turn action")
 					_on_end_player_turn_pressed()
 			KEY_S:
 				if visible and selected_unit and not movement_mode:
-					print("S key pressed - triggering Unit Summary toggle")
 					_on_unit_summary_pressed()
 			KEY_C, KEY_ESCAPE:
 				if visible and selected_unit:
-					print("C/ESC key pressed - triggering Cancel action")
 					_on_cancel_pressed()
 					# Consume ESC so the board cursor's own ui_cancel handler does not
 					# ALSO fire and deselect the unit -- that would collapse the staged
@@ -1070,48 +972,35 @@ func _input(event: InputEvent) -> void:
 
 func _test_manual_unit_selection() -> void:
 	"""Test manual unit selection for debugging"""
-	print("=== Testing manual unit selection ===")
-	
 	# Find a unit to test with
 	var scene_root = get_tree().current_scene
 	var player1_node = scene_root.get_node_or_null("Map/Player1")
 	if player1_node:
 		for child in player1_node.get_children():
 			if child is Unit:
-				print("Found test unit: " + child.name)
 				var world_pos = child.global_position
-				print("Manually triggering unit selection...")
 				_on_unit_selected(child, world_pos)
 				return
-	
-	print("No units found for testing")
 
 func _test_movement_range_calculation_direct() -> void:
 	"""Test movement range calculation directly"""
-	print("=== Testing Movement Range Calculation Directly ===")
-	
 	# Find a unit to test with
 	var scene_root = get_tree().current_scene
 	var player1_node = scene_root.get_node_or_null("Map/Player1")
 	if player1_node:
 		for child in player1_node.get_children():
 			if child is Unit:
-				print("Found test unit: " + child.name)
-				
 				# Set this as selected unit temporarily
 				selected_unit = child
-				
+
 				# Test movement range calculation
-				print("Testing movement range calculation...")
 				_calculate_and_show_movement_range()
-				
+
 				# Wait 3 seconds then clear
 				await get_tree().create_timer(3.0).timeout
 				_clear_movement_range()
 				selected_unit = null
 				return
-	
-	print("No units found for testing")
 
 # Movement system implementation
 func _enter_movement_mode() -> void:
@@ -1123,28 +1012,22 @@ func _enter_movement_mode() -> void:
 	# confirm/cancel). Re-entering movement here would let it move a second time, so
 	# block until the tentative move is confirmed or cancelled.
 	if _tentative_active:
-		print("Tentative move in progress - re-entering movement blocked")
 		return
 
 	# A unit that already moved this turn cannot move again.
 	if selected_unit.has_method("can_move") and not selected_unit.can_move():
-		print("Unit has already moved this turn - movement blocked")
 		return
 
-	print("=== Entering Movement Mode ===")
 	movement_mode = true
-	
+
 	# Calculate and show movement range
 	_calculate_and_show_movement_range()
-	
+
 	# Update UI to show movement mode
 	_update_movement_ui()
-	
-	print("Movement mode active - select destination tile")
 
 func _exit_movement_mode() -> void:
 	"""Exit movement mode and return to normal selection"""
-	print("=== Exiting Movement Mode ===")
 	movement_mode = false
 	movement_range_tiles.clear()
 	
@@ -1157,12 +1040,10 @@ func _exit_movement_mode() -> void:
 func _calculate_and_show_movement_range() -> void:
 	"""Calculate movement range and show visual indicators"""
 	if not selected_unit:
-		print("DEBUG: No selected unit for movement range calculation")
 		return
 
 	# Inspection-only units (enemy / AI, or not this player's turn) show no range.
 	if not _human_may_command(selected_unit):
-		print("DEBUG: " + selected_unit.get_display_name() + " is not commandable by the local player - no movement range shown")
 		_clear_movement_range()
 		return
 
@@ -1171,11 +1052,8 @@ func _calculate_and_show_movement_range() -> void:
 	# gates BOTH the select-time tactical highlight (_show_movement_range_on_selection)
 	# and movement mode (_enter_movement_mode), since both funnel through here.
 	if selected_unit.has_method("can_move") and not selected_unit.can_move():
-		print("DEBUG: " + selected_unit.get_display_name() + " has already moved this turn - no movement range shown")
 		_clear_movement_range()
 		return
-
-	print("DEBUG: Calculating movement range for " + selected_unit.get_display_name())
 
 	# Character-backed units route the range through MovementResolver + the shared
 	# BoardAdapter (CombatServices.board()). Non-character units, or the case where
@@ -1187,35 +1065,21 @@ func _calculate_and_show_movement_range() -> void:
 	var grid = preload("res://board/Grid.tres")
 	var unit_world_pos = selected_unit.global_position
 	var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
-	
-	print("DEBUG: Unit world pos: " + str(unit_world_pos))
-	print("DEBUG: Unit grid pos: " + str(unit_grid_pos))
-	
+
 	# Get movement range from unit
 	var movement_range = selected_unit.get_movement_range()
-	print("DEBUG: Movement range: " + str(movement_range))
-	
+
 	if movement_range <= 0:
-		print("DEBUG: Movement range is 0 or negative, aborting")
 		return
-	
+
 	# Calculate reachable tiles using BFS (similar to board.gd logic)
 	movement_range_tiles = _calculate_reachable_tiles(unit_grid_pos, movement_range, grid)
-	
-	print("DEBUG: Calculated " + str(movement_range_tiles.size()) + " reachable tiles")
-	
+
 	if movement_range_tiles.size() == 0:
-		print("DEBUG: No reachable tiles calculated, aborting")
 		return
-	
-	# Show first few tiles for debugging
-	for i in range(min(3, movement_range_tiles.size())):
-		print("DEBUG: Reachable tile " + str(i) + ": " + str(movement_range_tiles[i]))
-	
+
 	# Emit event to show movement range visually
-	print("DEBUG: Emitting movement_range_calculated signal with " + str(movement_range_tiles.size()) + " tiles")
 	GameEvents.movement_range_calculated.emit(movement_range_tiles)
-	print("DEBUG: Signal emitted")
 
 # --- MovementResolver / BoardAdapter integration (character-backed units) ----
 
@@ -1245,8 +1109,6 @@ func _try_show_movement_range_via_resolver() -> bool:
 	# Convert each Vector2i(col, row) into the Vector3(col, 0, row) grid-coord form the
 	# visualizer + GameEvents.movement_range_calculated + downstream validation expect.
 	movement_range_tiles = _cells_to_grid_tiles(cells)
-
-	print("DEBUG: Resolver produced " + str(movement_range_tiles.size()) + " reachable tiles from origin " + str(origin))
 
 	# Keep the same highlight flow: emit the calculated range for the visualizer.
 	GameEvents.movement_range_calculated.emit(movement_range_tiles)
@@ -1292,7 +1154,6 @@ func _try_execute_move_via_board(destination: Vector3) -> bool:
 
 	# Validate the destination is within the reachable set before moving.
 	if not _is_grid_pos_in_range(destination):
-		print("DEBUG: Destination cell " + str(dest_cell) + " not in reachable set - move rejected")
 		return true  # handled (rejected); do NOT fall back to BFS for a character unit
 
 	var old_world_pos: Vector3 = selected_unit.global_position
@@ -1310,7 +1171,6 @@ func _try_execute_move_via_board(destination: Vector3) -> bool:
 
 	# Preserve the legacy unit_moved contract: Vector3(col, 0, row) grid coords.
 	var old_grid_pos := Vector3(old_cell.x, 0, old_cell.y)
-	print("Unit moved from " + str(old_grid_pos) + " to " + str(destination) + " (via BoardAdapter)")
 	GameEvents.unit_moved.emit(selected_unit, old_grid_pos, destination)
 
 	# mark_moved() semantics: consumes the move but NOT the action.
@@ -1320,8 +1180,6 @@ func _try_execute_move_via_board(destination: Vector3) -> bool:
 
 func _calculate_reachable_tiles(start_pos: Vector3, max_distance: int, grid: Grid) -> Array[Vector3]:
 	"""Calculate all tiles reachable within movement range using BFS"""
-	print("DEBUG: BFS starting from " + str(start_pos) + " with max distance " + str(max_distance))
-	
 	var reachable: Array[Vector3] = []
 	var queue: Array = [{pos = start_pos, distance = 0}]
 	var visited: Dictionary = {start_pos: 0}
@@ -1345,8 +1203,7 @@ func _calculate_reachable_tiles(start_pos: Vector3, max_distance: int, grid: Gri
 						visited[next_pos] = current_distance + 1
 						queue.append({pos = next_pos, distance = current_distance + 1})
 						reachable.append(next_pos)
-	
-	print("DEBUG: BFS completed, found " + str(reachable.size()) + " reachable tiles")
+
 	return reachable
 
 func _is_tile_passable(grid_pos: Vector3) -> bool:
@@ -1402,39 +1259,24 @@ func _update_movement_ui() -> void:
 	
 	if cancel_button:
 		cancel_button.text = "Cancel Move (C/ESC)"
-	
-	# Show movement range info in unit summary if expanded
-	if stats_expanded and selected_unit:
-		var movement_range = selected_unit.get_movement_range()
-		print("Movement mode active - unit can move " + str(movement_range) + " tiles")
-		print("Highlighted " + str(movement_range_tiles.size()) + " reachable tiles")
 
 func _on_cursor_selected(position: Vector3) -> void:
 	"""Handle cursor selection - used for movement destination"""
-	print("=== Cursor Selected ===")
-	print("Selected position: " + str(position))
-	
 	# Check if we're in movement mode or if there's a movement range displayed
 	var unit_actions_panel = _get_unit_actions_panel()
 	if unit_actions_panel and unit_actions_panel.has_method("is_showing_movement_range"):
 		if unit_actions_panel.is_showing_movement_range():
-			print("Movement range is showing - checking if position is valid destination")
 			# Let the UnitActionsPanel handle the movement
 			unit_actions_panel.handle_movement_destination_selected(position)
 			return
-	
+
 	# If not in movement mode, handle normal selection
 	if not movement_mode or not selected_unit:
 		return
-	
-	print("Movement mode active - processing destination selection")
-	
+
 	# Check if position is within movement range
 	if position in movement_range_tiles:
-		print("Valid movement destination - executing move")
 		_execute_movement(position)
-	else:
-		print("Invalid movement destination - not in range")
 
 func _get_unit_actions_panel() -> Node:
 	"""Get reference to UnitActionsPanel"""
@@ -1448,9 +1290,6 @@ func _execute_movement(destination: Vector3) -> void:
 	"""Execute the actual unit movement"""
 	if not selected_unit:
 		return
-	
-	print("=== Executing Unit Movement ===")
-	print("Moving " + selected_unit.get_display_name() + " to " + str(destination))
 
 	# Character-backed units route through the shared BoardAdapter (resolver-backed).
 	if _try_execute_move_via_board(destination):
@@ -1471,8 +1310,6 @@ func _execute_movement(destination: Vector3) -> void:
 	# Animate the unit movement
 	_animate_unit_movement(selected_unit, old_world_pos, new_world_pos)
 
-	print("Unit moved from " + str(old_grid_pos) + " to " + str(destination))
-
 	# Emit movement event
 	GameEvents.unit_moved.emit(selected_unit, old_grid_pos, destination)
 
@@ -1486,9 +1323,7 @@ func _animate_unit_movement(unit: Unit, from_pos: Vector3, to_pos: Vector3) -> v
 	"""Animate unit movement with a smooth tween"""
 	if not unit:
 		return
-	
-	print("Animating movement from " + str(from_pos) + " to " + str(to_pos))
-	
+
 	# Create a tween for smooth movement
 	var tween = create_tween()
 	tween.set_ease(Tween.EASE_OUT)
@@ -1504,9 +1339,7 @@ func _complete_movement_action() -> void:
 	"""Complete the movement action and update turn system"""
 	if not selected_unit:
 		return
-	
-	print("=== Completing Movement Action ===")
-	
+
 	# Check if we're in multiplayer mode and submit action through GameModeManager
 	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
 		# Validate that this is our unit
@@ -1526,11 +1359,8 @@ func _complete_movement_action() -> void:
 				"to_position": selected_unit.global_position  # Current position after move
 			}
 			
-			if GameModeManager.submit_action("unit_move_complete", action_data):
-				print("Movement completion action submitted to multiplayer system")
-			else:
-				print("Movement completion action rejected by multiplayer system")
-		
+			GameModeManager.submit_action("unit_move_complete", action_data)
+
 		# Still do local processing for immediate feedback
 	
 	# Moving consumes only the unit's MOVE for this turn, not its action: the unit
@@ -1541,65 +1371,46 @@ func _complete_movement_action() -> void:
 	# Force update unit visuals
 	var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
 	if visual_manager:
-		print("Updating unit visuals via UnitVisualManager")
 		visual_manager.update_all_unit_visuals()
-	
-	print("Movement action completed")
 
-func _on_movement_animation_complete(unit: Unit) -> void:
+func _on_movement_animation_complete(_unit: Unit) -> void:
 	"""Called when movement animation finishes"""
-	print("Movement animation completed for " + unit.get_display_name())
+	pass
 
 # tactical style movement handling
 func is_showing_movement_range() -> bool:
 	"""Check if movement range is currently displayed"""
-	var showing = movement_range_tiles.size() > 0
-	print("DEBUG: is_showing_movement_range() = " + str(showing) + " (tiles: " + str(movement_range_tiles.size()) + ")")
-	return showing
+	return movement_range_tiles.size() > 0
 
 func handle_movement_destination_selected(destination: Vector3) -> void:
 	"""Handle selection of a movement destination (tactical style)"""
-	print("DEBUG: handle_movement_destination_selected called with destination: " + str(destination))
-	
 	if not selected_unit:
-		print("DEBUG: No unit selected for movement")
 		return
 
 	# Hard gate: a unit that already moved this turn cannot move again, even if a
 	# stale range highlight is somehow still present (no active turn system, etc.).
 	if selected_unit.has_method("can_move") and not selected_unit.can_move():
-		print("DEBUG: " + selected_unit.get_display_name() + " has already moved this turn - destination ignored")
 		_clear_movement_range()
 		return
 
-	print("DEBUG: Selected unit: " + selected_unit.get_display_name())
-	print("DEBUG: Available movement tiles: " + str(movement_range_tiles.size()))
-	
 	# Check if destination is in movement range
 	var is_valid_destination = false
 	for tile in movement_range_tiles:
 		if abs(tile.x - destination.x) < 0.1 and abs(tile.z - destination.z) < 0.1:
 			is_valid_destination = true
-			print("DEBUG: Found matching tile: " + str(tile) + " for destination: " + str(destination))
 			break
-	
-	print("DEBUG: Is valid destination: " + str(is_valid_destination))
-	
-	if is_valid_destination:
-		print("DEBUG: Valid destination - moving to destination")
 
+	if is_valid_destination:
 		# Validate with turn system
 		if TurnSystemManager.has_active_turn_system():
 			var turn_system = TurnSystemManager.get_active_turn_system()
 			if turn_system.validate_turn_action(selected_unit, "move"):
 				_move_to_destination(destination)
-			else:
-				print("DEBUG: Movement not allowed by turn system")
 		else:
 			_move_to_destination(destination)
 	else:
-		print("DEBUG: Invalid destination - not in movement range")
 		# Could play error sound or show message here
+		pass
 
 
 func _move_to_destination(destination: Vector3) -> void:
@@ -1624,9 +1435,6 @@ func _execute_movement_to_destination(destination: Vector3) -> void:
 	"""Execute movement to destination (tactical style)"""
 	if not selected_unit:
 		return
-	
-	print("=== Executing Movement to Destination ===")
-	print("Moving " + selected_unit.get_display_name() + " to " + str(destination))
 
 	# Character-backed units route through the shared BoardAdapter (resolver-backed).
 	# Validation happens against the reachable set inside the helper before it moves.
@@ -1653,8 +1461,6 @@ func _execute_movement_to_destination(destination: Vector3) -> void:
 
 	# Animate the unit movement
 	_animate_unit_movement(selected_unit, old_world_pos, new_world_pos)
-
-	print("Unit moved from " + str(old_grid_pos) + " to " + str(destination))
 
 	# Emit movement event
 	GameEvents.unit_moved.emit(selected_unit, old_grid_pos, destination)
@@ -1711,10 +1517,6 @@ func _begin_tentative_move(destination: Vector3) -> void:
 		visual_manager.update_all_unit_visuals()
 	_update_actions()
 
-	print("Tentative move: " + selected_unit.get_display_name()
-		+ " " + str(_tentative_origin_cell) + " -> " + str(dest_cell)
-		+ " (preview only, awaiting confirm/cancel)")
-
 
 func _commit_tentative_move() -> void:
 	"""COMMIT the staged tentative move for real: snap the unit exactly onto the
@@ -1751,9 +1553,6 @@ func _commit_tentative_move() -> void:
 	if visual_manager:
 		visual_manager.update_all_unit_visuals()
 
-	print("Committed tentative move: " + unit.get_display_name()
-		+ " " + str(origin_cell) + " -> " + str(dest_cell))
-
 
 func _revert_tentative_move() -> void:
 	"""CANCEL the staged tentative move: snap the unit back onto its ORIGIN cell and
@@ -1784,8 +1583,6 @@ func _revert_tentative_move() -> void:
 	var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
 	if visual_manager:
 		visual_manager.update_all_unit_visuals()
-
-	print("Reverted tentative move: " + unit.get_display_name() + " back to " + str(origin_cell))
 
 
 func _clear_tentative_state() -> void:
@@ -1843,8 +1640,6 @@ func _setup_move_system() -> void:
 			actions_container.move_child(moves_button, move_button_index + 1)
 		else:
 			actions_container.add_child(moves_button)
-	
-	print("Move system initialized")
 
 func _on_moves_pressed() -> void:
 	"""Handle Moves button press - list the selected unit's real moveset.
@@ -1858,22 +1653,18 @@ func _on_moves_pressed() -> void:
 	# Handler-level command guard: the KEY_P/Moves shortcut bypasses the disabled
 	# button. Only the local human may open moves for a unit they command.
 	if not _human_may_command(selected_unit):
-		print("Moves blocked: " + selected_unit.get_display_name() + " is not commandable by the local player")
 		return
 
 	# The unit must still have its action available this turn.
 	if selected_unit.has_method("can_act") and not selected_unit.can_act():
-		print("Moves unavailable: " + selected_unit.get_display_name() + " has no action left")
 		return
-
-	print("Moves button pressed for " + selected_unit.get_display_name())
 
 	# MoveSelectionPanel reads unit.get_moveset() / get_moveset_controller() itself,
 	# so this works for both character units (real moveset) and legacy units (empty).
 	if not selected_unit.has_character():
 		# LEGACY guard: no CharacterResource -> no MoveResource moveset. Show the
 		# panel anyway (it renders "No moves available") instead of fabricating moves.
-		print("Legacy unit has no character moveset - showing empty move panel")
+		pass
 	move_selection_panel.show_moves_for_unit(selected_unit)
 
 func _on_move_selected(slot: int) -> void:
@@ -1884,19 +1675,15 @@ func _on_move_selected(slot: int) -> void:
 
 	var move: MoveResource = selected_unit.get_move(slot)
 	if move == null or move.targeting == null:
-		print("Move slot " + str(slot) + " is empty or has no targeting pattern - ignoring")
 		return
 
 	selected_move_index = slot
 	move_mode = true
 
-	print("Move selected: " + move.display_name + " (slot " + str(slot) + ")")
-
 	# Compute every legal aim cell (within [min_range, max_range]) from the unit's
 	# current board cell and emit them as Vector3 grid coords for the visualizer.
 	var aim_cells := _compute_in_range_aim_cells(move)
 	GameEvents.attack_range_calculated.emit(_cells_to_grid_vec3(aim_cells))
-	print("Targeting active for " + move.display_name + " - " + str(aim_cells.size()) + " in-range cell(s)")
 
 	# Seed the forecast off the cursor's current tile, so if it already rests on an
 	# enemy the prediction shows at once instead of waiting for the next move.
@@ -1904,7 +1691,6 @@ func _on_move_selected(slot: int) -> void:
 
 func _on_move_cancelled() -> void:
 	"""Handle move selection cancellation (panel BACK button / its own ESC)."""
-	print("Move selection cancelled")
 	# Stamp the frame so a same-frame _on_cancel_pressed (ESC seen by both panels)
 	# knows the popup already consumed this ESC and does not back out a further level.
 	_popup_closed_frame = Engine.get_process_frames()
@@ -1928,7 +1714,6 @@ func handle_move_target_selected(grid_pos: Vector3) -> void:
 
 	var board = CombatServices.board()
 	if board == null:
-		print("No live board (CombatServices.board() is null) - cannot resolve move target")
 		_cancel_move_targeting()
 		return
 
@@ -1940,7 +1725,6 @@ func handle_move_target_selected(grid_pos: Vector3) -> void:
 	# unit's own range bonus -- see MoveResource.effective_max_range -- and the
 	# pattern's board constraints, e.g. a leap's empty landing cell).
 	if not move.can_target(origin, aim, selected_unit, board):
-		print("Aim cell " + str(aim) + " is not a legal target for " + move.display_name + " - keep targeting")
 		return  # stay in targeting mode
 
 	# Preview the full area footprint this aim would affect.
@@ -1951,7 +1735,6 @@ func handle_move_target_selected(grid_pos: Vector3) -> void:
 	# the aim cell; tile-target moves accept any in-range cell.
 	if _move_requires_unit_target(move):
 		if not _has_eligible_unit_at(board, move, aim):
-			print("No eligible target unit at " + str(aim) + " for " + move.display_name + " - keep targeting")
 			return  # stay in targeting mode
 
 	_execute_move_on_target(aim, move, selected_move_index)
@@ -1975,8 +1758,6 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 	# legacy/multiplayer committed move already applied).
 	_commit_tentative_move()
 
-	print("Executing " + move.display_name + " aimed at cell " + str(aim_cell))
-
 	var result: Dictionary = selected_unit.perform_move(slot, aim_cell, board)
 
 	if result.get("success", false):
@@ -1984,9 +1765,6 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 		var controller = selected_unit.get_moveset_controller()
 		if controller and controller.has_method("on_used"):
 			controller.on_used(move)
-
-		# Surface the resolved effect events for downstream systems / debugging.
-		print("Move resolved successfully. Events: " + str(result.get("events", [])))
 
 		# Using a move consumes the unit's action for the turn.
 		if selected_unit.has_method("mark_action_completed"):
@@ -2003,8 +1781,6 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 		var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
 		if visual_manager:
 			visual_manager.update_all_unit_visuals()
-	else:
-		print("Move failed: " + str(result.get("reason", "unknown")))
 
 	# Reset targeting state (and emit targeting_cleared) and refresh the action UI.
 	_cancel_move_targeting()
@@ -2018,7 +1794,7 @@ func _cancel_move_targeting() -> void:
 
 	  - exits targeting mode (is_targeting_move() -> false),
 	  - clears the on-board attack-range AND AoE-preview highlights
-	    (GameEvents.targeting_cleared -> TargetingVisualizer),
+		(GameEvents.targeting_cleared -> TargetingVisualizer),
 	  - hides the SELECT MOVE popup,
 	  - hides the combat forecast overlay.
 

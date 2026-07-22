@@ -38,11 +38,18 @@ var _lethal_label: Label
 func _ready() -> void:
 	name = "CombatForecastPanel"
 
-	# Detach from the sidebar parent's layout (see the long note in
-	# MoveSelectionPanel._ready): top_level makes our anchors viewport-relative and
-	# lets the parent Container skip us, so we float freely over the battlefield.
+	# Detach from the sidebar parent's layout: top_level lets the parent Container skip
+	# us. BUT a Control's anchors still resolve against its PARENT's rect, and our parent
+	# is UnitActionsPanel inside the ~220px sidebar -- so PRESET_FULL_RECT would size us
+	# to the sidebar, not the screen, dumping the centred card off-view (the "forecast is
+	# off-screen" bug). Instead we explicitly cover the whole VIEWPORT (see
+	# _cover_viewport) and keep it in sync on window resize, so the card's centre anchor
+	# always resolves against the real 1280x720 game window.
 	top_level = true
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	_cover_viewport()
+	var vp := get_viewport()
+	if vp != null and not vp.size_changed.is_connected(_cover_viewport):
+		vp.size_changed.connect(_cover_viewport)
 
 	# Non-modal: never eat mouse input. The whole subtree is set IGNORE below so a
 	# click during targeting always reaches the board/cursor underneath.
@@ -277,8 +284,22 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 		_show_stat_row(_result_value, false)
 		_lethal_label.visible = false
 
+	_cover_viewport()
 	_fit_to_viewport()
 	visible = true
+
+## Force this root to span the entire game window (regardless of the small sidebar
+## parent), so the card's viewport-centred anchors are correct and it never lands
+## off-screen. Top-left anchors + an explicit size, so no parent Container layout pass
+## can shrink us back to the sidebar.
+func _cover_viewport() -> void:
+	var vp := get_viewport()
+	if vp == null:
+		return
+	var r: Vector2 = vp.get_visible_rect().size
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
+	position = Vector2.ZERO
+	size = r
 
 ## Keep the card width within the viewport on small/narrow windows: it never exceeds
 ## CARD_WIDTH, but shrinks to fit when the screen is narrower than that plus a margin,

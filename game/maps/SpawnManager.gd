@@ -299,12 +299,8 @@ func _try_spawn(state: Dictionary) -> bool:
 	if _cell_blocked(home):
 		var spill: Vector2i = _find_spill_cell(home)
 		if spill.x < 0:
-			print("[SpawnManager] Home cell %s and its neighbourhood are full; deferring %s spawn to a later turn." % [
-				str(home), String(state["kind"])])
 			return false
 		spawn_cell = spill
-		print("[SpawnManager] Home cell %s occupied; spilling %s spawn to %s." % [
-			str(home), String(state["kind"]), str(spawn_cell)])
 
 	if _map_loader == null:
 		return false
@@ -321,7 +317,6 @@ func _try_spawn(state: Dictionary) -> bool:
 
 	var new_unit = _map_loader.spawn_unit_now(spawn_data, int(state["produced"]))
 	if new_unit == null:
-		print("[SpawnManager] spawn_unit_now returned null for point at %s; will retry." % str(home))
 		return false
 
 	# A unit that spawns mid/end-turn does NOT get to act on the turn it appeared --

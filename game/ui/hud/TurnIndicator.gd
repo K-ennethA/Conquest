@@ -31,7 +31,6 @@ func _ready() -> void:
 	# Connect to turn system events
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
-		print("TurnIndicator: Connected to TurnSystemManager")
 
 	# Delay initial update to ensure turn system is fully initialized
 	await get_tree().process_frame
@@ -44,7 +43,6 @@ func _ready() -> void:
 		_on_turn_system_activated(TurnSystemManager.get_active_turn_system())
 	else:
 		_update_display()
-	print("TurnIndicator: Initialized")
 
 func _process(_delta: float) -> void:
 	"""Reconcile the banner with the active turn system every frame, but only ACT on
@@ -82,12 +80,10 @@ func _update_display() -> void:
 	var active_player = null
 	if TurnSystemManager.has_active_turn_system():
 		active_player = TurnSystemManager.get_current_active_player()
-		print("TurnIndicator: Got active player from TurnSystemManager: " + (active_player.get_display_name() if active_player else "None"))
 	
 	# Fallback to PlayerManager only if TurnSystemManager doesn't have an active player
 	if not active_player and PlayerManager:
 		active_player = PlayerManager.get_current_player()
-		print("TurnIndicator: Fallback to PlayerManager current player: " + (active_player.get_display_name() if active_player else "None"))
 	
 	if active_player:
 		current_player = active_player
@@ -95,8 +91,7 @@ func _update_display() -> void:
 		# Update display based on turn system type
 		if TurnSystemManager.has_active_turn_system():
 			var turn_system = TurnSystemManager.get_active_turn_system()
-			print("TurnIndicator: Updating display for " + active_player.get_display_name() + " with turn system " + turn_system.system_name)
-			
+
 			if turn_system is TraditionalTurnSystem:
 				_update_traditional_display(turn_system, active_player)
 			elif turn_system is SpeedFirstTurnSystem:
@@ -104,7 +99,6 @@ func _update_display() -> void:
 			else:
 				_update_generic_display(turn_system, active_player)
 		else:
-			print("TurnIndicator: No active turn system, using fallback display")
 			_update_fallback_display(active_player)
 		
 		# Update background color
@@ -114,7 +108,6 @@ func _update_display() -> void:
 		visible = true
 	else:
 		# No active player
-		print("TurnIndicator: No active player found")
 		player_name_label.text = "Game Setup"
 		turn_info_label.text = "Waiting for players..."
 		_update_background_color(null)
@@ -223,16 +216,12 @@ func show_turn_transition(_from_player: Player, _to_player: Player) -> void:
 # Event handlers
 func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
 	"""Handle turn system activation"""
-	print("TurnIndicator: Turn system activated - " + turn_system.system_name)
-	
 	# Hide TurnIndicator when Speed First is active (TurnQueue handles it)
 	if turn_system is SpeedFirstTurnSystem:
 		visible = false
-		print("TurnIndicator: Hidden for Speed First system (TurnQueue handles display)")
 		return
 	else:
 		visible = true
-		print("TurnIndicator: Visible for " + turn_system.system_name)
 	
 	# Disconnect from previous turn system if any
 	if turn_system.turn_started.is_connected(_on_turn_started):
@@ -248,7 +237,6 @@ func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
 	_watched_system = turn_system
 	_last_seen_player = turn_system.get_current_active_player()
 
-	print("TurnIndicator: Connected to turn system events")
 	_update_display()
 
 func _on_turn_started(player: Player) -> void:
@@ -259,7 +247,6 @@ func _on_turn_started(player: Player) -> void:
 	if not player:
 		_update_display()
 		return
-	print("TurnIndicator: Turn started for " + player.get_display_name())
 
 	# The cinematic turn announcement is now owned by the full-screen TurnTransition
 	# overlay; this persistent chip just refreshes quietly so the two don't compete.
@@ -267,7 +254,6 @@ func _on_turn_started(player: Player) -> void:
 
 func _on_turn_ended(player: Player) -> void:
 	"""Handle turn end"""
-	print("TurnIndicator: Turn ended for " + player.get_display_name())
 	_update_display()
 
 func _on_player_turn_started(player: Player) -> void:
