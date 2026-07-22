@@ -335,6 +335,12 @@ func _setup_game_over_screen() -> void:
 	if GameEvents and not GameEvents.unit_eliminated.is_connected(_on_unit_eliminated):
 		GameEvents.unit_eliminated.connect(_on_unit_eliminated)
 
+## Latch so an ARENA round resolves exactly once: the enemy-wipe fires BOTH unit_eliminated
+## and player_eliminated, and after ArenaController finishes the run it is no longer active,
+## so a second _evaluate_game_end would fall through to the normal game-over path (which
+## paused/torn-down the tree). Reset naturally each round (fresh GameWorld scene).
+var _arena_battle_resolved: bool = false
+
 func _on_player_eliminated(_player) -> void:
 	_evaluate_game_end(null)
 
@@ -357,6 +363,12 @@ func _evaluate_game_end(just_removed) -> void:
 	if _game_over_screen == null or _game_over_screen.is_shown():
 		return
 
+	# Once an arena round has resolved this battle, ignore any further elimination signals
+	# (see _arena_battle_resolved) so a trailing player_eliminated can't run the normal
+	# game-over path after ArenaController has already handed off to the draft/results.
+	if _arena_battle_resolved:
+		return
+
 	# ARENA rounds resolve into the Arena loop (draft / next round), NOT the normal end
 	# screen. A round is won when the enemy wave is routed and lost when the player squad
 	# is wiped. ArenaController owns what happens next; this is a no-op when not in a run.
@@ -372,8 +384,10 @@ func _evaluate_game_end(just_removed) -> void:
 			else:
 				human_alive = true
 		if not enemy_alive:
+			_arena_battle_resolved = true
 			arena.notify_round_ended(true)
 		elif not human_alive:
+			_arena_battle_resolved = true
 			arena.notify_round_ended(false)
 		return
 

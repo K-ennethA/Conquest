@@ -363,6 +363,13 @@ func _on_player_unit_removed(player: Player, unit: Unit) -> void:
 
 		# Check for game end condition
 		if get_active_player_count() <= 1:
+			# ARENA owns round/run end (ArenaController.notify_round_ended, driven off this
+			# same elimination via GameWorldManager). The normal game-over teardown here
+			# deactivates the turn system mid-frame and fights that flow (it crashed on the
+			# final-enemy kill), so skip it entirely during an active run.
+			var arena_ctrl = get_node_or_null("/root/ArenaController")
+			if arena_ctrl != null and arena_ctrl.has_method("is_active") and arena_ctrl.is_active():
+				return
 			var winner = null
 			for p in players:
 				if p.current_state != Player.PlayerState.ELIMINATED:

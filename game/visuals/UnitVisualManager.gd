@@ -412,8 +412,13 @@ func update_all_unit_visuals() -> void:
 func _find_all_units() -> Array[Unit]:
 	"""Find all units in the current scene"""
 	var units: Array[Unit] = []
-	var scene_root = get_tree().current_scene
-	
+	# Null-safe: during scene teardown / a mid-frame turn-system deactivation the tree or
+	# its current_scene can briefly be null, and this used to crash reading .current_scene.
+	var tree = get_tree()
+	var scene_root = tree.current_scene if tree != null else null
+	if scene_root == null:
+		return units
+
 	# Look for units in Player1 and Player2 nodes
 	var player_nodes = ["Map/Player1", "Map/Player2"]
 	
