@@ -234,7 +234,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			# Check if mouse is over UI elements using UILayoutManager
-			var ui_layout = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
+			var ui_layout = null
+			var tree = get_tree()
+			if tree != null and tree.current_scene != null:
+				ui_layout = tree.current_scene.get_node_or_null("UI/GameUILayout")
 			if ui_layout and ui_layout.has_method("is_mouse_over_ui"):
 				if ui_layout.is_mouse_over_ui(event.position):
 					return
@@ -252,7 +255,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	
 	# Handle mouse movement for cursor positioning (only if mouse enabled)
 	if event is InputEventMouseMotion and is_mouse_enabled:
-		var ui_layout = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
+		var ui_layout = null
+		var tree = get_tree()
+		if tree != null and tree.current_scene != null:
+			ui_layout = tree.current_scene.get_node_or_null("UI/GameUILayout")
 		if ui_layout and ui_layout.has_method("is_mouse_over_ui"):
 			if ui_layout.is_mouse_over_ui(event.position):
 				return  # Don't move cursor when over UI
@@ -336,7 +342,10 @@ func _handle_mouse_click(mouse_pos: Vector2) -> void:
 		return
 
 	# Check if click is over UI using the layout manager
-	var ui_layout = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
+	var ui_layout = null
+	var tree = get_tree()
+	if tree != null and tree.current_scene != null:
+		ui_layout = tree.current_scene.get_node_or_null("UI/GameUILayout")
 	if ui_layout and ui_layout.has_method("is_mouse_over_ui"):
 		if ui_layout.is_mouse_over_ui(mouse_pos):
 			return
@@ -366,7 +375,10 @@ func _handle_mouse_movement(mouse_pos: Vector2) -> void:
 	
 	# Check if mouse is over UI using the layout manager (get_node_or_null so a
 	# missing HUD never throws and silently kills mouse-hover cursor tracking).
-	var ui_layout = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
+	var ui_layout = null
+	var tree = get_tree()
+	if tree != null and tree.current_scene != null:
+		ui_layout = tree.current_scene.get_node_or_null("UI/GameUILayout")
 	if ui_layout and ui_layout.has_method("is_mouse_over_ui"):
 		if ui_layout.is_mouse_over_ui(mouse_pos):
 			return  # Don't move cursor when over UI
@@ -441,7 +453,12 @@ func _handle_selection() -> void:
 
 func _get_unit_actions_panel() -> Node:
 	"""Get reference to UnitActionsPanel"""
-	var scene_root = get_tree().current_scene
+	var tree = get_tree()
+	if tree == null:
+		return null
+	var scene_root = tree.current_scene
+	if scene_root == null:
+		return null
 
 	var ui_layout = scene_root.get_node_or_null("UI/GameUILayout")
 
@@ -514,8 +531,13 @@ func _get_unit_at_position(grid_pos: Vector3) -> Unit:
 func _find_all_units() -> Array[Unit]:
 	"""Find all units in the scene"""
 	var units: Array[Unit] = []
-	var scene_root = get_tree().current_scene
-	
+	var tree = get_tree()
+	if tree == null:
+		return units
+	var scene_root = tree.current_scene
+	if scene_root == null:
+		return units
+
 	# Look for units in Player1 and Player2 nodes
 	var player_nodes = ["Map/Player1", "Map/Player2"]
 	

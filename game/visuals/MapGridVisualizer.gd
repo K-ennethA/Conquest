@@ -96,7 +96,12 @@ func _create_grid_tile(grid_pos: Vector3) -> void:
 	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	
 	# Add to scene and store reference
-	var scene_root = get_tree().current_scene
+	var tree = get_tree()
+	if tree == null:
+		return
+	var scene_root = tree.current_scene
+	if scene_root == null:
+		return
 	scene_root.add_child(mesh_instance)
 	map_grid_tiles.append(mesh_instance)
 
@@ -148,7 +153,10 @@ func _create_tile_border_lines(world_pos: Vector3, grid_pos: Vector3) -> void:
 		line_mesh.visible = true
 		line_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		
-		var scene_root = get_tree().current_scene
+		var tree = get_tree()
+		var scene_root = null
+		if tree != null:
+			scene_root = tree.current_scene
 		if scene_root:
 			scene_root.add_child(line_mesh)
 			map_grid_tiles.append(line_mesh)  # Store lines with tiles for easy management
@@ -297,7 +305,12 @@ func _test_line_visibility() -> void:
 	test_line.visible = true
 	test_line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	
-	var scene_root = get_tree().current_scene
+	var tree = get_tree()
+	if tree == null:
+		return
+	var scene_root = tree.current_scene
+	if scene_root == null:
+		return
 	scene_root.add_child(test_line)
 
 	# Also create a test border line similar to grid lines

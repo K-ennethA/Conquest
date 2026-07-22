@@ -249,7 +249,10 @@ func _compute_board_bounds() -> bool:
 
 
 func _find_tiles_container() -> Node:
-	var scene := get_tree().current_scene
+	var tree := get_tree()
+	if tree == null:
+		return null
+	var scene := tree.current_scene
 	if scene == null:
 		return null
 	return scene.get_node_or_null("Map/Tiles")
@@ -396,7 +399,10 @@ func _clamp_to_board() -> void:
 # --- Input hygiene ----------------------------------------------------------
 
 func _is_mouse_over_ui(pos: Vector2) -> bool:
-	var scene := get_tree().current_scene
+	var tree := get_tree()
+	if tree == null:
+		return false
+	var scene := tree.current_scene
 	if scene == null:
 		return false
 	var ui_layout := scene.get_node_or_null("UI/GameUILayout")

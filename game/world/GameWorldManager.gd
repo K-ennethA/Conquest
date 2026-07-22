@@ -383,12 +383,16 @@ func _evaluate_game_end(just_removed) -> void:
 				enemy_alive = true
 			else:
 				human_alive = true
+		# DEFER the hand-off: _evaluate_game_end runs deep inside the death -> combat ->
+		# turn signal cascade. Changing scene (draft/results) from there means the round's
+		# remaining signal handlers fire mid-teardown and crash on a null scene. call_deferred
+		# lets this frame's cascade finish on the intact scene, then the transition runs clean.
 		if not enemy_alive:
 			_arena_battle_resolved = true
-			arena.notify_round_ended(true)
+			arena.call_deferred("notify_round_ended", true)
 		elif not human_alive:
 			_arena_battle_resolved = true
-			arena.notify_round_ended(false)
+			arena.call_deferred("notify_round_ended", false)
 		return
 
 	var single_player: bool = GameSettings != null and GameSettings.game_mode == GameSettings.GameMode.SINGLE_PLAYER
@@ -598,7 +602,8 @@ func _setup_local_game() -> void:
 	var arena_ctrl = get_node_or_null("/root/ArenaController")
 	if arena_ctrl != null and arena_ctrl.has_method("is_active") and arena_ctrl.is_active():
 		ArenaRoundBuilder.build_round(map_loader, arena_ctrl.run(), arena_ctrl.ruleset())
-		_mount_arena_run_hud()
+		# (Run HUD removed -- the round is already in the turn banner and the squad is on
+		# the board, so the overlay was redundant and collided with the SELECT MOVE popup.)
 
 	# Initialize player management first
 	_setup_players()

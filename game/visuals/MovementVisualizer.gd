@@ -131,8 +131,12 @@ func _acquire_mesh() -> MeshInstance3D:
 	mesh_instance.mesh = _shared_plane_mesh
 	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
-	var scene_root: Node = get_tree().current_scene
-	scene_root.add_child(mesh_instance)
+	var tree = get_tree()
+	var scene_root: Node = null
+	if tree != null:
+		scene_root = tree.current_scene
+	if scene_root != null:
+		scene_root.add_child(mesh_instance)
 	return mesh_instance
 
 func _clear_all_highlights() -> void:

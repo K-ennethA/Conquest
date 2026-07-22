@@ -738,7 +738,10 @@ func _on_end_unit_turn_pressed() -> void:
 		GameEvents.unit_action_completed.emit(selected_unit, "end_turn")
 
 		# Force update unit visuals immediately
-		var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
+		var tree = get_tree()
+		var visual_manager = null
+		if tree != null and tree.current_scene != null:
+			visual_manager = tree.current_scene.get_node_or_null("UnitVisualManager")
 		if visual_manager:
 			visual_manager.update_all_unit_visuals()
 
@@ -973,7 +976,12 @@ func _input(event: InputEvent) -> void:
 func _test_manual_unit_selection() -> void:
 	"""Test manual unit selection for debugging"""
 	# Find a unit to test with
-	var scene_root = get_tree().current_scene
+	var tree = get_tree()
+	if tree == null:
+		return
+	var scene_root = tree.current_scene
+	if scene_root == null:
+		return
 	var player1_node = scene_root.get_node_or_null("Map/Player1")
 	if player1_node:
 		for child in player1_node.get_children():
@@ -985,7 +993,12 @@ func _test_manual_unit_selection() -> void:
 func _test_movement_range_calculation_direct() -> void:
 	"""Test movement range calculation directly"""
 	# Find a unit to test with
-	var scene_root = get_tree().current_scene
+	var tree = get_tree()
+	if tree == null:
+		return
+	var scene_root = tree.current_scene
+	if scene_root == null:
+		return
 	var player1_node = scene_root.get_node_or_null("Map/Player1")
 	if player1_node:
 		for child in player1_node.get_children():
@@ -1237,8 +1250,13 @@ func _is_tile_passable(grid_pos: Vector3) -> bool:
 func _find_all_units_in_scene() -> Array[Unit]:
 	"""Find all units in the current scene"""
 	var units: Array[Unit] = []
-	var scene_root = get_tree().current_scene
-	
+	var tree = get_tree()
+	if tree == null:
+		return units
+	var scene_root = tree.current_scene
+	if scene_root == null:
+		return units
+
 	# Look for units in Player1 and Player2 nodes
 	var player_nodes = ["Map/Player1", "Map/Player2"]
 	
@@ -1280,7 +1298,12 @@ func _on_cursor_selected(position: Vector3) -> void:
 
 func _get_unit_actions_panel() -> Node:
 	"""Get reference to UnitActionsPanel"""
-	var scene_root = get_tree().current_scene
+	var tree = get_tree()
+	if tree == null:
+		return null
+	var scene_root = tree.current_scene
+	if scene_root == null:
+		return null
 	var ui_layout = scene_root.get_node_or_null("UI/GameUILayout")
 	if ui_layout:
 		return ui_layout.get_node_or_null("MarginContainer/MainContainer/MiddleArea/RightSidebar/UnitActionsPanel")
@@ -1369,7 +1392,10 @@ func _complete_movement_action() -> void:
 	selected_unit.mark_moved()
 	
 	# Force update unit visuals
-	var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
+	var tree = get_tree()
+	var visual_manager = null
+	if tree != null and tree.current_scene != null:
+		visual_manager = tree.current_scene.get_node_or_null("UnitVisualManager")
 	if visual_manager:
 		visual_manager.update_all_unit_visuals()
 
@@ -1512,7 +1538,10 @@ func _begin_tentative_move(destination: Vector3) -> void:
 
 	# Refresh unit visuals (health bar etc. follow the moved node) and the action UI
 	# (Move now disabled; Moves / End Turn drive confirm-or-Wait).
-	var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
+	var tree = get_tree()
+	var visual_manager = null
+	if tree != null and tree.current_scene != null:
+		visual_manager = tree.current_scene.get_node_or_null("UnitVisualManager")
 	if visual_manager:
 		visual_manager.update_all_unit_visuals()
 	_update_actions()
@@ -1549,7 +1578,10 @@ func _commit_tentative_move() -> void:
 	var to_grid := Vector3(dest_cell.x, 0, dest_cell.y)
 	GameEvents.unit_moved.emit(unit, from_grid, to_grid)
 
-	var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
+	var tree = get_tree()
+	var visual_manager = null
+	if tree != null and tree.current_scene != null:
+		visual_manager = tree.current_scene.get_node_or_null("UnitVisualManager")
 	if visual_manager:
 		visual_manager.update_all_unit_visuals()
 
@@ -1580,7 +1612,10 @@ func _revert_tentative_move() -> void:
 		# remembered world position.
 		unit.global_position = origin_world
 
-	var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
+	var tree = get_tree()
+	var visual_manager = null
+	if tree != null and tree.current_scene != null:
+		visual_manager = tree.current_scene.get_node_or_null("UnitVisualManager")
 	if visual_manager:
 		visual_manager.update_all_unit_visuals()
 
@@ -1790,7 +1825,10 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 		GameEvents.targeting_cleared.emit()
 
 		# Force an immediate unit-visual refresh, mirroring the movement path.
-		var visual_manager = get_tree().current_scene.get_node_or_null("UnitVisualManager")
+		var tree = get_tree()
+		var visual_manager = null
+		if tree != null and tree.current_scene != null:
+			visual_manager = tree.current_scene.get_node_or_null("UnitVisualManager")
 		if visual_manager:
 			visual_manager.update_all_unit_visuals()
 
@@ -1827,7 +1865,10 @@ func _cancel_move_targeting() -> void:
 	if combat_forecast_panel:
 		combat_forecast_panel.hide_forecast()
 	# Drop the overworld incoming-damage bands on every targeting exit.
-	var vm = get_tree().current_scene.get_node_or_null("UnitVisualManager") if get_tree().current_scene else null
+	var tree = get_tree()
+	var vm = null
+	if tree != null and tree.current_scene != null:
+		vm = tree.current_scene.get_node_or_null("UnitVisualManager")
 	if vm and vm.has_method("clear_damage_previews"):
 		vm.clear_damage_previews()
 
@@ -1890,7 +1931,10 @@ func _refresh_overworld_damage_preview(grid_pos: Vector3) -> void:
 	card, so a multi-target AoE shows its potential damage on all victims at once.
 	Non-mutating (MoveExecutor.preview_vs only). Self-clears whenever the aim is
 	illegal, off any unit, or targeting has ended."""
-	var vm = get_tree().current_scene.get_node_or_null("UnitVisualManager") if get_tree().current_scene else null
+	var tree = get_tree()
+	var vm = null
+	if tree != null and tree.current_scene != null:
+		vm = tree.current_scene.get_node_or_null("UnitVisualManager")
 	if vm == null or not vm.has_method("preview_damage"):
 		return
 
