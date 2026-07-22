@@ -117,6 +117,10 @@ var _last_auto_focus_ms: int = 0
 ## SpawnManager/TurnIndicator's _watched_ts) keeps the (re)connect bookkeeping isolated.
 var _turn_system_manager: Node = null
 var _focus_watched_ts: Node = null
+## Last acting side the turn-focus re-framed for: -1 unknown, 0 ally, 1 enemy. In Speed
+## mode turn_started fires per-unit, so we only re-frame when the SIDE actually flips
+## (ally<->enemy) instead of flying the camera to every consecutive same-side unit.
+var _last_focus_side: int = -1
 
 # AutoFocus mode ints, mirroring GameSettings.AutoFocus (kept local so we stay
 # null-safe when GameSettings is absent).
@@ -721,6 +725,8 @@ func _on_turn_system_activated_focus(ts) -> void:
 			and _focus_watched_ts.turn_started.is_connected(_on_turn_focus_started):
 		_focus_watched_ts.turn_started.disconnect(_on_turn_focus_started)
 	_focus_watched_ts = ts
+	# Forget the last-framed side under the old system so a fresh game re-frames turn 1.
+	_last_focus_side = -1
 	if ts != null and ts.has_signal("turn_started") \
 			and not ts.turn_started.is_connected(_on_turn_focus_started):
 		ts.turn_started.connect(_on_turn_focus_started)
@@ -732,8 +738,20 @@ func _on_turn_system_activated_focus(ts) -> void:
 func _on_turn_focus_started(player) -> void:
 	if player == null:
 		return
-	# Human turns only: skip AI advances (we don't re-frame for them).
-	if "is_ai" in player and bool(player.is_ai):
+	# Re-frame only when the controlling SIDE flips (ally<->enemy), never for every
+	# consecutive same-side unit. In Speed mode turn_started fires per-unit, so a run of
+	# 8 ally units would otherwise fly the camera 8 times ("player1 to player1" waste) --
+	# the user wants the turn re-frame only on a real side change (player1 <-> player2).
+	# Track the side across ALL turns (incl. AI) so the flip is detected correctly.
+	var side: int = 1 if ("is_ai" in player and bool(player.is_ai)) else 0
+	var side_changed: bool = side != _last_focus_side
+	_last_focus_side = side
+	# Human turns only: skip AI advances (we don't re-frame for them) -- but the side was
+	# recorded above so the following ally turn is correctly seen as a flip.
+	if side == 1:
+		return
+	# Same ally side as the previous turn: no flip, so don't re-fly the camera.
+	if not side_changed:
 		return
 	# Same gating as the event auto-focus: OFF mode / mid grab-drag / typing.
 	if not _should_auto_focus():

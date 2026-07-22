@@ -45,7 +45,7 @@ size_flags_horizontal = 3
 [node name="CenterTopContainer" type="VBoxContainer" parent="MarginContainer/MainContainer/TopBar"]
 layout_mode = 2
 mouse_filter = 2
-custom_minimum_size = Vector2(400, 0)
+custom_minimum_size = Vector2(680, 0)
 theme_override_constants/separation = 5
 
 [node name="TurnQueue" parent="MarginContainer/MainContainer/TopBar/CenterTopContainer" instance=ExtResource("5")]
@@ -73,7 +73,7 @@ offset_left = 0.0
 offset_top = 0.0
 offset_right = 0.0
 offset_bottom = 0.0
-size_flags_horizontal = 3
+size_flags_horizontal = 4
 size_flags_vertical = 3
 
 [node name="RightTopSpacer" type="Control" parent="MarginContainer/MainContainer/TopBar"]

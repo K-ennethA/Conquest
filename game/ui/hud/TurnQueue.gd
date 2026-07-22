@@ -19,11 +19,12 @@ class_name TurnQueue
 var turn_system: SpeedFirstTurnSystem = null
 var unit_portraits: Array[Control] = []
 
-# Chip settings -- compact so many units fit at once.
-# Row budget: 12 chips * 84 + 11 * 4 separation = ~1052px, well within a ~1100px top bar.
-const PORTRAIT_SIZE := Vector2(84, 54)
+# Chip settings -- compact so the strip stays a slim top bar, not a screen-eater.
+# Row budget: 8 chips * 66 + 7 * 4 separation = ~556px + paging buttons ~= 640px, so the
+# whole queue occupies barely half the top instead of spanning the screen.
+const PORTRAIT_SIZE := Vector2(66, 50)
 const PORTRAIT_MARGIN := 4
-const PORTRAITS_PER_PAGE := 12  # Compact chips let us show a whole page at once
+const PORTRAITS_PER_PAGE := 8  # Slim strip; paging reaches the rest of a big roster
 
 # Warm/cool side colors (the amber theme is warm-only, so ally/enemy tints live here).
 const COLOR_ALLY_BG := Color(0.16, 0.30, 0.52, 0.92)      # cool blue
