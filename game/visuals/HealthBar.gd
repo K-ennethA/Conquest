@@ -39,8 +39,25 @@ const STATUS_PIP_Y := 0.30        # clears the 0.32-tall bar (half-height 0.16)
 ## makes the first refresh after _ready or a rebind always take the rebuild path.
 const SIGNATURE_UNSET := "<unset>"
 
+# --- Terrain bonus tag -------------------------------------------------------
+# A single billboarded green "+AVO N" Label3D floating just BELOW the bar, shown
+# only while the bound unit stands on a tile that grants an evasion bonus (the
+# Fire-Emblem tall-grass "avoid": TerrainStats.bonus_for(unit, "evasion") > 0).
+# Terrain bonuses are computed on the fly, never stored as a status, so this is
+# the world-space readout that lets the player SEE that a unit is harder to hit
+# because of where it is standing. Created once and only toggled/retexted after,
+# so it costs nothing when the unit is off grass.
+const TERRAIN_TAG_Y := -0.28          # below the 0.32-tall bar, clear of it
+const TERRAIN_TAG_FONT_SIZE := 40
+const TERRAIN_TAG_PIXEL_SIZE := 0.005  # ~0.20 world-unit glyph height, pip-scale
+const TERRAIN_LEAF_GREEN := Color("5fb84e")  # == ConquestTheme.EL_NATURE
+
 var _background_material: StandardMaterial3D
 var _health_material: StandardMaterial3D
+
+## Green "+AVO N" tag; built once in _setup_terrain_tag, then only shown/hidden
+## and re-texted. Null until _ready.
+var _terrain_tag: Label3D = null
 
 ## Parent of the pip row. Created once in _ready and then only ever has its
 ## children swapped, so the bar's own node layout is untouched.
@@ -62,10 +79,12 @@ func _ready():
 	_setup_materials()
 	_setup_meshes()
 	_setup_status_pips()
+	_setup_terrain_tag()
 	# If bind_unit ran before _ready (materials/meshes not built yet), paint now.
 	if _bound_unit != null:
 		_refresh_from_unit()
 	_refresh_status_pips()
+	_refresh_terrain_tag()
 
 ## Track [param unit] directly: connect to its stat signal and refresh on every HP
 ## change. Idempotent and safe to call before or after _ready.
@@ -78,12 +97,14 @@ func bind_unit(unit) -> void:
 	_status_signature = SIGNATURE_UNSET
 	_refresh_from_unit()
 	_refresh_status_pips()
+	_refresh_terrain_tag()
 
 func _on_bound_health_changed(_old_health: int, _new_health: int) -> void:
 	_refresh_from_unit()
 	# HP changing is itself a status beat: a burn/poison tick lands as damage, and
 	# the condition that caused it may have just expired in the same resolution.
 	_refresh_status_pips()
+	_refresh_terrain_tag()
 
 func _refresh_from_unit() -> void:
 	# Guard: unit freed, or _ready hasn't built the materials/meshes yet.
@@ -214,14 +235,24 @@ func _setup_status_pips() -> void:
 
 func _on_status_turn_beat(_unit) -> void:
 	_refresh_status_pips()
+	# A tile can gain/lose a passive bonus between turns (e.g. grass catching fire),
+	# so re-check the terrain tag on the same turn beats as the pips.
+	_refresh_terrain_tag()
 
 
 func _on_status_action_beat(_unit, _action_type) -> void:
 	_refresh_status_pips()
+	# An action can displace a unit (knockback/pull) or alter its tile, either of
+	# which changes the terrain bonus without a move_beat firing for this unit.
+	_refresh_terrain_tag()
 
 
 func _on_status_move_beat(_unit, _from_position, _to_position) -> void:
 	_refresh_status_pips()
+	# A unit can walk onto or off tall grass with no HP change, so the terrain tag
+	# has to be re-evaluated on every move -- this is the beat that makes "+AVO"
+	# appear the instant a unit steps into grass and vanish when it steps out.
+	_refresh_terrain_tag()
 
 
 ## "id:turns|id:turns|…" for [param conditions]. Any change in which statuses are
@@ -296,3 +327,50 @@ func _make_status_pip(color: Color, x: float) -> MeshInstance3D:
 	mat.render_priority = 3  # above the bar's background (1) and fill (2)
 	pip.material_override = mat
 	return pip
+
+
+# --- Terrain bonus tag --------------------------------------------------------
+
+## Build the "+AVO N" Label3D once. It uses the SAME overlay recipe as the bar
+## (billboarded, unshaded, no cast shadow, constant on-screen size) so it faces
+## the camera and never drops a floating shadow rectangle onto the map. Starts
+## hidden; _refresh_terrain_tag drives its visibility and text.
+func _setup_terrain_tag() -> void:
+	if _terrain_tag != null and is_instance_valid(_terrain_tag):
+		return
+	_terrain_tag = Label3D.new()
+	_terrain_tag.name = "TerrainAvoidTag"
+	_terrain_tag.text = ""
+	_terrain_tag.position = Vector3(0.0, TERRAIN_TAG_Y, 0.02)
+	_terrain_tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_terrain_tag.shaded = false
+	_terrain_tag.fixed_size = true  # constant on-screen size, like billboard_keep_scale
+	_terrain_tag.font_size = TERRAIN_TAG_FONT_SIZE
+	_terrain_tag.pixel_size = TERRAIN_TAG_PIXEL_SIZE
+	_terrain_tag.modulate = TERRAIN_LEAF_GREEN
+	# A dark outline keeps the green legible over both grass and bright tiles.
+	_terrain_tag.outline_modulate = Color(0.05, 0.03, 0.0, 0.85)
+	_terrain_tag.outline_size = 6
+	_terrain_tag.render_priority = 4  # above bar background (1), fill (2), pips (3)
+	_terrain_tag.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_terrain_tag.visible = false
+	add_child(_terrain_tag)
+
+
+## Show "+AVO N" when the bound unit's tile grants an evasion bonus, hide it
+## otherwise. Fully null-safe: a freed unit, an absent CombatServices, or a null
+## board all resolve to a 0 bonus (hidden). TerrainStats.bonus_for reads the
+## PASSIVE_WHILE_OCCUPYING tile effects under the unit -- tall grass -> +evasion.
+func _refresh_terrain_tag() -> void:
+	if _terrain_tag == null or not is_instance_valid(_terrain_tag):
+		return
+	if not is_instance_valid(_bound_unit):
+		_terrain_tag.visible = false
+		return
+	var board = CombatServices.board() if CombatServices else null
+	var avoid: int = TerrainStats.bonus_for(_bound_unit, "evasion", board)
+	if avoid > 0:
+		_terrain_tag.text = "+AVO %d" % avoid
+		_terrain_tag.visible = true
+	else:
+		_terrain_tag.visible = false

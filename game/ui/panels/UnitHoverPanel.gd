@@ -33,6 +33,12 @@ const MARGIN := 16.0
 ## Status chips shown before the row collapses into a "+N" overflow marker.
 const MAX_CHIPS := 4
 
+## Green used for the terrain-bonus chip (== ConquestTheme.EL_NATURE). Terrain
+## avoid is a passive of WHERE the unit stands (tall grass -> +evasion), so it
+## reads as "nature" green rather than a status colour to set it apart from the
+## StatusVisuals-coloured condition chips.
+const TERRAIN_AVOID_COLOR := Color("5fb84e")
+
 var _card: PanelContainer
 var _name_label: Label
 var _hp_label: Label
@@ -211,15 +217,27 @@ func _populate_effects(unit) -> void:
 		_effects_container.remove_child(child)
 		child.queue_free()
 
+	# Terrain-derived avoid: a passive of the unit's TILE (tall grass -> +evasion),
+	# computed on the fly by TerrainStats, never stored as a status -- so it is
+	# surfaced here as its own green chip, first in the row, clearly labeled as
+	# terrain. Shown only when non-zero.
+	var terrain_avoid: int = _terrain_evasion_bonus(unit)
+	if terrain_avoid > 0:
+		_effects_container.add_child(
+			_build_chip("Avoid +%d (terrain)" % terrain_avoid, TERRAIN_AVOID_COLOR))
+
 	# Empty for a unit with no StatusController, no statuses, or a freed unit.
 	var conditions: Array = StatusVisuals.active_conditions(unit)
 	if conditions.is_empty():
-		var none_label := Label.new()
-		none_label.text = "No active effects"
-		none_label.add_theme_font_size_override("font_size", 12)
-		none_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
-		none_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_effects_container.add_child(none_label)
+		# Only claim "no effects" when there is ALSO no terrain bonus to show;
+		# otherwise the green terrain chip stands on its own.
+		if terrain_avoid <= 0:
+			var none_label := Label.new()
+			none_label.text = "No active effects"
+			none_label.add_theme_font_size_override("font_size", 12)
+			none_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
+			none_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_effects_container.add_child(none_label)
 		return
 
 	var total: int = conditions.size()
@@ -241,6 +259,18 @@ func _populate_effects(unit) -> void:
 	if hidden > 0:
 		_effects_container.add_child(
 			_build_chip(StatusVisuals.overflow_label(hidden), StatusVisuals.OVERFLOW_COLOR))
+
+
+## The evasion bonus the unit's current tile grants it (tall grass -> +avoid), or
+## 0 when it stands on plain ground. Null-safe: a freed unit, an absent
+## CombatServices, or a null board all resolve to 0. TerrainStats reads the
+## PASSIVE_WHILE_OCCUPYING tile effects under the unit, the same source combat
+## uses when it forecasts the hit chance.
+func _terrain_evasion_bonus(unit) -> int:
+	if unit == null or not is_instance_valid(unit):
+		return 0
+	var board = CombatServices.board() if CombatServices else null
+	return TerrainStats.bonus_for(unit, "evasion", board)
 
 
 ## A compact colour-coded pill: dim fill, 1px frame in the status colour, cream

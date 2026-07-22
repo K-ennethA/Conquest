@@ -74,8 +74,20 @@ func can_unit_act(unit: Unit) -> bool:
 	if not current_player.owns_unit(unit):
 		return false
 
-	# Unit must not have acted this turn (once they act, they can't act again)
+	# Unit must not have acted this turn (once they act, they can't act again).
+	# Two INDEPENDENT sources are honored so completion never depends on just one:
+	#   1. units_acted_this_turn -- the turn system's SIDE LIST (populated by
+	#      mark_unit_acted, e.g. the End-Unit-Turn button).
+	#   2. unit.has_acted_this_turn -- the unit's OWN authoritative flag, set by
+	#      Unit.mark_action_completed the instant an attack/move resolves.
+	# The side list can lag or miss a unit if its unit_action_completed signal did not
+	# reach mark_unit_acted (connection made late / dropped / a spawned unit). Reading
+	# the unit's own flag here means a unit that genuinely acted is ALWAYS seen as "done"
+	# by _check_turn_completion(), so the player's turn still auto-ends. Duck-typed so a
+	# test mock without the property simply falls through to can_act() below.
 	if unit in units_acted_this_turn:
+		return false
+	if "has_acted_this_turn" in unit and bool(unit.has_acted_this_turn):
 		return false
 
 	# A stunned unit forfeits this turn entirely. Checked here rather than by
@@ -298,25 +310,21 @@ func _check_turn_completion() -> void:
 	if turn_completed_manually:
 		return
 
-	# Check if all player's units have acted
+	# Check if all player's units have acted. can_unit_act() is authoritative here: it
+	# reports false for a unit that has acted via EITHER the side list OR its own
+	# has_acted_this_turn flag (see can_unit_act), so this loop no longer depends solely
+	# on units_acted_this_turn being populated by the signal path.
 	var player_units = get_units_for_player(current_player)
 	var all_acted = true
-	var units_can_act = 0
-	var units_acted = 0
 
 	for unit in player_units:
 		if can_unit_act(unit):
 			all_acted = false
-			units_can_act += 1
-		else:
-			units_acted += 1
-			var reason = ""
-			if unit in units_acted_this_turn:
-				reason = " (already acted)"
-			elif not current_player.owns_unit(unit):
-				reason = " (not owned by current player)"
-			else:
-				reason = " (cannot act)"
+		# Self-heal the side list: a unit whose own flag says it acted but which the
+		# signal path never appended is recorded now, so queries built on
+		# units_acted_this_turn (progress HUD, refresh eligibility) agree with reality.
+		elif unit not in units_acted_this_turn and "has_acted_this_turn" in unit and bool(unit.has_acted_this_turn):
+			units_acted_this_turn.append(unit)
 
 	if all_acted:
 		all_units_acted.emit()

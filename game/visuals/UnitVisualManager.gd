@@ -9,14 +9,21 @@ class_name UnitVisualManager
 var _health_bar_scene: PackedScene
 var _unit_health_bars: Dictionary = {}  # Unit -> HealthBar
 
-# Shared "spent turn" dim wash (Fire Emblem style greying-out). One material is
-# reused across every unit and every frame -- never allocate per unit -- and it
-# is applied non-destructively via each MeshInstance3D's `material_overlay`, which
-# composites OVER the model's own materials without replacing them, so clearing it
-# (`material_overlay = null`) restores the original look exactly. Chosen over
-# GeometryInstance3D.transparency because a dark unshaded wash reads clearly as
-# "greyed / desaturated / spent" rather than merely fading the model out.
+# Shared "spent turn" GREYSCALE wash (Fire Emblem style drained-of-colour). One
+# material is reused across every unit and every frame -- never allocate per unit --
+# and it is applied non-destructively via each MeshInstance3D's `material_overlay`,
+# which composites OVER the model's own materials without replacing them, so clearing
+# it (`material_overlay = null`) restores the original look exactly. It is a STRONG
+# neutral-grey wash (albedo ~0.5,0.5,0.5 at ~0.6 alpha, unshaded, MIX blend): pulling
+# every hue toward the same mid-grey is what reads as "desaturated / spent" rather
+# than a faint darkening. It is paired with a slight per-mesh `transparency` fade
+# (~0.15) so the spent unit also recedes a touch -- grey wash + slight fade together.
 var _dim_material: StandardMaterial3D = null
+
+# How much a spent unit fades via GeometryInstance3D.transparency (0 = opaque,
+# 1 = invisible). Small on purpose: the greyscale wash carries the "spent" read;
+# this just adds a subtle recede. Cleared back to 0.0 when the unit can act again.
+const _DIM_TRANSPARENCY: float = 0.15
 
 func _ready():
 	if not player_materials:
@@ -239,13 +246,15 @@ func _restore_unit_material(unit: Unit) -> void:
 	apply_acted_visual(unit, has_acted)
 
 func apply_acted_visual(unit: Unit, has_acted: bool) -> void:
-	"""Dim a unit that has spent its turn (or clear the dim when it can act again).
+	"""Grey out a unit that has spent its turn (or clear it when it can act again).
 
-	Non-destructive: we set a SHARED semi-transparent dark grey `material_overlay`
-	on every MeshInstance3D under the unit's visible model, which composites over
-	the model's own materials. Setting `material_overlay = null` restores the
-	original look exactly -- no material is duplicated, copied, or overwritten, so
-	this never fights UnitAnimator's transient hit/heal `material_override` flashes.
+	Non-destructive: we set a SHARED semi-transparent neutral-grey `material_overlay`
+	on every MeshInstance3D under the unit's visible model, which composites over the
+	model's own materials and washes their colour toward mid-grey, plus a slight
+	per-mesh `transparency` fade. Clearing both (`material_overlay = null`,
+	`transparency = 0.0`) restores the original look exactly -- no material is
+	duplicated, copied, or overwritten, so this never fights UnitAnimator's transient
+	hit/heal `material_override` flashes (a different channel) or the selection glow.
 	Resolves the model the same way UnitAnimator does (CharacterModel glb root, else
 	a placeholder MeshInstance3D, else the first mesh found)."""
 	if not is_instance_valid(unit):
@@ -255,27 +264,33 @@ func apply_acted_visual(unit: Unit, has_acted: bool) -> void:
 	if model_root == null:
 		return
 
-	# Only living, spent units are dimmed; dead units are being removed, and a unit
-	# that can act again must read as fully active.
+	# Only living, spent units are greyed; dead units are being removed, and a unit
+	# that can act again must read as fully active / full-colour.
 	var should_dim: bool = has_acted and unit.is_alive()
 	var overlay: Material = _ensure_dim_material() if should_dim else null
+	var fade: float = _DIM_TRANSPARENCY if should_dim else 0.0
 
 	var meshes: Array[MeshInstance3D] = []
 	_collect_meshes(model_root, meshes)
 	for mesh in meshes:
 		if is_instance_valid(mesh):
 			mesh.material_overlay = overlay
+			mesh.transparency = fade
 
-## Build (once) and return the shared dim wash material. Lazily created so it is
-## always available even if apply_acted_visual runs before _ready.
+## Build (once) and return the shared greyscale wash material. Lazily created so it
+## is always available even if apply_acted_visual runs before _ready.
 func _ensure_dim_material() -> StandardMaterial3D:
 	if _dim_material == null:
 		var mat: StandardMaterial3D = StandardMaterial3D.new()
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
 		# Unshaded so the wash is a consistent flat grey regardless of scene
-		# lighting -- it reads as "greyed out / spent" everywhere.
+		# lighting -- every hue underneath gets pulled toward the same mid-grey,
+		# reading as "desaturated / drained of colour / spent" everywhere.
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.albedo_color = Color(0.11, 0.11, 0.15, 0.55)
+		# Strong neutral grey at ~0.6 alpha: heavy enough that the model's own
+		# colours are visibly washed toward grey, not merely darkened.
+		mat.albedo_color = Color(0.5, 0.5, 0.5, 0.6)
 		_dim_material = mat
 	return _dim_material
 

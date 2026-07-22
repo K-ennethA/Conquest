@@ -14,6 +14,12 @@ const MAX_LINES: int = 60
 const PANEL_WIDTH: float = 330.0
 const PANEL_HEIGHT: float = 158.0
 const MARGIN: float = 12.0
+## Vertical band kept clear at the bottom-LEFT for the unit/terrain inspection cluster
+## that shares this corner: TurnSystemIndicator (x20-320, y-120..-20 => bottom 100px) and
+## the bottom-anchored TerrainInfoPanel/UnitHoverPanel readouts. The log is raised to sit
+## ABOVE that band so it never overlaps them (it used to sit ~12px off the bottom, right
+## on top of the turn indicator). 130 clears the 120px-tall turn indicator plus a gap.
+const BOTTOM_RESERVE: float = 130.0
 
 # Side tints (bbcode): the local/ally side reads cool, the AI/enemy side warm-red, so
 # you can scan who did what at a glance. Neutral events use cream.
@@ -29,12 +35,18 @@ var _lines: Array[String] = []
 func _ready() -> void:
 	name = "BattleLog"
 	_build_ui()
-	# Bottom-left corner, click-through so it never blocks the board underneath.
+	# Bottom-left, but RAISED above the inspection cluster that shares this corner, and
+	# click-through so it never blocks the board underneath. Still bottom-anchored, so the
+	# whole left stack stays pinned to the window bottom and keeps its gaps as the window
+	# grows. At 1280x720 the log occupies x[12..342], y[432..590]: its right edge (342) is
+	# far left of the bottom-right hover card's left edge (1280-16-240 = 1024), and its
+	# bottom (590) sits ~10px above the TurnSystemIndicator's top (600) -- no overlap with
+	# either the hover UI or the turn/terrain readouts.
 	set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	offset_left = MARGIN
 	offset_right = MARGIN + PANEL_WIDTH
-	offset_top = -(PANEL_HEIGHT + MARGIN)
-	offset_bottom = -MARGIN
+	offset_top = -(BOTTOM_RESERVE + PANEL_HEIGHT)
+	offset_bottom = -BOTTOM_RESERVE
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_connect_events()
 

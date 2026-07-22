@@ -27,9 +27,24 @@ class_name BotTurnDriver
 
 ## Longer beat AFTER a visible ATTACK, so the player can actually watch the strike
 ## (the attacker's shake + the hit flash + the camera framing it) instead of the AI
-## blowing past it. A plain move or a skipped wait uses action_interval; only an
-## attack gets this dwell. Also divided by battle-speed.
-@export var attack_dwell: float = 0.55
+## blowing past it. Only an attack gets this dwell. Also divided by battle-speed but
+## floored by [member min_attack_dwell] so even Fast lingers on the hit.
+@export var attack_dwell: float = 0.9
+
+## Beat AFTER a visible plain MOVE (a unit slid to a new cell but did NOT attack), so
+## you can actually SEE it travel before the next unit acts. Shorter than an attack's
+## dwell but far longer than action_interval (which now only paces skipped waits).
+## Also divided by battle-speed and floored by [member min_move_dwell].
+@export var move_dwell: float = 0.4
+
+## Floor (seconds) on the post-ATTACK dwell after battle-speed scaling, so even the
+## fastest battle speed can never blur a strike into the next action. Raised well above
+## the old 0.08 so an attack is always clearly watchable.
+@export var min_attack_dwell: float = 0.35
+
+## Floor (seconds) on the post-MOVE dwell after battle-speed scaling. Keeps a visible
+## slide watchable at Fast while Slow (0.5x) stretches it out further.
+@export var min_move_dwell: float = 0.3
 
 ## Hard cap on how many silent no-op waits a single tick will fast-forward before
 ## yielding back to the frame. Bounds the worst case (a huge army entirely out of
@@ -135,10 +150,15 @@ func _tick() -> void:
 		if not acted:
 			break
 		if _last_action_visible:
-			# Pace this action. An attack dwells longer so the player can watch the
-			# strike land; a plain advance uses the shorter interval.
+			# Pace this action so it is watchable one at a time. An attack dwells the
+			# longest (watch the strike land); a plain visible move gets its own,
+			# shorter-but-still-generous dwell so you can SEE the unit slide. Only a
+			# skipped wait would fall back to the tiny action_interval -- but waits are
+			# fast-forwarded above and never reach this break with _last_action_visible.
 			if _last_action_was_attack:
 				next_wait = _effective_dwell()
+			else:
+				next_wait = _effective_move_dwell()
 			break
 		waits += 1
 
@@ -147,13 +167,25 @@ func _tick() -> void:
 		_timer.start(next_wait)
 
 
-## Effective post-attack dwell: attack_dwell scaled DOWN by battle speed, floored.
+## Effective post-attack dwell: attack_dwell scaled DOWN by battle speed, then floored
+## at min_attack_dwell so even Fast keeps the strike watchable (and Slow lingers).
 func _effective_dwell() -> float:
 	var scaled: float = attack_dwell
 	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and "battle_speed" in GameSettings:
 		var speed: float = clampf(float(GameSettings.battle_speed), 0.5, 3.0)
 		scaled = attack_dwell / speed
-	return maxf(0.08, scaled)
+	return maxf(min_attack_dwell, scaled)
+
+
+## Effective post-move dwell: move_dwell scaled DOWN by battle speed, then floored at
+## min_move_dwell. Mirrors [method _effective_dwell] but for a visible plain MOVE, so a
+## unit sliding to a new cell gets its own readable beat instead of the tiny interval.
+func _effective_move_dwell() -> float:
+	var scaled: float = move_dwell
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and "battle_speed" in GameSettings:
+		var speed: float = clampf(float(GameSettings.battle_speed), 0.5, 3.0)
+		scaled = move_dwell / speed
+	return maxf(min_move_dwell, scaled)
 
 
 ## Perform ONE AI action for the currently-active turn system (the Timer's entry

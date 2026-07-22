@@ -77,8 +77,16 @@ func register_unit(unit: Unit) -> void:
 	if unit not in registered_units:
 		registered_units.append(unit)
 
-		# Connect to unit signals
-		if unit.has_signal("unit_action_completed"):
+		# Connect to unit signals. Guard with is_connected exactly like the unit_died
+		# hook below: this is the ONE wire that drives auto-end-of-turn (a unit's
+		# mark_action_completed -> unit_action_completed -> _on_unit_action_completed ->
+		# mark_unit_acted -> _check_turn_completion). Without the guard a unit that is
+		# registered again while still connected (re-registration, or a scene-scan pass
+		# that races register_player) either errors or double-fires, so the completion
+		# check runs twice / not at all -- the reported "turn doesn't auto-advance"
+		# flakiness. The guard makes the connection idempotent: every registered unit is
+		# connected exactly once, so its completion is always observed.
+		if unit.has_signal("unit_action_completed") and not unit.unit_action_completed.is_connected(_on_unit_action_completed):
 			unit.unit_action_completed.connect(_on_unit_action_completed)
 
 		# Watch for this unit's death so the turn system can drop it and re-check

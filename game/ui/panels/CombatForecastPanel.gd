@@ -12,13 +12,23 @@ class_name CombatForecastPanel
 # amber HUD look. Unlike MoveSelectionPanel it is NON-modal: no dim backdrop and
 # mouse_filter = IGNORE everywhere, so it never blocks clicks on the board.
 #
-# Positioned top-center so it never overlaps the right-edge sidebar.
+# Positioned in the TOP-LEFT corner (not dead-center) so the middle of the board stays
+# visible while the player aims -- the centered card used to sit right over the enemies
+# being targeted. Top-left is used instead of top-right (gear button + right sidebar) or
+# the bottom corners (terrain/turn/hover readouts). The card stays TOP-anchored with an
+# END grow so it can never collapse to zero height (the old "forecast is gone" bug that
+# forced the move off the bottom edge in the first place).
 
 const CARD_WIDTH := 360.0
 ## Distance from the TOP edge the card floats at. Sits just below the slim turn chip
 ## (~56px top bar), so it no longer overlaps the banner but still reliably renders
 ## (a bottom-anchored grow collapsed to zero height -- the "forecast is gone" bug).
 const TOP_MARGIN := 70.0
+## Distance from the LEFT edge the card floats at.
+const SIDE_MARGIN := 16.0
+## Panel background opacity so board units partly show through the card while aiming;
+## kept high enough (0.9) that the forecast text stays fully readable.
+const CARD_BG_ALPHA := 0.9
 
 # --- Node references (built once in _ready, only re-populated in show_forecast) --
 var _card: PanelContainer
@@ -67,20 +77,20 @@ func _ready() -> void:
 	visible = false
 
 func _create_ui() -> void:
-	# The floating card, anchored to the BOTTOM-CENTER of the viewport: clear of the
-	# top-center turn banner (which it used to render on top of) and the right-edge
-	# sidebar, in the otherwise-empty bottom strip. Grows UPWARD from the bottom margin
-	# to fit its content, so it can never push off the bottom of the screen.
+	# The floating card, anchored to the TOP-LEFT of the viewport: off the board centre so
+	# the player can see the units being targeted, clear of the top-center turn banner and
+	# the right-edge sidebar. Grows DOWNWARD (and rightward) from the top-left margin to fit
+	# its content, so it can never collapse to zero height / slide off-screen.
 	_card = PanelContainer.new()
 	_card.name = "ForecastCard"
-	_card.anchor_left = 0.5
-	_card.anchor_right = 0.5
+	_card.anchor_left = 0.0
+	_card.anchor_right = 0.0
 	_card.anchor_top = 0.0
 	_card.anchor_bottom = 0.0
-	_card.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_card.grow_horizontal = Control.GROW_DIRECTION_END
 	_card.grow_vertical = Control.GROW_DIRECTION_END
-	_card.offset_left = -CARD_WIDTH * 0.5
-	_card.offset_right = CARD_WIDTH * 0.5
+	_card.offset_left = SIDE_MARGIN
+	_card.offset_right = SIDE_MARGIN + CARD_WIDTH
 	_card.offset_top = TOP_MARGIN
 	_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_card)
@@ -171,6 +181,14 @@ func _create_ui() -> void:
 	# font colours / per-panel styleboxes), THEN layer our local plate + text
 	# overrides so they survive.
 	ConquestTheme.apply_to(self)
+
+	# Make the amber card slightly translucent so board units partly show through it while
+	# aiming (secondary to the top-left move above; text stays fully readable at 0.9).
+	var card_box: StyleBox = _card.get_theme_stylebox("panel")
+	if card_box is StyleBoxFlat:
+		var translucent: StyleBoxFlat = (card_box as StyleBoxFlat).duplicate()
+		translucent.bg_color.a = CARD_BG_ALPHA
+		_card.add_theme_stylebox_override("panel", translucent)
 
 	# Dark inset plate behind the exchange stats, cream text so it reads on it.
 	plate.add_theme_stylebox_override("panel", ConquestTheme.plate_box())
@@ -330,10 +348,10 @@ func _fit_to_viewport() -> void:
 	if vp == null:
 		return
 	var vw: float = vp.get_visible_rect().size.x
-	var margin: float = 24.0
-	var w: float = minf(CARD_WIDTH, maxf(220.0, vw - margin * 2.0))
-	_card.offset_left = -w * 0.5
-	_card.offset_right = w * 0.5
+	var w: float = minf(CARD_WIDTH, maxf(220.0, vw - SIDE_MARGIN * 2.0))
+	# Top-left anchored: pin the left edge at the margin and size the width to the right.
+	_card.offset_left = SIDE_MARGIN
+	_card.offset_right = SIDE_MARGIN + w
 
 func hide_forecast() -> void:
 	"""Hide the forecast (targeting cancelled/cleared, or the move resolved)."""

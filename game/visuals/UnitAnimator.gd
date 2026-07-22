@@ -58,10 +58,32 @@ extends Node
 @export_range(0.0, 1.0, 0.01) var move_shake_time: float = 0.28
 
 # --- Death ----------------------------------------------------------------
+#
+# A death is dramatic and unmissable, not a quiet 0.25s shrink: a bright colour
+# FLASH, a small topple/POP up, THEN a slower SINK + shrink + fade. The colour flash
+# and fade drive the visible mesh (material_override); the pop/sink/shrink drive the
+# model root. Honors _anims_on() (off -> instant removal, no drama) and scales every
+# duration by battle speed via _scaled(), so a slow battle lingers on the death.
 @export_group("Death")
-## Seconds to shrink a unit's mesh on elimination. Best-effort: if the emitter
-## frees the unit on the same frame, there is nothing left to animate.
-@export_range(0.0, 1.5, 0.01) var death_shrink_time: float = 0.25
+## Seconds of the final SINK + shrink + fade -- the theatrical body of the death.
+## Raised well above the old quick 0.25s so the unit visibly sinks and fades away
+## rather than just popping out of existence.
+@export_range(0.0, 3.0, 0.01) var death_shrink_time: float = 0.7
+## Colour the mesh flashes to at the instant of death (a bright emissive tell). A near-
+## white/red default reads as a killing blow regardless of the unit's own colour.
+@export var death_flash_color: Color = Color(1.0, 0.85, 0.8)
+## Extra emission energy of the death flash, so it pops hard in 3D lighting.
+@export_range(0.0, 12.0, 0.1) var death_flash_emission: float = 4.0
+## Seconds to snap TO the death flash (the bright hit), before the sink begins.
+@export_range(0.0, 1.0, 0.01) var death_flash_time: float = 0.1
+## Height (local +Y) of the brief POP/rise the model does as it is struck, before it
+## sinks. A small theatrical lurch upward; 0.0 disables the pop.
+@export_range(0.0, 1.5, 0.01) var death_rise_height: float = 0.35
+## Seconds of the upward pop. Kept short so it reads as a lurch, not a jump.
+@export_range(0.0, 1.0, 0.01) var death_rise_time: float = 0.14
+## Distance (local -Y) the model SINKS through the floor as it shrinks and fades out.
+## Combined with the shrink it reads as the body dropping and dissolving.
+@export_range(0.0, 3.0, 0.01) var death_sink_distance: float = 0.6
 
 # --- Authored animation clips ---------------------------------------------
 #
@@ -349,21 +371,66 @@ func _on_unit_eliminated(unit = null, _eliminator = null) -> void:
 	_motion_tween.erase(id)
 	if played_death:
 		return
-	if not (unit is Node3D) or not is_instance_valid(unit) or death_shrink_time <= 0.0:
-		return
-	var node := _get_anim_root(unit)
-	if node == null:
-		return
-	# Animations off -> skip the shrink; the unit is being removed anyway, so there
-	# is no half-animated state to worry about.
+	# Animations off -> instant removal, no drama and no dead time; the emitter is
+	# freeing the unit anyway, so there is no half-animated state to leave behind.
 	if not _anims_on():
 		return
-	var t: float = _scaled(death_shrink_time)
-	if t <= 0.0:
+	_procedural_death(unit)
+
+## Dramatic, unmissable PROCEDURAL death (the fallback when a model ships no authored
+## death clip): a bright colour FLASH + a brief POP up, THEN a slower SINK + shrink +
+## fade. Best-effort and null-safe throughout -- the emitter may free the unit on the
+## same frame, so every step re-guards is_instance_valid. Self-contained: it drives the
+## model root and mesh via their OWN local tweens and never touches the shared motion-
+## tween / base-position caches (those were already dropped for this id above). All
+## durations pass through _scaled() so a slow battle lingers on the death.
+func _procedural_death(unit) -> void:
+	if not (unit is Node3D) or not is_instance_valid(unit):
 		return
-	var tw := node.create_tween()
-	tw.tween_property(node, "scale", Vector3.ZERO, t)\
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	var node := _get_anim_root(unit)
+	var mesh := _get_mesh(unit)
+
+	# COLOUR FLASH + FADE on the visible mesh. A temporary emissive material_override is
+	# installed and then faded to transparent -- no restore needed, the unit frees. We
+	# enable transparency so the albedo alpha can carry the dissolve.
+	var sink_t: float = _scaled(death_shrink_time)
+	if mesh != null:
+		var flash_mat := StandardMaterial3D.new()
+		flash_mat.albedo_color = death_flash_color
+		flash_mat.emission_enabled = true
+		flash_mat.emission = death_flash_color
+		flash_mat.emission_energy_multiplier = death_flash_emission
+		flash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mesh.material_override = flash_mat
+		var flash_dur: float = _scaled(death_flash_time)
+		var mt := mesh.create_tween()
+		# Snap bright, hold through the pop, then fade the emission and alpha out over
+		# the sink so the body dissolves as it drops.
+		if flash_dur > 0.0:
+			mt.tween_interval(flash_dur)
+		if sink_t > 0.0:
+			mt.tween_property(flash_mat, "emission_energy_multiplier", 0.0, sink_t)\
+				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+			mt.parallel().tween_property(flash_mat, "albedo_color",
+				Color(death_flash_color.r, death_flash_color.g, death_flash_color.b, 0.0), sink_t)\
+				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+
+	# MOTION on the model root: a brief POP up (the lurch of the killing blow), THEN a
+	# slower SINK downward while shrinking to nothing. Uses the node's own local tween.
+	if node != null:
+		var base: Vector3 = node.position
+		var rise_t: float = _scaled(death_rise_time)
+		var dt := node.create_tween()
+		if death_rise_height > 0.0 and rise_t > 0.0:
+			dt.tween_property(node, "position",
+				base + Vector3(0.0, death_rise_height, 0.0), rise_t)\
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		if sink_t > 0.0:
+			dt.tween_property(node, "position",
+				base - Vector3(0.0, death_sink_distance, 0.0), sink_t)\
+				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+			dt.parallel().tween_property(node, "scale", Vector3.ZERO, sink_t)\
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 
 # --- Helpers --------------------------------------------------------------
 
