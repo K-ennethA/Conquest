@@ -23,6 +23,18 @@ var current_unit: Node
 var move_buttons: Array[Button] = []
 var _card: PanelContainer
 
+## READ-ONLY inspection: when true, the panel merely LISTS an (uncommandable) unit's
+## moves and shows each move's details on hover/click. It never emits move_selected, so
+## the caller never enters targeting or executes. Set per-open via show_moves_for_unit.
+var view_only: bool = false
+## Cached so _on_move_selected can resolve the clicked slot back to its MoveResource /
+## controller when showing details in view-only mode (the number-key path only has an
+## index). Refreshed on every show_moves_for_unit.
+var _current_moveset: Array[MoveResource] = []
+var _current_controller: MovesetController = null
+## Title label kept so its text can reflect the mode (SELECT vs VIEW).
+var _title_label: Label
+
 func _ready() -> void:
 	name = "MoveSelectionPanel"
 
@@ -96,6 +108,7 @@ func _create_ui() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 18)
 	main_container.add_child(title)
+	_title_label = title
 
 	# Separator
 	var separator = HSeparator.new()
@@ -142,9 +155,15 @@ func _apply_responsive_width() -> void:
 		w = minf(CARD_WIDTH, vp.get_visible_rect().size.x * CARD_MAX_FRAC)
 	_card.custom_minimum_size.x = maxf(CARD_MIN_WIDTH, w)
 
-func show_moves_for_unit(unit: Node) -> void:
-	"""Display the unit's real moveset (up to 4 MoveResource slots)."""
+func show_moves_for_unit(unit: Node, view_only_mode: bool = false) -> void:
+	"""Display the unit's real moveset (up to 4 MoveResource slots).
+
+	view_only_mode == true is READ-ONLY inspection: the moves are listed and their
+	details shown on hover/click, but selecting a move NEVER emits move_selected (so the
+	caller cannot enter targeting or execute). Used for enemy / AI / not-your-turn units.
+	Defaults to false so the existing commandable-unit call path is unchanged."""
 	current_unit = unit
+	view_only = view_only_mode
 
 	if not unit:
 		hide()
@@ -152,6 +171,18 @@ func show_moves_for_unit(unit: Node) -> void:
 
 	var moveset: Array[MoveResource] = unit.get_moveset()
 	var controller := unit.get_moveset_controller() as MovesetController
+
+	_current_moveset = moveset
+	_current_controller = controller
+
+	# Title + hint reflect the mode so the read-only state is legible.
+	if _title_label:
+		_title_label.text = "VIEW MOVES" if view_only else "SELECT MOVE"
+	if move_info_label:
+		if view_only:
+			move_info_label.text = "Hover or click a move to read its details"
+		else:
+			move_info_label.text = "Hover over a move to see details"
 
 	_populate_moves(moveset, controller)
 	show()
@@ -211,7 +242,10 @@ func _create_move_button(move: MoveResource, slot: int, controller: MovesetContr
 
 	var range_text := move.targeting.describe_range() if move.targeting else "no range"
 	button.text = "%s (%s)%s" % [move.display_name, range_text, suffix]
-	button.disabled = controller != null and not can_use
+	# In view-only mode every move stays clickable so clicking reliably reveals its
+	# details (a disabled button would swallow the click). Cooldown/uses are still shown
+	# in the label + details text. Commandable mode keeps the real can-use gating.
+	button.disabled = (not view_only) and controller != null and not can_use
 	# Height floor only; width 0 + EXPAND_FILL (set by the caller) lets the button
 	# fill the card, and clip_text ellipsizes a long move name instead of stretching
 	# the card past its responsive width.
@@ -260,10 +294,21 @@ func _show_move_info(move: MoveResource, controller: MovesetController) -> void:
 
 func _clear_move_info() -> void:
 	"""Clear move information display"""
-	move_info_label.text = "Hover over a move to see details"
+	if view_only:
+		move_info_label.text = "Hover or click a move to read its details"
+	else:
+		move_info_label.text = "Hover over a move to see details"
 
 func _on_move_selected(move_index: int) -> void:
-	"""Handle move selection"""
+	"""Handle move selection. In view-only mode this is READ-ONLY: clicking a move (or
+	its number key) only reveals that move's details -- it does NOT emit move_selected or
+	close the panel, so the caller never enters targeting/execution."""
+	if view_only:
+		if move_index >= 0 and move_index < _current_moveset.size():
+			var move: MoveResource = _current_moveset[move_index]
+			if move != null:
+				_show_move_info(move, _current_controller)
+		return
 	move_selected.emit(move_index)
 	hide()
 
@@ -275,7 +320,9 @@ func _on_back_pressed() -> void:
 func update_move_cooldowns() -> void:
 	"""Update the display to reflect current cooldowns/uses for the shown unit."""
 	if current_unit and visible:
-		show_moves_for_unit(current_unit)
+		# Preserve the current read-only/commandable mode across a cooldown refresh so a
+		# refresh never silently drops the view-only guard on an inspected enemy.
+		show_moves_for_unit(current_unit, view_only)
 
 func _input(event: InputEvent) -> void:
 	if not visible:

@@ -1650,14 +1650,17 @@ func _on_moves_pressed() -> void:
 	if not selected_unit:
 		return
 
-	# Handler-level command guard: the KEY_P/Moves shortcut bypasses the disabled
-	# button. Only the local human may open moves for a unit they command.
-	if not _human_may_command(selected_unit):
-		return
+	# Selection == inspection: a unit the local human may NOT command (enemy / AI /
+	# not-your-turn) can still have its move list opened READ-ONLY, so the player can
+	# read what each move does. Commandable units keep exactly today's behaviour.
+	var may_command: bool = _human_may_command(selected_unit)
 
-	# The unit must still have its action available this turn.
-	if selected_unit.has_method("can_act") and not selected_unit.can_act():
-		return
+	# Commandable units require the action still be available this turn before opening
+	# moves (so they can actually pick + execute). View-only inspection has no such
+	# gate -- you can read an enemy's kit whenever it is selected.
+	if may_command:
+		if selected_unit.has_method("can_act") and not selected_unit.can_act():
+			return
 
 	# MoveSelectionPanel reads unit.get_moveset() / get_moveset_controller() itself,
 	# so this works for both character units (real moveset) and legacy units (empty).
@@ -1665,12 +1668,21 @@ func _on_moves_pressed() -> void:
 		# LEGACY guard: no CharacterResource -> no MoveResource moveset. Show the
 		# panel anyway (it renders "No moves available") instead of fabricating moves.
 		pass
-	move_selection_panel.show_moves_for_unit(selected_unit)
+	# Pass view-only = not may_command: in that mode the popup lists the moves and shows
+	# each move's details on hover/click but NEVER emits move_selected (no targeting).
+	move_selection_panel.show_moves_for_unit(selected_unit, not may_command)
 
 func _on_move_selected(slot: int) -> void:
 	"""A move slot was chosen from the panel: enter targeting for that move and
 	publish its in-range aim cells so the TargetingVisualizer can highlight them."""
 	if not selected_unit:
+		return
+
+	# READ-ONLY HARD GUARD: never enter targeting / set move_mode / compute aim cells
+	# for a unit the local human may not command. In view-only mode MoveSelectionPanel
+	# does not even emit move_selected (it reveals the move's details instead), but this
+	# guard guarantees no path can aim or execute an enemy / AI unit's move.
+	if not _human_may_command(selected_unit):
 		return
 
 	var move: MoveResource = selected_unit.get_move(slot)
@@ -2036,13 +2048,21 @@ func _update_moves_button_availability() -> void:
 		else:
 			usable += 1
 
+	# READ-ONLY VIEW: a unit the local human may NOT command (enemy / AI / not-your-turn)
+	# can still open its move list to READ each move's details. Keep the button enabled
+	# whenever the unit HAS a moveset and relabel it VIEW MOVES; clicking opens the popup
+	# in view-only mode (no targeting, no execution). Cooldown/uses do not matter for
+	# reading, so availability here is purely "does it have moves to show".
+	if not _human_may_command(selected_unit):
+		moves_button.disabled = moveset.is_empty()
+		moves_button.text = "MOVES (None)" if moveset.is_empty() else "VIEW MOVES"
+		return
+
 	var has_action := true
 	if selected_unit.has_method("can_act"):
 		has_action = selected_unit.can_act()
 
-	# Also gate on command permission so an enemy / AI unit's Moves button stays
-	# disabled during inspection.
-	moves_button.disabled = usable == 0 or not has_action or not _human_may_command(selected_unit)
+	moves_button.disabled = usable == 0 or not has_action
 
 	if moveset.is_empty():
 		moves_button.text = "MOVES (None)"

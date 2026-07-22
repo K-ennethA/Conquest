@@ -75,14 +75,16 @@ func _build_panel() -> void:
 
 	_panel = PanelContainer.new()
 	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Left edge, vertically centred.
+	# TOP-left corner, stacked just below the collapsed battle-log header. Vertically
+	# centred left used to collide with the SELECT MOVE popup, which owns the mid-left.
 	_panel.anchor_left = 0.0
 	_panel.anchor_right = 0.0
-	_panel.anchor_top = 0.5
-	_panel.anchor_bottom = 0.5
+	_panel.anchor_top = 0.0
+	_panel.anchor_bottom = 0.0
 	_panel.grow_horizontal = Control.GROW_DIRECTION_END
-	_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_panel.grow_vertical = Control.GROW_DIRECTION_END
 	_panel.offset_left = 14.0
+	_panel.offset_top = 46.0
 	_panel.custom_minimum_size = Vector2(196.0, 0.0)
 	_panel.add_theme_stylebox_override("panel", _panel_style())
 	root.add_child(_panel)
