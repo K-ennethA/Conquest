@@ -66,6 +66,10 @@ var _spawn_manager: SpawnManager = null
 var _hazard_manager: HazardManager = null
 
 func _ready() -> void:
+	# Discoverable by decoupled systems that need to spawn units mid-battle without a
+	# hard reference (e.g. SummonEffect reaches summon_unit() via this group).
+	add_to_group("game_world_manager")
+
 	# Initialize map loader
 	map_loader = MapLoader.new()
 	add_child(map_loader)
@@ -111,6 +115,40 @@ func _ready() -> void:
 		await _setup_network_multiplayer()
 	else:
 		await _setup_local_game()
+
+
+## Runtime-summon a unit MID-BATTLE (the Necromancer's Reanimate / Undying Legion).
+##
+## [method MapLoader.spawn_unit_now] alone yields a board-visible but OWNERLESS and
+## TURN-LESS puppet, so this does the two load-bearing follow-ups it omits: it hands the
+## unit an owner ([PlayerManager]) and registers it with the active turn system, then
+## marks it as having already acted so it holds the summon turn and only acts next turn
+## (the same "summoning sickness" [SpawnManager]'s runtime spawns use). Returns the new
+## [Unit], or null if the summon could not be placed. Null-safe end to end.
+func summon_unit(character_id: StringName, cell: Vector2i, player_id: int, stance: String = "aggressive") -> Node:
+	if map_loader == null:
+		return null
+	var unit = map_loader.spawn_unit_now({
+		"position": cell,
+		"player_id": player_id,
+		"character_id": String(character_id),
+		"spawn_kind": "Reinforcement",
+		"ai_stance": stance,
+	})
+	if unit == null:
+		return null
+	# spawn_unit_now does NOT assign an owner or turn-register -- do both explicitly, else
+	# the summon is neither ally nor enemy to anyone and never takes a turn.
+	if PlayerManager != null:
+		PlayerManager.assign_unit_to_player(unit, player_id)
+	if TurnSystemManager != null and TurnSystemManager.has_active_turn_system():
+		var ts := TurnSystemManager.get_active_turn_system()
+		if ts != null and ts.has_method("register_unit"):
+			ts.register_unit(unit)
+	# Hold the turn it was raised on; it becomes actable next turn.
+	if unit.has_method("mark_action_completed"):
+		unit.mark_action_completed("spawn")
+	return unit
 
 func _load_selected_map() -> void:
 	"""Load the selected map or create a default one"""

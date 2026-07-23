@@ -61,7 +61,7 @@ func _paint_symmetric(model: MapMakerModel, pos: Vector2i, tile_type: String) ->
 func _initialize() -> void:
 	var model := MapMakerModel.new(MAP_WIDTH, MAP_HEIGHT)
 	model.map_name = "Proving Grounds"
-	model.description = "A 17x13 point-symmetric combat arena: three walled approach lanes (west flank, centre, east flank) converge on a throne boxed in by a lava patch (north/south) and water (east/west). A true mirror match -- both sides field the full hero roster (Vineweave, Blightcap, Petalfang, Tree Grunt, Mycothrall, Geode) at symmetric positions, so it's a clean testbed for unit-vs-unit balance."
+	model.description = "A 17x13 point-symmetric combat arena: three walled approach lanes (west flank, centre, east flank) converge on a throne boxed in by a lava patch (north/south) and water (east/west). A true mirror match -- both sides field the full hero roster (Vineweave, Blightcap, Petalfang, Tree Grunt, Mycothrall, Geode, Mortis) at symmetric positions, so it's a clean testbed for unit-vs-unit balance."
 	model.author = "Map Maker (build_proving_grounds.gd)"
 	model.max_players = 2
 
@@ -136,6 +136,7 @@ const MIRROR_SQUAD := [
 	{"cell": Vector2i(1, 9), "id": "tree_grunt"},   # bark-skinned bruiser
 	{"cell": Vector2i(1, 10), "id": "mycothrall"},  # parasite caster (Hard+ gate)
 	{"cell": Vector2i(1, 3), "id": "gem_knight"},   # crystal defender (shield + reprisal)
+	{"cell": Vector2i(1, 11), "id": "necromancer"}, # gravecaller (raises the dead)
 ]
 
 func _place_spawns(res: MapResource) -> void:
