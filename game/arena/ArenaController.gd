@@ -40,6 +40,11 @@ var _ruleset: ArenaRuleset = null
 var _run: ArenaRun = null
 var _phase: int = Phase.IDLE
 
+## A ruleset staged by ArenaSetupScreen, held while the player picks a squad on the
+## Character Select screen, then consumed by begin_pending_run(). Lets the Arena flow
+## reuse the same squad-select screen the map modes use.
+var _pending_ruleset: ArenaRuleset = null
+
 ## Snapshot of the just-ended run, read by ArenaResultsScreen after the run/ruleset
 ## are discarded. Populated by _finish_run(); empty before any run finishes.
 var last_result: Dictionary = {}
@@ -79,8 +84,37 @@ func start_run(p_ruleset: ArenaRuleset, starting_character_ids: Array = []) -> v
 	_begin_next_round()
 
 
+## Stage a ruleset (from ArenaSetupScreen) without starting yet, so the shared Character
+## Select screen can collect the squad first, then call begin_pending_run().
+func prepare_run(p_ruleset: ArenaRuleset) -> void:
+	_pending_ruleset = p_ruleset
+
+
+## True while a ruleset is staged and waiting for a squad pick (Character Select reads this
+## to know it should launch an Arena run rather than change to the GameWorld scene).
+func has_pending_run() -> bool:
+	return _pending_ruleset != null
+
+
+## How many units the staged Arena run wants (the squad-pick limit); 0 when none staged.
+func pending_squad_size() -> int:
+	if _pending_ruleset == null:
+		return 0
+	return maxi(1, int(_pending_ruleset.squad_size))
+
+
+## Consume the staged ruleset and begin the run with the chosen [param squad].
+func begin_pending_run(squad: Array = []) -> void:
+	var rs: ArenaRuleset = _pending_ruleset
+	_pending_ruleset = null
+	if rs == null:
+		rs = ArenaRuleset.new()
+	start_run(rs, squad)
+
+
 ## Abandon the current run and return to IDLE (e.g. quit to menu).
 func abort_run() -> void:
+	_pending_ruleset = null
 	_run = null
 	_ruleset = null
 	_phase = Phase.IDLE

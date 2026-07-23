@@ -51,6 +51,13 @@ var game_mode: GameMode = GameMode.VERSUS
 var selected_turn_system: TurnSystemBase.TurnSystemType = TurnSystemBase.TurnSystemType.TRADITIONAL
 var selected_map_path: String = "res://game/maps/resources/default_skirmish.tres"  # Default map
 
+## The squad the local player chose on the Character Select screen (an ordered list of
+## character_ids). Empty = field the map's OWN authored player-0 roster (so maps launched
+## without a squad pick -- the mirror testbed, older flows -- are unchanged). When set,
+## MapLoader fills player 0's spawn slots with these ids in order (Arena reads it via
+## ArenaController.start_run instead). Cleared back to empty when starting a fresh pick.
+var selected_squad: Array = []
+
 # Player configuration
 var player_count: int = 2
 var player_names: Array[String] = ["Player 1", "Player 2"]
@@ -163,6 +170,16 @@ func set_selected_map(map_path: String) -> void:
 	"""Set the selected map path"""
 	selected_map_path = map_path
 	print("Selected map set to: " + map_path)
+
+func set_selected_squad(ids: Array) -> void:
+	"""The local player's chosen squad (character_ids). Copied so later edits don't alias."""
+	selected_squad = ids.duplicate()
+
+func get_selected_squad() -> Array:
+	return selected_squad
+
+func clear_selected_squad() -> void:
+	selected_squad = []
 
 func set_ai_difficulty(difficulty: int) -> void:
 	"""Set the AI difficulty (BotController.Difficulty: EASY=0..BRUTAL=3)."""

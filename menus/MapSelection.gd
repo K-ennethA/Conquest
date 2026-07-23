@@ -198,9 +198,14 @@ func _on_select_button_pressed() -> void:
 	
 	# Store selected map in GameSettings
 	GameSettings.set_selected_map(current_selected_map)
-	
-	# Start the game
-	get_tree().change_scene_to_file("res://game/world/GameWorld.tscn")
+
+	# Pick a squad for this map before the battle starts (Character Select then launches
+	# the GameWorld). Clear any Arena ruleset staged earlier so a map launch can never be
+	# mistaken for an Arena run.
+	var arena := get_node_or_null("/root/ArenaController")
+	if arena != null and arena.has_method("abort_run"):
+		arena.abort_run()
+	get_tree().change_scene_to_file("res://menus/CharacterSelect.tscn")
 
 func _on_back_button_pressed() -> void:
 	"""Handle back button press"""

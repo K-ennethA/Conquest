@@ -377,11 +377,17 @@ func _on_start_pressed() -> void:
 	rs.total_rounds = _resolved_rounds()
 	rs.turn_system = _turn_system
 
-	# start_run itself changes to the GameWorld scene -- do NOT change scene here.
-	arena.start_run(rs)
+	# Stage the ruleset and go pick a squad; Character Select calls begin_pending_run(),
+	# which starts the run (and changes to the GameWorld scene) with the chosen units.
+	arena.prepare_run(rs)
+	get_tree().change_scene_to_file("res://menus/CharacterSelect.tscn")
 
 
 func _on_back_pressed() -> void:
+	# Discard any staged ruleset so it can't leak into a later map launch.
+	var arena: Node = get_node_or_null("/root/ArenaController")
+	if arena != null and arena.has_method("abort_run"):
+		arena.abort_run()
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 

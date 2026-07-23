@@ -314,6 +314,16 @@ func _load_units() -> bool:
 	if not current_map or not map_root:
 		return false
 	
+	# The local player's chosen squad (Character Select). When set, it REPLACES the
+	# character in each of player 0's spawn slots, in order -- the map still decides WHERE
+	# and HOW MANY player-0 units stand, the player decides WHICH. Empty = field the map's
+	# own authored roster (unchanged for maps launched without a pick). Arena doesn't come
+	# through here; it seeds its squad via ArenaController.start_run.
+	var squad: Array = []
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and GameSettings.has_method("get_selected_squad"):
+		squad = GameSettings.get_selected_squad()
+	var p0_slot := 0
+
 	var units_created = 0
 	for spawn_data in current_map.unit_spawns:
 		# Spawn POINTS describe when they produce units, not just where. Only the
@@ -330,7 +340,18 @@ func _load_units() -> bool:
 		if not current_map.spawn_has_unit_reference(spawn_data):
 			continue
 
-		if _create_unit_from_spawn(spawn_data, units_created):
+		var sd = spawn_data
+		# Override player-0 slots with the chosen squad (in slot order). If the player
+		# fielded FEWER units than the map has player-0 slots, the extra slots stay empty
+		# rather than falling back to the map's authored unit.
+		if not squad.is_empty() and int(sd.get("player_id", 0)) == 0:
+			if p0_slot >= squad.size():
+				continue
+			sd = spawn_data.duplicate()
+			sd["character_id"] = String(squad[p0_slot])
+			p0_slot += 1
+
+		if _create_unit_from_spawn(sd, units_created):
 			units_created += 1
 
 	return true
