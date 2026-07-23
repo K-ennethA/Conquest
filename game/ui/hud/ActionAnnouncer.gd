@@ -184,6 +184,12 @@ func _on_move_performed(caster = null, move = null) -> void:
 		"attacker": caster,
 	}
 	_queue.append(entry)
+	# Never let the announcer fall more than ONE banner behind the action. A fast enemy
+	# turn used to pile up banners that then drained one-per-hold long after the fact --
+	# spilling the enemy's moves into the PLAYER's turn. Keeping only the newest pending
+	# entry drops that stale backlog so the banner tracks what just happened, not history.
+	if _queue.size() > 1:
+		_queue = [_queue[_queue.size() - 1]]
 	if not _busy:
 		_next()
 

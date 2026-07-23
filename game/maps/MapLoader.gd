@@ -398,9 +398,11 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 		return null
 
 	# Difficulty gate: a character can require a minimum AI difficulty (e.g. a
-	# parasite that only appears on Hard+). Applies to every spawn path because both
-	# _load_units and SpawnManager route through here. Skips quietly below the bar.
-	if not _difficulty_allows(character_resource):
+	# parasite that only appears on Hard+). This gates ENEMY spawns -- it must NEVER drop
+	# a unit the PLAYER deliberately chose. Player 0 is the local human's side (its squad
+	# comes from Character Select / the map's own roster), so it is exempt; otherwise a
+	# hand-picked mycothrall would silently vanish on Normal ("chose 4, only 3 showed up").
+	if player_id != 0 and not _difficulty_allows(character_resource):
 		return null
 
 	# Every unit is a CharacterUnit.tscn instance backed by a CharacterResource.

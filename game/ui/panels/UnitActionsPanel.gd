@@ -203,11 +203,12 @@ func _show_movement_range_on_selection() -> void:
 	if not selected_unit:
 		return
 
-	# Only show range for units the local human may actually command. Selecting an
-	# enemy / AI unit is inspection-only, so no range highlight (this also stops the
-	# cursor from hijacking clicks into a movement destination for enemy units).
+	# An enemy / AI unit is INSPECTION-only. Still show WHERE IT COULD MOVE (its blue
+	# threat range) so the player can read the danger, but via a display-only path that
+	# does NOT record those cells as a move destination -- clicking them must never
+	# relocate a unit the player can't command.
 	if not _human_may_command(selected_unit):
-		_clear_movement_range()
+		_show_inspect_movement_range()
 		return
 
 	# Calculate and show movement range
@@ -1095,6 +1096,26 @@ func _calculate_and_show_movement_range() -> void:
 	GameEvents.movement_range_calculated.emit(movement_range_tiles)
 
 # --- MovementResolver / BoardAdapter integration (character-backed units) ----
+
+## Display-only movement range for an INSPECTED enemy/AI unit: runs the same
+## reachable-cell flood the player's own units use and publishes it to the visualizer
+## (the blue tiles), but deliberately leaves movement_range_tiles EMPTY so no click can
+## treat those cells as a legal move -- you can see where the enemy could go, not send it.
+func _show_inspect_movement_range() -> void:
+	if selected_unit == null or not selected_unit.has_character():
+		_clear_movement_range()
+		return
+	var board = CombatServices.board()
+	var profile = selected_unit.get_movement_profile()
+	if board == null or profile == null:
+		_clear_movement_range()
+		return
+	var origin: Vector2i = board.cell_of(selected_unit)
+	var cells: Array[Vector2i] = MovementResolver.new().reachable_cells(origin, profile, board, selected_unit)
+	# Visual only -- the move-target set stays empty so the enemy can never be commanded.
+	movement_range_tiles = []
+	GameEvents.movement_range_calculated.emit(_cells_to_grid_tiles(cells))
+
 
 func _try_show_movement_range_via_resolver() -> bool:
 	"""Compute + publish the movement range through MovementResolver on the shared
