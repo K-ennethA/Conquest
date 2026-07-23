@@ -89,15 +89,25 @@ func can_target(origin: Vector2i, aim: Vector2i, caster = null, board = null) ->
 	return targeting.is_aim_allowed(origin, aim, caster, board, range_bonus_of(caster))
 
 
-## Build a full description from the effect list (for tooltips).
+## Build a full description for tooltips: the authored flavor text FOLLOWED BY a
+## one-line mechanical summary of every effect. The summary is what surfaces a
+## status/knockback/heal CHANCE (e.g. Blight Burst's "50% chance to inflict
+## Poisoned") -- it used to be hidden because a move with flavor text returned early
+## and never showed its effects. When no flavor is authored, the mechanics stand in
+## for the description, with the range appended.
 func full_description() -> String:
-	if description != "":
-		return description
 	var parts: Array[String] = []
 	for e in effects:
 		if e:
-			parts.append(e.describe())
-	var body := ", ".join(parts)
+			var d: String = e.describe()
+			if d != "":
+				parts.append(d)
+	var mechanics: String = " · ".join(parts)
+	if description != "":
+		if mechanics != "":
+			return "%s\n%s" % [description, mechanics]
+		return description
+	var body := mechanics
 	if targeting:
 		body += " (%s)" % targeting.describe_range()
 	return body

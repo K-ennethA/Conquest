@@ -76,6 +76,11 @@ var _last_action_visible: bool = false
 # perform_move), as opposed to a plain advance. _tick() reads it to give attacks a
 # longer, watchable beat.
 var _last_action_was_attack: bool = false
+# Move-then-attack is SPLIT across two Timer beats so each is watchable: the unit
+# visibly slides on one beat, then strikes on the next (instead of teleporting next to
+# its target and hitting in the same frame). This stashes the chosen strike for a unit
+# that just moved, keyed by its instance id; _act() resolves it on the following beat.
+var _pending_attack: Dictionary = {}
 
 
 func _ready() -> void:
@@ -292,6 +297,11 @@ func _has_stun_skipped_unit(ts: TurnSystemBase, player: Player) -> bool:
 ## player and AI paths symmetric without touching the primitive. Grid coords match
 ## the legacy contract: Vector3(col, 0, row).
 func _relocate(unit, board, from_cell: Vector2i, to_cell: Vector2i) -> void:
+	# board.move_unit snaps the unit's authoritative root to the destination cell (the
+	# board derives every unit's cell from its live world position, so the root MUST end
+	# up there -- do NOT rewind it). The visible SLIDE is UnitAnimator's job: it hears
+	# unit_moved and glides the MESH child from the old cell to the new one while the root
+	# stays put. Emitting unit_moved here is what makes the enemy's movement animate at all.
 	board.move_unit(unit, to_cell)
 	if GameEvents:
 		GameEvents.unit_moved.emit(
@@ -306,6 +316,19 @@ func _relocate(unit, board, from_cell: Vector2i, to_cell: Vector2i) -> void:
 ## the tick loop uses this to fast-forward past waits without spending an interval.
 func _act(unit: Unit) -> bool:
 	var board := CombatServices.board()
+	# A unit that moved last beat and stashed its strike resolves it NOW, as its own
+	# watchable beat, before any fresh planning. This is the second half of the
+	# move-then-attack split (see _execute_plan_attack).
+	var pend_key: int = unit.get_instance_id()
+	if _pending_attack.has(pend_key):
+		var pend: Dictionary = _pending_attack[pend_key]
+		_pending_attack.erase(pend_key)
+		if board != null and _execute_move_decision(unit, pend, board):
+			return true  # _execute_move_decision flags this beat as an ATTACK
+		# The stashed strike could not resolve (target gone, rare) -- close the unit's
+		# turn cleanly; it already spent its move on the previous beat.
+		_finish(unit, "wait")
+		return false
 	if board != null and unit.has_character():
 		return _act_character(unit, board)
 	return _act_fallback(unit, board)
@@ -532,9 +555,18 @@ func _execute_plan_attack(unit: Unit, decision: Dictionary, board) -> bool:
 	if moved:
 		_relocate(unit, board, origin, dest)
 		unit.mark_moved()
+		# SPLIT the beat: if the unit can still act after moving, let this beat be JUST
+		# the (now-animated) slide and stash the strike for the next beat, so the player
+		# watches the approach and then the hit as two readable moments instead of a
+		# single teleport-and-kill. If it somehow cannot act again, fall through and
+		# resolve the strike now rather than dropping it.
+		if unit.has_method("can_act") and unit.can_act():
+			_pending_attack[unit.get_instance_id()] = decision
+			_last_action_was_attack = false  # this beat is a MOVE (shorter dwell)
+			return true
 
 	if _execute_move_decision(unit, decision, board):
-		# Attacked (and possibly moved first) -- always visible.
+		# Attacked in place (already in range) -- always visible.
 		return true
 
 	# The move failed to resolve after moving (rare). End the turn cleanly -- the

@@ -268,8 +268,14 @@ func test_traditional_ai_moves_into_range_and_attacks_same_turn() -> void:
 	assert_true(acted, "the driver should act for the AI player (not sit inert)")
 	assert_ne(board.cell_of(ai_unit), start_cell,
 		"the AI must move up to the enemy (it starts out of every move's range)")
+	# Move-then-attack is SPLIT across two beats so each is watchable: the first beat
+	# slid the unit into range; the strike lands on the next. Drive one more beat to
+	# resolve it -- still the SAME turn (the unit never yielded, it just spread its
+	# move and its strike over two readable moments).
+	if human_unit.get_hp() >= start_hp:
+		driver.act_for_turn_system(ts)
 	assert_lt(human_unit.get_hp(), start_hp,
-		"after closing the gap the AI must attack the SAME turn, so the enemy's HP drops")
+		"after closing the gap the AI attacks the same turn, so the enemy's HP drops")
 
 
 # --- Traditional: AI advances its FULL move range, not one cell --------------

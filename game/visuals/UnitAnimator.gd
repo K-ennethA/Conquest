@@ -18,7 +18,7 @@ extends Node
 ## The unit's authoritative position is already at the destination when
 ## GameEvents.unit_moved fires, so we glide the MESH (a child offset) only --
 ## game logic, health bars, and targeting stay correct.
-@export_range(0.0, 1.5, 0.01) var move_glide_time: float = 0.18
+@export_range(0.0, 1.5, 0.01) var move_glide_time: float = 0.3
 ## Easing curve for the glide.
 @export var move_glide_trans: Tween.TransitionType = Tween.TRANS_SINE
 @export var move_glide_ease: Tween.EaseType = Tween.EASE_OUT
