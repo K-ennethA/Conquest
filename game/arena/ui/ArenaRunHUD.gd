@@ -301,7 +301,7 @@ func _augment_display_name(augment_id: String) -> String:
 	return _humanize(augment_id)
 
 
-## "wren_fleetfoot" -> "Wren Fleetfoot".
+## "vineweave" -> "Vineweave".
 func _humanize(raw: String) -> String:
 	var s: String = String(raw).strip_edges()
 	if s == "":

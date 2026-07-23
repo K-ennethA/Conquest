@@ -901,11 +901,11 @@ func test_eldroot_is_statted_as_an_immovable_fortress():
 	# The design constraint: a slow wall that punishes anyone in its grove, NOT a
 	# fast bruiser that chases. Compared against the roster's front-line bruiser so
 	# these stay meaningful if the whole game is retuned.
-	var torvald := load("res://game/characters/roster/torvald_ironhide.tres") as CharacterResource
-	if torvald != null:
-		assert_gt(eldroot.base_health, torvald.base_health, "boss-tier health")
-		assert_gt(eldroot.base_defense, torvald.base_defense, "boss-tier defence")
-		assert_lt(eldroot.base_speed, torvald.base_speed, "slower than a front-liner")
+	var hero := load("res://game/characters/roster/vineweave.tres") as CharacterResource
+	if hero != null:
+		assert_gt(eldroot.base_health, hero.base_health, "boss-tier health")
+		assert_gt(eldroot.base_defense, hero.base_defense, "boss-tier defence")
+		assert_lt(eldroot.base_speed, hero.base_speed, "slower than a front-liner")
 	assert_lte(eldroot.base_movement, 2, "movement 1-2: it does not chase")
 	assert_gte(eldroot.base_movement, 1)
 	assert_eq(eldroot.attack_range, 1, "melee")

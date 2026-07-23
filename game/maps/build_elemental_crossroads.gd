@@ -136,14 +136,14 @@ func _initialize() -> void:
 ## tile effects rather than stage an encounter.
 func _place_spawns(res: MapResource) -> void:
 	# Player 0 (west edge, column x=1).
-	res.set_character_spawn_at_position(Vector2i(1, 3), 0, "sable_quickarrow", "ARCHER")   # ranged sharpshooter
-	res.set_character_spawn_at_position(Vector2i(1, 4), 0, "torvald_ironhide", "WARRIOR")  # bruiser tank
-	res.set_character_spawn_at_position(Vector2i(1, 5), 0, "callan_brightvow", "SUPPORT")  # cleric support
+	res.set_character_spawn_at_position(Vector2i(1, 3), 0, "petalfang", "ARCHER")   # thorned control striker
+	res.set_character_spawn_at_position(Vector2i(1, 4), 0, "vineweave", "WARRIOR")  # vine-armed frontliner
+	res.set_character_spawn_at_position(Vector2i(1, 5), 0, "tree_grunt", "SUPPORT")  # bark-skinned bruiser
 
 	# Player 1 (east edge, column x=11) - mirror image of player 0's rows.
-	res.set_character_spawn_at_position(Vector2i(11, 3), 1, "wren_fleetfoot", "ARCHER")     # fast skirmisher
-	res.set_character_spawn_at_position(Vector2i(11, 4), 1, "mabel_bulwark", "WARRIOR")     # guardian tank
-	res.set_character_spawn_at_position(Vector2i(11, 5), 1, "ysolde_emberwynn", "MAGE")     # AoE mage
+	res.set_character_spawn_at_position(Vector2i(11, 3), 1, "blightcap", "ARCHER")     # leaping poison harasser
+	res.set_character_spawn_at_position(Vector2i(11, 4), 1, "tree_grunt", "WARRIOR")     # bark-skinned bruiser
+	res.set_character_spawn_at_position(Vector2i(11, 5), 1, "vineweave", "MAGE")     # vine-armed frontliner
 
 
 ## Saves [param res] to [param path], creating the destination directory if

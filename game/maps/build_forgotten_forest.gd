@@ -135,7 +135,7 @@ func _place_encounter(res: MapResource, anchor: Vector2i) -> void:
 
 	# Player placeholder squad on the edge FARTHEST from the grove, spread across it.
 	var far_y: int = res.height - 1 if anchor.y <= res.height / 2 else 0
-	var squad := ["torvald_ironhide", "callan_brightvow", "sable_quickarrow", "wren_fleetfoot"]
+	var squad := ["vineweave", "tree_grunt", "petalfang", "blightcap"]
 	var xs := [int(res.width * 0.2), int(res.width * 0.4), int(res.width * 0.6), int(res.width * 0.8)]
 	for i in range(squad.size()):
 		_add_spawn(res, 0, squad[i], Vector2i(xs[i], far_y), occupied)

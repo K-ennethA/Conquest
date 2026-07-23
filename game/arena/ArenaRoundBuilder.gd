@@ -13,7 +13,7 @@ const _APPLIER := preload("res://game/arena/ArenaAugmentApplier.gd")
 
 ## Enemy fodder pool, cycled to fill a wave. The hero roster now that the player fields the
 ## forest units -- so both rosters get exercised in a run.
-const ENEMY_POOL := ["wren_fleetfoot", "torvald_ironhide", "sable_quickarrow", "ysolde_emberwynn"]
+const ENEMY_POOL := ["petalfang", "blightcap", "tree_grunt", "vineweave"]
 ## Centrepiece dropped into the final round's wave.
 const BOSS_ID := "eldroot"
 

@@ -22,10 +22,13 @@ extends GutTest
 const GRID: Grid = preload("res://board/Grid.tres")
 const CHARACTER_UNIT_SCENE: PackedScene = preload("res://game/characters/CharacterUnit.tscn")
 
-## Torvald carries "cleave": a range-1 physical strike with a DamageEffect, so a
-## damaging in-range move is guaranteed to exist for the attack scenario.
-const ATTACKER_ID: StringName = &"torvald_ironhide"
-const TARGET_ID: StringName = &"sable_quickarrow"
+## Deterministic synthetic combatants (built in code and injected into
+## CharacterLibrary in before_each) instead of roster units: the attacker carries
+## ONE range-1 strike whose accuracy overshoots any evasion, so "HP drops" never
+## rides on a probabilistic hit, and its ONLY reach is range 1 so the "advance
+## instead of attacking" scenario at range 4 is genuinely out of range.
+const ATTACKER_ID: StringName = &"test_ai_attacker"
+const TARGET_ID: StringName = &"test_ai_target"
 
 var _map_root: Node3D
 
@@ -35,6 +38,7 @@ func before_each() -> void:
 	# previous test (this file or another) must never leak into this one.
 	CombatServices.clear()
 	_map_root = null
+	_install_test_characters()
 
 
 func after_each() -> void:
@@ -42,6 +46,8 @@ func after_each() -> void:
 	# left pointing at freed nodes for the next test.
 	CombatServices.clear()
 	_map_root = null
+	# Evict the injected synthetic characters so they never leak into other suites.
+	CharacterLibrary.clear_cache()
 
 
 # --- Helpers -----------------------------------------------------------------
@@ -51,6 +57,64 @@ func after_each() -> void:
 ## uses -- mirrors the placement pattern in tests/unit/test_board_adapter.gd.
 func _cell_to_world(cell: Vector2i) -> Vector3:
 	return BoardAdapter.new(GRID, []).cell_to_world(cell)
+
+
+## Build the two throwaway combatants and inject them straight into the
+## CharacterLibrary cache so _spawn_character_unit -> CharacterLibrary.get_character
+## resolves them without any .tres on disk.
+func _install_test_characters() -> void:
+	CharacterLibrary._cache[ATTACKER_ID] = _make_test_attacker()
+	CharacterLibrary._cache[TARGET_ID] = _make_test_target()
+
+
+func _make_test_attacker() -> CharacterResource:
+	return _make_test_character(ATTACKER_ID, "Test Attacker", 100, 34)
+
+
+func _make_test_target() -> CharacterResource:
+	return _make_test_character(TARGET_ID, "Test Target", 90, 20)
+
+
+func _make_test_character(id: StringName, name: String, hp: int, atk: int) -> CharacterResource:
+	var c := CharacterResource.new()
+	c.character_id = id
+	c.display_name = name
+	c.model_scene = load("res://game/characters/models/forest/tree_grunt.glb")
+	c.movement_profile = load("res://game/movement/profiles/ground_standard.tres")
+	c.base_health = hp
+	c.base_attack = atk
+	c.base_defense = 8
+	c.base_magic = 4
+	c.base_magic_defense = 8
+	c.base_speed = 10
+	c.base_movement = 3
+	c.attack_range = 1
+	c.moveset = [_test_cleave()] as Array[MoveResource]
+	return c
+
+
+## A range-1 physical strike whose accuracy (5.0) overshoots any target evasion,
+## so hit% clamps to 100 -- the attack ALWAYS lands. Non-lethal against the target
+## HP above, so the struck unit survives (get_hp() stays valid for the assert).
+func _test_cleave() -> MoveResource:
+	var m := MoveResource.new()
+	m.move_id = &"test_cleave"
+	m.display_name = "Test Cleave"
+	m.category = CombatTypes.DamageCategory.PHYSICAL
+	m.accuracy = 5.0
+	var p := TargetingPattern.new()
+	p.target_kind = CombatTypes.TargetKind.ENEMY
+	p.min_range = 1
+	p.max_range = 1
+	p.area_shape = CombatTypes.AreaShape.SINGLE
+	m.targeting = p
+	var d := DamageEffect.new()
+	d.power = 20
+	d.scaling_stat = "attack"
+	d.scale = 1.0
+	d.category = CombatTypes.DamageCategory.PHYSICAL
+	m.effects = [d]
+	return m
 
 
 ## Spawns a character-backed Unit (CharacterUnit.tscn + CharacterLibrary) at

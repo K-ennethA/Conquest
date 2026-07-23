@@ -26,7 +26,7 @@ var character_unit_scene: PackedScene = preload("res://game/characters/Character
 
 # Fallback roster id used when a spawn's character_id (explicit or aliased)
 # doesn't resolve to a real CharacterResource, so map loading never fails.
-const DEFAULT_CHARACTER_ID: StringName = &"torvald_ironhide"
+const DEFAULT_CHARACTER_ID: StringName = &"vineweave"
 
 ## World Y a unit's origin sits at: the tile box top (tiles are 0.2 tall, centered on
 ## y=0). Models are feet-at-origin, so this rests their feet on the tile surface.
@@ -36,9 +36,9 @@ const UNIT_GROUND_Y: float = 0.1
 # spawns authored before the character system (no "character_id" set) to a
 # fitting character so old maps keep loading with character-backed units.
 const LEGACY_UNIT_TYPE_TO_CHARACTER_ID: Dictionary = {
-	"WARRIOR": &"torvald_ironhide",
-	"ARCHER": &"sable_quickarrow",
-	"MAGE": &"ysolde_emberwynn",
+	"WARRIOR": &"vineweave",
+	"ARCHER": &"petalfang",
+	"MAGE": &"mycothrall",
 }
 
 func _ready():

@@ -246,7 +246,7 @@ func _update_unit_header() -> void:
 	if unit_header_background:
 		_update_header_background_color()
 
-## Turn a snake_case id ("torvald_ironhide") into a display string
+## Turn a snake_case id ("vineweave") into a display string
 ## ("Torvald Ironhide"). Empty in -> empty out.
 func _humanize_id(id: String) -> String:
 	if id == "":

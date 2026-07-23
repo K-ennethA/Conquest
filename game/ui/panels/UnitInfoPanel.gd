@@ -39,7 +39,7 @@ const _BASE_HEIGHT := 280.0
 ## fraction of the viewport height in _fit_height so it shrinks on short windows.
 const EFFECTS_MAX_HEIGHT := 150.0
 
-## Turn a snake_case id ("torvald_ironhide") into a display string
+## Turn a snake_case id ("vineweave") into a display string
 ## ("Torvald Ironhide"). Empty in -> empty out.
 func _humanize_id(id: String) -> String:
 	if id == "":

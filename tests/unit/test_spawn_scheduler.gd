@@ -109,7 +109,7 @@ func _map_with(kind: String, pos: Vector2i, player_id: int, opts: Dictionary) ->
 	# character id. (The FakeMapLoader ignores what is spawned; it only counts.)
 	var full_opts: Dictionary = opts.duplicate()
 	if not full_opts.has("character_id"):
-		full_opts["character_id"] = "torvald_ironhide"
+		full_opts["character_id"] = "vineweave"
 	var map := MapResource.new()
 	map.set_spawn_point_at_position(pos, player_id, kind, full_opts)
 	return map

@@ -480,37 +480,37 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }])
 unit_spawns = Array[Dictionary]([{
-"character_id": "sable_quickarrow",
+"character_id": "petalfang",
 "player_id": 0,
 "position": Vector2i(1, 3),
 "unit_resource_path": "",
 "unit_type": "ARCHER"
 }, {
-"character_id": "torvald_ironhide",
+"character_id": "vineweave",
 "player_id": 0,
 "position": Vector2i(1, 4),
 "unit_resource_path": "",
 "unit_type": "WARRIOR"
 }, {
-"character_id": "callan_brightvow",
+"character_id": "tree_grunt",
 "player_id": 0,
 "position": Vector2i(1, 5),
 "unit_resource_path": "",
 "unit_type": "SUPPORT"
 }, {
-"character_id": "wren_fleetfoot",
+"character_id": "blightcap",
 "player_id": 1,
 "position": Vector2i(11, 3),
 "unit_resource_path": "",
 "unit_type": "ARCHER"
 }, {
-"character_id": "mabel_bulwark",
+"character_id": "tree_grunt",
 "player_id": 1,
 "position": Vector2i(11, 4),
 "unit_resource_path": "",
 "unit_type": "WARRIOR"
 }, {
-"character_id": "ysolde_emberwynn",
+"character_id": "vineweave",
 "player_id": 1,
 "position": Vector2i(11, 5),
 "unit_resource_path": "",

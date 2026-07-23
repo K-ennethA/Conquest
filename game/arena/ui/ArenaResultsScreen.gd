@@ -232,7 +232,7 @@ func _read_result() -> Dictionary:
 
 # --- Helpers ----------------------------------------------------------------
 
-## "wren_fleetfoot" -> "Wren Fleetfoot". Empty id -> "Unknown".
+## "vineweave" -> "Vineweave". Empty id -> "Unknown".
 func _humanize_id(id: String) -> String:
 	var trimmed: String = id.strip_edges()
 	if trimmed == "":

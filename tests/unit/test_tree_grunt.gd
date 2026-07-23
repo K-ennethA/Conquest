@@ -251,9 +251,9 @@ func test_tree_grunt_is_a_spawnable_grunt_not_a_boss():
 	assert_false(grunt.is_boss, "the grunt is not a boss")
 	assert_eq(grunt.get_footprint(), Vector2i(1, 1), "the grunt occupies a single cell")
 	assert_eq(grunt.attack_range, 1, "the grunt is a melee unit")
-	# Individually weak: comfortably below the sample roster's front-line bruiser.
-	var torvald := load("res://game/characters/roster/torvald_ironhide.tres") as CharacterResource
-	assert_lt(grunt.power_budget(), torvald.power_budget(),
+	# Individually weak: comfortably below an authored front-line hero.
+	var frontliner := load("res://game/characters/roster/vineweave.tres") as CharacterResource
+	assert_lt(grunt.power_budget(), frontliner.power_budget(),
 		"a grunt is individually weaker than an authored front-liner")
-	assert_lt(grunt.base_speed, torvald.base_speed, "the grunt is slower")
-	assert_lt(grunt.base_movement, torvald.base_movement, "the grunt has shorter movement")
+	assert_lt(grunt.base_speed, frontliner.base_speed, "the grunt is slower")
+	assert_lt(grunt.base_movement, frontliner.base_movement, "the grunt has shorter movement")

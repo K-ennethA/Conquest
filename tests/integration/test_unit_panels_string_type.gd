@@ -14,7 +14,7 @@ const INFO_PANEL := preload("res://game/ui/panels/UnitInfoPanel.tscn")
 
 func _make_character_unit() -> Unit:
 	var c := CharacterResource.new()
-	c.character_id = &"torvald_ironhide"
+	c.character_id = &"vineweave"
 	c.display_name = "Torvald Ironhide"
 	var u := Unit.new()
 	u.character_resource = c
@@ -25,7 +25,7 @@ func _make_character_unit() -> Unit:
 func test_get_unit_type_is_a_string():
 	var u := _make_character_unit()
 	assert_eq(typeof(u.get_unit_type()), TYPE_STRING, "get_unit_type() returns a String")
-	assert_eq(u.get_unit_type(), "torvald_ironhide", "and it is the character id")
+	assert_eq(u.get_unit_type(), "vineweave", "and it is the character id")
 
 
 func test_actions_panel_header_and_icon_survive_selection():

@@ -16,9 +16,9 @@ extends SceneTree
 ## does not carry a "character_id" field through, so spawns are applied
 ## directly to the [MapResource] produced by [method MapMakerModel.to_map_resource]
 ## rather than routed through the model - the model owns tiles and the throne
-## objective only. The map is deliberately asymmetric on ONE axis: player 1
-## (the AI side) gets its balanced squad PLUS the boss, dread_sovereign_nyx,
-## as an extra unit - that imbalance is the point of a "proving grounds" map.
+## objective only. This is a true MIRROR MATCH: both players field the same five
+## heroes at point-symmetric positions, so identical teams meet on symmetric
+## terrain - the point of a "proving grounds" map is a clean balance testbed.
 ##
 ## After saving, the resource is re-loaded (fresh from disk, plus a live
 ## [MapLoader] build into a throwaway [Node3D]) and a validation report is
@@ -61,7 +61,7 @@ func _paint_symmetric(model: MapMakerModel, pos: Vector2i, tile_type: String) ->
 func _initialize() -> void:
 	var model := MapMakerModel.new(MAP_WIDTH, MAP_HEIGHT)
 	model.map_name = "Proving Grounds"
-	model.description = "A 17x13 point-symmetric combat arena: three walled approach lanes (west flank, centre, east flank) converge on a throne boxed in by a lava patch (north/south) and water (east/west). Player 1 fields a balanced squad plus the boss Dread Sovereign Nyx."
+	model.description = "A 17x13 point-symmetric combat arena: three walled approach lanes (west flank, centre, east flank) converge on a throne boxed in by a lava patch (north/south) and water (east/west). A true mirror match -- both sides field the full hero roster (Vineweave, Blightcap, Petalfang, Tree Grunt, Mycothrall) at symmetric positions, so it's a clean testbed for unit-vs-unit balance."
 	model.author = "Map Maker (build_proving_grounds.gd)"
 	model.max_players = 2
 
@@ -125,26 +125,25 @@ func _initialize() -> void:
 
 
 ## Places every character-backed spawn for both players directly onto
-## [param res]. Player 0 (human) gets a balanced 3-character squad on the west
-## edge; player 1 (AI) gets the mirrored positions for an equivalent squad
-## PLUS the boss, dread_sovereign_nyx, as a bonus 4th unit deeper in AI
-## territory - the map's deliberate imbalance.
-func _place_spawns(res: MapResource) -> void:
-	# Player 0 (human): balanced squad - front-line bruiser, ranged
-	# sharpshooter, support cleric. Positioned on the west edge, inside the
-	# centre lane's row band so they can push through any of the 3 lanes.
-	res.set_character_spawn_at_position(Vector2i(1, 6), 0, "torvald_ironhide", "WARRIOR")  # bruiser tank
-	res.set_character_spawn_at_position(Vector2i(1, 5), 0, "sable_quickarrow", "ARCHER")   # ranged sharpshooter
-	res.set_character_spawn_at_position(Vector2i(1, 7), 0, "callan_brightvow", "SUPPORT")  # cleric support
+## [param res]. This is a true MIRROR MATCH: player 0 (human) fields the entire
+## playable hero roster on the west edge, and player 1 (AI) gets the exact same
+## five heroes at point-mirrored positions. Identical teams, symmetric terrain -
+## the cleanest testbed for unit-vs-unit balance.
+const MIRROR_SQUAD := [
+	{"cell": Vector2i(1, 6), "id": "vineweave"},    # vine-armed frontliner (lead)
+	{"cell": Vector2i(1, 5), "id": "blightcap"},    # leaping poison harasser
+	{"cell": Vector2i(1, 7), "id": "petalfang"},    # thorned control striker
+	{"cell": Vector2i(1, 9), "id": "tree_grunt"},   # bark-skinned bruiser
+	{"cell": Vector2i(1, 10), "id": "mycothrall"},  # parasite caster (Hard+ gate)
+]
 
-	# Player 1 (AI): squad at the mirror image of player 0's positions...
-	res.set_character_spawn_at_position(_mirror(Vector2i(1, 6)), 1, "mabel_bulwark", "WARRIOR")     # guardian tank
-	res.set_character_spawn_at_position(_mirror(Vector2i(1, 5)), 1, "ysolde_emberwynn", "MAGE")     # AoE mage
-	res.set_character_spawn_at_position(_mirror(Vector2i(1, 7)), 1, "wren_fleetfoot", "ARCHER")     # fast skirmisher
-	# ...PLUS the boss, one extra tile further back on the east edge. No
-	# mirror counterpart is placed for player 0 - this asymmetry is intended:
-	# Proving Grounds is a boss-encounter map for the AI side.
-	res.set_character_spawn_at_position(Vector2i(16, 6), 1, "dread_sovereign_nyx", "BOSS")
+func _place_spawns(res: MapResource) -> void:
+	# Player 0 (human) on the west edge; player 1 (AI) at each cell's point-mirror.
+	for entry in MIRROR_SQUAD:
+		var cell: Vector2i = entry["cell"]
+		var id: String = entry["id"]
+		res.set_character_spawn_at_position(cell, 0, id, "WARRIOR")
+		res.set_character_spawn_at_position(_mirror(cell), 1, id, "WARRIOR")
 
 
 ## Saves [param res] to [param path], creating the destination directory if

@@ -6,7 +6,7 @@
 resource_name = "MapResource"
 script = ExtResource("1_y8bwm")
 map_name = "Proving Grounds"
-description = "A 17x13 point-symmetric combat arena: three walled approach lanes (west flank, centre, east flank) converge on a throne boxed in by a lava patch (north/south) and water (east/west). Player 1 fields a balanced squad plus the boss Dread Sovereign Nyx."
+description = "A 17x13 point-symmetric combat arena: three walled approach lanes (west flank, centre, east flank) converge on a throne boxed in by a lava patch (north/south) and water (east/west). A true mirror match -- both sides field the full hero roster (Vineweave, Blightcap, Petalfang, Tree Grunt, Mycothrall) at symmetric positions, so it's a clean testbed for unit-vs-unit balance."
 author = "Map Maker (build_proving_grounds.gd)"
 width = 17
 height = 13
@@ -896,47 +896,65 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }])
 unit_spawns = Array[Dictionary]([{
-"character_id": "torvald_ironhide",
+"character_id": "vineweave",
 "player_id": 0,
 "position": Vector2i(1, 6),
 "unit_resource_path": "",
 "unit_type": "WARRIOR"
 }, {
-"character_id": "sable_quickarrow",
+"character_id": "blightcap",
 "player_id": 0,
 "position": Vector2i(1, 5),
 "unit_resource_path": "",
-"unit_type": "ARCHER"
+"unit_type": "WARRIOR"
 }, {
-"character_id": "callan_brightvow",
+"character_id": "petalfang",
 "player_id": 0,
 "position": Vector2i(1, 7),
 "unit_resource_path": "",
-"unit_type": "SUPPORT"
+"unit_type": "WARRIOR"
 }, {
-"character_id": "mabel_bulwark",
+"character_id": "tree_grunt",
+"player_id": 0,
+"position": Vector2i(1, 9),
+"unit_resource_path": "",
+"unit_type": "WARRIOR"
+}, {
+"character_id": "mycothrall",
+"player_id": 0,
+"position": Vector2i(1, 10),
+"unit_resource_path": "",
+"unit_type": "WARRIOR"
+}, {
+"character_id": "vineweave",
 "player_id": 1,
 "position": Vector2i(15, 6),
 "unit_resource_path": "",
 "unit_type": "WARRIOR"
 }, {
-"character_id": "ysolde_emberwynn",
+"character_id": "blightcap",
 "player_id": 1,
 "position": Vector2i(15, 7),
 "unit_resource_path": "",
-"unit_type": "MAGE"
+"unit_type": "WARRIOR"
 }, {
-"character_id": "wren_fleetfoot",
+"character_id": "petalfang",
 "player_id": 1,
 "position": Vector2i(15, 5),
 "unit_resource_path": "",
-"unit_type": "ARCHER"
+"unit_type": "WARRIOR"
 }, {
-"character_id": "dread_sovereign_nyx",
+"character_id": "tree_grunt",
 "player_id": 1,
-"position": Vector2i(16, 6),
+"position": Vector2i(15, 3),
 "unit_resource_path": "",
-"unit_type": "BOSS"
+"unit_type": "WARRIOR"
+}, {
+"character_id": "mycothrall",
+"player_id": 1,
+"position": Vector2i(15, 2),
+"unit_resource_path": "",
+"unit_type": "WARRIOR"
 }])
 difficulty = "Hard"
 special_rules = Array[String](["objective:THRONE:-1:8:6"])

@@ -16,12 +16,13 @@ const ROSTER_DIR: String = "res://game/characters/roster/"
 ## if the roster directory can't be scanned (e.g. exported PCK quirks), and
 ## as documentation of what's expected to exist.
 const KNOWN_IDS: Array[StringName] = [
-	&"torvald_ironhide",
-	&"sable_quickarrow",
-	&"mabel_bulwark",
-	&"ysolde_emberwynn",
-	&"wren_fleetfoot",
-	&"callan_brightvow",
+	&"vineweave",
+	&"blightcap",
+	&"petalfang",
+	&"tree_grunt",
+	&"mycothrall",
+	&"eldroot",
+	&"feral_thornbeast",
 	&"dread_sovereign_nyx",
 ]
 

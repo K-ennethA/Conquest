@@ -8,7 +8,6 @@ script = ExtResource("1_6n3b1")
 map_name = "Forgotten Forest"
 description = "Forgotten Forest Boss Level"
 author = "Kenneth"
-status = "Inactive"
 width = 20
 height = 20
 tile_layout = Array[Dictionary]([{
@@ -487,11 +486,6 @@ tile_layout = Array[Dictionary]([{
 "tile_resource_path": "",
 "tile_type": "NORMAL"
 }, {
-"position": Vector2i(14, 4),
-"tile_id": "grass_plains",
-"tile_resource_path": "",
-"tile_type": "NORMAL"
-}, {
 "position": Vector2i(18, 5),
 "tile_id": "grass_plains",
 "tile_resource_path": "",
@@ -812,11 +806,6 @@ tile_layout = Array[Dictionary]([{
 "tile_resource_path": "",
 "tile_type": "NORMAL"
 }, {
-"position": Vector2i(7, 4),
-"tile_id": "grass_plains",
-"tile_resource_path": "",
-"tile_type": "NORMAL"
-}, {
 "position": Vector2i(4, 6),
 "tile_id": "grass_plains",
 "tile_resource_path": "",
@@ -977,16 +966,6 @@ tile_layout = Array[Dictionary]([{
 "tile_resource_path": "",
 "tile_type": "NORMAL"
 }, {
-"position": Vector2i(7, 0),
-"tile_id": "sacred_meadow",
-"tile_resource_path": "",
-"tile_type": "SACRED_GROUND"
-}, {
-"position": Vector2i(8, 0),
-"tile_id": "sacred_meadow",
-"tile_resource_path": "",
-"tile_type": "SACRED_GROUND"
-}, {
 "position": Vector2i(9, 0),
 "tile_id": "sacred_meadow",
 "tile_resource_path": "",
@@ -1018,11 +997,6 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "SACRED_GROUND"
 }, {
 "position": Vector2i(13, 0),
-"tile_id": "sacred_meadow",
-"tile_resource_path": "",
-"tile_type": "SACRED_GROUND"
-}, {
-"position": Vector2i(14, 0),
 "tile_id": "sacred_meadow",
 "tile_resource_path": "",
 "tile_type": "SACRED_GROUND"
@@ -1202,16 +1176,6 @@ tile_layout = Array[Dictionary]([{
 "tile_resource_path": "",
 "tile_type": "NORMAL"
 }, {
-"position": Vector2i(12, 5),
-"tile_id": "grass_plains",
-"tile_resource_path": "",
-"tile_type": "NORMAL"
-}, {
-"position": Vector2i(11, 5),
-"tile_id": "grass_plains",
-"tile_resource_path": "",
-"tile_type": "NORMAL"
-}, {
 "position": Vector2i(10, 5),
 "tile_id": "grass_plains",
 "tile_resource_path": "",
@@ -1268,11 +1232,6 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(10, 6),
-"tile_id": "grass_plains",
-"tile_resource_path": "",
-"tile_type": "NORMAL"
-}, {
-"position": Vector2i(9, 6),
 "tile_id": "grass_plains",
 "tile_resource_path": "",
 "tile_type": "NORMAL"
@@ -1467,46 +1426,6 @@ tile_layout = Array[Dictionary]([{
 "tile_resource_path": "",
 "tile_type": "NORMAL"
 }, {
-"position": Vector2i(9, 8),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(10, 8),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(9, 10),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(10, 10),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(9, 12),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(10, 12),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(9, 14),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(10, 14),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
 "position": Vector2i(8, 9),
 "tile_id": "tree",
 "tile_resource_path": "",
@@ -1533,86 +1452,6 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(11, 13),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(2, 9),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(3, 9),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(4, 9),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(2, 12),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(3, 12),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(4, 12),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(2, 6),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(3, 6),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(16, 6),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(17, 6),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(16, 9),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(17, 9),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(18, 9),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(16, 12),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(17, 12),
-"tile_id": "tree",
-"tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
-}, {
-"position": Vector2i(18, 12),
 "tile_id": "tree",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
@@ -2011,6 +1850,166 @@ tile_layout = Array[Dictionary]([{
 "tile_id": "sacred_meadow",
 "tile_resource_path": "",
 "tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(9, 8),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 8),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 10),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 10),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 14),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 14),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(2, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(2, 9),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 9),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 9),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(2, 6),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 6),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 6),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 6),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 9),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 9),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 9),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "res://game/tiles/resources/forest/tall_grass.tres",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 0),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "res://game/tiles/resources/forest/sacred_meadow.tres",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(8, 0),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "res://game/tiles/resources/forest/sacred_meadow.tres",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(7, 4),
+"tile_id": "grass_plains",
+"tile_resource_path": "res://game/tiles/resources/forest/grass_plains.tres",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(9, 6),
+"tile_id": "grass_plains",
+"tile_resource_path": "res://game/tiles/resources/forest/grass_plains.tres",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 5),
+"tile_id": "grass_plains",
+"tile_resource_path": "res://game/tiles/resources/forest/grass_plains.tres",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 5),
+"tile_id": "grass_plains",
+"tile_resource_path": "res://game/tiles/resources/forest/grass_plains.tres",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(14, 4),
+"tile_id": "grass_plains",
+"tile_resource_path": "res://game/tiles/resources/forest/grass_plains.tres",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(14, 0),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "res://game/tiles/resources/forest/sacred_meadow.tres",
+"tile_type": "SACRED_GROUND"
 }])
 unit_spawns = Array[Dictionary]([{
 "aggro_range": -1,
@@ -2030,9 +2029,35 @@ unit_spawns = Array[Dictionary]([{
 "ai_stance": "",
 "character_id": "tree_grunt",
 "leash_radius": -1,
+"max_spawns": -1,
+"player_id": 1,
+"position": Vector2i(4, 3),
+"respawn_interval": 1,
+"spawn_kind": "Endless",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": -1,
+"player_id": 1,
+"position": Vector2i(15, 3),
+"respawn_interval": 1,
+"spawn_kind": "Endless",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
 "max_spawns": 1,
 "player_id": 1,
-"position": Vector2i(7, 0),
+"position": Vector2i(2, 6),
 "respawn_interval": 1,
 "spawn_kind": "Start",
 "spawn_turn": 1,
@@ -2045,7 +2070,137 @@ unit_spawns = Array[Dictionary]([{
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 1,
-"position": Vector2i(14, 0),
+"position": Vector2i(3, 6),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(2, 9),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(3, 9),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(2, 12),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(3, 12),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(16, 6),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(17, 6),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(16, 9),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(17, 9),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(16, 12),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(17, 12),
 "respawn_interval": 1,
 "spawn_kind": "Start",
 "spawn_turn": 1,
@@ -2058,7 +2213,176 @@ unit_spawns = Array[Dictionary]([{
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 1,
-"position": Vector2i(7, 4),
+"position": Vector2i(4, 8),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "petalfang",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(4, 11),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "petalfang",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(15, 11),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "petalfang",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(15, 8),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "petalfang",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(8, 8),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "petalfang",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(11, 8),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "petalfang",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(8, 10),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "petalfang",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(11, 10),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(9, 9),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(10, 9),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(9, 11),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(10, 11),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(9, 13),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(10, 13),
 "respawn_interval": 1,
 "spawn_kind": "Start",
 "spawn_turn": 1,
@@ -2071,7 +2395,7 @@ unit_spawns = Array[Dictionary]([{
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 1,
-"position": Vector2i(14, 4),
+"position": Vector2i(4, 7),
 "respawn_interval": 1,
 "spawn_kind": "Start",
 "spawn_turn": 1,
@@ -2080,7 +2404,124 @@ unit_spawns = Array[Dictionary]([{
 }, {
 "aggro_range": -1,
 "ai_stance": "",
-"character_id": "mycothrall",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(4, 10),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(15, 10),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(15, 7),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(9, 8),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(10, 8),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(5, 6),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(14, 6),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(9, 14),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(10, 14),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 1,
@@ -2093,11 +2534,11 @@ unit_spawns = Array[Dictionary]([{
 }, {
 "aggro_range": -1,
 "ai_stance": "",
-"character_id": "mycothrall",
+"character_id": "blightcap",
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 1,
-"position": Vector2i(11, 5),
+"position": Vector2i(10, 6),
 "respawn_interval": 1,
 "spawn_kind": "Start",
 "spawn_turn": 1,
@@ -2106,7 +2547,150 @@ unit_spawns = Array[Dictionary]([{
 }, {
 "aggro_range": -1,
 "ai_stance": "",
-"character_id": "torvald_ironhide",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(2, 14),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 10,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(3, 14),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 10,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(4, 14),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 10,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(5, 14),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 10,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(14, 14),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 10,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(15, 14),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 10,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(16, 14),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 10,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(17, 14),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 10,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "vineweave",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(1, 19),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "petalfang",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(2, 19),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(3, 19),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 0,
@@ -2119,7 +2703,46 @@ unit_spawns = Array[Dictionary]([{
 }, {
 "aggro_range": -1,
 "ai_stance": "",
-"character_id": "callan_brightvow",
+"character_id": "vineweave",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(5, 19),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(6, 19),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "vineweave",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(7, 19),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "petalfang",
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 0,
@@ -2132,7 +2755,46 @@ unit_spawns = Array[Dictionary]([{
 }, {
 "aggro_range": -1,
 "ai_stance": "",
-"character_id": "sable_quickarrow",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(9, 19),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(10, 19),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "vineweave",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(11, 19),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 0,
@@ -2142,20 +2804,7 @@ unit_spawns = Array[Dictionary]([{
 "spawn_turn": 1,
 "unit_resource_path": "",
 "unit_type": ""
-}, {
-"aggro_range": -1,
-"ai_stance": "",
-"character_id": "wren_fleetfoot",
-"leash_radius": -1,
-"max_spawns": 1,
-"player_id": 0,
-"position": Vector2i(16, 19),
-"respawn_interval": 1,
-"spawn_kind": "Start",
-"spawn_turn": 1,
-"unit_resource_path": "",
-"unit_type": ""
 }])
 victory_conditions = Array[String](["Defeat Boss"])
 creation_date = "2026-07-19T21:03:24"
-last_modified = "2026-07-20T20:21:42"
+last_modified = "2026-07-20T21:36:46"
