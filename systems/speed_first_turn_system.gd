@@ -208,7 +208,11 @@ func get_unit_speed_modifiers(unit: Unit) -> Array:
 
 func _is_unit_active(unit: Unit) -> bool:
 	"""Check if a unit is active and can participate in turns"""
-	if not unit:
+	# is_instance_valid (not just `if not unit`): a unit freed on death leaves a dangling
+	# reference that is NOT caught by a plain null check, and calling has_method/is_alive on
+	# it crashes ("previously freed"). Treat a freed unit as inactive so it's filtered out
+	# of the queue everywhere this gate is used.
+	if unit == null or not is_instance_valid(unit):
 		return false
 
 	# Unit must be alive/active
@@ -396,7 +400,10 @@ func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
 
 # Query methods
 func get_current_acting_unit() -> Unit:
-	"""Get the unit that is currently acting"""
+	"""Get the unit that is currently acting (null if it died/was freed mid-turn, so
+	callers like the TurnQueue never dereference a freed instance)."""
+	if current_acting_unit != null and not is_instance_valid(current_acting_unit):
+		return null
 	return current_acting_unit
 
 func get_units_that_acted_this_round() -> Array[Unit]:

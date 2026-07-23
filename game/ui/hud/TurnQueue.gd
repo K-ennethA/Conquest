@@ -130,7 +130,7 @@ func _update_current_unit_display(current_unit: Unit, progress: Dictionary) -> v
 	if not current_unit_label or not round_info_label:
 		return
 
-	if current_unit:
+	if current_unit and is_instance_valid(current_unit):
 		# Show current acting unit with player info
 		var player = current_unit.get_owner_player()
 		var player_name = player.get_display_name() if player else "Unknown"
@@ -176,6 +176,11 @@ func _update_queue_display(queue: Array, current_unit: Unit) -> void:
 
 	for i in range(start_index, end_index):
 		var unit = queue[i]
+		# Skip a unit that died and was freed since the queue was built (Speed mode frees
+		# units mid-round). Calling get_display_name/get_stat on it crashes ("previously
+		# freed"), which is exactly the "enemy attacked then crashed" report.
+		if unit == null or not is_instance_valid(unit):
+			continue
 		var is_current: bool = (unit == current_unit)
 		var portrait = _create_unit_portrait(unit, is_current, i)
 		queue_container.add_child(portrait)
