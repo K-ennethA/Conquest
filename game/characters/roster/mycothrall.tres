@@ -11,6 +11,7 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"mycothrall"
+element = &"nature"
 display_name = "Mycothrall"
 description = "A low, wet parasite that spreads flat across a tile like something poured. It cannot win a straight fight, so it doesn't try -- it lunges in, bites deep, and drinks. Left in a wound too long its threads hollow the host from the inside and take the reins, and the thing you were protecting turns and swings at the ally beside it."
 model_scene = ExtResource("2_model")

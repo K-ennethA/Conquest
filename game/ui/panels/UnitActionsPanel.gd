@@ -1724,6 +1724,15 @@ func _on_move_selected(slot: int) -> void:
 	if move == null or move.targeting == null:
 		return
 
+	# COOLDOWN / CHARGES ENFORCEMENT: never enter targeting for a move the unit
+	# cannot currently use. The panel greys the button, but this guards every path
+	# into targeting (mouse, number keys, a re-entered/stale panel) so a move on
+	# cooldown can never even be aimed -- and _execute_move_on_target re-checks again
+	# at resolve time. Null-safe for legacy units without a MovesetController.
+	var select_controller = selected_unit.get_moveset_controller()
+	if select_controller and select_controller.has_method("can_use") and not select_controller.can_use(move):
+		return
+
 	selected_move_index = slot
 	move_mode = true
 
@@ -1796,6 +1805,20 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 	var board = CombatServices.board()
 	if board == null:
 		_cancel_move_targeting()
+		return
+
+	# COOLDOWN / CHARGES ENFORCEMENT (authoritative, not just the greyed button).
+	# The MoveSelectionPanel already disables a move that is on cooldown / out of
+	# charges, but that is a UI-only gate. Re-check MovesetController.can_use at the
+	# single execution chokepoint so a move that somehow reached here (stale panel,
+	# keyboard path, a future caller) can NEVER resolve or consume the unit's action.
+	# Null-safe: legacy units without a MovesetController fall through unchanged.
+	var gate_controller = selected_unit.get_moveset_controller()
+	if gate_controller and gate_controller.has_method("can_use") and not gate_controller.can_use(move):
+		# Not usable -- abort without executing or spending the action; refresh the UI
+		# (which reflects the remaining cooldown) and drop targeting.
+		_cancel_move_targeting()
+		_update_actions()
 		return
 
 	# CONFIRM: clicking a valid target commits the whole action. First lock in the

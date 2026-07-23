@@ -13,6 +13,7 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"eldroot"
+element = &"nature"
 display_name = "Eldroot, the Hollow Crown"
 description = "The oldest thing in the grove, and the reason the rest of it is dying. Eldroot drank the wood hollow to keep its own crown standing, and now it holds four cells of rotting ground like a fortress -- it does not chase, it does not retreat, it simply makes standing near it unsurvivable."
 model_scene = ExtResource("2_model")

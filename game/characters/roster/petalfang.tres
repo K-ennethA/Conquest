@@ -13,6 +13,7 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"petalfang"
+element = &"nature"
 display_name = "Petalfang"
 description = "A sprawling vine-serpent crowned with a wet, over-large blossom. Petalfang does not chase -- it seeds the ground with runners, spits thorns from cover, and waits for something to stop struggling."
 model_scene = ExtResource("2_model")

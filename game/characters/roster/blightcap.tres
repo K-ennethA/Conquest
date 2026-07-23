@@ -11,6 +11,7 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"blightcap"
+element = &"nature"
 display_name = "Blightcap"
 description = "A squat, wet-looking fungus that walks on a knot of root-legs and smells like a turned log. It cannot chase anything down, so it waits, throws itself the last few paces, and hammers at whatever it reaches until the rot it carries does the rest. Killing one is not the end of the exchange -- the cap ruptures and coats everything standing over it."
 model_scene = ExtResource("2_model")

@@ -88,6 +88,7 @@ effects = Array[ExtResource("3_c5ed8")]([SubResource("Resource_f47a3")])
 [resource]
 script = ExtResource("8_85556")
 character_id = &"callan_brightvow"
+element = &"holy"
 display_name = "Callan Brightvow"
 description = "A steadfast cleric who keeps the roster standing and emboldened."
 model_scene = ExtResource("1_7jfji")

@@ -88,6 +88,7 @@ effects = Array[ExtResource("3_ufw07")]([SubResource("Resource_44ecb")])
 [resource]
 script = ExtResource("8_xuhj2")
 character_id = &"torvald_ironhide"
+element = &"earth"
 display_name = "Torvald Ironhide"
 description = "A relentless front-line bruiser who trades finesse for raw force."
 model_scene = ExtResource("1_b5xr7")

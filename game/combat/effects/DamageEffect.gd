@@ -72,6 +72,14 @@ func apply(ctx: MoveContext) -> void:
 		var taken_scale: float = damage_taken_scale_for(target, ctx.board)
 		if not is_equal_approx(taken_scale, 1.0):
 			dealt = maxi(1, int(round(float(dealt) * taken_scale)))
+		# 4. TYPE MATCHUP: move-element vs target-type effectiveness, folded with the
+		#    tile amplifier (target on a matching-element tile) and the target's own-
+		#    element tile benefit. Resolved through the same shared helper the forecast
+		#    uses so preview and hit cannot drift; a no-op (1.0) when neither the move
+		#    nor the target carries an element, so unelemented content is unchanged.
+		var element_scale: float = ElementChart.damage_scale_for(ctx.move, target, ctx.board)
+		if not is_equal_approx(element_scale, 1.0):
+			dealt = maxi(1, int(round(float(dealt) * element_scale)))
 		var crit: bool = outcome.get("crit", false)
 		if crit:
 			dealt = maxi(1, int(round(dealt * CombatTypes.CRIT_MULTIPLIER)))

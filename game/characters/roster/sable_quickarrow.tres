@@ -84,6 +84,7 @@ effects = Array[ExtResource("3_mtvkl")]([SubResource("Resource_bi524")])
 [resource]
 script = ExtResource("8_2m5aw")
 character_id = &"sable_quickarrow"
+element = &"wind"
 display_name = "Sable Quickarrow"
 description = "A sharpshooter who controls the field from a distance."
 model_scene = ExtResource("1_4nm83")

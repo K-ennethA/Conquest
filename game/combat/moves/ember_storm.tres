@@ -27,6 +27,7 @@ script = ExtResource("4_w31x3")
 move_id = &"ember_storm"
 display_name = "Ember Storm"
 description = "Rain embers over an area, burning nearby enemies and scorching the ground."
+element = &"fire"
 category = 1
 energy_cost = 3
 targeting = SubResource("Resource_k77mr")

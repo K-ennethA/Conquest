@@ -34,6 +34,9 @@ var settings_button: Button = null
 # only blocks input while it is actually on screen.
 var turn_transition: TurnTransition = null
 var battle_log: BattleLog = null
+# Upper-centre action banner ("Eldroot used Forest Barrage!") that flashes when any unit
+# acts, so the enemy/AI turn is legible before per-move VFX exist. Its own high CanvasLayer.
+var action_announcer: ActionAnnouncer = null
 
 func _ready() -> void:
 	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
@@ -66,6 +69,10 @@ func _ready() -> void:
 	# theming to avoid the font-override sweep; anchors to this full-screen HUD root.
 	_build_battle_log()
 
+	# Upper-centre action banner. Self-styled CanvasLayer (like the turn wipe), mounted
+	# AFTER theming so its explicit fonts/colours survive the font-override sweep.
+	_build_action_announcer()
+
 	is_layout_initialized = true
 
 func _build_turn_transition() -> void:
@@ -79,6 +86,12 @@ func _build_battle_log() -> void:
 	battle_log = BattleLog.new()
 	battle_log.name = "BattleLog"
 	add_child(battle_log)
+
+func _build_action_announcer() -> void:
+	"""Create and mount the upper-centre action banner (flashes when a unit acts)."""
+	action_announcer = ActionAnnouncer.new()
+	action_announcer.name = "ActionAnnouncer"
+	add_child(action_announcer)
 
 func _apply_theme() -> void:
 	"""Apply the amber ConquestTheme to this HUD subtree (panels, buttons, text)."""

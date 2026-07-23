@@ -69,7 +69,7 @@ static func preview_vs(move: MoveResource, caster, target, board = null) -> Dict
 		crit_pct = clampf(move.crit_chance * 100.0 + float(_stat(caster, "crit")), 0.0, 100.0)
 		for effect in move.effects:
 			if effect is DamageEffect:
-				dmg += _preview_damage(effect, caster, target, board)
+				dmg += _preview_damage(effect, move, caster, target, board)
 	var hp := _hp(target)
 	return {
 		"hit_pct": hit_pct,
@@ -82,7 +82,7 @@ static func preview_vs(move: MoveResource, caster, target, board = null) -> Dict
 	}
 
 
-static func _preview_damage(effect: DamageEffect, caster, target, board = null) -> int:
+static func _preview_damage(effect: DamageEffect, move, caster, target, board = null) -> int:
 	# An invulnerable defender takes nothing, so the forecast must SAY nothing --
 	# short-circuited here exactly as DamageEffect.apply() short-circuits, ahead of
 	# mitigation and every scaling step. Showing a mitigated number against a target
@@ -123,6 +123,15 @@ static func _preview_damage(effect: DamageEffect, caster, target, board = null) 
 	var taken: float = DamageEffect.damage_taken_scale_for(target, board)
 	if not is_equal_approx(taken, 1.0):
 		mitigated = maxi(1, roundi(float(mitigated) * taken))
+
+	# TYPE MATCHUP (move-element vs target-type + tile amplifier + own-element tile
+	# benefit), routed through the SAME ElementChart helper DamageEffect.apply() uses,
+	# applied in the same position (after the defender's reduction, before crit) so the
+	# forecast's damage matches the resolved hit exactly. Deterministic, so previewing
+	# it is honest; a flat 1.0 for unelemented moves/units leaves the number untouched.
+	var element_scale: float = ElementChart.damage_scale_for(move, target, board)
+	if not is_equal_approx(element_scale, 1.0):
+		mitigated = maxi(1, roundi(float(mitigated) * element_scale))
 	return mitigated
 
 

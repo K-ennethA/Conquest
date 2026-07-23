@@ -32,6 +32,7 @@ script = ExtResource("2_0lhqb")
 move_id = &"ember_storm"
 display_name = "Ember Storm"
 description = "Rain embers over an area, burning nearby enemies and scorching the ground."
+element = &"fire"
 category = 1
 energy_cost = 3
 targeting = SubResource("Resource_205u6")
@@ -99,6 +100,7 @@ effects = Array[ExtResource("3_e1psb")]([SubResource("Resource_bt0oq")])
 [resource]
 script = ExtResource("9_81nyu")
 character_id = &"ysolde_emberwynn"
+element = &"fire"
 display_name = "Ysolde Emberwynn"
 description = "A storm-caller whose spells scorch whole clusters of foes."
 model_scene = ExtResource("1_aeds7")

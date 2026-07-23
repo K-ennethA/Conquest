@@ -90,6 +90,7 @@ effects = Array[ExtResource("3_0e46a")]([SubResource("Resource_fxvhc")])
 [resource]
 script = ExtResource("9_iordq")
 character_id = &"mabel_bulwark"
+element = &"earth"
 display_name = "Mabel Bulwark"
 description = "An immovable guardian built to soak hits and hold ground."
 model_scene = ExtResource("1_dyntd")

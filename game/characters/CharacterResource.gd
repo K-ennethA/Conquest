@@ -28,6 +28,12 @@ const MAX_MOVES: int = 4
 @export var attack_range: int = 1
 
 @export_group("Profile")
+## Elemental TYPE for matchup effectiveness (Fire-Emblem / Pokemon style). Damage a
+## unit deals/takes is scaled by [ElementChart] against a move's element and the tile
+## it stands on. Empty = NEUTRAL: no matchup either way (the safe, unchanged default).
+## Use one vocabulary shared with move elements and tile elements: &"fire", &"water",
+## &"nature", &"wind", &"earth", &"holy", &"dark".
+@export var element: StringName = &""
 @export var movement_kind: CombatTypes.MovementKind = CombatTypes.MovementKind.GROUND
 ## Optional authored movement profile. When unset, [method get_movement_profile]
 ## synthesizes one from [member movement_kind] + [member base_movement] so

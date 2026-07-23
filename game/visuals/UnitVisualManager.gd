@@ -37,7 +37,17 @@ func _ready():
 	# Connect to turn system events
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
-	
+		# CRITICAL: this manager is created LAZILY by the first unit that spawns
+		# (see unit.gd _find_visual_manager), which routinely happens AFTER the game
+		# has already reached IN_PROGRESS and TurnSystemManager fired its one-shot
+		# `turn_system_activated`. In that (normal) case we missed the signal, so
+		# `_on_turn_system_activated` never runs and we NEVER connect to the live
+		# system's turn_started / turn_ended / unit_action_completed -- meaning the
+		# per-action "spent unit greys out" sweep is never triggered during play.
+		# Wire up the already-active system right now to close that gap.
+		if TurnSystemManager.has_active_turn_system():
+			_on_turn_system_activated(TurnSystemManager.get_active_turn_system())
+
 	# Connect to game events (null-safe: guard the signal exists and isn't already
 	# wired so a minimal/headless scene never crashes on a missing bus).
 	if GameEvents and GameEvents.has_signal("unit_action_completed") \
@@ -313,9 +323,10 @@ func _ensure_dim_material() -> StandardMaterial3D:
 		# lighting -- every hue underneath gets pulled toward the same mid-grey,
 		# reading as "desaturated / drained of colour / spent" everywhere.
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		# Strong neutral grey at ~0.6 alpha: heavy enough that the model's own
-		# colours are visibly washed toward grey, not merely darkened.
-		mat.albedo_color = Color(0.5, 0.5, 0.5, 0.6)
+		# Strong, slightly-dark neutral grey at ~0.72 alpha: heavy enough that the
+		# model's own colours are unmistakably washed toward a drained mid-grey and
+		# clearly read as "spent" at a glance, not merely tinted or faintly darkened.
+		mat.albedo_color = Color(0.42, 0.42, 0.44, 0.72)
 		_dim_material = mat
 	return _dim_material
 

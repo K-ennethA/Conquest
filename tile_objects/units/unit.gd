@@ -553,6 +553,16 @@ func has_character() -> bool:
 	"""True if this unit is backed by a CharacterResource (custom moveset)."""
 	return character_resource != null
 
+## This unit's elemental TYPE for matchup effectiveness (see [ElementChart]). Reads
+## the backing [CharacterResource]; &"" (NEUTRAL) for a unit with no character or none
+## authored. This is the single accessor [ElementChart.element_of] duck-types against.
+func get_element() -> StringName:
+	if character_resource != null:
+		var e = character_resource.get("element")
+		if e != null:
+			return StringName(e)
+	return &""
+
 ## Current health of the unit (0 when no stats component is present).
 func get_hp() -> int:
 	return current_health
