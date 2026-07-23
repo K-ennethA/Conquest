@@ -18,6 +18,22 @@ class_name DamageEffect
 ## like [HealEffect], and floored to whole HP via round().
 @export_range(0.0, 1.0, 0.01) var lifesteal: float = 0.0
 
+## --- Escalating group-crit (Splinter Volley's piercing bow) -----------------
+##
+## Normally each target rolls its OWN crit inside [method MoveContext.resolve_hit].
+## When this is > 0 the WHOLE cast instead rolls crit ONCE as a group: the more
+## targets the shot pierces, the higher the shared crit chance, and if it lands
+## EVERY target in the area takes crit damage. Fully data-driven — no move needs
+## bespoke code — and it reuses this effect's ENTIRE damage path; only the crit
+## DECISION is swapped, never the damage math.
+##
+## Group crit chance = move.crit_chance + caster "crit" stat / 100 + this * (N-1),
+## where N is the number of gathered targets. 0.0 (the default) keeps the historical
+## per-target crit, so every DamageEffect authored before this field is unchanged.
+## The forecast ([method MoveExecutor.preview_vs]) never rolls crit and never reads
+## this field, so it is inherently preview-safe.
+@export_range(0.0, 1.0, 0.01) var group_crit_bonus_per_extra_target: float = 0.0
+
 
 func apply(ctx: MoveContext) -> void:
 	var bonus := 0
@@ -29,7 +45,19 @@ func apply(ctx: MoveContext) -> void:
 	# fraction of it once all targets are resolved.
 	var total_dealt: int = 0
 
-	for target in ctx.gather_targets():
+	# Gather once: the target set drives both the loop and (for the piercing bow) the
+	# escalating group-crit count, so they cannot disagree.
+	var targets: Array = ctx.gather_targets()
+
+	# Escalating group-crit: one shared crit roll for the entire cast, scaling with the
+	# number of targets pierced. A no-op unless the move authors a per-target bonus, in
+	# which case it REPLACES the per-target crit decision below for every target.
+	var group_crit_scales: bool = group_crit_bonus_per_extra_target > 0.0
+	var group_crit: bool = false
+	if group_crit_scales:
+		group_crit = _roll_group_crit(ctx, targets.size())
+
+	for target in targets:
 		var outcome := ctx.resolve_hit(target)
 		if not outcome.get("hit", true):
 			ctx.log_event({
@@ -81,6 +109,10 @@ func apply(ctx: MoveContext) -> void:
 		if not is_equal_approx(element_scale, 1.0):
 			dealt = maxi(1, int(round(float(dealt) * element_scale)))
 		var crit: bool = outcome.get("crit", false)
+		# The escalating bow overrides the per-target crit with the single group roll:
+		# the shot either crits every pierced target or none of them.
+		if group_crit_scales:
+			crit = group_crit
 		if crit:
 			dealt = maxi(1, int(round(dealt * CombatTypes.CRIT_MULTIPLIER)))
 		if target.has_method("take_damage"):
@@ -107,6 +139,19 @@ func apply(ctx: MoveContext) -> void:
 				"target": ctx.caster,
 				"amount": healed,
 			})
+
+
+## One shared crit roll for the escalating-bow path. The chance climbs with
+## [param count] (the number of targets the shot pierces) and is rolled through the
+## context RNG, so it is seeded/deterministic exactly like [method MoveContext.resolve_hit]'s
+## per-target crit. A single target (count 1) rolls the move's base crit only.
+func _roll_group_crit(ctx: MoveContext, count: int) -> bool:
+	var chance: float = 0.0
+	if ctx.move != null:
+		chance = ctx.move.crit_chance
+	chance += float(ctx.get_caster_stat("crit")) / 100.0
+	chance += group_crit_bonus_per_extra_target * float(maxi(0, count - 1))
+	return ctx.roll(clampf(chance, 0.0, 1.0))
 
 
 func describe() -> String:

@@ -32,7 +32,7 @@ const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 ## the forest roster so those units get thoroughly playtested (a proper pre-run roster
 ## pick comes later). NOTE: mycothrall has a Hard+ difficulty gate, so if the arena runs
 ## on Normal it may not spawn -- swap it out or raise arena difficulty if that bites.
-const DEFAULT_SQUAD := ["blightcap", "petalfang", "tree_grunt", "mycothrall"]
+const DEFAULT_SQUAD := ["vineweave", "blightcap", "petalfang", "tree_grunt"]
 
 const RESULTS_SCENE := "res://game/arena/ui/ArenaResultsScreen.tscn"
 
