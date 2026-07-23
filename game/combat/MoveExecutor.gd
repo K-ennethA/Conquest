@@ -116,6 +116,13 @@ static func _preview_damage(effect: DamageEffect, move, caster, target, board = 
 	if scale > 1.0:
 		mitigated = maxi(1, roundi(float(mitigated) * scale))
 
+	# The attacker's ELEMENT-HUNTER bonus (Vineweave's Grass Cutter vs nature),
+	# routed through DamageEffect's shared helper and applied in the same position
+	# (after the predation bonus, before the defender's reduction) so preview == hit.
+	var elem_bonus: float = DamageEffect.element_bonus_scale_for(caster, target, board)
+	if elem_bonus > 1.0:
+		mitigated = maxi(1, roundi(float(mitigated) * elem_bonus))
+
 	# The DEFENDER's own reduction (e.g. Eldroot's Grovebound while it stands in the
 	# grove). Applied after the attacker's bonus and before crit, matching the order
 	# in DamageEffect.apply() step for step, and routed through the same shared

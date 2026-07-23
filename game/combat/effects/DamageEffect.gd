@@ -97,6 +97,13 @@ func apply(ctx: MoveContext) -> void:
 		var restricted_scale: float = _restricted_scale(ctx, target)
 		if restricted_scale > 1.0:
 			dealt = maxi(1, int(round(float(dealt) * restricted_scale)))
+		# 1b. Element-hunter bonus: a caster whose passives declare
+		#     "damage_vs_element_<elem>" hits harder into a target of that element
+		#     (Vineweave's Grass Cutter vs nature). Attacker-side, same shape as the
+		#     predation bonus above, applied before the defender's reduction.
+		var element_bonus: float = _element_bonus_scale(ctx, target)
+		if element_bonus > 1.0:
+			dealt = maxi(1, int(round(float(dealt) * element_bonus)))
 		var taken_scale: float = damage_taken_scale_for(target, ctx.board)
 		if not is_equal_approx(taken_scale, 1.0):
 			dealt = maxi(1, int(round(float(dealt) * taken_scale)))
@@ -244,6 +251,52 @@ static func _restricted_modifier_of(caster, board) -> float:
 		return 0.0
 	var modifiers: Dictionary = system.passive_modifiers(caster, board)
 	return float(modifiers.get("damage_vs_restricted", 0.0))
+
+
+# --- Damage vs a specific enemy element (attacker "element hunter") ----------
+#
+# The element mirror of the predation bonus above: a PASSIVE AbilityResource on the
+# CASTER contributes `rule_modifiers = { "damage_vs_element_nature": 0.5 }` (= +50%
+# vs nature-element targets). The key is "damage_vs_element_" + the element name, so
+# ONE generic hook serves any element without new plumbing. AbilitySystem sums the
+# float exactly like the other numeric modifiers; this reads it and scales the hit.
+# Distinct from ElementChart (which keys off the MOVE's element vs the target TYPE) --
+# this is keyed off the CASTER's passive vs the target's element, i.e. "I, personally,
+# cut grass." Null-safe end to end.
+
+
+## Multiplier for one hit: 1.0 normally, or 1.0 + the caster's merged
+## "damage_vs_element_<target element>" modifier when the target carries that element.
+static func _element_bonus_scale(ctx: MoveContext, target) -> float:
+	if ctx == null:
+		return 1.0
+	return element_bonus_scale_for(ctx.caster, target, ctx.board)
+
+
+## Same element-hunter multiplier, addressed by CASTER/TARGET so the FORECAST
+## ([method MoveExecutor.preview_vs]) reads the identical value. Deterministic (it
+## depends only on the target's element and the caster's passives), so previewing it
+## is honest information.
+static func element_bonus_scale_for(caster, target, board = null) -> float:
+	if caster == null or target == null:
+		return 1.0
+	if not target.has_method("get_element"):
+		return 1.0
+	var elem: String = String(target.get_element())
+	if elem == "":
+		return 1.0
+	var system = null
+	if caster.has_method("get_ability_system"):
+		system = caster.get_ability_system()
+	elif caster.has_method("passive_modifiers"):
+		system = caster
+	if system == null or not system.has_method("passive_modifiers"):
+		return 1.0
+	var modifiers: Dictionary = system.passive_modifiers(caster, board)
+	var bonus: float = float(modifiers.get("damage_vs_element_" + elem, 0.0))
+	if bonus <= 0.0:
+		return 1.0
+	return 1.0 + bonus
 
 
 # --- Defender-side damage reduction -----------------------------------------

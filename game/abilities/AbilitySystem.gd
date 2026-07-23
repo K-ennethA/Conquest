@@ -40,6 +40,12 @@ var _ability_state: Dictionary = {}
 ## signal carries no eliminator (see [method _on_unit_eliminated]).
 var _last_damaged = null
 
+## Consecutive OWN turn-starts this unit has begun without taking damage. Bumped
+## once at each ON_TURN_START (see [method trigger]) and reset to 0 the moment the
+## unit is damaged (see [method _on_damage_dealt]). Read by UndamagedForTurnsCondition
+## to gate "reward for staying untouched" abilities like Crystalline Ward.
+var _turns_since_damaged: int = 0
+
 
 func _ready() -> void:
 	if owner_unit == null:
@@ -68,6 +74,11 @@ func add_ability(ability: AbilityResource) -> AbilityResource:
 ## [method can_activate]); one that actually runs records the activation.
 func trigger(event: AbilityTrigger.Trigger, unit = null, board = null, other = null) -> Array:
 	var acting = unit if unit != null else _unit()
+	# Count another untouched turn BEFORE evaluating this turn-start's abilities, so a
+	# condition that reads the counter (Crystalline Ward's "undamaged for N turns") sees
+	# the freshly-incremented value on the very turn it should fire.
+	if event == AbilityTrigger.Trigger.ON_TURN_START:
+		_turns_since_damaged += 1
 	var events: Array = []
 	for ability in abilities:
 		if ability == null or ability.trigger != event:
@@ -123,6 +134,12 @@ func tick_cooldowns() -> void:
 ## Forget all cooldown / activation tracking (e.g. at the start of a new battle).
 func reset_activations() -> void:
 	_ability_state.clear()
+	_turns_since_damaged = 0
+
+
+## Consecutive own turn-starts begun without taking damage (see [member _turns_since_damaged]).
+func turns_since_damaged() -> int:
+	return _turns_since_damaged
 
 
 ## This unit's tracking record for [param ability], created on first use.
@@ -249,6 +266,8 @@ func _on_damage_dealt(attacker, defender, _amount) -> void:
 		_last_damaged = defender
 		trigger(AbilityTrigger.Trigger.ON_ATTACK, me, _board(), defender)
 	elif defender == me:
+		# Being hit resets the "untouched turns" streak (Crystalline Ward must re-earn it).
+		_turns_since_damaged = 0
 		trigger(AbilityTrigger.Trigger.ON_DAMAGED, me, _board(), attacker)
 
 

@@ -49,6 +49,12 @@ var _leash_radius: int = -1
 signal unit_died(unit: Unit)
 signal unit_action_completed(unit: Unit, action_type: String)
 signal owner_changed(unit: Unit, old_owner: Player, new_owner: Player)
+## Temporary damage-soak shield changed (0 when depleted). Drives any shield HUD.
+signal shield_changed(current: int)
+
+## Temporary HP shield that absorbs incoming damage before real health (see
+## take_damage / grant_shield). 0 = none. Granted by e.g. Crystalline Ward.
+var shield_hp: int = 0
 
 # Inspector testing properties (for runtime testing)
 @export_group("Runtime Testing")
@@ -348,13 +354,38 @@ func take_damage(amount: int) -> void:
 	# for it (attacks the nearest hostile of either side).
 	if amount > 0 and is_dormant() and not provoked:
 		provoked = true
+	# A temporary shield (e.g. Gem Knight's Crystalline Ward) soaks incoming damage
+	# before any of it reaches real health. Absorb up to what the shield holds, then
+	# let the remainder fall through to HP below.
+	if amount > 0 and shield_hp > 0:
+		var absorbed: int = mini(shield_hp, amount)
+		shield_hp = maxi(0, shield_hp - absorbed)
+		amount -= absorbed
+		shield_changed.emit(shield_hp)
+	if amount <= 0:
+		return
 	if unit_stats:
 		var current_hp = unit_stats.get_stat("health")
 		var new_hp = max(0, current_hp - amount)
 		unit_stats.set_stat("health", new_hp)
-		
+
 		if new_hp <= 0:
 			_on_unit_died()
+
+
+## Grant a temporary damage-soaking shield. Refreshes to the strongest value rather
+## than stacking (a 15 shield re-granted stays 15, never 30) -- the same "reductions
+## refresh, never compound" rule the damage-reduction statuses follow.
+func grant_shield(amount: int) -> void:
+	if amount <= 0:
+		return
+	shield_hp = maxi(shield_hp, amount)
+	shield_changed.emit(shield_hp)
+
+
+## Current shield points remaining (0 when none).
+func get_shield() -> int:
+	return shield_hp
 
 func heal(amount: int) -> void:
 	"""Heal the unit"""

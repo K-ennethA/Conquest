@@ -1,0 +1,37 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="2_dmgef"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="4_targp"]
+
+[sub_resource type="Resource" id="Resource_rl_dmg"]
+script = ExtResource("2_dmgef")
+power = 28
+scaling_stat = "attack"
+scale = 1.0
+category = 0
+
+[sub_resource type="Resource" id="Resource_rl_tgt"]
+script = ExtResource("4_targp")
+target_kind = 2
+min_range = 1
+max_range = 2
+area_shape = 4
+area_size = 3
+affects_caster_tile = false
+
+[resource]
+script = ExtResource("3_mvres")
+move_id = &"refraction_lance"
+display_name = "Refraction Lance"
+description = "Geode aligns its facets and fires a searing beam of focused light down a lane. The lance refracts clean through everything in its path, running a whole row of foes through at once."
+category = 0
+element = &"earth"
+energy_cost = 0
+max_uses = -1
+cooldown = 3
+accuracy = 1.0
+crit_chance = 0.0
+targeting = SubResource("Resource_rl_tgt")
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_rl_dmg")])

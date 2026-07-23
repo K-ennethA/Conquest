@@ -1,0 +1,47 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/StackConsumeDamageEffect.gd" id="2_stackdmg"]
+[ext_resource type="Script" path="res://game/combat/effects/ApplyStatusEffect.gd" id="3_applystatus"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="4_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="5_targp"]
+[ext_resource type="Resource" path="res://game/combat/status/prism_guard.tres" id="6_prismguard"]
+
+[sub_resource type="Resource" id="Resource_pb_dmg"]
+script = ExtResource("2_stackdmg")
+base_power = 8
+power_per_stack = 6
+stack_status_id = &"reprisal_charge"
+scaling_stat = "attack"
+scale = 0.5
+category = 0
+
+[sub_resource type="Resource" id="Resource_pb_guard"]
+script = ExtResource("3_applystatus")
+condition = ExtResource("6_prismguard")
+chance = 1.0
+to_caster = true
+
+[sub_resource type="Resource" id="Resource_pb_tgt"]
+script = ExtResource("5_targp")
+target_kind = 2
+min_range = 1
+max_range = 1
+area_shape = 0
+area_size = 0
+affects_caster_tile = false
+
+[resource]
+script = ExtResource("4_mvres")
+move_id = &"prism_bulwark"
+display_name = "Prism Bulwark"
+description = "Geode throws up a lattice of crystal that turns aside the next blows to fall on it, and in the same motion looses every strike it has weathered back at the foe -- the more punishment stored, the harder the answer lands."
+category = 0
+element = &"earth"
+energy_cost = 0
+max_uses = -1
+cooldown = 3
+accuracy = 1.0
+crit_chance = 0.0
+targeting = SubResource("Resource_pb_tgt")
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_pb_dmg"), SubResource("Resource_pb_guard")])

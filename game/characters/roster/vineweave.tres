@@ -8,6 +8,8 @@
 [ext_resource type="Resource" path="res://game/combat/moves/splinter_volley.tres" id="6_volley"]
 [ext_resource type="Resource" path="res://game/combat/moves/strangling_roots.tres" id="7_roots"]
 [ext_resource type="Resource" path="res://game/movement/profiles/ground_standard.tres" id="8_mvprof"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="9_abres"]
+[ext_resource type="Resource" path="res://game/abilities/grass_cutter.tres" id="10_grasscutter"]
 
 [resource]
 script = ExtResource("1_char")
@@ -27,3 +29,4 @@ attack_range = 2
 movement_profile = ExtResource("8_mvprof")
 model_yaw_deg = 180.0
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_cleave"), ExtResource("5_thornward"), ExtResource("6_volley"), ExtResource("7_roots")])
+abilities = Array[ExtResource("9_abres")]([ExtResource("10_grasscutter")])
