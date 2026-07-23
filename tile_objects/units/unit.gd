@@ -327,6 +327,10 @@ func remove_stat_modifier(modifier_id: int) -> bool:
 # Health management
 func take_damage(amount: int) -> void:
 	"""Apply damage to the unit"""
+	# A dormant neutral camp wakes the instant it is hit -- from now on the bot AI fights
+	# for it (attacks the nearest hostile of either side).
+	if amount > 0 and is_dormant() and not provoked:
+		provoked = true
 	if unit_stats:
 		var current_hp = unit_stats.get_stat("health")
 		var new_hp = max(0, current_hp - amount)
@@ -638,7 +642,10 @@ func is_boss() -> bool:
 ## and a fallen-back-to-negative resolves to untethered).
 func configure_ai_behavior(p_home: Vector2i, stance: String = "", aggro: int = -1, leash: int = -1) -> void:
 	home_cell = p_home
-	_ai_stance = stance if (stance == "aggressive" or stance == "defensive") else _default_stance()
+	# "dormant" = a neutral camp: holds and does NOTHING until it is attacked (see
+	# provoked / take_damage), then behaves aggressively. Accepted here alongside the
+	# two classic stances; anything else falls back to the character default.
+	_ai_stance = stance if (stance == "aggressive" or stance == "defensive" or stance == "dormant") else _default_stance()
 	_aggro_range = aggro if aggro >= 0 else _default_aggro()
 	_leash_radius = leash if leash >= 0 else _default_leash()
 	_ai_configured = true
@@ -663,6 +670,15 @@ func is_aggressive() -> bool:
 
 func is_defensive() -> bool:
 	return get_ai_stance() == "defensive"
+
+## A neutral camp unit that holds until attacked. While dormant AND not yet provoked the
+## bot AI takes no action for it (see BotController.decide_action).
+func is_dormant() -> bool:
+	return get_ai_stance() == "dormant"
+
+## Latched true the first time a dormant unit takes damage -- from then on it fights like
+## an aggressive unit (attacks the nearest hostile of EITHER side).
+var provoked: bool = false
 
 ## Defensive wake distance (Manhattan) from the home cell. Falls back until configured.
 func get_aggro_range() -> int:

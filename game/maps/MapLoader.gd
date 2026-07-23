@@ -461,8 +461,10 @@ static func resolve_default_ai_stance(spawn_kind: String, authored_stance: Strin
 	if spawn_kind == MapResource.SPAWN_KIND_ENDLESS \
 			or spawn_kind == MapResource.SPAWN_KIND_RESPAWN:
 		return "aggressive"
-	# 2. A per-placement author override wins next.
-	if authored_stance == "aggressive" or authored_stance == "defensive":
+	# 2. A per-placement author override wins next. "dormant" (a neutral camp that holds
+	#    until attacked) is honored here too -- but NOT for Endless/Respawn waves above,
+	#    which always charge.
+	if authored_stance == "aggressive" or authored_stance == "defensive" or authored_stance == "dormant":
 		return authored_stance
 	# 3. The character's OWN declared stance (e.g. blightcap = always aggressive). Only
 	#    an EXPLICIT value counts; "" means "no preference, use the kind default below".

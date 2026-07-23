@@ -379,6 +379,10 @@ func _evaluate_game_end(just_removed) -> void:
 		for ap in PlayerManager.players:
 			if ap == null or not ap.has_units_remaining():
 				continue
+			# NEUTRAL camps never count toward round win/loss -- a round is won when the
+			# real enemy wave is routed even if a dormant neutral is still standing.
+			if "is_neutral" in ap and bool(ap.is_neutral):
+				continue
 			if "is_ai" in ap and bool(ap.is_ai):
 				enemy_alive = true
 			else:

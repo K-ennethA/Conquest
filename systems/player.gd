@@ -11,6 +11,10 @@ class_name Player
 @export var is_active: bool = false
 ## When true, this player's turns are driven by the bot AI (single-player).
 @export var is_ai: bool = false
+## A NEUTRAL faction (jungle-camp style): hostile to no one until attacked, killable by
+## BOTH sides, and NOT counted as "the enemy" for win/round-end. Its units are AI-driven
+## (is_ai stays true) but dormant until provoked. See Unit.is_dormant()/provoked.
+@export var is_neutral: bool = false
 
 # Player state tracking
 enum PlayerState {

@@ -123,6 +123,12 @@ func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
 	if hostiles.is_empty():
 		return _wait("no_hostiles")
 
+	# DORMANT neutral camp: it holds and does NOTHING (no attack, no move) until it has
+	# been attacked. Once provoked (Unit.take_damage) it falls through and fights like any
+	# aggressive unit, targeting the nearest hostile of EITHER side.
+	if _is_dormant(actor) and not _is_provoked(actor):
+		return _wait("dormant")
+
 	# STANCE + LEASH. Every unit's effective home is its authored guard post if it
 	# has one, otherwise the cell it currently stands on (units spawned outside the
 	# map loader -- e.g. tests -- have no home). An untethered aggressive unit reads
@@ -569,6 +575,16 @@ func _effective_home(actor, origin: Vector2i) -> Vector2i:
 ## True only when the actor explicitly reports a defensive stance.
 func _is_defensive(actor) -> bool:
 	return actor != null and actor.has_method("is_defensive") and actor.is_defensive()
+
+
+## True when the actor is a dormant neutral camp (holds until attacked).
+func _is_dormant(actor) -> bool:
+	return actor != null and actor.has_method("is_dormant") and actor.is_dormant()
+
+
+## True once a dormant unit has been provoked (attacked) -- from then on it fights.
+func _is_provoked(actor) -> bool:
+	return actor != null and "provoked" in actor and bool(actor.provoked)
 
 
 ## True only when the actor reports a finite leash (an anchored / guarding unit).
