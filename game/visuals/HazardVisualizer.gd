@@ -285,11 +285,13 @@ func _build_shared_resources() -> void:
 	_telegraph_quad_mesh.size = Vector2(1.6, 1.6)
 	_telegraph_quad_mesh.orientation = PlaneMesh.FACE_Y
 
+	# A BIG green ring that nearly fills the 2-unit tile, so a laid trap reads at a glance
+	# (was a tiny 0.36-radius coil that was easy to miss).
 	_coil_mesh = TorusMesh.new()
-	_coil_mesh.inner_radius = 0.14
-	_coil_mesh.outer_radius = 0.36
-	_coil_mesh.rings = 3          # low poly -> chunky faceted ring
-	_coil_mesh.ring_segments = 10
+	_coil_mesh.inner_radius = 0.6
+	_coil_mesh.outer_radius = 0.92
+	_coil_mesh.rings = 4          # low poly -> chunky faceted ring
+	_coil_mesh.ring_segments = 14
 
 	# Mossy palette: a couple of greens, a dark base, a pale thorn accent.
 	_vine_mat = _lit_mat(Color(0.22, 0.5, 0.18))
@@ -297,11 +299,12 @@ func _build_shared_resources() -> void:
 	_thorn_mat = _lit_mat(Color(0.62, 0.62, 0.28))
 	_leaf_mat = _lit_mat(Color(0.3, 0.62, 0.22))
 
-	# Trap: dark coil that faintly glows (pulsed in _process) + a brighter spike.
-	_trap_coil_mat = _lit_mat(Color(0.12, 0.34, 0.13))
+	# Trap: a bright green ring that glows (pulsed in _process) so the big torus is
+	# unmistakable on the board + a brighter spike.
+	_trap_coil_mat = _lit_mat(Color(0.24, 0.68, 0.26))
 	_trap_coil_mat.emission_enabled = true
-	_trap_coil_mat.emission = Color(0.2, 0.7, 0.25)
-	_trap_coil_mat.emission_energy_multiplier = 0.6
+	_trap_coil_mat.emission = Color(0.35, 0.95, 0.4)
+	_trap_coil_mat.emission_energy_multiplier = 1.1
 	_trap_thorn_mat = _lit_mat(Color(0.6, 0.6, 0.25))
 
 	# Telegraph: translucent, unshaded, glowing green -- clearly fainter/flatter than
@@ -372,11 +375,12 @@ func _make_trap() -> Node3D:
 	coil.scale = Vector3(1.0, 0.55, 1.0)  # flatten into a low coil
 	t.add_child(coil)
 
-	var spikes: int = 5
+	# Spikes ride ON the big ring (radius ~0.76), not inside its hole.
+	var spikes: int = 8
 	for i in range(spikes):
 		var a: float = float(i) / float(spikes) * TAU
 		var spike := _mi(_thorn_mesh, _trap_thorn_mat)
-		spike.position = Vector3(cos(a) * 0.28, 0.06, sin(a) * 0.28)
+		spike.position = Vector3(cos(a) * 0.76, 0.06, sin(a) * 0.76)
 		spike.rotation = Vector3(cos(a) * 0.6, -a, sin(a) * 0.6)  # tilt outward
 		t.add_child(spike)
 	return t
