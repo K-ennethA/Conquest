@@ -59,6 +59,7 @@ func _run_trigger(unit, cell: Vector2i, board, trigger: int) -> Array:
 	var events: Array = []
 	if unit == null:
 		return events
+	var spent: Array = []  # single-use effects that fired and must be extinguished
 	for te in _effects_at(cell, board):
 		if te == null or te.trigger != trigger:
 			continue
@@ -66,7 +67,30 @@ func _run_trigger(unit, cell: Vector2i, board, trigger: int) -> Array:
 			continue
 		for e in te.run(unit, board):
 			events.append(e)
+		# A single-use snare (Vine Trap) is spent the instant it springs on a unit.
+		if te.get("consume_on_trigger"):
+			spent.append(te)
+	# Extinguish AFTER the loop so we never mutate the cell's effect list mid-iteration;
+	# remove_tile_effect fires tile_effects_changed, which clears the trap's visual too.
+	for te in spent:
+		_extinguish(cell, te)
 	return events
+
+
+## Remove a spent runtime tile effect from the live board. Reaches the CombatServices
+## autoload directly (the applied-effects owner); null-safe for headless/mocked tests
+## where there is no live services node.
+func _extinguish(cell: Vector2i, te) -> void:
+	var svc = _combat_services()
+	if svc != null and svc.has_method("remove_tile_effect"):
+		svc.remove_tile_effect(cell, te)
+
+
+func _combat_services():
+	var loop := Engine.get_main_loop()
+	if loop is SceneTree:
+		return (loop as SceneTree).root.get_node_or_null("CombatServices")
+	return null
 
 
 ## Prefer the board's own authoring source; fall back to the injected dictionary.

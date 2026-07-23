@@ -29,22 +29,22 @@ class_name BotTurnDriver
 ## (the attacker's shake + the hit flash + the camera framing it) instead of the AI
 ## blowing past it. Only an attack gets this dwell. Also divided by battle-speed but
 ## floored by [member min_attack_dwell] so even Fast lingers on the hit.
-@export var attack_dwell: float = 0.9
+@export var attack_dwell: float = 1.3
 
 ## Beat AFTER a visible plain MOVE (a unit slid to a new cell but did NOT attack), so
 ## you can actually SEE it travel before the next unit acts. Shorter than an attack's
 ## dwell but far longer than action_interval (which now only paces skipped waits).
 ## Also divided by battle-speed and floored by [member min_move_dwell].
-@export var move_dwell: float = 0.4
+@export var move_dwell: float = 0.6
 
 ## Floor (seconds) on the post-ATTACK dwell after battle-speed scaling, so even the
 ## fastest battle speed can never blur a strike into the next action. Raised well above
 ## the old 0.08 so an attack is always clearly watchable.
-@export var min_attack_dwell: float = 0.35
+@export var min_attack_dwell: float = 0.6
 
 ## Floor (seconds) on the post-MOVE dwell after battle-speed scaling. Keeps a visible
 ## slide watchable at Fast while Slow (0.5x) stretches it out further.
-@export var min_move_dwell: float = 0.3
+@export var min_move_dwell: float = 0.45
 
 ## Hard cap on how many silent no-op waits a single tick will fast-forward before
 ## yielding back to the frame. Bounds the worst case (a huge army entirely out of

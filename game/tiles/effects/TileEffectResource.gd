@@ -46,6 +46,13 @@ enum AffectedFactions {
 ## Effects applied to the occupant when the trigger fires, in order.
 @export var effects: Array[MoveEffect] = []
 
+## SINGLE-USE: when true, this effect is EXTINGUISHED (removed from the cell) the moment
+## it actually fires on a unit -- a snare that springs once (Petalfang's Vine Trap) rather
+## than a lasting field. Only removes the RUNTIME-placed copy; map-authored terrain is
+## never removed (a lava tile stays lava). Contrast a timed field (e.g. a burn a move
+## leaves for a few turns): that would persist and expire on its own, not on first contact.
+@export var consume_on_trigger: bool = false
+
 ## RUNTIME owner of a PLACED effect (a trap laid by a unit), stamped by
 ## ApplyTileEffect at cast time; null for map-authored terrain. When set, the
 ## OCCUPANT_ENEMIES / OCCUPANT_ALLIES faction check is resolved against THIS owner
