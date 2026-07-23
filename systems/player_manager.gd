@@ -21,6 +21,14 @@ var current_player_index: int = 0
 var current_game_state: GameState = GameState.SETUP
 var turn_number: int = 0
 
+## Fixed slot for the NEUTRAL faction (jungle-camp style). The two combatants are
+## player 0 (the human squad) and player 1 (the enemy wave); the neutral camp lives
+## at index 2 so it never collides with either. See [method ensure_neutral_player].
+const NEUTRAL_PLAYER_INDEX: int = 2
+## Distinct grey/gold so a neutral camp reads apart from the blue/red combatants (its
+## units also fall through to PlayerMaterials.NEUTRAL grey via Unit.player_assignment).
+const NEUTRAL_TEAM_COLOR: Color = Color(0.78, 0.68, 0.32, 1.0)
+
 # Default team colors
 var default_team_colors: Array[Color] = [
 	Color(0.2, 0.4, 0.8, 1.0),  # Blue - Player 1
@@ -90,6 +98,28 @@ func setup_default_players() -> void:
 
 	var player1 = register_player("Player 1")
 	var player2 = register_player("Player 2")
+
+## Register (or return) the NEUTRAL faction at [constant NEUTRAL_PLAYER_INDEX] and
+## stamp it is_ai + is_neutral with a distinct grey/gold colour. Idempotent -- safe
+## to call every round, and safe to call before OR after the combatants are
+## registered: it first fills any missing lower slots so the neutral always lands at
+## its fixed index. Because the players array is then non-empty,
+## [method setup_default_players] no-ops, and the single-player AI-marking pass in
+## GameWorldManager._setup_players only re-asserts is_ai=true -- neither ever clears
+## is_neutral or turns this player human. Returns the neutral [Player].
+func ensure_neutral_player() -> Player:
+	# Fill the combatant slots (0, 1) first so the neutral takes index 2, not 0.
+	while players.size() < NEUTRAL_PLAYER_INDEX:
+		register_player()
+	var neutral: Player
+	if players.size() > NEUTRAL_PLAYER_INDEX:
+		neutral = players[NEUTRAL_PLAYER_INDEX]
+	else:
+		neutral = register_player("Neutral")
+	neutral.is_ai = true
+	neutral.is_neutral = true
+	neutral.set_team_color(NEUTRAL_TEAM_COLOR)
+	return neutral
 
 # Unit assignment
 func assign_unit_to_player(unit: Unit, player_id: int) -> bool:

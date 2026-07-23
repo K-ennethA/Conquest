@@ -10,6 +10,19 @@ class_name Unit
 # this unit can perform data-authored moves via the combat model (MoveExecutor).
 @export var character_resource: CharacterResource
 
+## Optional reward this unit grants to WHOEVER lands the killing blow. When set and
+## this unit dies with a known, still-valid last attacker, that attacker receives a
+## fresh copy of this [StatusCondition] through its own StatusController (see
+## [method _grant_kill_reward]). Null (the default) = no reward, so every existing
+## unit behaves exactly as before. Generic -- any unit can carry one -- but authored
+## on the neutral camp creature in the Arena (ArenaRoundBuilder sets it at spawn).
+@export var kill_reward: StatusCondition
+
+## The last unit to deal damage to this one, tracked off GameEvents.damage_dealt so a
+## kill_reward can credit the killer. Always re-checked with is_instance_valid before
+## use, since the attacker may have been freed between the hit and this unit's death.
+var _last_damager: Unit = null
+
 @export var has_turn: bool = false
 
 # Player ownership
@@ -288,6 +301,10 @@ func _connect_events() -> void:
 	if GameEvents:
 		GameEvents.unit_selected.connect(_on_unit_selected)
 		GameEvents.unit_deselected.connect(_on_unit_deselected)
+		# Track who last hit us, so a kill_reward can credit the killer on death.
+		if GameEvents.has_signal("damage_dealt") \
+				and not GameEvents.damage_dealt.is_connected(_on_any_damage_dealt):
+			GameEvents.damage_dealt.connect(_on_any_damage_dealt)
 
 # Stat access methods (preferred interface)
 func get_stat(stat_name: String) -> int:
@@ -814,6 +831,12 @@ func _on_unit_died() -> void:
 	#    unit_eliminated raises below. _is_dead above already makes this fire once.
 	_fire_death_abilities()
 
+	# 1b. Reward the unit that landed the killing blow, if this unit carries a
+	#     kill_reward (the neutral camp creature does). Done here -- before we free
+	#     ourselves in step 4 -- while the killer, who is on the opposing side and
+	#     untouched by this death, is certainly still alive.
+	_grant_kill_reward()
+
 	# 2. Notify listeners while the node is still valid:
 	#    - the owning Player removes it from owned_units (and self-eliminates when
 	#      its last unit dies, which PlayerManager turns into a win/lose result),
@@ -856,6 +879,35 @@ func _fire_death_abilities() -> void:
 	if board == null:
 		return
 	ability_system.trigger(AbilityTrigger.Trigger.ON_DEATH, self, board)
+
+## Remember the last unit to damage us, so a kill_reward can credit the killer. Only
+## records when WE are the defender and the attacker is a distinct, still-valid unit.
+## Fires for every unit (the signal is global) but is a cheap no-op unless it is us.
+func _on_any_damage_dealt(attacker, defender, _amount) -> void:
+	if defender != self:
+		return
+	if attacker == null or attacker == self or not is_instance_valid(attacker):
+		return
+	_last_damager = attacker
+
+## Grant this unit's kill_reward to whoever last damaged it. Fully null-safe: no
+## reward, or no valid killer, or a killer without a StatusController, all simply do
+## nothing. The killer receives a fresh DUPLICATE so the shared authoring resource is
+## never mutated (mirrors ApplyStatusEffect). Called once from _on_unit_died.
+func _grant_kill_reward() -> void:
+	if kill_reward == null:
+		return
+	if _last_damager == null or not is_instance_valid(_last_damager):
+		return
+	var killer: Unit = _last_damager
+	if not killer.has_method("get_status_controller"):
+		return
+	# Deliberately untyped: get_status_controller() is declared -> Node, and calling
+	# add_status() on a Node-typed variable would not compile.
+	var controller = killer.get_status_controller()
+	if controller == null or not controller.has_method("add_status"):
+		return
+	controller.add_status(kill_reward.duplicate(true))
 
 # Visual feedback (updated to use visual manager)
 func _on_unit_selected(unit: Unit) -> void:

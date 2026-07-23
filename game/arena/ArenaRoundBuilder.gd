@@ -17,6 +17,19 @@ const ENEMY_POOL := ["wren_fleetfoot", "torvald_ironhide", "sable_quickarrow", "
 ## Centrepiece dropped into the final round's wave.
 const BOSS_ID := "eldroot"
 
+## --- Neutral camp (side objective) ------------------------------------------
+## A dormant "wild" creature camp dropped in the MIDDLE of the map on a subset of
+## rounds. It attacks no one until struck (ai_stance "dormant" -> latched provoked in
+## Unit.take_damage), never counts toward the round win/loss (Player.is_neutral, honored
+## in GameWorldManager's arena round-end), and rewards whoever lands the killing blow.
+const NEUTRAL_PLAYER_ID: int = 2
+## The showcase creature the camp fields (see game/characters/roster/feral_thornbeast.tres).
+const CAMP_CHARACTER_ID := "feral_thornbeast"
+## The buff the killer receives, set on each camp unit's Unit.kill_reward at spawn.
+const CAMP_REWARD_PATH := "res://game/combat/status/empowered.tres"
+## Units in the camp (task: 1-2). A small pack in the middle reads as a side objective.
+const CAMP_SIZE: int = 2
+
 
 ## Fill [param map_loader]'s live board with the round described by [param run] +
 ## [param ruleset]. Null-safe; a missing map / applier degrades to "spawn what we can".
@@ -60,6 +73,85 @@ static func build_round(map_loader, run: ArenaRun, ruleset: ArenaRuleset) -> voi
 			"spawn_kind": "Reinforcement",  # waves CHARGE on arrival (see resolve_default_ai_stance)
 			"ai_stance": "aggressive",
 		})
+
+	# --- Neutral camp (player 2), an occasional mid-map side objective ---
+	_maybe_spawn_neutral_camp(map_loader, map, run, ruleset, p0_cells, p1_cells)
+
+
+## Drop a small DORMANT neutral camp in the middle of the map on a subset of rounds.
+## Skips round 1 (the intro) and the final boss round so it stays an occasional treat,
+## and is otherwise fully self-contained: it ensures the neutral player exists BEFORE
+## the round builder returns (so GameWorldManager's assign_units_by_parent pass, which
+## runs right after build_round, adopts the Player3 container), then spawns the camp
+## units dormant and stamps each with the kill_reward buff. A no-op on the excluded
+## rounds or if the neutral player API / reward resource is missing.
+static func _maybe_spawn_neutral_camp(map_loader, map, run: ArenaRun, ruleset: ArenaRuleset, p0_cells: Array, p1_cells: Array) -> void:
+	var round_index: int = run.round_index
+	var total_rounds: int = ruleset.total_rounds if ruleset != null else 6
+	# rounds 2 .. N-1 only: not the opener, not the boss finale.
+	if round_index < 2 or round_index >= total_rounds:
+		return
+	# The neutral faction must exist + be marked is_neutral BEFORE players are assigned.
+	if PlayerManager == null or not PlayerManager.has_method("ensure_neutral_player"):
+		return
+	PlayerManager.ensure_neutral_player()
+
+	var avoid: Array = []
+	avoid.append_array(p0_cells)
+	avoid.append_array(p1_cells)
+	var cells: Array = _camp_cells(map, avoid, CAMP_SIZE)
+	if cells.is_empty():
+		return
+
+	var reward: StatusCondition = null
+	if ResourceLoader.exists(CAMP_REWARD_PATH):
+		reward = load(CAMP_REWARD_PATH) as StatusCondition
+
+	for cell in cells:
+		var unit = map_loader.spawn_unit_now({
+			"position": cell,
+			"player_id": NEUTRAL_PLAYER_ID,
+			"character_id": CAMP_CHARACTER_ID,
+			"spawn_kind": "Start",     # holds its ground; "dormant" makes it inert until hit
+			"ai_stance": "dormant",
+		})
+		if unit != null and reward != null and "kill_reward" in unit:
+			unit.kill_reward = reward
+
+
+## Up to [param count] valid cells nearest the CENTRE of [param map], skipping any cell
+## in [param avoid] (the two start edges) and any that has no authored tile. Searched in
+## expanding Chebyshev rings from the centre so the camp lands mid-map, away from both
+## start edges and out of the direct crossfire lane.
+static func _camp_cells(map, avoid: Array, count: int) -> Array:
+	var out: Array = []
+	if map == null:
+		return out
+	var w: int = int(map.width)
+	var h: int = int(map.height)
+	if w <= 0 or h <= 0:
+		return out
+	var cx: int = w / 2
+	var cy: int = h / 2
+	var max_r: int = maxi(w, h)
+	for r in range(0, max_r + 1):
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				# Only the cells exactly on ring r (Chebyshev), so inner rings aren't revisited.
+				if maxi(absi(dx), absi(dy)) != r:
+					continue
+				var cell: Vector2i = Vector2i(cx + dx, cy + dy)
+				if cell.x < 0 or cell.x >= w or cell.y < 0 or cell.y >= h:
+					continue
+				if cell in avoid or cell in out:
+					continue
+				# Require an authored tile so the camp never lands on a hole in the map.
+				if map.has_method("get_tile_at_position") and map.get_tile_at_position(cell).is_empty():
+					continue
+				out.append(cell)
+				if out.size() >= count:
+					return out
+	return out
 
 
 ## The enemy character ids for [param round_index]: 2 + round fodder (cycled), capped at

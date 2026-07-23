@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/petalfang.glb" id="2_model"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Resource" path="res://game/combat/moves/tree_bash.tres" id="4_bash"]
+[ext_resource type="Resource" path="res://game/combat/moves/thorn_spit.tres" id="5_thorn"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"feral_thornbeast"
+element = &"nature"
+display_name = "Feral Thornbeast"
+description = "A wild, briar-matted beast that has claimed this ground as its own. It pays the two warring sides no mind -- until something is fool enough to strike it. Whoever fells the beast tears loose its thorned heart and fights the harder for it."
+model_scene = ExtResource("2_model")
+base_health = 64
+base_attack = 16
+base_defense = 9
+base_magic = 8
+base_magic_defense = 9
+base_speed = 9
+base_movement = 3
+attack_range = 1
+model_yaw_deg = 180.0
+model_scale = 1.0
+default_ai_stance = ""
+default_aggro_range = 0
+default_leash_radius = 3
+moveset = Array[ExtResource("3_mvres")]([ExtResource("4_bash"), ExtResource("5_thorn")])
