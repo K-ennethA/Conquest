@@ -261,6 +261,23 @@ func tile_id_at(cell: Vector2i) -> StringName:
 	return &""
 
 
+## The tile effects layered on [param cell] (base terrain + runtime-placed), proxied from
+## the live CombatServices registry so MovementResolver / TerrainStats can read them
+## through the board. Empty when there is no live services node (headless / mock boards).
+func tile_effects_at(cell: Vector2i) -> Array:
+	var svc = _combat_services()
+	if svc != null and svc.has_method("tile_effects_at"):
+		return svc.tile_effects_at(cell)
+	return []
+
+
+func _combat_services():
+	var loop := Engine.get_main_loop()
+	if loop is SceneTree:
+		return (loop as SceneTree).root.get_node_or_null("CombatServices")
+	return null
+
+
 ## Terrain tag for [param cell]: the registered [TileResource]'s primary tag (its
 ## first special_property, else its canonical id). Falls back to a [method set_tile]
 ## override id, then [code]&""[/code]. Used for broad terrain-keyed rules

@@ -37,6 +37,14 @@ const ENEMY_FADE_IN := 0.18
 const ENEMY_HOLD := 0.25
 const ENEMY_FADE_OUT := 0.25
 
+# Beat held BEFORE the "YOUR TURN" wipe when control passes from the AI back to the human.
+# The AI's last action resolves and advances the turn synchronously, so without this the
+# wipe would start on top of that final strike -- the enemy's move (and its banner) would
+# land ON the player's turn. During this hold the overlay is TRANSPARENT but input-blocking:
+# the player watches the last enemy action finish, then the wipe fades in. Scaled by Battle
+# Speed like everything else.
+const POST_ENEMY_HOLD := 0.9
+
 # High layer so the wipe covers the board and every HUD panel.
 const OVERLAY_LAYER := 128
 
@@ -189,7 +197,10 @@ func _on_player_turn_started(player: Player) -> void:
 	var side: int = _side_of(player)
 	# Play only when the side actually changed (or we've never announced one yet).
 	if side != _last_side:
-		play(player)
+		# Hand-off from the AI (enemy, side 1) back to the human (ally, side 0) gets a
+		# pre-hold so the enemy's LAST action is seen before the wipe covers the board.
+		var pre_hold: float = POST_ENEMY_HOLD if (_last_side == 1 and side == 0) else 0.0
+		play(player, pre_hold)
 	# Always remember the current side so a following same-side turn stays quiet.
 	_last_side = side
 
@@ -206,8 +217,10 @@ func _side_of(arg) -> int:
 	return 1 if player.is_ai else 0
 
 
-## Play the wipe for [param player]. Interrupts any in-flight transition.
-func play(player: Player) -> void:
+## Play the wipe for [param player]. Interrupts any in-flight transition. [param pre_hold]
+## (seconds, pre-scale) is a leading TRANSPARENT but input-blocking beat -- used on the
+## AI->human hand-off so the enemy's last action is watched before the wipe fades in.
+func play(player: Player, pre_hold: float = 0.0) -> void:
 	# A disabled-animations run skips the wipe outright (no dead time).
 	if not _animations_on():
 		_set_idle()
@@ -226,11 +239,16 @@ func play(player: Player) -> void:
 	var hold: float = ENEMY_HOLD if is_enemy else HOLD
 	var fade_out: float = ENEMY_FADE_OUT if is_enemy else FADE_OUT
 
+	# Overlay on and BLOCKING immediately (so the player can't act during the pre-hold),
+	# but transparent -- the board + the last enemy action + its banner stay visible until
+	# the wipe fades in.
 	_overlay.visible = true
 	_overlay.modulate.a = 0.0
 	_set_blocking(true)
 
 	_tween = create_tween()
+	if pre_hold > 0.0:
+		_tween.tween_interval(_scaled(pre_hold))
 	_tween.tween_property(_overlay, "modulate:a", 1.0, _scaled(fade_in))
 	_tween.tween_interval(_scaled(hold))
 	_tween.tween_property(_overlay, "modulate:a", 0.0, _scaled(fade_out))

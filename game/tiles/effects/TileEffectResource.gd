@@ -46,6 +46,13 @@ enum AffectedFactions {
 ## Effects applied to the occupant when the trigger fires, in order.
 @export var effects: Array[MoveEffect] = []
 
+## Extra MOVEMENT COST to enter this cell, on top of the base terrain cost, for any unit
+## the effect [method applies_to] (so an enemies-only rubble field slows foes crossing it
+## but not the placer's own side). Read by [MovementResolver] when it floods reachable
+## cells, so the penalty bites on the SAME turn a unit tries to cross -- unlike an ON_ENTER
+## status, which only lands after the step and only if the unit STOPS on the cell. 0 = none.
+@export var move_cost_bonus: int = 0
+
 ## SINGLE-USE: when true, this effect is EXTINGUISHED (removed from the cell) the moment
 ## it actually fires on a unit -- a snare that springs once (Petalfang's Vine Trap) rather
 ## than a lasting field. Only removes the RUNTIME-placed copy; map-authored terrain is

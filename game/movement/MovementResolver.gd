@@ -118,7 +118,7 @@ func _flood(origin: Vector2i, profile: MovementProfile, board, offsets: Array[Ve
 				continue
 			if not _can_enter(unit, n, profile.kind, board):
 				continue
-			var nc: int = cur_cost + _enter_cost(n, profile, board)
+			var nc: int = cur_cost + _enter_cost(n, profile, board, unit)
 			if nc > profile.range:
 				continue
 			if best.has(n) and best[n] <= nc:
@@ -308,17 +308,44 @@ static func _is_occupied(board, cell: Vector2i) -> bool:
 
 ## Cost to enter [param cell]: a matching terrain override (by tile id then tag)
 ## wins; otherwise the board's move_cost (clamped to at least 1); default 1.
-static func _enter_cost(cell: Vector2i, profile: MovementProfile, board) -> int:
+static func _enter_cost(cell: Vector2i, profile: MovementProfile, board, unit = null) -> int:
+	var base_cost: int = 1
 	var overrides: Dictionary = profile.terrain_cost_overrides
+	var matched_override: bool = false
 	if overrides != null and not overrides.is_empty() and board != null:
 		if board.has_method("tile_id_at"):
 			var tid = board.tile_id_at(cell)
 			if tid != null and overrides.has(tid):
-				return maxi(0, int(overrides[tid]))
-		if board.has_method("tile_tag_at"):
+				base_cost = maxi(0, int(overrides[tid]))
+				matched_override = true
+		if not matched_override and board.has_method("tile_tag_at"):
 			var tag = board.tile_tag_at(cell)
 			if tag != null and overrides.has(tag):
-				return maxi(0, int(overrides[tag]))
-	if board != null and board.has_method("move_cost"):
-		return maxi(1, int(board.move_cost(cell)))
-	return 1
+				base_cost = maxi(0, int(overrides[tag]))
+				matched_override = true
+	if not matched_override:
+		if board != null and board.has_method("move_cost"):
+			base_cost = maxi(1, int(board.move_cost(cell)))
+		else:
+			base_cost = 1
+	# A layered tile effect (a scattered-rubble field) adds its move_cost_bonus for any
+	# unit it applies to, so an enemies-only slow bites on the turn the foe tries to cross.
+	return base_cost + _tile_effect_cost(cell, board, unit)
+
+
+## Sum of move_cost_bonus from every tile effect on [param cell] that applies to
+## [param unit]. 0 when there is no unit, no tile-effect source, or none apply -- so this
+## never changes cost for a plain cell, a headless mock board, or the placer's own units.
+static func _tile_effect_cost(cell: Vector2i, board, unit) -> int:
+	if unit == null or board == null or not board.has_method("tile_effects_at"):
+		return 0
+	var total: int = 0
+	for te in board.tile_effects_at(cell):
+		if te == null:
+			continue
+		var bonus: int = int(te.get("move_cost_bonus")) if "move_cost_bonus" in te else 0
+		if bonus <= 0:
+			continue
+		if te.has_method("applies_to") and te.applies_to(unit, board):
+			total += bonus
+	return total
