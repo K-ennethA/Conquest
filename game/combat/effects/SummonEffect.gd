@@ -32,31 +32,71 @@ func apply(ctx: MoveContext) -> void:
 		return
 	var owner = ctx.caster.get_owner_player()
 	if owner == null:
+		push_warning("SummonEffect: caster has no owner player -- nothing raised.")
 		return
 	var pid: int = int(owner.player_id)
 
-	var gwm = _game_world_manager()
-	if gwm == null or not gwm.has_method("summon_unit"):
-		return  # no live world (headless/tests) -> nothing to raise
+	var gwm = _summoner()
+	if gwm == null:
+		# Headless / mock harnesses legitimately have no world, so stay quiet there; in a
+		# live battle this is a real failure worth surfacing rather than silently no-op'ing.
+		if Engine.get_main_loop() is SceneTree and (Engine.get_main_loop() as SceneTree).current_scene != null:
+			push_warning("SummonEffect: no summoner (GameWorldManager.summon_unit) reachable -- nothing raised.")
+		return
 
 	var origin: Vector2i = ctx.aim_cell
 	var cells: Array = _summon_cells(ctx, origin, count)
+	if cells.is_empty():
+		push_warning("SummonEffect: no free cell near %s -- nothing raised." % str(origin))
+		return
 	for cell in cells:
 		var unit = gwm.summon_unit(character_id, cell, pid, stance)
-		if unit != null:
-			ctx.log_event({
-				"effect": "summon",
-				"target": unit,
-				"cell": cell,
-				"character_id": String(character_id),
-			})
+		if unit == null:
+			push_warning("SummonEffect: summon_unit('%s') at %s returned null." % [String(character_id), str(cell)])
+			continue
+		ctx.log_event({
+			"effect": "summon",
+			"target": unit,
+			"cell": cell,
+			"character_id": String(character_id),
+		})
 
 
-## The active [GameWorldManager], or null when there is no live scene (headless tests).
-func _game_world_manager():
+## Whatever can actually perform a summon this frame -- i.e. a node exposing
+## summon_unit(). Resolved defensively because a single lookup is a single point of
+## failure: the group is the fast path, but if the manager somehow isn't in it (scene
+## rebuilt, load order, a different battle root) we fall back to scanning the current
+## scene rather than silently raising nothing. Null in headless/mocked runs.
+func _summoner():
 	var loop = Engine.get_main_loop()
-	if loop is SceneTree:
-		return loop.get_first_node_in_group("game_world_manager")
+	if not (loop is SceneTree):
+		return null
+	var tree := loop as SceneTree
+
+	# Fast path: the manager registers itself in this group on _ready.
+	var node = tree.get_first_node_in_group("game_world_manager")
+	if node != null and node.has_method("summon_unit"):
+		return node
+
+	# Fallback: find any node in the live scene that can summon.
+	if tree.current_scene != null:
+		var found = _find_summoner_in(tree.current_scene)
+		if found != null:
+			return found
+	return null
+
+
+## Depth-first search for a node exposing summon_unit(). Small scenes, run only when the
+## group lookup missed, so the cost is negligible.
+func _find_summoner_in(node: Node):
+	if node == null:
+		return null
+	if node.has_method("summon_unit"):
+		return node
+	for child in node.get_children():
+		var found = _find_summoner_in(child)
+		if found != null:
+			return found
 	return null
 
 

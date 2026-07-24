@@ -19,6 +19,6 @@ max_range = 2
 script = ExtResource("3_xynr1")
 move_id = &"sunder_guard"
 display_name = "Sunder Guard"
-description = "Batter an enemy's armor, lowering its defense for a short time."
+description = "Lowers an enemy's defense for 2 turns; deals no damage."
 targeting = SubResource("Resource_at343")
 effects = Array[ExtResource("1_slong")]([SubResource("Resource_r2tyg")])

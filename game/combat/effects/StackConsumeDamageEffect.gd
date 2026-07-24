@@ -47,9 +47,12 @@ func apply(ctx: MoveContext) -> void:
 			dealt = maxi(1, int(round(float(dealt) * elem)))
 		if outcome.get("crit", false):
 			dealt = maxi(1, int(round(float(dealt) * CombatTypes.CRIT_MULTIPLIER)))
+		# Announce BEFORE applying, for the same reason DamageEffect does: a lethal hit
+		# resolves the death synchronously, and the killer must already be known (via the
+		# damage_dealt signal) or ON_KILL abilities never fire.
+		DamageEffect._announce(ctx, target, dealt)
 		if target.has_method("take_damage"):
 			target.take_damage(dealt)
-		DamageEffect._announce(ctx, target, dealt)
 		ctx.log_event({"effect": "damage", "target": target, "amount": dealt, "category": category, "crit": outcome.get("crit", false)})
 
 	# Spend the accumulated charge whether or not there was a target, so the counter

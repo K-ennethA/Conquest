@@ -122,10 +122,16 @@ func apply(ctx: MoveContext) -> void:
 			crit = group_crit
 		if crit:
 			dealt = maxi(1, int(round(dealt * CombatTypes.CRIT_MULTIPLIER)))
+		# ANNOUNCE BEFORE APPLYING. take_damage() can KILL the target outright, and a death
+		# synchronously emits unit_eliminated -> the killer's ON_KILL. AbilitySystem
+		# attributes that kill through _last_damaged, which is only recorded when this
+		# damage_dealt signal fires -- so announcing afterwards meant the victim died before
+		# anyone knew who hit it, and ON_KILL abilities (Mortis's Reanimate) silently never
+		# fired. Emitting first makes the attacker known by the time the death resolves.
+		_announce(ctx, target, dealt)
 		if target.has_method("take_damage"):
 			target.take_damage(dealt)
 		total_dealt += dealt
-		_announce(ctx, target, dealt)
 		ctx.log_event({
 			"effect": "damage",
 			"target": target,

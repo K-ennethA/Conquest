@@ -9,6 +9,44 @@ class_name UnitVisualManager
 var _health_bar_scene: PackedScene
 var _unit_health_bars: Dictionary = {}  # Unit -> HealthBar
 
+# --- Team outline (friend/foe silhouette) -----------------------------------
+# Which side an outline is drawn for, from the LOCAL human player's point of view.
+enum OutlineSide { NONE, ALLY, ENEMY }
+
+## Shared, lazily-built outline/wash overlay materials, keyed "<side>_<dimmed>".
+## Built ONCE per combination and reused by every unit and every frame -- nothing
+## here is allocated per-unit or per-frame. Declared before the exports below so a
+## setter firing during scene load always has a valid dictionary to clear.
+var _overlay_materials: Dictionary = {}
+
+## Silhouette colour for units HOSTILE to the local human player (AI-owned, or owned
+## by any player that is not the local one). Red so enemies read instantly.
+@export var enemy_outline_color: Color = Color(1.0, 0.16, 0.12, 1.0):
+	set(value):
+		enemy_outline_color = value
+		_invalidate_overlay_materials()
+
+## Silhouette colour for the local human player's own units. A cool cyan-blue that
+## sits with the PLAYER_1 team tint instead of fighting it.
+@export var ally_outline_color: Color = Color(0.25, 0.72, 1.0, 1.0):
+	set(value):
+		ally_outline_color = value
+		_invalidate_overlay_materials()
+
+## Thickness of the outline shell, in metres of vertex grow (~0.02-0.04 reads well
+## on a 1-cell unit). Larger = chunkier silhouette.
+@export var outline_width: float = 0.03:
+	set(value):
+		outline_width = value
+		_invalidate_overlay_materials()
+
+## Master switch. Off -> no unit gets an outline (the acted-greyscale wash is
+## unaffected either way).
+@export var team_outlines_enabled: bool = true:
+	set(value):
+		team_outlines_enabled = value
+		_invalidate_overlay_materials()
+
 # Shared "spent turn" GREYSCALE wash (Fire Emblem style drained-of-colour). One
 # material is reused across every unit and every frame -- never allocate per unit --
 # and it is applied non-destructively via each MeshInstance3D's `material_overlay`,
@@ -18,6 +56,8 @@ var _unit_health_bars: Dictionary = {}  # Unit -> HealthBar
 # every hue toward the same mid-grey is what reads as "desaturated / spent" rather
 # than a faint darkening. It is paired with a slight per-mesh `transparency` fade
 # (~0.15) so the spent unit also recedes a touch -- grey wash + slight fade together.
+# This bare instance is the one used when a unit gets NO outline; the outlined
+# combinations live in _overlay_materials as their own wash + `next_pass` chains.
 var _dim_material: StandardMaterial3D = null
 
 # How much a spent unit fades via GeometryInstance3D.transparency (0 = opaque,
@@ -59,6 +99,10 @@ func setup_unit_visuals(unit: Unit, player_assignment: PlayerMaterials.PlayerTea
 	_apply_player_material(unit, player_assignment)
 	_setup_unit_type_indicator(unit)
 	_create_health_bar(unit)
+	# Ownership is known (or just changed -- summon / mind control both route through
+	# Unit.set_owner_player -> here), so (re)paint the friend/foe outline. This also
+	# re-applies the spent-turn wash, since the two share one overlay channel.
+	refresh_unit_outline(unit)
 
 func setup_unit_visuals_for_player(unit: Unit, player: Player) -> void:
 	"""Set up all visual elements for a unit using new Player class"""
@@ -155,7 +199,16 @@ func _create_health_bar(unit: Unit) -> void:
 	if not _health_bar_scene:
 		push_warning("Health bar scene not loaded")
 		return
-	
+
+	# setup_unit_visuals re-runs on every ownership change (summon, mind control), so
+	# never stack a second bar on the same unit -- just refresh the one it already has.
+	if _unit_health_bars.has(unit):
+		var existing = _unit_health_bars[unit]
+		if existing != null and is_instance_valid(existing):
+			_update_health_bar(unit)
+			return
+		_unit_health_bars.erase(unit)
+
 	var health_bar = _health_bar_scene.instantiate()
 	unit.add_child(health_bar)
 	
@@ -281,12 +334,12 @@ func _restore_unit_material(unit: Unit) -> void:
 	apply_acted_visual(unit, has_acted)
 
 func apply_acted_visual(unit: Unit, has_acted: bool) -> void:
-	"""Grey out a unit that has spent its turn (or clear it when it can act again).
+	"""Refresh a unit's non-destructive overlay pass: the spent-turn greyscale wash
+	AND the friend/foe team outline, which share one channel and compose as a chain.
 
-	Non-destructive: we set a SHARED semi-transparent neutral-grey `material_overlay`
-	on every MeshInstance3D under the unit's visible model, which composites over the
-	model's own materials and washes their colour toward mid-grey, plus a slight
-	per-mesh `transparency` fade. Clearing both (`material_overlay = null`,
+	Non-destructive: we set a SHARED `material_overlay` on every MeshInstance3D under
+	the unit's visible model. `material_overlay` composites over the model's own
+	materials without replacing them, so clearing it (`material_overlay = null`,
 	`transparency = 0.0`) restores the original look exactly -- no material is
 	duplicated, copied, or overwritten, so this never fights UnitAnimator's transient
 	hit/heal `material_override` flashes (a different channel) or the selection glow.
@@ -301,8 +354,11 @@ func apply_acted_visual(unit: Unit, has_acted: bool) -> void:
 
 	# Only living, spent units are greyed; dead units are being removed, and a unit
 	# that can act again must read as fully active / full-colour.
-	var should_dim: bool = has_acted and unit.is_alive()
-	var overlay: Material = _ensure_dim_material() if should_dim else null
+	var alive: bool = true
+	if unit.has_method("is_alive"):
+		alive = bool(unit.is_alive())
+	var should_dim: bool = has_acted and alive
+	var overlay: Material = _get_overlay_material(_outline_side_for_unit(unit), should_dim)
 	var fade: float = _DIM_TRANSPARENCY if should_dim else 0.0
 
 	var meshes: Array[MeshInstance3D] = []
@@ -312,23 +368,137 @@ func apply_acted_visual(unit: Unit, has_acted: bool) -> void:
 			mesh.material_overlay = overlay
 			mesh.transparency = fade
 
-## Build (once) and return the shared greyscale wash material. Lazily created so it
-## is always available even if apply_acted_visual runs before _ready.
+## Re-evaluate one unit's overlay (outline + spent wash) from its OWN authoritative
+## state. Called whenever ownership changes -- a summoned or mind-controlled unit
+## swaps sides mid-battle and must flip its outline colour immediately. Null-safe.
+func refresh_unit_outline(unit: Unit) -> void:
+	if not is_instance_valid(unit):
+		return
+	apply_acted_visual(unit, _unit_has_acted(unit))
+
+## The unit's authoritative "already spent its turn" flag, defaulting to false for a
+## stub/mock unit that does not expose it (headless tests).
+func _unit_has_acted(unit: Unit) -> bool:
+	if not is_instance_valid(unit):
+		return false
+	if not ("has_acted_this_turn" in unit):
+		return false
+	return bool(unit.has_acted_this_turn)
+
+# --- Friend / foe ------------------------------------------------------------
+
+## Which outline a unit should wear, from the LOCAL human player's point of view.
+##
+## Friend/foe is decided exactly the way the rest of the game decides who the human
+## may command (see PlayerManager.can_current_player_select_unit): the local human is
+## `GameModeManager.get_local_player_id()` (0 in single-player / hotseat, the real
+## slot in multiplayer), and any unit owned by an `is_ai` player -- or by any other
+## player id -- is hostile and gets the RED outline. A unit with no owner, or one
+## owned by a dormant NEUTRAL faction (jungle-camp style, hostile to nobody until
+## provoked), gets no outline at all so it reads as a third party rather than as
+## either side. Fully null-safe: returns NONE for anything it cannot resolve.
+func _outline_side_for_unit(unit: Unit) -> OutlineSide:
+	if not team_outlines_enabled:
+		return OutlineSide.NONE
+	if not is_instance_valid(unit) or not unit.has_method("get_owner_player"):
+		return OutlineSide.NONE
+
+	var owner_player: Player = unit.get_owner_player()
+	if owner_player == null:
+		return OutlineSide.NONE
+
+	# Neutral camps belong to no side in the read; they are killable by both.
+	if owner_player.is_neutral:
+		return OutlineSide.NONE
+
+	# AI-driven players are always the enemy of the human at the controls.
+	if owner_player.is_ai:
+		return OutlineSide.ENEMY
+
+	var local_id: int = 0
+	if GameModeManager and GameModeManager.has_method("get_local_player_id"):
+		local_id = int(GameModeManager.get_local_player_id())
+	return OutlineSide.ALLY if owner_player.player_id == local_id else OutlineSide.ENEMY
+
+# --- Shared overlay materials ------------------------------------------------
+
+## Drop the cached overlay materials after an inspector tweak and re-apply them to
+## every live unit so the change is visible immediately.
+func _invalidate_overlay_materials() -> void:
+	_overlay_materials.clear()
+	if is_inside_tree():
+		update_all_unit_visuals()
+
+## The single `material_overlay` value for a given side + spent state. Cached, so a
+## given combination is built at most once and then shared by every unit forever.
+##
+## When a unit is spent we chain the two effects instead of picking one: the greyscale
+## wash stays the ROOT material (it must composite directly over the model's surface,
+## which is what reads as "drained"), and the outline hangs off its `next_pass` in a
+## pre-dimmed colour. Together with the per-mesh `transparency` fade the outline recedes
+## along with the rest of the unit, so a spent enemy still reads as "enemy" but clearly
+## as "done". Returns null when there is nothing to draw.
+func _get_overlay_material(side: OutlineSide, dimmed: bool) -> Material:
+	if side == OutlineSide.NONE:
+		return _ensure_dim_material() if dimmed else null
+
+	var key: String = str(int(side)) + "_" + str(dimmed)
+	if _overlay_materials.has(key):
+		return _overlay_materials[key]
+
+	var color: Color = enemy_outline_color if side == OutlineSide.ENEMY else ally_outline_color
+	var root: Material
+	if dimmed:
+		# Wash first (over the real surface), pre-dimmed outline hung off it.
+		var wash: StandardMaterial3D = _make_dim_material()
+		wash.next_pass = _make_outline_material(color.darkened(0.45))
+		root = wash
+	else:
+		root = _make_outline_material(color)
+
+	_overlay_materials[key] = root
+	return root
+
+## Build one outline shell material: an unshaded, grown, front-culled second render of
+## the same geometry. Only the back faces survive the cull and only the grown sliver
+## that pokes past the silhouette survives the depth test, which is what leaves a clean
+## coloured rim around the unit without touching its real materials.
+func _make_outline_material(color: Color) -> StandardMaterial3D:
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = color
+	mat.cull_mode = BaseMaterial3D.CULL_FRONT
+	mat.grow = true
+	mat.grow_amount = maxf(0.0, outline_width)
+	# Depth test ON: the shell must be hidden by the model itself (and by anything in
+	# front of it) so only the rim shows -- an x-ray outline would read as a highlight.
+	mat.no_depth_test = false
+	return mat
+
+## Build (once) and return the shared greyscale wash material used on its own -- i.e.
+## for a spent unit that gets no outline. Lazily created so it is always available even
+## if apply_acted_visual runs before _ready.
 func _ensure_dim_material() -> StandardMaterial3D:
 	if _dim_material == null:
-		var mat: StandardMaterial3D = StandardMaterial3D.new()
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
-		# Unshaded so the wash is a consistent flat grey regardless of scene
-		# lighting -- every hue underneath gets pulled toward the same mid-grey,
-		# reading as "desaturated / drained of colour / spent" everywhere.
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		# Strong, slightly-dark neutral grey at ~0.72 alpha: heavy enough that the
-		# model's own colours are unmistakably washed toward a drained mid-grey and
-		# clearly read as "spent" at a glance, not merely tinted or faintly darkened.
-		mat.albedo_color = Color(0.42, 0.42, 0.44, 0.72)
-		_dim_material = mat
+		_dim_material = _make_dim_material()
 	return _dim_material
+
+## Construct a fresh spent-turn greyscale wash. Kept as a builder (rather than only a
+## singleton) because the outline variants need their own instance to hang a `next_pass`
+## on -- mutating the shared one would leak an enemy's red rim onto every spent unit.
+func _make_dim_material() -> StandardMaterial3D:
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
+	# Unshaded so the wash is a consistent flat grey regardless of scene
+	# lighting -- every hue underneath gets pulled toward the same mid-grey,
+	# reading as "desaturated / drained of colour / spent" everywhere.
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# Strong, slightly-dark neutral grey at ~0.72 alpha: heavy enough that the
+	# model's own colours are unmistakably washed toward a drained mid-grey and
+	# clearly read as "spent" at a glance, not merely tinted or faintly darkened.
+	mat.albedo_color = Color(0.42, 0.42, 0.44, 0.72)
+	return mat
 
 ## Resolve a unit's visible model root, mirroring UnitAnimator._get_anim_root:
 ## prefer the "CharacterModel" glb root, else the placeholder "MeshInstance3D",

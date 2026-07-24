@@ -16,6 +16,6 @@ script = ExtResource("4_ts0ok")
 script = ExtResource("3_nrwgm")
 move_id = &"cleave"
 display_name = "Cleave"
-description = "A heavy adjacent swing. Deal physical damage to one enemy."
+description = "Heavy physical damage to one adjacent enemy."
 targeting = SubResource("Resource_26ddx")
 effects = Array[ExtResource("1_84qr1")]([SubResource("Resource_7chly")])

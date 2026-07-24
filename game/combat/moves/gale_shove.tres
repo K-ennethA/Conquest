@@ -22,6 +22,6 @@ script = ExtResource("5_jp7tl")
 script = ExtResource("4_phh4w")
 move_id = &"gale_shove"
 display_name = "Gale Shove"
-description = "A concussive push: light damage that knocks an enemy back two cells."
+description = "Knocks an enemy back two cells for light damage."
 targeting = SubResource("Resource_tqc7i")
 effects = Array[ExtResource("1_4no61")]([SubResource("Resource_ovimu"), SubResource("Resource_ahdlm")])
