@@ -31,7 +31,6 @@ class BattleEffect:
 
 func _ready() -> void:
 	name = "BattleEffectsManager"
-	print("BattleEffectsManager initialized")
 
 # Speed modification API
 func apply_speed_buff(unit: Unit, buff_name: String, speed_increase: int, duration_rounds: int = -1, source: String = "") -> void:
@@ -97,8 +96,7 @@ func refresh_unit_turn(unit: Unit) -> bool:
 	
 	turn_refresh_flags[unit] = true
 	unit_turn_refreshed.emit(unit)
-	print("Unit " + unit.get_display_name() + " turn refreshed by battle effect")
-	
+
 	# Notify active turn system
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
@@ -118,7 +116,6 @@ func clear_unit_turn_refresh(unit: Unit) -> void:
 # Round progression (called by turn systems)
 func advance_round(new_round: int) -> void:
 	"""Update all battle effects for a new round"""
-	print("BattleEffectsManager: Advancing to round " + str(new_round))
 	_update_effect_durations(new_round)
 	_clear_turn_refresh_flags()
 
@@ -135,7 +132,6 @@ func _update_effect_durations(current_round: int) -> void:
 			if modifier.duration_rounds > 0:
 				modifier.duration_rounds -= 1
 				if modifier.duration_rounds <= 0:
-					print("Speed modifier expired: " + modifier.name + " on " + unit.get_display_name())
 					modifiers.remove_at(i)
 					speed_modifier_removed.emit(unit, modifier.name)
 		
@@ -155,28 +151,19 @@ func _clear_turn_refresh_flags() -> void:
 func start_battle() -> void:
 	"""Initialize battle effects for a new battle"""
 	reset_battle_state()
-	print("BattleEffectsManager: Battle started - ready for effects")
 
 func end_battle() -> void:
 	"""Clean up all battle effects when battle ends"""
 	_clear_all_effects()
-	print("BattleEffectsManager: Battle ended - all effects cleared")
 
 func reset_battle_state() -> void:
 	"""Reset all battle-specific state"""
 	_clear_all_effects()
 	turn_refresh_flags.clear()
-	print("BattleEffectsManager: Battle state reset")
 
 func _clear_all_effects() -> void:
 	"""Clear all battle effects"""
-	var units_affected = speed_modifiers.keys()
 	speed_modifiers.clear()
-	
-	if units_affected.size() > 0:
-		print("Cleared battle effects from " + str(units_affected.size()) + " units:")
-		for unit in units_affected:
-			print("  - " + unit.get_display_name() + " effects cleared")
 
 # Internal speed modifier management
 func _add_speed_modifier(unit: Unit, modifier_name: String, speed_change: int, duration_rounds: int = -1, source: String = "") -> void:
@@ -191,8 +178,7 @@ func _add_speed_modifier(unit: Unit, modifier_name: String, speed_change: int, d
 	
 	var modifier = BattleEffect.new(modifier_name, "speed", speed_change, duration_rounds, source, current_round)
 	speed_modifiers[unit].append(modifier)
-	
-	print("Added speed modifier to " + unit.get_display_name() + ": " + modifier_name + " (" + str(speed_change) + " speed)")
+
 	speed_modifier_added.emit(unit, modifier_name, speed_change)
 
 func _remove_speed_modifier(unit: Unit, modifier_name: String) -> bool:
@@ -203,7 +189,6 @@ func _remove_speed_modifier(unit: Unit, modifier_name: String) -> bool:
 	var modifiers = speed_modifiers[unit]
 	for i in range(modifiers.size() - 1, -1, -1):
 		if modifiers[i].name == modifier_name:
-			print("Removed speed modifier from " + unit.get_display_name() + ": " + modifier_name)
 			modifiers.remove_at(i)
 			speed_modifier_removed.emit(unit, modifier_name)
 			

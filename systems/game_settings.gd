@@ -76,7 +76,6 @@ var ai_difficulty: int = 1  # NORMAL
 func _ready() -> void:
 	name = "GameSettings"
 	_load_presentation_settings()
-	print("GameSettings initialized")
 
 # --- Presentation helpers ---------------------------------------------------
 
@@ -143,12 +142,10 @@ func _save_presentation_settings() -> void:
 func set_game_mode(mode: GameMode) -> void:
 	"""Set the game mode"""
 	game_mode = mode
-	print("Game mode set to: " + GameMode.keys()[mode])
 
 func set_turn_system(turn_system: TurnSystemBase.TurnSystemType) -> void:
 	"""Set the selected turn system"""
 	selected_turn_system = turn_system
-	print("Turn system set to: " + TurnSystemBase.TurnSystemType.keys()[turn_system])
 
 func set_player_count(count: int) -> void:
 	"""Set the number of players"""
@@ -157,19 +154,15 @@ func set_player_count(count: int) -> void:
 	# Adjust player names array
 	while player_names.size() < player_count:
 		player_names.append("Player " + str(player_names.size() + 1))
-	
-	print("Player count set to: " + str(player_count))
 
 func set_player_name(player_index: int, name: String) -> void:
 	"""Set a specific player's name"""
 	if player_index >= 0 and player_index < player_names.size():
 		player_names[player_index] = name
-		print("Player " + str(player_index + 1) + " name set to: " + name)
 
 func set_selected_map(map_path: String) -> void:
 	"""Set the selected map path"""
 	selected_map_path = map_path
-	print("Selected map set to: " + map_path)
 
 func set_selected_squad(ids: Array) -> void:
 	"""The local player's chosen squad (character_ids). Copied so later edits don't alias."""
@@ -184,7 +177,6 @@ func clear_selected_squad() -> void:
 func set_ai_difficulty(difficulty: int) -> void:
 	"""Set the AI difficulty (BotController.Difficulty: EASY=0..BRUTAL=3)."""
 	ai_difficulty = clampi(difficulty, 0, 3)
-	print("AI difficulty set to: " + str(ai_difficulty))
 
 func get_selected_map() -> String:
 	"""Get the selected map path"""
@@ -213,8 +205,7 @@ func is_versus() -> bool:
 # Game initialization
 func apply_settings_to_game() -> void:
 	"""Apply current settings to the game systems"""
-	print("Applying game settings...")
-	
+
 	# Set up PlayerManager with configured players
 	if PlayerManager:
 		# Only set up players if they don't exist yet
@@ -239,12 +230,10 @@ func apply_settings_to_game() -> void:
 			
 			# TODO: Add other turn systems when implemented
 			_:
-				print("Turn system not implemented: " + get_turn_system_string())
+				push_warning("Turn system not implemented: " + get_turn_system_string())
 				# Fallback to traditional
 				var traditional_system = TraditionalTurnSystem.new()
 				TurnSystemManager.register_turn_system(traditional_system)
-	
-	print("Game settings applied successfully")
 
 # Reset and defaults
 func reset_to_defaults() -> void:
@@ -258,8 +247,6 @@ func reset_to_defaults() -> void:
 	show_turn_indicators = true
 	enable_undo = false
 	ai_difficulty = 1  # NORMAL
-
-	print("Game settings reset to defaults")
 
 # Debug and info
 func get_settings_info() -> Dictionary:

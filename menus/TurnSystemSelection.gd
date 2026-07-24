@@ -31,8 +31,6 @@ func _ready() -> void:
 	# Set initial selection
 	_update_button_states()
 	_update_description()
-	
-	print("Turn System Selection initialized")
 
 func _on_traditional_pressed() -> void:
 	"""Handle Traditional Turn System selection"""
@@ -58,7 +56,6 @@ func _on_real_time_pressed() -> void:
 
 func _on_back_pressed() -> void:
 	"""Handle Back button press"""
-	print("Returning to main menu")
 	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
 
 func _update_button_states() -> void:
@@ -87,8 +84,7 @@ func _update_description() -> void:
 
 func _start_game_with_turn_system() -> void:
 	"""Start the game with the selected turn system"""
-	print("Starting game with turn system: " + TurnSystemBase.TurnSystemType.keys()[selected_turn_system])
-	
+
 	# Store the selected turn system for the game to use.
 	# This screen is only reached from Single Player, so keep single-player mode
 	# (set by the main menu) rather than forcing VERSUS.

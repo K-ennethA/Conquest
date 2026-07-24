@@ -43,7 +43,10 @@ const ENEMY_FADE_OUT := 0.25
 # land ON the player's turn. During this hold the overlay is TRANSPARENT but input-blocking:
 # the player watches the last enemy action finish, then the wipe fades in. Scaled by Battle
 # Speed like everything else.
-const POST_ENEMY_HOLD := 0.9
+const POST_ENEMY_HOLD := 1.5
+## Floor (seconds) on the post-enemy hold AFTER battle-speed scaling -- even on Fast, the
+## last enemy action gets a clear beat before control returns.
+const POST_ENEMY_HOLD_MIN := 0.9
 
 # High layer so the wipe covers the board and every HUD panel.
 const OVERLAY_LAYER := 128
@@ -248,7 +251,9 @@ func play(player: Player, pre_hold: float = 0.0) -> void:
 
 	_tween = create_tween()
 	if pre_hold > 0.0:
-		_tween.tween_interval(_scaled(pre_hold))
+		# Floor the scaled hold so even Fast battle speed keeps a readable beat on the
+		# enemy's last action before the wipe covers the board.
+		_tween.tween_interval(maxf(POST_ENEMY_HOLD_MIN, _scaled(pre_hold)))
 	_tween.tween_property(_overlay, "modulate:a", 1.0, _scaled(fade_in))
 	_tween.tween_interval(_scaled(hold))
 	_tween.tween_property(_overlay, "modulate:a", 0.0, _scaled(fade_out))

@@ -119,6 +119,28 @@ func advance_turn() -> void:
 	_end_unit_turn(current_acting_unit)
 	_advance_to_next_unit()
 
+func _on_registered_unit_died(unit: Unit) -> void:
+	"""Speed First runs a single-unit queue and advances ONLY when the acting unit
+	completes an action (mark_unit_acted). But a unit can die mid-turn WITHOUT ever
+	completing one -- a lethal poison/burn tick at its own turn start, or walking onto a
+	lethal hazard tile (movement fires mark_moved, not mark_action_completed). The base
+	handler just unregisters it and re-checks round completion, which Speed First
+	deliberately never advances from -- so without this override current_acting_unit would
+	dangle at the (about-to-be-freed) dead unit, is_turn_in_progress stays true, and the
+	whole match soft-locks (AI) or crashes on the next End-Turn deref. When the ACTING unit
+	is the one dying, hand off to the next unit in the queue."""
+	var was_acting := (unit != null and unit == current_acting_unit)
+	super._on_registered_unit_died(unit)  # unregister now (still valid) + defer round re-check
+	if was_acting:
+		# Clear the acting slot BEFORE advancing so no path (advance_turn, mark_unit_acted,
+		# _advance_to_next_unit, the debug getters) can touch the freed instance. Drop it
+		# from the queue by the still-valid ref, then hand off next idle frame.
+		if unit in turn_queue:
+			turn_queue.erase(unit)
+		current_acting_unit = null
+		is_turn_in_progress = false
+		call_deferred("_advance_to_next_unit")
+
 func can_unit_act(unit: Unit) -> bool:
 	"""Check if a unit can act in the current turn"""
 	if not is_active or not is_turn_in_progress:
@@ -463,8 +485,8 @@ func get_current_round_progress() -> Dictionary:
 	var remaining_units = turn_queue.size()
 
 	return {
-		"current_unit": current_acting_unit.get_display_name() if current_acting_unit else "None",
-		"current_unit_speed": get_unit_current_speed(current_acting_unit) if current_acting_unit else 0,
+		"current_unit": current_acting_unit.get_display_name() if is_instance_valid(current_acting_unit) else "None",
+		"current_unit_speed": get_unit_current_speed(current_acting_unit) if is_instance_valid(current_acting_unit) else 0,
 		"round_number": round_number,
 		"total_units": total_active_units,
 		"units_acted": acted_units,
@@ -610,7 +632,7 @@ func get_turn_system_info() -> Dictionary:
 		active_effects_count = effects.size()
 
 	var speed_first_info = {
-		"current_acting_unit": current_acting_unit.get_display_name() if current_acting_unit else "None",
+		"current_acting_unit": current_acting_unit.get_display_name() if is_instance_valid(current_acting_unit) else "None",
 		"round_number": round_number,
 		"turn_queue_size": turn_queue.size(),
 		"units_acted_this_round": units_acted_this_round.size(),
@@ -623,5 +645,5 @@ func get_turn_system_info() -> Dictionary:
 
 func _to_string() -> String:
 	"""String representation for debugging"""
-	var unit_name = current_acting_unit.get_display_name() if current_acting_unit else "No Unit"
+	var unit_name = current_acting_unit.get_display_name() if is_instance_valid(current_acting_unit) else "No Unit"
 	return system_name + " (Round " + str(round_number) + " - " + unit_name + ")"

@@ -32,7 +32,6 @@ func _ready() -> void:
 	_create_ui()
 	_load_all_tiles()
 	_setup_connections()
-	print("Tile Gallery initialized with " + str(all_tiles.size()) + " tiles")
 
 func _create_ui() -> void:
 	"""Create the complete UI for the tile gallery"""
@@ -262,8 +261,7 @@ func _load_all_tiles() -> void:
 
 func _create_default_tiles() -> void:
 	"""Create default tile examples and save them as resources"""
-	print("Creating default tiles for demonstration")
-	
+
 	# Ensure directory exists
 	if not DirAccess.dir_exists_absolute("res://game/tiles/resources/"):
 		DirAccess.open("res://").make_dir_recursive("game/tiles/resources")
@@ -290,9 +288,7 @@ func _create_default_tiles() -> void:
 	all_tiles.append(grass_tile)
 	
 	# Save grass tile
-	var grass_result = ResourceSaver.save(grass_tile, "res://game/tiles/resources/grass_plains.tres")
-	if grass_result == OK:
-		print("Saved: Grass Plains tile")
+	ResourceSaver.save(grass_tile, "res://game/tiles/resources/grass_plains.tres")
 	
 	# Molten Lava Tile (Fire damage)
 	var lava_tile = TileResource.new()
@@ -329,9 +325,7 @@ func _create_default_tiles() -> void:
 	all_tiles.append(lava_tile)
 	
 	# Save lava tile
-	var lava_result = ResourceSaver.save(lava_tile, "res://game/tiles/resources/molten_lava.tres")
-	if lava_result == OK:
-		print("Saved: Molten Lava tile with 10 fire damage per turn")
+	ResourceSaver.save(lava_tile, "res://game/tiles/resources/molten_lava.tres")
 	
 	# Deep Water Tile
 	var water_tile = TileResource.new()
@@ -355,9 +349,7 @@ func _create_default_tiles() -> void:
 	all_tiles.append(water_tile)
 	
 	# Save water tile
-	var water_result = ResourceSaver.save(water_tile, "res://game/tiles/resources/deep_water.tres")
-	if water_result == OK:
-		print("Saved: Deep Water tile")
+	ResourceSaver.save(water_tile, "res://game/tiles/resources/deep_water.tres")
 	
 	# Stone Wall Tile
 	var wall_tile = TileResource.new()
@@ -381,11 +373,7 @@ func _create_default_tiles() -> void:
 	all_tiles.append(wall_tile)
 	
 	# Save wall tile
-	var wall_result = ResourceSaver.save(wall_tile, "res://game/tiles/resources/stone_wall.tres")
-	if wall_result == OK:
-		print("Saved: Stone Wall tile")
-	
-	print("Created " + str(all_tiles.size()) + " default tiles")
+	ResourceSaver.save(wall_tile, "res://game/tiles/resources/stone_wall.tres")
 
 func _apply_filters() -> void:
 	"""Apply current search, filter, and sort settings"""
@@ -638,7 +626,7 @@ func _on_tile_selected(index: int) -> void:
 		if selected_tile != null:
 			_display_tile(selected_tile)
 		else:
-			print("Warning: Selected tile is null at index " + str(index))
+			push_warning("TileGallery: Selected tile is null at index " + str(index))
 
 func _on_search_changed(new_text: String) -> void:
 	"""Handle search text change"""
@@ -664,7 +652,6 @@ func _input(event: InputEvent) -> void:
 			KEY_F5:
 				# Refresh tile list
 				_load_all_tiles()
-				print("Tile list refreshed")
 
 func _exit_tree() -> void:
 	"""Clean up when exiting"""

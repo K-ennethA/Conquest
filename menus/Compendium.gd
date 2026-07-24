@@ -65,7 +65,6 @@ func _ready() -> void:
 	# Populate whichever tab opens first; the rest wait until they are shown.
 	_ensure_section(tab_container.current_tab)
 	_sync_section_input()
-	print("Compendium initialized")
 
 
 # ---------------------------------------------------------------------------

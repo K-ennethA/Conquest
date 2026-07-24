@@ -74,7 +74,6 @@ func _ready() -> void:
 	_load_all_characters()
 	_setup_connections()
 	_apply_filters()
-	print("Unit Gallery initialized with " + str(all_characters.size()) + " characters")
 
 
 # ---------------------------------------------------------------------------
@@ -1171,7 +1170,6 @@ func _input(event: InputEvent) -> void:
 		KEY_F5:
 			_load_all_characters()
 			_apply_filters()
-			print("Unit list refreshed")
 
 
 func _exit_tree() -> void:

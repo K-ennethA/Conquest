@@ -23,7 +23,6 @@ var current_selected_map: String = ""
 var map_resources: Array[MapResource] = []
 
 func _ready() -> void:
-	print("MapSelection: Initializing map selection UI")
 	theme = MenuTheme.build()  # dark Legends-style menu look
 	
 	# Connect signals
@@ -84,8 +83,6 @@ func _on_difficulty_selected(index: int) -> void:
 
 func _load_available_maps() -> void:
 	"""Load all available map files"""
-	print("Loading available maps...")
-	
 	available_maps.clear()
 	map_resources.clear()
 	
@@ -99,7 +96,6 @@ func _load_available_maps() -> void:
 
 	# If no maps exist, create a default one
 	if available_maps.is_empty():
-		print("No maps found, creating default map")
 		_create_default_map()
 		available_maps = MapLoader.get_available_maps(true)
 
@@ -119,10 +115,8 @@ func _load_available_maps() -> void:
 
 				map_list.add_item(display_name)
 		else:
-			print("Failed to load map: " + map_path)
-	
-	print("Loaded " + str(map_resources.size()) + " maps")
-	
+			push_error("MapSelection: Failed to load map: " + map_path)
+
 	# Select first map by default
 	if map_list and map_list.get_item_count() > 0:
 		map_list.select(0)
@@ -132,7 +126,6 @@ func _create_default_map() -> void:
 	"""Create and save a default map"""
 	var default_map = MapLoader.create_default_map()
 	MapLoader.save_map(default_map, "default_skirmish")
-	print("Created default map")
 
 func _on_map_selected(index: int) -> void:
 	"""Handle map selection from list"""
@@ -193,9 +186,7 @@ func _on_select_button_pressed() -> void:
 	"""Handle select button press"""
 	if current_selected_map.is_empty():
 		return
-	
-	print("Map selected: " + current_selected_map)
-	
+
 	# Store selected map in GameSettings
 	GameSettings.set_selected_map(current_selected_map)
 
@@ -209,12 +200,10 @@ func _on_select_button_pressed() -> void:
 
 func _on_back_button_pressed() -> void:
 	"""Handle back button press"""
-	print("Back button pressed")
 	get_tree().change_scene_to_file("res://menus/TurnSystemSelection.tscn")
 
 func _on_refresh_button_pressed() -> void:
 	"""Handle refresh button press"""
-	print("Refreshing map list...")
 	_load_available_maps()
 
 # Input handling for keyboard navigation

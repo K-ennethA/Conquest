@@ -136,7 +136,6 @@ func _load_available_maps() -> void:
 	
 	# If no maps exist, create a default one
 	if available_maps.is_empty():
-		print("MapSelectorPanel: No maps found, creating default map")
 		_create_default_map()
 		available_maps = MapLoader.get_available_maps()
 	
@@ -155,10 +154,8 @@ func _load_available_maps() -> void:
 				map_dropdown.add_item(display_name)
 				map_dropdown.set_item_metadata(i, map_path)
 		else:
-			print("MapSelectorPanel: Failed to load map: " + map_path)
-	
-	print("MapSelectorPanel: Loaded " + str(map_resources.size()) + " maps")
-	
+			push_error("MapSelectorPanel: Failed to load map: " + map_path)
+
 	# Auto-select first map or default map
 	if auto_select_first and map_resources.size() > 0:
 		var default_index = _find_default_map_index()
@@ -279,7 +276,6 @@ func _create_default_map() -> void:
 	"""Create and save a default map"""
 	var default_map = MapLoader.create_default_map()
 	MapLoader.save_map(default_map, "default_skirmish")
-	print("MapSelectorPanel: Created default map")
 
 func _on_map_selected(index: int) -> void:
 	"""Handle map selection change"""

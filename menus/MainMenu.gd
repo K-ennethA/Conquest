@@ -14,32 +14,20 @@ class_name MainMenu
 @onready var arena_button: Button = $CenterContainer/VBoxContainer/MenuButtons/ArenaButton
 @onready var quit_button: Button = $CenterContainer/VBoxContainer/MenuButtons/QuitButton
 
+# Dev-only multiplayer test harnesses. These attach three dev_scripts/ nodes that each
+# print a multi-line banner on _ready (and one writes a client-flag file), so they spam
+# the console on EVERY normal launch. Off by default -- flip to true only when debugging
+# the multiplayer auto-client/host handshake.
+const ENABLE_DEV_TEST_HARNESS := false
+
 func _ready() -> void:
-	print("[DEBUG] MainMenu: _ready() called")
 	theme = MenuTheme.build()  # dark Legends-style menu look
-	
-	# Add AutoClientDetector test
-	var autoclient_test = Node.new()
-	autoclient_test.name = "AutoClientDetectorTest"
-	autoclient_test.set_script(load("res://dev_scripts/test_autoclient_detector.gd"))
-	add_child(autoclient_test)
-	
-	# Add debug test script for development
-	var debug_test = Node.new()
-	debug_test.name = "HostAutoClientDebugTest"
-	debug_test.set_script(load("res://dev_scripts/test_host_auto_client_debug.gd"))
-	add_child(debug_test)
-	
-	# Add end-to-end test script
-	var e2e_test = Node.new()
-	e2e_test.name = "EndToEndMultiplayerTest"
-	e2e_test.set_script(load("res://dev_scripts/test_end_to_end_multiplayer.gd"))
-	add_child(e2e_test)
-	
+
+	if ENABLE_DEV_TEST_HARNESS:
+		_attach_dev_test_harness()
+
 	# Note: AutoClientDetector now runs as an autoload, so client detection
 	# happens before this scene loads. If we reach here, we're not a client.
-	print("[SINGLE] MainMenu: Setting up normal menu")
-	
 	# Connect button signals for normal menu operation
 	if single_player_button:
 		single_player_button.pressed.connect(_on_single_player_pressed)
@@ -51,8 +39,25 @@ func _ready() -> void:
 		arena_button.pressed.connect(_on_arena_pressed)
 	if quit_button:
 		quit_button.pressed.connect(_on_quit_pressed)
-	
-	print("Main Menu initialized")
+
+func _attach_dev_test_harness() -> void:
+	"""Attach the dev_scripts/ multiplayer test nodes. Gated behind ENABLE_DEV_TEST_HARNESS
+	because each spams a banner on _ready (and test_autoclient_detector writes a client-flag
+	file). Only for hands-on multiplayer handshake debugging."""
+	var autoclient_test := Node.new()
+	autoclient_test.name = "AutoClientDetectorTest"
+	autoclient_test.set_script(load("res://dev_scripts/test_autoclient_detector.gd"))
+	add_child(autoclient_test)
+
+	var debug_test := Node.new()
+	debug_test.name = "HostAutoClientDebugTest"
+	debug_test.set_script(load("res://dev_scripts/test_host_auto_client_debug.gd"))
+	add_child(debug_test)
+
+	var e2e_test := Node.new()
+	e2e_test.name = "EndToEndMultiplayerTest"
+	e2e_test.set_script(load("res://dev_scripts/test_end_to_end_multiplayer.gd"))
+	add_child(e2e_test)
 
 func _show_auto_join_status() -> void:
 	"""Show auto-join connection status"""
@@ -91,8 +96,7 @@ func _show_status_message(message: String) -> void:
 
 func _on_single_player_pressed() -> void:
 	"""Handle Single Player button press"""
-	print("Single Player mode selected")
-	
+
 	# Set up single player mode
 	GameSettings.set_game_mode(GameSettings.GameMode.SINGLE_PLAYER)
 	GameSettings.set_player_count(1)  # Single player vs AI
@@ -102,26 +106,22 @@ func _on_single_player_pressed() -> void:
 
 func _on_versus_pressed() -> void:
 	"""Handle Versus button press"""
-	print("Versus mode selected - opening multiplayer mode selection")
-	
+
 	# Load multiplayer mode selection scene (restored)
 	get_tree().change_scene_to_file("res://menus/MultiplayerModeSelection.tscn")
 
 func _on_compendium_pressed() -> void:
 	"""Handle Compendium button press"""
-	print("Compendium selected")
 	get_tree().change_scene_to_file("res://menus/Compendium.tscn")
 
 func _on_arena_pressed() -> void:
 	"""Handle Arena button press -- open the Arena pre-run setup screen"""
-	print("Arena mode selected")
 	# Setup screen lets the player pick run length + turn system before ArenaController
 	# starts the run (it, not this menu, launches the actual GameWorld round).
 	get_tree().change_scene_to_file("res://game/arena/ui/ArenaSetupScreen.tscn")
 
 func _on_quit_pressed() -> void:
 	"""Handle Quit button press"""
-	print("Quitting game")
 	get_tree().quit()
 
 func _show_not_implemented_message(message: String) -> void:

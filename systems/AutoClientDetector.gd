@@ -6,16 +6,9 @@ extends Node
 const CLIENT_FLAG_FILE = "user://auto_client.flag"
 
 func _ready() -> void:
-	print("=== AUTO CLIENT DETECTOR (AUTOLOAD) START ===")
-	print("Checking for client flag file: " + CLIENT_FLAG_FILE)
-	
 	# Check if flag file exists
 	if FileAccess.file_exists(CLIENT_FLAG_FILE):
-		print("*** CLIENT FLAG FILE FOUND - THIS IS A CLIENT INSTANCE ***")
 		_become_client()
-	else:
-		print("No client flag file found - this is a normal instance")
-		print("=== AUTO CLIENT DETECTOR (AUTOLOAD) END ===")
 
 func _become_client() -> void:
 	"""Transform this instance into a client"""

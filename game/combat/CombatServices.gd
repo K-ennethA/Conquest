@@ -277,7 +277,6 @@ func _assert_units_round_trip(board_adapter: BoardAdapter, map_root: Node3D) -> 
 
 	var units: Array = _gather_units(map_root)
 	if units.is_empty():
-		print("[CombatServices] Board rebuilt; no units to verify.")
 		return
 
 	# Derive "one cell" in world units from the adapter itself so this stays
@@ -308,9 +307,7 @@ func _assert_units_round_trip(board_adapter: BoardAdapter, map_root: Node3D) -> 
 				% [unit.name, str(actual), str(cell), str(expected), planar_dist, tolerance]
 			)
 
-	if mismatches == 0:
-		print("[CombatServices] Board rebuilt; all %d unit(s) round-trip within one cell." % units.size())
-	else:
+	if mismatches > 0:
 		push_warning(
 			"[CombatServices] Board rebuilt with %d of %d unit(s) failing the cell round-trip. See warnings above."
 			% [mismatches, units.size()]

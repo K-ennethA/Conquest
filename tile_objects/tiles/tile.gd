@@ -162,8 +162,7 @@ func add_effect(effect: TileEffect) -> bool:
 	
 	active_effects.append(effect)
 	_update_effect_visuals()
-	
-	print("Added effect " + effect.effect_name + " to tile at " + str(grid_position))
+
 	return true
 
 func remove_effect(effect: TileEffect) -> bool:
@@ -172,7 +171,6 @@ func remove_effect(effect: TileEffect) -> bool:
 	if index >= 0:
 		active_effects.remove_at(index)
 		_update_effect_visuals()
-		print("Removed effect " + effect.effect_name + " from tile at " + str(grid_position))
 		return true
 	return false
 
@@ -220,7 +218,6 @@ func apply_effects_to_unit(unit: Unit, trigger_type: String = "enter") -> Array[
 		if should_trigger:
 			var result = effect.apply_effect(unit, self)
 			results.append(result)
-			print("Applied effect " + effect.effect_name + " to " + unit.unit_name + ": " + result.message)
 	
 	return results
 

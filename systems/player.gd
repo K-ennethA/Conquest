@@ -101,7 +101,6 @@ func _end_turn() -> void:
 
 func _handle_elimination() -> void:
 	"""Handle player elimination"""
-	print("Player " + player_name + " has been eliminated!")
 	# Clear all unit ownership
 	for unit in owned_units.duplicate():
 		remove_unit(unit)

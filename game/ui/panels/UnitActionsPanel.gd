@@ -450,6 +450,14 @@ func _clear_unit_header() -> void:
 func _on_player_turn_changed(player: Player) -> void:
 	"""Handle player turn changes"""
 	_update_actions()
+	# When control is no longer the local human's, drop any lingering movement highlight
+	# and revert an uncommitted tentative move, so nothing stale reads as commandable or
+	# can be clicked during the enemy's turn. (The commit paths also hard-gate on
+	# _human_may_command, so this is the visual half of the same guard.)
+	if selected_unit != null and not _human_may_command(selected_unit):
+		if _tentative_active:
+			_revert_tentative_move()
+		_clear_movement_range()
 
 func _on_game_state_changed(new_state: PlayerManager.GameState) -> void:
 	"""Handle game state changes"""
@@ -1335,6 +1343,12 @@ func _execute_movement(destination: Vector3) -> void:
 	if not selected_unit:
 		return
 
+	# Same hard turn gate as handle_movement_destination_selected: this legacy path must
+	# never move a unit the human may not command this turn either.
+	if not _human_may_command(selected_unit):
+		_clear_movement_range()
+		return
+
 	# Character-backed units route through the shared BoardAdapter (resolver-backed).
 	if _try_execute_move_via_board(destination):
 		_exit_movement_mode()
@@ -1432,6 +1446,15 @@ func is_showing_movement_range() -> bool:
 func handle_movement_destination_selected(destination: Vector3) -> void:
 	"""Handle selection of a movement destination (tactical style)"""
 	if not selected_unit:
+		return
+
+	# HARD TURN GATE: never move a unit the local human may not command RIGHT NOW -- an
+	# enemy/AI unit, or ANY unit while it is not the human's turn. A movement range shown
+	# for your own unit before control passed to the enemy could otherwise still be clicked
+	# to slide it DURING the enemy turn. _human_may_command re-checks the live current
+	# player, so a stale highlight can never commit a move.
+	if not _human_may_command(selected_unit):
+		_clear_movement_range()
 		return
 
 	# Hard gate: a unit that already moved this turn cannot move again, even if a

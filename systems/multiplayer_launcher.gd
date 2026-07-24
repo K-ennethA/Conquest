@@ -10,23 +10,16 @@ var auto_join_player_name: String = "Auto Client"
 
 func _ready() -> void:
 	name = "MultiplayerLauncher"
-	
-	print("[DEBUG] MultiplayerLauncher: _ready() called")
-	print("[DEBUG] Command line args: " + str(OS.get_cmdline_args()))
-	
+
 	# Parse command line arguments immediately
 	_parse_command_line_args()
-	
-	print("[DEBUG] Auto-join enabled after parsing: " + str(auto_join_enabled))
-	
+
 	# If auto-join is enabled, start the process immediately
 	if auto_join_enabled:
 		print("[CLIENT] Auto-join enabled, will connect to %s:%d as %s" % [auto_join_address, auto_join_port, auto_join_player_name])
-		
+
 		# Start auto-join process immediately, don't wait
 		_start_auto_join_process()
-	else:
-		print("[SINGLE] Auto-join NOT enabled - running as normal instance")
 
 func _start_auto_join_process() -> void:
 	"""Start the auto-join process immediately"""
@@ -38,9 +31,7 @@ func _start_auto_join_process() -> void:
 func _parse_command_line_args() -> void:
 	"""Parse command line arguments for multiplayer auto-join"""
 	var args = OS.get_cmdline_args()
-	
-	print("[DEBUG] Parsing command line arguments: " + str(args))
-	
+
 	# Reset values
 	auto_join_enabled = false
 	auto_join_address = "127.0.0.1"

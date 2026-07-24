@@ -209,7 +209,7 @@ static func import_from_json(json_string: String) -> UnitStatsResource:
 	var parse_result = json.parse(json_string)
 	
 	if parse_result != OK:
-		print("Failed to parse JSON: " + json.get_error_message())
+		push_error("UnitStatsResource: Failed to parse JSON: " + json.get_error_message())
 		return null
 	
 	var data = json.data

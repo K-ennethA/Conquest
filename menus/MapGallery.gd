@@ -92,8 +92,6 @@ func _ready() -> void:
 		map_list.select(0)
 		_display_map(all_maps[0])
 
-	print("Map Gallery initialized with " + str(all_maps.size()) + " maps")
-
 
 func _create_ui() -> void:
 	"""Create the complete UI for the map gallery"""
@@ -211,12 +209,12 @@ func _load_all_maps() -> void:
 	all_maps.clear()
 
 	if not DirAccess.dir_exists_absolute(MAPS_DIR):
-		print("No map resources directory found")
+		push_warning("MapGallery: No map resources directory found")
 		return
 
 	var dir := DirAccess.open(MAPS_DIR)
 	if not dir:
-		print("Failed to open map resources directory")
+		push_error("MapGallery: Failed to open map resources directory")
 		return
 
 	dir.list_dir_begin()
@@ -228,7 +226,6 @@ func _load_all_maps() -> void:
 				var resource = load(resource_path)
 				if resource is MapResource:
 					all_maps.append(resource)
-					print("Loaded map: " + resource.map_name)
 		file_name = dir.get_next()
 	dir.list_dir_end()
 
@@ -376,7 +373,6 @@ func _input(event: InputEvent) -> void:
 			KEY_F5:
 				_load_all_maps()
 				_populate_map_list()
-				print("Map list refreshed")
 
 
 # ---------------------------------------------------------------------------

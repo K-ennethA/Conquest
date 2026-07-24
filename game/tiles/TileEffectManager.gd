@@ -110,8 +110,7 @@ func add_tile_effect(tile: Tile, effect: TileEffect) -> bool:
 	
 	# Update tile visuals
 	_update_tile_visuals(tile)
-	
-	print("Added effect " + effect.effect_name + " to tile at " + str(tile_pos))
+
 	return true
 
 func remove_tile_effect(tile: Tile, effect: TileEffect) -> bool:
@@ -144,8 +143,7 @@ func remove_tile_effect(tile: Tile, effect: TileEffect) -> bool:
 		_update_tile_visuals(tile)
 		
 		effect_expired.emit(tile, effect)
-		print("Removed effect " + effect.effect_name + " from tile at " + str(tile_pos))
-	
+
 	return removed
 
 func get_tile_effects(tile: Tile) -> Array[TileEffect]:
@@ -206,10 +204,8 @@ func _apply_effect_result_to_unit(unit: Unit, result: Dictionary):
 			var change = result.stat_changes[stat_name]
 			unit.unit_stats.apply_temporary_stat_change(stat_name, change)
 	
-	# Apply status effects (would need status effect system)
-	if result.has("status_effects") and not result.status_effects.is_empty():
-		for status in result.status_effects:
-			print("Applied status effect: " + status + " to " + unit.unit_name)
+	# Apply status effects: no-op until a dedicated status-effect system exists.
+	# (result.status_effects is carried through but not yet consumed here.)
 
 func get_movement_cost_for_tile(tile: Tile) -> int:
 	"""Get total movement cost for a tile including effects"""

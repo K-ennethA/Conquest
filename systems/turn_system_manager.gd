@@ -27,11 +27,17 @@ func register_turn_system(system: TurnSystemBase) -> void:
 	var system_key = TurnSystemBase.TurnSystemType.keys()[system.system_type]
 	available_turn_systems[system_key] = system
 
-	# Connect to turn system signals
-	system.turn_started.connect(_on_turn_started)
-	system.turn_ended.connect(_on_turn_ended)
-	system.unit_action_completed.connect(_on_unit_action_completed)
-	system.all_units_acted.connect(_on_all_units_acted)
+	# Connect to turn system signals (guarded so registering the same instance twice
+	# never double-fires these handlers -- mirrors the is_connected guards in
+	# unregister_turn_system and TurnSystemBase.register_unit).
+	if not system.turn_started.is_connected(_on_turn_started):
+		system.turn_started.connect(_on_turn_started)
+	if not system.turn_ended.is_connected(_on_turn_ended):
+		system.turn_ended.connect(_on_turn_ended)
+	if not system.unit_action_completed.is_connected(_on_unit_action_completed):
+		system.unit_action_completed.connect(_on_unit_action_completed)
+	if not system.all_units_acted.is_connected(_on_all_units_acted):
+		system.all_units_acted.connect(_on_all_units_acted)
 
 func unregister_turn_system(system: TurnSystemBase) -> void:
 	"""Unregister a turn system"""
