@@ -98,7 +98,10 @@ static func _preview_damage(effect: DamageEffect, move, caster, target, board = 
 	var bonus := 0
 	if effect.scaling_stat != "":
 		bonus = int(round(_stat(caster, effect.scaling_stat) * effect.scale))
-	var raw: int = effect.power + bonus
+	# Caster-state power (e.g. Prism Bulwark's stored reprisal charges) counts here too, or
+	# the forecast would under-report a charged release -- and the AI, which ranks moves off
+	# this same preview, would dismiss it as weak.
+	var raw: int = effect.power + bonus + effect.bonus_power_for(caster)
 	var mitigated: int = 0
 	match effect.category:
 		CombatTypes.DamageCategory.TRUE:

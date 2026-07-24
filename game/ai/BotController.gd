@@ -307,7 +307,9 @@ func _actor_is_controlled(actor) -> bool:
 func _ranked_attacks(actor, origin: Vector2i, moveset: Array, hostiles: Array, board) -> Array:
 	var candidates: Array = []
 	for move in moveset:
-		if move == null or move.targeting == null or not _move_has_damage(move):
+		# MODE-AWARE: read the pattern/effects in force for THIS caster, so a move
+		# currently in its alternate mode is planned with that mode's data.
+		if move == null or move.targeting_for(actor) == null or not _move_has_damage(move, actor):
 			continue
 		for target in hostiles:
 			# The AIM cell for this move against the target. An ordinary move aims at
@@ -358,9 +360,9 @@ func _attack_is_better(a: Dictionary, b: Dictionary) -> bool:
 func _ranked_attacks_from_cells(actor, origin: Vector2i, stand_cells: Array, moveset: Array, hostiles: Array, board, home: Vector2i) -> Array:
 	var best_by_key := {}  # "move_id:target_id" -> best candidate for that pairing
 	for move in moveset:
-		if move == null or move.targeting == null or not _move_has_damage(move):
+		if move == null or move.targeting_for(actor) == null or not _move_has_damage(move, actor):
 			continue
-		var positional: bool = _is_positional_move(move)
+		var positional: bool = _is_positional_move(move, actor)
 		for target in hostiles:
 			var tcell: Vector2i = board.cell_of(target)
 			# Cheapest stand cell (least movement) that can legally hit this target,
@@ -481,7 +483,7 @@ func _advance_full(origin: Vector2i, hostiles: Array, board, reachable: Array) -
 ## Mirrors [DamageEffect]'s scaling + mitigation so planning matches execution.
 func _estimate_damage(move: MoveResource, actor, target) -> int:
 	var total := 0
-	for effect in move.effects:
+	for effect in move.effects_for(actor):
 		if effect is DamageEffect:
 			var bonus := 0
 			if effect.scaling_stat != "":
@@ -491,8 +493,9 @@ func _estimate_damage(move: MoveResource, actor, target) -> int:
 	return total
 
 
-func _move_has_damage(move: MoveResource) -> bool:
-	for effect in move.effects:
+## [param actor] selects the move's active MODE (a single-mode move ignores it).
+func _move_has_damage(move: MoveResource, actor = null) -> bool:
+	for effect in move.effects_for(actor):
 		if effect is DamageEffect:
 			return true
 	return false
@@ -504,8 +507,10 @@ func _move_has_damage(move: MoveResource) -> bool:
 ## empty LANDING cell (a leap / dash), so its aim is a free tile the caster relocates
 ## to, NOT the target's own occupied cell. Detected purely by the targeting data
 ## (never by move id), so any move authored with requires_empty_cell is handled.
-func _is_positional_move(move: MoveResource) -> bool:
-	return move.targeting != null and move.targeting.requires_empty_cell
+## [param actor] selects the move's active MODE (a single-mode move ignores it).
+func _is_positional_move(move: MoveResource, actor = null) -> bool:
+	var pattern := move.targeting_for(actor)
+	return pattern != null and pattern.requires_empty_cell
 
 
 ## The AIM cell [param move] should use against [param target] when cast from
@@ -525,7 +530,7 @@ func _is_positional_move(move: MoveResource) -> bool:
 ## tie-broken by deterministic cell order.
 func _resolve_aim(move: MoveResource, actor, cast_cell: Vector2i, target, board, home: Vector2i) -> Dictionary:
 	var tcell: Vector2i = board.cell_of(target)
-	if not _is_positional_move(move):
+	if not _is_positional_move(move, actor):
 		if move.can_target(cast_cell, tcell, actor, board):
 			return { "found": true, "aim": tcell }
 		return { "found": false, "aim": tcell }
@@ -660,9 +665,10 @@ func _best_support_play(actor, origin: Vector2i, moveset: Array, hostiles: Array
 	var best: Dictionary = {}
 	var best_value: int = -1
 	for move in moveset:
-		if move == null or move.targeting == null:
+		# MODE-AWARE: classify off the pattern/effects in force for THIS caster.
+		if move == null or move.targeting_for(actor) == null:
 			continue
-		if _move_has_damage(move):
+		if _move_has_damage(move, actor):
 			continue  # damaging moves are ranked by the attack branch, not here
 		if not _move_is_ready(actor, move):
 			continue  # cooldown / uses gate -- reuses MovesetController.can_use
@@ -682,11 +688,11 @@ func _best_support_play(actor, origin: Vector2i, moveset: Array, hostiles: Array
 ## HEAL is checked first so a move that both heals and buffs is driven by its heal
 ## target logic; a move fitting no category returns {}.
 func _classify_support(move: MoveResource, actor, origin: Vector2i, hostiles: Array, board) -> Dictionary:
-	if _move_is_heal(move):
+	if _move_is_heal(move, actor):
 		return _heal_candidate(move, actor, origin, board)
-	if _move_is_self_buff(move):
+	if _move_is_self_buff(move, actor):
 		return _self_buff_candidate(move, actor, origin, hostiles, board)
-	if _move_is_debuff(move):
+	if _move_is_debuff(move, actor):
 		return _debuff_candidate(move, actor, origin, hostiles, board)
 	return {}
 
@@ -848,8 +854,9 @@ func _max_hp(unit) -> int:
 # --- Support-move classification (by effects + targeting, never by id) ------
 
 ## HEAL: any move carrying a [HealEffect] (targeting self or an ally in practice).
-func _move_is_heal(move: MoveResource) -> bool:
-	for e in move.effects:
+## [param actor] selects the move's active MODE (a single-mode move ignores it).
+func _move_is_heal(move: MoveResource, actor = null) -> bool:
+	for e in move.effects_for(actor):
 		if e is HealEffect:
 			return true
 	return false
@@ -858,13 +865,15 @@ func _move_is_heal(move: MoveResource) -> bool:
 ## SELF-BUFF / defensive: no damage, and it applies a status or positive stat modifier
 ## to the CASTER -- either a SELF-targeted move (Heartwood Guard) or an effect flagged
 ## [member ApplyStatusEffect.to_caster] on an otherwise enemy/ally move.
-func _move_is_self_buff(move: MoveResource) -> bool:
-	if move.targeting == null:
+## [param actor] selects the move's active MODE (a single-mode move ignores it).
+func _move_is_self_buff(move: MoveResource, actor = null) -> bool:
+	var pattern := move.targeting_for(actor)
+	if pattern == null:
 		return false
-	var self_targeted: bool = int(move.targeting.target_kind) == CombatTypes.TargetKind.SELF
+	var self_targeted: bool = int(pattern.target_kind) == CombatTypes.TargetKind.SELF
 	# Untyped local so the subclass fields (to_caster / amount) are reachable -- the
 	# elements are typed Array[MoveEffect], mirroring test_eldroot's classification.
-	for e in move.effects:
+	for e in move.effects_for(actor):
 		var fx = e
 		if fx is ApplyStatusEffect and (self_targeted or fx.to_caster):
 			return true
@@ -875,13 +884,15 @@ func _move_is_self_buff(move: MoveResource) -> bool:
 
 ## DEBUFF: an ENEMY-targeted move that applies a status or a negative stat modifier to
 ## its target (with no direct damage -- damaging moves are handled by the attack branch).
-func _move_is_debuff(move: MoveResource) -> bool:
-	if move.targeting == null:
+## [param actor] selects the move's active MODE (a single-mode move ignores it).
+func _move_is_debuff(move: MoveResource, actor = null) -> bool:
+	var pattern := move.targeting_for(actor)
+	if pattern == null:
 		return false
-	if int(move.targeting.target_kind) != CombatTypes.TargetKind.ENEMY:
+	if int(pattern.target_kind) != CombatTypes.TargetKind.ENEMY:
 		return false
 	# Untyped local, as in _move_is_self_buff, so to_caster / amount are reachable.
-	for e in move.effects:
+	for e in move.effects_for(actor):
 		var fx = e
 		if fx is ApplyStatusEffect and not fx.to_caster:
 			return true
@@ -912,12 +923,16 @@ func _move_is_ready(actor, move) -> bool:
 ## True when [param move] places a tile effect on an empty tile -- an ApplyTileEffect
 ## carried by an EMPTY_TILE-targeted move. This is the whole trap definition; no move
 ## id is ever consulted (matches BotTurnDriver._is_trap_move).
-func _move_is_trap(move) -> bool:
-	if move == null or move.targeting == null:
+## [param actor] selects the move's active MODE (a single-mode move ignores it).
+func _move_is_trap(move, actor = null) -> bool:
+	if move == null:
 		return false
-	if int(move.targeting.target_kind) != CombatTypes.TargetKind.EMPTY_TILE:
+	var pattern = move.targeting_for(actor)
+	if pattern == null:
 		return false
-	for e in move.effects:
+	if int(pattern.target_kind) != CombatTypes.TargetKind.EMPTY_TILE:
+		return false
+	for e in move.effects_for(actor):
 		if e is ApplyTileEffect:
 			return true
 	return false
@@ -925,8 +940,9 @@ func _move_is_trap(move) -> bool:
 
 ## The id of the tile effect [param move] would place (its ApplyTileEffect's effect
 ## resource id), or &"" when it carries none. Used to skip a cell already trapped with it.
-func _trap_effect_id(move) -> StringName:
-	for e in move.effects:
+## [param actor] selects the move's active MODE (a single-mode move ignores it).
+func _trap_effect_id(move, actor = null) -> StringName:
+	for e in move.effects_for(actor):
 		if e is ApplyTileEffect:
 			# Untyped local so the ApplyTileEffect subclass field `effect` is reachable
 			# (the elements are typed Array[MoveEffect]), mirroring _move_is_self_buff.
@@ -949,18 +965,19 @@ func _trap_plan(actor, moveset: Array, board) -> Dictionary:
 		return {}
 	var trap_move: MoveResource = null
 	for move in moveset:
-		if _move_is_trap(move) and _move_is_ready(actor, move):
+		if _move_is_trap(move, actor) and _move_is_ready(actor, move):
 			trap_move = move
 			break
 	if trap_move == null:
 		return {}
 
 	var origin: Vector2i = board.cell_of(actor)
-	var trap_id: StringName = _trap_effect_id(trap_move)
+	var trap_id: StringName = _trap_effect_id(trap_move, actor)
 	var max_r: int = trap_move.effective_max_range(actor)
 	var min_r: int = 1
-	if trap_move.targeting != null:
-		min_r = maxi(1, int(trap_move.targeting.min_range))
+	var trap_pattern := trap_move.targeting_for(actor)
+	if trap_pattern != null:
+		min_r = maxi(1, int(trap_pattern.min_range))
 	if max_r < min_r:
 		return {}
 

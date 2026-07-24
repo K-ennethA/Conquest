@@ -24,7 +24,7 @@ affects_caster_tile = true
 
 [sub_resource type="Resource" id="Resource_pb_release"]
 script = ExtResource("2_stackdmg")
-base_power = 8
+power = 8
 power_per_stack = 6
 stack_status_id = &"reprisal_charge"
 scaling_stat = "attack"

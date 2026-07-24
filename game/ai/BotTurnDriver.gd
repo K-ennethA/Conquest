@@ -520,7 +520,7 @@ func _has_ready_trap_move(unit) -> bool:
 	if unit.has_method("get_moveset_controller"):
 		mc = unit.get_moveset_controller()
 	for m in unit.get_moveset():
-		if not _is_trap_move(m):
+		if not _is_trap_move(m, unit):
 			continue
 		if mc != null and mc.has_method("can_use") and not bool(mc.can_use(m)):
 			continue
@@ -529,13 +529,17 @@ func _has_ready_trap_move(unit) -> bool:
 
 
 ## Generic trap-move test, mirroring BotController._move_is_trap: an ApplyTileEffect
-## carried by an EMPTY_TILE-targeted move. Never keyed to a move id.
-func _is_trap_move(move) -> bool:
-	if move == null or move.targeting == null:
+## carried by an EMPTY_TILE-targeted move. Never keyed to a move id. [param actor]
+## selects the move's active MODE (a single-mode move ignores it).
+func _is_trap_move(move, actor = null) -> bool:
+	if move == null:
 		return false
-	if int(move.targeting.target_kind) != CombatTypes.TargetKind.EMPTY_TILE:
+	var pattern = move.targeting_for(actor)
+	if pattern == null:
 		return false
-	for e in move.effects:
+	if int(pattern.target_kind) != CombatTypes.TargetKind.EMPTY_TILE:
+		return false
+	for e in move.effects_for(actor):
 		if e is ApplyTileEffect:
 			return true
 	return false

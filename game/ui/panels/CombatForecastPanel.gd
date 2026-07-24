@@ -287,7 +287,7 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 	_defender_bar.value = clampi(target_hp, 0, maxi(1, def_max))
 	_defender_hp.text = "%d/%d" % [target_hp, def_max]
 
-	if _move_has_damage(move):
+	if _move_has_damage(move, attacker):
 		var hit_pct: float = float(preview.get("hit_pct", 100.0))
 		var crit_pct: float = float(preview.get("crit_pct", 0.0))
 		var dmg: int = int(preview.get("damage", 0))
@@ -413,10 +413,12 @@ func _show_stat_row(value_label: Label, shown: bool) -> void:
 	if row is Control:
 		(row as Control).visible = shown
 
-func _move_has_damage(move: MoveResource) -> bool:
+func _move_has_damage(move: MoveResource, caster = null) -> bool:
 	if move == null:
 		return false
-	for effect in move.effects:
+	# Mode-aware, so the forecast reads the mode actually in force for this caster (a
+	# two-mode move's armed-release damage would otherwise be invisible).
+	for effect in move.effects_for(caster):
 		if effect is DamageEffect:
 			return true
 	return false

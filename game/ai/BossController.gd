@@ -92,7 +92,9 @@ func _hazard_lane_plan(actor, moveset: Array, board) -> Dictionary:
 		return {}
 
 	for move in moveset:
-		if move == null or move.targeting == null or not _move_has_hazard(move):
+		# MODE-AWARE: the pattern/effects in force for THIS boss (single-mode moves
+		# resolve to their one pattern/effect list, so nothing else changes).
+		if move == null or move.targeting_for(actor) == null or not _move_has_hazard(move, actor):
 			continue
 		if not _move_is_ready(actor, move):
 			continue
@@ -133,8 +135,9 @@ func _hazard_lane_plan(actor, moveset: Array, board) -> Dictionary:
 
 
 ## True if [param move]'s effects include a [SpawnHazardEffect] (a lane hazard).
-func _move_has_hazard(move) -> bool:
-	for e in move.effects:
+## [param actor] selects the move's active MODE (a single-mode move ignores it).
+func _move_has_hazard(move, actor = null) -> bool:
+	for e in move.effects_for(actor):
 		if e is SpawnHazardEffect:
 			return true
 	return false

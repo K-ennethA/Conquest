@@ -39,7 +39,7 @@ func apply(ctx: MoveContext) -> void:
 	var bonus := 0
 	if scaling_stat != "":
 		bonus = int(round(ctx.get_caster_stat(scaling_stat) * scale))
-	var raw := power + bonus
+	var raw := power + bonus + bonus_power_for(ctx.caster)
 
 	# Running total of HP actually removed this cast, so lifesteal can heal a fixed
 	# fraction of it once all targets are resolved.
@@ -152,6 +152,17 @@ func apply(ctx: MoveContext) -> void:
 				"target": ctx.caster,
 				"amount": healed,
 			})
+
+
+## Extra RAW power this effect contributes for [param caster], on top of [member power]
+## and the stat scaling. 0 for a plain hit; a subclass overrides it to add caster-state
+## damage (StackConsumeDamageEffect turns stored charges into power).
+##
+## Deliberately keyed on the CASTER rather than a MoveContext so the FORECAST can ask the
+## same question ([method MoveExecutor.preview_vs] has no context) -- preview and the
+## resolved hit therefore agree, and any AI that reads DamageEffect sees the real number.
+func bonus_power_for(_caster) -> int:
+	return 0
 
 
 ## One shared crit roll for the escalating-bow path. The chance climbs with

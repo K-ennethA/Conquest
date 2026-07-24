@@ -11,6 +11,9 @@ class_name SpeedFirstTurnSystem
 
 var turn_queue: Array[Unit] = []  # Current turn queue for this round
 var current_acting_unit: Unit = null
+## True while a deferred kickoff (start the order once units register post-activation) is
+## already pending, so a batch of same-frame registrations schedules it only once.
+var _kickoff_queued: bool = false
 var units_acted_this_round: Array[Unit] = []
 var round_number: int = 1
 
@@ -25,9 +28,6 @@ func _init() -> void:
 # Abstract method implementations
 func start_turn_system() -> void:
 	"""Initialize and start the speed first turn system"""
-	if registered_units.is_empty():
-		return
-
 	is_active = true
 	current_turn = 1
 	round_number = 1
@@ -41,13 +41,47 @@ func start_turn_system() -> void:
 	# Calculate initial turn queue
 	_calculate_turn_queue()
 
-	# Start with first unit in queue
+	# Start with first unit in queue.
+	#
+	# An EMPTY queue here used to bail out permanently, leaving current_acting_unit null
+	# forever -- and because THIS system derives the current player from the acting unit
+	# (unlike Traditional, whose current player is player-based), that made every unit
+	# selectable but uncommandable for the rest of the battle. Arena hit it every time:
+	# a round's actors are spawned around activation, so the system could be started
+	# before any of them had registered. Now we stay ACTIVE with nothing acting and let
+	# the first registration kick the order off (see register_unit / _kickoff_if_idle).
 	if not turn_queue.is_empty():
 		_start_unit_turn(turn_queue[0])
-	else:
-		return
+		_print_turn_queue()
 
+## Units can register AFTER the system starts -- an Arena round spawns its actors around
+## activation, and summons arrive mid-battle. If nothing is acting yet, the newcomer must
+## kick the order off, or the battle sits idle with no current acting unit (and therefore
+## no current player, so nothing can be commanded).
+##
+## The kickoff is DEFERRED so a whole batch of units registering in the same frame is in
+## the queue before it is sorted -- starting on the literal first registration would lock
+## in a one-unit turn order and drop everyone spawned immediately after.
+func register_unit(unit: Unit) -> void:
+	super.register_unit(unit)
+	if not is_active or current_acting_unit != null or _kickoff_queued:
+		return
+	_kickoff_queued = true
+	call_deferred("_kickoff_if_idle")
+
+
+func _kickoff_if_idle() -> void:
+	_kickoff_queued = false
+	# Re-check: the system may have been ended, or something may have started a turn in
+	# the meantime (this is the whole reason it is deferred).
+	if not is_active or current_acting_unit != null:
+		return
+	_calculate_turn_queue()
+	if turn_queue.is_empty():
+		return
+	_start_unit_turn(turn_queue[0])
 	_print_turn_queue()
+
 
 func end_turn_system() -> void:
 	"""Clean up and end the speed first turn system"""
