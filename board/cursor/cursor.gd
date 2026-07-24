@@ -6,6 +6,33 @@ extends Node3D
 @export var grid: Resource = preload("res://board/Grid.tres")
 @export var move_speed: float = 10.0
 
+# --- Fire-Emblem style corner-bracket tile selector geometry ---
+# The tile is 2x2 world units (see Grid.tres cell_size), so half a tile = 1.0.
+# Brackets sit inset from the tile edge; the dark outline is drawn slightly
+# larger/thicker than the gold bracket so it reads as a crisp edge on any
+# terrain (light sand/stone as well as dark lava/water).
+const CORNER_GOLD := 0.86        # gold bracket corner distance from tile center
+const CORNER_OUTLINE := 0.90     # outline corner sits further out, framing the gold
+const ARM_LENGTH_GOLD := 0.5
+const ARM_LENGTH_OUTLINE := 0.54
+const ARM_WIDTH_GOLD := 0.11
+const ARM_WIDTH_OUTLINE := 0.17
+
+const COLOR_GOLD_IDLE := Color(1.0, 0.78, 0.25, 0.95)
+const EMISSION_GOLD_IDLE := Color(1.0, 0.65, 0.15)
+const COLOR_GOLD_SELECTED := Color(1.0, 0.92, 0.55, 1.0)
+const EMISSION_GOLD_SELECTED := Color(1.2, 0.85, 0.25)
+
+const COLOR_OUTLINE_IDLE := Color(0.12, 0.07, 0.02, 0.9)
+const EMISSION_OUTLINE_IDLE := Color(0.08, 0.04, 0.0)
+const COLOR_OUTLINE_SELECTED := Color(0.35, 0.18, 0.05, 0.95)
+const EMISSION_OUTLINE_SELECTED := Color(0.3, 0.15, 0.02)
+
+# Idle "breathing" animation applied to the gold brackets only, so the dark
+# outline stays put as a stable frame around the tile.
+const PULSE_SPEED := 2.2
+const PULSE_AMPLITUDE := 0.06
+
 var tile_position := Vector3.ZERO:
 	set(value):
 		var new_position = grid.grid_clamp(value)
@@ -15,7 +42,13 @@ var tile_position := Vector3.ZERO:
 		var old_position = tile_position
 		tile_position = new_position
 		position = grid.calculate_map_position(tile_position)
-		position.y = 3.0  # Keep cursor above units and tiles
+		# Sit the bracket just above the tile top so it reads as ON the tile. Under a
+		# tilted orthographic view any vertical offset shifts the cursor's SCREEN
+		# position off the ground cell (~offset*sin(tilt)); a large lift (the old 3.0)
+		# floated it well above the tile under the mouse. The bracket material uses
+		# no_depth_test, so this small lift only prevents z-fighting with the tile top
+		# and never causes occlusion.
+		position.y = 0.15
 		
 		# Emit movement event
 		GameEvents.cursor_moved.emit(tile_position)
@@ -34,6 +67,10 @@ var selection_material: StandardMaterial3D
 var base_ring_material: StandardMaterial3D
 var selection_ring_material: StandardMaterial3D
 
+# Idle pulse animation state (cheap _process oscillation, no per-frame allocations)
+var _pulse_time: float = 0.0
+var _bracket_base_scale: Vector3 = Vector3.ONE
+
 # Mouse support
 var camera: Camera3D
 var is_mouse_enabled: bool = true
@@ -41,7 +78,7 @@ var is_mouse_enabled: bool = true
 func _ready() -> void:
 	_setup_cursor_visuals()
 	position = grid.calculate_map_position(tile_position)
-	position.y = 3.0  # Keep cursor above everything
+	position.y = 0.15  # Sit on the tile (see the tile_position setter for why)
 	GameEvents.cursor_moved.emit(tile_position)
 	_check_unit_at_cursor()
 	
@@ -57,66 +94,115 @@ func _ready() -> void:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
 
 func _setup_cursor_visuals() -> void:
-	"""Setup cursor visual materials"""
+	"""Build the Fire-Emblem style corner-bracket tile selector: four warm
+	gold corner brackets (mesh_instance) framed by a darker bracket outline
+	(base_mesh) so the selector reads clearly against any terrain. Everything
+	is mesh/material-generated here in _ready; _process only tweaks scale."""
 	if mesh_instance:
-		# Create base cursor material (bright yellow diamond with rim lighting)
-		base_material = StandardMaterial3D.new()
-		base_material.albedo_color = Color(1.0, 1.0, 0.2, 0.8)
-		base_material.flags_transparent = true
-		base_material.flags_unshaded = true
-		base_material.emission_enabled = true
-		base_material.emission = Color(1.0, 1.0, 0.3)
-		base_material.no_depth_test = true  # Always visible
-		base_material.rim_enabled = true
-		base_material.rim = 0.5
-		base_material.rim_tint = 0.8
-		
-		# Create selection material (bright green diamond with rim lighting)
-		selection_material = StandardMaterial3D.new()
-		selection_material.albedo_color = Color(0.2, 1.0, 0.2, 0.8)
-		selection_material.flags_transparent = true
-		selection_material.flags_unshaded = true
-		selection_material.emission_enabled = true
-		selection_material.emission = Color(0.3, 1.0, 0.3)
-		selection_material.no_depth_test = true  # Always visible
-		selection_material.rim_enabled = true
-		selection_material.rim = 0.6
-		selection_material.rim_tint = 0.9
-		
+		mesh_instance.mesh = _build_corner_bracket_mesh(CORNER_GOLD, ARM_LENGTH_GOLD, ARM_WIDTH_GOLD)
+		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+		# Idle gold brackets
+		base_material = _make_bracket_material(COLOR_GOLD_IDLE, EMISSION_GOLD_IDLE)
+		base_material.render_priority = 1
+
+		# Selected gold brackets (hotter, brighter gold - stays in the warm palette)
+		selection_material = _make_bracket_material(COLOR_GOLD_SELECTED, EMISSION_GOLD_SELECTED)
+		selection_material.render_priority = 1
+
 		mesh_instance.material_override = base_material
-	
+		_bracket_base_scale = mesh_instance.scale
+
 	if base_mesh:
-		# Create base ring material (subtle yellow with rim)
-		base_ring_material = StandardMaterial3D.new()
-		base_ring_material.albedo_color = Color(1.0, 1.0, 0.2, 0.2)
-		base_ring_material.flags_transparent = true
-		base_ring_material.flags_unshaded = true
-		base_ring_material.emission_enabled = true
-		base_ring_material.emission = Color(1.0, 1.0, 0.3, 0.3)
-		base_ring_material.no_depth_test = true
-		base_ring_material.rim_enabled = true
-		base_ring_material.rim = 0.3
-		base_ring_material.rim_tint = 0.5
-		
-		# Create selection ring material (subtle green with rim)
-		selection_ring_material = StandardMaterial3D.new()
-		selection_ring_material.albedo_color = Color(0.2, 1.0, 0.2, 0.3)
-		selection_ring_material.flags_transparent = true
-		selection_ring_material.flags_unshaded = true
-		selection_ring_material.emission_enabled = true
-		selection_ring_material.emission = Color(0.3, 1.0, 0.3, 0.4)
-		selection_ring_material.no_depth_test = true
-		selection_ring_material.rim_enabled = true
-		selection_ring_material.rim = 0.4
-		selection_ring_material.rim_tint = 0.7
-		
+		# Outline brackets are slightly larger/thicker than the gold ones so a
+		# thin dark edge frames the gold on every side - this is what keeps the
+		# cursor legible on light terrain (sand/stone) as well as dark (lava/water).
+		base_mesh.mesh = _build_corner_bracket_mesh(CORNER_OUTLINE, ARM_LENGTH_OUTLINE, ARM_WIDTH_OUTLINE)
+		base_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+		base_ring_material = _make_bracket_material(COLOR_OUTLINE_IDLE, EMISSION_OUTLINE_IDLE)
+		base_ring_material.render_priority = 0
+
+		selection_ring_material = _make_bracket_material(COLOR_OUTLINE_SELECTED, EMISSION_OUTLINE_SELECTED)
+		selection_ring_material.render_priority = 0
+
 		base_mesh.material_override = base_ring_material
+
+
+func _make_bracket_material(albedo: Color, emission: Color) -> StandardMaterial3D:
+	"""Shared material recipe for the cursor brackets: unshaded, always-on-top,
+	double-sided flat decal with a warm emissive glow and a soft rim."""
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = albedo
+	mat.flags_transparent = true
+	mat.flags_unshaded = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.emission_enabled = true
+	mat.emission = emission
+	mat.no_depth_test = true  # Always visible above terrain and units
+	mat.rim_enabled = true
+	mat.rim = 0.35
+	mat.rim_tint = 0.6
+	return mat
+
+
+func _build_corner_bracket_mesh(corner: float, arm_length: float, arm_width: float) -> ArrayMesh:
+	"""Procedurally build four L-shaped corner brackets (flat quads on the XZ
+	plane) framing a 2x2-unit tile, classic Fire-Emblem cursor style. `corner`
+	is each bracket's distance from the tile center (tile half-size is 1.0)."""
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+
+	var signs := [Vector2(1, 1), Vector2(-1, 1), Vector2(-1, -1), Vector2(1, -1)]
+	for s in signs:
+		var sx: float = s.x
+		var sz: float = s.y
+		var ex := sx * corner
+		var ez := sz * corner
+
+		# Arm running along the X edge (thin in Z)
+		_add_flat_quad(st, ex, ex - sx * arm_length, ez, ez - sz * arm_width)
+		# Arm running along the Z edge (thin in X)
+		_add_flat_quad(st, ex, ex - sx * arm_width, ez, ez - sz * arm_length)
+
+	return st.commit()
+
+
+func _add_flat_quad(st: SurfaceTool, x0: float, x1: float, z0: float, z1: float) -> void:
+	"""Add a two-triangle quad lying flat on the XZ plane (Y = 0, local space)."""
+	var p00 := Vector3(x0, 0.0, z0)
+	var p10 := Vector3(x1, 0.0, z0)
+	var p11 := Vector3(x1, 0.0, z1)
+	var p01 := Vector3(x0, 0.0, z1)
+
+	st.set_normal(Vector3.UP)
+	st.add_vertex(p00)
+	st.set_normal(Vector3.UP)
+	st.add_vertex(p10)
+	st.set_normal(Vector3.UP)
+	st.add_vertex(p11)
+
+	st.set_normal(Vector3.UP)
+	st.add_vertex(p00)
+	st.set_normal(Vector3.UP)
+	st.add_vertex(p11)
+	st.set_normal(Vector3.UP)
+	st.add_vertex(p01)
+
+
+func _process(delta: float) -> void:
+	"""Cheap idle "breathing" animation: the gold brackets gently pulse in
+	scale while the dark outline stays fixed as a stable frame on the tile."""
+	if not mesh_instance:
+		return
+	_pulse_time += delta
+	var pulse := 1.0 + sin(_pulse_time * PULSE_SPEED) * PULSE_AMPLITUDE
+	mesh_instance.scale = _bracket_base_scale * pulse
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Handle keyboard input first (always works)
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_F5:
-			print("F5 pressed - testing GameEvents.unit_selected signal")
 			_test_unit_selection_signal()
 			return
 		elif event.is_action_pressed("ui_accept"):
@@ -147,37 +233,32 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Handle mouse input (only if not handled by UI)
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-			print("=== Left Mouse Click Detected (Unhandled) ===")
-			print("Mouse position: " + str(event.position))
-			
 			# Check if mouse is over UI elements using UILayoutManager
-			var ui_layout = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
+			var ui_layout = null
+			var tree = get_tree()
+			if tree != null and tree.current_scene != null:
+				ui_layout = tree.current_scene.get_node_or_null("UI/GameUILayout")
 			if ui_layout and ui_layout.has_method("is_mouse_over_ui"):
 				if ui_layout.is_mouse_over_ui(event.position):
-					print("Mouse click blocked by UILayoutManager - over UI element")
 					return
-				else:
-					print("Mouse click allowed by UILayoutManager - not over UI")
 			else:
-				print("UILayoutManager not found - using fallback detection")
 				# Fallback: Check if mouse is over UI elements using screen position
 				var screen_size = get_viewport().get_visible_rect().size
 				var mouse_pos = event.position
-				print("Screen size: " + str(screen_size))
-				print("UI threshold (80%): " + str(screen_size.x * 0.8))
-				
+
 				# More lenient UI detection - only block if in right sidebar area
 				if mouse_pos.x > screen_size.x * 0.8:  # Changed from 0.75 to 0.8
-					print("Mouse click in UI area - not handling in cursor")
 					return
-			
-			print("Mouse click in game area - handling cursor selection")
+
 			_handle_mouse_click(event.position)
 		return
 	
 	# Handle mouse movement for cursor positioning (only if mouse enabled)
 	if event is InputEventMouseMotion and is_mouse_enabled:
-		var ui_layout = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
+		var ui_layout = null
+		var tree = get_tree()
+		if tree != null and tree.current_scene != null:
+			ui_layout = tree.current_scene.get_node_or_null("UI/GameUILayout")
 		if ui_layout and ui_layout.has_method("is_mouse_over_ui"):
 			if ui_layout.is_mouse_over_ui(event.position):
 				return  # Don't move cursor when over UI
@@ -197,169 +278,165 @@ func _input(event: InputEvent) -> void:
 	"""Handle high-priority input - currently unused to let UI have priority"""
 	# Debug: Print all input events to see what we're receiving
 	if event is InputEventMouseButton:
-		print("=== Mouse Button Event Received (High Priority) ===")
-		print("Button: " + str(event.button_index))
-		print("Pressed: " + str(event.pressed))
-		print("Position: " + str(event.position))
-		print("Letting UI handle this event first...")
-		
-		# Add debug key to bypass UI and force unit selection
+		# RIGHT CLICK = CANCEL (Fire-Emblem style back-out). While a unit interaction
+		# is staged (aiming a move, a tentative move, movement mode, or just a
+		# selection), route the click to UnitActionsPanel.request_cancel() so it backs
+		# out one level (drop targeting -> revert tentative move -> deselect). When
+		# nothing is staged this is a harmless no-op.
 		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			print("=== RIGHT CLICK - FORCING UNIT SELECTION TEST ===")
-			_handle_mouse_click(event.position)
-			get_viewport().set_input_as_handled()
+			var panel := _get_unit_actions_panel()
+			if panel and panel.has_method("request_cancel"):
+				panel.request_cancel()
+				get_viewport().set_input_as_handled()
 			return
 			
-	elif event is InputEventMouseMotion:
-		# Only print occasionally to avoid spam
-		if randf() < 0.01:  # Print ~1% of mouse motion events
-			print("Mouse motion (high priority): " + str(event.position))
-	
+
 	# Don't handle mouse events here - let UI have priority
 	# Mouse events will be handled in _unhandled_input() if UI doesn't consume them
 
+func _cell_under_mouse(mouse_pos: Vector2):
+	"""GROUND-PLANE mouse pick, shared by the hover and click paths. Casts the camera
+	ray through `mouse_pos` and intersects it with the board plane (y = 0):
+
+	    origin = camera.project_ray_origin(mouse_pos)
+	    dir    = camera.project_ray_normal(mouse_pos)
+	    t      = -origin.y / dir.y      (solve origin.y + dir.y * t = 0)
+	    point  = origin + dir * t
+
+	then converts the world hit `point` to a cell via grid.calculate_grid_coordinates.
+	Returns the Vector3(col, 0, row) grid coordinate, or null when the ray is parallel
+	to the plane (no dir.y) or the plane is behind the camera. This replaces the old
+	PhysicsRayQueryParameters3D raycast, which depended on tile colliders/layers and
+	could silently "miss" the board -- the plane math always resolves a cell."""
+	# Re-fetch the camera lazily: get_camera_3d() can be null at _ready if the
+	# Camera3D has not registered as current yet, which would otherwise kill picking.
+	if not camera:
+		camera = get_viewport().get_camera_3d()
+	if not camera:
+		return null
+
+	var origin: Vector3 = camera.project_ray_origin(mouse_pos)
+	var dir: Vector3 = camera.project_ray_normal(mouse_pos)
+
+	# Ray parallel to the ground plane -> no intersection.
+	if absf(dir.y) < 0.00001:
+		return null
+
+	var t: float = -origin.y / dir.y
+	# Intersection behind the camera (looking away from the board).
+	if t < 0.0:
+		return null
+
+	var point: Vector3 = origin + dir * t
+	return grid.calculate_grid_coordinates(point)
+
+
 func _handle_mouse_click(mouse_pos: Vector2) -> void:
 	"""Handle mouse click for unit selection"""
-	print("=== _handle_mouse_click called ===")
-	print("Mouse position: " + str(mouse_pos))
-	
+	# The camera is cached in _ready, but get_camera_3d() can be null there if the
+	# Camera3D has not yet registered as current. Re-fetch lazily so mouse picking
+	# is never permanently dead when that race loses.
 	if not camera:
-		print("ERROR: No camera found!")
+		camera = get_viewport().get_camera_3d()
+	if not camera:
 		return
-	
-	print("Camera found: " + camera.name)
-	
+
 	# Check if click is over UI using the layout manager
-	var ui_layout = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
+	var ui_layout = null
+	var tree = get_tree()
+	if tree != null and tree.current_scene != null:
+		ui_layout = tree.current_scene.get_node_or_null("UI/GameUILayout")
 	if ui_layout and ui_layout.has_method("is_mouse_over_ui"):
 		if ui_layout.is_mouse_over_ui(mouse_pos):
-			print("Mouse click in UI area - not handling in cursor")
 			return
-	
-	print("Mouse click in game area - proceeding with raycast")
-	
-	# Cast ray from camera through mouse position
-	var from = camera.project_ray_origin(mouse_pos)
-	var to = from + camera.project_ray_normal(mouse_pos) * 1000
-	
-	print("Ray from: " + str(from))
-	print("Ray to: " + str(to))
-	
-	var space_state = get_world_3d().direct_space_state
-	var query = PhysicsRayQueryParameters3D.create(from, to)
-	var result = space_state.intersect_ray(query)
-	
-	if result:
-		print("Ray hit something!")
-		print("Hit position: " + str(result.position))
-		print("Hit collider: " + str(result.collider))
-		
-		# Convert world position to grid position
-		var world_pos = result.position
-		var grid_pos = grid.calculate_grid_coordinates(world_pos)
-		print("Ray hit at world pos: " + str(world_pos))
-		print("Converted to grid pos: " + str(grid_pos))
-		
-		# Move cursor to clicked position
-		if grid.is_within_bounds(grid_pos):
-			print("Grid position is within bounds - moving cursor")
-			self.tile_position = grid_pos
-			_handle_selection()
-		else:
-			print("Grid position out of bounds: " + str(grid_pos))
-	else:
-		print("Ray cast did not hit anything - no collision detected")
-		print("This might mean:")
-		print("1. No collision bodies in the scene")
-		print("2. Ray is not hitting the ground/tiles")
-		print("3. Collision layers are not set up correctly")
+
+	# GROUND-PLANE picking (replaces the old physics raycast). Intersect the camera
+	# ray with the board plane (y = 0) so a click can never "miss" the board because
+	# of tile colliders/layers -- the plane is infinite and always solvable.
+	var grid_pos = _cell_under_mouse(mouse_pos)
+	if grid_pos == null:
+		return
+
+	# Move cursor to clicked position (same tile_position setter + bounds check the
+	# hover path uses, so selection targets exactly the hovered/clicked cell).
+	if grid.is_within_bounds(grid_pos):
+		self.tile_position = grid_pos
+		_handle_selection()
 
 func _handle_mouse_movement(mouse_pos: Vector2) -> void:
 	"""Handle mouse movement for cursor positioning"""
+	# Re-fetch lazily (see _handle_mouse_click): a null camera cached at _ready would
+	# otherwise silently kill mouse-hover cursor tracking -- and with it the
+	# GameEvents.cursor_moved emissions that drive TerrainInfoPanel.
+	if not camera:
+		camera = get_viewport().get_camera_3d()
 	if not camera:
 		return
 	
-	# Check if mouse is over UI using the layout manager
-	var ui_layout = get_tree().current_scene.get_node("UI/GameUILayout")
+	# Check if mouse is over UI using the layout manager (get_node_or_null so a
+	# missing HUD never throws and silently kills mouse-hover cursor tracking).
+	var ui_layout = null
+	var tree = get_tree()
+	if tree != null and tree.current_scene != null:
+		ui_layout = tree.current_scene.get_node_or_null("UI/GameUILayout")
 	if ui_layout and ui_layout.has_method("is_mouse_over_ui"):
 		if ui_layout.is_mouse_over_ui(mouse_pos):
 			return  # Don't move cursor when over UI
 	
-	# Cast ray from camera through mouse position
-	var from = camera.project_ray_origin(mouse_pos)
-	var to = from + camera.project_ray_normal(mouse_pos) * 1000
-	
-	var space_state = get_world_3d().direct_space_state
-	var query = PhysicsRayQueryParameters3D.create(from, to)
-	var result = space_state.intersect_ray(query)
-	
-	if result:
-		# Convert world position to grid position
-		var world_pos = result.position
-		var grid_pos = grid.calculate_grid_coordinates(world_pos)
-		
-		# Move cursor to mouse position (but don't auto-select)
-		if grid.is_within_bounds(grid_pos):
-			self.tile_position = grid_pos
+	# GROUND-PLANE picking (replaces the old physics raycast). Intersecting the
+	# camera ray with the board plane (y = 0) cannot miss the board, so hovering
+	# ANY board cell now moves the cursor there and fires GameEvents.cursor_moved
+	# (via the tile_position setter) -- which is exactly what drives TerrainInfoPanel.
+	var grid_pos = _cell_under_mouse(mouse_pos)
+	if grid_pos == null:
+		return
+
+	# Move cursor to mouse position (but don't auto-select)
+	if grid.is_within_bounds(grid_pos):
+		self.tile_position = grid_pos
 
 func _handle_selection() -> void:
 	"""Handle unit selection at cursor position"""
-	print("DEBUG: Cursor _handle_selection called at position: " + str(tile_position))
-	
-	# FIRST: Check if we should handle movement destination selection
+	# FIRST: If a move/attack is being targeted, this click selects the target.
 	var unit_actions_panel = _get_unit_actions_panel()
+	if unit_actions_panel and unit_actions_panel.has_method("is_targeting_move"):
+		if unit_actions_panel.is_targeting_move():
+			unit_actions_panel.handle_move_target_selected(tile_position)
+			return
+
+	# SECOND: If movement range is showing, this click is a movement destination --
+	# UNLESS the clicked cell holds a DIFFERENT unit, in which case switch selection
+	# to that unit instead of trying to move onto it.
 	if unit_actions_panel and unit_actions_panel.has_method("is_showing_movement_range"):
 		if unit_actions_panel.is_showing_movement_range():
-			print("DEBUG: Movement range is showing - handling as movement destination")
+			var unit_under_click: Unit = _get_unit_at_position(tile_position)
+			if unit_under_click and unit_under_click != selected_unit:
+				# Clicking another unit switches selection (reverting any staged
+				# tentative move via _deselect_unit inside _select_unit).
+				_select_unit(unit_under_click)
+				return
 			unit_actions_panel.handle_movement_destination_selected(tile_position)
 			return  # Exit early - don't do normal unit selection
-		else:
-			print("DEBUG: Movement range is NOT showing - proceeding with normal unit selection")
-	else:
-		print("DEBUG: UnitActionsPanel not found or missing method")
-	
+
 	# SECOND: Handle normal unit selection/deselection
 	var unit_at_cursor = _get_unit_at_position(tile_position)
 	
 	if unit_at_cursor:
-		print("Unit found for selection: ", unit_at_cursor.name)
-		
-		# First check PlayerManager validation
-		if not PlayerManager.can_current_player_select_unit(unit_at_cursor):
-			print("Cannot select unit: not owned by current player or game not active")
-			return
-		
-		# Then check turn system validation
+		# Selection == inspection: ANY living unit may be selected (including enemies /
+		# AI-owned units) so the player can read their info. Commanding a unit is gated
+		# separately in UnitActionsPanel (_human_may_command), so relaxing selection here
+		# is safe. We no longer reject via PlayerManager.can_current_player_select_unit
+		# or the turn system's can_unit_act.
 		if TurnSystemManager.has_active_turn_system():
 			var turn_system = TurnSystemManager.get_active_turn_system()
-			print("Cursor: Active turn system is " + turn_system.system_name)
-			
-			# Special handling for Speed First turn system - allow selection but UI will handle action restrictions
+
+			# Speed First inspection branch (log-only): any unit is selectable; the UI
+			# handles action availability for the current acting unit.
 			if turn_system is SpeedFirstTurnSystem:
 				var speed_system = turn_system as SpeedFirstTurnSystem
 				var current_acting_unit = speed_system.get_current_acting_unit()
-				
-				print("Cursor: Speed First mode - current acting unit: " + (current_acting_unit.get_display_name() if current_acting_unit else "None"))
-				print("Cursor: Attempted selection: " + unit_at_cursor.get_display_name())
-				
-				# In Speed First mode, allow selection of any unit - UI will handle action availability
-				if unit_at_cursor == current_acting_unit:
-					print("Cursor: ALLOWED - Unit is the currently acting unit (can act)")
-				else:
-					print("Cursor: ALLOWED - Unit can be selected for inspection (actions disabled)")
-				
-				# Skip the general can_unit_act check for Speed First - let UI handle it
-			elif not turn_system.can_unit_act(unit_at_cursor):
-				if turn_system is TraditionalTurnSystem:
-					var trad_system = turn_system as TraditionalTurnSystem
-					if unit_at_cursor in trad_system.get_units_that_acted():
-						print("Cannot select unit: already acted this turn")
-					else:
-						print("Cannot select unit: turn system constraint")
-				else:
-					print("Cannot select unit: not allowed by turn system")
-				return
-		
+
+
 		if selected_unit == unit_at_cursor:
 			# Deselect if clicking same unit
 			_deselect_unit()
@@ -370,28 +447,24 @@ func _handle_selection() -> void:
 		# No unit at cursor - only deselect if we're not in movement mode
 		if unit_actions_panel and unit_actions_panel.has_method("is_showing_movement_range"):
 			if not unit_actions_panel.is_showing_movement_range():
-				print("DEBUG: No unit at cursor and no movement range - deselecting")
 				_deselect_unit()
-			else:
-				print("DEBUG: No unit at cursor but movement range is showing - ignoring click")
 		else:
-			print("DEBUG: No unit at cursor - deselecting")
 			_deselect_unit()
 
 func _get_unit_actions_panel() -> Node:
 	"""Get reference to UnitActionsPanel"""
-	var scene_root = get_tree().current_scene
-	print("DEBUG: Looking for UnitActionsPanel, scene_root: " + str(scene_root.name if scene_root else "null"))
-	
+	var tree = get_tree()
+	if tree == null:
+		return null
+	var scene_root = tree.current_scene
+	if scene_root == null:
+		return null
+
 	var ui_layout = scene_root.get_node_or_null("UI/GameUILayout")
-	print("DEBUG: UI/GameUILayout found: " + str(ui_layout != null))
-	
+
 	if ui_layout:
 		# The correct path is MarginContainer/MainContainer/MiddleArea/RightSidebar/UnitActionsPanel
 		var unit_actions_panel = ui_layout.get_node_or_null("MarginContainer/MainContainer/MiddleArea/RightSidebar/UnitActionsPanel")
-		print("DEBUG: UnitActionsPanel found: " + str(unit_actions_panel != null))
-		if unit_actions_panel:
-			print("DEBUG: UnitActionsPanel name: " + unit_actions_panel.name)
 		return unit_actions_panel
 	return null
 
@@ -406,25 +479,18 @@ func _select_unit(unit: Unit) -> void:
 	
 	selected_unit = unit
 	var world_pos = grid.calculate_map_position(tile_position)
-	print("=== Cursor: Selecting unit ===")
-	print("Unit: ", unit.name)
-	print("World position: ", world_pos)
-	print("Emitting GameEvents.unit_selected signal...")
 	GameEvents.unit_selected.emit(unit, world_pos)
-	print("GameEvents.unit_selected signal emitted")
-	
+
 	# Update cursor visuals
 	if mesh_instance:
 		mesh_instance.material_override = selection_material
 	if base_mesh:
 		base_mesh.material_override = selection_ring_material
-	print("=== Cursor: Unit selection complete ===")
 
 func _deselect_unit() -> void:
 	"""Deselect current unit"""
 	if selected_unit:
 		var unit = selected_unit
-		print("Deselecting unit: ", unit.name)
 		selected_unit = null
 		GameEvents.unit_deselected.emit(unit)
 	
@@ -465,8 +531,13 @@ func _get_unit_at_position(grid_pos: Vector3) -> Unit:
 func _find_all_units() -> Array[Unit]:
 	"""Find all units in the scene"""
 	var units: Array[Unit] = []
-	var scene_root = get_tree().current_scene
-	
+	var tree = get_tree()
+	if tree == null:
+		return units
+	var scene_root = tree.current_scene
+	if scene_root == null:
+		return units
+
 	# Look for units in Player1 and Player2 nodes
 	var player_nodes = ["Map/Player1", "Map/Player2"]
 	
@@ -506,7 +577,6 @@ func get_cursor_position() -> Vector3:
 func set_mouse_enabled(enabled: bool) -> void:
 	"""Enable or disable mouse cursor movement"""
 	is_mouse_enabled = enabled
-	print("Mouse cursor movement " + ("enabled" if enabled else "disabled"))
 
 func toggle_mouse_mode() -> void:
 	"""Toggle between mouse and keyboard-only mode"""
@@ -556,10 +626,7 @@ func _position_cursor_on_current_unit(speed_system: SpeedFirstTurnSystem) -> voi
 		# Move cursor to unit's position
 		var unit_world_pos = current_unit.global_position
 		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
-		
-		print("Positioning cursor on current acting unit: " + current_unit.get_display_name())
-		print("  Moving cursor to grid position: " + str(unit_grid_pos))
-		
+
 		# Set cursor position (this will trigger position update)
 		self.tile_position = unit_grid_pos
 		
@@ -588,25 +655,15 @@ func _position_cursor_on_player_unit(trad_system: TraditionalTurnSystem) -> void
 	if target_unit:
 		var unit_world_pos = target_unit.global_position
 		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
-		
-		print("Positioning cursor on player unit: " + target_unit.get_display_name())
-		print("  Moving cursor to grid position: " + str(unit_grid_pos))
-		
+
 		# Set cursor position
 		self.tile_position = unit_grid_pos
 
 func _test_unit_selection_signal() -> void:
 	"""Test GameEvents.unit_selected signal emission"""
-	print("=== Testing GameEvents.unit_selected signal ===")
-	
 	# Find a unit to test with
 	var units = _find_all_units()
 	if units.size() > 0:
 		var test_unit = units[0]
 		var test_position = test_unit.global_position
-		print("Emitting GameEvents.unit_selected for: " + test_unit.name)
-		print("Position: " + str(test_position))
 		GameEvents.unit_selected.emit(test_unit, test_position)
-		print("Signal emitted")
-	else:
-		print("No units found for testing")

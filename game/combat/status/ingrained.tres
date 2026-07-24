@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="StatusCondition" format=3]
+
+[ext_resource type="Script" path="res://game/combat/status/StatusCondition.gd" id="1_status"]
+
+[resource]
+script = ExtResource("1_status")
+id = &"ingrained"
+display_name = "Ingrained"
+duration_turns = 5
+stacking = 0
+rule_flags = {
+"immobilized": true
+}

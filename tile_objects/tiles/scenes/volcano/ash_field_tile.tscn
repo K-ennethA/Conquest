@@ -1,0 +1,75 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
+[ext_resource type="Resource" path="res://game/tiles/resources/volcano/ash_field.tres" id="2_res"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="SphereMesh" id="SphereMesh_drift"]
+radius = 1.0
+height = 2.0
+radial_segments = 8
+rings = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_slab"]
+albedo_color = Color(0.58, 0.56, 0.54, 1)
+roughness = 1.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_drift"]
+albedo_color = Color(0.68, 0.66, 0.63, 1)
+roughness = 1.0
+
+[node name="AshFieldTile" type="Node3D"]
+script = ExtResource("1_tile")
+tile_resource = ExtResource("2_res")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_base")
+material_override = SubResource("StandardMaterial3D_slab")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+shape = SubResource("BoxShape3D_base")
+
+[node name="AshVisual" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+
+[node name="Drift1" type="MeshInstance3D" parent="AshVisual"]
+transform = Transform3D(0.4472, 0, -0.2085, 0, 0.055, 0, 0.3128, 0, 0.298, -0.42, 0.014, -0.38)
+mesh = SubResource("SphereMesh_drift")
+material_override = SubResource("StandardMaterial3D_drift")
+
+[node name="Drift2" type="MeshInstance3D" parent="AshVisual"]
+transform = Transform3D(0.2596, 0, 0.2179, 0, 0.042, 0, -0.3268, 0, 0.3894, 0.38, 0.011, -0.55)
+mesh = SubResource("SphereMesh_drift")
+material_override = SubResource("StandardMaterial3D_drift")
+
+[node name="Drift3" type="MeshInstance3D" parent="AshVisual"]
+transform = Transform3D(0.28, 0, -0.4849, 0, 0.065, 0, 0.291, 0, 0.168, 0.55, 0.017, 0.34)
+mesh = SubResource("SphereMesh_drift")
+material_override = SubResource("StandardMaterial3D_drift")
+
+[node name="Drift4" type="MeshInstance3D" parent="AshVisual"]
+transform = Transform3D(0.4058, 0, 0.1087, 0, 0.038, 0, -0.2536, 0, 0.174, -0.58, 0.01, 0.46)
+mesh = SubResource("SphereMesh_drift")
+material_override = SubResource("StandardMaterial3D_drift")
+
+[node name="Drift5" type="MeshInstance3D" parent="AshVisual"]
+transform = Transform3D(0.1197, 0, -0.3288, 0, 0.05, 0, 0.4699, 0, 0.171, 0.02, 0.013, 0.06)
+mesh = SubResource("SphereMesh_drift")
+material_override = SubResource("StandardMaterial3D_drift")
+
+[node name="Drift6" type="MeshInstance3D" parent="AshVisual"]
+transform = Transform3D(0.175, 0, 0.3031, 0, 0.032, 0, -0.4547, 0, 0.2625, 0.66, 0.008, -0.12)
+mesh = SubResource("SphereMesh_drift")
+material_override = SubResource("StandardMaterial3D_drift")
+
+[node name="Drift7" type="MeshInstance3D" parent="AshVisual"]
+transform = Transform3D(0.3421, 0, -0.1246, 0, 0.045, 0, 0.3736, 0, 0.1141, -0.1, 0.012, 0.68)
+mesh = SubResource("SphereMesh_drift")
+material_override = SubResource("StandardMaterial3D_drift")

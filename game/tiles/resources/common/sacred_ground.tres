@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="TileResource" format=3]
+
+[ext_resource type="Script" path="res://game/tiles/resources/TileResource.gd" id="1_sgrd"]
+
+[resource]
+resource_name = "TileResource"
+script = ExtResource("1_sgrd")
+id = &"sacred_ground"
+tile_name = "Sacred Ground"
+description = "Hallowed ground that fortifies whoever stands on it, raising their defense."
+base_color = Color(0.95, 0.82, 0.4, 1)
+tile_type = 8

@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_2p13l"]
+[ext_resource type="Script" path="res://game/combat/effects/HealEffect.gd" id="2_bqqca"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_8qb0d"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="4_recmi"]
+
+[sub_resource type="Resource" id="Resource_0tr0v"]
+script = ExtResource("2_bqqca")
+amount = 24
+scaling_stat = "magic"
+
+[sub_resource type="Resource" id="Resource_qae68"]
+script = ExtResource("4_recmi")
+target_kind = 1
+max_range = 2
+
+[resource]
+script = ExtResource("3_8qb0d")
+move_id = &"soothing_light"
+display_name = "Soothing Light"
+description = "Heals a nearby ally, scaled by magic."
+category = 1
+energy_cost = 2
+targeting = SubResource("Resource_qae68")
+effects = Array[ExtResource("1_2p13l")]([SubResource("Resource_0tr0v")])

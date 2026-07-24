@@ -120,15 +120,15 @@ func _input(event: InputEvent) -> void:
 				print("F10 pressed - testing movement range calculation")
 				_test_movement_range_calculation()
 			KEY_F11:
-				print("F11 pressed - testing Fire Emblem style unit selection")
-				_test_fire_emblem_selection()
+				print("F11 pressed - testing tactical style unit selection")
+				_test_tactical_selection()
 			KEY_F12:
 				print("F12 pressed - testing movement range display directly")
 				_test_movement_range_display()
 
-func _test_fire_emblem_selection() -> void:
-	"""Test Fire Emblem style unit selection with immediate movement range display"""
-	print("=== Testing Fire Emblem Style Selection ===")
+func _test_tactical_selection() -> void:
+	"""Test tactical style unit selection with immediate movement range display"""
+	print("=== Testing Tactical Style Selection ===")
 	
 	var units = _find_all_units()
 	if units.size() == 0:

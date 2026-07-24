@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="Augment" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://game/arena/Augment.gd" id="1"]
+[ext_resource type="Script" path="res://game/arena/effects/GrantAbilityEffect.gd" id="2"]
+[ext_resource type="Script" path="res://game/arena/effects/AugmentEffect.gd" id="3"]
+[ext_resource type="Resource" path="res://game/arena/abilities/lifesteal_on_kill.tres" id="4"]
+
+[sub_resource type="Resource" id="ga"]
+script = ExtResource("2")
+ability = ExtResource("4")
+ability_id = &""
+
+[resource]
+script = ExtResource("1")
+id = "bloodthirst"
+display_name = "Bloodthirst"
+description = "Every kill feeds the wielder. Grants Lifesteal: restore 20% of max health after defeating an enemy."
+rarity = 2
+target = 1
+stat_bonuses = {}
+effects = Array[ExtResource("3")]([SubResource("ga")])

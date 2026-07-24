@@ -1,0 +1,53 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/LeapEffect.gd" id="2_leap"]
+[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="3_damage"]
+[ext_resource type="Script" path="res://game/combat/effects/ApplyStatusEffect.gd" id="4_applystatus"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="5_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="6_targp"]
+[ext_resource type="Resource" path="res://game/combat/status/braced.tres" id="7_braced"]
+
+[sub_resource type="Resource" id="Resource_lunge_leap"]
+script = ExtResource("2_leap")
+description_override = "Spring onto the space beside your prey"
+
+[sub_resource type="Resource" id="Resource_lunge_dmg"]
+script = ExtResource("3_damage")
+power = 9
+scaling_stat = "attack"
+scale = 0.7
+category = 0
+lifesteal = 0.0
+
+[sub_resource type="Resource" id="Resource_lunge_brace"]
+script = ExtResource("4_applystatus")
+condition = ExtResource("7_braced")
+chance = 1.0
+to_caster = true
+
+[sub_resource type="Resource" id="Resource_lunge_tgt"]
+script = ExtResource("6_targp")
+target_kind = 2
+min_range = 1
+max_range = 4
+area_shape = 1
+area_size = 1
+affects_caster_tile = false
+requires_empty_cell = true
+requires_adjacent_enemy = true
+
+[resource]
+script = ExtResource("5_mvres")
+move_id = &"infesting_lunge"
+display_name = "Infesting Lunge"
+description = "Leaps beside a target, damaging adjacent enemies and bracing on landing."
+category = 0
+element = &"nature"
+energy_cost = 0
+max_uses = -1
+cooldown = 2
+accuracy = 1.0
+crit_chance = 0.0
+targeting = SubResource("Resource_lunge_tgt")
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_lunge_leap"), SubResource("Resource_lunge_dmg"), SubResource("Resource_lunge_brace")])

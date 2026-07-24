@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="Augment" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/arena/Augment.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "atk_up_2"
+display_name = "Honed"
+description = "Every unit in the squad gains +5 Attack."
+rarity = 1
+target = 0
+stat_bonuses = {
+"attack": 5
+}

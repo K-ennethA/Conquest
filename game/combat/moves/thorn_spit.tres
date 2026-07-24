@@ -1,0 +1,37 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="2_damage"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="4_targp"]
+
+[sub_resource type="Resource" id="Resource_thornspit_dmg"]
+script = ExtResource("2_damage")
+power = 10
+scaling_stat = "attack"
+scale = 0.8
+category = 0
+
+[sub_resource type="Resource" id="Resource_thornspit_tgt"]
+script = ExtResource("4_targp")
+target_kind = 2
+min_range = 1
+max_range = 3
+area_shape = 0
+area_size = 0
+affects_caster_tile = false
+
+[resource]
+script = ExtResource("3_mvres")
+move_id = &"thorn_spit"
+display_name = "Thorn Spit"
+description = "Ranged physical damage with a high critical chance."
+category = 0
+element = &"nature"
+energy_cost = 0
+max_uses = -1
+cooldown = 0
+accuracy = 0.95
+crit_chance = 0.15
+targeting = SubResource("Resource_thornspit_tgt")
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_thornspit_dmg")])

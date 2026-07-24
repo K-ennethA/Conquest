@@ -46,7 +46,7 @@ var clear_button: Button
 
 # Data
 var unit_types = ["Warrior", "Archer", "Mage", "Healer", "Tank", "Scout", "Custom"]
-var available_moves: Array[Move] = []
+var available_moves: Array = []
 
 func _init():
 	name = "UnitCreator"
@@ -352,19 +352,21 @@ func _create_spin_box(min_val: int, max_val: int, default_val: int) -> SpinBox:
 	return spin_box
 
 func _load_available_moves():
-	"""Load all available moves from MoveFactory"""
-	available_moves = MoveFactory.get_all_moves()
+	"""The legacy move system has been retired; UnitStatsResource never persisted
+	moves, so this picker starts empty until unit_creator is wired to the new
+	MoveResource/CharacterResource stack."""
+	available_moves = []
 	_update_available_moves_list()
 
 func _update_available_moves_list():
 	"""Update the available moves list"""
 	if not available_moves_list:
 		return
-	
+
 	available_moves_list.clear()
 	for move in available_moves:
 		if move:
-			available_moves_list.add_item(move.name + " (" + Move.MoveType.keys()[move.move_type] + ")")
+			available_moves_list.add_item(move.name)
 
 # Signal handlers
 func _on_name_changed(new_text: String):
@@ -516,7 +518,7 @@ func _on_add_move():
 			return
 		
 		# Add move
-		selected_moves_list.add_item(move.name + " (" + Move.MoveType.keys()[move.move_type] + ")")
+		selected_moves_list.add_item(move.name)
 		print("Added move: " + move.name)
 
 func _on_remove_move():
@@ -627,13 +629,7 @@ func _load_template_data(template_name: String):
 	selected_moves_list.clear()
 	var moves = template_data.get("moves", [])
 	for move_name in moves:
-		# Find move type for display
-		var move_type = "UNKNOWN"
-		for move in available_moves:
-			if move and move.name == move_name:
-				move_type = Move.MoveType.keys()[move.move_type]
-				break
-		selected_moves_list.add_item(move_name + " (" + move_type + ")")
+		selected_moves_list.add_item(move_name)
 	
 	print("Template loaded: " + template_name)
 
@@ -764,13 +760,7 @@ func _create_unit_scene(unit_data: Dictionary) -> bool:
 	unit_stats.stats_resource = load("res://game/units/resources/" + unit_data.name + ".tres")
 	unit_node.add_child(unit_stats)
 	unit_stats.owner = unit_node
-	
-	# Add MoveManager component
-	var move_manager = load("res://game/units/components/MoveManager.gd").new()
-	move_manager.name = "MoveManager"
-	unit_node.add_child(move_manager)
-	move_manager.owner = unit_node
-	
+
 	# Add 3D model if specified
 	if not unit_data.model_path.is_empty() and ResourceLoader.exists(unit_data.model_path):
 		var model_scene = load(unit_data.model_path)

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="StatusCondition" format=3]
+
+[ext_resource type="Script" path="res://game/combat/status/StatusCondition.gd" id="1_status"]
+
+[resource]
+script = ExtResource("1_status")
+id = &"prism_guard"
+display_name = "Prism Guard"
+duration_turns = 2
+stacking = 0
+max_stacks = -1
+rule_flags = {}
+damage_taken_scale = 0.5

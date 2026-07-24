@@ -134,7 +134,7 @@ func _build_ui() -> void:
 	selection_content.add_child(spacer1)
 	
 	# Map selector (gallery) - check if scene exists
-	var map_selector_scene = load("res://game/ui/MapSelectorPanel.tscn")
+	var map_selector_scene = load("res://game/ui/panels/MapSelectorPanel.tscn")
 	if map_selector_scene:
 		map_selector = map_selector_scene.instantiate()
 		if map_selector.has_method("set_gallery_mode"):

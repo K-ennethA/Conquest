@@ -7,30 +7,33 @@ class_name MainMenu
 
 @onready var single_player_button: Button = $CenterContainer/VBoxContainer/MenuButtons/SinglePlayerButton
 @onready var versus_button: Button = $CenterContainer/VBoxContainer/MenuButtons/VersusButton
-@onready var unit_gallery_button: Button = $CenterContainer/VBoxContainer/MenuButtons/UnitGalleryButton
-@onready var tile_gallery_button: Button = $CenterContainer/VBoxContainer/MenuButtons/TileGalleryButton
-@onready var multiplayer_button: Button = $CenterContainer/VBoxContainer/MenuButtons/MultiplayerButton
+# One entry point for the whole in-game reference. The Unit, Tile and Map
+# galleries are no longer separate menu items -- they are sections of
+# Compendium.tscn, which also covers Statuses (and, later, Weather).
+@onready var compendium_button: Button = $CenterContainer/VBoxContainer/MenuButtons/CompendiumButton
+@onready var arena_button: Button = $CenterContainer/VBoxContainer/MenuButtons/ArenaButton
 @onready var quit_button: Button = $CenterContainer/VBoxContainer/MenuButtons/QuitButton
 
 func _ready() -> void:
 	print("[DEBUG] MainMenu: _ready() called")
+	theme = MenuTheme.build()  # dark Legends-style menu look
 	
 	# Add AutoClientDetector test
 	var autoclient_test = Node.new()
 	autoclient_test.name = "AutoClientDetectorTest"
-	autoclient_test.set_script(load("res://test_autoclient_detector.gd"))
+	autoclient_test.set_script(load("res://dev_scripts/test_autoclient_detector.gd"))
 	add_child(autoclient_test)
 	
 	# Add debug test script for development
 	var debug_test = Node.new()
 	debug_test.name = "HostAutoClientDebugTest"
-	debug_test.set_script(load("res://test_host_auto_client_debug.gd"))
+	debug_test.set_script(load("res://dev_scripts/test_host_auto_client_debug.gd"))
 	add_child(debug_test)
 	
 	# Add end-to-end test script
 	var e2e_test = Node.new()
 	e2e_test.name = "EndToEndMultiplayerTest"
-	e2e_test.set_script(load("res://test_end_to_end_multiplayer.gd"))
+	e2e_test.set_script(load("res://dev_scripts/test_end_to_end_multiplayer.gd"))
 	add_child(e2e_test)
 	
 	# Note: AutoClientDetector now runs as an autoload, so client detection
@@ -42,10 +45,10 @@ func _ready() -> void:
 		single_player_button.pressed.connect(_on_single_player_pressed)
 	if versus_button:
 		versus_button.pressed.connect(_on_versus_pressed)
-	if unit_gallery_button:
-		unit_gallery_button.pressed.connect(_on_unit_gallery_pressed)
-	if tile_gallery_button:
-		tile_gallery_button.pressed.connect(_on_tile_gallery_pressed)
+	if compendium_button:
+		compendium_button.pressed.connect(_on_compendium_pressed)
+	if arena_button:
+		arena_button.pressed.connect(_on_arena_pressed)
 	if quit_button:
 		quit_button.pressed.connect(_on_quit_pressed)
 	
@@ -104,15 +107,17 @@ func _on_versus_pressed() -> void:
 	# Load multiplayer mode selection scene (restored)
 	get_tree().change_scene_to_file("res://menus/MultiplayerModeSelection.tscn")
 
-func _on_unit_gallery_pressed() -> void:
-	"""Handle Unit Gallery button press"""
-	print("Unit Gallery selected")
-	get_tree().change_scene_to_file("res://menus/UnitGallery.tscn")
+func _on_compendium_pressed() -> void:
+	"""Handle Compendium button press"""
+	print("Compendium selected")
+	get_tree().change_scene_to_file("res://menus/Compendium.tscn")
 
-func _on_tile_gallery_pressed() -> void:
-	"""Handle Tile Gallery button press"""
-	print("Tile Gallery selected")
-	get_tree().change_scene_to_file("res://menus/TileGallery.tscn")
+func _on_arena_pressed() -> void:
+	"""Handle Arena button press -- open the Arena pre-run setup screen"""
+	print("Arena mode selected")
+	# Setup screen lets the player pick run length + turn system before ArenaController
+	# starts the run (it, not this menu, launches the actual GameWorld round).
+	get_tree().change_scene_to_file("res://game/arena/ui/ArenaSetupScreen.tscn")
 
 func _on_quit_pressed() -> void:
 	"""Handle Quit button press"""
@@ -143,8 +148,8 @@ func _input(event: InputEvent) -> void:
 			KEY_2:
 				_on_versus_pressed()
 			KEY_3:
-				_on_unit_gallery_pressed()
+				_on_compendium_pressed()
 			KEY_4:
-				_on_tile_gallery_pressed()
+				_on_arena_pressed()
 			KEY_ESCAPE:
 				_on_quit_pressed()

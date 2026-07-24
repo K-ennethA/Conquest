@@ -87,8 +87,3 @@ func _swap(i: int, j: int) -> void:
 	var temp = heap[i]
 	heap[i] = heap[j]
 	heap[j] = temp
-
-func _swap(i: int, j: int) -> void:
-	var temp = heap[i]
-	heap[i] = heap[j]
-	heap[j] = temp

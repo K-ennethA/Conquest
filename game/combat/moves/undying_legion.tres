@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/SummonEffect.gd" id="2_summon"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="4_targp"]
+
+[sub_resource type="Resource" id="Resource_ul_summon"]
+script = ExtResource("2_summon")
+count = 2
+character_id = &"undead"
+stance = "aggressive"
+
+[sub_resource type="Resource" id="Resource_ul_tgt"]
+script = ExtResource("4_targp")
+target_kind = 0
+min_range = 0
+max_range = 0
+area_shape = 0
+area_size = 1
+affects_caster_tile = true
+
+[resource]
+script = ExtResource("3_mvres")
+move_id = &"undying_legion"
+display_name = "Undying Legion"
+description = "Raises 2 undead beside the caster."
+category = 1
+element = &"dark"
+energy_cost = 0
+max_uses = -1
+cooldown = 5
+accuracy = 1.0
+crit_chance = 0.0
+targeting = SubResource("Resource_ul_tgt")
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_ul_summon")])

@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="TileResource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/tiles/resources/TileResource.gd" id="1_tres"]
+[ext_resource type="Resource" path="res://game/tiles/effects/resources/slippery_ice.tres" id="2_ice_fx"]
+
+[resource]
+script = ExtResource("1_tres")
+id = &"ice_sheet"
+tile_name = "Ice Sheet"
+tile_type = 6
+description = "A pane of hard blue ice, polished by wind. Footing is quick but treacherous - nobody sidesteps well on a surface that slides back."
+base_movement_cost = 1
+is_passable = true
+blocks_line_of_sight = false
+material_style = 0
+base_color = Color(0.66, 0.85, 0.92, 1)
+emission_enabled = true
+emission_color = Color(0.12, 0.26, 0.34, 1)
+metallic = 0.15
+roughness = 0.12
+texture_path = ""
+model_path = "res://tile_objects/tiles/scenes/ice/ice_sheet_tile.tscn"
+has_default_effects = true
+default_effects = [ExtResource("2_ice_fx")]
+provides_cover = false
+cover_bonus = 0
+elevation = 0
+special_properties = Array[String](["tundra", "slippery"])
+rarity = "Uncommon"
+generation_weight = 0.6

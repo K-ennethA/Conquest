@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/mycothrall.glb" id="2_model"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Resource" path="res://game/combat/moves/infesting_lunge.tres" id="4_lunge"]
+[ext_resource type="Resource" path="res://game/combat/moves/siphon_bite.tres" id="5_siphon"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="6_abres"]
+[ext_resource type="Resource" path="res://game/abilities/parasitic_hold.tres" id="7_parasitic"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"mycothrall"
+element = &"nature"
+display_name = "Mycothrall"
+description = "A low, wet parasite that spreads flat across a tile like something poured. It cannot win a straight fight, so it doesn't try -- it lunges in, bites deep, and drinks. Left in a wound too long its threads hollow the host from the inside and take the reins, and the thing you were protecting turns and swings at the ally beside it."
+model_scene = ExtResource("2_model")
+base_health = 38
+base_attack = 13
+base_defense = 6
+base_magic = 6
+base_magic_defense = 7
+base_speed = 14
+base_movement = 5
+min_difficulty = 2
+moveset = Array[ExtResource("3_mvres")]([ExtResource("4_lunge"), ExtResource("5_siphon")])
+abilities = Array[ExtResource("6_abres")]([ExtResource("7_parasitic")])

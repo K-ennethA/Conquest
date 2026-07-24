@@ -18,6 +18,7 @@ var passable_checkbox: CheckBox
 var blocks_sight_checkbox: CheckBox
 
 # Visual Section
+var material_style_option: OptionButton
 var color_picker: ColorPicker
 var emission_checkbox: CheckBox
 var emission_color_picker: ColorPicker
@@ -57,6 +58,8 @@ var clear_button: Button
 
 # Data
 var tile_types = ["NORMAL", "DIFFICULT_TERRAIN", "WATER", "WALL", "SPECIAL", "LAVA", "ICE", "SWAMP", "SACRED_GROUND", "CORRUPTED"]
+# Order matches TileResource.MaterialStyle (FLAT = 0, GRASS = 1, WATER = 2, BURN = 3).
+var material_styles = ["Flat (Solid Color)", "Grass (Animated)", "Water (Animated)", "Burn (Animated)"]
 var effect_types = []
 var rarities = ["Common", "Uncommon", "Rare", "Epic", "Legendary"]
 var current_tile_effects: Array[TileEffect] = []
@@ -186,7 +189,19 @@ func _create_visual_section():
 	section_label.text = "VISUAL PROPERTIES"
 	section_label.add_theme_font_size_override("font_size", 14)
 	main_container.add_child(section_label)
-	
+
+	# Material Style (Flat solid color vs. stylized animated shaders like Grass)
+	var style_label = Label.new()
+	style_label.text = "Material Style:"
+	main_container.add_child(style_label)
+
+	material_style_option = OptionButton.new()
+	for style_name in material_styles:
+		material_style_option.add_item(style_name)
+	material_style_option.selected = 0
+	material_style_option.item_selected.connect(_on_material_style_changed)
+	main_container.add_child(material_style_option)
+
 	# Base Color
 	var color_label = Label.new()
 	color_label.text = "Base Color:"
@@ -411,14 +426,15 @@ func _setup_preview_scene():
 	"""Set up the 3D preview scene"""
 	# Add camera
 	var camera = Camera3D.new()
-	camera.position = Vector3(2, 3, 2)
-	camera.look_at(Vector3(0, 0, 0), Vector3.UP)
+	# look_at() needs the node already in the tree; look_at_from_position orients it
+	# from an explicit position, so it is safe to call BEFORE add_child (avoids the
+	# "Node not inside tree" editor error).
+	camera.look_at_from_position(Vector3(2, 3, 2), Vector3(0, 0, 0), Vector3.UP)
 	preview_viewport.add_child(camera)
-	
+
 	# Add lighting
 	var light = DirectionalLight3D.new()
-	light.position = Vector3(2, 3, 2)
-	light.look_at(Vector3(0, 0, 0), Vector3.UP)
+	light.look_at_from_position(Vector3(2, 3, 2), Vector3(0, 0, 0), Vector3.UP)
 	light.light_energy = 1.0
 	preview_viewport.add_child(light)
 	
@@ -532,6 +548,10 @@ func _apply_tile_type_defaults(tile_type: String):
 			emission_color_picker.color = Color(0.3, 0.1, 0.3)
 			has_effects_checkbox.button_pressed = true
 
+func _on_material_style_changed(_index: int):
+	"""Handle material style (Flat / Grass / ...) change"""
+	_update_preview()
+
 func _on_color_changed(color: Color):
 	"""Handle base color change"""
 	_update_preview()
@@ -614,20 +634,26 @@ func _on_browse_texture():
 	print("Browse texture clicked")
 
 func _update_preview():
-	"""Update the 3D preview"""
+	"""Update the 3D preview.
+
+	Builds the material through TileResource.create_material() so the preview is
+	identical to what the tile shows at runtime -- including stylized shader
+	styles like animated Grass (which animate live, since the preview SubViewport
+	updates every frame).
+	"""
 	if not preview_tile:
 		return
-	
-	var material = StandardMaterial3D.new()
-	material.albedo_color = color_picker.color
-	material.metallic = metallic_slider.value
-	material.roughness = roughness_slider.value
-	
-	if emission_checkbox.button_pressed:
-		material.emission_enabled = true
-		material.emission = emission_color_picker.color
-	
-	preview_tile.material_override = material
+
+	var res := TileResource.new()
+	res.material_style = material_style_option.selected if material_style_option else 0
+	res.base_color = color_picker.color
+	res.metallic = metallic_slider.value
+	res.roughness = roughness_slider.value
+	res.emission_enabled = emission_checkbox.button_pressed
+	res.emission_color = emission_color_picker.color
+	res.texture_path = texture_path_input.text
+
+	preview_tile.material_override = res.create_material()
 
 func _on_create_tile():
 	"""Create the tile with current settings"""
@@ -661,6 +687,7 @@ func _on_clear_form():
 	movement_cost_input.value = 1
 	passable_checkbox.button_pressed = true
 	blocks_sight_checkbox.button_pressed = false
+	material_style_option.selected = 0
 	color_picker.color = Color.WHITE
 	emission_checkbox.button_pressed = false
 	emission_color_picker.color = Color.BLACK
@@ -694,6 +721,7 @@ func _collect_tile_data() -> Dictionary:
 		"movement_cost": int(movement_cost_input.value),
 		"passable": passable_checkbox.button_pressed,
 		"blocks_sight": blocks_sight_checkbox.button_pressed,
+		"material_style": material_style_option.selected,
 		"base_color": color_picker.color,
 		"emission_enabled": emission_checkbox.button_pressed,
 		"emission_color": emission_color_picker.color,
@@ -723,14 +751,32 @@ func _create_tile_files(tile_data: Dictionary) -> bool:
 	print("Tile files created successfully for: " + tile_name)
 	return true
 
+## Where a tile with this name should be written.
+##
+## Tiles live in BIOME folders (forest/, volcano/, ice/, common/). Writing to the
+## flat root instead would resurrect a second copy of an existing tile every time
+## it was re-saved -- which is exactly what happened: a stale root tree.tres
+## shadowed forest/tree.tres and tripped TileCatalog's duplicate-id guard.
+##
+## So: if a tile with this id already exists anywhere in the tree, save back over
+## THAT file. Otherwise put new tiles in common/ rather than the root.
+func _tile_resource_path_for(tile_name: String) -> String:
+	var stem: String = tile_name.to_lower().replace(" ", "_")
+	var existing := TileCatalog.find_by_id(StringName(stem))
+	if existing != null and not existing.resource_path.is_empty():
+		return existing.resource_path
+	return "res://game/tiles/resources/common/" + stem + ".tres"
+
+
 func _create_tile_resource(tile_data: Dictionary) -> bool:
 	"""Create tile resource file"""
-	var resource_path = "res://game/tiles/resources/" + tile_data.name.to_lower().replace(" ", "_") + ".tres"
-	
-	# Create directory if it doesn't exist
-	if not DirAccess.dir_exists_absolute("res://game/tiles/resources/"):
-		DirAccess.open("res://").make_dir_recursive("game/tiles/resources")
-	
+	var resource_path = _tile_resource_path_for(tile_data.name)
+
+	# Create the destination biome directory if it doesn't exist
+	var dir_path: String = resource_path.get_base_dir()
+	if not DirAccess.dir_exists_absolute(dir_path):
+		DirAccess.open("res://").make_dir_recursive(dir_path.replace("res://", ""))
+
 	# Create TileResource
 	var tile_resource = TileResource.new()
 	tile_resource.tile_name = tile_data.name
@@ -746,6 +792,7 @@ func _create_tile_resource(tile_data: Dictionary) -> bool:
 	tile_resource.base_movement_cost = tile_data.movement_cost
 	tile_resource.is_passable = tile_data.passable
 	tile_resource.blocks_line_of_sight = tile_data.blocks_sight
+	tile_resource.material_style = tile_data.material_style
 	tile_resource.base_color = tile_data.base_color
 	tile_resource.emission_enabled = tile_data.emission_enabled
 	tile_resource.emission_color = tile_data.emission_color
@@ -776,31 +823,48 @@ func _create_tile_scene(tile_data: Dictionary) -> bool:
 	if not DirAccess.dir_exists_absolute("res://game/tiles/scenes/"):
 		DirAccess.open("res://").make_dir_recursive("game/tiles/scenes")
 	
-	# Create tile scene
-	var tile_scene = PackedScene.new()
-	var tile_node = Tile.new()
+	# Instantiate the base tile scene (which already has the MeshInstance3D +
+	# collision) rather than Tile.new(), so the created tile actually renders.
+	var base_tile_scene: PackedScene = load("res://tile_objects/tiles/tile.tscn")
+	if base_tile_scene == null:
+		print("Failed to load base tile scene res://tile_objects/tiles/tile.tscn")
+		return false
+
+	var tile_node: Tile = base_tile_scene.instantiate()
 	tile_node.name = tile_data.name.replace(" ", "")
-	
+
 	# Set tile properties
 	var type_name = tile_data.tile_type
 	for i in range(Tile.TileType.size()):
 		if Tile.TileType.keys()[i] == type_name:
 			tile_node.tile_type = i
 			break
-	
+
 	tile_node.base_movement_cost = tile_data.movement_cost
 	tile_node.is_passable_base = tile_data.passable
-	
+
+	# Bind the just-saved TileResource so the scene carries its data-driven
+	# visuals (material_style/color/effects) instead of falling back to the
+	# type-based flat material. Tile._ready() applies it via set_tile_resource().
+	var resource_path = _tile_resource_path_for(tile_data.name)
+	if ResourceLoader.exists(resource_path):
+		tile_node.tile_resource = load(resource_path)
+
 	# Add effects
 	if tile_data.has_effects:
 		for effect in tile_data.effects:
 			if effect:
 				tile_node.add_effect(effect)
-	
+
 	# Pack and save scene
-	tile_scene.pack(tile_node)
+	var tile_scene = PackedScene.new()
+	var pack_result = tile_scene.pack(tile_node)
+	tile_node.free()  # done with the working instance
+	if pack_result != OK:
+		print("Failed to pack tile scene: " + str(pack_result))
+		return false
+
 	var result = ResourceSaver.save(tile_scene, scene_path)
-	
 	if result == OK:
 		print("Tile scene created: " + scene_path)
 		return true

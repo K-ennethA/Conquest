@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/tree_grunt.glb" id="2_model"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Resource" path="res://game/combat/moves/tree_bash.tres" id="4_bash"]
+[ext_resource type="Resource" path="res://game/combat/moves/rooted.tres" id="5_rooted"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="6_abres"]
+[ext_resource type="Resource" path="res://game/abilities/natures_blessing.tres" id="7_blessing"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"tree_grunt"
+element = &"nature"
+display_name = "Barkling"
+description = "A lurching sapling animated by the Great Tree's will. Slow and brittle alone, but the forest never sends just one."
+model_scene = ExtResource("2_model")
+base_health = 55
+base_attack = 14
+base_defense = 8
+base_magic = 2
+base_magic_defense = 6
+base_speed = 7
+moveset = Array[ExtResource("3_mvres")]([ExtResource("4_bash"), ExtResource("5_rooted")])
+abilities = Array[ExtResource("6_abres")]([ExtResource("7_blessing")])

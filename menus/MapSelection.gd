@@ -8,11 +8,11 @@ signal map_selected(map_path: String)
 signal back_pressed()
 
 # UI Elements
-@onready var map_list: ItemList = $VBoxContainer/MapListContainer/MapList
-@onready var map_preview_container: Control = $VBoxContainer/MapPreviewContainer
-@onready var map_name_label: Label = $VBoxContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer/MapNameLabel
-@onready var map_description_label: Label = $VBoxContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer/MapDescriptionLabel
-@onready var map_details_label: Label = $VBoxContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer/MapDetailsLabel
+@onready var map_list: ItemList = $VBoxContainer/MainContainer/MapListContainer/MapList
+@onready var map_preview_container: Control = $VBoxContainer/MainContainer/MapPreviewContainer
+@onready var map_name_label: Label = $VBoxContainer/MainContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer/MapNameLabel
+@onready var map_description_label: Label = $VBoxContainer/MainContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer/MapDescriptionLabel
+@onready var map_details_label: Label = $VBoxContainer/MainContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer/MapDetailsLabel
 @onready var select_button: Button = $VBoxContainer/ButtonContainer/SelectButton
 @onready var back_button: Button = $VBoxContainer/ButtonContainer/BackButton
 @onready var refresh_button: Button = $VBoxContainer/ButtonContainer/RefreshButton
@@ -24,6 +24,7 @@ var map_resources: Array[MapResource] = []
 
 func _ready() -> void:
 	print("MapSelection: Initializing map selection UI")
+	theme = MenuTheme.build()  # dark Legends-style menu look
 	
 	# Connect signals
 	if map_list:
@@ -39,9 +40,47 @@ func _ready() -> void:
 	
 	if refresh_button:
 		refresh_button.pressed.connect(_on_refresh_button_pressed)
-	
+
+	# AI difficulty picker (single-player). Built in code so it slots into the
+	# existing layout without a .tscn edit; the UI restyle will formalize it.
+	_setup_difficulty_picker()
+
 	# Load available maps
 	_load_available_maps()
+
+var _difficulty_option: OptionButton
+
+func _setup_difficulty_picker() -> void:
+	"""Insert an 'Enemy AI' difficulty dropdown above the button row."""
+	var vbox := get_node_or_null("VBoxContainer")
+	if vbox == null:
+		return
+
+	var row := HBoxContainer.new()
+	row.name = "DifficultyRow"
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+
+	var label := Label.new()
+	label.text = "Enemy AI"
+	row.add_child(label)
+
+	_difficulty_option = OptionButton.new()
+	for i in range(4):  # BotController.Difficulty: EASY..BRUTAL
+		_difficulty_option.add_item(BotController.difficulty_name(i), i)
+	_difficulty_option.select(clampi(GameSettings.ai_difficulty, 0, 3))
+	_difficulty_option.item_selected.connect(_on_difficulty_selected)
+	row.add_child(_difficulty_option)
+
+	vbox.add_child(row)
+	# Sit the picker just above the Select/Back button row.
+	var button_row := get_node_or_null("VBoxContainer/ButtonContainer")
+	if button_row != null:
+		vbox.move_child(row, button_row.get_index())
+
+func _on_difficulty_selected(index: int) -> void:
+	"""Store the chosen AI difficulty for the game to read."""
+	GameSettings.set_ai_difficulty(_difficulty_option.get_item_id(index))
 
 func _load_available_maps() -> void:
 	"""Load all available map files"""
@@ -53,26 +92,31 @@ func _load_available_maps() -> void:
 	if map_list:
 		map_list.clear()
 	
-	# Get available map files
-	available_maps = MapLoader.get_available_maps()
-	
+	# Get available map files. Drafts (Inactive) ARE included here: this is the
+	# local / single-player picker, and you must be able to play-test a map you just
+	# built. Network setup keeps its own draft-free list (see NetworkMultiplayerSetup).
+	available_maps = MapLoader.get_available_maps(true)
+
 	# If no maps exist, create a default one
 	if available_maps.is_empty():
 		print("No maps found, creating default map")
 		_create_default_map()
-		available_maps = MapLoader.get_available_maps()
-	
+		available_maps = MapLoader.get_available_maps(true)
+
 	# Load map resources and populate list
 	for map_path in available_maps:
 		var map_resource = load(map_path) as MapResource
 		if map_resource:
 			map_resources.append(map_resource)
-			
+
 			if map_list:
 				var display_name = map_resource.map_name
 				if display_name.is_empty():
 					display_name = map_path.get_file().get_basename()
-				
+				# Mark drafts so a work-in-progress map is obvious in the list.
+				if not map_resource.is_active():
+					display_name += "  (draft)"
+
 				map_list.add_item(display_name)
 		else:
 			print("Failed to load map: " + map_path)
@@ -154,9 +198,14 @@ func _on_select_button_pressed() -> void:
 	
 	# Store selected map in GameSettings
 	GameSettings.set_selected_map(current_selected_map)
-	
-	# Start the game
-	get_tree().change_scene_to_file("res://game/world/GameWorld.tscn")
+
+	# Pick a squad for this map before the battle starts (Character Select then launches
+	# the GameWorld). Clear any Arena ruleset staged earlier so a map launch can never be
+	# mistaken for an Arena run.
+	var arena := get_node_or_null("/root/ArenaController")
+	if arena != null and arena.has_method("abort_run"):
+		arena.abort_run()
+	get_tree().change_scene_to_file("res://menus/CharacterSelect.tscn")
 
 func _on_back_button_pressed() -> void:
 	"""Handle back button press"""

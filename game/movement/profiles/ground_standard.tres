@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MovementProfile" format=3]
+
+[ext_resource type="Script" path="res://game/movement/MovementProfile.gd" id="1_gnd8s"]
+
+[resource]
+script = ExtResource("1_gnd8s")
+id = &"ground_standard"
+display_name = "Ground Standard"
+kind = 0
+range = 3
+shape = 0

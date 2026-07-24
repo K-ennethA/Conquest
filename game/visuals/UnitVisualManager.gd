@@ -9,25 +9,100 @@ class_name UnitVisualManager
 var _health_bar_scene: PackedScene
 var _unit_health_bars: Dictionary = {}  # Unit -> HealthBar
 
+# --- Team outline (friend/foe silhouette) -----------------------------------
+# Which side an outline is drawn for, from the LOCAL human player's point of view.
+enum OutlineSide { NONE, ALLY, ENEMY }
+
+## Shared, lazily-built outline/wash overlay materials, keyed "<side>_<dimmed>".
+## Built ONCE per combination and reused by every unit and every frame -- nothing
+## here is allocated per-unit or per-frame. Declared before the exports below so a
+## setter firing during scene load always has a valid dictionary to clear.
+var _overlay_materials: Dictionary = {}
+
+## Silhouette colour for units HOSTILE to the local human player (AI-owned, or owned
+## by any player that is not the local one). Red so enemies read instantly.
+@export var enemy_outline_color: Color = Color(1.0, 0.16, 0.12, 1.0):
+	set(value):
+		enemy_outline_color = value
+		_invalidate_overlay_materials()
+
+## Silhouette colour for the local human player's own units. A cool cyan-blue that
+## sits with the PLAYER_1 team tint instead of fighting it.
+@export var ally_outline_color: Color = Color(0.25, 0.72, 1.0, 1.0):
+	set(value):
+		ally_outline_color = value
+		_invalidate_overlay_materials()
+
+## Thickness of the outline shell, in metres of vertex grow (~0.02-0.04 reads well
+## on a 1-cell unit). Larger = chunkier silhouette.
+@export var outline_width: float = 0.03:
+	set(value):
+		outline_width = value
+		_invalidate_overlay_materials()
+
+## Master switch. Off -> no unit gets an outline (the acted-greyscale wash is
+## unaffected either way).
+@export var team_outlines_enabled: bool = true:
+	set(value):
+		team_outlines_enabled = value
+		_invalidate_overlay_materials()
+
+# Shared "spent turn" GREYSCALE wash (Fire Emblem style drained-of-colour). One
+# material is reused across every unit and every frame -- never allocate per unit --
+# and it is applied non-destructively via each MeshInstance3D's `material_overlay`,
+# which composites OVER the model's own materials without replacing them, so clearing
+# it (`material_overlay = null`) restores the original look exactly. It is a STRONG
+# neutral-grey wash (albedo ~0.5,0.5,0.5 at ~0.6 alpha, unshaded, MIX blend): pulling
+# every hue toward the same mid-grey is what reads as "desaturated / spent" rather
+# than a faint darkening. It is paired with a slight per-mesh `transparency` fade
+# (~0.15) so the spent unit also recedes a touch -- grey wash + slight fade together.
+# This bare instance is the one used when a unit gets NO outline; the outlined
+# combinations live in _overlay_materials as their own wash + `next_pass` chains.
+var _dim_material: StandardMaterial3D = null
+
+# How much a spent unit fades via GeometryInstance3D.transparency (0 = opaque,
+# 1 = invisible). Small on purpose: the greyscale wash carries the "spent" read;
+# this just adds a subtle recede. Cleared back to 0.0 when the unit can act again.
+const _DIM_TRANSPARENCY: float = 0.15
+
 func _ready():
 	if not player_materials:
 		player_materials = PlayerMaterials.new()
-	
+
+	_ensure_dim_material()
+
 	# Load health bar scene
 	_health_bar_scene = preload("res://game/visuals/HealthBar.tscn")
 	
 	# Connect to turn system events
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
-	
-	# Connect to game events
-	GameEvents.unit_action_completed.connect(_on_unit_action_completed)
+		# CRITICAL: this manager is created LAZILY by the first unit that spawns
+		# (see unit.gd _find_visual_manager), which routinely happens AFTER the game
+		# has already reached IN_PROGRESS and TurnSystemManager fired its one-shot
+		# `turn_system_activated`. In that (normal) case we missed the signal, so
+		# `_on_turn_system_activated` never runs and we NEVER connect to the live
+		# system's turn_started / turn_ended / unit_action_completed -- meaning the
+		# per-action "spent unit greys out" sweep is never triggered during play.
+		# Wire up the already-active system right now to close that gap.
+		if TurnSystemManager.has_active_turn_system():
+			_on_turn_system_activated(TurnSystemManager.get_active_turn_system())
+
+	# Connect to game events (null-safe: guard the signal exists and isn't already
+	# wired so a minimal/headless scene never crashes on a missing bus).
+	if GameEvents and GameEvents.has_signal("unit_action_completed") \
+			and not GameEvents.unit_action_completed.is_connected(_on_unit_action_completed):
+		GameEvents.unit_action_completed.connect(_on_unit_action_completed)
 
 func setup_unit_visuals(unit: Unit, player_assignment: PlayerMaterials.PlayerTeam) -> void:
 	"""Set up all visual elements for a unit"""
 	_apply_player_material(unit, player_assignment)
 	_setup_unit_type_indicator(unit)
 	_create_health_bar(unit)
+	# Ownership is known (or just changed -- summon / mind control both route through
+	# Unit.set_owner_player -> here), so (re)paint the friend/foe outline. This also
+	# re-applies the spent-turn wash, since the two share one overlay channel.
+	refresh_unit_outline(unit)
 
 func setup_unit_visuals_for_player(unit: Unit, player: Player) -> void:
 	"""Set up all visual elements for a unit using new Player class"""
@@ -98,6 +173,11 @@ func _apply_player_material(unit: Unit, player: PlayerMaterials.PlayerTeam) -> v
 		UnitType.Type.TANK:
 			mesh_instance.scale = Vector3(1.3, 1.1, 1.3)  # Bigger overall
 
+	# A multi-cell unit (e.g. a 2x2 boss) then fills and centers over its whole
+	# footprint. No-op for normal 1x1 units, so the per-type scales above stand.
+	if unit and unit.has_method("apply_footprint_visual"):
+		unit.apply_footprint_visual()
+
 func _setup_unit_type_indicator(unit: Unit) -> void:
 	"""Add visual indicators for unit type"""
 	if not unit.unit_stats or not unit.unit_stats.stats_resource:
@@ -119,21 +199,46 @@ func _create_health_bar(unit: Unit) -> void:
 	if not _health_bar_scene:
 		push_warning("Health bar scene not loaded")
 		return
-	
+
+	# setup_unit_visuals re-runs on every ownership change (summon, mind control), so
+	# never stack a second bar on the same unit -- just refresh the one it already has.
+	if _unit_health_bars.has(unit):
+		var existing = _unit_health_bars[unit]
+		if existing != null and is_instance_valid(existing):
+			_update_health_bar(unit)
+			return
+		_unit_health_bars.erase(unit)
+
 	var health_bar = _health_bar_scene.instantiate()
 	unit.add_child(health_bar)
 	
-	# Position health bar higher to avoid clipping with taller units (Archers are 1.2x height)
-	health_bar.position = Vector3(0, 1.8, 0)  # Higher to clear all unit types
+	# Position health bar higher to avoid clipping with taller units (Archers are 1.2x height).
+	# A multi-cell unit is scaled up by its footprint, so lift the bar to clear the
+	# bigger model and slide it over the center of the covered block. Both offsets
+	# are zero for a normal 1x1 unit, leaving the classic (0, 1.8, 0) placement.
+	var bar_offset: Vector3 = Vector3.ZERO
+	var bar_height: float = 1.8
+	if unit and unit.has_method("get_footprint_offset"):
+		bar_offset = unit.get_footprint_offset()
+	if unit and unit.has_method("get_footprint"):
+		var fp: Vector2i = unit.get_footprint()
+		bar_height += 1.2 * float(maxi(fp.x, fp.y) - 1)
+	health_bar.position = Vector3(bar_offset.x, bar_height, bar_offset.z)
 	
 	# Normal scale for good readability
 	health_bar.scale = Vector3(1.0, 1.0, 1.0)
 	
 	# Store reference
 	_unit_health_bars[unit] = health_bar
-	
+
 	# Initialize health bar
 	_update_health_bar(unit)
+
+	# Bind the bar directly to the unit's HP signal so it self-refreshes on every
+	# damage/heal -- not just on the action-completed sweep. This is the reliable
+	# path; the older visual_manager indirection could silently miss updates.
+	if health_bar.has_method("bind_unit"):
+		health_bar.bind_unit(unit)
 
 func _update_health_bar(unit: Unit) -> void:
 	"""Update health bar display"""
@@ -154,6 +259,31 @@ func _update_health_bar(unit: Unit) -> void:
 func _on_unit_health_changed(unit: Unit, old_health: int, new_health: int) -> void:
 	"""Handle unit health changes"""
 	_update_health_bar(unit)
+
+# --- Incoming-damage preview (overworld AoE) --------------------------------
+
+func preview_damage(previews: Dictionary) -> void:
+	"""Light up each affected unit's world-space bar with the HP a pending move
+	would remove, so an AoE that hits several units shows the damage on ALL of
+	their bars at once (not just the single enemy the forecast card covers).
+	[param previews] maps Unit -> predicted damage (int). Bars not in the map are
+	cleared, so moving the aim off a unit drops its band. Fully null-safe."""
+	for unit in _unit_health_bars:
+		var bar = _unit_health_bars[unit]
+		if bar == null or not is_instance_valid(bar):
+			continue
+		if previews.has(unit):
+			if bar.has_method("show_damage_preview"):
+				bar.show_damage_preview(int(previews[unit]))
+		elif bar.has_method("clear_damage_preview"):
+			bar.clear_damage_preview()
+
+func clear_damage_previews() -> void:
+	"""Drop every bar's incoming-damage band (targeting ended / aim left a cell)."""
+	for unit in _unit_health_bars:
+		var bar = _unit_health_bars[unit]
+		if bar != null and is_instance_valid(bar) and bar.has_method("clear_damage_preview"):
+			bar.clear_damage_preview()
 
 func apply_selection_visual(unit: Unit, selected: bool) -> void:
 	"""Apply or remove selection visual effects"""
@@ -196,49 +326,212 @@ func _restore_unit_material(unit: Unit) -> void:
 		var speed_system = turn_system as SpeedFirstTurnSystem
 		has_acted = unit in speed_system.get_units_that_acted_this_round()
 	
-	# Apply appropriate visual state
-	if has_acted:
-		apply_acted_visual(unit, true)
-	else:
-		var player = _determine_unit_player(unit)
-		_apply_player_material(unit, player)
+	# Apply appropriate visual state. Restore the base player material first (clears
+	# any selection-glow material_override), then re-apply the dim overlay on top for
+	# a spent unit -- the two use independent channels (override vs overlay).
+	var player = _determine_unit_player(unit)
+	_apply_player_material(unit, player)
+	apply_acted_visual(unit, has_acted)
 
 func apply_acted_visual(unit: Unit, has_acted: bool) -> void:
-	"""Apply or remove visual effects for units that have acted"""
-	var mesh_instance = unit.get_node("MeshInstance3D")
-	if not mesh_instance:
+	"""Refresh a unit's non-destructive overlay pass: the spent-turn greyscale wash
+	AND the friend/foe team outline, which share one channel and compose as a chain.
+
+	Non-destructive: we set a SHARED `material_overlay` on every MeshInstance3D under
+	the unit's visible model. `material_overlay` composites over the model's own
+	materials without replacing them, so clearing it (`material_overlay = null`,
+	`transparency = 0.0`) restores the original look exactly -- no material is
+	duplicated, copied, or overwritten, so this never fights UnitAnimator's transient
+	hit/heal `material_override` flashes (a different channel) or the selection glow.
+	Resolves the model the same way UnitAnimator does (CharacterModel glb root, else
+	a placeholder MeshInstance3D, else the first mesh found)."""
+	if not is_instance_valid(unit):
 		return
-	
-	if has_acted:
-		# Gray out the unit by reducing saturation and brightness
-		var player = _determine_unit_player(unit)
-		var base_material = player_materials.get_player_material(player, _get_unit_type(unit))
-		
-		var acted_material = base_material.duplicate()
-		
-		# Reduce albedo brightness and saturation
-		var original_color = acted_material.albedo_color
-		var gray_color = Color(
-			original_color.r * 0.5 + 0.3,  # Mix with gray
-			original_color.g * 0.5 + 0.3,
-			original_color.b * 0.5 + 0.3,
-			original_color.a * 0.7  # Make slightly transparent
-		)
-		acted_material.albedo_color = gray_color
-		
-		# Reduce emission if present
-		if acted_material.emission_enabled:
-			acted_material.emission = acted_material.emission * 0.3
-		
-		# Reduce metallic and increase roughness for duller appearance
-		acted_material.metallic = acted_material.metallic * 0.5
-		acted_material.roughness = min(acted_material.roughness + 0.3, 1.0)
-		
-		mesh_instance.material_override = acted_material
+
+	var model_root: Node = _get_model_root(unit)
+	if model_root == null:
+		return
+
+	# Only living, spent units are greyed; dead units are being removed, and a unit
+	# that can act again must read as fully active / full-colour.
+	var alive: bool = true
+	if unit.has_method("is_alive"):
+		alive = bool(unit.is_alive())
+	var should_dim: bool = has_acted and alive
+	var overlay: Material = _get_overlay_material(_outline_side_for_unit(unit), should_dim)
+	var fade: float = _DIM_TRANSPARENCY if should_dim else 0.0
+
+	var meshes: Array[MeshInstance3D] = []
+	_collect_meshes(model_root, meshes)
+	for mesh in meshes:
+		if is_instance_valid(mesh):
+			mesh.material_overlay = overlay
+			mesh.transparency = fade
+
+## Re-evaluate one unit's overlay (outline + spent wash) from its OWN authoritative
+## state. Called whenever ownership changes -- a summoned or mind-controlled unit
+## swaps sides mid-battle and must flip its outline colour immediately. Null-safe.
+func refresh_unit_outline(unit: Unit) -> void:
+	if not is_instance_valid(unit):
+		return
+	apply_acted_visual(unit, _unit_has_acted(unit))
+
+## The unit's authoritative "already spent its turn" flag, defaulting to false for a
+## stub/mock unit that does not expose it (headless tests).
+func _unit_has_acted(unit: Unit) -> bool:
+	if not is_instance_valid(unit):
+		return false
+	if not ("has_acted_this_turn" in unit):
+		return false
+	return bool(unit.has_acted_this_turn)
+
+# --- Friend / foe ------------------------------------------------------------
+
+## Which outline a unit should wear, from the LOCAL human player's point of view.
+##
+## Friend/foe is decided exactly the way the rest of the game decides who the human
+## may command (see PlayerManager.can_current_player_select_unit): the local human is
+## `GameModeManager.get_local_player_id()` (0 in single-player / hotseat, the real
+## slot in multiplayer), and any unit owned by an `is_ai` player -- or by any other
+## player id -- is hostile and gets the RED outline. A unit with no owner, or one
+## owned by a dormant NEUTRAL faction (jungle-camp style, hostile to nobody until
+## provoked), gets no outline at all so it reads as a third party rather than as
+## either side. Fully null-safe: returns NONE for anything it cannot resolve.
+func _outline_side_for_unit(unit: Unit) -> OutlineSide:
+	if not team_outlines_enabled:
+		return OutlineSide.NONE
+	if not is_instance_valid(unit) or not unit.has_method("get_owner_player"):
+		return OutlineSide.NONE
+
+	var owner_player: Player = unit.get_owner_player()
+	if owner_player == null:
+		return OutlineSide.NONE
+
+	# Neutral camps belong to no side in the read; they are killable by both.
+	if owner_player.is_neutral:
+		return OutlineSide.NONE
+
+	# AI-driven players are always the enemy of the human at the controls.
+	if owner_player.is_ai:
+		return OutlineSide.ENEMY
+
+	var local_id: int = 0
+	if GameModeManager and GameModeManager.has_method("get_local_player_id"):
+		local_id = int(GameModeManager.get_local_player_id())
+	return OutlineSide.ALLY if owner_player.player_id == local_id else OutlineSide.ENEMY
+
+# --- Shared overlay materials ------------------------------------------------
+
+## Drop the cached overlay materials after an inspector tweak and re-apply them to
+## every live unit so the change is visible immediately.
+func _invalidate_overlay_materials() -> void:
+	_overlay_materials.clear()
+	if is_inside_tree():
+		update_all_unit_visuals()
+
+## The single `material_overlay` value for a given side + spent state. Cached, so a
+## given combination is built at most once and then shared by every unit forever.
+##
+## When a unit is spent we chain the two effects instead of picking one: the greyscale
+## wash stays the ROOT material (it must composite directly over the model's surface,
+## which is what reads as "drained"), and the outline hangs off its `next_pass` in a
+## pre-dimmed colour. Together with the per-mesh `transparency` fade the outline recedes
+## along with the rest of the unit, so a spent enemy still reads as "enemy" but clearly
+## as "done". Returns null when there is nothing to draw.
+func _get_overlay_material(side: OutlineSide, dimmed: bool) -> Material:
+	if side == OutlineSide.NONE:
+		return _ensure_dim_material() if dimmed else null
+
+	var key: String = str(int(side)) + "_" + str(dimmed)
+	if _overlay_materials.has(key):
+		return _overlay_materials[key]
+
+	var color: Color = enemy_outline_color if side == OutlineSide.ENEMY else ally_outline_color
+	var root: Material
+	if dimmed:
+		# Wash first (over the real surface), pre-dimmed outline hung off it.
+		var wash: StandardMaterial3D = _make_dim_material()
+		wash.next_pass = _make_outline_material(color.darkened(0.45))
+		root = wash
 	else:
-		# Restore original material
-		var player = _determine_unit_player(unit)
-		_apply_player_material(unit, player)
+		root = _make_outline_material(color)
+
+	_overlay_materials[key] = root
+	return root
+
+## Build one outline shell material: an unshaded, grown, front-culled second render of
+## the same geometry. Only the back faces survive the cull and only the grown sliver
+## that pokes past the silhouette survives the depth test, which is what leaves a clean
+## coloured rim around the unit without touching its real materials.
+func _make_outline_material(color: Color) -> StandardMaterial3D:
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = color
+	mat.cull_mode = BaseMaterial3D.CULL_FRONT
+	mat.grow = true
+	mat.grow_amount = maxf(0.0, outline_width)
+	# Depth test ON: the shell must be hidden by the model itself (and by anything in
+	# front of it) so only the rim shows -- an x-ray outline would read as a highlight.
+	mat.no_depth_test = false
+	return mat
+
+## Build (once) and return the shared greyscale wash material used on its own -- i.e.
+## for a spent unit that gets no outline. Lazily created so it is always available even
+## if apply_acted_visual runs before _ready.
+func _ensure_dim_material() -> StandardMaterial3D:
+	if _dim_material == null:
+		_dim_material = _make_dim_material()
+	return _dim_material
+
+## Construct a fresh spent-turn greyscale wash. Kept as a builder (rather than only a
+## singleton) because the outline variants need their own instance to hang a `next_pass`
+## on -- mutating the shared one would leak an enemy's red rim onto every spent unit.
+func _make_dim_material() -> StandardMaterial3D:
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
+	# Unshaded so the wash is a consistent flat grey regardless of scene
+	# lighting -- every hue underneath gets pulled toward the same mid-grey,
+	# reading as "desaturated / drained of colour / spent" everywhere.
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# Strong, slightly-dark neutral grey at ~0.72 alpha: heavy enough that the
+	# model's own colours are unmistakably washed toward a drained mid-grey and
+	# clearly read as "spent" at a glance, not merely tinted or faintly darkened.
+	mat.albedo_color = Color(0.42, 0.42, 0.44, 0.72)
+	return mat
+
+## Resolve a unit's visible model root, mirroring UnitAnimator._get_anim_root:
+## prefer the "CharacterModel" glb root, else the placeholder "MeshInstance3D",
+## else the first MeshInstance3D found anywhere below the unit. Null-safe.
+func _get_model_root(unit: Unit) -> Node:
+	if not is_instance_valid(unit):
+		return null
+	var model: Node = unit.get_node_or_null("CharacterModel")
+	if model is Node3D:
+		return model
+	var direct: Node = unit.get_node_or_null("MeshInstance3D")
+	if direct is Node3D:
+		return direct
+	return _find_first_mesh(unit)
+
+## Gather every MeshInstance3D at or below [param node] into [param out].
+func _collect_meshes(node: Node, out: Array[MeshInstance3D]) -> void:
+	if node == null:
+		return
+	if node is MeshInstance3D:
+		out.append(node as MeshInstance3D)
+	for child in node.get_children():
+		_collect_meshes(child, out)
+
+## First MeshInstance3D anywhere below [param node], or null.
+func _find_first_mesh(node: Node) -> MeshInstance3D:
+	for child in node.get_children():
+		if child is MeshInstance3D:
+			return child as MeshInstance3D
+		var found: MeshInstance3D = _find_first_mesh(child)
+		if found != null:
+			return found
+	return null
 
 func _get_unit_type(unit: Unit) -> UnitType.Type:
 	"""Get the unit type for a unit"""
@@ -283,33 +576,37 @@ func _determine_unit_player(unit: Unit) -> PlayerMaterials.PlayerTeam:
 		return PlayerMaterials.PlayerTeam.NEUTRAL
 
 func update_all_unit_visuals() -> void:
-	"""Update visual state of all units based on current turn system"""
-	if not TurnSystemManager.has_active_turn_system():
-		return
-	
-	var turn_system = TurnSystemManager.get_active_turn_system()
-	
+	"""Refresh the acted/spent dim for every unit from its own turn state.
+
+	Driven by the unit's authoritative `has_acted_this_turn` flag rather than a
+	turn-system side list, so a unit un-dims automatically the moment its actions
+	reset (reset_turn_actions() clears the flag, and this runs on turn start)."""
 	# Find all units in the scene
-	var all_units = _find_all_units()
-	
+	var all_units: Array[Unit] = _find_all_units()
+
 	for unit in all_units:
-		var has_acted = false
-		
-		if turn_system is TraditionalTurnSystem:
-			var trad_system = turn_system as TraditionalTurnSystem
-			var acted_units = trad_system.get_units_that_acted()
-			has_acted = unit in acted_units
-		elif turn_system is SpeedFirstTurnSystem:
-			var speed_system = turn_system as SpeedFirstTurnSystem
-			has_acted = unit in speed_system.get_units_that_acted_this_round()
-		
+		if not is_instance_valid(unit):
+			continue
+		var has_acted: bool = bool(unit.has_acted_this_turn)
 		apply_acted_visual(unit, has_acted)
 
 func _find_all_units() -> Array[Unit]:
 	"""Find all units in the current scene"""
 	var units: Array[Unit] = []
-	var scene_root = get_tree().current_scene
-	
+	# Null-safe with PLAIN ifs (not a ternary): during scene teardown / a mid-frame
+	# turn-system deactivation the node can be detached (get_tree() == null) and the scene
+	# can be null. A `tree.current_scene if tree != null else null` guard does NOT work --
+	# GDScript evaluates `tree.current_scene` eagerly there and crashes on null. Guard each
+	# step with its own if/return.
+	if not is_inside_tree():
+		return units
+	var tree = get_tree()
+	if tree == null:
+		return units
+	var scene_root = tree.current_scene
+	if scene_root == null:
+		return units
+
 	# Look for units in Player1 and Player2 nodes
 	var player_nodes = ["Map/Player1", "Map/Player2"]
 	
@@ -323,10 +620,12 @@ func _find_all_units() -> Array[Unit]:
 	return units
 
 func cleanup_unit_visuals(unit: Unit) -> void:
-	"""Clean up visual elements when unit is removed"""
+	"""Clean up visual elements when unit is removed (e.g. on death)."""
 	if _unit_health_bars.has(unit):
 		var health_bar = _unit_health_bars[unit]
-		if health_bar:
+		# The bar is a child of the unit, so freeing the unit frees it too; guard
+		# so we don't queue_free a node that is already gone / already queued.
+		if health_bar and is_instance_valid(health_bar) and not health_bar.is_queued_for_deletion():
 			health_bar.queue_free()
 		_unit_health_bars.erase(unit)
 
@@ -358,7 +657,11 @@ func _on_turn_ended(player: Player) -> void:
 
 func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
 	"""Handle unit action completion from GameEvents"""
-	# Update visuals after a short delay to ensure turn system has processed the action
+	# Dim the acting unit immediately for instant feedback; the unit has already
+	# set has_acted_this_turn in mark_action_completed by the time this fires.
+	if is_instance_valid(unit):
+		apply_acted_visual(unit, bool(unit.has_acted_this_turn))
+	# Then sweep all units after a short delay so any turn-system side effects settle.
 	await get_tree().create_timer(0.1).timeout
 	update_all_unit_visuals()
 
@@ -370,4 +673,3 @@ func _on_turn_system_unit_action(unit: Unit, action_type: String) -> void:
 func refresh_unit_visuals() -> void:
 	"""Manually refresh all unit visuals - useful for testing"""
 	update_all_unit_visuals()
-	print("Unit visuals refreshed")

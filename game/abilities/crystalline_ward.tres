@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AbilityResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_mvefx"]
+[ext_resource type="Script" path="res://game/combat/effects/ShieldEffect.gd" id="2_shield"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="3_abres"]
+[ext_resource type="Script" path="res://game/abilities/UndamagedForTurnsCondition.gd" id="4_undamaged"]
+
+[sub_resource type="Resource" id="Resource_cw_shield"]
+script = ExtResource("2_shield")
+amount = 15
+
+[sub_resource type="Resource" id="Resource_cw_cond"]
+script = ExtResource("4_undamaged")
+turns = 3
+
+[resource]
+script = ExtResource("3_abres")
+id = &"crystalline_ward"
+display_name = "Crystalline Ward"
+description = "Left untouched, Geode's surface slowly grows over. After three turns without taking a hit, it crystallizes a 15 HP shield."
+trigger = 1
+condition = SubResource("Resource_cw_cond")
+effects = Array[ExtResource("1_mvefx")]([SubResource("Resource_cw_shield")])

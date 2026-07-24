@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="Augment" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/arena/Augment.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "paragon"
+display_name = "Paragon"
+description = "A legendary boon to every unit in the squad: +12 Max HP, +6 Attack, +6 Defense, +4 Speed, +1 Movement, +10 Evasion, +10 Crit."
+rarity = 3
+target = 0
+stat_bonuses = {
+"max_health": 12,
+"attack": 6,
+"defense": 6,
+"speed": 4,
+"movement": 1,
+"evasion": 10,
+"crit": 10
+}

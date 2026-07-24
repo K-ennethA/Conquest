@@ -1,23 +1,24 @@
-[gd_scene load_steps=20 format=3]
+[gd_scene load_steps=21 format=3]
 
 [ext_resource type="Script" path="res://tile_objects/units/board.gd" id="1"]
-[ext_resource type="PackedScene" path="res://game/units/scenes/WarriorUnit.tscn" id="2"]
-[ext_resource type="PackedScene" path="res://game/units/scenes/ArcherUnit.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://tile_objects/tiles/tile.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://board/cursor/cursor.tscn" id="5"]
 [ext_resource type="Script" path="res://game/visuals/UnitVisualManager.gd" id="6"]
 [ext_resource type="Script" path="res://game/world/test_gameworld_integration.gd" id="7"]
-[ext_resource type="PackedScene" path="res://game/ui/UnitInfoPanel.tscn" id="8"]
+[ext_resource type="PackedScene" path="res://game/ui/panels/UnitInfoPanel.tscn" id="8"]
 [ext_resource type="Script" path="res://systems/test_player_management.gd" id="9"]
-[ext_resource type="PackedScene" path="res://game/ui/UnitActionsPanel.tscn" id="10"]
+[ext_resource type="PackedScene" path="res://game/ui/panels/UnitActionsPanel.tscn" id="10"]
 [ext_resource type="Script" path="res://systems/test_traditional_turn_system.gd" id="11"]
 [ext_resource type="Script" path="res://game/world/GameWorldManager.gd" id="12"]
 [ext_resource type="Script" path="res://game/visuals/MovementVisualizer.gd" id="13"]
-[ext_resource type="PackedScene" path="res://game/ui/TurnIndicator.tscn" id="14"]
-[ext_resource type="PackedScene" path="res://game/ui/PlayerTurnPanel.tscn" id="15"]
+[ext_resource type="PackedScene" path="res://game/ui/hud/TurnIndicator.tscn" id="14"]
+[ext_resource type="PackedScene" path="res://game/ui/panels/PlayerTurnPanel.tscn" id="15"]
 [ext_resource type="Script" path="res://game/visuals/test_movement_system.gd" id="16"]
-[ext_resource type="PackedScene" path="res://game/ui/GameUILayout.tscn" id="17"]
+[ext_resource type="PackedScene" path="res://game/ui/layout/GameUILayout.tscn" id="17"]
 [ext_resource type="Script" path="res://game/visuals/debug_movement_range.gd" id="18"]
+[ext_resource type="Script" path="res://game/visuals/TargetingVisualizer.gd" id="21_tviz"]
+[ext_resource type="Script" path="res://game/visuals/CameraController.gd" id="22_camctl"]
+[ext_resource type="Script" path="res://game/visuals/HazardVisualizer.gd" id="23_hazviz"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
@@ -41,9 +42,9 @@ script = ExtResource("12")
 environment = SubResource("Environment_1")
 
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(0.965926, -0.109742, 0.234401, -0.0669873, 0.768796, 0.635976, -0.25, -0.630008, 0.735248, 6.06131, 16.6379, 16.8551)
-projection = 1
-size = 20.0
+transform = Transform3D(1, 0, 0, 0, 0.642788, 0.766044, 0, -0.766044, 0.642788, 20, 30, 44)
+fov = 50.0
+script = ExtResource("22_camctl")
 
 [node name="UnitVisualManager" type="Node" parent="."]
 script = ExtResource("6")
@@ -54,42 +55,15 @@ script = ExtResource("13")
 [node name="MapGridVisualizer" type="Node" parent="."]
 script = "res://game/visuals/MapGridVisualizer.gd"
 
-[node name="MovementSystemTest" type="Node" parent="."]
-script = ExtResource("16")
+[node name="TargetingVisualizer" type="Node3D" parent="."]
+script = ExtResource("21_tviz")
 
-[node name="DebugMovementRange" type="Node" parent="."]
-script = ExtResource("18")
-
-[node name="FireEmblemOverlayTest" type="Node" parent="."]
-script = "res://test_fire_emblem_overlay_system.gd"
-
-[node name="OverlayVisibilityTest" type="Node" parent="."]
-script = "res://test_overlay_visibility.gd"
-
-[node name="OverlaySystemDebug" type="Node" parent="."]
-script = "res://debug_overlay_system.gd"
-
-[node name="GameWorldTest" type="Node" parent="."]
-script = ExtResource("7")
-
-[node name="PlayerManagementTest" type="Node" parent="."]
-script = ExtResource("9")
-
-[node name="TurnSystemTest" type="Node" parent="."]
-script = ExtResource("11")
+[node name="HazardVisualizer" type="Node3D" parent="."]
+script = ExtResource("23_hazviz")
 
 [node name="UI" type="CanvasLayer" parent="."]
 
 [node name="GameUILayout" parent="UI" instance=ExtResource("17")]
-
-[node name="GridBorderTest" type="Node" parent="."]
-script = "res://test_grid_border_lines.gd"
-
-[node name="SimpleGridDebug" type="Node" parent="."]
-script = "res://debug_grid_lines_simple.gd"
-
-[node name="MapGridExistenceTest" type="Node" parent="."]
-script = "res://test_mapgrid_existence.gd"
 
 [node name="Map" type="Node3D" parent="."]
 script = ExtResource("1")
@@ -176,22 +150,4 @@ transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 8, 0, 8)
 
 [node name="Player1" type="Node3D" parent="Map"]
 
-[node name="Warrior1" parent="Map/Player1" instance=ExtResource("2")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1.5, 1)
-
-[node name="Warrior2" parent="Map/Player1" instance=ExtResource("2")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 1.5, 1)
-
-[node name="Archer1" parent="Map/Player1" instance=ExtResource("3")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 1.5, 1)
-
 [node name="Player2" type="Node3D" parent="Map"]
-
-[node name="Warrior3" parent="Map/Player2" instance=ExtResource("2")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 1.5, 7)
-
-[node name="Warrior4" parent="Map/Player2" instance=ExtResource("2")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 1.5, 7)
-
-[node name="Archer2" parent="Map/Player2" instance=ExtResource("3")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 1.5, 7)

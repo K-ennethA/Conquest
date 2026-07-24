@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ArenaRuleset" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/arena/ArenaRuleset.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "arena_solo"
+display_name = "Arena"
+player_count = 1
+heal_policy = 0
+win_condition = 0
+total_rounds = 6
+squad_size = 4
+augments_per_draft = 3
+starting_life = 1
+augment_pool_dir = "res://game/arena/augments"
+arena_map_pool = PackedStringArray("res://game/arena/maps/arena_grove.tres", "res://game/arena/maps/arena_hollow.tres")

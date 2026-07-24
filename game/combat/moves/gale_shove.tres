@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_4no61"]
+[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="2_0bkte"]
+[ext_resource type="Script" path="res://game/combat/effects/KnockbackEffect.gd" id="3_bqusg"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="4_phh4w"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="5_jp7tl"]
+
+[sub_resource type="Resource" id="Resource_ovimu"]
+script = ExtResource("2_0bkte")
+power = 10
+scale = 0.5
+
+[sub_resource type="Resource" id="Resource_ahdlm"]
+script = ExtResource("3_bqusg")
+distance = 2
+
+[sub_resource type="Resource" id="Resource_tqc7i"]
+script = ExtResource("5_jp7tl")
+
+[resource]
+script = ExtResource("4_phh4w")
+move_id = &"gale_shove"
+display_name = "Gale Shove"
+description = "Knocks an enemy back two cells for light damage."
+targeting = SubResource("Resource_tqc7i")
+effects = Array[ExtResource("1_4no61")]([SubResource("Resource_ovimu"), SubResource("Resource_ahdlm")])

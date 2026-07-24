@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="TileEffectResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/HealEffect.gd" id="2_heal"]
+[ext_resource type="Script" path="res://game/tiles/effects/TileEffectResource.gd" id="3_tileeffect"]
+
+[sub_resource type="Resource" id="Resource_meadow_heal"]
+script = ExtResource("2_heal")
+amount = 10
+scaling_stat = ""
+scale = 1.0
+
+[resource]
+script = ExtResource("3_tileeffect")
+id = &"sacred_meadow"
+display_name = "Sacred Meadow"
+trigger = 1
+affected_factions = 0
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_meadow_heal")])
+rule_flags = {
+"sanctified": true
+}

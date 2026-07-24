@@ -1,0 +1,16 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://c0foliage00001"]
+
+[ext_resource type="Shader" path="res://tile_objects/tiles/shaders/stylized_foliage.gdshader" id="1_foliage"]
+
+[resource]
+resource_name = "StylizedFoliage"
+render_priority = 0
+shader = ExtResource("1_foliage")
+shader_parameter/leaf_dark = Color(0.07, 0.26, 0.1, 1)
+shader_parameter/leaf_mid = Color(0.16, 0.45, 0.17, 1)
+shader_parameter/leaf_bright = Color(0.42, 0.68, 0.28, 1)
+shader_parameter/wind_speed = 1.3
+shader_parameter/wind_strength = 0.09
+shader_parameter/wind_dir = Vector2(1, 0.4)
+shader_parameter/clump_scale = 6.0
+shader_parameter/pattern_contrast = 1.1

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="Augment" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/arena/Augment.gd" id="1"]
+[ext_resource type="Script" path="res://game/arena/effects/ExtraActionEffect.gd" id="2"]
+
+[sub_resource type="Resource" id="ExtraAction_haste"]
+script = ExtResource("2")
+extra_actions = 1
+
+[resource]
+script = ExtResource("1")
+id = "haste"
+display_name = "Haste"
+description = "Your units can act twice each turn."
+rarity = 3
+target = 0
+stat_bonuses = {}
+effects = Array[Resource]([SubResource("ExtraAction_haste")])

@@ -1,0 +1,30 @@
+# Godot 4+ engine cache — regenerated on open, never commit
+.godot/
+
+# Godot 3.x import cache (harmless if present)
+.import/
+
+# Exports
+export.cfg
+export_presets.cfg
+/build/
+/exports/
+
+# Godot auto-generated translations
+*.translation
+
+# Mono / C# (unused today, safe default)
+.mono/
+data_*/
+mono_crash.*.json
+
+# Claude Code worktrees (agent isolation dirs)
+.claude/worktrees/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*~
+
+# NOTE: *.gd.uid and *.import files ARE intentionally committed —
+# Godot 4.4+ uses .uid files for stable resource references.

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="Augment" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/arena/Augment.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "windrunner"
+display_name = "Windrunner"
+description = "The squad turns swift and slippery: +1 Movement, +4 Speed, +12 Evasion."
+rarity = 2
+target = 0
+stat_bonuses = {
+"movement": 1,
+"speed": 4,
+"evasion": 12
+}

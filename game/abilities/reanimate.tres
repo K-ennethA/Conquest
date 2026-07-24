@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="AbilityResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_mvefx"]
+[ext_resource type="Script" path="res://game/combat/effects/SummonEffect.gd" id="2_summon"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="3_abres"]
+[ext_resource type="Script" path="res://game/abilities/AlwaysCondition.gd" id="4_alwys"]
+
+[sub_resource type="Resource" id="Resource_rn_summon"]
+script = ExtResource("2_summon")
+count = 1
+character_id = &"undead"
+stance = "aggressive"
+
+[sub_resource type="Resource" id="Resource_rn_cond"]
+script = ExtResource("4_alwys")
+
+[resource]
+script = ExtResource("3_abres")
+id = &"reanimate"
+display_name = "Reanimate"
+description = "Death is only a change of allegiance. Each foe Mortis strikes down claws its way back up as an undead thrall, sworn now to the hand that slew it."
+trigger = 7
+condition = SubResource("Resource_rn_cond")
+targets_triggering_unit = true
+effects = Array[ExtResource("1_mvefx")]([SubResource("Resource_rn_summon")])

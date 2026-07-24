@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/eldroot.glb" id="2_model"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Resource" path="res://game/combat/moves/bough_sweep.tres" id="4_bough"]
+[ext_resource type="Resource" path="res://game/combat/moves/heartwood_guard.tres" id="5_guard"]
+[ext_resource type="Resource" path="res://game/combat/moves/timberfall.tres" id="6_timber"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="7_abres"]
+[ext_resource type="Resource" path="res://game/abilities/grovebound.tres" id="8_grovebound"]
+[ext_resource type="Resource" path="res://game/combat/moves/forest_barrage.tres" id="9_barrage"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"eldroot"
+element = &"nature"
+display_name = "Eldroot, the Hollow Crown"
+description = "The oldest thing in the grove, and the reason the rest of it is dying. Eldroot drank the wood hollow to keep its own crown standing, and now it holds four cells of rotting ground like a fortress -- it does not chase, it does not retreat, it simply makes standing near it unsurvivable."
+model_scene = ExtResource("2_model")
+base_health = 400
+base_attack = 24
+base_defense = 30
+base_magic = 14
+base_magic_defense = 22
+base_speed = 5
+base_movement = 2
+is_boss = true
+footprint = Vector2i(2, 2)
+default_ai_stance = "defensive"
+default_aggro_range = 3
+default_leash_radius = 0
+moveset = Array[ExtResource("3_mvres")]([ExtResource("4_bough"), ExtResource("5_guard"), ExtResource("6_timber"), ExtResource("9_barrage")])
+abilities = Array[ExtResource("7_abres")]([ExtResource("8_grovebound")])

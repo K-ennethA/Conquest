@@ -1,0 +1,32 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
+[ext_resource type="Resource" path="res://game/tiles/resources/forest/forest_dirt.tres" id="2_res"]
+[ext_resource type="Script" path="res://tile_objects/tiles/lowpoly/LowPolyTileBuilder.gd" id="3_lp"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_dirt"]
+albedo_color = Color(0.45, 0.34, 0.23, 1)
+roughness = 1.0
+
+[node name="DirtTile" type="Node3D"]
+script = ExtResource("1_tile")
+tile_resource = ExtResource("2_res")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_base")
+material_override = SubResource("StandardMaterial3D_dirt")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+shape = SubResource("BoxShape3D_base")
+
+[node name="LowPoly" type="Node3D" parent="."]
+script = ExtResource("3_lp")
+style = 2

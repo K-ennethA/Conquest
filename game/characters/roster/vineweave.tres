@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/vineweave.glb" id="2_model"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Resource" path="res://game/combat/moves/bramble_cleave.tres" id="4_cleave"]
+[ext_resource type="Resource" path="res://game/combat/moves/thornward.tres" id="5_thornward"]
+[ext_resource type="Resource" path="res://game/combat/moves/splinter_volley.tres" id="6_volley"]
+[ext_resource type="Resource" path="res://game/combat/moves/strangling_roots.tres" id="7_roots"]
+[ext_resource type="Resource" path="res://game/movement/profiles/ground_standard.tres" id="8_mvprof"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="9_abres"]
+[ext_resource type="Resource" path="res://game/abilities/grass_cutter.tres" id="10_grasscutter"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"vineweave"
+element = &"nature"
+display_name = "Vineweave"
+description = "A warrior grown rather than armed. Where hands should be, Vineweave carries a living tangle of vine that answers its will -- braiding into a blade to cleave a line of foes, a lattice shield to turn a blow, a taut bow to loose a barbed shot, or roots that burst the ground and bind an enemy where it stands."
+model_scene = ExtResource("2_model")
+base_health = 108
+base_attack = 27
+base_defense = 15
+base_magic = 8
+base_magic_defense = 11
+base_speed = 12
+base_movement = 5
+attack_range = 2
+movement_profile = ExtResource("8_mvprof")
+model_yaw_deg = 180.0
+moveset = Array[ExtResource("3_mvres")]([ExtResource("4_cleave"), ExtResource("5_thornward"), ExtResource("6_volley"), ExtResource("7_roots")])
+abilities = Array[ExtResource("9_abres")]([ExtResource("10_grasscutter")])

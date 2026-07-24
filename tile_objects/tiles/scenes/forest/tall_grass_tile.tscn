@@ -1,0 +1,29 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
+[ext_resource type="Resource" path="res://game/tiles/resources/forest/tall_grass.tres" id="2_res"]
+[ext_resource type="Material" uid="uid://c0grasstile001" path="res://tile_objects/tiles/materials/stylized_grass_material.tres" id="3_grass"]
+[ext_resource type="Script" path="res://tile_objects/tiles/lowpoly/LowPolyTileBuilder.gd" id="4_lp"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_base"]
+size = Vector3(2, 0.2, 2)
+
+[node name="TallGrassTile" type="Node3D"]
+script = ExtResource("1_tile")
+tile_resource = ExtResource("2_res")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_base")
+material_override = ExtResource("3_grass")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+shape = SubResource("BoxShape3D_base")
+
+[node name="LowPoly" type="Node3D" parent="."]
+script = ExtResource("4_lp")
+style = 1

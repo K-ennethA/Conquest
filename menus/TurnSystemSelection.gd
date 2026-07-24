@@ -18,6 +18,7 @@ var turn_system_descriptions = {
 var selected_turn_system: TurnSystemBase.TurnSystemType = TurnSystemBase.TurnSystemType.TRADITIONAL
 
 func _ready() -> void:
+	theme = MenuTheme.build()  # dark Legends-style menu look
 	# Connect button signals
 	if traditional_button:
 		traditional_button.pressed.connect(_on_traditional_pressed)
@@ -88,9 +89,11 @@ func _start_game_with_turn_system() -> void:
 	"""Start the game with the selected turn system"""
 	print("Starting game with turn system: " + TurnSystemBase.TurnSystemType.keys()[selected_turn_system])
 	
-	# Store the selected turn system for the game to use
+	# Store the selected turn system for the game to use.
+	# This screen is only reached from Single Player, so keep single-player mode
+	# (set by the main menu) rather than forcing VERSUS.
 	GameSettings.selected_turn_system = selected_turn_system
-	GameSettings.game_mode = GameSettings.GameMode.VERSUS
+	GameSettings.game_mode = GameSettings.GameMode.SINGLE_PLAYER
 	
 	# Go to map selection instead of directly to game
 	get_tree().change_scene_to_file("res://menus/MapSelection.tscn")

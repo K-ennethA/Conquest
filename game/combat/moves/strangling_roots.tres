@@ -1,0 +1,44 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="2_dmgef"]
+[ext_resource type="Script" path="res://game/combat/effects/ApplyStatusEffect.gd" id="3_applystatus"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="4_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="5_targp"]
+[ext_resource type="Resource" path="res://game/combat/status/ensnared.tres" id="6_ensnared"]
+
+[sub_resource type="Resource" id="Resource_sr_dmg"]
+script = ExtResource("2_dmgef")
+power = 26
+scaling_stat = "attack"
+scale = 0.8
+category = 0
+
+[sub_resource type="Resource" id="Resource_sr_root"]
+script = ExtResource("3_applystatus")
+condition = ExtResource("6_ensnared")
+chance = 1.0
+
+[sub_resource type="Resource" id="Resource_sr_tgt"]
+script = ExtResource("5_targp")
+target_kind = 2
+min_range = 2
+max_range = 3
+area_shape = 3
+area_size = 1
+affects_caster_tile = false
+
+[resource]
+script = ExtResource("4_mvres")
+move_id = &"strangling_roots"
+display_name = "Strangling Roots"
+description = "Damages a small area at range; immobilizes everyone hit for 1 turn."
+category = 0
+element = &"nature"
+energy_cost = 0
+max_uses = -1
+cooldown = 4
+accuracy = 1.0
+crit_chance = 0.0
+targeting = SubResource("Resource_sr_tgt")
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_sr_dmg"), SubResource("Resource_sr_root")])

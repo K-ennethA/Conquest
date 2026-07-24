@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="AbilityResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_mvefx"]
+[ext_resource type="Script" path="res://game/combat/effects/ApplyStatusEffect.gd" id="2_applystatus"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="3_abres"]
+[ext_resource type="Script" path="res://game/abilities/AlwaysCondition.gd" id="4_alwys"]
+[ext_resource type="Resource" path="res://game/combat/status/reprisal_charge.tres" id="5_charge"]
+
+[sub_resource type="Resource" id="Resource_rp_apply"]
+script = ExtResource("2_applystatus")
+condition = ExtResource("5_charge")
+chance = 1.0
+to_caster = false
+
+[sub_resource type="Resource" id="Resource_rp_cond"]
+script = ExtResource("4_alwys")
+
+[resource]
+script = ExtResource("3_abres")
+id = &"reprisal"
+display_name = "Reprisal"
+description = "Every blow Geode weathers is remembered in its crystal. Each hit taken stores a reprisal charge to be paid back later."
+trigger = 6
+condition = SubResource("Resource_rp_cond")
+effects = Array[ExtResource("1_mvefx")]([SubResource("Resource_rp_apply")])

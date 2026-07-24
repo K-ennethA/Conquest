@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="TileResource" format=3 uid="uid://doye3niajk4fy"]
+
+[ext_resource type="Script" uid="uid://t8b7cimcr6bw" path="res://game/tiles/resources/TileResource.gd" id="1_vbfya"]
+
+[resource]
+resource_name = "TileResource"
+script = ExtResource("1_vbfya")
+id = &"grass_plains"
+tile_name = "Grass Plains"
+description = "Standard grassy terrain that's easy to traverse. No special effects."
+material_style = 1
+base_color = Color(0.4, 0.8, 0.3, 1)
+model_path = "res://tile_objects/tiles/scenes/forest/grass_tile.tscn"
+special_properties = Array[String](["forest"])

@@ -281,8 +281,8 @@ func _get_next_sequence_id() -> int:
 # Network event handlers
 func _on_network_message_received(sender_id: int, message: Dictionary) -> void:
 	"""Handle network messages"""
-	# Ensure sender_id is an int (defensive programming)
-	var sender_id_int = int(sender_id) if sender_id is String else sender_id
+	# sender_id is already typed int; keep a local alias for readability.
+	var sender_id_int := sender_id
 	
 	match message.get("type", ""):
 		"game_action":

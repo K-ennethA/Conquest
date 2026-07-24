@@ -8,10 +8,23 @@ class_name Tile
 @export var base_movement_cost: int = 1
 @export var is_passable_base: bool = true
 
+## Optional data-driven configuration for this tile. When assigned (via the
+## inspector, or at runtime through [method set_tile_resource]) its visuals /
+## material and movement / passability fields drive the tile, so the same live
+## scene can represent any authored terrain. Null falls back to the built-in
+## per-[member tile_type] defaults, keeping the legacy behaviour intact.
+##
+## NOTE: this is a plain export (no property setter) on purpose -- bind it at
+## runtime via [method set_tile_resource] so the sync/visual pass runs; an
+## inspector-authored value is applied once in [method _ready].
+@export var tile_resource: TileResource = null
+
 # Visual components
 @onready var mesh_instance: MeshInstance3D = $MeshInstance3D
-var base_material: StandardMaterial3D
-var current_material: StandardMaterial3D
+# Typed as Material (not StandardMaterial3D) so a TileResource can drive the tile
+# with a ShaderMaterial style (e.g. animated grass) as well as a flat material.
+var base_material: Material
+var current_material: Material
 var highlight_material: StandardMaterial3D
 
 # Effect system integration
@@ -48,6 +61,12 @@ enum HighlightType {
 func _ready() -> void:
 	world_position = global_position
 	_setup_base_materials()
+	# If a TileResource was assigned before we entered the tree (MapLoader sets it
+	# prior to add_child, mirroring how units bind their character) or authored in
+	# the inspector, run the full bind now that the mesh exists so its data and
+	# material override the type-based default.
+	if tile_resource != null:
+		set_tile_resource(tile_resource)
 	_setup_effect_system()
 	_connect_to_effect_manager()
 
@@ -56,41 +75,43 @@ func _setup_base_materials() -> void:
 	if not mesh_instance:
 		return
 	
-	# Create base material based on tile type
-	base_material = StandardMaterial3D.new()
-	
+	# Create base material based on tile type. Built as a local StandardMaterial3D
+	# (base_material is typed Material so it can also hold a ShaderMaterial style).
+	var mat := StandardMaterial3D.new()
+
 	match tile_type:
 		TileType.NORMAL:
-			base_material.albedo_color = Color(0.8, 0.8, 0.8, 1.0)  # Light gray
+			mat.albedo_color = Color(0.8, 0.8, 0.8, 1.0)  # Light gray
 		TileType.DIFFICULT_TERRAIN:
-			base_material.albedo_color = Color(0.6, 0.4, 0.2, 1.0)  # Brown
+			mat.albedo_color = Color(0.6, 0.4, 0.2, 1.0)  # Brown
 		TileType.WATER:
-			base_material.albedo_color = Color(0.2, 0.4, 0.8, 1.0)  # Blue
-			base_material.metallic = 0.8
-			base_material.roughness = 0.1
+			mat.albedo_color = Color(0.2, 0.4, 0.8, 1.0)  # Blue
+			mat.metallic = 0.8
+			mat.roughness = 0.1
 		TileType.WALL:
-			base_material.albedo_color = Color(0.3, 0.3, 0.3, 1.0)  # Dark gray
+			mat.albedo_color = Color(0.3, 0.3, 0.3, 1.0)  # Dark gray
 		TileType.SPECIAL:
-			base_material.albedo_color = Color(0.8, 0.8, 0.2, 1.0)  # Yellow
+			mat.albedo_color = Color(0.8, 0.8, 0.2, 1.0)  # Yellow
 		TileType.LAVA:
-			base_material.albedo_color = Color(1.0, 0.2, 0.0, 1.0)  # Red
-			base_material.emission_enabled = true
-			base_material.emission = Color(1.0, 0.3, 0.0)
+			mat.albedo_color = Color(1.0, 0.2, 0.0, 1.0)  # Red
+			mat.emission_enabled = true
+			mat.emission = Color(1.0, 0.3, 0.0)
 		TileType.ICE:
-			base_material.albedo_color = Color(0.8, 0.9, 1.0, 0.9)  # Light blue
-			base_material.metallic = 0.9
-			base_material.roughness = 0.0
+			mat.albedo_color = Color(0.8, 0.9, 1.0, 0.9)  # Light blue
+			mat.metallic = 0.9
+			mat.roughness = 0.0
 		TileType.SWAMP:
-			base_material.albedo_color = Color(0.3, 0.5, 0.2, 1.0)  # Dark green
+			mat.albedo_color = Color(0.3, 0.5, 0.2, 1.0)  # Dark green
 		TileType.SACRED_GROUND:
-			base_material.albedo_color = Color(1.0, 1.0, 0.9, 1.0)  # Light gold
-			base_material.emission_enabled = true
-			base_material.emission = Color(0.9, 0.9, 0.7)
+			mat.albedo_color = Color(1.0, 1.0, 0.9, 1.0)  # Light gold
+			mat.emission_enabled = true
+			mat.emission = Color(0.9, 0.9, 0.7)
 		TileType.CORRUPTED:
-			base_material.albedo_color = Color(0.4, 0.2, 0.4, 1.0)  # Dark purple
-			base_material.emission_enabled = true
-			base_material.emission = Color(0.3, 0.1, 0.3)
-	
+			mat.albedo_color = Color(0.4, 0.2, 0.4, 1.0)  # Dark purple
+			mat.emission_enabled = true
+			mat.emission = Color(0.3, 0.1, 0.3)
+	base_material = mat
+
 	# Create highlight material (for selection/movement preview)
 	highlight_material = StandardMaterial3D.new()
 	highlight_material.albedo_color = Color(0.2, 0.8, 0.2, 0.7)  # Semi-transparent green
@@ -247,8 +268,82 @@ func is_passable() -> bool:
 	for effect in active_effects:
 		if not effect.is_passable():
 			return false
-	
+
 	return true
+
+# Resource Binding & Data-Driven API
+func set_tile_resource(res: TileResource) -> void:
+	"""Bind a TileResource to this tile, syncing its data fields and visuals.
+
+	Keeps the enum/movement/passability members in sync so the existing tile
+	behaviour (get_movement_cost/is_passable/get_display_info) reflects the
+	resource, then re-applies the resource's material. Safe to call before or
+	after the node enters the tree; the visual is (re)applied in _ready too.
+	"""
+	tile_resource = res
+	if res != null:
+		tile_type = res.tile_type
+		base_movement_cost = res.base_movement_cost
+		is_passable_base = res.is_passable
+	_apply_resource_visual()
+
+func _apply_resource_visual() -> void:
+	"""Rebuild the base material from the bound TileResource and show it.
+
+	Leaves an active effect's material in place (effects visually override the
+	base terrain); when the effect later clears, _update_effect_visuals reverts
+	to this freshly-built base material, so a transformed tile stays correct.
+	"""
+	if not mesh_instance or tile_resource == null:
+		return
+	base_material = tile_resource.create_material()
+	if active_effects.is_empty():
+		current_material = base_material
+		mesh_instance.material_override = current_material
+
+func get_tile_resource() -> TileResource:
+	"""The TileResource currently bound to this tile, or null."""
+	return tile_resource
+
+func get_tile_id() -> StringName:
+	"""Canonical terrain id: the lowercased TileType name (e.g. &\"lava\").
+
+	Derived from tile_type (kept in sync with any bound resource) so it is stable
+	whether the tile is data-driven or type-driven.
+	"""
+	var idx := int(tile_type)
+	var keys := TileType.keys()
+	if idx >= 0 and idx < keys.size():
+		return StringName(String(keys[idx]).to_lower())
+	return &""
+
+func get_tags() -> Array:
+	"""Authored terrain tags (the resource's special_properties), or []."""
+	if tile_resource != null and tile_resource.special_properties != null:
+		return tile_resource.special_properties.duplicate()
+	return []
+
+func get_move_cost() -> int:
+	"""Movement cost to enter this tile (>= 1), from the resource when bound."""
+	if tile_resource != null:
+		return maxi(1, tile_resource.base_movement_cost)
+	return maxi(1, base_movement_cost)
+
+func set_tile_type(new_type) -> void:
+	"""Legacy type setter used by MapLoader for tiles without a TileResource.
+
+	Accepts a TileType enum int or its String name (e.g. \"WATER\"). Rebuilds the
+	type-based base material, but only when no TileResource is driving the tile
+	(a bound resource's visuals take precedence).
+	"""
+	if new_type is String:
+		var idx := TileType.keys().find(String(new_type).to_upper())
+		if idx >= 0:
+			tile_type = idx
+	elif typeof(new_type) == TYPE_INT:
+		tile_type = new_type
+	if tile_resource == null:
+		_setup_base_materials()
 
 func can_unit_stand_here(unit: Unit) -> bool:
 	"""Check if a specific unit can stand on this tile"""
@@ -334,7 +429,14 @@ func _apply_effect_material(effect: TileEffect):
 		return
 	
 	var effect_material = base_material.duplicate()
-	
+
+	# Effect tints assume a StandardMaterial3D. If the base is a shader style
+	# (e.g. animated grass), overlay a fresh tinted StandardMaterial3D instead so
+	# the effect still reads without poking non-existent shader properties.
+	if not (effect_material is StandardMaterial3D):
+		effect_material = StandardMaterial3D.new()
+		effect_material.flags_transparent = true
+
 	match effect.effect_type:
 		TileEffect.EffectType.FIRE_DAMAGE:
 			effect_material.albedo_color = Color(1.0, 0.3, 0.1, 0.8)

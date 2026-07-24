@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AbilityResource" format=3]
+
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="1_abres"]
+[ext_resource type="Script" path="res://game/abilities/AlwaysCondition.gd" id="2_always"]
+
+[sub_resource type="Resource" id="Resource_thornlust_cond"]
+script = ExtResource("2_always")
+
+[resource]
+script = ExtResource("1_abres")
+id = &"thornlust"
+display_name = "Thornlust"
+description = "Petalfang feeds on the panic of something that cannot run. It deals 50% more damage to any enemy whose movement is being restricted."
+trigger = 0
+condition = SubResource("Resource_thornlust_cond")
+rule_modifiers = {
+"damage_vs_restricted": 0.5
+}
+targets_triggering_unit = false
+cooldown = 0
+max_activations = -1

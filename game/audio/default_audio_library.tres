@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="AudioLibrary" load_steps=13 format=3]
+
+[ext_resource type="Script" path="res://game/audio/AudioLibrary.gd" id="1_audiolib"]
+[ext_resource type="AudioStream" path="res://game/audio/sfx/select.wav" id="2_sfx_select"]
+[ext_resource type="AudioStream" path="res://game/audio/sfx/move.wav" id="3_sfx_move"]
+[ext_resource type="AudioStream" path="res://game/audio/sfx/attack.wav" id="4_sfx_attack"]
+[ext_resource type="AudioStream" path="res://game/audio/sfx/hit.wav" id="5_sfx_hit"]
+[ext_resource type="AudioStream" path="res://game/audio/sfx/heal.wav" id="6_sfx_heal"]
+[ext_resource type="AudioStream" path="res://game/audio/sfx/death.wav" id="7_sfx_death"]
+[ext_resource type="AudioStream" path="res://game/audio/sfx/turn_start.wav" id="8_sfx_turn_start"]
+[ext_resource type="AudioStream" path="res://game/audio/sfx/victory.wav" id="9_sfx_victory"]
+[ext_resource type="AudioStream" path="res://game/audio/sfx/defeat.wav" id="10_sfx_defeat"]
+[ext_resource type="AudioStream" path="res://game/audio/sfx/ui_click.wav" id="11_sfx_ui_click"]
+[ext_resource type="AudioStream" path="res://game/audio/music/battle_theme.wav" id="12_music_battle"]
+
+[resource]
+script = ExtResource("1_audiolib")
+sfx_select = ExtResource("2_sfx_select")
+sfx_move = ExtResource("3_sfx_move")
+sfx_attack = ExtResource("4_sfx_attack")
+sfx_hit = ExtResource("5_sfx_hit")
+sfx_heal = ExtResource("6_sfx_heal")
+sfx_death = ExtResource("7_sfx_death")
+sfx_turn_start = ExtResource("8_sfx_turn_start")
+sfx_victory = ExtResource("9_sfx_victory")
+sfx_defeat = ExtResource("10_sfx_defeat")
+sfx_ui_click = ExtResource("11_sfx_ui_click")
+music_battle = ExtResource("12_music_battle")
+sfx_volume_db = 0.0
+music_volume_db = -6.0
+sfx_pitch_variance = 0.05
+metadata/_custom_type_script = "res://game/audio/AudioLibrary.gd"

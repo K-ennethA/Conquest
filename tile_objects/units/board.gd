@@ -39,7 +39,7 @@ func _setup_turn_system() -> void:
 		if PlayerManager.current_game_state == PlayerManager.GameState.SETUP:
 			PlayerManager.start_game()
 	else:
-		print("WARNING: PlayerManager not found - turn system not initialized")
+		push_warning("PlayerManager not found - turn system not initialized")
 
 func initialize_units() -> void:
 	for child in get_children():
@@ -122,8 +122,10 @@ func _move_unit_to_position(unit: Unit, new_position: Vector3) -> void:
 	
 	# Update unit position
 	var new_world_pos = grid.calculate_map_position(new_tile_pos)
-	# Preserve the unit's Y height (units should be at Y=1.5)
-	new_world_pos.y = 1.5
+	# Keep the unit's current Y (set to the tile surface at spawn) instead of forcing
+	# a fixed height -- forcing Y=1.5 here is what re-floated units the moment they
+	# moved. calculate_map_position returns Y=0, so preserve the unit's own height.
+	new_world_pos.y = unit.position.y
 	unit.position = new_world_pos
 	
 	GameEvents.unit_moved.emit(unit, old_tile_pos, new_tile_pos)

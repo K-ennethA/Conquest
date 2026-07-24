@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="TileEffectResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="2_damage"]
+[ext_resource type="Script" path="res://game/combat/effects/ApplyStatusEffect.gd" id="3_applystatus"]
+[ext_resource type="Script" path="res://game/tiles/effects/TileEffectResource.gd" id="4_tileeffect"]
+[ext_resource type="Resource" path="res://game/combat/status/ensnared.tres" id="5_ensnared"]
+
+[sub_resource type="Resource" id="Resource_vinetrap_dmg"]
+script = ExtResource("2_damage")
+power = 18
+scaling_stat = ""
+scale = 1.0
+category = 1
+
+[sub_resource type="Resource" id="Resource_vinetrap_hold"]
+script = ExtResource("3_applystatus")
+condition = ExtResource("5_ensnared")
+
+[resource]
+script = ExtResource("4_tileeffect")
+id = &"vine_trap"
+display_name = "Vine Trap"
+trigger = 0
+affected_factions = 1
+consume_on_trigger = true
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_vinetrap_dmg"), SubResource("Resource_vinetrap_hold")])

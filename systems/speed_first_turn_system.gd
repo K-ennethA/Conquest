@@ -11,6 +11,9 @@ class_name SpeedFirstTurnSystem
 
 var turn_queue: Array[Unit] = []  # Current turn queue for this round
 var current_acting_unit: Unit = null
+## True while a deferred kickoff (start the order once units register post-activation) is
+## already pending, so a batch of same-frame registrations schedules it only once.
+var _kickoff_queued: bool = false
 var units_acted_this_round: Array[Unit] = []
 var round_number: int = 1
 
@@ -25,72 +28,94 @@ func _init() -> void:
 # Abstract method implementations
 func start_turn_system() -> void:
 	"""Initialize and start the speed first turn system"""
-	print("Speed First Turn System: Starting...")
-	
-	if registered_units.is_empty():
-		print("Cannot start turn system: No units registered")
-		return
-	
 	is_active = true
 	current_turn = 1
 	round_number = 1
 	is_turn_in_progress = false
 	units_acted_this_round.clear()
-	
+
 	# Initialize BattleEffectsManager for this battle
 	if BattleEffectsManager:
 		BattleEffectsManager.start_battle()
-	
+
 	# Calculate initial turn queue
 	_calculate_turn_queue()
-	
-	# Start with first unit in queue
+
+	# Start with first unit in queue.
+	#
+	# An EMPTY queue here used to bail out permanently, leaving current_acting_unit null
+	# forever -- and because THIS system derives the current player from the acting unit
+	# (unlike Traditional, whose current player is player-based), that made every unit
+	# selectable but uncommandable for the rest of the battle. Arena hit it every time:
+	# a round's actors are spawned around activation, so the system could be started
+	# before any of them had registered. Now we stay ACTIVE with nothing acting and let
+	# the first registration kick the order off (see register_unit / _kickoff_if_idle).
 	if not turn_queue.is_empty():
 		_start_unit_turn(turn_queue[0])
-	else:
-		print("No units in turn queue - cannot start")
+		_print_turn_queue()
+
+## Units can register AFTER the system starts -- an Arena round spawns its actors around
+## activation, and summons arrive mid-battle. If nothing is acting yet, the newcomer must
+## kick the order off, or the battle sits idle with no current acting unit (and therefore
+## no current player, so nothing can be commanded).
+##
+## The kickoff is DEFERRED so a whole batch of units registering in the same frame is in
+## the queue before it is sorted -- starting on the literal first registration would lock
+## in a one-unit turn order and drop everyone spawned immediately after.
+func register_unit(unit: Unit) -> void:
+	super.register_unit(unit)
+	if not is_active or current_acting_unit != null or _kickoff_queued:
 		return
-	
-	print("Speed First Turn System started with " + str(turn_queue.size()) + " units")
+	_kickoff_queued = true
+	call_deferred("_kickoff_if_idle")
+
+
+func _kickoff_if_idle() -> void:
+	_kickoff_queued = false
+	# Re-check: the system may have been ended, or something may have started a turn in
+	# the meantime (this is the whole reason it is deferred).
+	if not is_active or current_acting_unit != null:
+		return
+	_calculate_turn_queue()
+	if turn_queue.is_empty():
+		return
+	_start_unit_turn(turn_queue[0])
 	_print_turn_queue()
+
 
 func end_turn_system() -> void:
 	"""Clean up and end the speed first turn system"""
 	if current_acting_unit and is_turn_in_progress:
 		_end_unit_turn(current_acting_unit)
-	
+
 	# End battle in BattleEffectsManager (clears all battle-scoped effects)
 	if BattleEffectsManager:
 		BattleEffectsManager.end_battle()
-	
+
 	is_active = false
 	is_turn_in_progress = false
 	current_acting_unit = null
 	turn_queue.clear()
 	units_acted_this_round.clear()
 	round_number = 1
-	
-	print("Speed First Turn System ended - all battle modifiers cleared")
 
 
 func reset_battle_state() -> void:
 	"""Reset all battle-specific state (call when starting new battle)"""
 	if BattleEffectsManager:
 		BattleEffectsManager.reset_battle_state()
-	
+
 	units_acted_this_round.clear()
 	turn_queue.clear()
 	round_number = 1
 	current_acting_unit = null
 	is_turn_in_progress = false
-	
-	print("Speed First Turn System: Battle state reset - ready for new battle")
 
 func advance_turn() -> void:
 	"""Advance to the next unit's turn"""
 	if not is_active or not current_acting_unit:
 		return
-	
+
 	_end_unit_turn(current_acting_unit)
 	_advance_to_next_unit()
 
@@ -98,7 +123,20 @@ func can_unit_act(unit: Unit) -> bool:
 	"""Check if a unit can act in the current turn"""
 	if not is_active or not is_turn_in_progress:
 		return false
-	
+
+	# A stunned unit forfeits this turn. It deliberately stays IN the turn queue and
+	# still has _start_unit_turn() run for it -- that is what ticks its statuses and
+	# expires the stun. It just cannot do anything while its turn is up; the human
+	# ends it with the End Turn button (can_end_turn_manually is independent of this)
+	# and BotTurnDriver advances past it automatically.
+	if is_turn_skipped(unit):
+		return false
+
+	# A CONTROLLED unit is barred from the player exactly like a stun; the turn system
+	# force-drives it against its own side instead (see _drive_controlled_units).
+	if is_turn_forced_control(unit):
+		return false
+
 	# Only the current acting unit can act
 	return unit == current_acting_unit
 
@@ -106,12 +144,12 @@ func get_current_active_player() -> Player:
 	"""Get the player who owns the currently acting unit"""
 	if not current_acting_unit:
 		return null
-	
+
 	# Find which player owns the current unit
 	for player in registered_players:
 		if player.owns_unit(current_acting_unit):
 			return player
-	
+
 	return null
 
 func get_turn_order() -> Array:
@@ -122,23 +160,20 @@ func get_turn_order() -> Array:
 func _calculate_turn_queue() -> void:
 	"""Calculate turn queue based on current unit speeds (including modifiers)"""
 	turn_queue.clear()
-	
+
 	# Get all active units that haven't acted this round
 	var available_units: Array[Unit] = []
 	for unit in registered_units:
 		if _is_unit_active(unit) and unit not in units_acted_this_round:
 			available_units.append(unit)
-	
+
 	# Sort by current speed (highest first)
 	available_units.sort_custom(_compare_unit_current_speed)
-	
+
 	turn_queue = available_units
-	
-	print("Turn queue calculated: " + str(turn_queue.size()) + " units")
 
 func _print_turn_queue() -> void:
 	"""Print current turn queue for debugging"""
-	print("Current turn queue:")
 	for i in range(turn_queue.size()):
 		var unit = turn_queue[i]
 		var base_speed = unit.get_stat("speed") if unit.has_method("get_stat") else 0
@@ -146,22 +181,21 @@ func _print_turn_queue() -> void:
 		var speed_info = str(current_speed)
 		if current_speed != base_speed:
 			speed_info += " (base: " + str(base_speed) + ")"
-		print("  " + str(i + 1) + ". " + unit.get_display_name() + " (Speed: " + speed_info + ")")
 
 func _compare_unit_current_speed(unit_a: Unit, unit_b: Unit) -> bool:
 	"""Compare two units by current speed for sorting (higher speed first)"""
 	var speed_a = get_unit_current_speed(unit_a)
 	var speed_b = get_unit_current_speed(unit_b)
-	
+
 	# If speeds are equal, use unit name for consistent ordering
 	if speed_a == speed_b:
 		return unit_a.get_display_name() < unit_b.get_display_name()
-	
+
 	return speed_a > speed_b
 
 func get_unit_current_speed(unit: Unit) -> int:
 	"""Get unit's current speed including all battle-scoped modifiers
-	
+
 	IMPORTANT: This does NOT modify the unit's base stats resource.
 	Battle modifiers are temporary and reset when the battle ends.
 	"""
@@ -178,27 +212,24 @@ func add_speed_modifier(unit: Unit, modifier_name: String, speed_change: int, du
 			BattleEffectsManager.apply_speed_buff(unit, modifier_name, speed_change, duration_rounds, source)
 		else:
 			BattleEffectsManager.apply_speed_debuff(unit, modifier_name, abs(speed_change), duration_rounds, source)
-		
+
 		# Recalculate turn queue if this affects turn order
 		if is_active and not is_turn_in_progress:
 			_calculate_turn_queue()
 			_print_turn_queue()
-	else:
-		print("Warning: BattleEffectsManager not available for speed modifier")
 
 func remove_speed_modifier(unit: Unit, modifier_name: String) -> bool:
 	"""Remove a specific speed modifier from a unit"""
 	if BattleEffectsManager:
 		var result = BattleEffectsManager.remove_speed_effect(unit, modifier_name)
-		
+
 		# Recalculate turn queue if this affects turn order
 		if result and is_active and not is_turn_in_progress:
 			_calculate_turn_queue()
 			_print_turn_queue()
-		
+
 		return result
 	else:
-		print("Warning: BattleEffectsManager not available for speed modifier removal")
 		return false
 
 func get_unit_speed_modifiers(unit: Unit) -> Array:
@@ -211,86 +242,111 @@ func get_unit_speed_modifiers(unit: Unit) -> Array:
 
 func _is_unit_active(unit: Unit) -> bool:
 	"""Check if a unit is active and can participate in turns"""
-	if not unit:
+	# is_instance_valid (not just `if not unit`): a unit freed on death leaves a dangling
+	# reference that is NOT caught by a plain null check, and calling has_method/is_alive on
+	# it crashes ("previously freed"). Treat a freed unit as inactive so it's filtered out
+	# of the queue everywhere this gate is used.
+	if unit == null or not is_instance_valid(unit):
 		return false
-	
+
 	# Unit must be alive/active
 	if unit.has_method("is_alive") and not unit.is_alive():
 		return false
-	
+
 	# Unit must belong to an active player
 	var owner = null
 	for player in registered_players:
 		if player.owns_unit(unit):
 			owner = player
 			break
-	
+
 	if not owner or owner.current_state == Player.PlayerState.ELIMINATED:
 		return false
-	
+
 	return true
 
 func _start_unit_turn(unit: Unit) -> void:
 	"""Start a specific unit's turn"""
 	current_acting_unit = unit
 	is_turn_in_progress = true
-	
+
+	# Reset THIS unit's per-turn action flags as its turn begins. Traditional resets
+	# every one of a player's units at player-turn start (reset_all_unit_actions in
+	# _start_player_turn); Speed First's analog is per-unit, since a unit's "turn" is
+	# the moment it acts. Without this, has_moved_this_turn / has_acted_this_turn are
+	# NEVER cleared during normal round flow, so can_move()/can_act() latch false after
+	# the unit's first move/action -- breaking 1-move-per-turn gating (and the Move /
+	# End-Turn buttons) in Speed First while it works in Traditional. Null-safe.
+	if unit != null and unit.has_method("reset_turn_actions"):
+		unit.reset_turn_actions()
+
+	# Tick this unit's move cooldowns and status conditions as its turn begins
+	# (null-safe for units without characters; idempotent per turn via the
+	# shared base helper).
+	_tick_unit_turn_start(unit)
+
+	# If this unit was hijacked at the top of its turn, force-drive it against its own
+	# side. Deferred so executing a real move (which can end the turn and advance the
+	# queue) runs after this turn-start call unwinds rather than re-entering it.
+	if is_turn_forced_control(unit):
+		call_deferred("_drive_controlled_units", [unit])
+
+
 	# Find the player who owns this unit
 	var owner_player = null
 	for player in registered_players:
 		if player.owns_unit(unit):
 			owner_player = player
 			break
-	
+
 	# Emit turn started signal with the owning player
 	if owner_player:
 		turn_started.emit(owner_player)
-	
+
 	var speed_info = str(get_unit_current_speed(unit))
 	var base_speed = unit.get_stat("speed") if unit.has_method("get_stat") else 0
 	if get_unit_current_speed(unit) != base_speed:
 		speed_info += " (base: " + str(base_speed) + ")"
-	
-	print("Speed First Turn System: " + unit.get_display_name() + "'s turn started (Round " + str(round_number) + ", Speed: " + speed_info + ")")
 
 func _end_unit_turn(unit: Unit) -> void:
 	"""End a specific unit's turn"""
 	if not unit or unit != current_acting_unit:
 		return
-	
+
 	# Mark unit as having acted this round
 	if unit not in units_acted_this_round:
 		units_acted_this_round.append(unit)
-	
+
+	# Fire this unit's ON_TURN_END abilities (null-safe via the shared base helper).
+	_tick_unit_turn_end(unit)
+
 	# Find the player who owns this unit
 	var owner_player = null
 	for player in registered_players:
 		if player.owns_unit(unit):
 			owner_player = player
 			break
-	
+
 	is_turn_in_progress = false
-	
+
 	# Emit turn ended signal with the owning player
 	if owner_player:
 		turn_ended.emit(owner_player)
-	
-	print("Speed First Turn System: " + unit.get_display_name() + "'s turn ended")
 
 func _advance_to_next_unit() -> void:
 	"""Advance to the next unit in the queue"""
 	# Remove current unit from queue since they've acted
 	if current_acting_unit in turn_queue:
 		turn_queue.erase(current_acting_unit)
-	
+
 	# Check if we need to start a new round
 	if turn_queue.is_empty():
 		_start_new_round()
 		return
-	
+
 	# Get next unit from queue (already sorted by speed)
 	var next_unit = turn_queue[0]
-	
+
 	# Verify unit can still act
 	if _is_unit_active(next_unit) and next_unit not in units_acted_this_round:
 		_start_unit_turn(next_unit)
@@ -306,31 +362,29 @@ func _start_new_round() -> void:
 	"""Start a new round - all units can act again"""
 	round_number += 1
 	current_turn += 1  # Keep turn counter for compatibility
-	
+
 	# Update battle effects for new round
 	if BattleEffectsManager:
 		BattleEffectsManager.advance_round(round_number)
-	
+
 	# Clear acted units for new round
 	units_acted_this_round.clear()
-	
+
 	# Recalculate turn queue with current speeds
 	_calculate_turn_queue()
-	
-	print("Speed First Turn System: Round " + str(round_number) + " begins")
+
 	_print_turn_queue()
-	
+
 	# Start with first unit in new queue
 	if not turn_queue.is_empty():
 		_start_unit_turn(turn_queue[0])
 	else:
-		print("Speed First Turn System: No units can act - ending turn system")
 		_handle_no_valid_units()
 
 func _handle_no_valid_units() -> void:
 	"""Handle case where no units can act"""
 	end_turn_system()
-	
+
 	# Notify game that turn system ended due to no valid units
 	if PlayerManager:
 		PlayerManager.end_game()
@@ -340,15 +394,14 @@ func _check_turn_completion() -> void:
 	"""Check if all units have acted this round"""
 	var active_units = 0
 	var acted_units = 0
-	
+
 	for unit in registered_units:
 		if _is_unit_active(unit):
 			active_units += 1
 			if unit in units_acted_this_round:
 				acted_units += 1
-	
+
 	if active_units > 0 and acted_units >= active_units:
-		print("Speed First Turn System: All units have acted this round")
 		all_units_acted.emit()
 		# Note: Don't auto-advance here, let the current unit finish their turn
 
@@ -356,20 +409,14 @@ func _check_turn_completion() -> void:
 func mark_unit_acted(unit: Unit) -> void:
 	"""Mark a unit as having acted and advance turn"""
 	if unit == current_acting_unit:
-		print("Speed First Turn System: Unit " + unit.get_display_name() + " completed their action")
 		advance_turn()
 
 # Manual turn control
 func end_turn_manually() -> bool:
 	"""Manually end the current unit's turn"""
 	if not is_active or not current_acting_unit or not is_turn_in_progress:
-		print("Speed First Turn System: Cannot end turn manually - invalid state")
-		print("  is_active: " + str(is_active))
-		print("  current_acting_unit: " + str(current_acting_unit != null))
-		print("  is_turn_in_progress: " + str(is_turn_in_progress))
 		return false
-	
-	print("Speed First Turn System: " + current_acting_unit.get_display_name() + " ended turn manually")
+
 	advance_turn()
 	return true
 
@@ -381,13 +428,16 @@ func can_end_turn_manually() -> bool:
 func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
 	"""Handle unit action completion"""
 	super._on_unit_action_completed(unit, action_type)
-	
+
 	# Mark unit as having acted and advance turn
 	mark_unit_acted(unit)
 
 # Query methods
 func get_current_acting_unit() -> Unit:
-	"""Get the unit that is currently acting"""
+	"""Get the unit that is currently acting (null if it died/was freed mid-turn, so
+	callers like the TurnQueue never dereference a freed instance)."""
+	if current_acting_unit != null and not is_instance_valid(current_acting_unit):
+		return null
 	return current_acting_unit
 
 func get_units_that_acted_this_round() -> Array[Unit]:
@@ -408,10 +458,10 @@ func get_current_round_progress() -> Dictionary:
 	for unit in registered_units:
 		if _is_unit_active(unit):
 			total_active_units += 1
-	
+
 	var acted_units = units_acted_this_round.size()
 	var remaining_units = turn_queue.size()
-	
+
 	return {
 		"current_unit": current_acting_unit.get_display_name() if current_acting_unit else "None",
 		"current_unit_speed": get_unit_current_speed(current_acting_unit) if current_acting_unit else 0,
@@ -427,7 +477,7 @@ func _get_turn_queue_preview() -> Array[Dictionary]:
 	"""Get preview of upcoming turns for UI display"""
 	var preview: Array[Dictionary] = []
 	var preview_count = min(5, turn_queue.size())  # Show next 5 units
-	
+
 	for i in range(preview_count):
 		var unit = turn_queue[i]
 		preview.append({
@@ -435,7 +485,7 @@ func _get_turn_queue_preview() -> Array[Dictionary]:
 			"speed": get_unit_current_speed(unit),
 			"is_current": unit == current_acting_unit
 		})
-	
+
 	return preview
 
 # Public API for turn manipulation (future-proofing)
@@ -443,48 +493,45 @@ func refresh_unit_turn(unit: Unit) -> bool:
 	"""Allow a unit to act again this round (for special abilities)"""
 	if not is_active or not _is_unit_active(unit):
 		return false
-	
+
 	# Remove unit from acted list if present
 	if unit in units_acted_this_round:
 		units_acted_this_round.erase(unit)
-		print("Unit " + unit.get_display_name() + " turn refreshed - can act again this round")
-		
+
 		# If this unit isn't in the current queue, add them back based on speed
 		if unit not in turn_queue:
 			_insert_unit_into_queue(unit)
-		
+
 		return true
-	
+
 	return false
 
 func handle_unit_turn_refresh(unit: Unit) -> void:
 	"""Handle turn refresh request from BattleEffectsManager"""
 	if refresh_unit_turn(unit):
-		print("Speed First Turn System: Handled turn refresh for " + unit.get_display_name())
+		pass
 
 func _insert_unit_into_queue(unit: Unit) -> void:
 	"""Insert a unit into the turn queue at the correct speed-based position"""
 	if unit in turn_queue:
 		return  # Already in queue
-	
+
 	var unit_speed = get_unit_current_speed(unit)
 	var inserted = false
-	
+
 	# Find correct position based on speed (highest first)
 	for i in range(turn_queue.size()):
 		var queue_unit = turn_queue[i]
 		var queue_speed = get_unit_current_speed(queue_unit)
-		
+
 		if unit_speed > queue_speed or (unit_speed == queue_speed and unit.get_display_name() < queue_unit.get_display_name()):
 			turn_queue.insert(i, unit)
 			inserted = true
 			break
-	
+
 	# If not inserted, add to end
 	if not inserted:
 		turn_queue.append(unit)
-	
-	print("Unit " + unit.get_display_name() + " inserted into turn queue at position with speed " + str(unit_speed))
 
 func can_refresh_unit_turn(unit: Unit) -> bool:
 	"""Check if a unit's turn can be refreshed"""
@@ -528,8 +575,6 @@ func get_unit_speed_info(unit: Unit) -> Dictionary:
 # Reset mechanism for testing
 func reset_turn_system() -> void:
 	"""Reset the turn system to initial state (for testing purposes)"""
-	print("Speed First Turn System: Resetting to initial state...")
-	
 	# Reset all state variables
 	current_turn = 1
 	round_number = 1
@@ -537,35 +582,33 @@ func reset_turn_system() -> void:
 	turn_queue.clear()
 	units_acted_this_round.clear()
 	current_acting_unit = null
-	
+	# Drop per-turn tick / stun-skip bookkeeping: current_turn just rewound to 1, so
+	# a stale entry from the previous battle's turn 1 would read as a live skip.
+	clear_turn_tick_state()
+
 	# Reset BattleEffectsManager
 	if BattleEffectsManager:
 		BattleEffectsManager.start_battle()  # This resets battle state
-	
+
 	# Reset all unit actions
 	reset_all_unit_actions()
-	
+
 	# Recalculate turn queue and start first unit
 	if not registered_units.is_empty():
 		_calculate_turn_queue()
 		if not turn_queue.is_empty():
 			_start_unit_turn(turn_queue[0])
-			print("Speed First Turn System: Reset complete - starting with " + turn_queue[0].get_display_name() + " on Round 1")
-		else:
-			print("Speed First Turn System: Reset complete - no active units")
-	else:
-		print("Speed First Turn System: Reset complete - no units registered")
 
 # Override debug info
 func get_turn_system_info() -> Dictionary:
 	"""Get detailed information about the speed first turn system state"""
 	var base_info = super.get_turn_system_info()
-	
+
 	var active_effects_count = 0
 	if BattleEffectsManager:
 		var effects = BattleEffectsManager.get_all_active_effects()
 		active_effects_count = effects.size()
-	
+
 	var speed_first_info = {
 		"current_acting_unit": current_acting_unit.get_display_name() if current_acting_unit else "None",
 		"round_number": round_number,
@@ -574,7 +617,7 @@ func get_turn_system_info() -> Dictionary:
 		"active_battle_effects": active_effects_count,
 		"round_progress": get_current_round_progress()
 	}
-	
+
 	base_info.merge(speed_first_info)
 	return base_info
 

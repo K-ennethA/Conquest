@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="Augment" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://game/arena/Augment.gd" id="1_aug"]
+[ext_resource type="Script" path="res://game/arena/effects/MoveModEffect.gd" id="2_mm"]
+[ext_resource type="Script" path="res://game/arena/effects/AugmentEffect.gd" id="3_base"]
+
+[sub_resource type="Resource" id="mm"]
+script = ExtResource("2_mm")
+which = 1
+slot = 0
+element = &""
+extra_hits = 0
+bonus_range = 1
+aoe_expand = 1
+cooldown_delta = 0
+max_uses_delta = 0
+
+[resource]
+script = ExtResource("1_aug")
+id = "wide_arc"
+display_name = "Wide Arc"
+description = "Your first attack reaches one cell farther and sweeps a wider area."
+rarity = 1
+target = 1
+stat_bonuses = {}
+effects = Array[ExtResource("3_base")]([SubResource("mm")])

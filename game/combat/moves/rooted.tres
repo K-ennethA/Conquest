@@ -1,0 +1,42 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_mvefx"]
+[ext_resource type="Script" path="res://game/combat/effects/StatModifierEffect.gd" id="2_statm"]
+[ext_resource type="Script" path="res://game/combat/effects/HealEffect.gd" id="3_healf"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="4_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="5_targp"]
+
+[sub_resource type="Resource" id="Resource_rt1df"]
+script = ExtResource("2_statm")
+stat_name = "defense"
+amount = 6
+duration = 3
+
+[sub_resource type="Resource" id="Resource_rt2md"]
+script = ExtResource("2_statm")
+stat_name = "magic_defense"
+amount = 6
+duration = 3
+
+[sub_resource type="Resource" id="Resource_rt3hl"]
+script = ExtResource("3_healf")
+amount = 0
+percent_of_max_health = 0.1
+
+[sub_resource type="Resource" id="Resource_rt4tg"]
+script = ExtResource("5_targp")
+target_kind = 0
+min_range = 0
+max_range = 0
+affects_caster_tile = true
+
+[resource]
+script = ExtResource("4_mvres")
+move_id = &"rooted"
+display_name = "Rooted"
+description = "Raises both defenses for 3 turns and heals 10% of max health."
+category = 1
+element = &"nature"
+cooldown = 3
+targeting = SubResource("Resource_rt4tg")
+effects = Array[ExtResource("1_mvefx")]([SubResource("Resource_rt1df"), SubResource("Resource_rt2md"), SubResource("Resource_rt3hl")])

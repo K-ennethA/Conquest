@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="TileResource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/tiles/resources/TileResource.gd" id="1_tres"]
+[ext_resource type="Resource" path="res://game/tiles/effects/resources/tall_grass.tres" id="2_grass_fx"]
+
+[resource]
+script = ExtResource("1_tres")
+id = &"tall_grass"
+tile_name = "Tall Grass"
+tile_type = 1
+description = "Waist-high grass that swallows a crouching figure. Harder to move through, but much harder to hit anyone standing in it."
+base_movement_cost = 2
+is_passable = true
+blocks_line_of_sight = false
+material_style = 1
+base_color = Color(0.36, 0.58, 0.24, 1)
+emission_enabled = false
+emission_color = Color(0, 0, 0, 1)
+metallic = 0.0
+roughness = 1.0
+texture_path = ""
+model_path = "res://tile_objects/tiles/scenes/forest/tall_grass_tile.tscn"
+has_default_effects = true
+default_effects = [ExtResource("2_grass_fx")]
+provides_cover = true
+cover_bonus = 1
+elevation = 0
+special_properties = Array[String](["forest", "concealment"])
+rarity = "Common"
+generation_weight = 1.0

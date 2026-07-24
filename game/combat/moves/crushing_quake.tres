@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_6wkx4"]
+[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="2_0c1b2"]
+[ext_resource type="Script" path="res://game/combat/effects/KnockbackEffect.gd" id="3_ackgt"]
+[ext_resource type="Script" path="res://game/combat/effects/TileTransformEffect.gd" id="4_4euvx"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="5_7ldny"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="6_uceky"]
+
+[sub_resource type="Resource" id="Resource_phmho"]
+script = ExtResource("2_0c1b2")
+power = 30
+scaling_stat = "magic"
+category = 1
+
+[sub_resource type="Resource" id="Resource_c7yte"]
+script = ExtResource("3_ackgt")
+
+[sub_resource type="Resource" id="Resource_a12vc"]
+script = ExtResource("4_4euvx")
+tile_id = &"rubble"
+
+[sub_resource type="Resource" id="Resource_kann8"]
+script = ExtResource("6_uceky")
+max_range = 2
+area_shape = 3
+area_size = 2
+
+[resource]
+script = ExtResource("5_7ldny")
+move_id = &"crushing_quake"
+display_name = "Crushing Quake"
+description = "Magic damage across a wide area; knocks enemies back and leaves rubble."
+category = 1
+energy_cost = 4
+max_uses = 2
+targeting = SubResource("Resource_kann8")
+effects = Array[ExtResource("1_6wkx4")]([SubResource("Resource_phmho"), SubResource("Resource_c7yte"), SubResource("Resource_a12vc")])

@@ -1,0 +1,19 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://c0grasstile001"]
+
+[ext_resource type="Shader" path="res://tile_objects/tiles/shaders/stylized_grass.gdshader" id="1_grass"]
+
+[resource]
+resource_name = "StylizedGrass"
+render_priority = 0
+shader = ExtResource("1_grass")
+shader_parameter/grass_dark = Color(0.17, 0.4, 0.19, 1)
+shader_parameter/grass_mid = Color(0.29, 0.56, 0.25, 1)
+shader_parameter/grass_bright = Color(0.47, 0.72, 0.34, 1)
+shader_parameter/blade_scale = 3.5
+shader_parameter/tuft_scale = 1.4
+shader_parameter/pattern_contrast = 0.8
+shader_parameter/wind_speed = 0.4
+shader_parameter/wind_strength = 0.14
+shader_parameter/wind_dir = Vector2(1, 0.35)
+shader_parameter/edge_darken = 0.22
+shader_parameter/edge_softness = 0.78

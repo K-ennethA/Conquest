@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/ApplyTileEffect.gd" id="2_applytile"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="4_targp"]
+[ext_resource type="Resource" path="res://game/tiles/effects/resources/vine_trap.tres" id="5_trapeffect"]
+
+[sub_resource type="Resource" id="Resource_vinetrap_place"]
+script = ExtResource("2_applytile")
+effect = ExtResource("5_trapeffect")
+
+[sub_resource type="Resource" id="Resource_vinetrap_tgt"]
+script = ExtResource("4_targp")
+target_kind = 5
+min_range = 1
+max_range = 2
+area_shape = 0
+area_size = 0
+affects_caster_tile = false
+
+[resource]
+script = ExtResource("3_mvres")
+move_id = &"vine_trap"
+display_name = "Vine Trap"
+description = "Traps an empty tile; the first enemy entering is damaged and immobilized."
+category = 1
+element = &"nature"
+energy_cost = 0
+max_uses = -1
+cooldown = 3
+accuracy = 1.0
+crit_chance = 0.0
+targeting = SubResource("Resource_vinetrap_tgt")
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_vinetrap_place")])

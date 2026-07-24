@@ -19,6 +19,9 @@ var dialog_mode: DialogMode
 var item_list: ItemList
 var name_input: LineEdit
 var description_label: Label
+## The map path the user has single-clicked (highlighted). The OK/"Load" button
+## loads THIS, so a single click + Load works -- not only a double-click.
+var _selected_map_path: String = ""
 
 func _init(mode: DialogMode):
 	dialog_mode = mode
@@ -63,9 +66,23 @@ func _setup_load_map_dialog():
 	description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	description_label.custom_minimum_size = Vector2(350, 50)
 	vbox.add_child(description_label)
-	
+
+	# The OK button loads the highlighted map (single click to select, then Load), so
+	# users don't have to discover that only a double-click works. A Cancel button
+	# lets them back out without loading.
+	get_ok_button().text = "Load"
+	add_cancel_button("Cancel")
+	if not confirmed.is_connected(_on_load_confirmed):
+		confirmed.connect(_on_load_confirmed)
+
 	# Load available maps
 	_load_available_maps()
+
+
+func _on_load_confirmed() -> void:
+	"""OK/"Load" pressed: load the highlighted map, if any."""
+	if not _selected_map_path.is_empty():
+		map_selected.emit(_selected_map_path)
 
 func _setup_save_map_dialog():
 	"""Set up dialog for saving maps"""
@@ -145,7 +162,9 @@ func _load_available_maps():
 		return
 	
 	item_list.clear()
-	var available_maps = MapLoader.get_available_maps()
+	# include_drafts: this is the authoring tool, so Inactive work-in-progress maps
+	# must be listed here even though the in-game selection screens hide them.
+	var available_maps = MapLoader.get_available_maps(true)
 	
 	for map_path in available_maps:
 		var map_resource = load(map_path) as MapResource
@@ -180,15 +199,30 @@ func _on_item_selected(index: int):
 	
 	var map_path = item_list.get_item_metadata(index)
 	if map_path:
+		_selected_map_path = str(map_path)
 		var map_resource = load(map_path) as MapResource
 		if map_resource:
-			var info = map_resource.get_display_info()
+			# Read EXPORTED PROPERTIES, never call methods: in the editor a resource
+			# whose script only became @tool after the session started loads as a
+			# PLACEHOLDER instance -- its properties are readable but method calls throw
+			# ("Attempt to call a method on a placeholder instance"). Properties are
+			# placeholder-safe, so this works whether or not the editor has reloaded.
+			var w: int = int(map_resource.width)
+			var h: int = int(map_resource.height)
+			var players := {}
+			var spawns = map_resource.unit_spawns
+			if spawns is Array:
+				for s in spawns:
+					if s is Dictionary:
+						var pid = s.get("player_id", -1)
+						if pid != null and int(pid) >= 0:
+							players[int(pid)] = true
 			var description_text = []
-			description_text.append("Size: " + info.get("size", "Unknown"))
-			description_text.append("Players: " + str(info.get("players", 0)))
-			description_text.append("Difficulty: " + info.get("difficulty", "Normal"))
-			description_text.append("Author: " + info.get("author", "Unknown"))
-			
+			description_text.append("Size: %dx%d" % [w, h])
+			description_text.append("Players: " + str(players.size()))
+			description_text.append("Difficulty: " + str(map_resource.difficulty))
+			description_text.append("Author: " + str(map_resource.author))
+
 			description_label.text = "\n".join(description_text)
 
 func _on_item_activated(index: int):

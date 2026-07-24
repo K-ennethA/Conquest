@@ -21,7 +21,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-AutoClientDetector="*res://AutoClientDetector.gd"
+AutoClientDetector="*res://systems/AutoClientDetector.gd"
 GameEvents="*res://systems/game_events.gd"
 ResourceManager="*res://systems/resource_manager.gd"
 PlayerManager="*res://systems/player_manager.gd"
@@ -30,12 +30,19 @@ GameSettings="*res://systems/game_settings.gd"
 BattleEffectsManager="*res://systems/battle_effects_manager.gd"
 GameModeManager="*res://systems/game_core/GameModeManager.gd"
 MultiplayerLauncher="*res://systems/multiplayer_launcher.gd"
+NetSession="*res://systems/net/NetSession.gd"
+CombatServices="*res://game/combat/CombatServices.gd"
+AudioManager="*res://game/audio/AudioManager.gd"
+UnitAnimator="*res://game/visuals/UnitAnimator.gd"
+ArenaController="*res://game/arena/ArenaController.gd"
 
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/gut/plugin.cfg", "res://addons/unit_creator/plugin.cfg")
+enabled=PackedStringArray("res://addons/augment_creator/plugin.cfg", "res://addons/gut/plugin.cfg", "res://addons/map_creator/plugin.cfg", "res://addons/tile_creator/plugin.cfg", "res://addons/unit_creator/plugin.cfg")

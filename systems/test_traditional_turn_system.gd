@@ -21,7 +21,8 @@ func _ready() -> void:
 	_test_player_turn_management()
 	_test_unit_action_tracking()
 	_test_manual_turn_ending()
-	
+	await _test_auto_advance_when_all_units_acted()
+
 	print("=== Traditional Turn System Test Complete ===")
 
 func _setup_test() -> void:
@@ -211,6 +212,52 @@ func _test_manual_turn_ending() -> void:
 			print("❌ Manual turn ending failed")
 	else:
 		print("❌ Cannot end turn manually")
+
+func _test_auto_advance_when_all_units_acted() -> void:
+	"""Core regression for the reported bug: once EVERY unit of the current player has
+	acted, the turn must auto-shift to the next player (with GameSettings.auto_end_turn
+	on). Marks all of the current player's units acted, then -- because the auto-advance
+	is deferred inside the completion check -- waits a frame and asserts the active
+	player changed."""
+	print("\n--- Test 6: Auto-Advance When All Units Acted ---")
+
+	if not traditional_turn_system.is_active:
+		print("✓ Skipping - Traditional turn system not active")
+		return
+
+	# The auto-end path is gated on this setting; it defaults true.
+	if not (GameSettings and GameSettings.auto_end_turn):
+		print("✓ Skipping - GameSettings.auto_end_turn is off")
+		return
+
+	var starting_player = traditional_turn_system.get_current_active_player()
+	if not starting_player:
+		print("❌ No current player for auto-advance test")
+		return
+
+	# Collect the units this player can still act with, then consume each one.
+	var actable_units: Array = []
+	for unit in test_units:
+		if traditional_turn_system.can_unit_act(unit):
+			actable_units.append(unit)
+
+	if actable_units.is_empty():
+		print("✓ Skipping - current player has no units able to act")
+		return
+
+	print("Marking " + str(actable_units.size()) + " unit(s) acted for " + starting_player.get_display_name())
+	for unit in actable_units:
+		traditional_turn_system.mark_unit_acted(unit)
+
+	# advance_turn is call_deferred inside _check_turn_completion; let it flush.
+	await get_tree().process_frame
+
+	var new_player = traditional_turn_system.get_current_active_player()
+	if new_player and new_player != starting_player:
+		print("✓ Turn auto-advanced to: " + new_player.get_display_name())
+	else:
+		var who = new_player.get_display_name() if new_player else "None"
+		print("❌ Turn did NOT auto-advance (still " + who + ") after all units acted")
 
 # Debug key inputs for testing
 func _input(event: InputEvent) -> void:

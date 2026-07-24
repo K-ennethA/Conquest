@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="AbilityResource" format=3]
+
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="1_abres"]
+[ext_resource type="Script" path="res://game/abilities/AlwaysCondition.gd" id="2_always"]
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="3_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="4_damage"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="5_targp"]
+
+[sub_resource type="Resource" id="Resource_deathbloom_cond"]
+script = ExtResource("2_always")
+
+[sub_resource type="Resource" id="Resource_deathbloom_dmg"]
+script = ExtResource("4_damage")
+power = 18
+scaling_stat = ""
+scale = 1.0
+category = 1
+
+[sub_resource type="Resource" id="Resource_deathbloom_tgt"]
+script = ExtResource("5_targp")
+target_kind = 2
+min_range = 0
+max_range = 0
+area_shape = 3
+area_size = 1
+affects_caster_tile = false
+requires_empty_cell = false
+requires_adjacent_enemy = false
+
+[resource]
+script = ExtResource("1_abres")
+id = &"deathbloom"
+display_name = "Deathbloom"
+description = "Killing a Blightcap is what it was waiting for. The cap ruptures and throws a hot cloud of spores over everything standing next to it."
+trigger = 8
+condition = SubResource("Resource_deathbloom_cond")
+effects = Array[ExtResource("3_moveeffect")]([SubResource("Resource_deathbloom_dmg")])
+targeting = SubResource("Resource_deathbloom_tgt")
+targets_triggering_unit = false
+cooldown = 0
+max_activations = -1

@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="StatusCondition" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/StatModifierEffect.gd" id="2_statmod"]
+[ext_resource type="Script" path="res://game/combat/status/StatusCondition.gd" id="3_status"]
+
+[sub_resource type="Resource" id="Resource_empowered_atk"]
+script = ExtResource("2_statmod")
+stat_name = "attack"
+amount = 8
+duration = 1
+
+[resource]
+script = ExtResource("3_status")
+id = &"empowered"
+display_name = "Empowered"
+duration_turns = 3
+stacking = 0
+max_stacks = -1
+tick_effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_empowered_atk")])
+rule_flags = {}
+damage_taken_scale = 1.0
