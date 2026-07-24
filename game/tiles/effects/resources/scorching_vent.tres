@@ -1,14 +1,13 @@
-[gd_resource type="Resource" script_class="TileEffectResource" format=3]
+[gd_resource type="Resource" script_class="TileEffectResource" format=3 uid="uid://6b4gv2m1ld4m"]
 
-[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
-[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="2_damage"]
-[ext_resource type="Script" path="res://game/tiles/effects/TileEffectResource.gd" id="3_tileeffect"]
+[ext_resource type="Script" uid="uid://mjk7dm1nx1iq" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" uid="uid://d1eyu4mfk0g0w" path="res://game/combat/effects/DamageEffect.gd" id="2_damage"]
+[ext_resource type="Script" uid="uid://fqvia73yafq4" path="res://game/tiles/effects/TileEffectResource.gd" id="3_tileeffect"]
 
 [sub_resource type="Resource" id="Resource_vent_dmg"]
 script = ExtResource("2_damage")
 power = 8
 scaling_stat = ""
-scale = 1.0
 category = 2
 
 [resource]
@@ -16,7 +15,6 @@ script = ExtResource("3_tileeffect")
 id = &"scorching_vent"
 display_name = "Scorching Vent"
 trigger = 1
-affected_factions = 0
 effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_vent_dmg")])
 rule_flags = {
 "scorched": true

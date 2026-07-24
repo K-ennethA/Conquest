@@ -1,8 +1,8 @@
-[gd_resource type="Resource" script_class="TileEffectResource" format=3]
+[gd_resource type="Resource" script_class="TileEffectResource" format=3 uid="uid://bj1jngdggf783"]
 
-[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
-[ext_resource type="Script" path="res://game/combat/effects/StatModifierEffect.gd" id="2_statmod"]
-[ext_resource type="Script" path="res://game/tiles/effects/TileEffectResource.gd" id="3_tileeffect"]
+[ext_resource type="Script" uid="uid://mjk7dm1nx1iq" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" uid="uid://bdyqvaenla2v0" path="res://game/combat/effects/StatModifierEffect.gd" id="2_statmod"]
+[ext_resource type="Script" uid="uid://fqvia73yafq4" path="res://game/tiles/effects/TileEffectResource.gd" id="3_tileeffect"]
 
 [sub_resource type="Resource" id="Resource_ice_evasion"]
 script = ExtResource("2_statmod")
@@ -15,7 +15,6 @@ script = ExtResource("3_tileeffect")
 id = &"slippery_ice"
 display_name = "Slippery Ice"
 trigger = 3
-affected_factions = 0
 effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_ice_evasion")])
 rule_flags = {
 "unstable_footing": true

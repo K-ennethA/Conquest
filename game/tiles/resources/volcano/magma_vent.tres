@@ -1,30 +1,23 @@
-[gd_resource type="Resource" script_class="TileResource" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="TileResource" format=3 uid="uid://d012vxnvq8hx8"]
 
-[ext_resource type="Script" path="res://game/tiles/resources/TileResource.gd" id="1_tres"]
-[ext_resource type="Resource" path="res://game/tiles/effects/resources/scorching_vent.tres" id="2_vent_fx"]
+[ext_resource type="Script" uid="uid://t8b7cimcr6bw" path="res://game/tiles/resources/TileResource.gd" id="1_tres"]
+[ext_resource type="Resource" uid="uid://6b4gv2m1ld4m" path="res://game/tiles/effects/resources/scorching_vent.tres" id="2_vent_fx"]
 
 [resource]
+resource_name = "TileResource"
 script = ExtResource("1_tres")
 id = &"magma_vent"
 tile_name = "Magma Vent"
 tile_type = 4
 description = "Cracked crust over a live heat channel. The fissures glow and breathe - anything that lingers here starts its turn scorched."
-base_movement_cost = 1
-is_passable = true
-blocks_line_of_sight = false
 material_style = 3
 base_color = Color(0.18, 0.11, 0.09, 1)
 emission_enabled = true
 emission_color = Color(0.95, 0.35, 0.06, 1)
-metallic = 0.0
 roughness = 0.85
-texture_path = ""
 model_path = "res://tile_objects/tiles/scenes/volcano/magma_vent_tile.tscn"
 has_default_effects = true
 default_effects = [ExtResource("2_vent_fx")]
-provides_cover = false
-cover_bonus = 0
-elevation = 0
 special_properties = Array[String](["volcano", "hazard", "fire"])
 rarity = "Uncommon"
 generation_weight = 0.5
