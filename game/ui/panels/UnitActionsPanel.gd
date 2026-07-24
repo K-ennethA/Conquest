@@ -1805,7 +1805,7 @@ func handle_move_target_selected(grid_pos: Vector3) -> void:
 		return  # stay in targeting mode
 
 	# Preview the full area footprint this aim would affect.
-	var area_cells := move.targeting.resolve_cells(origin, aim)
+	var area_cells := move.targeting_for(selected_unit).resolve_cells(origin, aim)
 	GameEvents.aoe_preview_calculated.emit(_cells_to_grid_vec3(area_cells))
 
 	# Unit-target moves (ENEMY / ALLY / ANY_UNIT) require an eligible occupant at
@@ -2004,7 +2004,7 @@ func _refresh_overworld_damage_preview(grid_pos: Vector3) -> void:
 
 	# Every cell this aim's pattern would strike, then each enemy standing on one.
 	var previews: Dictionary = {}
-	for cell in move.targeting.resolve_cells(origin, aim):
+	for cell in move.targeting_for(selected_unit).resolve_cells(origin, aim):
 		for occupant in board.units_at(cell):
 			if occupant == null or occupant == selected_unit or previews.has(occupant):
 				continue
@@ -2070,14 +2070,15 @@ func _cells_to_grid_vec3(cells: Array[Vector2i]) -> Array:
 
 func _move_requires_unit_target(move: MoveResource) -> bool:
 	"""True when the move must be aimed at an occupied cell (unit-target kinds)."""
-	if move == null or move.targeting == null:
+	if move == null or move.targeting_for(selected_unit) == null:
 		return false
+	var pattern := move.targeting_for(selected_unit)
 	# A pattern that demands an EMPTY landing cell (a leap/dash) is aimed at GROUND,
 	# not at a unit -- its TargetKind only picks out which units the effects then
 	# hit. Gating it on an occupant would make it impossible to aim.
-	if move.targeting.requires_empty_cell:
+	if pattern.requires_empty_cell:
 		return false
-	match move.targeting.target_kind:
+	match pattern.target_kind:
 		CombatTypes.TargetKind.ENEMY, CombatTypes.TargetKind.ALLY, CombatTypes.TargetKind.ANY_UNIT:
 			return true
 		_:
@@ -2090,7 +2091,7 @@ func _has_eligible_unit_at(board, move: MoveResource, aim: Vector2i) -> bool:
 	if occupants.is_empty():
 		return false
 
-	var kind = move.targeting.target_kind
+	var kind = move.targeting_for(selected_unit).target_kind
 	for occupant in occupants:
 		if occupant == null:
 			continue
@@ -2100,7 +2101,7 @@ func _has_eligible_unit_at(board, move: MoveResource, aim: Vector2i) -> bool:
 					return true
 			CombatTypes.TargetKind.ALLY:
 				if occupant == selected_unit:
-					if move.targeting.affects_caster_tile:
+					if move.targeting_for(selected_unit).affects_caster_tile:
 						return true
 				elif board.are_allies(selected_unit, occupant):
 					return true

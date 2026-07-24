@@ -25,7 +25,7 @@ const GRID_COLUMNS := 3
 
 # Characters excluded from the pickable roster regardless of is_boss: the neutral
 # beast and the summon-only undead body are never player squad picks.
-const EXCLUDED_IDS := ["feral_thornbeast", "undead"]
+const EXCLUDED_IDS := ["undead"]
 
 # --- Warm palette (ConquestTheme with hardcoded fallbacks so a missing constant
 # can never crash the screen; mirrors ArenaSetupScreen). ----------------------

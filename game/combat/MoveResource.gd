@@ -36,9 +36,75 @@ class_name MoveResource
 @export var targeting: TargetingPattern
 @export var effects: Array[MoveEffect] = []
 
+@export_group("Alternate mode")
+## OPTIONAL SECOND MODE. While the caster holds [member alt_requires_status] -- and does
+## NOT hold [member alt_blocked_by_status] -- this move swaps to [member alt_targeting] +
+## [member alt_effects]. One move that changes WHAT IT TARGETS and WHAT IT DOES based on
+## the caster's own state, instead of two moves eating two slots.
+##
+## Geode's Prism Bulwark is the case this exists for: normally a SELF-cast guard, but once
+## it has absorbed hits and the guard has dropped it becomes an ENEMY-targeted release of
+## the stored retaliation -- and reverts to the guard on its own when the charges expire.
+##
+## Leave [member alt_requires_status] empty (the default) and a move has exactly ONE mode,
+## so every move authored before this resolves exactly as it always did.
+@export var alt_requires_status: StringName = &""
+@export var alt_blocked_by_status: StringName = &""
+## Name shown while in alt mode (empty = keep [member display_name]).
+@export var alt_display_name: String = ""
+@export var alt_targeting: TargetingPattern
+@export var alt_effects: Array[MoveEffect] = []
+
 
 func is_valid() -> bool:
 	return targeting != null and not effects.is_empty()
+
+
+## True while [param caster]'s current state puts this move in its ALTERNATE mode.
+## Always false for a single-mode move, a null caster, or an unauthored alt pattern.
+func is_alt_mode(caster = null) -> bool:
+	if alt_requires_status == &"" or alt_targeting == null:
+		return false
+	if not _caster_has_status(caster, alt_requires_status):
+		return false
+	if alt_blocked_by_status != &"" and _caster_has_status(caster, alt_blocked_by_status):
+		return false
+	return true
+
+
+## The pattern this move targets with FOR [param caster]. Every range / legality / preview
+## question routes through here, so the UI, the AI and the executor all agree on the mode.
+func targeting_for(caster = null) -> TargetingPattern:
+	if is_alt_mode(caster):
+		return alt_targeting
+	return targeting
+
+
+## The effects this move resolves FOR [param caster].
+func effects_for(caster = null) -> Array:
+	if is_alt_mode(caster):
+		return alt_effects
+	return effects
+
+
+## Display name for [param caster], so the HUD can name the armed mode differently.
+func display_name_for(caster = null) -> String:
+	if is_alt_mode(caster) and alt_display_name != "":
+		return alt_display_name
+	return display_name
+
+
+## Duck-typed, null-safe status probe (mocks / legacy units simply report false).
+static func _caster_has_status(unit, id: StringName) -> bool:
+	if unit == null or id == &"":
+		return false
+	if unit.has_method("has_status"):
+		return bool(unit.has_status(id))
+	if unit.has_method("get_status_controller"):
+		var controller = unit.get_status_controller()
+		if controller != null and controller.has_method("has_status"):
+			return bool(controller.has_status(id))
+	return false
 
 
 ## Extra reach [param caster] currently grants to EVERY move it uses, read from
@@ -61,9 +127,10 @@ static func range_bonus_of(caster) -> int:
 ## the player's targetable-cell highlight in [UnitActionsPanel], and the AI's
 ## reachability tests in [BotController]) so they cannot drift apart.
 func effective_max_range(caster = null) -> int:
-	if targeting == null:
+	var pattern := targeting_for(caster)
+	if pattern == null:
 		return 0
-	return targeting.effective_max_range(range_bonus_of(caster))
+	return pattern.effective_max_range(range_bonus_of(caster))
 
 
 ## True if a caster on [param origin] may legally aim this move at [param aim].
@@ -71,7 +138,8 @@ func effective_max_range(caster = null) -> int:
 ## [param caster] is optional and trailing: omitted, this resolves exactly as it
 ## always has (no bonus). Pass the acting unit to honour its range bonus.
 func can_aim_at(origin: Vector2i, aim: Vector2i, caster = null) -> bool:
-	return targeting != null and targeting.in_range(origin, aim, range_bonus_of(caster))
+	var pattern := targeting_for(caster)
+	return pattern != null and pattern.in_range(origin, aim, range_bonus_of(caster))
 
 
 ## The FULL legality test: [method can_aim_at]'s range answer PLUS the pattern's
@@ -84,9 +152,10 @@ func can_aim_at(origin: Vector2i, aim: Vector2i, caster = null) -> bool:
 ## actually be used here?" and is what [MoveExecutor] validates with. A null board,
 ## or a pattern declaring no board constraints, makes the two identical.
 func can_target(origin: Vector2i, aim: Vector2i, caster = null, board = null) -> bool:
-	if targeting == null:
+	var pattern := targeting_for(caster)
+	if pattern == null:
 		return false
-	return targeting.is_aim_allowed(origin, aim, caster, board, range_bonus_of(caster))
+	return pattern.is_aim_allowed(origin, aim, caster, board, range_bonus_of(caster))
 
 
 ## Build a full description for tooltips: the authored flavor text FOLLOWED BY a

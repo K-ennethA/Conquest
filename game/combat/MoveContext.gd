@@ -138,7 +138,12 @@ func _matches_target_kind(unit) -> bool:
 	# ENEMY-targeted move (the hijacked unit's own attack) actually LANDS on its allies
 	# rather than gathering nobody. Gated on the caster reporting is_controlled(), so a
 	# normal caster resolves exactly as before.
-	var kind: int = move.targeting.target_kind
+	# Mode-aware: a two-mode move (Prism Bulwark) targets SELF or ENEMY depending on the
+	# caster's state, so gathering must read the pattern that is actually in force.
+	var pattern: TargetingPattern = move.targeting_for(caster)
+	if pattern == null:
+		return false
+	var kind: int = pattern.target_kind
 	if caster != null and caster.has_method("is_controlled") and caster.is_controlled():
 		kind = _invert_allegiance(kind)
 	return CombatTypes.unit_matches_target_kind(kind, caster, unit, board)

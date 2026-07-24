@@ -23,8 +23,9 @@ const BOSS_ID := "eldroot"
 ## Unit.take_damage), never counts toward the round win/loss (Player.is_neutral, honored
 ## in GameWorldManager's arena round-end), and rewards whoever lands the killing blow.
 const NEUTRAL_PLAYER_ID: int = 2
-## The showcase creature the camp fields (see game/characters/roster/feral_thornbeast.tres).
-const CAMP_CHARACTER_ID := "feral_thornbeast"
+## The creature the neutral camp fields -- a plain petalfang (the old feral_thornbeast was
+## a duplicate of it, so the camp just uses the real unit).
+const CAMP_CHARACTER_ID := "petalfang"
 ## The buff the killer receives, set on each camp unit's Unit.kill_reward at spawn.
 const CAMP_REWARD_PATH := "res://game/combat/status/empowered.tres"
 ## Units in the camp (task: 1-2). A small pack in the middle reads as a side objective.

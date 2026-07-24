@@ -30,11 +30,16 @@ static func execute(move: MoveResource, caster, board, aim_cell: Vector2i, rng: 
 	if not move.can_target(origin, aim_cell, caster, board):
 		return _fail("invalid_target_cell")
 
-	var cells := move.targeting.resolve_cells(origin, aim_cell)
+	# Mode-aware: a two-mode move resolves the pattern AND the effect list that its
+	# caster's current state puts in force (single-mode moves return their only pair).
+	var pattern := move.targeting_for(caster)
+	if pattern == null:
+		return _fail("no_targeting")
+	var cells := pattern.resolve_cells(origin, aim_cell)
 	var ctx := MoveContext.new(caster, board, move, aim_cell, cells)
 	ctx.rng = rng  # null -> MoveContext lazily makes a randomized one
 
-	for effect in move.effects:
+	for effect in move.effects_for(caster):
 		if effect:
 			effect.apply(ctx)
 
@@ -67,7 +72,8 @@ static func preview_vs(move: MoveResource, caster, target, board = null) -> Dict
 		var evasion := float(_stat(target, "evasion")) + float(TerrainStats.bonus_for(target, "evasion"))
 		hit_pct = clampf(move.accuracy * 100.0 - evasion, 0.0, 100.0)
 		crit_pct = clampf(move.crit_chance * 100.0 + float(_stat(caster, "crit")), 0.0, 100.0)
-		for effect in move.effects:
+		# Mode-aware, so the forecast previews the mode that would actually resolve.
+		for effect in move.effects_for(caster):
 			if effect is DamageEffect:
 				dmg += _preview_damage(effect, move, caster, target, board)
 	var hp := _hp(target)

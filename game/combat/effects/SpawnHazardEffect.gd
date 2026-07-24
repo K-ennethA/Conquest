@@ -20,10 +20,11 @@ class_name SpawnHazardEffect
 @export var scale: float = 0.5
 @export var category: CombatTypes.DamageCategory = CombatTypes.DamageCategory.PHYSICAL
 
-## Who the crawling band damages, relative to the CASTER. ENEMY (the safe default)
-## makes a generic hazard hit only the caster's foes; ANY_UNIT makes it
-## indiscriminate (Forest Barrage); ALLY could drive a friendly effect. Evaluated
-## through the same [enum CombatTypes.TargetKind] instant moves use.
+## Who the crawling band damages, relative to the CASTER. ENEMY (the default, and what
+## Forest Barrage uses) makes the hazard hit only the caster's foes -- it is NOT
+## indiscriminate; ANY_UNIT would make a hazard hit everyone it crosses, and ALLY could
+## drive a friendly effect. Evaluated through the same [enum CombatTypes.TargetKind]
+## instant moves use.
 @export var affiliation: CombatTypes.TargetKind = CombatTypes.TargetKind.ENEMY
 
 ## Lane width in cells (perpendicular to travel). Odd values center on the aim line;

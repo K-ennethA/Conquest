@@ -11,4 +11,4 @@ is decided, record it here so units, moves, and maps stay consistent.
 - **Names:** a unit's name is **one word** — unless it is a **boss**, which may use a
   multi-word name/title.
   - Examples (heroes / non-boss): Vineweave, Blightcap, Petalfang, Geode, Mycothrall.
-  - Examples (bosses, multi-word allowed): Dread Sovereign Nyx, Eldroot the Hollow Crown.
+  - Examples (bosses, multi-word allowed): Eldroot the Hollow Crown.

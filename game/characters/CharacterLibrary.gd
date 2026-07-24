@@ -22,8 +22,6 @@ const KNOWN_IDS: Array[StringName] = [
 	&"tree_grunt",
 	&"mycothrall",
 	&"eldroot",
-	&"feral_thornbeast",
-	&"dread_sovereign_nyx",
 ]
 
 ## id (StringName) -> CharacterResource. Shared across all callers for the
