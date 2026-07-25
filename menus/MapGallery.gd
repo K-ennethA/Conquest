@@ -58,6 +58,10 @@ const TURNTABLE_SPEED := 0.35  # radians / second
 @onready var metadata_container: VBoxContainer
 @onready var legend_container: HBoxContainer
 
+# Neutral placeholder shown over the 3D frame when a map has no tiles to render.
+@onready var map_preview_placeholder: PanelContainer
+@onready var map_preview_monogram: Label
+
 # 3D preview nodes (built in _create_map_display / _setup_map_viewport).
 @onready var map_viewport: SubViewport
 @onready var map_root: Node3D
@@ -97,15 +101,25 @@ func _create_ui() -> void:
 	"""Create the complete UI for the map gallery"""
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
+	# Outer 24px breathing room; 16px between the list and detail panels.
+	var outer := MarginContainer.new()
+	outer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	outer.add_theme_constant_override("margin_left", 24)
+	outer.add_theme_constant_override("margin_right", 24)
+	outer.add_theme_constant_override("margin_top", 24)
+	outer.add_theme_constant_override("margin_bottom", 24)
+	add_child(outer)
+
 	# Main container
 	var main_container := HBoxContainer.new()
-	main_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(main_container)
+	main_container.add_theme_constant_override("separation", 16)
+	outer.add_child(main_container)
 
 	# Left panel - Map list
 	var left_panel := VBoxContainer.new()
 	left_panel.custom_minimum_size = Vector2(300, 0)
 	left_panel.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	left_panel.add_theme_constant_override("separation", 6)
 	main_container.add_child(left_panel)
 
 	# Title and back button
@@ -114,7 +128,8 @@ func _create_ui() -> void:
 
 	var title := Label.new()
 	title.text = "MAP GALLERY"
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
+	title.add_theme_color_override("font_color", MenuTheme.GOLD)
 	title.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	header_container.add_child(title)
 
@@ -124,9 +139,7 @@ func _create_ui() -> void:
 	header_container.add_child(back_button)
 
 	# Map list
-	var list_label := Label.new()
-	list_label.text = "Maps:"
-	left_panel.add_child(list_label)
+	left_panel.add_child(_form_label("Maps"))
 
 	map_list = ItemList.new()
 	map_list.set_v_size_flags(Control.SIZE_EXPAND_FILL)
@@ -137,6 +150,7 @@ func _create_ui() -> void:
 	var right_panel := VBoxContainer.new()
 	right_panel.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	right_panel.custom_minimum_size = Vector2(500, 0)
+	right_panel.add_theme_constant_override("separation", 8)
 	main_container.add_child(right_panel)
 
 	_create_map_display(right_panel)
@@ -146,15 +160,21 @@ func _create_map_display(parent: VBoxContainer) -> void:
 	"""Create the map picture + detail area"""
 	# Map name (title)
 	map_name_label = Label.new()
-	map_name_label.add_theme_font_size_override("font_size", 22)
+	map_name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
+	map_name_label.add_theme_color_override("font_color", MenuTheme.GOLD)
 	parent.add_child(map_name_label)
 
 	# Real 3D render of the map, shown through a SubViewport for depth/perspective
-	# (mirrors TileGallery's 3D tile preview). The 2D "painted picture" is gone.
+	# (mirrors TileGallery's 3D tile preview). A neutral monogram placeholder sits on
+	# top, shown only when a map has no tiles to render (so the frame is never blank).
+	var preview_frame := Control.new()
+	preview_frame.custom_minimum_size = Vector2(420, 420)
+	parent.add_child(preview_frame)
+
 	var viewport_container := SubViewportContainer.new()
-	viewport_container.custom_minimum_size = Vector2(420, 420)
+	viewport_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	viewport_container.stretch = true
-	parent.add_child(viewport_container)
+	preview_frame.add_child(viewport_container)
 
 	map_viewport = SubViewport.new()
 	map_viewport.size = Vector2i(420, 420)
@@ -164,11 +184,21 @@ func _create_map_display(parent: VBoxContainer) -> void:
 
 	_setup_map_viewport()
 
+	map_preview_placeholder = PanelContainer.new()
+	map_preview_placeholder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	map_preview_placeholder.visible = false
+	preview_frame.add_child(map_preview_placeholder)
+
+	var placeholder_center := CenterContainer.new()
+	map_preview_placeholder.add_child(placeholder_center)
+
+	map_preview_monogram = Label.new()
+	map_preview_monogram.add_theme_font_size_override("font_size", 64)
+	map_preview_monogram.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	placeholder_center.add_child(map_preview_monogram)
+
 	# Description (wrapped)
-	var desc_label := Label.new()
-	desc_label.text = "Description:"
-	desc_label.add_theme_font_size_override("font_size", 14)
-	parent.add_child(desc_label)
+	parent.add_child(_section_header("Description"))
 
 	map_description = RichTextLabel.new()
 	map_description.custom_minimum_size = Vector2(0, 80)
@@ -176,22 +206,47 @@ func _create_map_display(parent: VBoxContainer) -> void:
 	parent.add_child(map_description)
 
 	# Metadata
-	var meta_label := Label.new()
-	meta_label.text = "Details:"
-	meta_label.add_theme_font_size_override("font_size", 14)
-	parent.add_child(meta_label)
+	parent.add_child(_section_header("Details"))
 
 	metadata_container = VBoxContainer.new()
+	metadata_container.add_theme_constant_override("separation", 4)
 	parent.add_child(metadata_container)
 
 	# Tile-effect legend
-	var legend_label := Label.new()
-	legend_label.text = "Tile Effects:"
-	legend_label.add_theme_font_size_override("font_size", 14)
-	parent.add_child(legend_label)
+	parent.add_child(_section_header("Tile Effects"))
 
 	legend_container = HBoxContainer.new()
+	legend_container.add_theme_constant_override("separation", 8)
 	parent.add_child(legend_container)
+
+
+func _section_header(text: String) -> Label:
+	var label := Label.new()
+	label.text = text.to_upper()
+	label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	label.add_theme_color_override("font_color", MenuTheme.GOLD)
+	return label
+
+
+## Small muted caption above a form control.
+func _form_label(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	label.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	return label
+
+
+## Up-to-two-letter monogram for a map with no renderable tiles (initials of the
+## first two words, else the first two characters). Never empty.
+func _map_monogram(map_name: String) -> String:
+	var trimmed := map_name.strip_edges()
+	if trimmed.is_empty():
+		return "?"
+	var words := trimmed.split(" ", false)
+	if words.size() >= 2:
+		return (String(words[0]).substr(0, 1) + String(words[1]).substr(0, 1)).to_upper()
+	return trimmed.substr(0, 2).to_upper()
 
 
 func _setup_connections() -> void:
@@ -293,9 +348,22 @@ func _update_metadata(map_res: MapResource) -> void:
 	]
 
 	for row in rows:
-		var label := Label.new()
-		label.text = str(row[0]) + ": " + str(row[1])
-		metadata_container.add_child(label)
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 8)
+		metadata_container.add_child(line)
+
+		var key_label := Label.new()
+		key_label.text = str(row[0])
+		key_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+		key_label.modulate = Color(0.72, 0.70, 0.78)
+		key_label.custom_minimum_size = Vector2(96, 0)
+		line.add_child(key_label)
+
+		var value_label := Label.new()
+		value_label.text = str(row[1])
+		value_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		value_label.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+		line.add_child(value_label)
 
 
 func _update_legend(map_res: MapResource) -> void:
@@ -316,30 +384,15 @@ func _update_legend(map_res: MapResource) -> void:
 	if present_types.is_empty():
 		var none_label := Label.new()
 		none_label.text = "No terrain effects on this map"
-		none_label.modulate = Color(0.7, 0.7, 0.7)
+		none_label.modulate = MenuTheme.CREAM_DIM
 		legend_container.add_child(none_label)
 		return
 
 	for tile_type in present_types.keys():
 		var effect_id: StringName = EFFECT_FOR_TILE[tile_type]
 		var info := TileEffectVisuals.info_for_id(effect_id)
-
-		var chip := HBoxContainer.new()
-		legend_container.add_child(chip)
-
-		var swatch := ColorRect.new()
-		swatch.custom_minimum_size = Vector2(16, 16)
-		swatch.color = TILE_COLORS.get(tile_type, TILE_FALLBACK)
-		chip.add_child(swatch)
-
-		var name_label := Label.new()
-		name_label.text = " " + str(info.get("name", "Effect"))
-		chip.add_child(name_label)
-
-		# Small spacer between chips.
-		var spacer := Control.new()
-		spacer.custom_minimum_size = Vector2(12, 0)
-		chip.add_child(spacer)
+		var chip_color: Color = TILE_COLORS.get(tile_type, TILE_FALLBACK)
+		legend_container.add_child(MenuTheme.make_chip(str(info.get("name", "Effect")), chip_color))
 
 
 # Read a tile_type string defensively - values are normally Strings.
@@ -434,6 +487,14 @@ func _build_map_3d(map_res: MapResource) -> void:
 
 	# Reset turntable so each map starts square-on.
 	map_root.rotation = Vector3.ZERO
+
+	# A map with no tiles renders as an empty frame, so cover it with a neutral
+	# monogram placeholder instead of blank dark space.
+	if map_preview_placeholder != null:
+		var has_tiles: bool = map_res != null and not map_res.tile_layout.is_empty()
+		map_preview_placeholder.visible = not has_tiles
+		if not has_tiles and map_preview_monogram != null:
+			map_preview_monogram.text = _map_monogram(map_res.map_name if map_res != null else "")
 
 	if map_res == null:
 		return

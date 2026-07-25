@@ -84,13 +84,23 @@ func _create_ui() -> void:
 	"""Create the complete UI for the unit gallery"""
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
+	# Outer 24px breathing room; 16px between the list and detail panels.
+	var outer := MarginContainer.new()
+	outer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	outer.add_theme_constant_override("margin_left", 24)
+	outer.add_theme_constant_override("margin_right", 24)
+	outer.add_theme_constant_override("margin_top", 24)
+	outer.add_theme_constant_override("margin_bottom", 24)
+	add_child(outer)
+
 	var main_container := HBoxContainer.new()
-	main_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(main_container)
+	main_container.add_theme_constant_override("separation", 16)
+	outer.add_child(main_container)
 
 	# --- Left panel: list + controls ---
 	var left_panel := VBoxContainer.new()
 	left_panel.custom_minimum_size = Vector2(300, 0)
+	left_panel.add_theme_constant_override("separation", 6)
 	main_container.add_child(left_panel)
 
 	var header_container := HBoxContainer.new()
@@ -98,7 +108,8 @@ func _create_ui() -> void:
 
 	var title := Label.new()
 	title.text = "UNIT GALLERY"
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
+	title.add_theme_color_override("font_color", MenuTheme.GOLD)
 	title.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	header_container.add_child(title)
 
@@ -107,35 +118,27 @@ func _create_ui() -> void:
 	back_button.custom_minimum_size = Vector2(80, 40)
 	header_container.add_child(back_button)
 
-	var search_label := Label.new()
-	search_label.text = "Search:"
-	left_panel.add_child(search_label)
+	left_panel.add_child(_form_label("Search"))
 
 	search_input = LineEdit.new()
 	search_input.placeholder_text = "Search units..."
 	left_panel.add_child(search_input)
 
-	var filter_label := Label.new()
-	filter_label.text = "Filter:"
-	left_panel.add_child(filter_label)
+	left_panel.add_child(_form_label("Filter"))
 
 	filter_option = OptionButton.new()
 	for mode in filter_modes:
 		filter_option.add_item(mode)
 	left_panel.add_child(filter_option)
 
-	var sort_label := Label.new()
-	sort_label.text = "Sort by:"
-	left_panel.add_child(sort_label)
+	left_panel.add_child(_form_label("Sort by"))
 
 	sort_option = OptionButton.new()
 	for sort_type in sort_options:
 		sort_option.add_item(sort_type)
 	left_panel.add_child(sort_option)
 
-	var list_label := Label.new()
-	list_label.text = "Units:"
-	left_panel.add_child(list_label)
+	left_panel.add_child(_form_label("Units"))
 
 	unit_list = ItemList.new()
 	unit_list.set_v_size_flags(Control.SIZE_EXPAND_FILL)
@@ -146,6 +149,7 @@ func _create_ui() -> void:
 	var right_panel := VBoxContainer.new()
 	right_panel.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	right_panel.custom_minimum_size = Vector2(500, 0)
+	right_panel.add_theme_constant_override("separation", 8)
 	main_container.add_child(right_panel)
 
 	_create_pager(right_panel)
@@ -179,7 +183,7 @@ func _create_pager(parent: VBoxContainer) -> void:
 	index_label.text = "0 / 0"
 	index_label.custom_minimum_size = Vector2(110, 0)
 	index_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	index_label.add_theme_font_size_override("font_size", 16)
+	index_label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
 	pager.add_child(index_label)
 
 	next_button = Button.new()
@@ -192,6 +196,7 @@ func _create_unit_display(parent: VBoxContainer) -> void:
 	"""Create the unit detail area"""
 	unit_display_container = VBoxContainer.new()
 	unit_display_container.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	unit_display_container.add_theme_constant_override("separation", 10)
 	parent.add_child(unit_display_container)
 
 	# --- Header: portrait + name/identity ---
@@ -221,11 +226,12 @@ func _create_unit_display(parent: VBoxContainer) -> void:
 	header_container.add_child(info_container)
 
 	unit_name_label = Label.new()
-	unit_name_label.add_theme_font_size_override("font_size", 22)
+	unit_name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
+	unit_name_label.add_theme_color_override("font_color", MenuTheme.GOLD)
 	info_container.add_child(unit_name_label)
 
 	unit_type_label = Label.new()
-	unit_type_label.add_theme_font_size_override("font_size", 14)
+	unit_type_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
 	unit_type_label.modulate = MUTED
 	unit_type_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info_container.add_child(unit_type_label)
@@ -290,8 +296,17 @@ func _create_unit_display(parent: VBoxContainer) -> void:
 func _section_header(text: String) -> Label:
 	var label := Label.new()
 	label.text = text.to_upper()
-	label.add_theme_font_size_override("font_size", 14)
-	label.modulate = MenuTheme.GOLD
+	label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	label.add_theme_color_override("font_color", MenuTheme.GOLD)
+	return label
+
+
+## Small muted caption above a form control (search / filter / sort / list).
+func _form_label(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	label.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
 	return label
 
 
@@ -684,6 +699,8 @@ func _update_stats(character: CharacterResource) -> void:
 
 	var stats_grid := GridContainer.new()
 	stats_grid.columns = 4
+	stats_grid.add_theme_constant_override("h_separation", 12)
+	stats_grid.add_theme_constant_override("v_separation", 6)
 	stats_container.add_child(stats_grid)
 
 	var rows: Array = [
@@ -766,15 +783,11 @@ func _build_move_card(move: MoveResource) -> PanelContainer:
 
 	var name_label := Label.new()
 	name_label.text = move_name
-	name_label.add_theme_font_size_override("font_size", 17)
+	name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
 	name_label.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	header.add_child(name_label)
 
-	var tag := Label.new()
-	tag.text = _move_tag_text(move)
-	tag.add_theme_font_size_override("font_size", 12)
-	tag.modulate = accent
-	header.add_child(tag)
+	header.add_child(MenuTheme.make_chip(_move_tag_text(move), accent))
 
 	# Description.
 	var desc_text: String = move.description.strip_edges()
@@ -785,7 +798,7 @@ func _build_move_card(move: MoveResource) -> PanelContainer:
 	# Key stats.
 	var stats := Label.new()
 	stats.text = _move_stats_text(move)
-	stats.add_theme_font_size_override("font_size", 12)
+	stats.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
 	stats.modulate = MUTED
 	stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stats.set_h_size_flags(Control.SIZE_EXPAND_FILL)
@@ -795,7 +808,7 @@ func _build_move_card(move: MoveResource) -> PanelContainer:
 	var effect_text: String = _join_effects(move.effects)
 	if not effect_text.is_empty():
 		var effects_label := _wrapped_label("Effect: " + effect_text)
-		effects_label.add_theme_font_size_override("font_size", 13)
+		effects_label.add_theme_font_size_override("font_size", MenuTheme.FONT_BODY)
 		body.add_child(effects_label)
 
 	return card
@@ -888,15 +901,11 @@ func _build_ability_card(ability: AbilityResource) -> PanelContainer:
 
 	var name_label := Label.new()
 	name_label.text = ability_name
-	name_label.add_theme_font_size_override("font_size", 17)
+	name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
 	name_label.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	header.add_child(name_label)
 
-	var tag := Label.new()
-	tag.text = _trigger_label(ability.trigger)
-	tag.add_theme_font_size_override("font_size", 12)
-	tag.modulate = ABILITY_ACCENT
-	header.add_child(tag)
+	header.add_child(MenuTheme.make_chip(_trigger_label(ability.trigger), ABILITY_ACCENT))
 
 	var desc_text: String = ability.description.strip_edges()
 	if desc_text.is_empty():
@@ -905,7 +914,7 @@ func _build_ability_card(ability: AbilityResource) -> PanelContainer:
 
 	var stats := Label.new()
 	stats.text = _ability_stats_text(ability)
-	stats.add_theme_font_size_override("font_size", 12)
+	stats.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
 	stats.modulate = MUTED
 	stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stats.set_h_size_flags(Control.SIZE_EXPAND_FILL)
@@ -914,13 +923,13 @@ func _build_ability_card(ability: AbilityResource) -> PanelContainer:
 	var effect_text: String = _join_effects(ability.effects)
 	if not effect_text.is_empty():
 		var effects_label := _wrapped_label("Effect: " + effect_text)
-		effects_label.add_theme_font_size_override("font_size", 13)
+		effects_label.add_theme_font_size_override("font_size", MenuTheme.FONT_BODY)
 		body.add_child(effects_label)
 
 	var rules_text: String = _rule_modifiers_text(ability)
 	if not rules_text.is_empty():
 		var rules_label := _wrapped_label("Rules: " + rules_text)
-		rules_label.add_theme_font_size_override("font_size", 13)
+		rules_label.add_theme_font_size_override("font_size", MenuTheme.FONT_BODY)
 		body.add_child(rules_label)
 
 	return card
@@ -995,14 +1004,8 @@ func _clear_container(container: Node) -> void:
 
 
 func _card_box(accent: Color) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(MenuTheme.PANEL_HI.r, MenuTheme.PANEL_HI.g, MenuTheme.PANEL_HI.b, 0.85)
-	sb.set_corner_radius_all(8)
-	sb.set_border_width_all(1)
-	sb.border_width_left = 5
-	sb.border_color = accent
-	sb.set_content_margin_all(10)
-	return sb
+	# Shared with the other galleries via MenuTheme so every card reads identically.
+	return MenuTheme.card_box(accent)
 
 
 func _wrapped_label(text: String) -> Label:

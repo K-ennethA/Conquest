@@ -16,6 +16,16 @@ const CREAM := Color("f2ead6")
 const CREAM_DIM := Color("b7adc6")
 const INK := Color("17141f")
 
+# --- Type scale -------------------------------------------------------------
+# ONE coherent set of font sizes for every dark menu, so screens stop each
+# inventing their own 12/13/14/16/17/20/22/24 overrides. Five steps, largest to
+# smallest. Reach for the nearest step rather than a bespoke number.
+const FONT_DISPLAY := 22  # sidebar / brand title (e.g. "COMPENDIUM")
+const FONT_TITLE := 22    # entity name header (a unit / tile / map / status name)
+const FONT_HEADER := 16   # section headers ("MOVES"), card titles
+const FONT_BODY := 14     # standard body text
+const FONT_CAPTION := 12  # muted meta, field captions, chips
+
 
 static func _panel_box() -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
@@ -49,6 +59,22 @@ static func _selected_box(fill: Color) -> StyleBoxFlat:
 	sb.content_margin_right = 8
 	sb.content_margin_top = 4
 	sb.content_margin_bottom = 4
+	return sb
+
+
+## Sidebar nav-rail entry background. Flat, roomy, left-aligned padding; an
+## optional gold left-edge bar marks the active entry ([param accent_w] > 0).
+static func _nav_box(fill: Color, accent: Color = Color(0, 0, 0, 0), accent_w: int = 0) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = fill
+	sb.set_corner_radius_all(6)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 12
+	sb.content_margin_top = 10
+	sb.content_margin_bottom = 10
+	if accent_w > 0:
+		sb.border_width_left = accent_w
+		sb.border_color = accent
 	return sb
 
 
@@ -113,6 +139,30 @@ static func build() -> Theme:
 	t.set_color("font_hover_color", "SelectedButton", INK)
 	t.set_color("font_pressed_color", "SelectedButton", INK)
 
+	# "NavButton" / "NavButtonActive" variations: the sidebar rail entries. NavButton
+	# is flat and borderless with a gold-tinged hover; NavButtonActive gains a gold
+	# left-edge bar and gold text so the current section reads at a glance. Apply per
+	# button with [code]button.theme_type_variation = "NavButton"[/code].
+	var gold_soft := Color(GOLD.r, GOLD.g, GOLD.b, 0.12)
+	var gold_mid := Color(GOLD.r, GOLD.g, GOLD.b, 0.18)
+	t.set_type_variation("NavButton", "Button")
+	t.set_stylebox("normal", "NavButton", _nav_box(Color(0, 0, 0, 0)))
+	t.set_stylebox("hover", "NavButton", _nav_box(gold_soft))
+	t.set_stylebox("pressed", "NavButton", _nav_box(gold_mid))
+	t.set_stylebox("focus", "NavButton", _nav_box(Color(0, 0, 0, 0)))
+	t.set_color("font_color", "NavButton", CREAM_DIM)
+	t.set_color("font_hover_color", "NavButton", CREAM)
+	t.set_color("font_pressed_color", "NavButton", GOLD)
+
+	t.set_type_variation("NavButtonActive", "Button")
+	t.set_stylebox("normal", "NavButtonActive", _nav_box(gold_mid, GOLD, 4))
+	t.set_stylebox("hover", "NavButtonActive", _nav_box(gold_mid, GOLD, 4))
+	t.set_stylebox("pressed", "NavButtonActive", _nav_box(gold_mid, GOLD, 4))
+	t.set_stylebox("focus", "NavButtonActive", _nav_box(gold_mid, GOLD, 4))
+	t.set_color("font_color", "NavButtonActive", GOLD)
+	t.set_color("font_hover_color", "NavButtonActive", GOLD)
+	t.set_color("font_pressed_color", "NavButtonActive", GOLD)
+
 	return t
 
 
@@ -171,3 +221,40 @@ static func apply_backdrop(root: Control) -> ColorRect:
 	root.add_child(rect)
 	root.move_child(rect, 0)
 	return rect
+
+
+## Left-accented content card (the move / ability / status / effect card look).
+## [param accent] paints a thick left edge so a column of cards is scannable by
+## colour. Assign with [code]panel.add_theme_stylebox_override("panel", box)[/code].
+static func card_box(accent: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(PANEL_HI.r, PANEL_HI.g, PANEL_HI.b, 0.85)
+	sb.set_corner_radius_all(8)
+	sb.set_border_width_all(1)
+	sb.border_width_left = 5
+	sb.border_color = accent
+	sb.set_content_margin_all(10)
+	return sb
+
+
+## A small rounded colour-tag (element / type / rarity / status kind). Returns a
+## ready-to-add [Label] with a tinted pill background and a brightened glyph colour,
+## so a plain string becomes a chip in one call.
+static func make_chip(text: String, color: Color) -> Label:
+	var chip := Label.new()
+	chip.text = text
+	chip.add_theme_font_size_override("font_size", FONT_CAPTION)
+	chip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(color.r, color.g, color.b, 0.22)
+	sb.set_corner_radius_all(6)
+	sb.set_border_width_all(1)
+	sb.border_color = Color(color.r, color.g, color.b, 0.85)
+	sb.content_margin_left = 8
+	sb.content_margin_right = 8
+	sb.content_margin_top = 2
+	sb.content_margin_bottom = 2
+	chip.add_theme_stylebox_override("normal", sb)
+	chip.add_theme_color_override("font_color", color.lightened(0.4))
+	return chip

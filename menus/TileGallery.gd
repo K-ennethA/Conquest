@@ -38,80 +38,85 @@ func _create_ui() -> void:
 	"""Create the complete UI for the tile gallery"""
 	# Set up main layout
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	
+
+	# Outer 24px breathing room; 16px between the list and detail panels.
+	var outer = MarginContainer.new()
+	outer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	outer.add_theme_constant_override("margin_left", 24)
+	outer.add_theme_constant_override("margin_right", 24)
+	outer.add_theme_constant_override("margin_top", 24)
+	outer.add_theme_constant_override("margin_bottom", 24)
+	add_child(outer)
+
 	# Main container
 	var main_container = HBoxContainer.new()
-	main_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(main_container)
-	
+	main_container.add_theme_constant_override("separation", 16)
+	outer.add_child(main_container)
+
 	# Left panel - Tile list and controls
 	var left_panel = VBoxContainer.new()
 	left_panel.custom_minimum_size = Vector2(300, 0)
 	left_panel.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	left_panel.add_theme_constant_override("separation", 6)
 	main_container.add_child(left_panel)
-	
+
 	# Title and back button
 	var header_container = HBoxContainer.new()
 	left_panel.add_child(header_container)
-	
+
 	var title = Label.new()
 	title.text = "TILE GALLERY"
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
+	title.add_theme_color_override("font_color", MenuTheme.GOLD)
 	title.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	header_container.add_child(title)
-	
+
 	back_button = Button.new()
 	back_button.text = "BACK"
 	back_button.custom_minimum_size = Vector2(80, 40)
 	header_container.add_child(back_button)
-	
+
 	# Search and filter controls
 	var controls_container = VBoxContainer.new()
+	controls_container.add_theme_constant_override("separation", 6)
 	left_panel.add_child(controls_container)
-	
+
 	# Search
-	var search_label = Label.new()
-	search_label.text = "Search:"
-	controls_container.add_child(search_label)
-	
+	controls_container.add_child(_form_label("Search"))
+
 	search_input = LineEdit.new()
 	search_input.placeholder_text = "Search tiles..."
 	controls_container.add_child(search_input)
-	
+
 	# Filter by type
-	var filter_label = Label.new()
-	filter_label.text = "Filter by Type:"
-	controls_container.add_child(filter_label)
-	
+	controls_container.add_child(_form_label("Filter by type"))
+
 	filter_option = OptionButton.new()
 	for tile_type in tile_types:
 		filter_option.add_item(tile_type)
 	controls_container.add_child(filter_option)
-	
+
 	# Sort options
-	var sort_label = Label.new()
-	sort_label.text = "Sort by:"
-	controls_container.add_child(sort_label)
-	
+	controls_container.add_child(_form_label("Sort by"))
+
 	sort_option = OptionButton.new()
 	for sort_type in sort_options:
 		sort_option.add_item(sort_type)
 	controls_container.add_child(sort_option)
-	
+
 	# Tile list
-	var list_label = Label.new()
-	list_label.text = "Tiles:"
-	controls_container.add_child(list_label)
-	
+	controls_container.add_child(_form_label("Tiles"))
+
 	tile_list = ItemList.new()
 	tile_list.set_v_size_flags(Control.SIZE_EXPAND_FILL)
 	tile_list.custom_minimum_size = Vector2(280, 400)
 	controls_container.add_child(tile_list)
-	
+
 	# Right panel - Tile details
 	var right_panel = VBoxContainer.new()
 	right_panel.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	right_panel.custom_minimum_size = Vector2(500, 0)
+	right_panel.add_theme_constant_override("separation", 8)
 	main_container.add_child(right_panel)
 	
 	_create_tile_display(right_panel)
@@ -119,42 +124,38 @@ func _create_ui() -> void:
 func _create_tile_display(parent: VBoxContainer) -> void:
 	"""Create the tile display area"""
 	tile_display_container = VBoxContainer.new()
+	tile_display_container.add_theme_constant_override("separation", 10)
 	parent.add_child(tile_display_container)
-	
+
 	# Tile header
 	var header_container = HBoxContainer.new()
 	tile_display_container.add_child(header_container)
-	
+
 	# Tile basic info
 	var info_container = VBoxContainer.new()
 	info_container.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	header_container.add_child(info_container)
-	
+
 	tile_name_label = Label.new()
-	tile_name_label.add_theme_font_size_override("font_size", 20)
+	tile_name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
+	tile_name_label.add_theme_color_override("font_color", MenuTheme.GOLD)
 	info_container.add_child(tile_name_label)
-	
+
 	tile_type_label = Label.new()
-	tile_type_label.add_theme_font_size_override("font_size", 16)
+	tile_type_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
 	info_container.add_child(tile_type_label)
-	
+
 	# Description
-	var desc_label = Label.new()
-	desc_label.text = "Description:"
-	desc_label.add_theme_font_size_override("font_size", 14)
-	tile_display_container.add_child(desc_label)
-	
+	tile_display_container.add_child(_section_header("Description"))
+
 	tile_description = RichTextLabel.new()
 	tile_description.custom_minimum_size = Vector2(0, 80)
 	tile_description.fit_content = true
 	tile_display_container.add_child(tile_description)
-	
+
 	# 3D Tile preview
-	var preview_label = Label.new()
-	preview_label.text = "3D Preview:"
-	preview_label.add_theme_font_size_override("font_size", 14)
-	tile_display_container.add_child(preview_label)
-	
+	tile_display_container.add_child(_section_header("3D Preview"))
+
 	var viewport_container = SubViewportContainer.new()
 	viewport_container.custom_minimum_size = Vector2(300, 200)
 	viewport_container.stretch = true
@@ -169,25 +170,37 @@ func _create_tile_display(parent: VBoxContainer) -> void:
 	_setup_preview_viewport()
 	
 	# Properties section
-	var properties_label = Label.new()
-	properties_label.text = "Properties:"
-	properties_label.add_theme_font_size_override("font_size", 14)
-	tile_display_container.add_child(properties_label)
-	
+	tile_display_container.add_child(_section_header("Properties"))
+
 	properties_container = VBoxContainer.new()
 	tile_display_container.add_child(properties_container)
-	
+
 	# Effects section
-	var effects_label = Label.new()
-	effects_label.text = "Tile Effects:"
-	effects_label.add_theme_font_size_override("font_size", 14)
-	tile_display_container.add_child(effects_label)
-	
+	tile_display_container.add_child(_section_header("Tile Effects"))
+
 	effects_container = VBoxContainer.new()
+	effects_container.add_theme_constant_override("separation", 8)
 	tile_display_container.add_child(effects_container)
-	
+
 	# Initially hide tile display
 	tile_display_container.visible = false
+
+
+func _section_header(text: String) -> Label:
+	var label = Label.new()
+	label.text = text.to_upper()
+	label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	label.add_theme_color_override("font_color", MenuTheme.GOLD)
+	return label
+
+
+## Small muted caption above a form control (search / filter / sort / list).
+func _form_label(text: String) -> Label:
+	var label = Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	label.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	return label
 
 func _setup_preview_viewport() -> void:
 	"""Set up the 3D tile preview viewport with camera and lighting"""
@@ -455,20 +468,21 @@ func _display_tile(tile: TileResource) -> void:
 	
 	if tile_type_label:
 		var type_name = Tile.TileType.keys()[tile.tile_type]
-		tile_type_label.text = type_name + " • " + tile.rarity
-		
-		# Color code by rarity
+		tile_type_label.text = type_name + "  -  " + tile.rarity
+
+		# Colour code by rarity, in the theme's warmer register rather than raw
+		# primaries, so the tag sits with the gold/cream palette instead of fighting it.
 		match tile.rarity:
 			"Common":
-				tile_type_label.modulate = Color.WHITE
+				tile_type_label.modulate = MenuTheme.CREAM_DIM
 			"Uncommon":
-				tile_type_label.modulate = Color.GREEN
+				tile_type_label.modulate = Color("6fae5a")
 			"Rare":
-				tile_type_label.modulate = Color.BLUE
+				tile_type_label.modulate = Color("5a9bd6")
 			"Epic":
-				tile_type_label.modulate = Color.PURPLE
+				tile_type_label.modulate = Color("a86fd0")
 			"Legendary":
-				tile_type_label.modulate = Color.GOLD
+				tile_type_label.modulate = MenuTheme.GOLD
 	
 	if tile_description:
 		tile_description.text = tile.description
@@ -524,8 +538,10 @@ func _update_tile_properties(tile: TileResource) -> void:
 	# Create properties grid
 	var properties_grid = GridContainer.new()
 	properties_grid.columns = 2
+	properties_grid.add_theme_constant_override("h_separation", 12)
+	properties_grid.add_theme_constant_override("v_separation", 6)
 	properties_container.add_child(properties_grid)
-	
+
 	# Add properties
 	var properties = [
 		["Movement Cost", str(tile.get_movement_cost())],
@@ -537,15 +553,18 @@ func _update_tile_properties(tile: TileResource) -> void:
 		["Rarity", tile.rarity],
 		["Has Effects", "Yes" if tile.has_default_effects else "No"]
 	]
-	
+
 	for prop in properties:
 		var label = Label.new()
 		label.text = prop[0] + ":"
+		label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+		label.modulate = Color(0.72, 0.70, 0.78)
 		properties_grid.add_child(label)
-		
+
 		var value = Label.new()
 		value.text = prop[1]
 		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		value.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 		properties_grid.add_child(value)
 
 func _update_tile_effects(tile: TileResource) -> void:
@@ -560,59 +579,67 @@ func _update_tile_effects(tile: TileResource) -> void:
 	if not tile.has_default_effects:
 		var no_effects = Label.new()
 		no_effects.text = "This tile has no special effects"
-		no_effects.modulate = Color.GRAY
+		no_effects.modulate = MenuTheme.CREAM_DIM
 		effects_container.add_child(no_effects)
 		return
-	
+
 	# Get effects for this tile type
 	var effects = tile.create_tile_effects()
-	
+
 	if effects.is_empty():
 		var no_effects = Label.new()
 		no_effects.text = "No effects configured"
-		no_effects.modulate = Color.GRAY
+		no_effects.modulate = MenuTheme.CREAM_DIM
 		effects_container.add_child(no_effects)
 	else:
+		# Accent tile effects in the piercing-orange used for hazards elsewhere, so
+		# each effect reads as a left-accented card matching the unit move cards.
+		var accent = Color("f0913c")
 		for effect in effects:
+			var card = PanelContainer.new()
+			card.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+			card.add_theme_stylebox_override("panel", MenuTheme.card_box(accent))
+			effects_container.add_child(card)
+
 			var effect_container = VBoxContainer.new()
-			effects_container.add_child(effect_container)
-			
-			# Effect name and type
+			effect_container.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+			card.add_child(effect_container)
+
+			# Effect name and type chip
 			var effect_header = HBoxContainer.new()
+			effect_header.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 			effect_container.add_child(effect_header)
-			
+
 			var effect_name = Label.new()
-			effect_name.text = "• " + effect.effect_name
-			effect_name.add_theme_font_size_override("font_size", 14)
+			effect_name.text = effect.effect_name
+			effect_name.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+			effect_name.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 			effect_header.add_child(effect_name)
-			
-			var effect_type = Label.new()
-			effect_type.text = "(" + TileEffect.EffectType.keys()[effect.effect_type] + ")"
-			effect_type.modulate = Color.CYAN
-			effect_type.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-			effect_type.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			effect_header.add_child(effect_type)
-			
+
+			effect_header.add_child(MenuTheme.make_chip(
+				TileEffect.EffectType.keys()[effect.effect_type], accent))
+
 			# Effect description
 			var effect_desc = Label.new()
-			effect_desc.text = "  " + effect._get_effect_description()
-			effect_desc.modulate = Color.LIGHT_GRAY
+			effect_desc.text = effect._get_effect_description()
+			effect_desc.modulate = MenuTheme.CREAM_DIM
 			effect_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			effect_desc.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 			effect_container.add_child(effect_desc)
-			
+
 			# Effect properties
-			var props_text = "  Strength: " + str(effect.strength)
+			var props_text = "Strength: " + str(effect.strength)
 			if effect.duration > 0:
-				props_text += ", Duration: " + str(effect.duration) + " turns"
+				props_text += "   -   Duration: " + str(effect.duration) + " turns"
 			elif effect.duration == -1:
-				props_text += ", Duration: Permanent"
+				props_text += "   -   Duration: Permanent"
 			else:
-				props_text += ", Duration: Instant"
-			
+				props_text += "   -   Duration: Instant"
+
 			var effect_props = Label.new()
 			effect_props.text = props_text
-			effect_props.modulate = Color.YELLOW
-			effect_props.add_theme_font_size_override("font_size", 12)
+			effect_props.modulate = Color(0.72, 0.70, 0.78)
+			effect_props.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
 			effect_container.add_child(effect_props)
 
 # Signal handlers
