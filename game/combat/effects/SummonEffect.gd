@@ -49,8 +49,15 @@ func apply(ctx: MoveContext) -> void:
 	if cells.is_empty():
 		push_warning("SummonEffect: no free cell near %s -- nothing raised." % str(origin))
 		return
+	# Optional deterministic id base for networked play. Read duck-typed off the
+	# context so single-player (a plain MoveContext that has no such property) is
+	# untouched: Object.get() returns null for a missing property, and a null base
+	# yields net_id -1 (current behaviour -- CommandApplier then assigns reactively).
+	var net_base = ctx.get("summon_net_base")
+	var index: int = 0
 	for cell in cells:
-		var unit = gwm.summon_unit(character_id, cell, pid, stance)
+		var net_id: int = (int(net_base) + index) if net_base != null else -1
+		var unit = gwm.summon_unit(character_id, cell, pid, stance, net_id)
 		if unit == null:
 			push_warning("SummonEffect: summon_unit('%s') at %s returned null." % [String(character_id), str(cell)])
 			continue
@@ -59,7 +66,9 @@ func apply(ctx: MoveContext) -> void:
 			"target": unit,
 			"cell": cell,
 			"character_id": String(character_id),
+			"net_id": net_id,
 		})
+		index += 1
 
 
 ## Whatever can actually perform a summon this frame -- i.e. a node exposing

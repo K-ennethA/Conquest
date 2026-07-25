@@ -2,10 +2,6 @@
 
 [ext_resource type="Script" path="res://menus/MainMenu.gd" id="1_1"]
 
-[sub_resource type="LabelSettings" id="LabelSettings_1"]
-font_size = 32
-font_color = Color(0.9, 0.9, 1, 1)
-
 [node name="MainMenu" type="Control"]
 layout_mode = 3
 anchors_preset = 15
@@ -18,7 +14,7 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.1, 0.1, 0.15, 1)
+color = Color(0.090196, 0.078431, 0.121569, 1)
 
 [node name="CenterContainer" type="CenterContainer" parent="."]
 layout_mode = 1
@@ -33,7 +29,6 @@ custom_minimum_size = Vector2(400, 0)
 [node name="Title" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
 text = "TACTICAL COMBAT"
-label_settings = SubResource("LabelSettings_1")
 horizontal_alignment = 1
 
 [node name="Subtitle" type="Label" parent="CenterContainer/VBoxContainer"]
@@ -51,7 +46,7 @@ layout_mode = 2
 [node name="SinglePlayerButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
-text = "Single Player"
+text = "Solo"
 
 [node name="VersusButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
 layout_mode = 2
@@ -63,10 +58,10 @@ layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
 text = "Compendium"
 
-[node name="ArenaButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
+[node name="MapCreatorButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
-text = "Arena"
+text = "Map Creator"
 
 [node name="Spacer2" type="Control" parent="CenterContainer/VBoxContainer/MenuButtons"]
 layout_mode = 2
@@ -83,6 +78,5 @@ custom_minimum_size = Vector2(0, 50)
 
 [node name="Instructions" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-text = "Press 1 for Single Player, 2 for Versus, 3 for Compendium, 4 for Arena, ESC to Quit"
+text = "1 Solo  •  2 Versus  •  3 Compendium  •  4 Map Creator  •  ESC quit"
 horizontal_alignment = 1
-modulate = Color(0.7, 0.7, 0.7, 1)

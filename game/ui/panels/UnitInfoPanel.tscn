@@ -54,7 +54,7 @@ layout_mode = 2
 text = "Unit Information"
 horizontal_alignment = 1
 vertical_alignment = 1
-theme_override_font_sizes/font_size = 16
+theme_override_font_sizes/font_size = 18
 
 [node name="HSeparator" type="HSeparator" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
@@ -63,10 +63,18 @@ layout_mode = 2
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="UnitPortrait" type="ColorRect" parent="MarginContainer/VBoxContainer/PortraitContainer"]
+[node name="UnitPortrait" type="PanelContainer" parent="MarginContainer/VBoxContainer/PortraitContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(64, 64)
-color = Color(0.5, 0.5, 0.5, 1)
+custom_minimum_size = Vector2(56, 56)
+size_flags_horizontal = 4
+size_flags_vertical = 4
+
+[node name="Monogram" type="Label" parent="MarginContainer/VBoxContainer/PortraitContainer/UnitPortrait"]
+layout_mode = 2
+text = "?"
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 28
 
 [node name="BasicInfoContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/PortraitContainer"]
 layout_mode = 2
@@ -76,13 +84,13 @@ theme_override_constants/separation = 4
 [node name="UnitNameLabel" type="Label" parent="MarginContainer/VBoxContainer/PortraitContainer/BasicInfoContainer"]
 layout_mode = 2
 text = "Unit Name"
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 15
 autowrap_mode = 2
 
 [node name="UnitTypeLabel" type="Label" parent="MarginContainer/VBoxContainer/PortraitContainer/BasicInfoContainer"]
 layout_mode = 2
 text = "Unit Type"
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 11
 modulate = Color(0.8, 0.8, 0.8, 1)
 
 [node name="HSeparator2" type="HSeparator" parent="MarginContainer/VBoxContainer"]
@@ -92,7 +100,7 @@ layout_mode = 2
 layout_mode = 2
 text = "Statistics"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 15
 
 [node name="StatsContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
@@ -101,7 +109,7 @@ theme_override_constants/separation = 2
 [node name="HealthLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
 layout_mode = 2
 text = "Health: 100/100"
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 
 [node name="HealthBar" type="ProgressBar" parent="MarginContainer/VBoxContainer/StatsContainer"]
 layout_mode = 2
@@ -113,24 +121,24 @@ show_percentage = false
 [node name="AttackLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
 layout_mode = 2
 text = "Attack: 25"
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 
 [node name="DefenseLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
 layout_mode = 2
 text = "Defense: 15"
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 
 [node name="SpeedLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
 layout_mode = 2
 text = "Speed: 8"
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 
 [node name="MovementLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
 layout_mode = 2
 text = "Movement: 3"
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 
 [node name="RangeLabel" type="Label" parent="MarginContainer/VBoxContainer/StatsContainer"]
 layout_mode = 2
 text = "Range: 1"
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13

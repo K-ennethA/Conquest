@@ -789,10 +789,15 @@ func get_move(slot: int) -> MoveResource:
 		return character_resource.get_move(slot)
 	return null
 
-func perform_move(slot: int, aim_cell: Vector2i, board_adapter) -> Dictionary:
+func perform_move(slot: int, aim_cell: Vector2i, board_adapter, rng: RandomNumberGenerator = null) -> Dictionary:
 	"""Resolve the move in [param slot] aimed at [param aim_cell] against the
 	live board (a BoardAdapter). Delegates to MoveExecutor and returns its
-	structured result dictionary (see MoveExecutor.execute)."""
+	structured result dictionary (see MoveExecutor.execute).
+
+	[param rng] is optional and trailing: left null (the single-player path) the
+	executor makes its own randomized generator exactly as before; the networked
+	command layer injects a seeded one (MatchRng.rng_for) so every peer resolves
+	the same accuracy/crit rolls. Fully backward compatible."""
 	var move := get_move(slot)
 	if move == null:
 		return {
@@ -801,7 +806,7 @@ func perform_move(slot: int, aim_cell: Vector2i, board_adapter) -> Dictionary:
 			"events": [],
 			"cells": [],
 		}
-	var result: Dictionary = MoveExecutor.execute(move, self, board_adapter, aim_cell)
+	var result: Dictionary = MoveExecutor.execute(move, self, board_adapter, aim_cell, rng)
 	# Announce a successful cast so the visual layer animates EVERY move, not only
 	# the ones that deal damage (damage_dealt covers those). Best-effort + guarded so
 	# tests and headless runs without the autoload simply don't animate.

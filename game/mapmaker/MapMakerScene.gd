@@ -57,6 +57,14 @@ func _ready() -> void:
 	_rebuild_grid()
 
 
+func _input(event: InputEvent) -> void:
+	# The creator is reached from the main menu, so it needs a way back out.
+	# ESC returns to the menu (edits live in the model; saving is explicit).
+	if event.is_pressed() and event is InputEventKey and event.keycode == KEY_ESCAPE:
+		get_viewport().set_input_as_handled()
+		get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
+
+
 func _build_ui() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 

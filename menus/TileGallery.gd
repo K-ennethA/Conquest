@@ -29,6 +29,7 @@ var tile_types = ["All", "NORMAL", "DIFFICULT_TERRAIN", "WATER", "WALL", "SPECIA
 var sort_options = ["Name", "Type", "Movement Cost", "Rarity", "Effect Count"]
 
 func _ready() -> void:
+	theme = MenuTheme.build()  # dark Legends-style menu look (matches Unit/Map galleries)
 	_create_ui()
 	_load_all_tiles()
 	_setup_connections()

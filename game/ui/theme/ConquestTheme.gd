@@ -37,6 +37,24 @@ const EL_HOLY := Color("e8b93a")
 const EL_NATURE := Color("5fb84e")
 const EL_STEEL := Color("c9cbd6")
 
+# --- Command-button role fills ---------------------------------------------
+# Three button roles share the warm palette but carry different weight so the
+# "important vs secondary vs destructive" signal reads at a glance. A parallel
+# panel tags its buttons with set_meta("style_role", "secondary"|"destructive");
+# absent/unknown meta = primary. apply_button_role() reads that meta.
+const BTN_PRIMARY := AMBER_LITE            # default warm amber (highest weight)
+const BTN_SECONDARY := Color("a8946e")     # muted low-contrast amber-grey
+const BTN_DESTRUCTIVE := Color("b5522f")   # ember red-brown (still in-palette)
+
+# --- Type scale ------------------------------------------------------------
+# One shared 720p-tuned scale so panels stop hand-setting per-widget font sizes.
+# Applied as the theme's Label/Button defaults in build(); panels reference the
+# constants for code-built widgets. Body is kept >= 13 for legibility at 720p.
+const FONT_TITLE := 18
+const FONT_HEADER := 15
+const FONT_BODY := 13
+const FONT_CAPTION := 11
+
 
 # --- Public stylebox factories (reusable per-panel) ------------------------
 
@@ -116,6 +134,13 @@ static func build() -> Theme:
 	t.set_stylebox("panel", "Panel", panel_box())
 	t.set_stylebox("panel", "PanelContainer", panel_box())
 
+	# Shared type scale: default body size on the common text widgets so panels
+	# stop needing per-widget font-size overrides. Any authored per-widget
+	# override still wins over these defaults, so existing panels are unaffected.
+	t.set_font_size("font_size", "Label", FONT_BODY)
+	t.set_font_size("font_size", "Button", FONT_BODY)
+	t.set_font_size("font_size", "OptionButton", FONT_BODY)
+
 	# Labels default to dark ink (readable on the amber panels). Panels that
 	# render text over darker plates set CREAM locally.
 	t.set_color("font_color", "Label", INK)
@@ -174,13 +199,62 @@ static func _restyle(node: Node) -> void:
 	for child in node.get_children():
 		if child is Panel or child is PanelContainer:
 			style_panel_background(child)
-		if (child is Label or child is Button) and child.has_theme_color_override("font_color"):
+		# Labels: drop any baked font colour so they inherit the panel default.
+		if child is Label and child.has_theme_color_override("font_color"):
 			child.remove_theme_color_override("font_color")
-		if child is Button or child is OptionButton:
+		# OptionButton IS-A Button, so test it FIRST (the more specific type):
+		# dropdowns have no role hierarchy, so strip any baked overrides back to the
+		# theme default rather than giving them a command-button role.
+		if child is OptionButton:
+			if child.has_theme_color_override("font_color"):
+				child.remove_theme_color_override("font_color")
 			for s in ["normal", "hover", "pressed", "disabled", "focus"]:
 				if child.has_theme_stylebox_override(s):
 					child.remove_theme_stylebox_override(s)
+		# Plain buttons: apply the role variant (primary/secondary/destructive) instead
+		# of stripping to a single flat amber -- preserves the command hierarchy.
+		elif child is Button:
+			apply_button_role(child)
 		_restyle(child)
+
+
+## Apply the amber command-button look for [param button]'s declared role, read
+## from set_meta("style_role", ...). Three warm-palette weights:
+##   "" / unknown / "primary" -> bright amber (default, highest weight)
+##   "secondary"              -> muted amber-grey (low contrast, de-emphasised)
+##   "destructive"            -> ember red-brown (a warning, still in-palette)
+## Overrides normal/hover/pressed/disabled + the matching font colours, so a
+## panel can tag intent once and get a consistent, hierarchy-preserving button.
+static func apply_button_role(button: Button) -> void:
+	var role := String(button.get_meta("style_role", ""))
+	var fill: Color = BTN_PRIMARY
+	var border: Color = BROWN
+	var font: Color = INK
+	var font_hover: Color = BROWN_DK
+	var font_pressed: Color = CREAM
+	match role:
+		"secondary":
+			fill = BTN_SECONDARY
+			border = BROWN
+		"destructive":
+			fill = BTN_DESTRUCTIVE
+			border = BROWN_DK
+			# The red-brown fill is dark, so cream text keeps contrast in every state.
+			font = CREAM
+			font_hover = CREAM
+			font_pressed = CREAM
+		_:
+			fill = BTN_PRIMARY
+			border = BROWN
+	button.add_theme_stylebox_override("normal", _button_box(fill, border))
+	button.add_theme_stylebox_override("hover", _button_box(fill.lightened(0.08), border))
+	button.add_theme_stylebox_override("pressed", _button_box(fill.darkened(0.16), border))
+	button.add_theme_stylebox_override("disabled",
+			_button_box(fill.darkened(0.24).lerp(BROWN, 0.15), BROWN_DK))
+	button.add_theme_color_override("font_color", font)
+	button.add_theme_color_override("font_hover_color", font_hover)
+	button.add_theme_color_override("font_pressed_color", font_pressed)
+	button.add_theme_color_override("font_disabled_color", INK_SOFT)
 
 
 ## Colour for a move/ability element tag; falls back to amber for unknowns.

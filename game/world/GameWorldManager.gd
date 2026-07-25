@@ -125,7 +125,7 @@ func _ready() -> void:
 ## marks it as having already acted so it holds the summon turn and only acts next turn
 ## (the same "summoning sickness" [SpawnManager]'s runtime spawns use). Returns the new
 ## [Unit], or null if the summon could not be placed. Null-safe end to end.
-func summon_unit(character_id: StringName, cell: Vector2i, player_id: int, stance: String = "aggressive") -> Node:
+func summon_unit(character_id: StringName, cell: Vector2i, player_id: int, stance: String = "aggressive", net_id: int = -1) -> Node:
 	if map_loader == null:
 		return null
 	var unit = map_loader.spawn_unit_now({
@@ -137,6 +137,12 @@ func summon_unit(character_id: StringName, cell: Vector2i, player_id: int, stanc
 	})
 	if unit == null:
 		return null
+	# Networked command layer (CommandApplier) passes a deterministic net_id derived
+	# from the summoning command's seq so every peer names the same body identically.
+	# -1 (the default, single-player path) leaves the unit untagged exactly as before;
+	# CommandApplier can still assign an id reactively from the resolved event log.
+	if net_id >= 0:
+		unit.set_meta("net_id", net_id)
 	# spawn_unit_now does NOT assign an owner or turn-register -- do both explicitly, else
 	# the summon is neither ally nor enemy to anyone and never takes a turn.
 	if PlayerManager != null:
@@ -736,24 +742,31 @@ func _on_multiplayer_game_ended(winner_id: int) -> void:
 	await get_tree().create_timer(2.0).timeout
 	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
 
-# Current UI Layout (1920x1080 reference):
-# 
-# TOP ROW:
-# - UnitInfoPanel: (20, 20) to (320, 360) - 300x340
-# - TurnIndicator: (1670, 20) to (1900, 100) - 230x80
+# Current UI Layout (1280x720, container-driven -- see game/ui/layout/GameUILayout.tscn
+# + UILayoutManager, and UI_LAYOUT_GUIDE.md). Positions are laid out by containers,
+# not hard-coded coordinates:
 #
-# MIDDLE ROW:  
-# - UnitActionsPanel: (1700, 120) to (1900, 340) - 200x220
-#
-# BOTTOM ROW:
-# - TurnSystemIndicator: (20, 960) to (320, 1060) - 300x100
-# - PlayerTurnPanel: (340, 960) to (620, 1060) - 280x100
+# TOP BAR:    TurnQueue (Speed First) OR TurnIndicator chip (Traditional), centered;
+#             Settings gear button, top-right.
+# LEFT COL:   UnitInfoPanel -- persistent selected-unit stat card, top-anchored.
+# RIGHT COL:  UnitActionsPanel -- contextual command menu (shown when a unit acts).
+# TOP-LEFT:   BattleLog (collapsible; auto-collapses while aiming) and, while aiming,
+#             the CombatForecastPanel.
+# BOTTOM-LEFT: TerrainInfoPanel -- hover terrain card (mounted on the UI CanvasLayer).
+# OVERLAYS:   TurnTransition wipe + ActionAnnouncer banner, each on its own CanvasLayer.
 
-# Debug input handling
+# Debug input handling. Gated OFF by default: these raw single-key bindings collide
+# with gameplay hotkeys (M = legacy move mode, T = enemy danger-zone toggle) and
+# KEY_M would yank the player back to the main menu mid-battle. Flip on only for
+# hands-on debugging sessions.
+const DEBUG_HOTKEYS := false
+
 func _input(event: InputEvent) -> void:
+	if not DEBUG_HOTKEYS:
+		return
 	if not event.is_pressed():
 		return
-	
+
 	if event is InputEventKey:
 		match event.keycode:
 			KEY_M:
@@ -804,18 +817,19 @@ func _debug_unit_ownership() -> void:
 	pass
 
 func _test_ui_separation() -> void:
-	"""Test the separation between unit actions and player turn actions"""
-	# Find UI panels
-	var unit_panel = get_tree().current_scene.get_node_or_null("UI/UnitActionsPanel")
-	var player_panel = get_tree().current_scene.get_node_or_null("UI/PlayerTurnPanel")
+	"""Debug (KEY_I): confirm the command surfaces resolve at their real container paths."""
+	var layout: Node = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
+	if layout == null:
+		return
+	var actions: Node = layout.get_node_or_null("MarginContainer/MainContainer/MiddleArea/RightSidebar/UnitActionsPanel")
+	var info: Node = layout.get_node_or_null("MarginContainer/MainContainer/MiddleArea/LeftSidebar/UnitInfoPanel")
+	print("[GameWorldManager] UI check -- actions:%s info:%s" % [actions != null, info != null])
 
 func _check_ui_layout() -> void:
-	"""Check UI layout for overlaps"""
-	var ui_manager = get_node_or_null("UILayoutManager")
-	if ui_manager:
-		ui_manager.print_layout_status()
-	else:
-		var ui_layer = get_tree().current_scene.get_node_or_null("UI")
+	"""Debug (KEY_L): dump the live layout state from UILayoutManager, if present."""
+	var layout: Node = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
+	if layout != null and layout.has_method("get_layout_info"):
+		print("[GameWorldManager] Layout: ", layout.get_layout_info())
 
 func _return_to_main_menu() -> void:
 	"""Return to the main menu"""

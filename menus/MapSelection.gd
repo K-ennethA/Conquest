@@ -24,7 +24,8 @@ var map_resources: Array[MapResource] = []
 
 func _ready() -> void:
 	theme = MenuTheme.build()  # dark Legends-style menu look
-	
+	MenuTheme.style_title(get_node_or_null("VBoxContainer/TitleLabel") as Label, 30)
+
 	# Connect signals
 	if map_list:
 		map_list.item_selected.connect(_on_map_selected)
@@ -199,8 +200,12 @@ func _on_select_button_pressed() -> void:
 	get_tree().change_scene_to_file("res://menus/CharacterSelect.tscn")
 
 func _on_back_button_pressed() -> void:
-	"""Handle back button press"""
-	get_tree().change_scene_to_file("res://menus/TurnSystemSelection.tscn")
+	"""Handle back button press.
+
+	NOTE: MapSelection is no longer part of any live flow -- the unified MatchSetup screen
+	replaced it. This class is retained only as the source the port was lifted from; its
+	Back now returns to the main menu (the old TurnSystemSelection target was deleted)."""
+	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
 
 func _on_refresh_button_pressed() -> void:
 	"""Handle refresh button press"""

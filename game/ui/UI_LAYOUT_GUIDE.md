@@ -1,41 +1,58 @@
-# UI Layout Guide
+# Battle HUD Layout Guide
 
-## Current UI Element Positions (Clean & Minimal)
+The in-battle HUD targets a **1280x720** window and is **container-driven** — panels
+are placed by `VBoxContainer` / `HBoxContainer` / anchors, not hard-coded pixel rects.
+The root is `game/ui/layout/GameUILayout.tscn` (script `UILayoutManager.gd`), instanced
+under the `UI` CanvasLayer of `GameWorld.tscn`. It has a 15px outer margin.
 
-### TOP ROW
-- **UnitInfoPanel**: (20, 20) to (320, 300) - 300x280 pixels
-  - Shows ONLY unit statistics (name, type, health, attack, defense, speed, movement, range)
-  - Clean, stats-focused display with unit portrait
-  - Always visible on top-left
+## Structure
 
-- **TurnIndicator**: (1670, 20) to (1900, 100) - 230x80 pixels  
-  - Shows current player and turn transitions
-  - Top-right corner
+```
+GameUILayout (Control, full-rect, mouse-ignore)
+└─ MarginContainer (15px)
+   └─ MainContainer (VBox)
+      ├─ TopBar (HBox)
+      │  ├─ CenterTopContainer: TurnQueue (Speed First) OR TurnIndicator chip (Traditional)
+      │  └─ SettingsButton (gear, top-right — built in code)
+      └─ MiddleArea (HBox, expands)
+         ├─ LeftSidebar (VBox):  UnitInfoPanel  (selected-unit stat card, top-anchored)
+         ├─ GameArea    (spacer over the 3D board)
+         └─ RightSidebar (VBox): UnitActionsPanel (contextual command menu)
+```
 
-### MIDDLE ROW
-- **UnitActionsPanel**: (1700, 120) to (1900, 300) - 200x180 pixels
-  - Unit-specific actions (Move, End Unit Turn, Cancel)
-  - Clean button layout with no help text
-  - Only visible when unit is selected
-  - Right side, below TurnIndicator
+Panels mounted in code by `UILayoutManager` (after theming, each on/over the HUD root):
+- **BattleLog** — top-left, collapsible scrolling combat log. Auto-collapses while a
+  move is being aimed so it never overlaps the CombatForecastPanel (same corner).
+- **TurnTransition** — full-screen turn-change wipe, own high CanvasLayer.
+- **ActionAnnouncer** — upper-centre "X used Y!" banner, own CanvasLayer.
+- **SettingsPanel** — full-screen options overlay (opened by the gear button).
 
-### BOTTOM ROW
-- **PlayerTurnPanel**: (340, 960) to (620, 1060) - 280x100 pixels
-  - Player turn management (End Player Turn)
-  - Bottom-center
+Mounted separately by `GameWorldManager` on the `UI` CanvasLayer:
+- **TerrainInfoPanel** — bottom-left hover card for the tile under the cursor.
+- **CombatForecastPanel** — top-left damage forecast, shown only while aiming a move.
 
-## Removed Elements
-- ❌ **TurnSystemIndicator**: Removed entirely (was showing debug info like "Traditional Turn System", "Current Player", etc.)
-- ❌ **Help text**: Removed from UnitActionsPanel
-- ❌ **Instructions**: Removed from UnitInfoPanel
+## Theme
 
-## Key Features
-- **Ultra Clean**: No metadata, debug info, or instructional text
-- **Pure Functionality**: Each panel shows only essential information
-- **No Overlapping**: All elements have dedicated, non-overlapping spaces
-- **Minimal UI**: Focus on gameplay, not UI clutter
-- **Contextual**: UnitActionsPanel only appears when needed
+Everything pulls the warm-amber Fire-Emblem look from `ConquestTheme` (built in code,
+applied via `ConquestTheme.apply_to(root)`):
+- **Command-button roles** — a button's weight is set with
+  `set_meta("style_role", "secondary" | "destructive")`; absent/unknown = **primary**.
+  `ConquestTheme.apply_button_role()` maps each to a warm-palette variant
+  (primary = bright amber, secondary = muted amber-grey, destructive = ember red-brown),
+  each with normal/hover/pressed/disabled + readable font colours.
+- **Type scale** — `FONT_TITLE 18 / FONT_HEADER 15 / FONT_BODY 13 / FONT_CAPTION 11`,
+  applied as the theme's default Label/Button font sizes so panels rarely need
+  per-widget overrides (any explicit override still wins).
+- **Element colours** — `ConquestTheme.element_color(name)` (used e.g. by the
+  UnitInfoPanel monogram plate and status/ability chips).
 
-## Debug Keys
-- L: Check UI layout and positions
-- I: Test UI separation
+## Feedback
+
+`UIFeedback.attach_sfx(root)` wires themed buttons' `pressed` to the shared
+`sfx_ui_click` at low volume (idempotent; TurnQueue excluded). `UILayoutManager`
+calls it once at `_ready`; panels that rebuild buttons dynamically can call it again.
+
+## Debug keys (GameWorldManager)
+
+- **I** — print whether the command surfaces resolve at their real paths.
+- **L** — dump `UILayoutManager.get_layout_info()`.

@@ -19,6 +19,10 @@ class_name UILayoutManager
 @onready var turn_queue: Control = $MarginContainer/MainContainer/TopBar/CenterTopContainer/TurnQueue
 @onready var turn_indicator: Control = $MarginContainer/MainContainer/TopBar/CenterTopContainer/TurnIndicator
 @onready var unit_actions_panel: Control = $MarginContainer/MainContainer/MiddleArea/RightSidebar/UnitActionsPanel
+# Persistent selected-unit stat card in the (previously empty) left column. It
+# self-shows/hides off GameEvents.unit_selected; kept here so is_mouse_over_ui can
+# treat it as HUD chrome while it is on screen.
+@onready var unit_info_panel: Control = $MarginContainer/MainContainer/MiddleArea/LeftSidebar/UnitInfoPanel
 
 # Layout state
 var current_turn_system_type: TurnSystemBase.TurnSystemType = TurnSystemBase.TurnSystemType.TRADITIONAL
@@ -73,7 +77,27 @@ func _ready() -> void:
 	# AFTER theming so its explicit fonts/colours survive the font-override sweep.
 	_build_action_announcer()
 
+	# Give the command buttons a click sound (they were silent). Reuses the existing
+	# sfx_ui_click slot at low volume. Runs after everything above is mounted so the
+	# gear button + battle log are present.
+	_wire_button_sfx()
+
 	is_layout_initialized = true
+
+func _wire_button_sfx() -> void:
+	"""Attach the shared UI-click SFX to the command surfaces this HUD owns.
+
+	Scoped deliberately: MiddleArea (the right-sidebar action menu + left stat card),
+	the top-right gear, and the battle-log header. The TurnQueue (rebuilt every turn,
+	would tick noisily) and the menus-owned SettingsPanel overlay are left out.
+	UnitActionsPanel rebuilds its command buttons on selection, so it can re-attach on
+	its own rebuilds; the meta flag in UIFeedback keeps this from double-connecting."""
+	if middle_area:
+		UIFeedback.attach_sfx(middle_area)
+	if settings_button:
+		UIFeedback.attach_sfx(settings_button)
+	if battle_log:
+		UIFeedback.attach_sfx(battle_log)
 
 func _build_turn_transition() -> void:
 	"""Create and mount the full-screen turn-transition wipe on its own CanvasLayer."""
@@ -285,7 +309,11 @@ func is_mouse_over_ui(mouse_position: Vector2) -> bool:
 	# Always check right sidebar (unit actions panel)
 	if unit_actions_panel and unit_actions_panel.visible:
 		panels.append({"name": "unit_actions_panel", "panel": unit_actions_panel})
-	
+
+	# Left-column selected-unit stat card (only on screen while a unit is selected).
+	if unit_info_panel and unit_info_panel.visible:
+		panels.append({"name": "unit_info_panel", "panel": unit_info_panel})
+
 	# Add turn system specific panels
 	if current_turn_system_type == TurnSystemBase.TurnSystemType.INITIATIVE and turn_queue and turn_queue.visible:
 		panels.append({"name": "turn_queue", "panel": turn_queue})

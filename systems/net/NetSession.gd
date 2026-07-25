@@ -37,6 +37,9 @@ signal turn_changed(slot: int)
 signal disconnected()
 ## A join attempt failed to connect.
 signal connection_failed()
+## The commit-reveal match-RNG handshake completed on this peer; [member match_rng]
+## is now READY and per-command seeds are derivable. Emitted on host and each client.
+signal match_rng_ready()
 
 enum Role { NONE, LISTEN_SERVER, DEDICATED_SERVER, CLIENT }
 
@@ -63,6 +66,18 @@ var _seq: int = 0
 var _pending_name: String = "Player"
 
 var _peer: ENetMultiplayerPeer = null
+
+## Commit-reveal match RNG (see [MatchRng]). Built by the handshake below; null until
+## a match's seed is negotiated. The authority derives per-command seeds from it.
+var match_rng: MatchRng = null
+
+## Optional: the ONE mutation point. When set, [method _rpc_apply_action] drives
+## resolved commands through it (using [member board_provider] for the board). Left
+## null in this phase so existing behaviour is unchanged — UI/board wiring lands later.
+var command_applier: CommandApplier = null
+## Optional source of the live board for [member command_applier]. Signature:
+## func() -> board. Null (the default) means no board is applied.
+var board_provider: Callable = Callable()
 
 
 func _ready() -> void:
@@ -134,6 +149,7 @@ func leave() -> void:
 	_local_slot = -1
 	_current_turn_slot = -1
 	_seq = 0
+	match_rng = null
 	_emit_roster()
 
 
@@ -301,9 +317,14 @@ func _server_handle_intent(actor_slot: int, action: Dictionary) -> void:
 		elif peer_id != -1:
 			_rpc_intent_rejected.rpc_id(peer_id, action, reason)
 		return
-	# Stamp authoritative ordering + actor, then broadcast to everyone.
+	# Stamp authoritative ordering + per-command RNG seed + protocol version, then
+	# actor, then broadcast to everyone (including the host, via call_local). The seed
+	# comes from the negotiated match RNG so every peer resolves this command's
+	# accuracy/crit rolls identically; 0 when no match RNG has been negotiated yet
+	# (e.g. lobby-phase actions), which the applier treats as "no injected seed".
 	_seq += 1
-	action[NetProtocol.KEY_SEQ] = _seq
+	var rng_seed: int = match_rng.seed_for(_seq) if (match_rng != null and match_rng.is_ready()) else 0
+	NetProtocol.stamp_resolution(action, _seq, rng_seed)
 	action[NetProtocol.KEY_ACTOR] = actor_slot
 	_rpc_apply_action.rpc(action)
 
@@ -326,7 +347,81 @@ func _validate_intent(actor_slot: int, action: Dictionary) -> String:
 
 @rpc("authority", "call_local", "reliable")
 func _rpc_apply_action(action: Dictionary) -> void:
+	# When a command applier is wired (a later phase), drive the resolved command
+	# through the single mutation point BEFORE announcing it, so observers see state
+	# that already reflects the command. Inert by default (command_applier == null),
+	# leaving today's emit-only behaviour untouched.
+	if command_applier != null and NetProtocol.is_command_well_formed(action):
+		var board = _resolve_board()
+		command_applier.apply_command(action, board, null)
 	action_applied.emit(action)
+
+
+func _resolve_board():
+	if board_provider.is_valid():
+		return board_provider.call()
+	return null
+
+
+# ---------------------------------------------------------------------------
+# Match-RNG commit-reveal handshake (see MatchRng)
+# ---------------------------------------------------------------------------
+
+## Solo/local: negotiate a match seed from a single local source. Same public
+## surface as the networked path, so single-player is the degenerate case.
+func begin_solo_match_rng() -> void:
+	match_rng = MatchRng.new()
+	match_rng.begin_solo(MatchRng.fresh_entropy())
+	match_rng_ready.emit()
+
+## Server: kick off the commit-reveal handshake. The host commits to hidden entropy
+## and broadcasts only the commit; clients answer with their own entropy; the host
+## then reveals and everyone finalises the same seed. Call after the roster is set,
+## before the first gameplay command.
+func begin_match_rng_handshake() -> void:
+	if not is_server():
+		push_warning("NetSession: only the server starts the match-RNG handshake")
+		return
+	match_rng = MatchRng.new()
+	var commit: int = match_rng.begin_host(MatchRng.fresh_entropy())
+	# A dedicated server with no local player still needs a seed if it ever resolves
+	# solo; but normally at least one client answers. Broadcast the commit.
+	_rpc_rng_commit.rpc(commit)
+
+
+## Server -> clients: here is my commit; send me your entropy.
+@rpc("authority", "call_remote", "reliable")
+func _rpc_rng_commit(commit: int) -> void:
+	match_rng = MatchRng.new()
+	match_rng.begin_client(commit)
+	var client_entropy: int = MatchRng.fresh_entropy()
+	match_rng.set_own_client_entropy(client_entropy)
+	_rpc_rng_client_entropy.rpc_id(SERVER_PEER_ID, client_entropy)
+
+
+## Client -> server: my entropy (in the clear). The server folds it in, reveals, and
+## broadcasts the reveal so clients can verify against the commit.
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_rng_client_entropy(client_entropy: int) -> void:
+	if not is_server() or match_rng == null:
+		return
+	match_rng.set_client_entropy(client_entropy)
+	var host_entropy: int = match_rng.host_reveal()   # finalises the seed on the host
+	_rpc_rng_reveal.rpc(host_entropy)
+	match_rng_ready.emit()
+
+
+## Server -> clients: the revealed host entropy. Each client verifies it against the
+## commit it holds; a mismatch means the host tampered and the match must abort.
+@rpc("authority", "call_remote", "reliable")
+func _rpc_rng_reveal(host_entropy: int) -> void:
+	if match_rng == null:
+		return
+	if match_rng.accept_reveal(host_entropy):
+		match_rng_ready.emit()
+	else:
+		push_error("NetSession: match-RNG reveal failed verification -- host entropy did not match its commit")
+		disconnected.emit()
 
 
 @rpc("authority", "call_local", "reliable")

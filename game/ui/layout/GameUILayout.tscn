@@ -1,9 +1,8 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="PackedScene" path="res://game/ui/panels/UnitInfoPanel.tscn" id="1"]
 [ext_resource type="PackedScene" path="res://game/ui/panels/UnitActionsPanel.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://game/ui/hud/TurnIndicator.tscn" id="3"]
-[ext_resource type="PackedScene" path="res://game/ui/panels/PlayerTurnPanel.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://game/ui/hud/TurnQueue.tscn" id="5"]
 [ext_resource type="Script" path="res://game/ui/layout/UILayoutManager.gd" id="6"]
 
@@ -92,6 +91,12 @@ layout_mode = 2
 mouse_filter = 2
 custom_minimum_size = Vector2(0, 0)
 theme_override_constants/separation = 10
+
+[node name="UnitInfoPanel" parent="MarginContainer/MainContainer/MiddleArea/LeftSidebar" instance=ExtResource("1")]
+layout_mode = 2
+custom_minimum_size = Vector2(260, 280)
+size_flags_horizontal = 0
+size_flags_vertical = 0
 
 [node name="GameArea" type="Control" parent="MarginContainer/MainContainer/MiddleArea"]
 layout_mode = 2

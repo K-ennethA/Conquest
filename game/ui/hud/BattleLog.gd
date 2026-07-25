@@ -46,6 +46,14 @@ var _header: Button
 ## knows something happened without expanding. Reset when expanded.
 var _unread: int = 0
 
+## True while the player is aiming a move. The CombatForecastPanel shows in THIS
+## same top-left corner (~y70) while aiming, which the expanded log (grows to ~166px)
+## would overlap. So we auto-collapse the log for the duration of the aim and restore
+## the player's prior expand state when it ends. Aim-start fires repeatedly (per
+## reticle move); only the first entry saves state, so continuous aiming never flickers.
+var _aiming: bool = false
+var _expanded_before_aim: bool = false
+
 
 func _ready() -> void:
 	name = "BattleLog"
@@ -85,7 +93,36 @@ func _toggle_expanded() -> void:
 	_expanded = not _expanded
 	if _expanded:
 		_unread = 0
+	# If the player toggles mid-aim, honour that as their new intent so the
+	# aim-ended restore doesn't undo it.
+	if _aiming:
+		_expanded_before_aim = _expanded
 	_apply_layout()
+
+
+# --- Targeting-driven auto-collapse (keeps the log clear of the forecast) -----
+
+func _on_aim_started(_cells = null) -> void:
+	"""Aiming began (attack range / AoE preview). Collapse the log so it doesn't
+	overlap the CombatForecastPanel in this corner. Re-fires per reticle move; only
+	the first entry saves the pre-aim state, so there is no collapse/expand flicker."""
+	if _aiming:
+		return
+	_aiming = true
+	_expanded_before_aim = _expanded
+	if _expanded:
+		_expanded = false
+		_apply_layout()
+
+
+func _on_aim_ended() -> void:
+	"""Aiming ended (move resolved or cancelled). Restore the pre-aim expand state."""
+	if not _aiming:
+		return
+	_aiming = false
+	if _expanded_before_aim and not _expanded:
+		_expanded = true
+		_apply_layout()
 
 
 func _build_ui() -> void:
@@ -149,6 +186,10 @@ func _connect_events() -> void:
 	_safe(bus, &"unit_healed", _on_unit_healed)
 	_safe(bus, &"unit_spawned", _on_unit_spawned)
 	_safe(bus, &"unit_eliminated", _on_unit_eliminated)
+	# Auto-collapse while a move is being aimed (forecast shares this corner).
+	_safe(bus, &"attack_range_calculated", _on_aim_started)
+	_safe(bus, &"aoe_preview_calculated", _on_aim_started)
+	_safe(bus, &"targeting_cleared", _on_aim_ended)
 
 
 func _safe(obj: Object, sig: StringName, cb: Callable) -> void:

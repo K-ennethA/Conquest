@@ -93,4 +93,81 @@ static func build() -> Theme:
 	t.set_stylebox("cursor", "ItemList", _button_box(Color(0, 0, 0, 0), GOLD, 1))
 	t.set_stylebox("cursor_unfocused", "ItemList", _button_box(Color(0, 0, 0, 0), BORDER, 1))
 
+	# LineEdit (address/port/name fields on the network screens).
+	var line_box := _button_box(Color(DARK.r, DARK.g, DARK.b, 0.85), BORDER)
+	t.set_stylebox("normal", "LineEdit", line_box)
+	t.set_stylebox("focus", "LineEdit", _button_box(Color(DARK.r, DARK.g, DARK.b, 0.9), GOLD, 2))
+	t.set_color("font_color", "LineEdit", CREAM)
+	t.set_color("font_placeholder_color", "LineEdit", CREAM_DIM)
+	t.set_color("caret_color", "LineEdit", GOLD)
+
+	# "SelectedButton" variation: a chosen option reads as a solid gold chip with
+	# ink text, replacing the old modulate-tint hack. Apply per-button with
+	# [code]button.theme_type_variation = "SelectedButton"[/code].
+	t.set_type_variation("SelectedButton", "Button")
+	t.set_stylebox("normal", "SelectedButton", _button_box(GOLD, GOLD, 2))
+	t.set_stylebox("hover", "SelectedButton", _button_box(GOLD, CREAM, 2))
+	t.set_stylebox("pressed", "SelectedButton", _button_box(GOLD_DK, GOLD, 2))
+	t.set_stylebox("focus", "SelectedButton", focus)
+	t.set_color("font_color", "SelectedButton", INK)
+	t.set_color("font_hover_color", "SelectedButton", INK)
+	t.set_color("font_pressed_color", "SelectedButton", INK)
+
 	return t
+
+
+# --- Shared styling helpers -------------------------------------------------
+# One gold/cream treatment for every dark menu, so titles and footers read the
+# same wherever they appear. These override label_settings (which otherwise wins
+# over theme colors) by clearing it first.
+
+## Gold accent title, centered. Use on a screen's main heading.
+static func style_title(label: Label, size: int = 34) -> void:
+	if label == null:
+		return
+	label.label_settings = null
+	label.add_theme_color_override("font_color", GOLD)
+	label.add_theme_font_size_override("font_size", size)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+
+## Dim cream subheading that sits under a title.
+static func style_subtitle(label: Label) -> void:
+	if label == null:
+		return
+	label.label_settings = null
+	label.add_theme_color_override("font_color", CREAM_DIM)
+	label.add_theme_font_size_override("font_size", 16)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+
+## Small, muted footer hint (e.g. keyboard shortcuts). Reads as a caption, not
+## debug text.
+static func style_caption(label: Label) -> void:
+	if label == null:
+		return
+	label.label_settings = null
+	label.add_theme_color_override("font_color", CREAM_DIM)
+	label.add_theme_font_size_override("font_size", 12)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.modulate = Color(1, 1, 1, 0.75)
+
+
+## Ensure a full-rect [constant DARK] backdrop behind [param root]'s content.
+## Reuses an existing child named "Background" when present (updating its color),
+## otherwise inserts one as the first child. Returns the ColorRect.
+static func apply_backdrop(root: Control) -> ColorRect:
+	if root == null:
+		return null
+	var existing := root.get_node_or_null("Background")
+	if existing is ColorRect:
+		existing.color = DARK
+		return existing
+	var rect := ColorRect.new()
+	rect.name = "Background"
+	rect.color = DARK
+	rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(rect)
+	root.move_child(rect, 0)
+	return rect

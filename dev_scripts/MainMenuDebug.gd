@@ -87,7 +87,8 @@ func _on_single_player_pressed() -> void:
 	print("Single Player mode selected")
 	GameSettings.set_game_mode(GameSettings.GameMode.SINGLE_PLAYER)
 	GameSettings.set_player_count(1)
-	get_tree().change_scene_to_file("res://menus/TurnSystemSelection.tscn")
+	# TurnSystemSelection was retired; the solo flow now starts at the mode picker.
+	get_tree().change_scene_to_file("res://menus/SoloModeSelect.tscn")
 
 func _on_versus_pressed() -> void:
 	print("Versus mode selected - opening multiplayer mode selection")

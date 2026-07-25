@@ -14,7 +14,7 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.1, 0.1, 0.15, 1)
+color = Color(0.090196, 0.078431, 0.121569, 1)
 
 [node name="VBoxContainer" type="VBoxContainer" parent="."]
 layout_mode = 1
@@ -59,7 +59,6 @@ layout_mode = 2
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 0.6
-visible = false
 
 [node name="PreviewLabel" type="Label" parent="VBoxContainer/MainContainer/MapPreviewContainer"]
 layout_mode = 2
@@ -81,7 +80,7 @@ offset_bottom = -20.0
 
 [node name="MapNameLabel" type="Label" parent="VBoxContainer/MainContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer"]
 layout_mode = 2
-text = "Map Name"
+text = "Select a map"
 horizontal_alignment = 1
 
 [node name="HSeparator" type="HSeparator" parent="VBoxContainer/MainContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer"]
@@ -89,7 +88,7 @@ layout_mode = 2
 
 [node name="MapDescriptionLabel" type="Label" parent="VBoxContainer/MainContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer"]
 layout_mode = 2
-text = "Map description goes here..."
+text = "Choose a map from the list to see its details."
 autowrap_mode = 3
 
 [node name="HSeparator2" type="HSeparator" parent="VBoxContainer/MainContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer"]
@@ -98,7 +97,7 @@ layout_mode = 2
 [node name="MapDetailsLabel" type="Label" parent="VBoxContainer/MainContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
-text = "Map details..."
+text = ""
 vertical_alignment = 1
 
 [node name="HSeparator2" type="HSeparator" parent="VBoxContainer"]

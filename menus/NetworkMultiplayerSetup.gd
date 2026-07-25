@@ -30,6 +30,9 @@ var players_list_label: Label
 var start_game_button: Button
 
 func _ready() -> void:
+	theme = MenuTheme.build()  # dark Legends-style menu look
+	MenuTheme.style_title(get_node_or_null("CenterContainer/VBoxContainer/TitleLabel") as Label, 32)
+
 	# Connect button signals
 	if host_button:
 		host_button.pressed.connect(_on_host_pressed)
@@ -84,8 +87,7 @@ func _create_lobby_ui() -> void:
 	# Add lobby title
 	var lobby_title = Label.new()
 	lobby_title.text = "MULTIPLAYER LOBBY"
-	lobby_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lobby_title.add_theme_font_size_override("font_size", 24)
+	MenuTheme.style_title(lobby_title, 24)
 	lobby_container.add_child(lobby_title)
 	
 	# Add spacing

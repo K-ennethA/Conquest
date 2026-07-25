@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://c0grasspreview01"]
+
+[ext_resource type="Script" path="res://dev_scripts/grass_preview.gd" id="1_prev"]
+
+[node name="GrassPreview" type="Node3D"]
+script = ExtResource("1_prev")

@@ -1,0 +1,395 @@
+{
+	"creation_date": "2026-07-20T16:35:59",
+	"description": "A 7x7 battlefield with varied terrain",
+	"difficulty": "Hard",
+	"height": 7,
+	"map_type": "Skirmish",
+	"name": "Large Battlefield",
+	"tile_layout": [
+		{
+			"position": "(0, 0)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(0, 1)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(0, 2)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(0, 3)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(0, 4)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(0, 5)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(0, 6)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(1, 0)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(1, 1)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(1, 2)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(1, 3)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(1, 4)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(1, 5)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(1, 6)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(2, 0)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(2, 1)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(2, 3)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(2, 4)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(2, 5)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(2, 6)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(3, 0)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(3, 2)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(3, 4)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(3, 6)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(4, 0)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(4, 1)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(4, 2)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(4, 3)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(4, 5)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(4, 6)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(5, 0)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(5, 1)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(5, 2)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(5, 3)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(5, 4)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(5, 5)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(5, 6)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(6, 0)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(6, 1)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(6, 2)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(6, 3)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(6, 4)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(6, 5)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(6, 6)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "NORMAL"
+		},
+		{
+			"position": "(2, 2)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "WATER"
+		},
+		{
+			"position": "(4, 4)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "WATER"
+		},
+		{
+			"position": "(3, 1)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "DIFFICULT_TERRAIN"
+		},
+		{
+			"position": "(3, 5)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "DIFFICULT_TERRAIN"
+		},
+		{
+			"position": "(3, 3)",
+			"tile_id": "",
+			"tile_resource_path": "",
+			"tile_type": "SACRED_GROUND"
+		}
+	],
+	"unit_spawns": [
+		{
+			"character_id": "",
+			"max_spawns": 1,
+			"player_id": 0,
+			"position": "(0, 1)",
+			"respawn_interval": 1,
+			"spawn_kind": "Start",
+			"spawn_turn": 1,
+			"unit_resource_path": "",
+			"unit_type": "WARRIOR"
+		},
+		{
+			"character_id": "",
+			"max_spawns": 1,
+			"player_id": 0,
+			"position": "(0, 3)",
+			"respawn_interval": 1,
+			"spawn_kind": "Start",
+			"spawn_turn": 1,
+			"unit_resource_path": "",
+			"unit_type": "WARRIOR"
+		},
+		{
+			"character_id": "",
+			"max_spawns": 1,
+			"player_id": 0,
+			"position": "(0, 5)",
+			"respawn_interval": 1,
+			"spawn_kind": "Start",
+			"spawn_turn": 1,
+			"unit_resource_path": "",
+			"unit_type": "ARCHER"
+		},
+		{
+			"character_id": "",
+			"max_spawns": 1,
+			"player_id": 0,
+			"position": "(1, 2)",
+			"respawn_interval": 1,
+			"spawn_kind": "Start",
+			"spawn_turn": 1,
+			"unit_resource_path": "",
+			"unit_type": "ARCHER"
+		},
+		{
+			"character_id": "",
+			"max_spawns": 1,
+			"player_id": 1,
+			"position": "(6, 1)",
+			"respawn_interval": 1,
+			"spawn_kind": "Start",
+			"spawn_turn": 1,
+			"unit_resource_path": "",
+			"unit_type": "WARRIOR"
+		},
+		{
+			"character_id": "",
+			"max_spawns": 1,
+			"player_id": 1,
+			"position": "(6, 3)",
+			"respawn_interval": 1,
+			"spawn_kind": "Start",
+			"spawn_turn": 1,
+			"unit_resource_path": "",
+			"unit_type": "WARRIOR"
+		},
+		{
+			"character_id": "",
+			"max_spawns": 1,
+			"player_id": 1,
+			"position": "(6, 5)",
+			"respawn_interval": 1,
+			"spawn_kind": "Start",
+			"spawn_turn": 1,
+			"unit_resource_path": "",
+			"unit_type": "ARCHER"
+		},
+		{
+			"character_id": "",
+			"max_spawns": 1,
+			"player_id": 1,
+			"position": "(5, 4)",
+			"respawn_interval": 1,
+			"spawn_kind": "Start",
+			"spawn_turn": 1,
+			"unit_resource_path": "",
+			"unit_type": "ARCHER"
+		}
+	],
+	"width": 7
+}

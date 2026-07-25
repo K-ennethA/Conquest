@@ -14,7 +14,10 @@ class_name UnitInfoPanel
 @onready var speed_label: Label = $MarginContainer/VBoxContainer/StatsContainer/SpeedLabel
 @onready var movement_label: Label = $MarginContainer/VBoxContainer/StatsContainer/MovementLabel
 @onready var range_label: Label = $MarginContainer/VBoxContainer/StatsContainer/RangeLabel
-@onready var unit_portrait: ColorRect = $MarginContainer/VBoxContainer/PortraitContainer/UnitPortrait
+## Element-coloured monogram plate (replaces the old grey ColorRect placeholder):
+## a rounded panel filled with the unit's element colour, holding its initial.
+@onready var unit_portrait: PanelContainer = $MarginContainer/VBoxContainer/PortraitContainer/UnitPortrait
+@onready var portrait_monogram: Label = $MarginContainer/VBoxContainer/PortraitContainer/UnitPortrait/Monogram
 
 var current_unit: Unit = null
 
@@ -187,7 +190,7 @@ func _build_abilities_section() -> void:
 	_abilities_header.name = "AbilitiesLabel"
 	_abilities_header.text = "Abilities"
 	_abilities_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_abilities_header.add_theme_font_size_override("font_size", 14)
+	_abilities_header.add_theme_font_size_override("font_size", ConquestTheme.FONT_HEADER)
 	vb.add_child(_abilities_header)
 
 	# Same containment as the effects list: descriptions are full sentences, so the
@@ -323,7 +326,7 @@ func _build_ability_chip(unit, ability) -> PanelContainer:
 
 	var name_label := Label.new()
 	name_label.text = title
-	name_label.add_theme_font_size_override("font_size", 12)
+	name_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_BODY)
 	name_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# Wraps instead of widening the chip past the 300px card on a long name.
@@ -332,7 +335,7 @@ func _build_ability_chip(unit, ability) -> PanelContainer:
 
 	var trigger_badge := Label.new()
 	trigger_badge.text = trigger_label(int(ability.trigger))
-	trigger_badge.add_theme_font_size_override("font_size", 11)
+	trigger_badge.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
 	trigger_badge.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
 	trigger_badge.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	head.add_child(trigger_badge)
@@ -343,7 +346,7 @@ func _build_ability_chip(unit, ability) -> PanelContainer:
 	if description != "":
 		var desc_label := Label.new()
 		desc_label.text = description
-		desc_label.add_theme_font_size_override("font_size", 11)
+		desc_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
 		desc_label.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
 		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rows.add_child(desc_label)
@@ -353,7 +356,7 @@ func _build_ability_chip(unit, ability) -> PanelContainer:
 	if state != "":
 		var state_label := Label.new()
 		state_label.text = state
-		state_label.add_theme_font_size_override("font_size", 11)
+		state_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
 		state_label.add_theme_color_override("font_color", ConquestTheme.AMBER_LITE)
 		state_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rows.add_child(state_label)
@@ -379,7 +382,7 @@ func _build_effects_section() -> void:
 	_effects_header.name = "EffectsLabel"
 	_effects_header.text = "Active Effects"
 	_effects_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_effects_header.add_theme_font_size_override("font_size", 14)
+	_effects_header.add_theme_font_size_override("font_size", ConquestTheme.FONT_HEADER)
 	vb.add_child(_effects_header)
 
 	# The chip list lives inside a ScrollContainer so a unit with many statuses
@@ -418,7 +421,7 @@ func _update_effects(unit) -> void:
 	if conditions.is_empty():
 		var none_label := Label.new()
 		none_label.text = "No active effects"
-		none_label.add_theme_font_size_override("font_size", 12)
+		none_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_BODY)
 		# Muted so "nothing here" reads as secondary, not as a real effect --
 		# mirrors TerrainInfoPanel's "No special effects" row.
 		none_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
@@ -475,7 +478,7 @@ func _build_status_chip(condition) -> PanelContainer:
 
 	var name_label := Label.new()
 	name_label.text = status_name
-	name_label.add_theme_font_size_override("font_size", 12)
+	name_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_BODY)
 	# CREAM reads on the dim chip fill; the theme's default INK is tuned for the
 	# light amber panel background instead.
 	name_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
@@ -484,7 +487,7 @@ func _build_status_chip(condition) -> PanelContainer:
 
 	var turns_label := Label.new()
 	turns_label.text = StatusVisuals.turns_label(StatusVisuals.turns_left_of(condition))
-	turns_label.add_theme_font_size_override("font_size", 11)
+	turns_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
 	turns_label.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
 	head.add_child(turns_label)
 
@@ -495,7 +498,7 @@ func _build_status_chip(condition) -> PanelContainer:
 	if detail != "":
 		var detail_label := Label.new()
 		detail_label.text = detail
-		detail_label.add_theme_font_size_override("font_size", 11)
+		detail_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
 		detail_label.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
 		detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rows.add_child(detail_label)
@@ -552,32 +555,30 @@ func _cap_scroll(scroll: ScrollContainer, content: Control, cap: float) -> float
 	return used
 
 func _update_portrait(unit: Unit) -> void:
-	"""Update unit portrait based on type and player"""
+	"""Paint the monogram plate: the unit's initial on its element colour.
+
+	A compact element-coded stand-in for real portrait art (no art files). Element
+	comes from Unit.get_element() -> ConquestTheme.element_color; the letter is dark
+	ink on light element colours and cream on dark ones so it always reads."""
 	if not unit_portrait:
 		return
-	
-	# Determine player color from owner
-	var player_color = Color.GRAY
-	var owner = unit.get_owner_player()
-	if owner:
-		player_color = owner.get_team_color()
-	else:
-		# Fallback to old method if no owner set
-		var parent = unit.get_parent()
-		if parent:
-			if parent.name.to_lower().contains("player1"):
-				player_color = Color.BLUE
-			elif parent.name.to_lower().contains("player2"):
-				player_color = Color.RED
-	
-	# Tint the portrait per character (unit_type is a String id now), blended
-	# toward the player's colour so team still reads at a glance.
-	var unit_type: String = unit.get_unit_type()
-	if unit_type != "":
-		var tint := Color.from_hsv(float(absi(hash(unit_type)) % 360) / 360.0, 0.5, 0.9, 1.0)
-		unit_portrait.color = player_color.lerp(tint, 0.35)
-	else:
-		unit_portrait.color = player_color
+
+	var element: String = String(unit.get_element()) if unit.has_method("get_element") else ""
+	var base: Color = ConquestTheme.element_color(element)
+
+	# Rounded, element-filled plate with a slightly darker warm border.
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = base
+	sb.set_corner_radius_all(10)
+	sb.set_border_width_all(2)
+	sb.border_color = base.darkened(0.35)
+	unit_portrait.add_theme_stylebox_override("panel", sb)
+
+	if portrait_monogram:
+		var display: String = unit.get_display_name().strip_edges()
+		portrait_monogram.text = display.substr(0, 1).to_upper() if display != "" else "?"
+		var text_color: Color = ConquestTheme.INK if base.get_luminance() > 0.55 else ConquestTheme.CREAM
+		portrait_monogram.add_theme_color_override("font_color", text_color)
 
 func _show_panel() -> void:
 	"""Show the info panel"""

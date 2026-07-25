@@ -17,21 +17,26 @@ var mode_descriptions = {
 }
 
 func _ready() -> void:
+	theme = MenuTheme.build()  # dark Legends-style menu look
+	MenuTheme.style_title(get_node_or_null("CenterContainer/VBoxContainer/TitleLabel") as Label, 32)
+
 	# Connect button signals
 	if local_multiplayer_button:
 		local_multiplayer_button.pressed.connect(_on_local_multiplayer_pressed)
 		local_multiplayer_button.mouse_entered.connect(func(): _update_description("LOCAL"))
-	
+		local_multiplayer_button.tooltip_text = "Hot-seat: both players share this device."
+
 	if network_multiplayer_button:
 		network_multiplayer_button.pressed.connect(_on_network_multiplayer_pressed)
 		network_multiplayer_button.mouse_entered.connect(func(): _update_description("NETWORK"))
-	
+		network_multiplayer_button.tooltip_text = "Play online over the internet or a local network."
+
 	if back_button:
 		back_button.pressed.connect(_on_back_pressed)
-	
+
 	# Set initial description
 	_update_description("LOCAL")
-	
+
 	print("Multiplayer Mode Selection initialized")
 
 func _on_local_multiplayer_pressed() -> void:
@@ -41,9 +46,10 @@ func _on_local_multiplayer_pressed() -> void:
 	# Set game mode to local multiplayer
 	GameSettings.set_game_mode(GameSettings.GameMode.VERSUS)
 	GameSettings.set_player_count(2)  # Default to 2 players for local
-	
-	# Go to turn system selection
-	get_tree().change_scene_to_file("res://menus/TurnSystemSelection.tscn")
+
+	# Go to the unified Match Setup (local hot-seat variant: map + turn system).
+	MatchSetup.requested_mode = MatchConfigPanel.MODE_LOCAL
+	get_tree().change_scene_to_file("res://menus/MatchSetup.tscn")
 
 func _on_network_multiplayer_pressed() -> void:
 	"""Handle Network Multiplayer button press"""

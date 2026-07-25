@@ -30,11 +30,17 @@ var map_selector: Node
 var vote_status_label: Label
 var ready_button: Button
 
+# Host-only match config (Turn System + Best-of rounds), embedded in the waiting panel.
+# Added ALONGSIDE the existing waiting-panel nodes (never renaming them) and revealed only
+# for the host. Applied locally to GameSettings at start via apply_settings().
+var versus_config_panel: MatchConfigPanel
+
 # Game mode manager
 var game_mode_manager: Node
 
 func _ready() -> void:
 	print("[LOBBY] _ready() called")
+	theme = MenuTheme.build()  # dark Legends-style menu look (also inherited when nested)
 	game_mode_manager = GameModeManager
 	if not game_mode_manager:
 		print("[LOBBY] ERROR: GameModeManager not found")
@@ -90,8 +96,7 @@ func _build_ui() -> void:
 	var waiting_title = Label.new()
 	waiting_title.name = "WaitingTitle"
 	waiting_title.text = "Waiting for player..."
-	waiting_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	waiting_title.add_theme_font_size_override("font_size", 24)
+	MenuTheme.style_title(waiting_title, 24)
 	waiting_content.add_child(waiting_title)
 	
 	var waiting_status = Label.new()
@@ -99,7 +104,30 @@ func _build_ui() -> void:
 	waiting_status.text = "Please wait..."
 	waiting_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	waiting_content.add_child(waiting_status)
-	
+
+	# Host-only match settings, added alongside the existing waiting-panel nodes. Hidden by
+	# default; _show_waiting_for_client reveals it for the host. Client never sees it.
+	var config_spacer = Control.new()
+	config_spacer.name = "ConfigSpacer"
+	config_spacer.custom_minimum_size = Vector2(0, 16)
+	config_spacer.visible = false
+	waiting_content.add_child(config_spacer)
+
+	var config_heading = Label.new()
+	config_heading.name = "ConfigHeading"
+	config_heading.text = "Match Settings (host)"
+	config_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	MenuTheme.style_subtitle(config_heading)
+	config_heading.visible = false
+	waiting_content.add_child(config_heading)
+
+	versus_config_panel = MatchConfigPanel.new()
+	versus_config_panel.name = "VersusConfigPanel"
+	versus_config_panel.custom_minimum_size = Vector2(360, 110)
+	versus_config_panel.visible = false
+	waiting_content.add_child(versus_config_panel)
+	versus_config_panel.configure(MatchConfigPanel.MODE_VERSUS)
+
 	# Map selection panel (shown when both players connected)
 	map_selection_panel = Control.new()
 	map_selection_panel.name = "MapSelectionPanel"
@@ -118,8 +146,7 @@ func _build_ui() -> void:
 	# Title
 	var selection_title = Label.new()
 	selection_title.text = "SELECT YOUR MAP"
-	selection_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	selection_title.add_theme_font_size_override("font_size", 28)
+	MenuTheme.style_title(selection_title, 28)
 	selection_content.add_child(selection_title)
 	
 	# Subtitle
@@ -197,6 +224,12 @@ func _show_waiting_for_client() -> void:
 		title.text = "Waiting for opponent..."
 	if status:
 		status.text = "Share this address: 127.0.0.1:8910"
+
+	# Reveal the host-only match settings (Turn System + Best-of).
+	for node_name in ["ConfigSpacer", "ConfigHeading", "VersusConfigPanel"]:
+		var n = waiting_panel.get_node_or_null("VBoxContainer/" + node_name)
+		if n != null:
+			n.visible = true
 
 func _show_waiting_for_host() -> void:
 	"""Show waiting screen for client"""
@@ -382,7 +415,12 @@ func _finalize_map_selection() -> void:
 	if not is_host:
 		print("[LOBBY] Client waiting for host to finalize...")
 		return
-	
+
+	# Apply the host's match settings locally BEFORE broadcasting game start, so the chosen
+	# turn system rides along in _broadcast_game_start (versus_rounds stays host-local).
+	if versus_config_panel != null:
+		versus_config_panel.apply_settings()
+
 	var final_map: String = ""
 	
 	if local_map_vote == remote_map_vote:

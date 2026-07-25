@@ -73,6 +73,11 @@ var enable_undo: bool = false  # For future expansion
 # BotController's load order.
 var ai_difficulty: int = 1  # NORMAL
 
+## Best-of / round count for a Versus match. Set host-side on the lobby's embedded
+## MatchConfigPanel and applied locally when the match starts (1 = single game / Bo1,
+## 3 = Bo3, 5 = Bo5). Kept as a plain int, clamped to a sane 1..9 band by its setter.
+var versus_rounds: int = 1
+
 func _ready() -> void:
 	name = "GameSettings"
 	_load_presentation_settings()
@@ -178,6 +183,10 @@ func set_ai_difficulty(difficulty: int) -> void:
 	"""Set the AI difficulty (BotController.Difficulty: EASY=0..BRUTAL=3)."""
 	ai_difficulty = clampi(difficulty, 0, 3)
 
+func set_versus_rounds(rounds: int) -> void:
+	"""Set the Versus best-of round count (1 = Bo1, 3 = Bo3, 5 = Bo5). Clamped 1..9."""
+	versus_rounds = clampi(rounds, 1, 9)
+
 func get_selected_map() -> String:
 	"""Get the selected map path"""
 	# Return default map if none selected
@@ -247,6 +256,7 @@ func reset_to_defaults() -> void:
 	show_turn_indicators = true
 	enable_undo = false
 	ai_difficulty = 1  # NORMAL
+	versus_rounds = 1
 
 # Debug and info
 func get_settings_info() -> Dictionary:

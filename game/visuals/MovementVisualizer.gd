@@ -17,6 +17,16 @@ var highlighted_tiles: Array[Vector3] = []
 var overlay_meshes: Dictionary = {}          # cell Vector3 -> MeshInstance3D (currently shown)
 var _mesh_pool: Array[MeshInstance3D] = []    # hidden, reusable overlay meshes
 
+# --- Enemy DANGER-ZONE overlays (persistent, hostile tint) -------------------
+# A completely separate channel from the player's blue movement range: each toggled
+# enemy owns an independent set of red overlay quads keyed by an opaque overlay id
+# (the enemy's instance id). These do NOT clear when the blue movement range clears
+# (movement_range_cleared / a new movement_range_calculated), so a toggled enemy's
+# danger zone survives the player deselecting it and selecting their own units. The
+# red material makes them unmistakable from the player's own blue reach.
+var _danger_meshes: Dictionary = {}          # overlay_id:int -> Array[MeshInstance3D]
+var danger_range_material: StandardMaterial3D
+
 # Shared plane mesh reused by every overlay instance (cheap, no per-tile allocation)
 var _shared_plane_mesh: PlaneMesh
 
@@ -71,6 +81,21 @@ func _setup_materials() -> void:
 	path_preview_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	path_preview_material.flags_do_not_receive_shadows = true
 	path_preview_material.flags_disable_ambient_light = true
+
+	# Enemy danger-zone material: a hot, hostile red/orange, deliberately distinct
+	# from the player's cool blue reach so a threat overlay can never be mistaken for
+	# somewhere the player can move. Slightly denser alpha so overlapping enemy zones
+	# read as a compounding threat rather than washing out.
+	danger_range_material = StandardMaterial3D.new()
+	danger_range_material.albedo_color = Color(1.0, 0.25, 0.15, 0.30)
+	danger_range_material.flags_transparent = true
+	danger_range_material.flags_unshaded = true
+	danger_range_material.emission_enabled = true
+	danger_range_material.emission = Color(1.0, 0.35, 0.2, 0.30)
+	danger_range_material.no_depth_test = false
+	danger_range_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	danger_range_material.flags_do_not_receive_shadows = true
+	danger_range_material.flags_disable_ambient_light = true
 
 func _setup_shared_mesh() -> void:
 	"""One shared plane mesh reused by every overlay instance"""
@@ -158,3 +183,62 @@ func is_highlighting_movement_range() -> bool:
 func get_highlighted_tiles() -> Array[Vector3]:
 	"""Get currently highlighted tile positions"""
 	return highlighted_tiles.duplicate()
+
+# --- Enemy danger-zone overlay API ------------------------------------------
+# Persistent, per-enemy red threat overlays that live entirely apart from the blue
+# movement range channel above. Callers (UnitActionsPanel) own the toggle policy;
+# this class only draws/erases the red quads for an opaque overlay id.
+
+func set_danger_overlay(overlay_id: int, positions: Array[Vector3]) -> void:
+	"""Show (or replace) the danger overlay for [param overlay_id] at the given grid
+	cells (Vector3(col, 0, row)). Rebuilds this id's quads only; every OTHER enemy's
+	overlay and the player's blue range are untouched."""
+	clear_danger_overlay(overlay_id)
+	if positions.is_empty():
+		return
+	var meshes: Array[MeshInstance3D] = []
+	for cell in positions:
+		var mesh_instance: MeshInstance3D = _acquire_mesh()
+		mesh_instance.material_override = danger_range_material
+		var world_pos: Vector3 = grid.calculate_map_position(cell)
+		# Sit just BELOW the blue range height so a friendly reach quad drawn over the
+		# same cell renders on top -- the player's own options stay readable even where
+		# they overlap an enemy threat band.
+		world_pos.y += overlay_height - 0.02
+		mesh_instance.position = world_pos
+		mesh_instance.visible = true
+		meshes.append(mesh_instance)
+	_danger_meshes[overlay_id] = meshes
+
+func clear_danger_overlay(overlay_id: int) -> void:
+	"""Erase one enemy's danger overlay (pooling its quads). No-op if not shown."""
+	if not _danger_meshes.has(overlay_id):
+		return
+	var meshes: Array = _danger_meshes[overlay_id]
+	for mesh_instance in meshes:
+		if mesh_instance and is_instance_valid(mesh_instance):
+			mesh_instance.visible = false
+			_mesh_pool.append(mesh_instance)
+	_danger_meshes.erase(overlay_id)
+
+func clear_all_danger_overlays() -> void:
+	"""Erase every enemy danger overlay at once (the global T-toggle off path)."""
+	for overlay_id in _danger_meshes.keys():
+		var meshes: Array = _danger_meshes[overlay_id]
+		for mesh_instance in meshes:
+			if mesh_instance and is_instance_valid(mesh_instance):
+				mesh_instance.visible = false
+				_mesh_pool.append(mesh_instance)
+	_danger_meshes.clear()
+
+func has_danger_overlay(overlay_id: int) -> bool:
+	"""True while [param overlay_id]'s danger overlay is currently shown."""
+	return _danger_meshes.has(overlay_id)
+
+func has_any_danger_overlay() -> bool:
+	"""True while at least one enemy danger overlay is shown."""
+	return not _danger_meshes.is_empty()
+
+func get_danger_overlay_ids() -> Array:
+	"""The overlay ids currently shown (a copy), so a caller can recompute each."""
+	return _danger_meshes.keys()

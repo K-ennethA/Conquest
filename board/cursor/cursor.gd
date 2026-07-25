@@ -66,6 +66,8 @@ var base_material: StandardMaterial3D
 var selection_material: StandardMaterial3D
 var base_ring_material: StandardMaterial3D
 var selection_ring_material: StandardMaterial3D
+## Lazily built the first time flash_invalid() runs (invalid-click feedback).
+var _invalid_flash_material: StandardMaterial3D
 
 # Idle pulse animation state (cheap _process oscillation, no per-frame allocations)
 var _pulse_time: float = 0.0
@@ -76,6 +78,10 @@ var camera: Camera3D
 var is_mouse_enabled: bool = true
 
 func _ready() -> void:
+	# Group so the UnitActionsPanel (and anything else) can find the cursor regardless of
+	# its scene path (Map/Cursor vs World/Board/Cursor).
+	add_to_group("board_cursor")
+
 	_setup_cursor_visuals()
 	position = grid.calculate_map_position(tile_position)
 	position.y = 0.15  # Sit on the tile (see the tile_position setter for why)
@@ -493,12 +499,58 @@ func _deselect_unit() -> void:
 		var unit = selected_unit
 		selected_unit = null
 		GameEvents.unit_deselected.emit(unit)
-	
+
 	# Update cursor visuals
 	if mesh_instance:
 		mesh_instance.material_override = base_material
 	if base_mesh:
 		base_mesh.material_override = base_ring_material
+
+# --- Public helpers for the UnitActionsPanel command loop --------------------
+
+func select_unit_external(unit: Unit) -> void:
+	"""Select [param unit] as if the player had clicked it: move the cursor onto its tile
+	and route through the normal _select_unit path (so GameEvents.unit_selected fires and
+	the cursor's own selection state stays in sync). Used by unit cycling (Tab) and the
+	Speed First auto-select-next-actor chain. No-op if it is already selected."""
+	if unit == null:
+		return
+	var unit_grid_pos: Vector3 = grid.calculate_grid_coordinates(unit.global_position)
+	if grid.is_within_bounds(unit_grid_pos):
+		self.tile_position = unit_grid_pos
+	if selected_unit == unit:
+		return
+	_select_unit(unit)
+
+func deselect_current() -> void:
+	"""Public deselect: clears BOTH the cursor's selection state and the panel's (via the
+	emitted unit_deselected), so a Wait / resolved action fully ends the selection."""
+	_deselect_unit()
+
+func flash_invalid() -> void:
+	"""Brief red flash of the cursor bracket -- feedback for an invalid click (unreachable
+	tile / illegal target). Restores the correct idle/selected material afterwards."""
+	if mesh_instance == null:
+		return
+	if _invalid_flash_material == null:
+		_invalid_flash_material = _make_bracket_material(
+			Color(1.0, 0.25, 0.2, 1.0), Color(1.4, 0.2, 0.15))
+		_invalid_flash_material.render_priority = 2
+	mesh_instance.material_override = _invalid_flash_material
+	# Restore after a short beat. create_timer is frame-safe and needs no node.
+	var tree := get_tree()
+	if tree != null:
+		await tree.create_timer(0.18).timeout
+	_restore_bracket_material()
+
+func _restore_bracket_material() -> void:
+	"""Put the gold bracket material back to whichever state the cursor is in now."""
+	if mesh_instance == null:
+		return
+	if selected_unit != null:
+		mesh_instance.material_override = selection_material
+	else:
+		mesh_instance.material_override = base_material
 
 func _check_unit_at_cursor() -> void:
 	"""Check for unit at cursor position and update hover state"""
@@ -610,7 +662,10 @@ func _on_speed_first_turn_started(unit_or_player) -> void:
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
 		if turn_system is SpeedFirstTurnSystem:
-			_position_cursor_on_current_unit(turn_system as SpeedFirstTurnSystem)
+			# auto_select = true: when the next actor is a human-commandable unit, SELECT
+			# it (not just position on it) so play chains without a re-click. AI units are
+			# only positioned-to.
+			_position_cursor_on_current_unit(turn_system as SpeedFirstTurnSystem, true)
 
 func _on_traditional_turn_started(player: Player) -> void:
 	"""Handle turn start in Traditional system"""
@@ -619,8 +674,10 @@ func _on_traditional_turn_started(player: Player) -> void:
 		if turn_system is TraditionalTurnSystem:
 			_position_cursor_on_player_unit(turn_system as TraditionalTurnSystem)
 
-func _position_cursor_on_current_unit(speed_system: SpeedFirstTurnSystem) -> void:
-	"""Position cursor on the current acting unit (no auto-selection)"""
+func _position_cursor_on_current_unit(speed_system: SpeedFirstTurnSystem, auto_select: bool = false) -> void:
+	"""Position cursor on the current acting unit. When [param auto_select] is true AND
+	the actor is a human-commandable unit, also SELECT it so the player commands the next
+	unit without a re-click (the Speed First chain). AI actors are never auto-selected."""
 	var current_unit = speed_system.get_current_acting_unit()
 	if current_unit:
 		# Move cursor to unit's position
@@ -629,8 +686,23 @@ func _position_cursor_on_current_unit(speed_system: SpeedFirstTurnSystem) -> voi
 
 		# Set cursor position (this will trigger position update)
 		self.tile_position = unit_grid_pos
-		
-		# Note: We don't auto-select the unit - player must manually select it
+
+		# Auto-select ONLY a human-commandable next actor; an AI unit is positioned-to
+		# but left unselected so the player is not handed the enemy's controls.
+		if auto_select and _unit_is_human_owned(current_unit):
+			if selected_unit != current_unit:
+				_select_unit(current_unit)
+
+func _unit_is_human_owned(unit: Unit) -> bool:
+	"""True when `unit` belongs to a human (non-AI) player -- the gate for auto-selecting
+	the next Speed First actor. Multiplayer ownership nuances are handled downstream by
+	the panel's own _human_may_command gate, so 'not AI' is sufficient here."""
+	if unit == null:
+		return false
+	var player := unit.get_owner_player()
+	if player == null:
+		return false
+	return not player.is_ai
 
 func _position_cursor_on_player_unit(trad_system: TraditionalTurnSystem) -> void:
 	"""Position cursor on a unit owned by the current player that can still act"""
