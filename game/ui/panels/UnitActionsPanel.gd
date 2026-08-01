@@ -15,6 +15,9 @@ class_name UnitActionsPanel
 @onready var unit_type_label: Label = $MarginContainer/ContentContainer/UnitHeaderContainer/UnitInfoContainer/UnitTypeLabel
 @onready var move_button: Button = $MarginContainer/ContentContainer/ActionsContainer/MoveButton
 @onready var end_unit_turn_button: Button = $MarginContainer/ContentContainer/ActionsContainer/EndUnitTurnButton
+## Holds only the two demoted legacy buttons above -- hidden as a whole so it (and its
+## VBox separation) takes zero sidebar space. See the hide in _ready().
+@onready var actions_container: VBoxContainer = $MarginContainer/ContentContainer/ActionsContainer
 @onready var unit_summary_button: Button = $MarginContainer/ContentContainer/UnitSummaryButton
 @onready var stats_container: VBoxContainer = $MarginContainer/ContentContainer/StatsContainer
 @onready var health_label: Label = $MarginContainer/ContentContainer/StatsContainer/HealthLabel
@@ -193,7 +196,19 @@ func _ready() -> void:
 		cancel_button.pressed.connect(_on_cancel_pressed)
 	else:
 		push_error("Cancel button not found!")
-	
+
+	# Move (M) and End Turn (E) are DEMOTED legacy: the contextual UnitActionMenu
+	# (post-move popup) is the golden path now. Hide them -- and the ActionsContainer
+	# that only holds them -- so they take zero sidebar space; the M/E keyboard
+	# shortcuts (_input below) still call _on_move_pressed / _on_end_unit_turn_pressed
+	# directly and never check the button's visible/disabled state, so they keep working.
+	if move_button:
+		move_button.visible = false
+	if end_unit_turn_button:
+		end_unit_turn_button.visible = false
+	if actions_container:
+		actions_container.visible = false
+
 	# Hide panel initially
 	_hide_panel()
 	
@@ -236,34 +251,48 @@ func _setup_sidebar_tooltips_and_meta() -> void:
 	UIFeedback.attach_sfx(self)
 
 func _setup_touch_buttons() -> void:
-	"""On-screen equivalents for two keyboard-only actions, appended to the same
-	ActionsContainer the Move/MOVES/End Turn buttons live in: Danger Zones (T) and
-	Next Unit (Tab/Q). Same secondary style_role + tooltip-names-the-hotkey pattern
-	as the rest of the sidebar; wired for SFX by the attach_sfx call in
-	_setup_sidebar_tooltips_and_meta, which runs after this."""
-	var actions_container = get_node_or_null("MarginContainer/ContentContainer/ActionsContainer")
-	if actions_container == null:
+	"""On-screen equivalents for two keyboard-only actions -- Danger Zones (T) and Next
+	Unit (Tab/Q) -- laid out side-by-side in one half-width row (compact, per the
+	sidebar-length pass) and inserted into ContentContainer directly above the
+	EndPlayerTurn divider, so the turn-control block stays grouped at the bottom. Same
+	secondary style_role + tooltip-names-the-hotkey pattern as the rest of the sidebar;
+	wired for SFX by the attach_sfx call in _setup_sidebar_tooltips_and_meta, which runs
+	after this."""
+	var content_container := get_node_or_null("MarginContainer/ContentContainer")
+	if content_container == null:
 		return
 
 	danger_zones_button = Button.new()
 	danger_zones_button.text = "Danger Zones"
 	danger_zones_button.toggle_mode = true
 	danger_zones_button.custom_minimum_size = Vector2(0, 44)
+	danger_zones_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	danger_zones_button.tooltip_text = "Show/hide every enemy's threat range (T)"
 	danger_zones_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	danger_zones_button.set_meta("style_role", "secondary")
 	danger_zones_button.pressed.connect(_on_danger_zones_button_pressed)
-	actions_container.add_child(danger_zones_button)
-	_sync_danger_zones_button()
 
 	next_unit_button = Button.new()
 	next_unit_button.text = "Next Unit"
 	next_unit_button.custom_minimum_size = Vector2(0, 44)
+	next_unit_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	next_unit_button.tooltip_text = "Select the next un-acted unit (Tab)"
 	next_unit_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	next_unit_button.set_meta("style_role", "secondary")
 	next_unit_button.pressed.connect(_on_next_unit_button_pressed)
-	actions_container.add_child(next_unit_button)
+
+	var utility_row := HBoxContainer.new()
+	utility_row.name = "UtilityRow"
+	utility_row.add_theme_constant_override("separation", 8)
+	utility_row.add_child(danger_zones_button)
+	utility_row.add_child(next_unit_button)
+	content_container.add_child(utility_row)
+
+	var end_turn_separator := content_container.get_node_or_null("HSeparator3")
+	if end_turn_separator:
+		content_container.move_child(utility_row, end_turn_separator.get_index())
+
+	_sync_danger_zones_button()
 
 func _on_danger_zones_button_pressed() -> void:
 	"""On-screen equivalent of the T hotkey: toggle every enemy's persistent danger
@@ -2137,27 +2166,21 @@ func _setup_move_system() -> void:
 	if GameEvents and not GameEvents.cursor_moved.is_connected(_on_cursor_moved_forecast):
 		GameEvents.cursor_moved.connect(_on_cursor_moved_forecast)
 
-	# Create moves button and add it to the actions container
+	# Create the VIEW MOVES button. This is the golden-path entry to a unit's kit (the
+	# demoted per-unit Move/End Turn buttons live hidden in ActionsContainer -- see
+	# _ready) so it is promoted next to the header, not buried further down.
 	moves_button = Button.new()
-	moves_button.text = "MOVES"
-	moves_button.custom_minimum_size = Vector2(120, 40)
+	moves_button.text = "VIEW MOVES"
+	moves_button.custom_minimum_size = Vector2(0, 40)
 	moves_button.pressed.connect(_on_moves_pressed)
-	
-	# Add moves button to the actions container (after move button)
-	var actions_container = get_node_or_null("MarginContainer/ContentContainer/ActionsContainer")
-	if actions_container:
-		# Insert after move button
-		var move_button_index = -1
-		for i in range(actions_container.get_child_count()):
-			if actions_container.get_child(i) == move_button:
-				move_button_index = i
-				break
-		
-		if move_button_index >= 0:
-			actions_container.add_child(moves_button)
-			actions_container.move_child(moves_button, move_button_index + 1)
-		else:
-			actions_container.add_child(moves_button)
+
+	var content_container := get_node_or_null("MarginContainer/ContentContainer")
+	if content_container:
+		content_container.add_child(moves_button)
+		# Right after the header's separator, i.e. as high as possible.
+		var header_separator := content_container.get_node_or_null("HSeparator")
+		if header_separator:
+			content_container.move_child(moves_button, header_separator.get_index() + 1)
 
 func _on_moves_pressed() -> void:
 	"""Handle Moves button press - list the selected unit's real moveset.

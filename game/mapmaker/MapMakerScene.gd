@@ -633,6 +633,7 @@ func _apply_brush(pos: Vector2i, action: Callable) -> void:
 
 func _paint_at(pos: Vector2i) -> void:
 	model.paint_tile(pos, _selected_tile_type, _selected_tile_path, _selected_tile_id)
+	_enforce_terrain_over_placement(pos)
 
 
 func _erase_at(pos: Vector2i) -> void:
@@ -643,6 +644,9 @@ func _erase_at(pos: Vector2i) -> void:
 
 func _toggle_spawn_at(pos: Vector2i) -> void:
 	if model.get_spawn(pos).is_empty():
+		if not model.can_place_unit(pos):
+			_deny_placement(pos, "a unit")
+			return
 		model.place_spawn_point(pos, _current_player_id, _selected_spawn_kind, {
 			"character_id": _selected_character_id,
 		})
@@ -653,10 +657,64 @@ func _toggle_spawn_at(pos: Vector2i) -> void:
 
 func _toggle_objective_at(pos: Vector2i) -> void:
 	if model.get_objective(pos).is_empty():
+		if not model.can_place_unit(pos):
+			_deny_placement(pos, "an objective")
+			return
 		model.set_objective(pos, "THRONE", _current_player_id)
 	else:
 		model.remove_objective(pos)
 	_refresh_cell(pos)
+
+
+## Refuses a SPAWN/OBJECTIVE placement on impassable terrain: a status message, a brief
+## red flash on the 2D cell button, and the denied UI cue. No model state changes -- the
+## caller returns right after this, so nothing needs undoing.
+func _deny_placement(pos: Vector2i, what: String) -> void:
+	_set_status("Can't place %s on %s — impassable terrain." % [what, _tile_label_at(pos)])
+	_flash_cell_denied(pos)
+	if typeof(AudioManager) == TYPE_OBJECT and AudioManager != null and AudioManager.has_method("play_ui_back"):
+		AudioManager.play_ui_back()
+
+
+## Human-readable label for the tile at [param pos] (used in denial/removal status text):
+## the resolved TileResource's authored name when one resolves, else the raw tile_type.
+func _tile_label_at(pos: Vector2i) -> String:
+	var resolved := _tile_resource_at(pos)
+	if resolved != null and not resolved.tile_name.is_empty():
+		return resolved.tile_name
+	var tile: Dictionary = model.get_tile(pos)
+	return str(tile.get("tile_type", "NORMAL")).capitalize()
+
+
+## Brief red flash on the 2D cell button at [param pos] via a modulate tween (fades back
+## to white). No-op for a cell with no button (out of bounds / not yet built).
+func _flash_cell_denied(pos: Vector2i) -> void:
+	var button: Button = _cell_buttons.get(pos)
+	if button == null:
+		return
+	button.modulate = Color(1.0, 0.35, 0.35)
+	create_tween().tween_property(button, "modulate", Color.WHITE, 0.35)
+
+
+## Painting an impassable tile (wall, tree, ...) OVER a cell that already carries a
+## spawn or objective invalidates it. Chosen behaviour: AUTO-REMOVE the now-invalid
+## marker with a status warning rather than blocking the paint stroke -- less annoying
+## mid-sketch than refusing every wall/tree brush pass that happens to cross a marker,
+## and the author can always re-place it once they see the warning. Called from every
+## paint path (single cell / brush, bucket fill, rect fill).
+func _enforce_terrain_over_placement(pos: Vector2i) -> void:
+	if model.can_place_unit(pos):
+		return
+	var removed_something := false
+	if not model.get_spawn(pos).is_empty():
+		model.remove_spawn(pos)
+		removed_something = true
+	if not model.get_objective(pos).is_empty():
+		model.remove_objective(pos)
+		removed_something = true
+	if removed_something:
+		_set_status("Removed spawn/objective at %s — now %s (impassable)." % [
+			str(pos), _tile_label_at(pos)])
 
 
 func _bucket_fill_at(pos: Vector2i) -> void:
@@ -673,6 +731,7 @@ func _bucket_fill_at(pos: Vector2i) -> void:
 		if str(model.get_tile(cell).get("tile_type", "NORMAL")) != target_type:
 			continue
 		model.paint_tile(cell, _selected_tile_type, _selected_tile_path, _selected_tile_id)
+		_enforce_terrain_over_placement(cell)
 		_refresh_cell(cell)
 		for neighbor in [Vector2i(cell.x + 1, cell.y), Vector2i(cell.x - 1, cell.y),
 				Vector2i(cell.x, cell.y + 1), Vector2i(cell.x, cell.y - 1)]:
@@ -715,6 +774,7 @@ func _commit_rect_fill(release_pos: Vector2i) -> void:
 		corner = anchor
 	for cell in _rect_cells(anchor, corner):
 		model.paint_tile(cell, _selected_tile_type, _selected_tile_path, _selected_tile_id)
+		_enforce_terrain_over_placement(cell)
 		_refresh_cell(cell)
 
 

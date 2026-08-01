@@ -125,6 +125,21 @@ static func _progress_fill(color: Color) -> StyleBoxFlat:
 	return sb
 
 
+## Tooltip background: near-opaque dark ink with a thin amber border -- deliberately
+## darker/smaller than panel_box() so a tooltip reads as a floating overlay, not
+## another card, and stays legible over both the amber HUD and the 3D board behind it.
+static func _tooltip_box() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(BROWN_DK.r, BROWN_DK.g, BROWN_DK.b, 0.96)
+	sb.set_corner_radius_all(6)
+	sb.set_border_width_all(1)
+	sb.border_color = AMBER_DK
+	sb.set_content_margin_all(8)
+	sb.shadow_color = Color(0, 0, 0, 0.35)
+	sb.shadow_size = 4
+	return sb
+
+
 # --- Assemble the Theme ----------------------------------------------------
 
 static func build() -> Theme:
@@ -171,6 +186,15 @@ static func build() -> Theme:
 	t.set_stylebox("background", "ProgressBar", _progress_track())
 	t.set_stylebox("fill", "ProgressBar", _progress_fill(HP_CYAN))
 	t.set_color("font_color", "ProgressBar", CREAM)
+
+	# Tooltips (Godot's built-in hover popup, rendered as a "TooltipPanel" containing a
+	# "TooltipLabel"). Previously unstyled here, so any panel with a tooltip_text fell
+	# back to the stock engine look -- small grey-on-grey text, unreadable over the
+	# amber HUD or the dark 3D board. Cream body text at body size (NOT the caption
+	# size) on the dark tooltip plate keeps it readable at a glance.
+	t.set_stylebox("panel", "TooltipPanel", _tooltip_box())
+	t.set_color("font_color", "TooltipLabel", CREAM)
+	t.set_font_size("font_size", "TooltipLabel", FONT_BODY)
 
 	return t
 

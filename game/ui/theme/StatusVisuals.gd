@@ -22,6 +22,7 @@ class_name StatusVisuals
 const _TABLE := {
 	# --- Debuffs -------------------------------------------------------------
 	&"ensnared":   { "name": "Ensnared",   "color": Color("9b4bd6"), "kind": "debuff" },
+	&"rubble_slowed": { "name": "Slowed",  "color": Color("8a6fd1"), "kind": "debuff" },
 	&"entangled":  { "name": "Entangled",  "color": Color("c9457d"), "kind": "debuff" },
 	# Self-applied trade-off (Petalfang's Ingrained): roots the unit but extends the
 	# reach of every move. Filed as a BUFF because it is chosen, not inflicted --

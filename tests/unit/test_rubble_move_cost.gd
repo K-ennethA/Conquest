@@ -57,3 +57,48 @@ func test_zero_bonus_rubble_does_not_slow():
 	var res := MovementResolver.new()
 	var cells := res.reachable_cells(Vector2i(0, 0), _profile(2), board, RefCounted.new())
 	assert_true(cells.has(Vector2i(0, 2)), "a tile effect with move_cost_bonus 0 never changes reach")
+
+
+## A unit exposing a LIVE movement stat below its base -- the shape a "Slowed" status
+## produces via a stat modifier. MovementResolver must fold the (current - base) delta
+## into its flood budget so the reachable set shrinks by the debuff.
+class MoverStub:
+	var cur: int
+	var base: int
+	func _init(p_cur: int, p_base: int) -> void:
+		cur = p_cur
+		base = p_base
+	func get_stat(name: String) -> int:
+		return cur if name == "movement" else 0
+	func get_base_stat(name: String) -> int:
+		return base if name == "movement" else 0
+
+
+func test_movement_debuff_shrinks_reachable_set():
+	# Base movement 3, but a -2 debuff drops live movement to 1: only one cell out is
+	# reachable, the cells two and three out are cut off (profile.range 3 + (1 - 3) = 1).
+	var board := MockBoard.new()
+	var res := MovementResolver.new()
+	var unit := MoverStub.new(1, 3)
+	var cells := res.reachable_cells(Vector2i(0, 0), _profile(3), board, unit)
+	assert_true(cells.has(Vector2i(0, 1)), "one step out is still reachable while slowed")
+	assert_false(cells.has(Vector2i(0, 2)), "two steps out is cut off by the -2 movement debuff")
+	assert_false(cells.has(Vector2i(0, 3)), "three steps out is cut off too")
+
+
+func test_no_movement_delta_leaves_reach_unchanged():
+	# current == base -> zero delta -> the full authored range-3 reach stands (byte-for-byte).
+	var board := MockBoard.new()
+	var res := MovementResolver.new()
+	var unit := MoverStub.new(3, 3)
+	var cells := res.reachable_cells(Vector2i(0, 0), _profile(3), board, unit)
+	assert_true(cells.has(Vector2i(0, 3)), "with no movement delta the unit reaches the full range")
+
+
+func test_movement_buff_grows_reachable_set():
+	# A positive delta (a haste) EXTENDS reach: base 2, live 3 -> range 2 + (3 - 2) = 3.
+	var board := MockBoard.new()
+	var res := MovementResolver.new()
+	var unit := MoverStub.new(3, 2)
+	var cells := res.reachable_cells(Vector2i(0, 0), _profile(2), board, unit)
+	assert_true(cells.has(Vector2i(0, 3)), "a +1 movement buff lets the unit reach one cell farther")

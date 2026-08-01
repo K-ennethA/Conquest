@@ -1,11 +1,20 @@
 [gd_resource type="Resource" script_class="TileEffectResource" format=3]
 
 [ext_resource type="Script" path="res://game/tiles/effects/TileEffectResource.gd" id="1_tileeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="2_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/ApplyStatusEffect.gd" id="3_applystatus"]
+[ext_resource type="Resource" path="res://game/combat/status/rubble_slowed.tres" id="4_slowed"]
+
+[sub_resource type="Resource" id="Resource_slow_apply"]
+script = ExtResource("3_applystatus")
+condition = ExtResource("4_slowed")
+chance = 1.0
 
 [resource]
 script = ExtResource("1_tileeffect")
 id = &"rock_rubble"
 display_name = "Rubble"
-trigger = 3
+trigger = 0
 affected_factions = 1
 move_cost_bonus = 2
+effects = Array[ExtResource("2_moveeffect")]([SubResource("Resource_slow_apply")])

@@ -196,7 +196,7 @@ theme_override_constants/margin_bottom = 4
 
 [node name="ContentContainer" type="VBoxContainer" parent="MarginContainer"]
 layout_mode = 2
-theme_override_constants/separation = 6
+theme_override_constants/separation = 10
 
 [node name="UnitHeaderContainer" type="HBoxContainer" parent="MarginContainer/ContentContainer"]
 layout_mode = 2
@@ -267,9 +267,6 @@ theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(0.9, 0.9, 0.9, 1)
 theme_override_colors/font_disabled_color = Color(0.6, 0.6, 0.6, 1)
 
-[node name="HSeparator2" type="HSeparator" parent="MarginContainer/ContentContainer"]
-layout_mode = 2
-
 [node name="UnitSummaryButton" type="Button" parent="MarginContainer/ContentContainer"]
 layout_mode = 2
 text = "Unit Summary ▼"
@@ -338,9 +335,6 @@ theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(0.9, 0.9, 0.9, 1)
 theme_override_colors/font_disabled_color = Color(0.6, 0.6, 0.6, 1)
-
-[node name="HSeparator4" type="HSeparator" parent="MarginContainer/ContentContainer"]
-layout_mode = 2
 
 [node name="CancelButton" type="Button" parent="MarginContainer/ContentContainer"]
 layout_mode = 2

@@ -94,6 +94,16 @@ func _ready():
 			and not GameEvents.unit_action_completed.is_connected(_on_unit_action_completed):
 		GameEvents.unit_action_completed.connect(_on_unit_action_completed)
 
+	# "Face where you act": turn a unit's model toward what it just did -- along its final
+	# movement direction on a move, toward the unit it struck on a hit. Guarded/no-op in a
+	# headless or minimal scene without these signals.
+	if GameEvents and GameEvents.has_signal("unit_moved") \
+			and not GameEvents.unit_moved.is_connected(_on_unit_moved_face):
+		GameEvents.unit_moved.connect(_on_unit_moved_face)
+	if GameEvents and GameEvents.has_signal("damage_dealt") \
+			and not GameEvents.damage_dealt.is_connected(_on_damage_dealt_face):
+		GameEvents.damage_dealt.connect(_on_damage_dealt_face)
+
 func setup_unit_visuals(unit: Unit, player_assignment: PlayerMaterials.PlayerTeam) -> void:
 	"""Set up all visual elements for a unit"""
 	_apply_player_material(unit, player_assignment)
@@ -668,6 +678,29 @@ func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
 func _on_turn_system_unit_action(unit: Unit, action_type: String) -> void:
 	"""Handle unit action completion from turn system"""
 	update_all_unit_visuals()
+
+# --- Face where you act ------------------------------------------------------
+# Turn a unit's model toward what it just did so facing reads as alive. Both delegate to
+# the unit, which composes the turn with its authored model_yaw_deg correction and no-ops
+# for multi-tile bosses. Null-safe: any freed / non-facing unit is simply skipped.
+
+func _on_unit_moved_face(unit, from_position: Vector3, to_position: Vector3) -> void:
+	"""Face the moved unit along its net movement direction (grid- or world-space deltas
+	both work -- only the direction sign matters)."""
+	if not is_instance_valid(unit) or not unit.has_method("face_direction"):
+		return
+	unit.face_direction(to_position.x - from_position.x, to_position.z - from_position.z)
+
+func _on_damage_dealt_face(attacker, defender, _damage) -> void:
+	"""Face the attacker toward the unit it struck (the defender's anchor cell)."""
+	if not is_instance_valid(attacker) or not is_instance_valid(defender):
+		return
+	if not attacker.has_method("face_cell") or not (defender is Node3D):
+		return
+	# Unit origins sit at their cell centers, so floor(world / CELL_SIZE) is the anchor cell.
+	var dp: Vector3 = (defender as Node3D).global_position
+	var cell := Vector2i(int(floor(dp.x / Unit.CELL_SIZE)), int(floor(dp.z / Unit.CELL_SIZE)))
+	attacker.face_cell(cell)
 
 # Public interface for manual updates
 func refresh_unit_visuals() -> void:

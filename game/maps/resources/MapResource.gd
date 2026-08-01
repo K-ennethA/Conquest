@@ -407,12 +407,45 @@ func validate_map(strict_catalog: bool = false) -> Dictionary:
 	# alias" and is handled by MapLoader, so it is never an issue here.
 	if strict_catalog:
 		_append_catalog_issues(issues)
+		_append_terrain_placement_issues(issues)
 
 	return {
 		"valid": issues.is_empty(),
 		"issues": issues,
 		"warnings": warnings
 	}
+
+
+func _append_terrain_placement_issues(issues: Array[String]) -> void:
+	"""Flag any unit spawn or objective/throne marker sitting on impassable terrain (a
+	wall, a tree, ...). This is the BACKSTOP for the live Map Creator's placement guard
+	(MapMakerScene refuses these at paint/place time) -- a hand-edited or shared JSON map
+	can still smuggle an invalid placement past the creator, so strict import rejects it
+	too. Shares [method MapMakerModel.tile_dict_is_passable] (a static, resolver-free call
+	here -- it resolves through the real TileCatalog) rather than re-deriving the
+	wall/impassable rule a second time, so the two checks can never drift apart.
+
+	Strict-mode only (see [method validate_map]): the many in-editor / in-game callers
+	that only want structural checks stay exactly as fast and permissive as before.
+	Position sanity is left to the out-of-bounds checks above this call -- a bad position
+	is reported once, there, not duplicated here.
+	"""
+	for spawn_data in unit_spawns:
+		var pos = spawn_data.get("position", Vector2i(-1, -1))
+		if pos.x < 0 or pos.x >= width or pos.y < 0 or pos.y >= height:
+			continue
+		if not MapMakerModel.tile_dict_is_passable(get_tile_at_position(pos)):
+			issues.append("Unit spawn at %s sits on impassable terrain" % str(pos))
+
+	for rule in special_rules:
+		var decoded: Dictionary = MapMakerModel.decode_objective_rule(rule)
+		if decoded.is_empty():
+			continue
+		var pos = decoded["position"]
+		if pos.x < 0 or pos.x >= width or pos.y < 0 or pos.y >= height:
+			continue
+		if not MapMakerModel.tile_dict_is_passable(get_tile_at_position(pos)):
+			issues.append("Objective marker at %s sits on impassable terrain" % str(pos))
 
 
 func _append_catalog_issues(issues: Array[String]) -> void:

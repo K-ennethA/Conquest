@@ -128,6 +128,92 @@ var _anim_base: Dictionary = {}
 # property (which also stranded the model). Death/flash use their own tweens.
 var _motion_tween: Dictionary = {}
 
+# --- Global animation-busy registry (static, poll-based) -------------------
+#
+# Lets a consumer -- specifically the AI driver (BotTurnDriver) -- know whether
+# any gameplay-visible animation this animator drives (move glide, attack shake,
+# hit/heal flash, death, and authored clips) is still in flight, so it can wait
+# for the screen to go QUIET before starting the next action. The reported bug is
+# the enemy acting on top of the player's still-playing attack/hit/death; the turn
+# SYSTEMS advancing instantly is by design, so the fix lives here on the visual
+# side plus a matching wait in the driver.
+#
+# Statics can't emit signals, so this is a POLLED design and -- crucially -- it can
+# never wedge the game: each started animation registers an entry with an EXPIRY
+# timestamp; the getter treats ONLY unexpired entries as "playing". If a finish
+# callback is ever lost (a killed tween emits no `finished`, or a unit frees mid-
+# animation), the entry simply expires and the registry goes quiet on its own. In
+# the common case entries are also erased promptly on the tween's `finished`.
+#
+# The registry is STATIC so the single UnitAnimator autoload's entries are visible
+# to the driver via the same script class, with no autoload lookup and no counter
+# that could drift negative (a Dictionary of live tokens can't).
+
+# token -> expiry ms (from Time.get_ticks_msec). A monotonic token keys each in-
+# flight animation so overlapping animations never clobber one another's entry.
+static var _anim_entries: Dictionary = {}
+static var _anim_token_seq: int = 0
+## Absolute hard ceiling (ms) on how long ONE entry is ever considered active,
+## regardless of the duration handed in -- the final backstop against a runaway
+## clip length. ~4s per the design: a lost callback can wedge nothing past this.
+const ANIM_MAX_AGE_MS: int = 4000
+## Slack (ms) added to every entry's duration so an animation is still counted
+## busy across scheduling jitter between its last frame and its finish callback.
+const ANIM_MARGIN_MS: int = 120
+
+## Register a started gameplay animation of ~[param duration_s] seconds and return
+## its token. The entry expires on its own after the (clamped) duration even if
+## [method _anim_end] is never called, so the registry can never get stuck busy.
+static func _anim_begin(duration_s: float) -> int:
+	_anim_token_seq += 1
+	var token: int = _anim_token_seq
+	var ms: int = int(ceil(maxf(0.0, duration_s) * 1000.0)) + ANIM_MARGIN_MS
+	ms = clampi(ms, 0, ANIM_MAX_AGE_MS)
+	_anim_entries[token] = Time.get_ticks_msec() + ms
+	return token
+
+## Mark a registered animation finished (its tween completed or was killed early).
+## Idempotent and safe with an unknown/stale token.
+static func _anim_end(token: int) -> void:
+	_anim_entries.erase(token)
+
+## Drop every entry whose expiry has passed. Keeps the registry bounded and makes
+## a lost [method _anim_end] harmless.
+static func _prune_anim_entries() -> void:
+	if _anim_entries.is_empty():
+		return
+	var now: int = Time.get_ticks_msec()
+	var dead: Array = []
+	for token in _anim_entries:
+		if int(_anim_entries[token]) <= now:
+			dead.append(token)
+	for token in dead:
+		_anim_entries.erase(token)
+
+## True when any gameplay-visible animation this animator drives is still in flight.
+## Polled by the AI driver so it defers its next action until the screen is quiet.
+## Prunes expired entries first, so a lost finish callback never wedges it. When
+## animations are OFF nothing is ever registered (every play path early-outs on
+## [method _anims_on]), so this is trivially false without special-casing here.
+static func is_any_animation_playing() -> bool:
+	_prune_anim_entries()
+	return not _anim_entries.is_empty()
+
+## Clear the registry outright. For tests / a hard scene reset -- production never
+## needs it (entries expire), but a test asserting the empty state wants a clean slate.
+static func _clear_anim_registry() -> void:
+	_anim_entries.clear()
+
+## Register [param tw] in the global busy registry for ~[param duration_s] seconds so
+## the AI driver waits for it. The entry auto-expires even if the tween is killed (a
+## killed tween never emits `finished`), so a leaked callback can never wedge the game;
+## in the normal case the `finished` callback clears it as soon as the tween completes.
+func _track(tw: Tween, duration_s: float) -> void:
+	if tw == null or not tw.is_valid():
+		return
+	var token: int = _anim_begin(duration_s)
+	tw.finished.connect(func() -> void: _anim_end(token))
+
 func _ready() -> void:
 	name = "UnitAnimator"
 	var bus := get_node_or_null("/root/GameEvents")
@@ -198,6 +284,7 @@ func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 	node.position = base + offset
 	tw.set_trans(move_glide_trans).set_ease(move_glide_ease)
 	tw.tween_property(node, "position", base, t)
+	_track(tw, t)
 
 # --- Hit flash ------------------------------------------------------------
 
@@ -254,6 +341,7 @@ func _shake(unit) -> void:
 	tw.tween_property(node, "position", base + Vector3(-d * 0.35, 0.0, 0.0), seg)
 	tw.tween_property(node, "position", base, seg)\
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_track(tw, total)
 
 func _flash(unit) -> void:
 	if not (unit is Node3D) or not is_instance_valid(unit):
@@ -289,6 +377,7 @@ func _flash(unit) -> void:
 		ft.tween_callback(func():
 			if is_instance_valid(mesh):
 				mesh.material_override = prev_override)
+		_track(ft, flash_dur)
 
 	# Squash punch (always safe -- no material knowledge needed).
 	var punch_dur: float = _scaled(hit_flash_time * 0.5)
@@ -299,6 +388,7 @@ func _flash(unit) -> void:
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		pt.tween_property(mesh, "scale", base_scale, punch_dur)\
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		_track(pt, punch_dur * 2.0)
 
 # --- Heal flash -----------------------------------------------------------
 
@@ -342,6 +432,7 @@ func _heal_flash(unit) -> void:
 		ft.tween_callback(func():
 			if is_instance_valid(mesh):
 				mesh.material_override = prev_override)
+		_track(ft, flash_dur)
 
 	# Gentle upward hop (local +Y) and settle -- a small POSITIVE pop, restored to
 	# the mesh's own current position so it leaves nothing displaced.
@@ -353,6 +444,7 @@ func _heal_flash(unit) -> void:
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		ht.tween_property(mesh, "position", base_mesh_pos, hop_dur)\
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		_track(ht, hop_dur * 2.0)
 
 # --- Death ----------------------------------------------------------------
 
@@ -414,6 +506,7 @@ func _procedural_death(unit) -> void:
 			mt.parallel().tween_property(flash_mat, "albedo_color",
 				Color(death_flash_color.r, death_flash_color.g, death_flash_color.b, 0.0), sink_t)\
 				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		_track(mt, flash_dur + sink_t)
 
 	# MOTION on the model root: a brief POP up (the lurch of the killing blow), THEN a
 	# slower SINK downward while shrinking to nothing. Uses the node's own local tween.
@@ -431,6 +524,7 @@ func _procedural_death(unit) -> void:
 				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 			dt.parallel().tween_property(node, "scale", Vector3.ZERO, sink_t)\
 				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+		_track(dt, rise_t + sink_t)
 
 # --- Helpers --------------------------------------------------------------
 
@@ -569,6 +663,15 @@ func play_clip(unit, base: String, loop_idle_after: bool = true) -> bool:
 	if clip.is_empty():
 		return false
 	ap.play(clip, clip_blend_time)
+	# Count a one-shot authored clip (walk/attack/hit/death) as busy for ~its length so
+	# the AI driver waits for an authored death/attack the same way it waits for the
+	# procedural tweens. IDLE is excluded -- it loops, so it must never register (it would
+	# read as "forever busy"). No explicit end is wired: the entry's expiry (clamped to
+	# ANIM_MAX_AGE_MS) clears it, which also caps a very long clip's hold.
+	if base != CLIP_IDLE:
+		var clip_anim := ap.get_animation(clip)
+		if clip_anim != null:
+			_anim_begin(clip_anim.length)
 	if loop_idle_after and base != CLIP_IDLE and base != CLIP_DEATH:
 		_queue_idle(ap)
 	return true

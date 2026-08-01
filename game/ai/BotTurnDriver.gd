@@ -65,6 +65,21 @@ class_name BotTurnDriver
 ## profile / debug the full planning path for every unit.
 @export var skip_idle_defender_planning: bool = true
 
+## Short recheck interval (seconds) the driver re-arms its timer for while it WAITS
+## for unit animations to finish before starting an action. Kept small so the AI
+## resumes promptly the instant the screen goes quiet.
+@export var anim_recheck: float = 0.15
+
+## Hard cap (seconds) on how long the driver will wait for animations to go quiet
+## before ONE action. After the cap it proceeds ANYWAY, so a stuck animation-busy
+## flag can never deadlock the AI (belt-and-suspenders atop the registry's own expiry).
+@export var anim_wait_cap: float = 3.0
+
+## UnitAnimator's script, referenced directly for its STATIC busy registry. Preloaded
+## (not the autoload) so the static getter resolves with no autoload lookup and works
+## in headless tests; the autoload instance and this reference share the same statics.
+const ANIMATOR_SCRIPT = preload("res://game/visuals/UnitAnimator.gd")
+
 var _timer: Timer
 var _busy: bool = false
 # Set by _act() (via act_for_turn_system) to record whether the LAST resolved
@@ -81,6 +96,10 @@ var _last_action_was_attack: bool = false
 # its target and hitting in the same frame). This stashes the chosen strike for a unit
 # that just moved, keyed by its instance id; _act() resolves it on the following beat.
 var _pending_attack: Dictionary = {}
+# Seconds already spent waiting for animations to go quiet for the CURRENT action.
+# Advanced one recheck per deferred tick and reset to 0 whenever the driver proceeds
+# (quiet, or the cap reached), so each action gets a fresh wait budget.
+var _anim_wait_elapsed: float = 0.0
 
 
 func _ready() -> void:
@@ -123,6 +142,36 @@ func _on_settings_changed() -> void:
 	_apply_wait()
 
 
+## True when a gameplay animation is still playing AND animations are enabled. The
+## driver waits on this before starting its next action so the enemy never acts on
+## top of the player's still-playing attack/hit/death. When animations are OFF there
+## is nothing to wait for (the animator registers no entries either, but we also
+## short-circuit here so a stale entry can't matter), so it returns false.
+func _animations_busy() -> bool:
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null \
+			and GameSettings.has_method("animations_on") and not bool(GameSettings.animations_on()):
+		return false
+	return ANIMATOR_SCRIPT.is_any_animation_playing()
+
+
+## Decide whether THIS beat should DEFER to let animations finish. Returns true to
+## WAIT (the caller re-arms the timer for a short recheck instead of acting) or false
+## to PROCEED. Advances the per-action wait accumulator on each deferral and PROCEEDS
+## once quiet OR once [member anim_wait_cap] is reached, so a stuck busy flag can never
+## deadlock the AI -- after the cap it acts anyway. Resets the accumulator on every
+## proceed so each action starts with a fresh budget. Pure/synchronous so it is unit-
+## testable against the animator's static registry without the Timer.
+func _defer_for_animations() -> bool:
+	if not _animations_busy():
+		_anim_wait_elapsed = 0.0
+		return false
+	if _anim_wait_elapsed >= anim_wait_cap:
+		_anim_wait_elapsed = 0.0
+		return false
+	_anim_wait_elapsed += anim_recheck
+	return true
+
+
 func _tick() -> void:
 	# _act() is synchronous EXCEPT during an ultimate cast, when it suspends to hold for the
 	# cut-in flash. That is still safe: the Timer is one-shot and re-armed only at the END of
@@ -134,6 +183,19 @@ func _tick() -> void:
 	# the turn never advances back to the human): the primary "AI inert" failure.
 	if _busy:
 		_busy = false
+
+	# WAIT FOR ANIMATIONS TO GO QUIET before this beat acts. When the player's (or a
+	# previous AI unit's) attack/hit/death animation is still in flight -- the turn
+	# systems advance instantly by design, so the player's LAST action may still be
+	# animating as the AI turn begins -- acting now would run the AI's first action on
+	# top of it, exactly the reported bug. Re-arm the one-shot timer for a short
+	# recheck instead of acting. The wait is capped (see _defer_for_animations), so a
+	# stuck busy flag can never deadlock the AI; and when animations are OFF the gate
+	# is a no-op (nothing is ever registered, and the setting is checked explicitly).
+	if _defer_for_animations():
+		if _timer != null:
+			_timer.start(anim_recheck)
+		return
 
 	# FAST-FORWARD SILENT WAITS. Each visible action (move/attack) should get its own
 	# Timer-paced beat so the turn stays readable, but a unit that just WAITs (nothing

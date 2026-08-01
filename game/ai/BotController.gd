@@ -311,6 +311,14 @@ func _ranked_attacks(actor, origin: Vector2i, moveset: Array, hostiles: Array, b
 		# currently in its alternate mode is planned with that mode's data.
 		if move == null or move.targeting_for(actor) == null or not _move_has_damage(move, actor):
 			continue
+		# COOLDOWN / CHARGE GATE: a damaging move on cooldown (or out of charges) is
+		# never re-picked -- the SAME MovesetController.can_use gate the human UI and the
+		# support/trap branches use. Without this the planner re-selected a cooldown move
+		# (e.g. Strangling Roots) every turn even though the AI cast starts its cooldown,
+		# so an enemy appeared to spam it. Null-safe: a mock actor with no controller
+		# reports ready, so pure-planner tests are unchanged.
+		if not _move_is_ready(actor, move):
+			continue
 		for target in hostiles:
 			# The AIM cell for this move against the target. An ordinary move aims at
 			# the target's OWN cell (historical); a POSITIONAL move (a leap) aims at
@@ -361,6 +369,10 @@ func _ranked_attacks_from_cells(actor, origin: Vector2i, stand_cells: Array, mov
 	var best_by_key := {}  # "move_id:target_id" -> best candidate for that pairing
 	for move in moveset:
 		if move == null or move.targeting_for(actor) == null or not _move_has_damage(move, actor):
+			continue
+		# COOLDOWN / CHARGE GATE (see _ranked_attacks): skip a damaging move the actor
+		# cannot legally use this turn, so a cooldown move is not re-cast every turn.
+		if not _move_is_ready(actor, move):
 			continue
 		var positional: bool = _is_positional_move(move, actor)
 		for target in hostiles:

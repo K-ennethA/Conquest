@@ -173,3 +173,109 @@ func test_objective_does_not_leak_into_special_rules_on_reload():
 	var res2: MapResource = restored.to_map_resource()
 	# The single objective should encode as exactly one special rule, not accumulate.
 	assert_eq(res2.special_rules.size(), 1, "Objective encoded once, no duplication")
+
+
+# --- Terrain-passability placement checks (can_place_unit) -------------------
+# Uses an INJECTED tile_resolver (not the real TileCatalog / disk assets) so these
+# stay pure, fast, and headless-safe -- see MapMakerModel.tile_resolver's doc comment.
+
+## Fake resolver standing in for TileCatalog.find_by_id: "wall_stub" resolves to an
+## impassable TileResource, "grass_stub" to a passable one, anything else to null (so
+## the tile_type-family fallback in tile_dict_is_passable is exercised on a miss).
+func _stub_tile_resolver(tile_id: String, _path: String) -> TileResource:
+	if tile_id == "wall_stub":
+		var wall := TileResource.new()
+		wall.id = &"wall_stub"
+		wall.tile_type = Tile.TileType.WALL
+		wall.is_passable = false
+		return wall
+	if tile_id == "grass_stub":
+		var grass := TileResource.new()
+		grass.id = &"grass_stub"
+		grass.tile_type = Tile.TileType.NORMAL
+		grass.is_passable = true
+		return grass
+	return null
+
+
+func test_can_place_unit_false_on_wall_tile_with_injected_resolver():
+	model.tile_resolver = Callable(self, "_stub_tile_resolver")
+	model.paint_tile(Vector2i(2, 2), "WALL", "", "wall_stub")
+	assert_false(model.can_place_unit(Vector2i(2, 2)), "GROUND unit cannot be placed on a wall tile")
+
+
+func test_can_place_unit_true_on_grass_tile_with_injected_resolver():
+	model.tile_resolver = Callable(self, "_stub_tile_resolver")
+	model.paint_tile(Vector2i(2, 2), "NORMAL", "", "grass_stub")
+	assert_true(model.can_place_unit(Vector2i(2, 2)), "GROUND unit can be placed on a passable tile")
+
+
+func test_can_place_unit_false_out_of_bounds():
+	model.tile_resolver = Callable(self, "_stub_tile_resolver")
+	assert_false(model.can_place_unit(Vector2i(-1, 0)), "out-of-bounds cell is never placeable")
+
+
+func test_can_place_unit_default_cell_with_no_resolver_uses_tile_type_fallback():
+	# No tile_resolver set: falls back to the coarse tile_type family (WALL only).
+	model.paint_tile(Vector2i(0, 0), "WALL")  # no tile_id/path -> unresolvable -> family fallback
+	assert_false(model.can_place_unit(Vector2i(0, 0)), "bare WALL tile_type is impassable via the fallback")
+	model.paint_tile(Vector2i(1, 0), "NORMAL")
+	assert_true(model.can_place_unit(Vector2i(1, 0)), "bare NORMAL tile_type is passable via the fallback")
+
+
+func test_can_place_unit_non_ground_kind_ignores_blocked_terrain():
+	# Flyers/hover aren't placeable from the Map Creator UI yet (see the class doc caveat
+	# this mirrors), but the rule table already honours a non-GROUND kind: it should ignore
+	# terrain the way MovementResolver's FLYING/PHASING pathing does.
+	model.tile_resolver = Callable(self, "_stub_tile_resolver")
+	model.paint_tile(Vector2i(2, 2), "WALL", "", "wall_stub")
+	assert_true(model.can_place_unit(Vector2i(2, 2), CombatTypes.MovementKind.FLYING),
+		"a FLYING unit ignores blocked terrain")
+
+
+# --- Strict-mode validator backstop (terrain placement) -----------------------
+# Uses REAL TileCatalog ids (stone_wall) since MapResource._append_terrain_placement_issues
+# calls the shared passability rule with no resolver override, matching production.
+
+func _has_issue_containing(issues: Array, needle: String) -> bool:
+	for i in issues:
+		if String(i).to_lower().contains(needle.to_lower()):
+			return true
+	return false
+
+
+func test_strict_validate_flags_spawn_on_wall_tile():
+	model.map_name = "Wall Spawn Test"
+	model.paint_tile(Vector2i(2, 2), "WALL", "", "stone_wall")
+	model.place_spawn(Vector2i(2, 2), 0)
+	model.place_spawn(Vector2i(4, 4), 1)
+	var res := model.to_map_resource()
+	var validation := res.validate_map(true)
+	assert_false(validation["valid"], "strict validation must reject a spawn placed on a wall tile")
+	assert_true(_has_issue_containing(validation["issues"], "impassable"),
+		"issue should call out the impassable placement: " + str(validation["issues"]))
+
+
+func test_strict_validate_flags_objective_on_wall_tile():
+	model.map_name = "Wall Objective Test"
+	model.paint_tile(Vector2i(1, 1), "WALL", "", "stone_wall")
+	model.set_objective(Vector2i(1, 1), "THRONE", 0)
+	model.place_spawn(Vector2i(0, 0), 0)
+	model.place_spawn(Vector2i(4, 4), 1)
+	var res := model.to_map_resource()
+	var validation := res.validate_map(true)
+	assert_false(validation["valid"], "strict validation must reject an objective placed on a wall tile")
+	assert_true(_has_issue_containing(validation["issues"], "impassable"),
+		"issue should call out the impassable placement: " + str(validation["issues"]))
+
+
+func test_non_strict_validate_does_not_check_terrain_placement():
+	# Backwards-compat: the many non-strict callers (in-editor autosave, live-game load)
+	# must keep behaving exactly as before -- terrain placement is a strict-only check.
+	model.map_name = "Wall Spawn Non-Strict"
+	model.paint_tile(Vector2i(2, 2), "WALL", "", "stone_wall")
+	model.place_spawn(Vector2i(2, 2), 0)
+	model.place_spawn(Vector2i(4, 4), 1)
+	var res := model.to_map_resource()
+	var validation := res.validate_map()
+	assert_true(validation["valid"], "non-strict validation should not check terrain placement: " + str(validation.get("issues", [])))

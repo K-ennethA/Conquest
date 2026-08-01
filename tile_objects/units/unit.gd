@@ -105,6 +105,18 @@ const CELL_SIZE: float = 2.0
 var _footprint_base_scale: Vector3 = Vector3.ONE
 var _has_footprint_base_scale: bool = false
 
+# --- Facing -----------------------------------------------------------------
+# The model root's Y rotation is the authored correction (character_resource.model_yaw_deg)
+# COMPOSED ADDITIVELY with `facing_yaw`, the WORLD direction the unit should face. The
+# authored correction's job is to align the sculpt's front to Godot's -Z, so with it
+# applied the model is canonical (faces world -Z); `facing_yaw` then rotates that canonical
+# forward. facing_yaw 0 = world -Z (north / up-board / AWAY from the south-side camera);
+# facing_yaw = PI = world +Z (south / down-board / TOWARD the camera). The spawner sets it
+# so a unit faces the opposing side; face_cell/face_direction update it at runtime so a
+# unit turns toward what it acts on. The authored correction is NEVER overwritten -- the
+# final model yaw is always model_yaw_deg + facing_yaw.
+var facing_yaw: float = 0.0
+
 # Death guard: death resolution (signals + despawn) must run exactly once, no
 # matter how many code paths observe HP hitting 0 (take_damage, the health_changed
 # signal, or a heal-then-lethal edge). Latches true on the first death.
@@ -295,11 +307,118 @@ func _setup_character_model() -> void:
 		m.position = get_footprint_offset()
 		var yaw: float = character_resource.model_yaw_deg if "model_yaw_deg" in character_resource else 0.0
 		var model_scale: float = character_resource.model_scale if "model_scale" in character_resource else 1.0
-		m.rotation = Vector3(0.0, deg_to_rad(yaw), 0.0)
+		# Compose the authored correction with the spawn/runtime facing (see the facing_yaw
+		# note above). The spawner sets facing_yaw BEFORE this node enters the tree, so the
+		# model is built already oriented toward the opposing side.
+		m.rotation = Vector3(0.0, deg_to_rad(yaw) + facing_yaw, 0.0)
 		m.scale = Vector3.ONE * maxf(0.05, model_scale)
 
 	if _mesh_instance:
 		_mesh_instance.visible = false
+
+
+# --- Facing API -------------------------------------------------------------
+
+## Decide the world-facing yaw (RADIANS) a freshly spawned unit takes so it faces the
+## OPPOSING side, to be composed with the authored model_yaw_deg. PURE + STATIC so the
+## decision is unit-testable. Convention: 0 = world -Z (north / up-board), PI = world +Z
+## (south / down-board / toward the south-side camera). A unit in the TOP (north) half
+## faces down-board (+Z, PI); one in the BOTTOM (south) half faces up-board (-Z, 0).
+## Exactly on the midline it faces the majority side of [param enemy_rows]; with no
+## decisive enemy it faces south (PI, toward the camera).
+static func spawn_facing_yaw(spawn_row: int, map_height: int, enemy_rows: Array = []) -> float:
+	var midline: float = float(maxi(1, map_height) - 1) * 0.5
+	if float(spawn_row) < midline:
+		return PI
+	if float(spawn_row) > midline:
+		return 0.0
+	# Dead-center on the midline: face the majority of enemy spawns, else south.
+	var below: int = 0
+	var above: int = 0
+	for r in enemy_rows:
+		var rr: int = int(r)
+		if rr > spawn_row:
+			below += 1
+		elif rr < spawn_row:
+			above += 1
+	if below > above:
+		return PI
+	if above > below:
+		return 0.0
+	return PI
+
+## World-facing yaw (RADIANS) whose canonical forward points along the world direction
+## ([param dx], [param dz]). With the authored correction applied the model faces -Z, and
+## rotate(-Z, yaw) = (-sin yaw, -cos yaw), so solving for the target direction gives this.
+## Convention-independent: only the sign of the delta matters, so grid-space or world-space
+## deltas both yield the same angle.
+static func facing_yaw_for_delta(dx: float, dz: float) -> float:
+	return atan2(-dx, -dz)
+
+## Set the world-facing yaw (radians) and re-apply the composed model rotation. Never
+## touches the authored model_yaw_deg -- the two are summed in [method _apply_model_facing].
+func set_facing_yaw(yaw_rad: float) -> void:
+	facing_yaw = yaw_rad
+	_apply_model_facing()
+
+## Compose and apply the model root's Y rotation = deg_to_rad(model_yaw_deg) + facing_yaw.
+## No-op when there is no character model (placeholder / headless units).
+func _apply_model_facing() -> void:
+	var m := get_node_or_null("CharacterModel") as Node3D
+	if m == null:
+		return
+	m.rotation = Vector3(0.0, deg_to_rad(_authored_model_yaw()) + facing_yaw, 0.0)
+
+## The authored per-model yaw correction in degrees (0 when there is no character or the
+## field is absent).
+func _authored_model_yaw() -> float:
+	if character_resource != null and "model_yaw_deg" in character_resource:
+		return character_resource.model_yaw_deg
+	return 0.0
+
+## Turn the model to face world direction ([param dx], [param dz]) -- used to face along a
+## just-completed move. No-op for a zero direction, a missing model, or a MULTI-TILE boss
+## (footprint != 1x1), whose centered model reads wrong when spun to an arbitrary angle.
+func face_direction(dx: float, dz: float) -> void:
+	if absf(dx) < 0.0001 and absf(dz) < 0.0001:
+		return
+	if get_footprint() != Vector2i.ONE:
+		return
+	_turn_model_to(facing_yaw_for_delta(dx, dz))
+
+## Turn the model to face [param target_cell] -- used to face the target of an action.
+## Faces from the unit's CURRENT world position toward the cell center, so calling it with
+## the unit's own cell is a harmless no-op. Same boss / missing-model guards as
+## [method face_direction] (via the delegation to it).
+func face_cell(target_cell: Vector2i) -> void:
+	var here: Vector3 = global_position if is_inside_tree() else position
+	var target_x: float = float(target_cell.x) * CELL_SIZE + CELL_SIZE * 0.5
+	var target_z: float = float(target_cell.y) * CELL_SIZE + CELL_SIZE * 0.5
+	face_direction(target_x - here.x, target_z - here.z)
+
+## Rotate the model root to [param target_facing_yaw] (world-facing, radians), composed with
+## the authored correction. A quick eased turn when animations are on and we are in the tree;
+## an instant set otherwise. Shortest-path via lerp_angle so it never spins the long way
+## around the +/-PI wrap. Records facing_yaw so the state stays authoritative.
+func _turn_model_to(target_facing_yaw: float) -> void:
+	var m := get_node_or_null("CharacterModel") as Node3D
+	if m == null:
+		# No model yet: still record the intent so a later build/apply uses it.
+		facing_yaw = target_facing_yaw
+		return
+	var target_rot: float = deg_to_rad(_authored_model_yaw()) + target_facing_yaw
+	facing_yaw = target_facing_yaw
+	var dur: float = 0.0
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and GameSettings.has_method("scaled_time"):
+		dur = GameSettings.scaled_time(0.1)
+	if dur <= 0.0 or not is_inside_tree():
+		m.rotation = Vector3(0.0, target_rot, 0.0)
+		return
+	var start_rot: float = m.rotation.y
+	var apply := func(t: float) -> void:
+		m.rotation.y = lerp_angle(start_rot, target_rot, t)
+	var tw := create_tween()
+	tw.tween_method(apply, 0.0, 1.0, dur)
 
 func _connect_events() -> void:
 	"""Connect to game events"""

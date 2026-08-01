@@ -426,6 +426,13 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 	var world_pos = Vector3(grid_pos.x * 2 + 1, UNIT_GROUND_Y, grid_pos.y * 2 + 1)
 	unit_instance.transform.origin = world_pos
 
+	# Face the opposing side based on board position: a unit in the TOP (north) half faces
+	# down-board toward the camera, one in the BOTTOM (south) half faces up-board (its back
+	# to the camera). Set BEFORE add_child so the model is built already oriented; Unit
+	# composes this ADDITIVELY with the character's authored model_yaw_deg correction.
+	if "facing_yaw" in unit_instance:
+		unit_instance.facing_yaw = _compute_spawn_facing(grid_pos, player_id)
+
 	# Add to appropriate player container
 	var player_container = map_root.get_node_or_null("Player" + str(player_id + 1))
 	if not player_container:
@@ -463,6 +470,26 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 		GameEvents.unit_spawned.emit(unit_instance, runtime)
 
 	return unit_instance
+
+
+## World-facing yaw (radians) a unit spawned on [param grid_pos] should take so it faces
+## the OPPOSING side, per [method Unit.spawn_facing_yaw]. Enemy rows (spawns of a different
+## player_id) only break a dead-center-on-the-midline tie. Null-safe: with no current_map it
+## defaults to a 5-row map with no enemy hints, so a unit spawned outside a loaded map still
+## gets a sane south-facing default.
+func _compute_spawn_facing(grid_pos: Vector2i, player_id: int) -> float:
+	var map_h: int = 5
+	var enemy_rows: Array = []
+	if current_map != null:
+		map_h = int(current_map.height)
+		for sp in current_map.unit_spawns:
+			var pid: int = int(sp.get("player_id", 0))
+			if pid == player_id:
+				continue
+			var pos = sp.get("position", Vector2i(-1, -1))
+			if pos is Vector2i and pos.y >= 0:
+				enemy_rows.append(pos.y)
+	return Unit.spawn_facing_yaw(grid_pos.y, map_h, enemy_rows)
 
 
 ## Resolve the AI stance a spawned unit should hold, given its spawn KIND and the

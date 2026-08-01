@@ -60,6 +60,13 @@ const KNIGHT_OFFSETS: Array[Vector2i] = [
 ## the moving unit, used only to honour a multi-cell footprint; omit it (or pass a
 ## 1x1 unit) for the original single-cell behaviour.
 func reachable_cells(origin: Vector2i, profile: MovementProfile, board, unit = null) -> Array[Vector2i]:
+	# LIVE MOVEMENT DEBUFFS/BUFFS shrink or grow the flood budget. The authored profile
+	# carries a STATIC range (base movement); a temporary movement-stat modifier -- e.g.
+	# the "Slowed" status a rubble field applies -- lowers the unit's live movement but
+	# never touched the profile, so it used to do nothing to reachability. Fold the delta
+	# (current - base movement) into an effective range here so a slow visibly shrinks the
+	# reachable set the same turn (and a haste grows it).
+	profile = _effective_profile(profile, unit)
 	var raw: Array = []
 	match profile.shape:
 		MovementProfile.Shape.ORTHOGONAL:
@@ -284,6 +291,33 @@ static func _unit_alive(unit) -> bool:
 	if hp != null:
 		return int(hp) > 0
 	return true
+
+
+# --- Effective range (live movement stat delta) ----------------------------
+
+## The profile to actually flood with, once the unit's LIVE movement modifiers are
+## folded in. When the unit exposes both a current and a base movement stat and they
+## differ (a temporary buff/debuff is active), return a DUPLICATE whose range is
+## [code]maxi(0, profile.range + (current - base))[/code] -- a -2 movement debuff shrinks
+## the reachable set by 2, a +1 haste grows it by 1. The shared authoring resource is
+## never mutated (a fresh duplicate is returned only when the delta is nonzero).
+##
+## Fully null-safe for mocks: a null profile/unit, or a unit that cannot report both
+## stats (the RefCounted units tests pass), yields the ORIGINAL profile untouched, so
+## every existing caller and test is byte-for-byte unchanged.
+static func _effective_profile(profile: MovementProfile, unit) -> MovementProfile:
+	if profile == null or unit == null:
+		return profile
+	if not (unit.has_method("get_stat") and unit.has_method("get_base_stat")):
+		return profile
+	var current: int = int(unit.get_stat("movement"))
+	var base: int = int(unit.get_base_stat("movement"))
+	var delta: int = current - base
+	if delta == 0:
+		return profile
+	var adjusted: MovementProfile = profile.duplicate()
+	adjusted.range = maxi(0, profile.range + delta)
+	return adjusted
 
 
 # --- Duck-typed board accessors -------------------------------------------

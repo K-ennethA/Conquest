@@ -186,13 +186,47 @@ func _move_hint(move, controller) -> String:
 	return "(" + ", ".join(parts) + ")" if not parts.is_empty() else ""
 
 func _move_tooltip(move) -> String:
+	"""Compact hover tooltip: name -- one-line mechanical effect, then range/cooldown.
+	Deliberately NOT move.full_description(), which prepends the authored flavor text
+	and can run several lines -- unreadable in a small hover bubble. The full multi-line
+	writeup still lives in MoveSelectionPanel's dedicated info panel."""
 	if move == null:
 		return ""
-	if move.has_method("full_description"):
-		return move.full_description()
+	var name_str := "Move"
 	if "display_name" in move:
-		return str(move.display_name)
-	return ""
+		name_str = str(move.display_name)
+
+	var bits: PackedStringArray = []
+	var effect := _move_effect_line(move)
+	if effect != "":
+		bits.append(effect)
+
+	var meta: PackedStringArray = []
+	if move != null and "targeting" in move and move.targeting != null and move.targeting.has_method("describe_range"):
+		meta.append(move.targeting.describe_range())
+	if "cooldown" in move and move.cooldown > 0:
+		meta.append("CD %d" % move.cooldown)
+	if not meta.is_empty():
+		bits.append(", ".join(meta))
+
+	if bits.is_empty():
+		return name_str
+	return "%s -- %s" % [name_str, " | ".join(bits)]
+
+
+func _move_effect_line(move) -> String:
+	"""Best-effort one-line mechanical summary: each effect's describe(), joined --
+	the same source full_description() uses for its mechanics line, minus the authored
+	flavor text that made the old tooltip multi-line."""
+	if move == null or not ("effects" in move):
+		return ""
+	var parts: PackedStringArray = []
+	for e in move.effects:
+		if e and e.has_method("describe"):
+			var d: String = e.describe()
+			if d != "":
+				parts.append(d)
+	return " · ".join(parts)
 
 func _reposition_to_unit() -> void:
 	"""Place the card next to the unit's projected screen position, clamped to the

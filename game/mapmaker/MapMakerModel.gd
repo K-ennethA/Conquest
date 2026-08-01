@@ -17,6 +17,14 @@ class_name MapMakerModel
 ## Prefix used to encode objective/throne markers inside MapResource.special_rules.
 const OBJECTIVE_PREFIX := "objective"
 
+## Injectable tile-resource resolver for [method can_place_unit] / [method
+## tile_dict_is_passable]. Signature: [code]func(tile_id: String, tile_resource_path: String) -> TileResource[/code]
+## (return null when nothing resolves). Left unset (the default [Callable]) resolves
+## through the real [TileCatalog], exactly like the live Map Creator; tests set this to
+## a fake resolver so passability logic is exercised WITHOUT touching disk / the real
+## tile catalog, keeping MapMakerModel a fast, fully headless-testable RefCounted.
+var tile_resolver: Callable = Callable()
+
 ## Map metadata mirrored onto the produced MapResource.
 var map_name: String = "New Map"
 var description: String = ""
@@ -96,6 +104,66 @@ func get_tile(pos: Vector2i) -> Dictionary:
 ## Number of explicitly painted tiles.
 func get_painted_tile_count() -> int:
 	return _tiles.size()
+
+
+## True when a unit of [param movement_kind] ([enum CombatTypes.MovementKind]) could be
+## PLACED at [param cell] -- out of bounds and impassable terrain (a wall, a tree, ...)
+## both refuse. Mirrors [method MovementResolver._can_traverse]/[method _can_stop]'s
+## per-kind terrain rule so a future placement check never disagrees with live movement:
+## GROUND is blocked by impassable terrain; FLYING/PHASING ignore terrain entirely (they
+## are still only blocked by units in [MovementResolver], which is out of scope for a
+## static map-authoring placement check -- there is no live occupancy here).
+##
+## The Map Creator has no flyer/hover/air unit type or kind selector yet (per the user's
+## own caveat: "this may not be true if the unit is a flyer/air type/hovering, effect not
+## implemented yet"), so every call from [MapMakerScene] today omits [param movement_kind]
+## and gets the GROUND rule. Threading the parameter through now means wiring in a real
+## kind selector later is a pure caller-side change -- this method's signature and the
+## rule table it dispatches on already support it.
+func can_place_unit(cell: Vector2i, movement_kind: int = CombatTypes.MovementKind.GROUND) -> bool:
+	if not is_in_bounds(cell):
+		return false
+	if movement_kind != CombatTypes.MovementKind.GROUND:
+		return true
+	return MapMakerModel.tile_dict_is_passable(get_tile(cell), tile_resolver)
+
+
+## Shared passability rule for a raw tile dict (the shape [method get_tile] /
+## [method MapResource.get_tile_at_position] return: tile_id / tile_resource_path /
+## tile_type). STATIC and PUBLIC so [MapResource.validate_map]'s strict-mode backstop
+## can call the exact same rule the live creator enforces, instead of re-deriving its
+## own copy of the tile-family table (which would drift the moment one of them changes).
+##
+## Resolution order: tile_id via [param resolver] (or the real [TileCatalog] when no
+## resolver is supplied) -> tile_resource_path likewise -> when NEITHER resolves to an
+## actual [TileResource] (an unpainted cell, a fresh custom tile awaiting catalog rescan,
+## a headless test with no resolver and no matching disk asset), fall back to the coarse
+## tile_type family: WALL is the only type that is impassable BY DEFINITION regardless of
+## its resource (see [method TileResource.get_movement_cost]'s hardcoded 999). Every other
+## family CAN also be impassable (e.g. the forest "tree" tile is DIFFICULT_TERRAIN with
+## [member TileResource.is_passable] = false) but that can only be known once the actual
+## resource resolves, so an unresolvable non-WALL tile is optimistically treated as
+## passable rather than guessed at.
+static func tile_dict_is_passable(tile: Dictionary, resolver: Callable = Callable()) -> bool:
+	var resolved := _resolve_tile_resource_for_dict(tile, resolver)
+	if resolved != null:
+		return resolved.is_tile_passable()
+	return str(tile.get("tile_type", "NORMAL")) != "WALL"
+
+
+static func _resolve_tile_resource_for_dict(tile: Dictionary, resolver: Callable) -> TileResource:
+	var tile_id: String = str(tile.get("tile_id", ""))
+	var path: String = str(tile.get("tile_resource_path", ""))
+	if resolver.is_valid():
+		var result = resolver.call(tile_id, path)
+		return result if result is TileResource else null
+	if not tile_id.is_empty():
+		var by_id := TileCatalog.find_by_id(StringName(tile_id))
+		if by_id != null:
+			return by_id
+	if not path.is_empty():
+		return TileCatalog.find(path)
+	return null
 
 
 ## Places a plain "Start" unit spawn at [param pos]. Returns false if out of bounds.
@@ -293,7 +361,7 @@ func load_from_map_resource(res: MapResource) -> void:
 		}
 
 	for rule in res.special_rules:
-		var decoded := _decode_objective(rule)
+		var decoded := MapMakerModel.decode_objective_rule(rule)
 		if decoded.is_empty():
 			_extra_special_rules.append(rule)
 		else:
@@ -381,7 +449,12 @@ func _encode_objective(pos: Vector2i, marker: Dictionary) -> String:
 	]
 
 
-func _decode_objective(rule: String) -> Dictionary:
+## Decode one [member MapResource.special_rules] entry as an objective/throne marker, or
+## return [code]{}[/code] when [param rule] isn't one (an ordinary special rule string).
+## STATIC and PUBLIC (not the private-by-convention [code]_decode_objective[/code] this
+## replaced) so [MapResource.validate_map]'s strict-mode terrain-placement check can read
+## objective positions out of special_rules without re-implementing the encoding here.
+static func decode_objective_rule(rule: String) -> Dictionary:
 	if not rule.begins_with(OBJECTIVE_PREFIX + ":"):
 		return {}
 	var parts := rule.split(":")
