@@ -541,13 +541,29 @@ func export_to_json() -> String:
 	
 	return JSON.stringify(data, "\t")
 
-static func import_from_json(json_string: String) -> MapResource:
-	"""Import map data from JSON format"""
+## Convert a JSON-parsed plain Array into the typed Array[String] our @export
+## properties require (a direct plain->typed assignment is a runtime error).
+## Non-string elements are stringified rather than dropped, matching JSON's
+## loose typing.
+static func _to_string_array(raw) -> Array[String]:
+	var out: Array[String] = []
+	if raw is Array:
+		for v in raw:
+			out.append(String(v))
+	return out
+
+
+static func import_from_json(json_string: String, quiet: bool = false) -> MapResource:
+	"""Import map data from JSON format. Pass quiet=true from validation-only callers
+	(e.g. ChallengeCodec.validate probing untrusted codes) so an EXPECTED rejection
+	reports through the null return alone instead of push_error - the loud default
+	stays for real load paths, where a rejected map is a genuine error."""
 	var json = JSON.new()
 	var parse_result = json.parse(json_string)
-	
+
 	if parse_result != OK:
-		push_error("MapResource: Failed to parse JSON: " + json.get_error_message())
+		if not quiet:
+			push_error("MapResource: Failed to parse JSON: " + json.get_error_message())
 		return null
 	
 	var data = json.data
@@ -574,8 +590,10 @@ static func import_from_json(json_string: String) -> MapResource:
 	resource.difficulty = gameplay.get("difficulty", "Normal")
 	resource.map_type = gameplay.get("map_type", "Skirmish")
 	resource.turn_limit = gameplay.get("turn_limit", 0)
-	resource.victory_conditions = gameplay.get("victory_conditions", ["Eliminate All Enemies"])
-	resource.special_rules = gameplay.get("special_rules", [])
+	# JSON.parse gives plain Arrays; these properties are typed Array[String], and Godot
+	# rejects a direct plain->typed assignment. Convert element-wise.
+	resource.victory_conditions = _to_string_array(gameplay.get("victory_conditions", ["Eliminate All Enemies"]))
+	resource.special_rules = _to_string_array(gameplay.get("special_rules", []))
 	
 	# Visual
 	var visual = data.get("visual", {})
@@ -598,7 +616,7 @@ static func import_from_json(json_string: String) -> MapResource:
 
 	# Metadata
 	var metadata = data.get("metadata", {})
-	resource.tags = metadata.get("tags", [])
+	resource.tags = _to_string_array(metadata.get("tags", []))
 	resource.preview_image_path = metadata.get("preview_image_path", "")
 
 	# A map with no victory condition can never be won - default it rather than reject.
@@ -612,8 +630,9 @@ static func import_from_json(json_string: String) -> MapResource:
 	# "load failed" path instead of quietly loading a corrupt map.
 	var validation: Dictionary = resource.validate_map(true)
 	if not validation.get("valid", false):
-		push_error("MapResource.import_from_json: rejected invalid map '%s' - %s" % [
-			resource.map_name, "; ".join(validation.get("issues", []))])
+		if not quiet:
+			push_error("MapResource.import_from_json: rejected invalid map '%s' - %s" % [
+				resource.map_name, "; ".join(validation.get("issues", []))])
 		return null
 
 	return resource

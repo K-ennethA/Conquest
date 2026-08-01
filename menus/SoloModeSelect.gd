@@ -17,6 +17,7 @@ class_name SoloModeSelect
 
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 const MATCH_SETUP_SCENE := "res://menus/MatchSetup.tscn"
+const CHALLENGE_BROWSE_SCENE := "res://menus/ChallengeBrowse.tscn"
 
 ## Message flashed when the not-yet-built Campaign card is chosen.
 const COMING_SOON_TEXT := "Campaign is still in development -- coming soon."
@@ -36,7 +37,7 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var page := VBoxContainer.new()
-	page.custom_minimum_size = Vector2(1060.0, 0.0)
+	page.custom_minimum_size = Vector2(1180.0, 0.0)
 	page.add_theme_constant_override("separation", 16)
 	center.add_child(page)
 
@@ -70,6 +71,10 @@ func _build_ui() -> void:
 		"3.  Arena Run",
 		"Draft augments between rounds.\nSurvive the gauntlet.",
 		MatchConfigPanel.MODE_ARENA))
+	cards.add_child(_make_action_card(
+		"4.  Challenges",
+		"Beat maps other players built --\nor share your own gauntlet.",
+		_on_challenges_chosen))
 
 	# Flashes the coming-soon caption; empty and reserved (fixed height) so the layout
 	# never jumps when the message appears.
@@ -92,7 +97,7 @@ func _build_ui() -> void:
 	page.add_child(back)
 
 	var hint := Label.new()
-	hint.text = "1 Campaign  •  2 Skirmish  •  3 Arena Run  •  ESC back"
+	hint.text = "1 Campaign  •  2 Skirmish  •  3 Arena Run  •  4 Challenges  •  ESC back"
 	page.add_child(hint)
 	MenuTheme.style_caption(hint)
 
@@ -100,11 +105,45 @@ func _build_ui() -> void:
 ## A tall, clickable mode card: a big gold heading over a dim description line.
 func _make_mode_card(heading: String, blurb: String, mode: String) -> Button:
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(320.0, 180.0)
+	btn.custom_minimum_size = Vector2(268.0, 180.0)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.pressed.connect(_on_mode_chosen.bind(mode))
 
 	# Stacked labels laid over the button; mouse_filter IGNORE so clicks reach the button.
+	var col := VBoxContainer.new()
+	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 10)
+
+	var head := Label.new()
+	head.text = heading
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_theme_font_size_override("font_size", 26)
+	head.add_theme_color_override("font_color", MenuTheme.GOLD)
+	col.add_child(head)
+
+	var desc := Label.new()
+	desc.text = blurb
+	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	desc.add_theme_font_size_override("font_size", 15)
+	desc.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	col.add_child(desc)
+
+	btn.add_child(col)
+	return btn
+
+
+## A clickable card that runs an arbitrary [param callback] instead of staging a
+## MatchSetup mode (used by Challenges, which navigates to its own browse screen).
+func _make_action_card(heading: String, blurb: String, callback: Callable) -> Button:
+	var btn := Button.new()
+	btn.custom_minimum_size = Vector2(268.0, 180.0)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.pressed.connect(callback)
+
 	var col := VBoxContainer.new()
 	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -136,7 +175,7 @@ func _make_mode_card(heading: String, blurb: String, mode: String) -> Button:
 ## tooltip. Choosing it by keyboard flashes [member _status_label] instead.
 func _make_coming_soon_card(heading: String, blurb: String) -> Button:
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(320.0, 180.0)
+	btn.custom_minimum_size = Vector2(268.0, 180.0)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.disabled = true
 	btn.focus_mode = Control.FOCUS_NONE
@@ -183,6 +222,10 @@ func _on_mode_chosen(mode: String) -> void:
 	get_tree().change_scene_to_file(MATCH_SETUP_SCENE)
 
 
+func _on_challenges_chosen() -> void:
+	get_tree().change_scene_to_file(CHALLENGE_BROWSE_SCENE)
+
+
 func _flash_coming_soon() -> void:
 	if _status_label == null:
 		return
@@ -208,5 +251,7 @@ func _input(event: InputEvent) -> void:
 				_on_mode_chosen(MatchConfigPanel.MODE_SKIRMISH)
 			KEY_3:
 				_on_mode_chosen(MatchConfigPanel.MODE_ARENA)
+			KEY_4:
+				_on_challenges_chosen()
 			KEY_ESCAPE:
 				_on_back_pressed()

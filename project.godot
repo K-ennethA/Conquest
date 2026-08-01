@@ -35,6 +35,7 @@ CombatServices="*res://game/combat/CombatServices.gd"
 AudioManager="*res://game/audio/AudioManager.gd"
 UnitAnimator="*res://game/visuals/UnitAnimator.gd"
 ArenaController="*res://game/arena/ArenaController.gd"
+ChallengeController="*res://game/challenge/ChallengeController.gd"
 
 [display]
 

@@ -610,6 +610,46 @@ func _human_may_command(unit: Unit) -> bool:
 		return false
 	return _player_is_human(current_player)
 
+# --- Networked command routing (Phase 2) -------------------------------------
+# In a CONNECTED networked match every golden-path action is submitted to NetSession as a
+# NetProtocol command instead of executing locally; the real execution happens when the
+# resolved command comes back through the CommandApplier (host stamps seq + rng_seed; all
+# peers, host included, apply). Single-player / hotseat / local-versus (no live NetSession
+# peer) fall through UNCHANGED -- every routing branch is gated on _is_networked_match(),
+# which is false off the wire, so SP behaviour is byte-for-byte the existing direct path.
+#
+# TENTATIVE-MOVE RECONCILIATION (documented decision): when a staged tentative move is
+# finalized in a networked match we REVERT the local tentative visual first, then submit a
+# MOVE_UNIT for its destination. The resolved command then applies origin->dest on every
+# peer symmetrically (correct unit_moved from/to, correct tile ON_EXIT/ON_ENTER), and the
+# applier's board.move_unit is an ABSOLUTE set to the destination cell, so even if a slide
+# raced ahead the apply cannot double-move. (The applier is idempotent; the revert just
+# keeps the acting peer's event stream identical to every observer's.)
+
+func _is_networked_match() -> bool:
+	"""True only in a live, connected networked match with >1 participant -- the single gate
+	for routing a command through NetSession instead of executing it locally."""
+	return typeof(NetSession) == TYPE_OBJECT and NetSession != null and NetSession.is_networked_match()
+
+func _net_id_of(unit) -> int:
+	"""The deterministic net_id NetSession/CommandApplier use to name [param unit] across
+	peers, or -1 if unknown (in which case the caller must NOT submit a command for it)."""
+	if typeof(NetSession) == TYPE_OBJECT and NetSession != null:
+		return NetSession.net_id_for(unit)
+	return -1
+
+func _net_submit_pending_move(unit) -> void:
+	"""If a tentative move is staged for [param unit], revert its local visual and submit the
+	destination as a MOVE_UNIT command (see the reconciliation note above). No-op when no
+	tentative move is staged or the unit has no net_id."""
+	if not _tentative_active or _tentative_unit != unit:
+		return
+	var nid: int = _net_id_of(unit)
+	var dest: Vector2i = _tentative_dest_cell
+	_revert_tentative_move()
+	if nid >= 0:
+		NetSession.submit_intent(NetProtocol.make_move_unit(nid, dest))
+
 func _update_actions() -> void:
 	"""Update available actions based on selected unit and game state"""
 	if not selected_unit or not PlayerManager:
@@ -804,7 +844,21 @@ func _on_end_unit_turn_pressed() -> void:
 	"""Handle End Unit Turn button press - only ends this unit's turn"""
 	if not selected_unit:
 		return
-	
+
+	# NETWORKED (Phase 2): Wait = commit any staged move (as MOVE_UNIT) then WAIT_UNIT. Both
+	# resolve through the CommandApplier on every peer; local UI just closes the command loop.
+	if _is_networked_match():
+		if not _human_may_command(selected_unit):
+			return
+		var unit := selected_unit
+		_cancel_move_targeting()
+		var nid: int = _net_id_of(unit)
+		if nid >= 0:
+			_net_submit_pending_move(unit)
+			NetSession.submit_intent(NetProtocol.make_wait_unit(nid))
+		_finish_command(unit)
+		return
+
 	# Check if we're in multiplayer mode and submit action through GameModeManager
 	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
 		# Validate that this is our unit and our turn
@@ -883,15 +937,27 @@ func _on_end_player_turn_pressed() -> void:
 	if not current_player:
 		return
 
+	# NETWORKED (Phase 2): route End Player Turn as an authoritative END_TURN command. The
+	# turn only advances when the resolved command applies (via the CommandApplier's turn
+	# hook) on every peer. Supersedes the legacy GameModeManager branch below when a live
+	# NetSession match is connected; leaves it compiling for the legacy transport.
+	if _is_networked_match():
+		var turn_player := _current_turn_player()
+		if not _player_is_human(turn_player):
+			return
+		var pid: int = int(current_player.player_id)
+		NetSession.submit_intent(NetProtocol.make_end_turn(pid))
+		return
+
 	# Check if we're in multiplayer mode and submit action through GameModeManager
 	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
 		# Validate that it's our turn
 		var local_player_id_raw = GameModeManager.get_local_player_id()
 		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
-		
+
 		# Ensure player_id is int for comparison
 		var current_player_id = int(current_player.player_id) if current_player.player_id is String else current_player.player_id
-		
+
 		if current_player_id != local_player_id:
 			return
 
@@ -1598,6 +1664,15 @@ func _execute_movement(destination: Vector3) -> void:
 		_clear_movement_range()
 		return
 
+	# NETWORKED (Phase 2): route the legacy movement-mode commit as an authoritative
+	# MOVE_UNIT too, so the keyboard/Move-button path stays in lockstep with the tactical path.
+	if _is_networked_match():
+		var nid: int = _net_id_of(selected_unit)
+		if nid >= 0:
+			NetSession.submit_intent(NetProtocol.make_move_unit(nid, _grid_tile_to_cell(destination)))
+		_exit_movement_mode()
+		return
+
 	# Character-backed units route through the shared BoardAdapter (resolver-backed).
 	if _try_execute_move_via_board(destination):
 		_exit_movement_mode()
@@ -1760,6 +1835,18 @@ func _move_to_destination(destination: Vector3) -> void:
 	authoritative networked flow). The tentative path is the canonical FE loop:
 	the unit moves for preview only and does not commit until the player confirms
 	an action (attack or Wait)."""
+	# NETWORKED (Phase 2): submit the destination as an authoritative MOVE_UNIT and let every
+	# peer apply it through the CommandApplier. Supersedes BOTH the tentative preview and the
+	# legacy instant-commit MP branch. Submitted BEFORE any local slide, so apply drives the
+	# move origin->dest cleanly on this peer and every observer.
+	if _is_networked_match():
+		var nid: int = _net_id_of(selected_unit)
+		if nid >= 0:
+			NetSession.submit_intent(NetProtocol.make_move_unit(nid, _grid_tile_to_cell(destination)))
+		_clear_movement_range()
+		_update_actions()
+		return
+
 	var use_tentative := (
 		selected_unit.has_character()
 		and CombatServices.board() != null
@@ -2108,6 +2195,17 @@ func _on_action_menu_wait_chosen() -> void:
 	var unit := selected_unit
 	# Drop any half-aimed move UI first, then lock the move in.
 	_cancel_move_targeting()
+
+	# NETWORKED (Phase 2): submit the staged move (if any) + WAIT_UNIT rather than committing
+	# locally; the applier finalizes both on every peer. See the reconciliation note above.
+	if _is_networked_match():
+		var nid: int = _net_id_of(unit)
+		if nid >= 0:
+			_net_submit_pending_move(unit)
+			NetSession.submit_intent(NetProtocol.make_wait_unit(nid))
+		_finish_command(unit)
+		return
+
 	_commit_tentative_move()
 	if unit.has_method("mark_action_completed"):
 		unit.mark_action_completed("wait")
@@ -2445,6 +2543,23 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 		# (which reflects the remaining cooldown) and drop targeting.
 		_cancel_move_targeting()
 		_update_actions()
+		return
+
+	# NETWORKED (Phase 2): route the attack/cast as authoritative commands. First submit the
+	# staged move (if any) as MOVE_UNIT, then the cast as CAST_MOVE(unit, slot, aim_cell). Both
+	# resolve through the CommandApplier -> perform_move on every peer (host stamps the per-cast
+	# rng_seed so accuracy/crit rolls match). No local perform_move here -- apply is the ONE
+	# mutation point. Remote peers see the cast purely through apply + the effect-layer events.
+	if _is_networked_match():
+		var acting := selected_unit
+		var nid: int = _net_id_of(acting)
+		if nid >= 0:
+			_net_submit_pending_move(acting)
+			NetSession.submit_intent(NetProtocol.make_cast_move(nid, slot, aim_cell))
+		_cancel_move_targeting()
+		_update_actions()
+		if nid >= 0:
+			_finish_command(acting)
 		return
 
 	# CONFIRM: clicking a valid target commits the whole action. First lock in the

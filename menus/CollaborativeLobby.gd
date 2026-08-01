@@ -421,6 +421,12 @@ func _finalize_map_selection() -> void:
 	if versus_config_panel != null:
 		versus_config_panel.apply_settings()
 
+	# NETWORKED SEED: when NetSession is the connected transport, kick the commit-reveal
+	# match-RNG handshake now (host side). It drives itself to completion on both peers via
+	# NetSession's RPCs before the battle's command seam needs a seed. No-op / harmless when
+	# NetSession is not the live transport (the battle then falls back to a solo seed).
+	_begin_net_match_rng()
+
 	var final_map: String = ""
 	
 	if local_map_vote == remote_map_vote:
@@ -455,17 +461,48 @@ func _finalize_map_selection() -> void:
 	# Host starts game
 	_start_game(final_map)
 
+func _begin_net_match_rng() -> void:
+	"""Host-side kick of the NetSession commit-reveal match-RNG handshake, guarded so it only
+	fires when NetSession is actually the connected server transport. The handshake completes
+	on both peers via NetSession's own RPCs (client responds automatically), so the battle's
+	CommandApplier has a shared match seed. Safe no-op when NetSession is not the live match."""
+	if typeof(NetSession) != TYPE_OBJECT or NetSession == null:
+		return
+	if NetSession.is_server() and NetSession.is_connected_session():
+		NetSession.begin_match_rng_handshake()
+
+func _build_match_settings(map_path: String) -> Dictionary:
+	"""The MatchSettings payload the host broadcasts so the client plays the SAME match instead
+	of trusting its own local GameSettings. Shape:
+	  {
+	    map: String,                # builtin map resource path
+	    map_json: String,           # validated custom-map JSON payload ("" for builtin)
+	    turn_system: int,           # TurnSystemBase.TurnSystemType
+	    versus_rounds: int,         # best-of round count
+	    host_squad: Array,          # host's selected character ids (player slot 0)
+	  }
+	The client keeps its OWN selected_squad for its slot; host_squad names slot 0's roster.
+	Custom-map JSON is carried when present so a client that lacks the .tres can still build
+	the board from the host's validated payload."""
+	var map_json: String = ""
+	if GameSettings.has_method("get_custom_map_json"):
+		map_json = str(GameSettings.get_custom_map_json())
+	return {
+		"map": map_path,
+		"map_json": map_json,
+		"turn_system": GameSettings.selected_turn_system,
+		"versus_rounds": GameSettings.versus_rounds,
+		"host_squad": GameSettings.get_selected_squad(),
+	}
+
 func _broadcast_game_start(map_path: String) -> void:
-	"""Broadcast game start with final map (host only)"""
+	"""Broadcast game start with final map + the full MatchSettings payload (host only)."""
 	if not is_host or not game_mode_manager:
 		return
-	
+
 	print("[LOBBY] Broadcasting game start with map: " + map_path)
-	
-	game_mode_manager.submit_action("game_start", {
-		"map": map_path,
-		"turn_system": GameSettings.selected_turn_system
-	})
+
+	game_mode_manager.submit_action("game_start", _build_match_settings(map_path))
 
 func _start_game(map_path: String) -> void:
 	"""Start the game with selected map"""
@@ -564,18 +601,33 @@ func _handle_game_start(data: Dictionary) -> void:
 	
 	var map_path = data.get("map", "")
 	var turn_system = data.get("turn_system", "")
-	
+
 	if map_path.is_empty():
 		print("[LOBBY] ERROR: No map path in game_start message")
 		return
-	
+
 	print("[LOBBY] Client received game start command")
 	print("[LOBBY]   Map: " + map_path)
-	print("[LOBBY]   Turn System: " + turn_system)
-	
-	# Update turn system if provided
-	if not turn_system.is_empty():
+	print("[LOBBY]   Turn System: " + str(turn_system))
+
+	# Update turn system if provided. Newer hosts send it as an int (TurnSystemType); the
+	# legacy payload sent a String -- accept either so mismatched builds don't desync here.
+	if turn_system is int:
 		GameSettings.selected_turn_system = turn_system
+	elif turn_system is String and not (turn_system as String).is_empty():
+		GameSettings.selected_turn_system = turn_system
+
+	# Apply the rest of the host's MatchSettings so the client plays the SAME match instead of
+	# its own local config. The client keeps its OWN selected_squad (its slot's roster); the
+	# host_squad names slot 0. Custom-map JSON is stored when the host sent one so a client
+	# without the .tres can still build the board. All optional -- legacy payloads omit them.
+	if data.has("versus_rounds") and GameSettings.has_method("set_versus_rounds"):
+		GameSettings.set_versus_rounds(int(data.get("versus_rounds", 1)))
+	if data.has("host_squad") and GameSettings.has_method("set_host_squad"):
+		GameSettings.set_host_squad(data.get("host_squad", []))
+	var custom_json: String = str(data.get("map_json", ""))
+	if not custom_json.is_empty() and GameSettings.has_method("set_custom_map_json"):
+		GameSettings.set_custom_map_json(custom_json)
 	
 	# Show starting message
 	if vote_status_label:

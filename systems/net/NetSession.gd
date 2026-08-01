@@ -80,6 +80,40 @@ var command_applier: CommandApplier = null
 var board_provider: Callable = Callable()
 
 
+# ---------------------------------------------------------------------------
+# Battle seam (installed by GameWorldManager at battle start; cleared on exit)
+# ---------------------------------------------------------------------------
+
+## Install the live command seam for the current battle: [param applier] is the ONE
+## mutation point every peer funnels resolved commands through, and [param provider] is
+## a Callable returning the live board it applies against. Called by [GameWorldManager]
+## after the map + units are spawned and the registry is populated. Idempotent -- a second
+## install simply replaces the hooks.
+func install_command_seam(applier: CommandApplier, provider: Callable) -> void:
+	command_applier = applier
+	board_provider = provider
+
+## Drop the battle seam so a stale applier never outlives the board it mutated (called on
+## battle end / scene exit). Leaves the RNG/roster alone -- only the apply hooks are cleared.
+func clear_command_seam() -> void:
+	command_applier = null
+	board_provider = Callable()
+
+## The deterministic net_id bound to [param unit] for this match, or -1 if unknown. Reads
+## the live registry when the seam is installed, falling back to the "net_id" metadata the
+## registry stamps on each unit. The UI uses this to name the acting unit in a command.
+func net_id_for(unit) -> int:
+	if unit == null:
+		return -1
+	if command_applier != null and command_applier.registry != null:
+		var rid: int = command_applier.registry.id_for(unit)
+		if rid != -1:
+			return rid
+	if unit is Object and (unit as Object).has_meta("net_id"):
+		return int((unit as Object).get_meta("net_id"))
+	return -1
+
+
 func _ready() -> void:
 	name = "NetSession"
 	# Wire the scene-tree multiplayer signals once. These fire for whichever
@@ -208,6 +242,13 @@ func is_server() -> bool:
 func is_connected_session() -> bool:
 	return multiplayer.multiplayer_peer != null \
 		and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
+
+## True when this is a live, connected networked match with more than one participant --
+## the single gate the UI uses to decide "route this command through submit_intent instead
+## of executing it locally". False for solo/hotseat/versus-on-one-box play (peer absent or a
+## lone participant), so those paths stay on their existing direct execution UNCHANGED.
+func is_networked_match() -> bool:
+	return is_connected_session() and player_count() > 1
 
 func local_peer_id() -> int:
 	return multiplayer.get_unique_id() if multiplayer.multiplayer_peer != null else -1

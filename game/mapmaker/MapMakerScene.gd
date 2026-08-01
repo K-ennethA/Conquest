@@ -119,6 +119,8 @@ var _desc_edit: TextEdit
 var _spawn_kind_option: OptionButton
 var _character_option: OptionButton
 var _tool_buttons: Dictionary = {}  # Tool -> Button
+var _challenge_squad_spin: SpinBox
+var _export_challenge_btn: Button
 
 # --- 3D preview references ----------------------------------------------------
 var _viewport_container: SubViewportContainer
@@ -156,6 +158,7 @@ func _ready() -> void:
 	_build_ui()
 	_rebuild_grid()
 	_build_world_3d()
+	_refresh_export_state()
 
 
 func _input(event: InputEvent) -> void:
@@ -401,6 +404,24 @@ func _build_save_load_section(col: VBoxContainer) -> void:
 	load_btn.pressed.connect(_on_load_pressed)
 	row.add_child(load_btn)
 
+	# --- Export as Challenge -------------------------------------------------
+	# Package the current map (with its player-2+ units as AI defenders) into a
+	# validated challenge JSON under user://challenges/ AND copy a share code to the
+	# clipboard, so another player can import and beat it. Disabled until the map has
+	# at least one player-2+ defender spawn that names a character (there is nothing to
+	# defend otherwise); the status line explains why when it is.
+	var squad_row := HBoxContainer.new()
+	col.add_child(squad_row)
+	squad_row.add_child(_make_label("Challenger squad size:"))
+	_challenge_squad_spin = _make_spin(
+		ChallengeCodec.MIN_SQUAD_SIZE, ChallengeCodec.MAX_SQUAD_SIZE, 4)
+	squad_row.add_child(_challenge_squad_spin)
+
+	_export_challenge_btn = Button.new()
+	_export_challenge_btn.text = "Export as Challenge"
+	_export_challenge_btn.pressed.connect(_on_export_challenge_pressed)
+	col.add_child(_export_challenge_btn)
+
 	_status_label = Label.new()
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -579,6 +600,7 @@ func _apply_tool_at(pos: Vector2i) -> void:
 			_toggle_objective_at(pos)
 		_:
 			pass
+	_refresh_export_state()
 
 
 func _apply_brush(pos: Vector2i, action: Callable) -> void:
@@ -1166,6 +1188,7 @@ func _on_resize_pressed() -> void:
 	model.set_dimensions(int(_width_spin.value), int(_height_spin.value))
 	_rebuild_grid()
 	_build_world_3d()
+	_refresh_export_state()
 	_set_status("Resized to %dx%d" % [model.width, model.height])
 
 
@@ -1203,7 +1226,69 @@ func _on_load_pressed() -> void:
 	_height_spin.value = model.height
 	_rebuild_grid()
 	_build_world_3d()
+	_refresh_export_state()
 	_set_status("Loaded: " + path)
+
+
+## Package the current map into a validated challenge: write user://challenges/<name>.json
+## AND copy a share code to the clipboard. The map's player-2+ spawns become the AI defense.
+func _on_export_challenge_pressed() -> void:
+	if _challenge_defender_count() < 1:
+		_set_status("Export needs at least one enemy defender: place your units on a player 2+ slot (with a character) first.")
+		return
+
+	var res := model.to_map_resource()
+	# Structural validity is required for the map to load in a challenge; import is strict.
+	var validation: Dictionary = res.validate_map()
+	if not validation.get("valid", false):
+		_set_status("Not exported - " + "; ".join(validation.get("issues", [])))
+		return
+
+	var squad_size := int(_challenge_squad_spin.value) if _challenge_squad_spin != null else 4
+	var rules := {
+		"challenger_squad_size": squad_size,
+		# Phase A: the creator has no turn-system / difficulty pickers, so field sane
+		# defaults (Traditional turns, Normal AI). Authors tune these in a later phase.
+		"turn_system": int(TurnSystemBase.TurnSystemType.TRADITIONAL),
+		"ai_difficulty": 1,
+	}
+	var created := Time.get_datetime_string_from_system()
+	var challenge := ChallengeCodec.build_challenge(res, model.map_name, model.author, created, rules)
+
+	var errors := ChallengeCodec.validate(challenge)
+	if not errors.is_empty():
+		_set_status("Not exported - " + "; ".join(errors))
+		return
+
+	var path := ChallengeCodec.save_to_file(challenge)
+	if path.is_empty():
+		_set_status("Export failed: could not write the challenge file.")
+		return
+
+	var code := ChallengeCodec.encode(challenge)
+	DisplayServer.clipboard_set(code)
+	_set_status("Exported challenge to %s and copied the share code to your clipboard (%d chars)." % [path, code.length()])
+
+
+## Refresh the Export button's enabled state + a hint when it is off. A challenge is only
+## meaningful once the map carries a player-2+ defender that names a character.
+func _refresh_export_state() -> void:
+	if _export_challenge_btn == null:
+		return
+	var defenders := _challenge_defender_count()
+	_export_challenge_btn.disabled = defenders < 1
+	_export_challenge_btn.tooltip_text = "" if defenders >= 1 else \
+		"Place at least one of your units on a player 2+ slot to define the AI defense."
+
+
+## Count player-2+ spawns that name a character (the AI defenders of a challenge). Reads
+## the model's spawn store directly so it stays cheap during drag-painting.
+func _challenge_defender_count() -> int:
+	var count := 0
+	for spawn in model._spawns.values():
+		if int(spawn.get("player_id", 0)) >= 1 and not String(spawn.get("character_id", "")).strip_edges().is_empty():
+			count += 1
+	return count
 
 
 func _go_back() -> void:

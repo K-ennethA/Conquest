@@ -23,6 +23,7 @@ extends Control
 
 const GAME_WORLD_SCENE := "res://game/world/GameWorld.tscn"
 const MATCH_SETUP_SCENE := "res://menus/MatchSetup.tscn"
+const CHALLENGE_BROWSE_SCENE := "res://menus/ChallengeBrowse.tscn"
 const DEFAULT_MAX := 4
 const GRID_COLUMNS := 2
 
@@ -46,6 +47,7 @@ var _gold: Color = Color("f0c040")
 
 # --- Mode / selection state -------------------------------------------------
 var _is_arena: bool = false
+var _is_challenge: bool = false
 var _max_units: int = DEFAULT_MAX
 var _destination: String = "Battle"
 # Ordered list of chosen character_id STRINGS (click order preserved).
@@ -88,6 +90,19 @@ func _ready() -> void:
 
 ## Decide whether this is an Arena or Map launch and compute the pick limit MAX.
 func _resolve_mode() -> void:
+	# Challenge launch: the map is already staged in GameSettings by ChallengeController.
+	# MAX = the author's challenger_squad_size. Confirm runs the normal map -> GameWorld
+	# path (no special-casing needed there); only the pick limit + header differ.
+	var challenge := get_node_or_null("/root/ChallengeController")
+	if challenge != null and challenge.has_method("has_pending_challenge") and challenge.has_pending_challenge():
+		_is_challenge = true
+		_destination = challenge.pending_name() if challenge.has_method("pending_name") else "Challenge"
+		var csize := DEFAULT_MAX
+		if challenge.has_method("pending_squad_size"):
+			csize = int(challenge.pending_squad_size())
+		_max_units = csize if csize > 0 else DEFAULT_MAX
+		return
+
 	var arena := get_node_or_null("/root/ArenaController")
 	if arena != null and arena.has_method("has_pending_run") and arena.has_pending_run():
 		_is_arena = true
@@ -616,6 +631,16 @@ func _on_confirm_pressed() -> void:
 	if settings != null and settings.has_method("set_selected_squad"):
 		settings.set_selected_squad(_chosen_ids)
 
+	# Challenge launch: the map is already staged in GameSettings, so this is a normal
+	# map -> GameWorld start. Tell the controller the pick is locked in (so nothing else
+	# is misread as this challenge) and change scene below.
+	if _is_challenge:
+		var challenge := get_node_or_null("/root/ChallengeController")
+		if challenge != null and challenge.has_method("notify_squad_confirmed"):
+			challenge.notify_squad_confirmed()
+		get_tree().change_scene_to_file(GAME_WORLD_SCENE)
+		return
+
 	var arena := get_node_or_null("/root/ArenaController")
 	if arena != null and arena.has_method("has_pending_run") and arena.has_pending_run():
 		# Arena: begin_pending_run changes to the GameWorld scene itself -- do not
@@ -627,6 +652,15 @@ func _on_confirm_pressed() -> void:
 
 
 func _on_back_pressed() -> void:
+	# Challenge launch: drop the staged run (so nothing records a stray result) and return
+	# to the challenge browser.
+	if _is_challenge:
+		var challenge := get_node_or_null("/root/ChallengeController")
+		if challenge != null and challenge.has_method("cancel"):
+			challenge.cancel()
+		get_tree().change_scene_to_file(CHALLENGE_BROWSE_SCENE)
+		return
+
 	var arena := get_node_or_null("/root/ArenaController")
 	if _is_arena and arena != null:
 		if arena.has_method("abort_run"):

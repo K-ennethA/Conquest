@@ -231,6 +231,12 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# battle tick forward and none leak into the next one.
 	_setup_hazard_manager()
 
+	# Stand up the networked command seam for THIS battle: a fresh CommandApplier +
+	# UnitRegistry bound to the units just spawned on the rebuilt board, handed to
+	# NetSession. This is what lets resolved commands drive the ONE mutation point on
+	# every peer. Rebuilt each map load so no stale applier outlives its board.
+	_setup_command_seam()
+
 	# Compile THIS map's authored win conditions into a live rule set. This is what
 	# makes objectives per-map: a boss map ends on the boss's death, a skirmish on a
 	# wipe -- same engine, different WinCondition list (see _evaluate_game_end).
@@ -519,6 +525,54 @@ func _setup_spawn_manager() -> void:
 	_spawn_manager.name = "SpawnManager"
 	add_child(_spawn_manager)
 	_spawn_manager.setup(map_loader, map_loader.current_map)
+
+# --- Networked command seam (CommandApplier + registry per battle) ----------
+
+func _setup_command_seam() -> void:
+	"""Build the live command seam for this battle and hand it to NetSession.
+
+	Constructs a fresh [CommandApplier] over a new [CommandApplier.UnitRegistry], assigns
+	deterministic net_ids to the freshly spawned units in load order (board tree order,
+	identical on every peer for identical match settings), and installs the applier plus a
+	board provider on NetSession. In NON-networked play it also negotiates a solo match seed
+	so per-command RNG is available (single-player is the degenerate local case of lockstep).
+
+	Rebuilt per map load so the applier/registry never outlive the board they mutate; the
+	stale seam is dropped in _exit_tree and replaced here on the next load."""
+	if typeof(NetSession) != TYPE_OBJECT or NetSession == null:
+		return
+	var board = CombatServices.board() if CombatServices != null else null
+	if board == null:
+		return
+
+	var registry := CommandApplier.UnitRegistry.new()
+	# Deterministic load order: BoardAdapter.all_units() follows the map's tree order,
+	# which is identical across peers loading the same map + squads. Ids start at 1.
+	var units: Array = []
+	if board.has_method("all_units"):
+		units = board.all_units()
+	registry.assign_map_units(units)
+
+	var applier := CommandApplier.new(registry, NetSession.match_rng)
+	NetSession.install_command_seam(applier, _seam_board_provider)
+
+	# Non-networked play (solo / hotseat / local versus): negotiate a solo match seed so
+	# the applier's per-command RNG stream exists. Networked play already negotiated the
+	# match seed via the lobby commit-reveal handshake, so we must not clobber it.
+	if not NetSession.is_networked_match():
+		NetSession.begin_solo_match_rng()
+		applier.match_rng = NetSession.match_rng
+
+func _seam_board_provider():
+	"""Board provider handed to NetSession: resolves the CURRENT live board each apply,
+	so the seam always mutates the board rebuilt for this battle (never a stale one)."""
+	return CombatServices.board() if CombatServices != null else null
+
+func _exit_tree() -> void:
+	"""Battle scene is being torn down: drop the command seam so a stale applier never
+	outlives the board it mutated. Null-safe -- a no-op if NetSession is absent."""
+	if typeof(NetSession) == TYPE_OBJECT and NetSession != null:
+		NetSession.clear_command_seam()
 
 func _setup_hazard_manager() -> void:
 	"""Create (or recreate) the per-battle HazardManager, mirroring _setup_spawn_manager.
