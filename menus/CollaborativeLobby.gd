@@ -278,13 +278,19 @@ func _check_for_connections() -> void:
 	"""Check if client has connected"""
 	if not is_host or is_client_connected:
 		return
-	
+
 	if not game_mode_manager:
 		print("[LOBBY] ERROR: game_mode_manager is null")
 		return
-	
+
+	# Safety check - the lobby may have already been removed from the tree (e.g. scene
+	# teardown mid-loop). get_tree() is null in that case, so bail before touching it.
+	if not is_inside_tree():
+		print("[LOBBY] Not in tree, stopping connection check")
+		return
+
 	await get_tree().create_timer(0.5).timeout
-	
+
 	# Safety check - don't loop forever
 	if not is_inside_tree():
 		print("[LOBBY] Not in tree anymore, stopping connection check")
@@ -355,29 +361,41 @@ func _broadcast_lobby_state(state: String) -> void:
 	})
 	print("[LOBBY] Broadcasted lobby state: " + state)
 
+func _display_name_for_vote(path: String) -> String:
+	"""Best-effort display name for a map vote: the loaded MapResource's map_name when the
+	resource actually loads, otherwise the path's file basename. Never null-derefs a failed
+	load (missing file, or a custom user:// map the other peer hasn't received yet)."""
+	if path.is_empty():
+		return ""
+	# Existence check BEFORE load: load() on a missing path logs engine errors on its
+	# own (even though it returns null safely), which spams the log for the perfectly
+	# normal "peer voted for a map this machine doesn't have" case.
+	if not ResourceLoader.exists(path):
+		return path.get_file().get_basename()
+	var map_resource: MapResource = load(path) as MapResource
+	if map_resource != null:
+		return map_resource.map_name
+	return path.get_file().get_basename()
+
 func _update_vote_status() -> void:
 	"""Update the vote status display"""
 	if not vote_status_label:
 		return
-	
+
 	var status_text = ""
-	
+
 	if local_map_vote.is_empty():
 		status_text = "Select a map to vote"
 	elif remote_map_vote.is_empty():
-		var local_map = load(local_map_vote) as MapResource
-		status_text = "You voted for: " + local_map.map_name + "\nWaiting for opponent's vote..."
+		status_text = "You voted for: " + _display_name_for_vote(local_map_vote) + "\nWaiting for opponent's vote..."
 	else:
-		var local_map = load(local_map_vote) as MapResource
-		var remote_map = load(remote_map_vote) as MapResource
-		
 		if local_map_vote == remote_map_vote:
-			status_text = "Both players chose: " + local_map.map_name + "\n✓ Ready to start!"
 			voting_complete = true
+			status_text = "Both players chose: " + _display_name_for_vote(local_map_vote) + "\n✓ Ready to start!"
 		else:
-			status_text = "You: " + local_map.map_name + " | Opponent: " + remote_map.map_name + "\nCoin flip will decide!"
 			voting_complete = true
-	
+			status_text = "You: " + _display_name_for_vote(local_map_vote) + " | Opponent: " + _display_name_for_vote(remote_map_vote) + "\nCoin flip will decide!"
+
 	vote_status_label.text = status_text
 
 func _on_ready_pressed() -> void:
@@ -439,17 +457,17 @@ func _finalize_map_selection() -> void:
 		var coin_flip = randi() % 2
 		final_map = local_map_vote if coin_flip == 0 else remote_map_vote
 		
-		var local_map = load(local_map_vote) as MapResource
-		var remote_map = load(remote_map_vote) as MapResource
-		var chosen_map = load(final_map) as MapResource
+		var local_name: String = _display_name_for_vote(local_map_vote)
+		var remote_name: String = _display_name_for_vote(remote_map_vote)
+		var chosen_name: String = _display_name_for_vote(final_map)
 		
-		print("[LOBBY] Coin flip! Result: " + chosen_map.map_name)
-		print("[LOBBY]   Your vote: " + local_map.map_name)
-		print("[LOBBY]   Opponent vote: " + remote_map.map_name)
+		print("[LOBBY] Coin flip! Result: " + chosen_name)
+		print("[LOBBY]   Your vote: " + local_name)
+		print("[LOBBY]   Opponent vote: " + remote_name)
 		
 		# Show coin flip result
 		if vote_status_label:
-			vote_status_label.text = "Coin flip chose: " + chosen_map.map_name + "!"
+			vote_status_label.text = "Coin flip chose: " + chosen_name + "!"
 		await get_tree().create_timer(2.0).timeout
 	
 	# Host broadcasts final map to client
@@ -562,10 +580,9 @@ func _handle_map_vote(data: Dictionary) -> void:
 	if player_name != local_player_name:
 		remote_map_vote = map_path
 		remote_player_name = player_name
-		
-		var map_resource = load(map_path) as MapResource
-		print("[LOBBY] Opponent voted for: " + map_resource.map_name)
-		
+
+		print("[LOBBY] Opponent voted for: " + _display_name_for_vote(map_path))
+
 		_update_vote_status()
 	else:
 		print("[LOBBY] Ignoring own vote (player_name matches local_player_name)")
@@ -631,8 +648,7 @@ func _handle_game_start(data: Dictionary) -> void:
 	
 	# Show starting message
 	if vote_status_label:
-		var map_resource = load(map_path) as MapResource
-		vote_status_label.text = "Starting game with: " + map_resource.map_name + "!"
+		vote_status_label.text = "Starting game with: " + _display_name_for_vote(map_path) + "!"
 	
 	# Small delay for UI feedback
 	await get_tree().create_timer(1.0).timeout
