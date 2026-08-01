@@ -89,6 +89,15 @@ signal unit_acted_under_control(unit, victim)
 ## damaging ones. Carries the caster and the MoveResource. See UnitAnimator.
 signal move_performed(caster, move)
 
+## Fired JUST BEFORE an ULTIMATE move (the signature 4th-slot ability, or any move
+## flagged is_ultimate -- see [method MoveResource.is_ultimate_move]) resolves, so the
+## presentation layer can sweep a full-screen cut-in banner across the display before the
+## hit lands. The cast site emits this and then AWAITS the cut-in's `finished` signal, so
+## the flash precedes resolution. Params are UNTYPED (mirroring move_performed) -- the
+## payload is a Unit + a MoveResource in the live game but duck-typed mocks in tests, and
+## leaving them untyped keeps this autoload emittable headless. See [UltimateCutIn].
+signal ultimate_casting(unit, move)
+
 func _ready() -> void:
 	# Make this a singleton
 	name = "GameEvents"

@@ -93,14 +93,14 @@ func _build_ui() -> void:
 
 	var back := Button.new()
 	back.text = "Back"
-	back.custom_minimum_size = Vector2(160.0, 46.0)
+	back.custom_minimum_size = Vector2(160.0, 48.0)
 	back.pressed.connect(_on_back_pressed)
 	actions.add_child(back)
 
 	_play_btn = Button.new()
 	_play_btn.text = "PLAY"
 	_play_btn.theme_type_variation = "SelectedButton"
-	_play_btn.custom_minimum_size = Vector2(220.0, 46.0)
+	_play_btn.custom_minimum_size = Vector2(220.0, 48.0)
 	_play_btn.disabled = true
 	_play_btn.pressed.connect(_on_play_pressed)
 	actions.add_child(_play_btn)

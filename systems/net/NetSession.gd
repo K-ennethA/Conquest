@@ -79,6 +79,27 @@ var command_applier: CommandApplier = null
 ## func() -> board. Null (the default) means no board is applied.
 var board_provider: Callable = Callable()
 
+# --- Turn-ownership bridge (task 2) -----------------------------------------
+# Nothing in the real game drives NetSession's own [member _current_turn_slot]; the actual
+# turn state lives in the active [TurnSystemBase] via [TurnSystemManager]. When the command
+# seam is installed we SUBSCRIBE to that turn system's [signal turn_started] and map the
+# active player -> a peer slot, so [method _validate_intent] can reject out-of-turn intents
+# server-side. Both turn systems hand a [Player] to turn_started -- Traditional's current
+# player, Speed First's acting-unit owner -- so one hook covers both.
+
+## True only while the seam is installed AND the bridge is live. Turn-ownership enforcement
+## is gated on this so a dev/legacy session with no seam is never gated by a stale slot.
+var _turn_bridge_active: bool = false
+## The turn SYSTEM whose turn_started we are currently connected to (re-hooked when the
+## manager activates a new system). Null when unhooked.
+var _bridged_turn_system = null
+## The manager (TurnSystemManager or an injected stand-in) whose turn_system_activated we
+## watch so we can re-hook on a system switch. Null when the source was a bare system.
+var _bridge_manager = null
+## Optional override for player -> peer slot. Signature: func(player) -> int. When invalid
+## the default maps player.player_id directly to the slot (host = player 0 = slot 0).
+var turn_slot_mapper: Callable = Callable()
+
 
 # ---------------------------------------------------------------------------
 # Battle seam (installed by GameWorldManager at battle start; cleared on exit)
@@ -89,15 +110,112 @@ var board_provider: Callable = Callable()
 ## a Callable returning the live board it applies against. Called by [GameWorldManager]
 ## after the map + units are spawned and the registry is populated. Idempotent -- a second
 ## install simply replaces the hooks.
-func install_command_seam(applier: CommandApplier, provider: Callable) -> void:
+## [param turn_source] (optional) is where the turn-ownership bridge reads turn state from:
+## null uses the live [TurnSystemManager] autoload; a manager-like object (has
+## turn_system_activated) or a bare turn system (has turn_started) may be injected for tests.
+func install_command_seam(applier: CommandApplier, provider: Callable, turn_source = null) -> void:
 	command_applier = applier
 	board_provider = provider
+	_activate_turn_bridge(turn_source)
 
 ## Drop the battle seam so a stale applier never outlives the board it mutated (called on
 ## battle end / scene exit). Leaves the RNG/roster alone -- only the apply hooks are cleared.
 func clear_command_seam() -> void:
 	command_applier = null
 	board_provider = Callable()
+	_deactivate_turn_bridge()
+
+
+# ---------------------------------------------------------------------------
+# Turn-ownership bridge
+# ---------------------------------------------------------------------------
+
+## Start driving [member _current_turn_slot] from the real turn system so the validator can
+## gate out-of-turn intents. Idempotent; safe when no turn source exists (bridge simply stays
+## armed but slot-less, so gating is inert until a turn actually starts).
+func _activate_turn_bridge(turn_source = null) -> void:
+	_deactivate_turn_bridge()
+	_turn_bridge_active = true
+	var src = turn_source if turn_source != null else _live_turn_manager()
+	if src == null:
+		return
+	if src.has_signal("turn_started"):
+		# A bare turn SYSTEM was injected directly (tests, or a system with no manager).
+		_bridge_hook_system(src)
+	elif src.has_signal("turn_system_activated"):
+		_bridge_manager = src
+		if not src.turn_system_activated.is_connected(_on_bridge_turn_system_activated):
+			src.turn_system_activated.connect(_on_bridge_turn_system_activated)
+		# Hook whatever system is already active so the first slot is seeded immediately.
+		if src.has_method("has_active_turn_system") and src.has_active_turn_system() \
+				and src.has_method("get_active_turn_system"):
+			_bridge_hook_system(src.get_active_turn_system())
+
+## Stop driving the slot and disconnect every bridge signal. Resets the slot to -1 so a
+## seam-less (dev/legacy) session is never gated by a stale value.
+func _deactivate_turn_bridge() -> void:
+	_bridge_unhook_system()
+	if _bridge_manager != null and is_instance_valid(_bridge_manager) \
+			and _bridge_manager.has_signal("turn_system_activated") \
+			and _bridge_manager.turn_system_activated.is_connected(_on_bridge_turn_system_activated):
+		_bridge_manager.turn_system_activated.disconnect(_on_bridge_turn_system_activated)
+	_bridge_manager = null
+	_turn_bridge_active = false
+	_current_turn_slot = -1
+
+## The live TurnSystemManager autoload, or null when it is unavailable (some headless runs).
+func _live_turn_manager():
+	if typeof(TurnSystemManager) == TYPE_OBJECT and TurnSystemManager != null:
+		return TurnSystemManager
+	return null
+
+## Connect to [param system]'s turn_started (dropping any prior hook) and seed the slot from
+## whoever is already acting, so a mid-battle seam install lands on the correct turn.
+func _bridge_hook_system(system) -> void:
+	if system == null or _bridged_turn_system == system:
+		return
+	_bridge_unhook_system()
+	_bridged_turn_system = system
+	if system.has_signal("turn_started") and not system.turn_started.is_connected(_on_bridge_turn_started):
+		system.turn_started.connect(_on_bridge_turn_started)
+	if system.has_method("get_current_active_player"):
+		var p = system.get_current_active_player()
+		if p != null:
+			_set_turn_slot_from_player(p)
+
+func _bridge_unhook_system() -> void:
+	if _bridged_turn_system != null and is_instance_valid(_bridged_turn_system) \
+			and _bridged_turn_system.has_signal("turn_started") \
+			and _bridged_turn_system.turn_started.is_connected(_on_bridge_turn_started):
+		_bridged_turn_system.turn_started.disconnect(_on_bridge_turn_started)
+	_bridged_turn_system = null
+
+## The manager activated a new turn system -- re-hook onto it (a battle can switch systems).
+func _on_bridge_turn_system_activated(system) -> void:
+	_bridge_hook_system(system)
+
+## The active turn system started [param player]'s turn (Traditional: current player; Speed
+## First: the acting unit's owner). Map it to a peer slot and drive the validator's gate.
+func _on_bridge_turn_started(player) -> void:
+	_set_turn_slot_from_player(player)
+
+func _set_turn_slot_from_player(player) -> void:
+	var slot: int = _slot_for_player(player)
+	if slot == _current_turn_slot:
+		return
+	_current_turn_slot = slot
+	turn_changed.emit(slot)
+
+## Map [param player] to its peer slot. Uses [member turn_slot_mapper] when set, else the
+## player's own 0-based player_id (host = player 0 = slot 0), which is the natural alignment.
+func _slot_for_player(player) -> int:
+	if player == null:
+		return -1
+	if turn_slot_mapper.is_valid():
+		return int(turn_slot_mapper.call(player))
+	if player is Object and (player as Object).get("player_id") != null:
+		return int((player as Object).get("player_id"))
+	return -1
 
 ## The deterministic net_id bound to [param unit] for this match, or -1 if unknown. Reads
 ## the live registry when the seam is installed, falling back to the "net_id" metadata the
@@ -184,6 +302,8 @@ func leave() -> void:
 	_current_turn_slot = -1
 	_seq = 0
 	match_rng = null
+	# Drop the turn bridge too so a torn-down session never keeps a stale turn hook.
+	_deactivate_turn_bridge()
 	_emit_roster()
 
 
@@ -375,7 +495,11 @@ func _validate_intent(actor_slot: int, action: Dictionary) -> String:
 		return "malformed"
 	if actor_slot == -1:
 		return "unknown_actor"
-	if enforce_turn_ownership and _current_turn_slot != -1 and actor_slot != _current_turn_slot:
+	# Turn-ownership gating is driven by the real turn system through the seam bridge. It is
+	# ON by default for a networked match (enforce_turn_ownership defaults true) once a seam
+	# is installed, and OFF for a dev/legacy session with no seam (_turn_bridge_active false)
+	# so a stale slot can never wrongly reject.
+	if enforce_turn_ownership and _turn_bridge_active and _current_turn_slot != -1 and actor_slot != _current_turn_slot:
 		return "not_your_turn"
 	if action_validator.is_valid() and not action_validator.call(action, actor_slot):
 		return "rejected_by_game"

@@ -25,6 +25,7 @@ anchor_bottom = 1.0
 [node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer"]
 layout_mode = 2
 custom_minimum_size = Vector2(500, 0)
+theme_override_constants/separation = 16
 
 [node name="TitleLabel" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
@@ -34,10 +35,11 @@ vertical_alignment = 1
 
 [node name="Spacer1" type="Control" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 30)
+custom_minimum_size = Vector2(0, 16)
 
 [node name="NetworkButtons" type="VBoxContainer" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
+theme_override_constants/separation = 12
 
 [node name="HostButton" type="Button" parent="CenterContainer/VBoxContainer/NetworkButtons"]
 layout_mode = 2
@@ -56,53 +58,64 @@ text = "Join Game"
 
 [node name="Spacer2" type="Control" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 20)
+custom_minimum_size = Vector2(0, 8)
 
 [node name="JoinContainer" type="VBoxContainer" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
+theme_override_constants/separation = 12
 
 [node name="JoinTitle" type="Label" parent="CenterContainer/VBoxContainer/JoinContainer"]
 layout_mode = 2
-text = "Join Game Settings:"
+text = "JOIN GAME SETTINGS"
 horizontal_alignment = 1
 
-[node name="AddressContainer" type="HBoxContainer" parent="CenterContainer/VBoxContainer/JoinContainer"]
+[node name="FormCard" type="PanelContainer" parent="CenterContainer/VBoxContainer/JoinContainer"]
 layout_mode = 2
 
-[node name="AddressLabel" type="Label" parent="CenterContainer/VBoxContainer/JoinContainer/AddressContainer"]
+[node name="FormMargin" type="MarginContainer" parent="CenterContainer/VBoxContainer/JoinContainer/FormCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="FormGrid" type="GridContainer" parent="CenterContainer/VBoxContainer/JoinContainer/FormCard/FormMargin"]
+layout_mode = 2
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 12
+columns = 2
+
+[node name="AddressLabel" type="Label" parent="CenterContainer/VBoxContainer/JoinContainer/FormCard/FormMargin/FormGrid"]
 layout_mode = 2
 custom_minimum_size = Vector2(100, 0)
+size_flags_vertical = 4
 text = "Address:"
 
-[node name="AddressInput" type="LineEdit" parent="CenterContainer/VBoxContainer/JoinContainer/AddressContainer"]
+[node name="AddressInput" type="LineEdit" parent="CenterContainer/VBoxContainer/JoinContainer/FormCard/FormMargin/FormGrid"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "127.0.0.1"
 placeholder_text = "Enter host IP address"
 
-[node name="PortContainer" type="HBoxContainer" parent="CenterContainer/VBoxContainer/JoinContainer"]
-layout_mode = 2
-
-[node name="PortLabel" type="Label" parent="CenterContainer/VBoxContainer/JoinContainer/PortContainer"]
+[node name="PortLabel" type="Label" parent="CenterContainer/VBoxContainer/JoinContainer/FormCard/FormMargin/FormGrid"]
 layout_mode = 2
 custom_minimum_size = Vector2(100, 0)
+size_flags_vertical = 4
 text = "Port:"
 
-[node name="PortInput" type="LineEdit" parent="CenterContainer/VBoxContainer/JoinContainer/PortContainer"]
+[node name="PortInput" type="LineEdit" parent="CenterContainer/VBoxContainer/JoinContainer/FormCard/FormMargin/FormGrid"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "8910"
 placeholder_text = "Enter port number"
 
-[node name="PlayerNameContainer" type="HBoxContainer" parent="CenterContainer/VBoxContainer/JoinContainer"]
-layout_mode = 2
-
-[node name="PlayerNameLabel" type="Label" parent="CenterContainer/VBoxContainer/JoinContainer/PlayerNameContainer"]
+[node name="PlayerNameLabel" type="Label" parent="CenterContainer/VBoxContainer/JoinContainer/FormCard/FormMargin/FormGrid"]
 layout_mode = 2
 custom_minimum_size = Vector2(100, 0)
+size_flags_vertical = 4
 text = "Your Name:"
 
-[node name="PlayerNameInput" type="LineEdit" parent="CenterContainer/VBoxContainer/JoinContainer/PlayerNameContainer"]
+[node name="PlayerNameInput" type="LineEdit" parent="CenterContainer/VBoxContainer/JoinContainer/FormCard/FormMargin/FormGrid"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Player"
@@ -110,26 +123,18 @@ placeholder_text = "Enter your player name"
 
 [node name="ConnectButton" type="Button" parent="CenterContainer/VBoxContainer/JoinContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 48)
 text = "Connect"
-
-[node name="Spacer3" type="Control" parent="CenterContainer/VBoxContainer"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 30)
 
 [node name="StatusLabel" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 60)
+custom_minimum_size = Vector2(0, 40)
 text = "Choose to host or join a network game"
 horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 2
 
-[node name="Spacer4" type="Control" parent="CenterContainer/VBoxContainer"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 20)
-
 [node name="BackButton" type="Button" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 48)
 text = "Back"

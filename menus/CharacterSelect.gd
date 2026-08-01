@@ -24,6 +24,7 @@ extends Control
 const GAME_WORLD_SCENE := "res://game/world/GameWorld.tscn"
 const MATCH_SETUP_SCENE := "res://menus/MatchSetup.tscn"
 const CHALLENGE_BROWSE_SCENE := "res://menus/ChallengeBrowse.tscn"
+const CAMPAIGN_SCREEN_SCENE := "res://menus/CampaignScreen.tscn"
 const DEFAULT_MAX := 4
 const GRID_COLUMNS := 2
 
@@ -48,6 +49,7 @@ var _gold: Color = Color("f0c040")
 # --- Mode / selection state -------------------------------------------------
 var _is_arena: bool = false
 var _is_challenge: bool = false
+var _is_campaign: bool = false
 var _max_units: int = DEFAULT_MAX
 var _destination: String = "Battle"
 # Ordered list of chosen character_id STRINGS (click order preserved).
@@ -90,6 +92,19 @@ func _ready() -> void:
 
 ## Decide whether this is an Arena or Map launch and compute the pick limit MAX.
 func _resolve_mode() -> void:
+	# Campaign launch: the map is already staged in GameSettings by CampaignController.
+	# MAX = the chapter's squad_size. Confirm runs the normal map -> GameWorld path (the
+	# map is staged), so only the pick cap + header + Back destination differ.
+	var campaign := get_node_or_null("/root/CampaignController")
+	if campaign != null and campaign.has_method("has_pending_chapter") and campaign.has_pending_chapter():
+		_is_campaign = true
+		_destination = campaign.pending_name() if campaign.has_method("pending_name") else "Campaign"
+		var chsize := DEFAULT_MAX
+		if campaign.has_method("pending_squad_size"):
+			chsize = int(campaign.pending_squad_size())
+		_max_units = chsize if chsize > 0 else DEFAULT_MAX
+		return
+
 	# Challenge launch: the map is already staged in GameSettings by ChallengeController.
 	# MAX = the author's challenger_squad_size. Confirm runs the normal map -> GameWorld
 	# path (no special-casing needed there); only the pick limit + header differ.
@@ -641,6 +656,15 @@ func _on_confirm_pressed() -> void:
 		get_tree().change_scene_to_file(GAME_WORLD_SCENE)
 		return
 
+	# Campaign launch mirrors a challenge: the map is staged, so this is a normal map ->
+	# GameWorld start. Lock the pick in (so nothing else is misread as this chapter).
+	if _is_campaign:
+		var campaign := get_node_or_null("/root/CampaignController")
+		if campaign != null and campaign.has_method("notify_squad_confirmed"):
+			campaign.notify_squad_confirmed()
+		get_tree().change_scene_to_file(GAME_WORLD_SCENE)
+		return
+
 	var arena := get_node_or_null("/root/ArenaController")
 	if arena != null and arena.has_method("has_pending_run") and arena.has_pending_run():
 		# Arena: begin_pending_run changes to the GameWorld scene itself -- do not
@@ -659,6 +683,15 @@ func _on_back_pressed() -> void:
 		if challenge != null and challenge.has_method("cancel"):
 			challenge.cancel()
 		get_tree().change_scene_to_file(CHALLENGE_BROWSE_SCENE)
+		return
+
+	# Campaign launch: drop the staged run (so nothing records a stray result) and return
+	# to the chapter list.
+	if _is_campaign:
+		var campaign := get_node_or_null("/root/CampaignController")
+		if campaign != null and campaign.has_method("cancel"):
+			campaign.cancel()
+		get_tree().change_scene_to_file(CAMPAIGN_SCREEN_SCENE)
 		return
 
 	var arena := get_node_or_null("/root/ArenaController")

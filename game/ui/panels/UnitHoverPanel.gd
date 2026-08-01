@@ -45,6 +45,12 @@ var _hp_label: Label
 var _hp_bar: ProgressBar
 var _effects_container: HFlowContainer
 
+# The unit currently shown, or null. Lets _on_cursor_moved own a local "stays sticky
+# until the reported unit genuinely changes" guarantee -- see the TOUCH-READY
+# STICKINESS note there -- instead of depending on cursor_moved's own emission
+# semantics.
+var _current_unit = null
+
 
 func _ready() -> void:
 	name = "UnitHoverPanel"
@@ -166,6 +172,7 @@ func show_for_unit(unit) -> void:
 		hide_panel()
 		return
 
+	_current_unit = unit
 	_name_label.text = _display_name_of(unit)
 
 	# HP is read through `in` guards: a legacy/mock unit with no stats component
@@ -195,6 +202,7 @@ func show_for_unit(unit) -> void:
 
 ## Hide the card. Safe to call repeatedly.
 func hide_panel() -> void:
+	_current_unit = null
 	hide()
 
 
@@ -338,6 +346,17 @@ func _on_cursor_moved(grid_pos: Vector3) -> void:
 		return
 
 	var unit = _unit_at(cell)
+
+	# TOUCH-READY STICKINESS: the cursor still resolves to the SAME unit already
+	# shown (its footprint can span several cells) -- nothing to update, and
+	# critically nothing to hide. Only a genuinely different unit, or no unit at
+	# all, may change what is displayed. Owning this check locally (rather than
+	# depending on board/cursor/cursor.gd's tile_position setter only emitting on
+	# real cell changes) keeps the guarantee correct regardless of what drives
+	# cursor_moved.
+	if unit != null and unit == _current_unit and visible:
+		return
+
 	if unit == null:
 		hide_panel()
 		return

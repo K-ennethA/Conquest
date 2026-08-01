@@ -44,6 +44,12 @@ var _tile_effect_overlay: TileEffectOverlay = null
 ## Animated end screen (see [GameOverScreen]). Instantiated once during setup and
 ## kept hidden; revealed by _on_player_eliminated() when the battle is decided.
 var _game_over_screen: GameOverScreen = null
+
+## Full-screen ULTIMATE cut-in flash (see [UltimateCutIn]). Its own CanvasLayer, mounted
+## once during setup and left idle; it self-triggers off GameEvents.ultimate_casting when a
+## unit fires its signature move, and the cast sites await its `finished` so the flash plays
+## BEFORE the move resolves. Null until _setup_ultimate_cutin runs.
+var _ultimate_cutin: UltimateCutIn = null
 ## The current map's compiled win/lose objectives (built at map load from
 ## MapResource.victory_conditions). Null until a map is loaded; when set, it drives
 ## the single-player end check in _evaluate_game_end.
@@ -106,6 +112,10 @@ func _ready() -> void:
 	# panel, safe to add before the map loads -- it rebuilds itself on
 	# CombatServices.board_ready and stays empty until a board/effects exist.
 	_setup_tile_effect_overlay()
+
+	# Ultimate cut-in flash: its own high CanvasLayer overlay, additive and hidden until a
+	# unit fires an ultimate. Safe to add now -- it stays idle until GameEvents.ultimate_casting.
+	_setup_ultimate_cutin()
 
 	# Load the selected map or default map
 	await _load_selected_map()
@@ -384,6 +394,24 @@ func _setup_game_over_screen() -> void:
 	# still stand -- player_eliminated alone would miss that moment.
 	if GameEvents and not GameEvents.unit_eliminated.is_connected(_on_unit_eliminated):
 		GameEvents.unit_eliminated.connect(_on_unit_eliminated)
+
+
+func _setup_ultimate_cutin() -> void:
+	"""Mount the ULTIMATE cut-in overlay once. It is a self-contained CanvasLayer (see
+	[UltimateCutIn]) that builds its own UI, joins the "ultimate_cutin" group, and connects to
+	GameEvents.ultimate_casting itself in _ready -- so there is nothing to wire here beyond
+	adding it to the tree. Added to the current scene root (its own layer index handles draw
+	order above the HUD), mirroring how the other self-contained overlays are mounted."""
+	if _ultimate_cutin != null:
+		return
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		push_warning("[GameWorldManager] No current_scene yet; UltimateCutIn not added.")
+		return
+	_ultimate_cutin = UltimateCutIn.new()
+	_ultimate_cutin.name = "UltimateCutIn"
+	scene_root.add_child(_ultimate_cutin)
+
 
 ## Latch so an ARENA round resolves exactly once: the enemy-wipe fires BOTH unit_eliminated
 ## and player_eliminated, and after ArenaController finishes the run it is no longer active,

@@ -17,9 +17,9 @@ const ENABLE_HOST_AUTO_CLIENT := false
 @onready var back_button: Button = $CenterContainer/VBoxContainer/BackButton
 
 @onready var join_container: VBoxContainer = $CenterContainer/VBoxContainer/JoinContainer
-@onready var address_input: LineEdit = $CenterContainer/VBoxContainer/JoinContainer/AddressInput
-@onready var port_input: LineEdit = $CenterContainer/VBoxContainer/JoinContainer/PortInput
-@onready var player_name_input: LineEdit = $CenterContainer/VBoxContainer/JoinContainer/PlayerNameInput
+@onready var address_input: LineEdit = $CenterContainer/VBoxContainer/JoinContainer/FormCard/FormMargin/FormGrid/AddressInput
+@onready var port_input: LineEdit = $CenterContainer/VBoxContainer/JoinContainer/FormCard/FormMargin/FormGrid/PortInput
+@onready var player_name_input: LineEdit = $CenterContainer/VBoxContainer/JoinContainer/FormCard/FormMargin/FormGrid/PlayerNameInput
 @onready var connect_button: Button = $CenterContainer/VBoxContainer/JoinContainer/ConnectButton
 
 @onready var status_label: Label = $CenterContainer/VBoxContainer/StatusLabel
@@ -43,6 +43,8 @@ var start_game_button: Button
 func _ready() -> void:
 	theme = MenuTheme.build()  # dark Legends-style menu look
 	MenuTheme.style_title(get_node_or_null("CenterContainer/VBoxContainer/TitleLabel") as Label, 32)
+	MenuTheme.style_section_header(get_node_or_null("CenterContainer/VBoxContainer/JoinContainer/JoinTitle") as Label)
+	MenuTheme.style_caption(status_label)
 
 	# Connect button signals
 	if host_button:

@@ -191,6 +191,19 @@ static func style_subtitle(label: Label) -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 
+## Left-aligned gold section header (e.g. "AVAILABLE MAPS", "MATCH SETTINGS",
+## "JOIN GAME SETTINGS"). Sits one step below [method style_title] in the type
+## scale -- reach for this whenever a column, card or config panel needs a
+## labelled heading. [param amber] false falls back to the dim cream register for
+## a de-emphasized heading (mirrors the old per-screen "amber" toggle).
+static func style_section_header(label: Label, amber: bool = true) -> void:
+	if label == null:
+		return
+	label.label_settings = null
+	label.add_theme_color_override("font_color", GOLD if amber else CREAM_DIM)
+	label.add_theme_font_size_override("font_size", FONT_HEADER)
+
+
 ## Small, muted footer hint (e.g. keyboard shortcuts). Reads as a caption, not
 ## debug text.
 static func style_caption(label: Label) -> void:

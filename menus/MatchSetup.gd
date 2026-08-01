@@ -85,10 +85,10 @@ func _title_text() -> String:
 func _build_ui() -> void:
 	var page := VBoxContainer.new()
 	page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	page.offset_left = 48.0
-	page.offset_right = -48.0
-	page.offset_top = 28.0
-	page.offset_bottom = -28.0
+	page.offset_left = 24.0
+	page.offset_right = -24.0
+	page.offset_top = 24.0
+	page.offset_bottom = -24.0
 	page.add_theme_constant_override("separation", 12)
 	add_child(page)
 
@@ -104,7 +104,7 @@ func _build_ui() -> void:
 
 	var main := HBoxContainer.new()
 	main.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	main.add_theme_constant_override("separation", 20)
+	main.add_theme_constant_override("separation", 16)
 	page.add_child(main)
 
 	main.add_child(_build_left_pane())
@@ -140,12 +140,18 @@ func _build_left_pane() -> Control:
 		return left
 
 	var list_label := Label.new()
-	list_label.text = "Available Maps"
+	list_label.text = "AVAILABLE MAPS"
+	MenuTheme.style_section_header(list_label)
 	left.add_child(list_label)
 
 	_map_list = ItemList.new()
 	_map_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_map_list.size_flags_stretch_ratio = 0.5
+	# Padded, card-like rows: extra breathing room between items and a distinct
+	# left-accented selected/hover fill (theme overrides only -- the widget stays
+	# a stock ItemList per the no-rebuild rule).
+	_map_list.add_theme_constant_override("v_separation", 8)
+	_map_list.add_theme_constant_override("icon_margin", 8)
 	_map_list.item_selected.connect(_on_map_selected)
 	_map_list.item_activated.connect(_on_map_activated)
 	left.add_child(_map_list)
@@ -191,6 +197,7 @@ func _build_left_pane() -> Control:
 func _build_minimap_holder() -> Control:
 	var holder := PanelContainer.new()
 	holder.custom_minimum_size = Vector2(0.0, 150.0)
+	holder.add_theme_stylebox_override("panel", MenuTheme.card_box(MenuTheme.GOLD_DK))
 
 	_map_minimap = TextureRect.new()
 	_map_minimap.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -252,8 +259,7 @@ func _build_right_pane() -> Control:
 
 	var heading := Label.new()
 	heading.text = "MATCH SETTINGS"
-	heading.add_theme_font_size_override("font_size", 15)
-	heading.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	MenuTheme.style_section_header(heading)
 	right.add_child(heading)
 
 	var panel := PanelContainer.new()
@@ -279,7 +285,7 @@ func _build_right_pane() -> Control:
 func _build_actions() -> Control:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 18)
+	row.add_theme_constant_override("separation", 24)
 
 	var back := Button.new()
 	back.text = "Back"
@@ -290,7 +296,7 @@ func _build_actions() -> Control:
 	_start_btn = Button.new()
 	_start_btn.text = "Start Run" if _mode == MatchConfigPanel.MODE_ARENA else "Start Match"
 	_start_btn.theme_type_variation = &"SelectedButton"  # solid gold, prominent
-	_start_btn.custom_minimum_size = Vector2(240.0, 48.0)
+	_start_btn.custom_minimum_size = Vector2(240.0, 52.0)
 	_start_btn.add_theme_font_size_override("font_size", 20)
 	_start_btn.pressed.connect(_on_start_pressed)
 	# Map modes need a selected map first; arena can start immediately.

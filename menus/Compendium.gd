@@ -155,7 +155,8 @@ func _build_nav_rail() -> PanelContainer:
 	back_button = Button.new()
 	back_button.name = "BackButton"
 	back_button.text = "BACK"
-	back_button.custom_minimum_size = Vector2(0, 40)
+	# >=44px hit target (touch-readiness).
+	back_button.custom_minimum_size = Vector2(0, 44)
 	back_button.pressed.connect(_on_back_pressed)
 	col.add_child(back_button)
 
@@ -178,7 +179,8 @@ func _build_nav_entry(index: int) -> Button:
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.custom_minimum_size = Vector2(0, 40)
+	# >=44px hit target (touch-readiness).
+	btn.custom_minimum_size = Vector2(0, 44)
 	btn.pressed.connect(_show_section.bind(index))
 
 	# Count badge, right-aligned, non-interactive so clicks fall through to the

@@ -141,6 +141,16 @@ func _apply_cast_move(cmd: Dictionary, data: Dictionary, board, seq: int) -> Dic
 	# Summoned bodies get deterministic ids from THIS command's seq + their order in
 	# the (deterministic) event log.
 	_register_summons(events, seq)
+	# A successful cast CONSUMES the unit's ACTION for the turn -- exactly what the local
+	# UI path (UnitActionsPanel._execute_move_on_target) does after a successful
+	# perform_move. This is what greys the unit and, in Speed First, advances the queue
+	# (mark_action_completed -> unit_action_completed -> the turn system's completion
+	# check) identically on EVERY peer. Without it a networked cast left the unit still
+	# lit and never advanced Speed First. Guarded so headless/mock units lacking the hook
+	# are skipped. The move (if any) arrives as a SEPARATE MOVE_UNIT command that marks
+	# the move, so this only spends the action -- never double-consuming the move.
+	if bool(res.get("success", false)) and unit.has_method("mark_action_completed"):
+		unit.mark_action_completed("move")
 	return {
 		"ok": bool(res.get("success", false)),
 		"type": NetProtocol.Action.CAST_MOVE,
@@ -156,13 +166,24 @@ func _apply_move_unit(cmd: Dictionary, data: Dictionary, board) -> Dictionary:
 		return _fail(cmd, "unknown_unit")
 	var dest: Vector2i = data[NetProtocol.KEY_DEST_CELL]
 	var from_cell: Vector2i = _cell_of(board, unit)
-	var from_world = unit.get("position")
+	# Whether this is a live unit (real world Vector3 position) or a headless/mock one.
+	# Only live units emit unit_moved -- mocks (no position) skip it, exactly as before.
+	var is_live_unit: bool = unit.get("position") is Vector3
 	if board != null and board.has_method("move_unit"):
 		board.move_unit(unit, dest)
+	# mark_moved() consumes only the MOVE for the turn (not the action) -- mirrors the
+	# local commit path (UnitActionsPanel._commit_tentative_move).
 	if unit.has_method("mark_moved"):
 		unit.mark_moved()
-	var to_world = unit.get("position")
-	_emit_unit_moved(unit, from_world, to_world)
+	# Emit GameEvents.unit_moved in GRID space -- Vector3(col, 0, row) -- the SAME space
+	# UnitActionsPanel._commit_tentative_move emits and the space every listener decodes
+	# (GameWorldManager._on_unit_moved_tile_effects reads round(pos.x)/round(pos.z) as a
+	# cell). The old code emitted the unit's WORLD position, so tile ON_EXIT/ON_ENTER fired
+	# on the wrong cells in networked play. Every peer (the acting peer's local commit is
+	# skipped in networked mode) now fires this identically, so tile effects land on the
+	# same cells across all peers.
+	if is_live_unit:
+		_emit_unit_moved(unit, Vector3(from_cell.x, 0, from_cell.y), Vector3(dest.x, 0, dest.y))
 	return _ok(cmd, [{
 		"effect": "move_unit",
 		"unit_id": int(data[NetProtocol.KEY_UNIT_ID]),
@@ -267,12 +288,13 @@ func _turn_system_from(ctx):
 	return null
 
 
-func _emit_unit_moved(unit, from_world, to_world) -> void:
-	# Best-effort + guarded exactly as unit.perform_move guards move_performed, so
-	# tests and headless runs (mock units without a Vector3 position) simply skip it.
+func _emit_unit_moved(unit, from_grid, to_grid) -> void:
+	# [param from_grid]/[param to_grid] are GRID-space Vector3(col, 0, row) (see the caller),
+	# matching UnitActionsPanel._commit_tentative_move. Best-effort + guarded exactly as
+	# unit.perform_move guards move_performed, so headless runs without the autoload skip it.
 	if typeof(GameEvents) == TYPE_OBJECT and GameEvents != null \
-			and from_world is Vector3 and to_world is Vector3:
-		GameEvents.unit_moved.emit(unit, from_world, to_world)
+			and from_grid is Vector3 and to_grid is Vector3:
+		GameEvents.unit_moved.emit(unit, from_grid, to_grid)
 
 
 func _cell_of(board, unit) -> Vector2i:

@@ -81,10 +81,23 @@ var moves_button: Button
 var move_mode: bool = false
 var selected_move_index: int = -1
 
+# --- Touch-readiness: on-screen equivalents for keyboard-only actions --------
+# Danger Zones mirrors the T hotkey (_toggle_all_enemy_danger); Next Unit mirrors
+# Tab/Q (_cycle_to_next_commandable_unit). Built in code and appended to the same
+# ActionsContainer the Move/MOVES/End Turn buttons live in (see _setup_touch_buttons),
+# so a touch player without a physical keyboard can still reach them.
+var danger_zones_button: Button
+var next_unit_button: Button
+
 # FE-style combat forecast overlay (preview-only; never mutates state). Shown
 # while targeting an offensive move over an eligible enemy; updated live as the
 # cursor moves; hidden when targeting is cancelled/cleared or the move resolves.
 var combat_forecast_panel: CombatForecastPanel
+# The enemy the forecast is currently shown for (or null). Lets _refresh_move_forecast
+# own its own "stays sticky until the target genuinely changes" guarantee locally,
+# rather than depending on GameEvents.cursor_moved only firing on real cell changes --
+# see the TOUCH-READY STICKINESS note there.
+var _forecast_target_enemy: Unit = null
 # Latest board-cursor tile (tracked from GameEvents.cursor_moved) so a move
 # selected while the cursor already rests on an enemy previews immediately.
 var _last_cursor_tile: Vector3 = Vector3.ZERO
@@ -190,6 +203,9 @@ func _ready() -> void:
 	# Initialize move system
 	_setup_move_system()
 
+	# On-screen buttons for the two keyboard-only actions (Danger Zones / Next Unit).
+	_setup_touch_buttons()
+
 	# Tooltips + theme style-role metadata on the (simplified) sidebar buttons.
 	_setup_sidebar_tooltips_and_meta()
 
@@ -218,6 +234,58 @@ func _setup_sidebar_tooltips_and_meta() -> void:
 	# Shared UI-click SFX on every sidebar button, including the dynamically built
 	# moves_button (idempotent -- guarded by a meta inside UIFeedback).
 	UIFeedback.attach_sfx(self)
+
+func _setup_touch_buttons() -> void:
+	"""On-screen equivalents for two keyboard-only actions, appended to the same
+	ActionsContainer the Move/MOVES/End Turn buttons live in: Danger Zones (T) and
+	Next Unit (Tab/Q). Same secondary style_role + tooltip-names-the-hotkey pattern
+	as the rest of the sidebar; wired for SFX by the attach_sfx call in
+	_setup_sidebar_tooltips_and_meta, which runs after this."""
+	var actions_container = get_node_or_null("MarginContainer/ContentContainer/ActionsContainer")
+	if actions_container == null:
+		return
+
+	danger_zones_button = Button.new()
+	danger_zones_button.text = "Danger Zones"
+	danger_zones_button.toggle_mode = true
+	danger_zones_button.custom_minimum_size = Vector2(0, 44)
+	danger_zones_button.tooltip_text = "Show/hide every enemy's threat range (T)"
+	danger_zones_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	danger_zones_button.set_meta("style_role", "secondary")
+	danger_zones_button.pressed.connect(_on_danger_zones_button_pressed)
+	actions_container.add_child(danger_zones_button)
+	_sync_danger_zones_button()
+
+	next_unit_button = Button.new()
+	next_unit_button.text = "Next Unit"
+	next_unit_button.custom_minimum_size = Vector2(0, 44)
+	next_unit_button.tooltip_text = "Select the next un-acted unit (Tab)"
+	next_unit_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	next_unit_button.set_meta("style_role", "secondary")
+	next_unit_button.pressed.connect(_on_next_unit_button_pressed)
+	actions_container.add_child(next_unit_button)
+
+func _on_danger_zones_button_pressed() -> void:
+	"""On-screen equivalent of the T hotkey: toggle every enemy's persistent danger
+	overlay. The button's pressed/toggled visual is synced from the resulting state
+	(see _sync_danger_zones_button), not driven by toggle_mode alone, so it stays
+	correct even when the T key or a unit death changes the underlying set."""
+	_toggle_all_enemy_danger()
+
+func _sync_danger_zones_button() -> void:
+	"""Keep the on-screen Danger Zones button's toggled-looking state in lockstep
+	with _persistent_danger_enemies (the T set), regardless of what changed it --
+	the T hotkey, this button, or an enemy dying. Called from every mutation point."""
+	if danger_zones_button:
+		danger_zones_button.set_pressed_no_signal(not _persistent_danger_enemies.is_empty())
+
+func _on_next_unit_button_pressed() -> void:
+	"""On-screen equivalent of the Tab/Q hotkey. Same guard as the keyboard path:
+	skip while the contextual action menu / targeting is up so it cannot yank
+	selection mid-command."""
+	if _state == CommandState.ACTION_MENU or _state == CommandState.TARGETING:
+		return
+	_cycle_to_next_commandable_unit()
 
 func _notification(what: int) -> void:
 	match what:
@@ -2339,6 +2407,7 @@ func _toggle_all_enemy_danger() -> void:
 		return
 	if not _persistent_danger_enemies.is_empty():
 		_clear_all_persistent_danger()
+		_sync_danger_zones_button()
 		return
 	for enemy in _all_enemy_units():
 		var cells: Array[Vector3] = _compute_enemy_threat_cells(enemy)
@@ -2348,6 +2417,7 @@ func _toggle_all_enemy_danger() -> void:
 			_persistent_danger_enemies.append(enemy)
 		if vis.has_method("set_danger_overlay"):
 			vis.set_danger_overlay(enemy.get_instance_id(), cells)
+	_sync_danger_zones_button()
 
 func _clear_all_persistent_danger() -> void:
 	"""Turn off the T overlays. Clears each persistent enemy's overlay individually rather
@@ -2388,6 +2458,7 @@ func _refresh_danger_overlays() -> void:
 				vis.set_danger_overlay(enemy.get_instance_id(), cells)
 			still.append(enemy)
 	_persistent_danger_enemies = still
+	_sync_danger_zones_button()
 
 	# Transient (click-inspect) overlay: recompute the single inspected enemy, or drop it.
 	if _transient_danger_enemy != null:
@@ -2407,6 +2478,7 @@ func _on_unit_eliminated_danger(unit: Unit, _eliminator: Unit) -> void:
 		return
 	if unit in _persistent_danger_enemies:
 		_persistent_danger_enemies.erase(unit)
+		_sync_danger_zones_button()
 	if unit == _transient_danger_enemy:
 		_transient_danger_enemy = null
 	var vis := _get_movement_visualizer()
@@ -2519,6 +2591,25 @@ func handle_move_target_selected(grid_pos: Vector3) -> void:
 
 	_execute_move_on_target(aim, move, selected_move_index)
 
+func _await_ultimate_cutin(unit, move, slot: int) -> void:
+	"""If [param move] is an ultimate (see [method MoveResource.is_ultimate_move]), emit
+	GameEvents.ultimate_casting and HOLD until the cut-in overlay's `finished` signal, so the
+	full-screen flash plays before the move resolves. The overlay lives in the
+	"ultimate_cutin" group and self-triggers off the same signal; we look it up null-safely and
+	skip the await entirely when it is absent (headless / tests) so the caller can never hang.
+	A non-ultimate move returns immediately with no await and no signal, so ordinary casts are
+	byte-for-byte unchanged."""
+	if not MoveResource.is_ultimate_move(move, slot):
+		return
+	GameEvents.ultimate_casting.emit(unit, move)
+	var tree := get_tree()
+	if tree == null:
+		return  # off-tree (defensive) -> emit only, never await
+	var overlay := tree.get_first_node_in_group(&"ultimate_cutin")
+	if overlay != null and overlay.has_signal(&"finished"):
+		await overlay.finished
+
+
 func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) -> void:
 	"""Resolve the selected move at aim_cell through the unit's perform_move
 	(-> MoveExecutor). On success: record the use for cooldown/charges, print the
@@ -2550,6 +2641,13 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 	# resolve through the CommandApplier -> perform_move on every peer (host stamps the per-cast
 	# rng_seed so accuracy/crit rolls match). No local perform_move here -- apply is the ONE
 	# mutation point. Remote peers see the cast purely through apply + the effect-layer events.
+	#
+	# ULTIMATE CUT-IN (MP hook, NOT wired here): the cut-in must NOT play on this submit path --
+	# it belongs where the cast APPLIES so every peer (submitter included) flashes it in sync.
+	# That apply site lives in CommandApplier (the CAST_MOVE handler), which this panel does not
+	# own. When wiring it there, emit GameEvents.ultimate_casting + await the overlay right before
+	# the applier's perform_move, gated by MoveResource.is_ultimate_move(move, slot). This phase
+	# wires only the local / single-player path below.
 	if _is_networked_match():
 		var acting := selected_unit
 		var nid: int = _net_id_of(acting)
@@ -2560,6 +2658,23 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 		_update_actions()
 		if nid >= 0:
 			_finish_command(acting)
+		return
+
+	# ULTIMATE CUT-IN: if this cast is an ultimate (the 4th moveset slot, or a move flagged
+	# is_ultimate -- see MoveResource.is_ultimate_move), sweep the full-screen flash across
+	# FIRST and hold until it finishes, so the drama precedes the hit. Local / single-player /
+	# hotseat path only: the networked branch above returned already, and in a networked match
+	# the cast resolves apply-side in CommandApplier, which is where the emit belongs so every
+	# peer sees the flash (flagged; CommandApplier is not owned by this panel). Headless / no
+	# overlay -> the helper emits and returns without awaiting, so nothing hangs.
+	var casting_unit: Unit = selected_unit
+	await _await_ultimate_cutin(casting_unit, move, slot)
+	# The brief await can be interrupted by a deselect / reselection (turn end, click-away,
+	# picking another unit). Bail cleanly unless the SAME unit is still selected, rather than
+	# resolving the move against a dropped or a different unit. Idempotent: no action was
+	# consumed yet. (For a non-ultimate move the helper returns without yielding, so this guard
+	# is a same-frame no-op and ordinary casts are unchanged.)
+	if not is_instance_valid(selected_unit) or selected_unit != casting_unit:
 		return
 
 	# CONFIRM: clicking a valid target commits the whole action. First lock in the
@@ -2636,6 +2751,10 @@ func _cancel_move_targeting() -> void:
 	if move_selection_panel:
 		move_selection_panel.hide()
 	# Drop the FE forecast too (cancel via BACK/ESC/right-click AND move resolution).
+	# Also drop the sticky target tracker (see _refresh_move_forecast) so the NEXT
+	# targeting session starts fresh instead of treating a same-named enemy as
+	# already-shown.
+	_forecast_target_enemy = null
 	if combat_forecast_panel:
 		combat_forecast_panel.hide_forecast()
 	# Drop the overworld incoming-damage bands on every targeting exit.
@@ -2659,7 +2778,16 @@ func _on_cursor_moved_forecast(tile_position: Vector3) -> void:
 func _refresh_move_forecast(grid_pos: Vector3) -> void:
 	"""Show the forecast for the current move against an eligible ENEMY at grid_pos
 	(a legal aim cell), else hide it. Never mutates state -- CombatForecastPanel
-	reads MoveExecutor.preview_vs() only."""
+	reads MoveExecutor.preview_vs() only.
+
+	TOUCH-READY STICKINESS: once the forecast is up for a target enemy, it stays up
+	as long as the aim keeps resolving to that SAME enemy -- see the early-return
+	below. This panel owns that guarantee locally rather than depending on
+	GameEvents.cursor_moved only firing on genuine cell changes (a property of
+	board/cursor/cursor.gd's tile_position setter, not this file), so it can never
+	flicker/hide just because motion paused or cursor_moved re-fired. Only a
+	genuinely different (or absent) target, an illegal aim, or the targeting
+	context ending (every branch below, plus _cancel_move_targeting) may hide it."""
 	# Overworld multi-unit preview: blink every affected enemy's world bar with the
 	# damage this aim would deal (the forecast card only covers the single enemy at
 	# the cursor). Self-clears when the aim is illegal or off any unit.
@@ -2670,16 +2798,19 @@ func _refresh_move_forecast(grid_pos: Vector3) -> void:
 
 	# Only while actively aiming a move for a commandable unit.
 	if not is_targeting_move() or not selected_unit:
+		_forecast_target_enemy = null
 		combat_forecast_panel.hide_forecast()
 		return
 
 	var move: MoveResource = selected_unit.get_move(selected_move_index)
 	if move == null or move.targeting == null:
+		_forecast_target_enemy = null
 		combat_forecast_panel.hide_forecast()
 		return
 
 	var board = CombatServices.board()
 	if board == null:
+		_forecast_target_enemy = null
 		combat_forecast_panel.hide_forecast()
 		return
 
@@ -2689,14 +2820,23 @@ func _refresh_move_forecast(grid_pos: Vector3) -> void:
 
 	# Forecast only a legal aim that lands on an enemy the caster may attack.
 	if not move.can_aim_at(origin, aim, selected_unit):
+		_forecast_target_enemy = null
 		combat_forecast_panel.hide_forecast()
 		return
 
 	var enemy = _first_enemy_at(board, aim)
+
+	# Sticky: the aim still resolves to the SAME enemy already shown -- nothing to
+	# update, and critically nothing to hide.
+	if enemy != null and enemy == _forecast_target_enemy:
+		return
+
 	if enemy == null:
+		_forecast_target_enemy = null
 		combat_forecast_panel.hide_forecast()
 		return
 
+	_forecast_target_enemy = enemy
 	combat_forecast_panel.show_forecast(selected_unit, enemy, move)
 
 func _refresh_overworld_damage_preview(grid_pos: Vector3) -> void:

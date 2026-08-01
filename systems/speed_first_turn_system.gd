@@ -9,6 +9,33 @@ class_name SpeedFirstTurnSystem
 # - Queue system prevents units from acting twice until all others have acted
 # - Speed modifications can change turn order mid-round
 
+# --- Per-unit move clock (Speed mode "speedier") ----------------------------
+# A HUMAN player's unit gets a countdown the moment its turn starts; when it runs
+# out the unit's turn is force-ended EXACTLY like the End Turn button (no staged
+# move committed -- the UI owns that state). AI units are never clocked. The system
+# is NOT in the scene tree (TurnSystemManager keeps it in a plain dictionary, never
+# add_child'd), so it CANNOT run _process or a SceneTreeTimer; it therefore owns only
+# the ARM/DISARM state + the expiry entry point, and the in-tree TurnTimer HUD drives
+# the actual per-frame countdown and calls expire_turn_timer() when it hits zero.
+
+## Emitted when a human unit's turn begins and the move clock should start. [param seconds]
+## is the configured duration (GameSettings.speed_turn_timer_seconds). The HUD listens and
+## runs the countdown.
+signal turn_timer_armed(unit: Unit, seconds: float)
+## Emitted whenever the move clock stops for any reason (the unit acted, the unit died
+## mid-turn, the system deactivated/reset, or the clock expired). The HUD hides on this.
+signal turn_timer_disarmed()
+## Emitted when the clock reached zero and the turn was force-ended. Fired for consumers
+## that want a flourish; the turn advance itself flows through end_turn_manually().
+signal turn_timer_expired(unit: Unit)
+
+## True while a human unit's move clock is armed. Owned here; the HUD reads/echoes it.
+var turn_timer_active: bool = false
+## The unit the armed clock belongs to (guards stale expiry against a re-used slot).
+var turn_timer_unit: Unit = null
+## The configured duration (seconds) the clock was armed with. 0 while disarmed.
+var turn_timer_seconds: float = 0.0
+
 var turn_queue: Array[Unit] = []  # Current turn queue for this round
 var current_acting_unit: Unit = null
 ## True while a deferred kickoff (start the order once units register post-activation) is
@@ -85,6 +112,10 @@ func _kickoff_if_idle() -> void:
 
 func end_turn_system() -> void:
 	"""Clean up and end the speed first turn system"""
+	# The battle is over -- kill any running move clock (in case the acting unit's turn
+	# is not in progress, so _end_unit_turn below would not run for it).
+	_disarm_turn_timer()
+
 	if current_acting_unit and is_turn_in_progress:
 		_end_unit_turn(current_acting_unit)
 
@@ -110,6 +141,7 @@ func reset_battle_state() -> void:
 	round_number = 1
 	current_acting_unit = null
 	is_turn_in_progress = false
+	_disarm_turn_timer()
 
 func advance_turn() -> void:
 	"""Advance to the next unit's turn"""
@@ -137,6 +169,10 @@ func _on_registered_unit_died(unit: Unit) -> void:
 		# from the queue by the still-valid ref, then hand off next idle frame.
 		if unit in turn_queue:
 			turn_queue.erase(unit)
+		# The acting unit died mid-turn WITHOUT going through _end_unit_turn, so stop its
+		# move clock here or the HUD would keep counting a dead unit and expire_turn_timer
+		# would later dereference it.
+		_disarm_turn_timer()
 		current_acting_unit = null
 		is_turn_in_progress = false
 		call_deferred("_advance_to_next_unit")
@@ -325,10 +361,75 @@ func _start_unit_turn(unit: Unit) -> void:
 	if owner_player:
 		turn_started.emit(owner_player)
 
+	# Arm the per-unit move clock for a HUMAN unit's turn (no-op for AI / when off).
+	# Done AFTER turn_started so the HUD has already re-synced to this unit before it
+	# hears the arm. Never arm a freed/invalid unit.
+	if unit != null and is_instance_valid(unit):
+		_arm_turn_timer(unit, owner_player)
+
 	var speed_info = str(get_unit_current_speed(unit))
 	var base_speed = unit.get_stat("speed") if unit.has_method("get_stat") else 0
 	if get_unit_current_speed(unit) != base_speed:
 		speed_info += " (base: " + str(base_speed) + ")"
+
+# --- Move-clock (turn timer) helpers ---------------------------------------
+
+## Arm the move clock for [param unit] IF it is a human-owned unit and the clock is
+## enabled. AI-owned units (owner.is_ai, which also covers neutral factions) are never
+## clocked -- BotTurnDriver already paces them. Clears any prior arming first, so this is
+## safe to call unconditionally at every turn start.
+func _arm_turn_timer(unit: Unit, owner_player) -> void:
+	_disarm_turn_timer()
+	if unit == null or owner_player == null or owner_player.is_ai:
+		return
+	var seconds: int = _configured_turn_timer_seconds()
+	if seconds <= 0:
+		return  # Clock OFF -- classic behaviour, no countdown.
+	turn_timer_active = true
+	turn_timer_unit = unit
+	turn_timer_seconds = float(seconds)
+	turn_timer_armed.emit(unit, turn_timer_seconds)
+
+## Stop the move clock (idempotent). Emits [signal turn_timer_disarmed] only when a clock
+## was actually running so the HUD isn't churned by no-op disarms.
+func _disarm_turn_timer() -> void:
+	if not turn_timer_active:
+		return
+	turn_timer_active = false
+	turn_timer_unit = null
+	turn_timer_seconds = 0.0
+	turn_timer_disarmed.emit()
+
+## The configured clock duration in seconds (0 = off). Reads the GameSettings autoload by
+## its GLOBAL name (NOT get_node) because this system is not in the scene tree, so a path
+## lookup would fail; the global identifier resolves regardless. Null-safe for headless
+## tests that run without the autoload.
+func _configured_turn_timer_seconds() -> int:
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null \
+			and "speed_turn_timer_seconds" in GameSettings:
+		return int(GameSettings.speed_turn_timer_seconds)
+	return 0
+
+## Force-end the current unit's turn because its move clock ran out. Called by the in-tree
+## TurnTimer HUD when its countdown reaches zero. Ends the turn EXACTLY like the End Turn
+## button (end_turn_manually) and deliberately does NOT commit any staged tentative move --
+## the UI owns that state and clears it off the turn_started/ended signals advance fires.
+##
+## Reentrancy / stale guard: only fires when [param unit] is still the armed, currently
+## acting unit whose turn is in progress. If the unit already acted this same frame,
+## advance_turn has disarmed the clock and moved on, so this is a harmless no-op -- the
+## queue is never advanced twice.
+func expire_turn_timer(unit: Unit) -> void:
+	if not is_active or not turn_timer_active:
+		return
+	if unit == null or unit != turn_timer_unit or unit != current_acting_unit \
+			or not is_turn_in_progress:
+		return
+	# Disarm + announce BEFORE advancing. advance_turn -> _end_unit_turn would disarm
+	# anyway, but clearing here first makes a re-entrant expire_turn_timer a no-op.
+	_disarm_turn_timer()
+	turn_timer_expired.emit(unit)
+	end_turn_manually()
 
 func _end_unit_turn(unit: Unit) -> void:
 	"""End a specific unit's turn"""
@@ -350,6 +451,10 @@ func _end_unit_turn(unit: Unit) -> void:
 			break
 
 	is_turn_in_progress = false
+
+	# Stop this unit's move clock as its turn closes (covers action-completed, Wait,
+	# End Turn, and the clock-expiry advance, which all route through here).
+	_disarm_turn_timer()
 
 	# Emit turn ended signal with the owning player
 	if owner_player:
@@ -604,6 +709,7 @@ func reset_turn_system() -> void:
 	turn_queue.clear()
 	units_acted_this_round.clear()
 	current_acting_unit = null
+	_disarm_turn_timer()
 	# Drop per-turn tick / stun-skip bookkeeping: current_turn just rewound to 1, so
 	# a stale entry from the previous battle's turn 1 would read as a live skip.
 	clear_turn_tick_state()

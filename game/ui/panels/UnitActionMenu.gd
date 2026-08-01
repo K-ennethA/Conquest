@@ -162,7 +162,9 @@ func _make_button(text: String, enabled: bool) -> Button:
 	var btn := Button.new()
 	btn.text = text
 	btn.disabled = not enabled
-	btn.custom_minimum_size = Vector2(0, 30)
+	# >=44px hit target (touch-readiness): was 30, kept dense by padding rather
+	# than growing the font.
+	btn.custom_minimum_size = Vector2(0, 44)
 	btn.clip_text = true
 	btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	return btn

@@ -25,6 +25,8 @@ var map_resources: Array[MapResource] = []
 func _ready() -> void:
 	theme = MenuTheme.build()  # dark Legends-style menu look
 	MenuTheme.style_title(get_node_or_null("VBoxContainer/TitleLabel") as Label, 30)
+	MenuTheme.style_section_header(get_node_or_null("VBoxContainer/MainContainer/MapListContainer/MapListLabel") as Label)
+	MenuTheme.style_section_header(get_node_or_null("VBoxContainer/MainContainer/MapPreviewContainer/PreviewLabel") as Label)
 
 	# Connect signals
 	if map_list:

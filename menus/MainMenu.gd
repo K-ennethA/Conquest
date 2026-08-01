@@ -5,15 +5,15 @@ class_name MainMenu
 # Main menu for the tactical combat game
 # Provides game mode selection (Single Player vs Versus)
 
-@onready var single_player_button: Button = $CenterContainer/VBoxContainer/MenuButtons/SinglePlayerButton
-@onready var versus_button: Button = $CenterContainer/VBoxContainer/MenuButtons/VersusButton
+@onready var single_player_button: Button = $Layout/CenterBlock/Column/MenuButtons/SinglePlayerButton
+@onready var versus_button: Button = $Layout/CenterBlock/Column/MenuButtons/VersusButton
 # One entry point for the whole in-game reference. The Unit, Tile and Map
 # galleries are no longer separate menu items -- they are sections of
 # Compendium.tscn, which also covers Statuses (and, later, Weather).
-@onready var compendium_button: Button = $CenterContainer/VBoxContainer/MenuButtons/CompendiumButton
+@onready var compendium_button: Button = $Layout/CenterBlock/Column/MenuButtons/CompendiumButton
 # Arena is no longer a top-level sibling: it lives under Solo -> Arena Run now.
-@onready var map_creator_button: Button = $CenterContainer/VBoxContainer/MenuButtons/MapCreatorButton
-@onready var quit_button: Button = $CenterContainer/VBoxContainer/MenuButtons/QuitButton
+@onready var map_creator_button: Button = $Layout/CenterBlock/Column/MenuButtons/MapCreatorButton
+@onready var quit_button: Button = $Layout/CenterBlock/Column/MenuButtons/QuitButton
 
 # Dev-only multiplayer test harnesses. These attach three dev_scripts/ nodes that each
 # print a multi-line banner on _ready (and one writes a client-flag file), so they spam
@@ -48,9 +48,9 @@ func _ready() -> void:
 
 func _style_chrome() -> void:
 	"""Apply the shared gold-title / dim-caption treatment to the static labels."""
-	MenuTheme.style_title(get_node_or_null("CenterContainer/VBoxContainer/Title") as Label, 40)
-	MenuTheme.style_subtitle(get_node_or_null("CenterContainer/VBoxContainer/Subtitle") as Label)
-	MenuTheme.style_caption(get_node_or_null("CenterContainer/VBoxContainer/Instructions") as Label)
+	MenuTheme.style_title(get_node_or_null("Layout/CenterBlock/Column/Title") as Label, 40)
+	MenuTheme.style_subtitle(get_node_or_null("Layout/CenterBlock/Column/Subtitle") as Label)
+	MenuTheme.style_caption(get_node_or_null("Layout/FooterMargin/Instructions") as Label)
 
 func _attach_dev_test_harness() -> void:
 	"""Attach the dev_scripts/ multiplayer test nodes. Gated behind ENABLE_DEV_TEST_HARNESS
@@ -90,15 +90,15 @@ func _show_auto_join_status() -> void:
 func _show_status_message(message: String) -> void:
 	"""Show a status message on the main menu"""
 	# Create a status label if it doesn't exist
-	var status_label = get_node_or_null("CenterContainer/VBoxContainer/StatusLabel")
+	var status_label = get_node_or_null("Layout/CenterBlock/Column/StatusLabel")
 	if not status_label:
 		status_label = Label.new()
 		status_label.name = "StatusLabel"
 		status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		
-		var container = get_node("CenterContainer/VBoxContainer")
+
+		var container = get_node("Layout/CenterBlock/Column")
 		if container:
 			container.add_child(status_label)
 	

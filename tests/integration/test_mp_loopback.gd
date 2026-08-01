@@ -117,6 +117,24 @@ class MockTurn:
 	func advance_turn() -> void:
 		calls += 1
 
+## A stand-in for a live TurnSystemBase: emits turn_started(player) on demand so the
+## NetSession turn-ownership bridge can be exercised without the full TurnSystemManager /
+## PlayerManager stack. Injected as install_command_seam's optional turn_source.
+class MockTurnSystem extends Node:
+	signal turn_started(player)
+	var _current = null
+	func get_current_active_player():
+		return _current
+	func begin_turn(player) -> void:
+		_current = player
+		turn_started.emit(player)
+
+## A minimal Player stand-in: only the player_id the bridge maps to a peer slot.
+class MockPlayer extends RefCounted:
+	var player_id: int
+	func _init(p_id: int) -> void:
+		player_id = p_id
+
 # --- fixtures ----------------------------------------------------------------
 
 func _strike() -> MoveResource:
@@ -284,6 +302,75 @@ func test_apply_through_installed_seam_mutates_the_provided_board():
 	var after: Vector2i = board.cell_of(peer["reg"].unit_for(1))
 	assert_eq(before, Vector2i(1, 1), "unit started at its spawn cell")
 	assert_eq(after, Vector2i(4, 4), "the resolved MOVE_UNIT mutated the provider's board")
+
+func test_two_peers_consume_action_flags_identically():
+	# Apply-semantics lockstep: driven from the same stamped stream, two independent peers end
+	# every command with IDENTICAL per-unit [acted, has_moved] flags -- so a networked cast
+	# greys the caster (and would advance Speed First) the same way on every box.
+	var stream := _authority_stream()
+	var peer_a := _make_peer()
+	var peer_b := _make_peer()
+	var applier_a: CommandApplier = peer_a["applier"]
+	var applier_b: CommandApplier = peer_b["applier"]
+	for cmd in stream:
+		applier_a.apply_command(cmd, peer_a["board"], { "turn_system": peer_a["turn"] })
+		applier_b.apply_command(cmd, peer_b["board"], { "turn_system": peer_b["turn"] })
+		assert_eq(str(_peer_flags(peer_a["reg"])), str(_peer_flags(peer_b["reg"])),
+			"both peers hold identical acted/has_moved flags after command seq %d"
+				% int(cmd.get(NetProtocol.KEY_SEQ, -1)))
+	# Deterministic consumption proof (independent of the seed-dependent cast hit/miss):
+	# the WAIT consumed the defender's action and the MOVE_UNIT marked the caster moved --
+	# identically on both peers.
+	assert_true(peer_a["reg"].unit_for(2).acted, "peer A: WAIT consumed the defender's action")
+	assert_true(peer_b["reg"].unit_for(2).acted, "peer B: WAIT consumed the defender's action")
+	assert_true(peer_a["reg"].unit_for(1).has_moved, "peer A: MOVE_UNIT marked the caster moved")
+	assert_true(peer_b["reg"].unit_for(1).has_moved, "peer B: MOVE_UNIT marked the caster moved")
+
+func _peer_flags(reg) -> Dictionary:
+	var out: Dictionary = {}
+	for id in [1, 2, 3]:
+		var u = reg.unit_for(id)
+		out[id] = null if u == null else [u.acted, u.has_moved]
+	return out
+
+func test_out_of_turn_intent_rejected_by_validator():
+	# Task 2: with the seam installed, the turn-ownership bridge drives NetSession's turn slot
+	# from the real turn system's turn_started, and the server-side validator rejects intents
+	# from any slot but the active one.
+	var net := _fresh_netsession()
+	var peer := _make_peer()
+	var sys := MockTurnSystem.new()
+	add_child_autofree(sys)
+	net.install_command_seam(peer["applier"], func(): return peer["board"], sys)
+	net.enforce_turn_ownership = true
+
+	# Player 0's turn begins -> bridge maps it to slot 0.
+	sys.begin_turn(MockPlayer.new(0))
+	assert_eq(net.current_turn_slot(), 0, "the bridge mapped player 0 -> slot 0")
+	assert_eq(net._validate_intent(1, NetProtocol.make_wait_unit(1)), "not_your_turn",
+		"an out-of-turn intent (slot 1 during slot 0's turn) is rejected server-side")
+	assert_eq(net._validate_intent(0, NetProtocol.make_wait_unit(1)), "",
+		"the active slot's intent passes the turn-ownership gate")
+
+	# The turn advances to player 1 -> the gate flips with it.
+	sys.begin_turn(MockPlayer.new(1))
+	assert_eq(net.current_turn_slot(), 1, "turn_started(player 1) moved the slot")
+	assert_eq(net._validate_intent(0, NetProtocol.make_wait_unit(1)), "not_your_turn",
+		"slot 0 is now out of turn")
+
+	# Dropping the seam disarms the bridge (slot back to -1, enforcement inert).
+	net.clear_command_seam()
+	assert_eq(net.current_turn_slot(), -1, "clearing the seam resets the driven turn slot")
+	assert_eq(net._validate_intent(0, NetProtocol.make_wait_unit(1)), "",
+		"with the seam cleared the turn gate is OFF again")
+
+func test_no_seam_means_no_turn_gating():
+	# Dev/legacy safety: with NO seam the bridge is inactive, so turn ownership is never
+	# enforced even with enforce_turn_ownership left ON and a stale-looking slot.
+	var net := _fresh_netsession()
+	net.enforce_turn_ownership = true
+	assert_eq(net._validate_intent(3, NetProtocol.make_wait_unit(1)), "",
+		"no seam installed -> out-of-turn gating is OFF (dev/legacy safety)")
 
 func test_shared_seed_layer_is_reproducible_across_peers():
 	# Both peers derive the SAME per-command seed from the SAME match seed -- the property the

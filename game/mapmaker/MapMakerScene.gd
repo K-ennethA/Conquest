@@ -380,12 +380,17 @@ func _build_spawn_section(col: VBoxContainer) -> void:
 
 
 func _build_grid_section(col: VBoxContainer) -> void:
-	col.add_child(_section_label("MAP GRID  (drag to paint, right-click erases)"))
+	col.add_child(_section_label("MAP GRID  (drag to paint; Erase tool or right-click erases)"))
 	var wrap := ScrollContainer.new()
 	wrap.custom_minimum_size = Vector2(0, 220)
 	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_child(wrap)
 	_grid_container = GridContainer.new()
+	# Touch-readiness compromise: 2px separation between cells so adjacent buttons
+	# don't read as one mis-tappable blob, without ballooning the grid's on-screen
+	# footprint (a full zoomable canvas is a later task).
+	_grid_container.add_theme_constant_override("h_separation", 2)
+	_grid_container.add_theme_constant_override("v_separation", 2)
 	wrap.add_child(_grid_container)
 
 
@@ -543,7 +548,10 @@ func _rebuild_grid() -> void:
 		for x in range(model.width):
 			var pos := Vector2i(x, y)
 			var button := Button.new()
-			button.custom_minimum_size = Vector2(30, 30)
+			# Touch-readiness compromise: 30 -> 38 (still short of the 44px hit-target
+			# guideline, but a full zoomable canvas -- the real fix -- is a later task;
+			# this keeps the grid readable on desktop while being less mis-tappable).
+			button.custom_minimum_size = Vector2(38, 38)
 			button.focus_mode = Control.FOCUS_NONE
 			button.gui_input.connect(_on_cell_gui_input.bind(pos))
 			button.mouse_entered.connect(_on_cell_mouse_entered.bind(pos))
@@ -566,6 +574,12 @@ func _on_cell_gui_input(event: InputEvent, pos: Vector2i) -> void:
 	if mb.button_index != MOUSE_BUTTON_LEFT:
 		return
 
+	# Touch-readiness: LEFT-click/tap erases too when the Erase tool is selected
+	# (right-click erase, handled above, stays as a desktop-only shortcut -- touch
+	# has no right-click). Spelled out as its own branch rather than relying on the
+	# `_:` default falling through to _apply_tool_at so the left-click-erases
+	# contract is explicit and doesn't silently depend on Tool.ERASE not colliding
+	# with a future RECT_FILL/BUCKET_FILL-style special case.
 	match _current_tool:
 		Tool.RECT_FILL:
 			_rect_anchor = pos
@@ -573,6 +587,10 @@ func _on_cell_gui_input(event: InputEvent, pos: Vector2i) -> void:
 			_tint_rect_preview()
 		Tool.BUCKET_FILL:
 			_bucket_fill_at(pos)
+		Tool.ERASE:
+			_is_painting = true
+			_apply_brush(pos, _erase_at)
+			_refresh_export_state()
 		_:
 			_is_painting = true
 			_apply_tool_at(pos)

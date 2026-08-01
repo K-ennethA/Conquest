@@ -278,6 +278,15 @@ func _build_effect_chip(te: TileEffectResource, is_temporary: bool) -> PanelCont
 func _on_cursor_moved(grid_pos: Vector3) -> void:
 	var cell := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
 
+	# TOUCH-READY STICKINESS: once shown for a cell, this panel stays up until the
+	# cursor genuinely reports a DIFFERENT cell -- never merely because cursor_moved
+	# re-fired (or motion paused) while resting on the same one. Owning this check
+	# locally (rather than depending on board/cursor/cursor.gd's tile_position setter
+	# only emitting on real changes) keeps the guarantee correct regardless of what
+	# drives cursor_moved.
+	if cell == _current_cell and visible:
+		return
+
 	# No live board yet (no map loaded / between rebuilds) -- nothing to show.
 	var board := CombatServices.board()
 	if board == null:

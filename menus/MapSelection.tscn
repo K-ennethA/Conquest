@@ -21,10 +21,11 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 50.0
-offset_top = 50.0
-offset_right = -50.0
-offset_bottom = -50.0
+offset_left = 24.0
+offset_top = 24.0
+offset_right = -24.0
+offset_bottom = -24.0
+theme_override_constants/separation = 12
 
 [node name="TitleLabel" type="Label" parent="VBoxContainer"]
 layout_mode = 2
@@ -38,19 +39,23 @@ layout_mode = 2
 [node name="MainContainer" type="HBoxContainer" parent="VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
+theme_override_constants/separation = 16
 
 [node name="MapListContainer" type="VBoxContainer" parent="VBoxContainer/MainContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 0.4
+theme_override_constants/separation = 8
 
 [node name="MapListLabel" type="Label" parent="VBoxContainer/MainContainer/MapListContainer"]
 layout_mode = 2
-text = "Available Maps:"
+text = "AVAILABLE MAPS"
 
 [node name="MapList" type="ItemList" parent="VBoxContainer/MainContainer/MapListContainer"]
 layout_mode = 2
 size_flags_vertical = 3
+theme_override_constants/v_separation = 8
+theme_override_constants/icon_margin = 8
 
 [node name="VSeparator" type="VSeparator" parent="VBoxContainer/MainContainer"]
 layout_mode = 2
@@ -59,10 +64,11 @@ layout_mode = 2
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 0.6
+theme_override_constants/separation = 8
 
 [node name="PreviewLabel" type="Label" parent="VBoxContainer/MainContainer/MapPreviewContainer"]
 layout_mode = 2
-text = "Map Preview:"
+text = "MAP PREVIEW"
 
 [node name="MapInfoPanel" type="Panel" parent="VBoxContainer/MainContainer/MapPreviewContainer"]
 layout_mode = 2
@@ -73,10 +79,11 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 20.0
-offset_top = 20.0
-offset_right = -20.0
-offset_bottom = -20.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+theme_override_constants/separation = 8
 
 [node name="MapNameLabel" type="Label" parent="VBoxContainer/MainContainer/MapPreviewContainer/MapInfoPanel/VBoxContainer"]
 layout_mode = 2
@@ -106,18 +113,19 @@ layout_mode = 2
 [node name="ButtonContainer" type="HBoxContainer" parent="VBoxContainer"]
 layout_mode = 2
 alignment = 1
+theme_override_constants/separation = 16
 
 [node name="BackButton" type="Button" parent="VBoxContainer/ButtonContainer"]
 layout_mode = 2
 text = "BACK"
-custom_minimum_size = Vector2(100, 40)
+custom_minimum_size = Vector2(120, 48)
 
 [node name="RefreshButton" type="Button" parent="VBoxContainer/ButtonContainer"]
 layout_mode = 2
 text = "REFRESH"
-custom_minimum_size = Vector2(100, 40)
+custom_minimum_size = Vector2(120, 48)
 
 [node name="SelectButton" type="Button" parent="VBoxContainer/ButtonContainer"]
 layout_mode = 2
 text = "SELECT MAP"
-custom_minimum_size = Vector2(120, 40)
+custom_minimum_size = Vector2(160, 48)

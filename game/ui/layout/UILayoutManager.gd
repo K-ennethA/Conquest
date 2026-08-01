@@ -41,6 +41,9 @@ var battle_log: BattleLog = null
 # Upper-centre action banner ("Eldroot used Forest Barrage!") that flashes when any unit
 # acts, so the enemy/AI turn is legible before per-move VFX exist. Its own high CanvasLayer.
 var action_announcer: ActionAnnouncer = null
+# Speed First per-unit move clock chip, mounted next to the TurnQueue. Self-shows only
+# while a HUMAN unit's clock is armed (see TurnTimer / SpeedFirstTurnSystem).
+var turn_timer: TurnTimer = null
 
 func _ready() -> void:
 	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
@@ -76,6 +79,10 @@ func _ready() -> void:
 	# Upper-centre action banner. Self-styled CanvasLayer (like the turn wipe), mounted
 	# AFTER theming so its explicit fonts/colours survive the font-override sweep.
 	_build_action_announcer()
+
+	# Speed First move-clock chip, next to the TurnQueue in the top-centre column.
+	# Self-styled, so mounted AFTER theming to keep its explicit font size / colours.
+	_build_turn_timer()
 
 	# Give the command buttons a click sound (they were silent). Reuses the existing
 	# sfx_ui_click slot at low volume. Runs after everything above is mounted so the
@@ -116,6 +123,21 @@ func _build_action_announcer() -> void:
 	action_announcer = ActionAnnouncer.new()
 	action_announcer.name = "ActionAnnouncer"
 	add_child(action_announcer)
+
+func _build_turn_timer() -> void:
+	"""Create and mount the Speed First move-clock chip beneath the TurnQueue.
+
+	Placed in the top-centre column (with the queue) so it reads as part of the Speed
+	First HUD. It self-hides whenever no human clock is armed and only ever hooks the
+	SpeedFirstTurnSystem, so it stays invisible in Traditional mode / when the clock is
+	off -- no per-turn-system layout toggling needed here."""
+	turn_timer = TurnTimer.new()
+	turn_timer.name = "TurnTimer"
+	turn_timer.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	if center_top_container:
+		center_top_container.add_child(turn_timer)
+	else:
+		add_child(turn_timer)
 
 func _apply_theme() -> void:
 	"""Apply the amber ConquestTheme to this HUD subtree (panels, buttons, text)."""

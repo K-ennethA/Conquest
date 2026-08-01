@@ -36,6 +36,7 @@ AudioManager="*res://game/audio/AudioManager.gd"
 UnitAnimator="*res://game/visuals/UnitAnimator.gd"
 ArenaController="*res://game/arena/ArenaController.gd"
 ChallengeController="*res://game/challenge/ChallengeController.gd"
+CampaignController="*res://game/campaign/CampaignController.gd"
 
 [display]
 

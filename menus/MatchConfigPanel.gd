@@ -66,7 +66,7 @@ func configure(mode: String) -> void:
 	var col := VBoxContainer.new()
 	col.name = "ConfigRows"
 	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	col.add_theme_constant_override("separation", 14)
+	col.add_theme_constant_override("separation", 10)
 	add_child(col)
 
 	col.add_child(_turn_system_row())
@@ -94,6 +94,7 @@ func _turn_system_row() -> Control:
 	_turn_option.tooltip_text = "Traditional: each side acts in full. Speed First: units act in speed order."
 	_select_option_by_id(_turn_option, GameSettings.selected_turn_system)
 	_turn_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_turn_option.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(_turn_option)
 	return row
 
@@ -105,6 +106,7 @@ func _difficulty_row() -> Control:
 		_difficulty_option.add_item(BotController.difficulty_name(i), i)
 	_select_option_by_id(_difficulty_option, clampi(GameSettings.ai_difficulty, 0, 3))
 	_difficulty_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_difficulty_option.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(_difficulty_option)
 	return row
 
@@ -118,6 +120,7 @@ func _versus_rounds_row() -> Control:
 	_versus_option.tooltip_text = "How many games decide the match (applied locally by the host)."
 	_select_option_by_id(_versus_option, clampi(GameSettings.versus_rounds, 1, 5))
 	_versus_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_versus_option.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(_versus_option)
 	return row
 
@@ -142,6 +145,7 @@ func _custom_rounds_row() -> Control:
 	_rounds_spin.custom_minimum_size = Vector2(120.0, 0.0)
 	_rounds_spin.tooltip_text = "Overrides the preset once changed (%d-%d)." % [CUSTOM_MIN, CUSTOM_MAX]
 	_rounds_spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_rounds_spin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(_rounds_spin)
 	# Connect AFTER setting the initial value so the sync above is not counted as a touch.
 	_rounds_spin.value_changed.connect(_on_rounds_override_changed)
@@ -162,8 +166,11 @@ func _make_preset_button(label: String, rounds: int) -> Button:
 
 
 ## An HBox with a left-aligned cream label and space for a right-aligned control.
+## Fixed to a >=40px row height so every config row -- across skirmish, arena and
+## versus -- reads at the same scale.
 func _labelled_row(text: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
+	row.custom_minimum_size = Vector2(0.0, 40.0)
 	row.add_theme_constant_override("separation", 12)
 	var lbl := Label.new()
 	lbl.text = text
@@ -173,12 +180,12 @@ func _labelled_row(text: String) -> HBoxContainer:
 	return row
 
 
-## A section heading; [param amber] tints it with the warm accent to flag arena-only rows.
+## A section heading; [param amber] tints it gold to flag arena-only rows, dim
+## cream otherwise (shared [method MenuTheme.style_section_header] register).
 func _section_heading(text: String, amber: bool = false) -> Label:
 	var lbl := Label.new()
 	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 15)
-	lbl.add_theme_color_override("font_color", MenuTheme.GOLD if amber else MenuTheme.CREAM_DIM)
+	MenuTheme.style_section_header(lbl, amber)
 	return lbl
 
 

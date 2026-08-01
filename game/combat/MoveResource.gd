@@ -19,6 +19,14 @@ class_name MoveResource
 ## &"frost", &"arcane", &"holy", &"nature", &"steel". Empty = neutral (amber).
 ## See [method ConquestTheme.element_color].
 @export var element: StringName = &""
+## Marks this move as an ULTIMATE -- the big, signature ability that gets the
+## full-screen cut-in flash before it resolves (see [UltimateCutIn]). Optional and
+## OFF by default: the resolution rule ([method is_ultimate_move]) treats a move as an
+## ultimate when this flag is set OR it sits in moveset slot 3 (the 4th move), so every
+## existing character's 4th move is an ultimate with zero .tres edits, while a future
+## move authored for an EARLIER slot can still opt in by setting this true. Purely
+## presentational -- it changes no combat math.
+@export var is_ultimate: bool = false
 ## Resource spent to use the move (energy/mana). 0 = free.
 @export var energy_cost: int = 0
 ## Limited charges per battle. -1 = unlimited.
@@ -58,6 +66,19 @@ class_name MoveResource
 
 func is_valid() -> bool:
 	return targeting != null and not effects.is_empty()
+
+
+## THE single authority for "does this cast get the ultimate cut-in?". A move is an
+## ultimate when its [member is_ultimate] flag is set OR it occupies moveset slot 3 (the
+## 4th move) -- so all existing content lights up with zero .tres edits, and a move can
+## opt in explicitly from an earlier slot. Null-safe (a null move is never an ultimate);
+## [param slot] < 0 (unknown slot) falls back to the flag alone. Static + side-effect free
+## so every cast site (human, AI, tests) resolves it identically.
+static func is_ultimate_move(move, slot: int = -1) -> bool:
+	if move == null:
+		return false
+	var flagged: bool = ("is_ultimate" in move) and bool(move.is_ultimate)
+	return flagged or slot == 3
 
 
 ## True while [param caster]'s current state puts this move in its ALTERNATE mode.

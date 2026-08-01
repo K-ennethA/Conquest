@@ -16,67 +16,83 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 color = Color(0.090196, 0.078431, 0.121569, 1)
 
-[node name="CenterContainer" type="CenterContainer" parent="."]
+[node name="Layout" type="VBoxContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+theme_override_constants/separation = 0
 
-[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer"]
+[node name="CenterBlock" type="CenterContainer" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Column" type="VBoxContainer" parent="Layout/CenterBlock"]
 layout_mode = 2
 custom_minimum_size = Vector2(400, 0)
+theme_override_constants/separation = 8
 
-[node name="Title" type="Label" parent="CenterContainer/VBoxContainer"]
+[node name="Title" type="Label" parent="Layout/CenterBlock/Column"]
 layout_mode = 2
 text = "TACTICAL COMBAT"
 horizontal_alignment = 1
 
-[node name="Subtitle" type="Label" parent="CenterContainer/VBoxContainer"]
+[node name="TitleHairline" type="ColorRect" parent="Layout/CenterBlock/Column"]
+layout_mode = 2
+custom_minimum_size = Vector2(220, 1)
+size_flags_horizontal = 4
+color = Color(0.9019608, 0.6509804, 0.2941177, 0.85)
+
+[node name="Subtitle" type="Label" parent="Layout/CenterBlock/Column"]
 layout_mode = 2
 text = "Strategic Turn-Based Combat"
 horizontal_alignment = 1
 
-[node name="Spacer1" type="Control" parent="CenterContainer/VBoxContainer"]
+[node name="Spacer1" type="Control" parent="Layout/CenterBlock/Column"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 50)
+custom_minimum_size = Vector2(0, 32)
 
-[node name="MenuButtons" type="VBoxContainer" parent="CenterContainer/VBoxContainer"]
+[node name="MenuButtons" type="VBoxContainer" parent="Layout/CenterBlock/Column"]
 layout_mode = 2
+theme_override_constants/separation = 12
 
-[node name="SinglePlayerButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
+[node name="SinglePlayerButton" type="Button" parent="Layout/CenterBlock/Column/MenuButtons"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
 text = "Solo"
 
-[node name="VersusButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
+[node name="VersusButton" type="Button" parent="Layout/CenterBlock/Column/MenuButtons"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
 text = "Versus"
 
-[node name="CompendiumButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
+[node name="CompendiumButton" type="Button" parent="Layout/CenterBlock/Column/MenuButtons"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
 text = "Compendium"
 
-[node name="MapCreatorButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
+[node name="MapCreatorButton" type="Button" parent="Layout/CenterBlock/Column/MenuButtons"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
 text = "Map Creator"
 
-[node name="Spacer2" type="Control" parent="CenterContainer/VBoxContainer/MenuButtons"]
+[node name="Spacer2" type="Control" parent="Layout/CenterBlock/Column/MenuButtons"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 20)
 
-[node name="QuitButton" type="Button" parent="CenterContainer/VBoxContainer/MenuButtons"]
+[node name="QuitButton" type="Button" parent="Layout/CenterBlock/Column/MenuButtons"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 48)
 text = "Quit"
 
-[node name="Spacer3" type="Control" parent="CenterContainer/VBoxContainer"]
+[node name="FooterMargin" type="MarginContainer" parent="Layout"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 50)
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 0
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
 
-[node name="Instructions" type="Label" parent="CenterContainer/VBoxContainer"]
+[node name="Instructions" type="Label" parent="Layout/FooterMargin"]
 layout_mode = 2
 text = "1 Solo  •  2 Versus  •  3 Compendium  •  4 Map Creator  •  ESC quit"
 horizontal_alignment = 1

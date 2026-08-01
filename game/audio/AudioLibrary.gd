@@ -40,6 +40,12 @@ class_name AudioLibrary
 @export_group("Music")
 ## Looping battle / gameplay music.
 @export var music_battle: AudioStream
+## Looping menu music (main menu, mode/character/map select, etc.). Left empty
+## until a menu-music asset is generated -- AudioManager's menu-music crossfade
+## is safe to call with this null (it simply plays nothing). See
+## AudioManager.set_menu_music() for a runtime-override path that doesn't
+## require editing this resource.
+@export var music_menu: AudioStream
 
 # --- Mix settings (inspector-editable) ------------------------------------
 @export_group("Mix")

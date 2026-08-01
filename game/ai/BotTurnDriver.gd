@@ -124,9 +124,11 @@ func _on_settings_changed() -> void:
 
 
 func _tick() -> void:
-	# _act() is synchronous and never awaits, so no earlier _tick() can still be on
-	# the stack when the Timer fires again. If _busy is somehow still set here, a
-	# previous _act() errored out before clearing it -- self-heal instead of wedging
+	# _act() is synchronous EXCEPT during an ultimate cast, when it suspends to hold for the
+	# cut-in flash. That is still safe: the Timer is one-shot and re-armed only at the END of
+	# _tick (after the whole beat, incl. any hold, completes), so it cannot fire a second _tick
+	# while this one is suspended mid-await. If _busy is somehow still set here, a previous
+	# _act() errored out before clearing it -- self-heal instead of wedging
 	# the driver inert for the rest of the match. A stranded _busy is exactly what
 	# would leave the AI player's turn permanently incomplete (the AI never acts, so
 	# the turn never advances back to the human): the primary "AI inert" failure.
@@ -151,7 +153,7 @@ func _tick() -> void:
 	while waits < max_waits_per_tick:
 		_last_action_visible = false
 		_last_action_was_attack = false
-		var acted: bool = act_one_ai_unit()
+		var acted: bool = await act_one_ai_unit()
 		if not acted:
 			break
 		if _last_action_visible:
@@ -199,7 +201,7 @@ func _effective_move_dwell() -> float:
 func act_one_ai_unit() -> bool:
 	if not TurnSystemManager or not TurnSystemManager.has_active_turn_system():
 		return false
-	return act_for_turn_system(TurnSystemManager.get_active_turn_system())
+	return await act_for_turn_system(TurnSystemManager.get_active_turn_system())
 
 
 ## Perform ONE AI action against a SPECIFIC turn system. This is the shared core
@@ -246,8 +248,11 @@ func act_for_turn_system(ts: TurnSystemBase) -> bool:
 	_busy = true
 	# _act reports whether the action was visible (move/attack) or a silent wait; the
 	# tick loop reads _last_action_visible to decide whether to fast-forward the next
-	# waiting unit or yield and let the Timer pace this one.
-	_last_action_visible = _act(unit)
+	# waiting unit or yield and let the Timer pace this one. _act only SUSPENDS on an
+	# ultimate cast (to hold for the cut-in flash); otherwise it returns synchronously, so
+	# _busy still brackets exactly one act. During an ultimate hold the one-shot Timer is
+	# stopped (re-armed only at the end of _tick), so no re-entrant tick runs meanwhile.
+	_last_action_visible = await _act(unit)
 	_busy = false
 	return true
 
@@ -323,14 +328,14 @@ func _act(unit: Unit) -> bool:
 	if _pending_attack.has(pend_key):
 		var pend: Dictionary = _pending_attack[pend_key]
 		_pending_attack.erase(pend_key)
-		if board != null and _execute_move_decision(unit, pend, board):
+		if board != null and await _execute_move_decision(unit, pend, board):
 			return true  # _execute_move_decision flags this beat as an ATTACK
 		# The stashed strike could not resolve (target gone, rare) -- close the unit's
 		# turn cleanly; it already spent its move on the previous beat.
 		_finish(unit, "wait")
 		return false
 	if board != null and unit.has_character():
-		return _act_character(unit, board)
+		return await _act_character(unit, board)
 	return _act_fallback(unit, board)
 
 
@@ -376,7 +381,7 @@ func _act_character(unit: Unit, board) -> bool:
 
 	match int(decision.get("action", BotController.ActionType.WAIT)):
 		BotController.ActionType.MOVE:
-			return _execute_plan_attack(unit, decision, board)
+			return await _execute_plan_attack(unit, decision, board)
 		BotController.ActionType.STEP:
 			return _execute_plan_advance(unit, decision, board)
 		_:
@@ -569,7 +574,7 @@ func _execute_plan_attack(unit: Unit, decision: Dictionary, board) -> bool:
 			_last_action_was_attack = false  # this beat is a MOVE (shorter dwell)
 			return true
 
-	if _execute_move_decision(unit, decision, board):
+	if await _execute_move_decision(unit, decision, board):
 		# Attacked in place (already in range) -- always visible.
 		return true
 
@@ -608,6 +613,12 @@ func _execute_move_decision(unit: Unit, decision: Dictionary, board) -> bool:
 	var slot := _slot_of_move(unit, move)
 	if slot < 0:
 		return false
+	# ULTIMATE CUT-IN: if this is the unit's ultimate (4th slot / is_ultimate flag), sweep the
+	# full-screen flash across and HOLD until it finishes BEFORE the strike resolves, so the AI's
+	# signature move gets the same drama as the player's. In headless tests / when no overlay is
+	# mounted the helper skips the await entirely, so the AI chain stays synchronous and GUT never
+	# hangs (this is why act_one_ai_unit / act_for_turn_system keep returning bools directly there).
+	await _await_ultimate_cutin(unit, move, slot)
 	var result: Dictionary = unit.perform_move(slot, aim_cell, board)
 	if result != null and bool(result.get("success", false)):
 		# Concise, diagnosable proof the attack LANDED: target + damage + target HP
@@ -631,6 +642,24 @@ func _execute_move_decision(unit: Unit, decision: Dictionary, board) -> bool:
 func _log_attack_landed(unit: Unit, move, result: Dictionary) -> void:
 	# Per-hit combat logging removed to keep the console quiet during play.
 	pass
+
+
+## Play the ULTIMATE cut-in for the AI's cast and HOLD until it finishes, mirroring the
+## human path in [UnitActionsPanel]. Emits [signal GameEvents.ultimate_casting] (the overlay
+## self-triggers off it) then awaits the overlay's `finished`. The overlay lives in the
+## "ultimate_cutin" group; we look it up null-safely and SKIP the await when it is absent
+## (headless / tests), so this coroutine completes synchronously there and the whole AI act
+## chain keeps returning values without suspending. A non-ultimate move returns immediately.
+func _await_ultimate_cutin(unit, move, slot: int) -> void:
+	if not MoveResource.is_ultimate_move(move, slot):
+		return
+	GameEvents.ultimate_casting.emit(unit, move)
+	var tree := get_tree()
+	if tree == null:
+		return  # off-tree (defensive) -> emit only, never await
+	var overlay := tree.get_first_node_in_group(&"ultimate_cutin")
+	if overlay != null and overlay.has_signal(&"finished"):
+		await overlay.finished
 
 
 ## Index of [param move] within the unit's moveset (what [Unit.perform_move]

@@ -180,6 +180,30 @@ func _replay(cmds: Array) -> Dictionary:
 		"turn_calls": turn.calls,
 	}
 
+## Replay the script on a fresh build, capturing every unit's turn-consumption flags
+## ([acted, has_moved]) after every command. Proves the apply layer consumes actions/moves
+## deterministically -- the property live networked turn flow (greying units, advancing Speed
+## First) depends on.
+func _replay_flags(cmds: Array) -> Array:
+	var b := _build()
+	var applier: CommandApplier = b["applier"]
+	var board = b["board"]
+	var reg = b["reg"]
+	var turn := MockTurn.new()
+	var snapshots: Array = []
+	for cmd in cmds:
+		applier.apply_command(cmd, board, { "turn_system": turn })
+		snapshots.append(_flags(reg))
+	return snapshots
+
+## Per-unit [acted, has_moved] keyed by net_id (null when a unit is gone).
+func _flags(reg) -> Dictionary:
+	var out: Dictionary = {}
+	for id in [1, 2, 3]:
+		var u = reg.unit_for(id)
+		out[id] = null if u == null else [u.acted, u.has_moved]
+	return out
+
 ## A comparable form of an apply result: unit object references (which differ between
 ## runs) are replaced by their stable net_ids.
 func _digest(res: Dictionary, reg) -> Dictionary:
@@ -247,6 +271,41 @@ func test_hash_is_sensitive_to_state():
 	reg.unit_for(2).take_damage(5)
 	var after := applier.hash_match_state(board)
 	assert_ne(before, after, "changing a unit's HP changes the state hash")
+
+func test_cast_and_move_consume_flags_identically_across_runs():
+	# The apply layer must consume actions/moves deterministically: two independent runs of
+	# the same command stream leave every unit's [acted, has_moved] flags identical after
+	# every command. This is what keeps turn flow (greying, Speed First advance) in lockstep.
+	var cmds := _script()
+	var run_a := _replay_flags(cmds)
+	var run_b := _replay_flags(cmds)
+	assert_eq(str(run_a), str(run_b),
+		"per-unit acted/has_moved flags are identical after every command across two runs")
+
+func test_cast_consumes_action_move_marks_moved():
+	# The concrete apply semantics this pass fixed: a CAST_MOVE consumes the caster's ACTION
+	# (acted) but not its move; a WAIT consumes the action; a MOVE_UNIT marks the move.
+	var cmds := _script()
+	var snaps := _replay_flags(cmds)
+	assert_eq(snaps[0][1], [true, false], "cmd0 CAST_MOVE: caster's action consumed, move not")
+	assert_eq(snaps[1][2], [true, false], "cmd1 WAIT_UNIT: defender's action consumed")
+	assert_eq(snaps[2][1], [true, true], "cmd2 MOVE_UNIT: caster now also marked moved")
+
+func test_hash_ignores_turn_flags():
+	# DELIBERATE DECISION: acted/has_moved are per-turn bookkeeping DERIVED from the same
+	# command stream every peer applies, so they add no desync signal the oracle's
+	# hp/cell/statuses/cooldowns/seq components don't already carry. They are therefore
+	# excluded from hash_match_state; flipping them must NOT change the hash. (Flag lockstep
+	# is instead asserted directly, above and in test_mp_loopback.)
+	var b := _build()
+	var applier: CommandApplier = b["applier"]
+	var board = b["board"]
+	var reg = b["reg"]
+	var before := applier.hash_match_state(board)
+	reg.unit_for(1).mark_action_completed("move")
+	reg.unit_for(1).mark_moved()
+	assert_eq(before, applier.hash_match_state(board),
+		"acted/has_moved are intentionally NOT part of the state hash")
 
 func test_summoned_units_get_deterministic_ids():
 	# Even without a live summon, the registry's summon id derivation is a pure
