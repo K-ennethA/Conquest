@@ -571,6 +571,110 @@ static func get_available_maps(include_drafts: bool = false) -> Array[String]:
 	return maps
 
 
+## Directory the in-game Map Creator writes player-authored maps to, as inert JSON
+## (never .tres - a shared .tres is an arbitrary-code-execution vector).
+const CUSTOM_MAPS_DIR := "user://maps/"
+
+
+## Available maps as ORIGIN-TAGGED ENTRIES, so a picker can badge player-made maps.
+##
+## Each entry is { "path": String, "origin": String, "name": String }:
+##   origin == "builtin"  -> a res:// .tres shipped with the game (the same set
+##                           [method get_available_maps] returns).
+##   origin == "custom"   -> a user://maps/*.json map the player authored in the
+##                           Map Creator. Load these with [method load_map_from_json_file].
+##
+## This is ADDITIVE: [method get_available_maps] (the Array[String] of .tres paths
+## every existing screen consumes) is deliberately left untouched. New UI that wants
+## the custom maps + the badge reads this instead.
+static func get_available_map_entries(include_drafts: bool = false) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+
+	# Built-in .tres maps: reuse the existing discovery so the active/draft rule and
+	# the res:// directory scan never drift from get_available_maps.
+	for map_path in get_available_maps(include_drafts):
+		entries.append({
+			"path": map_path,
+			"origin": "builtin",
+			"name": _map_name_for_tres(map_path)
+		})
+
+	# Player-authored JSON maps under user://maps/.
+	var dir = DirAccess.open(CUSTOM_MAPS_DIR)
+	if dir:
+		dir.list_dir_begin()
+		var file_name = dir.get_next()
+		while file_name != "":
+			if file_name.ends_with(".json") and not file_name.begins_with("."):
+				var json_path: String = CUSTOM_MAPS_DIR + file_name
+				entries.append({
+					"path": json_path,
+					"origin": "custom",
+					"name": _map_name_for_json(json_path, file_name)
+				})
+			file_name = dir.get_next()
+		dir.list_dir_end()
+
+	return entries
+
+
+## Best-effort display name of a .tres map (the file stem if it will not load).
+static func _map_name_for_tres(map_path: String) -> String:
+	if ResourceLoader.exists(map_path):
+		var res = load(map_path)
+		if res is MapResource and not (res as MapResource).map_name.is_empty():
+			return (res as MapResource).map_name
+	return map_path.get_file().get_basename()
+
+
+## Best-effort display name of a custom JSON map WITHOUT running the strict import
+## (listing must not reject a draft the way loading-to-play does).
+static func _map_name_for_json(json_path: String, file_name: String) -> String:
+	if not FileAccess.file_exists(json_path):
+		return file_name.get_basename()
+	var file = FileAccess.open(json_path, FileAccess.READ)
+	if file == null:
+		return file_name.get_basename()
+	var text: String = file.get_as_text()
+	file.close()
+	var json = JSON.new()
+	if json.parse(text) != OK or not (json.data is Dictionary):
+		return file_name.get_basename()
+	var map_info = (json.data as Dictionary).get("map_info", {})
+	if map_info is Dictionary:
+		var name_value: String = str((map_info as Dictionary).get("name", ""))
+		if not name_value.is_empty():
+			return name_value
+	return file_name.get_basename()
+
+
+## Load a player-authored JSON map from [param path] into the scene.
+##
+## Runs the HARDENED [method MapResource.import_from_json] (which validates the map
+## against the live catalog and rejects unknown / out-of-bounds / oversized data by
+## returning null), then hands the resulting resource to the normal [method load_map]
+## path. Returns false - via the same map_load_failed signal as every other loader -
+## when the file is missing, unreadable or fails validation.
+func load_map_from_json_file(map_path: String, target_parent: Node3D) -> bool:
+	if not FileAccess.file_exists(map_path):
+		_emit_load_failed("Custom map file not found: " + map_path)
+		return false
+
+	var file = FileAccess.open(map_path, FileAccess.READ)
+	if file == null:
+		_emit_load_failed("Could not open custom map: " + map_path)
+		return false
+	var text: String = file.get_as_text()
+	file.close()
+
+	var map_resource = MapResource.import_from_json(text)
+	if map_resource == null:
+		_emit_load_failed("Custom map failed validation: " + map_path)
+		return false
+
+	return load_map(map_resource, target_parent)
+
+
 ## Load just enough of a map to decide whether it is player-facing. A file that
 ## fails to load is treated as inactive rather than crashing the menus.
 static func _is_active_map(map_path: String) -> bool:

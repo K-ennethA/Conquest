@@ -5,6 +5,12 @@ class_name NetworkMultiplayerSetup
 # Network Multiplayer Setup Menu
 # Allows players to host or join network multiplayer games
 
+# Dev-only: "Host with Client" spawns a SECOND game instance (via OS.create_process)
+# that auto-joins the host. This is a developer two-instance testing convenience, NOT a
+# shipping feature. Gated OFF by default, mirroring MainMenu.ENABLE_DEV_TEST_HARNESS.
+# When false the button is hidden and the handler refuses to run.
+const ENABLE_HOST_AUTO_CLIENT := false
+
 @onready var host_button: Button = $CenterContainer/VBoxContainer/NetworkButtons/HostButton
 @onready var host_with_client_button: Button = $CenterContainer/VBoxContainer/NetworkButtons/HostWithClientButton
 @onready var join_button: Button = $CenterContainer/VBoxContainer/NetworkButtons/JoinButton
@@ -24,6 +30,11 @@ var game_mode_manager: Node
 
 # Lobby state
 var is_hosting: bool = false
+# True whenever a host/lobby flow is active (plain Host or dev Host-with-Client). While
+# true, ESC and the on-screen Cancel button tear the server peer down and return here.
+var is_host_active: bool = false
+# On-screen Cancel button shown over the lobby while hosting (created lazily).
+var host_cancel_button: Button = null
 var connected_players: Array[String] = []
 var lobby_container: VBoxContainer
 var players_list_label: Label
@@ -38,6 +49,8 @@ func _ready() -> void:
 		host_button.pressed.connect(_on_host_pressed)
 	if host_with_client_button:
 		host_with_client_button.pressed.connect(_on_host_with_client_pressed)
+		# Dev-only two-instance testing feature: hide unless explicitly enabled.
+		host_with_client_button.visible = ENABLE_HOST_AUTO_CLIENT
 	if join_button:
 		join_button.pressed.connect(_on_join_pressed)
 	if back_button:
@@ -219,15 +232,27 @@ func _on_host_pressed() -> void:
 		
 		print("[HOST] Connection info - Port: " + str(port))
 		print("[HOST] Share this address with other players: 127.0.0.1:" + str(port))
-		
+
+		_update_status("Waiting for opponent (port %d)" % port)
+
 		# Show collaborative lobby
 		_show_collaborative_lobby(true, "Host Player")
+
+		# Enter host-active state and show a Cancel affordance over the lobby.
+		is_host_active = true
+		_show_host_cancel_button()
 	else:
 		_update_status("Failed to start host. Please try again.")
 		_set_buttons_enabled(true)
 
 func _on_host_with_client_pressed() -> void:
 	"""Handle Host with Client button press - starts host and launches client instance"""
+	# Dev-only guard: refuse to spawn a second instance unless explicitly enabled
+	# (defends the KEY_2 shortcut and any stray callers even though the button is hidden).
+	if not ENABLE_HOST_AUTO_CLIENT:
+		print("[HOST] Host-with-Client is disabled (dev-only feature). Ignoring.")
+		_update_status("Host with Client is a dev-only feature (disabled).")
+		return
 	print("Starting network multiplayer host with automatic client...")
 	_update_status("Starting host with client...")
 	
@@ -253,11 +278,13 @@ func _on_host_with_client_pressed() -> void:
 		# Show lobby instead of auto-starting game
 		_show_lobby("127.0.0.1", actual_port)
 		is_hosting = true
+		is_host_active = true
 		connected_players = ["Host Player"]
 		_update_players_list()
-		
+		_show_host_cancel_button()
+
 		# Wait for client to connect
-		_update_status("Waiting for client to connect...")
+		_update_status("Waiting for opponent (port %d)" % actual_port)
 		_monitor_for_client_connection()
 	else:
 		_update_status("Failed to start host. Please try again.")
@@ -453,8 +480,77 @@ func _on_lobby_game_starting(map_path: String) -> void:
 	print("[SETUP] Game starting with map: " + map_path)
 	# Lobby handles the scene transition
 
+func _show_host_cancel_button() -> void:
+	"""Show a Cancel button over the lobby that tears down hosting at any stage."""
+	if host_cancel_button and is_instance_valid(host_cancel_button):
+		host_cancel_button.visible = true
+		host_cancel_button.move_to_front()
+		return
+
+	host_cancel_button = Button.new()
+	host_cancel_button.name = "HostCancelButton"
+	host_cancel_button.text = "Cancel"
+	host_cancel_button.custom_minimum_size = Vector2(140, 44)
+	host_cancel_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	host_cancel_button.position = Vector2(24, 24)
+	host_cancel_button.pressed.connect(_on_cancel_hosting_pressed)
+	# Added last so it draws on top of the full-rect lobby control.
+	add_child(host_cancel_button)
+	host_cancel_button.move_to_front()
+
+func _on_cancel_hosting_pressed() -> void:
+	"""Cancel button / ESC while hosting: tear down and return to setup."""
+	print("[HOST] Cancel requested - tearing down host...")
+	_teardown_hosting()
+
+func _teardown_hosting() -> void:
+	"""Stop hosting, close the server peer, and restore the setup screen.
+
+	Leaves no orphaned listener: end_current_game() -> handler.disconnect_network()
+	-> backend.disconnect_network() closes the ENet peer and nulls the scene-tree
+	multiplayer_peer. Also stops _monitor_for_client_connection (its loop is gated
+	on is_hosting + lobby_container.visible, both cleared here)."""
+	is_host_active = false
+	is_hosting = false
+
+	# Tear down the network peer + game session.
+	if game_mode_manager:
+		game_mode_manager.end_current_game()
+
+	# Remove the collaborative lobby if it was shown (plain Host path).
+	if collaborative_lobby and is_instance_valid(collaborative_lobby):
+		collaborative_lobby.queue_free()
+		collaborative_lobby = null
+
+	# Hide the legacy lobby container (dev Host-with-Client path).
+	if lobby_container:
+		lobby_container.visible = false
+	connected_players.clear()
+
+	# Remove the Cancel button.
+	if host_cancel_button and is_instance_valid(host_cancel_button):
+		host_cancel_button.queue_free()
+		host_cancel_button = null
+
+	# Restore the setup screen.
+	if host_button:
+		host_button.visible = true
+	if host_with_client_button:
+		host_with_client_button.visible = ENABLE_HOST_AUTO_CLIENT
+	if join_button:
+		join_button.visible = true
+	if status_label:
+		status_label.visible = true
+	_set_buttons_enabled(true)
+	_update_status("Choose to host or join a network game")
+
 func _on_back_pressed() -> void:
 	"""Handle Back button press"""
+	# If a host/lobby flow is active, Back cancels hosting instead of leaving the scene.
+	if is_host_active:
+		_teardown_hosting()
+		return
+
 	print("Returning to multiplayer mode selection")
 	
 	# If we're in lobby, hide it first
@@ -539,7 +635,10 @@ func _input(event: InputEvent) -> void:
 				if connect_button and connect_button.visible:
 					_on_connect_pressed()
 			KEY_ESCAPE:
-				_on_back_pressed()
+				if is_host_active:
+					_teardown_hosting()
+				else:
+					_on_back_pressed()
 
 func _show_lobby(address: String, port: int) -> void:
 	"""Show the multiplayer lobby"""
@@ -596,10 +695,19 @@ func _monitor_for_client_connection() -> void:
 		# Check game status for connected peers
 		var status = game_mode_manager.get_game_status()
 		var network_stats = status.get("network_stats", {})
-		var connected_peers = network_stats.get("connected_peers", [])
-		
+		# network_stats["connected_peers"] is an int peer COUNT (see
+		# NetworkManager.get_network_statistics), not an Array. Calling .size()
+		# on it crashed with "Nonexistent function 'size' in base 'int'".
+		# Guard both shapes to be safe.
+		var connected_peers_stat = network_stats.get("connected_peers", 0)
+		var peer_count := 0
+		if connected_peers_stat is int:
+			peer_count = connected_peers_stat
+		elif connected_peers_stat is Array:
+			peer_count = connected_peers_stat.size()
+
 		# Update connected players list
-		var new_player_count = connected_peers.size() + 1  # +1 for host
+		var new_player_count = peer_count + 1  # +1 for host
 		if new_player_count > connected_players.size():
 			# New player joined
 			for i in range(connected_players.size(), new_player_count):

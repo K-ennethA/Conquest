@@ -17,13 +17,15 @@ var highlighted_tiles: Array[Vector3] = []
 var overlay_meshes: Dictionary = {}          # cell Vector3 -> MeshInstance3D (currently shown)
 var _mesh_pool: Array[MeshInstance3D] = []    # hidden, reusable overlay meshes
 
-# --- Enemy DANGER-ZONE overlays (persistent, hostile tint) -------------------
-# A completely separate channel from the player's blue movement range: each toggled
-# enemy owns an independent set of red overlay quads keyed by an opaque overlay id
-# (the enemy's instance id). These do NOT clear when the blue movement range clears
-# (movement_range_cleared / a new movement_range_calculated), so a toggled enemy's
-# danger zone survives the player deselecting it and selecting their own units. The
-# red material makes them unmistakable from the player's own blue reach.
+# --- Enemy DANGER-ZONE overlays (hostile tint) -------------------------------
+# A completely separate channel from the player's blue movement range: each shown enemy
+# owns an independent set of red overlay quads keyed by an opaque overlay id (the enemy's
+# instance id). These do NOT clear when the blue movement range clears
+# (movement_range_cleared / a new movement_range_calculated) -- this class only draws and
+# erases quads for an id; the CALLER (UnitActionsPanel) owns each overlay's lifetime.
+# It drives two independent policies over this one channel: a PERSISTENT set (the T
+# hotkey, stays until T again) and a TRANSIENT single-enemy inspect overlay (cleared on
+# the next click). The red material makes them unmistakable from the player's own blue reach.
 var _danger_meshes: Dictionary = {}          # overlay_id:int -> Array[MeshInstance3D]
 var danger_range_material: StandardMaterial3D
 
@@ -185,9 +187,10 @@ func get_highlighted_tiles() -> Array[Vector3]:
 	return highlighted_tiles.duplicate()
 
 # --- Enemy danger-zone overlay API ------------------------------------------
-# Persistent, per-enemy red threat overlays that live entirely apart from the blue
-# movement range channel above. Callers (UnitActionsPanel) own the toggle policy;
-# this class only draws/erases the red quads for an opaque overlay id.
+# Per-enemy red threat overlays that live entirely apart from the blue movement range
+# channel above. Callers (UnitActionsPanel) own each overlay's lifetime/policy (persistent
+# T set vs transient click-inspect); this class only draws/erases the red quads for an
+# opaque overlay id.
 
 func set_danger_overlay(overlay_id: int, positions: Array[Vector3]) -> void:
 	"""Show (or replace) the danger overlay for [param overlay_id] at the given grid

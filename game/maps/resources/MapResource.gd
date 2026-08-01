@@ -334,11 +334,19 @@ func get_total_units_for_player(player_id: int) -> int:
 			count += 1
 	return count
 
-func validate_map() -> Dictionary:
-	"""Validate map configuration"""
+func validate_map(strict_catalog: bool = false) -> Dictionary:
+	"""Validate map configuration.
+
+	This is the ONE authoritative validator for a map. [param strict_catalog]
+	additionally resolves every tile_id / character_id the map references against
+	the live [TileCatalog] / [CharacterLibrary], so a SHARED map that names an asset
+	this install does not have fails loudly instead of silently substituting a
+	default. Left [code]false[/code] for the many in-editor / in-game callers that
+	only want the structural + playability checks, so their behaviour is unchanged.
+	"""
 	var issues: Array[String] = []
 	var warnings: Array[String] = []
-	
+
 	# Check required fields
 	if map_name.is_empty():
 		issues.append("Map name is required")
@@ -394,11 +402,45 @@ func validate_map() -> Dictionary:
 		if int(normalized["respawn_interval"]) < 1:
 			issues.append("Spawn point at %s has a respawn interval below 1 turn" % str(spawn_pos))
 
+	# Optional catalog resolution pass. Only NON-EMPTY references are checked: an
+	# empty tile_id / character_id is a legitimate "resolve me by type / legacy
+	# alias" and is handled by MapLoader, so it is never an issue here.
+	if strict_catalog:
+		_append_catalog_issues(issues)
+
 	return {
 		"valid": issues.is_empty(),
 		"issues": issues,
 		"warnings": warnings
 	}
+
+
+func _append_catalog_issues(issues: Array[String]) -> void:
+	"""Append an issue for every tile_id / character_id that does not resolve.
+
+	Kept out of [method validate_map]'s body so the structural checks read clean;
+	invoked only when validation is asked to be catalog-strict (map import).
+	"""
+	for tile_data in tile_layout:
+		var tile_id: String = str(tile_data.get("tile_id", ""))
+		if tile_id.is_empty():
+			continue
+		if TileCatalog.find_by_id(StringName(tile_id)) == null:
+			var pos = tile_data.get("position", Vector2i(-1, -1))
+			issues.append("Unknown tile_id '%s' at %s" % [tile_id, str(pos)])
+
+	# CharacterLibrary.all_ids() is used (rather than get_character(), which pushes a
+	# warning on a miss) so an unknown id is reported once, here, without console noise.
+	var known_ids: Dictionary = {}
+	for known in CharacterLibrary.all_ids():
+		known_ids[String(known)] = true
+	for spawn_data in unit_spawns:
+		var character_id: String = str(spawn_data.get("character_id", ""))
+		if character_id.is_empty():
+			continue
+		if not known_ids.has(character_id):
+			var spawn_pos = spawn_data.get("position", Vector2i(-1, -1))
+			issues.append("Unknown character_id '%s' at %s" % [character_id, str(spawn_pos)])
 
 ## True when this map should be offered to players. Inactive maps are drafts:
 ## they save and load normally but are filtered out of map-selection lists.
@@ -488,8 +530,8 @@ func export_to_json() -> String:
 			}
 		},
 		"layout": {
-			"tiles": tile_layout,
-			"unit_spawns": unit_spawns
+			"tiles": _entries_with_encoded_positions(tile_layout),
+			"unit_spawns": _entries_with_encoded_positions(unit_spawns)
 		},
 		"metadata": {
 			"tags": tags,
@@ -547,14 +589,82 @@ static func import_from_json(json_string: String) -> MapResource:
 		bg_color.get("a", 1.0)
 	)
 	
-	# Layout
+	# Layout. Positions are decoded back into Vector2i (JSON has no native vector type,
+	# so export writes them as {"x","y"} - see _entries_with_encoded_positions), and the
+	# legacy "(x, y)" string form is still accepted so older hand-written files load.
 	var layout = data.get("layout", {})
-	resource.tile_layout = layout.get("tiles", [])
-	resource.unit_spawns = layout.get("unit_spawns", [])
-	
+	resource.tile_layout = _decode_layout_entries(layout.get("tiles", []))
+	resource.unit_spawns = _decode_layout_entries(layout.get("unit_spawns", []))
+
 	# Metadata
 	var metadata = data.get("metadata", {})
 	resource.tags = metadata.get("tags", [])
 	resource.preview_image_path = metadata.get("preview_image_path", "")
-	
+
+	# A map with no victory condition can never be won - default it rather than reject.
+	if resource.victory_conditions.is_empty():
+		resource.victory_conditions = ["Eliminate All Enemies"]
+
+	# HARDENING: a JSON map is authored by a PLAYER and SHARED, so it is untrusted
+	# input. Validate it (catalog-strict) before handing it back: unknown tile / character
+	# references, out-of-bounds positions and a size outside MIN..MAX are all hard
+	# failures. Returning null (not a broken resource) keeps callers on their existing
+	# "load failed" path instead of quietly loading a corrupt map.
+	var validation: Dictionary = resource.validate_map(true)
+	if not validation.get("valid", false):
+		push_error("MapResource.import_from_json: rejected invalid map '%s' - %s" % [
+			resource.map_name, "; ".join(validation.get("issues", []))])
+		return null
+
 	return resource
+
+
+# --- JSON position (de)serialization -----------------------------------------
+# JSON has no native vector type. Tile / spawn entries key their cell on a Vector2i
+# "position", which JSON.stringify would otherwise flatten to the lossy string
+# "(x, y)". These helpers write it as {"x","y"} on export and rebuild the Vector2i
+# on import, so a save/load round-trip is exact.
+
+func _entries_with_encoded_positions(entries: Array) -> Array:
+	"""Deep-copy layout entries, replacing each Vector2i position with {"x","y"}."""
+	var out: Array = []
+	for entry in entries:
+		if not (entry is Dictionary):
+			continue
+		var copy: Dictionary = (entry as Dictionary).duplicate(true)
+		var pos_value: Variant = copy.get("position", null)
+		if pos_value is Vector2i:
+			var pos: Vector2i = pos_value
+			copy["position"] = {"x": pos.x, "y": pos.y}
+		out.append(copy)
+	return out
+
+
+static func _decode_layout_entries(entries: Array) -> Array[Dictionary]:
+	"""Rebuild layout entries from JSON, restoring position to a Vector2i."""
+	var out: Array[Dictionary] = []
+	for entry in entries:
+		if not (entry is Dictionary):
+			continue
+		var copy: Dictionary = (entry as Dictionary).duplicate(true)
+		copy["position"] = _decode_position(copy.get("position", null))
+		out.append(copy)
+	return out
+
+
+static func _decode_position(value) -> Vector2i:
+	"""Best-effort parse of a position from any form a JSON file might carry it in."""
+	if value is Vector2i:
+		return value
+	if value is Dictionary:
+		var d: Dictionary = value
+		return Vector2i(int(d.get("x", 0)), int(d.get("y", 0)))
+	if value is Array and (value as Array).size() >= 2:
+		var a: Array = value
+		return Vector2i(int(a[0]), int(a[1]))
+	if value is String:
+		var stripped: String = (value as String).replace("(", "").replace(")", "").replace(" ", "")
+		var parts: PackedStringArray = stripped.split(",")
+		if parts.size() >= 2:
+			return Vector2i(int(parts[0]), int(parts[1]))
+	return Vector2i(-1, -1)

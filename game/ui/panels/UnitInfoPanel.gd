@@ -55,6 +55,14 @@ const EFFECTS_MAX_HEIGHT := 150.0
 ## unit with both a long ability list and many statuses still fits a 1280x720 window.
 const ABILITIES_MAX_HEIGHT := 140.0
 
+## Vertical space reserved at the BOTTOM of the window that this (top-anchored) card
+## must never grow into. The bottom-left corner is owned by the floating
+## TerrainInfoPanel (see game/ui/panels/TerrainInfoPanel.gd): a ~16px margin + a
+## terrain card up to ~152px tall + an ~8px breathing gap. _fit_height caps the card's
+## bottom edge to `vp_height - BOTTOM_RESERVE` so the Active Effects list scrolls inside
+## the card instead of sliding down under the terrain card (the reported overlap bug).
+const BOTTOM_RESERVE := 176.0
+
 ## Turn a snake_case id ("vineweave") into a display string
 ## ("Torvald Ironhide"). Empty in -> empty out.
 func _humanize_id(id: String) -> String:
@@ -527,10 +535,15 @@ func _fit_height() -> void:
 	# +24 covers the MarginContainer's 12px top and bottom margins.
 	var wanted: float = vb.get_combined_minimum_size().y + 24.0
 
-	# Backstop: never taller than the gap between the card's top edge and the bottom
-	# of the window. Any overflow comes out of the two SCROLLING lists (proportionally)
-	# and never out of the stat rows -- the lists simply start scrolling sooner.
-	var budget: float = maxf(_BASE_HEIGHT, vp_height - position.y - 20.0)
+	# Backstop: never grow past the bottom-left corner reserved for the terrain card.
+	# The card is TOP-anchored (first child of the LeftSidebar VBox, size_flags_vertical
+	# = SHRINK_BEGIN), so its top edge is GLOBAL -- position.y is container-local (~0) and
+	# would let the budget balloon to nearly the full window height, sliding the card down
+	# under the bottom-left TerrainInfoPanel. Measure from global_position.y and stop
+	# BOTTOM_RESERVE px short of the window bottom. Any overflow comes out of the two
+	# SCROLLING lists (proportionally), never the stat rows -- the lists scroll sooner.
+	var top_y: float = global_position.y
+	var budget: float = maxf(_BASE_HEIGHT, vp_height - top_y - BOTTOM_RESERVE)
 	var pool: float = abilities_h + effects_h
 	if wanted > budget and pool > 0.0:
 		var scale: float = maxf(0.0, pool - (wanted - budget)) / pool

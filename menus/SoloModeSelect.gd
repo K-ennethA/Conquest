@@ -2,15 +2,26 @@ extends Control
 
 class_name SoloModeSelect
 
-## Solo mode picker, reached from MainMenu's "Solo" button. Offers the two single-player
-## registers as large mode cards -- Skirmish (pick a map, fight the AI) and Arena Run
-## (draft augments across a gauntlet) -- then hands off to the unified [b]MatchSetup[/b]
-## screen in the matching variant. Dark "Legends" menu look via [MenuTheme].
+## Solo mode picker, reached from MainMenu's "Solo" button. Offers the single-player
+## registers as large mode cards -- Campaign (story battles, not yet built), Skirmish
+## (pick a map, fight the AI) and Arena Run (draft augments across a gauntlet) -- then
+## hands off to the unified [b]MatchSetup[/b] screen in the matching variant. Dark
+## "Legends" menu look via [MenuTheme].
 ##
-## Keyboard: 1 = Skirmish, 2 = Arena Run, ESC = back to the main menu.
+## Campaign has no content yet, so it renders as a styled COMING-SOON card: same size
+## and shape as the live cards but dimmed, disabled (no click / press affordance) and
+## tooltipped "In development". Choosing it by keyboard flashes a brief caption instead
+## of navigating.
+##
+## Keyboard: 1 = Campaign (coming-soon flash), 2 = Skirmish, 3 = Arena Run, ESC = back.
 
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 const MATCH_SETUP_SCENE := "res://menus/MatchSetup.tscn"
+
+## Message flashed when the not-yet-built Campaign card is chosen.
+const COMING_SOON_TEXT := "Campaign is still in development -- coming soon."
+
+var _status_label: Label = null
 
 
 func _ready() -> void:
@@ -25,7 +36,7 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var page := VBoxContainer.new()
-	page.custom_minimum_size = Vector2(720.0, 0.0)
+	page.custom_minimum_size = Vector2(1060.0, 0.0)
 	page.add_theme_constant_override("separation", 16)
 	center.add_child(page)
 
@@ -48,17 +59,30 @@ func _build_ui() -> void:
 	cards.add_theme_constant_override("separation", 20)
 	page.add_child(cards)
 
+	cards.add_child(_make_coming_soon_card(
+		"1.  Campaign",
+		"Story battles across the\nForgotten Forest -- coming soon."))
 	cards.add_child(_make_mode_card(
-		"1.  Skirmish",
+		"2.  Skirmish",
 		"Pick a map, choose your squad,\ndefeat the AI.",
 		MatchConfigPanel.MODE_SKIRMISH))
 	cards.add_child(_make_mode_card(
-		"2.  Arena Run",
+		"3.  Arena Run",
 		"Draft augments between rounds.\nSurvive the gauntlet.",
 		MatchConfigPanel.MODE_ARENA))
 
+	# Flashes the coming-soon caption; empty and reserved (fixed height) so the layout
+	# never jumps when the message appears.
+	_status_label = Label.new()
+	_status_label.text = ""
+	_status_label.custom_minimum_size = Vector2(0.0, 22.0)
+	page.add_child(_status_label)
+	MenuTheme.style_caption(_status_label)
+	_status_label.add_theme_color_override("font_color", MenuTheme.GOLD)
+	_status_label.modulate = Color(1, 1, 1, 0)
+
 	var footspace := Control.new()
-	footspace.custom_minimum_size = Vector2(0.0, 20.0)
+	footspace.custom_minimum_size = Vector2(0.0, 10.0)
 	page.add_child(footspace)
 
 	var back := Button.new()
@@ -68,7 +92,7 @@ func _build_ui() -> void:
 	page.add_child(back)
 
 	var hint := Label.new()
-	hint.text = "1 Skirmish  •  2 Arena Run  •  ESC back"
+	hint.text = "1 Campaign  •  2 Skirmish  •  3 Arena Run  •  ESC back"
 	page.add_child(hint)
 	MenuTheme.style_caption(hint)
 
@@ -107,9 +131,66 @@ func _make_mode_card(heading: String, blurb: String, mode: String) -> Button:
 	return btn
 
 
+## A same-shape card for a mode that is not built yet: disabled (the theme's dimmed
+## "disabled" stylebox), non-interactive, muted heading, and a subtle "In development"
+## tooltip. Choosing it by keyboard flashes [member _status_label] instead.
+func _make_coming_soon_card(heading: String, blurb: String) -> Button:
+	var btn := Button.new()
+	btn.custom_minimum_size = Vector2(320.0, 180.0)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.disabled = true
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.tooltip_text = "In development"
+	btn.modulate = Color(1, 1, 1, 0.75)
+
+	var col := VBoxContainer.new()
+	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 10)
+
+	var head := Label.new()
+	head.text = heading
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_theme_font_size_override("font_size", 26)
+	head.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	col.add_child(head)
+
+	var desc := Label.new()
+	desc.text = blurb
+	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	desc.add_theme_font_size_override("font_size", 15)
+	desc.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	col.add_child(desc)
+
+	# A small gold "COMING SOON" tag so the card reads as intentional, not broken.
+	var tag := Label.new()
+	tag.text = "COMING SOON"
+	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tag.add_theme_font_size_override("font_size", 12)
+	tag.add_theme_color_override("font_color", MenuTheme.GOLD_DK)
+	col.add_child(tag)
+
+	btn.add_child(col)
+	return btn
+
+
 func _on_mode_chosen(mode: String) -> void:
 	MatchSetup.requested_mode = mode
 	get_tree().change_scene_to_file(MATCH_SETUP_SCENE)
+
+
+func _flash_coming_soon() -> void:
+	if _status_label == null:
+		return
+	_status_label.text = COMING_SOON_TEXT
+	_status_label.modulate = Color(1, 1, 1, 1)
+	var tween := create_tween()
+	tween.tween_interval(1.4)
+	tween.tween_property(_status_label, "modulate:a", 0.0, 0.8)
 
 
 func _on_back_pressed() -> void:
@@ -122,8 +203,10 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		match event.keycode:
 			KEY_1:
-				_on_mode_chosen(MatchConfigPanel.MODE_SKIRMISH)
+				_flash_coming_soon()
 			KEY_2:
+				_on_mode_chosen(MatchConfigPanel.MODE_SKIRMISH)
+			KEY_3:
 				_on_mode_chosen(MatchConfigPanel.MODE_ARENA)
 			KEY_ESCAPE:
 				_on_back_pressed()

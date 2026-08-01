@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3 uid="uid://bmatchsetup00001"]
+[gd_scene format=3 uid="uid://b5uynyaq2x8me"]
 
 [ext_resource type="Script" path="res://menus/MatchSetup.gd" id="1"]
 

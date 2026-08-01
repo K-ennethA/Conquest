@@ -55,13 +55,25 @@ var _state: int = CommandState.IDLE
 # The contextual post-move action menu (created in _setup_move_system).
 var action_menu: UnitActionMenu
 
-# --- Enemy DANGER-ZONE toggles ----------------------------------------------
-# Persistent red threat overlays, one per toggled enemy, drawn through the
-# MovementVisualizer's separate danger channel so they survive deselecting the enemy
-# and selecting your own units. Keyed by the enemy Unit itself; the visualizer keys by
-# the enemy's instance id. Computed on toggle and refreshed on turn start (positions
-# move), never per frame.
-var _danger_enemies: Array[Unit] = []
+# --- Enemy DANGER-ZONE overlays: two SEPARATE channels ----------------------
+# Both draw red threat quads through the MovementVisualizer's danger channel (keyed by
+# the enemy's instance id), but they differ in lifetime:
+#
+#   PERSISTENT (the T hotkey): every enemy's zone lit at once, stays up until T again.
+#     Tracked in _persistent_danger_enemies. Survives deselects and is NEVER cleared by
+#     a transient click below.
+#
+#   TRANSIENT (clicking / inspecting a single enemy): shows that one enemy's zone, and
+#     clears on the NEXT click -- selecting a different unit (a new enemy swaps the
+#     overlay to itself), clicking an empty tile, or deselecting. Tracked as the single
+#     _transient_danger_enemy. Because inspecting an enemy IS selecting it, the next
+#     selection change fires unit_deselected, which tears this overlay down.
+#
+# Both are computed on demand (toggle / inspect) and refreshed on turn start (positions
+# move), never per frame. When the same enemy is in BOTH channels, clearing the transient
+# leaves its overlay up (persistent still owns it) -- see _clear_transient_danger.
+var _persistent_danger_enemies: Array[Unit] = []
+var _transient_danger_enemy: Unit = null
 
 # Move system variables
 var move_selection_panel: MoveSelectionPanel
@@ -285,17 +297,22 @@ func _show_movement_range_on_selection() -> void:
 	if not selected_unit:
 		return
 
-	# An enemy / AI unit is INSPECTION-only. Selecting it TOGGLES its persistent danger
-	# zone (a distinct HOSTILE-red overlay via the separate danger channel), so the
-	# player can leave the threat up, deselect, command their own units, and still see
-	# where the enemy could reach. Selecting the same enemy again clears it. This
-	# replaces the old transient blue inspect-range, which vanished on deselect and could
-	# be confused with the player's own reachable blue tiles.
+	# An enemy / AI unit is INSPECTION-only. Selecting it shows its TRANSIENT danger zone
+	# (a distinct HOSTILE-red overlay via the separate danger channel) so the player can
+	# see where the enemy could reach. This overlay is EPHEMERAL: it clears on the next
+	# click -- selecting a different unit (a new enemy swaps the overlay to itself),
+	# clicking an empty tile, or deselecting -- because inspecting an enemy IS selecting
+	# it, so the next selection change fires unit_deselected and tears the overlay down
+	# (see _on_unit_deselected). The PERSISTENT threat mode is the T hotkey
+	# (_toggle_all_enemy_danger), a separate channel these transient clicks never clear.
 	if not _human_may_command(selected_unit):
-		_toggle_enemy_danger(selected_unit)
+		_set_transient_danger_enemy(selected_unit)
 		return
 
-	# Calculate and show movement range
+	# Commanding your own unit: drop any transient enemy inspect overlay first (the prior
+	# enemy was already deselected, but clear defensively so starting a command never
+	# leaves a stale red band up), then show this unit's blue movement range.
+	_clear_transient_danger()
 	_calculate_and_show_movement_range()
 
 func _update_unit_header() -> void:
@@ -514,12 +531,16 @@ func _on_unit_deselected(unit: Unit) -> void:
 		# Clear movement range when unit is deselected
 		_clear_movement_range()
 
+		# Tear down the TRANSIENT enemy inspect overlay: deselecting (or selecting a
+		# different unit, which deselects the old one first) is exactly the "any other
+		# click" that ends a click-inspect. The PERSISTENT T overlays are untouched --
+		# _clear_transient_danger keeps an enemy's overlay up when the T set also holds it.
+		_clear_transient_danger()
+
 		_clear_unit_header()
 		_hide_panel()
 
-		# Back to IDLE (closes the contextual menu if it was somehow still up). Enemy
-		# danger overlays are intentionally NOT cleared here -- they persist across
-		# deselect by design.
+		# Back to IDLE (closes the contextual menu if it was somehow still up).
 		_set_state(CommandState.IDLE)
 
 func _clear_movement_range() -> void:
@@ -1178,7 +1199,9 @@ func _input(event: InputEvent) -> void:
 				_cycle_to_next_commandable_unit()
 				get_viewport().set_input_as_handled()
 
-			# THREAT RANGES: T toggles ALL enemies' danger zones on/off at once.
+			# THREAT RANGES: T toggles ALL enemies' danger zones on/off at once -- the
+			# PERSISTENT mode (stays up until T again), separate from the transient
+			# single-enemy overlay a click/inspect shows.
 			KEY_T:
 				_toggle_all_enemy_danger()
 
@@ -2157,29 +2180,42 @@ func _flash_invalid_action() -> void:
 	if cursor and cursor.has_method("flash_invalid"):
 		cursor.flash_invalid()
 
-# --- Enemy danger-zone toggles ----------------------------------------------
+# --- Enemy danger-zone overlays (transient click channel + persistent T channel) ---
 
-func _toggle_enemy_danger(enemy: Unit) -> void:
-	"""Toggle [param enemy]'s persistent red threat overlay on/off. Computed only on
-	toggle (never per frame). Keyed by the enemy in _danger_enemies (and by its instance
-	id inside the visualizer)."""
+func _set_transient_danger_enemy(enemy: Unit) -> void:
+	"""Show a TRANSIENT click-inspect danger overlay for [param enemy], replacing any
+	previous transient overlay. Cleared on the next click (see _clear_transient_danger).
+	Does NOT disturb the persistent T-toggled set. Computed only here (never per frame)."""
 	if enemy == null:
 		return
+	if _transient_danger_enemy == enemy:
+		return  # already the inspected enemy -- nothing to redraw
+	_clear_transient_danger()
 	var vis := _get_movement_visualizer()
 	if vis == null:
-		return
-	var oid: int = enemy.get_instance_id()
-	if enemy in _danger_enemies:
-		_danger_enemies.erase(enemy)
-		if vis.has_method("clear_danger_overlay"):
-			vis.clear_danger_overlay(oid)
 		return
 	var cells: Array[Vector3] = _compute_enemy_threat_cells(enemy)
 	if cells.is_empty():
 		return
-	_danger_enemies.append(enemy)
+	_transient_danger_enemy = enemy
 	if vis.has_method("set_danger_overlay"):
-		vis.set_danger_overlay(oid, cells)
+		vis.set_danger_overlay(enemy.get_instance_id(), cells)
+
+func _clear_transient_danger() -> void:
+	"""Erase the transient click-inspect overlay, if any. Idempotent. Leaves the enemy's
+	overlay UP when the persistent T set also holds it, so a transient click can never
+	clear a T overlay -- the two channels are independent."""
+	if _transient_danger_enemy == null:
+		return
+	var enemy := _transient_danger_enemy
+	_transient_danger_enemy = null
+	if enemy in _persistent_danger_enemies:
+		return  # persistent channel still owns this overlay -- keep it drawn
+	if not is_instance_valid(enemy):
+		return  # a freed enemy's overlay is cleared by _on_unit_eliminated_danger
+	var vis := _get_movement_visualizer()
+	if vis and vis.has_method("clear_danger_overlay"):
+		vis.clear_danger_overlay(enemy.get_instance_id())
 
 func _compute_enemy_threat_cells(enemy: Unit) -> Array[Vector3]:
 	"""The reachable cells for an enemy (its danger zone), as Vector3(col,0,row) grid
@@ -2196,60 +2232,85 @@ func _compute_enemy_threat_cells(enemy: Unit) -> Array[Vector3]:
 	return _cells_to_grid_tiles(cells)
 
 func _toggle_all_enemy_danger() -> void:
-	"""The T hotkey: if ANY enemy danger zone is up, clear them all; otherwise light up
-	every living enemy's zone at once."""
+	"""The T hotkey (PERSISTENT mode): if the T set is up, clear it; otherwise light up
+	every living enemy's zone at once. The on/off decision reads ONLY the persistent set,
+	NOT the visualizer's has_any_danger_overlay -- a transient click-inspect overlay must
+	not make T think its own set is already shown (which would flip T to a clear)."""
 	var vis := _get_movement_visualizer()
 	if vis == null:
 		return
-	var any_shown := not _danger_enemies.is_empty()
-	if not any_shown and vis.has_method("has_any_danger_overlay"):
-		any_shown = vis.has_any_danger_overlay()
-	if any_shown:
-		_clear_all_enemy_danger()
+	if not _persistent_danger_enemies.is_empty():
+		_clear_all_persistent_danger()
 		return
 	for enemy in _all_enemy_units():
 		var cells: Array[Vector3] = _compute_enemy_threat_cells(enemy)
 		if cells.is_empty():
 			continue
-		if not (enemy in _danger_enemies):
-			_danger_enemies.append(enemy)
+		if not (enemy in _persistent_danger_enemies):
+			_persistent_danger_enemies.append(enemy)
 		if vis.has_method("set_danger_overlay"):
 			vis.set_danger_overlay(enemy.get_instance_id(), cells)
 
-func _clear_all_enemy_danger() -> void:
+func _clear_all_persistent_danger() -> void:
+	"""Turn off the T overlays. Clears each persistent enemy's overlay individually rather
+	than the visualizer's clear_all -- so a live TRANSIENT click-inspect overlay survives
+	T-off. If the inspected enemy is also in the T set, its overlay is kept (the transient
+	channel still owns it)."""
 	var vis := _get_movement_visualizer()
-	if vis and vis.has_method("clear_all_danger_overlays"):
-		vis.clear_all_danger_overlays()
-	_danger_enemies.clear()
+	for enemy in _persistent_danger_enemies:
+		if enemy == null or not is_instance_valid(enemy):
+			continue
+		if enemy == _transient_danger_enemy:
+			continue  # keep -- the transient channel still wants this overlay
+		if vis and vis.has_method("clear_danger_overlay"):
+			vis.clear_danger_overlay(enemy.get_instance_id())
+	_persistent_danger_enemies.clear()
 
 func _refresh_danger_overlays() -> void:
-	"""Recompute every toggled enemy's overlay (positions changed on a turn boundary),
-	dropping any that died. Cheap: only the already-toggled enemies, only on turn start."""
+	"""Recompute both channels' overlays (positions changed on a turn boundary), dropping
+	any that died. Cheap: only the already-shown enemies, only on turn start."""
 	var vis := _get_movement_visualizer()
 	if vis == null:
 		return
+
+	# Persistent (T) set.
 	var still: Array[Unit] = []
-	for enemy in _danger_enemies:
+	for enemy in _persistent_danger_enemies:
 		if enemy == null or not is_instance_valid(enemy) or not enemy.is_alive():
-			if enemy != null and vis.has_method("clear_danger_overlay"):
+			if enemy != null and is_instance_valid(enemy) and vis.has_method("clear_danger_overlay"):
 				vis.clear_danger_overlay(enemy.get_instance_id())
 			continue
 		var cells: Array[Vector3] = _compute_enemy_threat_cells(enemy)
 		if cells.is_empty():
-			if vis.has_method("clear_danger_overlay"):
+			# Only clear if the transient channel isn't keeping this overlay alive.
+			if enemy != _transient_danger_enemy and vis.has_method("clear_danger_overlay"):
 				vis.clear_danger_overlay(enemy.get_instance_id())
 		else:
 			if vis.has_method("set_danger_overlay"):
 				vis.set_danger_overlay(enemy.get_instance_id(), cells)
 			still.append(enemy)
-	_danger_enemies = still
+	_persistent_danger_enemies = still
+
+	# Transient (click-inspect) overlay: recompute the single inspected enemy, or drop it.
+	if _transient_danger_enemy != null:
+		var e := _transient_danger_enemy
+		if not is_instance_valid(e) or not e.is_alive():
+			_transient_danger_enemy = null
+		else:
+			var tcells: Array[Vector3] = _compute_enemy_threat_cells(e)
+			if tcells.is_empty():
+				_clear_transient_danger()
+			elif vis.has_method("set_danger_overlay"):
+				vis.set_danger_overlay(e.get_instance_id(), tcells)
 
 func _on_unit_eliminated_danger(unit: Unit, _eliminator: Unit) -> void:
-	"""A unit died: expire its danger overlay so no stale threat band lingers."""
+	"""A unit died: expire its danger overlay (both channels) so no stale threat band lingers."""
 	if unit == null:
 		return
-	if unit in _danger_enemies:
-		_danger_enemies.erase(unit)
+	if unit in _persistent_danger_enemies:
+		_persistent_danger_enemies.erase(unit)
+	if unit == _transient_danger_enemy:
+		_transient_danger_enemy = null
 	var vis := _get_movement_visualizer()
 	if vis and vis.has_method("clear_danger_overlay"):
 		vis.clear_danger_overlay(unit.get_instance_id())

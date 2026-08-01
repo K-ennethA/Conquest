@@ -43,8 +43,15 @@ var _current_selected_map: String = ""
 # --- Live node refs ---------------------------------------------------------
 var _map_list: ItemList = null
 var _map_name_label: Label = null
+var _map_minimap: TextureRect = null
+var _minimap_placeholder: Label = null
 var _map_desc_label: Label = null
 var _map_details_label: Label = null
+
+## Cache of rendered minimap textures keyed by map path, so re-selecting a map (or
+## returning to it) never re-renders. Cheap to build, but the cache avoids redundant
+## tile-resource loads (see [MapPreview]).
+var _minimap_cache: Dictionary = {}
 var _config_panel: MatchConfigPanel = null
 var _start_btn: Button = null
 var _message_label: Label = null
@@ -163,6 +170,8 @@ func _build_left_pane() -> Control:
 	_map_name_label.add_theme_color_override("font_color", MenuTheme.GOLD)
 	pv.add_child(_map_name_label)
 
+	pv.add_child(_build_minimap_holder())
+
 	_map_desc_label = Label.new()
 	_map_desc_label.text = "Choose a map from the list to see its details."
 	_map_desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -174,6 +183,64 @@ func _build_left_pane() -> Control:
 
 	left.add_child(preview)
 	return left
+
+
+## The minimap pane: a fixed-height panel holding the top-down map texture (NEAREST-
+## filtered, aspect kept so non-square maps letterbox) with a neutral placeholder
+## label shown until a map is selected or when a map has no drawable layout.
+func _build_minimap_holder() -> Control:
+	var holder := PanelContainer.new()
+	holder.custom_minimum_size = Vector2(0.0, 150.0)
+
+	_map_minimap = TextureRect.new()
+	_map_minimap.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_map_minimap.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_map_minimap.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_map_minimap.visible = false
+	holder.add_child(_map_minimap)
+
+	_minimap_placeholder = Label.new()
+	_minimap_placeholder.text = "No preview available"
+	_minimap_placeholder.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_minimap_placeholder.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_minimap_placeholder.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	holder.add_child(_minimap_placeholder)
+
+	return holder
+
+
+## Render (or fetch from cache) the minimap for the map at [param index] and show it,
+## falling back to the neutral placeholder when there is nothing to draw.
+func _update_minimap(index: int) -> void:
+	if _map_minimap == null or _minimap_placeholder == null:
+		return
+	if index < 0 or index >= _map_resources.size():
+		_show_minimap_placeholder("No preview available")
+		return
+
+	var map_path: String = _available_maps[index]
+	var tex: Texture2D = null
+	if _minimap_cache.has(map_path):
+		tex = _minimap_cache[map_path]
+	else:
+		tex = MapPreview.generate(_map_resources[index])
+		_minimap_cache[map_path] = tex  # cache null too, so an empty map isn't retried
+
+	if tex == null:
+		_show_minimap_placeholder("No preview available")
+		return
+
+	_map_minimap.texture = tex
+	_map_minimap.visible = true
+	_minimap_placeholder.visible = false
+
+
+func _show_minimap_placeholder(text: String) -> void:
+	if _map_minimap != null:
+		_map_minimap.visible = false
+	if _minimap_placeholder != null:
+		_minimap_placeholder.text = text
+		_minimap_placeholder.visible = true
 
 
 ## RIGHT: the reusable config column.
@@ -273,6 +340,7 @@ func _on_map_selected(index: int) -> void:
 		return
 	_current_selected_map = _available_maps[index]
 	_display_map_info(_map_resources[index])
+	_update_minimap(index)
 	if _start_btn != null:
 		_start_btn.disabled = false
 

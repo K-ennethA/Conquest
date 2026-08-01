@@ -86,11 +86,18 @@ func _monitor_connection() -> void:
 		# Check if we have any connected peers
 		var status = GameModeManager.get_game_status()
 		var network_stats = status.get("network_stats", {})
-		var connected_peers = network_stats.get("connected_peers", [])
-		
-		print("Connection check (%.1fs): %d peers connected" % [wait_time, connected_peers.size()])
-		
-		if connected_peers.size() > 0:
+		# network_stats["connected_peers"] is an int peer COUNT, not an Array;
+		# calling .size() on it crashed ("Nonexistent function 'size' in base 'int'").
+		var connected_peers_stat = network_stats.get("connected_peers", 0)
+		var peer_count := 0
+		if connected_peers_stat is int:
+			peer_count = connected_peers_stat
+		elif connected_peers_stat is Array:
+			peer_count = connected_peers_stat.size()
+
+		print("Connection check (%.1fs): %d peers connected" % [wait_time, peer_count])
+
+		if peer_count > 0:
 			print("✓ Client connected successfully!")
 			print("✓ End-to-end test PASSED")
 			return

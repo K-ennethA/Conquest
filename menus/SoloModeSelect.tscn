@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3 uid="uid://bsolomodeselect01"]
+[gd_scene format=3 uid="uid://lpj2kiassnd5"]
 
 [ext_resource type="Script" path="res://menus/SoloModeSelect.gd" id="1"]
 

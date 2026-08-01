@@ -7,6 +7,7 @@ extends GutTest
 var model: MapMakerModel
 
 const TEST_SAVE_PATH := "user://test_mapmaker_roundtrip.tres"
+const TEST_JSON_PATH := "user://maps/test_mapmaker_roundtrip.json"
 
 
 func before_each():
@@ -17,6 +18,8 @@ func after_each():
 	model = null
 	if FileAccess.file_exists(TEST_SAVE_PATH):
 		DirAccess.remove_absolute(TEST_SAVE_PATH)
+	if FileAccess.file_exists(TEST_JSON_PATH):
+		DirAccess.remove_absolute(TEST_JSON_PATH)
 
 
 # --- Dimensions --------------------------------------------------------------

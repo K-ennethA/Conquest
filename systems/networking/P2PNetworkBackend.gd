@@ -16,7 +16,12 @@ var _upnp: UPNP
 
 # P2P specific settings
 var _host_port: int = 0
-var _upnp_enabled: bool = true
+# UPnP is DISABLED by default: UPNP.discover() is a BLOCKING call that stalls the
+# main thread for several seconds while it probes for a gateway, which hard-freezes
+# the UI when hosting. It is also unnecessary for the current localhost/LAN dev flow.
+# Re-enable explicitly via set_upnp_enabled(true) only for real internet NAT traversal
+# (and only once discovery is moved off the main thread).
+var _upnp_enabled: bool = false
 var _connection_timeout: float = 10.0
 var _reconnection_attempts: int = 3
 var _current_reconnection_attempt: int = 0
