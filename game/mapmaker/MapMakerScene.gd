@@ -72,6 +72,16 @@ const SPAWN_KIND_INITIALS := {
 	"Endless": "E",
 	"Reinforcement": "F",
 }
+# Feet-on-tile Y for a spawned character model (mirrors MapLoader.UNIT_GROUND_Y so
+# the preview model rests on the tile the way the loaded map places it).
+const SPAWN_MODEL_Y := 0.1
+# Flat player-colour ground ring under a spawn model, carrying the player/kind info
+# the bare model would otherwise lose (the 2D badge + config panel keep the rest).
+const SPAWN_RING_Y := 0.16
+const SPAWN_RING_HEIGHT := 0.06
+const SPAWN_RING_RADIUS := 0.55
+# Floating kind-initial billboard height above the spawn cell.
+const SPAWN_LABEL_Y := 2.1
 
 var model: MapMakerModel
 
@@ -116,7 +126,8 @@ var _viewport: SubViewport
 var _world_root: Node3D
 var _camera: Camera3D
 var _tile_visuals: Dictionary = {}   # Vector2i -> Node3D
-var _spawn_meshes: Dictionary = {}   # Vector2i -> MeshInstance3D
+var _spawn_visuals: Dictionary = {}      # Vector2i -> Node3D (holder: model+ring+label, or sphere)
+var _spawn_signatures: Dictionary = {}   # Vector2i -> String (skip rebuild when spawn unchanged)
 var _objective_meshes: Dictionary = {}  # Vector2i -> MeshInstance3D
 var _world_span: float = TILE_STEP
 
@@ -131,6 +142,9 @@ var _tile_resource_cache: Dictionary = {}
 var _tile_model_cache: Dictionary = {}
 var _type_model_paths: Dictionary = {}
 var _type_model_paths_built: bool = false
+# character_id (String) -> PackedScene or null. Caches the roster model scene (and the
+# "no model" answer) so placing many spawns never re-resolves the same character.
+var _character_model_cache: Dictionary = {}
 
 
 func _ready() -> void:
@@ -762,7 +776,8 @@ func _build_world_3d() -> void:
 		_world_root.remove_child(child)
 		child.queue_free()
 	_tile_visuals.clear()
-	_spawn_meshes.clear()
+	_spawn_visuals.clear()
+	_spawn_signatures.clear()
 	_objective_meshes.clear()
 
 	var cols: int = maxi(model.width, 1)
@@ -810,42 +825,158 @@ func _create_tile_visual(pos: Vector2i) -> void:
 
 
 func _sync_spawn_marker(pos: Vector2i) -> void:
+	## Render a spawn as the ACTUAL character model (when the spawn names one), sitting
+	## on a flat player-colour ring with a floating kind-initial label so player/kind
+	## info is never lost. Falls back to the original colour sphere when the spawn has no
+	## character or its model can't load. Rebuilds only when the spawn's player/kind/
+	## character actually change, so an unrelated tile edit on the same cell is a no-op.
 	var spawn: Dictionary = model.get_spawn(pos)
 	if spawn.is_empty():
-		if _spawn_meshes.has(pos):
-			var stale: MeshInstance3D = _spawn_meshes[pos]
-			if is_instance_valid(stale):
-				stale.queue_free()
-			_spawn_meshes.erase(pos)
+		_clear_spawn_visual(pos)
 		return
+
 	var player_id: int = int(spawn.get("player_id", 0))
 	var kind: String = str(spawn.get("spawn_kind", MapResource.SPAWN_KIND_START))
+	var character_id: String = str(spawn.get("character_id", ""))
+	var signature: String = "%d|%s|%s" % [player_id, kind, character_id]
+	if _spawn_signatures.get(pos, "") == signature \
+			and _spawn_visuals.has(pos) and is_instance_valid(_spawn_visuals[pos]):
+		return  # nothing about the spawn changed; keep the existing visual
+
+	_clear_spawn_visual(pos)
+	var holder: Node3D = _build_spawn_visual(player_id, kind, character_id)
+	holder.name = "Spawn_%d_%d" % [pos.x, pos.y]
+	_world_root.add_child(holder)
+	holder.position = _world_position_for(pos, 0.0)
+	_spawn_visuals[pos] = holder
+	_spawn_signatures[pos] = signature
+
+
+## Free the spawn visual holder at [param pos] (model + ring + label, or the fallback
+## sphere) and forget its signature. No-op when the cell has no spawn visual.
+func _clear_spawn_visual(pos: Vector2i) -> void:
+	if _spawn_visuals.has(pos):
+		var holder: Node3D = _spawn_visuals[pos]
+		if is_instance_valid(holder):
+			var parent := holder.get_parent()
+			if parent:
+				parent.remove_child(holder)
+			holder.queue_free()
+		_spawn_visuals.erase(pos)
+	_spawn_signatures.erase(pos)
+
+
+## Build the spawn's 3D visual as a single holder Node3D positioned at the cell.
+## With a resolvable character: its model + a flat player-colour ground ring + a
+## floating kind-initial billboard. Otherwise: the original colour sphere, which
+## already carries the player colour and kind scale on its own.
+func _build_spawn_visual(player_id: int, kind: String, character_id: String) -> Node3D:
+	var holder := Node3D.new()
 	var color: Color = _player_color(player_id)
 	var scale_value: float = float(SPAWN_KIND_MARKER_SCALE.get(kind, 1.0))
+
+	var character_model: Node3D = _instantiate_character_model(character_id)
+	if character_model != null:
+		holder.add_child(character_model)
+		holder.add_child(_build_spawn_ring(color, scale_value))
+		holder.add_child(_build_spawn_label(kind, color))
+	else:
+		holder.add_child(_build_spawn_sphere(color, scale_value))
+	return holder
+
+
+## Instantiate [param character_id]'s authored model, placed feet-on-tile and given the
+## character's authored yaw + scale (the minimal engine-safe port of
+## Unit._setup_character_model). Returns null when the id is empty, unknown, has no
+## model_scene, or the scene doesn't instance to a Node3D -- the caller then falls back
+## to the sphere.
+func _instantiate_character_model(character_id: String) -> Node3D:
+	var packed: PackedScene = _load_character_model(character_id)
+	if packed == null:
+		return null
+	var instance = packed.instantiate()
+	if not (instance is Node3D):
+		if instance:
+			instance.free()
+		return null
+	var character_model := instance as Node3D
+
+	# Centre a multi-cell model over its footprint (zero offset for a normal 1x1), then
+	# apply the authored yaw and scale about the feet-at-origin, exactly like a live unit.
+	var yaw: float = 0.0
+	var model_scale: float = 1.0
+	var footprint := Vector2i.ONE
+	var character := CharacterLibrary.get_character(character_id)
+	if character != null:
+		yaw = character.model_yaw_deg if "model_yaw_deg" in character else 0.0
+		model_scale = character.model_scale if "model_scale" in character else 1.0
+		if character.has_method("get_footprint"):
+			footprint = character.get_footprint()
+	character_model.position = Vector3(
+		float(footprint.x - 1) * TILE_STEP * 0.5,
+		SPAWN_MODEL_Y,
+		float(footprint.y - 1) * TILE_STEP * 0.5)
+	character_model.rotation = Vector3(0.0, deg_to_rad(yaw), 0.0)
+	character_model.scale = Vector3.ONE * maxf(0.05, model_scale)
+	return character_model
+
+
+## Loads (and caches) the roster model PackedScene for [param character_id]. Caches the
+## null answer too, so a spawn with no character / no model never re-hits the library.
+func _load_character_model(character_id: String) -> PackedScene:
+	if character_id.is_empty():
+		return null
+	if _character_model_cache.has(character_id):
+		return _character_model_cache[character_id]
+	var packed: PackedScene = null
+	var character := CharacterLibrary.get_character(character_id)
+	if character != null and character.model_scene != null:
+		packed = character.model_scene
+	_character_model_cache[character_id] = packed
+	return packed
+
+
+## Flat player-colour ground ring under a spawn model, sized by spawn kind.
+func _build_spawn_ring(color: Color, scale_value: float) -> MeshInstance3D:
+	var radius: float = SPAWN_RING_RADIUS * scale_value
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = SPAWN_RING_HEIGHT
+	var ring := MeshInstance3D.new()
+	ring.mesh = mesh
+	ring.material_override = _solid_material(color)
+	ring.position = Vector3(0.0, SPAWN_RING_Y, 0.0)
+	return ring
+
+
+## Floating billboard showing the spawn kind's initial (S/R/E/F) in the player colour.
+func _build_spawn_label(kind: String, color: Color) -> Label3D:
+	var label := Label3D.new()
+	label.text = str(SPAWN_KIND_INITIALS.get(kind, "S"))
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.modulate = color
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 1.0)
+	label.outline_size = 10
+	label.font_size = 64
+	label.pixel_size = 0.012
+	label.position = Vector3(0.0, SPAWN_LABEL_Y, 0.0)
+	return label
+
+
+## The original spawn marker: a player-colour sphere scaled by kind. Used when a spawn
+## names no character (or its model can't load), where it still reads player + kind.
+func _build_spawn_sphere(color: Color, scale_value: float) -> MeshInstance3D:
 	var radius: float = SPAWN_RADIUS * scale_value
-
-	if _spawn_meshes.has(pos):
-		var existing: MeshInstance3D = _spawn_meshes[pos]
-		if is_instance_valid(existing):
-			var mat := existing.material_override as StandardMaterial3D
-			if mat:
-				mat.albedo_color = color
-			var sphere := existing.mesh as SphereMesh
-			if sphere:
-				sphere.radius = radius
-				sphere.height = radius * 2.0
-			return
-		_spawn_meshes.erase(pos)
-
 	var mesh := SphereMesh.new()
 	mesh.radius = radius
 	mesh.height = radius * 2.0
 	var marker := MeshInstance3D.new()
 	marker.mesh = mesh
 	marker.material_override = _solid_material(color)
-	marker.position = _world_position_for(pos, SPAWN_Y)
-	_world_root.add_child(marker)
-	_spawn_meshes[pos] = marker
+	marker.position = Vector3(0.0, SPAWN_Y, 0.0)
+	return marker
 
 
 func _sync_objective_marker(pos: Vector2i) -> void:
