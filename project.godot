@@ -17,10 +17,9 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 config/name="Conquest"
 run/main_scene="res://menus/MainMenu.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
-config/icon="res://icon.svg"
 boot_splash/bg_color=Color(0.0901961, 0.0784314, 0.121569, 1)
 boot_splash/image="res://assets/branding/splash.png"
-boot_splash/fullsize=true
+config/icon="res://icon.svg"
 
 [autoload]
 

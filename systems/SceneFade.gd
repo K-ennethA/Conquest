@@ -67,9 +67,15 @@ func _ready() -> void:
 
 	_build_rect()
 
-	# Connect BEFORE the project's main scene is ever added (autoloads _ready before the main
-	# scene is instanced), so even the very first boot scene fades in. See class doc.
+	# Catches every RUNTIME scene swap (change_scene_to_file targets). It can NOT catch
+	# the BOOT scene: at startup the engine adds every autoload AND the main scene to the
+	# tree BEFORE any autoload's _ready runs, so this connection exists only after the
+	# first scene has already entered (verified live: the boot scene never fires this,
+	# leaving the overlay opaque black forever - the "screen stays black" bug).
 	get_tree().node_added.connect(_on_scene_tree_node_added)
+	# ...so the boot scene's fade-in is kicked explicitly, deferred to land after the
+	# whole boot cascade settles.
+	call_deferred("_fade_in")
 
 
 func _build_rect() -> void:

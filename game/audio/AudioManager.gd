@@ -131,9 +131,15 @@ func _ready() -> void:
 
 	# Global menu-button audio wiring (zero per-menu edits): watch every node
 	# entering the tree for BaseButtons (hover/confirm/back cues) and for
-	# scene-root swaps (menu music). Connecting here, before the project's
-	# main scene is ever added, means even the very first boot scene is caught.
+	# scene-root swaps (menu music). NOTE: this canNOT catch the BOOT scene -
+	# at startup every autoload AND the main scene enter the tree before any
+	# autoload's _ready runs (verified live while fixing the stuck-black
+	# SceneFade bug), so the initial menu-music kick is done explicitly below.
 	get_tree().node_added.connect(_on_scene_tree_node_added)
+	# Boot-scene kick: start menu music for the very first scene (deferred so
+	# the whole boot cascade - including the battle-state signals that would
+	# set _in_battle - lands first). Runtime scene swaps ride the signal above.
+	call_deferred("_kick_boot_menu_music")
 
 func _build_players() -> void:
 	for i in sfx_voice_count:
@@ -201,6 +207,12 @@ func stop_music() -> void:
 ## Pass null to clear the override and fall back to library.music_menu (also
 ## likely null today -- see the class doc TODO). If a non-battle scene is
 ## currently active, this re-evaluates immediately.
+## Boot-scene menu-music kick - see the note at the node_added connection in _ready.
+func _kick_boot_menu_music() -> void:
+	if not _in_battle:
+		_crossfade_menu_music(_resolve_menu_music())
+
+
 func set_menu_music(stream: AudioStream) -> void:
 	_menu_music_override = stream
 	if not _in_battle:
