@@ -245,7 +245,10 @@ func create_material() -> Material:
 			var shader_mat = load(shader_path)
 			if shader_mat is ShaderMaterial:
 				return shader_mat
-		push_warning("TileResource: material_style shader missing at " + shader_path + "; falling back to FLAT.")
+		# Falling back to FLAT is the DESIGNED behaviour for a missing optional shader, and
+		# this resolver runs per tile material -- so a single absent shader file used to
+		# emit one debugger warning per tile on the board. The returned FLAT material IS
+		# the report; the visual difference is the symptom.
 
 	var material := StandardMaterial3D.new()
 

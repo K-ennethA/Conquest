@@ -16,7 +16,7 @@ func _move(id: StringName, cooldown: int, max_uses: int) -> MoveResource:
 # --- Cooldowns -------------------------------------------------------------
 
 func test_move_with_cooldown_two_is_unusable_for_two_ticks():
-	var mc := MovesetController.new()
+	var mc: MovesetController = autofree(MovesetController.new())
 	var move := _move(&"blast", 2, -1)
 	assert_true(mc.can_use(move), "usable before first use")
 	mc.on_used(move)
@@ -30,7 +30,7 @@ func test_move_with_cooldown_two_is_unusable_for_two_ticks():
 	assert_eq(mc.remaining(move), 0, "cooldown cleared")
 
 func test_zero_cooldown_move_is_always_ready():
-	var mc := MovesetController.new()
+	var mc: MovesetController = autofree(MovesetController.new())
 	var move := _move(&"jab", 0, -1)
 	mc.on_used(move)
 	assert_true(mc.can_use(move), "no cooldown means usable next turn immediately")
@@ -39,7 +39,7 @@ func test_zero_cooldown_move_is_always_ready():
 # --- Uses ------------------------------------------------------------------
 
 func test_max_uses_is_enforced():
-	var mc := MovesetController.new()
+	var mc: MovesetController = autofree(MovesetController.new())
 	var move := _move(&"ultimate", 0, 2)
 	assert_eq(mc.uses_left(move), 2, "starts with 2 charges")
 	mc.on_used(move)
@@ -50,7 +50,7 @@ func test_max_uses_is_enforced():
 	assert_eq(mc.uses_left(move), 0, "exhausted")
 
 func test_unlimited_uses_always_available():
-	var mc := MovesetController.new()
+	var mc: MovesetController = autofree(MovesetController.new())
 	var move := _move(&"strike", 0, -1)
 	for i in range(20):
 		mc.on_used(move)
@@ -60,7 +60,7 @@ func test_unlimited_uses_always_available():
 # --- Cooldown + uses interaction -------------------------------------------
 
 func test_cooldown_and_uses_combined():
-	var mc := MovesetController.new()
+	var mc: MovesetController = autofree(MovesetController.new())
 	var move := _move(&"nova", 3, 2)
 	mc.on_used(move)                 # spend charge 1, cooldown 3
 	assert_false(mc.can_use(move), "blocked by cooldown even with charges left")
@@ -74,13 +74,13 @@ func test_cooldown_and_uses_combined():
 	assert_false(mc.can_use(move), "off cooldown but out of charges")
 
 func test_null_move_is_never_usable():
-	var mc := MovesetController.new()
+	var mc: MovesetController = autofree(MovesetController.new())
 	assert_false(mc.can_use(null), "null move is not usable")
 	assert_eq(mc.remaining(null), 0, "null move has no cooldown")
 	assert_eq(mc.uses_left(null), -1, "null move uses_left reported as unlimited/none")
 
 func test_reset_clears_tracking():
-	var mc := MovesetController.new()
+	var mc: MovesetController = autofree(MovesetController.new())
 	var move := _move(&"blast", 2, 1)
 	mc.on_used(move)
 	mc.reset()

@@ -17,42 +17,34 @@ extends GutTest
 ## in before_each and restored in after_each so the suite leaves no trace.
 
 const CONTROLLER_SCRIPT := preload("res://game/challenge/ChallengeController.gd")
+const Guard := preload("res://tests/helpers/global_state_guard.gd")
 
 ## A map path that no real run will ever use, so the capture gate can be opened without
 ## pointing GameSettings at anything loadable.
 const FAKE_MAP_PATH := "user://challenges/active/__survive_capture_test.tres"
 
 var _controller: Node = null
-var _saved_map_path: String = ""
-var _saved_results: String = ""
-var _had_results: bool = false
+
+## RUNTIME-DESIGN GAP: ChallengeController.RESULTS_PATH is a const with no injection API
+## (contrast ItemInventory.set_save_path / PlayerProfile.set_source_paths), so these tests
+## cannot be pointed at a temp file -- they must write the REAL results.json and put it
+## back. The guard does that from after_each, which GUT runs even on a failing test.
+## Untyped on purpose: a `: RefCounted` annotation would make the static analyser reject
+## _guard.set_setting() / .watch_file() as "not found in base RefCounted".
+var _guard
 
 
 # --- Fixture ----------------------------------------------------------------
 
 func before_each() -> void:
 	_controller = CONTROLLER_SCRIPT.new()
-
-	_saved_map_path = String(GameSettings.selected_map_path)
-	_had_results = FileAccess.file_exists(CONTROLLER_SCRIPT.RESULTS_PATH)
-	_saved_results = ""
-	if _had_results:
-		var file: FileAccess = FileAccess.open(CONTROLLER_SCRIPT.RESULTS_PATH, FileAccess.READ)
-		if file != null:
-			_saved_results = file.get_as_text()
-			file.close()
+	_guard = Guard.new()
+	_guard.watch_setting("selected_map_path")
+	_guard.watch_file(CONTROLLER_SCRIPT.RESULTS_PATH)
 
 
 func after_each() -> void:
-	GameSettings.selected_map_path = _saved_map_path
-
-	if _had_results:
-		var file: FileAccess = FileAccess.open(CONTROLLER_SCRIPT.RESULTS_PATH, FileAccess.WRITE)
-		if file != null:
-			file.store_string(_saved_results)
-			file.close()
-	elif FileAccess.file_exists(CONTROLLER_SCRIPT.RESULTS_PATH):
-		DirAccess.remove_absolute(CONTROLLER_SCRIPT.RESULTS_PATH)
+	_guard.restore()
 
 	if _controller != null:
 		_controller.free()

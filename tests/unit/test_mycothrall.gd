@@ -21,7 +21,17 @@ extends GutTest
 ## and the status damage-reduction aggregate all resolve through the production path.
 ## `controlled_override` stands in for the live control state in the planner test;
 ## `passive_scale` gives it a defender-side passive reduction for the multiply test.
+##
+## ORPHAN NOTE: Thrall is a RefCounted holding a StatusController NODE. Freeing the
+## Thrall does NOT free the controller, so every Thrall built by a test used to leak
+## one orphan (27 construction sites -> the single biggest orphan source in the suite).
+## Each controller is registered on [member Thrall.live_controllers] and swept in
+## after_each. A RefCounted double that owns a Node ALWAYS needs a sweep like this --
+## `autofree` is unavailable inside an inner class.
 class Thrall:
+	## Every StatusController this class has built since the last sweep.
+	static var live_controllers: Array[Node] = []
+
 	var team: int
 	var stats: Dictionary
 	var hp: int
@@ -36,6 +46,14 @@ class Thrall:
 		hp = max_health
 		_sc = StatusController.new()
 		_sc.owner_unit = self
+		live_controllers.append(_sc)
+
+	## Free every controller built so far. Called from the suite's after_each.
+	static func sweep_controllers() -> void:
+		for node in live_controllers:
+			if is_instance_valid(node):
+				node.free()
+		live_controllers.clear()
 	func get_stat(n: String) -> int:
 		return int(stats.get(n, 0))
 	func get_base_stat(n: String) -> int:
@@ -136,11 +154,14 @@ func before_each() -> void:
 
 func after_each() -> void:
 	CombatServices.clear()
+	# Thrall is RefCounted but owns a StatusController Node; nothing else will free it.
+	Thrall.sweep_controllers()
 
 # --- Helpers ---------------------------------------------------------------
 
 func _controller_for(unit) -> StatusController:
-	var sc := StatusController.new()
+	# autofree: StatusController is a Node -- an untracked one is a GUT orphan.
+	var sc: StatusController = autofree(StatusController.new())
 	sc.owner_unit = unit
 	return sc
 

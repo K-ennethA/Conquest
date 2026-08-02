@@ -8,19 +8,20 @@ var signal_received: bool
 var received_data: Dictionary
 
 func before_each():
-	events = preload("res://systems/game_events.gd").new()
+	# A PRIVATE bus instance, not the GameEvents autoload: emitting on the real autoload
+	# would fire every listener the rest of the suite has wired up. autofree (not
+	# queue_free) so the Node is gone before GUT counts orphans for this script.
+	events = autofree(preload("res://systems/game_events.gd").new())
 	signal_received = false
 	received_data = {}
-
-func after_each():
-	if events:
-		events.queue_free()
 
 func test_unit_selection_signals():
 	# Connect to signal
 	events.unit_selected.connect(_on_unit_selected)
 	
-	var test_unit = Unit.new("TestUnit", 10, 3)
+	# Unit takes no constructor args (stats live on a UnitStatsResource); autofree because
+	# Unit is a Node3D and an untracked one is a GUT orphan.
+	var test_unit: Unit = autofree(Unit.new())
 	var test_position = Vector3(1, 0, 1)
 	
 	# Emit signal
@@ -43,7 +44,9 @@ func test_turn_system_signals():
 	events.turn_started.connect(_on_turn_started)
 	events.turn_ended.connect(_on_turn_ended)
 	
-	var test_unit = Unit.new("TurnUnit", 15, 4)
+	# Unit takes no constructor args (stats live on a UnitStatsResource); autofree because
+	# Unit is a Node3D and an untracked one is a GUT orphan.
+	var test_unit: Unit = autofree(Unit.new())
 	
 	# Test turn started
 	events.turn_started.emit(test_unit)
@@ -61,7 +64,9 @@ func test_turn_system_signals():
 func test_movement_signals():
 	events.unit_moved.connect(_on_unit_moved)
 	
-	var test_unit = Unit.new("MovingUnit", 12, 3)
+	# Unit takes no constructor args (stats live on a UnitStatsResource); autofree because
+	# Unit is a Node3D and an untracked one is a GUT orphan.
+	var test_unit: Unit = autofree(Unit.new())
 	var from_pos = Vector3(0, 0, 0)
 	var to_pos = Vector3(1, 0, 1)
 	

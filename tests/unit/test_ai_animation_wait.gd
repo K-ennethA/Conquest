@@ -12,14 +12,24 @@ extends GutTest
 ## the cap even if stuck, and skips the wait entirely when animations are off.
 
 const ANIMATOR = preload("res://game/visuals/UnitAnimator.gd")
+const Guard := preload("res://tests/helpers/global_state_guard.gd")
+
+## UnitAnimator's busy registry is STATIC (process-wide), and GameSettings is an autoload.
+## Both are cleaned in after_each so a failing assertion can never leave a stuck busy flag
+## or an animations-off setting behind for the rest of the run.
+## Untyped on purpose: a `: RefCounted` annotation would make the static analyser reject
+## _guard.set_setting() / .watch_file() as "not found in base RefCounted".
+var _guard
 
 
 func before_each() -> void:
+	_guard = Guard.new()
 	ANIMATOR._clear_anim_registry()
 
 
 func after_each() -> void:
 	ANIMATOR._clear_anim_registry()
+	_guard.restore()
 
 
 func _make_driver() -> BotTurnDriver:
@@ -69,16 +79,13 @@ func test_animations_off_skips_the_wait() -> void:
 	var driver := _make_driver()
 	ANIMATOR._anim_begin(10.0)  # busy registry...
 
-	var saved: bool = true
-	if GameSettings != null:
-		saved = GameSettings.animations_enabled
-		GameSettings.set_animations_enabled(false)
+	# Assign the FIELD, never GameSettings.set_animations_enabled() -- that setter writes
+	# user://settings.cfg, so calling it here would edit the player's real settings.
+	# The guard restores it from after_each, which runs even when an assertion below fails.
+	_guard.set_setting("animations_enabled", false)
 
 	# ...but with animations disabled there is nothing to watch, so no wait.
 	assert_false(driver._animations_busy(),
 		"animations off -> _animations_busy must be false regardless of the registry")
 	assert_false(driver._defer_for_animations(),
 		"animations off -> the driver must never defer")
-
-	if GameSettings != null:
-		GameSettings.set_animations_enabled(saved)

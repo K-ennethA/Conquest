@@ -184,6 +184,12 @@ func get_active_units() -> Array[Unit]:
 func reset_all_unit_actions() -> void:
 	"""Reset action states for all units"""
 	for unit in registered_units:
+		# registered_units can hold a unit freed since the last turn boundary (unregister
+		# is driven by a signal that may not have landed yet). has_method() raises on a
+		# freed instance, so validate first -- exactly as get_units_for_player() and
+		# get_active_units() already do.
+		if unit == null or not is_instance_valid(unit):
+			continue
 		if unit.has_method("reset_turn_actions"):
 			unit.reset_turn_actions()
 

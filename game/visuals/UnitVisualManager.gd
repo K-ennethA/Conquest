@@ -134,9 +134,14 @@ func _convert_player_to_assignment(player: Player) -> PlayerMaterials.PlayerTeam
 
 func _apply_player_material(unit: Unit, player: PlayerMaterials.PlayerTeam) -> void:
 	"""Apply player-specific material to unit"""
-	var mesh_instance = unit.get_node("MeshInstance3D")
+	# get_node() logs "Node not found" BEFORE the null branch below runs, so the warning
+	# was always preceded by a redundant engine error. Units with a .glb model legitimately
+	# have no "MeshInstance3D" child, which makes this an EXPECTED condition, not a fault --
+	# so it reports by returning, not through the engine log.
+	if not is_instance_valid(unit):
+		return
+	var mesh_instance = unit.get_node_or_null("MeshInstance3D")
 	if not mesh_instance:
-		push_warning("Unit has no MeshInstance3D node: " + str(unit))
 		return
 	
 	var unit_type = UnitType.Type.WARRIOR
@@ -297,7 +302,13 @@ func clear_damage_previews() -> void:
 
 func apply_selection_visual(unit: Unit, selected: bool) -> void:
 	"""Apply or remove selection visual effects"""
-	var mesh_instance = unit.get_node("MeshInstance3D")
+	# Signal-driven (selection / deselection), so `unit` can already be freed -- and a
+	# unit whose model is a .glb has no "MeshInstance3D" child at all. get_node() logs an
+	# engine error in BOTH cases before the `if not mesh_instance` below can help; the
+	# _or_null form makes the existing null branch actually reachable.
+	if not is_instance_valid(unit):
+		return
+	var mesh_instance = unit.get_node_or_null("MeshInstance3D")
 	if not mesh_instance:
 		return
 	
@@ -672,7 +683,16 @@ func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
 	if is_instance_valid(unit):
 		apply_acted_visual(unit, bool(unit.has_acted_this_turn))
 	# Then sweep all units after a short delay so any turn-system side effects settle.
-	await get_tree().create_timer(0.1).timeout
+	# This handler is bound to the GameEvents AUTOLOAD but `self` lives in the GameWorld
+	# scene, so a scene change inside the 0.1s window (Rematch / Main Menu / victory
+	# hand-off) resumes this coroutine on a freed manager -- "Resumed function ... after
+	# await, but the class instance is gone". Re-validate before touching anything.
+	var tree := get_tree()
+	if tree == null:
+		return
+	await tree.create_timer(0.1).timeout
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
 	update_all_unit_visuals()
 
 func _on_turn_system_unit_action(unit: Unit, action_type: String) -> void:

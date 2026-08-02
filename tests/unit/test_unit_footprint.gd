@@ -190,7 +190,8 @@ func _unit_with_footprint(fp: Vector2i) -> Unit:
 	# resource, rather than re-deriving the offset with the same formula.
 	var character := CharacterResource.new()
 	character.footprint = fp
-	var u := Unit.new()
+	# autofree: Unit is a Node3D -- an untracked one is a GUT orphan.
+	var u: Unit = autofree(Unit.new())
 	u.character_resource = character
 	return u
 

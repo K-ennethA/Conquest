@@ -1206,7 +1206,10 @@ func _grant_kill_reward() -> void:
 	controller.add_status(kill_reward.duplicate(true))
 
 # Visual feedback (updated to use visual manager)
-func _on_unit_selected(unit: Unit) -> void:
+# NOTE: GameEvents.unit_selected emits (unit, position) - EVERY living unit hears every
+# emission, so an arity mismatch here spams one engine error per unit per selection
+# (the soak harness caught 292 in a 26-round battle). Keep the signature in sync.
+func _on_unit_selected(unit: Unit, _selected_position: Vector3 = Vector3.ZERO) -> void:
 	if unit == self and visual_manager:
 		visual_manager.apply_selection_visual(self, true)
 

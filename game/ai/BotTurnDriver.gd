@@ -232,7 +232,16 @@ func _tick() -> void:
 		waits += 1
 
 	# Re-arm the one-shot timer for the next beat.
-	if _timer != null:
+	#
+	# This line resumes AFTER an await (the ultimate cut-in hold inside act_one_ai_unit),
+	# and the killing blow that triggered that cut-in can end the battle -- which frees the
+	# whole GameWorld scene, driver and Timer included, while this tick is suspended.
+	# `_timer != null` is TRUE for a freed Timer, so it used to call start() on a dead
+	# object. is_instance_valid is the only test that catches it; bailing when the driver
+	# itself is gone is correct, because there is no next beat to pace.
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
+	if is_instance_valid(_timer):
 		_timer.start(next_wait)
 
 

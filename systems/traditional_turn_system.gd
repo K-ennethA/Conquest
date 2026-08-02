@@ -67,6 +67,14 @@ func advance_turn() -> void:
 
 func can_unit_act(unit: Unit) -> bool:
 	"""Check if a unit can act in the current turn"""
+	# A FREED unit can still reach here: this is called from _check_turn_completion()
+	# after every action, from UnitActionsPanel on every UI refresh, and from
+	# get_units_eligible_for_refresh() -- all of which read side lists / panel state that
+	# may still hold a unit that just died. `not is_instance_valid` is the only test that
+	# catches that; the `owns_unit` and `"has_acted_this_turn" in unit` lines below both
+	# raise on a freed instance. A dead unit cannot act, so false is the right answer.
+	if unit == null or not is_instance_valid(unit):
+		return false
 	if not is_active or not current_player or not is_turn_in_progress:
 		return false
 
@@ -213,8 +221,14 @@ func _advance_to_next_player() -> void:
 			# wrapping back onto the SAME player instead of advancing. That usually
 			# means the other side's units are freed/stale (second-game state bug) --
 			# warn loudly rather than silently re-running the same player's turn.
-			if next_player == current_player:
-				push_warning("TraditionalTurnSystem: turn advance wrapped back to the same player (" + current_player.get_display_name() + ") - no other player could take a turn")
+			#
+			# BUT the ordinary end of every battle looks identical: the last enemy dies,
+			# so no other player has units, so the turn wraps. That is the game being WON,
+			# not a state bug, and warning on it meant every single match ended with
+			# debugger warnings. Only warn when another side demonstrably still HAS units
+			# and still could not take a turn -- which is the actual stale-state symptom.
+			if next_player == current_player and _another_side_still_has_units():
+				push_warning("TraditionalTurnSystem: turn advance wrapped back to the same player (" + current_player.get_display_name() + ") even though another side still has units")
 
 			# Increment round counter for each player switch (running counter)
 			current_turn += 1
@@ -236,6 +250,23 @@ func _advance_to_next_player() -> void:
 		if next_index == starting_index:
 			_handle_no_valid_players()
 			break
+
+## True when some registered player OTHER than [member current_player] still has at least
+## one living unit. Used to tell the two identical-looking wrap cases apart (see
+## _advance_to_next_player): "the battle is over" -- nobody else has units, expected -- vs
+## "somebody else has units but could not take a turn", which is the stale-state bug the
+## warning is actually for.
+func _another_side_still_has_units() -> bool:
+	for p in registered_players:
+		if p == null or p == current_player:
+			continue
+		if p.current_state == Player.PlayerState.ELIMINATED:
+			continue
+		for u in p.owned_units:
+			if u != null and is_instance_valid(u) and u.is_alive():
+				return true
+	return false
+
 
 func _can_player_take_turn_for_advance(player: Player) -> bool:
 	"""Check if a player can take a turn during turn advancement (doesn't require turn to be in progress)"""
@@ -455,6 +486,11 @@ func get_units_eligible_for_refresh() -> Array[Unit]:
 
 	var eligible: Array[Unit] = []
 	for unit in units_acted_this_turn:
+		# units_acted_this_turn is a SIDE LIST that is not pruned when a unit dies, so a
+		# freed reference reaches owns_unit() and raises. Skip it -- a dead unit is never
+		# eligible for a turn refresh.
+		if unit == null or not is_instance_valid(unit):
+			continue
 		if current_player.owns_unit(unit) and _can_unit_act_for_advance(unit, current_player):
 			eligible.append(unit)
 	return eligible

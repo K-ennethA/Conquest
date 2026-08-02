@@ -6,52 +6,9 @@ extends GutTest
 # Mock style mirrors test_move_system.gd.
 
 # --- Mocks -----------------------------------------------------------------
-
-class MockUnit:
-	var team: int
-	var stats: Dictionary
-	var hp: int
-	var added_statuses: Array = []
-	func _init(p_team: int, p_stats: Dictionary) -> void:
-		team = p_team
-		stats = p_stats
-		hp = stats.get("health", 100)
-	func get_stat(name: String) -> int:
-		return stats.get(name, 0)
-	func take_damage(n: int) -> void:
-		hp -= n
-	func heal(n: int) -> void:
-		hp += n
-	# Duck-typed status sink used by ApplyStatusEffect.
-	func add_status(condition) -> void:
-		added_statuses.append(condition)
-
-class MockBoard:
-	var placements: Array = []
-	var tiles: Dictionary = {}
-	func place(unit, cell: Vector2i) -> void:
-		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
-		for p in placements:
-			if p.unit == unit:
-				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
-		var out: Array = []
-		for p in placements:
-			if p.cell == cell:
-				out.append(p.unit)
-		return out
-	func are_enemies(a, b) -> bool:
-		return a.team != b.team
-	func are_allies(a, b) -> bool:
-		return a.team == b.team
-	func set_tile(cell: Vector2i, tile_id) -> void:
-		tiles[cell] = tile_id
-	func move_unit(unit, to_cell: Vector2i) -> void:
-		for p in placements:
-			if p.unit == unit:
-				p.cell = to_cell
+# StatusSinkUnit answers add_status directly, which is ApplyStatusEffect's first
+# branch -- so statuses land without a live StatusController Node.
+const Doubles := preload("res://tests/helpers/test_doubles.gd")
 
 # --- Fixtures --------------------------------------------------------------
 
@@ -80,23 +37,24 @@ func _regen(duration: int) -> StatusCondition:
 	return c
 
 func _controller_for(unit) -> StatusController:
-	var sc := StatusController.new()
+	# autofree: StatusController is a Node -- an untracked one is a GUT orphan.
+	var sc: StatusController = autofree(StatusController.new())
 	sc.owner_unit = unit
 	return sc
 
 # --- StatusCondition.tick --------------------------------------------------
 
 func test_burn_tick_deals_damage_to_self():
-	var unit := MockUnit.new(0, { "health": 100 })
-	var board := MockBoard.new()
+	var unit := Doubles.StatusSinkUnit.new(0, { "health": 100 })
+	var board := Doubles.CombatBoard.new()
 	board.place(unit, Vector2i(2, 2))
 	_burn(3).tick(unit, board)
 	assert_eq(unit.hp, 90, "single burn tick deals 10 true damage")
 
 func test_regen_tick_heals_self():
-	var unit := MockUnit.new(0, { "health": 100 })
+	var unit := Doubles.StatusSinkUnit.new(0, { "health": 100 })
 	unit.hp = 50
-	var board := MockBoard.new()
+	var board := Doubles.CombatBoard.new()
 	board.place(unit, Vector2i(0, 0))
 	_regen(2).tick(unit, board)
 	assert_eq(unit.hp, 58, "single regen tick heals 8")
@@ -104,8 +62,8 @@ func test_regen_tick_heals_self():
 # --- StatusController lifecycle --------------------------------------------
 
 func test_burn_ticks_n_turns_then_expires():
-	var unit := MockUnit.new(0, { "health": 100 })
-	var board := MockBoard.new()
+	var unit := Doubles.StatusSinkUnit.new(0, { "health": 100 })
+	var board := Doubles.CombatBoard.new()
 	board.place(unit, Vector2i(1, 1))
 	var sc := _controller_for(unit)
 	sc.add_status(_burn(3))
@@ -119,8 +77,8 @@ func test_burn_ticks_n_turns_then_expires():
 	assert_eq(unit.hp, 70, "no damage after expiry")
 
 func test_permanent_condition_never_expires():
-	var unit := MockUnit.new(0, { "health": 1000 })
-	var board := MockBoard.new()
+	var unit := Doubles.StatusSinkUnit.new(0, { "health": 1000 })
+	var board := Doubles.CombatBoard.new()
 	board.place(unit, Vector2i(0, 0))
 	var sc := _controller_for(unit)
 	sc.add_status(_burn(-1))
@@ -130,8 +88,8 @@ func test_permanent_condition_never_expires():
 	assert_eq(unit.hp, 950, "permanent burn ticked all 5 turns")
 
 func test_stacking_refresh_resets_duration():
-	var unit := MockUnit.new(0, { "health": 100 })
-	var board := MockBoard.new()
+	var unit := Doubles.StatusSinkUnit.new(0, { "health": 100 })
+	var board := Doubles.CombatBoard.new()
 	board.place(unit, Vector2i(0, 0))
 	var sc := _controller_for(unit)
 	sc.add_status(_burn(3))
@@ -142,8 +100,8 @@ func test_stacking_refresh_resets_duration():
 	assert_eq(sc.get_active()[0].turns_left, 3, "duration reset to full")
 
 func test_stacking_stack_adds_second_instance():
-	var unit := MockUnit.new(0, { "health": 100 })
-	var board := MockBoard.new()
+	var unit := Doubles.StatusSinkUnit.new(0, { "health": 100 })
+	var board := Doubles.CombatBoard.new()
 	board.place(unit, Vector2i(0, 0))
 	var sc := _controller_for(unit)
 	var a := _burn(3); a.stacking = StatusCondition.Stacking.STACK
@@ -155,8 +113,8 @@ func test_stacking_stack_adds_second_instance():
 	assert_eq(unit.hp, 80, "both stacked burns tick (10 + 10)")
 
 func test_stacking_ignore_keeps_original():
-	var unit := MockUnit.new(0, { "health": 100 })
-	var board := MockBoard.new()
+	var unit := Doubles.StatusSinkUnit.new(0, { "health": 100 })
+	var board := Doubles.CombatBoard.new()
 	board.place(unit, Vector2i(0, 0))
 	var sc := _controller_for(unit)
 	var a := _burn(3); a.stacking = StatusCondition.Stacking.IGNORE
@@ -168,7 +126,7 @@ func test_stacking_ignore_keeps_original():
 	assert_eq(sc.get_active()[0].turns_left, 2, "existing duration untouched")
 
 func test_added_condition_is_a_duplicate():
-	var unit := MockUnit.new(0, { "health": 100 })
+	var unit := Doubles.StatusSinkUnit.new(0, { "health": 100 })
 	var sc := _controller_for(unit)
 	var template := _burn(3)
 	sc.add_status(template)
@@ -178,10 +136,10 @@ func test_added_condition_is_a_duplicate():
 # --- ApplyStatusEffect via MoveExecutor ------------------------------------
 
 func test_apply_status_inflicts_condition_on_enemies():
-	var caster := MockUnit.new(0, {})
-	var enemy := MockUnit.new(1, { "health": 100 })
-	var ally := MockUnit.new(0, { "health": 100 })
-	var board := MockBoard.new()
+	var caster := Doubles.StatusSinkUnit.new(0, {})
+	var enemy := Doubles.StatusSinkUnit.new(1, { "health": 100 })
+	var ally := Doubles.StatusSinkUnit.new(0, { "health": 100 })
+	var board := Doubles.CombatBoard.new()
 	board.place(caster, Vector2i(0, 0))
 	board.place(enemy, Vector2i(1, 0))
 	board.place(ally, Vector2i(0, 1))
@@ -206,10 +164,10 @@ func test_apply_status_inflicts_condition_on_enemies():
 	assert_eq((enemy.added_statuses[0] as StatusCondition).id, &"burn", "correct condition id inflicted")
 
 func test_apply_status_gives_each_target_independent_duplicate():
-	var caster := MockUnit.new(0, {})
-	var enemy_a := MockUnit.new(1, { "health": 100 })
-	var enemy_b := MockUnit.new(1, { "health": 100 })
-	var board := MockBoard.new()
+	var caster := Doubles.StatusSinkUnit.new(0, {})
+	var enemy_a := Doubles.StatusSinkUnit.new(1, { "health": 100 })
+	var enemy_b := Doubles.StatusSinkUnit.new(1, { "health": 100 })
+	var board := Doubles.CombatBoard.new()
 	board.place(caster, Vector2i(0, 0))
 	board.place(enemy_a, Vector2i(2, 0))
 	board.place(enemy_b, Vector2i(2, 1))

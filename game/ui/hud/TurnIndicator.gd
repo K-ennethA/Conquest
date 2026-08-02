@@ -34,6 +34,10 @@ func _ready() -> void:
 
 	# Delay initial update to ensure turn system is fully initialized
 	await get_tree().process_frame
+	# Backing out of the battle during that frame frees this node; everything below
+	# touches `self`.
+	if not is_inside_tree():
+		return
 
 	# If a turn system is ALREADY active (it usually is by the time the HUD
 	# loads), wire up to it now -- otherwise we'd miss the one-shot

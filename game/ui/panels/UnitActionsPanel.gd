@@ -30,6 +30,10 @@ class_name UnitActionsPanel
 @onready var cancel_button: Button = $MarginContainer/ContentContainer/CancelButton
 
 var selected_unit: Unit = null
+## The in-flight movement slide (see [method _animate_unit_movement]). Held so a second
+## move can KILL the previous one instead of letting two tweens fight over the same
+## `global_position`.
+var _move_tween: Tween = null
 var stats_expanded: bool = false
 var movement_mode: bool = false
 var movement_range_tiles: Array[Vector3] = []
@@ -661,7 +665,10 @@ func _on_player_turn_changed(player: Player) -> void:
 	# and revert an uncommitted tentative move, so nothing stale reads as commandable or
 	# can be clicked during the enemy's turn. (The commit paths also hard-gate on
 	# _human_may_command, so this is the visual half of the same guard.)
-	if selected_unit != null and not _human_may_command(selected_unit):
+	# is_instance_valid, not `!= null`: a freed Unit compares non-null in Godot 4, and this
+	# handler runs on every turn change -- including the one right after the selected unit
+	# died -- so `!= null` would hand a freed instance to _human_may_command.
+	if is_instance_valid(selected_unit) and not _human_may_command(selected_unit):
 		if _tentative_active:
 			_revert_tentative_move()
 		_clear_movement_range()
@@ -698,7 +705,10 @@ func _human_may_command(unit: Unit) -> bool:
 	"""True only when the LOCAL human may issue commands to `unit` this turn: there is
 	a current turn player, that player owns the unit, AND that player is human. Any
 	living unit can still be SELECTED (inspected) -- this only gates commanding."""
-	if unit == null:
+	# Every caller can hand this a unit that died since it was captured (the panel's own
+	# selected_unit, a bound button callback, a cycling helper). owns_unit() below raises
+	# on a freed instance, and a dead unit is never commandable anyway.
+	if unit == null or not is_instance_valid(unit):
 		return false
 	var current_player := _current_turn_player()
 	if current_player == null:
@@ -749,7 +759,16 @@ func _net_submit_pending_move(unit) -> void:
 
 func _update_actions() -> void:
 	"""Update available actions based on selected unit and game state"""
-	if not selected_unit or not PlayerManager:
+	# selected_unit outlives the unit it points at: it is set on selection and only
+	# cleared on deselection, so when the selected unit DIES this still holds a freed
+	# reference -- and `not selected_unit` is false for one. Everything below
+	# (owns_unit, can_move, can_act, get_display_name) raises on it, once per UI refresh,
+	# which is the single loudest source of debugger spam in a real match. Drop the stale
+	# reference here so the rest of the panel's ~50 dereferences are unreachable with it.
+	if not is_instance_valid(selected_unit):
+		selected_unit = null
+		return
+	if not PlayerManager:
 		return
 	
 	# Use the turn system's current player as the source of truth for "whose turn
@@ -1132,14 +1151,14 @@ func _do_end_player_turn() -> void:
 		# PlayerManager WITHOUT advancing the turn system -- leaving the two desynced and
 		# the turn system stuck on the current player (so the banner froze and the AI
 		# never got a turn). Match PlayerTurnPanel's working end-turn path.
+		# end_turn_manually() already reports through its RETURN VALUE, and "you cannot end
+		# the turn right now" (double-click, an action still resolving, the wrong phase) is
+		# an ordinary UI outcome -- not a fault. Ignoring the false is the correct handling;
+		# the button simply does nothing, which is what the player already sees.
 		if turn_system is TraditionalTurnSystem:
-			var ended := (turn_system as TraditionalTurnSystem).end_turn_manually()
-			if not ended:
-				push_warning("End Player Turn FAILED: TraditionalTurnSystem.end_turn_manually() returned false (invalid turn state)")
+			(turn_system as TraditionalTurnSystem).end_turn_manually()
 		elif turn_system is SpeedFirstTurnSystem:
-			var ended := (turn_system as SpeedFirstTurnSystem).end_turn_manually()
-			if not ended:
-				push_warning("End Player Turn FAILED: SpeedFirstTurnSystem.end_turn_manually() returned false (invalid turn state)")
+			(turn_system as SpeedFirstTurnSystem).end_turn_manually()
 		elif turn_system.has_method("end_player_turn"):
 			turn_system.end_player_turn()
 		else:
@@ -1290,9 +1309,12 @@ func _show_panel() -> void:
 	visible = true
 	modulate.a = 1.0
 	
-	# Force a layout update
+	# Force a layout update. The panel can be freed during the awaited frame (scene change,
+	# or the whole HUD torn down on game over), so re-check before touching `self`.
 	await get_tree().process_frame
-	
+	if not is_inside_tree():
+		return
+
 	# Try to resize to fit content
 	_try_resize_to_content()
 
@@ -1318,8 +1340,10 @@ func _try_resize_to_content() -> void:
 		var needed_height: float = content_min_size.y + float(margin_top) + float(margin_bottom)
 		custom_minimum_size.y = needed_height
 
-		# Force layout update
-		await get_tree().process_frame
+		# (Dropped a trailing `await get_tree().process_frame` here: nothing followed it, so
+		# it bought no layout -- it only made this a coroutine that could resume on a freed
+		# panel and log "Resumed function ... after await, but the class instance is gone".
+		# Setting custom_minimum_size already queues the layout pass.)
 
 func _hide_panel() -> void:
 	"""Hide the actions panel"""
@@ -1800,17 +1824,25 @@ func _execute_movement(destination: Vector3) -> void:
 
 func _animate_unit_movement(unit: Unit, from_pos: Vector3, to_pos: Vector3) -> void:
 	"""Animate unit movement with a smooth tween"""
-	if not unit:
+	# is_inside_tree as well as validity: the tween drives the UNIT's global_position, so
+	# it must be bound to the unit (a tween created on the PANEL outlives the unit and
+	# keeps writing to a freed object when the unit dies mid-slide, e.g. to a trap).
+	if not is_instance_valid(unit) or not unit.is_inside_tree():
 		return
 
-	# Create a tween for smooth movement
-	var tween = create_tween()
+	# One slide at a time. Two overlapping tweens on the same `global_position` fight each
+	# other, and a second move started inside the 0.5s window used to do exactly that.
+	if _move_tween != null and _move_tween.is_valid():
+		_move_tween.kill()
+
+	var tween = unit.create_tween()
+	_move_tween = tween
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_QUART)
-	
+
 	# Animate the movement over 0.5 seconds
 	tween.tween_property(unit, "global_position", to_pos, 0.5)
-	
+
 	# Optional: Add a small bounce effect
 	tween.tween_callback(_on_movement_animation_complete.bind(unit))
 
@@ -2499,6 +2531,13 @@ func _on_unit_eliminated_danger(unit: Unit, _eliminator: Unit) -> void:
 	"""A unit died: expire its danger overlay (both channels) so no stale threat band lingers."""
 	if unit == null:
 		return
+	# ALSO drop it as the SELECTION. This is the only handler the panel has for a death, and
+	# selected_unit was previously only cleared on an explicit deselect -- so killing the
+	# selected unit left the panel holding a reference that is freed a frame later, and
+	# every subsequent _update_actions() dereferenced it. Clearing at the source is what
+	# makes that whole class of error impossible rather than merely guarded.
+	if unit == selected_unit:
+		selected_unit = null
 	if unit in _persistent_danger_enemies:
 		_persistent_danger_enemies.erase(unit)
 		_sync_danger_zones_button()

@@ -163,6 +163,12 @@ func _on_registered_unit_died(unit: Unit) -> void:
 	is the one dying, hand off to the next unit in the queue."""
 	var was_acting := (unit != null and unit == current_acting_unit)
 	super._on_registered_unit_died(unit)  # unregister now (still valid) + defer round re-check
+	# ALWAYS drop the dead unit from the queue while the ref is still valid - a queued
+	# non-acting unit killed by an AoE would otherwise sit freed in turn_queue, and the
+	# TurnQueue HUD's preview (built inside the very hand-off that killed it) hard-crashes
+	# dereferencing it (caught by the Speed First soak run).
+	if unit != null and unit in turn_queue:
+		turn_queue.erase(unit)
 	if was_acting:
 		# Clear the acting slot BEFORE advancing so no path (advance_turn, mark_unit_acted,
 		# _advance_to_next_unit, the debug getters) can touch the freed instance. Drop it
@@ -601,12 +607,20 @@ func get_current_round_progress() -> Dictionary:
 	}
 
 func _get_turn_queue_preview() -> Array[Dictionary]:
-	"""Get preview of upcoming turns for UI display"""
+	"""Get preview of upcoming turns for UI display.
+
+	Every entry is validity-guarded: a unit killed during the very hand-off that
+	triggered this refresh (attack -> mark_unit_acted -> advance -> turn_started ->
+	TurnQueue._update_display) can still sit freed inside turn_queue for this one
+	call, and dereferencing it hard-crashes the engine (caught by the soak harness
+	in Speed First). Freed entries are skipped, not shown."""
 	var preview: Array[Dictionary] = []
 	var preview_count = min(5, turn_queue.size())  # Show next 5 units
 
 	for i in range(preview_count):
 		var unit = turn_queue[i]
+		if unit == null or not is_instance_valid(unit):
+			continue
 		preview.append({
 			"name": unit.get_display_name(),
 			"speed": get_unit_current_speed(unit),

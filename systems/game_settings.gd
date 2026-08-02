@@ -303,7 +303,11 @@ func apply_settings_to_game() -> void:
 			
 			# TODO: Add other turn systems when implemented
 			_:
-				push_warning("Turn system not implemented: " + get_turn_system_string())
+				# An unimplemented type has a WORKING fallback right below, so this is a
+				# handled branch, not a fault -- it reported to the debugger on every match
+				# start that selected one. print keeps it discoverable without that.
+				print("[GameSettings] turn system not implemented (%s); using Traditional."
+					% get_turn_system_string())
 				# Fallback to traditional
 				var traditional_system = TraditionalTurnSystem.new()
 				TurnSystemManager.register_turn_system(traditional_system)

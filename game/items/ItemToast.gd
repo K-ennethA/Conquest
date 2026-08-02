@@ -124,6 +124,10 @@ func show_item(item: ItemResource) -> void:
 	_root.add_child(plate)
 	plate.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	await get_tree().process_frame  # let the plate compute its size before positioning
+	# A drop toast is raised on a KILL, so a battle-ending kill can free the whole overlay
+	# during the awaited frame; everything below touches `plate` and `self`.
+	if not is_instance_valid(self) or not is_inside_tree() or not is_instance_valid(plate):
+		return
 
 	var plate_size: Vector2 = plate.size
 	var rest_y: float = -plate_size.y - 48.0
@@ -133,6 +137,10 @@ func show_item(item: ItemResource) -> void:
 		# Animations off: appear, hold, gone. Still shown -- this banner is the only feedback
 		# that a drop happened at all.
 		await get_tree().create_timer(HOLD_TIME, true, false, true).timeout
+		# HOLD_TIME is seconds long -- easily long enough to span a scene change, which
+		# would leave this resuming on a freed toast.
+		if not is_instance_valid(self):
+			return
 		queue_free()
 		return
 

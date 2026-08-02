@@ -13,6 +13,10 @@ var map_root: Node3D
 var tiles_container: Node3D
 var units_container: Node3D
 
+## model_path values already reported by [method _note_tile_model_fallback], so a bad
+## path is mentioned ONCE per load instead of once per cell that uses it.
+var _reported_tile_model_fallbacks: Dictionary = {}
+
 # Tile and unit scene references
 var default_tile_scene: PackedScene = preload("res://tile_objects/tiles/tile.tscn")
 
@@ -59,7 +63,10 @@ func load_map(map_resource: MapResource, target_parent: Node3D) -> bool:
 	
 	# Clear existing map if any
 	clear_current_map()
-	
+	# Fresh load = fresh dedupe window, so a bad model_path is reported once per map load
+	# rather than once ever per process.
+	_reported_tile_model_fallbacks.clear()
+
 	# Set up map structure
 	current_map = map_resource
 	map_root = target_parent
@@ -202,9 +209,9 @@ func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary) -> bool
 					tile_scene = model_scene
 					uses_authored_geometry = true
 				else:
-					push_warning("MapLoader: model_path is not a PackedScene, using default tile: " + model_path)
+					_note_tile_model_fallback(model_path, "not a PackedScene")
 			else:
-				push_warning("MapLoader: model_path not found, using default tile: " + model_path)
+				_note_tile_model_fallback(model_path, "not found")
 
 	# Legacy fallback: the same field may hold a scene path instead of a TileResource.
 	if not uses_authored_geometry and not tile_resource_path.is_empty() and ResourceLoader.exists(tile_resource_path):
@@ -272,6 +279,23 @@ const TYPE_TO_TILE_ID: Dictionary = {
 	"LAVA": &"molten_lava",
 	"SACRED_GROUND": &"sacred_ground",
 }
+
+
+## Report a tile falling back to the default geometry, ONCE per distinct model_path.
+##
+## This used to be a push_warning fired per TILE INSTANCE -- a single bad model_path in a
+## map emitted one debugger warning per cell that used it, i.e. hundreds on one load.
+## Falling back is the DESIGNED behaviour here (see the resolution chain in
+## _create_tile_at_position: "bad data can never fail map loading"), so it is an EXPECTED
+## condition and must not report through the engine log at all. It is still worth knowing
+## about once, so it prints -- a plain print never reaches the debugger's error panel.
+func _note_tile_model_fallback(model_path: String, reason: String) -> void:
+	if _reported_tile_model_fallbacks.has(model_path):
+		return
+	_reported_tile_model_fallbacks[model_path] = true
+	print("[MapLoader] tile model_path %s (%s); using the default tile for those cells."
+		% [model_path, reason])
+
 
 func _resolve_tile_resource(resource_path: String, tile_type: String, tile_id = "") -> TileResource:
 	"""Resolve the TileResource for a tile from its map data.

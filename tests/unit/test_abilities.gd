@@ -6,58 +6,9 @@ extends GutTest
 # mirrors test_move_system.gd / test_status_condition.gd — no scene tree required.
 
 # --- Mocks -----------------------------------------------------------------
-
-class MockUnit:
-	var team: int
-	var stats: Dictionary
-	var hp: int
-	var modifiers: Array = []
-	func _init(p_team: int, p_stats: Dictionary) -> void:
-		team = p_team
-		stats = p_stats
-		hp = stats.get("health", 100)
-	func get_stat(name: String) -> int:
-		return stats.get(name, 0)
-	func take_damage(n: int) -> void:
-		hp -= n
-	func heal(n: int) -> void:
-		hp += n
-	func add_stat_modifier(stat: String, amount: int, duration: int) -> int:
-		modifiers.append({ "stat": stat, "amount": amount, "duration": duration })
-		return modifiers.size()
-
-class MockBoard:
-	var placements: Array = []       # { unit, cell }
-	var tiles: Dictionary = {}
-	var tags: Dictionary = {}        # cell -> terrain tag (StringName)
-	func place(unit, cell: Vector2i) -> void:
-		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
-		for p in placements:
-			if p.unit == unit:
-				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
-		var out: Array = []
-		for p in placements:
-			if p.cell == cell:
-				out.append(p.unit)
-		return out
-	func are_enemies(a, b) -> bool:
-		return a.team != b.team
-	func are_allies(a, b) -> bool:
-		return a.team == b.team
-	func set_tile(cell: Vector2i, tile_id) -> void:
-		tiles[cell] = tile_id
-	func move_unit(unit, to_cell: Vector2i) -> void:
-		for p in placements:
-			if p.unit == unit:
-				p.cell = to_cell
-	# Duck-typed terrain accessor read by OnTerrainCondition.
-	func tag_tile(cell: Vector2i, tag: StringName) -> void:
-		tags[cell] = tag
-	func tile_tag_at(cell: Vector2i) -> StringName:
-		return tags.get(cell, &"")
+# TerrainBoard is CombatBoard + tile_tag_at, which is the hook OnTerrainCondition
+# branches on. See tests/helpers/test_doubles.gd.
+const Doubles := preload("res://tests/helpers/test_doubles.gd")
 
 # A board exposing cell_of but no terrain accessor, to prove OnTerrainCondition
 # degrades gracefully (fails closed) rather than erroring.
@@ -75,8 +26,8 @@ func _system_for(unit) -> AbilitySystem:
 # --- Conditions ------------------------------------------------------------
 
 func test_on_terrain_met_only_on_tagged_tile():
-	var unit := MockUnit.new(0, { "health": 100 })
-	var board := MockBoard.new()
+	var unit := Doubles.CombatUnit.new(0, { "health": 100 })
+	var board := Doubles.TerrainBoard.new()
 	board.place(unit, Vector2i(2, 2))
 	board.tag_tile(Vector2i(2, 2), &"water")
 	var cond := OnTerrainCondition.new()
@@ -86,7 +37,7 @@ func test_on_terrain_met_only_on_tagged_tile():
 	assert_false(cond.is_met(unit, board), "not met once off the water tile")
 
 func test_on_terrain_degrades_when_board_lacks_accessor():
-	var unit := MockUnit.new(0, { "health": 100 })
+	var unit := Doubles.CombatUnit.new(0, { "health": 100 })
 	# A bare object with only cell_of and no terrain accessor -> fail closed.
 	var stub := _NoTerrainBoard.new()
 	var cond := OnTerrainCondition.new()
@@ -94,21 +45,21 @@ func test_on_terrain_degrades_when_board_lacks_accessor():
 	assert_false(cond.is_met(unit, stub), "no tile accessor -> condition fails closed, no error")
 
 func test_health_below_gates_at_threshold():
-	var board := MockBoard.new()
+	var board := Doubles.TerrainBoard.new()
 	var cond := HealthBelowCondition.new()
 	cond.threshold = 0.3
-	var wounded := MockUnit.new(0, { "health": 100 })
+	var wounded := Doubles.CombatUnit.new(0, { "health": 100 })
 	wounded.hp = 25                          # 25% < 30%
 	board.place(wounded, Vector2i(0, 0))
 	assert_true(cond.is_met(wounded, board), "met at 25% of max health")
-	var healthy := MockUnit.new(0, { "health": 100 })
+	var healthy := Doubles.CombatUnit.new(0, { "health": 100 })
 	healthy.hp = 40                          # 40% not < 30%
 	board.place(healthy, Vector2i(1, 0))
 	assert_false(cond.is_met(healthy, board), "not met at 40% of max health")
 
 func test_null_condition_is_always_met():
-	var unit := MockUnit.new(0, { "health": 100 })
-	var board := MockBoard.new()
+	var unit := Doubles.CombatUnit.new(0, { "health": 100 })
+	var board := Doubles.TerrainBoard.new()
 	var a := AbilityResource.new()
 	a.condition = null
 	assert_true(a.is_condition_met(unit, board), "a null condition never blocks the ability")
@@ -116,8 +67,8 @@ func test_null_condition_is_always_met():
 # --- Rule modifiers / passive accessors ------------------------------------
 
 func test_blitz_reports_extra_action():
-	var unit := MockUnit.new(0, { "health": 100 })
-	var board := MockBoard.new()
+	var unit := Doubles.CombatUnit.new(0, { "health": 100 })
+	var board := Doubles.TerrainBoard.new()
 	board.place(unit, Vector2i(0, 0))
 	var sys := _system_for(unit)
 	sys.add_ability(AbilityLibrary.blitz())
@@ -125,8 +76,8 @@ func test_blitz_reports_extra_action():
 	assert_eq(sys.extra_movement(unit, board), 0, "blitz does not touch movement")
 
 func test_passive_modifiers_merge_and_exclude_unmet():
-	var unit := MockUnit.new(0, { "health": 100 })
-	var board := MockBoard.new()
+	var unit := Doubles.CombatUnit.new(0, { "health": 100 })
+	var board := Doubles.TerrainBoard.new()
 	board.place(unit, Vector2i(3, 3))
 	board.tag_tile(Vector2i(3, 3), &"water")
 	var sys := _system_for(unit)
@@ -143,8 +94,8 @@ func test_passive_modifiers_merge_and_exclude_unmet():
 	assert_false(off_water.has("extra_movement"), "amphibious excluded when its condition is unmet")
 
 func test_extra_actions_sum_across_passives():
-	var unit := MockUnit.new(0, { "health": 100 })
-	var board := MockBoard.new()
+	var unit := Doubles.CombatUnit.new(0, { "health": 100 })
+	var board := Doubles.TerrainBoard.new()
 	board.place(unit, Vector2i(0, 0))
 	var sys := _system_for(unit)
 	sys.add_ability(AbilityLibrary.blitz())
@@ -156,9 +107,9 @@ func test_extra_actions_sum_across_passives():
 # --- Triggered abilities ---------------------------------------------------
 
 func test_vampiric_on_kill_heals_self():
-	var unit := MockUnit.new(0, { "health": 100 })
+	var unit := Doubles.CombatUnit.new(0, { "health": 100 })
 	unit.hp = 60
-	var board := MockBoard.new()
+	var board := Doubles.TerrainBoard.new()
 	board.place(unit, Vector2i(4, 4))             # must be on the board so the self-effect finds it
 	var sys := _system_for(unit)
 	sys.add_ability(AbilityLibrary.vampiric())
@@ -168,9 +119,9 @@ func test_vampiric_on_kill_heals_self():
 	assert_eq(events[0].get("effect"), "heal", "the logged event is a heal")
 
 func test_trigger_only_fires_matching_event():
-	var unit := MockUnit.new(0, { "health": 100 })
+	var unit := Doubles.CombatUnit.new(0, { "health": 100 })
 	unit.hp = 60
-	var board := MockBoard.new()
+	var board := Doubles.TerrainBoard.new()
 	board.place(unit, Vector2i(0, 0))
 	var sys := _system_for(unit)
 	sys.add_ability(AbilityLibrary.vampiric())    # ON_KILL only
@@ -179,8 +130,8 @@ func test_trigger_only_fires_matching_event():
 	assert_eq(unit.hp, 60, "no healing on a non-matching event")
 
 func test_last_stand_effect_fires_only_while_wounded():
-	var unit := MockUnit.new(0, { "health": 100 })
-	var board := MockBoard.new()
+	var unit := Doubles.CombatUnit.new(0, { "health": 100 })
+	var board := Doubles.TerrainBoard.new()
 	board.place(unit, Vector2i(2, 2))
 	var sys := _system_for(unit)
 	sys.add_ability(AbilityLibrary.last_stand())  # PASSIVE + HealthBelow 30%

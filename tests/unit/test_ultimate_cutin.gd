@@ -14,6 +14,13 @@ extends GutTest
 #      because a cast site is awaiting `finished` and can never be left hanging.
 
 
+## Any test that forced the animations flag gets it put back here, NOT at the end of the
+## test body -- an assertion that fails part-way through must not leave the rest of the run
+## (and the player's session) with animations disabled.
+func after_each() -> void:
+	_restore_animations()
+
+
 # --- 1. Resolution rule ------------------------------------------------------
 
 func test_slot_three_is_ultimate_even_without_flag() -> void:
@@ -74,7 +81,6 @@ func test_play_fires_finished_when_animated() -> void:
 	var fired: bool = await wait_for_signal(overlay.finished, 4.0,
 		"cut-in finished within the scaled animated duration")
 	assert_true(fired, "play() drives finished to fire (animated path)")
-	_restore_animations()
 
 
 func test_play_fires_finished_when_animations_off() -> void:
@@ -86,7 +92,6 @@ func test_play_fires_finished_when_animations_off() -> void:
 	var fired: bool = await wait_for_signal(overlay.finished, 2.0,
 		"static flash finished quickly with animations off")
 	assert_true(fired, "play() fires finished on the animations-off static path")
-	_restore_animations()
 
 
 func test_overlay_registers_in_group() -> void:

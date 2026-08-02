@@ -32,7 +32,8 @@ func apply(ctx: MoveContext) -> void:
 		return
 	var owner = ctx.caster.get_owner_player()
 	if owner == null:
-		push_warning("SummonEffect: caster has no owner player -- nothing raised.")
+		# An ownerless caster (a mock, a unit mid-teardown) simply raises nothing. The
+		# empty ctx.results IS the report -- see the note on the no-free-cell branch below.
 		return
 	var pid: int = int(owner.player_id)
 
@@ -47,7 +48,16 @@ func apply(ctx: MoveContext) -> void:
 	var origin: Vector2i = ctx.aim_cell
 	var cells: Array = _summon_cells(ctx, origin, count)
 	if cells.is_empty():
-		push_warning("SummonEffect: no free cell near %s -- nothing raised." % str(origin))
+		# "The board around the caster is crowded, so the summon fizzles" is a normal
+		# GAMEPLAY outcome, not a fault -- it happens whenever a necromancer casts into a
+		# packed melee. Reporting it through the engine log put an expected combat result
+		# in the debugger; the caller sees it as no summon events in ctx.results.
+		ctx.log_event({
+			"effect": "summon_fizzled",
+			"cell": origin,
+			"character_id": String(character_id),
+			"reason": "no free cell",
+		})
 		return
 	# Optional deterministic id base for networked play. Read duck-typed off the
 	# context so single-player (a plain MoveContext that has no such property) is

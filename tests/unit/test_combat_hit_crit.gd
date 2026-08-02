@@ -5,40 +5,9 @@ extends GutTest
 #   hit%  = move.accuracy*100 - target evasion   (clamped 0..100)
 #   crit% = move.crit_chance*100 + caster crit    (clamped 0..100)
 
-class MockUnit:
-	var team: int
-	var stats: Dictionary
-	var hp: int
-	func _init(p_team: int, p_stats: Dictionary) -> void:
-		team = p_team
-		stats = p_stats
-		hp = stats.get("health", 100)
-	func get_stat(n: String) -> int:
-		return stats.get(n, 0)
-	func take_damage(n: int) -> void:
-		hp -= n
-	func get_hp() -> int:
-		return hp
-
-class MockBoard:
-	var placements: Array = []
-	func place(u, c: Vector2i) -> void:
-		placements.append({ "u": u, "c": c })
-	func cell_of(u) -> Vector2i:
-		for p in placements:
-			if p.u == u:
-				return p.c
-		return Vector2i(-999, -999)
-	func units_at(c: Vector2i) -> Array:
-		var out: Array = []
-		for p in placements:
-			if p.c == c:
-				out.append(p.u)
-		return out
-	func are_enemies(a, b) -> bool:
-		return a.team != b.team
-	func are_allies(a, b) -> bool:
-		return a.team == b.team
+# HpUnit answers get_hp(), which is the branch MoveExecutor takes for HP bookkeeping.
+# See tests/helpers/test_doubles.gd.
+const Doubles := preload("res://tests/helpers/test_doubles.gd")
 
 
 func _strike(accuracy: float, crit_chance: float) -> MoveResource:
@@ -50,9 +19,9 @@ func _strike(accuracy: float, crit_chance: float) -> MoveResource:
 
 # caster with attack 0 so basic_strike deals exactly its base power (24).
 func _duel(target_stats: Dictionary, caster_stats: Dictionary = { "attack": 0 }) -> Array:
-	var caster := MockUnit.new(0, caster_stats)
-	var target := MockUnit.new(1, target_stats)
-	var board := MockBoard.new()
+	var caster := Doubles.HpUnit.new(0, caster_stats)
+	var target := Doubles.HpUnit.new(1, target_stats)
+	var board := Doubles.MinimalBoard.new()
 	board.place(caster, Vector2i(0, 0))
 	board.place(target, Vector2i(1, 0))
 	return [caster, target, board]
@@ -92,8 +61,8 @@ func test_crit_stat_on_caster_can_guarantee_a_crit():
 	assert_eq(d[1].hp, 64, "crit dealt 36")
 
 func test_preview_reports_hit_crit_and_lethality():
-	var caster := MockUnit.new(0, { "attack": 0, "crit": 10 })
-	var target := MockUnit.new(1, { "health": 100, "defense": 0, "evasion": 20 })
+	var caster := Doubles.HpUnit.new(0, { "attack": 0, "crit": 10 })
+	var target := Doubles.HpUnit.new(1, { "health": 100, "defense": 0, "evasion": 20 })
 	var pv := MoveExecutor.preview_vs(_strike(0.9, 0.1), caster, target)
 	assert_almost_eq(pv.hit_pct, 70.0, 0.001, "hit% = 90 - 20 evasion")
 	assert_almost_eq(pv.crit_pct, 20.0, 0.001, "crit% = 10 move + 10 caster")
@@ -103,8 +72,8 @@ func test_preview_reports_hit_crit_and_lethality():
 	assert_false(pv.lethal, "24 is not lethal vs 100 HP")
 
 func test_preview_flags_a_lethal_blow():
-	var caster := MockUnit.new(0, { "attack": 0 })
-	var target := MockUnit.new(1, { "health": 20, "defense": 0 })
+	var caster := Doubles.HpUnit.new(0, { "attack": 0 })
+	var target := Doubles.HpUnit.new(1, { "health": 20, "defense": 0 })
 	var pv := MoveExecutor.preview_vs(_strike(1.0, 0.0), caster, target)
 	assert_true(pv.lethal, "24 predicted vs 20 HP is lethal")
 	assert_eq(pv.remaining, 0, "target would drop to 0")

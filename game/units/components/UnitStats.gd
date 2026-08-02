@@ -130,8 +130,10 @@ func get_all_base_stats() -> Dictionary:
 # Stat modification methods
 func modify_stat(stat_name: String, amount: int, is_permanent: bool = false) -> void:
 	"""Modify a stat by a specific amount"""
+	# allow_runtime_modifications is a CONFIGURED flag, so refusing here is the configured
+	# behaviour, not an error -- warning about it meant every buff/debuff aimed at such a
+	# unit reported to the debugger. The unchanged stat is the observable outcome.
 	if not allow_runtime_modifications and not is_permanent:
-		push_warning("Runtime stat modifications are disabled for this unit")
 		return
 	
 	var old_value = get_stat(stat_name)

@@ -7,15 +7,20 @@ extends GutTest
 
 const MAP_PATH := "res://game/maps/resources/proving_grounds.tres"
 
-var _saved_squad: Array = []
+const Guard := preload("res://tests/helpers/global_state_guard.gd")
+
+## Untyped on purpose: a `: RefCounted` annotation would make the static analyser reject
+## _guard.set_setting() / .watch_file() as "not found in base RefCounted".
+var _guard
 
 func before_each() -> void:
-	if GameSettings != null:
-		_saved_squad = GameSettings.get_selected_squad()
+	# selected_squad is an autoload field these tests overwrite; the guard puts it back
+	# from after_each, which GUT runs even when a test fails part-way through.
+	_guard = Guard.new()
+	_guard.watch_setting("selected_squad")
 
 func after_each() -> void:
-	if GameSettings != null:
-		GameSettings.set_selected_squad(_saved_squad)
+	_guard.restore()
 
 
 func _player0_ids(map_root: Node) -> Array:

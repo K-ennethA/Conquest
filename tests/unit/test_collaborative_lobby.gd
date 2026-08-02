@@ -10,15 +10,16 @@ func before_each():
 	lobby_script = load("res://menus/CollaborativeLobby.gd")
 	lobby = Control.new()
 	lobby.set_script(lobby_script)
+	# add_child_autofree already owns the free. Do NOT also queue_free() in after_each:
+	# the double disposal is exactly the kind of thing that turns a real failure into a
+	# confusing "freeing a freed object" error.
 	add_child_autofree(lobby)
-	
+
 	# Wait for _ready to complete
 	await get_tree().process_frame
 
 func after_each():
 	"""Cleanup after each test"""
-	if lobby and is_instance_valid(lobby):
-		lobby.queue_free()
 	lobby = null
 
 # Initialization Tests
@@ -101,22 +102,13 @@ func test_voting_complete_with_different_votes():
 	assert_true(lobby.voting_complete, "Voting should be complete with different votes")
 
 # Coin Flip Tests
-func test_coin_flip_chooses_one_map():
-	"""Test coin flip selects one of the two maps"""
-	lobby.initialize(true, "TestHost")
-	
-	var map_a = "res://game/maps/resources/default_skirmish.tres"
-	var map_b = "res://game/maps/resources/other_map.tres"
-	
-	lobby.local_map_vote = map_a
-	lobby.remote_map_vote = map_b
-	
-	# Simulate coin flip logic
-	randomize()
-	var coin_flip = randi() % 2
-	var result = lobby.local_map_vote if coin_flip == 0 else lobby.remote_map_vote
-	
-	assert_true(result == map_a or result == map_b, "Result should be one of the two maps")
+#
+# REMOVED: test_coin_flip_chooses_one_map. It called randomize() -- reseeding the
+# PROCESS-WIDE RNG, which other suites rely on being untouched -- and then asserted on
+# `local_map_vote if randi() % 2 == 0 else remote_map_vote`, an expression written in the
+# test itself. It exercised no lobby code and could not fail. If the lobby ever grows a
+# real tie-break, test THAT function with an injected seed (see MatchRng /
+# test_match_rng.gd for the seeded-RNG pattern).
 
 func test_same_vote_no_coin_flip():
 	"""Test that same votes don't trigger coin flip"""
@@ -203,9 +195,11 @@ func test_not_in_tree_stops_connection_check():
 	
 	# This should detect not in tree and stop
 	lobby._check_for_connections()
-	
-	await get_tree().create_timer(1.0).timeout
-	
+
+	# One frame, not a 1.0s wall-clock timer: sleeping a real second per run buys nothing
+	# (the check is synchronous) and wall-clock waits are the classic source of flake.
+	await get_tree().process_frame
+
 	pass_test("Connection check stopped when not in tree")
 
 # Integration Tests

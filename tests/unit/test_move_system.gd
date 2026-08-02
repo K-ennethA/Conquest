@@ -1,56 +1,13 @@
 extends GutTest
 
 # Tests for the data-driven combat/move system: targeting math, composable
-# effects, the executor, and the character moveset model. Uses lightweight mocks
-# so no scene tree / live board is required.
+# effects, the executor, and the character moveset model. Uses the shared
+# doubles so no scene tree / live board is required.
 
 # --- Mocks -----------------------------------------------------------------
-
-class MockUnit:
-	var team: int
-	var stats: Dictionary
-	var hp: int
-	var modifiers: Array = []
-	func _init(p_team: int, p_stats: Dictionary) -> void:
-		team = p_team
-		stats = p_stats
-		hp = stats.get("health", 100)
-	func get_stat(name: String) -> int:
-		return stats.get(name, 0)
-	func take_damage(n: int) -> void:
-		hp -= n
-	func heal(n: int) -> void:
-		hp += n
-	func add_stat_modifier(stat: String, amount: int, duration: int) -> int:
-		modifiers.append({ "stat": stat, "amount": amount, "duration": duration })
-		return modifiers.size()
-
-class MockBoard:
-	var placements: Array = []  # { unit, cell }
-	var tiles: Dictionary = {}
-	func place(unit, cell: Vector2i) -> void:
-		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
-		for p in placements:
-			if p.unit == unit:
-				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
-		var out: Array = []
-		for p in placements:
-			if p.cell == cell:
-				out.append(p.unit)
-		return out
-	func are_enemies(a, b) -> bool:
-		return a.team != b.team
-	func are_allies(a, b) -> bool:
-		return a.team == b.team
-	func set_tile(cell: Vector2i, tile_id) -> void:
-		tiles[cell] = tile_id
-	func move_unit(unit, to_cell: Vector2i) -> void:
-		for p in placements:
-			if p.unit == unit:
-				p.cell = to_cell
+# CombatUnit + CombatBoard are the canonical pair; see tests/helpers/test_doubles.gd
+# for why each double is an exact shape rather than a kitchen sink.
+const Doubles := preload("res://tests/helpers/test_doubles.gd")
 
 # --- Targeting -------------------------------------------------------------
 
@@ -86,9 +43,9 @@ func test_pattern_excludes_caster_tile_by_default():
 # --- Damage effect ---------------------------------------------------------
 
 func test_damage_hits_enemies_scaled_and_mitigated():
-	var caster := MockUnit.new(0, { "attack": 10 })
-	var enemy := MockUnit.new(1, { "health": 100, "defense": 4 })
-	var board := MockBoard.new()
+	var caster := Doubles.CombatUnit.new(0, { "attack": 10 })
+	var enemy := Doubles.CombatUnit.new(1, { "health": 100, "defense": 4 })
+	var board := Doubles.CombatBoard.new()
 	board.place(caster, Vector2i(0, 0))
 	board.place(enemy, Vector2i(1, 0))
 	var move := MoveLibrary.basic_strike()  # power 24 + attack 10 = 34, - def 4 = 30
@@ -97,11 +54,11 @@ func test_damage_hits_enemies_scaled_and_mitigated():
 	assert_eq(enemy.hp, 70, "34 raw minus 4 defense = 30 damage")
 
 func test_area_damage_hits_multiple_enemies_not_ally():
-	var caster := MockUnit.new(0, { "magic": 10 })
-	var enemy_a := MockUnit.new(1, { "health": 100, "defense": 0 })
-	var enemy_b := MockUnit.new(1, { "health": 100, "defense": 0 })
-	var ally := MockUnit.new(0, { "health": 100, "defense": 0 })
-	var board := MockBoard.new()
+	var caster := Doubles.CombatUnit.new(0, { "magic": 10 })
+	var enemy_a := Doubles.CombatUnit.new(1, { "health": 100, "defense": 0 })
+	var enemy_b := Doubles.CombatUnit.new(1, { "health": 100, "defense": 0 })
+	var ally := Doubles.CombatUnit.new(0, { "health": 100, "defense": 0 })
+	var board := Doubles.CombatBoard.new()
 	board.place(caster, Vector2i(0, 0))
 	board.place(enemy_a, Vector2i(3, 0))       # aim cell
 	board.place(enemy_b, Vector2i(3, 1))       # within diamond radius 1
@@ -114,9 +71,9 @@ func test_area_damage_hits_multiple_enemies_not_ally():
 	assert_eq(ally.hp, 100, "ally in area is not hit by an ENEMY-targeted move")
 
 func test_flame_burst_transforms_terrain():
-	var caster := MockUnit.new(0, { "magic": 10 })
-	var enemy := MockUnit.new(1, { "health": 100, "defense": 0 })
-	var board := MockBoard.new()
+	var caster := Doubles.CombatUnit.new(0, { "magic": 10 })
+	var enemy := Doubles.CombatUnit.new(1, { "health": 100, "defense": 0 })
+	var board := Doubles.CombatBoard.new()
 	board.place(caster, Vector2i(0, 0))
 	board.place(enemy, Vector2i(3, 0))
 	MoveExecutor.execute(MoveLibrary.flame_burst(), caster, board, Vector2i(3, 0))
@@ -125,19 +82,19 @@ func test_flame_burst_transforms_terrain():
 # --- Heal & debuff ---------------------------------------------------------
 
 func test_heal_targets_ally_only():
-	var caster := MockUnit.new(0, { "magic": 12 })
-	var ally := MockUnit.new(0, { "health": 100 })
+	var caster := Doubles.CombatUnit.new(0, { "magic": 12 })
+	var ally := Doubles.CombatUnit.new(0, { "health": 100 })
 	ally.hp = 50
-	var board := MockBoard.new()
+	var board := Doubles.CombatBoard.new()
 	board.place(caster, Vector2i(0, 0))
 	board.place(ally, Vector2i(1, 0))
 	MoveExecutor.execute(MoveLibrary.mend(), caster, board, Vector2i(1, 0))  # 28 + magic 12 = 40
 	assert_eq(ally.hp, 90, "ally healed for 40")
 
 func test_expose_applies_defense_debuff():
-	var caster := MockUnit.new(0, {})
-	var enemy := MockUnit.new(1, { "health": 100 })
-	var board := MockBoard.new()
+	var caster := Doubles.CombatUnit.new(0, {})
+	var enemy := Doubles.CombatUnit.new(1, { "health": 100 })
+	var board := Doubles.CombatBoard.new()
 	board.place(caster, Vector2i(0, 0))
 	board.place(enemy, Vector2i(1, 0))
 	MoveExecutor.execute(MoveLibrary.expose(), caster, board, Vector2i(1, 0))
@@ -147,9 +104,9 @@ func test_expose_applies_defense_debuff():
 # --- Executor guards -------------------------------------------------------
 
 func test_execute_rejects_out_of_range():
-	var caster := MockUnit.new(0, { "attack": 10 })
-	var enemy := MockUnit.new(1, { "health": 100, "defense": 0 })
-	var board := MockBoard.new()
+	var caster := Doubles.CombatUnit.new(0, { "attack": 10 })
+	var enemy := Doubles.CombatUnit.new(1, { "health": 100, "defense": 0 })
+	var board := Doubles.CombatBoard.new()
 	board.place(caster, Vector2i(0, 0))
 	board.place(enemy, Vector2i(5, 0))
 	var result := MoveExecutor.execute(MoveLibrary.basic_strike(), caster, board, Vector2i(5, 0))

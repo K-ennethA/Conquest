@@ -10,16 +10,17 @@ func before_each():
 	map_selector_script = load("res://game/ui/panels/MapSelectorPanel.gd")
 	map_selector = VBoxContainer.new()
 	map_selector.set_script(map_selector_script)
+	# add_child_autofree already owns the free. Do NOT also queue_free() in after_each --
+	# the double disposal turns a real failure into a "freeing a freed object" error, and
+	# queue_free defers past the point where GUT counts orphans anyway.
 	add_child_autofree(map_selector)
-	
+
 	# Wait for _ready to complete
 	await get_tree().process_frame
 	await get_tree().process_frame  # Extra frame for map loading
 
 func after_each():
 	"""Cleanup after each test"""
-	if map_selector and is_instance_valid(map_selector):
-		map_selector.queue_free()
 	map_selector = null
 
 # Initialization Tests

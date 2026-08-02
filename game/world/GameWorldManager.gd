@@ -97,8 +97,12 @@ func _ready() -> void:
 	# the very first move/turn.
 	_setup_tile_effects()
 
-	# Wait a frame for all singletons to be ready
+	# Wait a frame for all singletons to be ready. Backing out of the battle during boot
+	# (Main Menu, a rematch, an Arena hand-off) frees this node mid-await; everything
+	# below touches `self` and the live tree, so bail if we are no longer in it.
 	await get_tree().process_frame
+	if not is_inside_tree():
+		return
 
 	# Terrain inspection HUD: purely additive overlay, safe to add before the
 	# map finishes loading -- it resolves the live board lazily on each cursor
@@ -127,7 +131,9 @@ func _ready() -> void:
 
 	# Load the selected map or default map
 	await _load_selected_map()
-	
+	if not is_inside_tree():
+		return
+
 	# Check if this is a network multiplayer game
 	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
 		await _setup_network_multiplayer()
@@ -192,11 +198,16 @@ func _load_selected_map() -> void:
 	
 	current_map_path = selected_map
 	
-	# Find the Map node in the scene
-	var map_node = get_tree().current_scene.get_node_or_null("Map")
+	# Find the Map node in the scene. current_scene is NULL mid-transition (and this runs
+	# after several awaits in _ready), so chaining straight off it is a null-instance
+	# error waiting to happen.
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
+	var map_node = scene_root.get_node_or_null("Map")
 	if not map_node:
 		return
-	
+
 	# Clear existing map content but keep the Map node structure
 	_clear_existing_map_content(map_node)
 	
@@ -277,13 +288,24 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 func _on_map_load_failed(error_message: String) -> void:
 	"""Handle map loading failure"""
 
-	# Try to load default map as fallback
+	# Try to load default map as fallback. Same null-current_scene hazard as
+	# _load_selected_map: a load failure can itself coincide with a transition.
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
 	var default_map = MapLoader.create_default_map()
-	var map_node = get_tree().current_scene.get_node_or_null("Map")
+	var map_node = scene_root.get_node_or_null("Map")
 	if map_node:
 		map_loader.load_map(default_map, map_node)
 
 # --- Terrain inspection HUD --------------------------------------------------
+#
+# NOTE on the _setup_* helpers below: each one mounts an OPTIONAL overlay and bails
+# silently when there is no current_scene or no "UI" CanvasLayer to mount into. Those
+# bails used to push_warning, but both are EXPECTED conditions -- they happen on every
+# scene transition and in every scene that is not GameWorld.tscn -- so they filled the
+# debugger with warnings for a HUD that is meant to be additive. The early return IS the
+# report; a real missing-HUD bug shows up as a missing HUD.
 
 func _setup_terrain_info_panel() -> void:
 	"""Instantiate TerrainInfoPanel and add it to the "UI" CanvasLayer (sibling of
@@ -295,12 +317,10 @@ func _setup_terrain_info_panel() -> void:
 
 	var scene_root := get_tree().current_scene
 	if scene_root == null:
-		push_warning("[GameWorldManager] No current_scene yet; TerrainInfoPanel not added.")
 		return
 
 	var ui_layer := scene_root.get_node_or_null("UI")
 	if ui_layer == null:
-		push_warning("[GameWorldManager] 'UI' CanvasLayer not found; TerrainInfoPanel not added.")
 		return
 
 	_terrain_info_panel = TerrainInfoPanel.new()
@@ -317,12 +337,10 @@ func _setup_unit_hover_panel() -> void:
 
 	var scene_root := get_tree().current_scene
 	if scene_root == null:
-		push_warning("[GameWorldManager] No current_scene yet; UnitHoverPanel not added.")
 		return
 
 	var ui_layer := scene_root.get_node_or_null("UI")
 	if ui_layer == null:
-		push_warning("[GameWorldManager] 'UI' CanvasLayer not found; UnitHoverPanel not added.")
 		return
 
 	_unit_hover_panel = UnitHoverPanel.new()
@@ -387,12 +405,10 @@ func _setup_game_over_screen() -> void:
 
 	var scene_root := get_tree().current_scene
 	if scene_root == null:
-		push_warning("[GameWorldManager] No current_scene yet; GameOverScreen not added.")
 		return
 
 	var ui_layer := scene_root.get_node_or_null("UI")
 	if ui_layer == null:
-		push_warning("[GameWorldManager] 'UI' CanvasLayer not found; GameOverScreen not added.")
 		return
 
 	_game_over_screen = GAME_OVER_SCREEN_SCENE.instantiate() as GameOverScreen
@@ -419,7 +435,6 @@ func _setup_ultimate_cutin() -> void:
 		return
 	var scene_root := get_tree().current_scene
 	if scene_root == null:
-		push_warning("[GameWorldManager] No current_scene yet; UltimateCutIn not added.")
 		return
 	_ultimate_cutin = UltimateCutIn.new()
 	_ultimate_cutin.name = "UltimateCutIn"
@@ -541,7 +556,6 @@ func _setup_tile_effect_overlay() -> void:
 
 	var scene_root := get_tree().current_scene
 	if scene_root == null:
-		push_warning("[GameWorldManager] No current_scene yet; TileEffectOverlay not added.")
 		return
 
 	_tile_effect_overlay = TileEffectOverlay.new()
@@ -769,13 +783,17 @@ func _setup_local_game() -> void:
 	
 	# Wait another frame to ensure units are properly assigned
 	await get_tree().process_frame
-	
+	if not is_inside_tree():
+		return
+
 	# Apply game settings (this will set up turn systems with units already assigned)
 	if GameSettings:
 		GameSettings.apply_settings_to_game()
-	
+
 	# Wait one more frame before starting the game
 	await get_tree().process_frame
+	if not is_inside_tree():
+		return
 	
 	# Start the game
 	_start_game()
@@ -849,8 +867,12 @@ func _start_game() -> void:
 
 func _on_multiplayer_game_ended(winner_id: int) -> void:
 	"""Handle multiplayer game ended"""
-	# Show game over screen or return to menu
+	# Show game over screen or return to menu. The GameOverScreen is live during those two
+	# seconds and offers its own "Main Menu" button, so the player can free this node
+	# mid-await; resuming would then call get_tree() on a freed instance.
 	await get_tree().create_timer(2.0).timeout
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
 	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
 
 # Current UI Layout (1280x720, container-driven -- see game/ui/layout/GameUILayout.tscn

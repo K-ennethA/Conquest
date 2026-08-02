@@ -37,7 +37,11 @@ const ATTACKER_ID: StringName = &"test_ai_attacker"
 const TARGET_ID: StringName = &"test_ai_target"
 
 var _map_root: Node3D
-var _saved_difficulty: int = 1
+const Guard := preload("res://tests/helpers/global_state_guard.gd")
+
+## Untyped on purpose: a `: RefCounted` annotation would make the static analyser reject
+## _guard.set_setting() / .watch_file() as "not found in base RefCounted".
+var _guard
 
 
 func before_each() -> void:
@@ -45,17 +49,16 @@ func before_each() -> void:
 	_map_root = null
 	# Pin NORMAL difficulty so the AI is deterministic (EASY dithers via RNG); the
 	# driver reads this from the GameSettings autoload, which other tests may touch.
-	if GameSettings != null:
-		_saved_difficulty = GameSettings.ai_difficulty
-		GameSettings.ai_difficulty = BotController.Difficulty.NORMAL
+	# The guard restores it from after_each, which runs on the failure path too.
+	_guard = Guard.new()
+	_guard.set_setting("ai_difficulty", BotController.Difficulty.NORMAL)
 	_install_test_characters()
 
 
 func after_each() -> void:
 	CombatServices.clear()
 	_map_root = null
-	if GameSettings != null:
-		GameSettings.ai_difficulty = _saved_difficulty
+	_guard.restore()
 	# Evict the injected synthetic characters so they never leak into other suites.
 	CharacterLibrary.clear_cache()
 

@@ -1,72 +1,19 @@
 extends GutTest
 
 # Tests for the data-driven tile-effects system: triggers, faction/tag filters,
-# passive rule-flag merging, and the shared effect pipeline. Uses lightweight
-# mocks (no scene tree / live board), mirroring test_move_system.gd.
+# passive rule-flag merging, and the shared effect pipeline. Uses the shared
+# doubles (no scene tree / live board), mirroring test_move_system.gd.
 
 # --- Mocks -----------------------------------------------------------------
-
-class MockUnit:
-	var team: int
-	var stats: Dictionary
-	var hp: int
-	var modifiers: Array = []
-	var tags: Array = []  # duck-typed tag source read by TileEffectResource
-	func _init(p_team: int, p_stats: Dictionary, p_tags: Array = []) -> void:
-		team = p_team
-		stats = p_stats
-		tags = p_tags
-		hp = stats.get("health", 100)
-	func get_stat(name: String) -> int:
-		return stats.get(name, 0)
-	func take_damage(n: int) -> void:
-		hp -= n
-	func heal(n: int) -> void:
-		hp += n
-	func add_stat_modifier(stat: String, amount: int, duration: int) -> int:
-		modifiers.append({ "stat": stat, "amount": amount, "duration": duration })
-		return modifiers.size()
-
-class MockBoard:
-	var placements: Array = []             # { unit, cell }
-	var tiles: Dictionary = {}             # cell -> Array[TileEffectResource]
-	var perspective = null                 # reference unit for faction filters
-	func place(unit, cell: Vector2i) -> void:
-		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
-		for p in placements:
-			if p.unit == unit:
-				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
-		var out: Array = []
-		for p in placements:
-			if p.cell == cell:
-				out.append(p.unit)
-		return out
-	func are_enemies(a, b) -> bool:
-		return a.team != b.team
-	func are_allies(a, b) -> bool:
-		return a.team == b.team
-	func set_tile(cell: Vector2i, tile_id) -> void:
-		tiles[cell] = tile_id
-	func move_unit(unit, to_cell: Vector2i) -> void:
-		for p in placements:
-			if p.unit == unit:
-				p.cell = to_cell
-	# Duck-typed hooks the tile-effect system consumes.
-	func tile_effects_at(cell: Vector2i) -> Array:
-		return tiles.get(cell, [])
-	func set_tile_effects(cell: Vector2i, effects: Array) -> void:
-		tiles[cell] = effects
-	func perspective_unit():
-		return perspective
+# TaggedCombatUnit carries the unit tags TileEffectResource filters on; TileEffectBoard
+# adds tile_effects_at + perspective_unit. See tests/helpers/test_doubles.gd.
+const Doubles := preload("res://tests/helpers/test_doubles.gd")
 
 # --- Triggers: fire burns on turn start ------------------------------------
 
 func test_fire_damages_occupant_on_turn_start():
-	var unit := MockUnit.new(1, { "health": 100, "defense": 50 })
-	var board := MockBoard.new()
+	var unit := Doubles.TaggedCombatUnit.new(1, { "health": 100, "defense": 50 })
+	var board := Doubles.TileEffectBoard.new()
 	board.place(unit, Vector2i(2, 2))
 	board.set_tile_effects(Vector2i(2, 2), [TileEffectLibrary.fire()])
 	var system = autofree(TileEffectSystem.new())
@@ -77,8 +24,8 @@ func test_fire_damages_occupant_on_turn_start():
 
 func test_fire_does_not_fire_on_enter():
 	# fire's trigger is ON_TURN_START_WHILE_OCCUPYING, so entering must not burn.
-	var unit := MockUnit.new(1, { "health": 100 })
-	var board := MockBoard.new()
+	var unit := Doubles.TaggedCombatUnit.new(1, { "health": 100 })
+	var board := Doubles.TileEffectBoard.new()
 	board.place(unit, Vector2i(0, 0))
 	board.set_tile_effects(Vector2i(0, 0), [TileEffectLibrary.fire()])
 	var system = autofree(TileEffectSystem.new())
@@ -89,8 +36,8 @@ func test_fire_does_not_fire_on_enter():
 # --- Required unit tag: empowering water -----------------------------------
 
 func test_empowering_water_affects_aquatic_unit():
-	var aquatic := MockUnit.new(0, { "attack": 10 }, ["aquatic"])
-	var board := MockBoard.new()
+	var aquatic := Doubles.TaggedCombatUnit.new(0, { "attack": 10 }, ["aquatic"])
+	var board := Doubles.TileEffectBoard.new()
 	board.place(aquatic, Vector2i(1, 1))
 	var water := TileEffectLibrary.empowering_water()
 	assert_true(water.applies_to(aquatic, board), "aquatic unit matches required tag")
@@ -100,16 +47,16 @@ func test_empowering_water_affects_aquatic_unit():
 	assert_eq(aquatic.modifiers[0]["amount"], 4, "buff is +4")
 
 func test_empowering_water_ignores_non_aquatic_unit():
-	var lander := MockUnit.new(0, { "attack": 10 }, ["infantry"])
-	var board := MockBoard.new()
+	var lander := Doubles.TaggedCombatUnit.new(0, { "attack": 10 }, ["infantry"])
+	var board := Doubles.TileEffectBoard.new()
 	board.place(lander, Vector2i(1, 1))
 	var water := TileEffectLibrary.empowering_water()
 	assert_false(water.applies_to(lander, board), "unit without the aquatic tag is filtered out")
 
 func test_untagged_unit_not_empowered_via_system():
 	# A unit that reports no tags at all must be unaffected by a tag-gated effect.
-	var untagged := MockUnit.new(0, { "attack": 10 })
-	var board := MockBoard.new()
+	var untagged := Doubles.TaggedCombatUnit.new(0, { "attack": 10 })
+	var board := Doubles.TileEffectBoard.new()
 	board.place(untagged, Vector2i(4, 4))
 	board.set_tile_effects(Vector2i(4, 4), [TileEffectLibrary.empowering_water()])
 	var system = autofree(TileEffectSystem.new())
@@ -122,8 +69,8 @@ func test_untagged_unit_not_empowered_via_system():
 # --- Passive rule flags: stealth + merge -----------------------------------
 
 func test_stealth_reports_untargetable_flag():
-	var unit := MockUnit.new(0, {})
-	var board := MockBoard.new()
+	var unit := Doubles.TaggedCombatUnit.new(0, {})
+	var board := Doubles.TileEffectBoard.new()
 	board.place(unit, Vector2i(3, 3))
 	board.set_tile_effects(Vector2i(3, 3), [TileEffectLibrary.stealth()])
 	var system = autofree(TileEffectSystem.new())
@@ -131,8 +78,8 @@ func test_stealth_reports_untargetable_flag():
 	assert_true(flags.get("untargetable", false), "stealth tile marks occupant untargetable")
 
 func test_passive_flags_merge_across_effects():
-	var unit := MockUnit.new(0, {})
-	var board := MockBoard.new()
+	var unit := Doubles.TaggedCombatUnit.new(0, {})
+	var board := Doubles.TileEffectBoard.new()
 	board.place(unit, Vector2i(5, 5))
 	board.set_tile_effects(Vector2i(5, 5), [TileEffectLibrary.stealth(), TileEffectLibrary.fortify()])
 	var system = autofree(TileEffectSystem.new())
@@ -145,10 +92,10 @@ func test_passive_flags_merge_across_effects():
 
 func test_affected_factions_enemies_only():
 	# A hazard that only harms occupants hostile to the tile's perspective side.
-	var reference := MockUnit.new(0, {})   # perspective: team 0
-	var enemy := MockUnit.new(1, { "health": 100 })
-	var ally := MockUnit.new(0, { "health": 100 })
-	var board := MockBoard.new()
+	var reference := Doubles.TaggedCombatUnit.new(0, {})   # perspective: team 0
+	var enemy := Doubles.TaggedCombatUnit.new(1, { "health": 100 })
+	var ally := Doubles.TaggedCombatUnit.new(0, { "health": 100 })
+	var board := Doubles.TileEffectBoard.new()
 	board.perspective = reference
 	board.place(enemy, Vector2i(6, 0))
 	board.place(ally, Vector2i(7, 0))
@@ -177,8 +124,8 @@ func test_affected_factions_enemies_only():
 
 func test_injected_tile_effects_lookup():
 	# When the board exposes no effects for a cell, the system uses its own map.
-	var unit := MockUnit.new(1, { "health": 100 })
-	var board := MockBoard.new()
+	var unit := Doubles.TaggedCombatUnit.new(1, { "health": 100 })
+	var board := Doubles.TileEffectBoard.new()
 	board.place(unit, Vector2i(9, 9))
 	var system = autofree(TileEffectSystem.new())
 	system.tile_effects[Vector2i(9, 9)] = [TileEffectLibrary.fire()]

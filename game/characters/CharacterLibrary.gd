@@ -28,14 +28,24 @@ const KNOWN_IDS: Array[StringName] = [
 ## lifetime of the process.
 static var _cache: Dictionary = {}
 
+## Ids already reported as unresolvable by [method get_character], so a legacy id that is
+## probed on every single spawn is mentioned once per process instead of once per unit.
+static var _reported_misses: Dictionary = {}
+
 
 ## Loads (and caches) the CharacterResource for [param id]. [param id] may be
-## a String or StringName. Returns null and pushes a warning if [param id] is
-## empty or doesn't resolve to a roster file.
+## a String or StringName. Returns null when [param id] is empty or doesn't resolve to a
+## roster file.
+##
+## A MISS IS EXPECTED, not a fault: [MapLoader] deliberately PROBES this with a spawn's
+## authored id and falls back to DEFAULT_CHARACTER_ID when it comes back null, so every
+## legacy-id spawn used to emit a debugger warning and then work correctly. (MapResource
+## even documents preferring all_ids() "rather than get_character(), which pushes a warning
+## on a miss".) So the null return IS the report; the engine log is left alone, and an
+## unresolvable id is printed at most once per process so real content bugs stay findable.
 static func get_character(id) -> CharacterResource:
 	var key: StringName = StringName(id) if id != null else &""
 	if String(key).is_empty():
-		push_warning("CharacterLibrary.get_character: empty character id")
 		return null
 
 	if _cache.has(key):
@@ -43,16 +53,25 @@ static func get_character(id) -> CharacterResource:
 
 	var path := ROSTER_DIR + String(key) + ".tres"
 	if not ResourceLoader.exists(path):
-		push_warning("CharacterLibrary.get_character: no roster entry for id '%s' (expected %s)" % [String(key), path])
+		_note_miss(key, "no roster entry (expected %s)" % path)
 		return null
 
 	var resource := load(path) as CharacterResource
 	if resource == null:
-		push_warning("CharacterLibrary.get_character: failed to load '%s' as CharacterResource" % path)
+		_note_miss(key, "'%s' is not a CharacterResource" % path)
 		return null
 
 	_cache[key] = resource
 	return resource
+
+
+## Print an unresolvable id once per process (see [method get_character]). A plain print
+## never reaches the debugger's error panel, which is the point.
+static func _note_miss(key: StringName, reason: String) -> void:
+	if _reported_misses.has(key):
+		return
+	_reported_misses[key] = true
+	print("[CharacterLibrary] character id '%s' did not resolve: %s" % [String(key), reason])
 
 
 ## All known roster character ids, as StringNames. Scans ROSTER_DIR; falls

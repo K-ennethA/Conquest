@@ -90,9 +90,11 @@ func _start_turn() -> void:
 	turns_played += 1
 	units_acted_this_turn.clear()
 	
-	# Reset unit action states
+	# Reset unit action states. `if unit` is TRUE for a freed instance in Godot 4 -- only
+	# is_instance_valid catches one -- and owned_units can still hold a unit that died
+	# since the last turn boundary.
 	for unit in owned_units:
-		if unit and unit.has_method("reset_turn_actions"):
+		if is_instance_valid(unit) and unit.has_method("reset_turn_actions"):
 			unit.reset_turn_actions()
 
 func _end_turn() -> void:
@@ -169,7 +171,8 @@ func get_units_that_can_act() -> Array[Unit]:
 	"""Get units that haven't acted this turn"""
 	var available_units: Array[Unit] = []
 	for unit in owned_units:
-		if unit and not has_unit_acted(unit):
+		# is_instance_valid, not truthiness: a freed Unit is still "truthy" here.
+		if is_instance_valid(unit) and not has_unit_acted(unit):
 			available_units.append(unit)
 	return available_units
 

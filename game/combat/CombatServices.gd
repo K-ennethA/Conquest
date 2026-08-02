@@ -288,8 +288,13 @@ func _assert_units_round_trip(board_adapter: BoardAdapter, map_root: Node3D) -> 
 	var tolerance: float = maxf(maxf(step_x, step_z), 0.001)
 
 	var mismatches: int = 0
+	# Detail of the FIRST offender only. This sweep runs on every board rebuild, and it
+	# used to push one warning PER offending unit plus a summary -- so a systematic
+	# centering mismatch (which affects every unit at once, the exact case this guards)
+	# emitted N+1 debugger warnings on each rebuild. One line carries the same diagnosis.
+	var first_detail: String = ""
 	for unit in units:
-		if unit == null:
+		if unit == null or not is_instance_valid(unit):
 			continue
 		var actual: Vector3 = unit.global_position
 		var cell: Vector2i = board_adapter.cell_of(unit)
@@ -302,15 +307,14 @@ func _assert_units_round_trip(board_adapter: BoardAdapter, map_root: Node3D) -> 
 		var planar_dist: float = sqrt(dx * dx + dz * dz)
 		if planar_dist > tolerance:
 			mismatches += 1
-			push_warning(
-				"[CombatServices] Unit '%s' does NOT round-trip: global=%s -> cell=%s -> world=%s (XZ off by %.3f, tolerance %.3f). Likely MapLoader vs Grid.calculate_map_position centering mismatch."
-				% [unit.name, str(actual), str(cell), str(expected), planar_dist, tolerance]
-			)
+			if first_detail.is_empty():
+				first_detail = "'%s' global=%s -> cell=%s -> world=%s (XZ off by %.3f, tolerance %.3f)" \
+					% [unit.name, str(actual), str(cell), str(expected), planar_dist, tolerance]
 
 	if mismatches > 0:
 		push_warning(
-			"[CombatServices] Board rebuilt with %d of %d unit(s) failing the cell round-trip. See warnings above."
-			% [mismatches, units.size()]
+			"[CombatServices] Board rebuilt with %d of %d unit(s) failing the cell round-trip; first: %s. Likely a MapLoader vs Grid.calculate_map_position centering mismatch."
+			% [mismatches, units.size(), first_detail]
 		)
 
 

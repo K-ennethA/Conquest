@@ -8,16 +8,20 @@ extends GutTest
 ## scene tree, so the HUD drives the real countdown and calls expire_turn_timer()); these
 ## tests exercise that state directly.
 
-var _orig_timer: int = 30
+const Guard := preload("res://tests/helpers/global_state_guard.gd")
+
+## Untyped on purpose: a `: RefCounted` annotation would make the static analyser reject
+## _guard.set_setting() / .watch_file() as "not found in base RefCounted".
+var _guard
 
 func before_each() -> void:
-	# Snapshot and pin the global clock setting so tests are deterministic regardless of
-	# any persisted user setting; restored in after_each.
-	_orig_timer = int(GameSettings.speed_turn_timer_seconds)
-	GameSettings.speed_turn_timer_seconds = 30
+	# Pin the global clock setting so tests are deterministic regardless of any persisted
+	# user setting. The guard restores it from after_each, which runs on failures too.
+	_guard = Guard.new()
+	_guard.set_setting("speed_turn_timer_seconds", 30)
 
 func after_each() -> void:
-	GameSettings.speed_turn_timer_seconds = _orig_timer
+	_guard.restore()
 
 # --- Helpers ----------------------------------------------------------------
 

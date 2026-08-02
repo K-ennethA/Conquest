@@ -80,6 +80,9 @@ func _ready() -> void:
 	GameEvents.unit_deselected.connect(_on_unit_deselected)
 	GameEvents.unit_hover_started.connect(_on_unit_hover_started)
 	GameEvents.unit_hover_ended.connect(_on_unit_hover_ended)
+	# Death is the OTHER way the panel's subject can go away; without this, current_unit
+	# outlives the unit it points at (see _on_unit_eliminated).
+	GameEvents.unit_eliminated.connect(_on_unit_eliminated)
 
 	# Append the code-built sections BEFORE theming, so the new controls pick up the
 	# amber theme along with the scene-authored ones. Order of the calls is the order
@@ -106,8 +109,22 @@ func _on_unit_deselected(unit: Unit) -> void:
 		current_unit = null
 		_hide_panel()
 
+func _on_unit_eliminated(unit: Unit, _eliminator: Unit) -> void:
+	"""A unit died: drop it as the panel's selection.
+
+	current_unit was only ever cleared on an explicit deselect, so killing the selected
+	unit left this holding a reference that is freed a frame later -- and because
+	_on_unit_hover_started gates on `if not current_unit` (true for a freed instance),
+	that also permanently suppressed hover info for the rest of the match."""
+	if unit != null and unit == current_unit:
+		current_unit = null
+		_hide_panel()
+
 func _on_unit_hover_started(unit: Unit) -> void:
 	"""Handle unit hover start - show preview info"""
+	# is_instance_valid, not truthiness: a freed current_unit is still "truthy".
+	if not is_instance_valid(current_unit):
+		current_unit = null
 	if not current_unit:  # Only show hover info if no unit is selected
 		_update_unit_info(unit)
 		_show_panel()
@@ -119,7 +136,9 @@ func _on_unit_hover_ended(unit: Unit) -> void:
 
 func _update_unit_info(unit: Unit) -> void:
 	"""Update the panel with unit information"""
-	if not unit:
+	# is_instance_valid, not truthiness: reached from _on_unit_selected / hover with a unit
+	# that may already be freed, and every line below dereferences it.
+	if not is_instance_valid(unit):
 		return
 	
 	# Basic info - with null checks

@@ -124,8 +124,16 @@ func _update_effect_durations(current_round: int) -> void:
 	var units_to_clean: Array[Unit] = []
 	
 	for unit in speed_modifiers.keys():
+		# The dictionary is KEYED BY UNIT and nothing prunes it when a unit dies, so dead
+		# units accumulate here and get re-broadcast through speed_modifier_removed every
+		# round -- handing every listener a freed instance. Erase the entry directly
+		# rather than staging it in units_to_clean, whose Array[Unit] element type cannot
+		# accept a freed reference. keys() is a snapshot, so erasing here is safe.
+		if not is_instance_valid(unit):
+			speed_modifiers.erase(unit)
+			continue
 		var modifiers = speed_modifiers[unit]
-		
+
 		# Update durations and remove expired modifiers
 		for i in range(modifiers.size() - 1, -1, -1):
 			var modifier = modifiers[i]
@@ -206,6 +214,10 @@ func get_all_active_effects() -> Dictionary:
 	var effects = {}
 	
 	for unit in speed_modifiers.keys():
+		# Same freed-key hazard as _update_effect_durations: get_display_name() below
+		# raises on a dead unit, and this is a debug read that must never itself error.
+		if not is_instance_valid(unit):
+			continue
 		var unit_effects = []
 		for modifier in speed_modifiers[unit]:
 			unit_effects.append({

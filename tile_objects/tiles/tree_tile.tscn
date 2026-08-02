@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://biymtf32cccfd"]
 
 [ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
-[ext_resource type="Resource" path="res://game/tiles/resources/tree.tres" id="2_res"]
+[ext_resource type="Resource" path="res://game/tiles/resources/forest/tree.tres" id="2_res"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_base"]
 size = Vector3(2, 0.2, 2)

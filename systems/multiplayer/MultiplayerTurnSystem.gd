@@ -35,9 +35,13 @@ var _turn_timer: Timer
 func _ready() -> void:
 	name = "MultiplayerTurnSystem"
 	
-	# Get required components
-	_network_manager = get_node("/root/NetworkManager")
-	_multiplayer_game_state = get_node("/root/MultiplayerGameState")
+	# Get required components. NEITHER of these is an autoload (see project.godot's
+	# [autoload] block) -- they are wired up by whatever stands the multiplayer stack up,
+	# so they are legitimately ABSENT most of the time. get_node() would log
+	# `Node not found: "/root/NetworkManager"` on every setup; the `if` guards below
+	# already treat null as the expected case, so ask for it optionally.
+	_network_manager = get_node_or_null("/root/NetworkManager")
+	_multiplayer_game_state = get_node_or_null("/root/MultiplayerGameState")
 	
 	if _network_manager:
 		_network_manager.message_received.connect(_on_network_message_received)

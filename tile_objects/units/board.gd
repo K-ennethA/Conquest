@@ -166,7 +166,7 @@ func _highlight_tile_at_position(position: Vector3) -> void:
 	
 	for tile_object in units[tile_position]:
 		if tile_object is Tile:
-			var mesh_instance = tile_object.get_node("MeshInstance3D")
+			var mesh_instance = tile_object.get_node_or_null("MeshInstance3D")
 			if mesh_instance:
 				var original_color = Color.WHITE
 				if mesh_instance.mesh and mesh_instance.mesh.material:
@@ -195,7 +195,7 @@ func _unhighlight_tile_at_position(position: Vector3) -> void:
 	
 	for tile_object in units[tile_position]:
 		if tile_object is Tile:
-			var mesh_instance = tile_object.get_node("MeshInstance3D")
+			var mesh_instance = tile_object.get_node_or_null("MeshInstance3D")
 			if mesh_instance:
 				var material = mesh_instance.get_surface_override_material(0)
 				if material:

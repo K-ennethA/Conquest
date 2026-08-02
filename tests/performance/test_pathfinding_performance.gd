@@ -2,22 +2,28 @@ extends GutTest
 
 # Performance tests for pathfinding and movement calculations
 # Ensures algorithms scale well with larger grids
+#
+# OPT-IN SUITE. tests/performance/ is deliberately NOT in .gutconfig.json's `dirs`,
+# because every assertion here is a WALL-CLOCK threshold and wall clocks are a property
+# of the machine, not of the code -- on a loaded CI box these fail for reasons that have
+# nothing to do with a regression. Run it on purpose when you are optimising:
+#
+#     godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests/performance -gexit
+#
+# See tests/README.md ("Performance tests").
 
 var board: Node3D
 var large_grid: Grid
 
 func before_each():
-	board = preload("res://tile_objects/units/board.gd").new()
-	
+	# autofree, not queue_free: GUT counts orphans before a queued free has run.
+	board = autofree(preload("res://tile_objects/units/board.gd").new())
+
 	# Create larger grid for performance testing
 	large_grid = Grid.new()
 	large_grid.size = Vector3(20, 0, 20)  # 20x20 grid
 	large_grid.cell_size = Vector3(1, 0, 1)
 	board.grid = large_grid
-
-func after_each():
-	if board:
-		board.queue_free()
 
 func test_movement_range_performance_small():
 	var start_time = Time.get_ticks_msec()
@@ -51,13 +57,14 @@ func test_priority_queue_performance():
 	var queue = PriorityQueue.new()
 	var start_time = Time.get_ticks_msec()
 	
-	# Add many units to queue
+	# Add many units to queue. Plain RefCounted stand-ins, NOT live Unit nodes: this
+	# measures the heap, and 1000 unfreed Node3Ds would be 1000 GUT orphans.
 	var units = []
 	for i in range(1000):
-		var unit = Unit.new("Unit" + str(i), randi() % 20 + 1, 3)
+		var unit := RefCounted.new()
 		units.append(unit)
 		queue.push(unit)
-	
+
 	# Pop all units
 	var popped_units = []
 	while not queue.is_empty():

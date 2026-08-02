@@ -249,7 +249,10 @@ func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 	if not (unit is Node3D) or not is_instance_valid(unit):
 		return
 	var node := _get_anim_root(unit)
-	if node == null:
+	# is_inside_tree as well as null: Node.create_tween() (in _begin_motion below) errors
+	# with "Can't create Tween when not inside scene tree" on a detached node, and this
+	# runs from a signal that can arrive while a unit is being torn down.
+	if node == null or not node.is_inside_tree():
 		_remember(unit)
 		return
 
@@ -313,7 +316,8 @@ func _shake(unit) -> void:
 	if not (unit is Node3D) or not is_instance_valid(unit):
 		return
 	var node := _get_anim_root(unit)
-	if node == null:
+	# See the glide path: a detached node cannot host a Tween.
+	if node == null or not node.is_inside_tree():
 		return
 	var base: Vector3 = _base_pos(unit, node)
 	# Animations off -> ensure the model sits at its base, no motion.
@@ -347,7 +351,8 @@ func _flash(unit) -> void:
 	if not (unit is Node3D) or not is_instance_valid(unit):
 		return
 	var mesh := _get_mesh(unit)
-	if mesh == null:
+	# is_inside_tree as well as null: mesh.create_tween() below errors on a detached node.
+	if mesh == null or not mesh.is_inside_tree():
 		return
 
 	# Animations off -> no flash and no punch. We never touched material_override or
@@ -408,7 +413,8 @@ func _heal_flash(unit) -> void:
 	if not (unit is Node3D) or not is_instance_valid(unit):
 		return
 	var mesh := _get_mesh(unit)
-	if mesh == null:
+	# is_inside_tree as well as null: mesh.create_tween() below errors on a detached node.
+	if mesh == null or not mesh.is_inside_tree():
 		return
 
 	# Animations off -> no flash and no hop. We never touched material_override or
@@ -486,7 +492,9 @@ func _procedural_death(unit) -> void:
 	# installed and then faded to transparent -- no restore needed, the unit frees. We
 	# enable transparency so the albedo alpha can carry the dissolve.
 	var sink_t: float = _scaled(death_shrink_time)
-	if mesh != null:
+	# is_inside_tree too: the death flash tweens are created ON the mesh, and this runs from
+	# unit_eliminated -- the one moment the node is most likely to be leaving the tree.
+	if mesh != null and mesh.is_inside_tree():
 		var flash_mat := StandardMaterial3D.new()
 		flash_mat.albedo_color = death_flash_color
 		flash_mat.emission_enabled = true
@@ -510,7 +518,7 @@ func _procedural_death(unit) -> void:
 
 	# MOTION on the model root: a brief POP up (the lurch of the killing blow), THEN a
 	# slower SINK downward while shrinking to nothing. Uses the node's own local tween.
-	if node != null:
+	if node != null and node.is_inside_tree():
 		var base: Vector3 = node.position
 		var rise_t: float = _scaled(death_rise_time)
 		var dt := node.create_tween()

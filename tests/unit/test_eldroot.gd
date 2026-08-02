@@ -139,7 +139,8 @@ func _ability_system_with(unit, ability: AbilityResource) -> AbilitySystem:
 	return sys
 
 func _controller_for(unit) -> StatusController:
-	var sc := StatusController.new()
+	# autofree: StatusController is a Node -- an untracked one is a GUT orphan.
+	var sc: StatusController = autofree(StatusController.new())
 	sc.owner_unit = unit
 	return sc
 

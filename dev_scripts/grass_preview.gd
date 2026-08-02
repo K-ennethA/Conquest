@@ -10,7 +10,7 @@ const CELL := 2.0            # matches Grid.cell_size (Vector3(2,0,2))
 const TILE_HEIGHT := 0.3
 const PATCH := 3             # PATCH x PATCH tiles per material
 const PATCH_STRIDE := 8.0    # world X distance between patch origins
-const TREE_TILE := "res://tile_objects/tiles/scenes/tree_tile.tscn"
+const TREE_TILE := "res://tile_objects/tiles/scenes/forest/tree_tile.tscn"
 
 func _ready() -> void:
 	# Flat material patches (Grass / Water / Burn) built via TileResource so the

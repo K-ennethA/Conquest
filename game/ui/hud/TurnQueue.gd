@@ -373,6 +373,11 @@ func _theme_color(name: String, fallback: Color) -> Color:
 
 func _on_portrait_clicked(unit: Unit) -> void:
 	"""Handle portrait click - show unit details"""
+	# `unit` was BOUND into this callback when the portrait row was built, so it can be a
+	# unit that has since died -- global_position below would raise, and the emit would
+	# hand a freed instance to every unit_selected listener at once.
+	if not is_instance_valid(unit):
+		return
 	unit_portrait_clicked.emit(unit)
 
 	# Also trigger unit info panel to show details

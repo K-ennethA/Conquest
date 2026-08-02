@@ -34,8 +34,10 @@ var _pending_validation: Dictionary = {}  # sequence_id -> action
 func _ready() -> void:
 	name = "MultiplayerGameState"
 	
-	# Get network manager
-	_network_manager = get_node("/root/NetworkManager")
+	# Get network manager. NOT an autoload (see project.godot) -- absent is the normal
+	# case, and the else branch below already says so, so never make get_node log a
+	# "Node not found" error for it.
+	_network_manager = get_node_or_null("/root/NetworkManager")
 	if _network_manager:
 		_network_manager.message_received.connect(_on_network_message_received)
 		_network_manager.connection_established.connect(_on_peer_connected)

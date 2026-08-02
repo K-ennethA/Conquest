@@ -88,8 +88,11 @@ func _ready() -> void:
 	GameEvents.cursor_moved.emit(tile_position)
 	_check_unit_at_cursor()
 	
-	# Find camera for mouse support
-	camera = get_viewport().get_camera_3d()
+	# Find camera for mouse support. get_viewport() is null when this runs outside a live
+	# window (headless harnesses, mid-teardown), and calling get_camera_3d() on null is an
+	# engine error -- the mouse paths below already treat a null camera as "no mouse".
+	var vp := get_viewport()
+	camera = vp.get_camera_3d() if vp != null else null
 	
 	# Connect to game events
 	GameEvents.unit_selected.connect(_on_unit_selected)
@@ -495,7 +498,12 @@ func _select_unit(unit: Unit) -> void:
 
 func _deselect_unit() -> void:
 	"""Deselect current unit"""
-	if selected_unit:
+	# is_instance_valid, not truthiness: when the selected unit DIES nothing clears this
+	# reference, so a later click would broadcast unit_deselected with a freed instance to
+	# every HUD listener. Dropping it silently is the correct deselect for a dead unit.
+	if not is_instance_valid(selected_unit):
+		selected_unit = null
+	elif selected_unit:
 		var unit = selected_unit
 		selected_unit = null
 		GameEvents.unit_deselected.emit(unit)
@@ -541,13 +549,19 @@ func flash_invalid() -> void:
 	var tree := get_tree()
 	if tree != null:
 		await tree.create_timer(0.18).timeout
+	# The cursor can be freed during that beat (scene change on game over / Main Menu),
+	# which would resume this coroutine on a dead instance.
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
 	_restore_bracket_material()
 
 func _restore_bracket_material() -> void:
 	"""Put the gold bracket material back to whichever state the cursor is in now."""
 	if mesh_instance == null:
 		return
-	if selected_unit != null:
+	# is_instance_valid, not `!= null`: selected_unit is never cleared when the selected
+	# unit DIES, so it routinely holds a freed reference here.
+	if is_instance_valid(selected_unit):
 		mesh_instance.material_override = selection_material
 	else:
 		mesh_instance.material_override = base_material
@@ -555,13 +569,20 @@ func _restore_bracket_material() -> void:
 func _check_unit_at_cursor() -> void:
 	"""Check for unit at cursor position and update hover state"""
 	var unit_at_cursor = _get_unit_at_position(tile_position)
-	
+
+	# hovered_unit is not cleared when the hovered unit dies, so it can be a freed
+	# reference by the time the cursor next moves. Drop it BEFORE the comparison so we
+	# never emit unit_hover_ended with a dead unit -- that would hand a freed instance to
+	# every listening HUD panel at once.
+	if not is_instance_valid(hovered_unit):
+		hovered_unit = null
+
 	if hovered_unit != unit_at_cursor:
 		if hovered_unit:
 			GameEvents.unit_hover_ended.emit(hovered_unit)
-		
+
 		hovered_unit = unit_at_cursor
-		
+
 		if hovered_unit:
 			GameEvents.unit_hover_started.emit(hovered_unit)
 
