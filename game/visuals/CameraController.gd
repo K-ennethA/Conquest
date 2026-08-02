@@ -351,16 +351,45 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseMotion and _dragging:
 		var mm := event as InputEventMouseMotion
-		var vp_h: float = get_viewport().get_visible_rect().size.y
-		if vp_h <= 0.0:
-			return
-		# World units per screen pixel at the focus depth (perspective): the visible
-		# vertical world span at distance d is 2*d*tan(fov/2).
-		var d: float = _current_distance()
-		var wpp: float = (2.0 * d * tan(deg_to_rad(fov) * 0.5) / vp_h) * drag_speed
-		var move := _ground_right * (-mm.relative.x) + _ground_forward * (mm.relative.y)
-		global_position += move * wpp
-		_clamp_to_board()
+		pan_by_screen_delta(mm.relative)
+
+
+# --- Public pan / zoom API (shared by mouse and touch) ----------------------
+##
+## The two entry points below are the ONLY way anything outside this script drives the
+## camera by hand. They exist so the touch gesture layer ([TouchInputAdapter]) reuses the
+## exact grab-drag and wheel-zoom maths the mouse uses, rather than growing a second
+## implementation that would drift. Both are additive: the mouse paths above now call
+## through them, so there is one implementation of each.
+
+## Pan by a SCREEN-space delta in pixels (grab-drag semantics: the ground follows the
+## pointer). Converts pixels to world units at the current focus depth, so a drag covers
+## the same fraction of the view whether zoomed in or out, then re-clamps to the board.
+func pan_by_screen_delta(screen_delta: Vector2) -> void:
+	if not is_inside_tree():
+		return
+	var vp := get_viewport()
+	if vp == null:
+		return
+	var vp_h: float = vp.get_visible_rect().size.y
+	if vp_h <= 0.0:
+		return
+	# World units per screen pixel at the focus depth (perspective): the visible
+	# vertical world span at distance d is 2*d*tan(fov/2).
+	var d: float = _current_distance()
+	var wpp: float = (2.0 * d * tan(deg_to_rad(fov) * 0.5) / vp_h) * drag_speed
+	var move := _ground_right * (-screen_delta.x) + _ground_forward * (screen_delta.y)
+	global_position += move * wpp
+	_clamp_to_board()
+
+
+## Dolly by [param factor] (<1 closer, >1 farther) while keeping the ground point under
+## [param screen_pos] fixed -- the same anchored zoom the mouse wheel performs, exposed so
+## a pinch can drive it. Non-positive factors are ignored rather than inverting the camera.
+func zoom_by(factor: float, screen_pos: Vector2) -> void:
+	if not is_inside_tree() or not is_finite(factor) or factor <= 0.0:
+		return
+	_zoom_at(screen_pos, factor)
 
 
 ## Dolly by [param factor] (<1 closer, >1 farther) while keeping the ground point

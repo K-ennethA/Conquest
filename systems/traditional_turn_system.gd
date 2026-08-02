@@ -634,13 +634,7 @@ func _notify_game_manager_of_turn_change(player: Player) -> void:
 
 				game_manager.turn_changed.emit(player_id)
 
-				# Also trigger network sync if we're the host
-				if game_manager._network_handler and game_manager._network_handler.is_host():
-					var turn_action = {
-						"type": "turn_change",
-						"data": {
-							"current_player": player_id,
-							"timestamp": Time.get_ticks_msec()
-						}
-					}
-					var success = game_manager._network_handler.submit_action(turn_action)
+				# No network sync is pushed from here any more. NetSession subscribes to THIS
+				# system's turn_started directly (NetSession._activate_turn_bridge) and derives
+				# the authoritative turn slot from it, so the turn state the validator gates on
+				# is already in step without a second hand-rolled turn_change message.

@@ -127,8 +127,9 @@ desync bug and worth a report.
    - The "your units" highlight tint on the joining machine still keys off the legacy local
      id, so it can outline the wrong side. Purely a tint — ownership itself is correct.
    - The legacy stack (`systems/multiplayer/`, `systems/networking/`,
-     `game_core/*NetworkHandler*`) is still present but is no longer the transport. It is
-     deleted in a later phase; ignore it while testing.
+     `game_core/*NetworkHandler*`) is **gone** — deleted along with the Dictionary-based
+     state simulator it wrapped. `NetSession` is the only transport; `GameModeManager` is
+     kept purely for the local (solo / hot-seat) session and the lobby's fallback envelope.
 2. **Ultimate cut-in does not play network-side.** The full-screen ultimate flash fires only on
    the local/single-player cast path; the networked cast returns before it. The apply-side hook
    (in `CommandApplier`'s `CAST_MOVE` handler, so every peer flashes in sync) is designed but

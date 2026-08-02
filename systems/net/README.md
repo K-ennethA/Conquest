@@ -1,10 +1,11 @@
 # systems/net — Consolidated multiplayer
 
 `NetSession` is the single, server-authoritative multiplayer core for Conquest.
-It replaces the older, overlapping stack (`systems/networking/*`,
-`systems/multiplayer/*`, `systems/game_core/*NetworkHandler*`, `multiplayer_launcher`,
-`AutoClientDetector`) with one node built directly on Godot's high-level
-multiplayer API.
+It replaced the older, overlapping stack (`systems/networking/*`,
+`systems/multiplayer/*`, `systems/game_core/*NetworkHandler*` — all now deleted)
+with one node built directly on Godot's high-level multiplayer API.
+`multiplayer_launcher` and `AutoClientDetector` survive as the dev-test
+auto-join affordance and run on NetSession like everything else.
 
 ## Why this exists
 
@@ -108,10 +109,16 @@ peer — it's the single source of state change.
    instead of `MultiplayerManager.submit_game_action`. **(done)** — see
    `UnitActionsPanel._is_networked_match()`.
 4. Move rule checks into `action_validator`.
-5. Delete `systems/networking/`, `systems/multiplayer/`,
-   `game_core/*NetworkHandler*`, `multiplayer_launcher.gd`,
-   `AutoClientDetector.gd`, and the root `*client*`/`*detector*` scripts once
-   nothing references them.
+5. Delete `systems/networking/`, `systems/multiplayer/` and
+   `game_core/*NetworkHandler*` — the Dictionary-based state simulator and every
+   class that existed to wire it. **(done)** — along with the `dev_scripts/`
+   harnesses that drove them.
+   `multiplayer_launcher.gd` and `AutoClientDetector.gd` are **kept on purpose**:
+   they are the two-instances-on-one-machine dev-test affordance, and both now
+   drive `NetworkMultiplayerSetup.begin_auto_join()`, i.e. NetSession over
+   localhost ENet — the same transport a real two-machine match uses.
+   `GameModeManager` is also kept, reduced to the local (solo / hot-seat) session
+   plus the `submit_action` / `get_game_status` surface the lobby falls back to.
 
 ## Lobby channel
 
@@ -128,6 +135,105 @@ The server relays; **the sender never receives its own message back**, so a lobb
 UI can broadcast unconditionally. Treat `data` as untrusted peer input.
 `CollaborativeLobby` picks this channel whenever `is_connected_session()` is true
 and falls back to the legacy `GameModeManager.submit_action` envelope otherwise.
+
+## What the player sees at the seam
+
+Two things the seam owes the player, both wired at the point a command is **applied or
+refused** rather than where it is submitted:
+
+- **Refused commands are surfaced.** `_validate_intent` answers with one of the
+  `NetProtocol.INTENT_*` wire strings; the origin peer gets it on `intent_rejected`, and
+  the battle HUD's `NetToast` renders
+  `NetProtocol.describe_intent_rejection(reason, action)` — "Attack rejected — not your
+  turn" — as a click-through amber banner that dismisses itself after ~2.5s. Before this
+  a refused command was completely silent. Pinned by `tests/unit/test_net_intent_rejection.gd`
+  (the wording, pure) and `tests/integration/test_net_rejection_toast.gd` (the wiring).
+- **Ultimates flash on every peer.** `CommandApplier._announce_ultimate_cast` emits
+  `GameEvents.ultimate_casting` when the applied CAST_MOVE is an ultimate, so a REMOTE
+  opponent's ultimate plays the `UltimateCutIn` here too. `UnitActionsPanel` deliberately
+  does *not* play it on its networked submit branch, so the local caster flashes exactly
+  once — and never for a cast the server then refuses. Pinned by
+  `tests/unit/test_command_applier_ultimate.gd`.
+
+## Match settings: whose squad is whose
+
+A `player_id` on a map is a **roster slot**, and the same slot must field the same characters
+on both machines. Exactly one participant's Character Select pick is authoritative for each
+slot, and `MapLoader.resolve_player_squad(player_id, local_squad, replicated_squad, local_slot,
+networked)` is the one rule that says which:
+
+| | `player_id == local_slot` | any other `player_id` |
+|---|---|---|
+| **not networked** | the local pick (player 0 only) | the map's authored roster |
+| **networked** | the local pick | that slot's **replicated** pick |
+
+`resolve_player0_squad(local, host, slot, networked)` is still there — it is the same call with
+`player_id = 0` — because slot 0 has its own replication channel: the host's `game_start`
+payload carries `host_squad`, the roster for the host's side of the board on *every* peer.
+Every **other** slot's pick rides its own `match_loadout` card (below), which is the client →
+host twin `game_start` never had. Before that a client's pick reached nobody and player 1
+fielded the map's authored roster on both peers; before `host_squad` was *applied*, a client
+fed its OWN pick into player 0's slots and the boards disagreed on the first frame.
+
+Both squads are untrusted peer input, so ids are normalised at the boundary
+(`MapLoader.normalise_squad_ids` for shape, `MatchLoadouts.normalise_squad` for shape *and* a
+`CharacterLibrary` whitelist — `MapLoader` falls back to a default character for an id it
+cannot resolve, so an unchecked junk id would become a real unit rather than cost its slot).
+An empty or absent squad means "field the map's authored roster for that slot" on **both**
+peers, which is also what that participant's own empty pick does — so they still agree.
+
+A squad-picked spawn is exempt from the `min_difficulty` gate on *any* slot, not just player 0:
+`ai_difficulty` is a local setting, so gating a human opponent's replicated pick would drop the
+unit on one peer and keep it on the other.
+
+Pinned by `tests/integration/test_net_host_squad.gd` (slot 0) and
+`tests/integration/test_net_client_squad.gd` (slot 1, both roles).
+
+## Squad, loadouts and skins: `match_loadout`
+
+A participant's squad decides which units exist at all; equipped items are real buffs (+Max HP,
+regen, a damage-reduction ward) and skins change what a unit looks like — and all three live in
+process-local storage (`GameSettings.selected_squad`, `ItemInventory`, the `PlayerProfile`
+autoload). So **both** machines need **both** sides' data before a single unit spawns.
+`game_start` is host → client only and has no twin, so this is its own bidirectional lobby
+message, in the shape `profile_info`/`MatchPeerInfo` already uses:
+
+```gdscript
+NetSession.send_lobby_message("match_loadout", {
+    "squad":    ["<character_id>"],                   # this peer's pick, in order, MAX_SQUAD max
+    "equipped": { "<character_id>": "<item_id>" },   # UNIT-scope items, per character
+    "team":     ["<item_id>"],                        # TEAM slots, ItemInventory.TEAM_SLOTS max
+    "skins":    { "<character_id>": "<skin_id>" },    # cosmetic skin per character
+})
+```
+
+`CollaborativeLobby` sends exactly one card per peer, at the two moments the profile card is
+exchanged (host: on admitting the opponent; client: alongside its `lobby_hello`). Cards are
+parked in `MatchLoadouts`, keyed by the **server-stamped** sender slot, and survive the scene
+change into the battle. The same announcement records `MatchLoadouts.set_local_slot()`, which
+is the flag that switches replication on — every solo / hotseat / arena path leaves it unset
+and reads `is_active()` as false, so those are untouched.
+
+At spawn, `MapLoader` fills a remote slot's START points from `MatchLoadouts.squad_for(slot)`
+and `ItemSystem` equips *every* human slot: our own from the local inventory, a remote slot
+from its card — both through the one shared `ItemSystem.apply_loadout_items()`, so the two
+simulations compute identical stats. `Unit.apply_equipped_skin` asks
+`MatchLoadouts.skin_for(slot, character_id, profile)` for the same reason.
+
+**Staleness.** `MatchLoadouts` (and `GameSettings.host_squad`) are process-wide and outlive the
+scene change, so they are cleared at *both* ends: `CollaborativeLobby.initialize` when a new
+networked lobby forms, and `MapLoader._clear_stale_replication` when a battle that is **not** a
+live networked match builds its board. Without the second, lobby → versus → Main Menu → a solo
+battle never passes a lobby again and would read the previous opponent's card.
+
+**Trust:** the payload is untrusted peer input and there is no server-side ownership proof.
+`MatchLoadouts.normalise()` is the floor: a squad id must resolve in `CharacterLibrary`, an
+item id must resolve in `ItemLibrary` *and* carry the scope it was announced for, a skin id
+must resolve in `SkinLibrary` *and* be authored for the character it was announced against,
+ids are length-capped, the squad is capped at `MAX_SQUAD` and both maps entry-capped.
+Anything else is dropped, so a hostile peer can only ever field fewer buffs than it claimed.
+An ownership proof is the natural next step and slots in here. Pinned by
+`tests/unit/test_match_loadouts.gd` and `tests/unit/test_lobby_loadout_exchange.gd`.
 
 ## Join handshake (the build gate)
 

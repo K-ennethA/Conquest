@@ -253,6 +253,64 @@ static func describe_rejection(reason: String, info: Dictionary = {}) -> String:
 	return "Join refused by the host (%s)." % reason
 
 
+# ---------------------------------------------------------------------------
+# Intent rejection — the vocabulary the server answers a refused command with
+# ---------------------------------------------------------------------------
+# [method NetSession._validate_intent] returns one of these (empty = accepted) and the
+# origin peer receives it on [signal NetSession.intent_rejected]. They are WIRE STRINGS:
+# changing one is a protocol change, so they live here next to the join-gate reasons
+# rather than as literals inside the session.
+
+const INTENT_OK := ""
+const INTENT_MALFORMED := "malformed"
+const INTENT_UNKNOWN_ACTOR := "unknown_actor"
+const INTENT_NOT_YOUR_TURN := "not_your_turn"
+const INTENT_REJECTED_BY_GAME := "rejected_by_game"
+
+## Short label for the command an action carries, for a player-facing line ("Move rejected").
+## [param action] may be anything at all -- a malformed payload off the wire, or null -- so an
+## unrecognised/absent type degrades to the generic "Command".
+static func describe_action(action: Variant) -> String:
+	if action is not Dictionary or not (action as Dictionary).has(KEY_TYPE):
+		return "Command"
+	match int((action as Dictionary)[KEY_TYPE]):
+		Action.MOVE_UNIT:
+			return "Move"
+		Action.ATTACK_UNIT:
+			return "Attack"
+		Action.WAIT_UNIT:
+			return "Wait"
+		Action.END_TURN:
+			return "End turn"
+		Action.CAST_MOVE:
+			return "Attack"
+	return "Command"
+
+
+## The ONE player-facing line for a refused command -- "Move rejected — not your turn".
+## PURE (no autoloads, no tree), so the toast that shows it is a thin renderer and this is
+## what the tests pin. [param action] is optional and only names the command; an unknown
+## [param reason] is still shown, de-underscored, rather than being swallowed -- a player
+## seeing an odd phrase is strictly better than a command vanishing in silence.
+static func describe_intent_rejection(reason: String, action: Variant = null) -> String:
+	var what: String = describe_action(action)
+	var why: String = ""
+	match reason:
+		INTENT_NOT_YOUR_TURN:
+			why = "not your turn"
+		INTENT_UNKNOWN_ACTOR:
+			why = "you have no seat in this match"
+		INTENT_MALFORMED:
+			why = "the host did not understand it"
+		INTENT_REJECTED_BY_GAME:
+			why = "the rules do not allow it"
+		_:
+			why = String(reason).strip_edges().replace("_", " ")
+			if why.is_empty():
+				why = "refused by the host"
+	return "%s rejected — %s" % [what, why]
+
+
 static func _has_int(data: Dictionary, key: String) -> bool:
 	return data.has(key) and data[key] is int
 

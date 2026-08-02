@@ -332,11 +332,13 @@ func _orient_character_model(m: Node3D) -> void:
 
 # --- Cosmetic skins ---------------------------------------------------------
 # Skins are PURELY visual variants of a roster character (see SkinResource /
-# SkinLibrary). They apply ONLY to units owned by the HUMAN player (player_id 0),
-# so an enemy fielding the same roster character (e.g. an AI Vineweave) always
-# keeps its canonical look -- a recoloured "Emberroot" is the player's vanity, not
-# a gameplay tell. Ownership may not be known when the model is first built, so
-# this runs from BOTH _setup_character_model (owner-known-early) and
+# SkinLibrary). WHOSE skin a unit wears is decided by MatchLoadouts.skin_for():
+# offline, only the HUMAN player (player_id 0) wears them, so an enemy fielding the
+# same roster character (e.g. an AI Vineweave) always keeps its canonical look -- a
+# recoloured "Emberroot" is the player's vanity, not a gameplay tell. In a NETWORKED
+# match the opponent's slot wears the skins it announced in the lobby, so both
+# machines render the same two armies. Ownership may not be known when the model is
+# first built, so this runs from BOTH _setup_character_model (owner-known-early) and
 # set_owner_player (owner-assigned-later); it is safe to call more than once.
 
 ## Skin id currently applied to this unit's model. Both call sites (the model build
@@ -357,7 +359,7 @@ var _skin_base_materials: Dictionary = {}
 ## is equipped -- all of which keep the default look. Safe to call repeatedly: an
 ## already-applied skin short-circuits.
 func apply_equipped_skin() -> void:
-	if owner_player == null or owner_player.player_id != 0:
+	if owner_player == null:
 		return
 	if character_resource == null:
 		return
@@ -381,16 +383,27 @@ func apply_equipped_skin() -> void:
 	_applied_skin_id = skin_id
 
 
-## Equipped skin id for [param char_id] via the PlayerProfile autoload, resolved
-## by node path so this compiles and runs even when that autoload is absent (tests
-## / headless / a load-order shift). Null-safe: "" means "default look".
+## Equipped skin id for [param char_id] on the player who OWNS this unit, or "" for the
+## default look.
+##
+## The policy lives in [method MatchLoadouts.skin_for], because "whose skin is this"
+## has two answers and only one of them is local: in a solo/hotseat/arena match only
+## slot 0 (the local human) wears skins, read from the local profile -- while in a
+## NETWORKED match the opponent's units must wear the skins THEY announced in the
+## lobby, or the two machines would render different armies. The PlayerProfile
+## autoload is resolved by node path (so this still runs when it is absent -- tests,
+## headless, a load-order shift) and injected, so that policy needs no autoload of
+## its own.
 func _equipped_skin_id(char_id: String) -> String:
 	if not is_inside_tree():
 		return ""
-	var profile: Node = get_node_or_null("/root/PlayerProfile")
-	if profile == null or not profile.has_method("get_equipped_skin"):
-		return ""
-	return String(profile.get_equipped_skin(char_id))
+	# A bot-driven or neutral faction has no player behind it and therefore no wardrobe --
+	# and in a networked match its player_id could otherwise collide with a real peer's
+	# roster slot and borrow that peer's skins. Slot -1 always reads as the default look.
+	var slot: int = -1
+	if owner_player != null and not owner_player.is_ai and not owner_player.is_neutral:
+		slot = int(owner_player.player_id)
+	return MatchLoadouts.skin_for(slot, char_id, get_node_or_null("/root/PlayerProfile"))
 
 
 ## Swap the built CharacterModel for a skin's full-model override, re-running the

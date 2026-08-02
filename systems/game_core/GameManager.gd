@@ -13,8 +13,16 @@ signal turn_changed(current_player_id: int)
 enum GameMode {
 	SINGLE_PLAYER,
 	LOCAL_MULTIPLAYER,  # Hot-seat or split-screen
-	NETWORK_MULTIPLAYER # P2P or dedicated server
+	NETWORK_MULTIPLAYER # Networked play — owned by NetSession, never entered here
 }
+
+# NOTE ON NETWORK_MULTIPLAYER: this manager no longer has a networked path. Host/Join run on
+# the NetSession autoload (systems/net/), which is server-authoritative and applies resolved
+# commands through CommandApplier on every peer. The old route into this enum value went
+# through a NetworkHandler that wrapped a Dictionary-based state simulator; that whole layer
+# is deleted. The enum member is kept because GameModeManager still names it when answering
+# "is this a legacy network session?" — the answer is now always no, and the NetSession-aware
+# prefixes in GameModeManager are what the battle UI actually reads.
 
 # Core game state
 var _game_mode: GameMode = GameMode.SINGLE_PLAYER
@@ -26,7 +34,6 @@ var _game_settings: Dictionary = {}
 # System references
 var _turn_system: Node = null
 var _player_manager: Node = null
-var _network_handler: NetworkHandler = null
 
 func _ready() -> void:
 	name = "GameManager"
@@ -79,49 +86,9 @@ func start_local_multiplayer_game(player_names: Array[String], settings: Diction
 
 	return _initialize_game()
 
-func start_network_multiplayer_game(network_handler: NetworkHandler, settings: Dictionary = {}) -> bool:
-	"""Start a network multiplayer game"""
-	_game_mode = GameMode.NETWORK_MULTIPLAYER
-	_game_settings = settings
-	_network_handler = network_handler
-
-	# Initialize players for network multiplayer
-	_players.clear()
-
-	# Always create 2 players for multiplayer
-	_players[0] = {
-		"id": 0,
-		"name": "Player 1",
-		"is_local": _network_handler.is_host() if _network_handler else true,
-		"is_ai": false
-	}
-
-	_players[1] = {
-		"id": 1,
-		"name": "Player 2",
-		"is_local": not _network_handler.is_host() if _network_handler else false,
-		"is_ai": false
-	}
-
-	# Connect to network events
-	if _network_handler:
-		_network_handler.player_joined.connect(_on_network_player_joined)
-		_network_handler.player_left.connect(_on_network_player_left)
-		_network_handler.action_received.connect(_on_network_action_received)
-
-	return _initialize_game()
-
 func end_game(winner_id: int = -1) -> void:
 	"""End the current game"""
 	_is_game_active = false
-
-	# Disconnect network handler if active
-	if _network_handler:
-		_network_handler.player_joined.disconnect(_on_network_player_joined)
-		_network_handler.player_left.disconnect(_on_network_player_left)
-		_network_handler.action_received.disconnect(_on_network_action_received)
-		_network_handler = null
-
 	game_ended.emit(winner_id)
 
 # Action Processing
@@ -145,12 +112,10 @@ func submit_player_action(action_type: String, action_data: Dictionary, player_i
 		"timestamp": Time.get_ticks_msec()
 	}
 
-	# Process based on game mode
-	match _game_mode:
-		GameMode.SINGLE_PLAYER, GameMode.LOCAL_MULTIPLAYER:
-			return _process_local_action(action)
-		GameMode.NETWORK_MULTIPLAYER:
-			return _process_network_action(action)
+	# Process based on game mode. NETWORK_MULTIPLAYER is unreachable here (NetSession owns
+	# networked play), so the only live path is the local one.
+	if _game_mode == GameMode.SINGLE_PLAYER or _game_mode == GameMode.LOCAL_MULTIPLAYER:
+		return _process_local_action(action)
 
 	return false
 
@@ -159,10 +124,6 @@ func _validate_action(action_type: String, action_data: Dictionary, player_id: i
 	# Check if player exists
 	if not _players.has(player_id):
 		return false
-
-	# In network multiplayer, be more permissive for now to allow testing
-	if _game_mode == GameMode.NETWORK_MULTIPLAYER:
-		return true
 
 	# Check if it's the player's turn
 	if player_id != _current_turn_player:
@@ -186,14 +147,6 @@ func _process_local_action(action: Dictionary) -> bool:
 	_check_turn_advancement(action)
 
 	return true
-
-func _process_network_action(action: Dictionary) -> bool:
-	"""Process action in network multiplayer"""
-	if not _network_handler:
-		return false
-
-	# Send to network handler for synchronization
-	return _network_handler.submit_action(action)
 
 func _apply_action_to_game_state(action: Dictionary) -> void:
 	"""Apply an action to the game state"""
@@ -290,17 +243,8 @@ func _advance_turn() -> void:
 	var next_index = (current_index + 1) % player_ids.size()
 	_current_turn_player = player_ids[next_index]
 
-	# In network multiplayer, sync the turn change
-	if _game_mode == GameMode.NETWORK_MULTIPLAYER and _network_handler:
-		var turn_action = {
-			"type": "turn_change",
-			"data": {
-				"current_player": _current_turn_player,
-				"timestamp": Time.get_ticks_msec()
-			}
-		}
-		_network_handler.submit_action(turn_action)
-
+	# Networked turn sync is NOT done here: NetSession bridges the live turn system's
+	# turn_started straight to its own turn slot (see NetSession._activate_turn_bridge).
 	turn_changed.emit(_current_turn_player)
 
 func _check_turn_advancement(action: Dictionary) -> void:
@@ -311,67 +255,6 @@ func _check_turn_advancement(action: Dictionary) -> void:
 	elif _turn_system and _turn_system.has_method("should_advance_turn"):
 		if _turn_system.should_advance_turn(action):
 			_advance_turn()
-
-# Network Event Handlers
-func _on_network_player_joined(player_id: int, player_name: String) -> void:
-	"""Handle player joining network game"""
-	_players[player_id] = {
-		"id": player_id,
-		"name": player_name,
-		"is_local": false,
-		"is_ai": false
-	}
-
-func _on_network_player_left(player_id: int) -> void:
-	"""Handle player leaving network game"""
-	if _players.has(player_id):
-		var player_name = _players[player_id]["name"]
-		_players.erase(player_id)
-
-func _on_network_action_received(action: Dictionary) -> void:
-	"""Handle action received from network"""
-	# Handle turn synchronization
-	if action.type == "turn_change":
-		var action_data = action.get("data", {})
-		var new_current_player = action_data.get("current_player", -1)
-
-		if new_current_player != -1:
-			_current_turn_player = new_current_player
-			turn_changed.emit(_current_turn_player)
-		return
-
-	# Handle nested action structure (action contains another action)
-	if action.has("data") and action.data.has("type"):
-		# This is a nested action structure - extract the inner action
-		var inner_action = action.data
-
-		if inner_action.type == "turn_change":
-			var inner_data = inner_action.get("data", {})
-			var new_current_player = inner_data.get("current_player", -1)
-
-			if new_current_player != -1:
-				_current_turn_player = new_current_player
-				turn_changed.emit(_current_turn_player)
-			return
-
-		# Apply the inner action to game state
-		_apply_action_to_game_state(inner_action)
-
-		# Emit for UI updates
-		player_action_processed.emit(inner_action)
-
-		# Check for turn advancement
-		_check_turn_advancement(inner_action)
-		return
-
-	# Apply the action locally
-	_apply_action_to_game_state(action)
-
-	# Emit for UI updates
-	player_action_processed.emit(action)
-
-	# Check for turn advancement
-	_check_turn_advancement(action)
 
 # Public Getters
 func get_game_mode() -> GameMode:
@@ -403,30 +286,12 @@ func can_player_act(player_id: int) -> bool:
 	if not _players.has(player_id):
 		return false
 
-	# In single-player and local multiplayer, check if it's their turn
-	if _game_mode != GameMode.NETWORK_MULTIPLAYER:
-		return player_id == _current_turn_player
-
-	# In network multiplayer, also check with network handler
-	if _network_handler:
-		return _network_handler.can_player_act(player_id)
-
 	return player_id == _current_turn_player
 
 # Debug and Status
 func _get_log_prefix() -> String:
 	"""Get a log prefix to identify host vs client"""
-	var prefix = "[UNKNOWN] "
-
-	if _game_mode == GameMode.NETWORK_MULTIPLAYER and _network_handler:
-		if _network_handler.is_host():
-			prefix = "[HOST] "
-		else:
-			prefix = "[CLIENT] "
-	else:
-		prefix = "[SINGLE] "
-
-	return prefix
+	return "[SINGLE] "
 
 func get_game_status() -> Dictionary:
 	"""Get comprehensive game status"""
@@ -435,6 +300,5 @@ func get_game_status() -> Dictionary:
 		"is_active": _is_game_active,
 		"current_player": _current_turn_player,
 		"players": _players,
-		"settings": _game_settings,
-		"has_network_handler": _network_handler != null
+		"settings": _game_settings
 	}

@@ -346,10 +346,10 @@ func _attach_dev_test_harness() -> void:
 	debug_test.set_script(load("res://dev_scripts/test_host_auto_client_debug.gd"))
 	add_child(debug_test)
 
-	var e2e_test := Node.new()
-	e2e_test.name = "EndToEndMultiplayerTest"
-	e2e_test.set_script(load("res://dev_scripts/test_end_to_end_multiplayer.gd"))
-	add_child(e2e_test)
+	# NOTE: the end-to-end harness that used to be attached here drove the deleted legacy
+	# stack (GameModeManager.start_network_multiplayer_host -> NetworkHandler -> the
+	# Dictionary state simulator). The equivalent on NetSession is the two-process runner
+	# dev_scripts/mp_loopback_runner.gd; see docs/NETWORK_TESTING.md.
 
 func _show_auto_join_status() -> void:
 	"""Show auto-join connection status"""

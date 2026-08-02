@@ -2711,12 +2711,11 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 	# rng_seed so accuracy/crit rolls match). No local perform_move here -- apply is the ONE
 	# mutation point. Remote peers see the cast purely through apply + the effect-layer events.
 	#
-	# ULTIMATE CUT-IN (MP hook, NOT wired here): the cut-in must NOT play on this submit path --
-	# it belongs where the cast APPLIES so every peer (submitter included) flashes it in sync.
-	# That apply site lives in CommandApplier (the CAST_MOVE handler), which this panel does not
-	# own. When wiring it there, emit GameEvents.ultimate_casting + await the overlay right before
-	# the applier's perform_move, gated by MoveResource.is_ultimate_move(move, slot). This phase
-	# wires only the local / single-player path below.
+	# ULTIMATE CUT-IN (MP): deliberately NOT played on this submit path -- it plays where the
+	# cast APPLIES, so every peer (submitter included) flashes it in sync and nobody flashes a
+	# cast the server then refuses. That apply site is CommandApplier._announce_ultimate_cast
+	# (the CAST_MOVE handler), which emits GameEvents.ultimate_casting for the overlay. Playing
+	# it here TOO would double-flash for the local caster.
 	if _is_networked_match():
 		var acting := selected_unit
 		var nid: int = _net_id_of(acting)
@@ -2733,9 +2732,9 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 	# is_ultimate -- see MoveResource.is_ultimate_move), sweep the full-screen flash across
 	# FIRST and hold until it finishes, so the drama precedes the hit. Local / single-player /
 	# hotseat path only: the networked branch above returned already, and in a networked match
-	# the cast resolves apply-side in CommandApplier, which is where the emit belongs so every
-	# peer sees the flash (flagged; CommandApplier is not owned by this panel). Headless / no
-	# overlay -> the helper emits and returns without awaiting, so nothing hangs.
+	# the cast resolves apply-side in CommandApplier._announce_ultimate_cast, which is where the
+	# emit lives so every peer sees the flash exactly once. Headless / no overlay -> the helper
+	# emits and returns without awaiting, so nothing hangs.
 	var casting_unit: Unit = selected_unit
 	await _await_ultimate_cutin(casting_unit, move, slot)
 	# The brief await can be interrupted by a deselect / reselection (turn end, click-away,

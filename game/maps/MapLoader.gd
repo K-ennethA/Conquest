@@ -45,8 +45,154 @@ const LEGACY_UNIT_TYPE_TO_CHARACTER_ID: Dictionary = {
 	"MAGE": &"mycothrall",
 }
 
+## Test/injection seam for the networked-match context [method _load_units] resolves each
+## player's roster with. Empty (the default) reads the live [NetSession] autoload; a test sets
+## { "networked": bool, "local_slot": int } to load a map AS a given peer without standing up
+## a socket. Never set in production.
+var net_context_override: Dictionary = {}
+
 func _ready():
 	pass
+
+
+# --- Which squad fills a player's start slots -------------------------------
+#
+# Single-player and hotseat: player 0 gets the local pick (Character Select ->
+# GameSettings.selected_squad); every other player_id is the map's own authored roster,
+# because there is nobody else to have picked one.
+#
+# NETWORKED: a player_id is a ROSTER SLOT, and the same slot must field the same characters on
+# BOTH machines. So exactly one participant's pick is authoritative for each slot -- OUR OWN
+# for our own slot, the REPLICATED announcement for everybody else's:
+#
+#   * slot 0's replicated pick is the host's, carried by the game_start payload's "host_squad".
+#     Before that existed a client applied its OWN selected_squad to player 0, so the client
+#     fielded its picks where the host fielded the host's and the boards disagreed on frame 1.
+#   * every other slot's replicated pick rides its "match_loadout" card (MatchLoadouts.squad_for),
+#     which is the client -> host twin game_start never had. Before THAT, a client's own pick
+#     reached nobody and player 1 fell back to the map's authored roster on both peers.
+
+## The character ids that fill [param player_id]'s START slots on THIS peer. PURE -- every
+## input is a parameter, which is what the tests drive.
+##
+## [param local_squad] is this peer's own Character Select pick, [param replicated_squad] the
+## pick the OWNER of [param player_id] announced (empty when it announced none),
+## [param local_slot] this peer's roster slot (-1 when unknown) and [param networked] whether
+## this is a live networked match.
+##
+## Rules:
+##   • not networked -> player 0 gets the local pick (unchanged for solo / hotseat / arena /
+##     challenge); any other player is the map's authored roster, as it always was.
+##   • networked AND this player_id IS our slot -> our own pick. That covers the host reading
+##     slot 0 and the client reading its own slot alike.
+##   • networked and it is SOMEBODY ELSE's slot (including when we are not yet seated, so no
+##     slot is ours) -> that slot's replicated pick. Empty -- a legacy peer that announced
+##     nothing -- means "the map's own authored roster for that slot", which is exactly what
+##     that peer's own empty pick fields too, so the two boards still agree.
+static func resolve_player_squad(player_id: int, local_squad: Array, replicated_squad: Array,
+		local_slot: int, networked: bool) -> Array:
+	if not networked:
+		return normalise_squad_ids(local_squad) if player_id == 0 else []
+	if player_id == local_slot:
+		return normalise_squad_ids(local_squad)
+	return normalise_squad_ids(replicated_squad)
+
+
+## [method resolve_player_squad] for player 0, the shape this started as. Kept because slot 0
+## is the one slot with its own replication channel (the host_squad in game_start) and callers
+## / tests name it directly.
+static func resolve_player0_squad(local_squad: Array, host_squad: Array, local_slot: int, networked: bool) -> Array:
+	return resolve_player_squad(0, local_squad, host_squad, local_slot, networked)
+
+
+## Private marker [method _load_units] stamps on a spawn whose character came from a SQUAD PICK
+## rather than from the map's authoring. Read only by [method _create_unit_from_spawn] (the
+## AI-difficulty gate); [method MapResource.normalize_spawn] rebuilds a fixed key set, so it
+## never reaches spawn data anyone else consumes.
+const SQUAD_PICK_KEY: String = "_from_squad_pick"
+
+
+## The squad that fills [param player_id]'s START slots, with the replicated half looked up
+## from wherever that slot announced it. Instance-level (it reads process-wide replication
+## state); the DECISION itself stays pure in [method resolve_player_squad].
+func _squad_for_player(player_id: int, local_squad: Array, host_squad: Array,
+		local_slot: int, networked: bool) -> Array:
+	return resolve_player_squad(player_id, local_squad,
+		_replicated_squad_for(player_id, host_squad, networked), local_slot, networked)
+
+
+## What the OWNER of [param player_id] announced it would field, from the channel that slot
+## has: slot 0's rides the host's game_start payload ([param host_squad], already stored in
+## GameSettings), everybody else's rides their own "match_loadout" card. Slot 0 also falls back
+## to its card, so a host that announced one but sent no host_squad still lands. Empty outside
+## a networked match -- nobody announced anything, so nothing is replicated.
+func _replicated_squad_for(player_id: int, host_squad: Array, networked: bool) -> Array:
+	if not networked:
+		return []
+	if player_id == 0 and not normalise_squad_ids(host_squad).is_empty():
+		return host_squad
+	return MatchLoadouts.squad_for(player_id)
+
+
+## Drop the previous match's REPLICATION STATE at the start of a battle that is not a live
+## networked match.
+##
+## [MatchLoadouts] is process-wide static state and [member GameSettings.host_squad] is an
+## autoload field; both are set from a networked lobby and only CLEARED when the next lobby
+## initialises. So going lobby -> versus match -> Main Menu -> a solo/campaign/challenge battle
+## never passes through a lobby again, and that battle would read the previous opponent's slot
+## card (its items and skins) and the previous host's roster. This is the other end of
+## [method CollaborativeLobby.initialize]'s clear: one at the start of a networked match, one
+## at the start of a battle that is not.
+##
+## Guarded on there being anything to forget, so the overwhelmingly common case (every solo
+## battle ever launched in a process that never networked) touches nothing at all.
+func _clear_stale_replication() -> void:
+	if MatchLoadouts.is_active() or MatchLoadouts.peer_count() > 0:
+		MatchLoadouts.clear()
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null \
+			and GameSettings.has_method("get_host_squad") and GameSettings.has_method("set_host_squad") \
+			and not (GameSettings.get_host_squad() as Array).is_empty():
+		GameSettings.set_host_squad([])
+
+
+## Coerce a squad id list into plain trimmed Strings, dropping anything that is not a scalar
+## id. [member GameSettings.host_squad] arrives as an UNTRUSTED peer Dictionary value off the
+## lobby channel, so a hostile or buggy host could put a Dictionary, an Array or a null in it;
+## normalising at this boundary (the MatchPeerInfo pattern) means the spawn path only ever
+## sees ids, and a junk entry costs that slot rather than the whole map load.
+static func normalise_squad_ids(raw) -> Array:
+	var out: Array = []
+	if not (raw is Array):
+		return out
+	for entry in (raw as Array):
+		match typeof(entry):
+			TYPE_STRING, TYPE_STRING_NAME:
+				var id: String = String(entry).strip_edges()
+				if not id.is_empty():
+					out.append(id)
+			_:
+				continue
+	return out
+
+
+## The { networked, local_slot } context [method resolve_player0_squad] needs, from the live
+## session -- or from [member net_context_override] when a test injected one. Null-safe: with
+## no NetSession autoload (headless runs, bare test harnesses) this reports "not networked",
+## so the local pick is used exactly as before.
+func _net_squad_context() -> Dictionary:
+	if not net_context_override.is_empty():
+		return {
+			"networked": bool(net_context_override.get("networked", false)),
+			"local_slot": int(net_context_override.get("local_slot", -1)),
+		}
+	var net: Object = get_node_or_null("/root/NetSession")
+	if net == null or not net.has_method("is_networked_match"):
+		return { "networked": false, "local_slot": -1 }
+	return {
+		"networked": bool(net.call("is_networked_match")),
+		"local_slot": int(net.call("local_slot")) if net.has_method("local_slot") else -1,
+	}
 
 func load_map(map_resource: MapResource, target_parent: Node3D) -> bool:
 	"""Load a map from MapResource into the scene"""
@@ -338,15 +484,38 @@ func _load_units() -> bool:
 	if not current_map or not map_root:
 		return false
 	
-	# The local player's chosen squad (Character Select). When set, it REPLACES the
-	# character in each of player 0's spawn slots, in order -- the map still decides WHERE
-	# and HOW MANY player-0 units stand, the player decides WHICH. Empty = field the map's
-	# own authored roster (unchanged for maps launched without a pick). Arena doesn't come
-	# through here; it seeds its squad via ArenaController.start_run.
-	var squad: Array = []
-	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and GameSettings.has_method("get_selected_squad"):
-		squad = GameSettings.get_selected_squad()
-	var p0_slot := 0
+	# The squad filling a player's spawn slots. When set, it REPLACES the character in each of
+	# that player's slots, in order -- the map still decides WHERE and HOW MANY units stand,
+	# the player decides WHICH. Empty = field the map's own authored roster (unchanged for maps
+	# launched without a pick). Arena doesn't come through here; it seeds its squad via
+	# ArenaController.start_run.
+	#
+	# In a NETWORKED match a player_id is a ROSTER SLOT: our own slot takes our own pick, every
+	# other slot takes that participant's REPLICATED pick -- see resolve_player_squad.
+	var ctx: Dictionary = _net_squad_context()
+	var networked: bool = bool(ctx["networked"])
+	var local_slot: int = int(ctx["local_slot"])
+
+	# A battle that is NOT a live networked match starts from a clean replication slate -- see
+	# _clear_stale_replication. Done BEFORE anything is resolved or spawned, because the reads
+	# below (and ItemSystem / Unit's, on every unit this loop creates) are exactly what would
+	# otherwise pick up the previous match's leftovers.
+	if not networked:
+		_clear_stale_replication()
+
+	var local_squad: Array = []
+	var host_squad: Array = []
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null:
+		if GameSettings.has_method("get_selected_squad"):
+			local_squad = GameSettings.get_selected_squad()
+		if GameSettings.has_method("get_host_squad"):
+			host_squad = GameSettings.get_host_squad()
+
+	# player_id -> the resolved squad for that slot, and how many of it we have placed.
+	# Resolved LAZILY (first START point a player owns), so a map with no spawns for a player
+	# never asks about it.
+	var squads: Dictionary = {}
+	var next_slot: Dictionary = {}
 
 	var units_created = 0
 	for spawn_data in current_map.unit_spawns:
@@ -365,24 +534,33 @@ func _load_units() -> bool:
 			continue
 
 		var sd = spawn_data
-		# Override player-0 slots with the chosen squad (in slot order). If the player
-		# fielded FEWER units than the map has player-0 slots, the extra slots stay empty
-		# rather than falling back to the map's authored unit.
+		# Override this player's slots with the squad that owns them (in slot order). If the
+		# player fielded FEWER units than the map has slots for them, the extra slots stay
+		# empty rather than falling back to the map's authored unit.
 		#
 		# START points ONLY. A "Start" point is a SQUAD SLOT -- an empty chair the
-		# match-setup screen fills. A player-0 Respawn / Endless / Reinforcement point is
-		# map FURNITURE: a spawn portal, a garrison, a base structure. The map decides what
-		# those field, not the player, and they must never be overwritten with (nor dropped
-		# in favour of) a squad pick -- a base-assault map's own base would otherwise load
-		# as whichever character the player picked first. No shipped map authors a non-Start
-		# player-0 point, so this narrows nothing that existed before.
-		if not squad.is_empty() and int(sd.get("player_id", 0)) == 0 \
-				and current_map.get_spawn_kind(spawn_data) == MapResource.SPAWN_KIND_START:
-			if p0_slot >= squad.size():
-				continue
-			sd = spawn_data.duplicate()
-			sd["character_id"] = String(squad[p0_slot])
-			p0_slot += 1
+		# match-setup screen fills. A Respawn / Endless / Reinforcement point is map
+		# FURNITURE: a spawn portal, a garrison, a base structure. The map decides what those
+		# field, not the player, and they must never be overwritten with (nor dropped in
+		# favour of) a squad pick -- a base-assault map's own base would otherwise load as
+		# whichever character the player picked first.
+		var spawn_player_id: int = int(sd.get("player_id", 0))
+		if current_map.get_spawn_kind(spawn_data) == MapResource.SPAWN_KIND_START:
+			if not squads.has(spawn_player_id):
+				squads[spawn_player_id] = _squad_for_player(
+					spawn_player_id, local_squad, host_squad, local_slot, networked)
+				next_slot[spawn_player_id] = 0
+			var squad: Array = squads[spawn_player_id]
+			if not squad.is_empty():
+				var pick: int = int(next_slot[spawn_player_id])
+				if pick >= squad.size():
+					continue
+				sd = spawn_data.duplicate()
+				sd["character_id"] = String(squad[pick])
+				# Marks this unit as a DELIBERATE PICK, exempting it from the AI-difficulty
+				# gate in _create_unit_from_spawn (see there).
+				sd[SQUAD_PICK_KEY] = true
+				next_slot[spawn_player_id] = pick + 1
 
 		if _create_unit_from_spawn(sd, units_created):
 			units_created += 1
@@ -435,7 +613,13 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 	# a unit the PLAYER deliberately chose. Player 0 is the local human's side (its squad
 	# comes from Character Select / the map's own roster), so it is exempt; otherwise a
 	# hand-picked mycothrall would silently vanish on Normal ("chose 4, only 3 showed up").
-	if player_id != 0 and not _difficulty_allows(character_resource):
+	#
+	# So is ANY slot filled from a squad pick, which in a networked match includes the OPPONENT's
+	# (SQUAD_PICK_KEY). ai_difficulty is a local setting: gating a human's replicated pick would
+	# drop the unit on the peer set to Normal and keep it on the peer set to Hard, which is a
+	# board disagreement on the first frame rather than a difficulty rule.
+	if player_id != 0 and not bool(spawn_data.get(SQUAD_PICK_KEY, false)) \
+			and not _difficulty_allows(character_resource):
 		return null
 
 	# Every unit is a CharacterUnit.tscn instance backed by a CharacterResource.

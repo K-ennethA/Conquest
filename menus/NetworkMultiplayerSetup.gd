@@ -677,8 +677,8 @@ func _show_collaborative_lobby(as_host: bool, player_name: String) -> void:
 
 func _setup_lobby_message_forwarding() -> void:
 	"""Setup forwarding of network messages to lobby"""
-	# The lobby needs to receive network messages
-	# This will be handled through MultiplayerGameState
+	# Nothing to wire: the lobby subscribes to NetSession.lobby_message itself (the legacy
+	# MultiplayerGameState relay that used to find the lobby by scene-tree search is deleted).
 	print("[SETUP] Lobby message forwarding setup complete")
 
 func _on_lobby_game_starting(map_path: String) -> void:
@@ -1152,6 +1152,6 @@ func _setup_client_message_listener() -> void:
 	if not game_mode_manager:
 		return
 	
-	# Connect to game manager signals to receive network messages
-	# This will be handled by the GameManager/MultiplayerGameState
+	# Nothing to wire: incoming messages arrive on NetSession (lobby_message / action_applied),
+	# not through GameManager. Kept as a no-op hook; the legacy relay is deleted.
 	print("[CLIENT] Message listener setup complete")

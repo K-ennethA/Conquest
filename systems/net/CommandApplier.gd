@@ -135,6 +135,10 @@ func _apply_cast_move(cmd: Dictionary, data: Dictionary, board, seq: int) -> Dic
 		return _fail(cmd, "unknown_unit")
 	if not unit.has_method("perform_move"):
 		return _fail(cmd, "unit_cannot_cast")
+	# ULTIMATE CUT-IN, APPLY-SIDE. Every peer -- the caster's own client included -- funnels a
+	# resolved cast through here, so this is the ONE place the full-screen flash can fire in
+	# sync on all of them. See _announce_ultimate_cast for why it emits without awaiting.
+	_announce_ultimate_cast(unit, int(data[NetProtocol.KEY_MOVE_SLOT]))
 	var rng: RandomNumberGenerator = _rng_for_cmd(cmd)
 	var res: Dictionary = unit.perform_move(int(data[NetProtocol.KEY_MOVE_SLOT]), data[NetProtocol.KEY_AIM_CELL], board, rng)
 	var events: Array = res.get("events", [])
@@ -258,6 +262,36 @@ func _rng_for_cmd(cmd: Dictionary) -> RandomNumberGenerator:
 	if match_rng != null:
 		return match_rng.rng_for(int(cmd.get(NetProtocol.KEY_SEQ, 0)))
 	return null
+
+
+## Fire [signal GameEvents.ultimate_casting] when the cast being applied is an ULTIMATE (the
+## 4th moveset slot, or a move flagged is_ultimate -- [method MoveResource.is_ultimate_move]
+## is the single authority). [UltimateCutIn] listens to that signal and plays the full-screen
+## flash itself, so a REMOTE opponent's ultimate lights up this client exactly like a local one.
+##
+## Why HERE and not at the submit site: [UnitActionsPanel] deliberately does NOT play the
+## cut-in on its networked branch (it returns before its own `_await_ultimate_cutin`), because
+## the submitter has no idea yet whether the server will accept the cast. Apply is the one
+## moment every peer agrees the cast is happening, so emitting here plays the flash exactly
+## ONCE per peer -- including on the caster's own client, which never double-plays. (The
+## overlay's own `_busy` re-entrancy guard drops a second overlapping play regardless.)
+##
+## Fire-and-forget, deliberately: [method apply_command] is synchronous and returns the applied
+## result to [NetSession], so it must not await. The flash therefore runs ALONGSIDE resolution
+## rather than strictly before it, which is the local path's only behavioural difference and is
+## purely presentational -- no game state depends on it.
+##
+## Null-safe end to end: a headless/mock unit with no get_move, an absent GameEvents autoload
+## (unit tests, dedicated server) and a non-ultimate slot all return without emitting.
+func _announce_ultimate_cast(unit, move_slot: int) -> void:
+	if unit == null or not unit.has_method("get_move"):
+		return
+	var move = unit.get_move(move_slot)
+	if not MoveResource.is_ultimate_move(move, move_slot):
+		return
+	if typeof(GameEvents) == TYPE_OBJECT and GameEvents != null \
+			and GameEvents.has_signal(&"ultimate_casting"):
+		GameEvents.ultimate_casting.emit(unit, move)
 
 
 func _register_summons(events: Array, seq: int) -> void:

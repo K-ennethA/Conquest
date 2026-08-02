@@ -12,7 +12,10 @@ state of readiness plus the concrete path to Android and iOS.
 | Hit targets | Done | 44px minimum hit-target pass completed across HUD/menu controls. |
 | Info panels | Done | Sticky info panels already work without hover (no hover-only UI blocking mobile). |
 | Save data | Done | `user://` JSON saves are portable as-is; no path/permission changes needed for Android or iOS. |
-| Renderer split | Done (this change) | `project.godot` now has a `[rendering]` section: desktop keeps Forward+, mobile exports use the Mobile renderer automatically via the `.mobile` feature-tag override. See section 6. |
+| Renderer split | Done | `project.godot` now has a `[rendering]` section: desktop keeps Forward+, mobile exports use the Mobile renderer automatically via the `.mobile` feature-tag override. See section 6. |
+| Gesture intent layer | Done (this change) | Tap / one-finger pan / pinch zoom / long-press inspect, classified by a pure state machine and routed to the existing camera + cursor APIs. See section 7. |
+| DPI / content scale | Done (this change) | `MobileDisplay` autoload picks a clamped `content_scale_factor` from DPI + resolution on mobile only. **Still needs on-device tuning** — the model is derived, not measured. See section 7. |
+| Safe-area insets | Done (this change) | Battle HUD and every menu scene root are inset from notches / gesture bars on mobile only. See section 7. |
 
 None of the above needs rework to start a mobile export. The blockers below are
 what's between "it boots on a phone" and "it's actually good on a phone."
@@ -21,9 +24,8 @@ what's between "it boots on a phone" and "it's actually good on a phone."
 
 | Blocker | Why it matters | Recommendation |
 |---|---|---|
-| Gesture input (pinch zoom, two-finger pan, long-press cancel) | Tap-as-click covers the command loop, but camera control and cancel actions still assume mouse/keyboard. | Needs an intent-layer refactor: an input-intent abstraction that both mouse+keyboard and touch feed into, rather than touch code bolted onto existing click handlers. Scope this as its own task before any camera-heavy mobile testing. |
-| DPI / content-scale strategy | `canvas_items` + `expand` handles aspect ratio, not pixel density. Phone screens range ~300-500+ DPI; UI text/icons sized for 1280x720 desktop may render too small or too large. | Decide on a `content_scale_factor` strategy per device class, or a UI-scale setting exposed to the player. Needs on-device testing to tune, not guessable from desktop. |
-| Safe-area insets | Notches, punch-hole cameras, and gesture-nav bars (Android) / home indicator (iOS) can overlap HUD elements. | Add safe-area-aware margins to the root HUD container before shipping a build to real devices. |
+| Content-scale tuning on hardware | The factor is derived from a viewing-distance model, not measured. It is clamped to 1.00–1.75 so it cannot go badly wrong, but the right number for this HUD is an empirical question. | Tune `MobileDisplay.VIEW_DISTANCE_RATIO` / `SCALE_MIN` / `SCALE_MAX` on a real phone. Consider exposing a UI-scale slider once a baseline is known. |
+| Mouse emulation double-fire on pan start | With `emulate_mouse_from_touch` left on (see section 7), the synthetic mouse-down at touch-down selects the tile a camera pan starts from. Harmless (the next tap replaces it) but wrong. | Fix on-device by having `board/cursor/cursor.gd` ignore events with `device == InputEvent.DEVICE_ID_EMULATION` once the adapter owns taps. Do not do this blind — it touches the shared click path. |
 | Map creator touch story | The map/tile/unit creator addons are precision editing tools built for mouse+keyboard. | Recommend desktop-only v1. Do not attempt touch support for the creator tools in the first mobile release; revisit only if player demand shows up post-launch. |
 | Always-on SubViewports on mobile GPUs | Galleries (unit/tile gallery) and the creator tools appear to keep SubViewports live continuously, which is fine on desktop GPUs but can be a real battery/thermal/perf cost on phone SoCs. | Needs a test pass: measure GPU/battery cost of each always-on SubViewport on a mid-range Android device, and gate/pause the ones not actively visible. Test list: unit gallery, tile gallery, augment creator preview, any battle-effects preview viewports. |
 | First on-device profiling checklist | Nothing has been profiled on real mobile hardware yet. | Before any beta: frame time on a mid-range Android device, cold-start time, memory footprint, thermal throttling under a full battle, battery drain per session. |
@@ -60,9 +62,9 @@ what's between "it boots on a phone" and "it's actually good on a phone."
 ### Per-step prerequisite checklist
 
 **Before Android beta:**
-- [ ] Gesture intent-layer refactor landed (section 2)
-- [ ] DPI/content-scale strategy decided and implemented
-- [ ] Safe-area insets added to HUD root
+- [x] Gesture intent-layer refactor landed (section 7)
+- [x] DPI/content-scale strategy decided and implemented (section 7) — still needs on-device tuning
+- [x] Safe-area insets added to HUD root and menu roots (section 7)
 - [ ] SubViewport battery/perf test pass done, always-on viewports gated where needed
 - [ ] Release keystore generated and stored securely
 - [ ] Play Console account created ($25)
@@ -94,3 +96,106 @@ renderer/rendering_method.mobile="mobile"
 - `renderer/rendering_method` = `"forward_plus"` keeps desktop/Steam on Forward+ (unchanged behavior).
 - `renderer/rendering_method.mobile` = `"mobile"` uses Godot's `.mobile` platform-feature-tag override so Android/iOS exports automatically switch to the Mobile renderer without any desktop config change.
 - `textures/vram_compression/import_etc2_astc=true` is set unconditionally (not feature-tagged) because it's required for Android texture export regardless of renderer, and Godot needs it enabled before textures are imported for mobile-compatible compression. This will trigger a one-time texture re-import next time the project is opened in the Godot editor.
+
+## 7. Touch input, content scale and safe area (implemented)
+
+All three are runtime-branched on `OS.has_feature("mobile")`, not feature-tagged in
+`project.godot`. One build behaves correctly wherever it lands, and **desktop is a
+guaranteed no-op** — every path returns before touching anything on a non-mobile host.
+
+### 7.1 Gesture intent layer
+
+| File | Role |
+|---|---|
+| `game/input/GestureClassifier.gd` | Pure `RefCounted` state machine. Pointer events + an injected clock in, gesture intents out. No scene dependencies, so the 0.5s long-press is testable synchronously. |
+| `game/input/TouchInputAdapter.gd` | Thin adapter node. Subscribes to `InputEventScreenTouch` / `ScreenDrag` / `MagnifyGesture` and calls existing APIs. Mounted once as a child of the `MobileDisplay` autoload. |
+
+Intent → existing API:
+
+| Gesture | Intent | Routed to |
+|---|---|---|
+| Tap (press + release inside 16px slop, under 0.5s) | select / confirm | `cursor.gd::_handle_mouse_click(pos)` — the same method a left click drives |
+| One-finger drag past 16px, not starting on HUD | camera pan | `CameraController.pan_by_screen_delta(delta)` |
+| Two-finger pinch | camera zoom | `CameraController.zoom_by(1.0 / factor, center)` (finger-distance ratio → camera-distance multiplier; they are reciprocals) |
+| Long press ≥ 0.5s inside slop | inspect | `cursor.gd::_handle_mouse_movement(pos)` — moves the board cursor, which emits `GameEvents.cursor_moved`, which is what `TerrainInfoPanel` / `UnitHoverPanel` already listen to for mouse hover |
+| Trackpad `InputEventMagnifyGesture` | camera zoom | same as pinch — works on desktop too, and is the one behaviour this adds off-mobile |
+
+The classifier resolves **one intent per touch sequence**: once a gesture is decided (or
+disqualified by a third finger) nothing more is emitted until every finger lifts. The
+adapter only ever reads touch/gesture events, never mouse events, so mouse behaviour is
+untouched.
+
+`CameraController` gained exactly two additive public methods — `pan_by_screen_delta()`
+and `zoom_by()` — and its existing middle-drag / wheel handlers now call through them, so
+mouse and touch share one implementation rather than two that drift.
+
+### 7.2 The `emulate_mouse_from_touch` decision
+
+**Left at Godot's default (`true`). The setting is deliberately NOT written to
+`project.godot`.**
+
+Turning it off would make the adapter the single owner of touch and remove all
+double-fire risk — but Godot's `BaseButton` handles only `InputEventMouseButton` in
+`_gui_input`, not `InputEventScreenTouch`. Disabling emulation would stop every HUD and
+menu button in the game responding to a tap. That is a far larger regression than the one
+it fixes, and it cannot be validated without a device.
+
+Consequence: a tap already reaches `cursor.gd` as a synthetic left click (the "Tap ==
+click" row in section 1). So `TouchInputAdapter` **auto-detects** the setting in `_ready()`
+and routes its own tap intent only when emulation is off. The classifier still classifies
+taps either way — the adapter simply declines to double-fire them. The residual issue
+(pan start also selects the origin tile) is logged as a blocker in section 2.
+
+`emulate_touch_from_mouse` is likewise **not** enabled. It would let gestures be driven
+with a desktop mouse for testing, but it does exactly what this work is forbidden from
+doing: it changes what a mouse drag means. Gesture behaviour is covered by unit tests
+instead.
+
+### 7.3 Content scale
+
+`game/mobile/MobileDisplay.gd` (autoload `MobileDisplay`) sets
+`Window.content_scale_factor` on mobile from:
+
+```
+factor = (dpi / 96) / stretch_scale * 0.5,  snapped to 0.05, clamped to [1.00, 1.75]
+```
+
+- `96` is the desktop reference density the HUD was authored at.
+- `stretch_scale` is what `canvas_items` + `expand` already applies (`min(w/1280, h/720)`).
+- `0.5` targets equal *angular* size rather than equal physical size, because a phone is
+  held at roughly half a monitor's viewing distance.
+- Any unusable input (DPI ≤ 0, which is what a platform that cannot report density
+  returns) yields exactly `1.0` — the authored desktop look.
+
+Worked examples: 2400×1080 @ 440 DPI → **1.55**; 1280×720 @ 300 DPI → **1.55**;
+3200×1440 @ 700 DPI → **1.75** (clamped); 2560×1600 tablet @ 264 DPI → **1.00** (its 2×
+stretch already covers the density).
+
+### 7.4 Safe area
+
+`MobileDisplay.apply_safe_area(control)` is the one reusable helper. It converts
+`DisplayServer.get_display_safe_area()` against the window rect into per-edge margins,
+divides by the content scale (physical pixels → UI pixels), rounds **up** so no pixel
+hides under a notch, and is idempotent so an orientation change replaces rather than
+accumulates insets. It handles a `MarginContainer` by adding to its margin constants
+(preserving the authored values) and any other `Control` by shifting its anchor offsets.
+
+Two application points, no per-screen copy-paste:
+
+- **Battle HUD** — `UILayoutManager._apply_safe_area()` calls it on the single outermost
+  `MarginContainer` that every HUD panel already lives inside. Runs *after* `_apply_theme()`
+  so the theme sweep cannot clobber the margin constants.
+- **Menus** — no menu scene needed editing. On mobile only, the autoload watches for
+  `Control` scene roots being added under `/root` and insets them deferred (after their
+  own `_ready`, so a `set_anchors_preset()` call cannot overwrite the offsets).
+
+### 7.5 Coverage
+
+| Suite | What it pins |
+|---|---|
+| `tests/unit/test_gesture_classifier.gd` | 22 tests — tap vs. drag slop, long-press timing on an injected clock, pinch ratios, one-intent-per-sequence, teardown |
+| `tests/unit/test_mobile_content_scale.gd` | 13 tests — the pure DPI→factor function, clamps, snapping, monotonicity |
+| `tests/unit/test_safe_area_margins.gd` | 12 tests — the pure inset function, scale conversion, no negative margins, empty-safe-rect = desktop no-op |
+| `tests/unit/test_touch_adapter_contract.gd` | 4 tests — the by-name method contract with `CameraController` and `cursor.gd`, which `Object.call()` would otherwise let a rename break silently |
+
+**Not covered, deliberately:** on-device profiling and tuning. No hardware was available.

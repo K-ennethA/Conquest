@@ -32,40 +32,35 @@ func _become_client() -> void:
 func _start_auto_join() -> void:
 	"""Start the auto-join process"""
 	print("[CLIENT] Setting up multiplayer settings...")
-	
+
 	# Set game settings
 	GameSettings.set_game_mode(GameSettings.GameMode.MULTIPLAYER)
 	GameSettings.set_turn_system(TurnSystemBase.TurnSystemType.TRADITIONAL)
-	
-	# Wait for GameModeManager
-	if not GameModeManager:
-		print("[CLIENT] ERROR: GameModeManager not found!")
-		_show_error("GameModeManager not found!")
-		return
-	
-	print("[CLIENT] GameModeManager found, attempting to join...")
-	
-	# Wait a bit for the host to be ready
+
+	# Wait a bit for the host process to finish opening its socket.
 	await get_tree().create_timer(3.0).timeout
-	
-	# Try to join the host
-	var success = await GameModeManager.join_network_multiplayer(
-		"127.0.0.1",
-		8910,
-		"Auto Client",
-		"local"
-	)
-	
-	print("[CLIENT] Join result: " + str(success))
-	
-	if success:
-		print("[CLIENT] Successfully joined! Loading game...")
-		
-		await get_tree().create_timer(1.0).timeout
-		get_tree().change_scene_to_file("res://game/world/GameWorld.tscn")
+
+	# Drive the REAL join flow rather than a parallel one: open the network setup screen and
+	# press its Connect for it. That screen runs on NetSession (the transport the battle's
+	# command seam reads) and owns the connect state machine, the version handshake and the
+	# collaborative lobby. The old shortcut here dialled a separate legacy stack, which left
+	# NetSession's roster empty and the battle unshared.
+	get_tree().change_scene_to_file("res://menus/NetworkMultiplayerSetup.tscn")
+
+	# change_scene_to_file is deferred, so poll (bounded) for the new scene.
+	var setup: Node = null
+	for _frame in range(60):
+		await get_tree().process_frame
+		var current: Node = get_tree().current_scene
+		if current != null and current.has_method("begin_auto_join"):
+			setup = current
+			break
+
+	if setup != null:
+		setup.begin_auto_join("127.0.0.1", 8910, "Auto Client")
 	else:
-		print("[CLIENT] Failed to join host")
-		_show_error("Failed to connect to host")
+		print("[CLIENT] ERROR: network setup screen never came up (no begin_auto_join)")
+		_show_error("Failed to open the network setup screen")
 
 func _show_error(message: String) -> void:
 	"""Show error message and return to menu"""

@@ -47,6 +47,10 @@ var battle_log: BattleLog = null
 # Upper-centre action banner ("Eldroot used Forest Barrage!") that flashes when any unit
 # acts, so the enemy/AI turn is legible before per-move VFX exist. Its own high CanvasLayer.
 var action_announcer: ActionAnnouncer = null
+# Brief amber notice banner for NETWORK feedback the player would otherwise never see --
+# today, a command the server refused (NetSession.intent_rejected). Its own CanvasLayer,
+# above the action banner; self-wires to the session and dismisses itself.
+var net_toast: NetToast = null
 # Speed First per-unit move clock chip, mounted next to the TurnQueue. Self-shows only
 # while a HUMAN unit's clock is armed (see TurnTimer / SpeedFirstTurnSystem).
 var turn_timer: TurnTimer = null
@@ -72,6 +76,12 @@ func _ready() -> void:
 	# consistent ground (children have already run _ready, so this wins).
 	_apply_theme()
 
+	# Push the HUD in from notches / punch holes / gesture bars on mobile. AFTER theming,
+	# like every other self-styled piece below: _apply_theme sweeps the subtree and must
+	# not be able to clobber the margin constants the inset writes. Exact no-op on
+	# desktop -- see _apply_safe_area.
+	_apply_safe_area()
+
 	# Mount the turn-transition overlay AFTER theming: it is a CanvasLayer that
 	# self-styles with explicit ConquestTheme colours, so it must not be swept by
 	# _apply_theme's font-override stripping. It draws above everything on its own
@@ -85,6 +95,10 @@ func _ready() -> void:
 	# Upper-centre action banner. Self-styled CanvasLayer (like the turn wipe), mounted
 	# AFTER theming so its explicit fonts/colours survive the font-override sweep.
 	_build_action_announcer()
+
+	# Network notice toast (refused commands). Self-styled CanvasLayer like the banner above,
+	# so it is mounted AFTER theming to keep its explicit ConquestTheme colours.
+	_build_net_toast()
 
 	# Speed First move-clock chip, next to the TurnQueue in the top-centre column.
 	# Self-styled, so mounted AFTER theming to keep its explicit font size / colours.
@@ -141,6 +155,16 @@ func _build_action_announcer() -> void:
 	action_announcer.name = "ActionAnnouncer"
 	add_child(action_announcer)
 
+func _build_net_toast() -> void:
+	"""Create and mount the network notice toast.
+
+	It wires itself to NetSession.intent_rejected in its own _ready (and unhooks in
+	_exit_tree), so there is nothing to connect here -- this only owns WHERE it lives. In a
+	solo battle the session never rejects anything, so it stays invisible for free."""
+	net_toast = NetToast.new()
+	net_toast.name = "NetToast"
+	add_child(net_toast)
+
 func _build_turn_timer() -> void:
 	"""Create and mount the Speed First move-clock chip beneath the TurnQueue.
 
@@ -159,6 +183,25 @@ func _build_turn_timer() -> void:
 func _apply_theme() -> void:
 	"""Apply the amber ConquestTheme to this HUD subtree (panels, buttons, text)."""
 	ConquestTheme.apply_to(self)
+
+func _apply_safe_area() -> void:
+	"""Inset the HUD from notches / punch holes / gesture bars on mobile.
+
+	Every HUD panel is laid out inside the single outermost MarginContainer, so adding
+	the platform's safe-area insets to THAT container's margins moves the whole HUD
+	inward at once -- no per-panel anchoring changes, and the authored 15px margins are
+	preserved and added to rather than replaced.
+
+	MobileDisplay.apply_safe_area() is the one shared implementation (the menus get the
+	same insets automatically via its scene-root hook). It returns before touching
+	anything unless OS.has_feature("mobile"), so on desktop this is a guaranteed no-op --
+	and it is null-guarded so a scene loaded without the autoload (headless tests) is
+	unaffected either way."""
+	if margin_container == null:
+		return
+	if typeof(MobileDisplay) != TYPE_OBJECT or MobileDisplay == null:
+		return
+	MobileDisplay.apply_safe_area(margin_container)
 
 func _build_settings_ui() -> void:
 	"""Create the gear button (top-right) and the SettingsPanel overlay.

@@ -122,8 +122,11 @@ func initialize(as_host: bool, player_name: String) -> void:
 	local_player_name = player_name
 
 	# A NEW lobby means a new match: forget whatever the LAST match's opponent announced, so
-	# the post-match summary can never attribute the previous opponent to this one.
+	# the post-match summary can never attribute the previous opponent to this one -- and so
+	# the previous match's replicated loadouts/skins can never be applied in this one (a
+	# cleared MatchLoadouts also reads as INACTIVE, which is what keeps solo play untouched).
 	MatchPeerInfo.clear()
+	MatchLoadouts.clear()
 
 	print("[LOBBY] Initialized as " + ("HOST" if is_host else "CLIENT"))
 	print("[LOBBY] Player name: " + player_name)
@@ -142,6 +145,9 @@ func initialize(as_host: bool, player_name: String) -> void:
 		# ...and, in the same breath, who we ARE (rank + lifetime points). See
 		# _broadcast_profile_info for why this rides the START of the match.
 		_broadcast_profile_info()
+		# ...and WHAT WE BRING: the equipped items + cosmetic skins the HOST must know before
+		# it spawns our units. See _broadcast_match_loadout.
+		_broadcast_match_loadout()
 	else:
 		# Client: Check if already connected (late join scenario)
 		if game_mode_manager:
@@ -420,6 +426,8 @@ func _admit_remote_player(player_name: String) -> void:
 	# The lobby has FORMED -- answer the newcomer with our own profile card, exactly as the
 	# lobby_state answer above closes the "host got there first" race for map selection.
 	_broadcast_profile_info()
+	# ...and with our loadout + skins, which the CLIENT must know before it spawns our units.
+	_broadcast_match_loadout()
 
 func _on_local_map_selected(map_path: String, map_resource: MapResource) -> void:
 	"""Handle local player's map selection"""
@@ -490,6 +498,60 @@ func _handle_profile_info(data: Dictionary, from_slot: int) -> void:
 	var announced_name: String = String(announced.get("name", "")).strip_edges()
 	if not announced_name.is_empty() and (remote_player_name.is_empty() or remote_player_name == "Opponent"):
 		remote_player_name = announced_name
+
+
+## Announce what THIS player brings into the match: the characters they will field, the item
+## equipped on each of them, their shared team items, and the cosmetic skin each one wears.
+##
+## WHY IT IS ITS OWN MESSAGE, NOT PART OF game_start. Items are real buffs, skins change what a
+## unit LOOKS like, and the squad decides which units exist at all -- so BOTH machines need
+## BOTH sides' data before a single unit spawns. game_start is host -> client only and has no
+## client -> host twin, so widening it would replicate the host's side and nothing else (which
+## is exactly what "host_squad" is, and exactly why a client's own pick used to reach nobody).
+## This message is the "profile_info" shape instead: announced by whoever is announcing, keyed
+## by the sender's server-stamped slot, parked in [MatchLoadouts] until the battle reads it.
+## Host and client each send exactly one, at the same two moments the profile card is exchanged.
+##
+## The local slot is recorded alongside, because it is what tells the battle which side is
+## OURS -- our own units keep reading the local inventory/profile/pick, never a replicated card.
+func _broadcast_match_loadout() -> void:
+	if not _net_active():
+		return
+	if net_session.has_method("local_slot"):
+		MatchLoadouts.set_local_slot(int(net_session.local_slot()))
+	_send_lobby_message("match_loadout",
+		MatchLoadouts.build_local_payload(_player_profile(), _local_squad()))
+
+
+## This peer's own Character Select pick, or an empty Array where GameSettings is absent (a
+## headless harness) or too old to answer. Empty means "field the map's authored roster for my
+## slot", which is the pre-existing behaviour for a match launched without a pick.
+func _local_squad() -> Array:
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null \
+			and GameSettings.has_method("get_selected_squad"):
+		return GameSettings.get_selected_squad()
+	return []
+
+
+## The PlayerProfile autoload, or null where it is not registered (headless / tests). Fetched
+## rather than referenced directly so a missing autoload degrades to "no skins" instead of
+## failing to resolve.
+func _player_profile() -> Object:
+	if typeof(PlayerProfile) == TYPE_OBJECT and PlayerProfile != null:
+		return PlayerProfile
+	return null
+
+
+## The other participant announced its squad + loadout + skins. [param from_slot] is the
+## SERVER's stamp of who sent it, and it is what the card is keyed by -- the payload itself is
+## untrusted peer input, so [MatchLoadouts] whitelists every id in it against the LOCAL
+## character/item/skin libraries on the way in (an unknown or mis-scoped id is simply dropped).
+func _handle_match_loadout(data: Dictionary, from_slot: int) -> void:
+	MatchLoadouts.set_peer_loadout(from_slot, data)
+	var stored: Dictionary = MatchLoadouts.get_peer_loadout(from_slot)
+	print("[LOBBY] Opponent loadout in slot %d: %d unit(s), %d worn item(s), %d team item(s), %d skin(s)" % [
+		from_slot, (stored["squad"] as Array).size(), (stored["equipped"] as Dictionary).size(),
+		(stored["team"] as Array).size(), (stored["skins"] as Dictionary).size()])
 
 
 func _broadcast_lobby_state(state: String) -> void:
@@ -663,7 +725,14 @@ func _broadcast_game_start(map_path: String) -> void:
 func _start_game(map_path: String) -> void:
 	"""Start the game with selected map"""
 	print("[LOBBY] Starting game with map: " + map_path)
-	
+
+	# Re-affirm which slot is OURS on the way into the battle. The announcement earlier in the
+	# lobby already did this, but a peer seated after its lobby node existed would have stamped
+	# -1 then; by now the roster is settled. Cheap, idempotent, and the difference between
+	# "our units read the local inventory" and "nobody is equipped at all".
+	if _net_active() and net_session.has_method("local_slot"):
+		MatchLoadouts.set_local_slot(int(net_session.local_slot()))
+
 	# Update settings
 	GameSettings.set_selected_map(map_path)
 	GameSettings.set_game_mode(GameSettings.GameMode.MULTIPLAYER)
@@ -691,6 +760,9 @@ func handle_network_message(message_type: String, data: Dictionary, from_slot: i
 		"profile_info":
 			print("[LOBBY] Routing to _handle_profile_info")
 			_handle_profile_info(data, from_slot)
+		"match_loadout":
+			print("[LOBBY] Routing to _handle_match_loadout")
+			_handle_match_loadout(data, from_slot)
 		"lobby_state":
 			print("[LOBBY] Routing to _handle_lobby_state")
 			_handle_lobby_state(data)

@@ -8,31 +8,19 @@ signal game_started(mode: GameManager.GameMode)
 signal game_ended(winner_id: int)
 
 var _game_manager: GameManager
-var _network_handler: NetworkHandler = null
 
 func _get_log_prefix() -> String:
 	"""Get a log prefix to identify host vs client"""
-	var prefix = "[UNKNOWN] "
-
-	# Be more defensive about accessing _network_handler and _game_manager
-	if _network_handler and _network_handler.has_method("is_host"):
-		if _network_handler.is_host():
-			prefix = "[HOST] "
-		else:
-			prefix = "[CLIENT] "
-	elif _game_manager and _game_manager.has_method("get_game_mode") and _game_manager.get_game_mode() == GameManager.GameMode.NETWORK_MULTIPLAYER:
-		# Fallback - try to determine from local player ID
-		var local_id = get_local_player_id()
-		if local_id == 0:
-			prefix = "[HOST] "
-		elif local_id == 1:
-			prefix = "[CLIENT] "
-		else:
-			prefix = "[PLAYER" + str(local_id) + "] "
-	else:
-		prefix = "[SINGLE] "
-
-	return prefix
+	# Networked play runs on NetSession, so the local SLOT is what distinguishes host from
+	# client now (slot 0 = host). Outside a live networked match this is single-player.
+	if not _netsession_is_live():
+		return "[SINGLE] "
+	var local_id := get_local_player_id()
+	if local_id == 0:
+		return "[HOST] "
+	if local_id == 1:
+		return "[CLIENT] "
+	return "[PLAYER" + str(local_id) + "] "
 
 func _ready() -> void:
 	name = "GameModeManager"
@@ -64,78 +52,11 @@ func start_local_multiplayer(player_names: Array[String]) -> bool:
 	"""Start a local multiplayer game (hot-seat)"""
 	return _game_manager.start_local_multiplayer_game(player_names)
 
-func start_network_multiplayer_host(player_name: String = "Host", network_mode: String = "p2p") -> bool:
-	"""Start hosting a network multiplayer game"""
-	# Create network handler
-	_network_handler = MultiplayerNetworkHandler.new()
-
-	var settings = {
-		"network_mode": network_mode,
-		"player_name": player_name,
-		"is_host": true
-	}
-
-	# Initialize network handler
-	var success = await _network_handler.initialize(settings)
-	if not success:
-		return false
-
-	# Start hosting on a consistent port (8910) for local development
-	var host_port = 8910
-
-	if not _network_handler.start_host(host_port):
-		return false
-
-	# Start game with network handler
-	var game_success = _game_manager.start_network_multiplayer_game(_network_handler, settings)
-
-	return game_success
-
-func join_network_multiplayer(address: String, port: int, player_name: String = "Player", network_mode: String = "p2p") -> bool:
-	"""Join a network multiplayer game"""
-	# Create network handler
-	_network_handler = MultiplayerNetworkHandler.new()
-
-	var settings = {
-		"network_mode": network_mode,
-		"player_name": player_name,
-		"is_host": false
-	}
-
-	# Initialize network handler
-	var success = await _network_handler.initialize(settings)
-	if not success:
-		return false
-
-	# Join host
-	if not _network_handler.join_host(address, port):
-		return false
-
-	# Wait for connection to establish (increased timeout for P2P)
-	var max_wait_time = 5.0
-	var wait_interval = 0.5
-	var total_waited = 0.0
-
-	while total_waited < max_wait_time:
-		await get_tree().create_timer(wait_interval).timeout
-		total_waited += wait_interval
-
-		var connection_status = _network_handler.get_connection_status()
-
-		if connection_status == "connected":
-			break
-		elif connection_status.begins_with("failed"):
-			return false
-
-	# Final check
-	var final_status = _network_handler.get_connection_status()
-	if final_status != "connected":
-		return false
-
-	# Start game with network handler
-	var game_success = _game_manager.start_network_multiplayer_game(_network_handler, settings)
-
-	return game_success
+# Hosting and joining live on NetSession (systems/net/NetSession.gd) — see
+# menus/NetworkMultiplayerSetup.gd. This manager used to own a parallel network path built on
+# a NetworkHandler wrapping a Dictionary-based state simulator; that layer is deleted, and the
+# only network-facing job left here is answering ownership/turn queries from NetSession (see
+# the prefixes below) plus the lobby's legacy submit_action envelope.
 
 func end_current_game() -> void:
 	"""End the current game"""
@@ -144,22 +65,15 @@ func end_current_game() -> void:
 
 	_game_manager.end_game()
 
-	# Clean up network handler
-	if _network_handler:
-		_network_handler.disconnect_network()
-		_network_handler = null
-
 # --- NetSession (consolidated transport) awareness ---------------------------
-# Host/Join now run on NetSession, NOT on this manager's MultiplayerNetworkHandler. On that
-# path `_network_handler` is null and `_game_manager` never started a session, so the three
+# Host/Join run on NetSession. On that path `_game_manager` never started a session, so the
 # queries below -- which the whole battle UI reads through (UnitActionsPanel's ownership and
 # turn gates, PlayerManager.can_current_player_select_unit, UnitVisualManager's "your units"
 # tint) -- would answer as if this were single-player: local player 0 on BOTH machines, and
 # never anyone's turn. That is what made the client unable to touch its own units.
 #
 # These are additive prefixes: when NetSession is not a live networked match every one of
-# them falls through to exactly the previous behaviour, so solo / hotseat / the legacy
-# network stack are untouched.
+# them falls through to exactly the previous behaviour, so solo / hotseat play is untouched.
 
 ## True when NetSession is the live, connected, multi-participant session for this process
 ## AND it has seated us in a slot.
@@ -211,13 +125,7 @@ func is_my_turn() -> bool:
 	if not _game_manager:
 		return false
 
-	var current_mode = _game_manager.get_game_mode()
-	if current_mode == GameManager.GameMode.NETWORK_MULTIPLAYER:
-		var local_player_id = get_local_player_id()
-		var current_player_id = _game_manager.get_current_player_id()
-		return local_player_id == current_player_id
-	else:
-		return _game_manager.is_local_player_turn()
+	return _game_manager.is_local_player_turn()
 
 func can_i_act() -> bool:
 	"""Check if the local player can currently act"""
@@ -235,9 +143,6 @@ func get_local_player_id() -> int:
 	if _netsession_is_live():
 		return int(NetSession.local_slot())
 
-	if _network_handler and _network_handler.has_method("get_local_player_id"):
-		return _network_handler.get_local_player_id()
-
 	# For single player and local multiplayer, always return 0 (first player)
 	return 0
 
@@ -254,15 +159,10 @@ func get_game_status() -> Dictionary:
 			"is_active": false
 		}
 
-	var status = _game_manager.get_game_status()
-
-	# Add network info if available
-	if _network_handler:
-		status["network_status"] = _network_handler.get_connection_status()
-		status["network_stats"] = _network_handler.get_network_statistics()
-		status["connection_info"] = _network_handler.get_connection_info()
-
-	return status
+	# No network keys are added here any more: connection state belongs to NetSession, and
+	# every caller of this dictionary already reads the network keys with a default (they
+	# were absent on the NetSession path long before this stack was removed).
+	return _game_manager.get_game_status()
 
 # Signal handlers
 func _on_game_started(mode: GameManager.GameMode, players: Array) -> void:

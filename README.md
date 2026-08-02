@@ -47,5 +47,6 @@ Defined in `project.godot` under `[autoload]`. Core singletons: `GameEvents` (ev
 ## Multiplayer
 
 See [`systems/net/README.md`](systems/net/README.md) for the current (consolidated) networking
-architecture and how to host/join. The older `systems/networking/` and `systems/multiplayer/`
-stacks are being superseded by `systems/net/` — see the migration note in that README.
+architecture and how to host/join. `systems/net/` is the only networking stack: the older
+`systems/networking/` and `systems/multiplayer/` layers (and their Dictionary-based state
+simulator) have been deleted.

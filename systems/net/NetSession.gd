@@ -672,20 +672,23 @@ func _server_handle_intent(actor_slot: int, action: Dictionary) -> void:
 	_rpc_apply_action.rpc(action)
 
 
+## Why [param action] may not be applied, or "" when it is legal. The strings are the
+## NetProtocol.INTENT_* wire vocabulary; the client turns one into a player-facing line with
+## [method NetProtocol.describe_intent_rejection] (see the battle HUD's rejection toast).
 func _validate_intent(actor_slot: int, action: Dictionary) -> String:
 	if not NetProtocol.is_well_formed(action):
-		return "malformed"
+		return NetProtocol.INTENT_MALFORMED
 	if actor_slot == -1:
-		return "unknown_actor"
+		return NetProtocol.INTENT_UNKNOWN_ACTOR
 	# Turn-ownership gating is driven by the real turn system through the seam bridge. It is
 	# ON by default for a networked match (enforce_turn_ownership defaults true) once a seam
 	# is installed, and OFF for a dev/legacy session with no seam (_turn_bridge_active false)
 	# so a stale slot can never wrongly reject.
 	if enforce_turn_ownership and _turn_bridge_active and _current_turn_slot != -1 and actor_slot != _current_turn_slot:
-		return "not_your_turn"
+		return NetProtocol.INTENT_NOT_YOUR_TURN
 	if action_validator.is_valid() and not action_validator.call(action, actor_slot):
-		return "rejected_by_game"
-	return ""
+		return NetProtocol.INTENT_REJECTED_BY_GAME
+	return NetProtocol.INTENT_OK
 
 
 # ---------------------------------------------------------------------------

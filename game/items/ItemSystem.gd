@@ -21,11 +21,16 @@ class_name ItemSystem
 ## sweeps every subsequent turn cost a dictionary lookup and nothing else, and mid-battle
 ## reinforcements are picked up on the next turn boundary.
 ##
-## SOLO ONLY, FOR NOW. Items are read off the LOCAL player's inventory and applied to
-## player-slot 0, which is the human in every solo mode (Skirmish / Campaign / Challenge /
-## Arena). Multiplayer would have to replicate each side's loadout through MatchSettings so
-## both peers simulate identical stats -- until that exists, a networked match simply never
-## mounts an equip (see [method _is_player_unit]).
+## WHOSE ITEMS APPLY TO WHOM. Two regimes, chosen by [method MatchLoadouts.is_active]:
+##   * SOLO (Skirmish / Campaign / Challenge / Arena / hotseat): items are read off the LOCAL
+##     player's [ItemInventory] and applied to player-slot 0, the human, exactly as they
+##     always were. Replication is inactive, so this path is untouched.
+##   * NETWORKED: each side announced its loadout in the lobby (see [MatchLoadouts]), so every
+##     human slot is equipped -- the LOCAL slot from the local inventory, a REMOTE slot from
+##     its announced (and library-whitelisted) card. Both peers therefore run the SAME
+##     application through [method apply_loadout_items], which is the only way the two
+##     simulations agree on a unit's stats. Before that replication existed a networked match
+##     mounted no equips at all.
 
 # --- Tuning -----------------------------------------------------------------
 
@@ -102,7 +107,7 @@ func apply_to_board() -> int:
 		return 0
 	var applied: int = 0
 	for unit in board.all_units():
-		if not _is_player_unit(unit):
+		if not _should_equip(unit):
 			continue
 		if apply_to_unit(unit):
 			applied += 1
@@ -111,10 +116,26 @@ func apply_to_board() -> int:
 
 ## Apply the loadout for one unit. Returns true when this call did the work, false when the
 ## unit was already equipped (or could not be resolved).
+##
+## The ITEMS come from whichever side owns the unit: the local inventory in a solo match (and
+## for the local slot of a networked one), the owner's replicated card otherwise. The
+## APPLICATION is the one shared static either way, so a remote unit's buffs are computed by
+## exactly the code that computes a local unit's.
 func apply_to_unit(unit) -> bool:
 	if not is_instance_valid(unit):
 		return false
-	return ItemSystem.apply_loadout(unit, _character_id_of(unit))
+	return ItemSystem.apply_loadout_items(unit, loadout_for_slot(_slot_of(unit), _character_id_of(unit)))
+
+
+## The items in force for [param character_id] as played by roster slot [param slot].
+##
+## Outside a networked match (or for our OWN slot inside one) this is just the local
+## inventory's answer -- [method loadout_for]. For a REMOTE slot it is that peer's announced
+## card, already whitelisted against the local libraries by [MatchLoadouts].
+static func loadout_for_slot(slot: int, character_id: String) -> Array[ItemResource]:
+	if not MatchLoadouts.is_active() or slot == MatchLoadouts.local_slot():
+		return loadout_for(character_id)
+	return MatchLoadouts.items_for(slot, character_id)
 
 
 ## Apply the UNIT item equipped to [param character_id] plus every TEAM item onto [param unit].
@@ -139,6 +160,17 @@ func apply_to_unit(unit) -> bool:
 ##     [method StatusController.status_damage_taken_scale] does downstream anyway (it returns
 ##     the single most-protective scale in force).
 static func apply_loadout(unit, character_id: String) -> bool:
+	return apply_loadout_items(unit, loadout_for(character_id))
+
+
+## The application half of [method apply_loadout], taking the resolved [param items] directly.
+##
+## THE ONE PLACE ITEMS BECOME BUFFS. Splitting the "which items" question out of the "what do
+## they do" answer is what lets a networked match equip a REMOTE player's units from their
+## replicated card (see [MatchLoadouts]) without a second copy of the three channels -- the
+## two peers run byte-identical maths on the same item list, which is the only way their
+## simulations stay in step. The latch, the ordering and every aggregation rule live here.
+static func apply_loadout_items(unit, items: Array[ItemResource]) -> bool:
 	if unit == null:
 		return false
 	if unit.has_method("has_meta") and unit.has_meta(APPLIED_META):
@@ -147,7 +179,6 @@ static func apply_loadout(unit, character_id: String) -> bool:
 	if unit.has_method("set_meta"):
 		unit.set_meta(APPLIED_META, true)
 
-	var items: Array[ItemResource] = loadout_for(character_id)
 	if items.is_empty():
 		return false
 
@@ -371,9 +402,29 @@ func _on_turn_started(_player) -> void:
 	apply_to_board()
 
 
+## Should [param unit] be equipped at all? The two regimes described in the class note:
+##
+##   * Replication ACTIVE (a networked lobby seated us): every HUMAN slot is equipped -- our
+##     own, plus any slot that announced a card. A slot that announced NOTHING is skipped
+##     rather than falling back to the local inventory, because equipping a peer with OUR
+##     items is precisely the desync this feature exists to remove.
+##   * Replication INACTIVE (every solo / hotseat / arena path): unchanged -- the local human
+##     in slot 0 and nobody else.
+func _should_equip(unit) -> bool:
+	if not is_instance_valid(unit):
+		return false
+	if not MatchLoadouts.is_active():
+		return _is_player_unit(unit)
+	var slot: int = _slot_of(unit)
+	if slot < 0:
+		return false
+	return slot == MatchLoadouts.local_slot() or MatchLoadouts.has_peer_loadout(slot)
+
+
 ## True when [param unit] belongs to the LOCAL human (player slot 0) in a SOLO match. A
-## networked match is excluded outright: both peers must simulate identical stats, and
-## replicating each side's loadout is a MatchSettings job that does not exist yet.
+## networked match that never got a replicated loadout (the legacy lobby transport, or a peer
+## that never announced) is still excluded outright: without both sides' cards the two peers
+## would simulate different stats, so nobody is equipped at all.
 func _is_player_unit(unit) -> bool:
 	if not is_instance_valid(unit):
 		return false
@@ -390,6 +441,26 @@ func _is_player_unit(unit) -> bool:
 	if "is_ai" in owner_player and bool(owner_player.is_ai):
 		return false
 	return int(owner_player.player_id) == 0
+
+
+## The roster slot of [param unit]'s owner, or -1 when it has none, is AI, or is a neutral
+## camp. Slot IS player_id: NetSession seats participants into the same numbering
+## PlayerManager assigns (see [method NetSession.local_slot] and its readers).
+func _slot_of(unit) -> int:
+	if not is_instance_valid(unit):
+		return -1
+	var owner_player = null
+	if unit.has_method("get_owner_player"):
+		owner_player = unit.get_owner_player()
+	elif "owner_player" in unit:
+		owner_player = unit.owner_player
+	if owner_player == null or not ("player_id" in owner_player):
+		return -1
+	if "is_ai" in owner_player and bool(owner_player.is_ai):
+		return -1
+	if "is_neutral" in owner_player and bool(owner_player.is_neutral):
+		return -1
+	return int(owner_player.player_id)
 
 
 ## The character id backing [param unit] ("" for a unit with no CharacterResource, e.g. a

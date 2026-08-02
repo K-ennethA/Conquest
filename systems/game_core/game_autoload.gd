@@ -31,17 +31,9 @@ func start_local_multiplayer(player_names: Array[String]) -> bool:
 		return false
 	return GameModeManager.start_local_multiplayer(player_names)
 
-func start_network_host(player_name: String = "Host", network_mode: String = "local") -> bool:
-	"""Start hosting a network game"""
-	if not is_initialized:
-		return false
-	return await GameModeManager.start_network_multiplayer_host(player_name, network_mode)
-
-func join_network_game(address: String, port: int, player_name: String = "Player", network_mode: String = "local") -> bool:
-	"""Join a network game"""
-	if not is_initialized:
-		return false
-	return await GameModeManager.join_network_multiplayer(address, port, player_name, network_mode)
+# Hosting/joining is NOT exposed here: networked play runs on the NetSession autoload
+# (systems/net/NetSession.gd), driven by menus/NetworkMultiplayerSetup.gd. This wrapper only
+# covers the local (solo / hot-seat) session GameModeManager still owns.
 
 func end_game() -> void:
 	"""End the current game"""
