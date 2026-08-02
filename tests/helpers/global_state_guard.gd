@@ -22,7 +22,7 @@ extends RefCounted
 ## func before_each() -> void:
 ##     _guard = Guard.new()
 ##     _guard.watch_setting("selected_map_path")
-##     _guard.watch_file(ChallengeController.RESULTS_PATH)
+##     _guard.watch_dir(MapLoader.CUSTOM_MAPS_DIR)
 ##
 ## func after_each() -> void:
 ##     _guard.restore()
@@ -31,9 +31,12 @@ extends RefCounted
 ## WHAT IT CANNOT DO: if the process is KILLED mid-test (or the engine crashes),
 ## [code]after_each[/code] never runs and the mutation survives. That is why the real fix
 ## for save-file suites is a PATH INJECTION API on the runtime class
-## (see [method ItemInventory.set_save_path] / [method PlayerProfile.set_source_paths])
-## and a [code]user://test_*[/code] temp path -- the guard is the fallback for the classes
-## that do not have one yet. See tests/README.md ("Temp paths").
+## (see [method ItemInventory.set_save_path] / [method PlayerProfile.set_source_paths] /
+## [method ChallengeController.set_results_path] / [method ChallengeCodec.set_challenge_dir] /
+## [method CommunityClient.set_maps_dir]) and a [code]user://test_*[/code] temp path -- the
+## guard is the fallback for the few paths still without one
+## ([constant MapLoader.CUSTOM_MAPS_DIR], [constant CommunityClient.CONFIG_PATH]).
+## See tests/README.md ("Temp paths").
 ##
 ## NEVER call a GameSettings setter that PERSISTS ([method GameSettings.set_animations_enabled]
 ## writes user://settings.cfg). Assign the field directly; that is what [method set_setting]

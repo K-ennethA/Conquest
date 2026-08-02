@@ -71,16 +71,6 @@ layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
 text = "Compendium"
 
-[node name="ProfileButton" type="Button" parent="Layout/CenterBlock/Column/MenuButtons"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 50)
-text = "Profile"
-
-[node name="CollectionButton" type="Button" parent="Layout/CenterBlock/Column/MenuButtons"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 50)
-text = "Collection"
-
 [node name="MapCreatorButton" type="Button" parent="Layout/CenterBlock/Column/MenuButtons"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
@@ -104,5 +94,5 @@ theme_override_constants/margin_bottom = 24
 
 [node name="Instructions" type="Label" parent="Layout/FooterMargin"]
 layout_mode = 2
-text = "1 Solo  •  2 Versus  •  3 Compendium  •  4 Profile  •  5 Collection  •  6 Map Creator  •  ESC quit"
+text = "1 Solo  •  2 Versus  •  3 Compendium  •  4 Map Creator  •  P Profile  •  ESC quit"
 horizontal_alignment = 1

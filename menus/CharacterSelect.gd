@@ -27,6 +27,9 @@ const CHALLENGE_BROWSE_SCENE := "res://menus/ChallengeBrowse.tscn"
 const CAMPAIGN_SCREEN_SCENE := "res://menus/CampaignScreen.tscn"
 const DEFAULT_MAX := 4
 const GRID_COLUMNS := 2
+## Details-pane portrait square, within the 96-128px range asked for -- big enough to read
+## the capture's head-and-shoulders framing without crowding the name/stats column beside it.
+const DETAIL_PORTRAIT_SIZE := 112.0
 
 # Characters excluded from the pickable roster regardless of is_boss: the neutral
 # beast and the summon-only undead body are never player squad picks.
@@ -69,6 +72,11 @@ var _back_btn: Button = null
 var _slots_row: HBoxContainer = null
 
 # Details pane refs.
+## Portrait frame beside the name -- monogram plate (fallback) with a real PortraitCache
+## texture stacked over it (same stack-and-swap pattern as UnitInfoPanel / TurnQueue).
+var _detail_portrait_frame: PanelContainer = null
+var _detail_portrait_monogram: Label = null
+var _detail_portrait_rect: TextureRect = null
 var _detail_name: Label = null
 var _detail_chip_panel: PanelContainer = null
 var _detail_chip_label: Label = null
@@ -339,10 +347,43 @@ func _build_details_pane() -> Control:
 	_detail_hint.add_theme_color_override("font_color", _cream_dim)
 	col.add_child(_detail_hint)
 
+	# --- Header row: portrait (left) + name/element chip (right) -------------
+	var header_row := HBoxContainer.new()
+	header_row.add_theme_constant_override("separation", 12)
+	col.add_child(header_row)
+
+	_detail_portrait_frame = PanelContainer.new()
+	_detail_portrait_frame.custom_minimum_size = Vector2(DETAIL_PORTRAIT_SIZE, DETAIL_PORTRAIT_SIZE)
+	_detail_portrait_frame.add_theme_stylebox_override("panel", _portrait_box(_amber))
+	header_row.add_child(_detail_portrait_frame)
+
+	# Monogram fallback (a character's initial on its element colour) -- shown until (or
+	# whenever) PortraitCache has no real capture for this character; see _refresh_detail_portrait.
+	_detail_portrait_monogram = Label.new()
+	_detail_portrait_monogram.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_detail_portrait_monogram.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_detail_portrait_monogram.add_theme_font_size_override("font_size", 42)
+	_detail_portrait_monogram.add_theme_color_override("font_color", _ink)
+	_detail_portrait_frame.add_child(_detail_portrait_monogram)
+
+	# PanelContainer stacks every child to the same content rect, so this simply covers
+	# the monogram once a real texture is available.
+	_detail_portrait_rect = TextureRect.new()
+	_detail_portrait_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_detail_portrait_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_detail_portrait_rect.visible = false
+	_detail_portrait_frame.add_child(_detail_portrait_rect)
+
+	var name_col := VBoxContainer.new()
+	name_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	name_col.add_theme_constant_override("separation", 6)
+	header_row.add_child(name_col)
+
 	_detail_name = Label.new()
 	_detail_name.add_theme_font_size_override("font_size", 26)
 	_detail_name.add_theme_color_override("font_color", _cream)
-	col.add_child(_detail_name)
+	name_col.add_child(_detail_name)
 
 	# Element chip: a small colored pill with dark-ink text.
 	var chip_wrap := HBoxContainer.new()
@@ -353,7 +394,7 @@ func _build_details_pane() -> Control:
 	_detail_chip_label.add_theme_color_override("font_color", _ink)
 	_detail_chip_panel.add_child(_detail_chip_label)
 	chip_wrap.add_child(_detail_chip_panel)
-	col.add_child(chip_wrap)
+	name_col.add_child(chip_wrap)
 
 	_detail_stats = Label.new()
 	_detail_stats.add_theme_font_size_override("font_size", 16)
@@ -549,7 +590,7 @@ func _build_actions(roster_empty: bool) -> Control:
 func _set_details_visible(shown: bool) -> void:
 	if _detail_hint != null:
 		_detail_hint.visible = not shown
-	for node in [_detail_name, _detail_chip_panel, _detail_stats, _detail_item_box, _detail_ability_box, _detail_moves_box]:
+	for node in [_detail_portrait_frame, _detail_name, _detail_chip_panel, _detail_stats, _detail_item_box, _detail_ability_box, _detail_moves_box]:
 		if node != null:
 			(node as CanvasItem).visible = shown
 
@@ -574,6 +615,8 @@ func _show_details(id_str: String) -> void:
 	var el := _element_label(chr.element)
 	_detail_chip_label.text = el
 	_detail_chip_panel.add_theme_stylebox_override("panel", _pill_box(_element_color(chr.element)))
+
+	_refresh_detail_portrait(id_str, chr)
 
 	_detail_stats.text = "HP %d    ATK %d    DEF %d    SPD %d" % [
 		chr.base_health, chr.base_attack, chr.base_defense, chr.base_speed
@@ -624,6 +667,63 @@ func _detail_body_label(text: String, color: Color, _italic: bool = false) -> La
 	lbl.add_theme_font_size_override("font_size", 13)
 	lbl.add_theme_color_override("font_color", color)
 	return lbl
+
+
+# --- Detail portrait (PortraitCache) -----------------------------------------
+#
+# Same stack-and-swap pattern as UnitInfoPanel / TurnQueue: the monogram plate is the
+# fallback shown immediately and whenever there is no real capture; a PortraitCache texture
+# is stacked over it (PanelContainer sizes every child to the same rect) and swapped in the
+# moment its resolution callback fires.
+
+## Repaint the monogram fallback for [param id_str] and either show its already-cached real
+## portrait or (re)issue a PortraitCache request for it.
+func _refresh_detail_portrait(id_str: String, chr: CharacterResource) -> void:
+	if _detail_portrait_frame == null:
+		return
+
+	var base: Color = _element_color(chr.element)
+	_detail_portrait_frame.add_theme_stylebox_override("panel", _portrait_box(base))
+	if _detail_portrait_monogram != null:
+		var display: String = chr.display_name.strip_edges()
+		_detail_portrait_monogram.text = display.substr(0, 1).to_upper() if display != "" else "?"
+		_detail_portrait_monogram.add_theme_color_override(
+			"font_color", _ink if base.get_luminance() > 0.55 else _cream)
+
+	var cached: Texture2D = PortraitCache.get_cached(id_str)
+	if cached != null:
+		_apply_detail_portrait(cached)
+		return
+
+	_clear_detail_portrait()
+	PortraitCache.get_portrait(id_str, _on_detail_portrait_resolved.bind(id_str))
+
+
+func _apply_detail_portrait(tex: Texture2D) -> void:
+	if _detail_portrait_rect == null:
+		return
+	_detail_portrait_rect.texture = tex
+	_detail_portrait_rect.visible = true
+	if _detail_portrait_monogram != null:
+		_detail_portrait_monogram.visible = false
+
+
+func _clear_detail_portrait() -> void:
+	if _detail_portrait_rect != null:
+		_detail_portrait_rect.visible = false
+	if _detail_portrait_monogram != null:
+		_detail_portrait_monogram.visible = true
+
+
+## PortraitCache resolution callback. The pane may have moved on to hovering/picking a
+## different unit (or been hidden) by the time a slow first capture resolves -- re-checks
+## [member _detail_current_id] before applying so a stale result can never clobber it.
+func _on_detail_portrait_resolved(tex: Texture2D, id_str: String) -> void:
+	if tex == null:
+		return
+	if _detail_current_id != id_str:
+		return
+	_apply_detail_portrait(tex)
 
 
 # --- Squad slots ------------------------------------------------------------
@@ -1073,6 +1173,18 @@ func _pill_box(fill: Color) -> StyleBoxFlat:
 	sb.content_margin_right = 12.0
 	sb.content_margin_top = 4.0
 	sb.content_margin_bottom = 5.0
+	return sb
+
+
+## The details-pane portrait frame: a square rounded plate in [param fill] (the element
+## colour), holding either the monogram fallback or a stacked real PortraitCache texture.
+func _portrait_box(fill: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = fill
+	sb.set_corner_radius_all(14)
+	sb.set_border_width_all(2)
+	sb.border_color = fill.darkened(0.35)
+	sb.set_content_margin_all(0.0)
 	return sb
 
 

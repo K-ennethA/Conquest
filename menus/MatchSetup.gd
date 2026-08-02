@@ -145,8 +145,15 @@ func _build_left_pane() -> Control:
 	left.add_child(list_label)
 
 	_map_list = ItemList.new()
+	# Guaranteed height so the list always shows several rows and scrolls within
+	# itself, no matter how tall the preview card below grows -- was crushed to
+	# near-zero because the preview card competed for the same 0.5 stretch share.
+	# 168 not 190: the pane's fixed minimums were arithmetic-tight at exactly 720p
+	# under conservative font metrics; ~4.5 visible rows still reads fine and the
+	# EXPAND_FILL ratio grows the list on any taller window.
+	_map_list.custom_minimum_size = Vector2(0.0, 168.0)
 	_map_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_map_list.size_flags_stretch_ratio = 0.5
+	_map_list.size_flags_stretch_ratio = 1.0
 	# Padded, card-like rows: extra breathing room between items and a distinct
 	# left-accented selected/hover fill (theme overrides only -- the widget stays
 	# a stock ItemList per the no-rebuild rule).
@@ -156,14 +163,17 @@ func _build_left_pane() -> Control:
 	_map_list.item_activated.connect(_on_map_activated)
 	left.add_child(_map_list)
 
+	# No EXPAND_FILL / stretch ratio here on purpose: the preview card is left at its
+	# natural (bounded) minimum size instead of competing with the map list for extra
+	# space, so a long description can never push it -- and the action row below it --
+	# taller than the screen. The description + details are scrolled internally instead
+	# (see below); only that inner ScrollContainer's min size feeds into this card's height.
 	var preview := PanelContainer.new()
-	preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	preview.size_flags_stretch_ratio = 0.5
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 14)
 	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_bottom", 10)
+	margin.add_theme_constant_override("margin_top", 6)
+	margin.add_theme_constant_override("margin_bottom", 6)
 	preview.add_child(margin)
 
 	var pv := VBoxContainer.new()
@@ -178,14 +188,27 @@ func _build_left_pane() -> Control:
 
 	pv.add_child(_build_minimap_holder())
 
+	# Description + details scroll internally with a firm cap, instead of pushing the
+	# preview card's (and therefore the whole pane's) height out arbitrarily. A long
+	# multi-line description now scrolls in place rather than shoving the action row
+	# off the bottom of the screen.
+	var details_scroll := ScrollContainer.new()
+	details_scroll.custom_minimum_size = Vector2(0.0, 96.0)
+	details_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	details_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	pv.add_child(details_scroll)
+
+	var details_box := VBoxContainer.new()
+	details_box.add_theme_constant_override("separation", 6)
+	details_scroll.add_child(details_box)
+
 	_map_desc_label = Label.new()
 	_map_desc_label.text = "Choose a map from the list to see its details."
 	_map_desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	pv.add_child(_map_desc_label)
+	details_box.add_child(_map_desc_label)
 
 	_map_details_label = Label.new()
-	_map_details_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	pv.add_child(_map_details_label)
+	details_box.add_child(_map_details_label)
 
 	left.add_child(preview)
 	return left

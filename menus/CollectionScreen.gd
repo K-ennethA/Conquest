@@ -29,7 +29,9 @@ class_name CollectionScreen
 ## rolls are client-local and must never draw from the deterministic match RNG that
 ## networked peers replay -- see [SkinLibrary].
 
-const MAIN_MENU_SCENE: String = "res://menus/MainMenu.tscn"
+## Collection is reached through Profile now (Profile chip -> ProfileScreen -> Collection
+## card), not directly off the main menu -- Back and ESC walk that same path in reverse.
+const PROFILE_SCENE: String = "res://menus/ProfileScreen.tscn"
 
 ## Rarity chip / card-accent colours: grey, blue, gold.
 const RARITY_COLORS: Array[Color] = [
@@ -781,7 +783,7 @@ func _hide_reveal() -> void:
 # ---------------------------------------------------------------------------
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+	get_tree().change_scene_to_file(PROFILE_SCENE)
 
 
 func _input(event: InputEvent) -> void:

@@ -54,7 +54,9 @@ const MAX_PAR_TURNS := 30
 
 ## Where saved / imported challenges live, as inert JSON (never .tres -- a shared .tres
 ## is an arbitrary-code-execution vector).
-const CHALLENGE_DIR := "user://challenges/"
+const DEFAULT_CHALLENGE_DIR := "user://challenges/"
+
+static var _challenge_dir: String = DEFAULT_CHALLENGE_DIR
 
 ## Hard ceiling on the JSON a share code may decompress to (bytes). A 12x12 map's blob
 ## is a few KB; this is generous headroom while still stopping a decompression bomb.
@@ -384,6 +386,27 @@ static func map_resource_from_challenge(challenge: Dictionary, quiet: bool = fal
 
 # --- Local files ------------------------------------------------------------
 
+## Point the codec at a different challenge directory. Exists for TESTS (a throwaway
+## `user://test_*` dir) so a suite that saves or lists challenges never writes into -- or
+## deletes out of -- the player's real library; normal play never calls it.
+##
+## An empty / whitespace-only [param dir] restores [constant DEFAULT_CHALLENGE_DIR]. The
+## trailing "/" is forced because every internal use concatenates the dir with a bare file
+## name, so a caller passing "user://test_challenges" must not silently produce
+## "user://test_challengesfoo.json".
+static func set_challenge_dir(dir: String) -> void:
+	var trimmed: String = dir.strip_edges()
+	if trimmed.is_empty():
+		_challenge_dir = DEFAULT_CHALLENGE_DIR
+		return
+	_challenge_dir = trimmed if trimmed.ends_with("/") else trimmed + "/"
+
+
+## The directory saved challenges currently read/write.
+static func challenge_dir() -> String:
+	return _challenge_dir
+
+
 ## Save a challenge to user://challenges/<sanitized-name>.json. Returns the path written,
 ## or "" on failure. Ensures the directory exists first.
 static func save_to_file(challenge: Dictionary, file_name: String = "") -> String:
@@ -394,7 +417,7 @@ static func save_to_file(challenge: Dictionary, file_name: String = "") -> Strin
 	stem = _sanitize_stem(stem)
 	if stem.is_empty():
 		stem = "challenge"
-	var path: String = CHALLENGE_DIR + stem + ".json"
+	var path: String = _challenge_dir + stem + ".json"
 	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		return ""
@@ -420,7 +443,7 @@ static func load_from_file(path: String) -> Dictionary:
 ## that will not parse into an object. Used by the browse screen to build its list.
 static func list_saved() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	var dir: DirAccess = DirAccess.open(CHALLENGE_DIR)
+	var dir: DirAccess = DirAccess.open(_challenge_dir)
 	if dir == null:
 		return out
 	dir.list_dir_begin()
@@ -429,17 +452,17 @@ static func list_saved() -> Array[Dictionary]:
 		if file_name.ends_with(".json") and not file_name.begins_with("."):
 			# results.json holds play records, not a challenge -- keep it out of the list.
 			if file_name != "results.json":
-				var challenge: Dictionary = load_from_file(CHALLENGE_DIR + file_name)
+				var challenge: Dictionary = load_from_file(_challenge_dir + file_name)
 				if not challenge.is_empty():
-					out.append({"path": CHALLENGE_DIR + file_name, "challenge": challenge})
+					out.append({"path": _challenge_dir + file_name, "challenge": challenge})
 		file_name = dir.get_next()
 	dir.list_dir_end()
 	return out
 
 
 static func _ensure_dir() -> void:
-	if not DirAccess.dir_exists_absolute(CHALLENGE_DIR):
-		DirAccess.make_dir_recursive_absolute(CHALLENGE_DIR)
+	if not DirAccess.dir_exists_absolute(_challenge_dir):
+		DirAccess.make_dir_recursive_absolute(_challenge_dir)
 
 
 ## Reduce an arbitrary name to a safe file stem (lowercase, alnum + underscore).

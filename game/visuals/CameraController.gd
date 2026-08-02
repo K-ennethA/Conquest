@@ -64,6 +64,11 @@ extends Camera3D
 ## Skip an auto-focus request whose destination is already this near the current focus
 ## (world units) -- no point gliding a hair, and it stops jitter during AI bursts.
 @export var auto_focus_min_move: float = 1.5
+## CRIT KICK (see [method impulse_shake]): authored seconds one impulse takes to decay
+## back to zero. Short -- it is a jolt, not a rumble.
+@export var impulse_shake_time: float = 0.18
+## How many oscillations the impulse packs into that decay. More = buzzier.
+@export_range(0.5, 8.0, 0.5) var impulse_shake_cycles: float = 2.5
 ## Minimum seconds between event-driven auto-focuses. Bursty events (a flurry of hits
 ## as the AI resolves a turn) can't snap the camera rapidly -- only the first within a
 ## window moves it. Spawns bypass this (they're rare and worth framing every time).
@@ -108,6 +113,24 @@ var _action_zoom_active: bool = false
 var _action_resting_distance: float = 0.0
 ## Time.get_ticks_msec() of the last event-driven auto-focus, for the cooldown gate.
 var _last_auto_focus_ms: int = 0
+
+## --- Impulse shake (crit kick) ----------------------------------------------
+## True while a kick is decaying. This is the RE-ENTRANCY GUARD: a second crit in the
+## same burst is ignored rather than restarting (or stacking) the jolt, which is what
+## keeps a multi-target crit from turning into a seizure.
+var _shake_active: bool = false
+## The live kick tween, killed on teardown so it can never resume on a freed camera.
+var _shake_tween: Tween = null
+## The offset THIS kick currently has applied to global_position. The kick is applied as
+## a DELTA against this value rather than by capturing-and-restoring an absolute position,
+## so a focus glide (or a pan, or the hit punch) running at the same time composes with it
+## instead of fighting it -- and zeroing it removes exactly what was added, no more.
+var _shake_offset: Vector3 = Vector3.ZERO
+## Peak displacement (world units) and the two screen-aligned axes of the current kick,
+## resolved once when it starts.
+var _shake_amplitude: float = 0.0
+var _shake_axis_a: Vector3 = Vector3.RIGHT
+var _shake_axis_b: Vector3 = Vector3.UP
 
 ## Cached TurnSystemManager autoload (absent in headless/minimal scenes) plus the turn
 ## system we're currently listening to for turn_started. SEPARATE from the GameEvents
@@ -655,6 +678,11 @@ func _on_settings_changed() -> void:
 	if _auto_focus_mode() == _AUTO_OFF:
 		_kill_focus_tween()
 		_action_zoom_active = false
+	# Animations switched off mid-kick: end it now and put back exactly what it moved,
+	# rather than leaving the camera parked on a half-decayed offset.
+	if _shake_active and _game_settings != null and _game_settings.has_method("animations_on") \
+			and not _game_settings.animations_on():
+		_end_impulse_shake()
 
 
 ## Frame only RUNTIME spawns (reinforcements / endless waves); skip the initial flood
@@ -689,6 +717,89 @@ func _on_event_unit_healed(unit, _amount) -> void:
 	if not is_instance_valid(unit) or not (unit is Node3D):
 		return
 	_request_auto_focus((unit as Node3D).global_position, false, false)
+
+
+# --- Impulse shake (crit kick) ----------------------------------------------
+##
+## A tiny, fast-decaying positional jolt of the camera, fired by [DamageNumbers] when a
+## CRIT lands. Deliberately NOT a basis or fov change: this controller's whole contract is
+## that it only translates and dollies (see the class doc), and a rotating shake would
+## break the authored camera angle the whole board art is composed for.
+##
+## Three properties make it safe to fire from a signal handler in the middle of combat:
+##  * RE-ENTRANCY GUARDED. A second call while a kick is decaying is a no-op, so a crit
+##    that hits four targets shakes ONCE.
+##  * ADDITIVE. The jolt is applied as a DELTA against its own accumulated offset rather
+##    than by capturing-and-restoring an absolute position, so the hit punch or a focus
+##    glide moving global_position at the same time composes with it instead of fighting
+##    it -- and zeroing the offset removes exactly what the kick added, no more.
+##  * ANIMATIONS-TOGGLE AWARE. With animations off there is no kick at all -- and since
+##    nothing was applied, there is nothing to restore.
+
+## Kick the camera by [param strength] world units of peak displacement. Tiny values are
+## the intended range (~0.15-0.25); anything larger reads as a bug, so it is clamped.
+func impulse_shake(strength: float = 0.2) -> void:
+	if _shake_active:
+		return
+	# create_tween() errors on a detached node, and this is called from a signal handler.
+	if not is_inside_tree():
+		return
+	if _game_settings != null and _game_settings.has_method("animations_on") \
+			and not _game_settings.animations_on():
+		return
+
+	var amplitude: float = clampf(strength, 0.0, 0.5)
+	if amplitude <= 0.0:
+		return
+
+	var duration: float = impulse_shake_time
+	if _game_settings != null and _game_settings.has_method("scaled_time"):
+		duration = float(_game_settings.scaled_time(impulse_shake_time))
+	# Floored so a fast battle speed cannot compress the kick into a single-frame pop,
+	# and capped so a slow one cannot leave the camera wobbling through the next action.
+	duration = clampf(duration, 0.08, 0.4)
+
+	# Shake across the SCREEN plane (camera-local right / up), so the jolt reads the same
+	# whichever way the board is being viewed from.
+	var cam_basis := global_transform.basis
+	_shake_axis_a = cam_basis.x.normalized()
+	_shake_axis_b = cam_basis.y.normalized()
+	_shake_amplitude = amplitude
+	_shake_active = true
+
+	if _shake_tween != null and _shake_tween.is_valid():
+		_shake_tween.kill()
+	_shake_tween = create_tween()
+	# k decays 1 -> 0; _impulse_step turns that into a decaying oscillation.
+	_shake_tween.tween_method(Callable(self, "_impulse_step"), 1.0, 0.0, duration) \
+		.set_trans(Tween.TRANS_LINEAR)
+	_shake_tween.tween_callback(_end_impulse_shake)
+
+
+## One step of the kick. [param k] runs 1 -> 0 across the decay, so the oscillation both
+## cycles and shrinks; the two axes run at different frequencies so it never degenerates
+## into a straight-line slide.
+func _impulse_step(k: float) -> void:
+	var phase: float = (1.0 - k) * TAU * impulse_shake_cycles
+	var magnitude: float = _shake_amplitude * k
+	_apply_shake_offset(
+		_shake_axis_a * (sin(phase) * magnitude)
+		+ _shake_axis_b * (cos(phase * 1.7) * magnitude * 0.5))
+
+
+## Move the camera so the kick's contribution is exactly [param offset]. Delta-based --
+## see [member _shake_offset] for why capturing an absolute position would be wrong.
+func _apply_shake_offset(offset: Vector3) -> void:
+	global_position += offset - _shake_offset
+	_shake_offset = offset
+
+
+## End of the kick (or an early abort): remove the displacement it added and re-arm.
+func _end_impulse_shake() -> void:
+	if is_inside_tree():
+		_apply_shake_offset(Vector3.ZERO)
+	_shake_offset = Vector3.ZERO
+	_shake_active = false
 
 
 # --- Turn-start focus (re-frame the player's side when control returns) ------
@@ -816,6 +927,13 @@ func _resolve_turn_focus_unit(ts, player):
 
 
 func _exit_tree() -> void:
+	# Drop any in-flight crit kick. The tween dies with the node, but clearing the state
+	# explicitly means a re-added camera never believes a stale kick is still decaying.
+	if _shake_tween != null and _shake_tween.is_valid():
+		_shake_tween.kill()
+	_shake_tween = null
+	_shake_offset = Vector3.ZERO
+	_shake_active = false
 	# Explicitly drop the turn-system subscriptions (freeing auto-disconnects, but being
 	# explicit keeps a reused instance from double-subscribing). The GameEvents auto-focus
 	# connections are on autoloads and tear down with the node the same way.

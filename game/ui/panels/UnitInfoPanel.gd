@@ -19,6 +19,14 @@ class_name UnitInfoPanel
 @onready var unit_portrait: PanelContainer = $MarginContainer/VBoxContainer/PortraitContainer/UnitPortrait
 @onready var portrait_monogram: Label = $MarginContainer/VBoxContainer/PortraitContainer/UnitPortrait/Monogram
 
+## The real captured portrait (game/ui/PortraitCache.gd), stacked over portrait_monogram
+## inside the same PanelContainer -- PanelContainer sizes every child to its full content
+## rect, so this simply covers the monogram once a texture is available. Built in CODE in
+## _ready() (the .tscn stays untouched, same reasoning as the abilities/effects sections
+## below). unit_portrait's rounded, element-coloured stylebox (set in _update_portrait)
+## keeps acting as the "rounded frame" around whichever of the two is showing.
+var _portrait_texture_rect: TextureRect = null
+
 var current_unit: Unit = null
 
 ## "Active Effects" section, built in CODE rather than in UnitInfoPanel.tscn so
@@ -90,6 +98,7 @@ func _ready() -> void:
 	# active effects (what is true right now).
 	_build_abilities_section()
 	_build_effects_section()
+	_build_portrait_texture_rect()
 
 	# Match the amber HUD look (lives outside GameUILayout, so themes itself).
 	ConquestTheme.apply_to(self)
@@ -586,10 +595,25 @@ func _cap_scroll(scroll: ScrollContainer, content: Control, cap: float) -> float
 	scroll.custom_minimum_size.y = used
 	return used
 
+## Build the TextureRect that shows a real captured portrait, stacked over the monogram
+## Label inside unit_portrait. Starts hidden -- _clear_portrait_texture (called from every
+## _update_portrait) is what decides whether it or the monogram is showing.
+func _build_portrait_texture_rect() -> void:
+	if unit_portrait == null:
+		return
+	_portrait_texture_rect = TextureRect.new()
+	_portrait_texture_rect.name = "PortraitTexture"
+	_portrait_texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_portrait_texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_portrait_texture_rect.visible = false
+	unit_portrait.add_child(_portrait_texture_rect)
+
+
 func _update_portrait(unit: Unit) -> void:
 	"""Paint the monogram plate: the unit's initial on its element colour.
 
-	A compact element-coded stand-in for real portrait art (no art files). Element
+	A compact element-coded stand-in for real portrait art, and the fallback shown until
+	(or whenever) PortraitCache has no real capture for this unit's character. Element
 	comes from Unit.get_element() -> ConquestTheme.element_color; the letter is dark
 	ink on light element colours and cream on dark ones so it always reads."""
 	if not unit_portrait:
@@ -598,7 +622,8 @@ func _update_portrait(unit: Unit) -> void:
 	var element: String = String(unit.get_element()) if unit.has_method("get_element") else ""
 	var base: Color = ConquestTheme.element_color(element)
 
-	# Rounded, element-filled plate with a slightly darker warm border.
+	# Rounded, element-filled plate with a slightly darker warm border -- this frame stays
+	# up (visible around / behind) whichever of the monogram or the real portrait is shown.
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = base
 	sb.set_corner_radius_all(10)
@@ -611,6 +636,64 @@ func _update_portrait(unit: Unit) -> void:
 		portrait_monogram.text = display.substr(0, 1).to_upper() if display != "" else "?"
 		var text_color: Color = ConquestTheme.INK if base.get_luminance() > 0.55 else ConquestTheme.CREAM
 		portrait_monogram.add_theme_color_override("font_color", text_color)
+
+	_refresh_portrait_texture(unit)
+
+
+# --- Real portrait (PortraitCache) ------------------------------------------------------
+
+## Show the real captured portrait for [param unit]'s character if PortraitCache already
+## has it cached, and either way (re)issue a request so a not-yet-captured character swaps
+## the monogram out the moment its portrait resolves. Never blocks -- the monogram plate
+## from _update_portrait above stays visible until (if ever) a texture arrives.
+func _refresh_portrait_texture(unit: Unit) -> void:
+	if _portrait_texture_rect == null:
+		return
+
+	var character_id: String = unit.get_unit_type() if unit.has_method("get_unit_type") else ""
+	if character_id.is_empty():
+		_clear_portrait_texture()
+		return
+
+	var cached: Texture2D = PortraitCache.get_cached(character_id)
+	if cached != null:
+		_apply_portrait_texture(cached)
+		return
+
+	_clear_portrait_texture()
+	PortraitCache.get_portrait(character_id, _on_portrait_resolved.bind(unit, character_id))
+
+
+func _apply_portrait_texture(tex: Texture2D) -> void:
+	if _portrait_texture_rect == null:
+		return
+	_portrait_texture_rect.texture = tex
+	_portrait_texture_rect.visible = true
+	if portrait_monogram:
+		portrait_monogram.visible = false
+
+
+func _clear_portrait_texture() -> void:
+	if _portrait_texture_rect != null:
+		_portrait_texture_rect.visible = false
+	if portrait_monogram:
+		portrait_monogram.visible = true
+
+
+## PortraitCache resolution callback. [param unit] / [param character_id] are the unit and
+## character id this request was made FOR, bound at request time -- a slow capture must
+## never clobber the panel once the player has selected someone else (or the same unit's
+## character somehow changed, e.g. a skin swap), so both are re-checked against the live
+## current_unit before applying.
+func _on_portrait_resolved(tex: Texture2D, unit: Unit, character_id: String) -> void:
+	if tex == null:
+		return
+	if not is_instance_valid(unit) or current_unit != unit:
+		return
+	var live_id: String = unit.get_unit_type() if unit.has_method("get_unit_type") else ""
+	if live_id != character_id:
+		return
+	_apply_portrait_texture(tex)
 
 func _show_panel() -> void:
 	"""Show the info panel"""

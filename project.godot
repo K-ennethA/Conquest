@@ -18,6 +18,9 @@ config/name="Conquest"
 run/main_scene="res://menus/MainMenu.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
+boot_splash/bg_color=Color(0.0901961, 0.0784314, 0.121569, 1)
+boot_splash/image="res://assets/branding/splash.png"
+boot_splash/fullsize=true
 
 [autoload]
 
@@ -38,6 +41,7 @@ ArenaController="*res://game/arena/ArenaController.gd"
 ChallengeController="*res://game/challenge/ChallengeController.gd"
 CampaignController="*res://game/campaign/CampaignController.gd"
 PlayerProfile="*res://game/profile/PlayerProfile.gd"
+SceneFade="*res://systems/SceneFade.gd"
 
 [display]
 

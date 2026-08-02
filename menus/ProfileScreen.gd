@@ -2,9 +2,10 @@ extends Control
 
 class_name ProfileScreen
 
-## The player's PROGRESSION screen: rank + points header, lifetime stat cards, and the
-## achievement grid. Reached from the main menu's "Profile" button. Read-only -- everything
-## here is a view onto the [PlayerProfile] autoload; this screen never grants or spends.
+## The player's PROGRESSION screen: rank + points header, a Collection entry card, lifetime
+## stat cards, and the achievement grid. Reached from the main menu's top-right profile chip.
+## Read-only -- everything here is a view onto the [PlayerProfile] autoload; this screen
+## never grants or spends (the Collection card only navigates; SkinShop owns the spending).
 ##
 ## Layout follows the dark "Legends" register the other menus use ([MenuTheme]) on a 24 /
 ## 16 rhythm: a 24px page margin, 16px between the major bands (header -> stats -> achievements
@@ -16,6 +17,10 @@ class_name ProfileScreen
 ## preview) the screen still draws, showing a zeroed Recruit profile rather than crashing.
 
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
+# The cosmetic wardrobe now nests under Profile rather than sitting as its own main-menu
+# entry. Guarded with ResourceLoader.exists the same way MainMenu used to guard it, since
+# the skin economy ships the scene separately from this screen.
+const COLLECTION_SCENE := "res://menus/CollectionScreen.tscn"
 
 # Achievement cards per row. Three fits the 860px page without the description wrapping to
 # more than two lines at FONT_CAPTION.
@@ -65,9 +70,13 @@ func _build_ui() -> void:
 	var title := Label.new()
 	title.text = "PROFILE"
 	page.add_child(title)
-	MenuTheme.style_title(title, 40)
+	# 32 not 40: the page's fixed minimums must sum under 720 - margins or the
+	# CenterContainer clips BOTH ends (the user literally could not see the Back
+	# button because the footer rendered below the screen edge).
+	MenuTheme.style_title(title, 32)
 
 	page.add_child(_build_rank_header())
+	page.add_child(_build_collection_card())
 	page.add_child(_build_stats_band())
 	page.add_child(_build_achievements_band())
 	page.add_child(_build_footer())
@@ -125,6 +134,64 @@ func _build_rank_header() -> PanelContainer:
 	caption.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
 	caption.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
 	col.add_child(caption)
+
+	return card
+
+
+## Collection is nested one level under Profile rather than living as its own main-menu
+## entry: a prominent gold-accent card, a single click target (the "content overlaid on a
+## plain Button" trick, like the rank/stat cards' visual register but clickable), routing
+## to CollectionScreen. Disabled with a "coming soon" tooltip when that scene is not yet in
+## the build, the same guard MainMenu used to apply before this card existed.
+func _build_collection_card() -> Button:
+	var available: bool = ResourceLoader.exists(COLLECTION_SCENE)
+
+	var card := Button.new()
+	card.name = "CollectionCard"
+	card.custom_minimum_size = Vector2(0.0, 64.0)
+	card.text = ""
+	card.disabled = not available
+	card.focus_mode = Control.FOCUS_ALL if available else Control.FOCUS_NONE
+	card.tooltip_text = ("Unit skins you own -- equip a look for each character."
+			if available else "Coming soon: your unit-skin wardrobe.")
+	card.pressed.connect(_on_collection_pressed)
+	card.add_theme_stylebox_override("normal", MenuTheme.card_box(MenuTheme.GOLD))
+
+	var content := HBoxContainer.new()
+	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	content.offset_left = 14.0
+	content.offset_right = -14.0
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_theme_constant_override("separation", 12)
+	card.add_child(content)
+
+	var text_col := VBoxContainer.new()
+	text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_col.add_theme_constant_override("separation", 2)
+	content.add_child(text_col)
+
+	var title := Label.new()
+	title.text = "COLLECTION"
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	title.add_theme_color_override("font_color", MenuTheme.GOLD)
+	text_col.add_child(title)
+
+	var subtitle := Label.new()
+	subtitle.text = "Unit skins you own -- equip a look for each character."
+	subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	subtitle.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	subtitle.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	text_col.add_child(subtitle)
+
+	var balance := Label.new()
+	balance.text = "%d pts" % _spendable_points()
+	balance.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	balance.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	balance.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
+	balance.add_theme_color_override("font_color", MenuTheme.CREAM)
+	content.add_child(balance)
 
 	return card
 
@@ -206,7 +273,10 @@ func _build_achievements_band() -> VBoxContainer:
 
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.custom_minimum_size = Vector2(0.0, 240.0)
+	# 120 minimum (not 240): this scroll is the page's ONLY flexible region - its
+	# minimum is what decides whether the footer (Back button) fits on a 720p
+	# screen. It EXPANDS to absorb all spare height on taller windows anyway.
+	scroll.custom_minimum_size = Vector2(0.0, 120.0)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	band.add_child(scroll)
 
@@ -294,7 +364,7 @@ func _build_footer() -> VBoxContainer:
 	footer.add_child(back)
 
 	var hint := Label.new()
-	hint.text = "ESC back"
+	hint.text = "ESC back  •  C Collection"
 	footer.add_child(hint)
 	MenuTheme.style_caption(hint)
 
@@ -357,8 +427,22 @@ func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 
+## Guarded like the card's own disabled state: the wardrobe screen ships separately from
+## this one, so a stale keypress (or a card left enabled by a race) can never fail a scene
+## change.
+func _on_collection_pressed() -> void:
+	if not ResourceLoader.exists(COLLECTION_SCENE):
+		return
+	get_tree().change_scene_to_file(COLLECTION_SCENE)
+
+
 func _input(event: InputEvent) -> void:
 	if not event.is_pressed():
 		return
-	if event is InputEventKey and event.keycode == KEY_ESCAPE:
-		_on_back_pressed()
+	if not (event is InputEventKey):
+		return
+	match (event as InputEventKey).keycode:
+		KEY_ESCAPE:
+			_on_back_pressed()
+		KEY_C:
+			_on_collection_pressed()

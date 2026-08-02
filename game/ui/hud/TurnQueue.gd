@@ -277,6 +277,38 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 	background.add_theme_stylebox_override("panel", style_box)
 	chip.add_child(background)
 
+	# --- Real portrait (PortraitCache), inset so the background panel's border stays
+	# visible all the way around it -- that border is exactly what carries the
+	# current/ally/enemy state (and highlight_portrait's selection ring), so the portrait
+	# must never cover it. A dim scrim sits between the photo and the text so the text's
+	# colours (tuned for the flat background) keep reading over any portrait's own colours.
+	var portrait_inset: float = 3.0
+	var portrait := TextureRect.new()
+	portrait.name = "Portrait"
+	portrait.position = Vector2(portrait_inset, portrait_inset)
+	portrait.size = Vector2(chip_w - portrait_inset * 2.0, chip_h - portrait_inset * 2.0)
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	portrait.clip_contents = true
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	portrait.visible = false
+	chip.add_child(portrait)
+
+	var scrim := ColorRect.new()
+	scrim.color = Color(0, 0, 0, 0.30)
+	scrim.position = portrait.position
+	scrim.size = portrait.size
+	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scrim.visible = false
+	chip.add_child(scrim)
+
+	var character_id: String = unit.get_unit_type() if unit.has_method("get_unit_type") else ""
+	if not character_id.is_empty():
+		var cached_portrait: Texture2D = PortraitCache.get_cached(character_id)
+		if cached_portrait != null:
+			_apply_chip_portrait(portrait, scrim, cached_portrait)
+		else:
+			PortraitCache.get_portrait(character_id, _on_chip_portrait_resolved.bind(portrait, scrim))
+
 	# --- Position / NOW label (top strip) ---
 	var pos_label := Label.new()
 	if is_current:
@@ -353,6 +385,27 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 	chip.add_child(button)
 
 	return chip
+
+## Show [param tex] on a chip's portrait TextureRect and its readability scrim together --
+## the two always toggle as a pair.
+func _apply_chip_portrait(portrait: TextureRect, scrim: ColorRect, tex: Texture2D) -> void:
+	portrait.texture = tex
+	portrait.visible = true
+	scrim.visible = true
+
+
+## PortraitCache resolution callback for one chip. Chips are rebuilt wholesale on every
+## _update_display, so by the time a slow first capture resolves the chip it was requested
+## for may already be freed (turn advanced, queue rescrolled) -- is_instance_valid guards
+## that; a stale-but-still-valid chip is harmless to update since it is about to be replaced
+## anyway.
+func _on_chip_portrait_resolved(tex: Texture2D, portrait: TextureRect, scrim: ColorRect) -> void:
+	if tex == null:
+		return
+	if not is_instance_valid(portrait) or not is_instance_valid(scrim):
+		return
+	_apply_chip_portrait(portrait, scrim, tex)
+
 
 func _theme_color(name: String, fallback: Color) -> Color:
 	"""Fetch a ConquestTheme palette color by constant name.

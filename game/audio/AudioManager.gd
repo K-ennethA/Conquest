@@ -265,8 +265,10 @@ func _crossfade_menu_music(new_stream: AudioStream) -> void:
 	if _music_player.stream == new_stream and (new_stream == null or _music_player.playing):
 		return
 	_kill_music_tween()
-	_music_tween = create_tween()
 	if _music_player.playing:
+		# Only build the fade-out tween when there is something to fade: a Tween
+		# created and never given a tweener logs an engine error on its first step.
+		_music_tween = create_tween()
 		_music_tween.tween_property(_music_player, "volume_db", -80.0, MUSIC_FADE_TIME)
 		_music_tween.tween_callback(_start_music_stream.bind(new_stream))
 	else:

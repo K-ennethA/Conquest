@@ -57,6 +57,46 @@ extends Node
 ## Total seconds of the lunge-and-recoil. Kept snappy so it reads as a strike.
 @export_range(0.0, 1.0, 0.01) var move_shake_time: float = 0.28
 
+# --- Idle bob -------------------------------------------------------------
+#
+# A standing unit that is perfectly still reads as a prop. This is the cheapest fix:
+# a slow, tiny breathe -- the model rises a few centimetres and squashes slightly,
+# then settles -- looped forever on each unit's own model node.
+#
+# Four properties keep it from being a source of bugs:
+#  * IT NEVER REGISTERS IN THE BUSY REGISTRY. It loops forever, so an entry would read
+#    as "animating" permanently and the AI driver would wait for the heat death of the
+#    universe. Nothing here calls _track / _anim_begin, and nothing ever should.
+#  * IT PAUSES FOR EVERY REAL ANIMATION. Glide, lunge, hit flash, heal flash and death
+#    all drive the same position/scale properties on the same nodes; two tweens fighting
+#    over one property is exactly the drift bug that strands a model off its unit. Every
+#    entry point stops the bob (which SNAPS the model back to its rest pose first, so the
+#    animation captures a clean base) and the animation's own tween restarts it on finish.
+#  * THE TWEEN IS OWNED BY THE MODEL NODE, so freeing the unit kills it -- a death can
+#    never leave a bob ticking on a dead instance.
+#  * IT IS PHASE-OFFSET PER UNIT (by instance id), so a line of eight units breathes as
+#    eight individuals rather than one accordion.
+@export_group("Idle Bob")
+## Master switch for the idle breathe.
+@export var idle_bob_enabled: bool = true
+## Authored seconds of one full up-and-down cycle. Slow on purpose -- this should be
+## noticed only when it is missing. Scaled by battle speed and jittered per unit.
+@export_range(0.5, 6.0, 0.05) var idle_bob_period: float = 2.2
+## Peak rise (local +Y) of the breathe, in metres. Tiny: a unit is ~1 metre tall.
+@export_range(0.0, 0.3, 0.005) var idle_bob_height: float = 0.045
+## Peak squash/stretch of the breathe as a fraction of the model's rest scale
+## (0.02 = 2% wider and 2% shorter at the bottom of the cycle). 0.0 = pure bob.
+@export_range(0.0, 0.2, 0.005) var idle_bob_scale: float = 0.02
+
+# unit instance id -> the looping idle Tween. Present ONLY while a unit is bobbing;
+# stopping erases the entry, so `has(id)` is the authoritative "is it bobbing?".
+var _idle_tween: Dictionary = {}
+
+# unit instance id -> the model's authored REST scale, captured the first time the bob
+# starts (i.e. before anything has squashed it). The counterpart to _anim_base for
+# position: every stop restores to THIS, never to a live reading taken mid-breathe.
+var _idle_base_scale: Dictionary = {}
+
 # --- Death ----------------------------------------------------------------
 #
 # A death is dramatic and unmissable, not a quiet 0.25s shrink: a bright colour
@@ -226,6 +266,7 @@ func _ready() -> void:
 	_safe_connect(bus, &"unit_healed", _on_unit_healed)
 	_safe_connect(bus, &"unit_eliminated", _on_unit_eliminated)
 	_safe_connect(bus, &"move_performed", _on_move_performed)
+	_safe_connect(bus, &"unit_spawned", _on_unit_spawned)
 
 func _safe_connect(obj: Object, signal_name: StringName, callable: Callable) -> void:
 	if obj != null and obj.has_signal(signal_name) and not obj.is_connected(signal_name, callable):
@@ -242,6 +283,15 @@ func _on_unit_selected(unit = null, _position = null) -> void:
 
 func _on_turn_started(who = null) -> void:
 	_remember(who)
+
+## Every unit on the board announces itself here -- pre-placed ones at load and runtime
+## reinforcements alike -- which makes this the one place that reaches ALL of them. The
+## start is DEFERRED by a frame: a character unit builds its "CharacterModel" subtree in
+## its own _ready, and _get_anim_root would otherwise find nothing to bob.
+func _on_unit_spawned(unit = null, _runtime = null) -> void:
+	if unit == null or not is_instance_valid(unit):
+		return
+	call_deferred("_start_idle_bob", unit)
 
 # --- Move glide -----------------------------------------------------------
 
@@ -360,6 +410,12 @@ func _flash(unit) -> void:
 	if not _anims_on():
 		return
 
+	# Stop the idle breathe FIRST. On a placeholder capsule the bob and the punch below
+	# drive the same node's `scale`, so the punch would otherwise capture a mid-breathe
+	# scale as its base and leave the unit permanently stretched. Stopping snaps the model
+	# back to rest, so base_scale below is always the authored one.
+	_stop_idle_bob(unit)
+
 	# A model with its own hit clip supplies the MOTION, so skip the squash punch
 	# (two competing motions read as a glitch) but keep the colour flash, which
 	# stays legible and reads as damage regardless of the animation.
@@ -383,6 +439,7 @@ func _flash(unit) -> void:
 			if is_instance_valid(mesh):
 				mesh.material_override = prev_override)
 		_track(ft, flash_dur)
+		_resume_idle_after(ft, unit)
 
 	# Squash punch (always safe -- no material knowledge needed).
 	var punch_dur: float = _scaled(hit_flash_time * 0.5)
@@ -394,6 +451,7 @@ func _flash(unit) -> void:
 		pt.tween_property(mesh, "scale", base_scale, punch_dur)\
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		_track(pt, punch_dur * 2.0)
+		_resume_idle_after(pt, unit)
 
 # --- Heal flash -----------------------------------------------------------
 
@@ -422,6 +480,10 @@ func _heal_flash(unit) -> void:
 	if not _anims_on():
 		return
 
+	# Stop the idle breathe FIRST -- same reason as the hit flash, except here it is the
+	# hop that would capture a mid-breathe `position` as its base and strand the model.
+	_stop_idle_bob(unit)
+
 	# Color flash via a temporary material_override; the prior override (usually
 	# null) is captured and restored exactly, so the base look is untouched.
 	var flash_dur: float = _scaled(heal_flash_time)
@@ -439,6 +501,7 @@ func _heal_flash(unit) -> void:
 			if is_instance_valid(mesh):
 				mesh.material_override = prev_override)
 		_track(ft, flash_dur)
+		_resume_idle_after(ft, unit)
 
 	# Gentle upward hop (local +Y) and settle -- a small POSITIVE pop, restored to
 	# the mesh's own current position so it leaves nothing displaced.
@@ -451,11 +514,16 @@ func _heal_flash(unit) -> void:
 		ht.tween_property(mesh, "position", base_mesh_pos, hop_dur)\
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		_track(ht, hop_dur * 2.0)
+		_resume_idle_after(ht, unit)
 
 # --- Death ----------------------------------------------------------------
 
 func _on_unit_eliminated(unit = null, _eliminator = null) -> void:
 	var id: int = unit.get_instance_id() if is_instance_valid(unit) else 0
+	# Stop the idle breathe BEFORE anything else: it loops forever and drives the same
+	# position/scale the death animation is about to take over, and stopping it snaps the
+	# model to its rest pose so the death captures a clean base.
+	_stop_idle_bob(unit)
 	# An authored death clip replaces the shrink entirely -- shrinking a model
 	# that is playing its own death animation just deletes the animation.
 	var played_death: bool = play_clip(unit, CLIP_DEATH, false)
@@ -467,6 +535,8 @@ func _on_unit_eliminated(unit = null, _eliminator = null) -> void:
 	_anim_players.erase(id)
 	_anim_base.erase(id)
 	_motion_tween.erase(id)
+	_idle_tween.erase(id)
+	_idle_base_scale.erase(id)
 	if played_death:
 		return
 	# Animations off -> instant removal, no drama and no dead time; the emitter is
@@ -534,6 +604,115 @@ func _procedural_death(unit) -> void:
 				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 		_track(dt, rise_t + sink_t)
 
+# --- Idle bob ---------------------------------------------------------------
+
+## Start (or restart) [param unit]'s looping idle breathe. Idempotent, and a no-op in
+## every case where bobbing would be wrong: disabled, animations off, no model, a model
+## not in the tree (a Tween cannot be created on one), or a REAL animation currently
+## owning the model. Never registers in the busy registry -- see the section header.
+func _start_idle_bob(unit) -> void:
+	if not idle_bob_enabled or not _anims_on():
+		return
+	# is_instance_valid FIRST: this runs from a deferred call and from tween `finished`
+	# callbacks, both of which can land after the unit has been freed.
+	if unit == null or not is_instance_valid(unit) or not (unit is Node3D):
+		return
+	var id: int = unit.get_instance_id()
+	var existing = _idle_tween.get(id, null)
+	if existing is Tween and existing.is_valid():
+		return
+	# A glide / lunge owns `position` right now; that animation's finish restarts us.
+	var motion = _motion_tween.get(id, null)
+	if motion is Tween and motion.is_valid():
+		return
+	var node := _get_anim_root(unit)
+	if node == null or not node.is_inside_tree():
+		return
+
+	var period: float = _scaled(idle_bob_period)
+	if period <= 0.0:
+		return
+
+	# Rest pose. _base_pos caches the position on FIRST call, and the bob is normally the
+	# first thing to touch the model, so the cache is seeded clean here; the scale gets the
+	# same treatment through _idle_base_scale.
+	var base: Vector3 = _base_pos(unit, node)
+	if not _idle_base_scale.has(id):
+		_idle_base_scale[id] = node.scale
+	var base_scale: Vector3 = _idle_base_scale[id]
+	node.position = base
+	node.scale = base_scale
+
+	# Per-unit desync: the instance id gives a stable 0..1 fraction, used BOTH to jitter
+	# the cycle length (+/-15%) and to start the loop already part-way through.
+	var fraction: float = float(id % 1000) / 1000.0
+	var cycle: float = period * (0.85 + 0.3 * fraction)
+	var half: float = cycle * 0.5
+	# Top of the breathe: a touch TALLER and thinner (a chest filling), settling back to
+	# the authored rest scale at the bottom. The loop therefore always ends on base_scale.
+	var stretch := Vector3(
+		base_scale.x * (1.0 - idle_bob_scale),
+		base_scale.y * (1.0 + idle_bob_scale),
+		base_scale.z * (1.0 - idle_bob_scale))
+
+	var tween := node.create_tween()
+	tween.set_loops()
+	tween.tween_property(node, "position", base + Vector3(0.0, idle_bob_height, 0.0), half)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.parallel().tween_property(node, "scale", stretch, half)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(node, "position", base, half)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.parallel().tween_property(node, "scale", base_scale, half)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_idle_tween[id] = tween
+	# Advance into the loop so no two units are in step on their very first cycle.
+	if tween.is_valid():
+		tween.custom_step(fraction * cycle)
+
+
+## Stop [param unit]'s idle breathe and SNAP the model back to its rest pose. Every real
+## animation calls this first, so it never captures a mid-breathe position or scale as its
+## own base -- that is what would otherwise strand the model off its unit.
+func _stop_idle_bob(unit) -> void:
+	if unit == null or not is_instance_valid(unit):
+		return
+	var id: int = unit.get_instance_id()
+	var tween = _idle_tween.get(id, null)
+	if tween is Tween and tween.is_valid():
+		tween.kill()
+	if not _idle_tween.has(id):
+		return
+	_idle_tween.erase(id)
+	if not (unit is Node3D):
+		return
+	var node := _get_anim_root(unit)
+	if node == null:
+		return
+	node.position = _base_pos(unit, node)
+	if _idle_base_scale.has(id):
+		node.scale = _idle_base_scale[id]
+
+
+## Restart [param unit]'s breathe once [param tween] (a real animation) finishes. The unit
+## may be freed by then -- _start_idle_bob re-validates -- and a still-running motion tween
+## makes it a no-op, so overlapping animations never double-start it.
+func _resume_idle_after(tween: Tween, unit) -> void:
+	if tween == null or not tween.is_valid():
+		return
+	tween.finished.connect(func() -> void:
+		# A tween is STILL `is_valid()` at the instant it emits `finished` -- the engine
+		# invalidates it a step later. So drop it from the motion registry here, or
+		# _start_idle_bob would conclude a real animation still owns the model and
+		# decline to restart, leaving the unit frozen for the rest of the battle.
+		# A no-op for the flash/hop tweens, which were never registered as motion.
+		if is_instance_valid(unit):
+			var id: int = unit.get_instance_id()
+			if _motion_tween.get(id, null) == tween:
+				_motion_tween.erase(id)
+		_start_idle_bob(unit))
+
+
 # --- Helpers --------------------------------------------------------------
 
 ## Return a unit's primary MeshInstance3D, or null. Units in this project use a
@@ -592,8 +771,14 @@ func _begin_motion(unit, node: Node3D) -> Tween:
 	var prev = _motion_tween.get(id, null)
 	if prev is Tween and prev.is_valid():
 		prev.kill()
+	# The idle breathe drives the same `position` property -- stop it (which snaps the
+	# model back to its rest pose) before the real animation takes over, and restart it
+	# when that animation finishes. A killed tween never emits `finished`, but the
+	# replacement motion tween created above will resume the bob in its place.
+	_stop_idle_bob(unit)
 	var tw := node.create_tween()
 	_motion_tween[id] = tw
+	_resume_idle_after(tw, unit)
 	return tw
 
 ## Kill any in-flight motion tween for [param unit] (used before instant snaps).

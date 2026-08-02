@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="AudioLibrary" load_steps=13 format=3]
+[gd_resource type="Resource" script_class="AudioLibrary" load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://game/audio/AudioLibrary.gd" id="1_audiolib"]
 [ext_resource type="AudioStream" path="res://game/audio/sfx/select.wav" id="2_sfx_select"]
@@ -12,6 +12,7 @@
 [ext_resource type="AudioStream" path="res://game/audio/sfx/defeat.wav" id="10_sfx_defeat"]
 [ext_resource type="AudioStream" path="res://game/audio/sfx/ui_click.wav" id="11_sfx_ui_click"]
 [ext_resource type="AudioStream" path="res://game/audio/music/battle_theme.wav" id="12_music_battle"]
+[ext_resource type="AudioStream" path="res://game/audio/music/menu_theme.wav" id="13_music_menu"]
 
 [resource]
 script = ExtResource("1_audiolib")
@@ -26,6 +27,7 @@ sfx_victory = ExtResource("9_sfx_victory")
 sfx_defeat = ExtResource("10_sfx_defeat")
 sfx_ui_click = ExtResource("11_sfx_ui_click")
 music_battle = ExtResource("12_music_battle")
+music_menu = ExtResource("13_music_menu")
 sfx_volume_db = 0.0
 music_volume_db = -6.0
 sfx_pitch_variance = 0.05

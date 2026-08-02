@@ -9,6 +9,12 @@ extends Node
 ## _setup_game_over_screen() and added to the "UI" CanvasLayer.
 const GAME_OVER_SCREEN_SCENE := preload("res://game/ui/screens/GameOverScreen.tscn")
 
+## Battle-juice layers, preloaded as SCRIPTS rather than referenced by their global
+## class_name. Both are brand-new files, and a fresh checkout resolves a global class
+## only once the editor/engine has rescanned -- a preload by path never has that problem.
+const DAMAGE_NUMBERS_SCRIPT := preload("res://game/visuals/DamageNumbers.gd")
+const IMPACT_FX_SCRIPT := preload("res://game/visuals/ImpactFX.gd")
+
 var map_loader: MapLoader
 var current_map_path: String = ""
 
@@ -78,6 +84,15 @@ var _hazard_manager: HazardManager = null
 ## map load so its per-battle latches reset. The collection itself is process-wide static
 ## state in [ItemInventory] and outlives this node.
 var _item_system: ItemSystem = null
+
+## Floating combat numbers (see [DamageNumbers]) and code-built impact particles (see
+## [ImpactFX]): two additive Node3D presentation layers mounted in the 3D scene root
+## beside [TileEffectOverlay]. Created fresh per battle in _setup_damage_numbers() /
+## _setup_impact_fx() -- the same free-then-recreate discipline as the spawn/hazard/item
+## runtimes -- so no popup or particle burst can outlive the battle that produced it.
+## Both self-wire to GameEvents in their own _ready; there is nothing to connect here.
+var _damage_numbers: Node3D = null
+var _impact_fx: Node3D = null
 
 func _ready() -> void:
 	# Discoverable by decoupled systems that need to spawn units mid-battle without a
@@ -255,6 +270,12 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# Stand up the runtime spawn scheduler for THIS battle. Done after the rebuild so
 	# it can adopt the load-time seed units off the fresh board (to time their deaths).
 	_setup_spawn_manager()
+
+	# Battle juice for THIS battle: floating damage/heal numbers and impact particles.
+	# Recreated per load like the runtimes above, so a second battle in the same app run
+	# never inherits a popup or a burst from the previous one.
+	_setup_damage_numbers()
+	_setup_impact_fx()
 
 	# Stand up the per-battle hazard runtime alongside it, so crawling vines cast this
 	# battle tick forward and none leak into the next one.
@@ -581,6 +602,45 @@ func _setup_spawn_manager() -> void:
 	add_child(_spawn_manager)
 	_spawn_manager.setup(map_loader, map_loader.current_map)
 
+# --- Battle juice (floating numbers + impact particles) ---------------------
+
+func _setup_damage_numbers() -> void:
+	"""Create (or recreate) the per-battle [DamageNumbers] layer, mirroring
+	_setup_spawn_manager's free-then-recreate discipline. Unlike the spawn/hazard/item
+	runtimes this is a Node3D, so it goes in the 3D scene root (like TileEffectOverlay),
+	NOT the "UI" CanvasLayer. It subscribes to GameEvents in its own _ready -- there is
+	nothing to wire here. Bails silently without a current_scene: that is an expected
+	condition on every scene transition, and the missing numbers ARE the report."""
+	if _damage_numbers != null and is_instance_valid(_damage_numbers):
+		_damage_numbers.queue_free()
+	_damage_numbers = null
+
+	# Guard get_tree() too, not just current_scene: a map load can land on the same frame
+	# as a scene hand-off (Rematch / Arena), which detaches this node mid-call.
+	var tree := get_tree()
+	if tree == null or tree.current_scene == null:
+		return
+	var scene_root: Node = tree.current_scene
+
+	_damage_numbers = DAMAGE_NUMBERS_SCRIPT.new()
+	scene_root.add_child(_damage_numbers)
+
+func _setup_impact_fx() -> void:
+	"""Create (or recreate) the per-battle [ImpactFX] layer, exactly as
+	_setup_damage_numbers does -- same 3D scene-root mount, same per-battle lifetime,
+	same self-wiring."""
+	if _impact_fx != null and is_instance_valid(_impact_fx):
+		_impact_fx.queue_free()
+	_impact_fx = null
+
+	var tree := get_tree()
+	if tree == null or tree.current_scene == null:
+		return
+	var scene_root: Node = tree.current_scene
+
+	_impact_fx = IMPACT_FX_SCRIPT.new()
+	scene_root.add_child(_impact_fx)
+
 # --- Networked command seam (CommandApplier + registry per battle) ----------
 
 func _setup_command_seam() -> void:
@@ -628,6 +688,15 @@ func _exit_tree() -> void:
 	outlives the board it mutated. Null-safe -- a no-op if NetSession is absent."""
 	if typeof(NetSession) == TYPE_OBJECT and NetSession != null:
 		NetSession.clear_command_seam()
+	# The juice layers are parented to the SCENE ROOT, not to this node, so they are not
+	# freed with us. The scene root normally takes them, but dropping them explicitly means
+	# a hand-off that reuses the root (Rematch / Arena) can never inherit the old layers.
+	if _damage_numbers != null and is_instance_valid(_damage_numbers):
+		_damage_numbers.queue_free()
+	_damage_numbers = null
+	if _impact_fx != null and is_instance_valid(_impact_fx):
+		_impact_fx.queue_free()
+	_impact_fx = null
 
 func _setup_item_system() -> void:
 	"""Create (or recreate) the per-battle ItemSystem, mirroring _setup_hazard_manager. Frees

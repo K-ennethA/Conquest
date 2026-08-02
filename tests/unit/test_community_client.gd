@@ -40,13 +40,13 @@ var _challenges_before: PackedStringArray = PackedStringArray()
 func before_each() -> void:
 	_recover_stale_config()
 	_maps_before = _list_dir(CommunityClient.MAPS_DIR)
-	_challenges_before = _list_dir(ChallengeCodec.CHALLENGE_DIR)
+	_challenges_before = _list_dir(ChallengeCodec.challenge_dir())
 
 
 func after_each() -> void:
 	# Remove anything a test added to the shared library dirs, then the mock root.
 	_restore_dir(CommunityClient.MAPS_DIR, _maps_before)
-	_restore_dir(ChallengeCodec.CHALLENGE_DIR, _challenges_before)
+	_restore_dir(ChallengeCodec.challenge_dir(), _challenges_before)
 	_rm_rf(TMP_ROOT)
 	_restore_config()
 
@@ -107,7 +107,7 @@ func test_tampered_challenge_is_rejected_and_writes_nothing() -> void:
 	var result: Dictionary = _client().install_payload(CommunityProvider.TYPE_CHALLENGE, payload)
 	assert_false(bool(result.get("ok", true)), "a tampered challenge must be rejected")
 	assert_true(String(result.get("error", "")).length() > 0, "rejection must carry a reason")
-	assert_eq(_list_dir(ChallengeCodec.CHALLENGE_DIR), _challenges_before,
+	assert_eq(_list_dir(ChallengeCodec.challenge_dir()), _challenges_before,
 		"a rejected challenge must write NOTHING to the challenge library")
 
 
@@ -146,7 +146,7 @@ func test_mislabelled_payload_cannot_smuggle_a_bad_map() -> void:
 
 	var result: Dictionary = _client().install_payload(CommunityProvider.TYPE_CHALLENGE, payload)
 	assert_false(bool(result.get("ok", true)), "a map labelled 'challenge' must not install")
-	assert_eq(_list_dir(ChallengeCodec.CHALLENGE_DIR), _challenges_before, "nothing written")
+	assert_eq(_list_dir(ChallengeCodec.challenge_dir()), _challenges_before, "nothing written")
 	assert_eq(_list_dir(CommunityClient.MAPS_DIR), _maps_before, "nothing written")
 
 
@@ -163,7 +163,7 @@ func test_download_to_library_rejects_a_tampered_payload_end_to_end() -> void:
 
 	var result: Dictionary = _sync(func(cb: Callable): client.download_to_library(summary, cb))
 	assert_false(bool(result.get("ok", true)), "download must reject the tampered payload")
-	assert_eq(_list_dir(ChallengeCodec.CHALLENGE_DIR), _challenges_before,
+	assert_eq(_list_dir(ChallengeCodec.challenge_dir()), _challenges_before,
 		"a rejected download must leave the library untouched")
 
 
