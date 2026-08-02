@@ -11,6 +11,19 @@ class_name NetworkMultiplayerSetup
 # When false the button is hidden and the handler refuses to run.
 const ENABLE_HOST_AUTO_CLIENT := false
 
+## Where the last address/port/name a player joined with is remembered, so the second
+## machine does not have to re-type the host's LAN IP every single test run.
+const NET_PREFS_PATH := "user://net.cfg"
+## How long "Connecting..." may run before we tell the player it did not reach the host.
+## Deliberately longer than the transport's own wait so the transport reports first when
+## it can, and this is the backstop that guarantees the UI never hangs on "Connecting...".
+const CONNECT_TIMEOUT_SEC := 8.0
+const DEFAULT_PORT := 8910
+
+## What the join half of this screen is doing right now. Drives the status text and
+## which buttons are live; there is exactly one place each state is entered.
+enum ConnectState { IDLE, CONNECTING, CONNECTED, REJECTED }
+
 @onready var host_button: Button = $CenterContainer/VBoxContainer/NetworkButtons/HostButton
 @onready var host_with_client_button: Button = $CenterContainer/VBoxContainer/NetworkButtons/HostWithClientButton
 @onready var join_button: Button = $CenterContainer/VBoxContainer/NetworkButtons/JoinButton
@@ -23,6 +36,9 @@ const ENABLE_HOST_AUTO_CLIENT := false
 @onready var connect_button: Button = $CenterContainer/VBoxContainer/JoinContainer/ConnectButton
 
 @onready var status_label: Label = $CenterContainer/VBoxContainer/StatusLabel
+## "First time on two machines?" walkthrough. Optional so an older copy of the scene
+## (or a test that builds this Control by hand) still works.
+@onready var hint_label: Label = get_node_or_null("CenterContainer/VBoxContainer/HintLabel") as Label
 
 # Game mode manager for unified multiplayer
 # Using the autoload singleton
@@ -40,11 +56,49 @@ var lobby_container: VBoxContainer
 var players_list_label: Label
 var start_game_button: Button
 
+# --- Join/host hardening state ----------------------------------------------
+## Current join state (see [enum ConnectState]).
+var connect_state: int = ConnectState.IDLE
+## Wall-clock deadline for the current connect attempt, in engine ticks. Only read
+## while [member connect_state] is CONNECTING.
+var _connect_deadline_msec: int = 0
+## Big always-on-top label that keeps the host's join address visible even after the
+## collaborative lobby covers the setup screen (created lazily, like the Cancel button).
+var host_info_label: Label = null
+## The address/port/name of the join attempt in flight, kept so the signal-driven state
+## transitions can name them without re-reading (and re-validating) the form.
+var _join_address: String = ""
+var _join_port: int = DEFAULT_PORT
+var _join_player_name: String = "Player"
+
+# --- Transport ---------------------------------------------------------------
+# HOST AND JOIN RUN ON NetSession, the consolidated server-authoritative transport -- the
+# SAME session the in-battle command seam reads. That is the whole point: the old path
+# (GameModeManager -> MultiplayerNetworkHandler -> P2PNetworkBackend) set the scene-tree peer
+# behind NetSession's back, so NetSession's roster stayed empty, is_networked_match() was
+# false in battle, and two connected machines each resolved their own moves locally. Routing
+# the lobby through NetSession is what makes the battle actually shared.
+#
+# The legacy GameModeManager is still constructed and still torn down here (it owns the
+# GameManager session object other screens query); it is simply no longer the transport.
+
+## The live NetSession autoload, or null in a bare test harness that has no autoloads.
+func _net() -> Node:
+	if typeof(NetSession) == TYPE_OBJECT and NetSession != null:
+		return NetSession
+	return null
+
+## True when NetSession currently holds a live (connected) peer -- host or client.
+func _net_session_live() -> bool:
+	var net: Node = _net()
+	return net != null and net.has_method("is_connected_session") and bool(net.is_connected_session())
+
 func _ready() -> void:
 	theme = MenuTheme.build()  # dark Legends-style menu look
 	MenuTheme.style_title(get_node_or_null("CenterContainer/VBoxContainer/TitleLabel") as Label, 32)
 	MenuTheme.style_section_header(get_node_or_null("CenterContainer/VBoxContainer/JoinContainer/JoinTitle") as Label)
 	MenuTheme.style_caption(status_label)
+	MenuTheme.style_caption(hint_label)
 
 	# Connect button signals
 	if host_button:
@@ -64,30 +118,53 @@ func _ready() -> void:
 	if join_container:
 		join_container.visible = false
 	
-	# Set default values
+	# Set default values, then let any remembered ones win (see _load_net_prefs).
 	if address_input:
 		address_input.text = "127.0.0.1"
 	if port_input:
-		port_input.text = "8910"
+		port_input.text = str(DEFAULT_PORT)
 	if player_name_input:
 		player_name_input.text = "Player"
-	
+	_load_net_prefs()
+
+	if hint_label:
+		hint_label.text = _first_time_hint()
+
 	# Create lobby UI (hidden initially)
 	_create_lobby_ui()
-	
-	# Add lobby system test for development
-	var lobby_test = Node.new()
-	lobby_test.name = "LobbySystemTest"
-	lobby_test.set_script(load("res://dev_scripts/test_lobby_system.gd"))
-	add_child(lobby_test)
-	
+
+	# Dev-only lobby probe. dev_scripts/ is excluded from exported builds
+	# (export_presets.cfg), so this must never be a hard dependency of the menu.
+	if ResourceLoader.exists("res://dev_scripts/test_lobby_system.gd"):
+		var lobby_test := Node.new()
+		lobby_test.name = "LobbySystemTest"
+		lobby_test.set_script(load("res://dev_scripts/test_lobby_system.gd"))
+		add_child(lobby_test)
+
 	# Get game mode manager from autoload
 	game_mode_manager = GameModeManager
 	
 	# Connect signals
 	game_mode_manager.game_started.connect(_on_game_started)
 	game_mode_manager.game_ended.connect(_on_game_ended)
-	
+
+	# NetSession is the transport, so the join state machine is driven by ITS signals:
+	#   join_rejected      -- the build gate refused us (looks like a successful connect,
+	#                         then vanishes, so it gets its own explicit state)
+	#   roster_changed     -- we were seated; this is what "connected" actually means
+	#   connection_failed  -- the socket never came up
+	#   disconnected       -- the host went away (or dropped us after a refusal)
+	var net: Node = _net()
+	if net != null:
+		if net.has_signal("join_rejected") and not net.join_rejected.is_connected(_on_join_rejected):
+			net.join_rejected.connect(_on_join_rejected)
+		if net.has_signal("roster_changed") and not net.roster_changed.is_connected(_on_net_roster_changed):
+			net.roster_changed.connect(_on_net_roster_changed)
+		if net.has_signal("connection_failed") and not net.connection_failed.is_connected(_on_net_connection_failed):
+			net.connection_failed.connect(_on_net_connection_failed)
+		if net.has_signal("disconnected") and not net.disconnected.is_connected(_on_net_disconnected):
+			net.disconnected.connect(_on_net_disconnected)
+
 	_update_status("Choose to host or join a network game")
 	
 	print("Network Multiplayer Setup initialized")
@@ -214,38 +291,59 @@ func _create_lobby_ui() -> void:
 	_update_map_info()
 
 func _on_host_pressed() -> void:
-	"""Handle Host button press"""
+	"""Handle Host button press: open a NetSession listen-server and show the lobby."""
 	print("[HOST] Starting network multiplayer host...")
 	_update_status("Starting host...")
-	
+
 	# Disable buttons while connecting
 	_set_buttons_enabled(false)
-	
-	# Start hosting using the unified system with P2P mode
-	var host_success = await game_mode_manager.start_network_multiplayer_host("Host Player", "p2p")
-	
-	if host_success:
-		print("[HOST] Host started successfully")
-		
-		# Get connection info for display
-		var status = game_mode_manager.get_game_status()
-		var connection_info = status.get("connection_info", {})
-		var port = connection_info.get("port", 8910)
-		
-		print("[HOST] Connection info - Port: " + str(port))
-		print("[HOST] Share this address with other players: 127.0.0.1:" + str(port))
 
-		_update_status("Waiting for opponent (port %d)" % port)
+	var port: int = DEFAULT_PORT
+	var host_name: String = _host_display_name()
+	var err: int = _start_net_host(host_name, port)
 
-		# Show collaborative lobby
-		_show_collaborative_lobby(true, "Host Player")
-
-		# Enter host-active state and show a Cancel affordance over the lobby.
-		is_host_active = true
-		_show_host_cancel_button()
-	else:
-		_update_status("Failed to start host. Please try again.")
+	if err != OK:
+		print("[HOST] Host failed to start: %s" % error_string(err))
+		_update_status("Could not start hosting on port %d (%s). Another copy of Conquest may already be hosting." % [port, error_string(err)])
 		_set_buttons_enabled(true)
+		return
+
+	print("[HOST] Host started successfully on port " + str(port))
+	for lan_address in _lan_addresses():
+		print("[HOST] Players on your network join: %s:%d" % [lan_address, port])
+
+	is_hosting = true
+	_update_status(_host_join_line(port))
+
+	# Show collaborative lobby
+	_show_collaborative_lobby(true, host_name)
+
+	# Enter host-active state and show a Cancel affordance over the lobby.
+	is_host_active = true
+	_show_host_cancel_button()
+	# The lobby hides the status label, so the join address gets its own always-on-top
+	# label -- the other machine needs to read it off this screen.
+	_show_host_info(port)
+
+## Open the listen server on NetSession. Two players max: this screen is 1v1, and a capped
+## lobby means a third dialler is cleanly refused (REJECT_LOBBY_FULL) instead of silently
+## occupying a slot the battle has no player for.
+func _start_net_host(host_name: String, port: int) -> int:
+	var net: Node = _net()
+	if net == null:
+		return ERR_UNAVAILABLE
+	# A stale peer from a previous attempt would make create_server fail; start clean.
+	net.leave()
+	return int(net.host_game(host_name, port, 2))
+
+## The host's display name. Reuses the remembered join name when the player set one, so both
+## machines show a name the human chose rather than two "Player"s.
+func _host_display_name() -> String:
+	if player_name_input != null:
+		var typed: String = player_name_input.text.strip_edges()
+		if typed != "" and typed != "Player":
+			return typed
+	return "Host Player"
 
 func _on_host_with_client_pressed() -> void:
 	"""Handle Host with Client button press - starts host and launches client instance"""
@@ -256,41 +354,15 @@ func _on_host_with_client_pressed() -> void:
 		_update_status("Host with Client is a dev-only feature (disabled).")
 		return
 	print("Starting network multiplayer host with automatic client...")
-	_update_status("Starting host with client...")
-	
-	# Disable buttons while setting up
-	_set_buttons_enabled(false)
-	
-	# Start hosting using the unified system
-	var host_client_success = await game_mode_manager.start_network_multiplayer_host("Host Player", "local")
-	
-	if host_client_success:
-		print("Host started successfully, launching client...")
-		
-		# Get the actual port the host is using
-		var status = game_mode_manager.get_game_status()
-		var connection_info = status.get("connection_info", {})
-		var actual_port = connection_info.get("port", 8910)
-		
-		print("Host is running on port: " + str(actual_port))
-		
-		# Launch client instance
-		_launch_simple_client_instance()
-		
-		# Show lobby instead of auto-starting game
-		_show_lobby("127.0.0.1", actual_port)
-		is_hosting = true
-		is_host_active = true
-		connected_players = ["Host Player"]
-		_update_players_list()
-		_show_host_cancel_button()
 
-		# Wait for client to connect
-		_update_status("Waiting for opponent (port %d)" % actual_port)
-		_monitor_for_client_connection()
-	else:
-		_update_status("Failed to start host. Please try again.")
-		_set_buttons_enabled(true)
+	# Deliberately the SAME code path a human takes (NetSession listen server + collaborative
+	# lobby). The harness only adds the second process; if it ever diverges from the real Host
+	# button it stops testing the thing that ships.
+	_on_host_pressed()
+	if not is_host_active:
+		return  # _on_host_pressed already explained the failure.
+
+	_launch_simple_client_instance()
 
 func _launch_simple_client_instance() -> void:
 	"""Launch client using AutoClientDetector system"""
@@ -376,33 +448,165 @@ func _on_join_pressed() -> void:
 
 func _on_connect_pressed() -> void:
 	"""Handle Connect button press"""
-	var address = address_input.text if address_input else "127.0.0.1"
-	var port_text = port_input.text if port_input else "8910"
-	var player_name = player_name_input.text if player_name_input else "Player"
-	
-	var port = int(port_text)
-	if port <= 0:
-		port = 8910
-	
+	if connect_state == ConnectState.CONNECTING:
+		return  # Already dialling -- a second press must not stack two attempts.
+
+	var address: String = (address_input.text if address_input else "127.0.0.1").strip_edges()
+	var port_text: String = port_input.text if port_input else str(DEFAULT_PORT)
+	var player_name: String = (player_name_input.text if player_name_input else "Player").strip_edges()
+	if player_name == "":
+		player_name = "Player"
+
+	# Validate the shape BEFORE touching the socket: a typo'd address otherwise burns the
+	# full connect timeout before saying anything useful.
+	if not _is_valid_address(address):
+		_update_status("That address does not look right. Use the host's LAN IP, e.g. 192.168.1.24")
+		return
+	var port: int = int(port_text)
+	if not _is_valid_port(port):
+		_update_status("Port must be between 1024 and 65535 (the host's screen shows it).")
+		return
+
+	_save_net_prefs(address, port, player_name)
+
 	print("[CLIENT] Joining network game at %s:%d as %s" % [address, port, player_name])
-	_update_status("Connecting to " + address + ":" + str(port) + "...")
-	
+	connect_state = ConnectState.CONNECTING
+	_join_address = address
+	_join_port = port
+	_join_player_name = player_name
+	_connect_deadline_msec = Time.get_ticks_msec() + int(CONNECT_TIMEOUT_SEC * 1000.0)
+	_update_status("Connecting to %s:%d ..." % [address, port])
+
 	# Disable buttons while connecting
 	_set_buttons_enabled(false)
-	
-	# Join using the unified system with P2P mode
-	var join_success = await game_mode_manager.join_network_multiplayer(address, port, player_name, "p2p")
-	
-	if join_success:
-		_update_status("Connected! Waiting for lobby...")
-		print("[CLIENT] Successfully joined network game")
-		
-		# Show collaborative lobby
-		_show_collaborative_lobby(false, player_name)
-	else:
-		print("[CLIENT] Failed to connect to host")
-		_update_status("Failed to connect. Check address and port.")
+
+	# Dial through NetSession -- the same session the battle's command seam reads. The hello /
+	# version handshake fires the moment the socket comes up (NetSession._on_connected_to_server),
+	# and the outcome arrives on a signal, never on this call's return value: create_client()
+	# only reports that the socket could be OPENED.
+	var net: Node = _net()
+	if net == null:
+		connect_state = ConnectState.IDLE
+		_update_status("Networking is unavailable in this build.")
 		_set_buttons_enabled(true)
+		return
+	net.leave()  # Drop any half-open peer from a previous attempt.
+	var err: int = int(net.join_game(address, player_name, port))
+	if err != OK:
+		connect_state = ConnectState.IDLE
+		print("[CLIENT] join_game failed immediately: %s" % error_string(err))
+		_update_status("Could not open a connection to %s:%d (%s)." % [address, port, error_string(err)])
+		_set_buttons_enabled(true)
+		return
+
+	# Countdown runs alongside the join (deliberately NOT awaited) so the player sees the
+	# attempt tick down instead of a frozen "Connecting..." forever. It is the backstop for
+	# the case where the transport reports nothing at all.
+	_run_connect_countdown(address, port)
+
+
+## NetSession seated us (or the roster moved). Being IN the roster is what "connected"
+## actually means on this transport -- the socket coming up only means the hello is in
+## flight, and a build mismatch is refused after that point.
+func _on_net_roster_changed(_roster: Dictionary) -> void:
+	if connect_state != ConnectState.CONNECTING:
+		return
+	var net: Node = _net()
+	if net == null or net.is_server():
+		return
+	if int(net.local_slot()) < 0:
+		return
+	connect_state = ConnectState.CONNECTED
+	print("[CLIENT] Successfully joined network game (slot %d)" % int(net.local_slot()))
+	_update_status("Connected to %s:%d. Waiting for the lobby..." % [_join_address, _join_port])
+	_show_collaborative_lobby(false, _join_player_name)
+
+
+## The socket never came up.
+func _on_net_connection_failed() -> void:
+	print("[CLIENT] Transport reported connection_failed")
+	_fail_connect(_join_address, _join_port)
+
+
+## The host went away. Harmless noise after a refusal (which owns the message) or when we
+## are not in a join flow at all; otherwise it is the end of this attempt/session.
+func _on_net_disconnected() -> void:
+	if connect_state == ConnectState.REJECTED:
+		return  # _on_join_rejected already said why, and it is the more useful message.
+	if connect_state == ConnectState.CONNECTING:
+		_fail_connect(_join_address, _join_port)
+		return
+	if connect_state == ConnectState.CONNECTED:
+		connect_state = ConnectState.IDLE
+		if collaborative_lobby and is_instance_valid(collaborative_lobby):
+			collaborative_lobby.queue_free()
+			collaborative_lobby = null
+		if join_container:
+			join_container.visible = true
+		if status_label:
+			status_label.visible = true
+		_set_buttons_enabled(true)
+		_update_status("The host closed the game.")
+
+
+## Dev harness entry point (--multiplayer-auto-join, see systems/multiplayer_launcher.gd):
+## fill the join form and press Connect on the SAME path a human uses, so the two-instance
+## harness can never drift from the flow that ships.
+func begin_auto_join(address: String, port: int, player_name: String) -> void:
+	_on_join_pressed()
+	if address_input:
+		address_input.text = address
+	if port_input:
+		port_input.text = str(port)
+	if player_name_input:
+		player_name_input.text = player_name
+	_on_connect_pressed()
+
+
+## Tick the visible connect countdown until we leave the CONNECTING state, then declare
+## the attempt dead if the deadline ran out first.
+func _run_connect_countdown(address: String, port: int) -> void:
+	while connect_state == ConnectState.CONNECTING:
+		if not is_inside_tree():
+			return
+		var remaining_msec: int = _connect_deadline_msec - Time.get_ticks_msec()
+		if remaining_msec <= 0:
+			_fail_connect(address, port)
+			return
+		_update_status("Connecting to %s:%d ... (%ds)" % [address, port, int(ceil(remaining_msec / 1000.0))])
+		await get_tree().create_timer(0.25).timeout
+
+
+## Leave CONNECTING with the "we never reached the host" explanation. Idempotent.
+func _fail_connect(address: String, port: int) -> void:
+	if connect_state != ConnectState.CONNECTING:
+		return
+	connect_state = ConnectState.IDLE
+	# Drop the half-open peer, else the next Connect press hits a socket that is still dialling.
+	var net: Node = _net()
+	if net != null:
+		net.leave()
+	_update_status("Could not reach %s:%d - check the address, that the host clicked Host, and that Windows Firewall allowed Conquest on both machines." % [address, port])
+	_set_buttons_enabled(true)
+
+
+## The host refused this peer (build/protocol mismatch, full lobby). Arrives on the
+## NetSession transport AFTER the socket came up, so it can land during or just after a
+## seemingly successful connect -- either way it is the final word on this attempt.
+func _on_join_rejected(reason: String, info: Dictionary) -> void:
+	connect_state = ConnectState.REJECTED
+	var explanation: String = NetProtocol.describe_rejection(reason, info)
+	print("[CLIENT] Join refused: " + explanation)
+	# Drop any lobby we optimistically opened, and put the join form back.
+	if collaborative_lobby and is_instance_valid(collaborative_lobby):
+		collaborative_lobby.queue_free()
+		collaborative_lobby = null
+	if join_container:
+		join_container.visible = true
+	if status_label:
+		status_label.visible = true
+	_set_buttons_enabled(true)
+	_update_status(explanation)
 
 # Collaborative lobby
 var collaborative_lobby: Control = null
@@ -482,6 +686,122 @@ func _on_lobby_game_starting(map_path: String) -> void:
 	print("[SETUP] Game starting with map: " + map_path)
 	# Lobby handles the scene transition
 
+# ---------------------------------------------------------------------------
+# Two-machine helpers: the host's address, the join form's memory, validation
+# ---------------------------------------------------------------------------
+
+## Every private-range IPv4 this machine owns, i.e. the addresses another machine on the
+## same router can actually dial. Loopback, link-local (169.254.x) and IPv6 are dropped:
+## handing the player 127.0.0.1 or a v6 address is the single most common reason a
+## two-machine test fails before it starts.
+func _lan_addresses() -> PackedStringArray:
+	var result: PackedStringArray = PackedStringArray()
+	for address in IP.get_local_addresses():
+		var text: String = String(address)
+		if not text.is_valid_ip_address() or text.contains(":"):
+			continue  # IPv6 (or junk) -- ENet here is dialled by IPv4.
+		var octets: PackedStringArray = text.split(".")
+		if octets.size() != 4:
+			continue
+		var first: int = int(octets[0])
+		var second: int = int(octets[1])
+		var is_private: bool = first == 10 \
+			or (first == 172 and second >= 16 and second <= 31) \
+			or (first == 192 and second == 168)
+		if is_private and not result.has(text):
+			result.append(text)
+	return result
+
+## The line the host reads out loud to the other machine.
+func _host_join_line(port: int) -> String:
+	var addresses: PackedStringArray = _lan_addresses()
+	if addresses.is_empty():
+		return "Hosting on port %d. No private network address found - both machines must be on the same Wi-Fi/router." % port
+	var joined: PackedStringArray = PackedStringArray()
+	for address in addresses:
+		joined.append("%s:%d" % [address, port])
+	return "Players on your network join:  %s" % "     ".join(joined)
+
+## Keep the host's join address readable even after the collaborative lobby covers this
+## screen. Same lazy always-on-top pattern as the Cancel button.
+func _show_host_info(port: int) -> void:
+	if host_info_label == null or not is_instance_valid(host_info_label):
+		host_info_label = Label.new()
+		host_info_label.name = "HostInfoLabel"
+		host_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		host_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		host_info_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		host_info_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+		host_info_label.offset_left = 180
+		host_info_label.offset_right = -24
+		host_info_label.offset_top = 24
+		host_info_label.offset_bottom = 96
+		host_info_label.add_theme_font_size_override("font_size", 18)
+		add_child(host_info_label)
+	host_info_label.text = _host_join_line(port)
+	host_info_label.visible = true
+	host_info_label.move_to_front()
+
+func _hide_host_info() -> void:
+	if host_info_label and is_instance_valid(host_info_label):
+		host_info_label.queue_free()
+	host_info_label = null
+
+## True when [param address] is shaped like something ENet can dial: an IPv4 literal,
+## "localhost", or a plain hostname. Shape only -- reachability is the connect attempt's job.
+func _is_valid_address(address: String) -> bool:
+	var text: String = address.strip_edges()
+	if text.is_empty() or text.length() > 253:
+		return false
+	if text.is_valid_ip_address():
+		return not text.contains(":")  # IPv4 literal.
+	if text.contains(".") and text.split(".").size() == 4 and text[0].is_valid_int():
+		return false  # Looks like a botched IPv4 ("192.168.1.999") -- do not treat as a hostname.
+	for i in text.length():
+		var c: String = text[i]
+		if not (c.is_valid_identifier() or c.is_valid_int() or c == "-" or c == "." or c == "_"):
+			return false
+	return true
+
+## Ports below 1024 need admin rights on Windows; 0 and >65535 are not ports at all.
+func _is_valid_port(port: int) -> bool:
+	return port >= 1024 and port <= 65535
+
+## The walkthrough for someone doing this for the first time. Short on purpose -- the
+## full script is docs/NETWORK_TESTING.md.
+func _first_time_hint() -> String:
+	return "First time on two machines? Both machines must run the SAME build. " \
+		+ "On machine A press Host and ALLOW the Windows Firewall prompt (Private networks). " \
+		+ "On machine B press Join and type the address A shows."
+
+# --- Remembered join details (user://net.cfg) --------------------------------
+
+func _load_net_prefs() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(NET_PREFS_PATH) != OK:
+		return  # Nothing saved yet -- keep the defaults.
+	if address_input:
+		var saved_address: String = String(cfg.get_value("join", "address", ""))
+		if _is_valid_address(saved_address):
+			address_input.text = saved_address
+	if port_input:
+		var saved_port: int = int(cfg.get_value("join", "port", DEFAULT_PORT))
+		if _is_valid_port(saved_port):
+			port_input.text = str(saved_port)
+	if player_name_input:
+		var saved_name: String = String(cfg.get_value("join", "player_name", "")).strip_edges()
+		if saved_name != "":
+			player_name_input.text = saved_name
+
+func _save_net_prefs(address: String, port: int, player_name: String) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(NET_PREFS_PATH)  # Preserve any other sections; ignore load failure.
+	cfg.set_value("join", "address", address)
+	cfg.set_value("join", "port", port)
+	cfg.set_value("join", "player_name", player_name)
+	cfg.save(NET_PREFS_PATH)
+
+
 func _show_host_cancel_button() -> void:
 	"""Show a Cancel button over the lobby that tears down hosting at any stage."""
 	if host_cancel_button and is_instance_valid(host_cancel_button):
@@ -508,14 +828,17 @@ func _on_cancel_hosting_pressed() -> void:
 func _teardown_hosting() -> void:
 	"""Stop hosting, close the server peer, and restore the setup screen.
 
-	Leaves no orphaned listener: end_current_game() -> handler.disconnect_network()
-	-> backend.disconnect_network() closes the ENet peer and nulls the scene-tree
-	multiplayer_peer. Also stops _monitor_for_client_connection (its loop is gated
-	on is_hosting + lobby_container.visible, both cleared here)."""
+	NetSession.leave() closes the ENet peer, nulls the scene-tree multiplayer_peer and
+	empties the roster, so no listener and no half-open socket outlives this screen. The
+	legacy GameModeManager session is ended too -- it is no longer the transport, but it
+	still owns a GameManager session object other screens query."""
 	is_host_active = false
 	is_hosting = false
 
-	# Tear down the network peer + game session.
+	# Tear down the network peer (NetSession is the transport) and the legacy game session.
+	var net: Node = _net()
+	if net != null:
+		net.leave()
 	if game_mode_manager:
 		game_mode_manager.end_current_game()
 
@@ -529,10 +852,11 @@ func _teardown_hosting() -> void:
 		lobby_container.visible = false
 	connected_players.clear()
 
-	# Remove the Cancel button.
+	# Remove the Cancel button and the host's join-address banner.
 	if host_cancel_button and is_instance_valid(host_cancel_button):
 		host_cancel_button.queue_free()
 		host_cancel_button = null
+	_hide_host_info()
 
 	# Restore the setup screen.
 	if host_button:
@@ -561,10 +885,13 @@ func _on_back_pressed() -> void:
 		_update_status("Choose to host or join a network game")
 		return
 	
-	# Clean up game mode manager
+	# Drop any live session (a connected client backing out) plus the legacy game session.
+	var net: Node = _net()
+	if net != null and _net_session_live():
+		net.leave()
 	if game_mode_manager:
 		game_mode_manager.end_current_game()
-	
+
 	get_tree().change_scene_to_file("res://menus/MultiplayerModeSelection.tscn")
 
 func _start_game_with_multiplayer() -> void:
@@ -642,7 +969,7 @@ func _input(event: InputEvent) -> void:
 				else:
 					_on_back_pressed()
 
-func _show_lobby(address: String, port: int) -> void:
+func _show_lobby(_address: String, port: int) -> void:
 	"""Show the multiplayer lobby"""
 	print("Showing multiplayer lobby...")
 	
@@ -659,7 +986,8 @@ func _show_lobby(address: String, port: int) -> void:
 	# Update connection info
 	var connection_info_label = lobby_container.get_node_or_null("ConnectionInfo")
 	if connection_info_label:
-		connection_info_label.text = "Host Address: %s:%d" % [address, port]
+		# Show the address ANOTHER machine can dial, not the loopback one this process used.
+		connection_info_label.text = _host_join_line(port)
 	
 	# Show lobby
 	if lobby_container:
@@ -757,6 +1085,7 @@ func _hide_lobby() -> void:
 	# Reset state
 	is_hosting = false
 	connected_players.clear()
+	_hide_host_info()
 	_set_buttons_enabled(true)
 
 func _on_map_selected(index: int) -> void:

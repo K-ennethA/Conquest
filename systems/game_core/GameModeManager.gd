@@ -149,9 +149,38 @@ func end_current_game() -> void:
 		_network_handler.disconnect_network()
 		_network_handler = null
 
+# --- NetSession (consolidated transport) awareness ---------------------------
+# Host/Join now run on NetSession, NOT on this manager's MultiplayerNetworkHandler. On that
+# path `_network_handler` is null and `_game_manager` never started a session, so the three
+# queries below -- which the whole battle UI reads through (UnitActionsPanel's ownership and
+# turn gates, PlayerManager.can_current_player_select_unit, UnitVisualManager's "your units"
+# tint) -- would answer as if this were single-player: local player 0 on BOTH machines, and
+# never anyone's turn. That is what made the client unable to touch its own units.
+#
+# These are additive prefixes: when NetSession is not a live networked match every one of
+# them falls through to exactly the previous behaviour, so solo / hotseat / the legacy
+# network stack are untouched.
+
+## True when NetSession is the live, connected, multi-participant session for this process
+## AND it has seated us in a slot.
+func _netsession_is_live() -> bool:
+	if typeof(NetSession) != TYPE_OBJECT or NetSession == null:
+		return false
+	if not NetSession.has_method("is_networked_match") or not NetSession.is_networked_match():
+		return false
+	return int(NetSession.local_slot()) >= 0
+
 # Action submission - unified interface
 func submit_action(action_type: String, action_data: Dictionary) -> bool:
 	"""Submit a player action (works for all game modes)"""
+	# NetSession path: this manager's GameManager session was never started, so its
+	# submit_player_action refuses everything (`_is_game_active` is false) -- which would
+	# dead-end the callers that use the return value purely as a permission check (e.g.
+	# UnitActionsPanel's Move button). Real state changes on this path do NOT travel here:
+	# they are NetProtocol commands submitted to NetSession and applied by the CommandApplier
+	# on every peer. So report the local permission as granted and let the caller proceed.
+	if _netsession_is_live():
+		return true
 	if not _game_manager:
 		return false
 	return _game_manager.submit_player_action(action_type, action_data)
@@ -173,6 +202,12 @@ func is_game_active() -> bool:
 
 func is_my_turn() -> bool:
 	"""Check if it's the local player's turn"""
+	# NetSession drives its turn slot off the ACTIVE turn system through the command seam's
+	# turn bridge, so this returns the same verdict the server-side validator will give an
+	# intent submitted right now -- the UI and the authority agree by construction.
+	if _netsession_is_live():
+		return NetSession.is_my_turn()
+
 	if not _game_manager:
 		return false
 
@@ -194,6 +229,12 @@ func can_i_act() -> bool:
 
 func get_local_player_id() -> int:
 	"""Get the local player ID for this client"""
+	# NetSession path: the roster slot IS the player id (host = slot 0 = player 0, joiner =
+	# slot 1 = player 1), which is the alignment the turn bridge and the battle's player
+	# registration both assume.
+	if _netsession_is_live():
+		return int(NetSession.local_slot())
+
 	if _network_handler and _network_handler.has_method("get_local_player_id"):
 		return _network_handler.get_local_player_id()
 

@@ -69,7 +69,11 @@ func _build_ui() -> void:
 	var title := Label.new()
 	title.text = "CHALLENGES"
 	page.add_child(title)
-	MenuTheme.style_title(title, 40)
+	# 32 not 40: the page's fixed minimums (this title + subtitle + daily card + import
+	# row + status + footer) plus the list's floor must sum under 720 at 1080p-scaled-down
+	# / 720p or the CenterContainer clips BOTH ends -- see the scroll floor below, the
+	# actual overflow driver (same bug class fixed on ProfileScreen and MatchSetup).
+	MenuTheme.style_title(title, 32)
 
 	var subtitle := Label.new()
 	subtitle.text = "Beat a map someone else built -- or import a share code"
@@ -95,7 +99,16 @@ func _build_ui() -> void:
 
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(0.0, 340.0)
+	# 150 not 340: this scroll is the page's ONLY flexible region (list_card above is
+	# SIZE_EXPAND_FILL) -- its floor is what decides whether the footer (Back / Community
+	# / PLAY) fits on a 720p screen. At 340 the fixed items (title 52 + subtitle 21 +
+	# daily card ~106 + import row ~40 + status 20 + footer 48 + hint ~16 + 7 gaps * 14
+	# separation = 98) summed to ~765 against a 720 budget -- the footer rendered below
+	# the screen edge, which was the reported bug. At 150 the same sum is ~565, safely
+	# under the page's explicit 700 floor, and the leftover (700 - 565 = 135) is what
+	# the container hands back to this scroll via EXPAND_FILL, so the list still shows
+	# several rows on a normal window.
+	scroll.custom_minimum_size = Vector2(0.0, 150.0)
 	list_card.add_child(scroll)
 
 	_list_box = VBoxContainer.new()

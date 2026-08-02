@@ -2,7 +2,11 @@ extends Control
 
 class_name SettingsPanel
 
-# Fire-Emblem / Pokemon-style in-game OPTIONS overlay.
+# Fire-Emblem / Pokemon-style OPTIONS overlay. THE one settings surface: the
+# battle HUD mounts it behind its top-right gear (see
+# game/ui/layout/UILayoutManager.gd), and MainMenu mounts the same class behind
+# its own gear so the menu and the battle expose an identical panel rather than
+# two drifting copies.
 #
 # Pure front-end for the presentation settings that already live in the
 # `GameSettings` autoload: it reads current values when opened, writes through
@@ -10,11 +14,29 @@ class_name SettingsPanel
 # anywhere else. All GameSettings access is guarded so the panel is safe in a
 # headless / minimal scene where the autoload might be absent or default.
 #
+# Audio is the same deal one layer on: the three sliders write
+# GameSettings.master/music/ui_volume (LINEAR 0..1), GameSettings persists them
+# and emits, and AudioManager re-levels itself off that signal -- this panel never
+# touches AudioManager or an audio bus directly.
+#
 # Built entirely in code (no .tscn) so it can be instantiated and mounted by the
 # HUD without fragile node paths, and so the whole layout lives in one place.
 
 # --- Speed presets shown in the slider label / snapping ---------------------
 const _SPEED_STEP := 0.25
+
+# Volume sliders run 0..1 (the unit GameSettings stores) in 5% detents and are
+# shown as a percentage.
+const _VOLUME_STEP := 0.05
+
+# Vertical rhythm. The card carries four sections now, so the gap is tight
+# enough that the whole thing still fits a 720-tall viewport without scrolling
+# (~600px tall at these numbers -- raising it costs ~19px per point).
+const _ROW_SEPARATION := 10
+
+# Fallback list used when GameSettings is absent; mirrors
+# GameSettings.SPEED_TIMER_ALLOWED.
+const _TIMER_FALLBACK: Array[int] = [0, 15, 20, 30]
 
 # Controls (created in _build_ui)
 var _backdrop: ColorRect = null
@@ -23,6 +45,15 @@ var _anim_check: CheckButton = null
 var _speed_slider: HSlider = null
 var _speed_value_label: Label = null
 var _focus_option: OptionButton = null
+var _timer_value_label: Label = null
+var _timer_prev_button: Button = null
+var _timer_next_button: Button = null
+var _master_slider: HSlider = null
+var _master_value_label: Label = null
+var _music_slider: HSlider = null
+var _music_value_label: Label = null
+var _ui_slider: HSlider = null
+var _ui_value_label: Label = null
 
 # True while we are pushing GameSettings values INTO the controls, so the
 # controls' change signals don't bounce back out into the setters (feedback loop).
@@ -87,7 +118,7 @@ func _build_ui() -> void:
 	_frame.add_child(margin)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 14)
+	vbox.add_theme_constant_override("separation", _ROW_SEPARATION)
 	margin.add_child(vbox)
 
 	# Title
@@ -142,6 +173,23 @@ func _build_ui() -> void:
 	focus_row.add_child(_focus_option)
 	vbox.add_child(focus_row)
 
+	# --- Speed First move clock ---
+	# A stepper, not a slider: the allowed values are a fixed short list
+	# (GameSettings.SPEED_TIMER_ALLOWED = Off/15/20/30), so stepping through them
+	# by index cannot land on an unrepresentable value the way dragging would.
+	vbox.add_child(_build_timer_row())
+
+	vbox.add_child(_make_separator())
+
+	# --- Audio ---
+	vbox.add_child(_make_section_label("AUDIO"))
+	_master_value_label = Label.new()
+	_master_slider = _build_volume_control(vbox, "Master", _master_value_label, _on_master_volume_changed)
+	_music_value_label = Label.new()
+	_music_slider = _build_volume_control(vbox, "Music", _music_value_label, _on_music_volume_changed)
+	_ui_value_label = Label.new()
+	_ui_slider = _build_volume_control(vbox, "Interface", _ui_value_label, _on_ui_volume_changed)
+
 	vbox.add_child(_make_separator())
 
 	# --- Close ---
@@ -151,6 +199,77 @@ func _build_ui() -> void:
 	close_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	close_btn.pressed.connect(close)
 	vbox.add_child(close_btn)
+
+
+## The Speed-First move-clock stepper: `< value >` over the fixed allowed list.
+## Both arrows are >= 40px wide so the control stays touch-usable on a phone.
+func _build_timer_row() -> HBoxContainer:
+	var row := _make_row("Speed Timer")
+
+	_timer_prev_button = Button.new()
+	_timer_prev_button.name = "TimerPrev"
+	_timer_prev_button.text = "<"
+	_timer_prev_button.custom_minimum_size = Vector2(40, 32)
+	_timer_prev_button.tooltip_text = "Shorter move clock"
+	_timer_prev_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	_timer_prev_button.pressed.connect(_on_timer_step.bind(-1))
+	row.add_child(_timer_prev_button)
+
+	_timer_value_label = Label.new()
+	_timer_value_label.name = "TimerValue"
+	_timer_value_label.text = "Off"
+	_timer_value_label.custom_minimum_size = Vector2(56, 0)
+	_timer_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_timer_value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_timer_value_label.add_theme_font_size_override("font_size", 16)
+	row.add_child(_timer_value_label)
+
+	_timer_next_button = Button.new()
+	_timer_next_button.name = "TimerNext"
+	_timer_next_button.text = ">"
+	_timer_next_button.custom_minimum_size = Vector2(40, 32)
+	_timer_next_button.tooltip_text = "Longer move clock"
+	_timer_next_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	_timer_next_button.pressed.connect(_on_timer_step.bind(1))
+	row.add_child(_timer_next_button)
+
+	return row
+
+
+## One volume control: a `Label ..... 60%` header row plus the slider under it.
+## Appends both to [param parent] and returns the slider; [param value_label] is
+## the caller's label so it can be kept for later refreshes.
+func _build_volume_control(parent: VBoxContainer, label_text: String, value_label: Label,
+		on_changed: Callable) -> HSlider:
+	var header := _make_row(label_text)
+	value_label.text = "100%"
+	value_label.custom_minimum_size = Vector2(52, 0)
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.add_theme_font_size_override("font_size", 16)
+	header.add_child(value_label)
+	parent.add_child(header)
+
+	var slider := HSlider.new()
+	slider.name = label_text + "Volume"
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = _VOLUME_STEP
+	slider.value = 1.0
+	slider.custom_minimum_size = Vector2(0, 24)
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.mouse_filter = Control.MOUSE_FILTER_STOP
+	slider.value_changed.connect(on_changed)
+	parent.add_child(slider)
+	return slider
+
+
+## A small caption that opens a group of related rows ("AUDIO").
+func _make_section_label(text: String) -> Label:
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return lbl
 
 
 func _make_row(label_text: String) -> HBoxContainer:
@@ -238,6 +357,18 @@ func _refresh_from_settings() -> void:
 		if idx >= 0:
 			_focus_option.select(idx)
 
+	_update_timer_label(int(GameSettings.speed_turn_timer_seconds))
+
+	if _master_slider:
+		_master_slider.value = float(GameSettings.master_volume)
+		_update_volume_label(_master_value_label, _master_slider.value)
+	if _music_slider:
+		_music_slider.value = float(GameSettings.music_volume)
+		_update_volume_label(_music_value_label, _music_slider.value)
+	if _ui_slider:
+		_ui_slider.value = float(GameSettings.ui_volume)
+		_update_volume_label(_ui_value_label, _ui_slider.value)
+
 	_syncing = false
 
 
@@ -256,6 +387,34 @@ func _update_speed_label(speed: float) -> void:
 		# Quarter steps (0.75, 1.25, ...).
 		txt = "%.2f" % speed
 	_speed_value_label.text = txt + "x"
+
+
+## Repaint the stepper: the value readout plus the two arrows' disabled state
+## (the list does not wrap, so the ends are dead ends and must look it).
+func _update_timer_label(seconds: int) -> void:
+	if _timer_value_label:
+		_timer_value_label.text = "Off" if seconds <= 0 else "%ds" % seconds
+	var allowed := _timer_values()
+	var idx := allowed.find(seconds)
+	if _timer_prev_button:
+		_timer_prev_button.disabled = idx <= 0
+	if _timer_next_button:
+		_timer_next_button.disabled = idx < 0 or idx >= allowed.size() - 1
+
+
+## The allowed move-clock values, from GameSettings when it is present.
+func _timer_values() -> Array[int]:
+	if _has_settings():
+		var from_settings: Array[int] = GameSettings.SPEED_TIMER_ALLOWED
+		if not from_settings.is_empty():
+			return from_settings
+	return _TIMER_FALLBACK
+
+
+func _update_volume_label(label: Label, linear: float) -> void:
+	if label == null:
+		return
+	label.text = "%d%%" % int(round(clampf(linear, 0.0, 1.0) * 100.0))
 
 
 # --- Sync: controls -> GameSettings -----------------------------------------
@@ -284,3 +443,45 @@ func _on_focus_selected(index: int) -> void:
 	var mode := _focus_option.get_item_id(index)
 	if _has_settings():
 		GameSettings.set_camera_auto_focus(mode)
+
+
+## Step the move clock by [param direction] positions through the allowed list.
+## Clamped, never wrapped -- pressing `>` at 30s should do nothing, not silently
+## jump the player back to Off.
+func _on_timer_step(direction: int) -> void:
+	if _syncing:
+		return
+	var allowed := _timer_values()
+	var current: int = int(GameSettings.speed_turn_timer_seconds) if _has_settings() else allowed[0]
+	var idx := allowed.find(current)
+	if idx < 0:
+		idx = 0
+	var next_idx: int = clampi(idx + direction, 0, allowed.size() - 1)
+	var seconds: int = allowed[next_idx]
+	_update_timer_label(seconds)
+	if _has_settings():
+		GameSettings.set_speed_turn_timer_seconds(seconds)
+
+
+func _on_master_volume_changed(value: float) -> void:
+	_update_volume_label(_master_value_label, value)
+	if _syncing:
+		return
+	if _has_settings():
+		GameSettings.set_master_volume(value)
+
+
+func _on_music_volume_changed(value: float) -> void:
+	_update_volume_label(_music_value_label, value)
+	if _syncing:
+		return
+	if _has_settings():
+		GameSettings.set_music_volume(value)
+
+
+func _on_ui_volume_changed(value: float) -> void:
+	_update_volume_label(_ui_value_label, value)
+	if _syncing:
+		return
+	if _has_settings():
+		GameSettings.set_ui_volume(value)

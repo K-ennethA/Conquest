@@ -144,6 +144,115 @@ static func stamp_resolution(action: Dictionary, seq: int, rng_seed: int) -> Dic
 	return action
 
 
+# ---------------------------------------------------------------------------
+# Join handshake — the build/version gate
+# ---------------------------------------------------------------------------
+# Two machines running mismatched builds must refuse each other AT CONNECT TIME,
+# not silently desync on the first command. A joining client's FIRST message is a
+# hello carrying its display name plus both version stamps; the server validates it
+# with [method validate_hello] before it is given a roster slot.
+#
+# [constant PROTOCOL_VERSION] is the hard gate: a difference means the two peers do
+# not agree on the wire format, so the join is refused. The game version string is
+# advisory — an editor run ("dev") joining an exported build is a normal and useful
+# testing setup, so a difference is reported, never fatal.
+
+## Keys on the hello payload.
+const KEY_HELLO_NAME := "name"   ## String, the joiner's display name
+const KEY_HELLO_PV := "pv"       ## int, the joiner's PROTOCOL_VERSION
+const KEY_HELLO_GAME := "game"   ## String, the joiner's application/config/version
+
+## Rejection reasons. Empty string means "accepted" everywhere in this API.
+const REJECT_NONE := ""
+const REJECT_MALFORMED_HELLO := "malformed_hello"
+const REJECT_VERSION_MISMATCH := "version_mismatch"
+const REJECT_LOBBY_FULL := "lobby_full"
+
+## Reported as the game version when the project declares no
+## [code]application/config/version[/code] (an editor / unversioned run).
+const GAME_VERSION_FALLBACK := "dev"
+
+## This build's game version string, or [constant GAME_VERSION_FALLBACK] when the
+## project setting is absent or blank. Never reads wall-clock time or the filesystem.
+static func local_game_version() -> String:
+	var raw: Variant = ProjectSettings.get_setting("application/config/version", "")
+	var version := String(raw).strip_edges()
+	return version if version != "" else GAME_VERSION_FALLBACK
+
+## Build the hello a joining client sends to the server. [param game_version] defaults
+## to this build's own version.
+static func make_hello(player_name: String, game_version: String = "") -> Dictionary:
+	return {
+		KEY_HELLO_NAME: player_name,
+		KEY_HELLO_PV: PROTOCOL_VERSION,
+		KEY_HELLO_GAME: game_version if game_version != "" else local_game_version(),
+	}
+
+## Server-side gate: decide whether [param hello] may be seated. PURE — pass
+## [param host_pv] / [param host_game] explicitly and this function touches nothing
+## outside its arguments (that is how the unit test drives it). [param host_game]
+## left empty means "this build's version".
+##
+## Returns:
+## [codeblock]
+## {
+##   "accepted": bool,          # false -> refuse the peer
+##   "reason": String,          # one of the REJECT_* constants, "" when accepted
+##   "name": String,            # the joiner's display name ("Player" when absent)
+##   "host_pv": int, "client_pv": int,
+##   "host_game": String, "client_game": String,
+##   "build_differs": bool,     # advisory: same protocol, different game version
+## }
+## [/codeblock]
+static func validate_hello(hello: Variant, host_pv: int = PROTOCOL_VERSION, host_game: String = "") -> Dictionary:
+	var resolved_host_game: String = host_game if host_game != "" else local_game_version()
+	var result: Dictionary = {
+		"accepted": false,
+		"reason": REJECT_MALFORMED_HELLO,
+		"name": "Player",
+		"host_pv": host_pv,
+		"client_pv": -1,
+		"host_game": resolved_host_game,
+		"client_game": "",
+		"build_differs": false,
+	}
+	if hello is not Dictionary:
+		return result
+	var payload: Dictionary = hello
+	if not payload.has(KEY_HELLO_PV) or payload[KEY_HELLO_PV] is not int:
+		return result
+	if not payload.has(KEY_HELLO_GAME) or payload[KEY_HELLO_GAME] is not String:
+		return result
+	var client_name := String(payload.get(KEY_HELLO_NAME, "")).strip_edges()
+	result["name"] = client_name if client_name != "" else "Player"
+	result["client_pv"] = int(payload[KEY_HELLO_PV])
+	result["client_game"] = String(payload[KEY_HELLO_GAME])
+	result["build_differs"] = String(payload[KEY_HELLO_GAME]) != resolved_host_game
+	if int(payload[KEY_HELLO_PV]) != host_pv:
+		result["reason"] = REJECT_VERSION_MISMATCH
+		return result
+	result["accepted"] = true
+	result["reason"] = REJECT_NONE
+	return result
+
+## Human-readable one-liner for a refused join, for the client's status label.
+## [param info] is the dictionary [method validate_hello] produced on the server.
+static func describe_rejection(reason: String, info: Dictionary = {}) -> String:
+	match reason:
+		REJECT_VERSION_MISMATCH:
+			return "Version mismatch: host %s (protocol %d), you %s (protocol %d). Both machines must run the same build." % [
+				String(info.get("host_game", "?")),
+				int(info.get("host_pv", -1)),
+				String(info.get("client_game", "?")),
+				int(info.get("client_pv", -1)),
+			]
+		REJECT_LOBBY_FULL:
+			return "The host's lobby is full."
+		REJECT_MALFORMED_HELLO:
+			return "The host did not understand this build's join request (incompatible version)."
+	return "Join refused by the host (%s)." % reason
+
+
 static func _has_int(data: Dictionary, key: String) -> bool:
 	return data.has(key) and data[key] is int
 

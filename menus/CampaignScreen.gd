@@ -42,14 +42,23 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var page := VBoxContainer.new()
-	page.custom_minimum_size = Vector2(920.0, 0.0)
+	# Explicit 700 (not 0): a deliberate height BUDGET for a 720p screen (20px safety --
+	# there is no MarginContainer here, so this page IS the full viewport). As long as
+	# the fixed items below sum under 700, the scroll (the page's only EXPAND_FILL
+	# region) absorbs the difference; same pattern as ProfileScreen / ChallengeBrowse.
+	page.custom_minimum_size = Vector2(920.0, 700.0)
 	page.add_theme_constant_override("separation", 14)
 	center.add_child(page)
 
 	var title := Label.new()
 	title.text = "CAMPAIGN"
 	page.add_child(title)
-	MenuTheme.style_title(title, 40)
+	# 32 not 40: with the old fixed 470 scroll floor, title(52) + subtitle(21) + spacer(8)
+	# + scroll(470) + footspace(6) + back(44) + hint(16) + 6 gaps * 14 separation = 84
+	# summed to ~701 against a 720 budget -- only 19px of slack, easy to blow past with
+	# any font-metric rounding and clip the Back button. Trimming the title and the
+	# scroll floor (below) restores real margin.
+	MenuTheme.style_title(title, 32)
 
 	var subtitle := Label.new()
 	subtitle.text = "Drive the blight from the Forgotten Forest, chapter by chapter."
@@ -63,8 +72,15 @@ func _build_ui() -> void:
 	# Scrollable chapter column (fits any future chapter count without overflowing).
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(0.0, 470.0)
+	# 220 floor (not a fixed 470): this scroll is the page's ONLY flexible region --
+	# EXPAND_FILL lets it soak up whatever the 700 budget has left after the fixed rows
+	# below (title + subtitle + spacer + footspace + back + hint sum to ~137, plus 84 of
+	# separation = ~221), which comes out to roughly 479px of actual scroll height on a
+	# normal window -- comfortably more than a fixed 470 ever gave, while the FLOOR itself
+	# stays low enough that the footer never gets pushed off a 720p screen.
+	scroll.custom_minimum_size = Vector2(0.0, 220.0)
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	page.add_child(scroll)
 
 	var list := VBoxContainer.new()

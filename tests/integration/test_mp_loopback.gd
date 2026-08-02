@@ -459,6 +459,99 @@ func test_live_two_peer_enet_loopback():
 
 	_teardown_live(host, client, host_branch, client_branch)
 
+# --- 4. Lobby transport: the roster gate + the lobby-message relay ------------
+#
+# What these pin: the menu's Host/Join now run on NetSession, so the ROSTER is what makes
+# is_networked_match() true in battle. Before that switch the roster stayed empty on a
+# connected pair and every peer resolved its own moves locally -- two machines, two games.
+# Only the server half is exercised here (a bound socket, no dialling), so there is no
+# connection to wait on and nothing that can hang.
+
+func test_host_plus_join_hello_makes_a_networked_match():
+	var session := _open_host()
+	if session.is_empty():
+		return  # _open_host already reported why.
+	var host = session["host"]
+
+	assert_eq(host.player_count(), 1, "the host occupies slot 0 the moment it hosts")
+	assert_false(host.is_networked_match(), "a lone host is not yet a networked match")
+
+	# A joining peer's FIRST message is the hello the build gate runs on; admitting it is
+	# what seats the peer. (The RPC wrapper only supplies the sender id.)
+	host._server_admit_peer(2, NetProtocol.make_hello("Client"))
+
+	assert_eq(host.player_count(), 2, "the admitted peer took a roster slot")
+	assert_eq(str(host._occupied_slots()), str([0, 1]), "slots are 0 (host) and 1 (joiner)")
+	assert_eq(host.get_roster()[2]["name"], "Client", "the roster carries the joiner's name")
+	assert_true(host.is_networked_match(),
+		"host + one seated peer IS a networked match -- the single gate the battle UI reads "
+		+ "to route commands through NetSession instead of resolving them locally")
+
+	_close_host(session)
+
+# NOTE: the REFUSAL half of the gate (a protocol-mismatched hello never taking a slot) is
+# pinned purely in tests/unit/test_net_handshake.gd against NetProtocol.validate_hello. It is
+# deliberately not driven through _server_admit_peer here: refusing a peer sends it an RPC and
+# then disconnect_peer()s it, and doing that to a peer id that was never really connected
+# raises engine errors -- which GUT (correctly) fails the run on.
+
+func test_lobby_message_relay_reaches_others_and_never_the_sender():
+	# The lobby's votes / ready flags / game-start settings ride this channel. It must
+	# deliver to the OTHER participants and never echo the sender, so a lobby can broadcast
+	# unconditionally without filtering its own traffic back out.
+	var session := _open_host()
+	if session.is_empty():
+		return
+	var host = session["host"]
+	host._server_admit_peer(2, NetProtocol.make_hello("Client"))
+
+	var seen: Array = []
+	host.lobby_message.connect(func(t, d, s): seen.append({"type": t, "data": d, "slot": s}))
+
+	# A client's message is relayed; the listen-server host is a participant, so it lands here.
+	host._server_relay_lobby_message(2, "map_vote", {"player_name": "Client", "map_path": "res://m.tres"})
+	assert_eq(seen.size(), 1, "the host received the client's lobby message")
+	assert_eq(seen[0]["type"], "map_vote", "the message type survived the relay")
+	assert_eq(seen[0]["slot"], 1, "the sender's roster slot is reported alongside it")
+	assert_eq(str(seen[0]["data"].get("map_path", "")), "res://m.tres", "the payload survived the relay")
+
+	# The host's OWN message is fanned out to the clients but never delivered back to itself.
+	host._server_relay_lobby_message(host.local_peer_id(), "player_ready", {"player_name": "Host"})
+	assert_eq(seen.size(), 1, "a participant never receives its own lobby message back")
+
+	_close_host(session)
+
+## Bind a NetSession listen server under its own MultiplayerAPI branch. No dialling, so this
+## completes immediately. Returns {} (after reporting pending) when the socket cannot be
+## bound in this environment, so a locked-down box degrades to an explicit deferral.
+func _open_host() -> Dictionary:
+	var branch := Node.new()
+	branch.name = "MPLobbyHost%d" % (Time.get_ticks_usec() % 100000)
+	get_tree().root.add_child(branch)
+	get_tree().set_multiplayer(MultiplayerAPI.create_default_interface(), branch.get_path())
+	var host := _netsession_instance()
+	branch.add_child(host)
+
+	var port: int = 40000 + (Time.get_ticks_usec() % 20000)
+	var err: int = host.host_game("Host", port, 2)
+	if err != OK:
+		host.leave()
+		branch.queue_free()
+		pending("Could not bind a local ENet server socket in this environment (%s). "
+			% error_string(err)
+			+ "The roster/relay rules are transport-independent; this test only needs a bound "
+			+ "listen socket so is_connected_session() can be true.")
+		return {}
+	return { "host": host, "branch": branch }
+
+func _close_host(session: Dictionary) -> void:
+	var host = session.get("host", null)
+	if host != null and is_instance_valid(host):
+		host.leave()
+	var branch = session.get("branch", null)
+	if branch != null and is_instance_valid(branch):
+		branch.queue_free()
+
 # --- helpers -----------------------------------------------------------------
 
 ## A NetSession parented under the test node (so its `multiplayer` resolves to the tree's

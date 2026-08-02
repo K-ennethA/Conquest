@@ -38,17 +38,79 @@ var versus_config_panel: MatchConfigPanel
 # Game mode manager
 var game_mode_manager: Node
 
+# --- Transport adapter --------------------------------------------------------
+# The lobby's vote / ready / lobby-state / game-start messages have TWO possible carriers:
+#
+#   NetSession (preferred)  -- the consolidated server-authoritative transport. When Host/Join
+#                              ran through it, it is the same session the battle's command
+#                              seam reads, so the lobby and the battle share one connection.
+#   GameModeManager (legacy) -- the old submit_action envelope, delivered by
+#                              MultiplayerGameState._handle_lobby_message finding this node in
+#                              the tree. Still the carrier for any caller that has not moved.
+#
+# The choice is made per SEND, on whether NetSession currently holds a live connected peer,
+# so nothing needs to be told which mode it is in. Receiving is symmetric: NetSession's
+# lobby_message signal and the legacy direct call both land in handle_network_message().
+
+## The transport to prefer. Defaults to the NetSession autoload; tests inject a stand-in via
+## [method set_net_session]. Never assume it is the autoload -- always go through the helpers.
+var net_session: Node = null
+
 func _ready() -> void:
 	print("[LOBBY] _ready() called")
 	theme = MenuTheme.build()  # dark Legends-style menu look (also inherited when nested)
 	game_mode_manager = GameModeManager
+	set_net_session(NetSession if typeof(NetSession) == TYPE_OBJECT else null)
 	if not game_mode_manager:
 		print("[LOBBY] ERROR: GameModeManager not found")
 		return
-	
+
 	print("[LOBBY] Building UI...")
 	_build_ui()
 	print("[LOBBY] UI built successfully")
+
+## Point this lobby at the transport it should prefer, subscribing to its inbound lobby
+## messages. Idempotent, and rebinding cleanly drops the previous source's subscription.
+func set_net_session(source) -> void:
+	if net_session == source:
+		return
+	if net_session != null and is_instance_valid(net_session) \
+			and net_session.has_signal("lobby_message") \
+			and net_session.lobby_message.is_connected(_on_net_lobby_message):
+		net_session.lobby_message.disconnect(_on_net_lobby_message)
+	net_session = source
+	if net_session != null and is_instance_valid(net_session) \
+			and net_session.has_signal("lobby_message") \
+			and not net_session.lobby_message.is_connected(_on_net_lobby_message):
+		net_session.lobby_message.connect(_on_net_lobby_message)
+
+func _exit_tree() -> void:
+	# The autoload outlives this lobby; drop the subscription so a torn-down lobby can never
+	# be woken by the next match's traffic.
+	set_net_session(null)
+
+## True when NetSession is the live transport for this process (a connected peer exists).
+## False in solo/menu/test contexts, which is what routes sends down the legacy path.
+func _net_active() -> bool:
+	return net_session != null and is_instance_valid(net_session) \
+		and net_session.has_method("is_connected_session") \
+		and bool(net_session.is_connected_session())
+
+## Send one lobby message over whichever transport is live. NetSession wins whenever it holds
+## a connected peer; otherwise the legacy submit_action envelope carries it. Null-safe on both
+## branches, so a lobby with neither transport is a silent no-op rather than a crash.
+func _send_lobby_message(message_type: String, data: Dictionary) -> void:
+	if _net_active():
+		net_session.send_lobby_message(message_type, data)
+		return
+	if game_mode_manager != null and is_instance_valid(game_mode_manager):
+		game_mode_manager.submit_action(message_type, data)
+
+## Inbound lobby message off NetSession. Same entry point the legacy path calls, so there is
+## exactly one place each message type is handled. NetSession never echoes our own sends back,
+## so this only ever carries the OTHER participant's traffic.
+func _on_net_lobby_message(message_type: String, data: Dictionary, _from_slot: int) -> void:
+	handle_network_message(message_type, data)
 
 func initialize(as_host: bool, player_name: String) -> void:
 	"""Initialize the lobby as host or client"""
@@ -61,6 +123,14 @@ func initialize(as_host: bool, player_name: String) -> void:
 	if is_host:
 		_show_waiting_for_client()
 		_start_monitoring_connections()
+	elif _net_active():
+		# NetSession client: the connection already exists (we only get here after being
+		# seated), so announce ourselves. The host answers with the current lobby state --
+		# which also closes the race where the host reached map selection before this lobby
+		# node existed and its broadcast had nobody to land on.
+		print("[LOBBY] Announcing to host over NetSession")
+		_show_waiting_for_host()
+		_send_lobby_message("lobby_hello", {"player_name": local_player_name})
 	else:
 		# Client: Check if already connected (late join scenario)
 		if game_mode_manager:
@@ -279,8 +349,8 @@ func _check_for_connections() -> void:
 	if not is_host or is_client_connected:
 		return
 
-	if not game_mode_manager:
-		print("[LOBBY] ERROR: game_mode_manager is null")
+	if not game_mode_manager and not _net_active():
+		print("[LOBBY] ERROR: no transport available for connection checking")
 		return
 
 	# Safety check - the lobby may have already been removed from the tree (e.g. scene
@@ -295,33 +365,47 @@ func _check_for_connections() -> void:
 	if not is_inside_tree():
 		print("[LOBBY] Not in tree anymore, stopping connection check")
 		return
-	
-	var status = game_mode_manager.get_game_status()
-	var network_stats = status.get("network_stats", {})
-	var connected_peers = network_stats.get("connected_peers", 0)
-	
-	# connected_peers is an integer (peer count), not an array
-	var peer_count = 0
-	if connected_peers is int:
-		peer_count = connected_peers
-	elif connected_peers is Array:
-		peer_count = connected_peers.size()
-	
+
+	var peer_count: int = _remote_peer_count()
+
 	print("[LOBBY] Checking connections... Peers: " + str(peer_count))
-	
+
 	if peer_count > 0:
 		print("[LOBBY] Client connected!")
-		is_client_connected = true
-		remote_player_name = "Opponent"
-		
-		# Show map selection for host
-		_show_map_selection()
-		
-		# Tell client to show map selection
-		_broadcast_lobby_state("map_selection")
+		_admit_remote_player("Opponent")
 	else:
 		# Keep checking (but with safety limit)
 		_check_for_connections()
+
+## How many OTHER participants are present. Reads NetSession's roster when it is the live
+## transport (authoritative, no polling of a second stack), and falls back to the legacy
+## GameModeManager network stats otherwise.
+func _remote_peer_count() -> int:
+	if _net_active() and net_session.has_method("player_count"):
+		return maxi(0, int(net_session.player_count()) - 1)
+	if game_mode_manager == null or not is_instance_valid(game_mode_manager):
+		return 0
+	var status = game_mode_manager.get_game_status()
+	var network_stats = status.get("network_stats", {})
+	var connected_peers = network_stats.get("connected_peers", 0)
+	# connected_peers is an integer (peer count), not an array -- guard both shapes.
+	if connected_peers is int:
+		return int(connected_peers)
+	if connected_peers is Array:
+		return (connected_peers as Array).size()
+	return 0
+
+## Host: the opponent is present -- move to map selection and tell them to do the same.
+## Idempotent on the state flip but ALWAYS re-broadcasts, so a hello that arrives after the
+## poll already flipped us still gets an answer.
+func _admit_remote_player(player_name: String) -> void:
+	if not is_host:
+		return
+	if not is_client_connected:
+		is_client_connected = true
+		remote_player_name = player_name
+		_show_map_selection()
+	_broadcast_lobby_state("map_selection")
 
 func _on_local_map_selected(map_path: String, map_resource: MapResource) -> void:
 	"""Handle local player's map selection"""
@@ -340,23 +424,18 @@ func _on_local_map_selected(map_path: String, map_resource: MapResource) -> void
 
 func _broadcast_map_vote(map_path: String) -> void:
 	"""Broadcast map vote to other player"""
-	if not game_mode_manager:
-		return
-	
-	var vote_data = {
+	_send_lobby_message("map_vote", {
 		"player_name": local_player_name,
 		"map_path": map_path
-	}
-	
-	game_mode_manager.submit_action("map_vote", vote_data)
+	})
 	print("[LOBBY] Broadcasted map vote: " + map_path)
 
 func _broadcast_lobby_state(state: String) -> void:
 	"""Broadcast lobby state change (host only)"""
-	if not is_host or not game_mode_manager:
+	if not is_host:
 		return
-	
-	game_mode_manager.submit_action("lobby_state", {
+
+	_send_lobby_message("lobby_state", {
 		"state": state
 	})
 	print("[LOBBY] Broadcasted lobby state: " + state)
@@ -418,10 +497,7 @@ func _on_ready_pressed() -> void:
 
 func _broadcast_ready() -> void:
 	"""Broadcast ready status"""
-	if not game_mode_manager:
-		return
-	
-	game_mode_manager.submit_action("player_ready", {
+	_send_lobby_message("player_ready", {
 		"player_name": local_player_name
 	})
 
@@ -484,10 +560,10 @@ func _begin_net_match_rng() -> void:
 	fires when NetSession is actually the connected server transport. The handshake completes
 	on both peers via NetSession's own RPCs (client responds automatically), so the battle's
 	CommandApplier has a shared match seed. Safe no-op when NetSession is not the live match."""
-	if typeof(NetSession) != TYPE_OBJECT or NetSession == null:
+	if not _net_active():
 		return
-	if NetSession.is_server() and NetSession.is_connected_session():
-		NetSession.begin_match_rng_handshake()
+	if net_session.has_method("is_server") and bool(net_session.is_server()):
+		net_session.begin_match_rng_handshake()
 
 func _build_match_settings(map_path: String) -> Dictionary:
 	"""The MatchSettings payload the host broadcasts so the client plays the SAME match instead
@@ -515,12 +591,12 @@ func _build_match_settings(map_path: String) -> Dictionary:
 
 func _broadcast_game_start(map_path: String) -> void:
 	"""Broadcast game start with final map + the full MatchSettings payload (host only)."""
-	if not is_host or not game_mode_manager:
+	if not is_host:
 		return
 
 	print("[LOBBY] Broadcasting game start with map: " + map_path)
 
-	game_mode_manager.submit_action("game_start", _build_match_settings(map_path))
+	_send_lobby_message("game_start", _build_match_settings(map_path))
 
 func _start_game(map_path: String) -> void:
 	"""Start the game with selected map"""
@@ -543,6 +619,9 @@ func handle_network_message(message_type: String, data: Dictionary) -> void:
 	print("[LOBBY] Message data: " + str(data))
 	
 	match message_type:
+		"lobby_hello":
+			print("[LOBBY] Routing to _handle_lobby_hello")
+			_handle_lobby_hello(data)
 		"lobby_state":
 			print("[LOBBY] Routing to _handle_lobby_state")
 			_handle_lobby_state(data)
@@ -558,6 +637,18 @@ func handle_network_message(message_type: String, data: Dictionary) -> void:
 		_:
 			print("[LOBBY] Unknown message type: " + message_type)
 
+func _handle_lobby_hello(data: Dictionary) -> void:
+	"""A joining client announced itself (NetSession path). Host-only: admit it and answer
+	with the current lobby state, so the client never sits on 'waiting for host' because the
+	host's broadcast went out before its lobby node existed."""
+	if not is_host:
+		return
+	var player_name: String = str(data.get("player_name", "Opponent")).strip_edges()
+	if player_name.is_empty():
+		player_name = "Opponent"
+	print("[LOBBY] Opponent announced itself: " + player_name)
+	_admit_remote_player(player_name)
+
 func _handle_lobby_state(data: Dictionary) -> void:
 	"""Handle lobby state change from host"""
 	var state = data.get("state", "")
@@ -565,6 +656,12 @@ func _handle_lobby_state(data: Dictionary) -> void:
 	
 	match state:
 		"map_selection":
+			# Idempotent: the host answers the join hello AND its own roster poll, so this can
+			# legitimately arrive twice. _show_map_selection() CLEARS both votes, so a repeat
+			# once the player has already voted must be ignored, not replayed.
+			if is_client_connected and map_selection_panel != null and map_selection_panel.visible:
+				print("[LOBBY] Already in map selection - ignoring duplicate state message")
+				return
 			is_client_connected = true
 			_show_map_selection()
 

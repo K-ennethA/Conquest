@@ -37,9 +37,23 @@ signal turn_changed(slot: int)
 signal disconnected()
 ## A join attempt failed to connect.
 signal connection_failed()
+## The server refused this peer's join (client side). [param reason] is one of
+## NetProtocol's REJECT_* constants; [param info] is the version detail dictionary
+## [method NetProtocol.validate_hello] produced, ready for
+## [method NetProtocol.describe_rejection].
+signal join_rejected(reason: String, info: Dictionary)
+## The server refused a joining peer (server side), so a host UI can say why.
+signal peer_join_refused(peer_id: int, reason: String, info: Dictionary)
 ## The commit-reveal match-RNG handshake completed on this peer; [member match_rng]
 ## is now READY and per-command seeds are derivable. Emitted on host and each client.
 signal match_rng_ready()
+## A free-form LOBBY message arrived from another participant. This is the pre-match
+## channel (map votes, ready flags, the game-start MatchSettings payload) -- deliberately
+## separate from the gameplay command vocabulary in [NetProtocol], which is validated,
+## sequenced and RNG-stamped. Lobby messages are relayed by the server, never applied to
+## game state, and are only ever delivered to peers OTHER than the sender.
+## [param from_slot] is the sender's roster slot (-1 if it had none yet).
+signal lobby_message(message_type: String, data: Dictionary, from_slot: int)
 
 enum Role { NONE, LISTEN_SERVER, DEDICATED_SERVER, CLIENT }
 
@@ -66,6 +80,11 @@ var _seq: int = 0
 var _pending_name: String = "Player"
 
 var _peer: ENetMultiplayerPeer = null
+
+## Client side: the last join refusal received from a server, kept AFTER the server
+## drops us so the UI can explain the disconnect. Shape: { "reason": String,
+## "info": Dictionary }; empty until a join is refused. Cleared by [method join_game].
+var _last_join_rejection: Dictionary = {}
 
 ## Commit-reveal match RNG (see [MatchRng]). Built by the handshake below; null until
 ## a match's seed is negotiated. The authority derives per-command seeds from it.
@@ -277,8 +296,11 @@ func start_dedicated_server(port: int = DEFAULT_PORT, players_max: int = 0) -> E
 	return OK
 
 
-## Join an existing host as a client.
+## Join an existing host as a client. The version handshake runs the moment the socket
+## comes up (see [method _on_connected_to_server]); a build mismatch surfaces as
+## [signal join_rejected] followed by the server dropping us.
 func join_game(address: String, player_name: String, port: int = DEFAULT_PORT) -> Error:
+	_last_join_rejection = {}
 	_peer = ENetMultiplayerPeer.new()
 	var err := _peer.create_client(address, port)
 	if err != OK:
@@ -321,6 +343,53 @@ func submit_intent(action: Dictionary) -> void:
 		_rpc_intent.rpc_id(SERVER_PEER_ID, action)
 
 
+## Send a LOBBY message (map vote, ready flag, game-start settings) to every OTHER
+## participant. The server relays it; the sender never receives its own message back, so a
+## lobby UI can broadcast unconditionally without having to filter its own echo.
+##
+## This is NOT the gameplay path: lobby messages are not validated, sequenced or RNG-stamped
+## and must never mutate battle state -- that is [method submit_intent]'s job. Treat the
+## payload as UNTRUSTED peer input in the handler (it is a plain Dictionary off the wire).
+## Silent no-op when there is no live session, so a solo/menu caller is safe.
+func send_lobby_message(message_type: String, data: Dictionary) -> void:
+	if not is_connected_session():
+		return
+	if is_server():
+		_server_relay_lobby_message(local_peer_id(), message_type, data)
+	else:
+		_rpc_lobby_message.rpc_id(SERVER_PEER_ID, message_type, data)
+
+
+## Client -> server: please relay this lobby message to the others.
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_lobby_message(message_type: String, data: Dictionary) -> void:
+	if not is_server():
+		return
+	_server_relay_lobby_message(multiplayer.get_remote_sender_id(), message_type, data)
+
+
+## Server: fan [param message_type] out to every participant except [param from_peer].
+## The host itself is a participant, so it emits locally when the message came from a client.
+func _server_relay_lobby_message(from_peer: int, message_type: String, data: Dictionary) -> void:
+	if not is_server():
+		return
+	var from_slot: int = int(_roster[from_peer]["slot"]) if _roster.has(from_peer) else -1
+	if multiplayer.multiplayer_peer != null:
+		for peer_id in multiplayer.get_peers():
+			if peer_id == from_peer:
+				continue
+			_rpc_lobby_deliver.rpc_id(peer_id, message_type, data, from_slot)
+	# The listen-server host is a player too: deliver locally unless it was the sender.
+	if from_peer != local_peer_id():
+		lobby_message.emit(message_type, data, from_slot)
+
+
+## Server -> one client: a lobby message from another participant.
+@rpc("authority", "call_remote", "reliable")
+func _rpc_lobby_deliver(message_type: String, data: Dictionary, from_slot: int) -> void:
+	lobby_message.emit(message_type, data, from_slot)
+
+
 ## Mark the local player ready in the lobby.
 func set_ready(ready: bool) -> void:
 	if is_server():
@@ -360,8 +429,15 @@ func is_server() -> bool:
 	return role == Role.LISTEN_SERVER or role == Role.DEDICATED_SERVER
 
 func is_connected_session() -> bool:
-	return multiplayer.multiplayer_peer != null \
-		and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
+	# OfflineMultiplayerPeer - the tree's DEFAULT when no session exists - reports
+	# CONNECTION_CONNECTED with peer id 1, so a naive status check reads "connected"
+	# in every solo process. That false positive made the lobby prefer NetSession
+	# and RPC-to-self (engine error, dropped votes). A session only counts when a
+	# REAL transport peer is installed.
+	var peer: MultiplayerPeer = multiplayer.multiplayer_peer
+	if peer == null or peer is OfflineMultiplayerPeer:
+		return false
+	return peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
 
 ## True when this is a live, connected networked match with more than one participant --
 ## the single gate the UI uses to decide "route this command through submit_intent instead
@@ -388,6 +464,13 @@ func get_roster() -> Dictionary:
 func player_count() -> int:
 	return _roster.size()
 
+## Client side: why the last join was refused, or an empty dictionary when it was not.
+## Shape { "reason": String, "info": Dictionary }. Survives the disconnect that follows
+## a refusal (and [method leave]), so a menu can explain a connection that just dropped;
+## [method join_game] clears it on the next attempt.
+func last_join_rejection() -> Dictionary:
+	return _last_join_rejection.duplicate(true)
+
 
 # ---------------------------------------------------------------------------
 # Server-side logic
@@ -406,7 +489,8 @@ func _create_server(port: int) -> Error:
 
 func _on_peer_connected(peer_id: int) -> void:
 	# Only the server manages the roster. The client will announce its name via
-	# _rpc_announce; we assign the slot when that arrives so names are correct.
+	# _rpc_hello; we assign the slot when that arrives, so names are correct AND the
+	# build gate has run before anyone is seated.
 	if not is_server():
 		return
 	# If the lobby is full, drop the newcomer.
@@ -428,21 +512,62 @@ func _on_peer_disconnected(peer_id: int) -> void:
 			advance_turn()
 
 
-## Server: a client announced its display name — assign a slot and sync everyone.
+## Server: a client said hello (display name + version stamps). Validate the build
+## BEFORE it gets a roster slot — a peer on a different protocol version is refused
+## with a reason it can show, then dropped, rather than being admitted and desyncing
+## on the first command.
 @rpc("any_peer", "call_remote", "reliable")
-func _rpc_announce(player_name: String) -> void:
+func _rpc_hello(hello: Dictionary) -> void:
 	if not is_server():
 		return
-	var peer_id := multiplayer.get_remote_sender_id()
+	_server_admit_peer(multiplayer.get_remote_sender_id(), hello)
+
+
+## Server: run the build gate on [param hello] and seat [param peer_id] if it passes.
+## Split out of [method _rpc_hello] so the seating rules can be driven directly (the
+## RPC wrapper only supplies the sender id) -- same shape as [method _server_handle_intent].
+func _server_admit_peer(peer_id: int, hello: Dictionary) -> void:
+	if not is_server():
+		return
 	if _roster.has(peer_id):
+		return
+	var check: Dictionary = NetProtocol.validate_hello(hello)
+	if not bool(check.get("accepted", false)):
+		_refuse_peer(peer_id, String(check.get("reason", NetProtocol.REJECT_MALFORMED_HELLO)), check)
 		return
 	var slot := _first_free_slot()
 	if slot == -1:
-		multiplayer.multiplayer_peer.disconnect_peer(peer_id)
+		_refuse_peer(peer_id, NetProtocol.REJECT_LOBBY_FULL, check)
 		return
+	if bool(check.get("build_differs", false)):
+		# Not fatal (an editor run joining an exported build is a legitimate test setup),
+		# but worth saying out loud when someone is chasing a desync. Deliberately a
+		# print, not push_warning: this is a handled, expected state.
+		print("[NET] Peer %d joined on game version '%s' while this host runs '%s'." % [
+			peer_id, String(check.get("client_game", "?")), String(check.get("host_game", "?"))])
+	var player_name: String = String(check.get("name", "Player"))
 	_roster[peer_id] = { "slot": slot, "name": player_name, "ready": false }
 	player_joined.emit(peer_id, slot, player_name)
 	_broadcast_roster()
+
+
+## Server: tell [param peer_id] why it may not join, then disconnect it. The peer is
+## dropped gracefully (ENet flushes queued reliable packets first) so the rejection
+## message actually arrives before the socket closes.
+func _refuse_peer(peer_id: int, reason: String, info: Dictionary) -> void:
+	print("[NET] Refusing peer %d: %s" % [peer_id, reason])
+	peer_join_refused.emit(peer_id, reason, info)
+	_rpc_join_rejected.rpc_id(peer_id, reason, info)
+	if multiplayer.multiplayer_peer != null:
+		multiplayer.multiplayer_peer.disconnect_peer(peer_id)
+
+
+## Server -> one client: your join was refused, and why. Remembered so the
+## server-disconnect that follows can still be explained.
+@rpc("authority", "call_remote", "reliable")
+func _rpc_join_rejected(reason: String, info: Dictionary) -> void:
+	_last_join_rejection = { "reason": reason, "info": info }
+	join_rejected.emit(reason, info)
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -537,7 +662,18 @@ func _resolve_board():
 func begin_solo_match_rng() -> void:
 	match_rng = MatchRng.new()
 	match_rng.begin_solo(MatchRng.fresh_entropy())
+	_sync_applier_rng()
 	match_rng_ready.emit()
+
+
+## Hand the CURRENT match RNG to an already-installed applier. Every path that REPLACES
+## [member match_rng] must call this: the seam can be installed before the handshake has
+## produced its MatchRng object (battle scene loads while the commit-reveal is still in
+## flight), and an applier left holding the previous object would roll a different stream
+## from every other peer. No-op when no seam is installed.
+func _sync_applier_rng() -> void:
+	if command_applier != null:
+		command_applier.match_rng = match_rng
 
 ## Server: kick off the commit-reveal handshake. The host commits to hidden entropy
 ## and broadcasts only the commit; clients answer with their own entropy; the host
@@ -548,6 +684,7 @@ func begin_match_rng_handshake() -> void:
 		push_warning("NetSession: only the server starts the match-RNG handshake")
 		return
 	match_rng = MatchRng.new()
+	_sync_applier_rng()
 	var commit: int = match_rng.begin_host(MatchRng.fresh_entropy())
 	# A dedicated server with no local player still needs a seed if it ever resolves
 	# solo; but normally at least one client answers. Broadcast the commit.
@@ -558,6 +695,7 @@ func begin_match_rng_handshake() -> void:
 @rpc("authority", "call_remote", "reliable")
 func _rpc_rng_commit(commit: int) -> void:
 	match_rng = MatchRng.new()
+	_sync_applier_rng()
 	match_rng.begin_client(commit)
 	var client_entropy: int = MatchRng.fresh_entropy()
 	match_rng.set_own_client_entropy(client_entropy)
@@ -623,8 +761,9 @@ func _rpc_intent_rejected(action: Dictionary, reason: String) -> void:
 # ---------------------------------------------------------------------------
 
 func _on_connected_to_server() -> void:
-	# We're a client; tell the server our name so it can seat us.
-	_rpc_announce.rpc_id(SERVER_PEER_ID, _pending_name)
+	# We're a client; our FIRST message is the hello (name + version stamps). The server
+	# seats us only if the build matches — see _rpc_hello.
+	_rpc_hello.rpc_id(SERVER_PEER_ID, NetProtocol.make_hello(_pending_name))
 
 
 func _on_connection_failed() -> void:

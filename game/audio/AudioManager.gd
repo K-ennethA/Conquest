@@ -20,13 +20,20 @@ extends Node
 ## first on a given button wins and the other is a no-op -- never a double
 ## connection. See `_wire_ui_button()` below.
 ##
-## TODO(menu music asset): no menu-music .wav exists yet (only
-## game/audio/music/battle_theme.wav). `library.music_menu` and
-## `set_menu_music()` are wired end-to-end (crossfade, scene detection) but are
-## silent no-ops until an asset is assigned. Generating one requires running
-## Godot (this agent cannot), so a future pass should synthesize/import a menu
-## loop and either assign it in default_audio_library.tres or call
-## `AudioManager.set_menu_music()` at boot.
+## MIX MODEL (where a played sound's final volume_db comes from). Four terms,
+## summed in dB, in this order:
+##   1. the LIBRARY's per-category base (`library.sfx_volume_db` /
+##      `library.music_volume_db`) -- the authored mix, edited in the .tres;
+##   2. this node's @export trims (`master_volume_db` / `music_volume_db` /
+##      `ui_volume_db`) -- the DEVELOPER's static offsets, e.g. music_volume_db
+##      sits at -10 so the music bed never competes with gameplay SFX;
+##   3. the PLAYER's settings (GameSettings.master_volume / music_volume /
+##      ui_volume), stored as LINEAR 0..1 and converted here by
+##      [method volume_to_db];
+##   4. the per-cue offset the caller passes (the cursor tick's -14, etc).
+## Only (3) changes at runtime: GameSettings emits `settings_changed`, this node
+## re-reads the three linear values and re-levels the music player in place, so a
+## settings slider is audible while it is being dragged.
 
 ## The swappable audio bank. Assign a different AudioLibrary .tres in the
 ## inspector (this node is an autoload -> Project Settings > Globals, or edit
@@ -58,20 +65,19 @@ extends Node
 ## time, not wire time) without needing to disconnect anything.
 @export var ui_sounds_enabled: bool = true
 
-## Volume trim (dB) applied on top of everything else -- the single knob a
-## future "master volume" settings slider should drive.
-## TODO(persistence): AudioManager is a plain script autoload (no scene, no
-## save file of its own), so these three volume knobs are in-memory only and
-## reset to their defaults on every run. Wire them to whatever settings/save
-## system the project ends up with; GameSettings is intentionally NOT touched
-## here (owned by another agent).
+## Developer trim (dB) applied on top of everything else. This is term (2) of the
+## MIX MODEL above -- the PLAYER's master slider is GameSettings.master_volume,
+## not this; leave this at 0 unless the whole game's authored mix is off.
 @export_range(-60.0, 12.0, 0.1) var master_volume_db: float = 0.0
-## Volume trim (dB) applied to UI hover/confirm/back cues only (on top of
-## master_volume_db). See TODO(persistence) above.
+## Developer trim (dB) applied to UI hover/confirm/back cues only (on top of
+## master_volume_db).
 @export_range(-60.0, 12.0, 0.1) var ui_volume_db: float = 0.0
-## Volume trim (dB) applied to music playback only (on top of master_volume_db
-## and library.music_volume_db). See TODO(persistence) above.
-@export_range(-60.0, 12.0, 0.1) var music_volume_db: float = 0.0
+## Developer trim (dB) applied to music playback only (on top of master_volume_db
+## and library.music_volume_db). Negative by default and deliberately so: music is
+## a BED, and at 0 the menu loop sat on top of the SFX (the "too loud" report).
+## With the shipped defaults the menu bed lands ~20 dB under an SFX cue -- see
+## [method _resolve_music_volume_db].
+@export_range(-60.0, 12.0, 0.1) var music_volume_db: float = -10.0
 
 ## Semantic pitch/volume map for the auto-wired UI cues. All three reuse the
 ## existing &"sfx_ui_click" stream (no new audio files) and differ only by
@@ -100,6 +106,14 @@ const _UI_SFX_WIRED_META := "ui_sfx_wired"
 ## Crossfade duration (seconds) for menu <-> menu music transitions.
 const MUSIC_FADE_TIME := 0.5
 
+## The dB value that stands for "off". Godot treats anything at or below roughly
+## -80 dB as inaudible, and `linear_to_db(0.0)` is -INF, which poisons any sum it
+## lands in -- so a 0.0 slider resolves to this finite floor instead.
+const SILENT_DB := -80.0
+## Linear volumes at or below this count as off (a slider dragged to its minimum
+## never lands on an exact 0.0 after float rounding).
+const SILENT_THRESHOLD := 0.0005
+
 var _sfx_players: Array[AudioStreamPlayer] = []
 var _next_voice: int = 0
 var _music_player: AudioStreamPlayer
@@ -118,6 +132,15 @@ var _in_battle: bool = false
 var _menu_music_override: AudioStream
 var _music_tween: Tween
 
+## Term (3) of the MIX MODEL: the PLAYER's volumes, already converted from
+## GameSettings' linear 0..1 to dB. Cached rather than read per sound so the
+## conversion happens once per settings change, not once per cursor tick. The
+## defaults here mirror GameSettings' own so this node is correctly levelled even
+## when that autoload is absent (an isolated tool/test scene).
+var _settings_master_db: float = 0.0
+var _settings_music_db: float = -4.44
+var _settings_ui_db: float = -1.94
+
 func _ready() -> void:
 	name = "AudioManager"
 
@@ -128,6 +151,7 @@ func _ready() -> void:
 
 	_build_players()
 	_connect_events()
+	_connect_settings()
 
 	# Global menu-button audio wiring (zero per-menu edits): watch every node
 	# entering the tree for BaseButtons (hover/confirm/back cues) and for
@@ -239,7 +263,8 @@ func play_ui_hover() -> void:
 		return
 	_ui_hover_player.stop()
 	_ui_hover_player.stream = stream
-	_ui_hover_player.volume_db = library.sfx_volume_db + master_volume_db + ui_volume_db + UI_HOVER_VOLUME_DB
+	_ui_hover_player.volume_db = (_resolve_sfx_volume_db() + ui_volume_db + _settings_ui_db
+		+ UI_HOVER_VOLUME_DB)
 	_ui_hover_player.pitch_scale = UI_HOVER_PITCH
 	_ui_hover_player.play()
 
@@ -251,11 +276,83 @@ func _play_ui_click_variant(volume_offset_db: float, pitch: float) -> void:
 	var stream := library.get_stream(&"sfx_ui_click")
 	if stream == null:
 		return
-	_play_stream_on_free_voice(stream, volume_offset_db + ui_volume_db, pitch)
+	_play_stream_on_free_voice(stream, volume_offset_db + ui_volume_db + _settings_ui_db, pitch)
+
+## Convert one of GameSettings' LINEAR 0..1 volumes to dB. Pure and static so the
+## mapping can be tested without an audio device, a tree or this autoload's state
+## (`tests/unit/test_audio_volume_mapping.gd`). 0 (and anything within
+## [constant SILENT_THRESHOLD] of it) maps to the finite [constant SILENT_DB]
+## floor rather than `linear_to_db`'s -INF, which would make every sum it takes
+## part in NaN/-INF.
+static func volume_to_db(linear: float) -> float:
+	var v: float = clampf(linear, 0.0, 1.0)
+	if v <= SILENT_THRESHOLD:
+		return SILENT_DB
+	return maxf(linear_to_db(v), SILENT_DB)
+
+
+## Subscribe to GameSettings and take its current volumes. Looked up by node path
+## (not the bare autoload identifier) so this node is equally safe in a stripped
+## scene where GameSettings is not registered.
+func _connect_settings() -> void:
+	var settings := _settings_node()
+	if settings == null:
+		return
+	if settings.has_signal(&"settings_changed") and not settings.is_connected(&"settings_changed", _on_settings_changed):
+		settings.connect(&"settings_changed", _on_settings_changed)
+	_pull_settings_volumes()
+
+
+func _settings_node() -> Node:
+	return get_node_or_null("/root/GameSettings")
+
+
+## Re-read the three linear volumes and cache them as dB. Leaves the cached
+## defaults in place when the autoload is absent, or when a field is missing (an
+## older/stripped GameSettings) -- see [method _settings_volume_db].
+func _pull_settings_volumes() -> void:
+	var settings := _settings_node()
+	if settings == null:
+		return
+	_settings_master_db = _settings_volume_db(settings, "master_volume", _settings_master_db)
+	_settings_music_db = _settings_volume_db(settings, "music_volume", _settings_music_db)
+	_settings_ui_db = _settings_volume_db(settings, "ui_volume", _settings_ui_db)
+
+
+## One linear volume off [param settings], converted to dB. `Object.get()` on an
+## unknown property returns null, and `float(null)` is a hard cast error -- so the
+## type is checked and [param fallback_db] returned instead of crashing boot.
+func _settings_volume_db(settings: Node, property: String, fallback_db: float) -> float:
+	var value: Variant = settings.get(property)
+	if typeof(value) != TYPE_FLOAT and typeof(value) != TYPE_INT:
+		return fallback_db
+	return volume_to_db(float(value))
+
+
+## GameSettings changed (a slider moved, or another system wrote a setting).
+## SFX pick the new level up on their next play by themselves -- they are levelled
+## at play time -- but the music player is already playing, so it is re-levelled
+## in place here. Skipped while a crossfade tween owns volume_db, otherwise this
+## would fight the tween and the fade would jump.
+func _on_settings_changed() -> void:
+	_pull_settings_volumes()
+	if _music_player == null or not _music_player.playing:
+		return
+	if _music_tween != null and _music_tween.is_valid() and _music_tween.is_running():
+		return
+	_music_player.volume_db = _resolve_music_volume_db()
+
+
+## Base dB for any SFX voice: the library's authored SFX level plus both master
+## terms. The per-cue offset is added by the caller.
+func _resolve_sfx_volume_db() -> float:
+	var base_db: float = library.sfx_volume_db if library != null else 0.0
+	return base_db + master_volume_db + _settings_master_db
+
 
 func _resolve_music_volume_db() -> float:
 	var base_db: float = library.music_volume_db if library != null else -6.0
-	return base_db + master_volume_db + music_volume_db
+	return base_db + master_volume_db + music_volume_db + _settings_master_db + _settings_music_db
 
 func _resolve_menu_music() -> AudioStream:
 	if _menu_music_override != null:
@@ -313,8 +410,7 @@ func _play_stream_on_free_voice(stream: AudioStream, volume_offset_db: float = 0
 		_next_voice = (_next_voice + 1) % _sfx_players.size()
 
 	player.stream = stream
-	var base_db: float = library.sfx_volume_db if library != null else 0.0
-	player.volume_db = base_db + master_volume_db + volume_offset_db
+	player.volume_db = _resolve_sfx_volume_db() + volume_offset_db
 	if pitch_override > 0.0:
 		player.pitch_scale = pitch_override
 	else:

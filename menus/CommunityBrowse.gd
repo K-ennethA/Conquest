@@ -59,14 +59,26 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var page := VBoxContainer.new()
-	page.custom_minimum_size = Vector2(820.0, 660.0)
+	# 700 not 660: raised alongside the scroll-floor trim below so the list (the page's
+	# only EXPAND_FILL region) still gets real height back, while staying a 20px-safe
+	# budget under the 720p viewport (no MarginContainer here -- this page IS the
+	# viewport). 660 was already too small to matter: the WORST case (offline banner +
+	# Load-more both visible) summed to ~785 on its own, well past even 720, so the
+	# explicit floor was never the binding constraint -- the fixed items were.
+	page.custom_minimum_size = Vector2(820.0, 700.0)
 	page.add_theme_constant_override("separation", 16)
 	center.add_child(page)
 
 	var title := Label.new()
 	title.text = "COMMUNITY"
 	page.add_child(title)
-	MenuTheme.style_title(title, 40)
+	# 32 not 40: worst case (offline banner shown + Load-more visible) the fixed items --
+	# title(52) + subtitle(21) + banner(16) + filter bar(40) + list(380 scroll + 24 panel
+	# padding) + load-more(40) + status(20) + actions(48) + hint(16) -- plus 8 gaps * 16
+	# separation summed to ~785 against a 720 screen: the Back button rendered off the
+	# bottom edge even in the common case (~729 with banner/load-more hidden). Trimming
+	# the title and the scroll floor (below) is what actually fixes it.
+	MenuTheme.style_title(title, 32)
 
 	var subtitle := Label.new()
 	subtitle.text = "Discover, rank and download maps and challenges built by other players"
@@ -90,7 +102,13 @@ func _build_ui() -> void:
 
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(0.0, 380.0)
+	# 150 not 380: list_card above is already SIZE_EXPAND_FILL, so this scroll is the
+	# page's ONLY flexible region and its floor is what decides whether the footer fits.
+	# With the trimmed floor the fixed-item sum (worst case, banner + load-more shown)
+	# drops to ~545 against the page's 700 budget, and the leftover 155px flows back
+	# into this scroll via EXPAND_FILL -- still several visible rows, just no longer
+	# hard-coded to a height that guaranteed the footer clipped off-screen.
+	scroll.custom_minimum_size = Vector2(0.0, 150.0)
 	list_card.add_child(scroll)
 
 	_list_box = VBoxContainer.new()

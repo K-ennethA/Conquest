@@ -4,9 +4,10 @@ extends Node
 # Stores game configuration and settings across scenes
 
 ## Emitted whenever a presentation setting (animations / battle speed / camera
-## auto-focus) changes, so live systems (UnitAnimator, CameraController, the
-## settings UI) can react without polling. Only the presentation block below
-## emits this -- match-setup fields (map, players) are read at load time.
+## auto-focus / audio volumes) changes, so live systems (UnitAnimator,
+## CameraController, AudioManager, the settings UI) can react without polling.
+## Only the presentation block below emits this -- match-setup fields (map,
+## players) are read at load time.
 signal settings_changed
 
 enum GameMode {
@@ -50,9 +51,45 @@ var camera_auto_focus: int = AutoFocus.QUICK
 ## nearest allowed value by [method set_speed_turn_timer_seconds].
 var speed_turn_timer_seconds: int = 30
 
-const _SETTINGS_PATH := "user://settings.cfg"
+# --- Audio volumes ----------------------------------------------------------
+# UNIT: LINEAR amplitude in the range 0.0 .. 1.0 (0 = silent, 1 = unattenuated),
+# NOT decibels. That is what a 0..100% slider maps onto directly, and it keeps
+# "off" representable as an exact 0 rather than a magic -80 dB sentinel.
+# AudioManager converts to dB at the point of use with its own
+# `AudioManager.volume_to_db()` (linear_to_db, with 0 -> SILENT_DB); nothing
+# else should do that conversion itself.
+#
+# These three multiply: master scales everything, music and ui scale their own
+# category on top of it. They persist alongside the presentation block and emit
+# `settings_changed`, which is how AudioManager applies them live.
+
+## Overall output level (0..1 linear). Scales music AND every SFX/UI cue.
+var master_volume: float = 1.0
+
+## Music level (0..1 linear), on top of [member master_volume]. Defaults below
+## 1.0 so the menu/battle bed sits under the gameplay SFX.
+var music_volume: float = 0.6
+
+## UI cue level (0..1 linear) for hover/confirm/back clicks, on top of
+## [member master_volume].
+var ui_volume: float = 0.8
+
+## Default on-disk location of the persisted presentation block. Tests must
+## redirect this with [method set_settings_path] rather than writing the
+## player's real file -- see tests/README.md ("Temp paths").
+const DEFAULT_SETTINGS_PATH := "user://settings.cfg"
 const BATTLE_SPEED_MIN := 0.5
 const BATTLE_SPEED_MAX := 3.0
+
+## Volume bounds. Both ends are meaningful: 0.0 is true silence, 1.0 is the
+## unattenuated signal (there is no boost above unity -- headroom above the
+## authored mix does not exist).
+const VOLUME_MIN := 0.0
+const VOLUME_MAX := 1.0
+
+## Where the presentation block is actually read from / written to. Swappable
+## for tests via [method set_settings_path].
+var _settings_path: String = DEFAULT_SETTINGS_PATH
 
 ## The only accepted Speed First move-clock durations (0 = off). Any other value passed
 ## to the setter/loader is snapped to the nearest of these.
@@ -161,6 +198,37 @@ func set_speed_turn_timer_seconds(seconds: int) -> void:
 	_save_presentation_settings()
 	settings_changed.emit()
 
+## Set the overall output level (0..1 linear). See the audio-volume block above for
+## the unit choice; AudioManager converts to dB.
+func set_master_volume(value: float) -> void:
+	var clamped: float = clampf(value, VOLUME_MIN, VOLUME_MAX)
+	if is_equal_approx(master_volume, clamped):
+		return
+	master_volume = clamped
+	_save_presentation_settings()
+	settings_changed.emit()
+
+
+## Set the music level (0..1 linear), applied on top of [member master_volume].
+func set_music_volume(value: float) -> void:
+	var clamped: float = clampf(value, VOLUME_MIN, VOLUME_MAX)
+	if is_equal_approx(music_volume, clamped):
+		return
+	music_volume = clamped
+	_save_presentation_settings()
+	settings_changed.emit()
+
+
+## Set the UI-cue level (0..1 linear), applied on top of [member master_volume].
+func set_ui_volume(value: float) -> void:
+	var clamped: float = clampf(value, VOLUME_MIN, VOLUME_MAX)
+	if is_equal_approx(ui_volume, clamped):
+		return
+	ui_volume = clamped
+	_save_presentation_settings()
+	settings_changed.emit()
+
+
 ## Snap an arbitrary second count to the nearest [constant SPEED_TIMER_ALLOWED] value.
 func _snap_speed_timer(seconds: int) -> int:
 	var best: int = SPEED_TIMER_ALLOWED[0]
@@ -174,23 +242,47 @@ func _snap_speed_timer(seconds: int) -> int:
 
 # --- Persistence ------------------------------------------------------------
 
+## Redirect the persisted settings file. FOR TESTS ONLY -- a suite that exercises
+## the setters (which all write on change) must point this at a `user://test_*`
+## path in `before_all` and restore [constant DEFAULT_SETTINGS_PATH] in
+## `after_all`, or it edits the player's real settings. See tests/README.md
+## ("Temp paths, or a path-injection API").
+func set_settings_path(path: String) -> void:
+	_settings_path = path if not path.is_empty() else DEFAULT_SETTINGS_PATH
+
+func get_settings_path() -> String:
+	return _settings_path
+
+## Re-read the presentation block from disk, discarding whatever is in memory.
+## The public face of [method _load_presentation_settings] -- boot calls the
+## private one from `_ready`; a persistence test calls this to prove a value
+## survived the round trip.
+func reload_presentation_settings() -> void:
+	_load_presentation_settings()
+
 func _load_presentation_settings() -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(_SETTINGS_PATH) != OK:
+	if cfg.load(_settings_path) != OK:
 		return  # No saved file yet -- keep the defaults above.
 	animations_enabled = bool(cfg.get_value("presentation", "animations_enabled", animations_enabled))
 	battle_speed = clampf(float(cfg.get_value("presentation", "battle_speed", battle_speed)), BATTLE_SPEED_MIN, BATTLE_SPEED_MAX)
 	camera_auto_focus = clampi(int(cfg.get_value("presentation", "camera_auto_focus", camera_auto_focus)), 0, AutoFocus.keys().size() - 1)
 	speed_turn_timer_seconds = _snap_speed_timer(int(cfg.get_value("presentation", "speed_turn_timer_seconds", speed_turn_timer_seconds)))
+	master_volume = clampf(float(cfg.get_value("presentation", "master_volume", master_volume)), VOLUME_MIN, VOLUME_MAX)
+	music_volume = clampf(float(cfg.get_value("presentation", "music_volume", music_volume)), VOLUME_MIN, VOLUME_MAX)
+	ui_volume = clampf(float(cfg.get_value("presentation", "ui_volume", ui_volume)), VOLUME_MIN, VOLUME_MAX)
 
 func _save_presentation_settings() -> void:
 	var cfg := ConfigFile.new()
-	cfg.load(_SETTINGS_PATH)  # Preserve any other sections; ignore load failure.
+	cfg.load(_settings_path)  # Preserve any other sections; ignore load failure.
 	cfg.set_value("presentation", "animations_enabled", animations_enabled)
 	cfg.set_value("presentation", "battle_speed", battle_speed)
 	cfg.set_value("presentation", "camera_auto_focus", camera_auto_focus)
 	cfg.set_value("presentation", "speed_turn_timer_seconds", speed_turn_timer_seconds)
-	cfg.save(_SETTINGS_PATH)
+	cfg.set_value("presentation", "master_volume", master_volume)
+	cfg.set_value("presentation", "music_volume", music_volume)
+	cfg.set_value("presentation", "ui_volume", ui_volume)
+	cfg.save(_settings_path)
 
 # Configuration methods
 func set_game_mode(mode: GameMode) -> void:
@@ -328,6 +420,9 @@ func reset_to_defaults() -> void:
 	host_squad = []
 	custom_map_json = ""
 	speed_turn_timer_seconds = SPEED_TIMER_DEFAULT
+	master_volume = 1.0
+	music_volume = 0.6
+	ui_volume = 0.8
 
 # Debug and info
 func get_settings_info() -> Dictionary:

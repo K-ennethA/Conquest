@@ -4,9 +4,12 @@
 # Godot 3.x import cache (harmless if present)
 .import/
 
-# Exports
+# Exports — build OUTPUT is ignored, the preset definitions are NOT.
+# export_presets.cfg is committed on purpose: every machine that builds Conquest for a
+# two-machine network test must produce the same exe from the same preset (see
+# docs/NETWORK_TESTING.md). NEVER put a keystore password or an encryption key in it —
+# those belong in the local, uncommitted export.cfg / environment.
 export.cfg
-export_presets.cfg
 /build/
 /exports/
 

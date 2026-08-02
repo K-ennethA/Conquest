@@ -18,6 +18,11 @@ const VERSION_GUARD_ID: String = "__test_portrait_cache_version_guard__"
 
 
 func before_each() -> void:
+	# Full clean slate BOTH ways: reset() drops the MEMORY cache too - an earlier suite in
+	# the same GUT process may have resolved one of these ids (e.g. a screen test touching
+	# CharacterSelect), and a memory hit would satisfy get_portrait before the headless
+	# gate runs, breaking the null expectation below.
+	PortraitCache.reset()
 	# The portrait disk cache is a pure, regenerable CACHE (not save data) -- deleting a
 	# stale entry before/after a test is safe and loses nothing; it is the only way to give
 	# this non-injectable, real user:// path (see tests/README.md rule 4) a clean slate.

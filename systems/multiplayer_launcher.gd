@@ -98,58 +98,34 @@ func _auto_join_multiplayer() -> void:
 	await get_tree().process_frame
 	
 	print("[CLIENT] Attempting to join %s:%d as %s" % [auto_join_address, auto_join_port, auto_join_player_name])
-	
-	# Ensure GameModeManager is available
-	if not GameModeManager:
-		print("[CLIENT] ERROR: GameModeManager not available!")
-		print("[CLIENT] Available autoloads:")
-		for child in get_tree().root.get_children():
-			if child.name.begins_with("Game") or child.name.begins_with("Multiplayer"):
-				print("[CLIENT]   - " + child.name + ": " + str(child))
-		get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
-		return
-	
-	print("[CLIENT] GameModeManager found: " + str(GameModeManager))
-	
-	# Wait a bit more for systems to initialize and for host to be ready
+
+	# Wait a bit for the host process to finish opening its socket.
 	print("[CLIENT] Waiting for host to be ready...")
 	await get_tree().create_timer(2.0).timeout
-	
-	# Try to join multiple times with delays (host might not be ready immediately)
-	var max_attempts = 3
-	var success = false
-	
-	for attempt in range(max_attempts):
-		print("[CLIENT] Join attempt " + str(attempt + 1) + " of " + str(max_attempts))
-		
-		success = await GameModeManager.join_network_multiplayer(
-			auto_join_address, 
-			auto_join_port, 
-			auto_join_player_name, 
-			"local"
-		)
-		
-		print("[CLIENT] Attempt " + str(attempt + 1) + " result: " + str(success))
-		
-		if success:
+
+	# Drive the REAL join flow rather than a parallel one: open the network setup screen and
+	# press its Connect for it. That screen runs on NetSession (the transport the battle's
+	# command seam reads) and owns the connect state machine, the version handshake and the
+	# collaborative lobby -- all of which this harness used to bypass, which is exactly how it
+	# drifted from the shipping path.
+	get_tree().change_scene_to_file("res://menus/NetworkMultiplayerSetup.tscn")
+
+	# change_scene_to_file is deferred, so poll (bounded) for the new scene rather than
+	# guessing a frame count.
+	var setup: Node = null
+	for _frame in range(60):
+		await get_tree().process_frame
+		var current: Node = get_tree().current_scene
+		if current != null and current.has_method("begin_auto_join"):
+			setup = current
 			break
-		
-		if attempt < max_attempts - 1:
-			print("[CLIENT] Join failed, waiting 2 seconds before retry...")
-			await get_tree().create_timer(2.0).timeout
-	
-	if success:
-		print("[CLIENT] Auto-join successful! Starting game...")
-		
-		# Wait a moment then load the game scene
-		await get_tree().create_timer(1.0).timeout
-		print("[CLIENT] Loading game scene...")
-		get_tree().change_scene_to_file("res://game/world/GameWorld.tscn")
+
+	if setup != null:
+		setup.begin_auto_join(auto_join_address, auto_join_port, auto_join_player_name)
 	else:
-		print("[CLIENT] Auto-join failed after " + str(max_attempts) + " attempts")
-		print("[CLIENT] Showing main menu")
+		print("[CLIENT] ERROR: network setup screen never came up (no begin_auto_join)")
 		get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
-	
+
 	print("[CLIENT] === AUTO-JOIN MULTIPLAYER END ===")
 
 func is_auto_join_enabled() -> bool:

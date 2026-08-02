@@ -152,6 +152,11 @@ func after_each() -> void:
 writes `user://settings.cfg` — calling it from a test edits the player's real settings file.
 Assign the field instead, which is what `_guard.set_setting(...)` does.
 
+The one exception is a suite that is testing *persistence itself*: redirect the whole block
+with `GameSettings.set_settings_path("user://test_*.cfg")` in `before_all`, restore
+`GameSettings.DEFAULT_SETTINGS_PATH` and delete the temp file in `after_all`, and the real
+file is never opened. `integration/test_audio_settings_persistence.gd` is the exemplar.
+
 Also global, and also your responsibility:
 - **Static registries** — `UnitAnimator`'s busy registry, `CharacterLibrary`'s cache,
   `ItemLibrary`. Clear them in `before_each` *and* `after_each`.
@@ -177,7 +182,8 @@ func after_all() -> void:
 ```
 
 Classes with injection today: `ItemInventory.set_save_path`, `PlayerProfile.set_profile_path`
-/ `set_source_paths`, `LocalProvider(root)`, `MapMakerModel.save_to_file(path)`.
+/ `set_source_paths`, `LocalProvider(root)`, `MapMakerModel.save_to_file(path)`,
+`GameSettings.set_settings_path` (+ `reload_presentation_settings()` to re-read).
 
 **Classes without it — a runtime-design gap, not a test problem:**
 `ChallengeController.RESULTS_PATH`, `ChallengeCodec.CHALLENGE_DIR`, `CommunityClient.MAPS_DIR`

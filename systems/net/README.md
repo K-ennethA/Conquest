@@ -99,14 +99,53 @@ peer — it's the single source of state change.
 
 1. **Add** `NetSession` alongside the old stack (done). Nothing else changes yet.
 2. Point new lobby/game UI (`CollaborativeLobby`, `NetworkMultiplayerSetup`) at
-   `NetSession` host/join + `roster_changed`.
+   `NetSession` host/join + `roster_changed`. **(done)** — the Host and Connect
+   buttons call `host_game` / `join_game` directly, the connect state machine is
+   driven by `roster_changed` / `connection_failed` / `disconnected` /
+   `join_rejected`, and the lobby's votes/ready/game-start ride
+   [`send_lobby_message`](#lobby-channel).
 3. Route unit move/attack/end-turn through `submit_intent` / `action_applied`
-   instead of `MultiplayerManager.submit_game_action`.
+   instead of `MultiplayerManager.submit_game_action`. **(done)** — see
+   `UnitActionsPanel._is_networked_match()`.
 4. Move rule checks into `action_validator`.
 5. Delete `systems/networking/`, `systems/multiplayer/`,
    `game_core/*NetworkHandler*`, `multiplayer_launcher.gd`,
    `AutoClientDetector.gd`, and the root `*client*`/`*detector*` scripts once
    nothing references them.
+
+## Lobby channel
+
+Pre-match traffic (map votes, ready flags, the game-start MatchSettings payload)
+is **not** part of the gameplay command vocabulary — it is never validated,
+sequenced or RNG-stamped, and must never mutate battle state:
+
+```gdscript
+NetSession.lobby_message.connect(_on_lobby_message)   # (type, data, from_slot)
+NetSession.send_lobby_message("map_vote", { "map_path": path })
+```
+
+The server relays; **the sender never receives its own message back**, so a lobby
+UI can broadcast unconditionally. Treat `data` as untrusted peer input.
+`CollaborativeLobby` picks this channel whenever `is_connected_session()` is true
+and falls back to the legacy `GameModeManager.submit_action` envelope otherwise.
+
+## Join handshake (the build gate)
+
+A joining client's **first** message is a hello — display name plus
+`NetProtocol.PROTOCOL_VERSION` and `application/config/version` — sent from
+`_on_connected_to_server`. The server runs the pure
+`NetProtocol.validate_hello()` **before** the peer gets a roster slot:
+
+- different `PROTOCOL_VERSION` → `_rpc_join_rejected` with reason
+  `version_mismatch`, then the peer is dropped. The client emits
+  `join_rejected(reason, info)`; `NetProtocol.describe_rejection()` turns that
+  into the line a menu shows.
+- same protocol, different game version → admitted, `build_differs` logged
+  (an editor run joining an exported build is a legitimate test setup).
+
+Bump `PROTOCOL_VERSION` whenever the envelope or a command's data shape changes.
+Pinned by `tests/unit/test_net_handshake.gd`; the two-machine procedure is
+`docs/NETWORK_TESTING.md`.
 
 ## Scaling beyond a few players
 
