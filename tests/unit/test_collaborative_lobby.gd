@@ -18,9 +18,15 @@ func before_each():
 	# Wait for _ready to complete
 	await get_tree().process_frame
 
+	# MatchPeerInfo is PROCESS-WIDE static state that the profile-info exchange writes to.
+	MatchPeerInfo.clear()
+
 func after_each():
 	"""Cleanup after each test"""
 	lobby = null
+	# Restored here, not at the end of a test body, so a failing assertion cannot leak one
+	# match's opponent card into the next suite (tests/README.md rule 3).
+	MatchPeerInfo.clear()
 
 # Initialization Tests
 func test_lobby_initializes_as_host():
@@ -162,6 +168,64 @@ func test_handle_player_ready_message():
 	lobby.handle_network_message("player_ready", ready_data)
 	
 	pass_test("Player ready message handled without crash")
+
+# Profile-info exchange (feeds the post-match summary's VERSUS block)
+func test_handle_profile_info_records_the_senders_card():
+	"""A peer's announced profile card is stored against the SLOT the server stamped."""
+	lobby.initialize(true, "TestHost")
+
+	lobby.handle_network_message("profile_info", {
+		"name": "Rival", "rank_name": "Veteran", "lifetime_points": 1800,
+	}, 1)
+
+	var stored: Dictionary = MatchPeerInfo.get_peer_info(1)
+	assert_eq(String(stored.get("name", "")), "Rival", "the opponent's name is kept for the summary")
+	assert_eq(String(stored.get("rank_name", "")), "Veteran", "so is their rank")
+	assert_eq(int(stored.get("lifetime_points", 0)), 1800, "and their lifetime points")
+
+func test_profile_info_names_a_placeholder_opponent():
+	"""The connection poll seats an opponent as 'Opponent'; their own announcement renames them."""
+	lobby.initialize(true, "TestHost")
+	lobby.remote_player_name = "Opponent"
+
+	lobby.handle_network_message("profile_info", {"name": "Rival"}, 1)
+
+	assert_eq(lobby.remote_player_name, "Rival", "the peer's own name replaces the placeholder")
+
+func test_profile_info_does_not_overwrite_a_real_opponent_name():
+	"""A name already learned from a map vote is not clobbered by a later card."""
+	lobby.initialize(true, "TestHost")
+	lobby.remote_player_name = "KnownRival"
+
+	lobby.handle_network_message("profile_info", {"name": "Rival"}, 1)
+
+	assert_eq(lobby.remote_player_name, "KnownRival", "an established name stands")
+
+func test_initialize_clears_the_previous_matchs_peer_info():
+	"""A new lobby is a new match -- last match's opponent must not survive into this one."""
+	MatchPeerInfo.set_peer_info(1, {"name": "OldRival"})
+
+	lobby.initialize(true, "TestHost")
+
+	assert_eq(MatchPeerInfo.peer_count(), 0, "a forming lobby starts with no opponent on record")
+
+func test_built_profile_info_has_the_three_announced_fields():
+	"""The card this player broadcasts: name, rank name, lifetime points -- all read null-safely."""
+	lobby.initialize(true, "TestHost")
+
+	var card: Dictionary = lobby._build_profile_info()
+
+	assert_eq(String(card.get("name", "")), "TestHost", "the card announces this player's name")
+	assert_true(card.has("rank_name"), "and a rank name field the opponent's chip renders from")
+	assert_gte(int(card.get("lifetime_points", -1)), 0, "and a non-negative lifetime points figure")
+
+func test_profile_info_send_is_safe_with_no_transport():
+	"""No NetSession peer and no GameModeManager: the broadcast is a silent no-op, not a crash."""
+	lobby.game_mode_manager = null
+
+	lobby._broadcast_profile_info()
+
+	pass_test("Broadcasting a profile card with no live transport is harmless")
 
 # Edge Cases
 func test_empty_vote_doesnt_enable_ready():

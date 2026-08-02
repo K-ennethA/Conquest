@@ -153,9 +153,11 @@ func test_hello_admits_the_opponent_and_answers_with_the_lobby_state():
 	assert_true(lobby.is_client_connected, "the host admitted the opponent")
 	assert_true(lobby.map_selection_panel.visible, "the host moved to map selection")
 	assert_eq(lobby.remote_player_name, "Opponent", "the opponent's name came off the hello")
-	assert_eq(net.sent.size(), 1, "the host answered the hello")
-	assert_eq(net.sent[0]["type"], "lobby_state", "the answer is the lobby state")
-	assert_eq(str(net.sent[0]["data"].get("state", "")), "map_selection", "which is map selection")
+	# Count by TYPE, not raw sends: the hello answer legitimately carries lobby_state AND
+	# the host's profile_info card (the post-match summary's opponent block reads it).
+	var states: Array = net.sent.filter(func(m): return m["type"] == "lobby_state")
+	assert_eq(states.size(), 1, "the host answered the hello with the lobby state")
+	assert_eq(str(states[0]["data"].get("state", "")), "map_selection", "which is map selection")
 
 func test_a_late_hello_is_answered_again():
 	# The host may already have flipped to map selection (roster poll) when the hello lands.
@@ -166,8 +168,9 @@ func test_a_late_hello_is_answered_again():
 
 	net.deliver("lobby_hello", { "player_name": "Opponent" })
 
-	assert_eq(net.sent.size(), 1, "a late hello is still answered with the current state")
-	assert_eq(net.sent[0]["type"], "lobby_state", "the answer is the lobby state")
+	# Count by TYPE (the answer also carries profile_info - see the hello test above).
+	var late_states: Array = net.sent.filter(func(m): return m["type"] == "lobby_state")
+	assert_eq(late_states.size(), 1, "a late hello is still answered with the current state")
 
 func test_a_client_ignores_a_hello():
 	lobby.initialize(false, "Client")

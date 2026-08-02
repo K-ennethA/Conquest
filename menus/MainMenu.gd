@@ -63,6 +63,7 @@ func _ready() -> void:
 	_install_menu_backdrop(background)
 	_style_chrome()
 	_build_top_bar()
+	_build_resume_entry()
 
 	if ENABLE_DEV_TEST_HARNESS:
 		_attach_dev_test_harness()
@@ -235,6 +236,101 @@ func _rank_display_text() -> String:
 	if profile == null or not profile.has_method("get_points_total"):
 		return PROFILE_FALLBACK_LABEL
 	return RankLadder.rank_for(int(profile.get_points_total())).to_upper()
+
+# --- Resume battle ----------------------------------------------------------
+#
+# A battle saved with Save & Quit (see [BattleSaveManager]) surfaces here as a gold banner
+# ABOVE Solo -- the first thing on the menu, because an unfinished battle is the thing the
+# player most likely came back for. Built in code rather than in MainMenu.tscn, like the top
+# bar, for the same reason: it only exists when there is something to resume, and its caption
+# is read live off the save file.
+#
+# THE END-OF-DAY RULE lives here too. A paused CHALLENGE attempt expires when the UTC date
+# rolls over, and expiring FORFEITS it (recorded as a played, un-cleared attempt). This is the
+# first of the two places that is checked -- so an expired attempt never even offers a Resume
+# button -- and [method BattleSaveManager.stage_resume] checks again at the moment of resume,
+# so a menu left open across midnight cannot slip one through either.
+
+const GAME_WORLD_SCENE := "res://game/world/GameWorld.tscn"
+const RESUME_EXPIRED_MESSAGE := "Challenge attempt expired — forfeited."
+
+## The resume banner's caption (mode + map + save date), refreshed whenever it is built.
+var _resume_caption: Label = null
+
+
+func _build_resume_entry() -> void:
+	"""Add the RESUME BATTLE banner to the top of the button column, but only when a valid,
+	unexpired save exists. Expiring a stale challenge attempt happens here as a side effect --
+	the banner is the moment the player would otherwise have seen it offered."""
+	var snapshot: Dictionary = BattleSaveManager.peek_save()
+	if snapshot.is_empty():
+		return
+	if BattleSaveManager.expire_if_needed(snapshot, BattleSaveManager.today_utc()):
+		_show_status_message(RESUME_EXPIRED_MESSAGE)
+		return
+
+	var buttons: VBoxContainer = get_node_or_null(
+		"Layout/CenterBlock/Column/MenuButtons") as VBoxContainer
+	if buttons == null:
+		return
+
+	var block := VBoxContainer.new()
+	block.name = "ResumeBlock"
+	block.add_theme_constant_override("separation", 4)
+
+	var button := Button.new()
+	button.name = "ResumeButton"
+	button.text = "▶  RESUME BATTLE"
+	button.custom_minimum_size = Vector2(0, 50)
+	button.tooltip_text = "Continue the battle you saved and quit."
+	# Gold-on-dark, so it reads as the standout entry rather than a fifth menu option.
+	button.add_theme_color_override("font_color", MenuTheme.GOLD)
+	button.add_theme_color_override("font_hover_color", MenuTheme.CREAM)
+	button.pressed.connect(_on_resume_pressed)
+	block.add_child(button)
+
+	_resume_caption = Label.new()
+	_resume_caption.name = "ResumeCaption"
+	_resume_caption.text = BattleSaveManager.describe(snapshot)
+	_resume_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_resume_caption.clip_text = true
+	_resume_caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_resume_caption.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	_resume_caption.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	block.add_child(_resume_caption)
+
+	var spacer := Control.new()
+	spacer.name = "ResumeSpacer"
+	spacer.custom_minimum_size = Vector2(0, 12)
+	block.add_child(spacer)
+
+	buttons.add_child(block)
+	buttons.move_child(block, 0)
+
+
+func _on_resume_pressed() -> void:
+	"""Stage the saved battle and go straight to it. stage_resume re-establishes the whole
+	mode context (map, turn system, difficulty, and the campaign/challenge run arming) and
+	re-checks the EOD rule; a false return means the save was expired or unusable and has
+	already been discarded, so we report it and rebuild the menu without the banner."""
+	var snapshot: Dictionary = BattleSaveManager.peek_save()
+	if snapshot.is_empty() or not BattleSaveManager.stage_resume(snapshot, BattleSaveManager.today_utc()):
+		_dismiss_resume_entry()
+		_show_status_message(RESUME_EXPIRED_MESSAGE)
+		return
+	get_tree().change_scene_to_file(GAME_WORLD_SCENE)
+
+
+func _dismiss_resume_entry() -> void:
+	var buttons: Node = get_node_or_null("Layout/CenterBlock/Column/MenuButtons")
+	if buttons == null:
+		return
+	var block: Node = buttons.get_node_or_null("ResumeBlock")
+	if block != null:
+		buttons.remove_child(block)
+		block.queue_free()
+	_resume_caption = null
+
 
 func _attach_dev_test_harness() -> void:
 	"""Attach the dev_scripts/ multiplayer test nodes. Gated behind ENABLE_DEV_TEST_HARNESS

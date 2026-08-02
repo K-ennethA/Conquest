@@ -168,6 +168,47 @@ func cancel() -> void:
 	_turns = 0
 
 
+# --- Mid-battle save / resume -----------------------------------------------
+
+## True while a campaign battle is live and its result would be recorded. Public face of the
+## internal capture gate, so the save layer can identify a campaign battle without guessing
+## from the map path.
+func is_capturing() -> bool:
+	return _is_capturing()
+
+
+## The chapter dict of the live run ({} when none), and its turn tally -- both written into
+## the battle snapshot so a resume continues the same chapter attempt.
+func active_chapter() -> Dictionary:
+	return _active.duplicate(true)
+
+
+func captured_turns() -> int:
+	return _turns
+
+
+## Re-arm result capture for a RESUMED chapter battle. The same arming block [method begin]
+## runs, minus the GameSettings staging and the scene change (the caller owns both) -- so a
+## resumed battle records its clear against the right chapter and keeps its turn count.
+## Returns false when the chapter's map cannot be loaded, so the caller can discard the save.
+func arm_for_resume(chapter: Dictionary, turns: int) -> bool:
+	if chapter.is_empty():
+		return false
+	var map_path: String = String(chapter.get("map_path", ""))
+	if map_path.is_empty():
+		return false
+	var map_resource: MapResource = load(map_path) as MapResource
+	if map_resource == null:
+		return false
+	_pending = {}
+	_active = chapter.duplicate(true)
+	_active_map_path = map_path
+	_active_rules = WinConditionLibrary.build_rules(map_resource.victory_conditions)
+	_result_recorded = false
+	_turns = maxi(0, turns)
+	return true
+
+
 # --- Battle result capture --------------------------------------------------
 
 func _on_player_turn_started(player) -> void:

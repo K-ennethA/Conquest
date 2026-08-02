@@ -1409,7 +1409,14 @@ func _input(event: InputEvent) -> void:
 				if visible and selected_unit and not movement_mode:
 					_on_unit_summary_pressed()
 			KEY_C, KEY_ESCAPE:
-				if visible and selected_unit:
+				# The gate is has_active_interaction() -- the SAME predicate
+				# UILayoutManager reads to decide whether Escape should instead open the
+				# pause menu (see its _unhandled_input). Sharing one predicate is what
+				# makes the ordering airtight: exactly one of the two fires per press.
+				# While anything is staged we back out ONE stage here and consume; once
+				# the command state is IDLE this does nothing, the press falls through to
+				# _unhandled_input, and the pause menu opens.
+				if has_active_interaction():
 					_on_cancel_pressed()
 					# Consume ESC so the board cursor's own ui_cancel handler does not
 					# ALSO fire and deselect the unit -- that would collapse the staged

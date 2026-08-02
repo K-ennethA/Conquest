@@ -109,14 +109,22 @@ func _send_lobby_message(message_type: String, data: Dictionary) -> void:
 ## Inbound lobby message off NetSession. Same entry point the legacy path calls, so there is
 ## exactly one place each message type is handled. NetSession never echoes our own sends back,
 ## so this only ever carries the OTHER participant's traffic.
-func _on_net_lobby_message(message_type: String, data: Dictionary, _from_slot: int) -> void:
-	handle_network_message(message_type, data)
+##
+## The sender's roster SLOT is forwarded: the server stamps it from its own roster, so it is
+## the trustworthy answer to "who said this" and is what keys the profile cards in
+## [MatchPeerInfo]. The legacy carrier has no slot and passes the default -1.
+func _on_net_lobby_message(message_type: String, data: Dictionary, from_slot: int) -> void:
+	handle_network_message(message_type, data, from_slot)
 
 func initialize(as_host: bool, player_name: String) -> void:
 	"""Initialize the lobby as host or client"""
 	is_host = as_host
 	local_player_name = player_name
-	
+
+	# A NEW lobby means a new match: forget whatever the LAST match's opponent announced, so
+	# the post-match summary can never attribute the previous opponent to this one.
+	MatchPeerInfo.clear()
+
 	print("[LOBBY] Initialized as " + ("HOST" if is_host else "CLIENT"))
 	print("[LOBBY] Player name: " + player_name)
 	
@@ -131,6 +139,9 @@ func initialize(as_host: bool, player_name: String) -> void:
 		print("[LOBBY] Announcing to host over NetSession")
 		_show_waiting_for_host()
 		_send_lobby_message("lobby_hello", {"player_name": local_player_name})
+		# ...and, in the same breath, who we ARE (rank + lifetime points). See
+		# _broadcast_profile_info for why this rides the START of the match.
+		_broadcast_profile_info()
 	else:
 		# Client: Check if already connected (late join scenario)
 		if game_mode_manager:
@@ -406,6 +417,9 @@ func _admit_remote_player(player_name: String) -> void:
 		remote_player_name = player_name
 		_show_map_selection()
 	_broadcast_lobby_state("map_selection")
+	# The lobby has FORMED -- answer the newcomer with our own profile card, exactly as the
+	# lobby_state answer above closes the "host got there first" race for map selection.
+	_broadcast_profile_info()
 
 func _on_local_map_selected(map_path: String, map_resource: MapResource) -> void:
 	"""Handle local player's map selection"""
@@ -429,6 +443,54 @@ func _broadcast_map_vote(map_path: String) -> void:
 		"map_path": map_path
 	})
 	print("[LOBBY] Broadcasted map vote: " + map_path)
+
+## Announce THIS player's profile card -- display name, local rank name, lifetime points --
+## to the other participant(s).
+##
+## WHY AT THE START: the post-match summary ([GameOverScreen]) wants to show who you beat and
+## what rank they carry, but by the time a versus match ENDS the opponent may have forfeited,
+## crashed or dropped, so there is nobody left to ask. The exchange therefore happens while
+## the lobby is forming and the answer is parked in [MatchPeerInfo] until the summary reads it.
+##
+## Sent on the same lobby channel as the votes / ready flags / game-start payload, through the
+## same [method _send_lobby_message] adapter, so it works on whichever transport is live and is
+## a silent no-op when neither is.
+func _broadcast_profile_info() -> void:
+	_send_lobby_message("profile_info", _build_profile_info())
+
+
+## This player's card. Every profile read is guarded: the autoload is absent in some harnesses,
+## and an older build may not carry the rank accessors. Missing data degrades to a name-only
+## card rather than blocking the send.
+func _build_profile_info() -> Dictionary:
+	var info: Dictionary = { "name": local_player_name, "rank_name": "", "lifetime_points": 0 }
+	if typeof(PlayerProfile) != TYPE_OBJECT or PlayerProfile == null:
+		return info
+	var lifetime: int = 0
+	if PlayerProfile.has_method("get_points_total"):
+		lifetime = int(PlayerProfile.get_points_total())
+	info["lifetime_points"] = lifetime
+	if PlayerProfile.has_method("get_rank_name"):
+		info["rank_name"] = str(PlayerProfile.get_rank_name())
+	else:
+		info["rank_name"] = RankLadder.rank_for(lifetime)
+	return info
+
+
+## The other participant announced its card. [param from_slot] is the SERVER's stamp of who
+## sent it (-1 on the legacy carrier, which has no slots), and it is what the card is keyed
+## by -- the payload is untrusted peer input and [MatchPeerInfo] normalises it on the way in.
+func _handle_profile_info(data: Dictionary, from_slot: int) -> void:
+	MatchPeerInfo.set_peer_info(from_slot, data)
+	var announced: Dictionary = MatchPeerInfo.get_peer_info(from_slot)
+	print("[LOBBY] Opponent profile: %s (%s, %d pts) in slot %d" % [
+		String(announced.get("name", "")), String(announced.get("rank_name", "")),
+		int(announced.get("lifetime_points", 0)), from_slot])
+	# Name the opponent from their own announcement when the poll only had a placeholder.
+	var announced_name: String = String(announced.get("name", "")).strip_edges()
+	if not announced_name.is_empty() and (remote_player_name.is_empty() or remote_player_name == "Opponent"):
+		remote_player_name = announced_name
+
 
 func _broadcast_lobby_state(state: String) -> void:
 	"""Broadcast lobby state change (host only)"""
@@ -613,15 +675,22 @@ func _start_game(map_path: String) -> void:
 	get_tree().change_scene_to_file("res://game/world/GameWorld.tscn")
 
 # Network message handlers (called by parent)
-func handle_network_message(message_type: String, data: Dictionary) -> void:
-	"""Handle network messages from other player"""
+func handle_network_message(message_type: String, data: Dictionary, from_slot: int = -1) -> void:
+	"""Handle network messages from other player.
+
+	[param from_slot] is the sender's roster slot as the SERVER stamped it. It is optional and
+	defaults to -1 so every existing 2-argument caller (the legacy MultiplayerGameState relay,
+	the lobby suite) keeps working unchanged; only profile_info currently needs it."""
 	print("[LOBBY] handle_network_message called: " + message_type)
 	print("[LOBBY] Message data: " + str(data))
-	
+
 	match message_type:
 		"lobby_hello":
 			print("[LOBBY] Routing to _handle_lobby_hello")
 			_handle_lobby_hello(data)
+		"profile_info":
+			print("[LOBBY] Routing to _handle_profile_info")
+			_handle_profile_info(data, from_slot)
 		"lobby_state":
 			print("[LOBBY] Routing to _handle_lobby_state")
 			_handle_lobby_state(data)

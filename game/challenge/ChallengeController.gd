@@ -44,7 +44,13 @@ extends Node
 
 ## Where the run's materialised map + the results file live.
 const ACTIVE_MAP_DIR := "user://challenges/active/"
+## Default on-disk location of the local results file. Redirect it with
+## [method set_results_path] rather than writing the player's real file -- see
+## tests/README.md ("Temp paths, or a path-injection API").
 const RESULTS_PATH := "user://challenges/results.json"
+
+## Where results are actually read from / written to. Swappable for tests.
+var _results_path: String = RESULTS_PATH
 
 const CHARACTER_SELECT_SCENE := "res://menus/CharacterSelect.tscn"
 const GAME_WORLD_SCENE := "res://game/world/GameWorld.tscn"
@@ -208,6 +214,97 @@ func cancel() -> void:
 	_result_recorded = false
 	_turns = 0
 	_units_lost = 0
+
+
+# --- Mid-battle save / resume + the end-of-day forfeit ----------------------
+#
+# A challenge attempt is a DAILY commitment: you may put it down and pick it up later the
+# same UTC day, but a paused attempt does not survive the date rolling over. That rule is
+# enforced from two places -- the main-menu banner (so an expired save never even offers a
+# Resume button) and the resume itself (so a session that sat open across midnight cannot
+# sneak back in) -- and BOTH funnel into [method forfeit_expired_attempt], which records the
+# attempt as a loss through the SAME [method _record_result] path a real defeat uses.
+#
+# Skirmish and campaign saves have no such rule; only a challenge expires.
+
+## True while a challenge battle is live and its results would be recorded. Public face of
+## the internal capture gate, so the save layer can tell "this is a challenge battle" from
+## "this is a skirmish that happens to be running a user:// map".
+func is_capturing() -> bool:
+	return _is_capturing()
+
+
+## The challenge dict of the live run ({} when none). Written into the battle snapshot so a
+## resume can re-validate the map through the codec rather than trusting a stale .tres.
+func active_challenge() -> Dictionary:
+	return _active.duplicate(true)
+
+
+## The live run's score counters, so a resume continues the same attempt instead of
+## restarting the tally.
+func capture_counters() -> Dictionary:
+	return { "turns": _turns, "units_lost": _units_lost }
+
+
+## Re-stage [param challenge] for a RESUMED battle and re-arm result capture at
+## [param turns] / [param units_lost]. Returns the staged map path, or "" when the stored
+## challenge no longer validates (a corrupt or tampered save -- the caller then discards it).
+##
+## Deliberately mirrors [method begin] minus the parts a resume must not repeat: it does NOT
+## clear the selected squad (the snapshot fields the board itself) and it does NOT change
+## scene (the caller goes straight to the battle). The map still goes through the hardened
+## [method ChallengeCodec.map_resource_from_challenge], so a resume is exactly as strict about
+## untrusted map data as the original launch was.
+func resume_from_snapshot(challenge: Dictionary, turns: int, units_lost: int) -> String:
+	if challenge.is_empty():
+		return ""
+	var map_resource: MapResource = ChallengeCodec.map_resource_from_challenge(challenge)
+	if map_resource == null:
+		return ""
+	var map_path: String = _write_active_map(map_resource, ChallengeCodec.challenge_id(challenge))
+	if map_path.is_empty():
+		return ""
+
+	var rules: Dictionary = challenge.get("rules", {})
+	if GameSettings != null:
+		GameSettings.set_game_mode(GameSettings.GameMode.SINGLE_PLAYER)
+		if GameSettings.has_method("set_turn_system"):
+			GameSettings.set_turn_system(int(rules.get("turn_system", 0)))
+		if GameSettings.has_method("set_ai_difficulty"):
+			GameSettings.set_ai_difficulty(int(rules.get("ai_difficulty", 1)))
+		if GameSettings.has_method("set_player_count"):
+			GameSettings.set_player_count(_team_count(map_resource))
+		GameSettings.set_selected_map(map_path)
+
+	_pending = {}
+	_active = challenge.duplicate(true)
+	_active_map_path = map_path
+	_result_recorded = false
+	_turns = maxi(0, turns)
+	_units_lost = maxi(0, units_lost)
+	return map_path
+
+
+## FORFEIT a paused attempt whose UTC day has rolled over: record it as a played-and-lost
+## attempt (attempts + 1, no clear) through the ordinary results path, then disarm.
+##
+## Reuses [method _record_result] rather than writing the record by hand, so the forfeit is
+## scored, keyed and rolled up exactly like any other loss -- there is one definition of "an
+## attempt was made" and this is it. Returns false when the challenge carries no id.
+func forfeit_expired_attempt(challenge: Dictionary, turns: int, units_lost: int) -> bool:
+	if challenge.is_empty() or ChallengeCodec.challenge_id(challenge).is_empty():
+		return false
+	_active = challenge.duplicate(true)
+	_result_recorded = false
+	_turns = maxi(0, turns)
+	_units_lost = maxi(0, units_lost)
+	_record_result(false)
+	# Disarm: the attempt is over, and nothing that happens later belongs to it.
+	_active = {}
+	_active_map_path = ""
+	_turns = 0
+	_units_lost = 0
+	return true
 
 
 # --- Battle result capture --------------------------------------------------
@@ -386,11 +483,22 @@ func _record_result(won: bool) -> void:
 
 # --- Results file -----------------------------------------------------------
 
+## Redirect the results file. FOR TESTS ONLY -- point it at a `user://test_*` path in
+## `before_all` and restore [constant RESULTS_PATH] in `after_all`, or the suite edits the
+## player's real record. Empty restores the default.
+func set_results_path(path: String) -> void:
+	_results_path = path if not path.is_empty() else RESULTS_PATH
+
+
+func get_results_path() -> String:
+	return _results_path
+
+
 ## The whole results map ({ challenge_id: record }), or {} when there is no file yet.
 func load_results() -> Dictionary:
-	if not FileAccess.file_exists(RESULTS_PATH):
+	if not FileAccess.file_exists(_results_path):
 		return {}
-	var file: FileAccess = FileAccess.open(RESULTS_PATH, FileAccess.READ)
+	var file: FileAccess = FileAccess.open(_results_path, FileAccess.READ)
 	if file == null:
 		return {}
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
@@ -406,7 +514,10 @@ func result_for(challenge_id: String) -> Dictionary:
 
 func _save_results(results: Dictionary) -> void:
 	ChallengeCodec._ensure_dir()
-	var file: FileAccess = FileAccess.open(RESULTS_PATH, FileAccess.WRITE)
+	var dir: String = _results_path.get_base_dir()
+	if not dir.is_empty() and not DirAccess.dir_exists_absolute(dir):
+		DirAccess.make_dir_recursive_absolute(dir)
+	var file: FileAccess = FileAccess.open(_results_path, FileAccess.WRITE)
 	if file == null:
 		return
 	file.store_string(JSON.stringify(results, "\t"))

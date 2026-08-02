@@ -66,5 +66,38 @@ func reset() -> void:
 	_uses_spent.clear()
 
 
+## A JSON-safe copy of this controller's whole state, for the mid-battle save
+## ([BattleSnapshot]). Keys are stringified move_ids so the dictionary survives a
+## JSON round trip (a [StringName] key would come back as a String anyway).
+func snapshot_state() -> Dictionary:
+	var cooldowns: Dictionary = {}
+	for move_id in _cooldowns:
+		var left: int = int(_cooldowns[move_id])
+		if left > 0:
+			cooldowns[String(move_id)] = left
+	var spent: Dictionary = {}
+	for move_id in _uses_spent:
+		var n: int = int(_uses_spent[move_id])
+		if n > 0:
+			spent[String(move_id)] = n
+	return { "cooldowns": cooldowns, "uses_spent": spent }
+
+
+## The exact inverse of [method snapshot_state]: replaces the tracking dictionaries with
+## [param state]. Keys are re-interned as [StringName]s, which is what [method remaining] /
+## [method _spent] look up by. Missing or malformed sections simply clear that half.
+func restore_state(state: Dictionary) -> void:
+	_cooldowns.clear()
+	_uses_spent.clear()
+	var cooldowns: Variant = state.get("cooldowns", {})
+	if cooldowns is Dictionary:
+		for key in cooldowns as Dictionary:
+			_cooldowns[StringName(String(key))] = int((cooldowns as Dictionary)[key])
+	var spent: Variant = state.get("uses_spent", {})
+	if spent is Dictionary:
+		for key in spent as Dictionary:
+			_uses_spent[StringName(String(key))] = int((spent as Dictionary)[key])
+
+
 func _spent(move_id: StringName) -> int:
 	return int(_uses_spent.get(move_id, 0))

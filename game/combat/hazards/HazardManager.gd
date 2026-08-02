@@ -148,6 +148,81 @@ func _emit_expired(hazard) -> void:
 		GameEvents.emit_signal(&"hazard_expired", hazard)
 
 
+# --- Mid-battle save / resume -----------------------------------------------
+#
+# An in-flight vine is pure data ([TravelingHazard]) apart from its `source` unit, so it
+# serialises cleanly for the battle snapshot ([BattleSaveManager]). The source is stored as
+# the unit's INDEX in the snapshot's unit list -- node references cannot be written to a file,
+# and the restore re-spawns those units in that same order. `_hit_units` is deliberately NOT
+# stored: it exists so a vine never hits the same unit twice, and every unit it has already
+# passed is behind the front, so the geometry alone keeps that promise across a resume.
+
+## A JSON-safe copy of every live vine. [param index_of_unit] maps a source [Unit] to its
+## snapshot index (return -1 for "not on the board"), so this stays free of any dependency on
+## how the snapshot numbers its units.
+func snapshot_state(index_of_unit: Callable) -> Dictionary:
+	var out: Array = []
+	for hazard in _hazards:
+		if hazard == null or hazard.is_expired():
+			continue
+		var source_index: int = -1
+		if hazard.source != null and index_of_unit.is_valid():
+			source_index = int(index_of_unit.call(hazard.source))
+		out.append({
+			"origin": [hazard.origin.x, hazard.origin.y],
+			"facing": [hazard.facing.x, hazard.facing.y],
+			"half_width": int(hazard.half_width),
+			"speed": int(hazard.speed),
+			"remaining": int(hazard.remaining),
+			"damage": int(hazard.damage),
+			"category": int(hazard.category),
+			"affiliation": int(hazard.affiliation),
+			"front": int(hazard.front),
+			"source_index": source_index,
+		})
+	return { "hazards": out }
+
+
+## Rebuild the vines [method snapshot_state] captured. [param unit_at_index] resolves a
+## stored source index back to a live [Unit] (return null when it no longer exists -- a
+## sourceless vine still crawls and still damages, it simply spares nobody by affiliation).
+func restore_state(state: Dictionary, unit_at_index: Callable) -> void:
+	_hazards.clear()
+	var raw: Variant = state.get("hazards", [])
+	if not (raw is Array):
+		return
+	for item in raw as Array:
+		if not (item is Dictionary):
+			continue
+		var d: Dictionary = item
+		var origin: Vector2i = _to_cell(d.get("origin", []))
+		var facing: Vector2i = _to_cell(d.get("facing", []))
+		var source = null
+		var source_index: int = int(d.get("source_index", -1))
+		if source_index >= 0 and unit_at_index.is_valid():
+			source = unit_at_index.call(source_index)
+		var hazard := TravelingHazard.new(
+			origin, facing,
+			int(d.get("half_width", 2)),
+			int(d.get("speed", 2)),
+			int(d.get("remaining", 0)),
+			int(d.get("damage", 0)),
+			int(d.get("category", 0)),
+			int(d.get("affiliation", 0)),
+			source)
+		# `remaining` is set by _init from the travel range; `front` is how far it has already
+		# crawled and must be written back separately or the vine would restart its lane.
+		hazard.front = int(d.get("front", 0))
+		if not hazard.is_expired():
+			_hazards.append(hazard)
+
+
+func _to_cell(value: Variant) -> Vector2i:
+	if value is Array and (value as Array).size() >= 2:
+		return Vector2i(int((value as Array)[0]), int((value as Array)[1]))
+	return Vector2i.ZERO
+
+
 # --- Teardown ---------------------------------------------------------------
 
 func _exit_tree() -> void:

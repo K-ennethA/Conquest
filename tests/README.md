@@ -183,10 +183,12 @@ func after_all() -> void:
 
 Classes with injection today: `ItemInventory.set_save_path`, `PlayerProfile.set_profile_path`
 / `set_source_paths`, `LocalProvider(root)`, `MapMakerModel.save_to_file(path)`,
-`GameSettings.set_settings_path` (+ `reload_presentation_settings()` to re-read).
+`GameSettings.set_settings_path` (+ `reload_presentation_settings()` to re-read),
+`BattleSaveManager.set_save_path` (static — the one mid-battle save slot),
+`ChallengeController.set_results_path`.
 
 **Classes without it — a runtime-design gap, not a test problem:**
-`ChallengeController.RESULTS_PATH`, `ChallengeCodec.CHALLENGE_DIR`, `CommunityClient.MAPS_DIR`
+`ChallengeCodec.CHALLENGE_DIR`, `CommunityClient.MAPS_DIR`
 and `MapLoader.CUSTOM_MAPS_DIR` are `const`. The suites covering them
 (`unit/test_community_client.gd`, `unit/test_challenge_survive_capture.gd`,
 `unit/test_community_local_provider.gd`) therefore have to touch the **real** library and
@@ -286,3 +288,6 @@ godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests/performance -gexit
   Port them into `tests/` as real GUT suites or delete them — do not leave a third category.
 - `unit/` is flat at ~75 files (see *Layout*).
 - The non-injectable `user://` paths listed under rule 4.
+- `unit/test_challenge_survive_capture.gd` still writes the real `results.json` through the
+  guard. `ChallengeController.set_results_path()` now exists — that suite can be pointed at a
+  temp file (as `unit/test_battle_save_eod.gd` is) whenever someone next touches it.

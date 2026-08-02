@@ -94,10 +94,28 @@ var _item_system: ItemSystem = null
 var _damage_numbers: Node3D = null
 var _impact_fx: Node3D = null
 
+## Mid-battle SAVE & RESUME seam (see [BattleSaveManager]). Mounted once per battle as a
+## child so the pause menu can find it through group &"battle_save_manager" and ask it
+## can_save_now() / save_and_quit(). Battle-scoped like the runtimes above; the save FILE
+## itself is process-wide static state and outlives this node.
+var _battle_save_manager: BattleSaveManager = null
+
+## The snapshot this battle is being RESTORED from, consumed in _maybe_restore_battle_snapshot
+## and then replayed in stages across setup (see that method for the four phases). Empty for
+## an ordinary battle, which is every code path below's "do nothing" case.
+var _restore_snapshot: Dictionary = {}
+## Units re-spawned from [member _restore_snapshot], positionally aligned with its "units"
+## array (index N in the file is index N here). Empty outside a restore.
+var _restored_units: Array = []
+
 func _ready() -> void:
 	# Discoverable by decoupled systems that need to spawn units mid-battle without a
 	# hard reference (e.g. SummonEffect reaches summon_unit() via this group).
 	add_to_group("game_world_manager")
+
+	# Save & quit seam, mounted BEFORE the map load so the pause menu can always resolve it
+	# (it answers can_save_now() == false until a battle is actually in progress).
+	_setup_battle_save_manager()
 
 	# Initialize map loader
 	map_loader = MapLoader.new()
@@ -148,6 +166,11 @@ func _ready() -> void:
 	await _load_selected_map()
 	if not is_inside_tree():
 		return
+
+	# RESUMED BATTLE: swap the map's authored units for the saved ones before players are
+	# set up, so the ordinary ownership/turn-registration passes below adopt them unchanged.
+	# A no-op for every ordinary battle.
+	_maybe_restore_battle_snapshot()
 
 	# Check if this is a network multiplayer game
 	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
@@ -698,6 +721,71 @@ func _exit_tree() -> void:
 		_impact_fx.queue_free()
 	_impact_fx = null
 
+# --- Mid-battle save & resume ------------------------------------------------
+
+func _setup_battle_save_manager() -> void:
+	"""Mount the per-battle [BattleSaveManager]. It joins group &"battle_save_manager" in its
+	own _ready, which is how the pause menu finds it -- nothing else is wired here. Created
+	once per GameWorld scene (this node is battle-scoped), unlike the save FILE, which is
+	process-wide static state in BattleSaveManager itself."""
+	if _battle_save_manager != null and is_instance_valid(_battle_save_manager):
+		return
+	_battle_save_manager = BattleSaveManager.new()
+	_battle_save_manager.name = "BattleSaveManager"
+	add_child(_battle_save_manager)
+
+
+## The per-battle spawn scheduler / hazard runtime, for the save layer. Read-only accessors:
+## both are created and owned here (see _setup_spawn_manager / _setup_hazard_manager), and
+## [BattleSaveManager] needs them to capture and restore their per-battle clocks.
+func get_spawn_manager() -> SpawnManager:
+	return _spawn_manager
+
+
+func get_hazard_manager() -> HazardManager:
+	return _hazard_manager
+
+
+func _maybe_restore_battle_snapshot() -> void:
+	"""RESUMED BATTLE, phase 1 -- the one entry point for restoring a saved battle.
+
+	Runs immediately after the map has loaded (so the board, the spawn/hazard/item runtimes
+	and the map's own authored units all exist) and BEFORE _setup_local_game, which is what
+	registers players and assigns unit ownership by parent container. That ordering is the
+	whole reason this is the insertion point: replacing the units HERE means the ordinary
+	ownership + turn-registration passes adopt the restored board exactly as they would a
+	fresh one, with no bespoke adoption code.
+
+	The remaining phases are:
+	  * phase 2 -- _setup_local_game, after the turn system is registered (tick suppression)
+	  * phases 3 + 4 -- _finish_battle_restore, after _start_game (turn state, schedulers)
+
+	A no-op unless a resume was staged from the main menu."""
+	_restore_snapshot = {}
+	_restored_units = []
+	if not BattleSaveManager.has_pending_resume():
+		return
+	# Consuming DELETES the slot: a save is single-use, and a restore that fails part-way
+	# must not leave a file that would be retried into the same failure on the next launch.
+	var snapshot: Dictionary = BattleSaveManager.take_pending_resume()
+	if snapshot.is_empty() or map_loader == null:
+		return
+
+	_restored_units = BattleSaveManager.restore_units(map_loader, snapshot)
+	BattleSaveManager.restore_board(snapshot)
+	_restore_snapshot = snapshot
+
+
+func _finish_battle_restore() -> void:
+	"""RESUMED BATTLE, phases 3 + 4. Split from _maybe_restore_battle_snapshot because both
+	steps need the turn system to be ACTIVE, which only happens inside _start_game."""
+	if _restore_snapshot.is_empty():
+		return
+	BattleSaveManager.restore_turn_state(_restore_snapshot, _restored_units)
+	BattleSaveManager.restore_managers(_restore_snapshot, _spawn_manager, _hazard_manager, _restored_units)
+	_restore_snapshot = {}
+
+
 func _setup_item_system() -> void:
 	"""Create (or recreate) the per-battle ItemSystem, mirroring _setup_hazard_manager. Frees
 	any prior instance first so a second+ battle starts with a clean applied/drop-rolled latch
@@ -859,13 +947,24 @@ func _setup_local_game() -> void:
 	if GameSettings:
 		GameSettings.apply_settings_to_game()
 
+	# RESUMED BATTLE, phase 2: the turn system now EXISTS but has not started. Stamp its
+	# per-turn tick latch for every restored unit so the turn it opens with does not tick
+	# statuses / cooldowns / abilities a second time (see BattleSaveManager).
+	if not _restore_snapshot.is_empty():
+		BattleSaveManager.suppress_turn_start_tick(_restored_units, 1)
+
 	# Wait one more frame before starting the game
 	await get_tree().process_frame
 	if not is_inside_tree():
 		return
-	
+
 	# Start the game
 	_start_game()
+
+	# RESUMED BATTLE, phases 3 + 4: rewind the live turn system to the saved turn/actor and
+	# put the per-battle schedulers' clocks back. Must run AFTER _start_game, which is what
+	# activates the turn system.
+	_finish_battle_restore()
 
 func _setup_multiplayer_players() -> void:
 	"""Set up players for network multiplayer"""

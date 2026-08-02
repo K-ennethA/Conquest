@@ -54,11 +54,26 @@ signal match_rng_ready()
 ## game state, and are only ever delivered to peers OTHER than the sender.
 ## [param from_slot] is the sender's roster slot (-1 if it had none yet).
 signal lobby_message(message_type: String, data: Dictionary, from_slot: int)
+## Another participant FORFEITED the live match (they used the pause menu's "Forfeit
+## Match"). [param slot] is the forfeiting player's roster slot, taken from the SERVER's
+## relay stamp rather than the sender's payload. The battle UI turns this into a defeat
+## for that slot so the remaining player gets the normal victory flow.
+signal opponent_forfeited(slot: int)
+## A participant vanished from a live networked match without forfeiting -- they crashed,
+## alt-F4'd, or lost the connection. Deliberately indistinguishable from a forfeit in
+## OUTCOME (leaving a live match is a loss either way); it is a separate signal only
+## because there is no reliable slot to name when a socket simply drops.
+signal opponent_left()
 
 enum Role { NONE, LISTEN_SERVER, DEDICATED_SERVER, CLIENT }
 
 const DEFAULT_PORT := 8910
 const SERVER_PEER_ID := 1
+
+## Lobby-channel message type for a deliberate forfeit. It rides the LOBBY channel, not
+## the command vocabulary: a forfeit is a session event, not a board mutation, and it has
+## to survive being sent by a peer that is about to disconnect itself.
+const MSG_MATCH_FORFEIT := "match_forfeit"
 
 @export var max_players: int = 4
 
@@ -329,6 +344,25 @@ func leave() -> void:
 	_emit_roster()
 
 
+## Concede the live match and tear the session down. Quitting a networked battle is a
+## LOSS, never a quiet exit, so this is the only way the pause menu is allowed to leave
+## one (see [PauseMenu]).
+##
+## Announces first, leaves second: the forfeit rides the reliable LOBBY channel, and
+## [method leave] closes the ENet peer, which flushes queued reliable packets before the
+## disconnect. Even if that flush were lost, the disconnect the other side then observes
+## raises [signal opponent_left] -- which the battle treats identically -- so the match
+## cannot end up hanging on a dropped announcement.
+##
+## No-op (and returns false) outside a live networked match, so a solo/menu caller is safe.
+func forfeit_match() -> bool:
+	if not is_networked_match():
+		return false
+	send_lobby_message(MSG_MATCH_FORFEIT, { "slot": _local_slot })
+	leave()
+	return true
+
+
 ## Submit an intent to the server. On the server this validates immediately;
 ## on a client it is sent to the server for validation. Never mutates state
 ## directly — the resolved action arrives back via [signal action_applied].
@@ -381,13 +415,29 @@ func _server_relay_lobby_message(from_peer: int, message_type: String, data: Dic
 			_rpc_lobby_deliver.rpc_id(peer_id, message_type, data, from_slot)
 	# The listen-server host is a player too: deliver locally unless it was the sender.
 	if from_peer != local_peer_id():
-		lobby_message.emit(message_type, data, from_slot)
+		_deliver_lobby_message(message_type, data, from_slot)
 
 
 ## Server -> one client: a lobby message from another participant.
 @rpc("authority", "call_remote", "reliable")
 func _rpc_lobby_deliver(message_type: String, data: Dictionary, from_slot: int) -> void:
+	_deliver_lobby_message(message_type, data, from_slot)
+
+
+## The ONE local delivery point for an incoming lobby message -- the host-side relay and
+## the client-side RPC both funnel through here. Emits the raw [signal lobby_message] for
+## lobby UIs, then routes the small set of SYSTEM message types into their own typed
+## signals.
+##
+## [param data] is UNTRUSTED peer input, so the slot reported for a forfeit is taken from
+## [param from_slot] -- which the SERVER derived from its own roster -- whenever that is
+## valid. The payload's own "slot" is only a fallback for the case where the sender had no
+## seat to be stamped with.
+func _deliver_lobby_message(message_type: String, data: Dictionary, from_slot: int) -> void:
 	lobby_message.emit(message_type, data, from_slot)
+	if message_type == MSG_MATCH_FORFEIT:
+		var slot: int = from_slot if from_slot >= 0 else int(data.get("slot", -1))
+		opponent_forfeited.emit(slot)
 
 
 ## Mark the local player ready in the lobby.
@@ -500,6 +550,13 @@ func _on_peer_connected(peer_id: int) -> void:
 
 
 func _on_peer_disconnected(peer_id: int) -> void:
+	# A peer vanishing from a LIVE networked match is a loss for them, exactly like a
+	# forfeit -- announce it before the roster shrinks (is_networked_match() reads the
+	# roster, so it must be sampled first). Emitted for every role: a client watching
+	# another client drop needs to see it too.
+	var was_live: bool = is_networked_match() and _roster.has(peer_id)
+	if was_live:
+		opponent_left.emit()
 	if not is_server():
 		return
 	if _roster.has(peer_id):
@@ -772,7 +829,13 @@ func _on_connection_failed() -> void:
 
 
 func _on_server_disconnected() -> void:
+	# The host went away mid-match. Sample the "was this a live match?" question BEFORE
+	# leave() clears the roster, then report it the same way a peer drop is reported so
+	# the battle can end on the standard victory flow instead of stranding the client.
+	var was_live: bool = is_networked_match()
 	leave()
+	if was_live:
+		opponent_left.emit()
 	disconnected.emit()
 
 

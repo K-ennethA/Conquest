@@ -475,6 +475,54 @@ func _board():
 	return CombatServices.board()
 
 
+# --- Mid-battle save / resume -----------------------------------------------
+#
+# The scheduler's whole clock is `_current_turn` plus, per point, how many units it has
+# already produced and when. None of that is derivable from the board, so it has to be
+# written into the battle snapshot and put back (see [BattleSaveManager]). Deliberately
+# JSON-shaped and symmetric: snapshot_state() emits only primitives, restore_state() reads
+# exactly what it emitted. Live node references (`current_unit`) are NOT stored -- those
+# units are re-spawned by the restore, so the seed adoption is simply re-run afterwards.
+
+## A JSON-safe copy of the schedule's runtime clock, keyed by "x,y,player_id".
+func snapshot_state() -> Dictionary:
+	var points: Dictionary = {}
+	for key in _points:
+		var state: Dictionary = _points[key]
+		var k: Vector3i = key
+		points["%d,%d,%d" % [k.x, k.y, k.z]] = {
+			"produced": int(state["produced"]),
+			"last_spawn_turn": int(state["last_spawn_turn"]),
+			"death_turn": int(state["death_turn"]),
+		}
+	return { "current_turn": _current_turn, "points": points }
+
+
+## Put back what [method snapshot_state] captured. Points the snapshot does not mention keep
+## the schedule they were just initialised with (a map edit between save and resume), and the
+## Respawn seeds are re-adopted off the live board so their deaths are watched again.
+func restore_state(state: Dictionary) -> void:
+	_current_turn = int(state.get("current_turn", 0))
+	var points: Variant = state.get("points", {})
+	if points is Dictionary:
+		for raw_key in points as Dictionary:
+			var parts: PackedStringArray = String(raw_key).split(",")
+			if parts.size() != 3:
+				continue
+			var key: Vector3i = Vector3i(int(parts[0]), int(parts[1]), int(parts[2]))
+			if not _points.has(key):
+				continue
+			var saved: Variant = (points as Dictionary)[raw_key]
+			if not (saved is Dictionary):
+				continue
+			var point: Dictionary = _points[key]
+			point["produced"] = int((saved as Dictionary).get("produced", point["produced"]))
+			point["last_spawn_turn"] = int((saved as Dictionary).get("last_spawn_turn", 0))
+			point["death_turn"] = int((saved as Dictionary).get("death_turn", -1))
+			point["current_unit"] = null
+	_resolve_seed_units()
+
+
 # --- Misc -------------------------------------------------------------------
 
 func _point_key(pos: Vector2i, player_id: int) -> Vector3i:

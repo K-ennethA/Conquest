@@ -33,6 +33,12 @@ var is_layout_initialized: bool = false
 var settings_panel: SettingsPanel = null
 var settings_button: Button = null
 
+# The battle PAUSE menu (quit / save & quit / forfeit) and the HUD button that opens it
+# for mouse+touch players. The menu is a self-contained CanvasLayer that pauses the tree
+# itself; this layout only owns WHERE it is mounted and WHEN Escape should open it.
+var pause_menu: PauseMenu = null
+var pause_button: Button = null
+
 # Full-screen cinematic turn-transition wipe (fade-to-black + turn name). Mounted
 # on its own high CanvasLayer so it draws above every HUD panel. Starts hidden and
 # only blocks input while it is actually on screen.
@@ -84,6 +90,15 @@ func _ready() -> void:
 	# Self-styled, so mounted AFTER theming to keep its explicit font size / colours.
 	_build_turn_timer()
 
+	# The pause menu overlay. Mounted AFTER theming like the other self-styled
+	# CanvasLayers -- it carries the DARK MenuTheme on purpose and must not be swept
+	# into the amber HUD cascade.
+	_build_pause_menu()
+
+	# A leaver/forfeiter has to LOSE, not just vanish. Wired here because this HUD is
+	# alive for exactly the lifetime of a battle.
+	_wire_net_session()
+
 	# Give the command buttons a click sound (they were silent). Reuses the existing
 	# sfx_ui_click slot at low volume. Runs after everything above is mounted so the
 	# gear button + battle log are present.
@@ -103,6 +118,8 @@ func _wire_button_sfx() -> void:
 		UIFeedback.attach_sfx(middle_area)
 	if settings_button:
 		UIFeedback.attach_sfx(settings_button)
+	if pause_button:
+		UIFeedback.attach_sfx(pause_button)
 	if battle_log:
 		UIFeedback.attach_sfx(battle_log)
 
@@ -149,6 +166,20 @@ func _build_settings_ui() -> void:
 	The button lives at the far right of the TopBar; the panel is mounted as the
 	last child of this layout root so it draws above the board and every other
 	HUD panel. Both start ready-to-theme."""
+	# Pause button, immediately LEFT of the gear. Escape opens the same menu, but a
+	# touch/mouse player has no Escape key -- 44px is the project's touch-target floor.
+	if top_bar:
+		pause_button = Button.new()
+		pause_button.name = "PauseButton"
+		pause_button.text = "⏸"
+		pause_button.tooltip_text = "Pause (Esc)"
+		pause_button.custom_minimum_size = Vector2(44, 44)
+		pause_button.mouse_filter = Control.MOUSE_FILTER_STOP
+		pause_button.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		pause_button.add_theme_font_size_override("font_size", 22)
+		pause_button.pressed.connect(_toggle_pause_menu)
+		top_bar.add_child(pause_button)
+
 	# Gear/Settings button, added at the end of the TopBar so it sits top-right.
 	if top_bar:
 		settings_button = Button.new()
@@ -171,15 +202,126 @@ func _toggle_settings() -> void:
 	if settings_panel:
 		settings_panel.toggle()
 
+func _build_pause_menu() -> void:
+	"""Create and mount the battle pause menu on its own high CanvasLayer."""
+	pause_menu = PauseMenu.new()
+	pause_menu.name = "PauseMenu"
+	add_child(pause_menu)
+
+func _toggle_pause_menu() -> void:
+	if pause_menu:
+		pause_menu.toggle()
+
 func _unhandled_input(event: InputEvent) -> void:
 	# Escape (ui_cancel) closes the Settings overlay when it is open, and consumes
 	# the event so the board cursor's own ui_cancel handler (unit deselect) does
-	# not ALSO fire underneath. When the panel is closed we leave Escape alone so
-	# it keeps its in-game meaning (cancel targeting / deselect); the gear button
-	# is the opener.
+	# not ALSO fire underneath. The gear button is the opener.
 	if event.is_action_pressed("ui_cancel") and settings_panel and settings_panel.is_open():
 		settings_panel.close()
 		get_viewport().set_input_as_handled()
+		return
+
+	# --- ESC ordering in battle -------------------------------------------------
+	# Escape has two jobs, and the STAGED one always wins:
+	#   1. Something is staged (move popup open, aiming a move, a tentative move,
+	#      movement mode, or just a selection): UnitActionsPanel's own `_input` handler
+	#      backs out ONE stage and consumes the event. `_input` runs before every
+	#      `_unhandled_input`, so in that case we never see the press at all.
+	#   2. Nothing is staged (the command state is IDLE): the press falls through to
+	#      here and opens the pause menu.
+	# So this branch only has to answer "is the panel idle?", which the panel already
+	# exposes as has_active_interaction(). Once open, the pause menu handles Escape in
+	# its OWN `_input`, so the press that closes it can never re-open it here.
+	if event.is_action_pressed("ui_cancel") and _can_open_pause_menu():
+		pause_menu.open()
+		get_viewport().set_input_as_handled()
+
+func _can_open_pause_menu() -> bool:
+	"""True when Escape should mean 'pause' rather than 'cancel one staged step'."""
+	if pause_menu == null or pause_menu.is_open():
+		return false
+	if settings_panel != null and settings_panel.is_open():
+		return false
+	# A decided battle already owns the screen: GameOverScreen pauses the tree and takes
+	# Escape for 'back to menu'. Never stack a pause menu on top of that.
+	var tree := get_tree()
+	if tree != null and tree.paused:
+		return false
+	# .call(): unit_actions_panel is declared as a plain Control here, so a direct
+	# has_active_interaction() would not survive static analysis.
+	if unit_actions_panel != null and unit_actions_panel.has_method("has_active_interaction") \
+			and bool(unit_actions_panel.call("has_active_interaction")):
+		return false
+	return true
+
+# --- Opponent left / forfeited = a loss for them ------------------------------
+#
+# NetSession only reports the SESSION event; something has to turn that into a battle
+# OUTCOME. This HUD is the natural owner: it exists for exactly one battle and is already
+# the node that mediates between session state and what ends up on screen.
+#
+# The path used is the public one a wipe takes -- mark the absent player ELIMINATED and
+# announce it on PlayerManager.player_eliminated, which GameWorldManager's existing
+# listener turns into the standard GameOverScreen victory for whoever is left standing.
+# No new hook in GameWorldManager, and no bespoke "you win because they left" screen.
+
+func _wire_net_session() -> void:
+	if typeof(NetSession) != TYPE_OBJECT or NetSession == null:
+		return
+	if NetSession.has_signal("opponent_forfeited") \
+			and not NetSession.opponent_forfeited.is_connected(_on_opponent_forfeited):
+		NetSession.opponent_forfeited.connect(_on_opponent_forfeited)
+	if NetSession.has_signal("opponent_left") \
+			and not NetSession.opponent_left.is_connected(_on_opponent_left):
+		NetSession.opponent_left.connect(_on_opponent_left)
+
+func _exit_tree() -> void:
+	# The autoload outlives this battle HUD, so drop the hooks -- a stale instance must
+	# never be called after the battle scene is gone.
+	if typeof(NetSession) != TYPE_OBJECT or NetSession == null:
+		return
+	if NetSession.has_signal("opponent_forfeited") \
+			and NetSession.opponent_forfeited.is_connected(_on_opponent_forfeited):
+		NetSession.opponent_forfeited.disconnect(_on_opponent_forfeited)
+	if NetSession.has_signal("opponent_left") \
+			and NetSession.opponent_left.is_connected(_on_opponent_left):
+		NetSession.opponent_left.disconnect(_on_opponent_left)
+
+func _on_opponent_forfeited(slot: int) -> void:
+	_eliminate_absent_players(slot)
+
+func _on_opponent_left() -> void:
+	# No slot to name when a socket simply drops -- everyone who is not US is gone.
+	_eliminate_absent_players(-1)
+
+func _eliminate_absent_players(slot: int) -> void:
+	"""Mark the absent player(s) defeated so the normal win evaluation resolves the battle.
+
+	[param slot] >= 0 targets exactly that roster slot (player_id maps 1:1 onto it --
+	host = player 0 = slot 0, the same alignment NetSession's turn bridge uses);
+	[param slot] < 0 means "every non-local combatant". NEUTRAL camps are skipped -- they
+	are not a side that can win or lose. Idempotent: an already ELIMINATED player is left
+	alone, so a forfeit followed by the forfeiter's own disconnect still resolves the
+	battle exactly once."""
+	if typeof(PlayerManager) != TYPE_OBJECT or PlayerManager == null:
+		return
+	var local_slot: int = -1
+	if typeof(NetSession) == TYPE_OBJECT and NetSession != null and NetSession.has_method("local_slot"):
+		local_slot = NetSession.local_slot()
+	for p in PlayerManager.players:
+		if p == null:
+			continue
+		if "is_neutral" in p and bool(p.is_neutral):
+			continue
+		if p.current_state == Player.PlayerState.ELIMINATED:
+			continue
+		if slot >= 0:
+			if p.player_id != slot:
+				continue
+		elif local_slot >= 0 and p.player_id == local_slot:
+			continue
+		p.set_state(Player.PlayerState.ELIMINATED)
+		PlayerManager.player_eliminated.emit(p)
 
 func _initialize_layout() -> void:
 	"""Initialize the layout system with proper sizing and constraints"""
@@ -319,10 +461,19 @@ func is_mouse_over_ui(mouse_position: Vector2) -> bool:
 	if settings_panel and settings_panel.is_open():
 		return true
 
-	# The Settings button itself is part of the HUD chrome.
+	# Same for the pause menu: it is full-screen and modal while it is up.
+	if pause_menu and pause_menu.is_open():
+		return true
+
+	# The Settings / Pause buttons are part of the HUD chrome.
 	if settings_button and settings_button.visible:
 		var btn_rect = Rect2(settings_button.global_position, settings_button.size)
 		if btn_rect.has_point(mouse_position):
+			return true
+
+	if pause_button and pause_button.visible:
+		var pause_rect = Rect2(pause_button.global_position, pause_button.size)
+		if pause_rect.has_point(mouse_position):
 			return true
 
 	# Check if mouse is over any visible UI panel
