@@ -77,6 +77,29 @@ var _detail_ability_box: VBoxContainer = null
 var _detail_moves_box: VBoxContainer = null
 var _detail_hint: Label = null
 
+# --- Item loadout refs ------------------------------------------------------
+# Equipment is PERSISTENT and profile-scoped (see [ItemInventory]) rather than part of the
+# squad pick, so it is edited here but confirmed immediately: every change writes straight to
+# the inventory and saves, and is in force the moment the player enters a battle -- including
+# for characters they did not pick this time.
+## The ITEM block in the details pane (separator + header + row), hidden with the rest of the
+## pane until a unit is hovered.
+var _detail_item_box: VBoxContainer = null
+var _detail_item_label: Label = null
+var _detail_item_btn: Button = null
+## The character currently rendered in the details pane ("" = prompt state). Needed because
+## the Equip button acts on whoever is SHOWN, not on the last unit picked.
+var _detail_current_id: String = ""
+## The TEAM ITEMS chips beside the confirm row, one per [constant ItemInventory.TEAM_SLOTS].
+var _team_chips: Array[Button] = []
+## Shared picker for both surfaces. One popup, two modes -- see [method _open_item_popup].
+var _item_popup: PopupMenu = null
+## Item ids parallel to the popup's entries; index 0 is always the "No item" clear entry ("").
+var _popup_item_ids: Array[String] = []
+## Which surface opened the popup: a character id (UNIT scope) XOR a team slot index (>= 0).
+var _popup_character_id: String = ""
+var _popup_team_slot: int = -1
+
 
 func _ready() -> void:
 	_load_palette()
@@ -85,6 +108,7 @@ func _ready() -> void:
 	_build_ui()
 	_refresh_selection_visuals()
 	_refresh_slots()
+	_refresh_team_chips()
 	_show_details("")  # prompt state until a unit is hovered / picked.
 
 
@@ -148,10 +172,16 @@ func _resolve_mode() -> void:
 	if not String(res.map_name).is_empty():
 		_destination = String(res.map_name)
 
+	# Only START points are squad slots the player fills. A player-0 Respawn/Endless/
+	# Reinforcement point is map FURNITURE (a base, a wave portal) that MapLoader fields
+	# from the map's own data - counting those would offer picks that never land
+	# (King's Crossing: 4 Start slots + 3 furniture points would read as a 7-pick squad).
 	var player0_slots := 0
 	for sd in res.unit_spawns:
 		if sd is Dictionary and int(sd.get("player_id", 0)) == 0:
-			player0_slots += 1
+			var kind := String(sd.get("spawn_kind", MapResource.SPAWN_KIND_START))
+			if kind == MapResource.SPAWN_KIND_START:
+				player0_slots += 1
 
 	_max_units = maxi(1, player0_slots) if player0_slots > 0 else DEFAULT_MAX
 
@@ -217,8 +247,19 @@ func _build_ui() -> void:
 	_message_label.visible = false
 	page.add_child(_message_label)
 
+	# --- Team items ----------------------------------------------------------
+	# Sits directly above the confirm row: these two shared slots buff EVERY unit fielded, so
+	# they read as a squad-level decision rather than a per-character one.
+	page.add_child(_build_team_items_row())
+
 	# --- Actions -------------------------------------------------------------
 	page.add_child(_build_actions(roster.is_empty()))
+
+	# Shared item picker, parented to the screen (not to a row) so it can be popped from
+	# either the details pane or a team chip.
+	_item_popup = PopupMenu.new()
+	_item_popup.id_pressed.connect(_on_item_popup_id_pressed)
+	add_child(_item_popup)
 
 	_update_counter()
 
@@ -318,6 +359,48 @@ func _build_details_pane() -> Control:
 	_detail_stats.add_theme_font_size_override("font_size", 16)
 	_detail_stats.add_theme_color_override("font_color", _amber_lite)
 	col.add_child(_detail_stats)
+
+	# --- ITEM (persistent equipment) -----------------------------------------
+	# Grouped into one box so _set_details_visible can show/hide the whole block with a single
+	# entry, exactly like the ability and moves boxes.
+	_detail_item_box = VBoxContainer.new()
+	_detail_item_box.add_theme_constant_override("separation", 4)
+	col.add_child(_detail_item_box)
+
+	_detail_item_box.add_child(_detail_separator())
+
+	var item_head := Label.new()
+	item_head.text = "ITEM"
+	item_head.add_theme_font_size_override("font_size", 14)
+	item_head.add_theme_color_override("font_color", _gold)
+	_detail_item_box.add_child(item_head)
+
+	var item_row := HBoxContainer.new()
+	item_row.add_theme_constant_override("separation", 8)
+	_detail_item_box.add_child(item_row)
+
+	_detail_item_label = Label.new()
+	_detail_item_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_detail_item_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_detail_item_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_detail_item_label.add_theme_font_size_override("font_size", 13)
+	_detail_item_label.add_theme_color_override("font_color", _cream_dim)
+	item_row.add_child(_detail_item_label)
+
+	_detail_item_btn = Button.new()
+	_detail_item_btn.text = "Equip"
+	_detail_item_btn.custom_minimum_size = Vector2(88.0, 32.0)
+	_detail_item_btn.focus_mode = Control.FOCUS_NONE
+	_detail_item_btn.add_theme_font_size_override("font_size", 14)
+	_detail_item_btn.add_theme_stylebox_override("normal", _button_box(_amber_lite))
+	_detail_item_btn.add_theme_stylebox_override("hover", _button_box(_amber_lite.lightened(0.10)))
+	_detail_item_btn.add_theme_stylebox_override("pressed", _button_box(_amber_dk))
+	_detail_item_btn.add_theme_stylebox_override("disabled", _button_box(_brown.lerp(_ink, 0.35), _brown_dk))
+	_detail_item_btn.add_theme_color_override("font_color", _ink)
+	_detail_item_btn.add_theme_color_override("font_hover_color", _brown_dk)
+	_detail_item_btn.add_theme_color_override("font_disabled_color", _cream_dim)
+	_detail_item_btn.pressed.connect(_on_equip_pressed)
+	item_row.add_child(_detail_item_btn)
 
 	col.add_child(_detail_separator())
 
@@ -466,7 +549,7 @@ func _build_actions(roster_empty: bool) -> Control:
 func _set_details_visible(shown: bool) -> void:
 	if _detail_hint != null:
 		_detail_hint.visible = not shown
-	for node in [_detail_name, _detail_chip_panel, _detail_stats, _detail_ability_box, _detail_moves_box]:
+	for node in [_detail_name, _detail_chip_panel, _detail_stats, _detail_item_box, _detail_ability_box, _detail_moves_box]:
 		if node != null:
 			(node as CanvasItem).visible = shown
 
@@ -474,13 +557,17 @@ func _set_details_visible(shown: bool) -> void:
 ## Populate the details pane for [param id_str]; empty string shows the prompt state.
 func _show_details(id_str: String) -> void:
 	if id_str.is_empty() or not _char_by_id.has(id_str):
+		_detail_current_id = ""
 		_set_details_visible(false)
 		return
 	var chr: CharacterResource = _char_by_id[id_str]
 	if chr == null:
+		_detail_current_id = ""
 		_set_details_visible(false)
 		return
+	_detail_current_id = id_str
 	_set_details_visible(true)
+	_refresh_item_row()
 
 	_detail_name.text = chr.display_name
 
@@ -579,6 +666,159 @@ func _on_slot_clicked(id_str: String) -> void:
 		_refresh_selection_visuals()
 		_update_counter()
 		_refresh_slots()
+
+
+# --- Item loadout -----------------------------------------------------------
+#
+# Two surfaces over the one static store ([ItemInventory]):
+#   * the ITEM row in the details pane -- the UNIT-scope item worn by the character currently
+#     shown, which buffs only that character;
+#   * the TEAM ITEMS chips above the confirm row -- TEAM-scope items that buff EVERY unit.
+#
+# Both open the SAME picker. Every change is written and saved immediately (equipment is
+# profile state, not part of this screen's squad pick), so backing out of the screen keeps it.
+# You own COPIES, not slots: picking an item whose every copy is already in use MOVES it, and
+# the inline message says where it came from.
+
+## The TEAM ITEMS chip row: a caption plus one chip per shared slot.
+func _build_team_items_row() -> Control:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+
+	var head := Label.new()
+	head.text = "TEAM ITEMS"
+	head.add_theme_font_size_override("font_size", 14)
+	head.add_theme_color_override("font_color", _gold)
+	head.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(head)
+
+	_team_chips.clear()
+	for slot in range(ItemInventory.TEAM_SLOTS):
+		var chip := Button.new()
+		chip.custom_minimum_size = Vector2(210.0, 34.0)
+		chip.focus_mode = Control.FOCUS_NONE
+		chip.clip_text = true
+		chip.add_theme_font_size_override("font_size", 14)
+		_style_choice_button(chip)
+		chip.pressed.connect(_on_team_chip_pressed.bind(slot))
+		row.add_child(chip)
+		_team_chips.append(chip)
+
+	return row
+
+
+## Repaint the ITEM row for whichever character the details pane is showing.
+func _refresh_item_row() -> void:
+	if _detail_item_label == null:
+		return
+	var item: ItemResource = ItemInventory.equipped_resource(_detail_current_id)
+	if item == null:
+		_detail_item_label.text = "No item"
+		_detail_item_label.add_theme_color_override("font_color", _cream_dim)
+	else:
+		_detail_item_label.text = "%s  %s  --  %s" % [item.icon_hint, item.display_name, item.effect_summary()]
+		_detail_item_label.add_theme_color_override("font_color", _amber_lite)
+	if _detail_item_btn != null:
+		_detail_item_btn.disabled = _detail_current_id.is_empty()
+
+
+## Repaint both TEAM chips from the store.
+func _refresh_team_chips() -> void:
+	var slots: Array[String] = ItemInventory.team_items()
+	for slot in range(_team_chips.size()):
+		var chip: Button = _team_chips[slot]
+		if chip == null:
+			continue
+		var slot_id: String = slots[slot] if slot < slots.size() else ""
+		var item: ItemResource = ItemLibrary.get_item(slot_id)
+		if item == null:
+			chip.text = "Team Slot %d -- Empty" % (slot + 1)
+			chip.tooltip_text = "Click to equip a team item (buffs every unit)."
+		else:
+			chip.text = "%s %s" % [item.icon_hint, item.display_name]
+			chip.tooltip_text = "%s\n%s\nClick to change." % [item.description, item.effect_summary()]
+
+
+func _on_equip_pressed() -> void:
+	if _detail_current_id.is_empty():
+		return
+	_popup_character_id = _detail_current_id
+	_popup_team_slot = -1
+	_open_item_popup(ItemResource.Scope.UNIT)
+
+
+func _on_team_chip_pressed(slot: int) -> void:
+	_popup_character_id = ""
+	_popup_team_slot = slot
+	_open_item_popup(ItemResource.Scope.TEAM)
+
+
+## Fill and show the shared picker with every OWNED item of [param scope]. The first entry is
+## always "No item" (the clear action), so index 0 of [member _popup_item_ids] is always "".
+## An item with no free copy left is labelled as a move, not hidden -- the player owns it, so
+## they can always put it where they want it.
+func _open_item_popup(scope: int) -> void:
+	if _item_popup == null:
+		return
+	_item_popup.clear()
+	_popup_item_ids.clear()
+
+	_item_popup.add_item("No item")
+	_popup_item_ids.append("")
+
+	var owned: Array[ItemResource] = ItemInventory.owned_items_with_scope(scope)
+	for item in owned:
+		var label: String = "%s %s  --  %s" % [item.icon_hint, item.display_name, item.effect_summary()]
+		if ItemInventory.free_copies(item.id) <= 0:
+			label += "   (in use -- moves it here)"
+		_item_popup.add_item(label)
+		_popup_item_ids.append(String(item.id))
+
+	if owned.is_empty():
+		# Added LAST so it cannot shift the entry indices the handler maps back to ids.
+		_item_popup.add_separator("Win battles and Arena runs to find items")
+
+	_item_popup.reset_size()
+	_item_popup.popup_centered()
+
+
+func _on_item_popup_id_pressed(id: int) -> void:
+	if id < 0 or id >= _popup_item_ids.size():
+		return
+	var item_id: String = _popup_item_ids[id]
+
+	if _popup_team_slot >= 0:
+		# set_team_item reports either "team slot N" (already display-ready) or a character id.
+		var note: String = ItemInventory.set_team_item(_popup_team_slot, item_id)
+		if not note.is_empty() and not note.begins_with("team slot"):
+			note = _character_name(note)
+		_report_move(item_id, note)
+	elif not _popup_character_id.is_empty():
+		var taken_from: String = ItemInventory.equip(_popup_character_id, item_id)
+		_report_move(item_id, _character_name(taken_from) if not taken_from.is_empty() else "")
+	else:
+		return
+
+	ItemInventory.save()
+	_refresh_item_row()
+	_refresh_team_chips()
+
+
+## Tell the player when an equip MOVED an item ([param source] empty = nothing was moved).
+func _report_move(item_id: String, source: String) -> void:
+	if source.is_empty():
+		_hide_message()
+		return
+	var item: ItemResource = ItemLibrary.get_item(item_id)
+	var item_name: String = item.display_name if item != null else item_id
+	_show_message("You own one %s -- moved it here from %s." % [item_name, source])
+
+
+## Display name for a character id (falls back to the raw id for an unknown one).
+func _character_name(character_id: String) -> String:
+	var chr: CharacterResource = _char_by_id.get(character_id)
+	return chr.display_name if chr != null else character_id
 
 
 # --- Selection logic --------------------------------------------------------

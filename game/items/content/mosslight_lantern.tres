@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/items/ItemResource.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"mosslight_lantern"
+display_name = "Mosslight Lantern"
+description = "Glowmoss sealed in horn. It shows the opening a half-heartbeat before anyone else sees it."
+rarity = 0
+scope = 0
+stat_modifiers = {
+"speed": 2
+}
+regen_per_turn = 0
+damage_reduction_percent = 0
+icon_hint = "🏮"

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/items/ItemResource.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"sagebloom_poultice"
+display_name = "Sagebloom Poultice"
+description = "Crushed sagebloom bound in bark. The wounds close a little further with every breath."
+rarity = 1
+scope = 0
+stat_modifiers = {}
+regen_per_turn = 5
+damage_reduction_percent = 0
+icon_hint = "🌿"

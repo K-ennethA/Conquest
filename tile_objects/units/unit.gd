@@ -303,18 +303,154 @@ func _setup_character_model() -> void:
 	# then apply the character's authored yaw (a sculpt that faces the wrong way) and
 	# scale (a small creature). Scale is about the feet-at-origin so it stays grounded.
 	if model is Node3D:
-		var m := model as Node3D
-		m.position = get_footprint_offset()
-		var yaw: float = character_resource.model_yaw_deg if "model_yaw_deg" in character_resource else 0.0
-		var model_scale: float = character_resource.model_scale if "model_scale" in character_resource else 1.0
-		# Compose the authored correction with the spawn/runtime facing (see the facing_yaw
-		# note above). The spawner sets facing_yaw BEFORE this node enters the tree, so the
-		# model is built already oriented toward the opposing side.
-		m.rotation = Vector3(0.0, deg_to_rad(yaw) + facing_yaw, 0.0)
-		m.scale = Vector3.ONE * maxf(0.05, model_scale)
+		_orient_character_model(model as Node3D)
 
 	if _mesh_instance:
 		_mesh_instance.visible = false
+
+	# Owner may already be assigned (e.g. a spawner sets owner_player before adding
+	# this node, so _ready runs with it known) -- apply the equipped cosmetic skin
+	# now. When ownership is instead assigned LATER, set_owner_player() re-invokes
+	# this. Both paths are guarded to the human player inside apply_equipped_skin().
+	apply_equipped_skin()
+
+
+## Position + orient a freshly-instanced CharacterModel: centre it over the
+## footprint, then set its Y rotation to the authored correction composed with the
+## runtime facing (see the facing_yaw note above), and apply the authored scale.
+## Shared by the default-model path and the skin's model_scene override.
+func _orient_character_model(m: Node3D) -> void:
+	m.position = get_footprint_offset()
+	var yaw: float = character_resource.model_yaw_deg if "model_yaw_deg" in character_resource else 0.0
+	var model_scale: float = character_resource.model_scale if "model_scale" in character_resource else 1.0
+	# Compose the authored correction with the spawn/runtime facing. The spawner sets
+	# facing_yaw BEFORE this node enters the tree, so the model is built already
+	# oriented toward the opposing side.
+	m.rotation = Vector3(0.0, deg_to_rad(yaw) + facing_yaw, 0.0)
+	m.scale = Vector3.ONE * maxf(0.05, model_scale)
+
+
+# --- Cosmetic skins ---------------------------------------------------------
+# Skins are PURELY visual variants of a roster character (see SkinResource /
+# SkinLibrary). They apply ONLY to units owned by the HUMAN player (player_id 0),
+# so an enemy fielding the same roster character (e.g. an AI Vineweave) always
+# keeps its canonical look -- a recoloured "Emberroot" is the player's vanity, not
+# a gameplay tell. Ownership may not be known when the model is first built, so
+# this runs from BOTH _setup_character_model (owner-known-early) and
+# set_owner_player (owner-assigned-later); it is safe to call more than once.
+
+## Skin id currently applied to this unit's model. Both call sites (the model build
+## and the ownership assignment) reach apply_equipped_skin(), and set_owner_player()
+## can itself run more than once, so without this latch the same tint would be
+## multiplied over an already-tinted material and the unit would darken each pass.
+var _applied_skin_id: String = ""
+
+## Per-surface ORIGINAL material, captured before the first tint:
+## "<mesh instance id>:<surface index>" -> Material. Tinting always starts from the
+## stored base, so re-applying a skin (or switching to a different one) recolours
+## the CANONICAL look rather than compounding on the previous tint.
+var _skin_base_materials: Dictionary = {}
+
+
+## Apply the player's equipped skin for this unit's character, if any. A no-op for
+## enemy/neutral units, a unit with no character, or when no (or an unknown) skin
+## is equipped -- all of which keep the default look. Safe to call repeatedly: an
+## already-applied skin short-circuits.
+func apply_equipped_skin() -> void:
+	if owner_player == null or owner_player.player_id != 0:
+		return
+	if character_resource == null:
+		return
+	var char_id: String = String(character_resource.character_id)
+	if char_id.is_empty():
+		return
+	var skin_id: String = _equipped_skin_id(char_id)
+	if skin_id == _applied_skin_id:
+		return  # already wearing it (or still on the default look)
+	if skin_id.is_empty():
+		return
+	var skin: SkinResource = SkinLibrary.find(skin_id)
+	# An unknown id, or a skin authored against a different character, reads as the
+	# default look.
+	if skin == null or String(skin.character_id) != char_id:
+		return
+	if skin.model_scene != null:
+		_rebuild_character_model(skin.model_scene)
+	elif skin.has_tint():
+		_apply_skin_tint(skin.tint)
+	_applied_skin_id = skin_id
+
+
+## Equipped skin id for [param char_id] via the PlayerProfile autoload, resolved
+## by node path so this compiles and runs even when that autoload is absent (tests
+## / headless / a load-order shift). Null-safe: "" means "default look".
+func _equipped_skin_id(char_id: String) -> String:
+	if not is_inside_tree():
+		return ""
+	var profile: Node = get_node_or_null("/root/PlayerProfile")
+	if profile == null or not profile.has_method("get_equipped_skin"):
+		return ""
+	return String(profile.get_equipped_skin(char_id))
+
+
+## Swap the built CharacterModel for a skin's full-model override, re-running the
+## same orient/scale/facing pipeline the default model used.
+func _rebuild_character_model(scene: PackedScene) -> void:
+	if scene == null:
+		return
+	var existing: Node = get_node_or_null("CharacterModel")
+	if existing != null:
+		remove_child(existing)
+		existing.queue_free()
+	# The cached base materials belong to the model being discarded.
+	_skin_base_materials.clear()
+	var model := scene.instantiate()
+	if model == null:
+		push_warning("[Unit] skin model_scene failed to instantiate for %s" % name)
+		return
+	model.name = "CharacterModel"
+	add_child(model)
+	if model is Node3D:
+		_orient_character_model(model as Node3D)
+
+
+## Tint every mesh surface of the CharacterModel by [param tint]. Materials are
+## DUPLICATED before tinting (via SkinLibrary.tinted_material) so a shared/base
+## material is never mutated; non-mesh children are skipped.
+func _apply_skin_tint(tint: Color) -> void:
+	var model: Node = get_node_or_null("CharacterModel")
+	if model == null:
+		return
+	_tint_mesh_tree(model, tint)
+
+
+func _tint_mesh_tree(node: Node, tint: Color) -> void:
+	if node is MeshInstance3D:
+		_tint_mesh_instance(node as MeshInstance3D, tint)
+	for child in node.get_children():
+		_tint_mesh_tree(child, tint)
+
+
+func _tint_mesh_instance(mi: MeshInstance3D, tint: Color) -> void:
+	var mesh: Mesh = mi.mesh
+	if mesh == null:
+		return
+	for s in range(mesh.get_surface_count()):
+		# Tint the CANONICAL material for this surface, not whatever is currently
+		# showing: after a first pass the active material IS the tinted override, so
+		# re-reading it would multiply the tint in again. The original is captured
+		# once (get_active_material resolves an authored override first, else the
+		# mesh's own material) and every later tint starts from it.
+		var key: String = "%d:%d" % [mi.get_instance_id(), s]
+		var base_mat: Material = _skin_base_materials.get(key, null)
+		if base_mat == null:
+			base_mat = mi.get_active_material(s)
+			if base_mat == null:
+				continue
+			_skin_base_materials[key] = base_mat
+		var tinted: Material = SkinLibrary.tinted_material(base_mat, tint)
+		if tinted != null:
+			mi.set_surface_override_material(s, tinted)
 
 
 # --- Facing API -------------------------------------------------------------
@@ -558,7 +694,12 @@ func set_owner_player(player: Player) -> void:
 		# Update visuals to neutral
 		if visual_manager:
 			visual_manager.setup_unit_visuals(self, player_assignment)
-	
+
+	# Ownership is the gate for cosmetic skins (human player only). When the model
+	# was built before this assignment, apply the equipped skin now that we know who
+	# owns the unit. No-op for enemies/neutral (guarded inside apply_equipped_skin).
+	apply_equipped_skin()
+
 	owner_changed.emit(self, old_owner, player)
 
 func get_owner_player() -> Player:

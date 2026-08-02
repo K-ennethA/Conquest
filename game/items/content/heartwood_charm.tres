@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/items/ItemResource.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"heartwood_charm"
+display_name = "Heartwood Charm"
+description = "A knot of living heartwood, still warm. Whoever carries it simply takes longer to fall."
+rarity = 0
+scope = 0
+stat_modifiers = {
+"health": 5
+}
+regen_per_turn = 0
+damage_reduction_percent = 0
+icon_hint = "🪵"

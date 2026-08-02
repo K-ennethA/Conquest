@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/items/ItemResource.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"sunleaf_totem"
+display_name = "Sunleaf Totem"
+description = "Planted at the edge of the field, it turns to follow the fighting. Everyone under its light swings harder."
+rarity = 1
+scope = 1
+stat_modifiers = {
+"attack": 2
+}
+regen_per_turn = 0
+damage_reduction_percent = 0
+icon_hint = "☀"

@@ -344,7 +344,16 @@ func _load_units() -> bool:
 		# Override player-0 slots with the chosen squad (in slot order). If the player
 		# fielded FEWER units than the map has player-0 slots, the extra slots stay empty
 		# rather than falling back to the map's authored unit.
-		if not squad.is_empty() and int(sd.get("player_id", 0)) == 0:
+		#
+		# START points ONLY. A "Start" point is a SQUAD SLOT -- an empty chair the
+		# match-setup screen fills. A player-0 Respawn / Endless / Reinforcement point is
+		# map FURNITURE: a spawn portal, a garrison, a base structure. The map decides what
+		# those field, not the player, and they must never be overwritten with (nor dropped
+		# in favour of) a squad pick -- a base-assault map's own base would otherwise load
+		# as whichever character the player picked first. No shipped map authors a non-Start
+		# player-0 point, so this narrows nothing that existed before.
+		if not squad.is_empty() and int(sd.get("player_id", 0)) == 0 \
+				and current_map.get_spawn_kind(spawn_data) == MapResource.SPAWN_KIND_START:
 			if p0_slot >= squad.size():
 				continue
 			sd = spawn_data.duplicate()

@@ -71,6 +71,14 @@ var _spawn_manager: SpawnManager = null
 ## finishes loading.
 var _hazard_manager: HazardManager = null
 
+## Runtime item runtime (see [ItemSystem]): applies the player's PERSISTENT equipped items
+## (per-character and team-wide) to their units at the first turn boundary, and rolls the
+## post-battle drop that grows the collection. Created fresh per battle in
+## _setup_item_system() beside the spawn/hazard managers, and freed + recreated on the next
+## map load so its per-battle latches reset. The collection itself is process-wide static
+## state in [ItemInventory] and outlives this node.
+var _item_system: ItemSystem = null
+
 func _ready() -> void:
 	# Discoverable by decoupled systems that need to spawn units mid-battle without a
 	# hard reference (e.g. SummonEffect reaches summon_unit() via this group).
@@ -240,6 +248,11 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# Stand up the per-battle hazard runtime alongside it, so crawling vines cast this
 	# battle tick forward and none leak into the next one.
 	_setup_hazard_manager()
+
+	# Stand up the per-battle item runtime beside them: it stamps the player's equipped items
+	# onto their units at the first turn boundary (see [ItemSystem] for why not here) and
+	# rolls the post-battle drop that grows the collection.
+	_setup_item_system()
 
 	# Stand up the networked command seam for THIS battle: a fresh CommandApplier +
 	# UnitRegistry bound to the units just spawned on the rebuilt board, handed to
@@ -601,6 +614,22 @@ func _exit_tree() -> void:
 	outlives the board it mutated. Null-safe -- a no-op if NetSession is absent."""
 	if typeof(NetSession) == TYPE_OBJECT and NetSession != null:
 		NetSession.clear_command_seam()
+
+func _setup_item_system() -> void:
+	"""Create (or recreate) the per-battle ItemSystem, mirroring _setup_hazard_manager. Frees
+	any prior instance first so a second+ battle starts with a clean applied/drop-rolled latch
+	-- this node is battle-scoped, while the player's collection itself lives in the
+	process-wide static ItemInventory. setup() wires it to the ACTIVE turn system's per-turn
+	signal (the only one that fires on AI turns too) and to the elimination signals that
+	decide the post-battle drop."""
+	if _item_system != null and is_instance_valid(_item_system):
+		_item_system.queue_free()
+	_item_system = null
+
+	_item_system = ItemSystem.new()
+	_item_system.name = "ItemSystem"
+	add_child(_item_system)
+	_item_system.setup()
 
 func _setup_hazard_manager() -> void:
 	"""Create (or recreate) the per-battle HazardManager, mirroring _setup_spawn_manager.

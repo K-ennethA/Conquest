@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SkinResource" format=3]
+
+[ext_resource type="Script" path="res://game/skins/SkinResource.gd" id="1_skin"]
+
+[resource]
+script = ExtResource("1_skin")
+id = &"blightcap_venomcap"
+character_id = &"blightcap"
+display_name = "Venomcap"
+description = "Bred in the deepest rot, glowing a lurid toxic green. You smell its poison a full field away."
+rarity = 0
+price = 300
+tint = Color(0.5, 0.9, 0.3, 1)

@@ -1,0 +1,109 @@
+class_name HttpProvider
+extends CommunityProvider
+
+## The REAL community client: HTTPRequest against a configured base_url, speaking the
+## contract in docs/COMMUNITY_API.md. It is intentionally THIN -- every method is one
+## request with a timeout, a status->result mapping, and a JSON parse -- so it stays
+## obviously correct until a live service exists to exercise it.
+##
+## Selection is handled by [CommunityClient]: this provider is used only when
+## user://community.cfg supplies a base_url; otherwise the offline [LocalProvider] runs.
+##
+## HTTPRequest is a Node and must live in the tree, so each call spawns a short-lived
+## HTTPRequest under the scene root and frees it on completion.
+
+const TIMEOUT_SEC := 15.0
+
+var _base_url: String
+
+
+func _init(base_url: String) -> void:
+	# Trim a trailing slash so path concatenation is unambiguous.
+	_base_url = base_url.strip_edges().trim_suffix("/")
+
+
+# --- API --------------------------------------------------------------------
+
+func list_items(sort: String, type: String, page: int, cb: Callable) -> void:
+	var query: String = "?sort=%s&type=%s&page=%d" % [
+		sort.uri_encode(), type.uri_encode(), maxi(0, page)]
+	_request(HTTPClient.METHOD_GET, "/v1/items" + query, {}, cb, false)
+
+
+func fetch_item(id: String, cb: Callable) -> void:
+	_request(HTTPClient.METHOD_GET, "/v1/items/" + id.uri_encode(), {}, cb, true)
+
+
+func upload(payload: Dictionary, cb: Callable) -> void:
+	_request(HTTPClient.METHOD_POST, "/v1/items", payload, cb, true)
+
+
+func vote(id: String, dir: int, cb: Callable) -> void:
+	_request(HTTPClient.METHOD_POST, "/v1/items/%s/vote" % id.uri_encode(),
+		{"dir": clampi(dir, -1, 1)}, cb, true)
+
+
+func daily(cb: Callable) -> void:
+	_request(HTTPClient.METHOD_GET, "/v1/daily", {}, cb, true)
+
+
+# --- Request plumbing -------------------------------------------------------
+
+## Issue one request. [param has_body] sends [param body] as JSON (POST). [param cb]
+## always receives the uniform result shape. Failures (transport, timeout, non-2xx,
+## unparseable body) map to {ok:false, error:...}.
+func _request(method: int, path: String, body: Dictionary, cb: Callable, has_body: bool) -> void:
+	var tree: SceneTree = Engine.get_main_loop() as SceneTree
+	if tree == null or tree.root == null:
+		_emit(cb, fail("No scene tree available for HTTP."))
+		return
+
+	var http := HTTPRequest.new()
+	http.timeout = TIMEOUT_SEC
+	tree.root.add_child(http)
+
+	var headers: PackedStringArray = PackedStringArray([
+		"Accept: application/json",
+		"X-Community-Device: " + device_id(),
+	])
+	var body_text: String = ""
+	if has_body:
+		headers.append("Content-Type: application/json")
+		body_text = JSON.stringify(body)
+
+	http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, resp: PackedByteArray):
+		_finish(http, cb, result, code, resp))
+
+	var err: int = http.request(_base_url + path, headers, method, body_text)
+	if err != OK:
+		http.queue_free()
+		_emit(cb, fail("Request could not be started (error %d)." % err))
+
+
+func _finish(http: HTTPRequest, cb: Callable, result: int, code: int, resp: PackedByteArray) -> void:
+	http.queue_free()
+
+	if result != HTTPRequest.RESULT_SUCCESS:
+		_emit(cb, fail("Network error (%d)." % result))
+		return
+	if code < 200 or code >= 300:
+		_emit(cb, fail(_error_from_body(resp, code)))
+		return
+
+	var text: String = resp.get_string_from_utf8()
+	if text.strip_edges().is_empty():
+		_emit(cb, ok({}))
+		return
+	var parsed: Variant = JSON.parse_string(text)
+	if parsed == null:
+		_emit(cb, fail("Server returned an unreadable response."))
+		return
+	_emit(cb, ok(parsed))
+
+
+## Pull the server's {"error": ...} message out of an error body, or fall back to the code.
+func _error_from_body(resp: PackedByteArray, code: int) -> String:
+	var parsed: Variant = JSON.parse_string(resp.get_string_from_utf8())
+	if parsed is Dictionary and (parsed as Dictionary).has("error"):
+		return String((parsed as Dictionary)["error"])
+	return "Server returned HTTP %d." % code

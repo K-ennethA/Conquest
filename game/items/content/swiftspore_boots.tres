@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/items/ItemResource.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"swiftspore_boots"
+display_name = "Swiftspore Boots"
+description = "Soles caked in swiftspore. Each step bursts and carries the wearer one pace further."
+rarity = 1
+scope = 0
+stat_modifiers = {
+"movement": 1
+}
+regen_per_turn = 0
+damage_reduction_percent = 0
+icon_hint = "👣"

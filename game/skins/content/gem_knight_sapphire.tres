@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SkinResource" format=3]
+
+[ext_resource type="Script" path="res://game/skins/SkinResource.gd" id="1_skin"]
+
+[resource]
+script = ExtResource("1_skin")
+id = &"gem_knight_sapphire"
+character_id = &"gem_knight"
+display_name = "Sapphire Bastion"
+description = "A rarer seam, cold blue and flawless. They say a Sapphire Geode has never once been cracked, only chipped."
+rarity = 1
+price = 800
+tint = Color(0.4, 0.55, 1, 1)

@@ -23,6 +23,13 @@ static func build_rules(condition_strings: Array, faction: int = HUMAN_FACTION) 
 	# Every listed objective must be met to win (matters only for multi-objective
 	# maps; a single objective behaves identically either way).
 	rules.require_all_win = true
+	# A BASE-ASSAULT map needs a sliver of runtime the pure, stateless conditions
+	# cannot provide (registering the neutral guardian faction, and the team bounty
+	# for felling one). Arm it here -- this is the one place that knows a map's
+	# compiled objectives -- and disarm it for every other map, so nothing else in
+	# the game changes. See [BaseAssaultRuntime]; it is a no-op when the rules carry
+	# no DestroyBase objective and none has ever been armed.
+	BaseAssaultRuntime.sync(rules)
 	return rules
 
 
@@ -50,6 +57,7 @@ static func build_lose_conditions(faction: int) -> Array[WinCondition]:
 
 ## Map ONE objective string to a [WinCondition]. Recognised (case-insensitive):
 ##   "Defeat Boss"          -> DefeatBoss
+##   "Destroy Enemy Base"   -> DestroyBase
 ##   "Eliminate/Defeat All..." -> DefeatAllEnemies
 ## Anything else falls back to DefeatAllEnemies with a warning. Capture/Protect/
 ## Survive conditions exist as classes but need parameters (a throne cell, a
@@ -61,6 +69,13 @@ static func build_one(name: String, faction: int) -> WinCondition:
 		var db := DefeatBoss.new()
 		db.faction = faction
 		return db
+	# "Destroy Enemy Base" / "destroy the base" / "destroy base". Matched on both words
+	# rather than an exact string so an author's phrasing does not silently fall through
+	# to "kill everything" -- which on a base-assault map (endless waves) is unwinnable.
+	if key.begins_with("destroy") and key.contains("base"):
+		var dbase := DestroyBase.new()
+		dbase.faction = faction
+		return dbase
 	if key.begins_with("eliminate all") or key.begins_with("defeat all"):
 		return _defeat_all(faction)
 	# Not push_warning: an unknown string is a soft fallback, not an engine error, and

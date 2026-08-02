@@ -8,6 +8,13 @@ class_name ArenaRoundBuilder
 ## default unit), so the board loads empty and we fill it here. Called from
 ## GameWorldManager._setup_local_game BEFORE players are assigned, so the normal
 ## assign_units_by_parent pass then picks these units up like any other placement.
+##
+## NOT here: the player's PERSISTENT items. Augments are run-scoped state this builder owns,
+## but equipped [ItemResource]s are profile-scoped and apply to every mode, so [ItemSystem]
+## stamps them on at the first turn boundary instead -- which is also after these spawns have
+## been assigned an owner, something this builder deliberately runs before. Adding an item
+## pass here would double-apply against that sweep. The run's own item PAYOUT is handled once
+## at run end by ArenaController._finish_run.
 
 const _APPLIER := preload("res://game/arena/ArenaAugmentApplier.gd")
 

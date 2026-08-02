@@ -9,6 +9,8 @@ extends GutTest
 ##  - validate() catches: a missing defense, an oversized challenger squad, and a map
 ##    with an unknown tile id (via the catalog-strict MapResource validator).
 ##  - A 12x12 map's share code stays comfortably under ~4 KB.
+##  - A v1 (pre-mode/par) code still decodes, validates and reads through the accessors
+##    with sane defaults -- old share codes must keep working after the v2 bump.
 
 # --- Helpers ----------------------------------------------------------------
 
@@ -50,6 +52,28 @@ func _make_challenge(with_defense: bool = true, squad: int = 4) -> Dictionary:
 			"turn_system": 0,
 			"ai_difficulty": 1,
 		})
+
+
+## Build a genuine v1-shaped challenge: the pre-v2 field set (no mode / survive_turns /
+## par_turns), stamped at format_version 1 and re-signed. This is byte-for-byte what an old
+## build wrote, which is what makes it a real back-compat fixture rather than a v2 blob with
+## keys removed.
+func _make_v1_challenge(squad: int = 4) -> Dictionary:
+	var v2: Dictionary = _make_challenge(true, squad)
+	var v1: Dictionary = {
+		"format_version": 1,
+		"name": String(v2.get("name", "")),
+		"author": String(v2.get("author", "")),
+		"created": String(v2.get("created", "")),
+		"map": v2.get("map", {}),
+		"rules": {
+			"challenger_squad_size": squad,
+			"turn_system": 0,
+			"ai_difficulty": 1,
+		},
+	}
+	v1["checksum"] = ChallengeCodec.content_hash(v1)
+	return v1
 
 
 func _has_error_containing(errors: Array, needle: String) -> bool:
@@ -147,3 +171,87 @@ func test_share_code_of_12x12_stays_small() -> void:
 	assert_lt(code.length(), 4096, "a 12x12 share code should stay under ~4 KB (was %d)" % code.length())
 	# And it must still round-trip.
 	assert_false(ChallengeCodec.decode(code).is_empty(), "the compact code must still decode")
+
+
+# --- v1 back-compat ---------------------------------------------------------
+
+func test_v1_challenge_still_validates() -> void:
+	# The v2 bump added rules.mode / survive_turns / par_turns AND hashes them into the
+	# checksum -- but only for v2+ blobs, so a v1 code's own checksum must still verify.
+	var v1 := _make_v1_challenge()
+	var errors := ChallengeCodec.validate(v1)
+	assert_eq(errors.size(), 0, "a v1 challenge must still validate clean: %s" % "; ".join(errors))
+
+
+func test_v1_challenge_round_trips_through_a_share_code() -> void:
+	var v1 := _make_v1_challenge()
+	var decoded := ChallengeCodec.decode(ChallengeCodec.encode(v1))
+	assert_false(decoded.is_empty(), "a v1 code must still decode")
+	assert_eq(int(decoded.get("format_version", -1)), 1, "decoding must not silently upgrade it")
+	assert_eq(ChallengeCodec.validate(decoded).size(), 0, "the decoded v1 challenge is still valid")
+
+
+func test_v1_rules_read_through_the_accessors_with_defaults() -> void:
+	var v1 := _make_v1_challenge()
+	var rules: Dictionary = v1.get("rules", {})
+	assert_false(rules.has("mode"), "the fixture must really lack the v2 fields")
+	assert_false(rules.has("survive_turns"))
+	assert_false(rules.has("par_turns"))
+
+	assert_eq(ChallengeCodec.rules_mode(v1), ChallengeCodec.MODE_BREACH,
+		"a v1 challenge plays as the original breach mode")
+	assert_eq(ChallengeCodec.rules_survive_turns(v1), ChallengeCodec.DEFAULT_SURVIVE_TURNS)
+	# Par is derived from the defense size, matching what build_challenge would have chosen.
+	assert_eq(ChallengeCodec.rules_par_turns(v1),
+		ChallengeCodec.default_par_for(ChallengeCodec.defense_count(v1)),
+		"a v1 challenge's par derives from its defender count")
+
+
+func test_an_unknown_mode_is_rejected() -> void:
+	var challenge := _make_challenge()
+	challenge["rules"]["mode"] = "sudden_death"
+	challenge["checksum"] = ChallengeCodec.content_hash(challenge)
+	assert_true(_has_error_containing(ChallengeCodec.validate(challenge), "mode"),
+		"an unknown mode must be rejected")
+
+
+func test_survive_rules_round_trip() -> void:
+	var res := _make_map(true)
+	var challenge := ChallengeCodec.build_challenge(res, "Hold", "Tester", "2026-08-01", {
+		"challenger_squad_size": 3,
+		"turn_system": 0,
+		"ai_difficulty": 1,
+		"mode": ChallengeCodec.MODE_SURVIVE,
+		"survive_turns": 12,
+		"par_turns": 9,
+	})
+	assert_eq(ChallengeCodec.validate(challenge).size(), 0)
+
+	var decoded := ChallengeCodec.decode(ChallengeCodec.encode(challenge))
+	assert_eq(ChallengeCodec.rules_mode(decoded), ChallengeCodec.MODE_SURVIVE)
+	assert_eq(ChallengeCodec.rules_survive_turns(decoded), 12)
+	assert_eq(ChallengeCodec.rules_par_turns(decoded), 9)
+
+
+func test_out_of_band_rule_values_are_clamped_at_build_time() -> void:
+	var res := _make_map(true)
+	var challenge := ChallengeCodec.build_challenge(res, "Extreme", "Tester", "2026-08-01", {
+		"challenger_squad_size": 4,
+		"mode": ChallengeCodec.MODE_SURVIVE,
+		"survive_turns": 999,
+		"par_turns": 0,
+	})
+	assert_eq(ChallengeCodec.rules_survive_turns(challenge), ChallengeCodec.MAX_SURVIVE_TURNS)
+	assert_eq(ChallengeCodec.rules_par_turns(challenge), ChallengeCodec.MIN_PAR_TURNS)
+	assert_eq(ChallengeCodec.validate(challenge).size(), 0,
+		"clamped values must land inside the validated band")
+
+
+func test_an_unknown_mode_falls_back_to_breach_at_build_time() -> void:
+	var res := _make_map(true)
+	var challenge := ChallengeCodec.build_challenge(res, "Odd", "Tester", "2026-08-01", {
+		"challenger_squad_size": 4,
+		"mode": "nonsense",
+	})
+	assert_eq(ChallengeCodec.rules_mode(challenge), ChallengeCodec.MODE_BREACH)
+	assert_eq(ChallengeCodec.validate(challenge).size(), 0)

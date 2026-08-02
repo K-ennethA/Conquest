@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/eldroot.glb" id="2_model"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Resource" path="res://game/combat/moves/thornward.tres" id="4_ward"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"bastion"
+element = &"earth"
+display_name = "Bastion"
+description = "Not a soldier -- a place. Roots driven through the bedrock hold it where it was raised, and it has never taken a step in its life. It cannot chase you, cannot flee you, and cannot be bargained with; it can only stand there being the reason your side still has somewhere to come back to. Bring it down and the ground behind it stops belonging to anyone."
+model_scene = ExtResource("2_model")
+base_health = 200
+base_attack = 8
+base_defense = 26
+base_magic = 0
+base_magic_defense = 20
+base_speed = 1
+base_movement = 0
+attack_range = 1
+is_boss = false
+footprint = Vector2i(1, 1)
+model_scale = 0.55
+default_ai_stance = "defensive"
+default_aggro_range = 1
+default_leash_radius = 0
+moveset = Array[ExtResource("3_mvres")]([ExtResource("4_ward")])

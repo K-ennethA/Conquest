@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SkinResource" format=3]
+
+[ext_resource type="Script" path="res://game/skins/SkinResource.gd" id="1_skin"]
+
+[resource]
+script = ExtResource("1_skin")
+id = &"vineweave_emberroot"
+character_id = &"vineweave"
+display_name = "Emberroot"
+description = "Vine that drank from a scorched grove and never cooled. Its tangle smoulders a deep coal-red, and the barbs run hot enough to sear where they bind."
+rarity = 0
+price = 300
+tint = Color(1, 0.45, 0.35, 1)

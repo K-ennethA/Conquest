@@ -25,11 +25,32 @@ class_name ChallengeCodec
 ##     catches accidental corruption / casual edits; it is not a security boundary.
 
 ## The only format this build writes. Bump when the on-wire shape changes.
-const FORMAT_VERSION := 1
+## v2 (this build) ADDS rules.mode / rules.survive_turns / rules.par_turns. v1 codes still
+## decode: the reader version-gates the new fields (see [method rules_mode] etc.) and the
+## checksum is hashed with the v1 field set for v1 blobs, so old share codes stay valid.
+const FORMAT_VERSION := 2
 
 ## Every format_version this build can still decode (kept as a set so old codes keep
 ## importing after a bump).
-const SUPPORTED_VERSIONS: Array[int] = [1]
+const SUPPORTED_VERSIONS: Array[int] = [1, 2]
+
+## Challenge MODES (rules.mode). "breach" is the original behaviour (beat the map's own
+## win condition -- clear the defense / kill the boss). "survive" wins when the challenger
+## still has a unit standing after rules.survive_turns rounds (or clears the defense early).
+const MODE_BREACH := "breach"
+const MODE_SURVIVE := "survive"
+const MODES: Array[String] = [MODE_BREACH, MODE_SURVIVE]
+const DEFAULT_MODE := MODE_BREACH
+
+## survive_turns band (rounds a challenger must last in "survive" mode).
+const MIN_SURVIVE_TURNS := 6
+const MAX_SURVIVE_TURNS := 30
+const DEFAULT_SURVIVE_TURNS := 10
+
+## par_turns band (author's target clear length, drives scoring). The sane default is a
+## function of the defender count (see [method default_par_for]).
+const MIN_PAR_TURNS := 3
+const MAX_PAR_TURNS := 30
 
 ## Where saved / imported challenges live, as inert JSON (never .tres -- a shared .tres
 ## is an arbitrary-code-execution vector).
@@ -52,6 +73,16 @@ const MAX_SQUAD_SIZE := 6
 ## the returned dict is self-consistent and ready to [method encode] / [method validate].
 static func build_challenge(map_resource: MapResource, p_name: String, p_author: String, p_created: String, rules: Dictionary) -> Dictionary:
 	var map_dict: Dictionary = _map_resource_to_dict(map_resource)
+
+	# Mode + its dependent fields (v2). An unknown mode falls back to breach.
+	var mode: String = String(rules.get("mode", DEFAULT_MODE))
+	if not MODES.has(mode):
+		mode = DEFAULT_MODE
+	var survive_turns: int = clampi(int(rules.get("survive_turns", DEFAULT_SURVIVE_TURNS)), MIN_SURVIVE_TURNS, MAX_SURVIVE_TURNS)
+	# Par defaults from the defense size when the author didn't set it, then clamps to band.
+	var default_par: int = default_par_for(_defender_count_in_map(map_dict))
+	var par_turns: int = clampi(int(rules.get("par_turns", default_par)), MIN_PAR_TURNS, MAX_PAR_TURNS)
+
 	var challenge: Dictionary = {
 		"format_version": FORMAT_VERSION,
 		"name": String(p_name),
@@ -62,10 +93,46 @@ static func build_challenge(map_resource: MapResource, p_name: String, p_author:
 			"challenger_squad_size": clampi(int(rules.get("challenger_squad_size", 4)), MIN_SQUAD_SIZE, MAX_SQUAD_SIZE),
 			"turn_system": int(rules.get("turn_system", 0)),
 			"ai_difficulty": int(rules.get("ai_difficulty", 1)),
+			"mode": mode,
+			"survive_turns": survive_turns,
+			"par_turns": par_turns,
 		},
 	}
 	challenge["checksum"] = content_hash(challenge)
 	return challenge
+
+
+## The sane default par (author's target clear length) for a defense of [param defenders]
+## units: defenders + 3, clamped to the par band. Exposed so the creator UI can seed its par
+## spinbox with the same value the codec would.
+static func default_par_for(defenders: int) -> int:
+	return clampi(defenders + 3, MIN_PAR_TURNS, MAX_PAR_TURNS)
+
+
+## Recompute the checksum over [param challenge] and stamp it in place, returning the same
+## dict. Used to FINALISE a trusted, hand-authored challenge (a builtin JSON shipped in
+## res://) whose file carries no valid checksum -- the equivalent of what [method build_challenge]
+## does at the end. NEVER call this on an untrusted imported code: that would paper over a
+## real tamper. Untrusted codes keep their author's checksum and are verified by [method validate].
+static func stamp_checksum(challenge: Dictionary) -> Dictionary:
+	challenge["checksum"] = content_hash(challenge)
+	return challenge
+
+
+## Defender count straight off a map DICT (not a challenge), used while building. Mirrors
+## [method defense_count] but reads the already-extracted map layout.
+static func _defender_count_in_map(map_dict: Dictionary) -> int:
+	var layout: Dictionary = map_dict.get("layout", {})
+	var spawns: Array = layout.get("unit_spawns", [])
+	var count: int = 0
+	for entry in spawns:
+		if not (entry is Dictionary):
+			continue
+		if int(entry.get("player_id", 0)) < 1:
+			continue
+		if not String(entry.get("character_id", "")).strip_edges().is_empty():
+			count += 1
+	return count
 
 
 ## Parse a [MapResource]'s canonical JSON export into a Dictionary so the map rides inside
@@ -84,9 +151,10 @@ static func _map_resource_to_dict(map_resource: MapResource) -> Dictionary:
 ## field itself. Built from a fixed field ORDER (not dict iteration order) so encode and
 ## decode always agree, then hashed via String.hash(). Tamper detection only.
 static func content_hash(challenge: Dictionary) -> String:
+	var version: int = int(challenge.get("format_version", 0))
 	var rules: Dictionary = challenge.get("rules", {})
 	var parts: Array = [
-		str(int(challenge.get("format_version", 0))),
+		str(version),
 		String(challenge.get("name", "")),
 		String(challenge.get("author", "")),
 		String(challenge.get("created", "")),
@@ -95,7 +163,39 @@ static func content_hash(challenge: Dictionary) -> String:
 		str(int(rules.get("turn_system", 0))),
 		str(int(rules.get("ai_difficulty", 0))),
 	]
+	# v2 fields are hashed ONLY for v2+ blobs, so a v1 code's checksum is computed over the
+	# exact v1 field set and still verifies after this build added the new fields.
+	if version >= 2:
+		parts.append(String(rules.get("mode", DEFAULT_MODE)))
+		parts.append(str(int(rules.get("survive_turns", DEFAULT_SURVIVE_TURNS))))
+		parts.append(str(int(rules.get("par_turns", 0))))
 	return str("".join(PackedStringArray(parts)).hash())
+
+
+# --- Rule accessors (version-gated reads) -----------------------------------
+# The play/scoring code reads rules THROUGH these so a v1 challenge (which has none of the
+# v2 fields) transparently gets sane defaults, and a v2 challenge gets its stored values.
+
+## The challenge mode ("breach" | "survive"); breach for any v1 code or unknown value.
+static func rules_mode(challenge: Dictionary) -> String:
+	var rules: Dictionary = challenge.get("rules", {})
+	var mode: String = String(rules.get("mode", DEFAULT_MODE))
+	return mode if MODES.has(mode) else DEFAULT_MODE
+
+
+## Rounds the challenger must last in survive mode (clamped to band; the default otherwise).
+static func rules_survive_turns(challenge: Dictionary) -> int:
+	var rules: Dictionary = challenge.get("rules", {})
+	return clampi(int(rules.get("survive_turns", DEFAULT_SURVIVE_TURNS)), MIN_SURVIVE_TURNS, MAX_SURVIVE_TURNS)
+
+
+## Author's target clear length (drives scoring). For a v1 code with no stored par this
+## derives the same default build_challenge would (defenders + 3, clamped).
+static func rules_par_turns(challenge: Dictionary) -> int:
+	var rules: Dictionary = challenge.get("rules", {})
+	if rules.has("par_turns"):
+		return clampi(int(rules.get("par_turns", 0)), MIN_PAR_TURNS, MAX_PAR_TURNS)
+	return default_par_for(defense_count(challenge))
 
 
 ## The stable id of a challenge (its checksum), used to key local results.
@@ -218,6 +318,20 @@ static func validate(challenge: Dictionary) -> Array[String]:
 	var squad_size: int = int(rules.get("challenger_squad_size", 0))
 	if squad_size < MIN_SQUAD_SIZE or squad_size > MAX_SQUAD_SIZE:
 		errors.append("challenger_squad_size %d is outside %d..%d." % [squad_size, MIN_SQUAD_SIZE, MAX_SQUAD_SIZE])
+
+	# v2 mode/par/survive band. Only enforced when the fields are actually present (a v1 code
+	# carries none of them and reads them through the defaulting accessors instead), so old
+	# codes never trip these checks.
+	if rules.has("mode") and not MODES.has(String(rules.get("mode", ""))):
+		errors.append("Unknown mode '%s' (expected one of %s)." % [str(rules.get("mode")), str(MODES)])
+	if rules.has("par_turns"):
+		var par: int = int(rules.get("par_turns", 0))
+		if par < MIN_PAR_TURNS or par > MAX_PAR_TURNS:
+			errors.append("par_turns %d is outside %d..%d." % [par, MIN_PAR_TURNS, MAX_PAR_TURNS])
+	if String(rules.get("mode", DEFAULT_MODE)) == MODE_SURVIVE and rules.has("survive_turns"):
+		var st: int = int(rules.get("survive_turns", 0))
+		if st < MIN_SURVIVE_TURNS or st > MAX_SURVIVE_TURNS:
+			errors.append("survive_turns %d is outside %d..%d." % [st, MIN_SURVIVE_TURNS, MAX_SURVIVE_TURNS])
 
 	# The map must survive the hardened, catalog-strict import (unknown tiles / characters,
 	# out-of-bounds cells and a bad size are all hard failures here). quiet=true: a

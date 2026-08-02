@@ -319,6 +319,10 @@ func _try_spawn(state: Dictionary) -> bool:
 	if new_unit == null:
 		return false
 
+	# Hand the fresh unit to its owning player and the turn system before anything else
+	# touches it (see _adopt_spawned_unit -- without this a scheduled wave is inert).
+	_adopt_spawned_unit(new_unit, int(state["player_id"]))
+
 	# A unit that spawns mid/end-turn does NOT get to act on the turn it appeared --
 	# it stands its post this turn and can move next turn. Mark it acted (duck-typed so
 	# the test doubles, which have no turn state, are unaffected).
@@ -330,6 +334,36 @@ func _try_spawn(state: Dictionary) -> bool:
 	state["death_turn"] = -1
 	_track_unit(state, new_unit)
 	return true
+
+
+## Give a freshly scheduled unit an OWNER and a place in the turn order.
+##
+## [method MapLoader.spawn_unit_now] deliberately only materialises a node on the
+## board -- it assigns neither, exactly as documented on
+## [code]GameWorldManager.summon_unit[/code], which does both by hand for the
+## Necromancer's summons. The load-time flood gets away with it because
+## [code]PlayerManager.assign_units_by_parent[/code] sweeps the whole board once
+## afterwards; a wave that arrives on turn 7 has no such sweep, so it stayed
+## OWNERLESS -- and an ownerless unit is not merely cosmetically odd:
+## [code]BoardAdapter.are_enemies[/code] returns false the moment EITHER side has no
+## owner, so the unit could neither attack nor be attacked, and the turn system never
+## knew about it. Every reinforcement / respawn / endless wave in the game was landing
+## as scenery. Doing the same two follow-ups here fixes it at the one point every
+## scheduled spawn passes through.
+##
+## Fully guarded: the test doubles are plain RefCounteds (not [Unit]s) and are skipped,
+## an out-of-range player_id is rejected by PlayerManager itself, and a battle with no
+## active turn system simply skips registration.
+func _adopt_spawned_unit(unit, player_id: int) -> void:
+	if unit == null or not (unit is Unit):
+		return
+	if PlayerManager != null and PlayerManager.has_method("assign_unit_to_player"):
+		PlayerManager.assign_unit_to_player(unit, player_id)
+	if TurnSystemManager != null and TurnSystemManager.has_method("has_active_turn_system") \
+			and TurnSystemManager.has_active_turn_system():
+		var ts = TurnSystemManager.get_active_turn_system()
+		if ts != null and ts.has_method("register_unit"):
+			ts.register_unit(unit)
 
 
 func _find_spill_cell(home: Vector2i) -> Vector2i:

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SkinResource" format=3]
+
+[ext_resource type="Script" path="res://game/skins/SkinResource.gd" id="1_skin"]
+
+[resource]
+script = ExtResource("1_skin")
+id = &"blightcap_ashcap"
+character_id = &"blightcap"
+display_name = "Ashcap"
+description = "A grunt that sprouted from cold cinders. Its cap is dusted grey, and the spores it coughs drift like flakes of burnt bark."
+rarity = 0
+price = 300
+tint = Color(0.6, 0.6, 0.62, 1)

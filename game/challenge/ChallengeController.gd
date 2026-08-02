@@ -27,6 +27,20 @@ extends Node
 ## GameWorldManager's own arena branch does (no enemy defender left -> win; no challenger
 ## unit left -> loss). It is gated on an active run AND on GameSettings still pointing at
 ## THIS run's map, so an elimination in a later normal match can never record a stray result.
+##
+## WHICH SIGNAL ENDS WHAT (all three feed the ONE idempotent [method _record_result]):
+##   * player_eliminated  -- ends a BREACH run either way, and ends a SURVIVE run EARLY on a
+##                           clear. No non-neutral AI player left standing => WIN; no human
+##                           player left => LOSS. Emitted by PlayerManager (reliable) and
+##                           mirrored on GameEvents (a fallback that does not always fire),
+##                           so both are connected and the recorder de-dupes.
+##   * turn_started       -- from the ACTIVE TURN SYSTEM (not PlayerManager). Counts the
+##                           challenger's turns, which is the score's "turns" AND the survive
+##                           mode's round counter; reaching rules.survive_turns ends a SURVIVE
+##                           run as a WIN. See [method _on_turn_started] for why this bus.
+##   * unit_eliminated    -- never ends anything; it only tallies units_lost for the score.
+## Whichever fires FIRST wins: _record_result latches (_result_recorded), so a survive latch
+## can never be flipped to a loss by a later wipe, and vice versa.
 
 ## Where the run's materialised map + the results file live.
 const ACTIVE_MAP_DIR := "user://challenges/active/"
@@ -34,6 +48,11 @@ const RESULTS_PATH := "user://challenges/results.json"
 
 const CHARACTER_SELECT_SCENE := "res://menus/CharacterSelect.tscn"
 const GAME_WORLD_SCENE := "res://game/world/GameWorld.tscn"
+
+## The player slot the CHALLENGER always occupies (the defense is every slot 1+). Shared by
+## the turn tally and the units-lost tally so the two can never disagree about whose side is
+## whose.
+const CHALLENGER_PLAYER_ID := 0
 
 ## The challenge staged for the squad pick (read by CharacterSelect). Empty when none.
 var _pending: Dictionary = {}
@@ -46,8 +65,17 @@ var _active_map_path: String = ""
 ## Set once per battle so repeated elimination signals record a single result.
 var _result_recorded: bool = false
 
-## Challenger turns taken this battle (fed to the personal-best record).
+## Challenger turns taken this battle (fed to the personal-best record). In "survive" mode
+## this doubles as the ROUND COUNT: each challenger turn start is one round survived.
 var _turns: int = 0
+
+## How many of the CHALLENGER's own units (player 0) fell during the armed run. Counted off
+## GameEvents.unit_eliminated and fed to the score (each loss costs points; zero == perfect).
+var _units_lost: int = 0
+
+## The turn system we are currently listening to for turn_started, re-wired whenever the
+## active system changes (see [method _on_turn_system_activated]).
+var _watched_turn_system: TurnSystemBase = null
 
 
 func _ready() -> void:
@@ -59,15 +87,27 @@ func _ready() -> void:
 	# emits the reliable one; GameEvents.player_eliminated is a fallback that does not always
 	# fire (see GameWorldManager._connect_end_signals). Connecting BOTH is safe because
 	# _on_player_eliminated is idempotent per battle (_result_recorded).
-	if PlayerManager != null:
-		if PlayerManager.has_signal("player_eliminated"):
-			PlayerManager.player_eliminated.connect(_on_player_eliminated)
-		# Turn tally: connect ONE source only (PlayerManager, the reliable one) so turns are
-		# not double-counted.
-		if PlayerManager.has_signal("player_turn_started"):
-			PlayerManager.player_turn_started.connect(_on_player_turn_started)
+	if PlayerManager != null and PlayerManager.has_signal("player_eliminated"):
+		PlayerManager.player_eliminated.connect(_on_player_eliminated)
+
+	# TURN TALLY / SURVIVE ROUNDS ride the ACTIVE TURN SYSTEM's turn_started, which is the
+	# only per-turn signal that fires on EVERY turn. PlayerManager.player_turn_started fires
+	# just at game start and off the human End-Turn button, so a run driven by the real turn
+	# system would under-count turns (inflating the score) and a survive run would never
+	# reach its round target at all. Mirrors HazardManager / TurnIndicator wiring: subscribe
+	# to activation and re-wire on every switch, since the system instance is per-battle.
+	if TurnSystemManager != null:
+		if not TurnSystemManager.turn_system_activated.is_connected(_on_turn_system_activated):
+			TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
+		if TurnSystemManager.has_active_turn_system():
+			_on_turn_system_activated(TurnSystemManager.get_active_turn_system())
+
 	if typeof(GameEvents) == TYPE_OBJECT and GameEvents != null and GameEvents.has_signal("player_eliminated"):
 		GameEvents.player_eliminated.connect(_on_player_eliminated)
+		# Per-UNIT deaths drive the units-lost tally (scoring). GameEvents is the one bus that
+		# carries a per-unit signal; PlayerManager only fires when a whole player is wiped.
+		if GameEvents.has_signal("unit_eliminated"):
+			GameEvents.unit_eliminated.connect(_on_unit_eliminated)
 
 
 # --- Staging (browse -> squad pick) -----------------------------------------
@@ -146,6 +186,7 @@ func begin() -> bool:
 	_active_map_path = map_path
 	_result_recorded = false
 	_turns = 0
+	_units_lost = 0
 
 	get_tree().change_scene_to_file(CHARACTER_SELECT_SCENE)
 	return true
@@ -166,16 +207,82 @@ func cancel() -> void:
 	_active_map_path = ""
 	_result_recorded = false
 	_turns = 0
+	_units_lost = 0
 
 
 # --- Battle result capture --------------------------------------------------
 
-func _on_player_turn_started(player) -> void:
+## (Re)wire to the ACTIVE turn system's turn_started when one activates or the system is
+## switched. The previous system is disconnected first so a switch mid-session can never
+## leave two live subscriptions double-counting turns.
+func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
+	if _watched_turn_system == turn_system:
+		return
+	if _watched_turn_system != null and is_instance_valid(_watched_turn_system) \
+			and _watched_turn_system.turn_started.is_connected(_on_turn_started):
+		_watched_turn_system.turn_started.disconnect(_on_turn_started)
+	_watched_turn_system = turn_system
+	if turn_system != null and not turn_system.turn_started.is_connected(_on_turn_started):
+		turn_system.turn_started.connect(_on_turn_started)
+
+
+## One more turn taken by the CHALLENGER. Defender turns are ignored, so the tally is the
+## challenger's own turn count (what par is measured against) and, in survive mode, the
+## number of rounds they have outlasted.
+func _on_turn_started(player: Player) -> void:
 	if not _is_capturing():
 		return
-	# Count challenger (human, non-neutral) turns as the run's turn tally.
-	if player != null and not _player_is_ai(player) and not _player_is_neutral(player):
-		_turns += 1
+	if not _player_is_challenger(player):
+		return
+	_turns += 1
+	_maybe_latch_survive_win()
+
+
+## SURVIVE mode outcome. A "round survived" is measured at the challenger's own turn
+## boundaries (each of their turn starts == one more round they have outlasted), which are
+## the SAME turn signals the breach-mode tally rides -- no turn-system code is touched. When
+## the tally reaches the author's survive_turns and the challenger is still standing (they
+## are, since their turn just started), we LATCH a win: _record_result is idempotent
+## (_result_recorded), so a later elimination can never flip this to a loss. The battle
+## itself keeps running until the map's own win/lose objective ends it -- capture only
+## INTERPRETS the outcome. (Clearing the defense early is also a win, handled in
+## _on_player_eliminated the same as breach mode, so survive needs no special-case there.)
+func _maybe_latch_survive_win() -> void:
+	if _result_recorded:
+		return
+	if ChallengeCodec.rules_mode(_active) != ChallengeCodec.MODE_SURVIVE:
+		return
+	if _turns >= ChallengeCodec.rules_survive_turns(_active):
+		_record_result(true)
+
+
+## Tally a CHALLENGER unit (player 0) death for the score. Guarded on an active run so a
+## death in a later, unrelated match never counts here. Deliberately does NOT decide the
+## outcome (that stays with the player/elimination logic) -- it only feeds units_lost.
+func _on_unit_eliminated(unit, _eliminator) -> void:
+	if not _is_capturing():
+		return
+	if unit != null and _unit_is_challenger(unit):
+		_units_lost += 1
+
+
+## True when [param unit] is owned by the challenger. Reads through the unit's owner Player
+## when available, tolerating either the get_owner_player() accessor or a bare owner_player
+## field so a minor Unit API drift can't break capture.
+func _unit_is_challenger(unit) -> bool:
+	var owner = null
+	if unit.has_method("get_owner_player"):
+		owner = unit.get_owner_player()
+	elif "owner_player" in unit:
+		owner = unit.owner_player
+	return _player_is_challenger(owner)
+
+
+## True when [param player] is the challenger's slot. Identity is the SLOT, not the is_ai
+## flag: the challenger is by construction player 0 (every defender lives on slot 1+), and a
+## slot check also shrugs off a turn signal that hands us something other than a Player.
+func _player_is_challenger(player) -> bool:
+	return player != null and "player_id" in player and int(player.player_id) == CHALLENGER_PLAYER_ID
 
 
 func _on_player_eliminated(_player) -> void:
@@ -221,8 +328,9 @@ func _player_is_neutral(player) -> bool:
 	return "is_neutral" in player and bool(player.is_neutral)
 
 
-## Upsert this battle's outcome into results.json, keeping the best (fewest-turn) win as the
-## personal best. Idempotent per battle via [member _result_recorded].
+## Upsert this battle's outcome into results.json. Keeps the best (highest-SCORE) win as the
+## personal best and rolls up the local defense-rating tallies. Idempotent per battle via
+## [member _result_recorded].
 func _record_result(won: bool) -> void:
 	_result_recorded = true
 	var id: String = ChallengeCodec.challenge_id(_active)
@@ -232,16 +340,44 @@ func _record_result(won: bool) -> void:
 	var results: Dictionary = load_results()
 	var prev: Dictionary = results.get(id, {})
 
+	# Score this run (pure formula). Par comes from the challenge; survive/breach share it.
+	var par: int = ChallengeCodec.rules_par_turns(_active)
+	var mode: String = ChallengeCodec.rules_mode(_active)
+	var scoring: Dictionary = ChallengeScoring.evaluate(won, _turns, par, _units_lost)
+	var score: int = int(scoring.get("score", 0))
+	var perfect: bool = bool(scoring.get("perfect", false))
+
+	# Best-of by SCORE (a win always outscores a loss's 0). best_turns is kept alongside for
+	# the "cleared in N" line; it only updates when THIS run is the new best score.
+	var best_score: int = int(prev.get("best_score", 0))
 	var best_turns: int = int(prev.get("best_turns", -1))
-	if won and (best_turns < 0 or _turns < best_turns):
+	var best_perfect: bool = bool(prev.get("best_perfect", false))
+	if won and score > best_score:
+		best_score = score
 		best_turns = _turns
+		best_perfect = perfect
+
+	# Local defense rating: attempts = every recorded play, clears = every challenger win.
+	# This is a LOCAL-ONLY placeholder -- it only ever sees THIS install's plays. True
+	# cross-player "how often does this defense hold" aggregation arrives with the community
+	# service; until then the browse screen labels it as your own local attempts.
+	var attempts: int = int(prev.get("attempts", 0)) + 1
+	var clears: int = int(prev.get("clears", 0)) + (1 if won else 0)
 
 	results[id] = {
 		"challenge_id": id,
 		"won": bool(prev.get("won", false)) or won,
+		"best_score": best_score,
 		"best_turns": best_turns,
+		"best_perfect": best_perfect,
+		"mode": mode,
 		"last_won": won,
 		"last_turns": _turns,
+		"last_score": score,
+		"last_units_lost": _units_lost,
+		"last_perfect": perfect,
+		"attempts": attempts,
+		"clears": clears,
 		"plays": int(prev.get("plays", 0)) + 1,
 		"timestamp": Time.get_datetime_string_from_system(),
 	}

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SkinResource" format=3]
+
+[ext_resource type="Script" path="res://game/skins/SkinResource.gd" id="1_skin"]
+
+[resource]
+script = ExtResource("1_skin")
+id = &"necromancer_boneash"
+character_id = &"necromancer"
+display_name = "Boneash Sovereign"
+description = "What remains when a gravecaller outlives every grave. Bleached to ash and bone-pale, Mortis has forgotten which of the fallen were once his enemies. The rarest raiment in the crypt."
+rarity = 2
+price = 0
+tint = Color(0.82, 0.85, 0.9, 1)

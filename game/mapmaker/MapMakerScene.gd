@@ -120,7 +120,17 @@ var _spawn_kind_option: OptionButton
 var _character_option: OptionButton
 var _tool_buttons: Dictionary = {}  # Tool -> Button
 var _challenge_squad_spin: SpinBox
+var _challenge_mode_option: OptionButton
+var _challenge_survive_row: HBoxContainer
+var _challenge_survive_spin: SpinBox
+var _challenge_par_spin: SpinBox
 var _export_challenge_btn: Button
+
+## True once the author has typed their own par, after which [method _refresh_export_state]
+## stops re-seeding it from the defender count (see [method _seed_par_from_defenders]).
+var _challenge_par_touched: bool = false
+## Guard so a PROGRAMMATIC par write doesn't look like the author touching the spinbox.
+var _seeding_par: bool = false
 
 # --- 3D preview references ----------------------------------------------------
 var _viewport_container: SubViewportContainer
@@ -421,6 +431,41 @@ func _build_save_load_section(col: VBoxContainer) -> void:
 	_challenge_squad_spin = _make_spin(
 		ChallengeCodec.MIN_SQUAD_SIZE, ChallengeCodec.MAX_SQUAD_SIZE, 4)
 	squad_row.add_child(_challenge_squad_spin)
+
+	# MODE picks what "winning" means for the challenger. Breach is the classic
+	# clear-the-defense run; Survive asks them to still have a unit standing after N of
+	# their own rounds. Survive's round count is only meaningful in that mode, so its row
+	# is hidden entirely under Breach rather than shown greyed out.
+	var mode_row := HBoxContainer.new()
+	col.add_child(mode_row)
+	mode_row.add_child(_make_label("Mode:"))
+	_challenge_mode_option = OptionButton.new()
+	_challenge_mode_option.add_item("Breach  (clear the defense)")
+	_challenge_mode_option.add_item("Survive  (outlast the defense)")
+	_challenge_mode_option.selected = 0
+	_challenge_mode_option.item_selected.connect(_on_challenge_mode_selected)
+	mode_row.add_child(_challenge_mode_option)
+
+	_challenge_survive_row = HBoxContainer.new()
+	col.add_child(_challenge_survive_row)
+	_challenge_survive_row.add_child(_make_label("Rounds to survive:"))
+	_challenge_survive_spin = _make_spin(
+		ChallengeCodec.MIN_SURVIVE_TURNS, ChallengeCodec.MAX_SURVIVE_TURNS,
+		ChallengeCodec.DEFAULT_SURVIVE_TURNS)
+	_challenge_survive_row.add_child(_challenge_survive_spin)
+	_challenge_survive_row.visible = false
+
+	# PAR is the author's target clear length: the challenger scores a bonus under it and
+	# loses points over it. It seeds from the defender count until the author sets it.
+	var par_row := HBoxContainer.new()
+	col.add_child(par_row)
+	par_row.add_child(_make_label("Par (target turns):"))
+	_challenge_par_spin = _make_spin(
+		ChallengeCodec.MIN_PAR_TURNS, ChallengeCodec.MAX_PAR_TURNS,
+		ChallengeCodec.default_par_for(0))
+	_challenge_par_spin.tooltip_text = "The clear time you are aiming challengers at. Under par pays a bonus; over par costs points."
+	_challenge_par_spin.value_changed.connect(_on_challenge_par_changed)
+	par_row.add_child(_challenge_par_spin)
 
 	_export_challenge_btn = Button.new()
 	_export_challenge_btn.text = "Export as Challenge"
@@ -1329,6 +1374,13 @@ func _on_export_challenge_pressed() -> void:
 		# defaults (Traditional turns, Normal AI). Authors tune these in a later phase.
 		"turn_system": int(TurnSystemBase.TurnSystemType.TRADITIONAL),
 		"ai_difficulty": 1,
+		"mode": _selected_challenge_mode(),
+		# survive_turns always ships (the codec clamps and stores it either way) so an author
+		# who flips a saved challenge to Survive later keeps the number they picked.
+		"survive_turns": int(_challenge_survive_spin.value) if _challenge_survive_spin != null \
+			else ChallengeCodec.DEFAULT_SURVIVE_TURNS,
+		"par_turns": int(_challenge_par_spin.value) if _challenge_par_spin != null \
+			else ChallengeCodec.default_par_for(_challenge_defender_count()),
 	}
 	var created := Time.get_datetime_string_from_system()
 	var challenge := ChallengeCodec.build_challenge(res, model.map_name, model.author, created, rules)
@@ -1348,12 +1400,44 @@ func _on_export_challenge_pressed() -> void:
 	_set_status("Exported challenge to %s and copied the share code to your clipboard (%d chars)." % [path, code.length()])
 
 
+## The mode id the OptionButton is showing ("breach" | "survive"), defaulting to breach.
+func _selected_challenge_mode() -> String:
+	if _challenge_mode_option == null:
+		return ChallengeCodec.DEFAULT_MODE
+	return ChallengeCodec.MODE_SURVIVE if _challenge_mode_option.selected == 1 \
+		else ChallengeCodec.MODE_BREACH
+
+
+## Show the rounds-to-survive spinbox only while Survive is the selected mode.
+func _on_challenge_mode_selected(_index: int) -> void:
+	if _challenge_survive_row != null:
+		_challenge_survive_row.visible = _selected_challenge_mode() == ChallengeCodec.MODE_SURVIVE
+
+
+## Any AUTHOR edit of par pins it, so the defender-count seeding stops overwriting it.
+func _on_challenge_par_changed(_value: float) -> void:
+	if not _seeding_par:
+		_challenge_par_touched = true
+
+
+## Seed par from the defense size (the same default the codec would apply) while the author
+## has not set it themselves. Called as defenders are placed/removed, so par tracks the map
+## until the moment the author takes it over.
+func _seed_par_from_defenders(defenders: int) -> void:
+	if _challenge_par_spin == null or _challenge_par_touched:
+		return
+	_seeding_par = true
+	_challenge_par_spin.value = ChallengeCodec.default_par_for(defenders)
+	_seeding_par = false
+
+
 ## Refresh the Export button's enabled state + a hint when it is off. A challenge is only
 ## meaningful once the map carries a player-2+ defender that names a character.
 func _refresh_export_state() -> void:
 	if _export_challenge_btn == null:
 		return
 	var defenders := _challenge_defender_count()
+	_seed_par_from_defenders(defenders)
 	_export_challenge_btn.disabled = defenders < 1
 	_export_challenge_btn.tooltip_text = "" if defenders >= 1 else \
 		"Place at least one of your units on a player 2+ slot to define the AI defense."

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SkinResource" format=3]
+
+[ext_resource type="Script" path="res://game/skins/SkinResource.gd" id="1_skin"]
+
+[resource]
+script = ExtResource("1_skin")
+id = &"necromancer_gravemoss"
+character_id = &"necromancer"
+display_name = "Gravemoss"
+description = "Mortis let the barrow-mould take him. Sickly green creeps across his robes where the dead lie thickest, and his risen soldiers wear the same rot."
+rarity = 0
+price = 300
+tint = Color(0.55, 0.8, 0.45, 1)

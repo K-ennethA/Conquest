@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SkinResource" format=3]
+
+[ext_resource type="Script" path="res://game/skins/SkinResource.gd" id="1_skin"]
+
+[resource]
+script = ExtResource("1_skin")
+id = &"vineweave_frostbloom"
+character_id = &"vineweave"
+display_name = "Frostbloom"
+description = "Grown through a winter the blight could not thaw. Rime-blue vines flower with brittle ice, and every lattice it braids rings like cracking frost."
+rarity = 1
+price = 800
+tint = Color(0.5, 0.75, 1, 1)

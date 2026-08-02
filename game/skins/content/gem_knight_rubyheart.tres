@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SkinResource" format=3]
+
+[ext_resource type="Script" path="res://game/skins/SkinResource.gd" id="1_skin"]
+
+[resource]
+script = ExtResource("1_skin")
+id = &"gem_knight_rubyheart"
+character_id = &"gem_knight"
+display_name = "Rubyheart"
+description = "Geode cut from a vein of deep red corundum. Each facet burns like a coal, and a struck blow throws sparks of scarlet light."
+rarity = 0
+price = 300
+tint = Color(1, 0.35, 0.4, 1)

@@ -259,11 +259,38 @@ func _finish_run(victory: bool) -> void:
 					"name": unit_state.character_id,
 					"augment_count": unit_state.augment_ids.size(),
 				})
+	# PERSISTENT ITEM PAYOUT. A run always pays out exactly one item the player KEEPS (unlike
+	# the augments above, which die with the run) -- the run-scale sibling of the per-battle
+	# drop roll. Guaranteed rather than chanced because a whole run is a far bigger ask than
+	# one battle; only the RARITY is rolled, weighted by how deep the run got (<=2 rounds
+	# Common, 3-5 Rare-leaning, 6+ a real shot at Epic). Paid on a run ENDING, not on a win, so
+	# a run that died on round 5 still walks away with something.
+	#
+	# ItemSystem's per-battle roll deliberately skips arena rounds (it checks is_active()), so
+	# a 6-round run pays out once here rather than seven times.
+	var item_reward: Dictionary = {}
+	var reward: ItemResource = ItemSystem.roll_arena_reward(rounds_cleared)
+	if reward != null:
+		# award() grants + saves + toasts through one entry point, so the payout and the
+		# banner announcing it can never drift apart.
+		ItemSystem.award(reward, self)
+		item_reward = {
+			"id": String(reward.id),
+			"name": reward.display_name,
+			"rarity": reward.rarity_name(),
+			"icon": reward.icon_hint,
+			"effect": reward.effect_summary(),
+		}
+
 	last_result = {
 		"victory": victory,
 		"rounds_cleared": rounds_cleared,
 		"total_rounds": total_rounds,
 		"squad": squad_summary,
+		# Read by ArenaResultsScreen. A results-screen line for this belongs directly under the
+		# "Reached round X of N" subtitle and above the squad list; rendering it is that
+		# screen's job -- nothing is restyled from here.
+		"item_reward": item_reward,
 	}
 
 	run_finished.emit(victory)

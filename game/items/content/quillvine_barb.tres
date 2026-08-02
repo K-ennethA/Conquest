@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/items/ItemResource.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"quillvine_barb"
+display_name = "Quillvine Barb"
+description = "A single quillvine thorn, lashed to the haft. It finds the seam in armour more often than it has any right to."
+rarity = 0
+scope = 0
+stat_modifiers = {
+"crit": 5
+}
+regen_per_turn = 0
+damage_reduction_percent = 0
+icon_hint = "🌵"

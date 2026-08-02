@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SkinResource" format=3]
+
+[ext_resource type="Script" path="res://game/skins/SkinResource.gd" id="1_skin"]
+
+[resource]
+script = ExtResource("1_skin")
+id = &"mycothrall_emberspore"
+character_id = &"mycothrall"
+display_name = "Emberspore"
+description = "A thrall risen near the burning line, its mycelium banked with warm orange embers. Where it treads, the ground smokes faintly."
+rarity = 0
+price = 300
+tint = Color(1, 0.6, 0.25, 1)

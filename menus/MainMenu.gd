@@ -11,9 +11,18 @@ class_name MainMenu
 # galleries are no longer separate menu items -- they are sections of
 # Compendium.tscn, which also covers Statuses (and, later, Weather).
 @onready var compendium_button: Button = $Layout/CenterBlock/Column/MenuButtons/CompendiumButton
+# Progression (rank, points, achievements) and the cosmetic wardrobe.
+@onready var profile_button: Button = $Layout/CenterBlock/Column/MenuButtons/ProfileButton
+@onready var collection_button: Button = $Layout/CenterBlock/Column/MenuButtons/CollectionButton
 # Arena is no longer a top-level sibling: it lives under Solo -> Arena Run now.
 @onready var map_creator_button: Button = $Layout/CenterBlock/Column/MenuButtons/MapCreatorButton
 @onready var quit_button: Button = $Layout/CenterBlock/Column/MenuButtons/QuitButton
+
+const PROFILE_SCENE := "res://menus/ProfileScreen.tscn"
+# The Collection (skins wardrobe) screen ships alongside the skin economy. Until that scene
+# exists the button stays visible but disabled, so the menu shape is stable and players can
+# see what is coming instead of the entry appearing out of nowhere later.
+const COLLECTION_SCENE := "res://menus/CollectionScreen.tscn"
 
 # Dev-only multiplayer test harnesses. These attach three dev_scripts/ nodes that each
 # print a multi-line banner on _ready (and one writes a client-flag file), so they spam
@@ -40,6 +49,12 @@ func _ready() -> void:
 	if compendium_button:
 		compendium_button.pressed.connect(_on_compendium_pressed)
 		compendium_button.tooltip_text = "Browse every unit, tile, status and map."
+	if profile_button:
+		profile_button.pressed.connect(_on_profile_pressed)
+		profile_button.tooltip_text = "Your rank, points, lifetime record and achievements."
+	if collection_button:
+		collection_button.pressed.connect(_on_collection_pressed)
+		_refresh_collection_button()
 	if map_creator_button:
 		map_creator_button.pressed.connect(_on_map_creator_pressed)
 		map_creator_button.tooltip_text = "Build custom maps (early version)"
@@ -125,6 +140,31 @@ func _on_compendium_pressed() -> void:
 	"""Handle Compendium button press"""
 	get_tree().change_scene_to_file("res://menus/Compendium.tscn")
 
+func _on_profile_pressed() -> void:
+	"""Handle Profile button press -- open the rank / stats / achievements screen."""
+	get_tree().change_scene_to_file(PROFILE_SCENE)
+
+func _refresh_collection_button() -> void:
+	"""Enable Collection only when its scene is actually present in the build; otherwise leave
+	a disabled 'Coming soon' entry so pressing it (or its number key) can never fail a scene
+	change."""
+	if collection_button == null:
+		return
+	var available: bool = ResourceLoader.exists(COLLECTION_SCENE)
+	collection_button.disabled = not available
+	if available:
+		collection_button.focus_mode = Control.FOCUS_ALL
+		collection_button.tooltip_text = "Unit skins you own -- equip a look for each character."
+	else:
+		collection_button.focus_mode = Control.FOCUS_NONE
+		collection_button.tooltip_text = "Coming soon: your unit-skin wardrobe."
+
+func _on_collection_pressed() -> void:
+	"""Handle Collection button press -- guarded, since the wardrobe screen ships separately."""
+	if not ResourceLoader.exists(COLLECTION_SCENE):
+		return
+	get_tree().change_scene_to_file(COLLECTION_SCENE)
+
 func _on_map_creator_pressed() -> void:
 	"""Handle Map Creator button press -- open the custom-map editor (early version)."""
 	get_tree().change_scene_to_file("res://game/mapmaker/MapMakerScene.tscn")
@@ -159,6 +199,10 @@ func _input(event: InputEvent) -> void:
 			KEY_3:
 				_on_compendium_pressed()
 			KEY_4:
+				_on_profile_pressed()
+			KEY_5:
+				_on_collection_pressed()
+			KEY_6:
 				_on_map_creator_pressed()
 			KEY_ESCAPE:
 				_on_quit_pressed()
