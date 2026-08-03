@@ -13,6 +13,9 @@ extends GutTest
 ##   * one attempt == one report, whatever combination of end signals arrives;
 ##   * the payload is { cleared, score, turns } with the score + turns taken from the SAME
 ##     source of truth the local record uses ([ChallengeScoring] and the challenger turn tally);
+##   * the attacker's REPLAY rides along as "replay_b64" when a recorder is mounted, and is
+##     silently left off when there is none / it has nothing usable -- an attachment can never
+##     cost the attempt its report;
 ##   * a report that fails, or never answers at all (offline), cannot disturb the finish flow:
 ##     the local record is still written and nothing is retried.
 ##
@@ -45,6 +48,24 @@ class StubCommunityClient extends RefCounted:
 ## A client that predates the report API entirely (an older/partial front door). The
 ## controller must notice and do nothing rather than crash the finish.
 class ClientWithoutReportApi extends RefCounted:
+	var touched: bool = false
+
+
+## Stand-in for the live [ReplayRecorder] the battle mounts. Only [method get_log] is used by
+## the attach path, and returning it is all a recorder is to the reporter.
+class StubRecorder extends RefCounted:
+	## The log handed over. Empty == "nothing worth attaching" (a recorder that never latched).
+	var log: Dictionary = {}
+	## How many times the reporter asked -- the attach must be a single read, not a poll.
+	var reads: int = 0
+
+	func get_log() -> Dictionary:
+		reads += 1
+		return log.duplicate(true)
+
+
+## A source that predates get_log() entirely. The reporter must notice and attach nothing.
+class RecorderWithoutGetLog extends RefCounted:
 	var touched: bool = false
 
 
@@ -398,6 +419,77 @@ func test_a_detached_controller_never_builds_a_real_client() -> void:
 	assert_null(_controller._get_community_client(),
 		"a detached controller builds no community client")
 	assert_true(_controller._result_recorded, "and the run still finishes")
+
+
+# --- The attached replay -----------------------------------------------------
+
+## A recorder holding a real, encodable log -- what a finished battle leaves behind.
+func _stub_recorder_with_a_real_log() -> StubRecorder:
+	var recorder := StubRecorder.new()
+	recorder.log = ReplayLog.make_log({
+		"mode": ReplayLog.MODE_CHALLENGE,
+		"recorded_at_utc": "2026-08-02T14:03:11",
+	})
+	return recorder
+
+
+func test_a_mounted_recorder_attaches_the_replay_to_the_report() -> void:
+	var recorder: StubRecorder = _stub_recorder_with_a_real_log()
+	_controller.set_replay_source(recorder)
+	_arm(_community_challenge())
+	_take_turns(6)
+
+	var outcome: Dictionary = _only_outcome()
+	assert_eq(recorder.reads, 1, "the log is read once, when the attempt is reported")
+	assert_true(outcome.has(CommunityProvider.REPLAY_KEY),
+		"the defender gets the attacker's replay with the attempt")
+	assert_eq(outcome.keys().size(), 4, "and it is the ONLY addition to the pinned payload")
+
+	# What was attached is a real container the service's gate would accept.
+	var b64: String = String(outcome.get(CommunityProvider.REPLAY_KEY, ""))
+	assert_eq(CommunityProvider.sanitize_replay_b64(b64), b64,
+		"the attached blob passes the same boundary gate the store applies")
+	assert_false(ReplayLog.decode_container(Marshalls.base64_to_raw(b64)).is_empty(),
+		"and decodes back to a replay log")
+
+
+func test_no_recorder_reports_the_attempt_without_a_replay() -> void:
+	# The default for this suite: a detached controller has no tree to search, so there is no
+	# recorder to find -- and every other attempt-report test above therefore runs replay-free.
+	_arm(_community_challenge())
+	_take_turns(6)
+
+	var outcome: Dictionary = _only_outcome()
+	assert_false(outcome.has(CommunityProvider.REPLAY_KEY),
+		"no recorder means no key at all, not an empty one")
+	assert_eq(outcome.keys().size(), 3, "the attempt is reported exactly as before")
+
+
+func test_a_recorder_with_nothing_to_give_is_skipped_silently() -> void:
+	# A recorder that never latched a header (the battle ended before a single turn started)
+	# and a source that predates get_log(): both attach nothing, and neither disturbs the report.
+	for source in [StubRecorder.new(), RecorderWithoutGetLog.new()]:
+		_client.reports.clear()
+		_controller.set_replay_source(source)
+		_arm(_community_challenge())
+		_take_turns(6)
+
+		assert_true(_controller._result_recorded, "the run finishes normally")
+		var outcome: Dictionary = _only_outcome()
+		assert_false(outcome.has(CommunityProvider.REPLAY_KEY), "there was nothing to attach")
+		assert_eq(outcome.keys().size(), 3, "so the report is the plain 3-key payload")
+
+
+func test_a_share_code_challenge_attaches_nothing_because_it_reports_nothing() -> void:
+	# The replay is part of the REPORT, so the serverless share-code path stays serverless:
+	# no id, no report, and the log is never even read.
+	var recorder: StubRecorder = _stub_recorder_with_a_real_log()
+	_controller.set_replay_source(recorder)
+	_arm(_share_code_challenge())
+	_take_turns(6)
+
+	assert_eq(_client.reports.size(), 0, "a share code is never reported")
+	assert_eq(recorder.reads, 0, "and its replay is never even encoded")
 
 
 # --- The attacker's own profile ---------------------------------------------

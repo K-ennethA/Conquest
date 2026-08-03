@@ -50,6 +50,13 @@ extends Node
 ## forfeit, the pause-menu abandon) and does NOT depend on the player ever seeing the summary
 ## screen. Challenges that arrived as a friend SHARE CODE carry no "community_id" and are
 ## silently never reported -- that path is deliberately serverless.
+##
+## THE REPLAY RIDES ALONG. When a [ReplayRecorder] is mounted for the battle (the ordinary
+## case -- [method GameWorldManager._setup_replay_recorder] mounts one per battle), the report
+## also carries the attacker's command log as base64 of its CQRP container, so the DEFENDING
+## author can watch how their base was played. It is strictly an attachment: no recorder, an
+## unencodable log, or one past [constant CommunityProvider.MAX_REPLAY_BYTES] simply reports
+## the attempt without it. See [method _attempt_replay_b64].
 
 ## Field the community install path stamps onto a downloaded challenge. Its presence is the
 ## whole test for "this attempt belongs to a community-hosted challenge".
@@ -99,6 +106,11 @@ var _community_client = null
 ## The progression recorder the finished attempt is mirrored onto (the [PlayerProfile]
 ## autoload in a real run). Untyped + injectable for the same reason as the client above.
 var _profile = null
+
+## The replay source the attached command log is read from (the live [ReplayRecorder] in a
+## real run, found by group). Untyped + injectable through [method set_replay_source], exactly
+## like the two seams above, so a suite can attach a stub log without a battle.
+var _replay_source = null
 
 ## Challenger turns taken this battle (fed to the personal-best record). In "survive" mode
 ## this doubles as the ROUND COUNT: each challenger turn start is one round survived.
@@ -590,12 +602,58 @@ func _report_attempt(won: bool, score: int) -> bool:
 	# Latch BEFORE the hand-off: a client that answers synchronously (the local provider does)
 	# must not be able to re-enter this and report the same attempt twice.
 	_attempt_reported = true
-	client.report_attempt(community_id, {
+	var outcome: Dictionary = {
 		"cleared": won,
 		"score": score,
 		"turns": _turns,
-	}, _on_attempt_reported)
+	}
+	# The replay is an ATTACHMENT, added only when there is one: an absent / unusable / oversized
+	# log leaves the key off entirely rather than sending an empty string to be dropped later.
+	var replay_b64: String = _attempt_replay_b64()
+	if not replay_b64.is_empty():
+		outcome[CommunityProvider.REPLAY_KEY] = replay_b64
+	client.report_attempt(community_id, outcome, _on_attempt_reported)
 	return true
+
+
+## Inject the replay source. FOR TESTS -- pass a stub exposing get_log() -> Dictionary; null
+## restores the group lookup.
+func set_replay_source(source) -> void:
+	_replay_source = source
+
+
+## The battle's live [ReplayRecorder], or null. Found through
+## [constant ReplayRecorder.GROUP] rather than a stored reference because the recorder is
+## mounted per battle and this autoload outlives every one of them. Every step is guarded the
+## same way the other seams are: a detached controller (a `.new()` in a test, never in the
+## tree) has no tree to search and finds nothing.
+func _get_replay_source():
+	if _replay_source != null:
+		return _replay_source
+	if not is_inside_tree():
+		return null
+	var tree: SceneTree = get_tree()
+	if tree == null:
+		return null
+	return tree.get_first_node_in_group(ReplayRecorder.GROUP)
+
+
+## The attacker's command log for this attempt, as base64 of its CQRP container -- or "" and
+## NOTHING ELSE for every failure: no recorder mounted, a source that predates get_log(), an
+## empty / unencodable log, or a container past [constant CommunityProvider.MAX_REPLAY_BYTES]
+## (the same ceiling the service enforces, checked here so an oversized blob is never even
+## base64'd). Silent by design: a missing replay must never cost the attempt its report.
+func _attempt_replay_b64() -> String:
+	var source = _get_replay_source()
+	if source == null or not is_instance_valid(source) or not source.has_method("get_log"):
+		return ""
+	var log_dict: Variant = source.get_log()
+	if not (log_dict is Dictionary) or (log_dict as Dictionary).is_empty():
+		return ""
+	var bytes: PackedByteArray = ReplayLog.encode_container(log_dict)
+	if bytes.is_empty() or bytes.size() > CommunityProvider.MAX_REPLAY_BYTES:
+		return ""
+	return Marshalls.raw_to_base64(bytes)
 
 
 ## The report came back. Nothing to do either way -- see [method _report_attempt]. Kept as a

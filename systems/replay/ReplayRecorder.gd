@@ -283,11 +283,23 @@ func append_checksum() -> void:
 	checks.append(ReplayLog.make_checksum(_turn, ReplayLog.state_checksum(collect_state_rows())))
 
 
+## The rows [method ReplayLog.state_checksum] hashes for the LIVE board. Instance form of
+## [method board_state_rows] -- see there.
+func collect_state_rows() -> Array:
+	return board_state_rows()
+
+
 ## The rows [method ReplayLog.state_checksum] hashes: one
 ## [code]{ id, cell, hp }[/code] per live unit that the command seam named. A unit with no
 ## net_id is SKIPPED -- it cannot be addressed by a command either, so including it would
 ## make the checksum depend on something playback can never reproduce.
-func collect_state_rows() -> Array:
+##
+## STATIC because it reads only the live board: PLAYBACK recomputes this at every turn
+## boundary to compare against the recorded checksum, and it must be able to do so WITHOUT
+## mounting a recorder (which would make a replay record itself). Recording and playback
+## therefore hash the identical rows, gathered by the identical code -- the divergence
+## tripwire would be worthless if the two sides could drift.
+static func board_state_rows() -> Array:
 	var rows: Array = []
 	if typeof(CombatServices) != TYPE_OBJECT or CombatServices == null:
 		return rows
@@ -449,25 +461,66 @@ func _live_participants() -> Array:
 		if player == null:
 			continue
 		var slot: int = int(player.player_id)
-		var squad: Array = _squad_for_slot(slot)
-		var skins: Dictionary = {}
-		var items: Array = []
-		for character_id in squad:
-			var skin: String = MatchLoadouts.skin_for(slot, String(character_id), profile)
-			if not skin.is_empty():
-				skins[String(character_id)] = skin
-			for item_id in MatchLoadouts.item_ids_for(slot, String(character_id)):
-				if not items.has(String(item_id)):
-					items.append(String(item_id))
+		var card: Dictionary = participant_loadout(slot, profile)
 		out.append({
 			"slot": slot,
 			"name": player.get_display_name() if player.has_method("get_display_name") else String(player.player_name),
 			"is_ai": bool(player.is_ai) if "is_ai" in player else false,
-			"squad": squad,
-			"items": items,
-			"skins": skins,
+			"squad": _squad_for_slot(slot),
+			"equipped": card["equipped"],
+			"team": card["team"],
+			"skins": card["skins"],
 		})
 	return out
+
+
+## The ITEM + SKIN card in force for [param slot], in the EXACT shape [MatchLoadouts] carries
+## on the wire and applies at spawn:
+## [code]{ "equipped": { character_id: item_id }, "team": [item_id], "skins": { character_id:
+## skin_id } }[/code].
+##
+## WHY THAT SHAPE, NOT A FLAT UNION. Playback republishes each recorded participant AS a
+## [MatchLoadouts] card ([method ReplayPlayback._stage_loadouts]), so whatever is recorded here
+## is fed straight back into [method MatchLoadouts.items_for] / [method MatchLoadouts.skin_for]
+## -- the very calls the spawn path makes. A per-slot list with no character key could only be
+## re-applied as that slot's TEAM loadout, which hands one character's worn item to its
+## team-mates; the per-turn checksum would then (correctly) call the replay diverged. Since a
+## challenge attacker routinely carries per-unit items, that is the difference between defense
+## replays playing and refusing to play.
+##
+## WHERE EACH SLOT IS SAMPLED FROM -- deliberately whatever the SPAWN PATH would read, so
+## recording and application cannot disagree:
+##   * the LOCAL slot ([method _local_card_slot]) from the local [ItemInventory] and
+##     [param profile], through [method MatchLoadouts.build_local_payload] -- the identical
+##     sampler the lobby puts on the wire, so a networked and a solo recording of the same
+##     inventory are byte-identical.
+##   * every other slot from its announced card, verbatim.
+##   * a slot with neither (a solo AI side, a neutral camp) records an EMPTY card, which is
+##     exactly what [ItemSystem] gives it.
+func participant_loadout(slot: int, profile: Object = null) -> Dictionary:
+	if int(slot) == _local_card_slot():
+		return _card_fields(MatchLoadouts.build_local_payload(profile))
+	if MatchLoadouts.has_peer_loadout(int(slot)):
+		return _card_fields(MatchLoadouts.get_peer_loadout(int(slot)))
+	return _card_fields({})
+
+
+## The one slot whose loadout comes from LOCAL storage rather than a replicated card: our own
+## seat in a networked match, slot 0 (the local human) in every solo / hotseat / campaign /
+## challenge / arena path. The SAME split [method ItemSystem.loadout_for_slot] and
+## [method MatchLoadouts.skin_for] make, which is why sampling here reproduces what was applied.
+static func _local_card_slot() -> int:
+	return MatchLoadouts.local_slot() if MatchLoadouts.is_active() else 0
+
+
+## The three loadout fields of a card, defaulted -- so a blank card and a real one have the
+## identical shape and [method ReplayLog.make_header] never has to guess.
+static func _card_fields(card: Dictionary) -> Dictionary:
+	return {
+		"equipped": card.get("equipped", {}),
+		"team": card.get("team", []),
+		"skins": card.get("skins", {}),
+	}
 
 
 ## The character ids fielded by [param slot]: the replicated card when a networked match

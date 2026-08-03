@@ -56,7 +56,8 @@ func _a_log(entry_count: int = 3) -> Dictionary:
 		"map": { "path": "res://maps/forgotten_forest.tres", "name": "Forgotten Forest" },
 		"participants": [
 			{ "slot": 0, "name": "Player 1", "is_ai": false,
-			  "squad": ["vineweave"], "items": ["ironband"], "skins": { "vineweave": "ashen" } },
+			  "squad": ["vineweave"], "equipped": { "vineweave": "ironbark_sigil" },
+			  "team": ["verdant_banner"], "skins": { "vineweave": "ashen" } },
 			{ "slot": 1, "name": "Bot", "is_ai": true, "squad": ["blightcap"] },
 		],
 		"rng": { "match_seed": 123456789 },
@@ -223,6 +224,83 @@ func test_validate_caps_oversized_input() -> void:
 	var out := ReplayLog.validate(log)
 	assert_eq((out["entries"] as Array).size(), ReplayLog.MAX_ENTRIES, "the entry cap holds")
 	assert_eq((out["participants"] as Array).size(), ReplayLog.MAX_PARTICIPANTS, "the participant cap holds")
+
+
+# --- The participant loadout (the MatchLoadouts card shape) ------------------
+
+func test_validate_round_trips_the_participant_loadout_card() -> void:
+	# The three fields ARE MatchLoadouts' card, because playback republishes them verbatim. A
+	# per-character key on the worn item is the whole point: a flat list could only come back as
+	# the slot's TEAM loadout, which would arm its team-mates and trip the per-turn checksum.
+	var out := ReplayLog.validate(ReplayLog.parse_text(ReplayLog.to_json(_a_log(1))))
+	var p: Dictionary = (out["participants"] as Array)[0]
+	assert_eq(p["equipped"], { "vineweave": "ironbark_sigil" },
+		"the worn UNIT item stays keyed to the character who wore it")
+	assert_eq(p["team"], ["verdant_banner"], "the shared TEAM slots stay a list")
+	assert_eq(p["skins"], { "vineweave": "ashen" }, "and the skins stay keyed too")
+	assert_false(p.has("items"),
+		"the old flat union is gone -- there is one shape, not two")
+
+	var bot: Dictionary = (out["participants"] as Array)[1]
+	assert_eq(bot["equipped"], {}, "a participant that announced nothing gets an empty map")
+	assert_eq(bot["team"], [], "an empty team list")
+	assert_eq(bot["skins"], {}, "and an empty skin map -- every field is always present")
+
+
+func test_validate_drops_a_malformed_participant_loadout_quietly() -> void:
+	# All of these are EXPECTED inputs (a hand-edited or hostile file). Each is dropped as a
+	# returned value; none may reach the engine log (convention #1).
+	var log := _a_log(0)
+	log["participants"] = [{
+		"slot": 0, "name": "Rowan",
+		"equipped": "not a dictionary",
+		"team": { "nope": true },
+		"skins": [1, 2, 3],
+	}]
+	var out := ReplayLog.validate(log)
+	var p: Dictionary = (out["participants"] as Array)[0]
+	assert_eq(p["equipped"], {}, "a non-dictionary equipped map reads as empty")
+	assert_eq(p["team"], [], "a non-array team list reads as empty")
+	assert_eq(p["skins"], {}, "a non-dictionary skin map reads as empty")
+	assert_eq(String(p["name"]), "Rowan", "and the rest of the participant still survives")
+
+
+func test_validate_refuses_non_string_ids_in_a_loadout() -> void:
+	# A number where an id belongs is nonsense, not something to stringify: coercing 7 into the
+	# id "7" would fabricate an id the wire boundary (MatchLoadouts._clean_id) would refuse.
+	var log := _a_log(0)
+	log["participants"] = [{
+		"slot": 0,
+		"squad": ["vineweave", 7, { "a": 1 }, ""],
+		"equipped": { "vineweave": 7, 3: "ironbark_sigil", "blightcap": "quillvine_barb" },
+		"team": [12, "verdant_banner"],
+		"skins": { "vineweave": [1], "blightcap": "blightcap_ashcap" },
+	}]
+	var p: Dictionary = (ReplayLog.validate(log)["participants"] as Array)[0]
+	assert_eq(p["squad"], ["vineweave"], "only real string ids survive the squad")
+	assert_eq(p["equipped"], { "blightcap": "quillvine_barb" },
+		"a numeric item id and a numeric character key are both dropped")
+	assert_eq(p["team"], ["verdant_banner"], "and a numeric team entry")
+	assert_eq(p["skins"], { "blightcap": "blightcap_ashcap" }, "and a non-string skin id")
+
+
+func test_validate_caps_an_oversized_participant_loadout() -> void:
+	var equipped: Dictionary = {}
+	var skins: Dictionary = {}
+	var team: Array = []
+	for i in (ReplayLog.MAX_LIST + 40):
+		equipped["c%d" % i] = "item%d" % i
+		skins["c%d" % i] = "skin%d" % i
+		team.append("team%d" % i)
+	var log := _a_log(0)
+	log["participants"] = [{ "slot": 0, "equipped": equipped, "team": team, "skins": skins }]
+	var p: Dictionary = (ReplayLog.validate(log)["participants"] as Array)[0]
+	assert_eq((p["equipped"] as Dictionary).size(), ReplayLog.MAX_LIST,
+		"a million-key equipped map is capped, not carried")
+	assert_eq((p["skins"] as Dictionary).size(), ReplayLog.MAX_LIST, "and so is the skin map")
+	assert_eq((p["team"] as Array).size(), ItemInventory.TEAM_SLOTS,
+		"the team list is capped at the shared slots that actually exist -- "
+		+ "the same ceiling MatchLoadouts.normalise enforces")
 
 
 func test_validate_clips_oversized_strings() -> void:

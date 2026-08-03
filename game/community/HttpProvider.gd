@@ -55,8 +55,49 @@ func daily(cb: Callable) -> void:
 func report_attempt(id: String, outcome: Dictionary, cb: Callable) -> void:
 	# Sanitised client-side so the wire body is already the exact 3-key shape; the server
 	# MUST re-sanitise anyway (a client is never a validator).
-	_request(HTTPClient.METHOD_POST, "/v1/items/%s/attempts" % id.uri_encode(),
-		sanitize_outcome(outcome), cb, true)
+	var body: Dictionary = sanitize_outcome(outcome)
+	# The replay rides as a fourth key ONLY when it passes the same gate the store applies --
+	# so a blob that would be dropped server-side is never even uploaded.
+	var replay_b64: String = sanitize_replay_b64(outcome.get(REPLAY_KEY, ""))
+	if not replay_b64.is_empty():
+		body[REPLAY_KEY] = replay_b64
+	_request(HTTPClient.METHOD_POST, "/v1/items/%s/attempts" % id.uri_encode(), body, cb, true)
+
+
+## GET the owner-only attempt ledger. The response is normalised to the pinned
+## { entries, has_more } shape so a screen never has to guess what a sparse server sent.
+func attempt_log(id: String, page: int, cb: Callable) -> void:
+	var handler: Callable = func(result: Dictionary) -> void:
+		if not bool(result.get("ok", false)):
+			_emit(cb, result)
+			return
+		var data: Variant = result.get("data", {})
+		var body: Dictionary = data if data is Dictionary else {}
+		var entries: Variant = body.get("entries", [])
+		_emit(cb, ok({
+			"entries": entries if entries is Array else [],
+			"has_more": bool(body.get("has_more", false)),
+		}))
+	_request(HTTPClient.METHOD_GET,
+		"/v1/items/%s/attempts?page=%d" % [id.uri_encode(), maxi(0, page)], {}, handler, false)
+
+
+## GET one attempt's replay. The service answers { "replay_b64": ... }; the contract here is
+## the STRING, so the envelope is unwrapped and an empty/absent blob reads as
+## [constant ERR_NOT_FOUND] rather than as a successful empty replay.
+func fetch_attempt_replay(attempt_id: String, cb: Callable) -> void:
+	var handler: Callable = func(result: Dictionary) -> void:
+		if not bool(result.get("ok", false)):
+			_emit(cb, result)
+			return
+		var data: Variant = result.get("data", {})
+		var b64: String = String((data as Dictionary).get(REPLAY_KEY, "")) if data is Dictionary else ""
+		if b64.is_empty():
+			_emit(cb, fail(ERR_NOT_FOUND))
+			return
+		_emit(cb, ok(b64))
+	_request(HTTPClient.METHOD_GET, "/v1/attempts/%s/replay" % attempt_id.uri_encode(),
+		{}, handler, false)
 
 
 ## The caller is identified by the X-Community-Device header every request already carries,

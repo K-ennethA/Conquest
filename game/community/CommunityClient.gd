@@ -5,7 +5,8 @@ extends RefCounted
 ##   * picks the transport ([LocalProvider] offline, or [HttpProvider] when
 ##     user://community.cfg supplies a base_url) -- so screens never touch a provider;
 ##   * forwards the read/write API (list+search / fetch / vote / upload / daily /
-##     report_attempt / my_bases / set_base_active) unchanged;
+##     report_attempt / attempt_log / fetch_attempt_replay / my_bases / set_base_active)
+##     unchanged;
 ##   * adds [method download_to_library], the ONLY safe path from an untrusted downloaded
 ##     payload to a saved, playable file -- which is also where the item's service id is
 ##     stamped into the challenge as "community_id", the handle the completion flow later
@@ -85,7 +86,10 @@ func daily(cb: Callable) -> void:
 ## Record one play of a community item. [param id] is the `community_id` stamped into the
 ## installed challenge by [method install_payload] -- the challenge-completion flow reads it
 ## off the challenge it just finished and calls this. [param outcome] is
-## { cleared: bool, score: int, turns: int }; it is sanitised at the provider boundary.
+## { cleared: bool, score: int, turns: int }, optionally plus
+## [constant CommunityProvider.REPLAY_KEY] (base64 of the attacker's replay container); it is
+## all sanitised at the provider boundary, and a replay that fails the gate is dropped WITHOUT
+## costing the attempt.
 func report_attempt(id: String, outcome: Dictionary, cb: Callable) -> void:
 	if id.strip_edges().is_empty():
 		# A locally authored or pre-stamping challenge simply has no ledger to write to.
@@ -93,6 +97,27 @@ func report_attempt(id: String, outcome: Dictionary, cb: Callable) -> void:
 		CommunityProvider._emit(cb, CommunityProvider.fail(CommunityProvider.ERR_NOT_FOUND))
 		return
 	_provider.report_attempt(id, outcome, cb)
+
+
+## One page of the per-attempt ledger for one of MY OWN bases (newest first,
+## [constant CommunityProvider.PAGE_SIZE] per page). data =
+## { entries: [{ attempt_id, cleared, score, turns, at, has_replay }], has_more: bool }.
+## Someone else's base fails with "not_owner", an unknown id with "not_found".
+func attempt_log(id: String, page: int, cb: Callable) -> void:
+	if id.strip_edges().is_empty():
+		CommunityProvider._emit(cb, CommunityProvider.fail(CommunityProvider.ERR_NOT_FOUND))
+		return
+	_provider.attempt_log(id, page, cb)
+
+
+## The replay attached to one attempt, as base64 of its CQRP container (data = String).
+## Same owner gate as [method attempt_log]; "not_found" when the attempt carried no blob or
+## its blob has aged out of the retention window.
+func fetch_attempt_replay(attempt_id: String, cb: Callable) -> void:
+	if attempt_id.strip_edges().is_empty():
+		CommunityProvider._emit(cb, CommunityProvider.fail(CommunityProvider.ERR_NOT_FOUND))
+		return
+	_provider.fetch_attempt_replay(attempt_id, cb)
 
 
 ## This device's own uploaded challenges (active and retired), with their counters.

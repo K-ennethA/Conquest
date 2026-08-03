@@ -280,7 +280,8 @@ func can_save_now() -> bool:
 		_is_arena_active(),
 		PlayerManager != null and PlayerManager.current_game_state == PlayerManager.GameState.IN_PROGRESS,
 		TurnSystemManager != null and TurnSystemManager.has_active_turn_system(),
-		_has_living_player_unit())
+		_has_living_player_unit(),
+		ReplayPlayback.is_playing())
 
 
 ## The PURE decision behind [method can_save_now], split out so the gate can be tested
@@ -288,10 +289,14 @@ func can_save_now() -> bool:
 ## necessary; the interesting ones are the two exclusions documented in the class header
 ## ([param networked] and [param arena_active]).
 static func gate(solo: bool, networked: bool, arena_active: bool, in_progress: bool,
-		has_turn_system: bool, has_player_unit: bool) -> bool:
+		has_turn_system: bool, has_player_unit: bool, replay_playback: bool = false) -> bool:
 	if not solo:
 		return false
 	if networked or arena_active:
+		return false
+	# A replay-boot battle is a SPECTATED re-simulation, not the player's progress --
+	# saving it would resurrect a finished battle as a resumable one.
+	if replay_playback:
 		return false
 	return in_progress and has_turn_system and has_player_unit
 

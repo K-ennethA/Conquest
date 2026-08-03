@@ -22,19 +22,38 @@ rules server-side and re-compute the checksum -- never trust the client.
 """
 
 import argparse
+import base64
+import binascii
 import datetime
+import hashlib
 import json
 import os
+import struct
 import threading
 import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 PAGE_SIZE = 20
 MAX_QUERY_LENGTH = 64
 MAX_ACTIVE_BASES = 3
 MAX_ATTEMPT_SCORE = 1_000_000
 MAX_ATTEMPT_TURNS = 999
+
+# --- Attached replays (mirror CommunityProvider) -----------------------------
+REPLAY_KEY = "replay_b64"
+MAX_REPLAY_BYTES = 512 * 1024
+MAX_REPLAY_B64_LENGTH = ((MAX_REPLAY_BYTES + 2) // 3) * 4
+MAX_STORED_REPLAYS = 50      # blobs retained per base (oldest dropped)
+MAX_LOGGED_ATTEMPTS = 200    # ledger entries retained per base
+
+# The CQRP container header: magic(4) | container_version(4) | uncompressed_size(4) |
+# sha256(payload)(32). See systems/replay/ReplayLog.gd.
+CONTAINER_MAGIC = b"CQRP"
+CONTAINER_VERSION = 1
+CONTAINER_HEADER_SIZE = 44
+MAX_DECOMPRESSED_BYTES = 8 * 1024 * 1024
 
 # Recommendation weights + scales -- mirror LocalProvider._recommended_score exactly. See
 # docs/COMMUNITY_API.md "Recommended feed" for what each term is for.
@@ -52,7 +71,13 @@ class Store:
     def __init__(self, data_dir):
         self.data_dir = data_dir
         self.payload_dir = os.path.join(data_dir, "payloads")
-        os.makedirs(self.payload_dir, exist_ok=True)
+        # The ledger and the replay blobs live OUTSIDE items.json: the index is re-read and
+        # re-written by every call, and a base's history (plus half-megabyte blobs) must not
+        # ride along. One file per base for the ledger, one per attempt for the blob.
+        self.attempt_dir = os.path.join(data_dir, "attempts")
+        self.replay_dir = os.path.join(data_dir, "replays")
+        for d in (self.payload_dir, self.attempt_dir, self.replay_dir):
+            os.makedirs(d, exist_ok=True)
         self.index_path = os.path.join(data_dir, "items.json")
 
     def load_index(self):
@@ -79,6 +104,63 @@ class Store:
         path = os.path.join(self.payload_dir, _safe(item_id) + ".json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent="\t")
+
+    # -- Attempt ledger + attached replays --
+    def load_attempts(self, item_id):
+        """One base's ledger, newest first."""
+        path = os.path.join(self.attempt_dir, _safe(item_id) + ".json")
+        if not os.path.exists(path):
+            return []
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        entries = data.get("entries", []) if isinstance(data, dict) else []
+        return [e for e in entries if isinstance(e, dict)]
+
+    def save_attempts(self, item_id, entries):
+        path = os.path.join(self.attempt_dir, _safe(item_id) + ".json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"entries": entries}, f, indent="\t")
+
+    def load_replay(self, attempt_id):
+        """{"item_id":…, "replay_b64":…} for one attempt, or None."""
+        path = os.path.join(self.replay_dir, _safe(attempt_id) + ".json")
+        if not os.path.exists(path):
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else None
+
+    def save_replay(self, attempt_id, item_id, b64):
+        path = os.path.join(self.replay_dir, _safe(attempt_id) + ".json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"item_id": item_id, REPLAY_KEY: b64}, f)
+
+    def delete_replay(self, attempt_id):
+        if not attempt_id:
+            return
+        path = os.path.join(self.replay_dir, _safe(attempt_id) + ".json")
+        if os.path.exists(path):
+            os.remove(path)
+
+    def append_attempt(self, item_id, entry):
+        """Push one entry onto the front of the ledger and apply BOTH retention rules:
+        only the newest MAX_STORED_REPLAYS entries keep their blob (older blobs are deleted
+        and their has_replay flipped, so the log stays honest about what is watchable), and
+        only the newest MAX_LOGGED_ATTEMPTS entries are kept at all. The attempts / clears
+        counters are untouched -- they are the totals, this is the recent history."""
+        entries = self.load_attempts(item_id)
+        entries.insert(0, entry)
+        kept = 0
+        for e in entries:
+            if not e.get("has_replay"):
+                continue
+            kept += 1
+            if kept > MAX_STORED_REPLAYS:
+                self.delete_replay(str(e.get("attempt_id", "")))
+                e["has_replay"] = False
+        while len(entries) > MAX_LOGGED_ATTEMPTS:
+            self.delete_replay(str(entries.pop().get("attempt_id", "")))
+        self.save_attempts(item_id, entries)
 
 
 def _safe(item_id):
@@ -150,6 +232,43 @@ def _sanitize_outcome(body):
         "score": _clamp_counter(body.get("score", 0), MAX_ATTEMPT_SCORE),
         "turns": _clamp_counter(body.get("turns", 0), MAX_ATTEMPT_TURNS),
     }
+
+
+def _sanitize_replay_b64(raw):
+    """THE REPLAY GATE -- mirrors CommunityProvider.sanitize_replay_b64. Returns the accepted
+    base64 text or "" ; a failure DROPS the blob and the attempt still counts.
+
+    The client is never a validator, so all three checks run again here: shape/length, the
+    512 KiB decoded ceiling, and the CQRP container itself (magic, container version, declared
+    size, and the SHA-256 of the payload -- verified BEFORE anything would be inflated, exactly
+    as ReplayLog.from_bytes does). The JSON *inside* the container is not re-validated here:
+    that needs the game catalog (see the module docstring), and the digest already proves the
+    bytes are the ones the recorder wrote."""
+    if not isinstance(raw, str):
+        return ""
+    text = raw.strip()
+    if not text or len(text) > MAX_REPLAY_B64_LENGTH:
+        return ""
+    try:
+        blob = base64.b64decode(text, validate=True)
+    except (binascii.Error, ValueError):
+        return ""
+    if not blob or len(blob) > MAX_REPLAY_BYTES:
+        return ""
+    if not _is_replay_container(blob):
+        return ""
+    return text
+
+
+def _is_replay_container(blob):
+    if len(blob) <= CONTAINER_HEADER_SIZE or blob[:4] != CONTAINER_MAGIC:
+        return False
+    version, original_size = struct.unpack_from("<II", blob, 4)
+    if version != CONTAINER_VERSION:
+        return False
+    if original_size <= 0 or original_size > MAX_DECOMPRESSED_BYTES:
+        return False
+    return hashlib.sha256(blob[CONTAINER_HEADER_SIZE:]).digest() == blob[12:44]
 
 
 def _coerce_int(value, fallback=0):
@@ -240,6 +359,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._daily()
         if path == "/v1/me/bases":
             return self._my_bases()
+        # The sub-resources must be matched BEFORE the bare-id fetch, or "{id}/attempts"
+        # would read as an item called "{id}/attempts".
+        if path.startswith("/v1/items/") and path.endswith("/attempts"):
+            return self._attempt_log(unquote(path[len("/v1/items/"):-len("/attempts")]),
+                                     parse_qs(parsed.query))
+        if path.startswith("/v1/attempts/") and path.endswith("/replay"):
+            return self._attempt_replay(unquote(path[len("/v1/attempts/"):-len("/replay")]))
         if path.startswith("/v1/items/"):
             return self._fetch(path[len("/v1/items/"):])
         self._send(404, {"error": "Not found."})
@@ -348,6 +474,10 @@ class Handler(BaseHTTPRequestHandler):
         if body is None:
             return self._send(400, {"error": "Body was not valid JSON."})
         outcome = _sanitize_outcome(body)
+        # Gated separately from the counters, and before anything is written: a blob that
+        # fails is dropped and the attempt is recorded regardless.
+        replay_b64 = _sanitize_replay_b64(body.get(REPLAY_KEY) if isinstance(body, dict) else "")
+        attempt_id = uuid.uuid4().hex
         with _LOCK:
             index = self.store.load_index()
             item = next((it for it in index["items"] if it.get("id") == item_id), None)
@@ -356,8 +486,50 @@ class Handler(BaseHTTPRequestHandler):
             item["attempts"] = max(0, int(item.get("attempts", 0) or 0)) + 1
             item["clears"] = max(0, int(item.get("clears", 0) or 0)) + (1 if outcome["cleared"] else 0)
             self.store.save_index(index)
+            has_replay = bool(replay_b64)
+            if has_replay:
+                self.store.save_replay(attempt_id, item_id, replay_b64)
+            self.store.append_attempt(item_id, {
+                "attempt_id": attempt_id, "cleared": outcome["cleared"],
+                "score": outcome["score"], "turns": outcome["turns"],
+                "at": datetime.datetime.now().isoformat(timespec="seconds"),
+                "has_replay": has_replay,
+            })
         self._send(200, {"id": item_id, "attempts": item["attempts"],
-                         "clears": item["clears"], "outcome": outcome})
+                         "clears": item["clears"], "outcome": outcome,
+                         "attempt_id": attempt_id, "has_replay": has_replay})
+
+    def _attempt_log(self, item_id, query):
+        """One page of a base's ledger, newest first. OWNER ONLY -- an attempt log names how
+        every attacker fared, which is the defender's private record."""
+        page = _coerce_int(query.get("page", ["0"])[0])
+        index = self.store.load_index()
+        item = next((it for it in index["items"] if it.get("id") == item_id), None)
+        if item is None:
+            return self._send(404, {"error": "not_found"})
+        device = self._device()
+        if not device or item.get("owner") != device:
+            return self._send(403, {"error": "not_owner"})
+        entries = self.store.load_attempts(item_id)
+        start = max(0, page) * PAGE_SIZE
+        self._send(200, {"entries": entries[start:start + PAGE_SIZE],
+                         "has_more": start + PAGE_SIZE < len(entries)})
+
+    def _attempt_replay(self, attempt_id):
+        """The blob one attempt carried, exactly as it was stored. Gated on ownership of the
+        BASE it was played against (resolved through the blob's own item_id)."""
+        record = self.store.load_replay(attempt_id)
+        b64 = str(record.get(REPLAY_KEY, "")) if record else ""
+        if not b64:
+            return self._send(404, {"error": "not_found"})
+        item_id = str(record.get("item_id", ""))
+        item = next((it for it in self.store.load_index()["items"] if it.get("id") == item_id), None)
+        if item is None:
+            return self._send(404, {"error": "not_found"})
+        device = self._device()
+        if not device or item.get("owner") != device:
+            return self._send(403, {"error": "not_owner"})
+        self._send(200, {REPLAY_KEY: b64})
 
     def _my_bases(self):
         device = self._device()

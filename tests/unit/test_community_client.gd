@@ -42,6 +42,14 @@ class RecordingProvider extends CommunityProvider:
 		calls.append({"call": "report_attempt", "id": id, "outcome": outcome.duplicate(true)})
 		_emit(cb, ok({"id": id, "attempts": 1, "clears": 0, "outcome": outcome}))
 
+	func attempt_log(id: String, page: int, cb: Callable) -> void:
+		calls.append({"call": "attempt_log", "id": id, "page": page})
+		_emit(cb, ok({"entries": [], "has_more": false}))
+
+	func fetch_attempt_replay(attempt_id: String, cb: Callable) -> void:
+		calls.append({"call": "fetch_attempt_replay", "attempt_id": attempt_id})
+		_emit(cb, ok("Q1FSUA=="))
+
 	func my_bases(cb: Callable) -> void:
 		calls.append({"call": "my_bases"})
 		_emit(cb, ok([]))
@@ -349,6 +357,34 @@ func test_client_forwards_the_whole_api_to_its_provider() -> void:
 	assert_eq(int(forwarded.get("turns", -1)), 3, "...and turns, to be sanitised at that boundary")
 	assert_eq(String(provider.calls[2].get("call", "")), "my_bases")
 	assert_false(bool(provider.calls[3].get("active", true)), "the active flag is forwarded")
+
+
+func test_client_forwards_the_replay_endpoints() -> void:
+	# The defender's half of an attempt: page my base's ledger, then pull one attempt's
+	# replay. The UI codes against these exact names, so they are pinned here too.
+	var provider := RecordingProvider.new()
+	var client := CommunityClient.new(provider)
+
+	var page: Dictionary = _sync(func(cb: Callable): client.attempt_log("challenge_x", 2, cb))
+	assert_true(bool(page.get("ok", false)), "the ledger page reaches the provider")
+	assert_eq(int(provider.calls[0].get("page", -1)), 2, "the page is forwarded unchanged")
+	assert_true(page.get("data", {}).has("entries") and page.get("data", {}).has("has_more"),
+		"and comes back in the { entries, has_more } shape")
+
+	var replay: Dictionary = _sync(func(cb: Callable): client.fetch_attempt_replay("attempt_1", cb))
+	assert_eq(String(provider.calls[1].get("attempt_id", "")), "attempt_1")
+	assert_true(replay.get("data", "") is String, "a replay comes back as the base64 STRING")
+
+
+func test_the_replay_endpoints_refuse_a_blank_id_without_touching_the_service() -> void:
+	var provider := RecordingProvider.new()
+	var client := CommunityClient.new(provider)
+	for result in [_sync(func(cb: Callable): client.attempt_log("  ", 0, cb)),
+			_sync(func(cb: Callable): client.fetch_attempt_replay("", cb))]:
+		assert_false(bool(result.get("ok", true)), "there is nothing to look up")
+		assert_eq(String(result.get("error", "")), CommunityProvider.ERR_NOT_FOUND,
+			"and it says so in the shared vocabulary")
+	assert_eq(provider.calls.size(), 0, "the provider is never called for a blank id")
 
 
 func test_report_attempt_with_a_real_id_reaches_the_provider() -> void:

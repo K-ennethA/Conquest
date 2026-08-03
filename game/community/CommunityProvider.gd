@@ -45,6 +45,34 @@ const MAX_QUERY_LENGTH := 64
 const MAX_ATTEMPT_SCORE := 1_000_000
 const MAX_ATTEMPT_TURNS := 999
 
+# --- Attached replays -------------------------------------------------------
+# An attempt may carry the ATTACKER's recorded command log so the defending author can watch
+# how their base was played. The blob rides as base64 of the CQRP container
+# ([method ReplayLog.encode_container]) under [constant REPLAY_KEY] inside the reported
+# outcome. It is ATTACHMENT, never payload: a replay that fails any gate below is DROPPED and
+# the attempt still counts -- a ledger entry is the thing that must never be lost.
+
+## The outcome key an attached replay rides on.
+const REPLAY_KEY := "replay_b64"
+
+## Cap on ONE decoded replay container. A real battle's container is a few KB gzipped
+## (5000 entries of near-identical JSON), so half a megabyte is orders of magnitude above any
+## honest replay and still small enough that a base's whole retained set is a few MB.
+const MAX_REPLAY_BYTES := 512 * 1024
+
+## The longest base64 text that could possibly decode to [constant MAX_REPLAY_BYTES] --
+## checked BEFORE decoding, so an absurd paste is refused without ever being expanded.
+const MAX_REPLAY_B64_LENGTH := ((MAX_REPLAY_BYTES + 2) / 3) * 4
+
+## How many replay blobs one base retains. Past this the OLDEST are dropped (their ledger
+## entries survive with `has_replay` false) -- the store keeps a rolling window, never an
+## unbounded archive.
+const MAX_STORED_REPLAYS := 50
+
+## How many attempt-log entries one base retains. Ten pages of history; older entries fall
+## off the tail (the `attempts` / `clears` counters are unaffected -- they are the totals).
+const MAX_LOGGED_ATTEMPTS := 200
+
 # Machine-readable error codes. These are matched by CALLERS (the bases screen switches on
 # them), so unlike the prose messages the older endpoints return they are stable strings.
 const ERR_NOT_FOUND := "not_found"
@@ -163,6 +191,69 @@ static func sanitize_outcome(outcome: Dictionary) -> Dictionary:
 	}
 
 
+## THE REPLAY GATE. Take whatever the play flow attached and return either the accepted
+## base64 text or [code]""[/code] -- never a partially trusted blob. Three checks, cheapest
+## first, and EVERY failure is silent (convention #1: a dropped attachment is a handled
+## outcome, not a fault -- the attempt it rode on still counts):
+##   1. it is a String, non-empty, within [constant MAX_REPLAY_B64_LENGTH] and made only of
+##      base64 characters -- so [method Marshalls.base64_to_raw] is never handed garbage;
+##   2. it decodes to between 1 and [constant MAX_REPLAY_BYTES] bytes;
+##   3. [method ReplayLog.decode_container] accepts those bytes -- the SAME strict importer
+##      playback uses (magic, container version, sha256 BEFORE inflation, then the full
+##      whitelisting validate). Nothing else in this layer ever inspects a replay's insides.
+##
+## The accepted string is returned verbatim (only edge-trimmed), so what a store keeps is
+## byte-identical to what the attacker's machine encoded.
+static func sanitize_replay_b64(value: Variant) -> String:
+	if not (value is String):
+		return ""
+	var text: String = (value as String).strip_edges()
+	if text.is_empty() or text.length() > MAX_REPLAY_B64_LENGTH:
+		return ""
+	if not _is_base64_text(text):
+		return ""
+	var bytes: PackedByteArray = Marshalls.base64_to_raw(text)
+	if bytes.is_empty() or bytes.size() > MAX_REPLAY_BYTES:
+		return ""
+	if ReplayLog.decode_container(bytes).is_empty():
+		return ""
+	return text
+
+
+## True when [param text] is nothing but base64 characters and a valid length. A cheap
+## pre-filter so the decoder only ever sees well-formed input (a hostile string is EXPECTED
+## here, and an engine-level decode complaint would fail a test on sight).
+static func _is_base64_text(text: String) -> bool:
+	if text.length() % 4 != 0:
+		return false
+	# Padding is only ever a 1-2 char '=' tail; everything before it must be an alphabet char.
+	var body: int = text.length()
+	while body > 0 and text.unicode_at(body - 1) == 61:      # '='
+		body -= 1
+	if text.length() - body > 2:
+		return false
+	for i in body:
+		var c: int = text.unicode_at(i)
+		if not ((c >= 65 and c <= 90) or (c >= 97 and c <= 122)
+				or (c >= 48 and c <= 57) or c == 43 or c == 47):   # A-Z a-z 0-9 + /
+			return false
+	return true
+
+
+## One attempt-log entry, in the exact pinned shape. Built here so the store, the wire and
+## the UI can never drift apart on what an entry IS.
+static func make_attempt_entry(attempt_id: String, outcome: Dictionary, at: String, has_replay: bool) -> Dictionary:
+	var clean: Dictionary = sanitize_outcome(outcome)
+	return {
+		"attempt_id": String(attempt_id),
+		"cleared": bool(clean["cleared"]),
+		"score": int(clean["score"]),
+		"turns": int(clean["turns"]),
+		"at": String(at),
+		"has_replay": bool(has_replay),
+	}
+
+
 ## A single untrusted number as an int in 0..[param limit]. Anything that is not a real
 ## number (a bool, a string, NaN) counts as 0 rather than converting to a surprise.
 static func _clamp_counter(value: Variant, limit: int) -> int:
@@ -209,9 +300,36 @@ func daily(cb: Callable) -> void:
 ## and is sanitised by [method sanitize_outcome] at the boundary. Deliberately NOT
 ## idempotent: every attempt counts, including repeats from the same device -- the ledger
 ## measures how a base actually performs, not how many people tried it once.
-## data = { id, attempts, clears, outcome }. Unknown id = [constant ERR_NOT_FOUND].
+##
+## [param outcome] MAY also carry [constant REPLAY_KEY] -- base64 of the attacker's CQRP
+## replay container. It is gated by [method sanitize_replay_b64] and DROPPED on any failure
+## while the attempt still counts.
+##
+## data = { id, attempts, clears, outcome, attempt_id, has_replay }.
+## Unknown id = [constant ERR_NOT_FOUND].
 func report_attempt(_id: String, _outcome: Dictionary, cb: Callable) -> void:
 	_emit(cb, fail("report_attempt not implemented"))
+
+
+## The per-attempt ledger for one of the CALLER'S OWN bases -- newest first,
+## [constant PAGE_SIZE] per 0-based page. data =
+## [code]{ "entries": Array[Dictionary], "has_more": bool }[/code], each entry
+## [code]{ attempt_id, cleared, score, turns, at, has_replay }[/code]
+## ([method make_attempt_entry]).
+##
+## OWNER-ONLY: this is a defender's private record of who attacked their base. Someone
+## else's item = [constant ERR_NOT_OWNER]; an unknown id = [constant ERR_NOT_FOUND].
+func attempt_log(_id: String, _page: int, cb: Callable) -> void:
+	_emit(cb, fail("attempt_log not implemented"))
+
+
+## The replay attached to ONE attempt, as the base64 text that was stored (data = String),
+## byte-identical to what the attacker's machine encoded. Owner-of-the-BASE only, exactly as
+## [method attempt_log] is: [constant ERR_NOT_OWNER] for anyone else, [constant ERR_NOT_FOUND]
+## for an unknown attempt, an attempt whose blob was never stored, and one whose blob has
+## since aged out of the [constant MAX_STORED_REPLAYS] window.
+func fetch_attempt_replay(_attempt_id: String, cb: Callable) -> void:
+	_emit(cb, fail("fetch_attempt_replay not implemented"))
 
 
 ## This device's OWN uploaded challenges, active and retired alike, with their counters.

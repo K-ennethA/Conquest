@@ -15,19 +15,42 @@ extends GutTest
 ##    is NOT wired to PlayerManager's turn signals (which never fire on AI turns).
 ##  - finalize(): outcome stamping, idempotence, and the quit-mid-match fallback.
 ##  - Truncation: the entry cap flips the flag and drops silently.
+##  - The PARTICIPANT LOADOUT: each slot sampled from whatever the spawn path would read, in
+##    the MatchLoadouts card shape playback republishes verbatim.
+
+## The item store is process-wide static state; point it at a temp path that is never written
+## (nothing here calls ItemInventory.save) so the player's real collection cannot be reached.
+const TEMP_ITEM_SAVE := "user://test_replay_recorder_items.json"
 
 var _guard_recording_enabled: bool = true
+
+
+## A stand-in for the PlayerProfile autoload: the one method MatchLoadouts.build_local_payload
+## duck-types for. Kept local so the suite never touches the real profile file.
+class FakeProfile extends RefCounted:
+	var skins: Dictionary = {}
+
+	func get_equipped_skin(character_id: String) -> String:
+		return String(skins.get(character_id, ""))
 
 
 func before_each() -> void:
 	_guard_recording_enabled = ReplayRecorder.recording_enabled
 	ReplayRecorder.recording_enabled = true
 	CombatServices.clear()
+	# Both process-wide loadout sources the recorder samples. Cleared in BOTH hooks so neither
+	# a previous suite's leftovers answer here nor ours leak onward (tests/README rule 3).
+	ItemInventory.set_save_path(TEMP_ITEM_SAVE)
+	ItemInventory.reset()
+	MatchLoadouts.clear()
 
 
 func after_each() -> void:
 	ReplayRecorder.recording_enabled = _guard_recording_enabled
 	CombatServices.clear()
+	ItemInventory.reset()
+	ItemInventory.set_save_path(ItemInventory.DEFAULT_SAVE_PATH)
+	MatchLoadouts.clear()
 
 
 # --- Helpers ----------------------------------------------------------------
@@ -231,6 +254,101 @@ func test_build_live_header_is_well_formed_headless() -> void:
 	assert_true(ReplayLog.MODES.has(String(log["mode"])), "with a recognised mode")
 	assert_false(ReplayLog.validate(ReplayLog.parse_text(ReplayLog.to_json(log))).is_empty(),
 		"and it survives the strict importer")
+
+
+# --- The participant loadout (the MatchLoadouts card shape) ------------------
+
+func test_participant_loadout_samples_the_local_slot_from_the_local_stores() -> void:
+	# Outside a networked match slot 0 IS the local human, and ItemSystem.loadout_for_slot /
+	# MatchLoadouts.skin_for read its items and skins straight off the local stores. The
+	# recorder must sample the SAME stores, or the replay would field a loadout the battle
+	# never had.
+	ItemInventory.grant("ironbark_sigil")
+	ItemInventory.grant("verdant_banner")
+	ItemInventory.equip("gem_knight", "ironbark_sigil")
+	ItemInventory.set_team_item(0, "verdant_banner")
+	var profile := FakeProfile.new()
+	profile.skins = { "gem_knight": "gem_knight_sapphire" }
+
+	var rec := _make_recorder()
+	var card: Dictionary = rec.participant_loadout(0, profile)
+
+	assert_eq(card["equipped"], { "gem_knight": "ironbark_sigil" },
+		"the worn UNIT item is recorded KEYED to the character wearing it")
+	assert_eq(Array(card["team"]), ["verdant_banner"], "the filled TEAM slot is recorded as a team item")
+	assert_eq(card["skins"], { "gem_knight": "gem_knight_sapphire" },
+		"and the equipped skin, keyed the same way")
+
+
+func test_participant_loadout_samples_an_announced_slot_verbatim() -> void:
+	# In a networked match every OTHER slot's loadout is its announced card -- the one the
+	# spawn path reads through MatchLoadouts.items_for. Recording it verbatim is what makes
+	# the two agree.
+	MatchLoadouts.set_local_slot(0)
+	MatchLoadouts.set_peer_loadout(1, {
+		"equipped": { "mycothrall": "quillvine_barb" },
+		"team": ["sunleaf_totem"],
+		"skins": { "mycothrall": "mycothrall_emberspore" },
+		"squad": ["mycothrall"],
+	})
+
+	var rec := _make_recorder()
+	var card: Dictionary = rec.participant_loadout(1, null)
+
+	assert_eq(card["equipped"], { "mycothrall": "quillvine_barb" }, "the peer's worn item, keyed")
+	assert_eq(Array(card["team"]), ["sunleaf_totem"], "its team slot")
+	assert_eq(card["skins"], { "mycothrall": "mycothrall_emberspore" }, "and its skin")
+
+
+func test_participant_loadout_reads_our_own_seat_locally_in_a_networked_match() -> void:
+	# Our own units never read a replicated card, even in a networked match -- the local
+	# inventory is authoritative for us (MatchLoadouts.build_local_payload is what we ANNOUNCE).
+	# So a recording made on seat 1 must sample seat 1 from the local stores, not from slot 0's.
+	ItemInventory.grant("heartwood_charm")
+	ItemInventory.equip("vineweave", "heartwood_charm")
+	MatchLoadouts.set_local_slot(1)
+
+	var rec := _make_recorder()
+	assert_eq(rec.participant_loadout(1, null)["equipped"], { "vineweave": "heartwood_charm" },
+		"our own seat is sampled from the local inventory")
+	assert_eq(rec.participant_loadout(0, null)["equipped"], {},
+		"and a slot that announced nothing records an empty card, not ours")
+
+
+func test_participant_loadout_is_empty_for_a_side_that_fields_nothing() -> void:
+	# A solo AI side and a neutral camp are equipped by nobody, so an empty card is the
+	# truthful record. Every field is still present, so no reader needs a has() check.
+	var rec := _make_recorder()
+	var card: Dictionary = rec.participant_loadout(3, null)
+	assert_eq(card["equipped"], {}, "no worn items")
+	assert_eq(Array(card["team"]), [], "no team items")
+	assert_eq(card["skins"], {}, "no skins")
+
+
+func test_a_recorded_loadout_survives_the_container_still_keyed() -> void:
+	# End to end: what the recorder sampled is what a loaded file hands playback -- per
+	# character, not as a flat union that would arm the whole team.
+	ItemInventory.grant("ironbark_sigil")
+	ItemInventory.grant("verdant_banner")
+	ItemInventory.equip("gem_knight", "ironbark_sigil")
+	ItemInventory.set_team_item(0, "verdant_banner")
+	var rec := _make_recorder()
+	var card: Dictionary = rec.participant_loadout(0, null)
+
+	rec.begin({
+		"mode": ReplayLog.MODE_CHALLENGE,
+		"participants": [{
+			"slot": 0, "name": "P1", "is_ai": false, "squad": ["gem_knight"],
+			"equipped": card["equipped"], "team": card["team"], "skins": card["skins"],
+		}],
+	})
+	rec.finalize(ReplayLog.RESULT_VICTORY, 0)
+
+	var loaded: Dictionary = ReplayLog.from_bytes(ReplayLog.to_bytes(rec.get_log()))
+	var p: Dictionary = (loaded["participants"] as Array)[0]
+	assert_eq(p["equipped"], { "gem_knight": "ironbark_sigil" },
+		"the worn item is still keyed to its character after the round trip")
+	assert_eq(p["team"], ["verdant_banner"], "and the team item is still a team item")
 
 
 func test_entries_preserve_commit_order() -> void:

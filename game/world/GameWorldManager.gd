@@ -108,6 +108,16 @@ var _restore_snapshot: Dictionary = {}
 ## array (index N in the file is index N here). Empty outside a restore.
 var _restored_units: Array = []
 
+## The REPLAY this battle is playing back, consumed in _maybe_begin_replay_playback and then
+## replayed in stages across setup (see that method for the four phases -- deliberately the
+## same shape as the snapshot restore above, because it is the same problem: a battle whose
+## initial state comes from a file instead of from the menus). Empty for an ordinary battle,
+## which is every code path below's "do nothing" case.
+var _replay_log: Dictionary = {}
+## A custom map materialised from the replay header's embedded payload, or null when the
+## header names an ordinary map path. Consumed by _load_selected_map.
+var _replay_map: MapResource = null
+
 func _ready() -> void:
 	# Discoverable by decoupled systems that need to spawn units mid-battle without a
 	# hard reference (e.g. SummonEffect reaches summon_unit() via this group).
@@ -162,9 +172,15 @@ func _ready() -> void:
 	# unit fires an ultimate. Safe to add now -- it stays idle until GameEvents.ultimate_casting.
 	_setup_ultimate_cutin()
 
+	# REPLAY PLAYBACK, phase 1: is this battle a recording being watched? Runs BEFORE the
+	# recorder mount (which it switches off) and before the map load (whose spawn/loadout
+	# path it redirects at the recorded participants). A no-op for every ordinary battle.
+	_maybe_begin_replay_playback()
+
 	# Battle REPLAY recorder: a headless listener that logs every committed command. Mounted
 	# BEFORE the map/players load so it is subscribed in time for the very first turn (it
-	# latches its header on the first turn_started, once the roster exists).
+	# latches its header on the first turn_started, once the roster exists). Skipped during
+	# playback -- ReplayRecorder.recording_enabled is off, so a replay cannot record itself.
 	_setup_replay_recorder()
 
 	# Load the selected map or default map
@@ -253,6 +269,14 @@ func _load_selected_map() -> void:
 	# Clear existing map content but keep the Map node structure
 	_clear_existing_map_content(map_node)
 	
+	# REPLAY PLAYBACK, phase 2a: a replay of a CUSTOM map carries the map WITH it (the header's
+	# embedded payload), because the viewer's machine has no res:// identity that could resolve
+	# it. It was materialised through the hardened importer at staging, so hand the resource
+	# straight to the ordinary loader -- same load path, different source.
+	if _replay_map != null:
+		map_loader.load_map(_replay_map, map_node)
+		return
+
 	# Load the new map
 	var success = map_loader.load_map_from_file(selected_map, map_node)
 	if not success:
@@ -318,6 +342,12 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# NetSession. This is what lets resolved commands drive the ONE mutation point on
 	# every peer. Rebuilt each map load so no stale applier outlives its board.
 	_setup_command_seam()
+
+	# REPLAY PLAYBACK, phase 2b: the seam just negotiated a FRESH solo match seed. Overwrite it
+	# with the RECORDED one, so anything deriving a roll from the match stream rolls what it
+	# rolled when the battle was played. (Every recorded command also carries its own stamped
+	# rng_seed, which the applier prefers -- this is the belt to those braces.)
+	_apply_replay_match_seed()
 
 	# Compile THIS map's authored win conditions into a live rule set. This is what
 	# makes objectives per-map: a boss map ends on the boss's death, a skirmish on a
@@ -491,6 +521,112 @@ func _setup_replay_recorder() -> void:
 	var recorder := ReplayRecorder.new()
 	recorder.name = "ReplayRecorder"
 	add_child(recorder)
+
+
+# --- Replay playback ---------------------------------------------------------
+#
+# WATCHING a replay boots the SAME battle scene as playing one. There is no "replay mode"
+# inside gameplay: the map, the board, the players, the turn system, the HUD and the command
+# seam are all built by the code above, unchanged, and the only differences are the four
+# staged here -- where the setup comes from (the recorded header), who may issue commands
+# (nobody), whether the AI acts (no) and whether this battle is itself recorded (no).
+#
+# The phases mirror the snapshot restore's, and for the same reason -- each one needs a
+# different part of the battle to already exist:
+#   * phase 1 -- _maybe_begin_replay_playback, before the recorder and the map load
+#   * phase 2 -- the map (2a, custom-map payload) and the match seed (2b, after the seam)
+#   * phase 3 -- _finish_replay_boot, after _start_game: the roster, the AI gate, the driver
+#
+# A no-op unless a replay was staged by ReplayPlayback.launch().
+
+func _is_replaying() -> bool:
+	return not _replay_log.is_empty()
+
+
+func _maybe_begin_replay_playback() -> void:
+	"""REPLAY PLAYBACK, phase 1 -- the one entry point for booting a battle from a log.
+
+	Consumes the staged replay (single-use, exactly like a staged resume), arms spectator mode
+	(which switches RECORDING off before the recorder would have mounted), and points the map
+	loader's peer-identity context at [constant ReplayPlayback.SPECTATOR_SLOT]. That last line
+	is what makes every recorded side field its OWN squad, items and skins: it is the same
+	injection a networked client uses, and since no participant occupies the spectator slot,
+	NO slot is treated as 'mine' and each one is rebuilt from its recorded card."""
+	_replay_log = {}
+	_replay_map = null
+	if not ReplayPlayback.has_pending():
+		# A launch that never reached a battle (a scene change that failed, a menu that backed
+		# out) must not leave spectator mode armed for an ORDINARY battle. Idempotent no-op in
+		# the overwhelmingly common case where nothing was ever staged.
+		ReplayPlayback.end_playback()
+		return
+
+	_replay_log = ReplayPlayback.take_pending()
+	_replay_map = ReplayPlayback.take_pending_map()
+	ReplayPlayback.begin_playback()
+
+	if map_loader != null:
+		map_loader.net_context_override = {
+			"networked": true,
+			"local_slot": ReplayPlayback.SPECTATOR_SLOT,
+		}
+
+
+func _apply_replay_match_seed() -> void:
+	"""REPLAY PLAYBACK, phase 2b: put the RECORDED match seed back (see the call site)."""
+	if not _is_replaying():
+		return
+	if typeof(NetSession) != TYPE_OBJECT or NetSession == null or NetSession.match_rng == null:
+		return
+	var rng: Dictionary = _replay_log.get("rng", {})
+	NetSession.match_rng.match_seed = int(rng.get("match_seed", 0))
+
+
+func _finish_replay_boot() -> void:
+	"""REPLAY PLAYBACK, phase 3. Split from phase 1 because all three steps need the roster and
+	the turn system to be LIVE, which only happens inside _start_game."""
+	if not _is_replaying():
+		return
+	_apply_replay_participants()
+	# Belt to _ensure_bot_driver's braces: a driver mounted by any other path (an arena round,
+	# a scene that shipped one) is freed here, because every AI action is already IN the log
+	# and a live driver would take it a second time.
+	ReplayPlayback.disable_ai_drivers(get_tree().current_scene if get_tree() != null else null)
+	_mount_replay_driver()
+
+
+func _apply_replay_participants() -> void:
+	"""Stamp each recorded participant's NAME and AI flag onto the live roster, so the turn
+	banner, the queue and the end screen say what they said in the recorded battle. The squads,
+	items and skins are not applied here -- those rode the spawn path in phase 1."""
+	if typeof(PlayerManager) != TYPE_OBJECT or PlayerManager == null:
+		return
+	for entry in (_replay_log.get("participants", []) as Array):
+		if not (entry is Dictionary):
+			continue
+		var participant: Dictionary = entry
+		var slot: int = int(participant.get("slot", -1))
+		for player in PlayerManager.players:
+			if player == null or int(player.player_id) != slot:
+				continue
+			if "is_ai" in player:
+				player.is_ai = bool(participant.get("is_ai", false))
+			var recorded_name: String = String(participant.get("name", "")).strip_edges()
+			if not recorded_name.is_empty() and "player_name" in player:
+				player.player_name = recorded_name
+
+
+func _mount_replay_driver() -> void:
+	"""Mount the [ReplayDriver] and start it. Added as a child of THIS node (like the recorder)
+	so it is torn down with the battle -- which is what disarms spectator mode and switches
+	recording back on, whichever way the player leaves."""
+	if get_node_or_null("ReplayDriver") != null:
+		return
+	var driver := ReplayDriver.new()
+	driver.name = "ReplayDriver"
+	add_child(driver)
+	driver.setup(_replay_log)
+	driver.play()
 
 
 func _setup_ultimate_cutin() -> void:
@@ -967,6 +1103,11 @@ func _setup_local_game() -> void:
 	# activates the turn system.
 	_finish_battle_restore()
 
+	# REPLAY PLAYBACK, phase 3: the roster and the turn system are live, so stamp the recorded
+	# participants onto them, make sure no AI driver is running, and mount the driver that
+	# steps the log. A no-op for every ordinary battle.
+	_finish_replay_boot()
+
 func _setup_players() -> void:
 	"""Set up players and assign units"""
 	# Ensure we have the right number of players
@@ -1000,6 +1141,10 @@ func _mount_arena_run_hud() -> void:
 
 func _ensure_bot_driver() -> void:
 	"""Add the bot turn driver to the scene if not already present"""
+	# REPLAY PLAYBACK: never. The AI's every action is already in the log and is applied from
+	# there; a live driver would plan and act a SECOND time on top of the replayed one.
+	if ReplayPlayback.is_playing():
+		return
 	var scene_root = get_tree().current_scene
 	if not scene_root or scene_root.get_node_or_null("BotTurnDriver"):
 		return

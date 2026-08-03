@@ -47,10 +47,12 @@ same fact and a rounding to argue about; the counters are the fact.
 | --- | --- | --- |
 | `GET` | `/v1/items?sort=recommended\|top\|new\|daily&type=map\|challenge\|all&page=N&q=needle` | List item summaries. `page` is 0-based; empty array = end. `q` is optional (see *Search*). Retired items are **never** listed. |
 | `GET` | `/v1/items/{id}` | Full payload for one item (the map or challenge JSON). Works for **retired** items too — a friend with the code can always play the base. |
-| `POST` | `/v1/items` | Upload. Body `{type, name, author, payload, checksum}`; server **re-validates** and re-computes the checksum, ignoring the client's. Stamps `owner` from the device header. Returns the created summary. |
+| `POST` | `/v1/items` | Upload. Body is the **bare authored payload** — a challenge dict (`format_version`/`map`/`rules`, what the client actually POSTs) or a map dict (`dimensions`/`layout`); a `{payload: …}` envelope is also accepted. The server derives type/name/author from the payload, **re-validates**, and re-computes the checksum, ignoring the client's. Stamps `owner` from the device header. Returns the created summary. |
 | `POST` | `/v1/items/{id}/vote` | Body `{dir: 1 \| -1 \| 0}`. **Idempotent per device**: re-sending the same dir is a no-op; `0` clears this device's vote. Returns the item's new `votes`. |
 | `GET` | `/v1/daily` | `{id}` of the server's daily featured pick (active items only). |
-| `POST` | `/v1/items/{id}/attempts` | Record one play. Body `{cleared, score, turns}`. **Not** idempotent — see *Attempt ledger*. Returns `{id, attempts, clears, outcome}`. |
+| `POST` | `/v1/items/{id}/attempts` | Record one play. Body `{cleared, score, turns}`, optionally `+ replay_b64` — see *Attempt ledger* and *Attached replays*. **Not** idempotent. Returns `{id, attempts, clears, outcome, attempt_id, has_replay}`. |
+| `GET` | `/v1/items/{id}/attempts?page=N` | **Owner only.** One page of the per-attempt ledger, newest first. Returns `{entries: [...], has_more: bool}`. |
+| `GET` | `/v1/attempts/{attempt_id}/replay` | **Owner of the base only.** The replay attached to one attempt. Returns `{replay_b64: "…"}`. |
 | `GET` | `/v1/me/bases` | The calling device's own uploaded challenges, **active and retired**, with their counters. Array of summaries, newest first. |
 | `POST` | `/v1/items/{id}/active` | Body `{active: bool}`. Publish or retire an owned base. Returns `{id, active}`. |
 
@@ -128,6 +130,68 @@ the checksum). The challenge-completion flow reads that field off the challenge 
 finished and calls `CommunityClient.report_attempt(community_id, …)`. A locally authored
 challenge has no `community_id` and simply reports nothing. Bare maps are not stamped —
 nothing "attempts" a map.
+
+### Per-attempt ledger (`GET /v1/items/{id}/attempts?page=N`)
+
+The counters say *how* a base performs; this says *what happened*. One entry per recorded
+attempt, **newest first**, `PAGE_SIZE` (20) per 0-based page:
+
+```json
+{ "entries": [
+    { "attempt_id": "9f2c…", "cleared": false, "score": 0, "turns": 7,
+      "at": "2026-08-02T14:03:11", "has_replay": true }
+  ],
+  "has_more": true }
+```
+
+`at` is an ISO-ish stamp the store adds when the attempt lands. `has_replay` tells the UI
+whether `GET /v1/attempts/{attempt_id}/replay` will answer.
+
+**Owner only.** An attempt log is the defender's private record of who attacked their base:
+someone else's item → `not_owner` (`403`), an unknown id → `not_found` (`404`). Unowned
+(seeded/builtin) content belongs to nobody, so nobody may read its log.
+
+Retention: a base keeps its newest **200** ledger entries. Older entries fall off the tail;
+the `attempts` / `clears` counters are unaffected — they are the totals, the ledger is the
+recent history.
+
+## Attached replays
+
+An attempt may carry the **attacker's recorded command log** so the defending author can
+watch how their base was played (see `systems/replay/README.md` for what a replay is — a
+command log on lockstep determinism, not video). It rides as a fourth key in the attempt
+body:
+
+```json
+{ "cleared": false, "score": 0, "turns": 7, "replay_b64": "Q1FSUAEA…" }
+```
+
+`replay_b64` is base64 of the **CQRP container** (`ReplayLog.encode_container`). It is an
+**attachment, never payload** — every gate below **drops the blob and still counts the
+attempt**, because losing a ledger entry is worse than losing a replay:
+
+| Gate | Rule |
+| --- | --- |
+| Shape | a base64 string, at most `((512 KiB + 2) / 3) * 4` characters — checked *before* decoding, so an absurd paste is never expanded. |
+| Size | decodes to 1..**512 KiB**. A real battle's container is a few KB gzipped. |
+| Content | `ReplayLog.decode_container` accepts it — magic, container version, SHA-256 verified *before* inflation, then the full whitelisting `validate`. |
+
+Applied on **both** sides: the client will not upload a blob that would be dropped, and the
+server re-checks (a client is never a validator). The stored text is byte-identical to what
+the attacker's machine encoded, so `GET /v1/attempts/{attempt_id}/replay` round-trips exactly.
+
+Retention: a base keeps the **newest 50** replay blobs. Beyond that the oldest blobs are
+deleted and their ledger entries flip to `has_replay: false` — the log stays honest about
+what is actually watchable, and a popular base cannot grow an unbounded archive.
+
+`GET /v1/attempts/{attempt_id}/replay` is gated on ownership of the **base the attempt was
+played against**: `not_owner` (`403`) for anyone else, `not_found` (`404`) for an unknown
+attempt, one that carried no blob, and one whose blob has aged out.
+
+**Where the blob comes from:** `ChallengeController._report_attempt` finds the battle's live
+`ReplayRecorder` through its group, encodes `get_log()` and attaches the result. No recorder,
+an empty log, or an oversized container simply reports the attempt without a replay — the
+attach path can never block, delay or fail a report.
 
 ## Active bases (max 3)
 

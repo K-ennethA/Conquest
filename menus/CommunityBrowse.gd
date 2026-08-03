@@ -26,6 +26,10 @@ class_name CommunityBrowse
 
 const CHALLENGE_BROWSE_SCENE := "res://menus/ChallengeBrowse.tscn"
 const MY_BASES_SCENE := "res://menus/MyBases.tscn"
+## This device's own battle recordings. Sits beside My Bases in the footer because it is the
+## same "your stuff" half of the loop; guarded by [method ResourceLoader.exists] like every
+## other cross-screen hop here.
+const MY_REPLAYS_SCENE := "res://menus/MyReplays.tscn"
 
 ## Mirrors [code]CommunityProvider.SORT_RECOMMENDED[/code] (byte-identical string). Held here
 ## rather than referenced so this screen still PARSES in a tree where the client-side constant
@@ -193,6 +197,20 @@ func _build_ui() -> void:
 		if bases_available else "The base screen is not available in this build."
 	bases.pressed.connect(_on_my_bases_pressed)
 	actions.add_child(bases)
+
+	# Footer width check: Back 200 + My Bases 200 + My Replays 200, plus 2 gaps * 18
+	# separation = 636, against this page's 820 floor -- the row still fits without any of
+	# the three being squeezed below its explicit minimum. The row's HEIGHT is unchanged, so
+	# the vertical budget above is untouched.
+	var replays := Button.new()
+	replays.text = "My Replays"
+	replays.custom_minimum_size = Vector2(200.0, 48.0)
+	var replays_available: bool = ResourceLoader.exists(MY_REPLAYS_SCENE)
+	replays.disabled = not replays_available
+	replays.tooltip_text = "Battles this device recorded." if replays_available \
+		else "The replay screen is not available in this build."
+	replays.pressed.connect(_on_my_replays_pressed)
+	actions.add_child(replays)
 
 	var hint := Label.new()
 	hint.text = "Search  •  Recommended / Top / New / Daily  •  vote and Download  •  ESC back"
@@ -768,6 +786,14 @@ func _on_my_bases_pressed() -> void:
 		_set_status("The base screen is not available in this build.")
 		return
 	get_tree().change_scene_to_file(MY_BASES_SCENE)
+
+
+## Open this device's own recordings. Same guard as the My Bases hop above.
+func _on_my_replays_pressed() -> void:
+	if not ResourceLoader.exists(MY_REPLAYS_SCENE):
+		_set_status("The replay screen is not available in this build.")
+		return
+	get_tree().change_scene_to_file(MY_REPLAYS_SCENE)
 
 
 func _input(event: InputEvent) -> void:

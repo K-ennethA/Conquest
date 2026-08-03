@@ -12,8 +12,10 @@ python server.py --port 8787
 
 Options: `--host` (default `127.0.0.1`), `--port` (default `8787`), `--data-dir`
 (default `./data`). Storage is flat JSON files under the data dir — `items.json` is the
-index, `payloads/<id>.json` is each map/challenge body. Requires Python 3.7+; no `pip
-install` needed (standard library only).
+index, `payloads/<id>.json` is each map/challenge body, `attempts/<id>.json` is a base's
+attempt ledger (newest first, newest 200 kept) and `replays/<attempt_id>.json` is one
+attached replay blob (newest 50 kept per base). Requires Python 3.7+; no `pip install`
+needed (standard library only).
 
 ## Point the game at it
 
@@ -39,7 +41,9 @@ Implements the whole `/v1/` contract. See `docs/COMMUNITY_API.md` for the shapes
 | `POST` | `/v1/items` | Upload. `owner` is stamped from the device header; a 4th challenge lands `active: false` rather than being refused. `409` on a duplicate id. |
 | `POST` | `/v1/items/{id}/vote` | `{dir: 1\|-1\|0}`, idempotent per `X-Community-Device`. |
 | `GET` | `/v1/daily` | `{id}` of today's pick (active items only). |
-| `POST` | `/v1/items/{id}/attempts` | `{cleared, score, turns}`, re-sanitised server-side. **Not** idempotent — every play counts. `404 {"error":"not_found"}`. |
+| `POST` | `/v1/items/{id}/attempts` | `{cleared, score, turns}` (+ optional `replay_b64`), re-sanitised server-side. **Not** idempotent — every play counts. Returns `attempt_id` + `has_replay`. `404 {"error":"not_found"}`. |
+| `GET` | `/v1/items/{id}/attempts?page=N` | **Owner only** ledger page, newest first: `{entries, has_more}`. `403 not_owner`, `404 not_found`. |
+| `GET` | `/v1/attempts/{attempt_id}/replay` | **Owner of the base only**: `{replay_b64}`. `404` when the attempt carried no blob or it aged out. |
 | `GET` | `/v1/me/bases` | The calling device's own challenges, active *and* retired, newest first. |
 | `POST` | `/v1/items/{id}/active` | `{active: bool}`. `403 not_owner`, `409 base_limit` past 3 active; retiring always succeeds. |
 

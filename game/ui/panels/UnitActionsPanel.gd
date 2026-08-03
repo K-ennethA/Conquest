@@ -694,6 +694,13 @@ func _player_is_human(player: Player) -> bool:
 	AI's turn the AI IS the current player, so ownership alone is not enough."""
 	if player == null:
 		return false
+	# REPLAY PLAYBACK: the viewer is a SPECTATOR. Every command in a replay comes from the log
+	# (through the CommandApplier, exactly as a networked one does), so nobody on the board is
+	# locally controllable -- and this predicate is the ONE gate that covers both command paths
+	# (_human_may_command ends in it, and End Player Turn calls it directly). Selection, the
+	# cursor, the inspection panels and the camera are untouched: watching is still watching.
+	if ReplayPlayback.is_playing():
+		return false
 	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
 		var local_id_raw = GameModeManager.get_local_player_id() if GameModeManager else -1
 		var local_id = int(local_id_raw) if local_id_raw is String else local_id_raw

@@ -31,10 +31,13 @@ class_name ReplayLog
 ##     "payload": { }                    # embedded map dict for a custom/challenge map
 ##                                       # (empty for a res:// map -- the path IS the identity)
 ##   },
-##   "participants": [                   # one per player slot, ascending
+##   "participants": [                   # one per player slot, ascending. The three loadout
+##                                       # fields are EXACTLY the MatchLoadouts card shape, so
+##                                       # playback can republish them verbatim (see below).
 ##     { "slot": 0, "name": "Player 1", "is_ai": false,
-##       "squad": ["vineweave"],         # character ids, pick order
-##       "items":  ["ironband"],         # item ids in force
+##       "squad": ["vineweave"],                 # character ids, pick order
+##       "equipped": { "vineweave": "ironband" },# UNIT-scope item, per character
+##       "team": ["verdant_banner"],             # TEAM-scope items (the shared slots)
 ##       "skins":  { "vineweave": "ashen" } }
 ##   ],
 ##   "rng":  { "match_seed": 123456789 },  # MatchRng.match_seed for the battle
@@ -472,13 +475,21 @@ static func matches_this_build(log: Dictionary) -> bool:
 	return String(log.get("game_version", "")) == NetProtocol.local_game_version()
 
 
-# --- Byte codec (the on-disk container) --------------------------------------
+# --- Byte codec (the CQRP container) -----------------------------------------
+#
+# ONE container, three consumers: the file helpers below, the playback loader, and the
+# transport that attaches a replay to a challenge attempt report (where the bytes travel in a
+# payload and never touch a file at all). [method encode_container] / [method decode_container]
+# are the names those consumers code against; [method to_bytes] / [method from_bytes] are the
+# original aliases, kept because they read better at the file seam and because nothing should
+# have to be renamed to keep working. All four are the SAME bytes -- there is one
+# implementation and no second format.
 
-## Serialise to the on-disk container: JSON -> UTF-8 -> gzip, wrapped in
+## Serialise to the CQRP container: JSON -> UTF-8 -> gzip, wrapped in
 ## [code]magic | container_version | uncompressed_size | sha256(payload)[/code]. The digest
-## is what lets [method from_bytes] refuse a tampered file WITHOUT handing it to the
+## is what lets [method decode_container] refuse a tampered payload WITHOUT handing it to the
 ## decompressor (whose failure path is an uncatchable engine error).
-static func to_bytes(log: Dictionary) -> PackedByteArray:
+static func encode_container(log: Dictionary) -> PackedByteArray:
 	var raw: PackedByteArray = to_json(log).to_utf8_buffer()
 	var payload: PackedByteArray = raw.compress(FileAccess.COMPRESSION_GZIP)
 	var head: PackedByteArray = PackedByteArray()
@@ -495,8 +506,9 @@ static func to_bytes(log: Dictionary) -> PackedByteArray:
 
 ## The inverse: container bytes -> a VALIDATED replay log, or {} for anything that is not
 ## one. Quiet on every rejection path (bad magic, wrong container version, oversized,
-## digest mismatch, short read, non-JSON, failed validation).
-static func from_bytes(bytes: PackedByteArray) -> Dictionary:
+## digest mismatch, short read, non-JSON, failed validation) -- an empty Dictionary is the
+## ONE failure answer, and nothing reaches the engine log (convention #1).
+static func decode_container(bytes: PackedByteArray) -> Dictionary:
 	if bytes.size() <= CONTAINER_HEADER_SIZE:
 		return {}
 	for i in 4:
@@ -519,6 +531,16 @@ static func from_bytes(bytes: PackedByteArray) -> Dictionary:
 	if raw.size() != original_size:
 		return {}
 	return validate(parse_text(raw.get_string_from_utf8()))
+
+
+## Alias of [method encode_container], the name the file helpers read best with.
+static func to_bytes(log: Dictionary) -> PackedByteArray:
+	return encode_container(log)
+
+
+## Alias of [method decode_container].
+static func from_bytes(bytes: PackedByteArray) -> Dictionary:
+	return decode_container(bytes)
 
 
 # --- Files -------------------------------------------------------------------
@@ -550,7 +572,7 @@ static func save_to_file(log: Dictionary, filename: String = "") -> String:
 		name += FILE_EXTENSION
 	if not _ensure_dir():
 		return ""
-	var bytes: PackedByteArray = to_bytes(log)
+	var bytes: PackedByteArray = encode_container(log)
 	if bytes.is_empty() or bytes.size() > MAX_FILE_BYTES:
 		return ""
 	var path: String = _replay_dir.path_join(name)
@@ -576,7 +598,7 @@ static func load_from_file(path: String) -> Dictionary:
 		return {}
 	var bytes: PackedByteArray = file.get_buffer(length)
 	file.close()
-	return from_bytes(bytes)
+	return decode_container(bytes)
 
 
 ## Every replay on disk, newest filename last, as
@@ -649,6 +671,21 @@ static func _clean_map(value: Variant) -> Dictionary:
 	}
 
 
+## One participant per player slot, normalised.
+##
+## THE LOADOUT FIELDS ARE THE [MatchLoadouts] CARD SHAPE -- [code]equipped[/code] keyed by
+## character id, [code]team[/code] as the shared TEAM slots, [code]skins[/code] keyed by
+## character id -- because that is precisely what [method ReplayPlayback._stage_loadouts]
+## republishes for each recorded side and what the spawn path then reads back through
+## [method MatchLoadouts.items_for] / [method MatchLoadouts.skin_for]. A flat per-slot item
+## list could only be re-applied as that slot's TEAM loadout, which would hand one character's
+## worn item to its team-mates and trip the per-turn checksum as a divergence.
+##
+## The cleaning here is STRUCTURAL and content-free (types, lengths, counts) -- it is the same
+## floor [method MatchLoadouts.normalise] enforces on the wire, minus the library whitelist,
+## which [method MatchLoadouts.set_peer_loadout] applies at staging time. So an id that no
+## longer resolves survives the file and is dropped when it is fielded, exactly as a peer's
+## would be.
 static func _clean_participants(value: Variant) -> Array:
 	var out: Array = []
 	if not (value is Array):
@@ -664,23 +701,27 @@ static func _clean_participants(value: Variant) -> Array:
 			"name": _clip(String(p.get("name", "")), MAX_STRING),
 			"is_ai": bool(p.get("is_ai", false)),
 			"squad": _clean_id_list(p.get("squad", [])),
-			"items": _clean_id_list(p.get("items", [])),
+			"equipped": _clean_id_map(p.get("equipped", {})),
+			# Capped at the number of shared slots the inventory actually has, the same ceiling
+			# MatchLoadouts.normalise uses -- a file claiming twenty team items must not even
+			# reach the holder with them.
+			"team": _clean_id_list(p.get("team", []), ItemInventory.TEAM_SLOTS),
 			"skins": _clean_id_map(p.get("skins", {})),
 		})
 	return out
 
 
-## A plain [Array] of clipped id Strings. Deliberately NOT typed [code]Array[String][/code]:
-## a JSON-parsed plain Array cannot be assigned to a typed one (project convention #3), and
-## this value goes straight back into JSON.
-static func _clean_id_list(value: Variant) -> Array:
+## A plain [Array] of clipped id Strings, at most [param limit] of them. Deliberately NOT typed
+## [code]Array[String][/code]: a JSON-parsed plain Array cannot be assigned to a typed one
+## (project convention #3), and this value goes straight back into JSON.
+static func _clean_id_list(value: Variant, limit: int = MAX_LIST) -> Array:
 	var out: Array = []
 	if not (value is Array):
 		return out
 	for item in (value as Array):
-		if out.size() >= MAX_LIST:
+		if out.size() >= limit:
 			break
-		var id: String = _clip(String(item), MAX_STRING).strip_edges()
+		var id: String = _clean_id(item)
 		if not id.is_empty():
 			out.append(id)
 	return out
@@ -693,11 +734,23 @@ static func _clean_id_map(value: Variant) -> Dictionary:
 	for key in (value as Dictionary).keys():
 		if out.size() >= MAX_LIST:
 			break
-		var k: String = _clip(String(key), MAX_STRING).strip_edges()
-		var v: String = _clip(String((value as Dictionary)[key]), MAX_STRING).strip_edges()
-		if not k.is_empty() and not v.is_empty():
+		var k: String = _clean_id(key)
+		var v: String = _clean_id((value as Dictionary)[key])
+		if not k.is_empty() and not v.is_empty() and not out.has(k):
 			out[k] = v
 	return out
+
+
+## An untrusted key/value as a usable id String: STRINGS ONLY (a number, a Dictionary or an
+## Array where an id belongs is nonsense, not something to stringify into a fabricated id --
+## the same rule [method MatchLoadouts._clean_id] applies at the wire boundary), trimmed and
+## length-capped. "" means "reject".
+static func _clean_id(value: Variant) -> String:
+	match typeof(value):
+		TYPE_STRING, TYPE_STRING_NAME:
+			return _clip(String(value), MAX_STRING).strip_edges()
+		_:
+			return ""
 
 
 static func _mode_or_default(value: Variant) -> String:

@@ -170,6 +170,11 @@ func test_an_arena_round_can_never_be_saved() -> void:
 		"an Arena round's real state lives in the run, not on the board")
 
 
+func test_a_replay_playback_can_never_be_saved() -> void:
+	assert_false(SAVE_MANAGER.gate(true, false, false, true, true, true, true),
+		"a replay-boot battle is a spectated re-simulation, not the player's progress")
+
+
 func test_versus_and_pre_battle_states_are_excluded() -> void:
 	assert_false(SAVE_MANAGER.gate(false, false, false, true, true, true),
 		"a hot-seat / versus match has no single owner to hand the battle back to")

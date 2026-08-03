@@ -54,6 +54,9 @@ var net_toast: NetToast = null
 # Speed First per-unit move clock chip, mounted next to the TurnQueue. Self-shows only
 # while a HUMAN unit's clock is armed (see TurnTimer / SpeedFirstTurnSystem).
 var turn_timer: TurnTimer = null
+# Replay transport bar (play/pause, speed, step, turn counter, exit). Its own CanvasLayer,
+# mounted in every battle and self-hidden unless a replay is being watched -- see ReplayHUD.
+var replay_hud: ReplayHUD = null
 
 func _ready() -> void:
 	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
@@ -103,6 +106,10 @@ func _ready() -> void:
 	# Speed First move-clock chip, next to the TurnQueue in the top-centre column.
 	# Self-styled, so mounted AFTER theming to keep its explicit font size / colours.
 	_build_turn_timer()
+
+	# Replay transport bar. Self-styled CanvasLayer like the toast above, and self-hidden
+	# unless a replay is being watched, so a normal battle never sees it.
+	_build_replay_hud()
 
 	# The pause menu overlay. Mounted AFTER theming like the other self-styled
 	# CanvasLayers -- it carries the DARK MenuTheme on purpose and must not be swept
@@ -179,6 +186,17 @@ func _build_turn_timer() -> void:
 		center_top_container.add_child(turn_timer)
 	else:
 		add_child(turn_timer)
+
+func _build_replay_hud() -> void:
+	"""Create and mount the replay transport bar.
+
+	Exactly the NetToast deal: this only owns WHERE it lives. The bar hides itself unless
+	ReplayPlayback.is_playing(), and it finds the ReplayDriver (mounted later, by the battle
+	boot) from its own _ready -- so a normal battle mounts one hidden CanvasLayer and nothing
+	else happens."""
+	replay_hud = ReplayHUD.new()
+	replay_hud.name = "ReplayHUD"
+	add_child(replay_hud)
 
 func _apply_theme() -> void:
 	"""Apply the amber ConquestTheme to this HUD subtree (panels, buttons, text)."""

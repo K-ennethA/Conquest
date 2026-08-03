@@ -10,14 +10,16 @@ a `MatchRng` stream derived from the match seed, so the complete record of a bat
 Re-issuing those commands from that setup reproduces the battle exactly. A 200-command battle
 is a few kilobytes gzipped.
 
-This directory is the **recording core**. Playback, the viewer UI, and the
-attach-a-replay-to-a-challenge-attempt transport are separate waves; see *Seams for playback*
-at the bottom for what they get to build on.
+This directory is the **format, the recorder and the player**. The replay-picker screen and
+the attach-a-replay-to-a-challenge-attempt transport are separate waves; see *Seams* at the
+bottom for what they build on.
 
 | File | What it is |
 |---|---|
 | `ReplayLog.gd` | The format and its codec. Pure statics, no scene, no autoload mutation — the whole contract is unit-testable headless. **Nothing else may define the shape.** |
 | `ReplayRecorder.gd` | The per-battle `Node` that listens and writes. Mounted by `GameWorldManager._setup_replay_recorder`. |
+| `ReplayPlayback.gd` | The hand-off: `launch(log)` validates, stages and changes to the battle scene. Pure statics (the [BattleSaveManager] resume-staging shape), because static state is what survives the scene change. |
+| `ReplayDriver.gd` | The per-replay `Node` that steps the log back through `CommandApplier`, paces it, and stops on divergence. Mounted by `GameWorldManager._mount_replay_driver`. |
 
 ---
 
@@ -42,8 +44,9 @@ at the bottom for what they get to build on.
   },
   "participants": [             // one per player slot, ascending
     { "slot": 0, "name": "Player 1", "is_ai": false,
-      "squad": ["vineweave"],           // character ids, pick order
-      "items":  ["ironband"],           // item ids in force
+      "squad": ["vineweave"],                  // character ids, pick order
+      "equipped": { "vineweave": "ironband" }, // UNIT-scope item, per character
+      "team": ["verdant_banner"],              // TEAM-scope items (the shared slots)
       "skins":  { "vineweave": "ashen" } }
   ],
   "rng":  { "match_seed": 123456789 },  // MatchRng.match_seed for the battle
@@ -64,6 +67,30 @@ at the bottom for what they get to build on.
 `result` is one of `""` (never finished — the player quit mid-match), `victory`, `defeat`,
 `draw`, read from the local player's point of view. `winner_slot` is the authoritative
 payload; in versus/hotseat "victory" just means *a human* won and the slot says which.
+
+### The participant loadout *is* a `MatchLoadouts` card
+
+`equipped` / `team` / `skins` are deliberately the **exact** three fields
+`systems/net/MatchLoadouts.gd` puts on the wire and applies at spawn — not a replay-specific
+spelling of them. Playback republishes them verbatim (`ReplayPlayback._stage_loadouts`) and the
+spawn path reads them back through the same `MatchLoadouts.items_for` /
+`MatchLoadouts.skin_for` calls that answered while the battle was being recorded, so a worn
+UNIT item stays on the one character who wore it.
+
+`ReplayRecorder.participant_loadout(slot, profile)` samples each slot from **whatever the spawn
+path would read**, which is what makes recording and application unable to disagree:
+
+| Slot | Sampled from |
+|---|---|
+| the local one — our seat in a networked match, else slot 0 | `MatchLoadouts.build_local_payload(profile)` — the local `ItemInventory` + `PlayerProfile`, the identical sampler the lobby announces with |
+| any slot that announced a card | `MatchLoadouts.get_peer_loadout(slot)`, verbatim |
+| anything else (a solo AI side, a neutral camp) | an empty card — which is what `ItemSystem` gives it |
+
+`ReplayLog.validate` cleans these **structurally** (strings only — a number where an id belongs
+is dropped, never stringified into a fabricated id; lengths clipped; `team` capped at
+`ItemInventory.TEAM_SLOTS`; each map capped at `MAX_LIST`). The **library** whitelist is
+`MatchLoadouts.set_peer_loadout`'s, applied at staging: a replay's cards are no more trusted
+than a peer's, so an id that no longer resolves is dropped when it is fielded.
 
 ### Commands
 
@@ -99,6 +126,14 @@ Recipe, and every part of it is load-bearing:
 It is deliberately **cheap** — ids, cells and HP only. It is a divergence *tripwire*, not a
 state capture. `CommandApplier.hash_match_state` (statuses + cooldowns) is the richer desync
 detector the live net layer uses.
+
+### The container
+
+`ReplayLog.encode_container(log)` / `decode_container(bytes)` — one CQRP codec with three
+consumers: the file helpers, playback, and the attach-to-attempt transport (whose bytes travel
+in a payload and never touch a file). `to_bytes` / `from_bytes` are aliases of the same two
+functions, kept because they read better at the file seam. `decode_container` answers `{}` for
+**anything** that is not a replay, silently.
 
 ### On disk
 
@@ -201,9 +236,97 @@ checksumming the moment the enemy acted (project convention #2).
 
 ---
 
-## Seams for playback
+---
 
-Everything the next wave needs already exists and is deliberately *not* used here:
+## Playback
+
+### The whole contract with a replay-picker screen
+
+```gdscript
+var log: Dictionary = ReplayLog.load_from_file(path)   # {} when it is not a replay
+var res: Dictionary = ReplayPlayback.launch(log)
+# { "ok": true }                                  -> the battle scene is loading
+# { "ok": false, "error": "invalid_replay" }      -> ReplayLog.validate refused it
+# { "ok": false, "error": "version_mismatch" }    -> recorded by a different build
+# { "ok": false, "error": "no_scene_tree" }       -> headless; nothing was staged
+```
+
+A refusal changes **nothing** — no scene change, no staged state, no engine log line — so the
+menu shows the error and stays where it is. `ReplayLog.list_replays()` / `delete_replay(path)`
+are the browse half.
+
+### Booting a battle from a header
+
+`GameWorldManager` picks the staged log up in three phases, mirroring the snapshot restore's
+shape because it is the same problem — a battle whose initial state comes from a file:
+
+| Phase | Where | What |
+|---|---|---|
+| 1 | `_maybe_begin_replay_playback`, before the recorder mount and the map load | consume the staged log, arm spectator mode, point `MapLoader.net_context_override` at the spectator slot |
+| 2a | `_load_selected_map` | a custom map travels **with** the replay (the header's embedded payload, imported through `MapResource.import_from_json`); otherwise the header's path is what the ordinary loader reads |
+| 2b | `_on_map_loaded`, after the command seam | overwrite the freshly negotiated solo match seed with `header.rng.match_seed` |
+| 3 | `_finish_replay_boot`, after `_start_game` | stamp the recorded participants onto the roster, free any AI driver, mount the `ReplayDriver` |
+
+**How each side fields its own squad, items and skins.** Staging publishes one
+`MatchLoadouts` card per recorded participant and seats the viewer in
+`ReplayPlayback.SPECTATOR_SLOT` (99 — a slot no participant can hold, since `MAX_PARTICIPANTS`
+is 8). That one fact routes every recorded side through the code path a *networked* match
+uses, so no slot is treated as "mine" and none of them is rebuilt from the viewer's local
+inventory. There is no replay-specific spawn code.
+
+The card's `equipped` / `team` / `skins` go across untouched, because the recorder wrote them
+in that shape to begin with (see *The participant loadout is a `MatchLoadouts` card* above) —
+there is no translation step here to get wrong, and a per-unit item cannot leak onto a
+team-mate and trip the checksum.
+
+### Spectator mode — three switches, all off `ReplayPlayback.is_playing()`
+
+- **Input.** `UnitActionsPanel._player_is_human` returns false. That is the *one* gate:
+  `_human_may_command` ends in it and End Player Turn calls it directly, so the whole command
+  loop closes with a single guarded line. Selection, the cursor, the inspection panels and the
+  camera are untouched — watching is still watching.
+- **AI.** `_ensure_bot_driver` never mounts one, and `ReplayPlayback.disable_ai_drivers` frees
+  any that exists. Every AI action is already *in* the log; a live driver would take it twice.
+- **Recording.** `ReplayRecorder.recording_enabled` goes off in `begin_playback` and is
+  restored in `end_playback`, which runs from the driver's `_exit_tree` — so *any* way of
+  leaving the replay puts it back for the next real battle.
+
+### Pacing
+
+Each command buys a **beat** sized by what it is — cast `0.90s`, move `0.55s`, end-turn
+`0.70s`, wait `0.12s` — and the next one waits it out. Speed (x1 / x2 / x4) multiplies how
+fast a beat is *spent*; it deliberately never touches `Engine.time_scale`, which would also
+speed up the animations, tweens and audio the beat exists to let you watch. Before each beat
+the driver waits for `UnitAnimator`'s busy registry to go quiet (capped, exactly as
+`BotTurnDriver` does), so a command never lands on top of the previous one's flourish.
+
+`ReplayDriver.advance(delta)` is the entire clock and `_process` is a one-line caller, so
+playback is drivable in a test by handing it deltas. `beat_for(type, speed)` is a static pure
+function; `step_one()` applies exactly one command; the applier, the board, the checksum rows
+and the animation gate are all injectable.
+
+### Divergence
+
+At every turn boundary — the **active** turn system's `turn_ended`, the same signal the
+recorder stamped on — the driver recomputes `ReplayLog.state_checksum` over
+`ReplayRecorder.board_state_rows()` and compares it to the recorded hash for that boundary. A
+mismatch **stops playback dead**, names the turn, and banners
+*"Replay diverged — recorded on a different version?"*. It never resumes: a replay that has
+drifted is no longer a recording of anything, and showing it as one is the worst thing this
+system could do. A log with no checksums left (a truncated recording) simply stops being
+checkable — that is a handled outcome, not a divergence.
+
+The transport bar (`game/ui/hud/ReplayHUD.gd`, mounted by `UILayoutManager` exactly as
+`NetToast` is) is play/pause · step · speed · `Turn 4/12` · exit, plus that banner and the
+recorded outcome when the log runs out. It hides itself unless a replay is playing, so a
+normal battle pays one hidden `CanvasLayer`.
+
+---
+
+## Seams
+
+Everything the *recording* core deliberately left for later. Playback has now taken the first
+seven; the rest are still open for the picker screen and the attempt-report transport:
 
 - **`ReplayLog.validate(raw)` / `load_from_file(path)`** — the single gate. Anything they
   return is normalised, capped and vocabulary-checked; anything else is `{}`.
@@ -230,7 +353,18 @@ Everything the next wave needs already exists and is deliberately *not* used her
 
 - `tests/unit/test_replay_log.gd` — codec round-trip, hostile/malformed input, checksum
   determinism / permutation invariance / sensitivity, container tampering, file I/O against an
-  injected directory.
+  injected directory, and the participant loadout's structural whitelist (non-string ids
+  dropped, maps and the team list capped).
 - `tests/integration/test_replay_recorder.gd` — recorder lifecycle: header latch, entry order
   and turn stamping, checksums on the active turn system's `turn_ended`, finalize + outcome,
-  truncation, and normalization of the solo/AI commit statics.
+  truncation, normalization of the solo/AI commit statics, and where
+  `participant_loadout` samples each slot from (local stores, an announced card, or nothing).
+- `tests/unit/test_replay_playback.gd` — the CQRP container (round-trip, broken magic, wrong
+  container version, tampered payload, declared-size bomb) and `launch`'s result shapes:
+  version-mismatch and invalid-log refusals that change no scene and stage nothing, what
+  staging points at (including the loadout card round-tripping into the reads the spawn path
+  makes), and the spectator switches.
+- `tests/integration/test_replay_driver.gd` — the transport against a fake applier (order,
+  pacing, speed, pause/step, animation gate), the divergence stop, the end-of-log outcome, the
+  input/AI gates, the transport bar, and one end-to-end drive of a recorded MOVE through the
+  real `CommandApplier` on a real map.

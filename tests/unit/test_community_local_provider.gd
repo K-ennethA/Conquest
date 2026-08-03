@@ -12,6 +12,10 @@ extends GutTest
 ##  - RECOMMENDED: the fairness peak and the freshness nudge, on crafted fixtures;
 ##  - the ATTEMPT ledger: counts every attempt (no idempotency), validates the outcome,
 ##    and refuses an unknown id;
+##  - ATTACHED REPLAYS: a valid CQRP blob persists and round-trips byte-identically, a
+##    garbage / oversized one is DROPPED while the attempt still counts, the per-attempt log
+##    pages newest-first, both new endpoints are owner-only, and the store keeps only the
+##    newest MAX_STORED_REPLAYS blobs per base;
 ##  - ACTIVE BASES: the 3-active cap, retiring to free a slot, ownership, and the fact that
 ##    a retired base leaves the feeds but stays fetchable by id.
 ##
@@ -121,6 +125,31 @@ func _challenge_payload(challenge_name: String) -> Dictionary:
 	res.set_character_spawn_at_position(Vector2i(5, 5), 1, cid)
 	return ChallengeCodec.build_challenge(res, challenge_name, "Local Provider Test",
 		"2026-07-30T18:00:00", {"challenger_squad_size": 4, "turn_system": 0, "ai_difficulty": 1})
+
+
+## A VALID attached replay: base64 of a real CQRP container. [param tag] makes each blob
+## distinct, so a round-trip assertion is about THIS attempt's bytes and not just "some
+## replay came back".
+func _replay_b64(tag: String) -> String:
+	var log_dict: Dictionary = ReplayLog.make_log({
+		"mode": ReplayLog.MODE_CHALLENGE,
+		"challenge_id": tag,
+		"recorded_at_utc": "2026-08-02T14:03:11",
+	})
+	return Marshalls.raw_to_base64(ReplayLog.encode_container(log_dict))
+
+
+## Report one attempt and return the result payload (asserting it was accepted).
+func _report(provider: LocalProvider, id: String, outcome: Dictionary) -> Dictionary:
+	var result: Dictionary = _sync(func(cb: Callable): provider.report_attempt(id, outcome, cb))
+	assert_true(bool(result.get("ok", false)), "reporting an attempt should succeed")
+	return result.get("data", {})
+
+
+func _attempt_page(provider: LocalProvider, id: String, page: int) -> Dictionary:
+	var result: Dictionary = _sync(func(cb: Callable): provider.attempt_log(id, page, cb))
+	assert_true(bool(result.get("ok", false)), "reading my own attempt log should succeed")
+	return result.get("data", {})
 
 
 ## Upload [param challenge_name] and return its summary (asserting the upload took).
@@ -395,6 +424,187 @@ func test_report_attempt_on_an_unknown_id_fails_with_not_found() -> void:
 	assert_false(bool(result.get("ok", true)), "an unknown id must not create a ledger entry")
 	assert_eq(String(result.get("error", "")), CommunityProvider.ERR_NOT_FOUND,
 		"callers switch on the machine-readable code")
+
+
+# --- Attached replays --------------------------------------------------------
+
+func test_an_attached_replay_persists_and_round_trips_byte_identically() -> void:
+	var provider := LocalProvider.new(TMP_ROOT)
+	var id: String = String(_upload_challenge(provider, "Replay Base").get("id", ""))
+	var blob: String = _replay_b64("attach")
+
+	var reported: Dictionary = _report(provider, id, {
+		"cleared": true, "score": 900, "turns": 7, CommunityProvider.REPLAY_KEY: blob})
+	assert_true(bool(reported.get("has_replay", false)), "a valid replay is accepted")
+	var attempt_id: String = String(reported.get("attempt_id", ""))
+	assert_false(attempt_id.is_empty(), "the attempt is named, so its replay can be asked for")
+	assert_eq(reported.get("outcome", {}).keys().size(), 3,
+		"the replay rides ALONGSIDE the outcome -- it never widens it")
+
+	# The ledger entry carries the pinned shape and flags the blob.
+	var page: Dictionary = _attempt_page(provider, id, 0)
+	var entries: Array = page.get("entries", [])
+	assert_eq(entries.size(), 1, "one attempt, one ledger entry")
+	var entry: Dictionary = entries[0]
+	assert_eq(String(entry.get("attempt_id", "")), attempt_id, "the entry names the same attempt")
+	assert_true(bool(entry.get("has_replay", false)), "and advertises its replay")
+	assert_true(bool(entry.get("cleared", false)) and int(entry.get("score", -1)) == 900
+		and int(entry.get("turns", -1)) == 7, "the outcome is recorded per attempt, not just counted")
+	assert_false(String(entry.get("at", "")).is_empty(), "the store stamps when it happened")
+	assert_false(bool(page.get("has_more", true)), "a single entry is the whole log")
+
+	# Byte-identical round trip -- what the attacker's machine encoded is what the defender
+	# gets back, or the container's own digest would refuse it.
+	var fetched: Dictionary = _sync(func(cb: Callable): provider.fetch_attempt_replay(attempt_id, cb))
+	assert_true(bool(fetched.get("ok", false)), "the owner may fetch the replay")
+	assert_eq(String(fetched.get("data", "")), blob, "the stored blob comes back unchanged")
+	assert_false(ReplayLog.decode_container(Marshalls.base64_to_raw(String(fetched.get("data", "")))).is_empty(),
+		"and it is still a decodable replay after the round trip")
+
+	# It survives the process: a fresh provider on the same root serves the same bytes.
+	var fresh := LocalProvider.new(TMP_ROOT)
+	assert_eq(String(_sync(func(cb: Callable): fresh.fetch_attempt_replay(attempt_id, cb)).get("data", "")),
+		blob, "the blob is persisted, not held in memory")
+
+
+func test_a_bad_replay_is_dropped_but_the_attempt_still_counts() -> void:
+	var provider := LocalProvider.new(TMP_ROOT)
+	var id: String = String(_upload_challenge(provider, "Replay Base").get("id", ""))
+
+	# Three ways to be unacceptable: not base64 at all, well-formed base64 that is not a
+	# container, and a blob past the size ceiling (refused on LENGTH, before any decode).
+	var junk: Array = [
+		"this is not base64!!",
+		Marshalls.raw_to_base64("hello, defender".to_utf8_buffer()),
+		"A".repeat(CommunityProvider.MAX_REPLAY_B64_LENGTH + 4),
+	]
+	for i in junk.size():
+		var reported: Dictionary = _report(provider, id, {
+			"cleared": false, "turns": i, CommunityProvider.REPLAY_KEY: junk[i]})
+		assert_false(bool(reported.get("has_replay", true)),
+			"an unacceptable replay is dropped (case %d)" % i)
+		assert_eq(int(reported.get("attempts", 0)), i + 1,
+			"...and the attempt is still counted (case %d)" % i)
+		assert_eq(String(_sync(func(cb: Callable):
+			provider.fetch_attempt_replay(String(reported.get("attempt_id", "")), cb)).get("error", "")),
+			CommunityProvider.ERR_NOT_FOUND, "there is nothing to fetch (case %d)" % i)
+
+	for entry in _attempt_page(provider, id, 0).get("entries", []):
+		assert_false(bool(entry.get("has_replay", true)),
+			"the ledger never advertises a replay that was dropped")
+
+
+func test_the_replay_gate_is_the_boundary_sanitiser() -> void:
+	# The gate itself, directly -- both providers and the reference server share these rules.
+	var blob: String = _replay_b64("gate")
+	assert_eq(CommunityProvider.sanitize_replay_b64(blob), blob, "a real container passes verbatim")
+	assert_eq(CommunityProvider.sanitize_replay_b64("  %s  " % blob), blob, "edges are trimmed")
+	for bad in [null, 42, "", "   ", "***", "AAAA", "A".repeat(CommunityProvider.MAX_REPLAY_B64_LENGTH + 4)]:
+		assert_eq(CommunityProvider.sanitize_replay_b64(bad), "",
+			"anything that is not a decodable container is refused, quietly")
+
+	# Tampering is caught by the container's own digest, not by us re-parsing it.
+	var bytes: PackedByteArray = Marshalls.base64_to_raw(blob)
+	bytes[bytes.size() - 1] = bytes[bytes.size() - 1] ^ 0xFF
+	assert_eq(CommunityProvider.sanitize_replay_b64(Marshalls.raw_to_base64(bytes)), "",
+		"a tampered container is refused before anything would inflate it")
+
+
+func test_attempt_log_is_newest_first_and_paginated() -> void:
+	var provider := LocalProvider.new(TMP_ROOT)
+	var id: String = String(_upload_challenge(provider, "Replay Base").get("id", ""))
+	var total: int = CommunityProvider.PAGE_SIZE + 3
+	for i in total:
+		_report(provider, id, {"cleared": false, "turns": i})
+
+	var first: Dictionary = _attempt_page(provider, id, 0)
+	var page0: Array = first.get("entries", [])
+	assert_eq(page0.size(), CommunityProvider.PAGE_SIZE, "a page holds PAGE_SIZE entries")
+	assert_true(bool(first.get("has_more", false)), "and says there is more behind it")
+	assert_eq(int(page0[0].get("turns", -1)), total - 1, "newest first: the last attempt leads")
+	assert_eq(int(page0[page0.size() - 1].get("turns", -1)), total - CommunityProvider.PAGE_SIZE)
+
+	var second: Dictionary = _attempt_page(provider, id, 1)
+	assert_eq(second.get("entries", []).size(), 3, "the tail is the rest")
+	assert_eq(int(second.get("entries", [])[2].get("turns", -1)), 0, "ending at the oldest attempt")
+	assert_false(bool(second.get("has_more", true)), "the last page says so")
+
+	assert_eq(_attempt_page(provider, id, 9).get("entries", []).size(), 0,
+		"a page past the end is empty, not an error")
+
+
+func test_the_attempt_log_and_its_replays_are_owner_only() -> void:
+	var provider := LocalProvider.new(TMP_ROOT)
+	var id: String = String(_upload_challenge(provider, "Replay Base").get("id", ""))
+	var attempt_id: String = String(_report(provider, id, {
+		"cleared": true, CommunityProvider.REPLAY_KEY: _replay_b64("owner")}).get("attempt_id", ""))
+
+	var unknown: Dictionary = _sync(func(cb: Callable): provider.attempt_log("no_such_item", 0, cb))
+	assert_eq(String(unknown.get("error", "")), CommunityProvider.ERR_NOT_FOUND,
+		"an unknown id is not_found, not not_owner")
+	assert_eq(String(_sync(func(cb: Callable): provider.fetch_attempt_replay("no_such_attempt", cb)).get("error", "")),
+		CommunityProvider.ERR_NOT_FOUND, "and so is an unknown attempt")
+
+	# Become someone else: the ledger is the DEFENDER's private record of who attacked them.
+	CommunityProvider.set_device_path(TMP_DEVICE_OTHER)
+	assert_eq(String(_sync(func(cb: Callable): provider.attempt_log(id, 0, cb)).get("error", "")),
+		CommunityProvider.ERR_NOT_OWNER, "someone else's attempt log is not mine to read")
+	assert_eq(String(_sync(func(cb: Callable): provider.fetch_attempt_replay(attempt_id, cb)).get("error", "")),
+		CommunityProvider.ERR_NOT_OWNER, "nor is the replay it points at")
+
+
+func test_unowned_seed_content_has_no_readable_attempt_log() -> void:
+	# Builtin/seed items belong to nobody (see test_seeded_content_belongs_to_nobody), so
+	# there is no owner for the gate to match -- nobody may read their logs.
+	var provider: LocalProvider = _write_index([_fixture("base", {"owner": ""})])
+	_report(provider, "base", {"cleared": true})
+	assert_eq(String(_sync(func(cb: Callable): provider.attempt_log("base", 0, cb)).get("error", "")),
+		CommunityProvider.ERR_NOT_OWNER, "an unowned base's log belongs to nobody")
+
+
+func test_only_the_newest_replays_are_kept() -> void:
+	var provider := LocalProvider.new(TMP_ROOT)
+	var id: String = String(_upload_challenge(provider, "Replay Base").get("id", ""))
+
+	var first_attempt: String = ""
+	var last_attempt: String = ""
+	for i in CommunityProvider.MAX_STORED_REPLAYS + 1:
+		var reported: Dictionary = _report(provider, id, {
+			"cleared": false, "turns": i, CommunityProvider.REPLAY_KEY: _replay_b64("keep_%d" % i)})
+		assert_true(bool(reported.get("has_replay", false)), "every valid blob is stored on arrival")
+		last_attempt = String(reported.get("attempt_id", ""))
+		if i == 0:
+			first_attempt = String(reported.get("attempt_id", ""))
+
+	assert_eq(String(_sync(func(cb: Callable): provider.fetch_attempt_replay(first_attempt, cb)).get("error", "")),
+		CommunityProvider.ERR_NOT_FOUND,
+		"past the retention window the OLDEST blob is dropped")
+	assert_true(bool(_sync(func(cb: Callable): provider.fetch_attempt_replay(last_attempt, cb)).get("ok", false)),
+		"while the newest is still watchable")
+
+	# The ledger entry survives the blob and stops advertising it -- the log stays honest.
+	var oldest: Dictionary = _find_entry(provider, id, first_attempt)
+	assert_false(oldest.is_empty(), "the aged-out attempt is still in the ledger")
+	assert_false(bool(oldest.get("has_replay", true)), "but no longer claims a replay")
+
+	var kept: int = 0
+	for page in 3:
+		for entry in _attempt_page(provider, id, page).get("entries", []):
+			if bool(entry.get("has_replay", false)):
+				kept += 1
+	assert_eq(kept, CommunityProvider.MAX_STORED_REPLAYS, "exactly the newest window is retained")
+
+
+## Walk the paged ledger for one attempt's entry ({} when it is gone).
+func _find_entry(provider: LocalProvider, id: String, attempt_id: String) -> Dictionary:
+	for page in 20:
+		var data: Dictionary = _attempt_page(provider, id, page)
+		for entry in data.get("entries", []):
+			if String(entry.get("attempt_id", "")) == attempt_id:
+				return entry
+		if not bool(data.get("has_more", false)):
+			break
+	return {}
 
 
 # --- Active bases -----------------------------------------------------------
