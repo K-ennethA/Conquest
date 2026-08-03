@@ -40,6 +40,33 @@ const SORT_RECOMMENDED := "recommended"
 ## How long the search field stays quiet before the query is sent.
 const SEARCH_DEBOUNCE := 0.4
 
+# --- Entry hint (optional, additive) -----------------------------------------
+# A caller that already knows WHAT the player came for sets these before changing scene, and
+# `_ready` consumes them ONCE. Static, so they survive the scene change; consumed, so the
+# next plain entry to this screen is the ordinary unfiltered browse feed rather than
+# inheriting a filter set an hour ago. Nothing else about the screen changes: the type tabs
+# are still there and still one click away.
+#
+#     CommunityBrowse.open_filtered(CommunityProvider.TYPE_MAP, "res://menus/MatchSetup.tscn")
+#     get_tree().change_scene_to_file("res://menus/CommunityBrowse.tscn")
+
+## The type tab to open on ("" = the screen's own default).
+static var entry_type: String = ""
+## Where Back goes ("" = the usual ChallengeBrowse). A screen that sent the player here to
+## fetch something needs them BACK on itself, not on the general library.
+static var entry_return_scene: String = ""
+
+## Where Back goes for THIS instance, read off the hint in `_ready`.
+var _return_scene: String = ""
+
+
+## Open this screen pre-filtered. [param type] is a [CommunityProvider] TYPE_* value; an
+## unrecognised one is ignored (the screen opens on its default) rather than filtering the
+## list down to nothing. Both arguments are consumed by the next [method _ready].
+static func open_filtered(type: String, return_scene: String = "") -> void:
+	entry_type = type
+	entry_return_scene = return_scene
+
 # --- State ------------------------------------------------------------------
 ## Untyped on purpose: tests inject a stand-in client, and the pinned client API
 ## (`list_items`'s trailing query, `my_bases`, `set_base_active`) is owned by a parallel
@@ -79,6 +106,7 @@ func set_community_client(client) -> void:
 
 
 func _ready() -> void:
+	_consume_entry_hint()
 	theme = MenuTheme.build()
 	MenuTheme.apply_backdrop(self)
 	if _client == null:
@@ -86,6 +114,22 @@ func _ready() -> void:
 	_build_ui()
 	_refresh_banner()
 	_load_daily_then_list()
+
+
+## Read the entry hint and CLEAR it, before `_build_ui` so the filter bar is built with the
+## right tab already highlighted and the first page load asks for the right type. Runs before
+## anything else in `_ready`: an unconsumed hint would leak into the next entry.
+func _consume_entry_hint() -> void:
+	var hinted_type: String = entry_type
+	_return_scene = entry_return_scene
+	entry_type = ""
+	entry_return_scene = ""
+	# Validated, not trusted: an unknown type would ask the service for a filter nothing
+	# matches, which reads to the player as "the community is empty".
+	if hinted_type == CommunityProvider.TYPE_MAP \
+			or hinted_type == CommunityProvider.TYPE_CHALLENGE \
+			or hinted_type == CommunityProvider.TYPE_ALL:
+		_type = hinted_type
 
 
 # --- UI construction --------------------------------------------------------
@@ -745,6 +789,14 @@ func _on_download(id: String, item: Dictionary, btn: Button) -> void:
 			else:
 				btn.text = "Downloaded"
 				_set_status("Downloaded '%s' to your library." % String(item.get("name", "item")))
+				# A fresh MAP install is recorded in MapCatalog's community index so the
+				# versus pickers badge it COMMUNITY instead of CUSTOM (the two are
+				# byte-identical on disk -- the index is the only record). Only fresh
+				# downloads: "already_owned" may be the player's own authored map.
+				if String(data.get("type", "")) == CommunityProvider.TYPE_MAP:
+					var catalog: Variant = load("res://game/maps/MapCatalog.gd")
+					if catalog != null and catalog.has_method("note_community_install"):
+						catalog.note_community_install(String(data.get("path", "")))
 		else:
 			btn.text = "Retry"
 			btn.disabled = false
@@ -775,7 +827,13 @@ func _set_status(text: String) -> void:
 		_status.text = text
 
 
+## Back goes wherever the entry hint said, falling back to the challenge library. A screen
+## that sent the player here to fetch a map needs them back on ITSELF -- that round trip is
+## what makes a fresh download show up in the list it was fetched for.
 func _on_back_pressed() -> void:
+	if not _return_scene.is_empty() and ResourceLoader.exists(_return_scene):
+		get_tree().change_scene_to_file(_return_scene)
+		return
 	get_tree().change_scene_to_file(CHALLENGE_BROWSE_SCENE)
 
 

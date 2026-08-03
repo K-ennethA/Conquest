@@ -9,6 +9,11 @@ class_name CollaborativeLobby
 # - If votes match: use that map
 # - If votes differ: coin flip decides
 
+## The shared map-ROW model + renderer, used by the map-selection panel below (and by
+## MatchSetup, which is why it is shared). Preloaded BY PATH, not by class_name: a brand new
+## script is not in the project's global class cache until the next import.
+const MapRowBuilder := preload("res://menus/MapRowBuilder.gd")
+
 signal lobby_ready()
 signal game_starting(map_path: String)
 
@@ -21,6 +26,11 @@ var remote_player_name: String = ""
 # Map voting
 var local_map_vote: String = ""
 var remote_map_vote: String = ""
+## The name that travelled WITH the opponent's vote. A community or player-authored map lives
+## at a user:// path that means nothing on this machine, so when we cannot resolve the voted
+## path locally this is the only thing that can be shown. Content itself never rides a vote --
+## it ships once, from the host, at game_start.
+var remote_map_vote_name: String = ""
 var voting_complete: bool = false
 
 # UI Elements
@@ -247,25 +257,24 @@ func _build_ui() -> void:
 	spacer1.custom_minimum_size = Vector2(0, 20)
 	selection_content.add_child(spacer1)
 	
-	# Map selector (gallery) - check if scene exists
-	var map_selector_scene = load("res://game/ui/panels/MapSelectorPanel.tscn")
-	if map_selector_scene:
-		map_selector = map_selector_scene.instantiate()
-		if map_selector.has_method("set_gallery_mode"):
-			map_selector.set_gallery_mode(true)
-		if map_selector.has_method("set_preview_size"):
-			map_selector.set_preview_size(Vector2(200, 150))
-		if map_selector.has_method("set_columns"):
-			map_selector.set_columns(3)
-		map_selector.set("show_title", false)
-		map_selector.map_changed.connect(_on_local_map_selected)
-		selection_content.add_child(map_selector)
-	else:
-		print("[LOBBY] ERROR: Could not load MapSelectorPanel scene")
-		var error_label = Label.new()
-		error_label.text = "Error: Map selector not available"
-		error_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		selection_content.add_child(error_label)
+	# Map list. Rows come from the SHARED builder (menus/MapRowBuilder.gd), so this panel and
+	# MatchSetup badge every source identically -- builtin unbadged, CUSTOM for the player's
+	# own creations, COMMUNITY for downloads -- and a map the OPPONENT could not be sent
+	# (MapCatalog.network_eligible) renders disabled with one shared sentence. `true` =
+	# networked: that refusal exists ONLY here. The callback keeps the (path, MapResource)
+	# shape MapSelectorPanel.map_changed emitted, so nothing in the vote / transport half of
+	# this file changes.
+	#
+	# 720p BUDGET for this panel (offsets 20 -> 680 usable height, VBox separation 4, 7 gaps
+	# = 28): title 46 + subtitle 19 + spacer 20 + spacer 20 + vote status (2 lines) 42 +
+	# spacer 10 + ready button 60 = 217 fixed, + 28 gaps = 245. The list card is the panel's
+	# ONE flexible region: its 240 floor (216 scroll + 12+12 PanelContainer margin) brings the
+	# total to 485 of 680, and the 195px of slack flows back into it (~435px of rows, ~8 at
+	# 44+6 each). The gallery this replaced had a 400px scroll floor PLUS its own description
+	# and details labels -- ~445 fixed against the 435 available, which is what pushed the
+	# READY button off the bottom edge of a 720p screen.
+	map_selector = MapRowBuilder.build_list(true, _on_local_map_selected)
+	selection_content.add_child(map_selector)
 	
 	var spacer2 = Control.new()
 	spacer2.custom_minimum_size = Vector2(0, 20)
@@ -350,6 +359,7 @@ func _show_map_selection() -> void:
 	# Reset voting state
 	local_map_vote = ""
 	remote_map_vote = ""
+	remote_map_vote_name = ""
 	voting_complete = false
 	_update_vote_status()
 
@@ -445,10 +455,17 @@ func _on_local_map_selected(map_path: String, map_resource: MapResource) -> void
 		ready_button.disabled = false
 
 func _broadcast_map_vote(map_path: String) -> void:
-	"""Broadcast map vote to other player"""
+	"""Broadcast map vote to other player.
+
+	The vote carries the map's NAME alongside its path. The path is the identity both peers
+	agree on, but a custom / community map's path is a user:// file the opponent has never
+	seen, so without the name their vote line would read as a meaningless file stem. The name
+	is display data only -- the map's CONTENT is never shipped by a vote (see
+	_build_match_settings: it rides the host's game_start, once, after the vote is settled)."""
 	_send_lobby_message("map_vote", {
 		"player_name": local_player_name,
-		"map_path": map_path
+		"map_path": map_path,
+		"map_name": MapCatalog.map_name_for(map_path),
 	})
 	print("[LOBBY] Broadcasted map vote: " + map_path)
 
@@ -564,20 +581,23 @@ func _broadcast_lobby_state(state: String) -> void:
 	})
 	print("[LOBBY] Broadcasted lobby state: " + state)
 
-func _display_name_for_vote(path: String) -> String:
-	"""Best-effort display name for a map vote: the loaded MapResource's map_name when the
-	resource actually loads, otherwise the path's file basename. Never null-derefs a failed
-	load (missing file, or a custom user:// map the other peer hasn't received yet)."""
+func _display_name_for_vote(path: String, announced_name: String = "") -> String:
+	"""Best-effort display name for a map vote.
+
+	Resolution order: what THIS machine can read off the file ([method MapCatalog.map_name_for],
+	which covers builtin .tres and user:// .json alike and never load()s a missing path), then
+	the name the voter ANNOUNCED with their vote, then the file stem. The middle step is what
+	makes an opponent's community map show as "Skirmish Arena" rather than "skirmish_arena" on a
+	machine that does not have the file at all -- which is the normal case until the host ships
+	the payload at game_start."""
 	if path.is_empty():
 		return ""
-	# Existence check BEFORE load: load() on a missing path logs engine errors on its
-	# own (even though it returns null safely), which spams the log for the perfectly
-	# normal "peer voted for a map this machine doesn't have" case.
-	if not ResourceLoader.exists(path):
-		return path.get_file().get_basename()
-	var map_resource: MapResource = load(path) as MapResource
-	if map_resource != null:
-		return map_resource.map_name
+	var resolved: String = MapCatalog.map_name_for(path)
+	if not resolved.is_empty():
+		return resolved
+	var announced: String = announced_name.strip_edges()
+	if not announced.is_empty():
+		return announced
 	return path.get_file().get_basename()
 
 func _update_vote_status() -> void:
@@ -597,7 +617,9 @@ func _update_vote_status() -> void:
 			status_text = "Both players chose: " + _display_name_for_vote(local_map_vote) + "\n✓ Ready to start!"
 		else:
 			voting_complete = true
-			status_text = "You: " + _display_name_for_vote(local_map_vote) + " | Opponent: " + _display_name_for_vote(remote_map_vote) + "\nCoin flip will decide!"
+			status_text = "You: " + _display_name_for_vote(local_map_vote) \
+				+ " | Opponent: " + _display_name_for_vote(remote_map_vote, remote_map_vote_name) \
+				+ "\nCoin flip will decide!"
 
 	vote_status_label.text = status_text
 
@@ -645,31 +667,44 @@ func _finalize_map_selection() -> void:
 	# NetSession is not the live transport (the battle then falls back to a solo seed).
 	_begin_net_match_rng()
 
+	# WHICH VOTES MAY WIN. The host is the only participant that ships map content, so a map it
+	# cannot ship cannot be the match: the opponent's vote for a community map names a file that
+	# exists only on THEIR disk, and either side's map may have grown past the payload cap since
+	# it was listed. Filtering the CANDIDATES (rather than rejecting after the tie-break) means
+	# such a pick simply loses the coin flip instead of killing the lobby. A builtin is always
+	# eligible -- both machines already have it.
+	var candidates: Array = _startable_votes()
+	if candidates.is_empty():
+		_refuse_start("That map cannot be played online (too large, or not on this machine). Pick another.")
+		return
+
 	var final_map: String = ""
-	
-	if local_map_vote == remote_map_vote:
-		# Both chose same map
-		final_map = local_map_vote
-		print("[LOBBY] Both players chose same map: " + final_map)
+
+	if candidates.size() == 1:
+		final_map = String(candidates[0])
+		if local_map_vote == remote_map_vote:
+			print("[LOBBY] Both players chose same map: " + final_map)
+		else:
+			print("[LOBBY] Only one vote can be played online: " + final_map)
 	else:
 		# Coin flip (host decides)
 		randomize()
 		var coin_flip = randi() % 2
-		final_map = local_map_vote if coin_flip == 0 else remote_map_vote
-		
+		final_map = String(candidates[coin_flip])
+
 		var local_name: String = _display_name_for_vote(local_map_vote)
-		var remote_name: String = _display_name_for_vote(remote_map_vote)
-		var chosen_name: String = _display_name_for_vote(final_map)
-		
+		var remote_name: String = _display_name_for_vote(remote_map_vote, remote_map_vote_name)
+		var chosen_name: String = _display_name_for_vote(final_map, remote_map_vote_name)
+
 		print("[LOBBY] Coin flip! Result: " + chosen_name)
 		print("[LOBBY]   Your vote: " + local_name)
 		print("[LOBBY]   Opponent vote: " + remote_name)
-		
+
 		# Show coin flip result
 		if vote_status_label:
 			vote_status_label.text = "Coin flip chose: " + chosen_name + "!"
 		await get_tree().create_timer(2.0).timeout
-	
+
 	# Host broadcasts final map to client
 	_broadcast_game_start(final_map)
 	
@@ -678,6 +713,19 @@ func _finalize_map_selection() -> void:
 	
 	# Host starts game
 	_start_game(final_map)
+
+## The distinct votes this host could actually START on, in vote order (ours first). Pure enough
+## to drive from a test: the only outside read is MapCatalog's per-path eligibility.
+func _startable_votes() -> Array:
+	var out: Array = []
+	for vote in [local_map_vote, remote_map_vote]:
+		var path: String = String(vote)
+		if path.is_empty() or out.has(path):
+			continue
+		if MapCatalog.network_eligible(path):
+			out.append(path)
+	return out
+
 
 func _begin_net_match_rng() -> void:
 	"""Host-side kick of the NetSession commit-reveal match-RNG handshake, guarded so it only
@@ -705,13 +753,46 @@ func _build_match_settings(map_path: String) -> Dictionary:
 	var map_json: String = ""
 	if GameSettings.has_method("get_custom_map_json"):
 		map_json = str(GameSettings.get_custom_map_json())
-	return {
+	var settings: Dictionary = {
 		"map": map_path,
 		"map_json": map_json,
 		"turn_system": GameSettings.selected_turn_system,
 		"versus_rounds": GameSettings.versus_rounds,
 		"host_squad": GameSettings.get_selected_squad(),
 	}
+	var payload: Dictionary = _network_map_payload(map_path)
+	if not payload.is_empty():
+		settings["map_payload"] = payload
+	return settings
+
+
+## The map CONTENT a game_start must carry, or {} when it must carry none.
+##
+## A builtin is on both machines already, so shipping it would be pure waste -- "map" alone
+## identifies it. Anything else (a Map Creator save, a community download) exists ONLY on this
+## machine, so the board can only agree if the bytes travel: the client re-validates them and
+## boots from them (see _handle_game_start). Over-cap or no-longer-valid maps return {}, and
+## _finalize_map_selection refuses to start on them rather than sending half a match.
+func _network_map_payload(map_path: String) -> Dictionary:
+	if map_path.is_empty() or MapCatalog.is_builtin(map_path):
+		return {}
+	if not MapCatalog.network_eligible(map_path):
+		return {}
+	return MapCatalog.load_payload(map_path)
+
+
+## Abandon a start that cannot be made safe, leaving the lobby usable. Used on BOTH sides:
+## the host when the agreed map cannot be transmitted, the client when the host's payload does
+## not survive validation. It is a returned/displayed outcome, never push_error -- a rejected
+## peer payload is expected input, not a bug (tests/README.md rule 1) -- and it must never end
+## with a match started from two different boards.
+func _refuse_start(reason: String) -> void:
+	print("[LOBBY] Match start refused: " + reason)
+	if vote_status_label != null:
+		vote_status_label.text = reason
+	if ready_button != null:
+		ready_button.disabled = false
+		ready_button.text = "READY - START GAME"
 
 func _broadcast_game_start(map_path: String) -> void:
 	"""Broadcast game start with final map + the full MatchSettings payload (host only)."""
@@ -817,9 +898,12 @@ func _handle_map_vote(data: Dictionary) -> void:
 	
 	if player_name != local_player_name:
 		remote_map_vote = map_path
+		# Display data only, and untrusted peer input -- coerced to a plain trimmed String so a
+		# Dictionary/null in the payload can never reach a Label.
+		remote_map_vote_name = str(data.get("map_name", "")).strip_edges()
 		remote_player_name = player_name
 
-		print("[LOBBY] Opponent voted for: " + _display_name_for_vote(map_path))
+		print("[LOBBY] Opponent voted for: " + _display_name_for_vote(map_path, remote_map_vote_name))
 
 		_update_vote_status()
 	else:
@@ -865,6 +949,17 @@ func _handle_game_start(data: Dictionary) -> void:
 	print("[LOBBY]   Map: " + map_path)
 	print("[LOBBY]   Turn System: " + str(turn_system))
 
+	# WHICH FILE THIS PEER BOOTS FROM. "map" is the host's own path -- meaningful to them, and
+	# to us only when it is a builtin. A non-builtin map travels as CONTENT in "map_payload", and
+	# that content is untrusted peer input: it goes through the catalog-strict gate and is
+	# materialised into the session directory, or the match does not start at all. Never
+	# push_error (an invalid payload is expected input, not a bug) and never fall through to a
+	# same-named local file, which would put the two peers on different boards.
+	var boot_path: String = _resolve_boot_map(map_path, data.get("map_payload", {}))
+	if boot_path.is_empty():
+		_refuse_start("The host's map could not be verified -- the match was not started.")
+		return
+
 	# Update turn system if provided. Newer hosts send it as an int (TurnSystemType); the
 	# legacy payload sent a String -- accept either so mismatched builds don't desync here.
 	if turn_system is int:
@@ -884,12 +979,31 @@ func _handle_game_start(data: Dictionary) -> void:
 	if not custom_json.is_empty() and GameSettings.has_method("set_custom_map_json"):
 		GameSettings.set_custom_map_json(custom_json)
 	
-	# Show starting message
+	# Show starting message. Named from the file we will actually boot -- for a shipped map that
+	# is the freshly installed session copy, whose map_info carries the author's own name.
 	if vote_status_label:
-		vote_status_label.text = "Starting game with: " + _display_name_for_vote(map_path) + "!"
-	
+		vote_status_label.text = "Starting game with: " + _display_name_for_vote(boot_path, remote_map_vote_name) + "!"
+
 	# Small delay for UI feedback
 	await get_tree().create_timer(1.0).timeout
-	
-	# Client starts game with host's chosen map
-	_start_game(map_path)
+
+	# Client starts game with host's chosen map (the local file for it, when one was shipped)
+	_start_game(boot_path)
+
+
+## The path THIS peer boots the battle from, or "" to refuse the match.
+##
+## [param map_path] is the host's own identifier; [param raw_payload] the map content it
+## shipped. Three cases:
+##   * content shipped -> strict-validate + materialise it ([method
+##     MapCatalog.install_session_payload]) and boot from THAT copy, whatever the host called
+##     it. This is the only path an opponent's map ever takes onto this disk.
+##   * no content, builtin path -> boot the shipped map, exactly as before.
+##   * no content, NON-builtin path -> refuse. The host is either too old to ship its map or
+##     could not; booting a same-named local file (or nothing) would be two different boards.
+func _resolve_boot_map(map_path: String, raw_payload: Variant) -> String:
+	if raw_payload is Dictionary and not (raw_payload as Dictionary).is_empty():
+		return MapCatalog.install_session_payload(raw_payload as Dictionary)
+	if MapCatalog.is_builtin(map_path):
+		return map_path
+	return ""

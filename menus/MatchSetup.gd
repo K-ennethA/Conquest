@@ -25,6 +25,15 @@ const BASE_RULESET_PATH := "res://game/arena/rulesets/arena_solo.tres"
 const CHARACTER_SELECT_SCENE := "res://menus/CharacterSelect.tscn"
 const SOLO_MODE_SELECT_SCENE := "res://menus/SoloModeSelect.tscn"
 const MP_MODE_SELECT_SCENE := "res://menus/MultiplayerModeSelection.tscn"
+## Where "Get more maps" goes, and where it comes BACK to (this screen), so a map downloaded
+## for this match is one Back press away from the list it was fetched for.
+const COMMUNITY_BROWSE_SCENE := "res://menus/CommunityBrowse.tscn"
+const MATCH_SETUP_SCENE := "res://menus/MatchSetup.tscn"
+
+## The shared row model: what the badges say, how the list is ordered, and which rows are
+## refused. Preloaded BY PATH, not by class_name -- a brand new script is not in the global
+## class cache until the project is next imported (the `menus/ReplayWatch.gd` rule).
+const MapRowBuilder := preload("res://menus/MapRowBuilder.gd")
 
 ## The variant to build, set by the caller (SoloModeSelect / MultiplayerModeSelection)
 ## before change_scene. Static so it persists across the scene load and a Back trip from
@@ -36,13 +45,21 @@ static var requested_mode: String = "skirmish"
 var _mode: String = MatchConfigPanel.MODE_SKIRMISH
 
 # --- Map data (ported from MapSelection) ------------------------------------
+## Parallel arrays, one entry per LIST ROW and in the list's own order: the path, the loaded
+## resource (null when the library lists a map this build cannot read), and the row model
+## that decided its badge. Index-aligned with `_map_list` -- rebuilt together, always.
 var _available_maps: Array[String] = []
 var _map_resources: Array[MapResource] = []
+var _map_rows: Array = []
 var _current_selected_map: String = ""
 
 # --- Live node refs ---------------------------------------------------------
 var _map_list: ItemList = null
 var _map_name_label: Label = null
+## Holder for the preview card's source chip (CUSTOM / COMMUNITY). An ItemList row is text
+## only, so this is where the real themed chip lives; the row itself carries the bracketed
+## text badge.
+var _map_source_slot: HBoxContainer = null
 var _map_minimap: TextureRect = null
 var _minimap_placeholder: Label = null
 var _map_desc_label: Label = null
@@ -64,6 +81,15 @@ func _ready() -> void:
 	_build_ui()
 	if _uses_map_list():
 		_load_available_maps()
+	# The Get-more-maps round trip is a SCENE CHANGE, so coming back re-runs `_ready` above
+	# and the new download is already listed. This covers the other shape -- a build (or a
+	# test) that keeps one MatchSetup alive and hides it -- for the price of one connection.
+	visibility_changed.connect(_on_visibility_changed)
+
+
+func _on_visibility_changed() -> void:
+	if visible and _uses_map_list():
+		refresh_map_list()
 
 
 func _uses_map_list() -> bool:
@@ -81,6 +107,19 @@ func _title_text() -> String:
 
 
 # --- UI construction --------------------------------------------------------
+#
+# 720p BUDGET, and what the community-map work did to it: NOTHING. The three additions are
+# all height-neutral, so the floors below (list 168, minimap 150, details scroll 96) are the
+# same arithmetic they were:
+#   * the source CHIP shares the preview card's name line -- caption font (12) + 2/2 padding
+#     ~= 20px against the 20pt name label's ~27, and it is SHRINK_CENTER, so the row is still
+#     the label's height;
+#   * the row BADGE is text inside the existing ItemList -- an ItemList row's height comes
+#     from the font, not from the string, and the text is ellipsised, not wrapped;
+#   * "Source:" is one more line inside the details ScrollContainer, which scrolls in place;
+#   * "Get More Maps" (48 tall) joins a footer row whose height is already the 52 of Start.
+# The page keeps exactly ONE EXPAND_FILL region per column (main -> the map list on the left,
+# the config panel on the right), and the footer stays pinned as the page's last child.
 
 func _build_ui() -> void:
 	var page := VBoxContainer.new()
@@ -180,11 +219,33 @@ func _build_left_pane() -> Control:
 	pv.add_theme_constant_override("separation", 6)
 	margin.add_child(pv)
 
+	# Name + source chip on ONE line. The chip is SHRINK_CENTER and its caption font (12 + 2/2
+	# padding = ~20px) is shorter than the 20pt name label it sits beside, so this row's height
+	# is still the name label's -- the left pane's vertical budget below is untouched.
+	var name_row := HBoxContainer.new()
+	name_row.add_theme_constant_override("separation", 8)
+	pv.add_child(name_row)
+
 	_map_name_label = Label.new()
 	_map_name_label.text = "Select a map"
 	_map_name_label.add_theme_font_size_override("font_size", 20)
 	_map_name_label.add_theme_color_override("font_color", MenuTheme.GOLD)
-	pv.add_child(_map_name_label)
+	# A player-authored map name is arbitrary length: clip + ellipsis so it can never push
+	# the chip off the right edge of the card.
+	_map_name_label.clip_text = true
+	_map_name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_map_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_map_name_label.custom_minimum_size = Vector2(120.0, 0.0)
+	name_row.add_child(_map_name_label)
+
+	# Explicit floor, like every other chip-sized control on these screens: without one it
+	# collapses to its text width the moment the pane is squeezed.
+	_map_source_slot = HBoxContainer.new()
+	_map_source_slot.name = "SourceChipSlot"
+	_map_source_slot.alignment = BoxContainer.ALIGNMENT_END
+	_map_source_slot.custom_minimum_size = Vector2(MapRowBuilder.CHIP_MIN_WIDTH, 0.0)
+	_map_source_slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	name_row.add_child(_map_source_slot)
 
 	pv.add_child(_build_minimap_holder())
 
@@ -248,11 +309,17 @@ func _update_minimap(index: int) -> void:
 		_show_minimap_placeholder("No preview available")
 		return
 
+	if _map_resources[index] == null:
+		_show_minimap_placeholder("No preview available")
+		return
+
 	var map_path: String = _available_maps[index]
 	var tex: Texture2D = null
 	if _minimap_cache.has(map_path):
 		tex = _minimap_cache[map_path]
 	else:
+		# Same generator for every source: a downloaded or player-built map is a MapResource
+		# like any other by the time it reaches here, so it gets a real minimap for free.
 		tex = MapPreview.generate(_map_resources[index])
 		_minimap_cache[map_path] = tex  # cache null too, so an empty map isn't retried
 
@@ -316,6 +383,23 @@ func _build_actions() -> Control:
 	back.pressed.connect(_on_back_pressed)
 	row.add_child(back)
 
+	# "Get more maps" lands in the FOOTER, not the left pane: at 48 tall it is shorter than
+	# the 52 Start button already in this row, so the row's height -- and therefore the whole
+	# page's vertical budget -- is unchanged. Width: 160 + 200 + 240 + 2 gaps * 24 separation
+	# = 648, against the page's 1232 (1280 - 2*24 margins) at 720p. Arena has no map list, so
+	# it has nothing to browse for.
+	if _uses_map_list():
+		var more := Button.new()
+		more.name = "GetMoreMapsButton"
+		more.text = "Get More Maps"
+		more.custom_minimum_size = Vector2(200.0, 48.0)
+		var browse_available: bool = ResourceLoader.exists(COMMUNITY_BROWSE_SCENE)
+		more.disabled = not browse_available
+		more.tooltip_text = "Browse and download community maps." if browse_available \
+			else "The community browser is not available in this build."
+		more.pressed.connect(_on_more_maps_pressed)
+		row.add_child(more)
+
 	_start_btn = Button.new()
 	_start_btn.text = "Start Run" if _mode == MatchConfigPanel.MODE_ARENA else "Start Match"
 	_start_btn.theme_type_variation = &"SelectedButton"  # solid gold, prominent
@@ -331,44 +415,94 @@ func _build_actions() -> Control:
 
 # --- Map listing (ported from MapSelection) ---------------------------------
 
+## Rebuild the map list from the catalog, keeping the current selection when that map is
+## still there. Public because it is also the return path from the community browser: a map
+## downloaded mid-setup must be listed the moment the player is back here.
+func refresh_map_list() -> void:
+	_load_available_maps()
+
+
 func _load_available_maps() -> void:
-	_available_maps.clear()
-	_map_resources.clear()
 	if _map_list == null:
 		return
-	_map_list.clear()
+	var previous: String = _current_selected_map
+	_available_maps.clear()
+	_map_resources.clear()
+	_map_rows.clear()
 
-	# Drafts (Inactive) ARE included: this is the local / single-player picker, and you must
-	# be able to play-test a map you just built (mirrors MapSelection).
-	_available_maps = MapLoader.get_available_maps(true)
-	if _available_maps.is_empty():
+	# EVERY source, one list: shipped maps, maps the player built, maps they downloaded --
+	# badged, and ordered builtin -> custom -> community (see MapRowBuilder). Drafts are
+	# included: this is the local picker, and you must be able to play-test a map you just
+	# built. Nothing is refused here -- `false` = not networked, so a map too big to send to
+	# an opponent is still perfectly playable hot-seat.
+	var rows: Array = MapRowBuilder.versus_rows(false, true)
+	if rows.is_empty():
+		# Fresh install, empty library: seed the shipped default, exactly as MapSelection did.
 		var default_map := MapLoader.create_default_map()
 		MapLoader.save_map(default_map, "default_skirmish")
-		_available_maps = MapLoader.get_available_maps(true)
+		rows = MapRowBuilder.versus_rows(false, true)
 
-	for map_path in _available_maps:
-		var map_resource := load(map_path) as MapResource
-		if map_resource == null:
-			push_error("MatchSetup: Failed to load map: " + map_path)
-			continue
+	# Drafts keep their "(draft)" tail; it is per-row state the catalog does not carry, so it
+	# is passed to the renderer rather than baked into the shared row model.
+	var suffixes: Dictionary = {}
+	for row in rows:
+		var path: String = String(row.get("path", ""))
+		var resource = row.get("resource", null)
+		var map_resource: MapResource = resource if resource is MapResource else null
+		_available_maps.append(path)
 		_map_resources.append(map_resource)
-		var display_name := map_resource.map_name
-		if display_name.is_empty():
-			display_name = map_path.get_file().get_basename()
-		if not map_resource.is_active():
-			display_name += "  (draft)"
-		_map_list.add_item(display_name)
+		_map_rows.append(row)
+		if map_resource != null and not map_resource.is_active():
+			suffixes[path] = "  (draft)"
 
-	if _map_list.get_item_count() > 0:
-		_map_list.select(0)
-		_on_map_selected(0)
+	MapRowBuilder.apply_to_item_list(_map_list, rows, suffixes)
+
+	var target: int = _available_maps.find(previous)
+	if target < 0:
+		target = _first_selectable_row()
+	elif _map_list.is_item_disabled(target):
+		target = _first_selectable_row()
+	if target >= 0:
+		_map_list.select(target)
+		_on_map_selected(target)
+	else:
+		_current_selected_map = ""
+		if _start_btn != null:
+			_start_btn.disabled = true
+
+
+## The first row the player can actually launch, or -1 when there is none.
+func _first_selectable_row() -> int:
+	if _map_list == null:
+		return -1
+	for i in _map_list.get_item_count():
+		if not _map_list.is_item_disabled(i):
+			return i
+	return -1
 
 
 func _on_map_selected(index: int) -> void:
 	if index < 0 or index >= _map_resources.size():
 		return
+	var map_resource: MapResource = _map_resources[index]
+	if map_resource == null:
+		# The library lists it, but this build cannot read it. Say so and stage nothing --
+		# an expected outcome for an untrusted download, so it is a message, never an error.
+		var row: Dictionary = _map_rows[index] if index < _map_rows.size() else {}
+		_current_selected_map = ""
+		if _map_name_label != null:
+			_map_name_label.text = String(row.get("name", "Unknown Map"))
+		_update_source_chip(String(row.get("source", MapRowBuilder.SOURCE_BUILTIN)))
+		if _map_desc_label != null:
+			_map_desc_label.text = MapRowBuilder.UNREADABLE_TOOLTIP
+		if _map_details_label != null:
+			_map_details_label.text = ""
+		_show_minimap_placeholder("No preview available")
+		if _start_btn != null:
+			_start_btn.disabled = true
+		return
 	_current_selected_map = _available_maps[index]
-	_display_map_info(_map_resources[index])
+	_display_map_info(map_resource, _map_rows[index] if index < _map_rows.size() else {})
 	_update_minimap(index)
 	if _start_btn != null:
 		_start_btn.disabled = false
@@ -379,16 +513,24 @@ func _on_map_activated(index: int) -> void:
 	_on_start_pressed()
 
 
-func _display_map_info(map_resource: MapResource) -> void:
+## The preview card for [param map_resource]. [param row] is that map's row model, whose only
+## job here is the source chip + the "Source:" detail line -- the description, size, players
+## and author still come from the map's OWN [method MapResource.get_display_info], so a
+## downloaded or player-built map reads exactly like a shipped one with no second metadata
+## path to keep in step.
+func _display_map_info(map_resource: MapResource, row: Dictionary = {}) -> void:
 	if map_resource == null:
 		return
 	var info := map_resource.get_display_info()
+	var source: String = String(row.get("source", MapRowBuilder.SOURCE_BUILTIN))
 	if _map_name_label != null:
 		_map_name_label.text = info.get("name", "Unknown Map")
+	_update_source_chip(source)
 	if _map_desc_label != null:
 		_map_desc_label.text = info.get("description", "No description available")
 	if _map_details_label != null:
 		var details: Array = []
+		details.append("Source: " + MapRowBuilder.source_label(source))
 		details.append("Size: " + info.get("size", "Unknown"))
 		details.append("Players: " + str(info.get("players", 0)) + "/" + str(info.get("max_players", 2)))
 		details.append("Difficulty: " + info.get("difficulty", "Normal"))
@@ -398,6 +540,40 @@ func _display_map_info(map_resource: MapResource) -> void:
 		details.append("Units: " + str(info.get("total_spawns", 0)))
 		details.append("Tiles: " + str(info.get("total_tiles", 0)))
 		_map_details_label.text = "\n".join(details)
+
+
+## Show (or clear) the preview card's source chip. Builtin is unbadged -- the slot keeps its
+## width either way, so the name label never reflows between selections.
+func _update_source_chip(source: String) -> void:
+	if _map_source_slot == null:
+		return
+	for child in _map_source_slot.get_children():
+		# free(), not queue_free(): the old chip is ours alone and is gone from the tree on
+		# the line above, and a DEFERRED free would still be counted as a live node by the
+		# time a test that rebuilt this list finishes (tests/README.md rule 2).
+		_map_source_slot.remove_child(child)
+		child.free()
+	var badge: String = MapRowBuilder.badge_for(source)
+	if badge.is_empty():
+		return
+	var chip: Label = MenuTheme.make_chip(badge, MapRowBuilder.badge_color(source))
+	chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_map_source_slot.add_child(chip)
+
+
+# --- Community maps ---------------------------------------------------------
+
+## Open the community browser PRE-FILTERED to maps, and told to come back here. Guarded like
+## every other cross-screen hop in these menus: a build without the scene reports it rather
+## than changing scene to a missing path.
+func _on_more_maps_pressed() -> void:
+	if not ResourceLoader.exists(COMMUNITY_BROWSE_SCENE):
+		_show_message("The community browser is not available in this build.")
+		return
+	# The mode is a static on this class, so the Back trip lands on the same variant of this
+	# screen the player left -- exactly as the Character Select round trip already does.
+	CommunityBrowse.open_filtered(CommunityProvider.TYPE_MAP, MATCH_SETUP_SCENE)
+	get_tree().change_scene_to_file(COMMUNITY_BROWSE_SCENE)
 
 
 # --- Start / Back -----------------------------------------------------------

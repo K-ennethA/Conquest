@@ -252,7 +252,20 @@ func _sync_grid_size(map_resource) -> void:
 	grid.size = Vector3(w, 0, h)
 
 func load_map_from_file(map_path: String, target_parent: Node3D) -> bool:
-	"""Load a map from a .tres file"""
+	"""Load a map from a .tres file -- or, for a .json path, through the hardened importer.
+
+	THE ONE CONSUMPTION SEAM. A map that did not ship with the game is always inert JSON:
+	the Map Creator writes it (CUSTOM_MAPS_DIR), a community download re-exports it there,
+	and a map received from a networked host is materialised as one by
+	MapCatalog.install_session_payload. Every one of those is addressed by PATH, and every
+	caller that boots a battle (GameWorldManager._load_selected_map, the versus lobby, the
+	local match setup) already hands us a path -- so routing on the extension here means
+	there is exactly ONE place a shared map becomes a board, and it is the hardened one.
+	A .json path NEVER reaches ResourceLoader (a shared .tres is an arbitrary-code-execution
+	vector; see CONQUEST.md convention 8)."""
+	if map_path.get_extension().to_lower() == "json":
+		return load_map_from_json_file(map_path, target_parent)
+
 	if not ResourceLoader.exists(map_path):
 		_emit_load_failed("Map file not found: " + map_path)
 		return false
@@ -583,7 +596,13 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 	var grid_pos = spawn_data.get("position", Vector2i(-1, -1))
 	var player_id_raw = spawn_data.get("player_id", 0)
 
-	var player_id = int(player_id_raw) if player_id_raw is String else player_id_raw  # Ensure int
+	# ALWAYS coerce. A .tres map carries an int here, but a JSON map (Map Creator save,
+	# community download, a map a networked host shipped) carries whatever JSON.parse produced
+	# -- and JSON has one number type, so "player_id": 1 comes back as the FLOAT 1.0. The old
+	# String-only coercion let that float through, and str(1.0 + 1) is "2.0", so every unit on a
+	# JSON map was parented to a freshly invented "Player2.0" container instead of the real
+	# "Player2" -- an empty-looking board with the units hidden one node over.
+	var player_id: int = int(player_id_raw)
 
 	var unit_type = spawn_data.get("unit_type", "WARRIOR")
 	var character_id_raw = spawn_data.get("character_id", "")
@@ -911,7 +930,12 @@ func load_map_from_json_file(map_path: String, target_parent: Node3D) -> bool:
 	var text: String = file.get_as_text()
 	file.close()
 
-	var map_resource = MapResource.import_from_json(text)
+	# quiet=true: this file is UNTRUSTED, SHARED content (a player's own save, a community
+	# download, a map a networked host just shipped), so a rejection is an EXPECTED outcome for
+	# bad input, not an impossible state. It is reported through map_load_failed + the false
+	# return -- the engine log is for bugs (CONQUEST.md convention 1), and a push_error here
+	# turned every test that covers this path red.
+	var map_resource = MapResource.import_from_json(text, true)
 	if map_resource == null:
 		_emit_load_failed("Custom map failed validation: " + map_path)
 		return false
