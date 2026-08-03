@@ -25,7 +25,10 @@ class_name TravelingHazard
 ##
 ## DAMAGE: routed through [method DamageEffect.resolve_hazard_damage] so a guarded /
 ## invulnerable unit takes 0 and Grovebound-style reduction applies, exactly as a
-## normal hit would. [member damage] is the raw number snapshotted at CAST time.
+## normal hit would. [member damage] is the raw number snapshotted at CAST time. Each
+## landed hit is ANNOUNCED as [code]damage_dealt[/code] before it is applied, so a vine
+## kill is attributed to [member source] (while that unit is alive and on the board)
+## exactly like a swing -- see [method DamageEffect.credited_source].
 ##
 ## AFFILIATION: [member affiliation] (a [enum CombatTypes.TargetKind]) decides WHO
 ## in the band is damaged, evaluated relative to [member source] through the shared
@@ -52,6 +55,11 @@ var category: int = CombatTypes.DamageCategory.PHYSICAL
 var affiliation: int = CombatTypes.TargetKind.ENEMY
 ## The casting unit; never damaged by its own vine.
 var source
+
+## Optional event-bus override for the [code]damage_dealt[/code] announcement, mirroring
+## [member MoveContext.event_bus]: null in the live game (the [code]GameEvents[/code]
+## autoload is used), injected by tests and by [SpawnHazardEffect] from the cast's context.
+var event_bus = null
 
 ## Rows already entered (advances forward by [member speed] each tick).
 var front: int = 0
@@ -133,8 +141,16 @@ func advance(board) -> Dictionary:
 					continue  # spared by this vine's per-move affiliation filter
 				_hit_units[unit] = true
 				var dealt := DamageEffect.resolve_hazard_damage(unit, damage, category, board)
-				if dealt > 0 and unit.has_method("take_damage"):
-					unit.take_damage(dealt)
+				if dealt > 0:
+					# ANNOUNCE BEFORE APPLYING, for the same reason the ordinary damage
+					# pipeline does: take_damage can kill outright, and the kill is
+					# attributed from this signal. A vine used to mutate HP silently, so
+					# an Eldroot that killed with Forest Barrage credited nobody and no
+					# ON_KILL ability ever fired off it.
+					DamageEffect.announce_damage(
+						event_bus, DamageEffect.credited_source(source, unit, board), unit, dealt)
+					if unit.has_method("take_damage"):
+						unit.take_damage(dealt)
 				damaged.append({ "unit": unit, "amount": dealt })
 
 	return {

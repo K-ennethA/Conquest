@@ -44,8 +44,16 @@ named file is the canonical example — read it before you write the same kind o
 
 6. **Statuses, modifiers and damage reductions REFRESH — they never stack, sum or multiply.**
    A second source of the same id resets the timer on the one instance; two sources must
-   never deepen the effect.
+   never deepen the effect. A refresh also hands the instance to the NEW applier, so kill
+   credit for what it does follows whoever topped it up last.
    → `game/combat/status/StatModifierStatus.gd`, pinned by `tests/unit/test_rubble_slow_status.gd`
+
+   Two **deliberate exceptions**, both authored rather than accidental: `poisoned` STACKS
+   (severity is the instance count, capped by `max_stacks`), and Mycothrall's `infested`
+   counter is neither refreshed nor stacked while its host is already controlled — it is
+   suppressed outright, and wiped when control lapses, so re-taking a host always costs two
+   fresh bites. If you add a third, say so in the resource's own docs.
+   → `game/combat/effects/InfestEffect.gd`, `game/combat/status/EnthralledStatus.gd`
 
 7. **Shared materials, profiles and table entries are DUPLICATED before mutation.** They are
    loaded once and handed to every unit, so mutating in place recolours the whole roster.

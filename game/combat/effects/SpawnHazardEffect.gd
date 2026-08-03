@@ -54,6 +54,9 @@ func apply(ctx: MoveContext) -> void:
 	var half_width: int = maxi(0, (width - 1) / 2)
 	var hazard := TravelingHazard.new(origin, facing, half_width, speed, travel_range,
 		raw, category, affiliation, ctx.caster)
+	# Carry the cast's bus onto the vine so its per-band damage_dealt announcements go
+	# wherever this cast's do (a mock in tests, the autoload in game).
+	hazard.event_bus = ctx.event_bus
 
 	# Resolve the FIRST segment immediately so the cast turn itself deals damage.
 	var first: Dictionary = hazard.advance(board)

@@ -29,6 +29,7 @@ const VICTIM_ID: StringName = &"test_status_victim"
 const FRAGILE_ID: StringName = &"test_status_fragile"
 const PARASITE_ID: StringName = &"test_status_parasite"
 const REAPER_ID: StringName = &"test_status_reaper"
+const FRAGILE_REAPER_ID: StringName = &"test_status_fragile_reaper"
 
 ## Poison's authored numbers, asserted once in test_poisoned_content_is_what_this_file_assumes
 ## so every exact-HP expectation below has a stated source.
@@ -98,6 +99,10 @@ func _install_test_characters() -> void:
 	# is observed independently of what Mycothrall happens to be authored with.
 	CharacterLibrary._cache[REAPER_ID] = _make_character(
 		REAPER_ID, "Test Reaper", 60, 13, [_siphon_bite()], [AbilityLibrary.vampiric()])
+	# Dies to a single poison tick AND carries the ON_KILL probe, so a unit that poisons
+	# ITSELF to death is observably credited with nothing.
+	CharacterLibrary._cache[FRAGILE_REAPER_ID] = _make_character(
+		FRAGILE_REAPER_ID, "Test Fragile Reaper", POISON_TICK_DAMAGE, 13, [], [AbilityLibrary.vampiric()])
 
 
 func _make_character(
@@ -551,6 +556,242 @@ func test_two_bites_seize_control_of_a_living_host_on_the_live_board() -> void:
 	assert_true(status.has_status(&"enthralled"), "the second bite seized control")
 	assert_eq(status.stack_count(&"infested"), 0, "spending the infestation counter")
 	assert_eq(takeovers.size(), 1, "and announced the betrayal exactly once")
+
+
+# ===========================================================================
+# REPORT 3 -- an INDIRECT kill belongs to whoever caused it
+# ===========================================================================
+#
+# A poison tick used to announce the VICTIM as its own attacker, so the victim's
+# AbilitySystem recorded itself as the last unit to damage it -- and
+# AbilitySystem._on_unit_eliminated early-returns when the eliminated unit IS the
+# listener. The net effect: nobody's ON_KILL fired on a damage-over-time kill. Ever.
+#
+# These run on the live stack because the elimination signal is typed (Unit, Unit) and
+# the ON_KILL routing is autoload wiring -- a mock can prove none of it. The attribution
+# RULE itself (dead applier, off-board applier, self-inflicted) is unit-tested in
+# unit/test_indirect_kill_credit.gd.
+#
+# TURN-SYSTEM COVERAGE follows the same pattern as
+# test_a_poison_tick_can_kill_and_the_death_resolves above: the death is driven through
+# the per-unit hook on an INACTIVE turn system, because a death inside a live turn defers
+# _check_turn_completion into PlayerManager.end_game -- global state this suite must not
+# touch. Both systems are instantiated, and the tests further up already prove
+# _start_player_turn / _start_unit_turn reach that hook on each of them.
+
+
+## Inflict the AUTHORED poison on [param victim] FROM [param applier], through the
+## production [ApplyStatusEffect] path (which is what stamps the applier onto the live
+## instance). Returns nothing -- a failure to land would show as a missing tick.
+func _poison(applier: Unit, victim: Unit, board) -> void:
+	var effect := ApplyStatusEffect.new()
+	effect.condition = _poisoned()
+	effect.apply(_cast_at(applier, victim, board))
+
+
+## Inflict the authored poison on [param unit] BY ITSELF, through the self-application
+## branch (to_caster) -- the shape a self-damaging buff would take.
+func _self_poison(unit: Unit, board) -> void:
+	var effect := ApplyStatusEffect.new()
+	effect.condition = _poisoned()
+	effect.to_caster = true
+	effect.apply(_cast_at(unit, unit, board))
+
+
+## A single-cell ENEMY-targeted context from [param caster] onto [param target]'s cell.
+func _cast_at(caster: Unit, target: Unit, board) -> MoveContext:
+	var cell: Vector2i = board.cell_of(target)
+	var move := MoveResource.new()
+	move.move_id = &"test_poison_cast"
+	var pattern := TargetingPattern.new()
+	pattern.target_kind = CombatTypes.TargetKind.ENEMY
+	pattern.min_range = 0
+	pattern.max_range = 12
+	pattern.area_shape = CombatTypes.AreaShape.SINGLE
+	move.targeting = pattern
+	return MoveContext.new(caster, board, move, cell, [cell] as Array[Vector2i])
+
+
+## Record every damage_dealt attacker for the duration of [param body]. GUT lambdas
+## capture BY VALUE, so the Array is the counter (tests/README).
+func _attackers_during(body: Callable) -> Array:
+	var attackers: Array = []
+	var probe := func(attacker, _defender, _amount): attackers.append(attacker)
+	GameEvents.damage_dealt.connect(probe)
+	body.call()
+	GameEvents.damage_dealt.disconnect(probe)
+	return attackers
+
+
+func test_a_poison_kill_fires_the_APPLIERS_on_kill_ability() -> void:
+	_begin_map()
+	var hunter_side := Player.new(0, "Hunter")
+	var prey_side := Player.new(1, "Prey")
+	var poisoner := _spawn(REAPER_ID, Vector2i(2, 2), hunter_side)
+	var doomed := _spawn(FRAGILE_ID, Vector2i(6, 6), prey_side)
+	if poisoner == null or doomed == null:
+		pending("Could not build the character-backed units; skipping.")
+		return
+	await get_tree().process_frame
+	_finish_map()
+
+	var ts: TraditionalTurnSystem = add_child_autofree(TraditionalTurnSystem.new())
+	_poison(poisoner, doomed, CombatServices.board())
+	assert_true(doomed.get_status_controller().has_status(&"poisoned"), "the poison landed")
+
+	# Wound the poisoner so its ON_KILL heal (15) is visible and not capped away, and note
+	# that it is nowhere near the victim -- the credit travels with the status, not by range.
+	poisoner.take_damage(40)
+	var wounded_hp: int = poisoner.get_hp()
+
+	ts.current_turn = 1
+	var attackers: Array = _attackers_during(func(): ts._tick_unit_turn_start(doomed))
+
+	assert_eq(attackers, [poisoner],
+		"the tick announced the POISONER as its attacker, not the victim itself")
+	assert_true(is_instance_valid(doomed) and not doomed.is_alive(), "the tick killed the victim")
+	assert_eq(poisoner.get_hp(), wounded_hp + 15,
+		"and the applier's ON_KILL fired -- an indirect kill is still its kill")
+	await get_tree().process_frame
+
+
+func test_a_poison_kill_credits_the_applier_on_the_speed_first_system_too() -> void:
+	_begin_map()
+	var hunter_side := Player.new(0, "Hunter")
+	var prey_side := Player.new(1, "Prey")
+	var poisoner := _spawn(REAPER_ID, Vector2i(2, 2), hunter_side)
+	var doomed := _spawn(FRAGILE_ID, Vector2i(6, 6), prey_side)
+	if poisoner == null or doomed == null:
+		pending("Could not build the character-backed units; skipping.")
+		return
+	await get_tree().process_frame
+	_finish_map()
+
+	var ts: SpeedFirstTurnSystem = add_child_autofree(SpeedFirstTurnSystem.new())
+	_poison(poisoner, doomed, CombatServices.board())
+	poisoner.take_damage(40)
+	var wounded_hp: int = poisoner.get_hp()
+
+	ts.current_turn = 1
+	ts._tick_unit_turn_start(doomed)
+
+	assert_false(doomed.is_alive(), "Speed First: the tick killed the victim")
+	assert_eq(poisoner.get_hp(), wounded_hp + 15,
+		"and the same applier is credited -- attribution is a property of the status, not of the turn order")
+	await get_tree().process_frame
+
+
+func test_a_poison_kill_credits_an_AI_OWNED_applier() -> void:
+	# The mirror of test_poison_ticks_on_an_AI_OWNED_unit_too: kill credit is routed off
+	# the global damage bus, so who OWNS the applier is irrelevant.
+	_begin_map()
+	var ai_side := Player.new(0, "AI")
+	ai_side.is_ai = true
+	var prey_side := Player.new(1, "Prey")
+	var poisoner := _spawn(REAPER_ID, Vector2i(2, 2), ai_side)
+	var doomed := _spawn(FRAGILE_ID, Vector2i(6, 6), prey_side)
+	if poisoner == null or doomed == null:
+		pending("Could not build the character-backed units; skipping.")
+		return
+	await get_tree().process_frame
+	_finish_map()
+
+	var ts: TraditionalTurnSystem = add_child_autofree(TraditionalTurnSystem.new())
+	_poison(poisoner, doomed, CombatServices.board())
+	poisoner.take_damage(40)
+	var wounded_hp: int = poisoner.get_hp()
+
+	ts.current_turn = 1
+	ts._tick_unit_turn_start(doomed)
+
+	assert_false(doomed.is_alive(), "the AI's poison killed the prey")
+	assert_eq(poisoner.get_hp(), wounded_hp + 15,
+		"and the AI-owned applier's ON_KILL fired just the same")
+	await get_tree().process_frame
+
+
+func test_a_poison_whose_applier_has_died_credits_nobody() -> void:
+	_begin_map()
+	var hunter_side := Player.new(0, "Hunter")
+	var prey_side := Player.new(1, "Prey")
+	var poisoner := _spawn(REAPER_ID, Vector2i(2, 2), hunter_side)
+	var doomed := _spawn(FRAGILE_ID, Vector2i(6, 6), prey_side)
+	if poisoner == null or doomed == null:
+		pending("Could not build the character-backed units; skipping.")
+		return
+	await get_tree().process_frame
+	_finish_map()
+
+	var ts: TraditionalTurnSystem = add_child_autofree(TraditionalTurnSystem.new())
+	_poison(poisoner, doomed, CombatServices.board())
+
+	poisoner.take_damage(9999)  # the poisoner falls before its poison finishes the job
+	assert_false(poisoner.is_alive(), "the applier is dead")
+
+	ts.current_turn = 1
+	var attackers: Array = _attackers_during(func(): ts._tick_unit_turn_start(doomed))
+
+	assert_eq(attackers.size(), 1, "the tick still announced its damage")
+	assert_null(attackers[0],
+		"but with NO attacker -- a kill cannot be earned by a unit that is already gone")
+	assert_false(doomed.is_alive(), "and the poison still finished the victim")
+	await get_tree().process_frame
+
+
+func test_a_unit_that_poisons_itself_to_death_is_credited_with_nothing() -> void:
+	# The precise shape of the original bug: the victim announced as its own attacker.
+	# It carries the ON_KILL probe, so if the credit ever came back to it the heal would
+	# show -- and a dead unit healing itself for its own death is exactly the nonsense
+	# this refuses.
+	_begin_map()
+	var side := Player.new(0, "Solo")
+	var doomed := _spawn(FRAGILE_REAPER_ID, Vector2i(6, 6), side)
+	if doomed == null:
+		pending("Could not build the character-backed unit; skipping.")
+		return
+	await get_tree().process_frame
+	_finish_map()
+
+	var ts: TraditionalTurnSystem = add_child_autofree(TraditionalTurnSystem.new())
+	_self_poison(doomed, CombatServices.board())
+	assert_true(doomed.get_status_controller().has_status(&"poisoned"), "it poisoned itself")
+
+	ts.current_turn = 1
+	var attackers: Array = _attackers_during(func(): ts._tick_unit_turn_start(doomed))
+
+	assert_eq(attackers.size(), 1, "the self-inflicted tick is still announced")
+	assert_null(attackers[0], "with no attacker -- a unit is never credited with its own death")
+	assert_false(doomed.is_alive(), "and it really did kill itself")
+	await get_tree().process_frame
+
+
+func test_a_direct_kill_still_credits_the_unit_that_swung() -> void:
+	# Regression guard on the ordinary case: nothing about redirecting INDIRECT credit
+	# may disturb a plain swing, which is announced with its caster exactly as before.
+	_begin_map()
+	var hunter_side := Player.new(0, "Hunter")
+	var prey_side := Player.new(1, "Prey")
+	var reaper := _spawn(REAPER_ID, Vector2i(5, 5), hunter_side)
+	var prey := _spawn(VICTIM_ID, Vector2i(5, 6), prey_side)
+	if reaper == null or prey == null:
+		pending("Could not build the character-backed units; skipping.")
+		return
+	await get_tree().process_frame
+	_finish_map()
+
+	var board = CombatServices.board()
+	var slot := _slot_of(reaper, _siphon_bite())
+	reaper.take_damage(40)
+	var wounded_hp: int = reaper.get_hp()
+	prey.take_damage(prey.get_hp() - 1)
+
+	var attackers: Array = _attackers_during(func():
+		reaper.perform_move(slot, Vector2i(5, 6), board, _rng(5)))
+
+	assert_true(reaper in attackers, "the swing is announced with the unit that swung")
+	assert_false(prey.is_alive(), "the bite killed")
+	await get_tree().process_frame
+	assert_gt(reaper.get_hp(), wounded_hp + 13, "and its ON_KILL fired, exactly as it always did")
 
 
 # --- Local doubles ----------------------------------------------------------

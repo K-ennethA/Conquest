@@ -1,9 +1,9 @@
-[gd_resource type="Resource" script_class="StatusCondition" format=3]
+[gd_resource type="Resource" script_class="EnthralledStatus" format=3]
 
-[ext_resource type="Script" path="res://game/combat/status/StatusCondition.gd" id="1_status"]
+[ext_resource type="Script" path="res://game/combat/status/EnthralledStatus.gd" id="1_enthralled"]
 
 [resource]
-script = ExtResource("1_status")
+script = ExtResource("1_enthralled")
 id = &"enthralled"
 display_name = "Enthralled"
 duration_turns = 1
@@ -12,3 +12,4 @@ max_stacks = -1
 rule_flags = {
 "controlled": true
 }
+clears_status_id = &"infested"

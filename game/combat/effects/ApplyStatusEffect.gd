@@ -41,7 +41,7 @@ func apply(ctx: MoveContext) -> void:
 		if ctx.caster != null:
 			var self_applied := false
 			if ctx.roll(chance):
-				self_applied = _inflict(ctx.caster)
+				self_applied = _inflict(ctx.caster, ctx.caster)
 			ctx.log_event({
 				"effect": "apply_status",
 				"target": ctx.caster,
@@ -59,7 +59,7 @@ func apply(ctx: MoveContext) -> void:
 				"chance": chance,
 			})
 			continue
-		var applied := _inflict(target)
+		var applied := _inflict(target, ctx.caster)
 		ctx.log_event({
 			"effect": "apply_status",
 			"target": target,
@@ -70,18 +70,31 @@ func apply(ctx: MoveContext) -> void:
 
 ## Inflict a fresh duplicate of [member condition] on [param unit] through whichever
 ## status entry point it exposes. Returns true if it landed.
-func _inflict(unit) -> bool:
+##
+## [param source] is the unit CREDITED with everything the condition goes on to do --
+## the caster of the move/ability/tile that inflicted it. It is stamped on the fresh
+## duplicate (never on the shared authoring resource), so when the condition's ticks
+## deal damage the kill goes to whoever applied it rather than to the victim. Null is
+## legal and means "nobody is credited".
+func _inflict(unit, source = null) -> bool:
 	if unit == null:
 		return false
 	if unit.has_method("add_status"):
-		unit.add_status(condition.duplicate(true))
+		unit.add_status(_stamped(source))
 		return true
 	if unit.has_method("get_status_controller"):
 		var controller = unit.get_status_controller()
 		if controller != null and controller.has_method("add_status"):
-			controller.add_status(condition.duplicate(true))
+			controller.add_status(_stamped(source))
 			return true
 	return false
+
+
+## A fresh duplicate of [member condition] carrying [param source] as its applier.
+func _stamped(source) -> StatusCondition:
+	var instance: StatusCondition = condition.duplicate(true)
+	instance.set_source(source)
+	return instance
 
 
 func describe() -> String:

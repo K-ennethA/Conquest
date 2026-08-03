@@ -494,6 +494,273 @@ func test_a_controlled_casters_enemy_move_actually_lands_on_the_ally():
 	assert_eq(ally.hp, 85, "the controlled unit's ENEMY move struck its ally for 15")
 	assert_eq(enemy.hp, 100, "and its real enemy was spared")
 
+# ===========================================================================
+# MECHANIC 3b -- THE THRALL REWORK
+#
+# Three rules, decided together, that turn "two bites and it is yours forever-ish"
+# into a loop with a real cost:
+#
+#   a) a LETHAL second bite RAISES the thrall instead of killing the host;
+#   b) control lasts EXACTLY one turn (pinned in both turn systems below);
+#   c) re-taking a host costs TWO FRESH BITES -- nothing accrues while it is
+#      controlled, and whatever is left over is wiped when control lapses.
+#
+# (a) resolves in [method DamageEffect.apply]: the promotion happens on the parasite's
+# ON_ATTACK, which fires from the announce BEFORE the blow's HP is applied, so these
+# tests drive a real AbilitySystem off an injected bus exactly as the live game drives
+# it off GameEvents.
+# ===========================================================================
+
+## A bus carrying just damage_dealt, wired to a real AbilitySystem -- the live ON_ATTACK
+## path (GameEvents -> AbilitySystem._on_damage_dealt) without the typed autoload, which
+## refuses mock units by design.
+class MockBus:
+	extends RefCounted
+	signal damage_dealt(attacker, defender, amount)
+
+
+## A parasite with Parasitic Hold live on a bus, so hitting [param victim] through a
+## DamageEffect really does run the ability mid-blow. Returns the bus to inject.
+##
+## The subscriber raises ON_ATTACK itself rather than going through
+## [method AbilitySystem._on_damage_dealt], for one reason: that handler resolves its
+## board from CombatServices, which this headless suite deliberately keeps empty, and
+## [method AbilityResource.run_effects] no-ops without a board. The routing it skips
+## (attacker == me -> ON_ATTACK) is already pinned by test_abilities.gd; what these tests
+## need is the ability firing INSIDE the announce, which is exactly what this reproduces.
+func _wire_parasitic_hold(myco, board) -> MockBus:
+	var bus := MockBus.new()
+	var sys: AbilitySystem = autofree(AbilitySystem.new())
+	sys.owner_unit = myco
+	sys.add_ability(_parasitic_hold())
+	bus.damage_dealt.connect(func(attacker, defender, _n):
+		if attacker == myco:
+			sys.trigger(AbilityTrigger.Trigger.ON_ATTACK, myco, board, defender))
+	return bus
+
+
+## Resolve [param effect] from [param caster] onto [param target] with [param bus]
+## injected, so the announce reaches the wired AbilitySystem.
+func _resolve_on_bus(effect: MoveEffect, board, caster, target, bus) -> MoveContext:
+	var cell: Vector2i = board.cell_of(target)
+	var move := MoveResource.new()
+	var pattern := TargetingPattern.new()
+	pattern.target_kind = CombatTypes.TargetKind.ENEMY
+	pattern.min_range = 0
+	pattern.max_range = 6
+	pattern.area_shape = CombatTypes.AreaShape.SINGLE
+	move.move_id = &"test_resolve_bus"
+	move.targeting = pattern
+	var ctx := MoveContext.new(caster, board, move, cell, [cell] as Array[Vector2i])
+	ctx.event_bus = bus
+	effect.apply(ctx)
+	return ctx
+
+# --- (a) a lethal takeover raises the thrall --------------------------------
+
+func test_a_lethal_second_bite_raises_the_thrall_instead_of_killing_it():
+	var board := MockBoard.new()
+	var myco := Thrall.new(0, { "attack": 12 })
+	var victim := Thrall.new(1, { "health": 100 })
+	board.place(myco, Vector2i(0, 0))
+	board.place(victim, Vector2i(1, 0))
+	var sc := victim.get_status_controller()
+
+	# One bite in: infested once, still its own unit.
+	_resolve(_infest_effect(), board, myco, victim)
+	assert_eq(sc.stack_count(&"infested"), 1, "the first bite planted the counter")
+
+	# Now a bite that would kill outright. Parasitic Hold rides its announce.
+	victim.hp = 8
+	var bus := _wire_parasitic_hold(myco, board)
+	_resolve_on_bus(_true_damage(40), board, myco, victim, bus)
+
+	assert_eq(victim.hp, 1,
+		"the blow that completed the takeover left exactly 1 HP -- a thrall is raised, not a corpse")
+	assert_true(sc.has_status(&"enthralled"), "and the takeover happened")
+	assert_true(victim.is_controlled(), "the host is the parasite's now")
+	assert_eq(sc.stack_count(&"infested"), 0, "the infestation counter was spent as usual")
+
+
+func test_the_raising_blow_announces_the_takeover_exactly_once():
+	var board := MockBoard.new()
+	var myco := Thrall.new(0, { "attack": 12 })
+	var victim := Thrall.new(1, { "health": 100 })
+	board.place(myco, Vector2i(0, 0))
+	board.place(victim, Vector2i(1, 0))
+
+	# GUT lambdas capture BY VALUE -- an Array is the only counter that survives.
+	var takeovers: Array = []
+	var on_controlled := func(u, s): takeovers.append({ "unit": u, "source": s })
+	GameEvents.unit_controlled.connect(on_controlled)
+
+	_resolve(_infest_effect(), board, myco, victim)
+	victim.hp = 8
+	var bus := _wire_parasitic_hold(myco, board)
+	_resolve_on_bus(_true_damage(40), board, myco, victim, bus)
+
+	GameEvents.unit_controlled.disconnect(on_controlled)
+
+	assert_eq(takeovers.size(), 1,
+		"a lethal takeover is still one betrayal -- the battle log narrates it exactly as a survivable one")
+	assert_eq(takeovers[0]["unit"], victim, "naming the hijacked host")
+	assert_eq(takeovers[0]["source"], myco, "and the parasite that raised it")
+
+
+func test_a_host_already_at_one_HP_survives_the_raising_blow_too():
+	var board := MockBoard.new()
+	var myco := Thrall.new(0, { "attack": 12 })
+	var victim := Thrall.new(1, { "health": 100 })
+	board.place(myco, Vector2i(0, 0))
+	board.place(victim, Vector2i(1, 0))
+
+	_resolve(_infest_effect(), board, myco, victim)
+	victim.hp = 1
+	var bus := _wire_parasitic_hold(myco, board)
+	_resolve_on_bus(_true_damage(40), board, myco, victim, bus)
+
+	assert_eq(victim.hp, 1, "clamped to 1, never to 0 -- the blow takes nothing at all")
+	assert_true(victim.is_controlled(), "and it is still a takeover")
+
+
+func test_a_lethal_FIRST_bite_still_just_kills():
+	# The counterexample that keeps the rule honest: one stack is not a takeover, so the
+	# host is killed like anything else. Nothing here is a free save.
+	var board := MockBoard.new()
+	var myco := Thrall.new(0, { "attack": 12 })
+	var victim := Thrall.new(1, { "health": 100 })
+	board.place(myco, Vector2i(0, 0))
+	board.place(victim, Vector2i(1, 0))
+	victim.hp = 8
+
+	var bus := _wire_parasitic_hold(myco, board)
+	_resolve_on_bus(_true_damage(40), board, myco, victim, bus)
+
+	assert_lt(victim.hp, 1, "a lethal FIRST bite kills -- it took the full 40")
+	assert_false(victim.is_controlled(), "one stack seizes nothing")
+	assert_eq(victim.get_status_controller().stack_count(&"infested"), 1,
+		"the corpse just carries the infestation it was given")
+
+
+func test_an_ALREADY_controlled_host_is_killable_by_the_next_blow():
+	# The clamp is scoped to the exact blow that SEIZED the host. A puppet is not immortal.
+	var board := MockBoard.new()
+	var myco := Thrall.new(0, { "attack": 12 })
+	var victim := Thrall.new(1, { "health": 100 })
+	board.place(myco, Vector2i(0, 0))
+	board.place(victim, Vector2i(1, 0))
+
+	_resolve(_infest_effect(), board, myco, victim)
+	_resolve(_infest_effect(), board, myco, victim)
+	assert_true(victim.is_controlled(), "control is up")
+
+	victim.hp = 8
+	_resolve(_true_damage(40), board, myco, victim)
+	assert_lt(victim.hp, 1, "the next blow kills the thrall outright")
+
+
+func test_an_ordinary_lethal_hit_is_untouched_by_the_takeover_clamp():
+	# Regression-safety for every other unit in the game: no control, no clamp.
+	var board := MockBoard.new()
+	var attacker := Thrall.new(0, { "attack": 12 })
+	var victim := Thrall.new(1, { "health": 100 })
+	board.place(attacker, Vector2i(0, 0))
+	board.place(victim, Vector2i(1, 0))
+	victim.hp = 8
+
+	_resolve(_true_damage(40), board, attacker, victim)
+	assert_eq(victim.hp, -32, "a plain lethal hit deals its full damage, exactly as before")
+
+# --- (c) re-taking a host costs two fresh bites ------------------------------
+
+func test_bites_during_control_plant_no_infestation():
+	# Rule 1 of the re-takeover loop: while the host is ours, a bite is JUST damage.
+	# Banking progress toward the next takeover off attacks on a unit already controlled
+	# would let control renew itself for free.
+	var board := MockBoard.new()
+	var myco := Thrall.new(0, { "attack": 12 })
+	var victim := Thrall.new(1, { "health": 100 })
+	board.place(myco, Vector2i(0, 0))
+	board.place(victim, Vector2i(1, 0))
+	var sc := victim.get_status_controller()
+
+	_resolve(_infest_effect(), board, myco, victim)
+	_resolve(_infest_effect(), board, myco, victim)
+	assert_true(sc.has_status(&"enthralled"), "control is up")
+
+	var ctx := _resolve(_infest_effect(), board, myco, victim)
+	assert_eq(sc.stack_count(&"infested"), 0, "a bite during control plants nothing")
+	var infest_events: Array = []
+	for e in ctx.results:
+		if String(e.get("effect", "")) == "infest":
+			infest_events.append(e)
+	assert_eq(infest_events.size(), 1, "the bite is still logged")
+	assert_true(bool(infest_events[0].get("suppressed", false)),
+		"and says why it carried no infestation")
+
+
+func test_control_lapsing_wipes_leftover_infestation():
+	# Rule 2: whatever is on the host when control ends goes with it, however the
+	# infestation got there.
+	var board := MockBoard.new()
+	var victim := Thrall.new(1, { "health": 100 })
+	board.place(victim, Vector2i(1, 0))
+	var sc := victim.get_status_controller()
+
+	sc.add_status(_infested())
+	sc.add_status(_enthralled())
+	assert_eq(sc.stack_count(&"infested"), 1, "a stack is sitting under the control")
+
+	sc.tick_all(board)  # 1-turn control -> expires
+
+	assert_false(sc.has_status(&"enthralled"), "control ran out")
+	assert_eq(sc.stack_count(&"infested"), 0,
+		"and took the leftover infestation with it -- the run-up resets to zero")
+	assert_eq(sc.get_active().size(), 0,
+		"the unit is completely clean, not carrying a resurrected stack")
+
+
+func test_after_control_lapses_two_fresh_bites_are_needed_again():
+	# The whole loop, end to end: seize, lapse, and the SECOND takeover costs exactly as
+	# much as the first did.
+	var board := MockBoard.new()
+	var myco := Thrall.new(0, { "attack": 12 })
+	var victim := Thrall.new(1, { "health": 100 })
+	board.place(myco, Vector2i(0, 0))
+	board.place(victim, Vector2i(1, 0))
+	var sc := victim.get_status_controller()
+
+	_resolve(_infest_effect(), board, myco, victim)
+	_resolve(_infest_effect(), board, myco, victim)
+	assert_true(victim.is_controlled(), "first takeover")
+
+	_resolve(_infest_effect(), board, myco, victim)  # banked nothing
+	sc.tick_all(board)
+	assert_false(victim.is_controlled(), "control lapsed after its one turn")
+	assert_eq(sc.stack_count(&"infested"), 0, "with nothing carried over")
+
+	_resolve(_infest_effect(), board, myco, victim)
+	assert_eq(sc.stack_count(&"infested"), 1, "bite one of the new run-up")
+	assert_false(victim.is_controlled(), "one fresh bite is not a takeover")
+
+	_resolve(_infest_effect(), board, myco, victim)
+	assert_true(victim.is_controlled(), "and the second fresh bite takes it again")
+
+
+func test_clearing_a_units_statuses_also_clears_the_counter():
+	# on_expire is the wipe's hook, so a cleanse / controller clear does it too rather
+	# than leaving a counter behind with nothing to spend it on.
+	var board := MockBoard.new()
+	var victim := Thrall.new(1, { "health": 100 })
+	board.place(victim, Vector2i(1, 0))
+	var sc := victim.get_status_controller()
+	sc.add_status(_infested())
+	sc.add_status(_enthralled())
+
+	sc.remove_status(&"enthralled", board)
+	assert_eq(sc.stack_count(&"infested"), 0,
+		"cleansing the control cleanses the infestation under it")
+
 # --- The anti-lockout: control lasts EXACTLY one turn, in BOTH turn systems --
 
 func test_control_is_forced_then_expires_traditional():
@@ -612,6 +879,10 @@ func test_enthralled_is_a_one_turn_control_status():
 	assert_eq(enthralled.duration_turns, 1, "exactly one hijacked turn")
 	assert_true(bool(enthralled.rule_flags.get("controlled", false)),
 		"it declares the controlled rule flag")
+	assert_true(enthralled is EnthralledStatus,
+		"it is authored on the control script, so lapsing control can wipe the counter")
+	assert_eq((enthralled as EnthralledStatus).clears_status_id, &"infested",
+		"and the counter it wipes is the infestation that earned it")
 
 func test_parasitic_hold_infests_on_every_attack():
 	var ability := _parasitic_hold()

@@ -85,6 +85,46 @@ func crit_chance(_target) -> float:
 ## Default false, so a move, a hazard and an ability all resolve exactly as before.
 var guaranteed_hit: bool = false
 
+# --- Damage CREDIT (indirect kill attribution) --------------------------------
+#
+# Damage normally belongs to [member caster]: the unit swinging is the unit credited.
+# INDIRECT damage breaks that. A poison tick resolves with the VICTIM as its caster
+# (that is what makes the SELF-targeted tick move gather exactly the poisoned unit),
+# so announcing `caster` as the attacker made the victim credit ITSELF for its own
+# death -- and nobody's ON_KILL fired on a damage-over-time kill.
+#
+# The fix is deliberately NOT "swap the caster": every stat lookup, passive modifier
+# and target gather in the pipeline reads `caster`, and changing it would silently
+# retune what a tick DEALS. Only the CREDIT moves. So the tick sets this override and
+# the damage MATH is byte-identical to what it was.
+#
+# Three states, which is why a plain null is not enough:
+#   * unset (the default)  -> credit the caster, exactly as always.
+#   * set to a unit        -> credit that unit (the status' applier, a hazard's owner).
+#   * set to null          -> credit NOBODY (a dead applier, or self-inflicted damage;
+#                             see [method DamageEffect.credited_source]).
+
+## The unit to credit instead of [member caster]; only meaningful while
+## [member _damage_credit_set] is true.
+var _damage_credit = null
+## True once [method set_damage_credit] has spoken, so "credit nobody" (null) is
+## distinguishable from "nobody said anything" (credit the caster).
+var _damage_credit_set: bool = false
+
+
+## Redirect credit for the damage this context deals. Pass null to credit NOBODY --
+## that is a real answer, not an absence, and it is what a status applied by a unit
+## that has since died reports.
+func set_damage_credit(unit) -> void:
+	_damage_credit = unit
+	_damage_credit_set = true
+
+
+## Who this context's damage is credited to: the override when one was set (possibly
+## null = nobody), else [member caster]. Read by [method DamageEffect._announce].
+func damage_credit():
+	return _damage_credit if _damage_credit_set else caster
+
 
 ## Resolve (once, then cache) whether this move hits [param target] and whether it
 ## crits. Returns { hit, crit, hit_pct, crit_pct }.

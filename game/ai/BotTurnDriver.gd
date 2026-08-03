@@ -823,8 +823,17 @@ func _act_fallback(unit: Unit, board) -> bool:
 		return true
 
 
+## The legacy no-Character attack: a flat stat hit with no MoveResource behind it.
+##
+## It still has to ANNOUNCE the hit before applying it. take_damage can kill outright,
+## and a kill is attributed from the damage_dealt signal -- so mutating HP silently made
+## every kill this path landed credit nobody: no ON_KILL ability, no ON_DAMAGED
+## retaliation, no floating damage number. Announcing first (the order
+## [method DamageEffect.apply] documents) is the whole fix; the damage itself is
+## deliberately left as-is.
 func _fallback_attack(unit: Unit, target: Unit) -> void:
 	var dmg: int = _stat(unit, "attack", 10)
+	DamageEffect.announce_damage(null, unit, target, dmg)
 	if target.has_method("take_damage"):
 		target.take_damage(dmg)
 

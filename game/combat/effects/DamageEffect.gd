@@ -128,14 +128,31 @@ func apply(ctx: MoveContext) -> void:
 		# damage_dealt signal fires -- so announcing afterwards meant the victim died before
 		# anyone knew who hit it, and ON_KILL abilities (Mortis's Reanimate) silently never
 		# fired. Emitting first makes the attacker known by the time the death resolves.
+		var controlled_before: bool = is_mind_controlled(target)
 		_announce(ctx, target, dealt)
-		if target.has_method("take_damage"):
-			target.take_damage(dealt)
-		total_dealt += dealt
+		# THE BLOW THAT SEIZES A HOST DOES NOT ALSO KILL IT.
+		#
+		# The announce above is the seam where the attacker's ON_ATTACK abilities run (see
+		# the ordering note), and one of them -- Mycothrall's Parasitic Hold -- can HAND THE
+		# TARGET OVER mid-blow. A takeover that killed its own host in the same instant would
+		# be a takeover of a corpse, so the puppet is raised instead: HP is clamped to leave
+		# exactly 1, the host is alive to be puppeted, and no elimination fires. Thematically
+		# it keeps the host alive while it is effectively dead.
+		#
+		# Scoped to the EXACT blow that seized the target (the before/after snapshot of the
+		# "controlled" rule flag), so an already-controlled unit is killable by the next hit
+		# like anything else. Expressed as a RULE FLAG, not as Mycothrall: any future
+		# mind-control status inherits this.
+		var applied: int = dealt
+		if not controlled_before and is_mind_controlled(target):
+			applied = mini(dealt, maxi(0, hp_of(target) - 1))
+		if applied > 0 and target.has_method("take_damage"):
+			target.take_damage(applied)
+		total_dealt += applied
 		ctx.log_event({
 			"effect": "damage",
 			"target": target,
-			"amount": dealt,
+			"amount": applied,
 			"category": category,
 			"crit": crit,
 		})
@@ -196,17 +213,126 @@ func describe() -> String:
 ## [code]GameEvents[/code] autoload. Guarded end to end so a headless or mocked
 ## context never errors: no bus, no such signal, or non-[Unit] participants (the
 ## autoload's signal is typed, so mocks must not reach it) all simply no-op.
+##
+## The attacker announced is [method MoveContext.damage_credit], NOT the caster: for a
+## direct hit those are the same object, and for INDIRECT damage (a status tick, a
+## crawling hazard) the credit is the unit that applied it -- or null for nobody. A
+## null attacker is a legal, meaningful announcement ("this HP loss belongs to no
+## one"), so only the TARGET has to be a real Unit for the typed autoload signal.
 static func _announce(ctx: MoveContext, target, dealt: int) -> void:
 	if ctx == null or target == null:
 		return
-	var bus = ctx.event_bus
+	announce_damage(ctx.event_bus, ctx.damage_credit(), target, dealt)
+
+
+## Emit one [code]damage_dealt(attacker, defender, damage)[/code] on [param bus], or on
+## the [code]GameEvents[/code] autoload when [param bus] is null.
+##
+## Split out of [method _announce] so a damage source with no [MoveContext] can use the
+## SAME single emit point: [TravelingHazard] resolves its band damage off-pipeline, and
+## before this it announced nothing at all, so a vine kill credited nobody. [param attacker]
+## may be null (credit nobody); [param defender] must be a real [Unit] to reach the typed
+## autoload signal, exactly as before.
+static func announce_damage(bus, attacker, defender, dealt: int) -> void:
+	if defender == null:
+		return
 	if bus == null:
-		if not (ctx.caster is Unit and target is Unit):
+		if not (defender is Unit):
+			return
+		if attacker != null and not (attacker is Unit):
 			return
 		bus = GameEvents
 	if bus == null or not bus.has_signal(&"damage_dealt"):
 		return
-	bus.emit_signal(&"damage_dealt", ctx.caster, target, dealt)
+	bus.emit_signal(&"damage_dealt", attacker, defender, dealt)
+
+
+# --- Indirect-damage attribution ---------------------------------------------
+#
+# THE RULE, in one place, for every indirect damage source (status ticks, traveling
+# hazards) so none of them can drift:
+#
+#   credit the unit that CAUSED the damage -- the status' applier, the vine's caster --
+#   while it is still a live unit standing on the board; otherwise credit NOBODY.
+#
+# Three deliberate refusals:
+#   * a FREED source credits nobody (weak references resolve to null, never a dangling
+#     object);
+#   * a DEAD or off-board source credits nobody -- you cannot earn a kill after you are
+#     gone, so a poison that outlives its applier is unattributed;
+#   * SELF-INFLICTED damage credits nobody. A unit must never be handed the credit for
+#     its own death, which is exactly the bug this replaced: a tick announced with the
+#     victim as its own attacker made the victim's AbilitySystem record itself.
+
+
+## The unit to credit for indirect damage dealt to [param victim] by [param source],
+## or null when nobody may be credited. See the rule above.
+static func credited_source(source, victim, board = null):
+	if source == null or not is_instance_valid(source):
+		return null
+	if source == victim:
+		return null
+	if not _is_live(source):
+		return null
+	if not _is_on_board(source, board):
+		return null
+	return source
+
+
+## Is [param unit] still alive? Duck-typed in the project's usual order: a live [Unit]
+## answers is_alive(); a mock that only tracks HP is dead at 0; anything exposing neither
+## is taken at face value (it cannot be proven dead).
+static func _is_live(unit) -> bool:
+	if unit.has_method("is_alive"):
+		return bool(unit.is_alive())
+	if unit.has_method("get_hp"):
+		return int(unit.get_hp()) > 0
+	return true
+
+
+## Is [param unit] still ON the board? [BoardAdapter.all_units] already filters the dead,
+## so it is the preferred question; a board that only answers placement queries is asked
+## whether the unit is standing where it claims to be. A null / query-less board cannot
+## answer, and then liveness is all the evidence there is.
+static func _is_on_board(unit, board) -> bool:
+	if board == null:
+		return true
+	if board.has_method("all_units"):
+		return unit in board.all_units()
+	if board.has_method("cell_of") and board.has_method("units_at"):
+		return unit in board.units_at(board.cell_of(unit))
+	return true
+
+
+## True while [param target] is under MIND CONTROL, read from the "controlled" rule flag
+## a control status ([code]enthralled[/code]) declares. Duck-typed and independently
+## optional at every step, exactly like [method is_invulnerable].
+##
+## Deliberately NOT [method Unit.is_controlled]: that also reports the turn system's
+## per-turn forced-control LATCH, which outlives the status by design. This asks only
+## "does a status say this unit is somebody else's right now".
+static func is_mind_controlled(target) -> bool:
+	if target == null:
+		return false
+	if target.has_method("has_status_rule_flag"):
+		return bool(target.has_status_rule_flag(&"controlled"))
+	if target.has_method("get_status_controller"):
+		var controller = target.get_status_controller()
+		if controller != null and controller.has_method("has_rule_flag"):
+			return bool(controller.has_rule_flag(&"controlled"))
+	return false
+
+
+## [param target]'s current HP through whichever accessor it exposes (0 when it has
+## none). Used by the takeover clamp in [method apply] to leave exactly 1.
+static func hp_of(target) -> int:
+	if target == null:
+		return 0
+	if target.has_method("get_hp"):
+		return int(target.get_hp())
+	if target.has_method("get_stat"):
+		return int(target.get_stat("health"))
+	return 0
 
 
 # --- Damage vs movement-restricted targets ----------------------------------

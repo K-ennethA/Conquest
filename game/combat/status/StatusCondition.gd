@@ -71,6 +71,46 @@ enum Stacking {
 ## the condition is added to a [StatusController]; -1 means permanent.
 var turns_left: int = 0
 
+# --- Who applied this (indirect kill attribution) -----------------------------
+#
+# A live instance remembers the unit that INFLICTED it, so the damage its ticks deal
+# can be credited to that unit rather than to the victim. Without it a poison tick
+# announced the victim as its own attacker and a death by poison credited nobody --
+# no ON_KILL, no vampiric heal, no Reanimate.
+#
+# HELD WEAKLY, ON PURPOSE. A status routinely outlives its applier (a 3-turn poison
+# on a board where the poisoner dies next turn), and a strong reference from a
+# Resource to a freed Node is exactly the dangling-object crash this project cannot
+# afford mid-turn. A freed applier resolves to null, which the attribution rule
+# already reads as "credit nobody".
+#
+# NOT EXPORTED, so it is per-instance runtime state that [method Resource.duplicate]
+# does not carry -- the same shape as [member turns_left] and
+# [member StatModifierStatus._modifier_id]. Every place that duplicates a condition
+# on its way onto a unit ([ApplyStatusEffect], [InfestEffect],
+# [method StatusController.add_status]) therefore re-states the source explicitly,
+# and the shared authoring .tres is never mutated.
+
+## Weak handle on the applier; null when nothing applied it or it has been freed.
+var _source_ref: WeakRef = null
+
+
+## Record the unit that applied this instance. Null clears the attribution.
+func set_source(unit) -> void:
+	_source_ref = weakref(unit) if unit != null else null
+
+
+## The unit that applied this instance, or null when there was none or it has been
+## freed. Resolution is always through the weak handle -- never cache the result
+## across turns.
+func get_source():
+	if _source_ref == null:
+		return null
+	var unit = _source_ref.get_ref()
+	if unit == null or not is_instance_valid(unit):
+		return null
+	return unit
+
 
 ## True while this live instance still has time on it (or is permanent).
 func is_active() -> bool:
@@ -99,6 +139,12 @@ func tick(target, board) -> Array[Dictionary]:
 	# skipped ticks at random, and no two peers/replays agreed on which. See
 	# [member MoveContext.guaranteed_hit].
 	ctx.guaranteed_hit = true
+	# INDIRECT KILL ATTRIBUTION. The context's CASTER stays the afflicted unit -- that is
+	# what makes the SELF-targeted tick move gather exactly this unit, and what keeps the
+	# tick's damage math byte-identical to before. Only the CREDIT is redirected, to the
+	# unit that applied the condition (null when it is gone, or when the unit poisoned
+	# itself). See [method DamageEffect.credited_source] for the rule.
+	ctx.set_damage_credit(DamageEffect.credited_source(get_source(), target, board))
 	for effect in tick_effects:
 		if effect:
 			effect.apply(ctx)

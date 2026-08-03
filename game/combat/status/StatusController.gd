@@ -35,7 +35,7 @@ func add_status(condition: StatusCondition) -> StatusCondition:
 	if existing != null:
 		match condition.stacking:
 			StatusCondition.Stacking.REFRESH:
-				existing.turns_left = condition.duration_turns
+				_refresh(existing, condition)
 				return existing
 			StatusCondition.Stacking.IGNORE:
 				return existing
@@ -46,11 +46,15 @@ func add_status(condition: StatusCondition) -> StatusCondition:
 					# maxed poison keeps it alive on the target, it just cannot
 					# make it any worse. _find_by_id returns the first (oldest)
 					# match, so this is also the instance about to expire.
-					existing.turns_left = condition.duration_turns
+					_refresh(existing, condition)
 					return existing
 				# Otherwise fall out of the match and add another instance.
 	var instance: StatusCondition = condition.duplicate(true)
 	instance.turns_left = instance.duration_turns
+	# duplicate() carries only STORED (exported) properties, so the applier -- runtime
+	# state, like turns_left -- has to be re-stated onto the stored copy or every kill
+	# by a status tick would go unattributed. See StatusCondition._source_ref.
+	instance.set_source(condition.get_source())
 	_active.append(instance)
 	instance.on_apply(_target(), _board())
 	_announce(&"status_applied", instance)
@@ -61,10 +65,18 @@ func add_status(condition: StatusCondition) -> StatusCondition:
 ## finite durations, and expire any that reach 0 (firing on_expire). Permanent
 ## conditions (-1) tick forever. [param board] is the standard board adapter.
 ## Returns the combined tick event log.
+##
+## RE-ENTRANCY: an on_expire hook may itself change this list -- [EnthralledStatus]
+## clears the host's leftover infestation as control lapses, which calls
+## [method remove_status] from inside this loop. So the list is edited IN PLACE (each
+## expiring condition is erased before its hook runs) and iterated over a SNAPSHOT,
+## rather than rebuilt from a survivors list at the end: rebuilding would resurrect
+## exactly the conditions a hook had just removed.
 func tick_all(board) -> Array[Dictionary]:
 	var events: Array[Dictionary] = []
-	var survivors: Array[StatusCondition] = []
-	for condition in _active:
+	for condition in _active.duplicate():
+		if condition == null or not (condition in _active):
+			continue  # an earlier expiry hook already took this one off the unit
 		var tick_events: Array[Dictionary] = condition.tick(_target(), board)
 		for e in tick_events:
 			events.append(e)
@@ -74,11 +86,9 @@ func tick_all(board) -> Array[Dictionary]:
 		if condition.turns_left > 0:
 			condition.turns_left -= 1
 		if condition.turns_left == 0:
+			_active.erase(condition)
 			condition.on_expire(_target(), board)
 			_announce(&"status_expired", condition)
-		else:
-			survivors.append(condition)
-	_active = survivors
 	return events
 
 
@@ -163,17 +173,19 @@ func status_damage_taken_scale() -> float:
 ## CONSUME a status -- e.g. the infection promoting to control clears the counter it
 ## spent. [param board] is optional (passed to on_expire).
 func remove_status(condition_id: StringName, board = null) -> int:
-	var survivors: Array[StatusCondition] = []
-	var removed: int = 0
+	# Erased BEFORE its hook runs, for the same re-entrancy reason [method tick_all]
+	# documents: an on_expire may remove further conditions, and a survivors list built
+	# up here would put them back.
+	var doomed: Array[StatusCondition] = []
 	for condition in _active:
 		if condition != null and condition.id == condition_id:
-			condition.on_expire(_target(), board)
-			_announce(&"status_expired", condition)
-			removed += 1
-		else:
-			survivors.append(condition)
-	_active = survivors
-	return removed
+			doomed.append(condition)
+	for condition in doomed:
+		_active.erase(condition)
+	for condition in doomed:
+		condition.on_expire(_target(), board)
+		_announce(&"status_expired", condition)
+	return doomed.size()
 
 
 ## Every rule flag currently set to true across the active conditions. Handy for
@@ -213,6 +225,19 @@ func _announce(signal_name: StringName, condition, events = null) -> void:
 		GameEvents.emit_signal(signal_name, _target(), condition)
 	else:
 		GameEvents.emit_signal(signal_name, _target(), condition, events)
+
+
+## Re-apply [param incoming] onto the already-live [param existing] instance: reset the
+## timer, and hand the instance to the NEW applier.
+##
+## Re-attributing is the deliberate half. The refresh rule says a second source must not
+## deepen the effect -- it says nothing about who owns the kill, and "the last unit to
+## top up the poison owns what it does from now on" is the only answer that does not
+## require tracking one timer per source. It also self-heals attribution: a poison whose
+## original applier has died credits nobody until somebody re-applies it.
+func _refresh(existing: StatusCondition, incoming: StatusCondition) -> void:
+	existing.turns_left = incoming.duration_turns
+	existing.set_source(incoming.get_source())
 
 
 ## True when [param condition] is already at its
