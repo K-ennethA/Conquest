@@ -26,6 +26,10 @@ const Guard := preload("res://tests/helpers/global_state_guard.gd")
 
 const TEMP_SAVE_PATH := "user://test_battle_save.json"
 const TEMP_RESULTS_PATH := "user://test_battle_save_results.json"
+## A forfeited attempt is ALSO mirrored onto the attacker's profile (see
+## [method ChallengeController._notify_profile]), and this suite drives the LIVE autoload --
+## so the profile file is redirected for the whole suite too, on the same principle.
+const TEMP_PROFILE_PATH := "user://test_battle_save_profile.json"
 
 const TODAY := "2026-08-02"
 const YESTERDAY := "2026-08-01"
@@ -38,6 +42,9 @@ var _guard
 func before_all() -> void:
 	SAVE_MANAGER.set_save_path(TEMP_SAVE_PATH)
 	ChallengeController.set_results_path(TEMP_RESULTS_PATH)
+	if PlayerProfile != null and PlayerProfile.has_method("set_profile_path"):
+		PlayerProfile.set_profile_path(TEMP_PROFILE_PATH)
+		PlayerProfile.load_profile()
 
 
 func after_all() -> void:
@@ -46,6 +53,17 @@ func after_all() -> void:
 	if FileAccess.file_exists(TEMP_RESULTS_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(TEMP_RESULTS_PATH))
 	ChallengeController.set_results_path(CHALLENGE_SCRIPT.RESULTS_PATH)
+
+	# The profile's save is DEFERRED while the autoload is in the tree, so let any pending
+	# write land while the temp path is still in force -- restoring first would flush this
+	# suite's throwaway profile straight into the player's real file. Then reload the real
+	# one so the autoload's in-memory state is the player's again.
+	if PlayerProfile != null and PlayerProfile.has_method("set_profile_path"):
+		await get_tree().process_frame
+		PlayerProfile.set_profile_path("")
+		PlayerProfile.load_profile()
+		if FileAccess.file_exists(TEMP_PROFILE_PATH):
+			DirAccess.remove_absolute(TEMP_PROFILE_PATH)
 
 
 func before_each() -> void:

@@ -384,6 +384,10 @@ func _relocate(unit, board, from_cell: Vector2i, to_cell: Vector2i) -> void:
 			unit,
 			Vector3(from_cell.x, 0, from_cell.y),
 			Vector3(to_cell.x, 0, to_cell.y))
+	# REPLAY: the AI's single relocation point (plan-attack, plan-advance and the legacy
+	# fallback all route through here), normalised into the SAME MOVE_UNIT command the human
+	# and networked paths record. No-op when no recorder is mounted.
+	ReplayRecorder.note_move_unit(unit, to_cell)
 
 
 ## Route the unit to the planning path (character-backed + live board) or to the
@@ -692,6 +696,10 @@ func _execute_move_decision(unit: Unit, decision: Dictionary, board) -> bool:
 	await _await_ultimate_cutin(unit, move, slot)
 	var result: Dictionary = unit.perform_move(slot, aim_cell, board)
 	if result != null and bool(result.get("success", false)):
+		# REPLAY: the AI's single cast point (plan-attack and the stashed second-beat strike
+		# both land here), normalised into the SAME CAST_MOVE the human and networked paths
+		# record. On success only, so a refused plan never enters the log.
+		ReplayRecorder.note_cast_move(unit, slot, aim_cell)
 		# Concise, diagnosable proof the attack LANDED: target + damage + target HP
 		# after. Mirrors the take_damage log in the fallback path so both AI attack
 		# routes are visible in the live game's output.
@@ -804,6 +812,13 @@ func _fallback_attack(unit: Unit, target: Unit) -> void:
 func _finish(unit: Unit, action: String) -> void:
 	if unit.has_method("mark_action_completed"):
 		unit.mark_action_completed(action)
+	# REPLAY: the AI's single "unit closed its turn without acting" point. ONLY the "wait"
+	# action is recorded -- "move" was already recorded as MOVE_UNIT by _relocate, and
+	# "attack" is the legacy _fallback_attack path, which mutates HP directly rather than
+	# through a NetProtocol command and therefore has nothing replayable to log (see the
+	# module README's "not covered" note).
+	if action == "wait":
+		ReplayRecorder.note_wait_unit(unit)
 
 
 ## Nearest living unit owned by a non-AI (human) player, ranked by squared world

@@ -10,6 +10,10 @@ extends CommunityProvider
 ##   items.json            -- the index: { "items": [summary...], "my_votes": { id: dir } }
 ##   payloads/<id>.json    -- the full map / challenge JSON for each item
 ##
+## Each summary carries the SERVER-MAINTAINED fields the live service would own:
+## `votes`, the attempt ledger (`attempts` / `clears` -- the defense rate is DERIVED by
+## readers, never stored), `owner` (the uploader's device id) and `active`.
+##
 ## All callbacks fire SYNCHRONOUSLY (there is no I/O to await), which is what lets the
 ## tests assert on results inline. The on-wire shapes match docs/COMMUNITY_API.md so a
 ## screen written against this provider works unchanged against [HttpProvider].
@@ -21,6 +25,28 @@ const SEED_MAP_PATHS: Array[String] = [
 	"res://game/maps/resources/skirmish_arena.tres",
 	"res://game/maps/resources/default_skirmish.tres",
 ]
+
+# --- Recommendation weights (see docs/COMMUNITY_API.md "Recommended feed") ---------------
+# The four terms are each normalised to roughly 0..1 (votes to -1..1) and blended. The
+# weights are the whole editorial policy: a base that people actually PLAY and sometimes
+# beat outranks a base that merely collected up-votes on its screenshot.
+const REC_W_VOTES := 0.45
+const REC_W_FAIRNESS := 0.35
+const REC_W_ENGAGEMENT := 0.12
+const REC_W_FRESHNESS := 0.08
+
+## Vote count at which the vote term reaches half its ceiling (soft saturation, so a runaway
+## score cannot bury everything else).
+const REC_VOTE_SCALE := 25.0
+## Same soft saturation for play count -- and the counterweight to a tiny sample: a base with
+## two attempts cannot out-rank a well-played one on fairness alone.
+const REC_ATTEMPT_SCALE := 25.0
+## The clear rate that ranks best. Below it a base is unbeatable, above it a pushover; the
+## sweet spot is "beatable, but you have to earn it".
+const REC_PEAK_CLEAR_RATE := 0.4
+## Age at which the freshness term halves. Small weight -- new content gets a nudge onto the
+## page, never a free pass to the top.
+const REC_FRESH_HALFLIFE_DAYS := 14.0
 
 var _root: String
 var _payload_dir: String
@@ -34,15 +60,22 @@ func _init(root: String = DEFAULT_ROOT) -> void:
 
 # --- API --------------------------------------------------------------------
 
-func list_items(sort: String, type: String, page: int, cb: Callable) -> void:
+func list_items(sort: String, type: String, page: int, cb: Callable, query: String = "") -> void:
 	var index: Dictionary = _load_index()
 	var items: Array = index.get("items", [])
+	var needle: String = sanitize_query(query)
 
-	# Type filter ("all" keeps everything).
+	# Filters, all applied BEFORE sort + pagination so page 0 is genuinely the top of the
+	# filtered set: retired bases are invisible to every feed, then type, then the search.
 	var filtered: Array = []
 	for it in items:
-		if type == TYPE_ALL or type == "" or String(it.get("type", "")) == type:
-			filtered.append(it)
+		if not _is_active(it):
+			continue
+		if not (type == TYPE_ALL or type == "" or String(it.get("type", "")) == type):
+			continue
+		if not matches_query(it, needle):
+			continue
+		filtered.append(it)
 
 	filtered = _sort_items(filtered, sort)
 
@@ -53,6 +86,8 @@ func list_items(sort: String, type: String, page: int, cb: Callable) -> void:
 	_emit(cb, ok(slice))
 
 
+## Direct fetch by id works for RETIRED bases too: a friend who has the code can always
+## play the base, which is what keeps codes the friend-share path.
 func fetch_item(id: String, cb: Callable) -> void:
 	_ensure_seeded()
 	var payload: Dictionary = _load_payload(id)
@@ -75,6 +110,16 @@ func upload(payload: Dictionary, cb: Callable) -> void:
 		if String(existing.get("id", "")) == String(summary["id"]):
 			_emit(cb, fail("Item already exists."))
 			return
+	# Ownership is stamped server-side from the caller's identity -- never taken from the
+	# payload, or anyone could upload a base "as" someone else and retire theirs.
+	var me: String = device_id()
+	summary["owner"] = me
+	# Published active by default, but the 3-active cap is an INVARIANT, not just a check on
+	# the toggle: a fourth upload lands retired rather than sneaking past the limit. The
+	# summary says so, so the uploader's screen can offer to swap one out.
+	summary["active"] = String(summary.get("type", "")) != TYPE_CHALLENGE \
+		or _active_base_count(index, me) < MAX_ACTIVE_BASES
+
 	_write_payload(String(summary["id"]), payload)
 	var items: Array = index.get("items", [])
 	items.append(summary)
@@ -89,11 +134,7 @@ func vote(id: String, dir: int, cb: Callable) -> void:
 	var my_votes: Dictionary = index.get("my_votes", {})
 	var prev: int = int(my_votes.get(id, 0))
 
-	var found: Dictionary = {}
-	for it in index.get("items", []):
-		if String(it.get("id", "")) == id:
-			found = it
-			break
+	var found: Dictionary = _find_item(index, id)
 	if found.is_empty():
 		_emit(cb, fail("Item '%s' not found." % id))
 		return
@@ -114,10 +155,104 @@ func daily(cb: Callable) -> void:
 	_emit(cb, ok({"id": _daily_id()}))
 
 
+## Record one play. NOT idempotent by design (see [method CommunityProvider.report_attempt]):
+## the same device replaying a base counts every time, because the ledger is measuring the
+## base's difficulty, not its audience size. Retired bases still count -- a friend playing
+## from a code is exactly the traffic an author wants reflected.
+func report_attempt(id: String, outcome: Dictionary, cb: Callable) -> void:
+	var clean: Dictionary = sanitize_outcome(outcome)
+	var index: Dictionary = _load_index()
+	var found: Dictionary = _find_item(index, id)
+	if found.is_empty():
+		_emit(cb, fail(ERR_NOT_FOUND))
+		return
+
+	# maxi() re-floors counters that a hand-edited mock store could have left negative.
+	found["attempts"] = maxi(0, int(found.get("attempts", 0))) + 1
+	found["clears"] = maxi(0, int(found.get("clears", 0))) + (1 if bool(clean["cleared"]) else 0)
+	_save_index(index)
+	_emit(cb, ok({
+		"id": id,
+		"attempts": int(found["attempts"]),
+		"clears": int(found["clears"]),
+		"outcome": clean,
+	}))
+
+
+## The caller's own uploaded CHALLENGES -- active and retired alike, newest first -- so the
+## bases screen can show what is published, what is benched, and how each is performing.
+func my_bases(cb: Callable) -> void:
+	var me: String = device_id()
+	if me.is_empty():
+		_emit(cb, ok([]))
+		return
+	var mine: Array = []
+	for it in _load_index().get("items", []):
+		if String(it.get("owner", "")) == me and String(it.get("type", "")) == TYPE_CHALLENGE:
+			mine.append(it)
+	mine.sort_custom(func(a, b): return String(a.get("created", "")) > String(b.get("created", "")))
+	_emit(cb, ok(mine))
+
+
+## Publish or retire one of the caller's own bases. Retiring ALWAYS succeeds (an author can
+## always pull a base out of the feeds); publishing is what the cap guards.
+func set_base_active(id: String, active: bool, cb: Callable) -> void:
+	var index: Dictionary = _load_index()
+	var found: Dictionary = _find_item(index, id)
+	if found.is_empty():
+		_emit(cb, fail(ERR_NOT_FOUND))
+		return
+
+	var me: String = device_id()
+	if me.is_empty() or String(found.get("owner", "")) != me:
+		_emit(cb, fail(ERR_NOT_OWNER))
+		return
+
+	# Only a transition INTO active can breach the cap: re-activating something already
+	# active is a no-op, and retiring frees the slot for the next call.
+	if active and not _is_active(found) and String(found.get("type", "")) == TYPE_CHALLENGE \
+			and _active_base_count(index, me) >= MAX_ACTIVE_BASES:
+		_emit(cb, fail(ERR_BASE_LIMIT))
+		return
+
+	found["active"] = active
+	_save_index(index)
+	_emit(cb, ok({"id": id, "active": active}))
+
+
 ## This device's current vote on an item (1 / -1 / 0), so the UI can pre-highlight the
 ## up/down buttons. Local convenience -- not part of the network contract.
 func my_vote(id: String) -> int:
 	return int(_load_index().get("my_votes", {}).get(id, 0))
+
+
+# --- Index lookups ----------------------------------------------------------
+
+## The summary dict for [param id] BY REFERENCE (so a caller mutates the index in place),
+## or {} when the id is unknown.
+func _find_item(index: Dictionary, id: String) -> Dictionary:
+	for it in index.get("items", []):
+		if String(it.get("id", "")) == id:
+			return it
+	return {}
+
+
+## Items written before `active` existed are treated as published -- absence of a retirement
+## is not a retirement.
+func _is_active(item: Dictionary) -> bool:
+	return bool(item.get("active", true))
+
+
+## How many ACTIVE challenge bases [param owner] currently has published.
+func _active_base_count(index: Dictionary, owner: String) -> int:
+	if owner.is_empty():
+		return 0
+	var count: int = 0
+	for it in index.get("items", []):
+		if String(it.get("owner", "")) == owner and String(it.get("type", "")) == TYPE_CHALLENGE \
+				and _is_active(it):
+			count += 1
+	return count
 
 
 # --- Sorting / daily --------------------------------------------------------
@@ -125,6 +260,26 @@ func my_vote(id: String) -> int:
 func _sort_items(items: Array, sort: String) -> Array:
 	var out: Array = items.duplicate()
 	match sort:
+		SORT_RECOMMENDED:
+			# Scores are computed ONCE per item (not inside the comparator, which would
+			# re-evaluate them O(n log n) times and re-read the clock mid-sort).
+			var now: float = Time.get_unix_time_from_system()
+			var scores: Dictionary = {}
+			for it in out:
+				scores[String(it.get("id", ""))] = _recommended_score(it, now)
+			out.sort_custom(func(a, b):
+				var sa: float = float(scores.get(String(a.get("id", "")), 0.0))
+				var sb: float = float(scores.get(String(b.get("id", "")), 0.0))
+				if not is_equal_approx(sa, sb):
+					return sa > sb
+				# Deterministic tie-break, so an equal-scoring pair never shuffles between
+				# two calls (which would make pagination lose or repeat an item).
+				var va: int = int(a.get("votes", 0))
+				var vb: int = int(b.get("votes", 0))
+				if va != vb:
+					return va > vb
+				return String(a.get("id", "")) < String(b.get("id", ""))
+			)
 		SORT_NEW:
 			out.sort_custom(func(a, b): return String(a.get("created", "")) > String(b.get("created", "")))
 		SORT_DAILY:
@@ -142,11 +297,64 @@ func _sort_items(items: Array, sort: String) -> Array:
 	return out
 
 
-## Deterministic daily pick: a hash of today's date modulo the item count, so the choice
-## is stable within a calendar day and changes the next. Mirrors the challenge daily trick.
+## The REFERENCE recommendation score. Deterministic given the item and the clock, and
+## documented in docs/COMMUNITY_API.md so the live service can be checked against it -- but
+## the CONTRACT is only "the server ranks, the client renders", so a live refinement needs
+## no client change.
+##
+## Four terms, blended by the REC_W_* weights:
+##   votes      v / (|v| + 25)         -- soft-saturating, signed: the crowd's opinion, but
+##                                        a viral score cannot drown out everything else.
+##   fairness   1 - ((r - 0.4) / 0.4)^2, floored at 0, where r = clears / attempts
+##                                     -- an inverted parabola peaking at a 40% clear rate.
+##                                        A base nobody can beat (r=0) and a pushover
+##                                        (r>=0.8) both score 0; "sometimes cleared, not
+##                                        always" wins. Unplayed (attempts=0) scores 0: an
+##                                        unknown base has not EARNED the fairness bonus.
+##   engagement a / (a + 25)           -- how much it is actually played, which is also what
+##                                        stops a 2-attempt fluke rate from topping the feed.
+##   freshness  1 / (1 + age_days/14)  -- a small nudge so new bases surface at all.
+func _recommended_score(item: Dictionary, now_unix: float) -> float:
+	var votes: float = float(int(item.get("votes", 0)))
+	var vote_term: float = votes / (absf(votes) + REC_VOTE_SCALE)
+
+	var attempts: float = float(maxi(0, int(item.get("attempts", 0))))
+	var engagement: float = attempts / (attempts + REC_ATTEMPT_SCALE)
+
+	var fairness: float = 0.0
+	if attempts > 0.0:
+		var rate: float = clampf(float(maxi(0, int(item.get("clears", 0)))) / attempts, 0.0, 1.0)
+		var offset: float = (rate - REC_PEAK_CLEAR_RATE) / REC_PEAK_CLEAR_RATE
+		fairness = maxf(0.0, 1.0 - offset * offset)
+
+	var freshness: float = 0.0
+	var created_unix: float = _created_unix(String(item.get("created", "")))
+	if created_unix > 0.0:
+		var age_days: float = maxf(0.0, (now_unix - created_unix) / 86400.0)
+		freshness = 1.0 / (1.0 + age_days / REC_FRESH_HALFLIFE_DAYS)
+
+	return REC_W_VOTES * vote_term + REC_W_FAIRNESS * fairness \
+		+ REC_W_ENGAGEMENT * engagement + REC_W_FRESHNESS * freshness
+
+
+## Parse an ISO-ish `created` stamp to unix seconds, or 0 when it is missing / malformed
+## (which reads as "very old", i.e. no freshness bonus). The shape is checked first because
+## Time's parser is loud about garbage and a bad timestamp is DATA, not an engine error.
+func _created_unix(created: String) -> float:
+	if created.length() < 10 or not created.substr(0, 4).is_valid_int():
+		return 0.0
+	return float(Time.get_unix_time_from_datetime_string(created))
+
+
+## Deterministic daily pick: a hash of today's date modulo the ACTIVE item count, so the
+## choice is stable within a calendar day and changes the next. Mirrors the challenge daily
+## trick. Retired bases are never featured.
 func _daily_id() -> String:
 	var index: Dictionary = _load_index()
-	var items: Array = index.get("items", [])
+	var items: Array = []
+	for it in index.get("items", []):
+		if _is_active(it):
+			items.append(it)
 	if items.is_empty():
 		return ""
 	var seed_str: String = Time.get_date_string_from_system()
@@ -232,7 +440,9 @@ func _make_seed_challenge() -> Dictionary:
 # --- Summary construction ---------------------------------------------------
 
 ## Derive an index summary from a payload, detecting whether it is a challenge or a bare
-## map. Returns {} if it is neither.
+## map. Returns {} if it is neither. `owner` is left BLANK -- only [method upload] knows the
+## caller's identity, and seeded builtin content deliberately belongs to nobody (so nobody
+## can retire it).
 func _summary_for_payload(payload: Dictionary, votes: int, created: String) -> Dictionary:
 	var json_text: String = JSON.stringify(payload)
 	if payload.has("format_version") and payload.has("map") and payload.has("rules"):
@@ -246,6 +456,8 @@ func _summary_for_payload(payload: Dictionary, votes: int, created: String) -> D
 			"votes": votes,
 			"attempts": 0,
 			"clears": 0,
+			"owner": "",
+			"active": true,
 			"created": created,
 			"size_bytes": json_text.length(),
 			"checksum": checksum,
@@ -262,6 +474,8 @@ func _summary_for_payload(payload: Dictionary, votes: int, created: String) -> D
 			"votes": votes,
 			"attempts": 0,
 			"clears": 0,
+			"owner": "",
+			"active": true,
 			"created": created,
 			"size_bytes": json_text.length(),
 			"checksum": checksum2,

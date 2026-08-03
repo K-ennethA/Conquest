@@ -30,9 +30,23 @@ sandbox. That one file is the entire switch — no code change.
 
 ## Endpoints
 
-Implements the `/v1/` contract: `GET /v1/items`, `GET /v1/items/{id}`,
-`POST /v1/items`, `POST /v1/items/{id}/vote`, `GET /v1/daily`. Votes are idempotent per
-`X-Community-Device` header. See `docs/COMMUNITY_API.md` for shapes.
+Implements the whole `/v1/` contract. See `docs/COMMUNITY_API.md` for the shapes.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/v1/items?sort=&type=&page=&q=` | `sort` = `recommended` (default) \| `top` \| `new` \| `daily`. `q` is a case-insensitive title/author substring, trimmed + capped at 64 chars, applied **before** sort and pagination. Retired items are never listed. |
+| `GET` | `/v1/items/{id}` | Full payload. Works for **retired** items — a share code always plays. |
+| `POST` | `/v1/items` | Upload. `owner` is stamped from the device header; a 4th challenge lands `active: false` rather than being refused. `409` on a duplicate id. |
+| `POST` | `/v1/items/{id}/vote` | `{dir: 1\|-1\|0}`, idempotent per `X-Community-Device`. |
+| `GET` | `/v1/daily` | `{id}` of today's pick (active items only). |
+| `POST` | `/v1/items/{id}/attempts` | `{cleared, score, turns}`, re-sanitised server-side. **Not** idempotent — every play counts. `404 {"error":"not_found"}`. |
+| `GET` | `/v1/me/bases` | The calling device's own challenges, active *and* retired, newest first. |
+| `POST` | `/v1/items/{id}/active` | `{active: bool}`. `403 not_owner`, `409 base_limit` past 3 active; retiring always succeeds. |
+
+The three newest endpoints answer with **machine-readable** error codes (`not_found`,
+`not_owner`, `base_limit`) rather than prose, because clients switch on them.
+`_recommended_score` mirrors `LocalProvider._recommended_score` term for term, so the
+offline sandbox and this server rank a catalogue identically.
 
 ## Validation caveat (important)
 

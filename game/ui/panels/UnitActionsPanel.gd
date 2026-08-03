@@ -1014,6 +1014,8 @@ func _on_end_unit_turn_pressed() -> void:
 	_cancel_move_targeting()
 	_commit_tentative_move()
 
+	ReplayRecorder.note_wait_unit(selected_unit)  # REPLAY: solo WAIT_UNIT (End Unit Turn)
+
 	# Remember who is acting so _finish_command can tell whether Speed First has already
 	# advanced selection to the next unit (see _finish_command).
 	var acted_unit := selected_unit
@@ -1140,6 +1142,12 @@ func _ensure_end_turn_dialog() -> ConfirmationDialog:
 
 func _do_end_player_turn() -> void:
 	"""The actual end-player-turn path (previously inline in the button handler)."""
+	# REPLAY: solo END_TURN, recorded BEFORE the turn system advances so the entry is stamped
+	# with the turn it ended (the networked branch records apply-side instead).
+	var ending_player := _current_turn_player()
+	if ending_player != null:
+		ReplayRecorder.note_end_turn(int(ending_player.player_id))
+
 	# Local game logic (existing)
 	if TurnSystemManager.has_active_turn_system():
 		var turn_system = TurnSystemManager.get_active_turn_system()
@@ -2120,6 +2128,11 @@ func _commit_tentative_move() -> void:
 	var to_grid := Vector3(dest_cell.x, 0, dest_cell.y)
 	GameEvents.unit_moved.emit(unit, from_grid, to_grid)
 
+	# REPLAY: this is the ONE place a solo/hotseat move becomes committed board state, so it
+	# is the one place a MOVE_UNIT is recorded for the local FE loop (the networked branch
+	# records apply-side instead). No-op when no recorder is mounted.
+	ReplayRecorder.note_move_unit(unit, dest_cell)
+
 	var tree = get_tree()
 	var visual_manager = null
 	if tree != null and tree.current_scene != null:
@@ -2339,6 +2352,7 @@ func _on_action_menu_wait_chosen() -> void:
 	_commit_tentative_move()
 	if unit.has_method("mark_action_completed"):
 		unit.mark_action_completed("wait")
+	ReplayRecorder.note_wait_unit(unit)  # REPLAY: solo WAIT_UNIT
 	_refresh_unit_visuals()
 	_finish_command(unit)
 
@@ -2758,6 +2772,11 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 	var result: Dictionary = selected_unit.perform_move(slot, aim_cell, board)
 
 	if result.get("success", false):
+		# REPLAY: the cast RESOLVED -- record it as CAST_MOVE in the same vocabulary the
+		# networked path uses, so playback has one apply path for both. Recorded on success
+		# only, so a refused/aborted aim never enters the log.
+		ReplayRecorder.note_cast_move(acting_unit, slot, aim_cell)
+
 		# Cooldown / charge bookkeeping (null-safe: legacy units have no controller).
 		var controller = selected_unit.get_moveset_controller()
 		if controller and controller.has_method("on_used"):

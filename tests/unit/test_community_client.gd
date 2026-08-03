@@ -16,6 +16,9 @@ extends GutTest
 ##  - the end-to-end download_to_library path (through a temp-root LocalProvider) rejects
 ##    a tampered payload the mock is serving;
 ##  - a VALID map/challenge does install, and a re-download is idempotent ("already_owned");
+##  - an installed challenge is STAMPED with the service's item id as "community_id" (the
+##    handle the challenge-completion flow reports attempts against) without disturbing the
+##    checksum;
 ##  - provider selection: no user://community.cfg -> LocalProvider; a cfg with a base_url
 ##    -> HttpProvider.
 ##
@@ -23,7 +26,35 @@ extends GutTest
 ## under a throwaway user:// root, and the (unavoidably fixed) library paths are restored to
 ## the exact file set they had before the test.
 
+## A provider that only RECORDS what the client handed it. The forwarding signatures are
+## load-bearing across agents -- screens call `list_items(..., cb, query)` and the challenge
+## completion flow calls `report_attempt(id, outcome, cb)` -- so a test pins them here rather
+## than leaving them to be discovered by a broken build.
+class RecordingProvider extends CommunityProvider:
+	## One entry per forwarded call: { "call": String, ... the arguments }.
+	var calls: Array = []
+
+	func list_items(sort: String, type: String, page: int, cb: Callable, query: String = "") -> void:
+		calls.append({"call": "list_items", "sort": sort, "type": type, "page": page, "query": query})
+		_emit(cb, ok([]))
+
+	func report_attempt(id: String, outcome: Dictionary, cb: Callable) -> void:
+		calls.append({"call": "report_attempt", "id": id, "outcome": outcome.duplicate(true)})
+		_emit(cb, ok({"id": id, "attempts": 1, "clears": 0, "outcome": outcome}))
+
+	func my_bases(cb: Callable) -> void:
+		calls.append({"call": "my_bases"})
+		_emit(cb, ok([]))
+
+	func set_base_active(id: String, active: bool, cb: Callable) -> void:
+		calls.append({"call": "set_base_active", "id": id, "active": active})
+		_emit(cb, ok({"id": id, "active": active}))
+
+
 const TMP_ROOT := "user://test_community_client/"
+## Own device identity: an upload stamps ownership from it, and a test must not write the
+## player's real community_device.txt.
+const TMP_DEVICE := "user://test_community_client_device.txt"
 ## Somewhere to park a real user://community.cfg while the selection tests own that path.
 const CFG_BACKUP := "user://community.cfg.testbak"
 ## The base_url the selection tests write. Unroutable on purpose (no request is ever made --
@@ -39,6 +70,7 @@ var _challenges_before: PackedStringArray = PackedStringArray()
 
 func before_each() -> void:
 	_recover_stale_config()
+	CommunityProvider.set_device_path(TMP_DEVICE)
 	_maps_before = _list_dir(CommunityClient.MAPS_DIR)
 	_challenges_before = _list_dir(ChallengeCodec.challenge_dir())
 
@@ -48,6 +80,9 @@ func after_each() -> void:
 	_restore_dir(CommunityClient.MAPS_DIR, _maps_before)
 	_restore_dir(ChallengeCodec.challenge_dir(), _challenges_before)
 	_rm_rf(TMP_ROOT)
+	CommunityProvider.set_device_path("")
+	if FileAccess.file_exists(TMP_DEVICE):
+		DirAccess.remove_absolute(TMP_DEVICE)
 	_restore_config()
 
 
@@ -206,6 +241,123 @@ func test_valid_challenge_installs_and_redownload_is_idempotent() -> void:
 	assert_true(bool(second.get("ok", false)), "a re-install should still succeed")
 	assert_eq(String(second.get("data", {}).get("status", "")), "already_owned",
 		"a re-download must resolve to the challenge already owned")
+
+
+# --- Community id stamping --------------------------------------------------
+
+func test_installed_challenge_is_stamped_with_the_community_id() -> void:
+	var client: CommunityClient = _client()
+	var payload: Dictionary = _challenge_payload("Community Stamp Challenge")
+
+	var result: Dictionary = client.install_payload(CommunityProvider.TYPE_CHALLENGE, payload, "challenge_abc123")
+	assert_true(bool(result.get("ok", false)), "a valid challenge should install: %s" % String(result.get("error", "")))
+	var path: String = String(result.get("data", {}).get("path", ""))
+
+	var saved: Dictionary = ChallengeCodec.load_from_file(path)
+	# The field name is load-bearing: the challenge-completion flow reads exactly this key
+	# and hands it to CommunityClient.report_attempt.
+	assert_eq(String(saved.get("community_id", "")), "challenge_abc123",
+		"the installed challenge carries the service's item id as 'community_id'")
+	assert_eq(ChallengeCodec.validate(saved).size(), 0,
+		"stamping must not disturb the checksum -- the saved file still validates")
+	assert_false(payload.has("community_id"),
+		"the caller's payload dict is not mutated; the stamp goes on the saved copy")
+
+
+func test_install_without_a_community_id_stamps_nothing() -> void:
+	var client: CommunityClient = _client()
+	var result: Dictionary = client.install_payload(CommunityProvider.TYPE_CHALLENGE,
+		_challenge_payload("Community Unstamped Challenge"))
+	assert_true(bool(result.get("ok", false)), "the challenge should still install")
+	var saved: Dictionary = ChallengeCodec.load_from_file(String(result.get("data", {}).get("path", "")))
+	assert_false(saved.has("community_id"),
+		"a locally installed challenge has no service id, so the key is absent entirely")
+
+
+func test_download_to_library_stamps_the_items_id_end_to_end() -> void:
+	var client: CommunityClient = _client()
+	var payload: Dictionary = _challenge_payload("Community Download Stamp")
+
+	var uploaded: Dictionary = _sync(func(cb: Callable): client.upload(payload, cb))
+	assert_true(bool(uploaded.get("ok", false)), "the mock should accept the upload")
+	var summary: Dictionary = uploaded.get("data", {})
+	var item_id: String = String(summary.get("id", ""))
+	assert_false(item_id.is_empty(), "the mock should mint an item id")
+
+	var result: Dictionary = _sync(func(cb: Callable): client.download_to_library(summary, cb))
+	assert_true(bool(result.get("ok", false)), "the download should install: %s" % String(result.get("error", "")))
+	var saved: Dictionary = ChallengeCodec.load_from_file(String(result.get("data", {}).get("path", "")))
+	assert_eq(String(saved.get("community_id", "")), item_id,
+		"a downloaded challenge is stamped with the id it was downloaded under")
+
+
+func test_redownload_backfills_a_missing_community_id() -> void:
+	var client: CommunityClient = _client()
+	var payload: Dictionary = _challenge_payload("Community Backfill Challenge")
+
+	# First install: no service id known (e.g. the challenge was imported from a share code).
+	var first: Dictionary = client.install_payload(CommunityProvider.TYPE_CHALLENGE, payload)
+	assert_true(bool(first.get("ok", false)), "the first install should succeed")
+
+	# Same content, now downloaded from the service: already owned, but the id is new
+	# information and the file would otherwise never report attempts.
+	var second: Dictionary = client.install_payload(CommunityProvider.TYPE_CHALLENGE, payload, "challenge_backfilled")
+	assert_eq(String(second.get("data", {}).get("status", "")), "already_owned",
+		"the same content is not installed twice")
+	assert_eq(String(second.get("data", {}).get("path", "")), String(first.get("data", {}).get("path", "")),
+		"and it stays the same file")
+	var saved: Dictionary = ChallengeCodec.load_from_file(String(second.get("data", {}).get("path", "")))
+	assert_eq(String(saved.get("community_id", "")), "challenge_backfilled",
+		"the id is backfilled onto the copy already on disk")
+
+
+func test_report_attempt_without_an_id_fails_without_touching_the_service() -> void:
+	# A locally authored challenge has no community_id: the completion flow calls this
+	# anyway, and it must be an ordinary refusal, not an error the player sees.
+	var result: Dictionary = _sync(func(cb: Callable): _client().report_attempt("   ", {"cleared": true}, cb))
+	assert_false(bool(result.get("ok", true)), "there is no ledger to write to")
+	assert_eq(String(result.get("error", "")), CommunityProvider.ERR_NOT_FOUND, "and it says so in the shared vocabulary")
+
+
+# --- Forwarding -------------------------------------------------------------
+
+func test_client_forwards_the_whole_api_to_its_provider() -> void:
+	var provider := RecordingProvider.new()
+	var client := CommunityClient.new(provider)
+
+	# The 5-argument list_items IS the browse screen's call. A 4-argument client would not
+	# even compile against it, which is exactly the break this pins.
+	_sync(func(cb: Callable): client.list_items(CommunityProvider.SORT_RECOMMENDED,
+		CommunityProvider.TYPE_CHALLENGE, 2, cb, "  Frozen  "))
+	_sync(func(cb: Callable): client.report_attempt("challenge_x", {"cleared": true, "score": 7, "turns": 3}, cb))
+	_sync(func(cb: Callable): client.my_bases(cb))
+	_sync(func(cb: Callable): client.set_base_active("challenge_x", false, cb))
+
+	assert_eq(provider.calls.size(), 4, "every call reaches the provider exactly once")
+
+	var listed: Dictionary = provider.calls[0]
+	assert_eq(String(listed.get("sort", "")), CommunityProvider.SORT_RECOMMENDED)
+	assert_eq(String(listed.get("type", "")), CommunityProvider.TYPE_CHALLENGE)
+	assert_eq(int(listed.get("page", -1)), 2, "the page is forwarded unchanged")
+	assert_eq(String(listed.get("query", "")), "  Frozen  ",
+		"the raw needle is forwarded -- sanitising is the PROVIDER's boundary, not the client's")
+
+	assert_eq(String(provider.calls[1].get("id", "")), "challenge_x")
+	var forwarded: Dictionary = provider.calls[1].get("outcome", {})
+	assert_true(bool(forwarded.get("cleared", false)), "the outcome reaches the provider intact...")
+	assert_eq(int(forwarded.get("score", -1)), 7, "...score included...")
+	assert_eq(int(forwarded.get("turns", -1)), 3, "...and turns, to be sanitised at that boundary")
+	assert_eq(String(provider.calls[2].get("call", "")), "my_bases")
+	assert_false(bool(provider.calls[3].get("active", true)), "the active flag is forwarded")
+
+
+func test_report_attempt_with_a_real_id_reaches_the_provider() -> void:
+	# The mirror of the blank-id refusal: a stamped id is NOT short-circuited.
+	var provider := RecordingProvider.new()
+	var result: Dictionary = _sync(func(cb: Callable):
+		CommunityClient.new(provider).report_attempt("challenge_x", {"cleared": false}, cb))
+	assert_true(bool(result.get("ok", false)), "a stamped id reports through to the service")
+	assert_eq(provider.calls.size(), 1, "and it is the provider that answers")
 
 
 func test_unrecognised_payload_is_rejected() -> void:

@@ -162,6 +162,11 @@ func _ready() -> void:
 	# unit fires an ultimate. Safe to add now -- it stays idle until GameEvents.ultimate_casting.
 	_setup_ultimate_cutin()
 
+	# Battle REPLAY recorder: a headless listener that logs every committed command. Mounted
+	# BEFORE the map/players load so it is subscribed in time for the very first turn (it
+	# latches its header on the first turn_started, once the roster exists).
+	_setup_replay_recorder()
+
 	# Load the selected map or default map
 	await _load_selected_map()
 	if not is_inside_tree():
@@ -172,11 +177,10 @@ func _ready() -> void:
 	# A no-op for every ordinary battle.
 	_maybe_restore_battle_snapshot()
 
-	# Check if this is a network multiplayer game
-	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
-		await _setup_network_multiplayer()
-	else:
-		await _setup_local_game()
+	# Networked matches (GameMode.MULTIPLAYER) boot through the SAME deterministic setup
+	# as solo/hotseat: both peers build an identical board locally, and the NetSession
+	# command seam installed per map load (_install_command_seam) keeps them in lockstep.
+	await _setup_local_game()
 
 
 ## Runtime-summon a unit MID-BATTLE (the Necromancer's Reanimate / Undying Legion).
@@ -467,6 +471,26 @@ func _setup_game_over_screen() -> void:
 	# still stand -- player_eliminated alone would miss that moment.
 	if GameEvents and not GameEvents.unit_eliminated.is_connected(_on_unit_eliminated):
 		GameEvents.unit_eliminated.connect(_on_unit_eliminated)
+
+
+func _setup_replay_recorder() -> void:
+	"""Mount the battle REPLAY recorder once per battle. Like the overlays above it is
+	entirely self-contained (see [ReplayRecorder]): it joins the "replay_recorder" group,
+	subscribes to GameEvents.command_committed and the ACTIVE turn system's turn signals in
+	_ready, latches its header on the first turn, and writes user://replays/<file> when the
+	battle finalizes -- so there is nothing to wire here beyond adding it to the tree.
+
+	Recording is ON by default for real battles (ReplayRecorder.recording_enabled); it costs
+	one signal connection and a dictionary append per committed command, and the challenge
+	base-defense flow needs the log. Added as a child of THIS node rather than the scene root
+	so it is torn down with the battle, which is what triggers the save-on-quit path."""
+	if get_node_or_null("ReplayRecorder") != null:
+		return
+	if not ReplayRecorder.recording_enabled:
+		return
+	var recorder := ReplayRecorder.new()
+	recorder.name = "ReplayRecorder"
+	add_child(recorder)
 
 
 func _setup_ultimate_cutin() -> void:
@@ -893,29 +917,6 @@ func _on_player_turn_started_tile_effects(player) -> void:
 		_prime_tile_effects(cell)
 		_tile_effect_system.on_turn_start(unit, board)
 
-func _setup_network_multiplayer() -> void:
-	"""Set up network multiplayer game"""
-	# Check if GameModeManager is already handling multiplayer
-	if GameModeManager and GameModeManager.is_multiplayer_active():
-		# Connect to GameModeManager signals
-		if not GameModeManager.game_ended.is_connected(_on_multiplayer_game_ended):
-			GameModeManager.game_ended.connect(_on_multiplayer_game_ended)
-		
-		# Set up players for network multiplayer
-		await _setup_multiplayer_players()
-		
-		# Apply settings but don't start game (GameModeManager handles this)
-		if GameSettings:
-			GameSettings.apply_settings_to_game()
-		
-		# Wait one more frame before starting the game
-		await get_tree().process_frame
-		
-		# Start the game for multiplayer
-		_start_game()
-	else:
-		await _setup_local_game()
-
 func _setup_local_game() -> void:
 	"""Set up local single-player or local multiplayer game"""
 
@@ -966,28 +967,6 @@ func _setup_local_game() -> void:
 	# activates the turn system.
 	_finish_battle_restore()
 
-func _setup_multiplayer_players() -> void:
-	"""Set up players for network multiplayer"""
-	# Get player info from GameModeManager
-	var multiplayer_status = GameModeManager.get_multiplayer_status()
-	var network_players = multiplayer_status.get("players", {})
-	var local_player_id = GameModeManager.get_local_player_id()
-
-	# Reset per-session autoload state before registering players. Replaces the old
-	# ad-hoc players.clear(): also resets game state back to SETUP and tears down any
-	# turn system left over from a prior session (freed units). This runs BEFORE the
-	# Player 1/2 registration below so the registration order is preserved.
-	PlayerManager.reset_for_new_game()
-	TurnSystemManager.reset_for_new_game()
-
-	# Set up multiplayer players with proper IDs
-	# Always create 2 players for multiplayer
-	var player1 = PlayerManager.register_player("Player 1")
-	var player2 = PlayerManager.register_player("Player 2")
-
-	# Assign units to players based on scene structure
-	PlayerManager.assign_units_by_parent()
-
 func _setup_players() -> void:
 	"""Set up players and assign units"""
 	# Ensure we have the right number of players
@@ -1032,16 +1011,6 @@ func _start_game() -> void:
 	"""Start the game"""
 	# Start the game in PlayerManager
 	PlayerManager.start_game()
-
-func _on_multiplayer_game_ended(winner_id: int) -> void:
-	"""Handle multiplayer game ended"""
-	# Show game over screen or return to menu. The GameOverScreen is live during those two
-	# seconds and offers its own "Main Menu" button, so the player can free this node
-	# mid-await; resuming would then call get_tree() on a freed instance.
-	await get_tree().create_timer(2.0).timeout
-	if not is_instance_valid(self) or not is_inside_tree():
-		return
-	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
 
 # Current UI Layout (1280x720, container-driven -- see game/ui/layout/GameUILayout.tscn
 # + UILayoutManager, and UI_LAYOUT_GUIDE.md). Positions are laid out by containers,

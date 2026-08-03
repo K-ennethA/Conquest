@@ -408,23 +408,6 @@ func _on_player_unit_removed(player: Player, unit: Unit) -> void:
 			end_game(winner)
 
 # Debug and utility
-func _get_log_prefix() -> String:
-	"""Get a log prefix to identify host vs client"""
-	var prefix = "[UNKNOWN] "
-
-	if GameModeManager and GameModeManager.is_multiplayer_active():
-		var local_player_id = GameModeManager.get_local_player_id()
-		if local_player_id == 0:
-			prefix = "[HOST] "
-		elif local_player_id == 1:
-			prefix = "[CLIENT] "
-		else:
-			prefix = "[PLAYER" + str(local_player_id) + "] "
-	else:
-		prefix = "[SINGLE] "
-
-	return prefix
-
 func get_game_state_info() -> Dictionary:
 	"""Get current game state information"""
 	var current_player = get_current_player()

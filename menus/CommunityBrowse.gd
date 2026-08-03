@@ -9,23 +9,46 @@ class_name CommunityBrowse
 ##
 ## It talks only to [CommunityClient], which hides whether we are online (an [HttpProvider]
 ## against a configured service) or offline (the [LocalProvider] sandbox). When offline a
-## banner says so. Sorting (Top / New / Daily) and a type filter (Maps / Challenges / All)
-## drive the list; each card shows a lazily-generated minimap thumbnail (maps), a net vote
-## score with up/down buttons (optimistic, reverts on error), a Held% for played challenges,
-## and a Download button that routes through the client's hardened validate+save path.
+## banner says so. Sorting (Recommended / Top / New / Daily), a free-text search and a type
+## filter (Maps / Challenges / All) drive the list; each card shows a lazily-generated minimap
+## thumbnail (maps), a net vote score with up/down buttons (optimistic, reverts on error), a
+## derived defense readout for challenges, and a Download button that routes through the
+## client's hardened validate+save path.
 ##
 ## Every dependency is null-guarded so a missing autoload or unreadable payload degrades to
 ## a message rather than a crash.
+##
+## SEARCH is DEBOUNCED, not submit-on-enter: typing restarts a 0.4s one-shot timer and the
+## query fires when the player stops. Enter flushes it immediately (a shortcut, not the only
+## way in), and emptying the field is just another query -- it debounces back to the plain
+## browse feed. Debounce over submit because the sort tabs already reload on a single click;
+## making search the one control that needs a second keystroke to commit would read as broken.
 
 const CHALLENGE_BROWSE_SCENE := "res://menus/ChallengeBrowse.tscn"
+const MY_BASES_SCENE := "res://menus/MyBases.tscn"
+
+## Mirrors [code]CommunityProvider.SORT_RECOMMENDED[/code] (byte-identical string). Held here
+## rather than referenced so this screen still PARSES in a tree where the client-side constant
+## has not landed yet -- a missing constant is a load-time error that would take the whole
+## screen down, while the value itself is part of the pinned wire vocabulary.
+const SORT_RECOMMENDED := "recommended"
+
+## How long the search field stays quiet before the query is sent.
+const SEARCH_DEBOUNCE := 0.4
 
 # --- State ------------------------------------------------------------------
-var _client: CommunityClient = null
-var _sort: String = CommunityProvider.SORT_TOP
+## Untyped on purpose: tests inject a stand-in client, and the pinned client API
+## (`list_items`'s trailing query, `my_bases`, `set_base_active`) is owned by a parallel
+## workstream -- an untyped handle keeps this screen from hard-binding to an arity.
+## Set it with [method set_community_client] BEFORE the node enters the tree.
+var _client = null
+var _sort: String = SORT_RECOMMENDED
 var _type: String = CommunityProvider.TYPE_ALL
 var _page: int = 0
 var _loading: bool = false
 var _daily_id: String = ""
+## The live search string ("" = the plain browse feed).
+var _query: String = ""
 
 ## Per-card live state, keyed by item id: {votes, my_vote, votes_label, up_btn, down_btn,
 ## download_btn, item}.
@@ -40,12 +63,22 @@ var _status: Label = null
 var _banner: Label = null
 var _sort_btns: Dictionary = {}
 var _type_btns: Dictionary = {}
+var _search_edit: LineEdit = null
+var _search_timer: Timer = null
+
+
+## Inject the community client. Call BEFORE the node enters the tree (the script is live as
+## soon as it is set, `_ready` is not) -- `_ready` only builds the real client when none was
+## supplied, so a test never touches the on-disk sandbox.
+func set_community_client(client) -> void:
+	_client = client
 
 
 func _ready() -> void:
 	theme = MenuTheme.build()
 	MenuTheme.apply_backdrop(self)
-	_client = CommunityClient.new()
+	if _client == null:
+		_client = CommunityClient.new()
 	_build_ui()
 	_refresh_banner()
 	_load_daily_then_list()
@@ -95,6 +128,9 @@ func _build_ui() -> void:
 	# Filter bar: sort tabs on the left, type filter on the right.
 	page.add_child(_build_filter_bar())
 
+	# Search row (one more 40px fixed item; see the scroll floor below for the budget).
+	page.add_child(_build_search_row())
+
 	# The scrolling card list.
 	var list_card := PanelContainer.new()
 	list_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -104,10 +140,14 @@ func _build_ui() -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	# 150 not 380: list_card above is already SIZE_EXPAND_FILL, so this scroll is the
 	# page's ONLY flexible region and its floor is what decides whether the footer fits.
-	# With the trimmed floor the fixed-item sum (worst case, banner + load-more shown)
-	# drops to ~545 against the page's 700 budget, and the leftover 155px flows back
-	# into this scroll via EXPAND_FILL -- still several visible rows, just no longer
-	# hard-coded to a height that guaranteed the footer clipped off-screen.
+	# Worst case (offline banner + Load-more both visible) the fixed items now sum to
+	#   title 52 + subtitle 21 + banner 16 + filter bar 40 + SEARCH ROW 40 + list card
+	#   (150 floor + 24 panel padding) + load-more 40 + status 20 + actions 48 + hint 16
+	#   = 467, plus 9 gaps * 16 separation = 144  ->  611
+	# against the page's 700 budget (itself 20px clear of a 720p viewport). The leftover
+	# 89px flows back into this scroll via EXPAND_FILL (~239px of rows). The search row
+	# cost 56 of the old ~145px of slack; there is still room, but the next fixed item
+	# added to this page must re-run this sum, not eyeball it.
 	scroll.custom_minimum_size = Vector2(0.0, 150.0)
 	list_card.add_child(scroll)
 
@@ -142,10 +182,81 @@ func _build_ui() -> void:
 	back.pressed.connect(_on_back_pressed)
 	actions.add_child(back)
 
+	# My Bases lives beside Back rather than in the list: it is the OTHER half of the
+	# community loop (what you published and how it is holding up), not a browse filter.
+	var bases := Button.new()
+	bases.text = "My Bases"
+	bases.custom_minimum_size = Vector2(200.0, 48.0)
+	var bases_available: bool = ResourceLoader.exists(MY_BASES_SCENE)
+	bases.disabled = not bases_available
+	bases.tooltip_text = "Your published challenges and how their defenses are holding." \
+		if bases_available else "The base screen is not available in this build."
+	bases.pressed.connect(_on_my_bases_pressed)
+	actions.add_child(bases)
+
 	var hint := Label.new()
-	hint.text = "Top / New / Daily  •  filter by type  •  vote and Download  •  ESC back"
+	hint.text = "Search  •  Recommended / Top / New / Daily  •  vote and Download  •  ESC back"
 	page.add_child(hint)
 	MenuTheme.style_caption(hint)
+
+
+## The search field. Debounced (see the class docs): typing restarts [member _search_timer],
+## Enter flushes immediately, and Clear empties the field which debounces back to the feed.
+func _build_search_row() -> Control:
+	var row := HBoxContainer.new()
+	row.custom_minimum_size = Vector2(0.0, 40.0)
+	row.add_theme_constant_override("separation", 10)
+
+	_search_edit = LineEdit.new()
+	_search_edit.placeholder_text = "Search by title or author..."
+	_search_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_search_edit.clear_button_enabled = true
+	_search_edit.text_changed.connect(_on_search_text_changed)
+	_search_edit.text_submitted.connect(func(_t: String): _flush_search())
+	row.add_child(_search_edit)
+
+	# The debounce clock. One-shot and RESTARTED per keystroke, so only the pause at the
+	# end of typing costs a request.
+	_search_timer = Timer.new()
+	_search_timer.one_shot = true
+	_search_timer.wait_time = SEARCH_DEBOUNCE
+	_search_timer.timeout.connect(_flush_search)
+	row.add_child(_search_timer)
+
+	var clear := Button.new()
+	clear.text = "Clear"
+	# Explicit minimum: this button's label is its only content, and a chip-sized button
+	# with no explicit floor collapses to its text width on a narrow layout.
+	clear.custom_minimum_size = Vector2(96.0, 40.0)
+	clear.pressed.connect(_on_search_cleared)
+	row.add_child(clear)
+
+	return row
+
+
+## Restart the debounce. The query itself is read in [method _flush_search], so a keystroke
+## that lands after the timer already fired simply starts a fresh one.
+func _on_search_text_changed(_text: String) -> void:
+	if _search_timer != null:
+		_search_timer.start(SEARCH_DEBOUNCE)
+
+
+## Send the field's current contents as the query, if it actually changed. Called by the
+## debounce timeout, by Enter, and by Clear -- all three land here so there is one path.
+func _flush_search() -> void:
+	if _search_timer != null:
+		_search_timer.stop()
+	var next: String = _search_edit.text.strip_edges() if _search_edit != null else ""
+	if next == _query:
+		return
+	_query = next
+	_reload()
+
+
+func _on_search_cleared() -> void:
+	if _search_edit != null:
+		_search_edit.text = ""
+	_flush_search()
 
 
 func _build_filter_bar() -> Control:
@@ -156,14 +267,20 @@ func _build_filter_bar() -> Control:
 	var sort_row := HBoxContainer.new()
 	sort_row.add_theme_constant_override("separation", 6)
 	bar.add_child(sort_row)
+	# Recommended leads AND is the default (see [member _sort]): the server-ranked feed is the
+	# one that surfaces a challenge a player has not seen, which is the point of the screen.
+	# Top/New/Daily stay, unchanged, one click away. Widths: 136 + 3*88 + 3*6 gaps = 418,
+	# against the type row's 3*96 + 2*6 = 300 and the page's 820 floor -- the bar fits with
+	# ~80px to spare, so the spacer between them never collapses.
 	for spec in [
-		{"label": "Top", "value": CommunityProvider.SORT_TOP},
-		{"label": "New", "value": CommunityProvider.SORT_NEW},
-		{"label": "Daily", "value": CommunityProvider.SORT_DAILY},
+		{"label": "Recommended", "value": SORT_RECOMMENDED, "width": 136.0},
+		{"label": "Top", "value": CommunityProvider.SORT_TOP, "width": 88.0},
+		{"label": "New", "value": CommunityProvider.SORT_NEW, "width": 88.0},
+		{"label": "Daily", "value": CommunityProvider.SORT_DAILY, "width": 88.0},
 	]:
 		var b := Button.new()
 		b.text = String(spec["label"])
-		b.custom_minimum_size = Vector2(88.0, 40.0)
+		b.custom_minimum_size = Vector2(float(spec["width"]), 40.0)
 		var value: String = String(spec["value"])
 		b.pressed.connect(func(): _on_sort_selected(value))
 		sort_row.add_child(b)
@@ -203,7 +320,7 @@ func _sync_filter_highlights() -> void:
 
 
 func _refresh_banner() -> void:
-	if _banner == null or _client == null:
+	if _banner == null or _client == null or not _client.has_method("is_local"):
 		return
 	if _client.is_local():
 		_banner.text = "Showing local sandbox -- community service not connected"
@@ -243,10 +360,16 @@ func _load_page() -> void:
 	_loading = true
 	if _load_more_btn != null:
 		_load_more_btn.disabled = true
-	_client.list_items(_sort, _type, _page, func(result: Dictionary): _on_page_loaded(result))
+	# The trailing query is part of the pinned client contract; "" is the plain browse feed.
+	_client.list_items(_sort, _type, _page, func(result: Dictionary): _on_page_loaded(result), _query)
 
 
 func _on_page_loaded(result: Dictionary) -> void:
+	# A page can land after the screen closed (or after a newer query replaced this one):
+	# the LocalProvider answers synchronously but HttpProvider does not, so nothing here may
+	# assume the nodes are still alive.
+	if _list_box == null or not is_instance_valid(_list_box):
+		return
 	_loading = false
 	if _load_more_btn != null:
 		_load_more_btn.disabled = false
@@ -259,7 +382,9 @@ func _on_page_loaded(result: Dictionary) -> void:
 	var items: Array = result.get("data", []) if result.get("data", []) is Array else []
 	if _page == 0 and items.is_empty():
 		var empty := Label.new()
-		empty.text = "Nothing here yet. Be the first to share a map or challenge!"
+		empty.text = "No results for \"%s\". Try a different title or author." % _query \
+			if not _query.is_empty() \
+			else "Nothing here yet. Be the first to share a map or challenge!"
 		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		MenuTheme.style_subtitle(empty)
@@ -314,6 +439,12 @@ func _make_card(item: Dictionary) -> Control:
 	var name_lbl := Label.new()
 	name_lbl.text = String(item.get("name", "Untitled"))
 	name_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	# A player-authored title is arbitrary length: clip + ellipsis so it can never push the
+	# chips, vote column and Download button off the right edge of the card.
+	name_lbl.clip_text = true
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.custom_minimum_size = Vector2(120.0, 0.0)
 	name_row.add_child(name_lbl)
 
 	name_row.add_child(MenuTheme.make_chip(
@@ -425,19 +556,55 @@ func _generate_thumb_async(id: String, holder: Control) -> void:
 	)
 
 
-## "42x  •  Score N  •  Held 70%  •  1.2 KB" style meta, omitting fields that don't apply.
+## "Attacked 42  •  defended 71%  •  1.2 KB" style meta, omitting fields that don't apply.
+## The defense readout is CHALLENGE-only: a bare map is never attacked, so a "0 attacks" line
+## on one would be noise rather than information.
 func _meta_line(item: Dictionary) -> String:
 	var parts: Array = []
-	var attempts: int = int(item.get("attempts", 0))
-	var clears: int = int(item.get("clears", 0))
-	if attempts > 0:
-		var held: int = int(round(100.0 * float(attempts - clears) / float(attempts)))
-		parts.append("Held %d%%" % held)
-		parts.append("%d attempt%s" % [attempts, "" if attempts == 1 else "s"])
+	if String(item.get("type", "")) == CommunityProvider.TYPE_CHALLENGE:
+		parts.append(defense_label(item))
 	var size_bytes: int = int(item.get("size_bytes", 0))
 	if size_bytes > 0:
 		parts.append(_fmt_size(size_bytes))
 	return "   •   ".join(PackedStringArray(parts))
+
+
+# --- Derived defense figures (pure; the single source of truth) --------------
+# The service stores COUNTERS only -- attempts (how many players attacked this base) and
+# clears (how many of them won). Everything the UI shows is arithmetic over those two, done
+# here so the browse cards and the My Bases slots can never disagree. Static + dictionary-in
+# so it is directly unit-testable with no screen in the tree.
+
+## Derived figures for an item summary: { attacked, defended, rate }.
+## [code]rate[/code] is 0.0..1.0, or -1.0 when the base has NEVER been attacked -- 0/0 is not
+## 100%, it is "no data", and the sentinel forces every caller to say so in words.
+## A payload claiming more clears than attempts is clamped rather than trusted (it is
+## untrusted server data), so [code]defended[/code] can never go negative.
+static func defense_stats(item: Dictionary) -> Dictionary:
+	var attacked: int = maxi(0, int(item.get("attempts", 0)))
+	var clears: int = clampi(int(item.get("clears", 0)), 0, attacked)
+	var defended: int = attacked - clears
+	var rate: float = -1.0 if attacked <= 0 else float(defended) / float(attacked)
+	return {"attacked": attacked, "defended": defended, "rate": rate}
+
+
+## One subtle line for a card: "Attacked 42   ·   defended 71%", or the honest
+## "Not attacked yet" when there is nothing to average.
+static func defense_label(item: Dictionary) -> String:
+	var stats: Dictionary = defense_stats(item)
+	var rate: float = float(stats["rate"])
+	if rate < 0.0:
+		return "Not attacked yet"
+	return "Attacked %d   ·   defended %d%%" % [int(stats["attacked"]), defense_percent(item)]
+
+
+## The defense rate as a whole percent. Returns -1 when the base has never been attacked, so
+## a caller that formats it itself still cannot print "100%" for an untested base.
+static func defense_percent(item: Dictionary) -> int:
+	var rate: float = float(defense_stats(item)["rate"])
+	if rate < 0.0:
+		return -1
+	return int(round(100.0 * rate))
 
 
 func _fmt_size(bytes: int) -> String:
@@ -473,7 +640,9 @@ func _make_vote_controls(id: String, item: Dictionary) -> Control:
 
 	# Seed card vote state. my_vote comes from the local provider when available.
 	var my_vote: int = 0
-	if _client != null and _client.provider() is LocalProvider:
+	# has_method, not just null: the handle is untyped so a stand-in client need not carry
+	# the local-only extras at all.
+	if _client != null and _client.has_method("provider") and _client.provider() is LocalProvider:
 		my_vote = (_client.provider() as LocalProvider).my_vote(id)
 	var state: Dictionary = _cards.get(id, {})
 	state["votes"] = int(item.get("votes", 0))
@@ -592,10 +761,22 @@ func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file(CHALLENGE_BROWSE_SCENE)
 
 
+## Open the player's own published bases. Guarded like the ChallengeBrowse -> Community hop:
+## a build without the scene reports it rather than changing scene to a missing path.
+func _on_my_bases_pressed() -> void:
+	if not ResourceLoader.exists(MY_BASES_SCENE):
+		_set_status("The base screen is not available in this build.")
+		return
+	get_tree().change_scene_to_file(MY_BASES_SCENE)
+
+
 func _input(event: InputEvent) -> void:
 	if not event.is_pressed():
 		return
 	if event is InputEventKey:
+		# Don't steal typing (or ESC-to-dismiss) while the search field is focused.
+		if _search_edit != null and _search_edit.has_focus():
+			return
 		match (event as InputEventKey).keycode:
 			KEY_ESCAPE:
 				_on_back_pressed()

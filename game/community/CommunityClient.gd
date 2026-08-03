@@ -4,9 +4,12 @@ extends RefCounted
 ## Front door to the community service for the UI. It:
 ##   * picks the transport ([LocalProvider] offline, or [HttpProvider] when
 ##     user://community.cfg supplies a base_url) -- so screens never touch a provider;
-##   * forwards the read/write API (list / fetch / vote / upload / daily) unchanged;
+##   * forwards the read/write API (list+search / fetch / vote / upload / daily /
+##     report_attempt / my_bases / set_base_active) unchanged;
 ##   * adds [method download_to_library], the ONLY safe path from an untrusted downloaded
-##     payload to a saved, playable file.
+##     payload to a saved, playable file -- which is also where the item's service id is
+##     stamped into the challenge as "community_id", the handle the completion flow later
+##     reports attempts against.
 ##
 ## SECURITY: a downloaded payload is player-authored, untrusted content. It is turned into
 ## something on disk ONLY through the two hardened importers:
@@ -58,8 +61,9 @@ func provider() -> CommunityProvider:
 
 # --- Forwarded API ----------------------------------------------------------
 
-func list_items(sort: String, type: String, page: int, cb: Callable) -> void:
-	_provider.list_items(sort, type, page, cb)
+## [param query] is an optional case-insensitive title/author search; "" is no filter.
+func list_items(sort: String, type: String, page: int, cb: Callable, query: String = "") -> void:
+	_provider.list_items(sort, type, page, cb, query)
 
 
 func fetch_item(id: String, cb: Callable) -> void:
@@ -76,6 +80,30 @@ func vote(id: String, dir: int, cb: Callable) -> void:
 
 func daily(cb: Callable) -> void:
 	_provider.daily(cb)
+
+
+## Record one play of a community item. [param id] is the `community_id` stamped into the
+## installed challenge by [method install_payload] -- the challenge-completion flow reads it
+## off the challenge it just finished and calls this. [param outcome] is
+## { cleared: bool, score: int, turns: int }; it is sanitised at the provider boundary.
+func report_attempt(id: String, outcome: Dictionary, cb: Callable) -> void:
+	if id.strip_edges().is_empty():
+		# A locally authored or pre-stamping challenge simply has no ledger to write to.
+		# That is an ordinary outcome, not an error the play flow should surface.
+		CommunityProvider._emit(cb, CommunityProvider.fail(CommunityProvider.ERR_NOT_FOUND))
+		return
+	_provider.report_attempt(id, outcome, cb)
+
+
+## This device's own uploaded challenges (active and retired), with their counters.
+func my_bases(cb: Callable) -> void:
+	_provider.my_bases(cb)
+
+
+## Publish / retire one of this device's own bases. Fails with "base_limit" past
+## [constant CommunityProvider.MAX_ACTIVE_BASES] active, "not_owner" for someone else's.
+func set_base_active(id: String, active: bool, cb: Callable) -> void:
+	_provider.set_base_active(id, active, cb)
 
 
 # --- Download to library (the guarded write path) ---------------------------
@@ -96,28 +124,33 @@ func download_to_library(item: Dictionary, cb: Callable) -> void:
 		if not (payload is Dictionary):
 			CommunityProvider._emit(cb, CommunityProvider.fail("Malformed payload."))
 			return
-		CommunityProvider._emit(cb, install_payload(item_type, payload))
+		CommunityProvider._emit(cb, install_payload(item_type, payload, id))
 	)
 
 
 ## Validate + save a payload synchronously. This is the hardened core of
 ## [method download_to_library], exposed so the guard can be unit-tested directly. A
 ## payload that fails validation returns {ok:false} and writes NOTHING.
-func install_payload(item_type: String, payload: Dictionary) -> Dictionary:
+##
+## [param community_id] is the SERVICE's id for the item. It is stamped into the installed
+## challenge as "community_id" so the completion flow can call [method report_attempt] with
+## it. Bare maps are not stamped: they have no ledger (nothing attempts a map), and their
+## file is written by re-exporting the validated [MapResource], which only knows map fields.
+func install_payload(item_type: String, payload: Dictionary, community_id: String = "") -> Dictionary:
 	match item_type:
 		CommunityProvider.TYPE_CHALLENGE:
-			return _install_challenge(payload)
+			return _install_challenge(payload, community_id)
 		CommunityProvider.TYPE_MAP:
 			return _install_map(payload)
 	# Unknown type: probe the shape rather than trust the label, then route.
 	if payload.has("format_version") and payload.has("rules"):
-		return _install_challenge(payload)
+		return _install_challenge(payload, community_id)
 	if payload.has("dimensions") and payload.has("layout"):
 		return _install_map(payload)
 	return CommunityProvider.fail("Unrecognised item type '%s'." % item_type)
 
 
-func _install_challenge(payload: Dictionary) -> Dictionary:
+func _install_challenge(payload: Dictionary, community_id: String = "") -> Dictionary:
 	var errors: Array[String] = ChallengeCodec.validate(payload)
 	if not errors.is_empty():
 		return CommunityProvider.fail("Challenge rejected: %s" % errors[0])
@@ -127,12 +160,28 @@ func _install_challenge(payload: Dictionary) -> Dictionary:
 	for entry in ChallengeCodec.list_saved():
 		var saved: Dictionary = entry.get("challenge", {})
 		if ChallengeCodec.challenge_id(saved) == id and not id.is_empty():
-			return CommunityProvider.ok({"status": "already_owned", "path": entry.get("path", ""), "type": CommunityProvider.TYPE_CHALLENGE})
+			var owned_path: String = String(entry.get("path", ""))
+			# Backfill: a copy saved before we knew its service id (or authored locally and
+			# later published) would otherwise never report attempts. The stem is reused so
+			# this rewrites the SAME file rather than adding a second copy.
+			if not community_id.is_empty() and String(saved.get("community_id", "")) != community_id:
+				saved["community_id"] = community_id
+				ChallengeCodec.save_to_file(saved, owned_path.get_file().get_basename())
+			return CommunityProvider.ok({"status": "already_owned", "path": owned_path,
+				"type": CommunityProvider.TYPE_CHALLENGE, "community_id": community_id})
 
-	var path: String = ChallengeCodec.save_to_file(payload)
+	# Stamp a COPY, and only after validation passed: the id is our metadata, not the
+	# author's content. ChallengeCodec.content_hash() hashes a fixed field list, so the extra
+	# key leaves the checksum -- and any later re-validation of the saved file -- untouched.
+	var to_save: Dictionary = payload.duplicate(true)
+	if not community_id.is_empty():
+		to_save["community_id"] = community_id
+
+	var path: String = ChallengeCodec.save_to_file(to_save)
 	if path.is_empty():
 		return CommunityProvider.fail("Could not save the challenge.")
-	return CommunityProvider.ok({"status": "downloaded", "path": path, "type": CommunityProvider.TYPE_CHALLENGE})
+	return CommunityProvider.ok({"status": "downloaded", "path": path,
+		"type": CommunityProvider.TYPE_CHALLENGE, "community_id": community_id})
 
 
 func _install_map(payload: Dictionary) -> Dictionary:

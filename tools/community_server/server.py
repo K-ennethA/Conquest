@@ -22,13 +22,27 @@ rules server-side and re-compute the checksum -- never trust the client.
 """
 
 import argparse
+import datetime
 import json
 import os
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 PAGE_SIZE = 20
+MAX_QUERY_LENGTH = 64
+MAX_ACTIVE_BASES = 3
+MAX_ATTEMPT_SCORE = 1_000_000
+MAX_ATTEMPT_TURNS = 999
+
+# Recommendation weights + scales -- mirror LocalProvider._recommended_score exactly. See
+# docs/COMMUNITY_API.md "Recommended feed" for what each term is for.
+REC_W_VOTES, REC_W_FAIRNESS, REC_W_ENGAGEMENT, REC_W_FRESHNESS = 0.45, 0.35, 0.12, 0.08
+REC_VOTE_SCALE = REC_ATTEMPT_SCALE = 25.0
+REC_PEAK_CLEAR_RATE = 0.4
+REC_FRESH_HALFLIFE_DAYS = 14.0
+
 _LOCK = threading.Lock()  # serialise file writes across worker threads
 
 
@@ -77,26 +91,118 @@ def _checksum(payload):
 
 
 def _summary_for(payload, votes, created):
-    """Derive an index summary from a payload; return None if unrecognisable."""
+    """Derive an index summary from a payload; return None if unrecognisable.
+
+    `owner` is left blank -- only the upload handler knows the caller's identity, and it
+    must come from the request header, never from the payload.
+    """
     text = json.dumps(payload)
     if all(k in payload for k in ("format_version", "map", "rules")):
         checksum = str(payload.get("checksum") or _checksum(payload))
         return {
             "id": "challenge_" + checksum, "type": "challenge",
             "name": payload.get("name", "Untitled"), "author": payload.get("author", ""),
-            "votes": votes, "attempts": 0, "clears": 0, "created": created,
-            "size_bytes": len(text), "checksum": checksum,
+            "votes": votes, "attempts": 0, "clears": 0, "owner": "", "active": True,
+            "created": created, "size_bytes": len(text), "checksum": checksum,
         }
     if "dimensions" in payload and "layout" in payload:
         checksum = _checksum(payload)
-        info = payload.get("map_info", {})
+        info = payload.get("map_info") if isinstance(payload.get("map_info"), dict) else {}
         return {
             "id": "map_" + checksum, "type": "map",
             "name": info.get("name", "Untitled Map"), "author": info.get("author", ""),
-            "votes": votes, "attempts": 0, "clears": 0, "created": created,
-            "size_bytes": len(text), "checksum": checksum,
+            "votes": votes, "attempts": 0, "clears": 0, "owner": "", "active": True,
+            "created": created, "size_bytes": len(text), "checksum": checksum,
         }
     return None
+
+
+# --- Boundary sanitisers (mirror CommunityProvider) --------------------------
+
+def _sanitize_query(raw):
+    """Trim, cap and lowercase a search needle. '' means NO query."""
+    return str(raw or "").strip()[:MAX_QUERY_LENGTH].lower()
+
+
+def _matches_query(item, needle):
+    if not needle:
+        return True
+    return needle in str(item.get("name", "")).lower() \
+        or needle in str(item.get("author", "")).lower()
+
+
+def _clamp_counter(value, limit):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0
+    try:
+        return max(0, min(limit, int(value)))
+    except (ValueError, OverflowError):  # NaN / inf
+        return 0 if value != value or value < 0 else limit
+
+
+def _sanitize_outcome(body):
+    """Exactly {cleared, score, turns}; unknown keys dropped, numbers clamped."""
+    if not isinstance(body, dict):
+        body = {}
+    cleared = body.get("cleared", False)
+    return {
+        "cleared": cleared if isinstance(cleared, bool) else False,
+        "score": _clamp_counter(body.get("score", 0), MAX_ATTEMPT_SCORE),
+        "turns": _clamp_counter(body.get("turns", 0), MAX_ATTEMPT_TURNS),
+    }
+
+
+def _coerce_int(value, fallback=0):
+    """An untrusted query/body number as an int. Junk reads as the fallback rather than
+    raising -- a malformed `page=abc` is a client mistake to absorb, not a 500 + traceback."""
+    if isinstance(value, bool):
+        return fallback
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return fallback
+
+
+def _is_active(item):
+    return bool(item.get("active", True))
+
+
+def _active_base_count(index, owner):
+    if not owner:
+        return 0
+    return sum(1 for it in index["items"]
+               if it.get("owner") == owner and it.get("type") == "challenge" and _is_active(it))
+
+
+def _created_unix(created):
+    try:
+        return datetime.datetime.fromisoformat(str(created)).timestamp()
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _recommended_score(item, now):
+    """The reference ranking -- documented in docs/COMMUNITY_API.md."""
+    v = float(item.get("votes", 0) or 0)
+    vote_term = v / (abs(v) + REC_VOTE_SCALE)
+
+    attempts = float(max(0, int(item.get("attempts", 0) or 0)))
+    engagement = attempts / (attempts + REC_ATTEMPT_SCALE)
+
+    fairness = 0.0
+    if attempts > 0:
+        rate = min(1.0, max(0.0, float(max(0, int(item.get("clears", 0) or 0))) / attempts))
+        offset = (rate - REC_PEAK_CLEAR_RATE) / REC_PEAK_CLEAR_RATE
+        fairness = max(0.0, 1.0 - offset * offset)
+
+    freshness = 0.0
+    created = _created_unix(item.get("created", ""))
+    if created > 0:
+        age_days = max(0.0, (now - created) / 86400.0)
+        freshness = 1.0 / (1.0 + age_days / REC_FRESH_HALFLIFE_DAYS)
+
+    return (REC_W_VOTES * vote_term + REC_W_FAIRNESS * fairness
+            + REC_W_ENGAGEMENT * engagement + REC_W_FRESHNESS * freshness)
 
 
 # --- Request handler --------------------------------------------------------
@@ -132,6 +238,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._list(parse_qs(parsed.query))
         if path == "/v1/daily":
             return self._daily()
+        if path == "/v1/me/bases":
+            return self._my_bases()
         if path.startswith("/v1/items/"):
             return self._fetch(path[len("/v1/items/"):])
         self._send(404, {"error": "Not found."})
@@ -141,20 +249,29 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path.rstrip("/")
         if path == "/v1/items":
             return self._upload()
-        if path.startswith("/v1/items/") and path.endswith("/vote"):
-            item_id = path[len("/v1/items/"):-len("/vote")]
-            return self._vote(item_id)
+        for suffix, handler in (("/vote", self._vote), ("/attempts", self._attempt),
+                                ("/active", self._set_active)):
+            if path.startswith("/v1/items/") and path.endswith(suffix):
+                return handler(path[len("/v1/items/"):-len(suffix)])
         self._send(404, {"error": "Not found."})
 
     # -- Endpoints --
     def _list(self, query):
-        sort = (query.get("sort", ["top"])[0])
+        sort = (query.get("sort", ["recommended"])[0])
         type_filter = (query.get("type", ["all"])[0])
-        page = int(query.get("page", ["0"])[0] or 0)
-        items = self.store.load_index()["items"]
+        page = _coerce_int(query.get("page", ["0"])[0])
+        needle = _sanitize_query(query.get("q", [""])[0])
+        # Retired bases are invisible to every feed; filters run BEFORE sort + pagination.
+        items = [it for it in self.store.load_index()["items"] if _is_active(it)]
         if type_filter not in ("all", ""):
             items = [it for it in items if it.get("type") == type_filter]
-        if sort == "new":
+        if needle:
+            items = [it for it in items if _matches_query(it, needle)]
+        if sort == "recommended":
+            now = time.time()
+            items = sorted(items, key=lambda it: (
+                -_recommended_score(it, now), -int(it.get("votes", 0) or 0), str(it.get("id", ""))))
+        elif sort == "new":
             items = sorted(items, key=lambda it: it.get("created", ""), reverse=True)
         elif sort == "daily":
             pick = self._daily_id()
@@ -181,7 +298,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(400, {"error": "Missing payload object."})
         # STRUCTURAL validation only -- see the module docstring. Server re-derives the
         # checksum and IGNORES any client-supplied one.
-        created = payload.get("created") or payload.get("map_info", {}).get("creation_date", "")
+        info = payload.get("map_info") if isinstance(payload.get("map_info"), dict) else {}
+        created = payload.get("created") or info.get("creation_date", "")
         summary = _summary_for(payload, 0, created)
         if summary is None:
             return self._send(400, {"error": "Payload is neither a map nor a challenge."})
@@ -189,6 +307,13 @@ class Handler(BaseHTTPRequestHandler):
             index = self.store.load_index()
             if any(it.get("id") == summary["id"] for it in index["items"]):
                 return self._send(409, {"error": "Item already exists."})
+            # Ownership comes from the request header, NEVER from the payload.
+            device = self._device()
+            summary["owner"] = device
+            # The 3-active cap is an invariant: a fourth upload lands retired instead of
+            # being refused, so nothing the author made is lost.
+            summary["active"] = (summary["type"] != "challenge"
+                                 or _active_base_count(index, device) < MAX_ACTIVE_BASES)
             self.store.save_payload(summary["id"], payload)
             index["items"].append(summary)
             self.store.save_index(index)
@@ -198,7 +323,7 @@ class Handler(BaseHTTPRequestHandler):
         body = self._read_body()
         if body is None:
             return self._send(400, {"error": "Body was not valid JSON."})
-        direction = max(-1, min(1, int(body.get("dir", 0))))
+        direction = max(-1, min(1, _coerce_int(body.get("dir", 0) if isinstance(body, dict) else 0)))
         device = self._device()
         with _LOCK:
             index = self.store.load_index()
@@ -215,12 +340,58 @@ class Handler(BaseHTTPRequestHandler):
             self.store.save_index(index)
         self._send(200, {"id": item_id, "votes": item["votes"]})
 
+    def _attempt(self, item_id):
+        """Record ONE play. Deliberately not idempotent: every attempt counts, including
+        repeats from the same device -- the ledger measures the base, not the audience.
+        Retired bases still count (a friend playing from a share code is real traffic)."""
+        body = self._read_body()
+        if body is None:
+            return self._send(400, {"error": "Body was not valid JSON."})
+        outcome = _sanitize_outcome(body)
+        with _LOCK:
+            index = self.store.load_index()
+            item = next((it for it in index["items"] if it.get("id") == item_id), None)
+            if item is None:
+                return self._send(404, {"error": "not_found"})
+            item["attempts"] = max(0, int(item.get("attempts", 0) or 0)) + 1
+            item["clears"] = max(0, int(item.get("clears", 0) or 0)) + (1 if outcome["cleared"] else 0)
+            self.store.save_index(index)
+        self._send(200, {"id": item_id, "attempts": item["attempts"],
+                         "clears": item["clears"], "outcome": outcome})
+
+    def _my_bases(self):
+        device = self._device()
+        mine = [it for it in self.store.load_index()["items"]
+                if it.get("owner") == device and it.get("type") == "challenge"]
+        mine.sort(key=lambda it: str(it.get("created", "")), reverse=True)
+        self._send(200, mine)
+
+    def _set_active(self, item_id):
+        body = self._read_body()
+        if body is None:
+            return self._send(400, {"error": "Body was not valid JSON."})
+        active = bool(body.get("active", False)) if isinstance(body, dict) else False
+        device = self._device()
+        with _LOCK:
+            index = self.store.load_index()
+            item = next((it for it in index["items"] if it.get("id") == item_id), None)
+            if item is None:
+                return self._send(404, {"error": "not_found"})
+            if not device or item.get("owner") != device:
+                return self._send(403, {"error": "not_owner"})
+            # Only a transition INTO active can breach the cap; retiring always succeeds.
+            if (active and not _is_active(item) and item.get("type") == "challenge"
+                    and _active_base_count(index, device) >= MAX_ACTIVE_BASES):
+                return self._send(409, {"error": "base_limit"})
+            item["active"] = active
+            self.store.save_index(index)
+        self._send(200, {"id": item_id, "active": active})
+
     def _daily(self):
         self._send(200, {"id": self._daily_id()})
 
     def _daily_id(self):
-        import datetime
-        items = self.store.load_index()["items"]
+        items = [it for it in self.store.load_index()["items"] if _is_active(it)]
         if not items:
             return ""
         seed = datetime.date.today().isoformat()

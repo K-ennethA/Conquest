@@ -41,6 +41,19 @@ extends Node
 ##   * unit_eliminated    -- never ends anything; it only tallies units_lost for the score.
 ## Whichever fires FIRST wins: _record_result latches (_result_recorded), so a survive latch
 ## can never be flipped to a loss by a later wipe, and vice versa.
+##
+## ATTEMPT REPORTING (the defender's half of an async challenge): every attempt at a challenge
+## that was INSTALLED FROM THE COMMUNITY SERVICE is reported back to that service, WIN OR LOSS
+## -- a failed attempt is exactly what the author wants to know about, so both outcomes go up.
+## The report rides [method _record_result], the ONE place an attempt is declared over, so it
+## fires from every finish path there is (breach win, survive latch, wipe, the end-of-day
+## forfeit, the pause-menu abandon) and does NOT depend on the player ever seeing the summary
+## screen. Challenges that arrived as a friend SHARE CODE carry no "community_id" and are
+## silently never reported -- that path is deliberately serverless.
+
+## Field the community install path stamps onto a downloaded challenge. Its presence is the
+## whole test for "this attempt belongs to a community-hosted challenge".
+const COMMUNITY_ID_KEY := "community_id"
 
 ## Where the run's materialised map + the results file live.
 const ACTIVE_MAP_DIR := "user://challenges/active/"
@@ -70,6 +83,22 @@ var _active_map_path: String = ""
 
 ## Set once per battle so repeated elimination signals record a single result.
 var _result_recorded: bool = false
+
+## Set once per ATTEMPT the moment the community report is handed off, so an attempt can
+## never be reported twice. Deliberately a SECOND latch rather than a reuse of
+## [member _result_recorded]: that one is reset by the forfeit paths (which legitimately
+## re-enter _record_result for a stored attempt), and a stale re-entry must still not
+## re-report. Both are cleared together everywhere a genuinely NEW attempt is armed.
+var _attempt_reported: bool = false
+
+## The community front door used for [method _report_attempt]. Untyped and lazily created:
+## tests inject a stub through [method set_community_client] so a suite never touches the
+## real community store, and a run that never plays a community challenge never builds one.
+var _community_client = null
+
+## The progression recorder the finished attempt is mirrored onto (the [PlayerProfile]
+## autoload in a real run). Untyped + injectable for the same reason as the client above.
+var _profile = null
 
 ## Challenger turns taken this battle (fed to the personal-best record). In "survive" mode
 ## this doubles as the ROUND COUNT: each challenger turn start is one round survived.
@@ -191,6 +220,7 @@ func begin() -> bool:
 	_active = challenge
 	_active_map_path = map_path
 	_result_recorded = false
+	_attempt_reported = false
 	_turns = 0
 	_units_lost = 0
 
@@ -212,6 +242,7 @@ func cancel() -> void:
 	_active = {}
 	_active_map_path = ""
 	_result_recorded = false
+	_attempt_reported = false
 	_turns = 0
 	_units_lost = 0
 
@@ -280,6 +311,7 @@ func resume_from_snapshot(challenge: Dictionary, turns: int, units_lost: int) ->
 	_active = challenge.duplicate(true)
 	_active_map_path = map_path
 	_result_recorded = false
+	_attempt_reported = false
 	_turns = maxi(0, turns)
 	_units_lost = maxi(0, units_lost)
 	return map_path
@@ -296,10 +328,32 @@ func forfeit_expired_attempt(challenge: Dictionary, turns: int, units_lost: int)
 		return false
 	_active = challenge.duplicate(true)
 	_result_recorded = false
+	_attempt_reported = false
 	_turns = maxi(0, turns)
 	_units_lost = maxi(0, units_lost)
 	_record_result(false)
 	# Disarm: the attempt is over, and nothing that happens later belongs to it.
+	_active = {}
+	_active_map_path = ""
+	_turns = 0
+	_units_lost = 0
+	return true
+
+
+## FORFEIT the LIVE attempt because the player walked out of the battle (the pause menu's
+## Quit to Menu). Leaving a challenge mid-attempt is a loss, for the same reason the
+## end-of-day rollover is: the attempt was spent. Routed through the same
+## [method _record_result] as every other ending, so it is scored, recorded AND reported
+## (cleared = false) exactly like a defeat on the board.
+##
+## Returns false -- changing nothing -- when this is not a live challenge battle (an Arena
+## abandon, a networked forfeit, a plain skirmish quit) or when the run already ended, so
+## the pause menu can call it unconditionally on its way out.
+func forfeit_active_attempt() -> bool:
+	if not _is_capturing() or _result_recorded:
+		return false
+	_record_result(false)
+	# Disarm: the player has left; nothing that happens later belongs to this attempt.
 	_active = {}
 	_active_map_path = ""
 	_turns = 0
@@ -479,6 +533,109 @@ func _record_result(won: bool) -> void:
 		"timestamp": Time.get_datetime_string_from_system(),
 	}
 	_save_results(results)
+
+	# The attempt is now final and locally recorded -- tell the wider world. Both calls are
+	# best-effort and return-value based: neither can fail the finish flow.
+	_report_attempt(won, score)
+	_notify_profile(won, score, perfect)
+
+
+# --- Attempt reporting (community) + local attacker stats -------------------
+
+## Inject the community front door. FOR TESTS (and a future offline/local swap): pass a stub
+## exposing report_attempt(id, outcome, cb) so a suite never touches the real community store.
+## Pass null to fall back to a lazily-built real [CommunityClient].
+func set_community_client(client) -> void:
+	_community_client = client
+
+
+## The community client, built on first use. Cached on the autoload so an in-flight request
+## (and the callback it holds) outlives the call that started it.
+##
+## A DETACHED instance (a `.new()` controller in a test or a tool, never added to the tree)
+## builds nothing and returns null: only the live autoload may reach the real community
+## store, so a suite that forgets to inject a stub reports nowhere instead of writing to the
+## player's library.
+func _get_community_client():
+	if _community_client == null and is_inside_tree():
+		_community_client = CommunityClient.new()
+	return _community_client
+
+
+## Report the finished attempt to the community service. Returns TRUE when a report was
+## handed off, and FALSE -- silently, changing nothing -- in every other case:
+##   * the challenge carries no [constant COMMUNITY_ID_KEY]: it came from a friend SHARE CODE
+##     (or is a built-in), and that path is serverless BY DESIGN;
+##   * this attempt was already reported (the [member _attempt_reported] latch);
+##   * no client is available / it predates the report API.
+##
+## FIRE AND FORGET. The result callback is ignored on purpose: a challenge attempt is a
+## GAMEPLAY event, and a flaky network must never block, delay or error the finish flow. A
+## dropped report costs the defender one data point and nothing else.
+##
+## FUTURE (live service): a durable retry queue -- persist unsent attempts and flush them on
+## the next successful connection -- belongs here once the service is real. Deliberately NOT
+## built now: an offline-first queue is only meaningful against a backend that can de-duplicate
+## replayed attempts, which the local sandbox provider cannot.
+func _report_attempt(won: bool, score: int) -> bool:
+	if _attempt_reported:
+		return false
+	var community_id: String = String(_active.get(COMMUNITY_ID_KEY, "")).strip_edges()
+	if community_id.is_empty():
+		return false
+	var client = _get_community_client()
+	if client == null or not client.has_method("report_attempt"):
+		return false
+
+	# Latch BEFORE the hand-off: a client that answers synchronously (the local provider does)
+	# must not be able to re-enter this and report the same attempt twice.
+	_attempt_reported = true
+	client.report_attempt(community_id, {
+		"cleared": won,
+		"score": score,
+		"turns": _turns,
+	}, _on_attempt_reported)
+	return true
+
+
+## The report came back. Nothing to do either way -- see [method _report_attempt]. Kept as a
+## named method rather than an inline lambda so the Callable is bound to this autoload and
+## can never outlive its capture.
+func _on_attempt_reported(_result: Dictionary) -> void:
+	pass
+
+
+## Mirror the attempt onto the ATTACKER's own profile: one battle result per attempt, tagged
+## "challenge". This is the hook [PlayerProfile] already documents for the mode controllers
+## (notify_battle_result / notify_mode_win), so no profile code changes -- a win bumps
+## battles_won + wins_by_mode.challenge + challenges_won (and pays score/10), a loss bumps
+## battles_lost + losses_by_mode.challenge. "Attempts" is the sum of the two mode buckets.
+## The profile latches per battle itself, so this can never double-count, and every call is
+## has_method-guarded so a harness without the autoload is unaffected.
+func _notify_profile(won: bool, score: int, perfect: bool) -> void:
+	var profile = _get_profile()
+	if profile == null or not profile.has_method("notify_battle_result"):
+		return
+	profile.notify_battle_result("challenge", won, { "score": score, "perfect": perfect })
+
+
+## Inject the profile recorder. FOR TESTS -- pass a stub exposing notify_battle_result(mode,
+## won, meta); null restores the autoload.
+func set_profile(profile) -> void:
+	_profile = profile
+
+
+## The profile to mirror onto: an injected stub, else the live autoload. Same detached-instance
+## rule as [method _get_community_client] -- a `.new()` controller outside the tree records
+## nowhere, so a test driving the capture handlers can never edit the player's real profile.
+func _get_profile():
+	if _profile != null:
+		return _profile
+	if not is_inside_tree():
+		return null
+	if typeof(PlayerProfile) != TYPE_OBJECT or PlayerProfile == null:
+		return null
+	return PlayerProfile
 
 
 # --- Results file -----------------------------------------------------------

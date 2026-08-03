@@ -24,10 +24,15 @@ func _init(base_url: String) -> void:
 
 # --- API --------------------------------------------------------------------
 
-func list_items(sort: String, type: String, page: int, cb: Callable) -> void:
-	var query: String = "?sort=%s&type=%s&page=%d" % [
+func list_items(sort: String, type: String, page: int, cb: Callable, query: String = "") -> void:
+	var params: String = "?sort=%s&type=%s&page=%d" % [
 		sort.uri_encode(), type.uri_encode(), maxi(0, page)]
-	_request(HTTPClient.METHOD_GET, "/v1/items" + query, {}, cb, false)
+	# The needle is sanitised (trimmed + capped) BEFORE it is encoded, so an absurd paste
+	# never becomes an absurd URL; an empty search sends no `q` at all.
+	var needle: String = sanitize_query(query)
+	if not needle.is_empty():
+		params += "&q=" + needle.uri_encode()
+	_request(HTTPClient.METHOD_GET, "/v1/items" + params, {}, cb, false)
 
 
 func fetch_item(id: String, cb: Callable) -> void:
@@ -45,6 +50,24 @@ func vote(id: String, dir: int, cb: Callable) -> void:
 
 func daily(cb: Callable) -> void:
 	_request(HTTPClient.METHOD_GET, "/v1/daily", {}, cb, true)
+
+
+func report_attempt(id: String, outcome: Dictionary, cb: Callable) -> void:
+	# Sanitised client-side so the wire body is already the exact 3-key shape; the server
+	# MUST re-sanitise anyway (a client is never a validator).
+	_request(HTTPClient.METHOD_POST, "/v1/items/%s/attempts" % id.uri_encode(),
+		sanitize_outcome(outcome), cb, true)
+
+
+## The caller is identified by the X-Community-Device header every request already carries,
+## so "me" needs no path parameter.
+func my_bases(cb: Callable) -> void:
+	_request(HTTPClient.METHOD_GET, "/v1/me/bases", {}, cb, false)
+
+
+func set_base_active(id: String, active: bool, cb: Callable) -> void:
+	_request(HTTPClient.METHOD_POST, "/v1/items/%s/active" % id.uri_encode(),
+		{"active": active}, cb, true)
 
 
 # --- Request plumbing -------------------------------------------------------

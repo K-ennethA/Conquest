@@ -162,10 +162,9 @@ func _start_player_turn(player: Player) -> void:
 	# turn-start call unwinds rather than re-entering it.
 	call_deferred("_drive_controlled_units", get_units_for_player(player))
 
-	# Notify GameManager of turn change for network synchronization
-	_notify_game_manager_of_turn_change(player)
-
-	# Emit turn started signal
+	# Emit turn started signal. This is also the network sync point: NetSession's turn
+	# bridge (NetSession._activate_turn_bridge) subscribes to turn_started directly and
+	# derives the authoritative turn slot from it -- no separate push is needed.
 	turn_started.emit(player)
 
 func _end_player_turn(player: Player) -> void:
@@ -535,23 +534,6 @@ func get_unit_speed_info(unit: Unit) -> Dictionary:
 		}
 
 # Reset mechanism for testing
-func _get_log_prefix() -> String:
-	"""Get a log prefix to identify host vs client"""
-	var prefix = "[UNKNOWN] "
-
-	if GameModeManager and GameModeManager.is_multiplayer_active():
-		var local_player_id = GameModeManager.get_local_player_id()
-		if local_player_id == 0:
-			prefix = "[HOST] "
-		elif local_player_id == 1:
-			prefix = "[CLIENT] "
-		else:
-			prefix = "[PLAYER" + str(local_player_id) + "] "
-	else:
-		prefix = "[SINGLE] "
-
-	return prefix
-
 func reset_turn_system() -> void:
 	"""Reset the turn system to initial state (for testing purposes)"""
 	# Reset all state variables
@@ -604,37 +586,3 @@ func _to_string() -> String:
 	"""String representation for debugging"""
 	var player_name = current_player.get_display_name() if current_player else "No Player"
 	return system_name + " (Round " + str(current_turn) + " - " + player_name + ")"
-
-func _notify_game_manager_of_turn_change(player: Player) -> void:
-	"""Notify GameManager of turn change for network synchronization"""
-	# Check if we're in multiplayer mode and need to sync turns
-	if GameModeManager and GameModeManager.is_multiplayer_active():
-		# Get the GameManager through GameModeManager
-		var game_manager = GameModeManager._game_manager
-		if game_manager:
-			# Find the player index in the GameManager's player list
-			var players = game_manager.get_players()
-			var player_id = -1
-
-			# Strategy 1: Direct player ID match (most reliable)
-			if players.has(player.player_id):
-				player_id = player.player_id
-			else:
-				# Strategy 2: Name matching (should work now with simplified names)
-				for pid in players:
-					var p = players[pid]
-					var gm_name = p.get("name", "")
-
-					if gm_name == player.get_display_name():
-						player_id = pid
-						break
-
-			if player_id >= 0:
-				game_manager._current_turn_player = player_id
-
-				game_manager.turn_changed.emit(player_id)
-
-				# No network sync is pushed from here any more. NetSession subscribes to THIS
-				# system's turn_started directly (NetSession._activate_turn_bridge) and derives
-				# the authoritative turn slot from it, so the turn state the validator gates on
-				# is already in step without a second hand-rolled turn_change message.

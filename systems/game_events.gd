@@ -98,6 +98,16 @@ signal move_performed(caster, move)
 ## leaving them untyped keeps this autoload emittable headless. See [UltimateCutIn].
 signal ultimate_casting(unit, move)
 
+## Fired ONCE for every gameplay command any actor commits -- the human FE loop, the AI
+## driver, and the networked apply path all emit it through the ReplayRecorder.note_*
+## statics. `cmd` is a normalised NetProtocol command dictionary and `actor_slot` is the
+## player slot that issued it. APPENDED, never reordered; params are UNTYPED (mirroring
+## move_performed) so a headless harness can emit it with plain dictionaries.
+##
+## This is the ONE seam battle replays record from: [ReplayRecorder] is the only subscriber,
+## so adding a new command site costs one emit and nothing else has to know replays exist.
+signal command_committed(cmd, actor_slot)
+
 func _ready() -> void:
 	# Make this a singleton
 	name = "GameEvents"

@@ -115,6 +115,11 @@ func apply_command(cmd: Dictionary, board, ctx = null) -> Dictionary:
 		return _fail(cmd, "malformed")
 	var seq: int = int(cmd.get(NetProtocol.KEY_SEQ, 0))
 	last_applied_seq = maxi(last_applied_seq, seq)
+	# REPLAY RECORDING, apply-side. This is the ONE mutation point every networked command
+	# passes through on every peer, so recording here captures a networked match completely
+	# and exactly once (the acting peer's UI submit path deliberately does not also record).
+	# A no-op -- one integer compare, no allocation -- when no recorder is mounted.
+	ReplayRecorder.note_command(cmd, int(cmd.get(NetProtocol.KEY_ACTOR, -1)))
 	var data: Dictionary = cmd[NetProtocol.KEY_DATA]
 
 	match int(cmd[NetProtocol.KEY_TYPE]):

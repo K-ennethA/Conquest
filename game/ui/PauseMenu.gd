@@ -75,6 +75,10 @@ const TOOLTIP_CANNOT_SAVE_NOW := "Saving unavailable right now"
 const CONFIRM_FORFEIT := "You will lose this match."
 const CONFIRM_ABANDON := "Your Arena run ends here. Progress in this run is lost."
 const CONFIRM_UNSAVED := "Unsaved progress will be lost."
+## Shown instead of [constant CONFIRM_UNSAVED] when quitting a live CHALLENGE attempt:
+## walking out spends the attempt (see [method _forfeit_challenge_attempt]), and the
+## player must know that BEFORE confirming, not discover it in their base's attack log.
+const CONFIRM_CHALLENGE_QUIT := "Quitting spends this attempt — it counts as a failed raid."
 const CONFIRM_QUIT_GAME := "Quit Conquest?"
 
 ## Fade-in duration for the backdrop + card (skipped entirely when animations are off).
@@ -173,7 +177,7 @@ static func rows_for_context(ctx: Dictionary) -> Array:
 		rows.append(save_row)
 
 		var to_menu: Dictionary = _make_row(Row.QUIT_TO_MENU, LABEL_QUIT_TO_MENU)
-		to_menu["confirm"] = CONFIRM_UNSAVED
+		to_menu["confirm"] = CONFIRM_CHALLENGE_QUIT if challenge else CONFIRM_UNSAVED
 		rows.append(to_menu)
 
 	var quit_game: Dictionary = _make_row(Row.QUIT_GAME, LABEL_QUIT_GAME)
@@ -664,8 +668,26 @@ func _save_and_quit() -> void:
 
 
 func _quit_to_menu() -> void:
+	_forfeit_challenge_attempt()
 	_unpause()
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+
+
+## Walking out of a CHALLENGE battle SPENDS the attempt. Every exit that lands here is a
+## no-save exit (SAVE & QUIT hands off to the save contract instead and never comes through
+## this function), so the attempt is over and cannot be resumed -- exactly the situation the
+## end-of-day rollover already treats as a played-and-lost attempt. The controller owns what
+## that means: it records the loss, and reports it to the community service if the challenge
+## came from there.
+##
+## Deliberately unconditional: [method ChallengeController.forfeit_active_attempt] answers
+## false and changes nothing when this is not a live challenge battle, so an Arena abandon, a
+## networked forfeit or a plain skirmish quit passes straight through.
+func _forfeit_challenge_attempt() -> void:
+	if typeof(ChallengeController) != TYPE_OBJECT or ChallengeController == null:
+		return
+	if ChallengeController.has_method("forfeit_active_attempt"):
+		ChallengeController.call("forfeit_active_attempt")
 
 
 ## get_tree().paused survives a scene change, so every exit path must clear it or the

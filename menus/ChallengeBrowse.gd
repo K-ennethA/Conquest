@@ -29,6 +29,10 @@ const SOLO_SELECT_SCENE := "res://menus/SoloModeSelect.tscn"
 ## explained) in a build where that scene is not present.
 const COMMUNITY_SCENE := "res://menus/CommunityBrowse.tscn"
 
+## The player's own published bases (the defender half of the community loop). Guarded the
+## same way as [constant COMMUNITY_SCENE].
+const MY_BASES_SCENE := "res://menus/MyBases.tscn"
+
 var _entries: Array[Dictionary] = []      # [{ path, challenge }]
 var _selected: Dictionary = {}            # the chosen entry, or {}
 
@@ -137,6 +141,19 @@ func _build_ui() -> void:
 		else "The community browser is not available in this build."
 	community.pressed.connect(_on_community_pressed)
 	actions.add_child(community)
+
+	# Footer width check: Back 160 + Community 180 + My Bases 160 + PLAY 220, plus 3 gaps *
+	# 18 separation = 674, against this page's 760 floor -- the row still fits without the
+	# buttons being squeezed below their explicit minimums.
+	var bases := Button.new()
+	bases.text = "My Bases"
+	bases.custom_minimum_size = Vector2(160.0, 48.0)
+	var bases_available: bool = ResourceLoader.exists(MY_BASES_SCENE)
+	bases.disabled = not bases_available
+	bases.tooltip_text = "Your published challenges and how their defenses are holding." \
+		if bases_available else "The base screen is not available in this build."
+	bases.pressed.connect(_on_my_bases_pressed)
+	actions.add_child(bases)
 
 	_play_btn = Button.new()
 	_play_btn.text = "PLAY"
@@ -515,6 +532,14 @@ func _on_community_pressed() -> void:
 		_set_import_status("The community browser is not available in this build.")
 		return
 	get_tree().change_scene_to_file(COMMUNITY_SCENE)
+
+
+## Open the player's own published bases.
+func _on_my_bases_pressed() -> void:
+	if not ResourceLoader.exists(MY_BASES_SCENE):
+		_set_import_status("The base screen is not available in this build.")
+		return
+	get_tree().change_scene_to_file(MY_BASES_SCENE)
 
 
 func _on_back_pressed() -> void:

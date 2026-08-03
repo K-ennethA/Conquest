@@ -90,6 +90,14 @@ func test_challenge_caption_survives_a_disabled_save_row():
 	assert_eq(String(_row(rows, Row.SAVE_AND_QUIT).get("caption", "")), PauseMenu.CHALLENGE_EOD_CAPTION,
 		"the end-of-day rule applies whether or not saving is available")
 
+func test_challenge_quit_confirm_says_the_attempt_is_spent():
+	# Pause-quit forfeits a live challenge attempt and reports it as a failed raid
+	# (ChallengeController.forfeit_active_attempt) -- the confirm sheet must say so
+	# BEFORE the player commits, not let them find out from the defender's attack log.
+	var rows: Array = PauseMenu.rows_for_context(_solo_ctx(true, true, true))
+	assert_eq(String(_row(rows, Row.QUIT_TO_MENU).get("confirm", "")), PauseMenu.CONFIRM_CHALLENGE_QUIT,
+		"quitting a challenge warns that the attempt is spent")
+
 func test_a_plain_skirmish_has_no_caption():
 	var rows: Array = PauseMenu.rows_for_context(_solo_ctx())
 	assert_eq(String(_row(rows, Row.SAVE_AND_QUIT).get("caption", "")), "",
