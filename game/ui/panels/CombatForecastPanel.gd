@@ -42,6 +42,11 @@ var _defender_hp: Label
 var _hit_value: Label
 var _dmg_value: Label
 var _crit_value: Label
+## "3 → 5" -- shown ONLY while something is extending the attacker's reach for this move.
+## A forecast that always printed a Range row would spend a line of a 720p card on a
+## number the player already knows from the highlighted tiles; a row that appears exactly
+## when the reach is NOT the authored one is a signal instead of furniture.
+var _range_value: Label
 var _result_value: Label
 var _lethal_label: Label
 ## FE-style HP preview: a red rect over the DEFENDER bar covering exactly the chunk
@@ -167,6 +172,8 @@ func _create_ui() -> void:
 	_hit_value = _add_stat_row(stats_vb, "Hit")
 	_dmg_value = _add_stat_row(stats_vb, "Damage")
 	_crit_value = _add_stat_row(stats_vb, "Crit")
+	_range_value = _add_stat_row(stats_vb, "Range")
+	_show_stat_row(_range_value, false)
 	_result_value = _add_stat_row(stats_vb, "HP")
 
 	_lethal_label = Label.new()
@@ -192,7 +199,7 @@ func _create_ui() -> void:
 
 	# Dark inset plate behind the exchange stats, cream text so it reads on it.
 	plate.add_theme_stylebox_override("panel", ConquestTheme.plate_box())
-	for lbl in [_hit_value, _dmg_value, _crit_value, _result_value]:
+	for lbl in [_hit_value, _dmg_value, _crit_value, _range_value, _result_value]:
 		lbl.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	for row in stats_vb.get_children():
 		if row is HBoxContainer:
@@ -277,6 +284,21 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 	# Element accent stripe.
 	_element_stripe.color = ConquestTheme.element_color(String(move.element))
 
+	# Boosted reach: the ONE stat on this card whose live value can differ from the move's
+	# authored one without anything else on screen saying so. Read through
+	# MoveResource.effective_max_range (via MoveStatVisuals) -- the same helper the
+	# executor validates casts with -- so the forecast can never advertise a reach the
+	# cast would then reject. Hidden entirely when the reach is unmodified.
+	var range_dict: Dictionary = MoveStatVisuals.range_info(move, attacker)
+	if bool(range_dict.get("modified", false)):
+		_range_value.text = "%d → %d" % [
+			int(range_dict.get("base", 0)), int(range_dict.get("effective", 0))]
+		_range_value.add_theme_color_override(
+			"font_color", range_dict.get("color", ConquestTheme.CREAM))
+		_show_stat_row(_range_value, true)
+	else:
+		_show_stat_row(_range_value, false)
+
 	var preview: Dictionary = MoveExecutor.preview_vs(move, attacker, defender)
 
 	# Defender column.
@@ -300,6 +322,17 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 		var dmg_text := str(dmg)
 		if crit_pct > 0.0 and crit_dmg != dmg:
 			dmg_text += " (%d crit)" % crit_dmg
+		# A buffed / debuffed ATTACK stat is already folded into `dmg` by the previewer,
+		# so the number is right -- but silently right. The delta names the reason, read
+		# off the unit's own effective-vs-base pair so any source (status, item, tile,
+		# augment) shows up without this panel enumerating them.
+		var atk: Dictionary = MoveStatVisuals.stat_info(attacker, "attack", "Attack")
+		if bool(atk.get("modified", false)):
+			dmg_text += String(atk.get("suffix", ""))
+			_dmg_value.add_theme_color_override(
+				"font_color", atk.get("color", ConquestTheme.HIT_ORANGE))
+		else:
+			_dmg_value.add_theme_color_override("font_color", ConquestTheme.HIT_ORANGE)
 		_dmg_value.text = dmg_text
 
 		_crit_value.text = "%d%%" % int(round(crit_pct))

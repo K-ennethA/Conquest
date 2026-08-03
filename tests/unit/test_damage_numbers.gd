@@ -130,8 +130,12 @@ func test_a_hit_spawns_one_popup_carrying_the_amount() -> void:
 func test_a_heal_spawns_a_signed_green_popup() -> void:
 	var numbers := _mounted()
 	numbers._on_unit_healed(_victim, 8)
+	# Heals ride the SAME deferred buffer hits do -- not because a heal can crit (it
+	# cannot), but because a regen tick has to be recolourable by the status announce
+	# that arrives after it. One path for both is what stops the two drifting.
+	await get_tree().process_frame
 	var label := numbers.get_child(0) as Label3D
-	assert_not_null(label, "a heal spawns immediately -- heals cannot crit, so nothing to wait for")
+	assert_not_null(label, "the deferred flush spawns the heal popup")
 	assert_eq(label.text, "+8", "restored HP reads as a signed gain, not a bare number")
 	assert_almost_eq(label.modulate.r, numbers.heal_color.r, 0.01,
 		"and it is green, the opposite of damage")
@@ -140,9 +144,17 @@ func test_a_heal_spawns_a_signed_green_popup() -> void:
 func test_the_popup_spawns_above_the_victim_it_was_captured_from() -> void:
 	var numbers := _mounted()
 	numbers._on_unit_healed(_victim, 3)
+	await get_tree().process_frame
 	var label := numbers.get_child(0) as Label3D
-	assert_almost_eq(label.global_position.y, _victim.global_position.y + numbers.spawn_height,
-		0.001, "the number floats a fixed height above the unit, clear of its health bar")
+	# A RANGE, not an exact height: the popup spawns at spawn_height and immediately
+	# begins drifting up by float_height, and the deferred flush means a frame of that
+	# drift has already elapsed by the time a test can look at it. What the placement
+	# rule actually promises is "starts clear of the health bar, ends no higher than one
+	# float_height above that" -- so that is what is asserted.
+	assert_between(label.global_position.y,
+		_victim.global_position.y + numbers.spawn_height - 0.001,
+		_victim.global_position.y + numbers.spawn_height + numbers.float_height,
+		"the number floats above the unit, clear of its health bar, and drifts up from there")
 	# Only the horizontal placement is jittered, and only within the authored band.
 	assert_almost_eq(label.global_position.x, _victim.global_position.x,
 		numbers.spawn_jitter + 0.001, "horizontal jitter stays inside its authored band")
@@ -179,11 +191,132 @@ func test_popups_never_register_as_a_playing_animation() -> void:
 		"floating numbers are cosmetic: the AI must never wait on one")
 
 
+# --- Status feedback ----------------------------------------------------------
+#
+# Signal -> presentation wiring, driven with a stub emitter (the handlers are called
+# directly, exactly as the damage/heal ones above are). The report behind these: a player
+# could not tell whether poison was doing anything, because a poison tick drew the SAME
+# plain white number a sword hit does, from no visible source.
+
+
+## A live poison instance -- a Resource, so it never orphans.
+func _poison() -> StatusCondition:
+	var condition := StatusCondition.new()
+	condition.id = &"poisoned"
+	condition.display_name = "Poisoned"
+	condition.duration_turns = 3
+	condition.turns_left = 2
+	return condition
+
+
+func test_a_status_tick_is_recoloured_and_marked() -> void:
+	var numbers := _mounted()
+	var poison := _poison()
+	# Exactly the live order: the tick's damage is announced first, then the status
+	# announce that attributes it.
+	numbers._on_damage_dealt(_victim, _victim, 4)
+	numbers._on_status_ticked(_victim, poison, [])
+	await get_tree().process_frame
+	var label := numbers.get_child(0) as Label3D
+	assert_not_null(label, "a poison tick still produces a floating number")
+	assert_eq(label.text, StatusVisuals.tick_text(poison, 4, false),
+		"but it carries the status' glyph, so the player can see WHERE the damage came from")
+	assert_almost_eq(label.modulate.g, Color(StatusVisuals.info_for(poison)["color"]).g, 0.01,
+		"and it is drawn in the status' own colour, not the plain damage white")
+
+
+func test_an_ordinary_hit_in_the_same_frame_is_untouched() -> void:
+	var numbers := _mounted()
+	# A sword hit buffered BEFORE any tick ran must not be claimed by the tick: the
+	# attribution rule is "untagged entries at the moment the tick announces", which is
+	# only exact because tick_all announces per condition, immediately.
+	numbers._on_damage_dealt(null, _victim, 9)
+	await get_tree().process_frame
+	var label := numbers.get_child(0) as Label3D
+	assert_eq(label.text, "9", "an unattributed hit is still a bare number")
+	assert_almost_eq(label.modulate.r, numbers.damage_color.r, 0.01, "and still plain white")
+
+
+func test_a_regen_tick_stays_signed_and_takes_the_status_colour() -> void:
+	var numbers := _mounted()
+	var regen := StatusCondition.new()
+	regen.id = &"regen"
+	regen.display_name = "Regeneration"
+	regen.turns_left = 2
+	numbers._on_unit_healed(_victim, 5)
+	numbers._on_status_ticked(_victim, regen, [])
+	await get_tree().process_frame
+	var label := numbers.get_child(0) as Label3D
+	assert_eq(label.text, StatusVisuals.tick_text(regen, 5, true),
+		"a regen tick reads as a signed heal WITH its status marker")
+
+
+func test_a_tick_on_another_unit_does_not_claim_this_units_number() -> void:
+	var other: Node3D = add_child_autofree(Node3D.new())
+	other.position = Vector3(1.0, 0.0, 1.0)
+	var numbers := _mounted()
+	numbers._on_damage_dealt(null, _victim, 7)
+	numbers._on_status_ticked(other, _poison(), [])
+	await get_tree().process_frame
+	var label := numbers.get_child(0) as Label3D
+	assert_eq(label.text, "7",
+		"a condition only ticks its OWN unit, so it can never colour another unit's number")
+
+
+func test_a_landing_status_shouts_its_name_above_the_numbers() -> void:
+	var numbers := _mounted()
+	var poison := _poison()
+	numbers._on_status_applied(_victim, poison)
+	var label := numbers.get_child(0) as Label3D
+	assert_not_null(label, "an applied status spawns inline -- there is nothing to correlate")
+	assert_eq(label.text, "POISONED", "the shout names the status the unit just picked up")
+	assert_gt(label.global_position.y, _victim.global_position.y + numbers.spawn_height,
+		"and sits ABOVE the tick number, so the two are legible at once")
+	assert_lt(label.font_size, numbers.font_size,
+		"a word must never out-shout the damage it is explaining")
+
+
+func test_an_expiring_status_reports_quietly() -> void:
+	var numbers := _mounted()
+	var poison := _poison()
+	numbers._on_status_expired(_victim, poison)
+	var label := numbers.get_child(0) as Label3D
+	assert_eq(label.text, "Poisoned faded", "an expiry is good news, reported in sentence case")
+	var vivid: Color = StatusVisuals.info_for(poison)["color"]
+	assert_lt(label.modulate.g, vivid.g,
+		"and is faded toward grey -- the quietest thing this layer draws")
+
+
+func test_status_labels_obey_every_existing_guard() -> void:
+	# Detached layer (a signal arriving mid-teardown).
+	var detached := _detached()
+	detached._on_status_applied(_victim, _poison())
+	assert_eq(detached.get_child_count(), 0, "no scene to spawn into -> nothing, and no error")
+
+	# Animations off.
+	_guard.set_setting("animations_enabled", false)
+	var numbers := _mounted()
+	numbers._on_status_applied(_victim, _poison())
+	numbers._on_status_expired(_victim, _poison())
+	assert_eq(numbers.get_child_count(), 0, "animations off means no floating status words either")
+
+
+func test_null_status_payloads_are_survivable() -> void:
+	var numbers := _mounted()
+	numbers._on_status_applied(null, null)
+	numbers._on_status_expired(_victim, null)
+	numbers._on_status_ticked(null, null, null)
+	await get_tree().process_frame
+	assert_eq(numbers.get_child_count(), 0,
+		"a payload with no condition in it is dropped, not guessed at")
+
+
 # --- Teardown -----------------------------------------------------------------
 
 func test_clear_popups_empties_the_layer_immediately() -> void:
 	var numbers := _mounted()
 	numbers._on_unit_healed(_victim, 5)
+	await get_tree().process_frame
 	assert_eq(numbers.get_child_count(), 1)
 	numbers.clear_popups()
 	assert_eq(numbers.get_child_count(), 0,

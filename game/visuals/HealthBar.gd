@@ -22,17 +22,37 @@ const COLOR_MID := Color(0.92, 0.62, 0.13, 1.0)    # Amber - matches the fantasy
 const COLOR_LOW := Color(0.82, 0.18, 0.16, 1.0)    # Red - critical
 
 # --- Status pips -------------------------------------------------------------
-# A small row of billboarded coloured pips floating just ABOVE the bar, one per
-# active StatusCondition, coloured through [StatusVisuals] -- the world-space
-# sibling of TileEffectOverlay's per-tile pip row, and of the status chips in
+# A small row of billboarded status BADGES floating just ABOVE the bar -- a coloured
+# chip carrying the status' one-character glyph, and its stack count when it is
+# stacked. Colour, glyph and grouping all come from [StatusVisuals], the world-space
+# sibling of TileEffectOverlay's per-tile pip row and of the status chips in
 # UnitInfoPanel / UnitHoverPanel. Same shared vocabulary, so "Ensnared" is the
 # same violet on the map as it is in the panels.
 #
-# The pips live under their own child Node3D at a FIXED local offset, so a unit
+# WHY A GLYPH AND NOT JUST A COLOUR (it used to be a bare coloured quad): at this size
+# a hue on its own is not a readout. Two violets a few points apart are the same pip to
+# a player mid-turn, poison had no table row at all so it drew as the neutral tan
+# fallback, and none of it survives colour blindness. The glyph says which of five
+# things is happening (damage over time / heal over time / guard / buff / debuff)
+# before the colour is even resolved.
+#
+# WHY THE ROW IS GROUPED BY ID: three stacked Poisoned instances are ONE status at
+# severity 3. Drawn per instance they filled the whole 4-slot budget with identical
+# pips and pushed every OTHER status on the unit into the overflow marker -- so the
+# row is built from [method StatusVisuals.group_by_id] and shows "◆3".
+#
+# The badges live under their own child Node3D at a FIXED local offset, so a unit
 # with no statuses gets no nodes and the bar itself never moves (no layout shift).
-const STATUS_PIP_SIZE := 0.16
-const STATUS_PIP_SPACING := 0.19  # world units between adjacent pip centers on X
-const STATUS_PIP_Y := 0.30        # clears the 0.32-tall bar (half-height 0.16)
+const STATUS_PIP_SIZE := 0.20
+const STATUS_PIP_SPACING := 0.24  # world units between adjacent pip centers on X
+const STATUS_PIP_Y := 0.32        # clears the 0.32-tall bar (half-height 0.16)
+## Glyph drawn on the chip. Dark ink with a thin pale outline, which is the one
+## combination that stays legible on EVERY chip hue (a white glyph washes out on the
+## pale buffs, a black one disappears on the deep debuffs).
+const STATUS_GLYPH_FONT_SIZE := 44
+const STATUS_GLYPH_PIXEL_SIZE := 0.0032
+const STATUS_GLYPH_INK := Color(0.10, 0.06, 0.03, 1.0)
+const STATUS_GLYPH_OUTLINE := Color(1.0, 0.97, 0.90, 0.75)
 
 ## Sentinel for _status_signature. Real signatures are "id:turns" entries joined
 ## by "|" (and "" for an empty list), so this can never collide with one -- which
@@ -246,12 +266,31 @@ func _setup_status_pips() -> void:
 	if not GameEvents.unit_moved.is_connected(_on_status_move_beat):
 		GameEvents.unit_moved.connect(_on_status_move_beat)
 
+	# The status layer DOES announce now (status_applied / status_ticked /
+	# status_expired). These are the precise beats -- a status landing mid-move no
+	# longer waits for the next turn/HP change to appear on the bar. The broad beats
+	# above are KEPT as the safety net for anything that mutates the list without
+	# going through StatusController (and cost nothing: the signature guard turns an
+	# unchanged list into a string compare).
+	if GameEvents.has_signal(&"status_applied") \
+			and not GameEvents.status_applied.is_connected(_on_status_changed_beat):
+		GameEvents.status_applied.connect(_on_status_changed_beat)
+	if GameEvents.has_signal(&"status_expired") \
+			and not GameEvents.status_expired.is_connected(_on_status_changed_beat):
+		GameEvents.status_expired.connect(_on_status_changed_beat)
+
 
 func _on_status_turn_beat(_unit) -> void:
 	_refresh_status_pips()
 	# A tile can gain/lose a passive bonus between turns (e.g. grass catching fire),
 	# so re-check the terrain tag on the same turn beats as the pips.
 	_refresh_terrain_tag()
+
+
+## A status landed on / left SOME unit. Global like the other beats -- every bar wakes,
+## and the signature guard makes all but the affected one an early return.
+func _on_status_changed_beat(_unit, _condition) -> void:
+	_refresh_status_pips()
 
 
 func _on_status_action_beat(_unit, _action_type) -> void:
@@ -269,19 +308,22 @@ func _on_status_move_beat(_unit, _from_position, _to_position) -> void:
 	_refresh_terrain_tag()
 
 
-## "id:turns|id:turns|…" for [param conditions]. Any change in which statuses are
-## active, their order, or their remaining turns produces a different string.
-func _status_signature_for(conditions: Array) -> String:
+## "id:turns:count|…" for the GROUPED conditions. Any change in which statuses are
+## active, their order, their remaining turns, or their stack depth produces a
+## different string -- so a poison deepening from x2 to x3 rebuilds the row.
+func _status_signature_for(groups: Array) -> String:
 	var parts: PackedStringArray = []
-	for condition in conditions:
+	for group in groups:
+		var condition = group.get("condition", null)
 		var id_text: String = "?"
 		if typeof(condition) == TYPE_OBJECT and "id" in condition:
 			id_text = String(condition.id)
-		parts.append("%s:%d" % [id_text, StatusVisuals.turns_left_of(condition)])
+		parts.append("%s:%d:%d" % [
+			id_text, int(group.get("turns_left", 0)), int(group.get("count", 1))])
 	return "|".join(parts)
 
 
-## Rebuild the pip row from the bound unit's active conditions -- but only when
+## Rebuild the badge row from the bound unit's active conditions -- but only when
 ## the list actually changed. No statuses (or no StatusController at all) leaves
 ## the row empty, which is exactly today's appearance.
 func _refresh_status_pips() -> void:
@@ -289,40 +331,77 @@ func _refresh_status_pips() -> void:
 		return
 
 	# Null-safe all the way down: a freed unit, a unit with no controller, or an
-	# empty list all come back as an empty array.
-	var conditions: Array = StatusVisuals.active_conditions(_bound_unit)
+	# empty list all come back as an empty array. Grouped by id so severity renders
+	# as one badge, not N identical ones.
+	var groups: Array = StatusVisuals.group_by_id(
+		StatusVisuals.active_conditions(_bound_unit))
 
-	var signature: String = _status_signature_for(conditions)
+	var signature: String = _status_signature_for(groups)
 	if signature == _status_signature:
 		return
 	_status_signature = signature
 
 	for child in _status_root.get_children():
 		child.queue_free()
-	if conditions.is_empty():
+	if groups.is_empty():
 		return
 
 	# Cap the row: past MAX_PIPS the final slot becomes a neutral overflow marker
-	# so a heavily-afflicted unit never grows an unbounded ribbon of pips.
-	var total: int = conditions.size()
+	# so a heavily-afflicted unit never grows an unbounded ribbon of badges.
+	var total: int = groups.size()
 	var shown: int = StatusVisuals.shown_count(total)
 	var hidden: int = StatusVisuals.hidden_count(total)
 	var slots: int = shown + (1 if hidden > 0 else 0)
 	if slots <= 0:
 		return
 
-	# Center the row over the bar: pip i sits at (i - (n-1)/2) * spacing on X.
+	# Center the row over the bar: badge i sits at (i - (n-1)/2) * spacing on X.
 	var x0: float = -0.5 * float(slots - 1) * STATUS_PIP_SPACING
 	for i in range(shown):
-		var info: Dictionary = StatusVisuals.info_for(conditions[i])
+		var group: Dictionary = groups[i]
+		var condition = group.get("condition", null)
+		var info: Dictionary = StatusVisuals.info_for(condition)
 		var color: Color = info.get("color", StatusVisuals.OVERFLOW_COLOR)
-		_status_root.add_child(_make_status_pip(color, x0 + float(i) * STATUS_PIP_SPACING))
+		var x: float = x0 + float(i) * STATUS_PIP_SPACING
+		_status_root.add_child(_make_status_pip(color, x))
+		var glyph: String = StatusVisuals.glyph_for(condition)
+		var count: int = int(group.get("count", 1))
+		if count > 1:
+			glyph += str(count)
+		_status_root.add_child(_make_status_glyph(glyph, x))
 	if hidden > 0:
+		var overflow_x: float = x0 + float(shown) * STATUS_PIP_SPACING
+		_status_root.add_child(_make_status_pip(StatusVisuals.OVERFLOW_COLOR, overflow_x))
 		_status_root.add_child(
-			_make_status_pip(StatusVisuals.OVERFLOW_COLOR, x0 + float(shown) * STATUS_PIP_SPACING))
+			_make_status_glyph(StatusVisuals.overflow_label(hidden), overflow_x))
 
 
-## One pip quad tinted [param color], placed at [param x] in the row's local space.
+## The status' glyph (plus its stack count when stacked), drawn on the chip at
+## [param x]. Same billboard recipe as the terrain tag, so it holds a constant
+## on-screen size and never casts a shadow onto the map.
+func _make_status_glyph(text: String, x: float) -> Label3D:
+	var label := Label3D.new()
+	label.text = text
+	label.position = Vector3(x, 0.0, 0.01)  # just in front of the chip quad
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.shaded = false
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# NOTE: fixed_size stays OFF -- with it on, pixel_size * font_size stops mapping to
+	# world units and the glyph renders screen-huge (the same trap documented on the
+	# terrain tag below).
+	label.font_size = STATUS_GLYPH_FONT_SIZE
+	label.pixel_size = STATUS_GLYPH_PIXEL_SIZE
+	label.modulate = STATUS_GLYPH_INK
+	label.outline_modulate = STATUS_GLYPH_OUTLINE
+	label.outline_size = 5
+	label.render_priority = 5   # above bar bg (1), fill (2), chips (3), terrain tag (4)
+	label.outline_render_priority = 4
+	label.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return label
+
+
+## One chip quad tinted [param color], placed at [param x] in the row's local space.
 func _make_status_pip(color: Color, x: float) -> MeshInstance3D:
 	var pip := MeshInstance3D.new()
 	var mesh := QuadMesh.new()

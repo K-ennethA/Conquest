@@ -27,10 +27,86 @@ var player_colors = {
 	3: Color(0.8, 0.8, 0.2, 0.8),  # Yellow - Player 4
 }
 
+# --- Units-left-to-act counter -----------------------------------------------
+#
+# WHAT THE OLD NUMBER WAS. The banner read
+# `TraditionalTurnSystem.get_current_turn_progress().units_can_act`, and it was only ever
+# recomputed on turn_started / turn_ended. So it was a SNAPSHOT taken the instant the side
+# became active -- every unit that then moved, attacked, was stunned, died or spawned left
+# the number untouched for the rest of the turn. On an enemy phase the banner therefore
+# sat on "41 units remaining" while the AI worked through the roster. It also said
+# "remaining", which reads as "units left alive", not "units left to act".
+#
+# WHAT IT SAYS NOW. "N of M units left to act" for the ACTIVE side only, recomputed from
+# the live roster on the active turn system's turn_started / turn_ended /
+# unit_action_completed / all_units_acted, plus GameEvents unit_eliminated / unit_spawned.
+# Never PlayerManager.player_turn_started -- that does not fire on AI turns, which is the
+# exact case this counter exists for (CONQUEST.md convention 2).
+
+## How many of [param units] have still to act this turn, and how many there are.
+##
+## Pure and duck-typed so a test can hand it a crafted roster. The rules, in order:
+##   * a null / freed entry is not a unit at all -- skipped entirely;
+##   * a DEAD unit is skipped entirely: neither "left" nor part of the total, so a side
+##     that loses a unit mid-turn reports a smaller M rather than a stuck one;
+##   * a unit that has acted -- via the turn system's [param acted] side list OR its own
+##     has_acted_this_turn flag, which can disagree (see
+##     TraditionalTurnSystem.can_unit_act) -- counts toward the total, not toward "left";
+##   * a unit in [param blocked] (stunned or hijacked THIS turn) also counts toward the
+##     total but can never act, so it is not "left" either;
+##   * a unit SPAWNED mid-turn is simply a live unacted unit and lands in both counts on
+##     the next refresh -- which is why this is recomputed from the live roster instead of
+##     decremented from a turn-start snapshot.
+static func count_act_progress(units: Array, acted: Array = [], blocked: Array = []) -> Dictionary:
+	var total: int = 0
+	var left: int = 0
+	var acted_count: int = 0
+	for unit in units:
+		if unit == null or not is_instance_valid(unit):
+			continue
+		if not _counts_as_alive(unit):
+			continue
+		total += 1
+		if unit in acted or ("has_acted_this_turn" in unit and bool(unit.has_acted_this_turn)):
+			acted_count += 1
+			continue
+		if unit in blocked:
+			continue
+		left += 1
+	return {"left": left, "total": total, "acted": acted_count}
+
+
+## Liveness, duck-typed: a real [Unit] answers is_alive(), a bare double may only carry
+## current_health, and something with neither is assumed alive (it cannot be proven dead).
+static func _counts_as_alive(unit) -> bool:
+	if unit.has_method("is_alive"):
+		return bool(unit.is_alive())
+	if "current_health" in unit:
+		return int(unit.current_health) > 0
+	return true
+
+
+## The banner's second line for [param round_number] and a [method count_act_progress]
+## result. Static so the wording is pinned by a test alongside the arithmetic.
+static func progress_text(round_number: int, progress: Dictionary) -> String:
+	if progress.is_empty() or int(progress.get("total", 0)) <= 0:
+		return "Round %d" % round_number
+	return "Round %d - %d of %d units left to act" % [
+		round_number, int(progress.get("left", 0)), int(progress.get("total", 0))]
+
+
 func _ready() -> void:
 	# Connect to turn system events
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
+
+	# Roster changes do not go through the turn system's own signals, but they DO change
+	# the denominator, so the banner listens for them directly.
+	if GameEvents:
+		if not GameEvents.unit_eliminated.is_connected(_on_roster_changed):
+			GameEvents.unit_eliminated.connect(_on_roster_changed)
+		if not GameEvents.unit_spawned.is_connected(_on_roster_changed):
+			GameEvents.unit_spawned.connect(_on_roster_changed)
 
 	# Delay initial update to ensure turn system is fully initialized
 	await get_tree().process_frame
@@ -107,7 +183,7 @@ func _update_display() -> void:
 		
 		# Update background color
 		_update_background_color(active_player)
-		
+
 		# Show the indicator
 		visible = true
 	else:
@@ -116,6 +192,9 @@ func _update_display() -> void:
 		turn_info_label.text = "Waiting for players..."
 		_update_background_color(null)
 		visible = true
+
+	# Both lines just changed; keep the amber frame around them.
+	_fit_chip_width()
 
 func _turn_title(player: Player) -> String:
 	"""Ally/enemy framing for the chip -- reads better than "Player 1/2" in
@@ -128,12 +207,87 @@ func _turn_title(player: Player) -> String:
 func _update_traditional_display(turn_system: TraditionalTurnSystem, active_player: Player) -> void:
 	"""Update display for Traditional Turn System"""
 	player_name_label.text = _turn_title(active_player)
-	
-	var progress = turn_system.get_current_turn_progress()
-	if progress.has("units_can_act"):
-		turn_info_label.text = "Round " + str(turn_system.current_turn) + " - " + str(progress.units_can_act) + " units remaining"
-	else:
-		turn_info_label.text = "Round " + str(turn_system.current_turn) + " - calculating..."
+	turn_info_label.text = progress_text(turn_system.current_turn, _live_progress(turn_system))
+
+
+## Read the ACTIVE side's roster off [param turn_system] and count it. Everything here is
+## a read -- the roster, the turn system's own acted side list, and its per-turn stun /
+## forced-control latches (which bar a unit from acting without it having "acted").
+func _live_progress(turn_system) -> Dictionary:
+	if turn_system == null or not is_instance_valid(turn_system):
+		return {}
+	if not turn_system.has_method("get_current_active_player") \
+			or not turn_system.has_method("get_units_for_player"):
+		return {}
+	var player = turn_system.get_current_active_player()
+	if player == null:
+		return {}
+
+	var units: Array = turn_system.get_units_for_player(player)
+	var acted: Array = []
+	if "units_acted_this_turn" in turn_system:
+		acted = turn_system.units_acted_this_turn
+	var blocked: Array = []
+	for unit in units:
+		if unit == null or not is_instance_valid(unit):
+			continue
+		if turn_system.has_method("is_turn_skipped") and bool(turn_system.is_turn_skipped(unit)):
+			blocked.append(unit)
+		elif turn_system.has_method("is_turn_forced_control") \
+				and bool(turn_system.is_turn_forced_control(unit)):
+			blocked.append(unit)
+	return count_act_progress(units, acted, blocked)
+
+
+## Repaint ONLY the progress line, from the live roster. Cheap enough to run on every
+## unit action; leaves the player-name line and the chip tint alone.
+func _refresh_progress() -> void:
+	if not is_inside_tree() or turn_info_label == null:
+		return
+	if not TurnSystemManager:
+		return
+	var sys: TurnSystemBase = TurnSystemManager.get_active_turn_system()
+	# Speed First is owned by the TurnQueue; this banner stays hidden for it.
+	if sys == null or sys is SpeedFirstTurnSystem:
+		return
+	turn_info_label.text = progress_text(sys.current_turn, _live_progress(sys))
+	_fit_chip_width()
+
+
+## Widest the chip's amber frame has to be to hold its two lines.
+const CHIP_MIN_WIDTH: float = 240.0
+## _chip_box(): 12px content margin each side + the 3px frame each side, rounded up.
+const CHIP_PADDING: float = 32.0
+
+
+## Keep the amber frame wide enough for the longest line it currently shows.
+##
+## This root is a plain Control, so its children contribute NOTHING to its minimum size --
+## the 240px authored width was sized for "Round 1 - 3 units remaining" and the longer
+## "N of M units left to act" line would simply spill out past the frame.
+func _fit_chip_width() -> void:
+	if player_name_label == null or turn_info_label == null:
+		return
+	var widest: float = maxf(
+			player_name_label.get_minimum_size().x,
+			turn_info_label.get_minimum_size().x)
+	custom_minimum_size.x = maxf(CHIP_MIN_WIDTH, widest + CHIP_PADDING)
+
+
+func _on_unit_acted(_unit = null, _action_type = "") -> void:
+	# Deferred: this fires from inside the unit's action signal, before the turn system has
+	# finished its own bookkeeping (mark_unit_acted / completion check).
+	call_deferred("_refresh_progress")
+
+
+func _on_all_units_acted() -> void:
+	call_deferred("_refresh_progress")
+
+
+func _on_roster_changed(_a = null, _b = null) -> void:
+	# A death unregisters the unit from the turn system inside the same emission, so read
+	# the roster after this signal has unwound.
+	call_deferred("_refresh_progress")
 
 func _update_speed_first_display(turn_system: SpeedFirstTurnSystem, active_player: Player) -> void:
 	"""Update display for Speed First Turn System"""
@@ -168,7 +322,7 @@ func _update_speed_first_display(turn_system: SpeedFirstTurnSystem, active_playe
 func _update_generic_display(turn_system: TurnSystemBase, active_player: Player) -> void:
 	"""Update display for generic turn system"""
 	player_name_label.text = _turn_title(active_player)
-	turn_info_label.text = "Round " + str(turn_system.current_turn)
+	turn_info_label.text = progress_text(turn_system.current_turn, _live_progress(turn_system))
 
 func _update_fallback_display(active_player: Player) -> void:
 	"""Update display when no turn system is active"""
@@ -233,9 +387,17 @@ func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
 	if turn_system.turn_ended.is_connected(_on_turn_ended):
 		turn_system.turn_ended.disconnect(_on_turn_ended)
 	
-	# Connect to new turn system events
+	# Connect to new turn system events. unit_action_completed / all_units_acted are what
+	# make the "N of M units left to act" line tick DURING a turn -- including an AI turn,
+	# which is why these ride the turn system and never PlayerManager (CONQUEST.md rule 2).
 	turn_system.turn_started.connect(_on_turn_started)
 	turn_system.turn_ended.connect(_on_turn_ended)
+	if turn_system.has_signal("unit_action_completed") \
+			and not turn_system.unit_action_completed.is_connected(_on_unit_acted):
+		turn_system.unit_action_completed.connect(_on_unit_acted)
+	if turn_system.has_signal("all_units_acted") \
+			and not turn_system.all_units_acted.is_connected(_on_all_units_acted):
+		turn_system.all_units_acted.connect(_on_all_units_acted)
 
 	# Keep the watcher's baseline in sync so it only fires on genuine future changes.
 	_watched_system = turn_system

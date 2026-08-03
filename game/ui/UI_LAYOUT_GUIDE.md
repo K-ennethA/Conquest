@@ -15,16 +15,38 @@ GameUILayout (Control, full-rect, mouse-ignore)
       │  ├─ CenterTopContainer: TurnQueue (Speed First) OR TurnIndicator chip (Traditional)
       │  └─ SettingsButton (gear, top-right — built in code)
       └─ MiddleArea (HBox, expands)
-         ├─ LeftSidebar (VBox):  UnitInfoPanel  (selected-unit stat card, top-anchored)
+         ├─ LeftSidebar (VBox, 260px): BattleLog chip, then UnitInfoPanel
          ├─ GameArea    (spacer over the 3D board)
          └─ RightSidebar (VBox): UnitActionsPanel (contextual command menu)
 ```
 
-Panels mounted in code by `UILayoutManager` (after theming, each on/over the HUD root):
-- **BattleLog** — top-left, collapsible scrolling combat log. Auto-collapses while a
-  move is being aimed so it never overlaps the CombatForecastPanel (same corner).
+### Left-column budget (1280x720)
+
+The left column is a real VBox stack with **one** flexible region, and the claims add up
+to the column height exactly:
+
+| Row | px | Notes |
+|---|---:|---|
+| top of the column | 81 | 15 HUD margin + 56 TopBar + 10 separation |
+| BattleLog chip | 30 | owns the column's first row |
+| separation | 10 | `UILayoutManager.COLUMN_SEPARATION` |
+| **UnitInfoPanel** | **423** | budget; measured fixed-content floor is 358 — only the ability / effect lists flex |
+| terrain reserve | 176 | `UnitInfoPanel.BOTTOM_RESERVE` = 16 margin + `TerrainInfoPanel.MAX_HEIGHT` 152 + 8 gap |
+
+`UILayoutManager._rebudget_left_column()` re-splits this whenever the card shows/hides or
+the window resizes. An expanded log (158px) does not fit beside the card's floor, so while
+a unit is selected the log renders its chip; with nothing selected it gets the whole
+column. Two rules keep the card honest: it is **never** given less height than
+`fixed_content_height()` (a BoxContainer under its minimum overlaps its own children), and
+nothing inside it may declare a minimum wider than the column (`discipline_label`).
+
+Panels mounted in code by `UILayoutManager` (after theming):
+- **BattleLog** — first child of the LeftSidebar, collapsible scrolling combat log. Also
+  auto-collapses while a move is being aimed (the CombatForecastPanel shares that corner).
 - **TurnTransition** — full-screen turn-change wipe, own high CanvasLayer.
-- **ActionAnnouncer** — upper-centre "X used Y!" banner, own CanvasLayer.
+- **ActionAnnouncer** — upper-centre "X used Y!" banner, own CanvasLayer. Parks itself
+  below the *live* TopBar (56px Traditional chip / 180px Speed First queue), never at a
+  fixed offset.
 - **SettingsPanel** — full-screen options overlay (opened by the gear button).
 
 Mounted separately by `GameWorldManager` on the `UI` CanvasLayer:

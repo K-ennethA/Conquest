@@ -25,11 +25,25 @@ class_name TerrainInfoPanel
 const PANEL_WIDTH := 260.0
 const MARGIN := 16.0
 
+## Hard cap on the card's height. The HUD's whole left column is budgeted against this:
+## UnitInfoPanel.BOTTOM_RESERVE (176) = MARGIN (16) + MAX_HEIGHT (152) + an 8px gap, and
+## the unit card is never allowed to grow into that band. A tile carrying more effect
+## chips than fit therefore SCROLLS the chip list instead of growing the card upward into
+## the unit card (and, before the explicit offsets below, off the bottom of the screen).
+const MAX_HEIGHT := 152.0
+
+## Width the card's rows are measured at: PANEL_WIDTH minus the amber card's 14px content
+## margins each side, minus a couple of px of frame.
+const CONTENT_WIDTH := 228.0
+
 var _card: PanelContainer
 var _name_label: Label
 var _move_label: Label
 var _effects_header: Label
 var _effects_container: VBoxContainer
+## Scrolls the chip list once the card would exceed MAX_HEIGHT. The name / rule /
+## move-cost / "Effects:" rows above it are fixed; this is the one elastic region.
+var _effects_scroll: ScrollContainer
 
 # Sentinel so the very first _on_cursor_moved always does a fresh lookup.
 var _current_cell: Vector2i = Vector2i(-999999, -999999)
@@ -78,6 +92,8 @@ func _fit_to_viewport() -> void:
 		return
 	position = Vector2.ZERO
 	size = vp.get_visible_rect().size
+	# The card's offsets are relative to THIS rect's bottom edge, so re-pin on resize.
+	_reflow_card()
 
 
 func _create_ui() -> void:
@@ -94,6 +110,13 @@ func _create_ui() -> void:
 	_card.grow_horizontal = Control.GROW_DIRECTION_END
 	_card.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_card.offset_left = MARGIN
+	_card.offset_right = MARGIN + PANEL_WIDTH
+	# BOTH vertical offsets are written explicitly by _reflow_card() after every content
+	# change. Leaving offset_top at its default 0 against a 1.0 top anchor made the card's
+	# rect NEGATIVE-height and left it to the grow direction to rescue -- which is what put
+	# the card's bottom edge off the bottom of the screen. An explicit
+	# [-(MARGIN + height), -MARGIN] band cannot be cut off.
+	_card.offset_top = -(MARGIN + MAX_HEIGHT)
 	_card.offset_bottom = -MARGIN
 	_card.custom_minimum_size = Vector2(PANEL_WIDTH, 0)
 	_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -130,15 +153,30 @@ func _create_ui() -> void:
 	_effects_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_vb.add_child(_effects_header)
 
+	_effects_scroll = ScrollContainer.new()
+	_effects_scroll.name = "EffectsScroll"
+	_effects_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_effects_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_effects_scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root_vb.add_child(_effects_scroll)
+
 	_effects_container = VBoxContainer.new()
 	_effects_container.name = "EffectsContainer"
 	_effects_container.add_theme_constant_override("separation", 2)
+	_effects_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_effects_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root_vb.add_child(_effects_container)
+	_effects_scroll.add_child(_effects_container)
 
 	# Amber HUD look, applied last (see CombatForecastPanel._create_ui) so it
 	# doesn't get stripped by any later local overrides.
 	ConquestTheme.apply_to(self)
+
+	# Bound every row's contribution to the card's minimum size. _name_label AUTOWRAPS, and
+	# a Godot autowrap Label reports its minimum HEIGHT for whatever width it was last laid
+	# out at -- measured, this card's VBox was demanding 287px for four short rows, which
+	# blew the 152px the HUD reserves for this corner. Pinning a floor width pins the line
+	# count with it. See UnitInfoPanel.discipline_label for the full note.
+	UnitInfoPanel.discipline_subtree(self, CONTENT_WIDTH)
 
 
 # --- Public API --------------------------------------------------------------
@@ -183,8 +221,42 @@ func hide_panel() -> void:
 
 # --- Internals -----------------------------------------------------------------
 
+## Height the card renders at for a content height of [param content_h], capped so the
+## HUD's bottom-left reserve holds. Pure so the budget can be pinned by a test:
+## MARGIN (16) + card (<= MAX_HEIGHT 152) + an 8px gap == UnitInfoPanel.BOTTOM_RESERVE.
+static func card_height(content_h: float) -> float:
+	return clampf(content_h, 0.0, MAX_HEIGHT)
+
+
+## Re-pin the card to the bottom-left corner: cap the elastic chip list so the whole card
+## fits in MAX_HEIGHT, then write BOTH vertical offsets from the measured height. Never
+## relies on the grow direction to rescue an inverted rect.
+func _reflow_card() -> void:
+	if _card == null or not is_instance_valid(_card):
+		return
+
+	var content_h: float = _card.get_combined_minimum_size().y
+	if _effects_scroll != null and is_instance_valid(_effects_scroll):
+		# Measure the fixed rows with the list collapsed, then give the list whatever is
+		# left under the cap.
+		_effects_scroll.custom_minimum_size.y = 0.0
+		var fixed: float = _card.get_combined_minimum_size().y
+		var room: float = maxf(0.0, MAX_HEIGHT - fixed)
+		var used: float = minf(_effects_container.get_combined_minimum_size().y, room)
+		_effects_scroll.custom_minimum_size.y = used
+		content_h = fixed + used
+
+	var h: float = card_height(content_h)
+	_card.offset_top = -(MARGIN + h)
+	_card.offset_bottom = -MARGIN
+
+
 func _populate_effects(cell: Vector2i) -> void:
+	# remove_child BEFORE queue_free: a queued-but-still-parented chip keeps contributing
+	# to get_combined_minimum_size(), so _reflow_card() below would size the card against
+	# the PREVIOUS tile's chips as well as this one's.
 	for child in _effects_container.get_children():
+		_effects_container.remove_child(child)
 		child.queue_free()
 
 	# ALL effects (base terrain + runtime), plus the runtime-only set so we can flag
@@ -200,7 +272,10 @@ func _populate_effects(cell: Vector2i) -> void:
 		# Muted so the "nothing here" state reads as secondary, not a real effect.
 		none_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
 		none_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		UnitInfoPanel.discipline_label(none_label, CONTENT_WIDTH)
 		_effects_container.add_child(none_label)
+		# Content changed height; re-pin after this layout pass rather than during it.
+		call_deferred("_reflow_card")
 		return
 
 	for te in effects:
@@ -209,6 +284,8 @@ func _populate_effects(cell: Vector2i) -> void:
 		# Temporary iff this effect is in the runtime (applied-this-battle) set --
 		# i.e. NOT an inherent terrain effect.
 		_effects_container.add_child(_build_effect_chip(te, te in applied))
+
+	call_deferred("_reflow_card")
 
 
 ## Build one colour-coded chip for a tile effect: a rounded PanelContainer whose

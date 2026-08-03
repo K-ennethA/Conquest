@@ -7,8 +7,11 @@ class_name BattleLog
 ## player can read a running account ("Petalfang used Thorn Spit", "Torvald hit
 ## Blightcap for 20"). Purely additive and read-only: it never mutates game state.
 ##
-## Mounted by UILayoutManager as a direct child of the full-screen HUD root, so its
-## bottom-left anchors resolve against the whole window (no top_level needed).
+## Mounted by UILayoutManager as the FIRST child of the HUD's LeftSidebar VBox, so it
+## owns the top row of the left column and the UnitInfoPanel stacks underneath it with
+## the column's 10px separation -- the two can no longer overlap (the reported "BATTLE LOG
+## chip sits on top of the Unit Information title" bug). It still works as a free-floating
+## top-left panel when mounted under a non-Container parent (tests, other scenes).
 
 const MAX_LINES: int = 60
 const PANEL_WIDTH: float = 330.0
@@ -26,6 +29,15 @@ const TOP_MARGIN: float = 8.0
 ## to expand to PANEL_HEIGHT; click again to collapse. Starts collapsed so the log
 ## stays out of the way (a tiny header) until the player wants to read it.
 const COLLAPSED_HEIGHT: float = 30.0
+## Vertical space the header + panel margins take, i.e. everything that is NOT scrollback.
+const HEADER_ALLOWANCE: float = 34.0
+## Shortest an EXPANDED log is still worth the rows it costs the unit card (header + ~5
+## lines of scrollback). While a unit is selected the left column can only spare ~95px
+## (463 usable - the card's 358px of fixed rows - 10px separation), which is under this, so
+## the log shows its collapsed chip rather than pushing the card's ability / effect lists
+## to zero. With no unit selected the whole column is the log's and it expands in full.
+## Same idiom as the existing auto-collapse while a move is being aimed.
+const MIN_EXPANDED_HEIGHT: float = 120.0
 
 # Side tints (bbcode): the local/ally side reads cool, the AI/enemy side warm-red, so
 # you can scan who did what at a glance. Neutral events use cream.
@@ -54,35 +66,87 @@ var _unread: int = 0
 var _aiming: bool = false
 var _expanded_before_aim: bool = false
 
+## True when this log is laid out BY a Container (the HUD's LeftSidebar VBox), in which
+## case the container owns position/width and the log declares its height through
+## custom_minimum_size. False when it is a free-floating top-left panel driving its own
+## anchors/offsets, which is how it behaves outside GameUILayout.
+var _docked: bool = false
+
+## Tallest this log may render, handed down by UILayoutManager from the left column's
+## budget (see UILayoutManager._rebudget_left_column). INF until somebody budgets it, so
+## a standalone log keeps its authored PANEL_HEIGHT.
+var _height_budget: float = INF
+
 
 func _ready() -> void:
 	name = "BattleLog"
+	_docked = get_parent() is Container
 	_build_ui()
-	# TOP-left corner (see TOP_MARGIN note): out of the contested bottom-left inspection
-	# cluster, so it no longer overlaps / hides behind the terrain card. Grows downward.
+	if _docked:
+		# The column owns x and width; only the height is ours to declare.
+		size_flags_horizontal = Control.SIZE_FILL
+		size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	else:
+		# TOP-left corner (see TOP_MARGIN note): out of the contested bottom-left
+		# inspection cluster. Grows downward.
+		set_anchors_preset(Control.PRESET_TOP_LEFT)
+		offset_left = MARGIN
+		offset_right = MARGIN + PANEL_WIDTH
 	# Click-through except the header, which captures clicks to toggle expand/collapse.
-	set_anchors_preset(Control.PRESET_TOP_LEFT)
-	offset_left = MARGIN
-	offset_right = MARGIN + PANEL_WIDTH
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_apply_layout()
 	_connect_events()
 
 
-## Resize to header-only or full, and show/hide the scrollback, per _expanded.
-## Top-anchored: grows downward from TOP_MARGIN.
+## The height an [param expanded] log actually renders at inside [param budget].
+##
+## Pure, and the whole left-column contract in one place: a collapsed log is always its
+## 30px chip; an expanded one takes PANEL_HEIGHT unless the column cannot spare it, and
+## anything under MIN_EXPANDED_HEIGHT is not a readable log -- it falls back to the chip
+## rather than stealing rows from the UnitInfoPanel underneath.
+static func resolved_height(expanded: bool, budget: float) -> float:
+	if not expanded:
+		return COLLAPSED_HEIGHT
+	var allowed: float = minf(PANEL_HEIGHT, budget)
+	return allowed if allowed >= MIN_EXPANDED_HEIGHT else COLLAPSED_HEIGHT
+
+
+## Tell the log how much vertical room the left column can spare for it. Re-applies the
+## layout immediately, so expanding into a column that has no room silently keeps the chip.
+func set_height_budget(px: float) -> void:
+	var next: float = maxf(COLLAPSED_HEIGHT, px)
+	if is_equal_approx(next, _height_budget):
+		return
+	_height_budget = next
+	_apply_layout()
+
+
+## True when the scrollback is actually on screen (expanded AND the column had room).
+func is_showing_scrollback() -> bool:
+	return resolved_height(_expanded, _height_budget) > COLLAPSED_HEIGHT
+
+
+## Resize to header-only or full, and show/hide the scrollback, per _expanded and the
+## column budget. Docked: declares a minimum height to the column. Floating: grows
+## downward from TOP_MARGIN.
 func _apply_layout() -> void:
-	var h: float = PANEL_HEIGHT if _expanded else COLLAPSED_HEIGHT
-	offset_top = TOP_MARGIN
-	offset_bottom = TOP_MARGIN + h
+	var h: float = resolved_height(_expanded, _height_budget)
+	var showing: bool = h > COLLAPSED_HEIGHT
+	if _docked:
+		custom_minimum_size.y = h
+	else:
+		offset_top = TOP_MARGIN
+		offset_bottom = TOP_MARGIN + h
 	if _log:
-		_log.visible = _expanded
+		_log.visible = showing
+		# The scrollback is the elastic part; the header + panel margins are not.
+		_log.custom_minimum_size.y = maxf(0.0, h - HEADER_ALLOWANCE) if showing else 0.0
 	if _header:
 		_header.text = _header_text()
 
 
 func _header_text() -> String:
-	if _expanded:
+	if is_showing_scrollback():
 		return "BATTLE LOG  ▾"  # down triangle = open
 	if _unread > 0:
 		return "BATTLE LOG  ▸  (%d)" % _unread  # right triangle + unread badge
@@ -91,13 +155,17 @@ func _header_text() -> String:
 
 func _toggle_expanded() -> void:
 	_expanded = not _expanded
-	if _expanded:
-		_unread = 0
 	# If the player toggles mid-aim, honour that as their new intent so the
 	# aim-ended restore doesn't undo it.
 	if _aiming:
 		_expanded_before_aim = _expanded
 	_apply_layout()
+	# Only a log that actually came on screen has been "read" -- a budget-denied expand
+	# must keep its unread badge.
+	if is_showing_scrollback():
+		_unread = 0
+		if _header:
+			_header.text = _header_text()
 
 
 # --- Targeting-driven auto-collapse (keeps the log clear of the forecast) -----
@@ -168,7 +236,10 @@ func _build_ui() -> void:
 	_log.scroll_following = true   # keep the newest line in view
 	_log.fit_content = false
 	_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_log.custom_minimum_size = Vector2(PANEL_WIDTH - 16.0, PANEL_HEIGHT - 34.0)
+	_log.size_flags_horizontal = Control.SIZE_FILL
+	# Docked, the COLUMN sets the width -- declaring one here would widen the whole left
+	# column to 330px and eat 70px of board. Height is set by _apply_layout.
+	_log.custom_minimum_size = Vector2(0.0 if _docked else PANEL_WIDTH - 16.0, 0.0)
 	_log.add_theme_font_size_override("normal_font_size", 12)
 	_log.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(_log)
@@ -248,7 +319,7 @@ func _append(text: String, color: String) -> void:
 		_lines = _lines.slice(_lines.size() - MAX_LINES)
 	_log.text = "\n".join(_lines)
 	# Collapsed: don't pop open, just badge the header so the player sees activity.
-	if not _expanded:
+	if not is_showing_scrollback():
 		_unread += 1
 		if _header:
 			_header.text = _header_text()

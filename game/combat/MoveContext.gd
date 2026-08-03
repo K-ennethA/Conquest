@@ -71,11 +71,30 @@ func crit_chance(_target) -> float:
 	return clampf(move.crit_chance * 100.0 + float(get_caster_stat("crit")), 0.0, 100.0)
 
 
+## When true this context NEVER rolls to hit: every target takes a guaranteed,
+## non-critical hit and the generator is untouched.
+##
+## This is what a STATUS TICK resolves through ([method StatusCondition.tick]). Poison
+## is not an attack you can dodge — it is already inside you — but a tick routed through
+## the ordinary pipeline was rolling [method hit_chance] like any swing, so the victim's
+## EVASION applied to it. Standing in tall grass (+15 terrain avoid) therefore gave a
+## poisoned unit a 15% chance to dodge its own poison each turn, and because a tick's
+## context carries no injected RNG that roll was made on an unseeded generator — so the
+## same battle desynced between networked peers and replayed differently.
+##
+## Default false, so a move, a hazard and an ability all resolve exactly as before.
+var guaranteed_hit: bool = false
+
+
 ## Resolve (once, then cache) whether this move hits [param target] and whether it
 ## crits. Returns { hit, crit, hit_pct, crit_pct }.
 func resolve_hit(target) -> Dictionary:
 	if _hit_cache.has(target):
 		return _hit_cache[target]
+	if guaranteed_hit:
+		var certain := { "hit": true, "crit": false, "hit_pct": 100.0, "crit_pct": 0.0 }
+		_hit_cache[target] = certain
+		return certain
 	var hp := hit_chance(target)
 	var cp := crit_chance(target)
 	var r := _get_rng()

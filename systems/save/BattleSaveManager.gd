@@ -5,11 +5,29 @@ class_name BattleSaveManager
 ## up later exactly where you left it.
 ##
 ## ONE SLOT, ONE FILE. [constant DEFAULT_SAVE_PATH] holds a single [BattleSnapshot] (see that
-## script for the format). There is no autosave and no save-on-quit: closing the app without
-## pressing Save & Quit simply loses the battle, which is the honest reading of "quit" and
-## keeps the file from ever being written behind the player's back. The save is SINGLE-USE --
-## it is deleted the moment a resume consumes it, so a battle can never be re-farmed from one
-## snapshot.
+## script for the format). There is no autosave. The save is SINGLE-USE -- it is deleted the
+## moment a resume consumes it, so a battle can never be re-farmed from one snapshot.
+##
+## CLOSING THE WINDOW SAVES TOO. It used not to: Save & Quit wrote the slot, but killing the
+## window mid-battle wrote nothing and the run was simply gone. "I closed the window" is not a
+## player saying "throw my battle away", it is a player leaving -- so [method _notification]
+## handles `NOTIFICATION_WM_CLOSE_REQUEST` and writes the SAME snapshot Save & Quit writes,
+## through the same [method can_save_now] gate, so every exclusion below applies unchanged.
+## Three properties that handler must have and does:
+##   * BEST-EFFORT. A failed write (full disk) is a returned false, never a dialog and never a
+##     retry. See [method save_on_close].
+##   * NEVER BLOCKING. It is synchronous, allocates one dictionary and one file write, and
+##     shows nothing. The engine's own quit follows immediately (and if the project ever turns
+##     `auto_accept_quit` off, the handler finishes the quit itself rather than trapping the
+##     player in an unclosable window).
+##   * BATTLE-SCOPED, not process-wide -- this node is mounted per battle by [GameWorldManager]
+##     and is in the tree for exactly as long as there is anything to save. Outside a battle
+##     `can_save_now()` is false anyway, so a process-wide handler would add nothing.
+## A CHALLENGE attempt snapshotted this way is legitimate and deliberate: the end-of-day rule
+## below already governs it, so closing the window mid-attempt parks it until midnight UTC and
+## then forfeits it exactly as a Save & Quit would have.
+## NETWORKED matches need nothing here -- [NetSession] already treats the disconnect a closing
+## window causes as a server-side forfeit, and `can_save_now()` excludes them regardless.
 ##
 ## TWO SURFACES, DELIBERATELY.
 ##   * A NODE, discoverable through group [constant GROUP], mounted per battle by
@@ -337,6 +355,52 @@ func save_and_quit() -> bool:
 	tree.paused = false
 	tree.change_scene_to_file(MAIN_MENU_SCENE)
 	return true
+
+
+# --- Closing the window -----------------------------------------------------
+#
+# See the class header's "closing the window saves too" note for the reasoning; what follows is
+# only the mechanism.
+
+## The player killed the window (title-bar X, Alt+F4, dock quit). Write the same snapshot Save &
+## Quit writes -- through the same gate, so every exclusion still applies -- and get out of the
+## way. Deliberately SILENT: no dialog, no confirmation, no await. A best-effort save is the
+## whole contract; a failed one loses exactly what closing the window used to lose anyway.
+##
+## The engine sends this notification to every node in the tree and THEN quits, so this
+## synchronous write completes before the process goes down. The `auto_accept_quit` branch is
+## belt-and-braces: the project leaves it at its default (true, so the engine finishes the quit
+## itself, which is the arrangement that CANNOT trap the player in an unclosable window), but if
+## it is ever turned off, this handler must finish the job rather than swallow the request.
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_WM_CLOSE_REQUEST:
+		return
+	save_on_close()
+	var tree: SceneTree = get_tree()
+	if tree != null and not tree.auto_accept_quit:
+		tree.quit()
+
+
+## Serialise the live battle into the slot WITHOUT leaving the battle -- the close-request half
+## of [method save_and_quit], which cannot change scene because there is no next scene. Returns
+## whether a snapshot was written; false (changing nothing) when the battle cannot be saved, has
+## nothing capturable, or the write fails.
+func save_on_close() -> bool:
+	if not can_save_now():
+		return false
+	return BattleSaveManager.write_close_snapshot(true, capture(BattleSaveManager.today_utc()))
+
+
+## The gate-and-write step behind [method save_on_close], split out so the close-save rule can be
+## tested exhaustively without standing up a live battle -- hand it the gate's answer and a
+## snapshot and it does exactly what the handler does. [param allowed] is
+## [method can_save_now]'s verdict: false means write NOTHING, not even a partial file.
+static func write_close_snapshot(allowed: bool, snapshot: Dictionary) -> bool:
+	if not allowed:
+		return false
+	if snapshot.is_empty():
+		return false
+	return write_save(snapshot)
 
 
 # --- Capture ----------------------------------------------------------------

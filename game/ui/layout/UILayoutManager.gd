@@ -24,6 +24,39 @@ class_name UILayoutManager
 # treat it as HUD chrome while it is on screen.
 @onready var unit_info_panel: Control = $MarginContainer/MainContainer/MiddleArea/LeftSidebar/UnitInfoPanel
 
+# --- Left-column budget (1280x720) -------------------------------------------
+#
+# The left column is a real VBox stack, not a pile of overlapping anchored panels. Every
+# row has a fixed claim except ONE flexible region (the UnitInfoPanel's two scrolling
+# lists), and the claims add up to the column height exactly:
+#
+#   720   window height
+#   - 15  MarginContainer top margin
+#   - 56  TopBar (compact turn chip -- see _show_traditional_layout)
+#   - 10  MainContainer separation
+#   = 81  MiddleArea / left column TOP
+#
+#   - 30  BattleLog chip           (owns the column's first row)
+#   - 10  LeftSidebar separation
+#   = 121 UnitInfoPanel TOP
+#
+#   720 - 121 - 176 = 423px budget for the UnitInfoPanel, against a MEASURED fixed-content
+#   floor of 358px (title 26 + portrait row 56 + stat block 132 + two section headers, plus
+#   separations and the 24px of MarginContainer chrome) -- so the stat rows ALWAYS fit and
+#   only the ability / effect lists scroll. The 176 is the bottom-left reserve owned by the
+#   floating TerrainInfoPanel: a 16px window margin + its 152px height cap + an 8px gap
+#   (UnitInfoPanel.BOTTOM_RESERVE == TerrainInfoPanel.MARGIN + MAX_HEIGHT + 8).
+#
+# An EXPANDED log (158px) does not fit alongside the card's 358px floor in the 463px of
+# usable column -- 463 - 358 - 10 leaves 95px -- so the log is handed that leftover as its
+# budget and falls back to its chip because it is under BattleLog.MIN_EXPANDED_HEIGHT.
+# With no unit selected the card is hidden and the whole 463px goes to the log, which then
+# expands in full.
+const LEFT_COLUMN_WIDTH: float = 260.0
+const COLUMN_SEPARATION: float = 10.0
+## Mirror of UnitInfoPanel.BOTTOM_RESERVE, the window-bottom band the terrain card owns.
+const BOTTOM_RESERVE: float = 176.0
+
 # Layout state
 var current_turn_system_type: TurnSystemBase.TurnSystemType = TurnSystemBase.TurnSystemType.TRADITIONAL
 var is_layout_initialized: bool = false
@@ -57,6 +90,18 @@ var turn_timer: TurnTimer = null
 # Replay transport bar (play/pause, speed, step, turn counter, exit). Its own CanvasLayer,
 # mounted in every battle and self-hidden unless a replay is being watched -- see ReplayHUD.
 var replay_hud: ReplayHUD = null
+# "Skip enemy turn" fast-forward control. Its own CanvasLayer, mounted in every battle and
+# self-hidden except during an AI turn (and never in a networked match) -- see
+# SkipEnemyTurnButton.
+## Typed as the base CanvasLayer, and built from SKIP_ENEMY_TURN_BUTTON_SCRIPT below rather than
+## from its global class_name -- see that const for why.
+var skip_enemy_turn_button: CanvasLayer = null
+
+## The fast-forward control's script (see [SkipEnemyTurnButton]). Preloaded by PATH rather than
+## referenced by its global class_name, exactly as [GameWorldManager] preloads its juice layers:
+## a global class only resolves once the editor/engine has rescanned, so a fresh checkout (or a
+## headless run against a stale class cache) would otherwise fail to compile this whole HUD.
+const SKIP_ENEMY_TURN_BUTTON_SCRIPT = preload("res://game/ui/hud/SkipEnemyTurnButton.gd")
 
 func _ready() -> void:
 	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
@@ -111,6 +156,10 @@ func _ready() -> void:
 	# unless a replay is being watched, so a normal battle never sees it.
 	_build_replay_hud()
 
+	# "Skip enemy turn" fast-forward control. Same deal as the two above: self-styled
+	# CanvasLayer, mounted after theming, and self-hidden outside an AI turn.
+	_build_skip_enemy_turn_button()
+
 	# The pause menu overlay. Mounted AFTER theming like the other self-styled
 	# CanvasLayers -- it carries the DARK MenuTheme on purpose and must not be swept
 	# into the amber HUD cascade.
@@ -125,7 +174,67 @@ func _ready() -> void:
 	# gear button + battle log are present.
 	_wire_button_sfx()
 
+	# Keep the left column's two panels sharing one budget for the rest of the battle
+	# (the card shows/hides with the selection, and the window can be resized).
+	_wire_left_column_budget()
+
 	is_layout_initialized = true
+
+# --- Left column budget ------------------------------------------------------
+
+func _wire_left_column_budget() -> void:
+	"""Re-share the left column whenever the unit card appears, disappears, changes its
+	own minimum, or the window resizes."""
+	if unit_info_panel != null:
+		if not unit_info_panel.visibility_changed.is_connected(_on_left_column_changed):
+			unit_info_panel.visibility_changed.connect(_on_left_column_changed)
+		if not unit_info_panel.minimum_size_changed.is_connected(_on_left_column_changed):
+			unit_info_panel.minimum_size_changed.connect(_on_left_column_changed)
+	var vp := get_viewport()
+	if vp != null and not vp.size_changed.is_connected(_on_left_column_changed):
+		vp.size_changed.connect(_on_left_column_changed)
+	_on_left_column_changed()
+
+func _on_left_column_changed() -> void:
+	# Deferred: this fires from inside a layout pass (visibility / minimum-size
+	# notifications), and re-budgeting writes minimum sizes back into that same pass.
+	call_deferred("_rebudget_left_column")
+
+## Split the left column between the battle log (top row) and the unit info card.
+##
+## ONE flexible region, and a strict claim order: the terrain card's bottom reserve is
+## untouchable, the info card's FIXED rows (title / portrait / stats / section headers)
+## have the next claim, and the battle log is handed whatever is left. See the
+## LEFT_COLUMN_WIDTH comment block at the top of this file for the 720p arithmetic --
+## 463px usable, 402px of which the card cannot give up, so an expanded log falls back to
+## its chip while a unit is selected and takes the full 158px when none is.
+func _rebudget_left_column() -> void:
+	if battle_log == null or not is_instance_valid(battle_log):
+		return
+	if not battle_log.has_method("set_height_budget"):
+		return
+
+	var vp := get_viewport()
+	var vp_height: float = vp.get_visible_rect().size.y if vp != null else 720.0
+	var column_top: float = left_sidebar.global_position.y if left_sidebar != null else 81.0
+	var usable: float = vp_height - BOTTOM_RESERVE - column_top
+
+	var card_claim: float = 0.0
+	if unit_info_panel != null and is_instance_valid(unit_info_panel) and unit_info_panel.visible:
+		card_claim = COLUMN_SEPARATION
+		if unit_info_panel.has_method("fixed_content_height"):
+			card_claim += float(unit_info_panel.call("fixed_content_height"))
+		else:
+			card_claim += unit_info_panel.get_combined_minimum_size().y
+
+	battle_log.set_height_budget(usable - card_claim)
+
+	# The log's row height just moved the card's top edge, so the card re-runs its own
+	# fit against the new top. Deferred inside refit(); converges because both writes are
+	# no-ops once the sizes stop changing.
+	if unit_info_panel != null and is_instance_valid(unit_info_panel) \
+			and unit_info_panel.has_method("refit"):
+		unit_info_panel.call("refit")
 
 func _wire_button_sfx() -> void:
 	"""Attach the shared UI-click SFX to the command surfaces this HUD owns.
@@ -151,10 +260,22 @@ func _build_turn_transition() -> void:
 	add_child(turn_transition)
 
 func _build_battle_log() -> void:
-	"""Create and mount the bottom-left battle log (records moves/attacks/deaths)."""
+	"""Create and mount the battle log as the TOP ROW of the left column.
+
+	It used to be a free-floating panel anchored to the window's top-left, which put it in
+	the same band as the container-placed UnitInfoPanel: expanded, the log's 158px reached
+	y~171 while the card starts at y~81, so the chip drew straight over the card's "Unit
+	Information" title. Mounted as the LeftSidebar VBox's first child it OWNS its row and
+	the card stacks under it with the column's 10px separation -- overlap is now
+	structurally impossible rather than a matter of tuned offsets."""
 	battle_log = BattleLog.new()
 	battle_log.name = "BattleLog"
-	add_child(battle_log)
+	if left_sidebar != null:
+		left_sidebar.add_child(battle_log)
+		left_sidebar.move_child(battle_log, 0)
+	else:
+		add_child(battle_log)
+	_rebudget_left_column()
 
 func _build_action_announcer() -> void:
 	"""Create and mount the upper-centre action banner (flashes when a unit acts)."""
@@ -197,6 +318,17 @@ func _build_replay_hud() -> void:
 	replay_hud = ReplayHUD.new()
 	replay_hud.name = "ReplayHUD"
 	add_child(replay_hud)
+
+func _build_skip_enemy_turn_button() -> void:
+	"""Create and mount the enemy-turn fast-forward control.
+
+	Same one-call deal as NetToast / ReplayHUD: this only owns WHERE it lives. The control
+	subscribes to the ACTIVE turn system in its own _ready, shows itself only during an AI turn
+	(and never in a networked match or a replay), and disarms the fast-forward on teardown -- so
+	a normal player turn mounts one hidden CanvasLayer and nothing else happens."""
+	skip_enemy_turn_button = SKIP_ENEMY_TURN_BUTTON_SCRIPT.new()
+	skip_enemy_turn_button.name = "SkipEnemyTurnButton"
+	add_child(skip_enemy_turn_button)
 
 func _apply_theme() -> void:
 	"""Apply the amber ConquestTheme to this HUD subtree (panels, buttons, text)."""
@@ -413,10 +545,21 @@ func _initialize_layout() -> void:
 		# This will expand to fill available space
 		middle_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
-	# Set sidebar constraints - only right sidebar now
+	# Left column: a FIXED 260px width, declared here rather than inferred from whichever
+	# child happens to be visible. The column holds two panels that show and hide
+	# independently (the battle log always, the unit card only while something is
+	# selected), so an inferred width made the column -- and the battle log inside it --
+	# collapse the moment the card was hidden.
 	if left_sidebar:
-		left_sidebar.custom_minimum_size = Vector2(0, 0)  # No minimum width needed
+		left_sidebar.custom_minimum_size = Vector2(LEFT_COLUMN_WIDTH, 0)
 		left_sidebar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		left_sidebar.add_theme_constant_override("separation", int(COLUMN_SEPARATION))
+
+	# The card FILLs that column instead of shrinking to its own minimum, so its inner
+	# rows (and the HP bar) resolve against exactly the width the frame is drawn at.
+	if unit_info_panel:
+		unit_info_panel.size_flags_horizontal = Control.SIZE_FILL
+		unit_info_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	
 	if right_sidebar:
 		right_sidebar.custom_minimum_size = Vector2(220, 0)

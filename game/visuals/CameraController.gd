@@ -151,6 +151,14 @@ const _AUTO_OFF: int = 0
 const _AUTO_QUICK: int = 1
 const _AUTO_CINEMATIC: int = 2
 
+## The enemy-turn FAST-FORWARD latch (see [TurnFastForward]): while it is armed this camera
+## stands its auto-focus down, so a ~1-frame-per-action AI turn does not fly the frame around
+## the board. Preloaded by PATH rather than by its global class_name, exactly as
+## [GameWorldManager] preloads its juice layers -- a global class only resolves once the
+## editor/engine has rescanned, and a fresh checkout would otherwise fail to compile this
+## script. Every function on it is static, so this const IS the whole API.
+const FAST_FORWARD = preload("res://game/ai/TurnFastForward.gd")
+
 
 func _ready() -> void:
 	_dist_max_runtime = dist_max
@@ -515,10 +523,19 @@ func _auto_focus_mode() -> int:
 	return int(_game_settings.camera_auto_focus)
 
 
-## Whether an event-driven auto-move is allowed right now: not OFF, and not while the
-## player is actively driving the camera (mid grab-drag or typing in a text field).
+## Whether an event-driven auto-move is allowed right now: not OFF, not while the player is
+## actively driving the camera (mid grab-drag or typing in a text field), and not while the
+## enemy turn is being FAST-FORWARDED.
+##
+## The fast-forward clause is the third leg of the skip button (see [TurnFastForward]): the AI
+## still issues every command, so damage_dealt / unit_healed / unit_spawned still fire -- and
+## at a ~1-frame beat each, honouring them would fly the camera across the board dozens of
+## times a second. Suppressing auto-focus is what turns "the AI does everything, we just don't
+## show it" from a promise into a calm screen.
 func _should_auto_focus() -> bool:
 	if _dragging or _text_field_has_focus():
+		return false
+	if FAST_FORWARD.is_armed():
 		return false
 	return _auto_focus_mode() != _AUTO_OFF
 
@@ -884,6 +901,12 @@ func _on_turn_system_activated_focus(ts) -> void:
 func _on_turn_focus_started(player) -> void:
 	if player == null:
 		return
+	# AUTO-DISARM the enemy-turn fast-forward the instant a human player is up. This rides the
+	# ACTIVE turn system's turn_started (see _setup_turn_focus), which is the only signal that
+	# fires on AI turns too -- and it has to happen BEFORE _should_auto_focus below, or the
+	# still-armed latch would swallow the human turn's re-frame. Idempotent and shared with the
+	# HUD button, so whichever of the two the turn system connected first does the work.
+	FAST_FORWARD.note_turn_started(player)
 	# Re-frame only when the controlling SIDE flips (ally<->enemy), never for every
 	# consecutive same-side unit. In Speed mode turn_started fires per-unit, so a run of
 	# 8 ally units would otherwise fly the camera 8 times ("player1 to player1" waste) --

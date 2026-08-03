@@ -80,6 +80,13 @@ class_name BotTurnDriver
 ## in headless tests; the autoload instance and this reference share the same statics.
 const ANIMATOR_SCRIPT = preload("res://game/visuals/UnitAnimator.gd")
 
+## The enemy-turn FAST-FORWARD latch (see [TurnFastForward]). Preloaded by PATH rather than
+## referenced by its global class_name for the same reason [GameWorldManager] preloads its juice
+## layers: a global class only resolves once the editor/engine has rescanned, and a fresh
+## checkout (or a headless test run against a stale class cache) would otherwise fail to compile
+## this script entirely. Every function on it is static, so this const IS the whole API.
+const FAST_FORWARD = preload("res://game/ai/TurnFastForward.gd")
+
 var _timer: Timer
 var _busy: bool = false
 # Set by _act() (via act_for_turn_system) to record whether the LAST resolved
@@ -123,12 +130,16 @@ func _ready() -> void:
 ## battle speed -> shorter AI beats), with a hard floor so it can never hit zero.
 ## Reads the GameSettings autoload null-safely; when it is absent (headless tests)
 ## the unscaled interval is used.
+##
+## FAST-FORWARD (see [TurnFastForward]) is applied LAST, after the floor, so the skip button
+## overrides the watchability floor rather than being clamped back up by it. Disarmed, the
+## call is the identity and this function is exactly what it was.
 func _effective_wait() -> float:
 	var scaled: float = action_interval
 	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and "battle_speed" in GameSettings:
 		var speed: float = clampf(float(GameSettings.battle_speed), 0.5, 3.0)
 		scaled = action_interval / speed
-	return maxf(0.05, scaled)
+	return FAST_FORWARD.scale_delay(maxf(0.05, scaled))
 
 
 ## Recompute and apply the Timer's wait. Call whenever the interval or battle speed
@@ -161,11 +172,17 @@ func _animations_busy() -> bool:
 ## deadlock the AI -- after the cap it acts anyway. Resets the accumulator on every
 ## proceed so each action starts with a fresh budget. Pure/synchronous so it is unit-
 ## testable against the animator's static registry without the Timer.
+##
+## FAST-FORWARD collapses this gate to its MINIMUM rather than removing it: [TurnFastForward]
+## scales the cap to 0, so the `elapsed >= cap` branch below is taken on the very first check
+## and the driver proceeds immediately instead of spending up to anim_wait_cap real seconds
+## per action waiting for animations the player has asked not to watch. Disarmed, the cap is
+## the authored one and this function is exactly what it was.
 func _defer_for_animations() -> bool:
 	if not _animations_busy():
 		_anim_wait_elapsed = 0.0
 		return false
-	if _anim_wait_elapsed >= anim_wait_cap:
+	if _anim_wait_elapsed >= FAST_FORWARD.scale_anim_cap(anim_wait_cap):
 		_anim_wait_elapsed = 0.0
 		return false
 	_anim_wait_elapsed += anim_recheck
@@ -194,7 +211,7 @@ func _tick() -> void:
 	# is a no-op (nothing is ever registered, and the setting is checked explicitly).
 	if _defer_for_animations():
 		if _timer != null:
-			_timer.start(anim_recheck)
+			_timer.start(FAST_FORWARD.scale_delay(anim_recheck))
 		return
 
 	# FAST-FORWARD SILENT WAITS. Each visible action (move/attack) should get its own
@@ -246,24 +263,27 @@ func _tick() -> void:
 
 
 ## Effective post-attack dwell: attack_dwell scaled DOWN by battle speed, then floored
-## at min_attack_dwell so even Fast keeps the strike watchable (and Slow lingers).
+## at min_attack_dwell so even Fast keeps the strike watchable (and Slow lingers) -- and
+## finally through [TurnFastForward], which is allowed to undercut that floor because the
+## player has explicitly asked not to watch this turn.
 func _effective_dwell() -> float:
 	var scaled: float = attack_dwell
 	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and "battle_speed" in GameSettings:
 		var speed: float = clampf(float(GameSettings.battle_speed), 0.5, 3.0)
 		scaled = attack_dwell / speed
-	return maxf(min_attack_dwell, scaled)
+	return FAST_FORWARD.scale_delay(maxf(min_attack_dwell, scaled))
 
 
 ## Effective post-move dwell: move_dwell scaled DOWN by battle speed, then floored at
 ## min_move_dwell. Mirrors [method _effective_dwell] but for a visible plain MOVE, so a
-## unit sliding to a new cell gets its own readable beat instead of the tiny interval.
+## unit sliding to a new cell gets its own readable beat instead of the tiny interval --
+## including the same final fast-forward pass.
 func _effective_move_dwell() -> float:
 	var scaled: float = move_dwell
 	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and "battle_speed" in GameSettings:
 		var speed: float = clampf(float(GameSettings.battle_speed), 0.5, 3.0)
 		scaled = move_dwell / speed
-	return maxf(min_move_dwell, scaled)
+	return FAST_FORWARD.scale_delay(maxf(min_move_dwell, scaled))
 
 
 ## Perform ONE AI action for the currently-active turn system (the Timer's entry

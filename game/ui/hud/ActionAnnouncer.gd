@@ -27,7 +27,18 @@ const OVERLAY_LAYER: int = 120
 # Pushed DOWN from the very top so it clears the top-centre turn chip / "YOUR TURN" banner.
 # Upper-centre, below the turn banner -- clear of the left SELECT-MOVE popup, the right
 # action panel, and the corners (battle log / terrain card / turn indicator).
+#
+# This is a FLOOR, not the final position. The HUD's TopBar is 56px tall for the compact
+# Traditional turn chip but 180px for the Speed First turn QUEUE, and a fixed 104 put the
+# banner straight through the middle of the taller one -- the reported "toast renders half
+# under the top turn banner". _banner_top() measures the live top bar and parks the banner
+# BANNER_GAP below whichever it is, falling back to this constant when there is no HUD to
+# measure (tests, other scenes).
 const TOP_OFFSET: float = 104.0
+## Clear air between the bottom of the turn banner and the top of this plate.
+const BANNER_GAP: float = 16.0
+## Where the HUD's top bar lives, relative to the current scene.
+const TOP_BAR_PATH: String = "UI/GameUILayout/MarginContainer/MainContainer/TopBar"
 const BANNER_MAX_WIDTH: float = 720.0
 
 # --- Timing (seconds, base before Battle-Speed scaling) ---------------------
@@ -50,7 +61,9 @@ const ENEMY_COLOR: Color = Color(1.0, 0.55, 0.42)    # warm red-orange
 const NEUTRAL_COLOR: Color = Color(0.988, 0.937, 0.839)  # cream (ConquestTheme.CREAM)
 const CREAM_DIM: Color = Color(0.906, 0.827, 0.678)  # subtitle (ConquestTheme.CREAM_DIM)
 const OUTLINE_COLOR: Color = Color(0.216, 0.133, 0.059)  # BROWN_DK, for text readability
-const PLATE_BG: Color = Color(0.06, 0.045, 0.03, 0.78)   # dark warm plate
+# Near-opaque: at 0.78 the amber turn chip and the 3D board read straight through the
+# plate, which is what made the banner text look "semi-transparent and colliding".
+const PLATE_BG: Color = Color(0.06, 0.045, 0.03, 0.94)   # dark warm plate
 
 var _root: Control = null
 var _plate: PanelContainer = null
@@ -132,6 +145,40 @@ func _build_ui() -> void:
 	# Start hidden; a banner only appears when something acts.
 	_root.modulate.a = 0.0
 	_root.visible = false
+
+	# The HUD may not be laid out yet on the frame this is built, so take a first
+	# measurement once the tree has settled.
+	call_deferred("_reposition")
+
+
+# --- Placement --------------------------------------------------------------
+
+## The y this plate's top edge should sit at: below the live HUD top bar (turn chip or
+## turn queue) plus BANNER_GAP, never above TOP_OFFSET. Pure enough to pin in a test via
+## [method banner_top].
+static func banner_top(top_bar_bottom: float) -> float:
+	return maxf(TOP_OFFSET, top_bar_bottom + BANNER_GAP)
+
+
+## Bottom edge (in viewport space) of the HUD's top bar, or -INF when there is no HUD to
+## measure -- in which case banner_top() falls back to TOP_OFFSET.
+func _top_bar_bottom() -> float:
+	var tree := get_tree()
+	if tree == null or tree.current_scene == null:
+		return -INF
+	var bar := tree.current_scene.get_node_or_null(TOP_BAR_PATH) as Control
+	if bar == null or not bar.is_visible_in_tree():
+		return -INF
+	return bar.global_position.y + bar.size.y
+
+
+## Re-park the plate under whatever the top bar currently is. Cheap (two property reads),
+## so it is re-run before every banner rather than cached -- the bar's height changes with
+## the active turn system.
+func _reposition() -> void:
+	if _plate == null or not is_instance_valid(_plate):
+		return
+	_plate.offset_top = banner_top(_top_bar_bottom())
 
 
 func _apply_plate_style(side: Color) -> void:
@@ -284,6 +331,8 @@ func _show(entry: Dictionary) -> void:
 		_sub_label.text = sub
 		_sub_label.visible = sub != ""
 	_apply_plate_style(color)
+	# The top bar's height changes with the active turn system, so re-measure per banner.
+	_reposition()
 
 	if _root != null:
 		_root.visible = true

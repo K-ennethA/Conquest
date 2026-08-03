@@ -65,11 +65,29 @@ const ABILITIES_MAX_HEIGHT := 140.0
 
 ## Vertical space reserved at the BOTTOM of the window that this (top-anchored) card
 ## must never grow into. The bottom-left corner is owned by the floating
-## TerrainInfoPanel (see game/ui/panels/TerrainInfoPanel.gd): a ~16px margin + a
-## terrain card up to ~152px tall + an ~8px breathing gap. _fit_height caps the card's
-## bottom edge to `vp_height - BOTTOM_RESERVE` so the Active Effects list scrolls inside
-## the card instead of sliding down under the terrain card (the reported overlap bug).
+## TerrainInfoPanel (see game/ui/panels/TerrainInfoPanel.gd): a 16px margin + a
+## terrain card capped at TerrainInfoPanel.MAX_HEIGHT (152px) + an 8px breathing gap.
+## _fit_height caps the card's bottom edge to `vp_height - BOTTOM_RESERVE` so the Active
+## Effects list scrolls inside the card instead of sliding down under the terrain card
+## (the reported overlap bug).
 const BOTTOM_RESERVE := 176.0
+
+## The MarginContainer's 12px top + 12px bottom margins. The card's height is always the
+## inner VBox's height plus this, so it is named rather than repeated as a magic +24.
+const CHROME_HEIGHT := 24.0
+
+## Widest any row inside the card may DEMAND: the 260px left column
+## (UILayoutManager.LEFT_COLUMN_WIDTH) minus the MarginContainer's 12px each side.
+const CONTENT_WIDTH := 236.0
+
+## Floor width an autowrapping label is measured at, so its reported minimum HEIGHT is a
+## stable line count rather than whatever narrow width it last saw. Leaves room for the
+## 56px portrait plate + the 8px row separation inside CONTENT_WIDTH.
+const WRAP_MIN_WIDTH := 150.0
+
+## Same, for labels inside an ability / status chip: CONTENT_WIDTH minus the chip's 6px
+## content margins each side and the scroll's ~12px vertical scrollbar.
+const CHIP_WRAP_WIDTH := 190.0
 
 ## Turn a snake_case id ("vineweave") into a display string
 ## ("Torvald Ironhide"). Empty in -> empty out.
@@ -99,12 +117,83 @@ func _ready() -> void:
 	_build_abilities_section()
 	_build_effects_section()
 	_build_portrait_texture_rect()
+	_apply_width_discipline()
 
 	# Match the amber HUD look (lives outside GameUILayout, so themes itself).
 	ConquestTheme.apply_to(self)
 
 	# Hide panel initially
 	_hide_panel()
+
+## Keep every row inside the card's 260px column.
+##
+## MEASURED FAILURE: the card sat in a 260px column while its MarginContainer reported a
+## 293px minimum, and a full-rect anchored child with the default GROW_DIRECTION_BOTH
+## resolves an over-wide minimum by growing HALF THE EXCESS OFF EACH SIDE -- the container
+## landed at x = -1.5 with width 293 inside a card at x = 15 width 260. That is both
+## reported symptoms at once: the stat labels ran off the left edge of the screen and the
+## HP bar ran past the card's right edge. Two rules fix it for good:
+##
+##   * nothing may declare a minimum wider than the column (see discipline_label), and
+##   * the MarginContainer grows RIGHT only, so it can never reach off-screen even if some
+##     future row does demand more.
+func _apply_width_discipline() -> void:
+	var margin := get_node_or_null("MarginContainer") as MarginContainer
+	if margin != null:
+		margin.grow_horizontal = Control.GROW_DIRECTION_END
+
+	discipline_subtree(self, WRAP_MIN_WIDTH)
+
+	if health_bar != null and is_instance_valid(health_bar):
+		health_bar.custom_minimum_size.x = 0.0
+		health_bar.size_flags_horizontal = Control.SIZE_FILL
+
+
+## Bound one label's contribution to its row's minimum size.
+##
+## A NON-wrapping Label reports its whole text width as a minimum, so a long name or a
+## four-digit stat widens the row past the card. Clipping with an ellipsis drops that
+## minimum to 1 and trims on screen instead.
+##
+## An AUTOWRAPPING Label is the opposite and much nastier: Godot reports its minimum WIDTH
+## as 1 and its minimum HEIGHT for whatever width it was last laid out at. A label that was
+## ever ~20px wide therefore reports a THIRTEEN-line minimum height from then on -- which is
+## how the portrait row came to demand 260px of the card's height budget and push the whole
+## card past its budget into the squeeze. Pinning a floor width pins the line count with it.
+static func discipline_label(label: Label, wrap_width: float) -> void:
+	if label == null or not is_instance_valid(label):
+		return
+	if label.autowrap_mode == TextServer.AUTOWRAP_OFF:
+		label.clip_text = true
+		label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		label.custom_minimum_size.x = 0.0
+	else:
+		var w: float = minf(wrap_width, CONTENT_WIDTH)
+		label.custom_minimum_size.x = w
+		label.size.x = maxf(label.size.x, w)
+		# Force a re-shape AT that width. A Label shapes its lines lazily and only when
+		# something marks them dirty; a CODE-BUILT label is first shaped at width 0, where
+		# it wraps to one character per line, and setting custom_minimum_size afterwards
+		# invalidates the Control's cached minimum but NOT the Label's line cache. Measured,
+		# TerrainInfoPanel's one-word "Terrain" heading reported a nine-line, 229px minimum
+		# height forever from that initial zero-width shape -- which is what drove the
+		# terrain card to 315px and off the bottom of the screen. Round-tripping the text
+		# is what marks the lines dirty, so the next measurement is taken honestly.
+		var text: String = label.text
+		if text != "":
+			label.text = ""
+			label.text = text
+
+
+## Apply [method discipline_label] to every Label under [param node]. Static so the chip
+## builders can call it on a freshly built chip, which is the only way rows created at
+## runtime get the same treatment as the scene-authored ones.
+static func discipline_subtree(node: Node, wrap_width: float) -> void:
+	for child in node.get_children():
+		if child is Label:
+			discipline_label(child, wrap_width)
+		discipline_subtree(child, wrap_width)
+
 
 func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	"""Handle unit selection"""
@@ -397,6 +486,9 @@ func _build_ability_chip(unit, ability) -> PanelContainer:
 		state_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rows.add_child(state_label)
 
+	# Same width contract as the scene-authored rows: nothing in a chip may demand more
+	# than the column, and every wrapping line is measured at a fixed width.
+	discipline_subtree(chip, CHIP_WRAP_WIDTH)
 	return chip
 
 
@@ -461,6 +553,7 @@ func _update_effects(unit) -> void:
 		# Muted so "nothing here" reads as secondary, not as a real effect --
 		# mirrors TerrainInfoPanel's "No special effects" row.
 		none_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
+		discipline_label(none_label, CHIP_WRAP_WIDTH)
 		_effects_container.add_child(none_label)
 	else:
 		for condition in conditions:
@@ -539,12 +632,55 @@ func _build_status_chip(condition) -> PanelContainer:
 		detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rows.add_child(detail_label)
 
+	discipline_subtree(chip, CHIP_WRAP_WIDTH)
 	return chip
 
 
+## The height this card can NEVER give up: the title, the portrait row, every stat row
+## and the two section headers -- i.e. the inner VBox's minimum with both scrolling lists
+## collapsed to zero, plus the MarginContainer's chrome.
+##
+## THIS IS THE FIX FOR THE REPORTED LEFT-COLUMN MESS. `_fit_height` used to clamp the
+## card's height to a bottom-reserve budget WITHOUT this floor, so on any short column
+## (a taller top bar, a shorter window) the card was handed less height than its own
+## content minimum. A BoxContainer that is given less than its minimum distributes
+## NEGATIVE space -- which is exactly what stacked the portrait plate on top of the
+## Statistics rows and left the stat labels reading "th: 8" from under it. The card may
+## overflow its reserve; it may never be squeezed below this.
+func fixed_content_height() -> float:
+	var vb := get_node_or_null("MarginContainer/VBoxContainer") as VBoxContainer
+	if vb == null:
+		return _BASE_HEIGHT
+	var elastic: float = 0.0
+	for scroll in [_abilities_scroll, _effects_scroll]:
+		if scroll != null and is_instance_valid(scroll) and scroll.visible:
+			elastic += scroll.custom_minimum_size.y
+	return maxf(_BASE_HEIGHT, vb.get_combined_minimum_size().y - elastic + CHROME_HEIGHT)
+
+
+## Tallest this top-anchored card may be, given a window [param viewport_height], a top
+## edge at [param top_y], and the card's own irreducible [param floor_h].
+##
+## Pure arithmetic so the 720p budget can be pinned by a test:
+##   720 (window) - 121 (top: 15 margin + 56 top bar + 10 sep + 30 log chip + 10 sep)
+##       - 176 (bottom reserve: 16 margin + 152 terrain card + 8 gap)  =  423px
+## against a measured floor of 358px -- so the stat rows always fit and only the two
+## scrolling lists absorb the difference. Never returns less than [param floor_h]: a
+## budget that cannot hold the fixed rows is not a budget, it is a squeeze.
+static func height_budget(viewport_height: float, top_y: float, floor_h: float) -> float:
+	return maxf(floor_h, viewport_height - top_y - BOTTOM_RESERVE)
+
+
+## Re-run the height fit after this frame's layout pass. Called by UILayoutManager when
+## the battle log above this card changes row height (which moves this card's top edge and
+## therefore its budget).
+func refit() -> void:
+	call_deferred("_fit_height")
+
+
 ## Grow the panel so the ability / effects lists are not clipped by the authored
-## 300x280 rect, never shrinking below the original height and never growing past
-## the bottom of the window.
+## 300x280 rect, never shrinking below the fixed-content floor and never growing past
+## the bottom-left corner reserved for the terrain card.
 func _fit_height() -> void:
 	var vb := get_node_or_null("MarginContainer/VBoxContainer") as VBoxContainer
 	if vb == null:
@@ -560,26 +696,29 @@ func _fit_height() -> void:
 	var effects_h := _cap_scroll(_effects_scroll, _effects_container,
 			minf(EFFECTS_MAX_HEIGHT, vp_height * 0.35))
 
-	# +24 covers the MarginContainer's 12px top and bottom margins.
-	var wanted: float = vb.get_combined_minimum_size().y + 24.0
+	var wanted: float = vb.get_combined_minimum_size().y + CHROME_HEIGHT
+	var pool: float = abilities_h + effects_h
+	# Everything that is NOT one of the two scrolling lists (see fixed_content_height).
+	var floor_h: float = maxf(_BASE_HEIGHT, wanted - pool)
 
 	# Backstop: never grow past the bottom-left corner reserved for the terrain card.
-	# The card is TOP-anchored (first child of the LeftSidebar VBox, size_flags_vertical
-	# = SHRINK_BEGIN), so its top edge is GLOBAL -- position.y is container-local (~0) and
+	# The card is TOP-anchored (in the LeftSidebar VBox, size_flags_vertical =
+	# SHRINK_BEGIN), so its top edge is GLOBAL -- position.y is container-local (~0) and
 	# would let the budget balloon to nearly the full window height, sliding the card down
 	# under the bottom-left TerrainInfoPanel. Measure from global_position.y and stop
 	# BOTTOM_RESERVE px short of the window bottom. Any overflow comes out of the two
 	# SCROLLING lists (proportionally), never the stat rows -- the lists scroll sooner.
 	var top_y: float = global_position.y
-	var budget: float = maxf(_BASE_HEIGHT, vp_height - top_y - BOTTOM_RESERVE)
-	var pool: float = abilities_h + effects_h
+	var budget: float = height_budget(vp_height, top_y, floor_h)
 	if wanted > budget and pool > 0.0:
 		var scale: float = maxf(0.0, pool - (wanted - budget)) / pool
-		_cap_scroll(_abilities_scroll, _abilities_container, abilities_h * scale)
-		_cap_scroll(_effects_scroll, _effects_container, effects_h * scale)
-		wanted = budget
+		var used: float = _cap_scroll(_abilities_scroll, _abilities_container, abilities_h * scale)
+		used += _cap_scroll(_effects_scroll, _effects_container, effects_h * scale)
+		# Recompute rather than assuming `budget`: the two lists round to their own
+		# content heights, so the card ends up at the floor plus whatever they took.
+		wanted = floor_h + used
 
-	custom_minimum_size.y = maxf(_BASE_HEIGHT, wanted)
+	custom_minimum_size.y = maxf(floor_h, wanted)
 	size.y = custom_minimum_size.y
 
 
@@ -604,6 +743,17 @@ func _build_portrait_texture_rect() -> void:
 	_portrait_texture_rect = TextureRect.new()
 	_portrait_texture_rect.name = "PortraitTexture"
 	_portrait_texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	# THE root cause of the reported left-column mess. A TextureRect's DEFAULT expand mode
+	# is EXPAND_KEEP_SIZE, which reports the texture's own size as its minimum -- and
+	# PortraitCache captures at 256x256. So the moment a real portrait resolved (from the
+	# on-disk cache, i.e. immediately on any machine that had played before), this 56x56
+	# plate demanded 256x256: measured, it drove the portrait ROW to 260x260, the card's
+	# content to 418x538 inside a 260-wide, 423-tall card, and from there every reported
+	# symptom followed at once -- the MarginContainer overflowed both side edges (stat
+	# labels off the left of the screen, HP bar past the right) and the inner VBox was
+	# handed less than its minimum, so it stacked the portrait on the Statistics rows.
+	# IGNORE_SIZE lets the plate be whatever size the layout gives it.
+	_portrait_texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_portrait_texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_portrait_texture_rect.visible = false
 	unit_portrait.add_child(_portrait_texture_rect)

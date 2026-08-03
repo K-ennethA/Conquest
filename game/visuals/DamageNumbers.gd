@@ -39,6 +39,23 @@ class_name DamageNumbers
 ##     `crit_damage > damage`) means the roll landed.
 ##   * anything missing -- no move, a different caster, a freed participant, a multi-effect
 ##     move, environmental damage from a hazard or a status -- resolves to "not a crit".
+##
+## STATUS FEEDBACK. A poison tick used to be indistinguishable from a sword hit: the same
+## plain white number, from nowhere, with no way to tell WHY the unit lost HP. Three
+## additions close that, all riding the same buffer this file already had:
+##
+##   * a TICK is recoloured. [signal GameEvents.status_ticked] fires immediately after a
+##     condition's effects resolve, so the damage_dealt / unit_healed it produced are
+##     already sitting in `_pending` -- the handler simply TAGS this frame's untagged
+##     entries for that unit with the condition, and the flush draws them in the status'
+##     own colour with its glyph ("◆ 4" in toxic green rather than a bare white "4").
+##     This is why HEALS are buffered too now instead of spawning inline: a regen tick has
+##     to be taggable exactly like a poison tick, and one code path for both is what keeps
+##     them from drifting.
+##   * an APPLY shouts "POISONED" and an EXPIRE murmurs "Poisoned faded", above the tick
+##     number so the two never overlap. Both spawn inline -- there is nothing to correlate.
+##   * nothing here decides WHAT a status is or does; the words, glyph and colour all come
+##     from [StatusVisuals], the same vocabulary the health-bar pips and hover chips use.
 
 # --- Placement ---------------------------------------------------------------
 @export_group("Placement")
@@ -66,6 +83,17 @@ class_name DamageNumbers
 @export var heal_color: Color = Color(0.42, 1.0, 0.52)
 ## Base font size of an ordinary number.
 @export_range(8, 192, 1) var font_size: int = 56
+## Multiplier applied to [member font_size] for a status APPLIED / EXPIRED word label.
+## Well under 1.0: these are words, not numbers, and they must never out-shout the damage
+## they sit above.
+@export_range(0.1, 1.5, 0.01) var status_label_scale: float = 0.5
+## Extra world +Y a status APPLIED / EXPIRED label spawns at, on top of [member
+## spawn_height], so a "POISONED" shout and the tick number it belongs to are legible at
+## the same time instead of stacking on one another.
+@export_range(0.0, 3.0, 0.05) var status_label_lift: float = 0.75
+## How far an EXPIRED label's colour is faded toward grey. An expiry is good news being
+## reported, not a new threat, so it is deliberately the quietest thing this layer draws.
+@export_range(0.0, 1.0, 0.01) var status_expired_desaturation: float = 0.55
 ## Multiplier applied to [member font_size] for a crit, so a crit is unmistakable
 ## before the colour is even read.
 @export_range(1.0, 3.0, 0.05) var crit_size_scale: float = 1.45
@@ -88,10 +116,12 @@ class_name DamageNumbers
 const _LIFETIME_MIN: float = 0.25
 const _LIFETIME_MAX: float = 2.0
 
-## This frame's buffered hits, flushed deferred (see the crit note in the class doc).
-## Each entry: { "pos": Vector3, "amount": int, "attacker": Object, "defender": Object }.
+## This frame's buffered HP changes, flushed deferred (see the crit note in the class doc).
+## Each entry: { "pos": Vector3, "amount": int, "attacker": Object, "defender": Object,
+## "heal": bool, "status": StatusCondition|null }.
 ## `pos` is the authoritative popup placement, captured at signal time; the two object
-## refs are BEST-EFFORT crit context only and are re-validated before any use.
+## refs are BEST-EFFORT crit context only and are re-validated before any use. `status` is
+## filled in by [method _on_status_ticked] when this frame's change came from a condition.
 var _pending: Array[Dictionary] = []
 ## True while a deferred flush is already scheduled, so one AoE queues exactly one.
 var _flush_queued: bool = false
@@ -119,6 +149,11 @@ func _ready() -> void:
 	_safe_connect(bus, &"damage_dealt", _on_damage_dealt)
 	_safe_connect(bus, &"unit_healed", _on_unit_healed)
 	_safe_connect(bus, &"move_performed", _on_move_performed)
+	# Status feedback. Each is guarded by has_signal inside _safe_connect, so a build
+	# where the status bus signals have not landed simply keeps the old behaviour.
+	_safe_connect(bus, &"status_ticked", _on_status_ticked)
+	_safe_connect(bus, &"status_applied", _on_status_applied)
+	_safe_connect(bus, &"status_expired", _on_status_expired)
 
 
 func _safe_connect(obj: Object, signal_name: StringName, callable: Callable) -> void:
@@ -144,13 +179,18 @@ func _on_damage_dealt(attacker = null, defender = null, damage = null) -> void:
 		"amount": amount,
 		"attacker": attacker,
 		"defender": defender,
+		"heal": false,
+		"status": null,
 	})
 	if not _flush_queued:
 		_flush_queued = true
 		call_deferred("_flush_pending")
 
 
-## A unit regained HP. Heals never crit, so they need no deferral -- spawn immediately.
+## A unit regained HP. Heals never crit, so nothing about the CRIT inference needs the
+## deferral -- but a heal from a [RegenStatus] tick has to be recolourable by
+## [method _on_status_ticked], which can only run after the heal was announced. So heals
+## ride the same buffer as hits, and one flush styles both.
 func _on_unit_healed(unit = null, amount = null) -> void:
 	if not _fx_enabled():
 		return
@@ -160,7 +200,70 @@ func _on_unit_healed(unit = null, amount = null) -> void:
 	var pos = _anchor_of(unit)
 	if pos == null:
 		return
-	_spawn_popup(pos, "+%d" % healed, heal_color, 1.0)
+	_pending.append({
+		"pos": pos,
+		"amount": healed,
+		"attacker": null,
+		"defender": unit,
+		"heal": true,
+		"status": null,
+	})
+	if not _flush_queued:
+		_flush_queued = true
+		call_deferred("_flush_pending")
+
+
+# --- Status feedback ---------------------------------------------------------
+
+## A condition just ticked on [param unit]. Whatever HP it moved was announced a moment
+## ago and is sitting UNTAGGED in `_pending`, so claim this frame's entries for that unit
+## -- the flush then draws them in the status' colour with its glyph.
+##
+## "Untagged entries for this unit" is the whole attribution rule, and it is exact rather
+## than a guess: a condition ticks only its OWN unit, and ticks resolve one at a time, so
+## anything for that unit still unclaimed when this fires belongs to this condition. A
+## sword hit landing on the same unit in the same frame was buffered BEFORE any tick ran
+## and would be mis-claimed -- which is why [method tick_all] announces per condition,
+## immediately, instead of once at the end of the turn.
+func _on_status_ticked(unit = null, condition = null, _events = null) -> void:
+	if condition == null or unit == null or not is_instance_valid(unit):
+		return
+	var unit_id: int = unit.get_instance_id()
+	for entry in _pending:
+		if entry.get("status", null) != null:
+			continue
+		var defender = entry.get("defender", null)
+		if defender == null or not is_instance_valid(defender):
+			continue
+		if defender.get_instance_id() == unit_id:
+			entry["status"] = condition
+
+
+## A condition LANDED. Shout its name over the unit, above the tick number.
+func _on_status_applied(unit = null, condition = null) -> void:
+	_spawn_status_label(unit, condition, StatusVisuals.applied_label(condition), false)
+
+
+## A condition ran out. Report it quietly -- faded colour, same place.
+func _on_status_expired(unit = null, condition = null) -> void:
+	_spawn_status_label(unit, condition, StatusVisuals.expired_label(condition), true)
+
+
+## Shared body of the two lifecycle handlers: one small word label in the status' colour,
+## lifted clear of the numbers. Guarded exactly like every other spawn path -- animations
+## off, a freed unit, or a detached layer all produce nothing.
+func _spawn_status_label(unit, condition, text: String, faded: bool) -> void:
+	if condition == null or text == "":
+		return
+	if not _fx_enabled():
+		return
+	var pos = _anchor_of(unit)
+	if pos == null:
+		return
+	var color: Color = StatusVisuals.info_for(condition).get("color", damage_color)
+	if faded:
+		color = color.lerp(Color(0.72, 0.68, 0.60), status_expired_desaturation)
+	_spawn_popup(pos + Vector3(0.0, status_label_lift, 0.0), text, color, status_label_scale)
 
 
 ## The cast that produced this frame's hits, announced right after it resolved. Stored
@@ -187,12 +290,30 @@ func _flush_pending() -> void:
 
 	var any_crit: bool = false
 	for entry in batch:
+		var pos: Vector3 = entry.get("pos", Vector3.ZERO)
+		var amount: int = int(entry.get("amount", 0))
+		var healed: bool = bool(entry.get("heal", false))
+		var condition = entry.get("status", null)
+
+		# A status tick wins the styling: it is the ONE case where the player cannot see
+		# where the damage came from, so it gets the status' colour and glyph. A status
+		# tick is never a crit (crits belong to casts), so the inference is skipped.
+		if condition != null:
+			var status_text: String = StatusVisuals.tick_text(condition, amount, healed)
+			if status_text != "":
+				var status_color: Color = StatusVisuals.info_for(condition).get(
+					"color", heal_color if healed else damage_color)
+				_spawn_popup(pos, status_text, status_color, 1.0)
+			continue
+
+		if healed:
+			_spawn_popup(pos, "+%d" % amount, heal_color, 1.0)
+			continue
+
 		var crit: bool = _infer_crit(entry)
 		any_crit = any_crit or crit
 		var color: Color = crit_color if crit else damage_color
 		var size_scale: float = crit_size_scale if crit else 1.0
-		var pos: Vector3 = entry.get("pos", Vector3.ZERO)
-		var amount: int = int(entry.get("amount", 0))
 		_spawn_popup(pos, str(amount), color, size_scale)
 
 	# Drop the cast context: it is only ever valid for the frame it was announced in.

@@ -31,13 +31,21 @@ class_name MovementResolver
 ##
 ## [b]Per-kind rules[/b] ([enum CombatTypes.MovementKind]):
 ## [ul]
-## GROUND  — cannot path through or end on blocked (walls) or occupied cells.
-## FLYING  — ignores walls (`is_blocked`) entirely; blocked by units in its path
-##           and may not end on an occupied cell.
+## GROUND  — cannot path through walls, nor through an ENEMY-occupied cell; may not
+##           end on a blocked or occupied cell.
+## FLYING  — ignores walls (`is_blocked`) entirely; blocked by ENEMY units in its
+##           path and may not end on an occupied cell.
 ## PHASING — ignores walls and units while pathing; may not end on an occupied cell.
 ## [/ul]
 ## TELEPORT reachability ignores everything for pathing but still may not land on
 ## an occupied cell (respecting the profile's kind for the destination).
+##
+## [b]ALLY PASS-THROUGH (the Fire Emblem rule).[/b] A cell held only by the mover's own
+## ALLIES is PASSABLE — a unit boxed in by its own side can always walk out between them —
+## but it is never a legal place to STOP. Enemies still block pathing outright. The rule
+## needs the board to positively confirm friendship (`units_at` + `are_allies`); a board
+## that cannot answer either question falls back to the old "any occupant blocks" behaviour,
+## so mock boards and non-allegiance-aware callers are unchanged.
 
 const ORTHOGONAL_OFFSETS: Array[Vector2i] = [
 	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
@@ -190,12 +198,16 @@ func _teleport(origin: Vector2i, profile: MovementProfile, board, unit = null) -
 # --- Traversal / stopping rules -------------------------------------------
 
 ## Whether the pathfinder may move [i]through[/i] (or into) a cell for a kind.
-static func _can_traverse(cell: Vector2i, kind: CombatTypes.MovementKind, board) -> bool:
+##
+## [param mover] is the unit doing the walking; it is what makes ally pass-through
+## possible (a cell holding only friends does not block). Null keeps the historical
+## "any occupant blocks" reading.
+static func _can_traverse(mover, cell: Vector2i, kind: CombatTypes.MovementKind, board) -> bool:
 	match kind:
 		CombatTypes.MovementKind.GROUND:
-			return not _is_blocked(board, cell) and not _is_occupied(board, cell)
+			return not _is_blocked(board, cell) and not _blocks_traversal(board, mover, cell)
 		CombatTypes.MovementKind.FLYING:
-			return not _is_occupied(board, cell)
+			return not _blocks_traversal(board, mover, cell)
 		CombatTypes.MovementKind.PHASING:
 			return true
 	return true
@@ -219,7 +231,7 @@ static func _can_stop(cell: Vector2i, kind: CombatTypes.MovementKind, board) -> 
 static func _can_enter(unit, cell: Vector2i, kind: CombatTypes.MovementKind, board) -> bool:
 	var fp := _footprint_of(unit)
 	if fp == Vector2i.ONE:
-		return _can_traverse(cell, kind, board)
+		return _can_traverse(unit, cell, kind, board)
 	return _span_allows(unit, cell, fp, kind, board, false)
 
 
@@ -238,23 +250,27 @@ static func _can_finish(unit, cell: Vector2i, kind: CombatTypes.MovementKind, bo
 ## Per-kind legality across every cell a footprint covers from [param anchor].
 ## Occupancy excludes the mover itself, so a large unit's own body never blocks the
 ## step it is trying to take. [param stopping] applies the end-of-move rule (no kind
-## may finish on a cell another living unit holds).
+## may finish on a cell another living unit holds); while merely PASSING THROUGH, the
+## mover's own allies are transparent exactly as they are for a 1x1 unit.
 static func _span_allows(unit, anchor: Vector2i, fp: Vector2i, kind: CombatTypes.MovementKind, board, stopping: bool) -> bool:
 	for dx in range(fp.x):
 		for dy in range(fp.y):
 			var c := Vector2i(anchor.x + dx, anchor.y + dy)
 			if not _in_bounds(board, c):
 				return false
+			# Landing: ANY other living unit blocks. Passing: only a non-ally does.
+			var unit_in_the_way: bool = _occupied_by_other(board, unit, c) if stopping \
+				else _blocks_traversal(board, unit, c)
 			match kind:
 				CombatTypes.MovementKind.GROUND:
-					if _is_blocked(board, c) or _occupied_by_other(board, unit, c):
+					if _is_blocked(board, c) or unit_in_the_way:
 						return false
 				CombatTypes.MovementKind.FLYING:
-					if _occupied_by_other(board, unit, c):
+					if unit_in_the_way:
 						return false
 				CombatTypes.MovementKind.PHASING:
 					# Phases through everything while pathing; still cannot land on a unit.
-					if stopping and _occupied_by_other(board, unit, c):
+					if stopping and unit_in_the_way:
 						return false
 	return true
 
@@ -279,6 +295,32 @@ static func _occupied_by_other(board, mover, cell: Vector2i) -> bool:
 				return true
 		return false
 	return _is_occupied(board, cell)
+
+
+## True when something standing on [param cell] stops [param mover] PASSING THROUGH it.
+##
+## THE ALLY PASS-THROUGH RULE lives here, and nowhere else. A living unit blocks the
+## path unless the board can confirm it is one of the mover's own — the Fire Emblem
+## model, where you may walk between your own line but never through the enemy's. The
+## mover itself is transparent (a large unit never blocks its own step) and a corpse
+## mid-cleanup is ignored, exactly as [method _occupied_by_other] does.
+##
+## FAILS CLOSED. Pass-through requires BOTH [code]units_at[/code] (to see who is there)
+## and [code]are_allies[/code] (to judge them). A board offering neither -- a lightweight
+## mock, a caller with no allegiance model -- falls straight back to the plain occupancy
+## query, so nothing that could not previously be walked through becomes walkable, and no
+## board ever has hostility invented for it.
+static func _blocks_traversal(board, mover, cell: Vector2i) -> bool:
+	if board == null:
+		return false
+	if mover == null or not board.has_method("units_at") or not board.has_method("are_allies"):
+		return _is_occupied(board, cell)
+	for u in board.units_at(cell):
+		if u == null or u == mover or not _unit_alive(u):
+			continue
+		if not bool(board.are_allies(mover, u)):
+			return true
+	return false
 
 
 ## Duck-typed liveness: prefers is_alive(), then a readable hp, else assumes alive.

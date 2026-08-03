@@ -35,6 +35,14 @@ var _current_controller: MovesetController = null
 ## Title label kept so its text can reflect the mode (SELECT vs VIEW).
 var _title_label: Label
 
+## "<unit instance id>:<move_id>" -> the cooldown count this panel last DREW for that
+## move. The only reason it exists is the READY FLASH: "just came back up" is a
+## transition, not a state, so it cannot be read off the controller -- the controller
+## only knows the move is ready now, not that it was charging when the player last saw
+## it. Keyed by unit as well as move so two units' copies of the same move never flash
+## for each other. Bounded by (units x moves) in one battle and cleared with the panel.
+var _last_remaining: Dictionary = {}
+
 func _ready() -> void:
 	name = "MoveSelectionPanel"
 
@@ -221,10 +229,31 @@ func _populate_moves(moveset: Array[MoveResource], controller: MovesetController
 		swatch.custom_minimum_size = Vector2(7, 0)
 		swatch.size_flags_vertical = Control.SIZE_FILL
 		row.add_child(swatch)
+
+		# The button plus its two optional readouts stack in one column, so the card's
+		# width is unchanged and only a move that actually HAS something to report
+		# (a cooldown, a boosted stat) costs any vertical space.
+		var column := VBoxContainer.new()
+		column.add_theme_constant_override("separation", 2)
+		column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		move_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(move_button)
+		column.add_child(move_button)
+
+		var boost_caption := _build_boost_caption(move)
+		if boost_caption != null:
+			column.add_child(boost_caption)
+
+		var total_cd: int = int(move.cooldown)
+		var remaining: int = controller.remaining(move) if controller else 0
+		if total_cd > 0:
+			var bar := MoveStatVisuals.make_recharge_bar()
+			MoveStatVisuals.update_recharge_bar(bar, remaining, total_cd)
+			column.add_child(bar)
+
+		row.add_child(column)
 		moves_container.add_child(row)
 		move_buttons.append(move_button)
+		_note_cooldown(move, remaining, column)
 
 func _create_move_button(move: MoveResource, slot: int, controller: MovesetController) -> Button:
 	"""Create a button for a single moveset slot."""
@@ -236,11 +265,18 @@ func _create_move_button(move: MoveResource, slot: int, controller: MovesetContr
 		can_use = controller.can_use(move)
 		var remaining := controller.remaining(move)
 		if remaining > 0:
-			suffix = " (Cooldown: %d)" % remaining
+			# "CD 2/3" rather than the old bare "Cooldown: 2": the recharge bar under the
+			# button shows the PROGRESS, and this says how far through the wait that is.
+			suffix = " (%s)" % MoveStatVisuals.cooldown_badge(remaining, int(move.cooldown))
 		elif move.max_uses >= 0:
 			suffix = " (%d/%d uses)" % [controller.uses_left(move), move.max_uses]
 
-	var range_text := move.targeting.describe_range() if move.targeting else "no range"
+	# EFFECTIVE reach, read through MoveResource.effective_max_range for this unit --
+	# never the authored pattern alone, which is what made Petalfang's extended reach
+	# invisible on the very button used to pick the move.
+	var range_text := MoveStatVisuals.range_phrase(move, current_unit)
+	if range_text == "":
+		range_text = "no range"
 	button.text = "%s (%s)%s" % [move.display_name, range_text, suffix]
 	# In view-only mode every move stays clickable so clicking reliably reveals its
 	# details (a disabled button would swallow the click). Cooldown/uses are still shown
@@ -267,6 +303,79 @@ func _create_move_button(move: MoveResource, slot: int, controller: MovesetContr
 
 	return button
 
+func _build_boost_caption(move: MoveResource) -> Label:
+	"""A small green (or red) caption under a move button naming every stat currently
+	NOT at its authored value -- "Range 3 → 5 ▲+2". Returns null when nothing is
+	modified, which is the whole point: an unbuffed move must render exactly as it did
+	before this existed, with no empty row eating sidebar height.
+
+	Range is read through MoveResource.effective_max_range and Attack through the unit's
+	own get_stat/get_base_stat pair, so every source of a boost -- a status, a tile
+	effect, an item, an arena augment -- surfaces here without this panel knowing any of
+	them exist."""
+	var lines: PackedStringArray = []
+	var color: Color = MoveStatVisuals.BUFF_COLOR
+
+	var range_dict: Dictionary = MoveStatVisuals.range_info(move, current_unit)
+	if bool(range_dict.get("modified", false)):
+		lines.append("%s%s" % [range_dict.get("text", ""), range_dict.get("suffix", "")])
+		color = range_dict.get("color", color)
+
+	# Attack only matters on a move that actually deals damage -- a buffed attack stat on
+	# a pure heal/status move would be noise.
+	if _move_deals_damage(move):
+		var atk: Dictionary = MoveStatVisuals.stat_info(current_unit, "attack", "Attack")
+		if bool(atk.get("modified", false)):
+			lines.append("%s%s" % [atk.get("text", ""), atk.get("suffix", "")])
+			color = atk.get("color", color)
+
+	if lines.is_empty():
+		return null
+
+	var caption := Label.new()
+	caption.name = "BoostCaption"
+	caption.text = "  ".join(lines)
+	caption.add_theme_font_size_override("font_size", 12)
+	caption.add_theme_color_override("font_color", color)
+	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption.clip_text = true
+	return caption
+
+
+func _move_deals_damage(move: MoveResource) -> bool:
+	"""True when the mode this move is in FOR THE SHOWN UNIT carries a damage effect."""
+	if move == null:
+		return false
+	for effect in move.effects_for(current_unit):
+		if effect is DamageEffect:
+			return true
+	return false
+
+
+func _note_cooldown(move: MoveResource, remaining: int, row: Control) -> void:
+	"""Record this move's cooldown for the shown unit and, when it just came back up,
+	pulse its row once. See _last_remaining for why the previous value has to be kept
+	here rather than asked of the MovesetController."""
+	if move == null:
+		return
+	var key: String = "%d:%s" % [
+		current_unit.get_instance_id() if is_instance_valid(current_unit) else 0,
+		String(move.move_id),
+	]
+	var previous: int = int(_last_remaining.get(key, remaining))
+	_last_remaining[key] = remaining
+	if MoveStatVisuals.became_ready(previous, remaining):
+		# Deferred: the row is not in the tree yet on the frame it is built, and a Tween
+		# cannot be created on a detached node.
+		call_deferred("_flash_row", row)
+
+
+func _flash_row(row: Control) -> void:
+	if row == null or not is_instance_valid(row):
+		return
+	MoveStatVisuals.flash_ready(row)
+
+
 func _show_move_info(move: MoveResource, controller: MovesetController) -> void:
 	"""Display detailed move information"""
 	var info_text = ""
@@ -277,7 +386,15 @@ func _show_move_info(move: MoveResource, controller: MovesetController) -> void:
 	if move.energy_cost > 0:
 		info_text += "Energy Cost: %d\n" % move.energy_cost
 	if move.targeting:
-		info_text += "Range: %s\n" % move.targeting.describe_range()
+		# Base → effective when something is extending this unit's reach, so the details
+		# pane says WHAT changed rather than just reporting a number that disagrees with
+		# the .tres a curious player might go read.
+		var range_dict: Dictionary = MoveStatVisuals.range_info(move, current_unit)
+		if bool(range_dict.get("modified", false)):
+			info_text += "Range: %s%s\n" % [
+				MoveStatVisuals.range_phrase(move, current_unit), range_dict.get("suffix", "")]
+		else:
+			info_text += "Range: %s\n" % move.targeting.describe_range()
 	info_text += "Accuracy: %d%%\n" % int(move.accuracy * 100)
 
 	if move.cooldown > 0:
@@ -288,7 +405,10 @@ func _show_move_info(move: MoveResource, controller: MovesetController) -> void:
 	if controller:
 		var remaining := controller.remaining(move)
 		if remaining > 0:
-			info_text += "\nCOOLDOWN: %d turns remaining" % remaining
+			info_text += "\nRECHARGING: %s left (%s)" % [
+				MoveStatVisuals.cooldown_label(remaining),
+				MoveStatVisuals.cooldown_badge(remaining, int(move.cooldown)),
+			]
 
 	move_info_label.text = info_text
 

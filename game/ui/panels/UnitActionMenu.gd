@@ -34,6 +34,12 @@ var _card: PanelContainer
 var _rows: VBoxContainer
 var _unit: Node = null
 
+## "<unit instance id>:<move_id>" -> the cooldown count this menu last DREW. Only the
+## READY FLASH needs it: "came back up" is a transition and the MovesetController only
+## knows the present, so the previous value has to be remembered by whoever last drew it.
+## See the same field on [MoveSelectionPanel].
+var _last_remaining: Dictionary = {}
+
 func _ready() -> void:
 	name = "UnitActionMenu"
 	# Detach from the parent sidebar Container's layout (same reasoning as
@@ -155,8 +161,50 @@ func _add_move_row(move, slot: int, controller, actionable: bool) -> void:
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var captured_slot := slot
 	btn.pressed.connect(func() -> void: move_chosen.emit(captured_slot))
-	row.add_child(btn)
+
+	# Button + its recharge bar share one column, so the menu's width is untouched and a
+	# move with no cooldown costs no extra height at all.
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 2)
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(btn)
+
+	var total_cd: int = int(move.cooldown) if ("cooldown" in move) else 0
+	var remaining: int = 0
+	if controller != null and controller.has_method("remaining"):
+		remaining = int(controller.remaining(move))
+	if total_cd > 0:
+		var bar := MoveStatVisuals.make_recharge_bar()
+		MoveStatVisuals.update_recharge_bar(bar, remaining, total_cd)
+		column.add_child(bar)
+
+	row.add_child(column)
 	_rows.add_child(row)
+	_note_cooldown(move, remaining, row)
+
+
+func _note_cooldown(move, remaining: int, row: Control) -> void:
+	"""Remember this move's cooldown for this unit and pulse the row once on the turn it
+	comes back up. A move that was ALREADY ready last time the menu was drawn must not
+	flash again every time the menu reopens -- that is what became_ready() guarantees."""
+	if move == null or not ("move_id" in move):
+		return
+	var key: String = "%d:%s" % [
+		_unit.get_instance_id() if is_instance_valid(_unit) else 0,
+		String(move.move_id),
+	]
+	var previous: int = int(_last_remaining.get(key, remaining))
+	_last_remaining[key] = remaining
+	if MoveStatVisuals.became_ready(previous, remaining):
+		# Deferred: the row is not in the tree on the frame it is built, and a Tween
+		# cannot be created on a detached node.
+		call_deferred("_flash_row", row)
+
+
+func _flash_row(row: Control) -> void:
+	if row == null or not is_instance_valid(row):
+		return
+	MoveStatVisuals.flash_ready(row)
 
 func _make_button(text: String, enabled: bool) -> Button:
 	var btn := Button.new()
@@ -175,14 +223,24 @@ func _move_element(move) -> String:
 	return ""
 
 func _move_hint(move, controller) -> String:
+	"""The "(range 1-5, ▲+2, CD 2/3)" hint after a move's name.
+
+	Reach is the EFFECTIVE reach for THIS unit -- read through
+	MoveResource.effective_max_range, the same helper the executor and the targeting
+	highlight use -- with the delta appended so a boost is visible as a CHANGE rather
+	than as a number the player has no baseline for. Unboosted, the delta is empty and
+	the hint reads exactly as it always did."""
 	var parts: PackedStringArray = []
 	if move != null and "targeting" in move and move.targeting != null:
-		if move.targeting.has_method("describe_range"):
-			parts.append(move.targeting.describe_range())
+		var phrase: String = MoveStatVisuals.range_phrase(move, _unit)
+		if phrase != "":
+			var range_dict: Dictionary = MoveStatVisuals.range_info(move, _unit)
+			parts.append(phrase + String(range_dict.get("suffix", "")))
 	if controller != null and controller.has_method("remaining"):
 		var rem: int = controller.remaining(move)
 		if rem > 0:
-			parts.append("CD %d" % rem)
+			var total: int = int(move.cooldown) if ("cooldown" in move) else 0
+			parts.append(MoveStatVisuals.cooldown_badge(rem, total))
 	return "(" + ", ".join(parts) + ")" if not parts.is_empty() else ""
 
 func _move_tooltip(move) -> String:

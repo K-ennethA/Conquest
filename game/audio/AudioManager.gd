@@ -20,6 +20,24 @@ extends Node
 ## first on a given button wins and the other is a no-op -- never a double
 ## connection. See `_wire_ui_button()` below.
 ##
+## WHICH BED PLAYS: THE SCENE DECIDES, NOT A GAMEPLAY SIGNAL. This node used to
+## enter battle music off `GameEvents.game_started` and leave it off
+## `GameEvents.game_ended` -- and those two signals are DECLARED in
+## systems/game_events.gd but have never had a single emitter anywhere in the
+## project. `_in_battle` was therefore always false and [method play_music] was
+## never called, which is the whole reason battles were silent while the menus
+## had music. (Worse, the same dead flag made the scene watcher below treat the
+## battle scene as "just another menu", so the menu bed simply kept looping.)
+##
+## The fix is to read the ONE fact that is always true and always available: the
+## scene that was just swapped in. [member battle_scene_paths] lists the scenes
+## that ARE a battle; the root-swap branch of [method _on_scene_tree_node_added]
+## calls [method enter_battle] or [method exit_battle] accordingly, and BOTH
+## directions crossfade through the same [method _crossfade_music]. The
+## GameEvents hooks are still connected and now simply delegate to those two
+## methods, so if anyone ever does emit game_started/game_ended it agrees with
+## the scene watcher instead of fighting it.
+##
 ## MIX MODEL (where a played sound's final volume_db comes from). Four terms,
 ## summed in dB, in this order:
 ##   1. the LIBRARY's per-category base (`library.sfx_volume_db` /
@@ -49,6 +67,15 @@ extends Node
 @export var sfx_bus: StringName = &"Master"
 ## Audio bus name for the music player.
 @export var music_bus: StringName = &"Master"
+
+## Scenes that count as a BATTLE for music purposes -- entering one of them crossfades to
+## [member AudioLibrary.music_battle], leaving it crossfades back to the menu bed. A
+## PackedStringArray of `res://` scene paths, matched against the swapped-in node's
+## `scene_file_path` (see [method is_battle_scene]), so nothing here has to know what a battle
+## IS -- only where it lives. Matching by path rather than by class keeps this node free of any
+## dependency on the gameplay tree; `BattleSaveManager.GAME_WORLD_SCENE` is the same constant
+## from the save layer's side. Inspector-editable, so a future second battle scene is one entry.
+@export var battle_scene_paths: PackedStringArray = ["res://game/world/GameWorld.tscn"]
 
 ## The cursor-move blip fires on every tile the cursor crosses, so it plays MUCH
 ## quieter than a deliberate action sound (negative dB = quieter). Tune to taste;
@@ -123,13 +150,16 @@ var _ui_hover_player: AudioStreamPlayer
 ## Timestamp (ms) of the last cursor-move blip, for throttling.
 var _last_cursor_sfx_ms: int = 0
 
-## True from game_started to game_ended. While true, the menu-music
-## scene-change watcher backs off entirely and leaves music to
-## play_music()/stop_music() (battle's existing, unchanged behaviour).
+## True while a BATTLE scene is the current scene (see [member battle_scene_paths] and the
+## class doc's "which bed plays" note). Flipped by [method enter_battle] / [method exit_battle]
+## and read by [method resolve_music_for_state] to pick which bed belongs on screen.
 var _in_battle: bool = false
 ## Runtime override for the menu-music stream (see set_menu_music()). Takes
 ## priority over library.music_menu when set.
 var _menu_music_override: AudioStream
+## Runtime override for the battle-music stream (see set_battle_music()). Takes priority over
+## library.music_battle when set. Mirrors the menu override exactly.
+var _battle_music_override: AudioStream
 var _music_tween: Tween
 
 ## Term (3) of the MIX MODEL: the PLAYER's volumes, already converted from
@@ -202,16 +232,16 @@ func play_stream(stream: AudioStream) -> void:
 		return
 	_play_stream_on_free_voice(stream)
 
-## Start (or restart) music instantly (no fade -- this is battle's existing,
-## unchanged entry point, driven by GameEvents.game_started). Pass an
-## AudioStream, or omit to use library.music_battle. No-op when the resolved
-## stream is null.
+## Start (or restart) music INSTANTLY (no fade). Pass an AudioStream, or omit to use the battle
+## bed. No-op when the resolved stream is null. Kept as the hard-cut entry point for callers
+## that explicitly want no crossfade; the ordinary menu <-> battle transitions go through
+## [method enter_battle] / [method exit_battle] instead.
 func play_music(stream: AudioStream = null) -> void:
 	if _music_player == null:
 		return
 	var to_play := stream
-	if to_play == null and library != null:
-		to_play = library.music_battle
+	if to_play == null:
+		to_play = _resolve_battle_music()
 	if to_play == null:
 		return
 	_kill_music_tween()
@@ -226,21 +256,89 @@ func stop_music() -> void:
 	if _music_player != null:
 		_music_player.stop()
 
-## Runtime override for the menu-music slot, so a future generation pass (or
-## any calling code) can supply a stream without editing default_audio_library.tres.
-## Pass null to clear the override and fall back to library.music_menu (also
-## likely null today -- see the class doc TODO). If a non-battle scene is
-## currently active, this re-evaluates immediately.
-## Boot-scene menu-music kick - see the note at the node_added connection in _ready.
+## Boot-scene music kick - see the note at the node_added connection in _ready. Deliberately
+## routed through the same state-driven resolve as every other transition, so a build that ever
+## boots STRAIGHT into a battle (a replay launched from a command line, a dev scene) gets the
+## battle bed rather than the menu one.
 func _kick_boot_menu_music() -> void:
-	if not _in_battle:
-		_crossfade_menu_music(_resolve_menu_music())
+	_apply_music_for_state()
 
 
+## Runtime override for the menu-music slot, so a generation pass (or any calling code) can
+## supply a stream without editing default_audio_library.tres. Pass null to clear the override
+## and fall back to library.music_menu. Re-evaluates immediately when the menu bed is the one
+## currently owed to the screen.
 func set_menu_music(stream: AudioStream) -> void:
 	_menu_music_override = stream
 	if not _in_battle:
-		_crossfade_menu_music(_resolve_menu_music())
+		_apply_music_for_state()
+
+
+## Runtime override for the battle-music slot. Mirrors [method set_menu_music] exactly,
+## including re-evaluating on the spot when a battle is what is currently on screen.
+func set_battle_music(stream: AudioStream) -> void:
+	_battle_music_override = stream
+	if _in_battle:
+		_apply_music_for_state()
+
+
+## True while a battle scene is on screen -- the readable half of [member _in_battle], for the
+## HUD, tests, and anything that needs to know which bed is owed.
+func in_battle() -> bool:
+	return _in_battle
+
+
+## True when [param scene_path] is one of the [member battle_scene_paths]. An empty path (a
+## node built in code rather than instantiated from a .tscn) is never a battle, which is what
+## keeps a bare CanvasLayer added under the root from being mistaken for a scene swap.
+func is_battle_scene(scene_path: String) -> bool:
+	if scene_path.is_empty():
+		return false
+	for path in battle_scene_paths:
+		if scene_path == String(path):
+			return true
+	return false
+
+
+## Enter BATTLE music: latch the state and crossfade to the battle bed. Idempotent -- a second
+## call while already in battle changes nothing (the crossfade itself no-ops on the same
+## stream), so it is safe to call from every seam that can plausibly detect a battle starting.
+func enter_battle() -> void:
+	if _in_battle:
+		return
+	_in_battle = true
+	_apply_music_for_state()
+
+
+## Leave battle music: drop the state and crossfade back to the menu bed. Idempotent, like
+## [method enter_battle]. NOTE this is a crossfade, not a stop -- the player leaving a battle is
+## going back to a menu, and cutting to silence there was the old game_ended behaviour that
+## nothing ever actually triggered.
+func exit_battle() -> void:
+	if not _in_battle:
+		return
+	_in_battle = false
+	_apply_music_for_state()
+
+
+## The stream that SHOULD be playing right now, given the battle/menu state and the overrides.
+## Pure (reads state, mutates nothing) so a test can assert the CUE SELECTION without waiting on
+## an audio device or a tween -- see tests/unit/test_battle_music_wiring.gd. May be null when the
+## relevant library slot is empty, which every caller treats as "fade to silence".
+func resolve_music_for_state() -> AudioStream:
+	return _resolve_battle_music() if _in_battle else _resolve_menu_music()
+
+
+## The stream currently assigned to the music player ("what is actually on the speakers"), or
+## null when nothing is. The observable half of [method resolve_music_for_state].
+func current_music_stream() -> AudioStream:
+	return _music_player.stream if _music_player != null else null
+
+
+## Crossfade to whatever [method resolve_music_for_state] says is owed. The single mutation
+## point for every music transition in the game.
+func _apply_music_for_state() -> void:
+	_crossfade_music(resolve_music_for_state())
 
 ## Semantic UI cue: a deliberate confirm/select press. Reuses &"sfx_ui_click"
 ## at pitch 1.0. No-op when ui_sounds_enabled is false or the slot is empty.
@@ -359,16 +457,23 @@ func _resolve_menu_music() -> AudioStream:
 		return _menu_music_override
 	return library.music_menu if library != null else null
 
+func _resolve_battle_music() -> AudioStream:
+	if _battle_music_override != null:
+		return _battle_music_override
+	return library.music_battle if library != null else null
+
 func _kill_music_tween() -> void:
 	if _music_tween != null and _music_tween.is_valid():
 		_music_tween.kill()
 	_music_tween = null
 
-## Crossfade the music player to [param new_stream] over MUSIC_FADE_TIME on
-## each side. A null stream (no menu-music asset yet -- see class doc TODO)
-## just fades whatever is playing out to silence, so this is always safe to
-## call speculatively. No-ops if already playing the requested stream.
-func _crossfade_menu_music(new_stream: AudioStream) -> void:
+## Crossfade the music player to [param new_stream] over MUSIC_FADE_TIME on each side. Used for
+## EVERY transition -- menu -> battle, battle -> menu, and menu -> menu. A null stream (an empty
+## library slot) just fades whatever is playing out to silence, so this is always safe to call
+## speculatively. No-ops if already playing the requested stream, which is what makes
+## [method enter_battle] / [method exit_battle] idempotent and what stops a run of unrelated
+## nodes landing under the root from restarting the bed.
+func _crossfade_music(new_stream: AudioStream) -> void:
 	if _music_player == null:
 		return
 	if _music_player.stream == new_stream and (new_stream == null or _music_player.playing):
@@ -482,15 +587,16 @@ func _on_unit_healed(_unit = null, _amount = null) -> void:
 func _on_unit_eliminated(_unit = null, _eliminator = null) -> void:
 	play_sfx(&"sfx_death")
 
+## NOTE: `GameEvents.game_started` / `game_ended` currently have NO emitters anywhere in the
+## project (see the class doc) -- the scene watcher is what actually drives the beds. These two
+## stay connected and delegate to the same entry points, so the day someone does emit them the
+## two seams agree instead of fighting, and the idempotence of enter/exit makes a double-fire
+## free.
 func _on_game_started() -> void:
-	# Kick off battle music if one is assigned. Also flips the flag that makes
-	# the menu-music scene watcher below back off for the duration of the battle.
-	_in_battle = true
-	play_music()
+	enter_battle()
 
 func _on_game_ended(_winner = null) -> void:
-	_in_battle = false
-	stop_music()
+	exit_battle()
 
 # --- Menu polish: global button wiring + menu-music scene watcher ----------
 
@@ -499,15 +605,19 @@ func _on_game_ended(_winner = null) -> void:
 func _on_scene_tree_node_added(node: Node) -> void:
 	if node is BaseButton:
 		_wire_ui_button(node as BaseButton)
-	# A node added directly under the tree root is (in this project) always a
-	# scene swap via change_scene_to_file/change_scene_to_packed -- every menu
-	# and the battle scene (game/world/GameWorld.tscn) are added there. This
-	# avoids hardcoding scene paths: we don't need to know a scene IS the
-	# battle scene, only that GameEvents.game_started/game_ended (handled
-	# above) already tracks _in_battle for us.
+	# A node added directly under the tree root with a scene_file_path is (in this project)
+	# always a scene swap via change_scene_to_file/change_scene_to_packed -- every menu AND the
+	# battle scene are added there. Which bed the swap owes is decided HERE, by path, because
+	# the gameplay signals that used to decide it (GameEvents.game_started/game_ended) have no
+	# emitters and left every battle silent -- see the class doc. Nodes without a
+	# scene_file_path (autoloads, code-built overlays) are not scene swaps and are ignored by
+	# is_battle_scene's empty-path rule + the crossfade's own same-stream no-op.
 	elif node.get_parent() == get_tree().root:
-		if not _in_battle:
-			_crossfade_menu_music(_resolve_menu_music())
+		if is_battle_scene(node.scene_file_path):
+			enter_battle()
+		elif not node.scene_file_path.is_empty():
+			exit_battle()
+			_apply_music_for_state()
 
 ## Wires [param button]'s hover + press to the semantic UI cues. Idempotent
 ## and shared with UIFeedback via the _UI_SFX_WIRED_META meta key: whichever

@@ -248,20 +248,28 @@ func _populate_effects(unit) -> void:
 			_effects_container.add_child(none_label)
 		return
 
-	var total: int = conditions.size()
+	# Grouped by id, exactly like the world-space health-bar badges: three live Poisoned
+	# instances are ONE status at severity 3, and the hover card is where that severity
+	# has to be legible ("◆ Poisoned x3 · 2 turns"). Ungrouped, they filled the chip
+	# budget with identical rows and hid every other condition behind the overflow marker
+	# -- so the one surface that could answer "how bad is the poison, and how long" never
+	# actually answered it.
+	var groups: Array = StatusVisuals.group_by_id(conditions)
+	var total: int = groups.size()
 	var shown: int = StatusVisuals.shown_count(total, MAX_CHIPS)
 	var hidden: int = StatusVisuals.hidden_count(total, MAX_CHIPS)
 
 	for i in range(shown):
-		var condition = conditions[i]
+		var group: Dictionary = groups[i]
+		var condition = group.get("condition", null)
 		if condition == null:
 			continue
 		var info: Dictionary = StatusVisuals.info_for(condition)
 		var color: Color = info.get("color", ConquestTheme.AMBER)
-		var text: String = "%s · %s" % [
-			String(info.get("name", "Status")),
-			StatusVisuals.turns_label(StatusVisuals.turns_left_of(condition)),
-		]
+		var text: String = StatusVisuals.chip_text(
+			condition,
+			int(group.get("count", 1)),
+			int(group.get("turns_left", StatusVisuals.TURNS_FROM_CONDITION)))
 		_effects_container.add_child(_build_chip(text, color))
 
 	if hidden > 0:

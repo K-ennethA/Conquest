@@ -53,6 +53,7 @@ func add_status(condition: StatusCondition) -> StatusCondition:
 	instance.turns_left = instance.duration_turns
 	_active.append(instance)
 	instance.on_apply(_target(), _board())
+	_announce(&"status_applied", instance)
 	return instance
 
 
@@ -64,12 +65,17 @@ func tick_all(board) -> Array[Dictionary]:
 	var events: Array[Dictionary] = []
 	var survivors: Array[StatusCondition] = []
 	for condition in _active:
-		for e in condition.tick(_target(), board):
+		var tick_events: Array[Dictionary] = condition.tick(_target(), board)
+		for e in tick_events:
 			events.append(e)
+		# AFTER the tick resolved, so the damage_dealt / unit_healed it produced have
+		# already been announced and the presentation layer can attribute them here.
+		_announce(&"status_ticked", condition, tick_events)
 		if condition.turns_left > 0:
 			condition.turns_left -= 1
 		if condition.turns_left == 0:
 			condition.on_expire(_target(), board)
+			_announce(&"status_expired", condition)
 		else:
 			survivors.append(condition)
 	_active = survivors
@@ -162,6 +168,7 @@ func remove_status(condition_id: StringName, board = null) -> int:
 	for condition in _active:
 		if condition != null and condition.id == condition_id:
 			condition.on_expire(_target(), board)
+			_announce(&"status_expired", condition)
 			removed += 1
 		else:
 			survivors.append(condition)
@@ -185,7 +192,27 @@ func active_rule_flags() -> Dictionary:
 func clear(board = null) -> void:
 	for condition in _active:
 		condition.on_expire(_target(), board)
+		_announce(&"status_expired", condition)
 	_active = []
+
+
+## Announce a status lifecycle beat on the game-wide bus, for the PRESENTATION layer
+## only (floating "POISONED" labels, tick numbers in the status' own colour, the pips
+## on the world-space health bar). Nothing in the combat layer subscribes, so this is
+## purely additive: with no bus, no signal, or no listener, ticking is byte-identical.
+##
+## Guarded end to end on purpose -- this controller runs headless in ~a dozen unit
+## suites where the GameEvents autoload is absent, and a cosmetic announce must never
+## be able to fail a mechanics test.
+func _announce(signal_name: StringName, condition, events = null) -> void:
+	if typeof(GameEvents) != TYPE_OBJECT or GameEvents == null:
+		return
+	if not GameEvents.has_signal(signal_name):
+		return
+	if events == null:
+		GameEvents.emit_signal(signal_name, _target(), condition)
+	else:
+		GameEvents.emit_signal(signal_name, _target(), condition, events)
 
 
 ## True when [param condition] is already at its

@@ -108,6 +108,30 @@ signal ultimate_casting(unit, move)
 ## so adding a new command site costs one emit and nothing else has to know replays exist.
 signal command_committed(cmd, actor_slot)
 
+# --- Status lifecycle (presentation only) -------------------------------------
+# APPENDED, never reordered. Params are UNTYPED, mirroring move_performed: the
+# payloads are a Unit + a StatusCondition in the live game but duck-typed mocks in
+# tests, and leaving them untyped keeps this autoload emittable headless.
+#
+# The status layer previously announced NOTHING, so every surface that wanted to show
+# a condition had to POLL it on unrelated beats (see HealthBar's refresh-strategy
+# note). These three exist so a status can be SEEN happening rather than inferred:
+#
+#   status_applied : a condition just landed on `unit` (the first instance only --
+#                    a REFRESH of a condition already on the unit does not re-announce,
+#                    so a re-applied poison does not spam a second "POISONED" shout).
+#   status_ticked  : `condition` fired its per-turn effects on `unit`. `events` is the
+#                    tick's own event log. Emitted immediately AFTER the tick resolved,
+#                    so the damage_dealt / unit_healed the tick produced have already
+#                    been announced and a listener can attribute them to this status.
+#   status_expired : the condition ran out (or was cleared/consumed) and is gone.
+#
+# STRICTLY ADDITIVE: [StatusController] emits them and nothing in the combat layer
+# reads them, so a build with no subscriber behaves exactly as it always did.
+signal status_applied(unit, condition)
+signal status_ticked(unit, condition, events)
+signal status_expired(unit, condition)
+
 func _ready() -> void:
 	# Make this a singleton
 	name = "GameEvents"
