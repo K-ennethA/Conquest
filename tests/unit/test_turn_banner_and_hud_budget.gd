@@ -161,6 +161,11 @@ func test_the_banner_drops_the_count_when_there_is_no_side_to_count() -> void:
 
 
 # --- The left-column budget --------------------------------------------------
+#
+# Since the unit-info redesign the card's height is PINNED (UnitInfoPanel.CARD_HEIGHT):
+# every row on the compact battle card has a fixed height, so the column budgets against
+# a constant instead of re-measuring a card whose content changes whenever a status lands.
+# That constant is what the arithmetic below spends.
 
 func test_the_left_column_claims_add_up_to_the_column_exactly() -> void:
 	# 720 window - 15 HUD margin - 56 top bar - 10 separation = the column's top edge.
@@ -171,13 +176,46 @@ func test_the_left_column_claims_add_up_to_the_column_exactly() -> void:
 	var usable: float = 720.0 - UnitInfoPanel.BOTTOM_RESERVE - column_top
 	assert_eq(usable, 463.0, "463px of column to share")
 
-	# Battle-log chip + the column separation + the card's budget spend it exactly.
-	var card_top: float = column_top + BattleLog.COLLAPSED_HEIGHT + 10.0
-	assert_eq(card_top, 121.0, "the card starts under the collapsed log chip")
-	var card_budget: float = UnitInfoPanel.height_budget(720.0, card_top, 0.0)
-	assert_eq(card_budget, 423.0, "and gets 423px")
-	assert_eq(BattleLog.COLLAPSED_HEIGHT + 10.0 + card_budget, usable,
-			"chip + separation + card budget == the usable column, with nothing left over")
+	# The card's claim is its pinned height plus the column separation above it.
+	var card_claim: float = UnitInfoPanel.CARD_HEIGHT + 10.0
+	assert_eq(card_claim, 238.0, "the card claims its 228px card plus the 10px separation")
+
+	# What is left is the battle log's budget, and the three add up with nothing over.
+	var log_budget: float = usable - card_claim
+	assert_eq(log_budget, 225.0, "225px of column is left for the battle log")
+	assert_eq(card_claim + log_budget, usable,
+			"card + separation + log budget == the usable column, with nothing left over")
+
+
+func test_the_compact_card_frees_enough_column_for_a_fully_expanded_log() -> void:
+	# THE DIVIDEND of shrinking the card. The old sheet-style card claimed a 358px
+	# fixed-content floor, so the log was handed 463 - 358 - 10 = 95px -- under
+	# MIN_EXPANDED_HEIGHT, which forced it back to its 30px chip for as long as anything
+	# was selected. The pinned 228px card leaves 225px, which is more than the log's whole
+	# panel, so it now expands in full WITH a unit selected.
+	var log_budget: float = 463.0 - (UnitInfoPanel.CARD_HEIGHT + 10.0)
+	assert_true(log_budget >= BattleLog.PANEL_HEIGHT,
+			"the freed slack covers the log's whole expanded panel")
+	assert_eq(BattleLog.resolved_height(true, log_budget), BattleLog.PANEL_HEIGHT,
+			"so an expanded log renders at its full height beside the card")
+
+
+func test_the_card_still_fits_under_a_fully_expanded_log() -> void:
+	# The worst case on screen: log expanded, card underneath it, terrain card below both.
+	var card_top: float = 81.0 + BattleLog.PANEL_HEIGHT + 10.0
+	assert_eq(card_top, 249.0, "the card starts under a fully expanded log")
+
+	var card_bottom: float = card_top + UnitInfoPanel.CARD_HEIGHT
+	var reserve_top: float = 720.0 - UnitInfoPanel.BOTTOM_RESERVE
+	assert_eq(card_bottom, 477.0, "and ends at 477px")
+	assert_true(card_bottom <= reserve_top,
+			"which is clear of the band the terrain card owns")
+	assert_eq(reserve_top - card_bottom, 67.0, "with 67px of slack, not a hair's breadth")
+
+	# And the budget the card is handed in that worst case still holds its pinned height.
+	assert_true(UnitInfoPanel.height_budget(720.0, card_top, UnitInfoPanel.CARD_HEIGHT)
+			>= UnitInfoPanel.CARD_HEIGHT,
+			"so nothing on the card is ever squeezed or cut off at 720p")
 
 
 func test_the_bottom_reserve_is_exactly_the_terrain_cards_corner() -> void:
@@ -187,17 +225,17 @@ func test_the_bottom_reserve_is_exactly_the_terrain_cards_corner() -> void:
 
 
 func test_the_card_is_never_budgeted_below_its_own_fixed_rows() -> void:
-	# The bug: a short column (a 180px Speed First top bar, or a shorter window) produced
-	# a budget under the card's fixed content, and the inner VBox then overlapped its own
-	# children. The budget must yield to the floor, never the other way round.
-	# 358 is the measured floor -- see integration/test_battle_hud_layout.gd, which prints it.
-	var floor_h: float = 358.0
-	assert_eq(UnitInfoPanel.height_budget(720.0, 205.0, floor_h), floor_h,
-			"a 339px slot cannot squeeze a 402px card -- the card overflows instead")
-	assert_eq(UnitInfoPanel.height_budget(600.0, 121.0, floor_h), floor_h,
+	# The bug this guard exists for: a short column (a 180px Speed First top bar, or a
+	# shorter window) produced a budget under the card's fixed content, and the inner VBox
+	# then distributed NEGATIVE space and overlapped its own children. The budget must
+	# yield to the floor, never the other way round.
+	var floor_h: float = UnitInfoPanel.CARD_HEIGHT
+	assert_eq(UnitInfoPanel.height_budget(720.0, 560.0, floor_h), floor_h,
+			"a slot smaller than the card cannot squeeze it -- the card overflows instead")
+	assert_eq(UnitInfoPanel.height_budget(380.0, 121.0, floor_h), floor_h,
 			"nor can a short window")
 	assert_eq(UnitInfoPanel.height_budget(720.0, 121.0, floor_h), 423.0,
-			"but a column with room hands the surplus to the scrolling lists")
+			"and a column with room reports the room it has")
 
 
 func test_the_terrain_card_is_capped_at_its_reserved_height() -> void:
@@ -221,14 +259,15 @@ func test_an_expanded_log_takes_the_full_panel_when_the_column_can_spare_it() ->
 
 
 func test_an_expanded_log_falls_back_to_its_chip_rather_than_squeezing_the_card() -> void:
-	# Card visible: 463 usable - 358 fixed rows - 10 separation = 95px left for the log,
-	# which is under MIN_EXPANDED_HEIGHT and so not worth the card's ability/effect lists.
-	var leftover: float = 463.0 - 358.0 - 10.0
-	assert_eq(leftover, 95.0, "95px is all the column can spare beside the card")
+	# The rule still holds even though the compact card no longer triggers it at 720p: a
+	# budget under MIN_EXPANDED_HEIGHT is not a readable log, so the log gives up its
+	# scrollback rather than stealing rows from the card. This is what protects a SHORT
+	# window (or the 180px Speed First top bar), where the column really is that tight.
+	var leftover: float = 95.0
 	assert_true(leftover < BattleLog.MIN_EXPANDED_HEIGHT,
-			"which is less than a readable log")
+			"95px is less than a readable log")
 	assert_eq(BattleLog.resolved_height(true, leftover), BattleLog.COLLAPSED_HEIGHT,
-			"so the log shows its chip instead of stealing the card's stat rows")
+			"so the log shows its chip instead of stealing the card's rows")
 
 
 func test_an_expanded_log_takes_a_partial_budget_when_it_is_still_readable() -> void:

@@ -3,11 +3,14 @@ extends GutTest
 ## Geometry regressions for the in-battle HUD.
 ##
 ## Every assertion here corresponds to something a player saw on screen:
-##   * the BATTLE LOG chip drawn over the "Unit Information" title;
-##   * the unit portrait stacked on top of the Statistics rows, with the stat labels
-##     spilling out from under it (a BoxContainer given less than its minimum distributes
-##     NEGATIVE space -- the card was being budgeted below its own fixed content);
+##   * the BATTLE LOG chip drawn over the unit card's title;
+##   * the unit portrait stacked on top of the stat rows, with the stat labels spilling
+##     out from under it (a BoxContainer given less than its minimum distributes NEGATIVE
+##     space -- the card was being budgeted below its own fixed content);
 ##   * the HP bar running past the card's right edge;
+##   * the ABILITIES section cut off at the bottom of the card -- which is what the
+##     compact-card redesign fixed by moving abilities to the full-screen
+##     [UnitDetailPage] and PINNING the card at UnitInfoPanel.CARD_HEIGHT;
 ##   * the terrain card cut off at the bottom of the screen.
 ##
 ## Builds the REAL GameUILayout.tscn, so it is an integration test by tests/README's split.
@@ -113,9 +116,19 @@ func test_the_expanded_log_still_cannot_reach_the_unit_card() -> void:
 	var log_rect: Rect2 = _rect_of(layout.battle_log)
 	var card_rect: Rect2 = _rect_of(layout.unit_info_panel)
 	gut.p("expanded log: %s" % log_rect)
+	gut.p("unit card   : %s" % card_rect)
 
 	assert_false(log_rect.intersects(card_rect),
 			"expanding the log can never push it over the card")
+
+	# The compact card's dividend: the column can now afford BOTH at once, so the log
+	# actually renders its scrollback instead of falling back to its chip.
+	assert_true(layout.battle_log.is_showing_scrollback(),
+			"and with the compact card there is room for the log's scrollback beside it")
+
+	# ...and the pair still clears the terrain card's corner in that worst case.
+	assert_true(card_rect.end.y <= _vp().y - UnitInfoPanel.BOTTOM_RESERVE + 0.5,
+			"log + card together still stop short of the terrain card's band")
 
 
 func test_the_unit_card_is_never_squeezed_below_its_fixed_rows() -> void:
@@ -128,28 +141,66 @@ func test_the_unit_card_is_never_squeezed_below_its_fixed_rows() -> void:
 			% [card.size.y, floor_h, card.global_position.y])
 
 	assert_true(card.size.y >= floor_h - 0.5,
-			"the card is at least as tall as its title + portrait + stat rows")
+			"the card is at least as tall as its own fixed rows")
 
 	var vbox := card.get_node("MarginContainer/VBoxContainer") as VBoxContainer
 	assert_true(vbox.size.y >= vbox.get_combined_minimum_size().y - 0.5,
 			"so the inner VBox never distributes negative space (portrait over stats)")
 
 
-func test_the_portrait_row_and_the_statistics_rows_do_not_overlap() -> void:
+func test_the_unit_card_is_pinned_to_its_declared_height() -> void:
+	# The whole left-column budget (see unit/test_turn_banner_and_hud_budget.gd) is spent
+	# against UnitInfoPanel.CARD_HEIGHT as a CONSTANT. If the real card ever measures
+	# taller than the pin -- a font-metric change, a row someone added -- the arithmetic
+	# silently stops being true, and this is the assertion that catches it.
+	var layout: Control = await _build_hud()
+	await _select_unit(layout)
+
+	var card = layout.unit_info_panel
+	var vbox := card.get_node("MarginContainer/VBoxContainer") as VBoxContainer
+	gut.p("card pin    : %.1f   measured content+chrome: %.1f   actual: %.1f"
+			% [UnitInfoPanel.CARD_HEIGHT,
+			vbox.get_combined_minimum_size().y + UnitInfoPanel.CHROME_HEIGHT, card.size.y])
+	_dump_tree(vbox, 0)
+
+	assert_eq(card.fixed_content_height(), UnitInfoPanel.CARD_HEIGHT,
+			"the card's real content fits the height the column budgets for it")
+	assert_true(card.size.y <= UnitInfoPanel.CARD_HEIGHT + 0.5,
+			"and the card on screen is exactly that tall, never taller")
+
+
+func test_the_card_shows_no_ability_or_move_list_at_all() -> void:
+	# The reported bug was "the Abilities section is STILL cut off". The fix was not a
+	# taller card -- it was removing the section: abilities and moves live on the
+	# full-screen UnitDetailPage now, reachable from the card's DETAILS chip.
+	var layout: Control = await _build_hud()
+	await _select_unit(layout)
+
+	var card = layout.unit_info_panel
+	for name in ["AbilitiesScroll", "AbilitiesContainer", "AbilitiesLabel",
+			"AbilitiesSeparator", "MoveList"]:
+		assert_null(card.find_child(name, true, false),
+				"%s is gone from the compact card" % name)
+
+	assert_not_null(card.find_child("DetailsButton", true, false),
+			"and the DETAILS affordance that replaced them is present")
+
+
+func test_the_portrait_row_and_the_stat_chips_do_not_overlap() -> void:
 	var layout: Control = await _build_hud()
 	await _select_unit(layout)
 
 	var card = layout.unit_info_panel
 	var portrait := card.get_node("MarginContainer/VBoxContainer/PortraitContainer") as Control
-	var stats := card.get_node("MarginContainer/VBoxContainer/StatsContainer") as Control
+	var chips := card.get_node("MarginContainer/VBoxContainer/StatChips") as Control
 	gut.p("portrait    : %s" % _rect_of(portrait))
-	gut.p("stats block : %s" % _rect_of(stats))
+	gut.p("stat chips  : %s" % _rect_of(chips))
 
-	assert_false(_rect_of(portrait).intersects(_rect_of(stats)),
-			"the portrait plate never sits on top of the Statistics block")
+	assert_false(_rect_of(portrait).intersects(_rect_of(chips)),
+			"the portrait plate never sits on top of the stat chips")
 
 
-func test_every_stat_row_stays_inside_the_cards_frame() -> void:
+func test_every_card_row_stays_inside_the_cards_frame() -> void:
 	var layout: Control = await _build_hud()
 	await _select_unit(layout)
 
@@ -164,16 +215,16 @@ func test_every_stat_row_stays_inside_the_cards_frame() -> void:
 	assert_true(margin.get_combined_minimum_size().x <= card_rect.size.x + 0.5,
 			"nothing inside the card demands more width than the column gives it")
 
-	for path in ["StatsContainer/HealthLabel", "StatsContainer/HealthBar",
-			"StatsContainer/AttackLabel", "StatsContainer/DefenseLabel",
-			"StatsContainer/SpeedLabel", "StatsContainer/MovementLabel",
-			"StatsContainer/RangeLabel"]:
+	for path in ["PortraitContainer", "HealthRow", "HealthBar", "StatChips",
+			"StatusStrip", "DetailsButton"]:
 		var row := card.get_node("MarginContainer/VBoxContainer/" + path) as Control
 		var row_rect: Rect2 = _rect_of(row)
 		assert_true(row_rect.position.x >= card_rect.position.x,
 				"%s starts inside the card's left edge" % path)
 		assert_true(row_rect.end.x <= card_rect.end.x + 0.5,
 				"%s ends inside the card's right edge" % path)
+		assert_true(row_rect.end.y <= card_rect.end.y + 0.5,
+				"%s ends inside the card's bottom edge -- nothing is cut off" % path)
 
 
 func test_the_unit_card_stays_clear_of_the_terrain_cards_corner() -> void:

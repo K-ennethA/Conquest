@@ -18,14 +18,13 @@ class_name UnitActionsPanel
 ## Holds only the two demoted legacy buttons above -- hidden as a whole so it (and its
 ## VBox separation) takes zero sidebar space. See the hide in _ready().
 @onready var actions_container: VBoxContainer = $MarginContainer/ContentContainer/ActionsContainer
-@onready var unit_summary_button: Button = $MarginContainer/ContentContainer/UnitSummaryButton
-@onready var stats_container: VBoxContainer = $MarginContainer/ContentContainer/StatsContainer
-@onready var health_label: Label = $MarginContainer/ContentContainer/StatsContainer/HealthLabel
-@onready var attack_label: Label = $MarginContainer/ContentContainer/StatsContainer/AttackLabel
-@onready var defense_label: Label = $MarginContainer/ContentContainer/StatsContainer/DefenseLabel
-@onready var speed_label: Label = $MarginContainer/ContentContainer/StatsContainer/SpeedLabel
-@onready var movement_label: Label = $MarginContainer/ContentContainer/StatsContainer/MovementLabel
-@onready var range_label: Label = $MarginContainer/ContentContainer/StatsContainer/RangeLabel
+## Opens the full-screen [UnitDetailPage]. REPLACED the old "Unit Summary ▼" dropdown and
+## the StatsContainer it toggled: that block re-printed the same six numbers the left-hand
+## [UnitInfoPanel] card was already showing, so the player had two surfaces for one fact
+## and neither of them had room for the abilities. The stat surfaces are now exactly three
+## and they do not overlap -- the compact card (live battle facts), the detail page
+## (everything general) and the combat forecast (damage maths).
+@onready var details_button: Button = $MarginContainer/ContentContainer/DetailsButton
 @onready var end_player_turn_button: Button = $MarginContainer/ContentContainer/EndPlayerTurnButton
 @onready var cancel_button: Button = $MarginContainer/ContentContainer/CancelButton
 
@@ -34,7 +33,6 @@ var selected_unit: Unit = null
 ## move can KILL the previous one instead of letting two tweens fight over the same
 ## `global_position`.
 var _move_tween: Tween = null
-var stats_expanded: bool = false
 var movement_mode: bool = false
 var movement_range_tiles: Array[Vector3] = []
 
@@ -183,11 +181,11 @@ func _ready() -> void:
 	else:
 		push_error("End Unit Turn button not found!")
 
-	if unit_summary_button:
-		unit_summary_button.mouse_filter = Control.MOUSE_FILTER_STOP
-		unit_summary_button.pressed.connect(_on_unit_summary_pressed)
+	if details_button:
+		details_button.mouse_filter = Control.MOUSE_FILTER_STOP
+		details_button.pressed.connect(_on_details_pressed)
 	else:
-		push_error("Unit Summary button not found!")
+		push_error("Details button not found!")
 
 	if end_player_turn_button:
 		end_player_turn_button.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -241,8 +239,9 @@ func _setup_sidebar_tooltips_and_meta() -> void:
 		end_unit_turn_button.tooltip_text = "End just this unit's turn (E) -- or pick Wait from the action menu"
 	if moves_button:
 		moves_button.tooltip_text = "Open this unit's moves -- or pick one from the action menu after moving"
-	if unit_summary_button:
-		unit_summary_button.tooltip_text = "Show / hide this unit's full stats (S)"
+	if details_button:
+		details_button.tooltip_text = "Open this unit's full page -- stats, moves, abilities, statuses (D)"
+		details_button.set_meta("style_role", "secondary")
 	if end_player_turn_button:
 		end_player_turn_button.tooltip_text = "End the whole player turn (P). Confirms if units still have actions."
 		end_player_turn_button.set_meta("style_role", "destructive")
@@ -377,8 +376,7 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 
 	_update_unit_header()
 	_update_actions()
-	_update_unit_stats()
-	
+
 	# Show movement range immediately when unit is selected (tactical style)
 	_show_movement_range_on_selection()
 
@@ -553,57 +551,17 @@ func _update_header_background_color() -> void:
 	
 	unit_header_background.add_theme_stylebox_override("panel", style_box)
 
-func _update_unit_stats() -> void:
-	"""Update the unit stats display"""
-	if not selected_unit:
-		return
-	
-	# Update all stat labels
-	if health_label:
-		health_label.text = "Health: " + str(selected_unit.current_health) + "/" + str(selected_unit.max_health)
-	
-	if attack_label:
-		var attack = selected_unit.get_stat("attack") if selected_unit.has_method("get_stat") else 0
-		attack_label.text = "Attack: " + str(attack)
-	
-	if defense_label:
-		var defense = selected_unit.get_stat("defense") if selected_unit.has_method("get_stat") else 0
-		defense_label.text = "Defense: " + str(defense)
-	
-	if speed_label:
-		var speed = selected_unit.get_stat("speed") if selected_unit.has_method("get_stat") else 0
-		# Show current speed if different from base (due to battle effects)
-		var current_speed = speed
-		if TurnSystemManager.has_active_turn_system():
-			var turn_system = TurnSystemManager.get_active_turn_system()
-			if turn_system is SpeedFirstTurnSystem:
-				current_speed = (turn_system as SpeedFirstTurnSystem).get_unit_current_speed(selected_unit)
-		
-		if current_speed != speed:
-			speed_label.text = "Speed: " + str(current_speed) + " (base: " + str(speed) + ")"
-		else:
-			speed_label.text = "Speed: " + str(speed)
-	
-	if movement_label:
-		var movement = selected_unit.get_stat("movement") if selected_unit.has_method("get_stat") else 0
-		movement_label.text = "Movement: " + str(movement)
-	
-	if range_label:
-		var range_val = selected_unit.get_stat("range") if selected_unit.has_method("get_stat") else 0
-		range_label.text = "Range: " + str(range_val)
+func _on_details_pressed() -> void:
+	"""Open the full-screen [UnitDetailPage] on the selected unit.
 
-func _on_unit_summary_pressed() -> void:
-	"""Handle Unit Summary button press - toggle stats display"""
-	stats_expanded = not stats_expanded
-	
-	if stats_container:
-		stats_container.visible = stats_expanded
-	
-	if unit_summary_button:
-		if stats_expanded:
-			unit_summary_button.text = "Unit Summary ▲"
-		else:
-			unit_summary_button.text = "Unit Summary ▼"
+	The whole command surface for it: no toggling, no in-sidebar expansion. The page is a
+	single per-battle overlay ([method UnitDetailPage.open_for] finds or mounts it), and it
+	closes on ESC or its own Close button, returning the player to exactly this state --
+	same selection, same staged command. Works for an inspected ENEMY too, because the page
+	only ever reads."""
+	if not is_instance_valid(selected_unit):
+		return
+	UnitDetailPage.open_for(self, selected_unit)
 
 func _on_unit_deselected(unit: Unit) -> void:
 	"""Handle unit deselection - hide actions"""
@@ -623,11 +581,6 @@ func _on_unit_deselected(unit: Unit) -> void:
 		_revert_tentative_move()
 
 		selected_unit = null
-		stats_expanded = false
-		if stats_container:
-			stats_container.visible = false
-		if unit_summary_button:
-			unit_summary_button.text = "Unit Summary ▼"
 
 		# Clear movement range when unit is deselected
 		_clear_movement_range()
@@ -903,14 +856,13 @@ func _update_actions() -> void:
 		else:
 			end_player_turn_button.text = "End Player Turn (P)\n[AI Turn]"
 	
-	# Unit Summary button is always available when unit is selected (handled in _on_unit_summary_pressed)
-	if unit_summary_button:
-		unit_summary_button.disabled = false
-		if stats_expanded:
-			unit_summary_button.text = "Unit Summary ▲"
-		else:
-			unit_summary_button.text = "Unit Summary ▼"
-	
+	# DETAILS is always available while a unit is selected -- reading a unit's page is not
+	# a command, so it is never gated on whose turn it is or whether the unit can act.
+	if details_button:
+		details_button.disabled = false
+		details_button.text = "Details (D)"
+
+
 	# Cancel button is always available when unit is selected
 	if cancel_button:
 		cancel_button.disabled = false
@@ -1420,9 +1372,11 @@ func _input(event: InputEvent) -> void:
 			KEY_P:
 				if visible and selected_unit and not movement_mode:
 					_on_end_player_turn_pressed()
-			KEY_S:
+			# D opens the full unit page. It was S, toggling the "Unit Summary"
+			# dropdown -- both are gone along with the duplicated stat block.
+			KEY_D:
 				if visible and selected_unit and not movement_mode:
-					_on_unit_summary_pressed()
+					_on_details_pressed()
 			KEY_C, KEY_ESCAPE:
 				# The gate is has_active_interaction() -- the SAME predicate
 				# UILayoutManager reads to decide whether Escape should instead open the

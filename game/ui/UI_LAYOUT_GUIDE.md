@@ -22,23 +22,43 @@ GameUILayout (Control, full-rect, mouse-ignore)
 
 ### Left-column budget (1280x720)
 
-The left column is a real VBox stack with **one** flexible region, and the claims add up
-to the column height exactly:
+The left column is a real VBox stack with **one** flexible region — the battle log —
+and the claims add up to the column height exactly:
 
 | Row | px | Notes |
 |---|---:|---|
 | top of the column | 81 | 15 HUD margin + 56 TopBar + 10 separation |
-| BattleLog chip | 30 | owns the column's first row |
+| **BattleLog** | **225** | the flexible row; 30 collapsed, up to `PANEL_HEIGHT` 158 expanded |
 | separation | 10 | `UILayoutManager.COLUMN_SEPARATION` |
-| **UnitInfoPanel** | **423** | budget; measured fixed-content floor is 358 — only the ability / effect lists flex |
+| **UnitInfoPanel** | **228** | `UnitInfoPanel.CARD_HEIGHT` — pinned, not fitted (measured content 223) |
 | terrain reserve | 176 | `UnitInfoPanel.BOTTOM_RESERVE` = 16 margin + `TerrainInfoPanel.MAX_HEIGHT` 152 + 8 gap |
 
 `UILayoutManager._rebudget_left_column()` re-splits this whenever the card shows/hides or
-the window resizes. An expanded log (158px) does not fit beside the card's floor, so while
-a unit is selected the log renders its chip; with nothing selected it gets the whole
-column. Two rules keep the card honest: it is **never** given less height than
+the window resizes. Because the card's height is a **constant**, the log is handed
+463 − 238 = 225px, which is more than its whole expanded panel — so the log now renders
+its scrollback *and* the card at once. Worst case on screen: 81 + 158 + 10 + 228 = 477,
+against the 544 the terrain reserve leaves free (67px of slack).
+
+Two rules keep the card honest: it is **never** given less height than
 `fixed_content_height()` (a BoxContainer under its minimum overlaps its own children), and
 nothing inside it may declare a minimum wider than the column (`discipline_label`).
+
+### The two unit surfaces
+
+Stats live in exactly three places, and they do not overlap:
+
+- **UnitInfoPanel** (left column) — the **compact battle card**: portrait thumb, name +
+  class line, HP bar with numbers, one row of four *effective* stat chips (ATK/DEF/SPD/MOV,
+  tinted + ▲/▼ when off base), and the status strip. No abilities, no moves, no lore.
+- **UnitDetailPage** (`game/ui/screens/`) — the **full page**, opened by the card's
+  DETAILS chip, the sidebar's DETAILS button, or **D**. Full stat table with base →
+  effective deltas, every move with live cooldown, every ability with its description,
+  every active status. Own CanvasLayer at **130** (above the HUD, below `PauseMenu` 140);
+  deliberately does **not** pause the tree. ESC returns to the battle untouched.
+- **CombatForecastPanel** — damage maths, while aiming.
+
+Both unit surfaces build their cards from `UnitPageContent`, which is also what the
+Compendium's `UnitGallery` uses, so the roster browser and the in-battle page cannot drift.
 
 Panels mounted in code by `UILayoutManager` (after theming):
 - **BattleLog** — first child of the LeftSidebar, collapsible scrolling combat log. Also
@@ -48,6 +68,8 @@ Panels mounted in code by `UILayoutManager` (after theming):
   below the *live* TopBar (56px Traditional chip / 180px Speed First queue), never at a
   fixed offset.
 - **SettingsPanel** — full-screen options overlay (opened by the gear button).
+- **UnitDetailPage** — the battle's single full-screen unit page (see above). Both openers
+  find it through `UnitDetailPage.open_for()`'s group lookup rather than owning one each.
 
 Mounted separately by `GameWorldManager` on the `UI` CanvasLayer:
 - **TerrainInfoPanel** — bottom-left hover card for the tile under the cursor.

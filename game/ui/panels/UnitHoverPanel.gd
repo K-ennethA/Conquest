@@ -51,6 +51,11 @@ var _effects_container: HFlowContainer
 # semantics.
 var _current_unit = null
 
+## The unit currently SELECTED (via GameEvents.unit_selected/deselected). The hover
+## card suppresses itself for this unit -- its readout already lives on the compact
+## battle card, and duplicating HP bottom-right is what the unit-info split removed.
+var _selected_unit = null
+
 
 func _ready() -> void:
 	name = "UnitHoverPanel"
@@ -79,6 +84,15 @@ func _ready() -> void:
 
 	if GameEvents and not GameEvents.cursor_moved.is_connected(_on_cursor_moved):
 		GameEvents.cursor_moved.connect(_on_cursor_moved)
+	# Track the SELECTED unit so the card can suppress itself for it: the selected
+	# unit already owns the compact battle card on the left, and showing the same
+	# HP a second time bottom-right is exactly the duplication the unit-info split
+	# removed. Hover stays for peeking at every OTHER unit.
+	if GameEvents:
+		if not GameEvents.unit_selected.is_connected(_on_unit_selected):
+			GameEvents.unit_selected.connect(_on_unit_selected)
+		if not GameEvents.unit_deselected.is_connected(_on_unit_deselected):
+			GameEvents.unit_deselected.connect(_on_unit_deselected)
 
 
 ## Pin our rect to the whole viewport so the bottom-right-anchored card lands on
@@ -171,6 +185,11 @@ func show_for_unit(unit) -> void:
 	if unit == null or typeof(unit) != TYPE_OBJECT or not is_instance_valid(unit):
 		hide_panel()
 		return
+	# The selected unit's readout lives on the compact battle card -- never
+	# duplicate it here (see _ready's selection subscription).
+	if unit == _selected_unit:
+		hide_panel()
+		return
 
 	_current_unit = unit
 	_name_label.text = _display_name_of(unit)
@@ -204,6 +223,18 @@ func show_for_unit(unit) -> void:
 func hide_panel() -> void:
 	_current_unit = null
 	hide()
+
+
+func _on_unit_selected(unit, _selected_position := Vector3.ZERO) -> void:
+	_selected_unit = unit
+	# If the card is already showing the unit that just became selected, drop it
+	# now rather than waiting for the next cursor move.
+	if _current_unit == unit:
+		hide_panel()
+
+
+func _on_unit_deselected(_unit) -> void:
+	_selected_unit = null
 
 
 # --- Internals ---------------------------------------------------------------

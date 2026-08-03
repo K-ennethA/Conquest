@@ -267,9 +267,10 @@ theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(0.9, 0.9, 0.9, 1)
 theme_override_colors/font_disabled_color = Color(0.6, 0.6, 0.6, 1)
 
-[node name="UnitSummaryButton" type="Button" parent="MarginContainer/ContentContainer"]
+[node name="DetailsButton" type="Button" parent="MarginContainer/ContentContainer"]
 layout_mode = 2
-text = "Unit Summary ▼"
+custom_minimum_size = Vector2(0, 44)
+text = "Details (D)"
 theme_override_font_sizes/font_size = 12
 theme_override_styles/normal = SubResource("SecondaryButtonNormal")
 theme_override_styles/hover = SubResource("SecondaryButtonHover")
@@ -277,48 +278,6 @@ theme_override_styles/pressed = SubResource("SecondaryButtonPressed")
 theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
 theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(0.8, 0.8, 0.8, 1)
-
-[node name="StatsContainer" type="VBoxContainer" parent="MarginContainer/ContentContainer"]
-layout_mode = 2
-theme_override_constants/separation = 2
-visible = false
-
-[node name="StatsTitle" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
-layout_mode = 2
-text = "Unit Statistics"
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 12
-theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
-
-[node name="HealthLabel" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
-layout_mode = 2
-text = "Health: 100/100"
-theme_override_font_sizes/font_size = 11
-
-[node name="AttackLabel" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
-layout_mode = 2
-text = "Attack: 25"
-theme_override_font_sizes/font_size = 11
-
-[node name="DefenseLabel" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
-layout_mode = 2
-text = "Defense: 15"
-theme_override_font_sizes/font_size = 11
-
-[node name="SpeedLabel" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
-layout_mode = 2
-text = "Speed: 8"
-theme_override_font_sizes/font_size = 11
-
-[node name="MovementLabel" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
-layout_mode = 2
-text = "Movement: 3"
-theme_override_font_sizes/font_size = 11
-
-[node name="RangeLabel" type="Label" parent="MarginContainer/ContentContainer/StatsContainer"]
-layout_mode = 2
-text = "Range: 1"
-theme_override_font_sizes/font_size = 11
 
 [node name="HSeparator3" type="HSeparator" parent="MarginContainer/ContentContainer"]
 layout_mode = 2

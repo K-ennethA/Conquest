@@ -16,13 +16,14 @@ class_name UnitGallery
 # arrow keys all route through _select_index(), so the list and the detail pane can
 # never disagree.
 
-# --- Card accents -----------------------------------------------------------
-# Move cards are colour-coded by damage category so a moveset is scannable at a
-# glance; the element (when authored) is named in the small type tag on the card.
-const CAT_PHYSICAL := Color("c9cbd6")   # steel grey
-const CAT_MAGICAL := Color("a860e0")    # arcane violet
-const CAT_TRUE := Color("f0913c")       # piercing orange
-const ABILITY_ACCENT := Color("5fb84e") # passives read as "nature" green
+# --- Where the cards come from ----------------------------------------------
+#
+# The stat table, the move cards and the ability cards are built by [UnitPageContent],
+# which was EXTRACTED from this file when the in-battle DETAILS overlay ([UnitDetailPage])
+# needed the same page. The gallery keeps what makes it a gallery -- search, filter, sort,
+# the pager and the 3D turntable -- and delegates "what does a move card say" so the two
+# surfaces cannot drift. The accents and the small text helpers live there too.
+const Content := preload("res://game/ui/screens/UnitPageContent.gd")
 
 const MUTED := Color(0.72, 0.70, 0.78)
 
@@ -691,49 +692,16 @@ func _process(delta: float) -> void:
 
 
 func _update_stats(character: CharacterResource) -> void:
-	"""Rebuild the stats grid from the character's base stats."""
+	"""Rebuild the stats table from the character's base stats.
+
+	No live unit is passed: out of battle there is nothing to be buffed BY, so every row
+	renders as its authored base. The same builder is what the in-battle detail page calls
+	WITH a unit, which is where the `base → effective` arrows come from."""
 	if not stats_container:
 		return
 
-	_clear_container(stats_container)
-
-	var stats_grid := GridContainer.new()
-	stats_grid.columns = 4
-	stats_grid.add_theme_constant_override("h_separation", 12)
-	stats_grid.add_theme_constant_override("v_separation", 6)
-	stats_container.add_child(stats_grid)
-
-	var rows: Array = [
-		["Health", character.base_health],
-		["Attack", character.base_attack],
-		["Defense", character.base_defense],
-		["Magic", character.base_magic],
-		["Magic Def", character.base_magic_defense],
-		["Speed", character.base_speed],
-		["Movement", character.base_movement],
-		["Range", character.attack_range],
-		["Power", character.power_budget()],
-	]
-
-	for row in rows:
-		var label := Label.new()
-		label.text = str(row[0]) + ":"
-		label.modulate = MUTED
-		stats_grid.add_child(label)
-
-		var value := Label.new()
-		value.text = str(row[1])
-		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		value.custom_minimum_size = Vector2(60, 0)
-		stats_grid.add_child(value)
-
-	var profile: MovementProfile = character.get_movement_profile()
-	if profile != null:
-		var movement_row := Label.new()
-		movement_row.text = "Movement profile: %s" % profile.display_name
-		movement_row.modulate = MUTED
-		movement_row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		stats_container.add_child(movement_row)
+	Content.clear_container(stats_container)
+	stats_container.add_child(Content.build_stat_table(character))
 
 
 # ---------------------------------------------------------------------------
@@ -745,117 +713,18 @@ func _update_moves(character: CharacterResource) -> void:
 	if not moves_container:
 		return
 
-	_clear_container(moves_container)
+	Content.clear_container(moves_container)
 
 	var shown: int = 0
 	for i in range(character.move_count()):
 		var move: MoveResource = character.get_move(i)
 		if move == null:
 			continue
-		moves_container.add_child(_build_move_card(move))
+		moves_container.add_child(Content.build_move_card(move))
 		shown += 1
 
 	if shown == 0:
-		moves_container.add_child(_muted_label("No moves"))
-
-
-func _build_move_card(move: MoveResource) -> PanelContainer:
-	var accent: Color = _category_color(move.category)
-
-	var card := PanelContainer.new()
-	card.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	card.add_theme_stylebox_override("panel", _card_box(accent))
-
-	var body := VBoxContainer.new()
-	body.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	card.add_child(body)
-
-	# Header: name + element/category tag.
-	var header := HBoxContainer.new()
-	header.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	body.add_child(header)
-
-	var move_name: String = move.display_name
-	if move_name.is_empty():
-		move_name = String(move.move_id)
-	if move_name.is_empty():
-		move_name = "(Unnamed move)"
-
-	var name_label := Label.new()
-	name_label.text = move_name
-	name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
-	name_label.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	header.add_child(name_label)
-
-	header.add_child(MenuTheme.make_chip(_move_tag_text(move), accent))
-
-	# Description.
-	var desc_text: String = move.description.strip_edges()
-	if desc_text.is_empty():
-		desc_text = "No description."
-	body.add_child(_wrapped_label(desc_text))
-
-	# Key stats.
-	var stats := Label.new()
-	stats.text = _move_stats_text(move)
-	stats.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	stats.modulate = MUTED
-	stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	stats.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	body.add_child(stats)
-
-	# What it actually does, straight from the effect list.
-	var effect_text: String = _join_effects(move.effects)
-	if not effect_text.is_empty():
-		var effects_label := _wrapped_label("Effect: " + effect_text)
-		effects_label.add_theme_font_size_override("font_size", MenuTheme.FONT_BODY)
-		body.add_child(effects_label)
-
-	return card
-
-
-func _move_tag_text(move: MoveResource) -> String:
-	"""e.g. "Nature / Physical", or just "Physical" when no element is authored."""
-	var category_name: String = _category_name(move.category)
-	var element_text: String = String(move.element).strip_edges()
-	if element_text.is_empty():
-		return category_name
-	return "%s / %s" % [element_text.capitalize(), category_name]
-
-
-func _move_stats_text(move: MoveResource) -> String:
-	"""Cooldown, uses, cost, accuracy, crit and range as one scannable line."""
-	var parts: Array[String] = []
-
-	if move.cooldown > 0:
-		parts.append("Cooldown %d turn%s" % [move.cooldown, "" if move.cooldown == 1 else "s"])
-	else:
-		parts.append("No cooldown")
-
-	if move.max_uses == 1:
-		parts.append("Once per battle")
-	elif move.max_uses > 1:
-		parts.append("%d uses per battle" % move.max_uses)
-
-	if move.energy_cost > 0:
-		parts.append("Cost %d" % move.energy_cost)
-
-	parts.append("Accuracy %d%%" % _as_percent(move.accuracy))
-	parts.append("Crit %d%%" % _as_percent(move.crit_chance))
-
-	var targeting: TargetingPattern = move.targeting
-	if targeting != null:
-		if targeting.min_range == targeting.max_range:
-			parts.append("Range %d" % targeting.max_range)
-		else:
-			parts.append("Range %d-%d" % [targeting.min_range, targeting.max_range])
-		parts.append("Targets %s" % _target_kind_name(targeting.target_kind))
-		if targeting.area_shape != CombatTypes.AreaShape.SINGLE:
-			parts.append("Area %s %d" % [_area_shape_name(targeting.area_shape), targeting.area_size])
-	else:
-		parts.append("No targeting pattern")
-
-	return "   -   ".join(parts)
+		moves_container.add_child(Content.muted_label("No moves"))
 
 
 # ---------------------------------------------------------------------------
@@ -867,244 +736,18 @@ func _update_abilities(character: CharacterResource) -> void:
 	if not abilities_container:
 		return
 
-	_clear_container(abilities_container)
+	Content.clear_container(abilities_container)
 
 	var shown: int = 0
 	for ability in character.abilities:
 		if ability == null:
 			continue
-		abilities_container.add_child(_build_ability_card(ability))
+		abilities_container.add_child(Content.build_ability_card(ability))
 		shown += 1
 
 	if shown == 0:
-		abilities_container.add_child(_muted_label("No abilities"))
+		abilities_container.add_child(Content.muted_label("No abilities"))
 
-
-func _build_ability_card(ability: AbilityResource) -> PanelContainer:
-	var card := PanelContainer.new()
-	card.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	card.add_theme_stylebox_override("panel", _card_box(ABILITY_ACCENT))
-
-	var body := VBoxContainer.new()
-	body.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	card.add_child(body)
-
-	var header := HBoxContainer.new()
-	header.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	body.add_child(header)
-
-	var ability_name: String = ability.display_name
-	if ability_name.is_empty():
-		ability_name = String(ability.id)
-	if ability_name.is_empty():
-		ability_name = "(Unnamed ability)"
-
-	var name_label := Label.new()
-	name_label.text = ability_name
-	name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
-	name_label.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	header.add_child(name_label)
-
-	header.add_child(MenuTheme.make_chip(_trigger_label(ability.trigger), ABILITY_ACCENT))
-
-	var desc_text: String = ability.description.strip_edges()
-	if desc_text.is_empty():
-		desc_text = "No description."
-	body.add_child(_wrapped_label(desc_text))
-
-	var stats := Label.new()
-	stats.text = _ability_stats_text(ability)
-	stats.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	stats.modulate = MUTED
-	stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	stats.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	body.add_child(stats)
-
-	var effect_text: String = _join_effects(ability.effects)
-	if not effect_text.is_empty():
-		var effects_label := _wrapped_label("Effect: " + effect_text)
-		effects_label.add_theme_font_size_override("font_size", MenuTheme.FONT_BODY)
-		body.add_child(effects_label)
-
-	var rules_text: String = _rule_modifiers_text(ability)
-	if not rules_text.is_empty():
-		var rules_label := _wrapped_label("Rules: " + rules_text)
-		rules_label.add_theme_font_size_override("font_size", MenuTheme.FONT_BODY)
-		body.add_child(rules_label)
-
-	return card
-
-
-func _ability_stats_text(ability: AbilityResource) -> String:
-	var parts: Array[String] = []
-
-	parts.append("Trigger: %s" % _trigger_label(ability.trigger))
-
-	if ability.cooldown > 0:
-		parts.append("Cooldown %d turn%s" % [ability.cooldown, "" if ability.cooldown == 1 else "s"])
-	else:
-		parts.append("No cooldown")
-
-	if ability.max_activations == 1:
-		parts.append("Once per battle")
-	elif ability.max_activations > 1:
-		parts.append("%d activations per battle" % ability.max_activations)
-	else:
-		parts.append("Unlimited activations")
-
-	var condition: AbilityCondition = ability.condition
-	if condition != null:
-		parts.append("Condition: %s" % condition.describe())
-
-	if ability.targets_triggering_unit:
-		parts.append("Applies to the triggering unit")
-
-	var targeting: TargetingPattern = ability.targeting
-	if targeting != null:
-		parts.append("Area %s (%s)" % [_area_shape_name(targeting.area_shape), targeting.describe_range()])
-
-	return "   -   ".join(parts)
-
-
-func _rule_modifiers_text(ability: AbilityResource) -> String:
-	"""Action-economy tweaks ("extra_actions": 1 -> "Extra actions: 1")."""
-	var modifiers: Dictionary = ability.rule_modifiers
-	if modifiers.is_empty():
-		return ""
-	var parts: Array[String] = []
-	for key in modifiers.keys():
-		var value_text: String = str(modifiers[key])
-		parts.append("%s: %s" % [str(key).capitalize(), value_text])
-	return ", ".join(parts)
-
-
-# ---------------------------------------------------------------------------
-# Small shared helpers
-# ---------------------------------------------------------------------------
-
-func _join_effects(effects: Array) -> String:
-	"""Summarise a move/ability by joining every effect's own describe()."""
-	var parts: Array[String] = []
-	for effect in effects:
-		if effect == null:
-			continue
-		var described: String = str(effect.describe()).strip_edges()
-		if not described.is_empty():
-			parts.append(described)
-	return "; ".join(parts)
-
-
-func _clear_container(container: Node) -> void:
-	"""Detach and free every child. Detaching first matters because queue_free() is
-	deferred - without it, paging would briefly stack the outgoing unit's cards
-	underneath the incoming one's."""
-	for child in container.get_children():
-		container.remove_child(child)
-		child.queue_free()
-
-
-func _card_box(accent: Color) -> StyleBoxFlat:
-	# Shared with the other galleries via MenuTheme so every card reads identically.
-	return MenuTheme.card_box(accent)
-
-
-func _wrapped_label(text: String) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	return label
-
-
-func _muted_label(text: String) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.modulate = MUTED
-	return label
-
-
-func _as_percent(value: float) -> int:
-	"""0..1 -> 0..100, clamped so an odd authored value can't print nonsense."""
-	return roundi(clampf(value, 0.0, 1.0) * 100.0)
-
-
-func _category_name(category: int) -> String:
-	match category:
-		CombatTypes.DamageCategory.PHYSICAL:
-			return "Physical"
-		CombatTypes.DamageCategory.MAGICAL:
-			return "Magical"
-		CombatTypes.DamageCategory.TRUE:
-			return "True"
-	return "Unknown"
-
-
-func _category_color(category: int) -> Color:
-	match category:
-		CombatTypes.DamageCategory.MAGICAL:
-			return CAT_MAGICAL
-		CombatTypes.DamageCategory.TRUE:
-			return CAT_TRUE
-	return CAT_PHYSICAL
-
-
-func _target_kind_name(kind: int) -> String:
-	match kind:
-		CombatTypes.TargetKind.SELF:
-			return "self"
-		CombatTypes.TargetKind.ALLY:
-			return "allies"
-		CombatTypes.TargetKind.ENEMY:
-			return "enemies"
-		CombatTypes.TargetKind.ANY_UNIT:
-			return "any unit"
-		CombatTypes.TargetKind.TILE:
-			return "tiles"
-		CombatTypes.TargetKind.EMPTY_TILE:
-			return "empty tiles"
-	return "unknown"
-
-
-func _area_shape_name(shape: int) -> String:
-	match shape:
-		CombatTypes.AreaShape.SINGLE:
-			return "single"
-		CombatTypes.AreaShape.CROSS:
-			return "cross"
-		CombatTypes.AreaShape.SQUARE:
-			return "square"
-		CombatTypes.AreaShape.DIAMOND:
-			return "diamond"
-		CombatTypes.AreaShape.LINE:
-			return "line"
-		CombatTypes.AreaShape.ARC:
-			return "arc"
-	return "unknown"
-
-
-func _trigger_label(trigger: int) -> String:
-	"""Readable label for an AbilityTrigger.Trigger value (ON_TURN_START ->
-	"On turn start")."""
-	match trigger:
-		AbilityTrigger.Trigger.PASSIVE:
-			return "Passive"
-		AbilityTrigger.Trigger.ON_TURN_START:
-			return "On turn start"
-		AbilityTrigger.Trigger.ON_TURN_END:
-			return "On turn end"
-		AbilityTrigger.Trigger.ON_MOVE:
-			return "On move"
-		AbilityTrigger.Trigger.ON_TILE_ENTER:
-			return "On tile enter"
-		AbilityTrigger.Trigger.ON_ATTACK:
-			return "On attack"
-		AbilityTrigger.Trigger.ON_DAMAGED:
-			return "On damaged"
-		AbilityTrigger.Trigger.ON_KILL:
-			return "On kill"
-		AbilityTrigger.Trigger.ON_DEATH:
-			return "On death"
-	return "Unknown trigger"
 
 
 # ---------------------------------------------------------------------------

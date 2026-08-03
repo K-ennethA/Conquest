@@ -26,9 +26,9 @@ class_name UILayoutManager
 
 # --- Left-column budget (1280x720) -------------------------------------------
 #
-# The left column is a real VBox stack, not a pile of overlapping anchored panels. Every
-# row has a fixed claim except ONE flexible region (the UnitInfoPanel's two scrolling
-# lists), and the claims add up to the column height exactly:
+# The left column is a real VBox stack, not a pile of overlapping anchored panels. Since
+# the unit-info redesign there is exactly ONE flexible region in it -- the battle log --
+# and every other claim is a constant:
 #
 #   720   window height
 #   - 15  MarginContainer top margin
@@ -36,22 +36,28 @@ class_name UILayoutManager
 #   - 10  MainContainer separation
 #   = 81  MiddleArea / left column TOP
 #
-#   - 30  BattleLog chip           (owns the column's first row)
-#   - 10  LeftSidebar separation
-#   = 121 UnitInfoPanel TOP
+#   - 176 bottom reserve owned by the floating TerrainInfoPanel: a 16px window margin +
+#         its 152px height cap + an 8px gap
+#         (UnitInfoPanel.BOTTOM_RESERVE == TerrainInfoPanel.MARGIN + MAX_HEIGHT + 8)
+#   = 463 usable column to share
 #
-#   720 - 121 - 176 = 423px budget for the UnitInfoPanel, against a MEASURED fixed-content
-#   floor of 358px (title 26 + portrait row 56 + stat block 132 + two section headers, plus
-#   separations and the 24px of MarginContainer chrome) -- so the stat rows ALWAYS fit and
-#   only the ability / effect lists scroll. The 176 is the bottom-left reserve owned by the
-#   floating TerrainInfoPanel: a 16px window margin + its 152px height cap + an 8px gap
-#   (UnitInfoPanel.BOTTOM_RESERVE == TerrainInfoPanel.MARGIN + MAX_HEIGHT + 8).
+# The UnitInfoPanel is now the COMPACT BATTLE CARD, and its height is PINNED at
+# UnitInfoPanel.CARD_HEIGHT (228) rather than fitted to its content -- every row on it has
+# a fixed height, so the column budgets against a constant. Its claim is therefore:
 #
-# An EXPANDED log (158px) does not fit alongside the card's 358px floor in the 463px of
-# usable column -- 463 - 358 - 10 leaves 95px -- so the log is handed that leftover as its
-# budget and falls back to its chip because it is under BattleLog.MIN_EXPANDED_HEIGHT.
-# With no unit selected the card is hidden and the whole 463px goes to the log, which then
-# expands in full.
+#   228 card + 10 LeftSidebar separation = 238
+#   463 - 238 = 225px left for the battle log
+#
+# 225 >= BattleLog.PANEL_HEIGHT (158), so the log now expands IN FULL while a unit is
+# selected. That is the direct dividend of shrinking the card: the old sheet-style card
+# claimed a 358px fixed-content floor, which left the log only 95px -- under
+# BattleLog.MIN_EXPANDED_HEIGHT, so it was forced back to its 30px chip the whole time
+# anything was selected. Worst case on screen is now:
+#
+#   81 (column top) + 158 (expanded log) + 10 (separation) = 249  card TOP
+#   249 + 228 = 477  card BOTTOM, against the 544 (720 - 176) the terrain card leaves free
+#
+# -- 67px of slack, so nothing in the column can be squeezed or cut off at 720p.
 const LEFT_COLUMN_WIDTH: float = 260.0
 const COLUMN_SEPARATION: float = 10.0
 ## Mirror of UnitInfoPanel.BOTTOM_RESERVE, the window-bottom band the terrain card owns.
@@ -71,6 +77,14 @@ var settings_button: Button = null
 # itself; this layout only owns WHERE it is mounted and WHEN Escape should open it.
 var pause_menu: PauseMenu = null
 var pause_button: Button = null
+
+# The full-screen UNIT DETAIL page (full stat table, every move, every ability, every
+# active status). Its own CanvasLayer at 130 -- above the HUD, below the pause menu -- and
+# deliberately NOT tree-pausing: a networked match keeps running while a player reads a
+# stat sheet. Mounted here so the battle has exactly ONE instance; both openers (the left
+# card's DETAILS chip and the right sidebar's DETAILS button) find it through
+# UnitDetailPage.open_for's group lookup rather than owning one each.
+var unit_detail_page: UnitDetailPage = null
 
 # Full-screen cinematic turn-transition wipe (fade-to-black + turn name). Mounted
 # on its own high CanvasLayer so it draws above every HUD panel. Starts hidden and
@@ -165,6 +179,10 @@ func _ready() -> void:
 	# into the amber HUD cascade.
 	_build_pause_menu()
 
+	# The unit detail page. Same deal as the pause menu: a self-styled CanvasLayer in the
+	# DARK menu register, mounted AFTER theming so the amber sweep cannot claim it.
+	_build_unit_detail_page()
+
 	# A leaver/forfeiter has to LOSE, not just vanish. Wired here because this HUD is
 	# alive for exactly the lifetime of a battle.
 	_wire_net_session()
@@ -203,11 +221,10 @@ func _on_left_column_changed() -> void:
 ## Split the left column between the battle log (top row) and the unit info card.
 ##
 ## ONE flexible region, and a strict claim order: the terrain card's bottom reserve is
-## untouchable, the info card's FIXED rows (title / portrait / stats / section headers)
-## have the next claim, and the battle log is handed whatever is left. See the
-## LEFT_COLUMN_WIDTH comment block at the top of this file for the 720p arithmetic --
-## 463px usable, 402px of which the card cannot give up, so an expanded log falls back to
-## its chip while a unit is selected and takes the full 158px when none is.
+## untouchable, the battle card's pinned height has the next claim, and the battle log is
+## handed whatever is left. See the LEFT_COLUMN_WIDTH comment block at the top of this
+## file for the 720p arithmetic -- 463px usable, 238px of it the card's, leaving the log
+## 225px, which is enough for it to expand in full whether or not a unit is selected.
 func _rebudget_left_column() -> void:
 	if battle_log == null or not is_instance_valid(battle_log):
 		return
@@ -405,6 +422,12 @@ func _toggle_pause_menu() -> void:
 	if pause_menu:
 		pause_menu.toggle()
 
+func _build_unit_detail_page() -> void:
+	"""Create and mount the battle's single unit detail page (starts hidden)."""
+	unit_detail_page = UnitDetailPage.new()
+	unit_detail_page.name = "UnitDetailPage"
+	add_child(unit_detail_page)
+
 func _unhandled_input(event: InputEvent) -> void:
 	# Escape (ui_cancel) closes the Settings overlay when it is open, and consumes
 	# the event so the board cursor's own ui_cancel handler (unit deselect) does
@@ -434,6 +457,11 @@ func _can_open_pause_menu() -> bool:
 	if pause_menu == null or pause_menu.is_open():
 		return false
 	if settings_panel != null and settings_panel.is_open():
+		return false
+	# The detail page consumes Escape in its own `_input` (so this branch is normally
+	# unreachable while it is up), but the guard is stated here as well: with a full-screen
+	# page open, Escape means "close the page", never "pause".
+	if unit_detail_page != null and is_instance_valid(unit_detail_page) and unit_detail_page.is_open():
 		return false
 	# A decided battle already owns the screen: GameOverScreen pauses the tree and takes
 	# Escape for 'back to menu'. Never stack a pause menu on top of that.
@@ -667,6 +695,11 @@ func is_mouse_over_ui(mouse_position: Vector2) -> bool:
 
 	# Same for the pause menu: it is full-screen and modal while it is up.
 	if pause_menu and pause_menu.is_open():
+		return true
+
+	# And for the unit detail page: it deliberately blocks the map, so no click made while
+	# it is open may reach the board underneath it.
+	if unit_detail_page and is_instance_valid(unit_detail_page) and unit_detail_page.is_open():
 		return true
 
 	# The Settings / Pause buttons are part of the HUD chrome.

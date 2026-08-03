@@ -66,7 +66,8 @@ const _TABLE := {
 # colour-blind player still gets a signal).
 #
 # The set is deliberately tiny and drawn only from characters this project already
-# renders elsewhere (the sidebar's "Unit Summary ▲ / ▼"). Anything exotic -- a skull,
+# renders elsewhere (the ▲ / ▼ on the battle card's stat chips, via MoveStatVisuals).
+# Anything exotic -- a skull,
 # a heavy plus, a shield -- is outside Godot's default font and would draw as tofu on
 # the one surface (a Label3D over the battlefield) that cannot fall back to another
 # font. Category, not identity: the NAME and the COLOUR identify the status, the
