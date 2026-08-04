@@ -8,11 +8,44 @@ Grid movement, unit stats & combat, pluggable turn systems, and online multiplay
 
 ## Running the game
 
+**From the editor (development):**
+
 1. Install **Godot 4.6** (Forward+ renderer).
 2. Open `project.godot` in the Godot editor.
 3. Press **F5** (or Play) — the main scene is `menus/MainMenu.tscn`.
 
 There is no external build step; GDScript is interpreted by the engine.
+
+**As a standalone build (playtesting, second machine):**
+
+The Windows build is a single self-contained exe (the game data is embedded).
+It is NOT committed to git — produce it locally:
+
+```
+godot --headless --export-release "Windows Desktop" build/Conquest.exe
+```
+
+(Requires export templates once: Editor → Manage Export Templates → Download.)
+Copy `build/Conquest.exe` to any Windows machine and run it — no install, no
+Godot needed on the target machine.
+
+## Playing multiplayer on two machines
+
+Short version: build the exe (above), copy it to machine B, then on machine A
+choose **Host** and on machine B **Join** with machine A's LAN IP (shown on the
+host screen). Both machines must run the SAME build — the version handshake
+refuses mismatches by design, so re-copy the exe after every change you want
+to test.
+
+The full walkthrough — hosting, joining, the version gate, what a correct
+end-to-end match looks like, known limitations, and how to capture logs for a
+bug report — is in [`docs/NETWORK_TESTING.md`](docs/NETWORK_TESTING.md).
+Same-machine testing (two instances over localhost) also works: launch the exe
+twice and join `127.0.0.1`.
+
+Internet play (outside your LAN) currently needs port forwarding on the host's
+router (default port 8910); friend-battle relay is planned with the Steam
+integration.
 
 ## Running the tests
 
