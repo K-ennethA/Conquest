@@ -126,6 +126,7 @@ func open(unit) -> void:
 	if unit == null or typeof(unit) != TYPE_OBJECT or not is_instance_valid(unit):
 		return
 	_unit = unit
+	_fit_card_width()
 	_populate(unit)
 	_set_visible(true)
 	if _close_button != null:
@@ -215,16 +216,22 @@ func _build() -> void:
 		centre.add_theme_constant_override("margin_" + side, int(MARGIN))
 	_root.add_child(centre)
 
-	var limiter := CenterContainer.new()
-	limiter.name = "Limiter"
-	centre.add_child(limiter)
-
+	# MEASURED FAILURE, and the reason the card is parented straight to the margin frame
+	# rather than to a CenterContainer: a [CenterContainer] sizes its child to the child's
+	# MINIMUM, and the minimum height of a VERTICALLY SCROLLING [ScrollContainer] is zero.
+	# So the card measured 228px tall -- the header, the footer and NOTHING BETWEEN -- and
+	# every section below (stats, moves, abilities, statuses) was built, parented, and
+	# allotted no height at all. On screen: "clicking details doesn't show full details".
+	# The old suite read Label text out of the node tree, so it never noticed.
+	#
+	# A MarginContainer honours size flags, so SIZE_FILL vertically hands the card the whole
+	# window and the scroll region finally has room to be a document. The width is still
+	# capped -- see _fit_card_width -- because a 1600px-wide wall of body text is unreadable.
 	_card = PanelContainer.new()
 	_card.name = "Card"
-	_card.custom_minimum_size = Vector2(MAX_CARD_WIDTH, 0)
 	_card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_card.size_flags_vertical = Control.SIZE_FILL
-	limiter.add_child(_card)
+	centre.add_child(_card)
 
 	var pad := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -262,6 +269,21 @@ func _build() -> void:
 	_close_button.custom_minimum_size = Vector2(160, 44)
 	_close_button.pressed.connect(close)
 	footer.add_child(_close_button)
+
+	# The card is SHRINK_CENTER horizontally, so its width IS its minimum width -- which
+	# therefore has to be restated whenever the window changes. Never wider than
+	# MAX_CARD_WIDTH, and never wider than the window (the phone build's case).
+	_root.resized.connect(_fit_card_width)
+	_fit_card_width()
+
+
+func _fit_card_width() -> void:
+	if _card == null or not is_instance_valid(_card):
+		return
+	var available: float = MAX_CARD_WIDTH
+	if _root != null and is_instance_valid(_root) and _root.size.x > 0.0:
+		available = _root.size.x - MARGIN * 2.0
+	_card.custom_minimum_size.x = maxf(0.0, minf(MAX_CARD_WIDTH, available))
 
 
 func _build_header() -> Control:

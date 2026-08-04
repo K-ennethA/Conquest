@@ -249,7 +249,11 @@ static func build_move_card(move: MoveResource, live: Dictionary = {}) -> PanelC
 	var accent: Color = category_color(move.category)
 
 	var card := PanelContainer.new()
-	card.name = "MoveCard"
+	# Named per MOVE, not just "MoveCard". Sibling names must be unique, so a second plain
+	# "MoveCard" is silently mangled by the engine into "@MoveCard@<n>" -- which makes the
+	# node tree unreadable in the remote inspector and makes any name query over the page
+	# quietly return one card per section instead of all of them.
+	card.name = _card_name("MoveCard", move.move_id)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.add_theme_stylebox_override("panel", MenuTheme.card_box(accent))
 
@@ -376,7 +380,7 @@ static func move_stats_text(move: MoveResource) -> String:
 ## [param live] when there are any.
 static func build_ability_card(ability: AbilityResource, live: Dictionary = {}) -> PanelContainer:
 	var card := PanelContainer.new()
-	card.name = "AbilityCard"
+	card.name = _card_name("AbilityCard", ability.id)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.add_theme_stylebox_override("panel", MenuTheme.card_box(ABILITY_ACCENT))
 
@@ -517,7 +521,7 @@ static func _build_status_card(condition, count: int, turns_left: int) -> PanelC
 	var accent: Color = info.get("color", MenuTheme.GOLD)
 
 	var card := PanelContainer.new()
-	card.name = "StatusCard"
+	card.name = _card_name("StatusCard", condition.id if "id" in condition else &"")
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.add_theme_stylebox_override("panel", MenuTheme.card_box(accent))
 
@@ -550,6 +554,18 @@ static func _build_status_card(condition, count: int, turns_left: int) -> PanelC
 # ---------------------------------------------------------------------------
 # Small shared helpers
 # ---------------------------------------------------------------------------
+
+## "MoveCard_root_slam" -- a card node name that is unique among its siblings and still
+## begins with the card KIND, so a `find_children("MoveCard*")` over the page reaches every
+## card of that kind. Godot's own uniquifier would produce "@MoveCard@41", which matches no
+## readable pattern and reads as noise in the remote scene tree.
+## Characters Node names forbid (`. : @ / " %`) are stripped from the id.
+static func _card_name(kind: String, id: StringName) -> String:
+	var suffix: String = String(id).validate_node_name().strip_edges()
+	if suffix == "":
+		return kind
+	return "%s_%s" % [kind, suffix]
+
 
 ## Summarise a move/ability by joining every effect's own describe().
 static func join_effects(effects: Array) -> String:

@@ -28,7 +28,9 @@ class_name UnitInfoPanel
 ##   * ONE row of four stat chips -- ATK / DEF / SPD / MOV -- showing EFFECTIVE values,
 ##     tinted and arrowed when they are off base (see [method _build_stat_chip]);
 ##   * the status strip: one compact chip per active condition, wrapping to at most two
-##     rows, with a "+N" overflow marker.
+##     rows, with a "+N" overflow marker. Each chip NAMES its status, its severity and its
+##     remaining turns, and ELABORATES on hover (see [method chip_tooltip]) -- a coloured
+##     pip the player has to guess at is not a readout.
 ##
 ## There is NO ability list, NO move list, NO lore, and no damage maths -- the forecast
 ## panel already owns that.
@@ -98,6 +100,15 @@ const DETAILS_BUTTON_HEIGHT: float = 30.0
 ## marker. Matches [constant StatusVisuals.MAX_PIPS] so the card, the hover panel and the
 ## world-space health bar all overflow at the same point.
 const MAX_STATUS_CHIPS: int = 4
+
+## Widest one status chip's LABEL may claim.
+##
+## Two chips plus their pill padding and the flow's separation have to fit one row of the
+## strip: 2 * (104 + 5 + 5) + 4 == 232, inside [constant CONTENT_WIDTH] (240). That is what
+## makes [constant MAX_STATUS_CHIPS] chips land in exactly the two rows the strip reserves,
+## so a full strip is never silently clipped. A status whose label is longer than this is
+## ellipsised at the cap -- and its tooltip still spells the whole thing out.
+const CHIP_MAX_WIDTH: float = 104.0
 
 # --- Code-built rows ----------------------------------------------------------
 # Built in _ready and appended to the scene's VBox (the .tscn owns only the static rows).
@@ -201,6 +212,45 @@ static func discipline_label(label: Label, wrap_width: float) -> void:
 		if text != "":
 			label.text = ""
 			label.text = text
+
+
+## Give [param label] a minimum WIDTH equal to the text it actually has to draw, capped at
+## [param cap]. Returns the width claimed.
+##
+## MEASURED FAILURE, and the only reason this exists. [method discipline_label] clips a
+## non-wrapping label so a long name cannot widen the card -- and a clipped Label (or ANY
+## Label whose `text_overrun_behavior` is not NO_TRIMMING) reports a minimum WIDTH of 1px.
+## That is Godot's documented contract, not a bug, and inside a BoxContainer it is exactly
+## what we want: the row has a width already and the label just trims into it.
+##
+## Inside an [HFlowContainer] it is a disaster: a flow lays every child out at ITS OWN
+## minimum, so each status chip was drawn 11px wide with its label trimmed away to nothing.
+## On screen that is a small coloured DOT per status -- which is precisely what was
+## reported ("a small green dot for poison, but it doesn't elaborate"). The old suites read
+## `ChipLabel.text`, i.e. the string the chip was HANDED, so none of them ever saw it.
+##
+## So a chip label states its width explicitly. `custom_minimum_size` wins over the
+## reported minimum, which keeps the ellipsis available for the over-long case while still
+## reserving room for the ordinary one.
+static func fit_chip_label(label: Label, cap: float = CHIP_MAX_WIDTH) -> float:
+	if label == null or not is_instance_valid(label):
+		return 0.0
+	var font: Font = label.get_theme_font("font")
+	if font == null:
+		font = ThemeDB.fallback_font
+	if font == null:
+		# No font to measure with (a stripped harness): claim the cap rather than 1px, so
+		# the chip is at worst too wide and never invisible.
+		label.custom_minimum_size.x = cap
+		return cap
+	var font_size: int = label.get_theme_font_size("font_size")
+	if font_size <= 0:
+		font_size = ThemeDB.fallback_font_size
+	var needed: float = font.get_string_size(
+			label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	var claimed: float = minf(ceilf(needed), cap)
+	label.custom_minimum_size.x = claimed
+	return claimed
 
 
 ## Apply [method discipline_label] to every Label under [param node]. Static so the chip
@@ -440,6 +490,10 @@ func _build_status_strip() -> void:
 	_status_strip.custom_minimum_size = Vector2(0, STATUS_STRIP_HEIGHT)
 	_status_strip.clip_contents = true
 	_status_strip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# IGNORE on the frame and the flow, PASS on the chips: a Control with IGNORE is skipped
+	# as a hit-test CANDIDATE but its children are still traversed, so the chips underneath
+	# these two are reachable for their tooltips while neither of the wrappers can swallow
+	# a click meant for the card.
 	_status_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(_status_strip)
 
@@ -474,7 +528,11 @@ func _update_status_strip(unit) -> void:
 		none_label.text = "No active effects"
 		none_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
 		none_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
-		discipline_label(none_label, CHIP_WRAP_WIDTH)
+		none_label.clip_text = true
+		none_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		# NOT discipline_label: this label is inside the flow, where a 1px minimum means it
+		# is drawn as nothing at all (see fit_chip_label).
+		fit_chip_label(none_label, CHIP_WRAP_WIDTH)
 		_status_flow.add_child(none_label)
 		return
 
@@ -487,15 +545,17 @@ func _update_status_strip(unit) -> void:
 		if condition == null:
 			continue
 		var info: Dictionary = StatusVisuals.info_for(condition)
-		var text: String = compact_status_text(
-				condition,
-				int(group.get("count", 1)),
-				int(group.get("turns_left", StatusVisuals.TURNS_FROM_CONDITION)))
-		_status_flow.add_child(_build_status_chip(text, info.get("color", ConquestTheme.AMBER)))
+		var count: int = int(group.get("count", 1))
+		var turns: int = int(group.get("turns_left", StatusVisuals.TURNS_FROM_CONDITION))
+		_status_flow.add_child(_build_status_chip(
+				compact_status_text(condition, count, turns),
+				info.get("color", ConquestTheme.AMBER),
+				chip_tooltip(condition, count, turns)))
 
 	if hidden > 0:
 		_status_flow.add_child(_build_status_chip(
-				StatusVisuals.overflow_label(hidden), StatusVisuals.OVERFLOW_COLOR))
+				StatusVisuals.overflow_label(hidden), StatusVisuals.OVERFLOW_COLOR,
+				overflow_tooltip(groups, shown)))
 
 
 ## "2t" / "1t" / "∞" -- the compact turn count this card uses.
@@ -526,13 +586,52 @@ static func compact_status_text(condition, count: int = 1,
 	]
 
 
+## What a chip says when the player HOVERS it: the one-line label, then a plain-English
+## sentence for what the status is doing to the unit.
+##
+## This is the "elaborate" half of the chip. The strip has ~104px per chip, which is enough
+## to NAME a status and time it and no more -- so the explanation lives here, one hover
+## away, and the full page (with the same sentence on a status card) stays one click away
+## for everything else.
+static func chip_tooltip(condition, count: int = 1,
+		turns_left: int = StatusVisuals.TURNS_FROM_CONDITION) -> String:
+	var head: String = StatusVisuals.chip_text(condition, count, turns_left)
+	var detail: String = StatusVisuals.describe_condition(condition)
+	if detail == "":
+		return head
+	return "%s\n%s" % [head, detail]
+
+
+## What the "+N" marker says on hover: the statuses it is standing in for, named. The
+## overflow marker COUNTS what did not fit; this is how the player finds out what that was
+## without opening the page.
+static func overflow_tooltip(groups: Array, shown: int) -> String:
+	var lines: PackedStringArray = []
+	for i in range(shown, groups.size()):
+		var group: Dictionary = groups[i]
+		var condition = group.get("condition", null)
+		if condition == null:
+			continue
+		lines.append(StatusVisuals.chip_text(
+				condition,
+				int(group.get("count", 1)),
+				int(group.get("turns_left", StatusVisuals.TURNS_FROM_CONDITION))))
+	return "\n".join(lines)
+
+
 ## A compact colour-coded pill: dim fill, 1px frame in the status colour, cream text.
 ## Same recipe as the hover card's chips, so the two surfaces read identically.
-func _build_status_chip(text: String, color: Color) -> PanelContainer:
+##
+## [param tooltip] defaults to the chip's own text, so a caller with nothing more to say
+## still gets a legible hover.
+func _build_status_chip(text: String, color: Color, tooltip: String = "") -> PanelContainer:
 	var chip := PanelContainer.new()
 	chip.name = "StatusChip"
-	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	chip.tooltip_text = text
+	# PASS, not IGNORE: an IGNORE control is skipped by the hit test, and a control the hit
+	# test never returns can never show a tooltip. PASS lets the hover land here while the
+	# click still travels on to the card underneath.
+	chip.mouse_filter = Control.MOUSE_FILTER_PASS
+	chip.tooltip_text = tooltip if tooltip != "" else text
 
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = color.darkened(0.35)
@@ -554,6 +653,10 @@ func _build_status_chip(text: String, color: Color) -> PanelContainer:
 	label.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	label.clip_text = true
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	# ...and therefore a reported minimum width of 1px, which inside the strip's flow means
+	# "draw me as a dot". State the width the text needs, capped so the strip still holds
+	# MAX_STATUS_CHIPS chips in its two rows. See fit_chip_label.
+	fit_chip_label(label)
 	chip.add_child(label)
 
 	return chip
