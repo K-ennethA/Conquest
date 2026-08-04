@@ -1,28 +1,32 @@
 extends RefCounted
 class_name ElementChart
 
-## Data-driven TYPE-MATCHUP chart (Fire-Emblem / Pokemon style).
+## Static façade over the ONE editable element resource,
+## [code]res://game/combat/resources/element_chart.tres[/code] ([ElementChartResource]).
 ##
 ## A move carries an [member MoveResource.element]; a unit carries a
-## [member CharacterResource.element] TYPE; a tile contributes an element via the
-## effect standing on it (see [constant TILE_ELEMENT]). Damage is scaled by three
-## coherent, independent factors, all resolved HERE so tuning lives in one place:
+## [member CharacterResource.element]; a tile contributes an element through the effect
+## standing on it. Damage is scaled by three coherent, independent factors, all resolved
+## HERE so tuning lives in one place — and all of them read their numbers from the .tres,
+## never from a constant in this file:
 ##
-##   1. MOVE vs TYPE effectiveness -- FIRE is super-effective into a NATURE unit
-##      (Ember Storm vs the tree boss), water douses fire, and so on.
-##   2. TILE amplifier -- a target standing on a tile whose element MATCHES the
-##      move's element takes more (a fire move into a target on a burning tile).
-##   3. TYPE BENEFIT -- a unit standing on a tile of ITS OWN element is "at home"
-##      and takes slightly less damage.
+##   1. MATCHUP — the matrix. Attacker element vs defender element (fire into nature).
+##   2. TILE amplifier — a target standing on a tile whose element MATCHES the move's
+##      element takes more (a fire move into a target standing in flames).
+##   3. HOME benefit — a unit standing on a tile of ITS OWN element is "at home" and
+##      takes slightly less.
 ##
-## MISSING-ELEMENT DEGRADES TO NEUTRAL: an empty move element or an empty unit
-## type never matches any chart row / tile, so every helper returns [constant
-## NEUTRAL] (1.0). A move or unit authored before this system behaves exactly as
-## it did before -- nothing is scaled.
+## UNKNOWN PAIRS ARE NEUTRAL, ALWAYS. An empty move element, an empty unit element, an
+## element the chart has never heard of, a null, or outright garbage all resolve to
+## [constant NEUTRAL] (1.0). Nothing here can push an error or fail a lookup — a move or
+## character authored before this system, or authored during the content phase with a
+## brand-new element, behaves exactly as if the chart did not exist.
 ##
-## Element StringNames match the values existing moves already use and the tags
-## [method ConquestTheme.element_color] colours by, so authoring stays one
-## vocabulary end to end.
+## Deterministic: no RNG, no time, no mutable global state. Lockstep peers and replays
+## resolve identical damage from identical inputs, and the replay format is untouched.
+
+## The single resource every number is read from.
+const CHART_PATH: String = "res://game/combat/resources/element_chart.tres"
 
 const FIRE: StringName = &"fire"
 const WATER: StringName = &"water"
@@ -32,154 +36,164 @@ const EARTH: StringName = &"earth"
 const HOLY: StringName = &"holy"
 const DARK: StringName = &"dark"
 
-const SUPER_EFFECTIVE: float = 1.5
-const RESISTED: float = 0.75
+## The only multiplier that is a code constant, because it is the IDENTITY — "nothing
+## applies". Every real number (how strong is strong, how much a tile adds) is data.
 const NEUTRAL: float = 1.0
 
-## Modest environment amplifier when a move's element matches the tile under the
-## target (fire move + burning tile). Kept light and separate from effectiveness.
-const TILE_MATCH_BONUS: float = 1.25
-## The "type benefit": a unit on a tile of its OWN element takes this fraction of
-## incoming damage (a small, tunable defensive perk). 0.9 = 10% less.
-const TYPE_BENEFIT_SCALE: float = 0.9
+## Verdict a multiplier reads as, for UI and logs. THE vocabulary — panels label a
+## matchup with exactly these three.
+const LABEL_STRONG: StringName = &"strong"
+const LABEL_RESISTED: StringName = &"resisted"
+const LABEL_NEUTRAL: StringName = &"neutral"
 
-## ATTACKER element -> { DEFENDER type -> multiplier }. Any pairing NOT listed is
-## [constant NEUTRAL]. A coherent ring (FIRE->NATURE->EARTH... plus WATER, WIND and
-## a HOLY/DARK opposition) authored so it is easy to read and retune in one spot.
-const CHART: Dictionary = {
-	FIRE:   { NATURE: SUPER_EFFECTIVE, WATER: RESISTED, EARTH: RESISTED },
-	WATER:  { FIRE: SUPER_EFFECTIVE, EARTH: SUPER_EFFECTIVE, NATURE: RESISTED, WATER: RESISTED },
-	NATURE: { WATER: SUPER_EFFECTIVE, EARTH: SUPER_EFFECTIVE, FIRE: RESISTED, WIND: RESISTED },
-	WIND:   { NATURE: SUPER_EFFECTIVE, EARTH: SUPER_EFFECTIVE, WIND: RESISTED },
-	EARTH:  { FIRE: SUPER_EFFECTIVE, WATER: RESISTED, WIND: RESISTED, NATURE: RESISTED },
-	HOLY:   { DARK: SUPER_EFFECTIVE, HOLY: RESISTED },
-	DARK:   { HOLY: SUPER_EFFECTIVE, DARK: RESISTED },
-}
-
-## Light TILE-EFFECT-id -> element mapping. Keyed on [member TileEffectResource.id]
-## (what a cell exposes at combat time through [code]board.tile_effects_at[/code]),
-## so a burning tile reads as FIRE without any refactor of the tile resources. A
-## couple of raw tile ids are included too, harmlessly, in case a board ever
-## surfaces them. Extend this dictionary to give new terrain an element.
-const TILE_ELEMENT: Dictionary = {
-	&"fire": FIRE,
-	&"scorching_vent": FIRE,
-	&"scorched": FIRE,
-	&"molten_lava": FIRE,
-	&"magma_vent": FIRE,
-	&"empowering_water": WATER,
-	&"deep_water": WATER,
-	&"slippery_ice": WATER,
-	&"tall_grass": NATURE,
-	&"vine_trap": NATURE,
-	&"sacred_meadow": HOLY,
-	&"fortify": EARTH,
-}
+## Cached chart. Loaded once on first use; [method set_chart] swaps it for a test.
+static var _chart: ElementChartResource = null
 
 
-## Multiplier for [param attacker_element] striking [param defender_type].
-## Returns [constant NEUTRAL] whenever either side is empty or the pairing is not
-## authored, so a missing element is always a no-op.
-static func effectiveness(attacker_element, defender_type) -> float:
-	var atk: StringName = StringName(attacker_element)
-	var def: StringName = StringName(defender_type)
-	if atk == &"" or def == &"":
-		return NEUTRAL
-	if not CHART.has(atk):
-		return NEUTRAL
-	var row: Dictionary = CHART[atk]
-	return float(row.get(def, NEUTRAL))
+## The live chart resource. Never null: if the .tres is missing or fails to load, this
+## hands back an EMPTY chart, so every lookup answers [constant NEUTRAL] and the game
+## keeps running unscaled rather than erroring. Quiet failure, per the project rule.
+static func chart() -> ElementChartResource:
+	if _chart == null:
+		var loaded: Resource = null
+		if ResourceLoader.exists(CHART_PATH):
+			loaded = load(CHART_PATH)
+		if loaded is ElementChartResource:
+			_chart = loaded
+		else:
+			_chart = ElementChartResource.new()
+	return _chart
 
 
-## Move-vs-type effectiveness for [param move] landing on [param target].
+## Swap the chart (tests: pin an exact matrix without touching the shipped .tres).
+## Pass null to go back to the authored resource.
+static func set_chart(resource) -> void:
+	_chart = resource if resource is ElementChartResource else null
+
+
+## Drop the cache so the next lookup re-reads the .tres. Pair with [method set_chart]
+## in a test's `after_each`.
+static func reset_chart() -> void:
+	_chart = null
+
+
+# --- THE pinned lookup -------------------------------------------------------
+
+
+## Multiplier for [param attacker_element] striking [param defender_element].
+##
+## THE matchup question, and the one a UI asks. Unknown or absent pairs — either side
+## empty, an element with no row, a row with no such column, a null, a garbage type —
+## return [constant NEUTRAL]. It cannot crash and it cannot log.
+static func multiplier(attacker_element, defender_element) -> float:
+	return chart().multiplier(attacker_element, defender_element)
+
+
+## The verdict [param mult] reads as: [constant LABEL_STRONG] above 1.0,
+## [constant LABEL_RESISTED] below it, [constant LABEL_NEUTRAL] at it.
+static func label_for(mult: float) -> StringName:
+	if not is_finite(mult) or is_equal_approx(mult, NEUTRAL):
+		return LABEL_NEUTRAL
+	return LABEL_STRONG if mult > NEUTRAL else LABEL_RESISTED
+
+
+## The elements the chart authors ([member ElementChartResource.elements]).
+static func vocabulary() -> Array[StringName]:
+	return chart().elements
+
+
+# --- Applied to a hit --------------------------------------------------------
+
+
+## Legacy alias for [method multiplier]. Kept because it names the concept the damage
+## pipeline talks about ("how effective is this?"), and because call sites predate the
+## pinned name.
+static func effectiveness(attacker_element, defender_element) -> float:
+	return multiplier(attacker_element, defender_element)
+
+
+## Matchup multiplier for [param move] landing on [param target].
 static func type_scale_for(move, target) -> float:
-	return effectiveness(move_element(move), element_of(target))
+	return multiplier(move_element(move), element_of(target))
 
 
-## Environment amplifier: [constant TILE_MATCH_BONUS] when the move's element
-## matches an element of the tile under [param target] (e.g. a fire move hitting a
-## target that stands on a burning tile), else [constant NEUTRAL].
+## Environment amplifier: [member ElementChartResource.tile_match_bonus] when the move's
+## element matches an element of the tile under [param target], else [constant NEUTRAL].
 static func tile_scale_for(move, target, board) -> float:
 	var me: StringName = move_element(move)
 	if me == &"":
 		return NEUTRAL
 	for el in tile_elements_under(target, board):
 		if StringName(el) == me:
-			return TILE_MATCH_BONUS
+			return chart().tile_bonus()
 	return NEUTRAL
 
 
-## Type benefit: [constant TYPE_BENEFIT_SCALE] when [param target] stands on a tile
-## of its OWN element ("at home"), else [constant NEUTRAL]. A light, tunable hook.
+## Home benefit: [member ElementChartResource.own_tile_benefit] when [param target]
+## stands on a tile of its OWN element, else [constant NEUTRAL].
 static func type_benefit_scale_for(target, board) -> float:
 	var te: StringName = element_of(target)
 	if te == &"":
 		return NEUTRAL
 	for el in tile_elements_under(target, board):
 		if StringName(el) == te:
-			return TYPE_BENEFIT_SCALE
+			return chart().home_benefit()
 	return NEUTRAL
 
 
-## The FULL element multiplier applied to one hit: move-vs-type effectiveness,
-## folded with the tile amplifier and the defender's own-element tile benefit.
+## The FULL element multiplier applied to one hit: matchup, folded with the tile
+## amplifier and the defender's own-element tile benefit.
 ##
-## THE single entry point both [method DamageEffect.apply] and
-## [method MoveExecutor.preview_vs] resolve through, so the combat forecast can
-## never disagree with the resolved hit. Every factor is deterministic (it depends
-## only on the move's element and the target's current state), so previewing it is
-## honest information, not an exploit. Returns [constant NEUTRAL] when nothing
-## applies -- the missing-element no-op path.
+## THE single entry point the resolved hit and the forecast both resolve through (see
+## [DamageMath]), so preview and reality can never disagree. Every factor is
+## deterministic — it depends only on the move's element and the target's current state
+## — so previewing it is honest information, not an exploit. Returns [constant NEUTRAL]
+## when nothing applies, which is the missing-element no-op path.
 static func damage_scale_for(move, target, board) -> float:
 	return type_scale_for(move, target) \
 		* tile_scale_for(move, target, board) \
 		* type_benefit_scale_for(target, board)
 
 
+# --- Reading elements off duck-typed things ----------------------------------
+
+
 ## Duck-typed element of [param move] (its [member MoveResource.element]), or &"".
 static func move_element(move) -> StringName:
 	if move == null:
 		return &""
-	var e = move.get("element")
-	return StringName(e) if e != null else &""
+	return ElementChartResource.key_of(move.get("element"))
 
 
-## Duck-typed TYPE of [param unit]: prefer a [code]get_element()[/code] method
-## (a live [Unit] reads its backing character), else an [code]element[/code]
-## property (mocks), else &"" (neutral).
+## Duck-typed element of [param unit]: prefer a [code]get_element()[/code] method (a
+## live [Unit] reads its backing character), else an [code]element[/code] property
+## (mocks), else &"" (neutral).
 static func element_of(unit) -> StringName:
 	if unit == null:
 		return &""
 	if unit.has_method("get_element"):
-		return StringName(unit.get_element())
-	var e = unit.get("element")
-	return StringName(e) if e != null else &""
+		return ElementChartResource.key_of(unit.get_element())
+	return ElementChartResource.key_of(unit.get("element"))
 
 
 ## Distinct elements contributed by the tile effects under [param unit]. Reads the
-## cell's effects through [param board]'s [code]tile_effects_at[/code] (falling back
-## to the live [code]CombatServices[/code], mirroring [TerrainStats]), maps each
-## effect id through [constant TILE_ELEMENT], and dedupes. Null-safe: no board, no
-## cell lookup, or a mock exposing neither simply yields an empty list.
+## cell's effects through [param board]'s [code]tile_effects_at[/code] (falling back to
+## the live [code]CombatServices[/code], mirroring [TerrainStats]), maps each effect id
+## through [member ElementChartResource.tile_elements], and dedupes. Null-safe: no
+## board, no cell lookup, or a mock exposing neither simply yields an empty list.
 static func tile_elements_under(unit, board) -> Array:
 	var out: Array = []
 	if unit == null:
 		return out
+	var res := chart()
 	var cell: Vector2i = _cell_of(unit, board)
 	for te in _effects_at(cell, board):
 		if te == null:
 			continue
-		var id: StringName = _effect_id(te)
-		if id != &"" and TILE_ELEMENT.has(id):
-			var el: StringName = TILE_ELEMENT[id]
-			if el not in out:
-				out.append(el)
+		var el: StringName = res.tile_element(te.get("id"))
+		if el != &"" and el not in out:
+			out.append(el)
 	return out
-
-
-static func _effect_id(te) -> StringName:
-	var v = te.get("id")
-	return StringName(v) if v != null else &""
 
 
 static func _cell_of(unit, board) -> Vector2i:

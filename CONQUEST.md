@@ -65,5 +65,16 @@ named file is the canonical example — read it before you write the same kind o
    *validated resource* as inert JSON.
    → `game/community/CommunityClient.gd`, `game/challenge/ChallengeCodec.gd`
 
+9. **Element matchups live in `element_chart.tres`, and preview shares ONE function with
+   the live hit.** Every matchup number is data in
+   `game/combat/resources/element_chart.tres` — never a constant in code — so retuning a
+   matchup is content work; an unknown or unauthored pair is **neutral (1.0)**, never an
+   error, so a brand-new element can be authored without touching the framework. The
+   damage the forecast shows and the damage the board applies both come from
+   `DamageMath.apply_scales` / `DamageMath.preview`. Never re-implement a damage rule in a
+   preview path: add it to `DamageMath` and both sides get it.
+   → `game/combat/ElementChart.gd`, `game/combat/DamageMath.gd`, pinned by
+   `tests/integration/test_element_preview_parity.gd`
+
 Testing conventions (orphans, global state, temp paths, shared doubles) live in
 [tests/README.md](tests/README.md).

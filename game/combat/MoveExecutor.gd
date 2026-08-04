@@ -50,34 +50,44 @@ static func execute(move: MoveResource, caster, board, aim_cell: Vector2i, rng: 
 	}
 
 
-## Non-mutating combat forecast of [param move] from [param caster] against
-## [param target] -- what the FE-style forecast panel shows. Never rolls RNG.
-## Returns { hit_pct, crit_pct, damage, crit_damage, target_hp, remaining, lethal }.
+## Non-mutating combat FORECAST of [param move] from [param caster] against
+## [param target] -- what the FE-style forecast panel shows. Never rolls RNG, never
+## mutates anything.
 ##
-## [param board] is optional and trailing, so every existing call site is
-## unaffected: omitted, it resolves to the live board exactly as before. It exists
-## because a passive that changes damage may be gated on a CONDITION that needs a
-## board to answer -- Eldroot's Grovebound only reduces damage while it stands on
-## forest. Without a board those conditions fail closed, and the forecast would
-## quietly under-report the boss's toughness while resolution applied it. Callers
-## holding a board (and tests using a mock one) should pass it.
+## Returns { hit_pct, crit_pct, damage, crit_damage, target_hp, remaining, lethal }
+## PLUS the element/ability breakdown [DamageMath.preview] produces:
+## { total, base, element_mult, element_label, ability_bonus_percent, ability_notes }.
+## "damage" and "total" are the same number by construction -- "damage" is the historical
+## key the panel already reads, "total" is the pinned name.
+##
+## THE DAMAGE NUMBER IS NOT COMPUTED HERE. It comes from [method DamageMath.preview],
+## which is the identical function [method DamageEffect.apply] resolves the real hit
+## through, so the forecast cannot drift from reality: there is no second copy of the
+## arithmetic to fall out of step.
+##
+## [param board] is optional and trailing, so every existing call site is unaffected:
+## omitted, it resolves to the live board exactly as before. It exists because a passive
+## that changes damage may be gated on a CONDITION that needs a board to answer --
+## Eldroot's Grovebound only reduces damage while it stands on forest. Without a board
+## those conditions fail closed, and the forecast would quietly under-report the boss's
+## toughness while resolution applied it. Callers holding a board (and tests using a mock
+## one) should pass it.
 static func preview_vs(move: MoveResource, caster, target, board = null) -> Dictionary:
 	if board == null:
 		board = _live_board()
 	var hit_pct := 100.0
 	var crit_pct := 0.0
-	var dmg := 0
 	if move != null:
 		# Include terrain avoid so the forecast matches what resolve_hit will roll.
 		var evasion := float(_stat(target, "evasion")) + float(TerrainStats.bonus_for(target, "evasion"))
 		hit_pct = clampf(move.accuracy * 100.0 - evasion, 0.0, 100.0)
 		crit_pct = clampf(move.crit_chance * 100.0 + float(_stat(caster, "crit")), 0.0, 100.0)
-		# Mode-aware, so the forecast previews the mode that would actually resolve.
-		for effect in move.effects_for(caster):
-			if effect is DamageEffect:
-				dmg += _preview_damage(effect, move, caster, target, board)
+	# Mode-aware (DamageMath reads move.effects_for(caster)), invulnerability-aware, and
+	# element-aware -- all of it the shared implementation, none of it restated here.
+	var preview: Dictionary = DamageMath.preview(caster, target, move, board)
+	var dmg: int = int(preview.get("total", 0))
 	var hp := _hp(target)
-	return {
+	var out := {
 		"hit_pct": hit_pct,
 		"crit_pct": crit_pct,
 		"damage": dmg,
@@ -86,69 +96,8 @@ static func preview_vs(move: MoveResource, caster, target, board = null) -> Dict
 		"remaining": maxi(0, hp - dmg),
 		"lethal": hp > 0 and dmg >= hp,
 	}
-
-
-static func _preview_damage(effect: DamageEffect, move, caster, target, board = null) -> int:
-	# An invulnerable defender takes nothing, so the forecast must SAY nothing --
-	# short-circuited here exactly as DamageEffect.apply() short-circuits, ahead of
-	# mitigation and every scaling step. Showing a mitigated number against a target
-	# that will take 0 is the forecast telling a straight lie.
-	if DamageEffect.is_invulnerable(target):
-		return 0
-	var bonus := 0
-	if effect.scaling_stat != "":
-		bonus = int(round(_stat(caster, effect.scaling_stat) * effect.scale))
-	# Caster-state power (e.g. Prism Bulwark's stored reprisal charges) counts here too, or
-	# the forecast would under-report a charged release -- and the AI, which ranks moves off
-	# this same preview, would dismiss it as weak.
-	var raw: int = effect.power + bonus + effect.bonus_power_for(caster)
-	var mitigated: int = 0
-	match effect.category:
-		CombatTypes.DamageCategory.TRUE:
-			mitigated = maxi(1, raw)
-		CombatTypes.DamageCategory.MAGICAL:
-			var res := _stat_or(target, "magic_defense", _stat_or(target, "defense", 0))
-			mitigated = maxi(1, raw - res)
-		_:
-			mitigated = maxi(1, raw - _stat_or(target, "defense", 0))
-
-	# Predation bonus (e.g. Petalfang's Thornlust vs a snared target). Shown in the
-	# forecast because it is DETERMINISTIC: it depends only on the target's current
-	# state, so revealing it gives the player information, not an exploit. Crit is
-	# deliberately NOT resolved here -- the forecast reports it as a probability and
-	# never rolls, so re-aiming or cancelling can never fish for a favourable roll.
-	#
-	# Routed through DamageEffect's own helper (rather than reimplemented) so the
-	# preview and the actual resolution cannot drift apart. Applied after mitigation
-	# and before crit, matching DamageEffect.apply() exactly.
-	var scale: float = DamageEffect.restricted_scale_for(caster, target, board)
-	if scale > 1.0:
-		mitigated = maxi(1, roundi(float(mitigated) * scale))
-
-	# The attacker's ELEMENT-HUNTER bonus (Vineweave's Grass Cutter vs nature),
-	# routed through DamageEffect's shared helper and applied in the same position
-	# (after the predation bonus, before the defender's reduction) so preview == hit.
-	var elem_bonus: float = DamageEffect.element_bonus_scale_for(caster, target, board)
-	if elem_bonus > 1.0:
-		mitigated = maxi(1, roundi(float(mitigated) * elem_bonus))
-
-	# The DEFENDER's own reduction (e.g. Eldroot's Grovebound while it stands in the
-	# grove). Applied after the attacker's bonus and before crit, matching the order
-	# in DamageEffect.apply() step for step, and routed through the same shared
-	# helper so the two cannot drift.
-	var taken: float = DamageEffect.damage_taken_scale_for(target, board)
-	if not is_equal_approx(taken, 1.0):
-		mitigated = maxi(1, roundi(float(mitigated) * taken))
-
-	# TYPE MATCHUP (move-element vs target-type + tile amplifier + own-element tile
-	# benefit), routed through the SAME ElementChart helper DamageEffect.apply() uses,
-	# applied in the same position (after the defender's reduction, before crit) so the
-	# forecast's damage matches the resolved hit exactly. Deterministic, so previewing
-	# it is honest; a flat 1.0 for unelemented moves/units leaves the number untouched.
-	var element_scale: float = ElementChart.damage_scale_for(move, target, board)
-	if not is_equal_approx(element_scale, 1.0):
-		mitigated = maxi(1, roundi(float(mitigated) * element_scale))
-	return mitigated
+	out.merge(preview)
+	return out
 
 
 ## The live board, when there is one. Only needed so a passive's CONDITION can be
@@ -164,13 +113,6 @@ static func _stat(unit, stat_name: String) -> int:
 	if unit and unit.has_method("get_stat"):
 		return unit.get_stat(stat_name)
 	return 0
-
-
-static func _stat_or(unit, stat_name: String, fallback: int) -> int:
-	if unit and unit.has_method("get_stat"):
-		var v: int = unit.get_stat(stat_name)
-		return v if v > 0 else fallback
-	return fallback
 
 
 static func _hp(unit) -> int:

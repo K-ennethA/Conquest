@@ -33,6 +33,9 @@ const MARGIN := 16.0
 ## Status chips shown before the row collapses into a "+N" overflow marker.
 const MAX_CHIPS := 4
 
+## Widest the element badge on the HP row may claim -- see the arithmetic in _create_ui.
+const ELEMENT_BADGE_MAX_WIDTH := 72.0
+
 ## Green used for the terrain-bonus chip (== ConquestTheme.EL_NATURE). Terrain
 ## avoid is a passive of WHERE the unit stands (tall grass -> +evasion), so it
 ## reads as "nature" green rather than a status colour to set it apart from the
@@ -43,6 +46,9 @@ var _card: PanelContainer
 var _name_label: Label
 var _hp_label: Label
 var _hp_bar: ProgressBar
+## The unit's elemental TYPE, right-aligned on the HP row. Hidden for a unit with no
+## element, so the row is exactly what it was before for two thirds of the roster.
+var _element_badge: PanelContainer
 var _effects_container: HFlowContainer
 
 # The unit currently shown, or null. Lets _on_cursor_moved own a local "stays sticky
@@ -147,12 +153,44 @@ func _create_ui() -> void:
 	sep.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_vb.add_child(sep)
 
+	# The HP row carries the element badge on its right, and that placement is the whole
+	# reason there IS a badge here. The card has no fixed height -- it grows up-and-left
+	# from the bottom-right corner -- so any NEW row would grow the panel, and the brief
+	# was to add the chip only where an existing row has room. This row has room by
+	# measurement, not by hope: "HP 40/40" at 13px is ~58px, the badge is capped at
+	# ELEMENT_BADGE_MAX_WIDTH (72), and 58 + 6 separation + 72 == 136 inside the ~224px
+	# the 240px card leaves after its panel padding.
+	#
+	# VERTICALLY it is free only because the pill gives up its padding. The HP label at
+	# 13px draws 18px; a 12px badge label draws 17px, and at the badge's DEFAULT 1px
+	# top/bottom content margin that is 19px -- one pixel taller than the row, which grows
+	# the card. Measured, and caught by test_the_hover_chip_does_not_grow_the_card. Passing
+	# v_padding = 0 puts the pill at 17px, inside the 18px the row already claimed, so the
+	# row's height (and therefore the card's) is genuinely unchanged.
+	#
+	# The NAME row was the obvious alternative and was rejected: _name_label autowraps,
+	# so taking ~72px off it makes a multi-word boss name ("Eldroot the Hollow Crown")
+	# wrap to a second line -- i.e. it grows the panel for exactly the units a player is
+	# most likely to be inspecting.
+	var hp_row := HBoxContainer.new()
+	hp_row.name = "HPRow"
+	hp_row.add_theme_constant_override("separation", 6)
+	hp_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root_vb.add_child(hp_row)
+
 	_hp_label = Label.new()
 	_hp_label.name = "HPLabel"
 	_hp_label.text = "HP --/--"
 	_hp_label.add_theme_font_size_override("font_size", 13)
+	_hp_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root_vb.add_child(_hp_label)
+	hp_row.add_child(_hp_label)
+
+	_element_badge = ElementVisuals.make_badge(&"", 12, ELEMENT_BADGE_MAX_WIDTH, 0)
+	# This whole subtree is click-through by design (see _ready), so the badge gives up
+	# the tooltip its PASS default would earn it.
+	_element_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hp_row.add_child(_element_badge)
 
 	_hp_bar = ProgressBar.new()
 	_hp_bar.name = "HPBar"
@@ -193,6 +231,8 @@ func show_for_unit(unit) -> void:
 
 	_current_unit = unit
 	_name_label.text = _display_name_of(unit)
+	ElementVisuals.update_badge(
+			_element_badge, ElementVisuals.of_unit(unit), ELEMENT_BADGE_MAX_WIDTH)
 
 	# HP is read through `in` guards: a legacy/mock unit with no stats component
 	# simply shows a dashed readout instead of erroring.

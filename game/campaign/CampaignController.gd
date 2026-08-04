@@ -30,12 +30,17 @@ extends Node
 ## to a [StoryScene] (see [CampaignData]). This controller owns BOTH playbacks because it is
 ## the one object that outlives the scene changes they straddle:
 ##
-##   INTRO -- played by [method play_intro_then_launch], called from Character Select's
-##            campaign confirm branch INSTEAD of its immediate change_scene. The overlay
-##            mounts over the screen the player is already looking at, blocks input to
-##            everything behind it, and the battle scene is only loaded once the story
-##            finishes (or is skipped). A chapter with no intro returns false and the caller
-##            changes scene exactly as it did before.
+##   INTRO -- STAGED here by [method stage_intro_for_launch] (Character Select's campaign
+##            confirm branch) and PLAYED BY THE BATTLE BOOT itself
+##            ([code]GameWorldManager._play_campaign_intro[/code]), which consumes the slot
+##            with [method consume_staged_intro]. Character Select changes scene exactly as
+##            it always did -- the story deliberately does NOT play over the squad picker.
+##            Playing it from inside the boot is what puts the portraits over the LOADED
+##            BATTLE MAP (the Fire Emblem read), and it lands in the one window where the
+##            board, the players and the registered-but-not-yet-active turn system all exist
+##            -- so awaiting it holds the first turn, exactly like the VS clash intro beside
+##            it. This controller only owns the latch; it outlives the scene change the
+##            hand-off straddles, which is why the slot lives here.
 ##   OUTRO -- played from [method _record_result] on a WIN only; a loss never plays one. It
 ##            mounts over the live battle at [constant StoryDialogue.LAYER_INDEX] (135),
 ##            which is above the battle's own "UI" CanvasLayer, so it covers [GameOverScreen]
@@ -79,6 +84,13 @@ var _turns: int = 0
 ## The live story overlay, or null. Exactly one at a time -- mounting a second dismisses
 ## the first (see [method play_story]).
 var _story_overlay: StoryDialogue = null
+
+## The chapter intro STAGED for the next battle boot, or null when none is waiting. Latched
+## on this autoload precisely because the autoload is the one object that survives the
+## Character Select -> GameWorld scene change the hand-off straddles. SINGLE USE: the boot
+## consumes it ([method consume_staged_intro]) so a rematch, a resumed save or a later
+## unrelated battle can never replay a chapter's opening.
+var _staged_intro: StoryScene = null
 
 
 func _ready() -> void:
@@ -177,6 +189,9 @@ func begin() -> bool:
 	_active_rules = WinConditionLibrary.build_rules(map_resource.victory_conditions)
 	_result_recorded = false
 	_turns = 0
+	# A previous chapter's intro that was staged and then abandoned (the player backed out of
+	# the squad pick and picked a different chapter) must not open THIS battle.
+	_staged_intro = null
 
 	get_tree().change_scene_to_file(CHARACTER_SELECT_SCENE)
 	return true
@@ -198,7 +213,9 @@ func cancel() -> void:
 	_active_rules = null
 	_result_recorded = false
 	_turns = 0
-	# A story mounted for a run the player just walked away from must come down with it.
+	# A story mounted for a run the player just walked away from must come down with it --
+	# and one merely QUEUED for its battle must never survive to open an unrelated one.
+	_staged_intro = null
 	_dismiss_story()
 
 
@@ -275,15 +292,33 @@ func play_story(scene: StoryScene, on_done: Callable) -> bool:
 	return true
 
 
-## Play the ACTIVE chapter's intro, then load [param battle_scene_path]. Returns false when
-## there is no intro (or story is suppressed), leaving the caller to change scene itself --
-## see the campaign branch of [code]CharacterSelect._on_confirm_pressed[/code].
-func play_intro_then_launch(battle_scene_path: String) -> bool:
-	return play_story(story_scene_for(_active, INTRO_SCENE_KEY), func() -> void:
-		var tree: SceneTree = get_tree()
-		if tree != null:
-			tree.change_scene_to_file(battle_scene_path)
-	)
+## STAGE the ACTIVE chapter's intro for the battle that is about to be launched, and return
+## whether anything was staged. NOTHING IS SHOWN HERE -- the caller (Character Select's
+## campaign confirm) changes scene immediately, exactly as it does for an unscripted chapter,
+## and the battle boot plays the staged scene over the loaded map.
+##
+## Staging is deliberately UNFILTERED: [method story_suppressed] (the replay guard) is
+## evaluated at CONSUMPTION time instead, because the fact that decides it -- whether this
+## battle is a spectated replay -- belongs to the battle, not to the menu that queued it.
+func stage_intro_for_launch() -> bool:
+	_staged_intro = story_scene_for(_active, INTRO_SCENE_KEY)
+	return _staged_intro != null
+
+
+## True while an intro is waiting for the next battle boot to pick it up.
+func has_staged_intro() -> bool:
+	return _staged_intro != null
+
+
+## Take the staged intro (clearing the slot), or null when there is nothing to play. Returns
+## null -- while still clearing -- when the scene is unplayable or story is suppressed
+## (a replay), so the boot's single call is both "what should I show?" and "the slot is spent".
+func consume_staged_intro() -> StoryScene:
+	var scene: StoryScene = _staged_intro
+	_staged_intro = null
+	if not can_play_story(scene):
+		return null
+	return scene
 
 
 ## True while a story overlay is up. Public so a future caller (a pause menu, a mid-battle

@@ -27,13 +27,14 @@ class_name Compendium
 # currently on screen (see _sync_section_input).
 
 ## Section index -> nav title. Order here IS the nav order.
-const SECTION_TITLES: Array[String] = ["Units", "Tiles", "Maps", "Statuses", "Weather"]
+const SECTION_TITLES: Array[String] = ["Units", "Tiles", "Maps", "Statuses", "Elements", "Weather"]
 
 const SECTION_UNITS := 0
 const SECTION_TILES := 1
 const SECTION_MAPS := 2
 const SECTION_STATUSES := 3
-const SECTION_WEATHER := 4
+const SECTION_ELEMENTS := 4
+const SECTION_WEATHER := 5
 
 ## Hosted gallery scenes, by section index. Sections absent from this map are
 ## built in code by this script (Statuses, Weather).
@@ -41,6 +42,7 @@ const HOSTED_SCENES: Dictionary = {
 	SECTION_UNITS: "res://menus/UnitGallery.tscn",
 	SECTION_TILES: "res://menus/TileGallery.tscn",
 	SECTION_MAPS: "res://menus/MapGallery.tscn",
+	SECTION_ELEMENTS: "res://menus/ElementChartGallery.tscn",
 }
 
 ## Where map resources live, for the Maps count badge (MapGallery owns loading).
@@ -215,6 +217,10 @@ func _section_badge_text(index: int) -> String:
 			return str(_count_maps())
 		SECTION_STATUSES:
 			return str(StatusCatalog.all_paths().size())
+		SECTION_ELEMENTS:
+			# Read live off the chart resource, like every other badge here -- an
+			# element authored during the content phase counts itself.
+			return str(ElementChartGallery.elements().size())
 		SECTION_WEATHER:
 			return "SOON"
 	return ""
@@ -782,9 +788,11 @@ func _input(event: InputEvent) -> void:
 	if typing:
 		return
 
-	# 1-5 jump straight to a section; Up/Down cycle. Galleries use Left/Right for
-	# their pager, so these never collide.
-	if key_event.keycode >= KEY_1 and key_event.keycode <= KEY_5:
+	# 1-9 jump straight to a section; Up/Down cycle. Galleries use Left/Right for
+	# their pager, so these never collide. The range is the DIGIT ROW, not the
+	# section count -- the bounds check below is what keeps it honest, so adding a
+	# section never needs this line edited again.
+	if key_event.keycode >= KEY_1 and key_event.keycode <= KEY_9:
 		var target: int = key_event.keycode - KEY_1
 		if target < SECTION_TITLES.size():
 			_show_section(target)

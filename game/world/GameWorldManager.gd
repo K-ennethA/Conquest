@@ -132,6 +132,11 @@ var _replay_map: MapResource = null
 ## in base CanvasLayer". Same reason this file keeps its arena and challenge probes untyped.
 var _versus_intro = null
 
+## The CAMPAIGN CHAPTER INTRO overlay for THIS battle, or null when this battle did not get one
+## (see [method _play_campaign_intro]). Mounted on the scene root -- [StoryDialogue] carries its
+## own CanvasLayer, exactly like the VS intro beside it.
+var _campaign_intro: StoryDialogue = null
+
 func _ready() -> void:
 	# Discoverable by decoupled systems that need to spawn units mid-battle without a
 	# hard reference (e.g. SummonEffect reaches summon_unit() via this group).
@@ -710,6 +715,86 @@ func get_versus_intro():
 	return _versus_intro
 
 
+# --- Campaign chapter intro ---------------------------------------------------
+
+func _play_campaign_intro() -> void:
+	"""Play the CAMPAIGN CHAPTER INTRO over the loaded battle map, and do not return until it
+	is done. The Fire-Emblem read: portraits and text box over the battlefield the player is
+	about to fight on, rather than over the squad picker they just left.
+
+	The scene is not decided here -- [CampaignController] latched it when the player confirmed
+	their squad, and this consumes that slot (see stage_intro_for_launch /
+	consume_staged_intro). Consumption is what applies the replay guard, and it happens
+	UNCONDITIONALLY once a slot exists, so a staged intro can never leak into a later battle
+	even on the branches below that decline to show it.
+
+	Same insertion point, same shape and the same guards as [method _play_versus_intro]: the
+	board, the players and the registered-but-not-yet-active turn system all exist, and
+	_start_game() below is what activates the turn system -- so awaiting here IS the first-turn
+	hold. A RESUMED mid-battle save is not a battle starting, so it never opens with the
+	chapter's cutscene (_restore_snapshot is still populated at this point; it is only cleared
+	after _start_game). The overlay is context-free and mounter-owned (see [StoryDialogue]), so
+	this frees it once it reports finished.
+
+	A no-op that returns immediately for every non-campaign battle."""
+	if _campaign_intro != null and is_instance_valid(_campaign_intro):
+		return
+
+	var campaign := get_node_or_null("/root/CampaignController")
+	if campaign == null or not campaign.has_method("consume_staged_intro"):
+		return
+	var scene = campaign.consume_staged_intro()
+	if scene == null:
+		return
+	# A resumed battle discards what it consumed rather than playing it.
+	if not _restore_snapshot.is_empty():
+		return
+
+	var tree := get_tree()
+	if tree == null or tree.current_scene == null:
+		return
+	var scene_root: Node = tree.current_scene
+	if scene_root.get_node_or_null("CampaignIntro") != null:
+		return
+
+	var overlay := StoryDialogue.new()
+	_campaign_intro = overlay
+	scene_root.add_child(overlay)
+	# NAMED AFTER the add: StoryDialogue._ready() assigns its own name, so a name set before
+	# this line is silently overwritten and every get_node("CampaignIntro") misses.
+	overlay.name = "CampaignIntro"
+
+	# play() only returns false when there is nothing to show -- and then it emits nothing, so
+	# awaiting `finished` here would hang the boot forever. Take the blocker back down instead.
+	if not overlay.play(scene):
+		_dismiss_campaign_intro()
+		return
+
+	await overlay.finished
+	_dismiss_campaign_intro()
+
+
+## Take the chapter intro down: out of the tree immediately (it stops drawing and stops
+## blocking input on this very call) and queued for deletion. Safe from inside the overlay's
+## own `finished` emission -- removing a node mid-emission is legal, freeing it is not, which
+## is why this queues (mirrors CampaignController._dismiss_story).
+func _dismiss_campaign_intro() -> void:
+	var overlay: StoryDialogue = _campaign_intro
+	_campaign_intro = null
+	if overlay == null or not is_instance_valid(overlay):
+		return
+	var parent: Node = overlay.get_parent()
+	if parent != null:
+		parent.remove_child(overlay)
+	overlay.queue_free()
+
+
+## The live chapter-intro overlay, or null when this battle did not get one. Read-only
+## accessor, for tests and for anything that needs to know the opening scene is still up.
+func get_campaign_intro() -> StoryDialogue:
+	return _campaign_intro
+
+
 ## Latch so an ARENA round resolves exactly once: the enemy-wipe fires BOTH unit_eliminated
 ## and player_eliminated, and after ArenaController finishes the run it is no longer active,
 ## so a second _evaluate_game_end would fall through to the normal game-over path (which
@@ -1166,6 +1251,15 @@ func _setup_local_game() -> void:
 	# is what activates the turn system. Awaiting here therefore IS the first-turn hold: no
 	# turn ticks until the intro finishes or the player skips it. Nothing new gates the boot;
 	# the existing ordering does. A no-op that returns immediately in every other mode.
+	# CAMPAIGN CHAPTER INTRO: the authored opening scene of a campaign chapter, played over the
+	# LOADED MAP for the same reason and at the same seam as the VS clash below it -- awaiting
+	# here holds the first turn. The two are mutually exclusive by mode (a campaign battle is
+	# SINGLE_PLAYER, which the VS gate rejects), and the campaign scene goes first so a future
+	# mode that somehow armed both would still read story-then-clash. A no-op otherwise.
+	await _play_campaign_intro()
+	if not is_inside_tree():
+		return
+
 	await _play_versus_intro()
 	if not is_inside_tree():
 		return

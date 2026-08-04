@@ -1,0 +1,82 @@
+[gd_resource type="Resource" script_class="ElementChartResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/combat/resources/ElementChartResource.gd" id="1_elchart"]
+
+[resource]
+script = ExtResource("1_elchart")
+elements = Array[StringName]([&"fire", &"water", &"nature", &"wind", &"earth", &"holy", &"dark"])
+default_multiplier = 1.0
+matrix = {
+&"dark": {
+&"dark": 0.75,
+&"holy": 1.25
+},
+&"earth": {
+&"earth": 0.75,
+&"water": 1.25
+},
+&"fire": {
+&"fire": 0.75,
+&"nature": 1.25
+},
+&"holy": {
+&"dark": 1.25,
+&"holy": 0.75
+},
+&"nature": {
+&"fire": 1.25,
+&"nature": 0.75
+},
+&"water": {
+&"earth": 1.25,
+&"water": 0.75
+},
+&"wind": {
+&"wind": 0.75
+}
+}
+notes = "SEEDED MATCHUPS -- the framework's starting numbers. Balancing is content work:
+edit the floats here, not the code.
+
+TWO RULES generated every entry below.
+
+1. EVERY ELEMENT RESISTS ITSELF -- 0.75.
+   fire>fire, water>water, nature>nature, wind>wind, earth>earth, holy>holy,
+   dark>dark. Seven entries. A unit is hardest to hurt with its own element, so
+   a mirror match is decided by play rather than by the chart.
+
+2. OPPOSITE PAIRS ARE STRONG BOTH WAYS -- 1.25, authored in both directions.
+   fire <-> nature   (flame burns wood; green chokes out flame)
+   water <-> earth   (water erodes stone; earth dams water)
+   holy <-> dark     (the classic opposition)
+   Six entries -- each pair is listed once per direction, never inferred.
+
+   fire<->nature is the pair with live content today (18 nature moves, 6 nature
+   characters, 1 fire move) and it is the matchup the existing design already
+   leaned on -- Ember Storm into the tree boss. water<->earth is half-live (4
+   earth moves, 2 earth characters, no water content yet).
+
+WIND has no opposite. It is the one element with NO content at all -- no move and
+no character carries it -- so pairing it now would be inventing balance for
+something that does not exist. It self-resists and is otherwise neutral. Give it
+an opposite when wind content is authored.
+
+EVERYTHING ELSE IS NEUTRAL (1.0), including every element this file has never
+heard of. Unlisted is not an error: a move or character authored with a brand new
+element simply plays neutral until someone adds its row here."
+tile_match_bonus = 1.25
+own_tile_benefit = 0.9
+tile_elements = {
+&"deep_water": &"water",
+&"empowering_water": &"water",
+&"fire": &"fire",
+&"fortify": &"earth",
+&"magma_vent": &"fire",
+&"molten_lava": &"fire",
+&"sacred_meadow": &"holy",
+&"scorched": &"fire",
+&"scorching_vent": &"fire",
+&"slippery_ice": &"water",
+&"tall_grass": &"nature",
+&"vine_trap": &"nature"
+}

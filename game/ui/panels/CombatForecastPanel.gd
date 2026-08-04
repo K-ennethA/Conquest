@@ -47,6 +47,16 @@ var _crit_value: Label
 ## number the player already knows from the highlighted tiles; a row that appears exactly
 ## when the reach is NOT the authored one is a signal instead of furniture.
 var _range_value: Label
+## "Strong ×1.5" / "Resisted ×0.75" -- the element matchup, shown ONLY when it is not
+## neutral. Same rule as the Range row above and for the same reason: the overwhelmingly
+## common matchup is ×1.0, and a card that spends a line of a 720p budget printing
+## "Neutral ×1" on every aim has turned a signal into furniture. The damage NUMBER already
+## has the multiplier folded in -- this row names WHY it is what it is.
+var _type_value: Label
+## "+30% (Grass Cutter)" -- what an ability is doing to this specific hit, shown only when
+## some ability is doing something. Read out of the preview's `ability_bonus_percent` /
+## `ability_notes`, so this panel enumerates no abilities of its own.
+var _ability_value: Label
 var _result_value: Label
 var _lethal_label: Label
 ## FE-style HP preview: a red rect over the DEFENDER bar covering exactly the chunk
@@ -171,6 +181,12 @@ func _create_ui() -> void:
 
 	_hit_value = _add_stat_row(stats_vb, "Hit")
 	_dmg_value = _add_stat_row(stats_vb, "Damage")
+	# The breakdown sits DIRECTLY under the number it explains, and both rows default to
+	# hidden -- a neutral, ability-free hit renders exactly the card that shipped before.
+	_type_value = _add_stat_row(stats_vb, "Type")
+	_show_stat_row(_type_value, false)
+	_ability_value = _add_stat_row(stats_vb, "Ability")
+	_show_stat_row(_ability_value, false)
 	_crit_value = _add_stat_row(stats_vb, "Crit")
 	_range_value = _add_stat_row(stats_vb, "Range")
 	_show_stat_row(_range_value, false)
@@ -199,7 +215,8 @@ func _create_ui() -> void:
 
 	# Dark inset plate behind the exchange stats, cream text so it reads on it.
 	plate.add_theme_stylebox_override("panel", ConquestTheme.plate_box())
-	for lbl in [_hit_value, _dmg_value, _crit_value, _range_value, _result_value]:
+	for lbl in [_hit_value, _dmg_value, _crit_value, _range_value, _result_value,
+			_type_value, _ability_value]:
 		lbl.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	for row in stats_vb.get_children():
 		if row is HBoxContainer:
@@ -263,6 +280,39 @@ func _add_stat_row(parent: VBoxContainer, label_text: String) -> Label:
 	parent.add_child(row)
 	return value
 
+# --- The preview source (the one seam) ---------------------------------------
+
+## Where the forecast's numbers come from. Empty by default, meaning
+## [method MoveExecutor.preview_vs] -- the production path, unchanged.
+##
+## THE ONE SEAM, deliberately singular. Every number this card renders arrives in ONE
+## dictionary from ONE call, so a test can hand it a stubbed matchup (or a future combat
+## change can move where the dictionary is built) without this file learning anything new
+## about combat. Set it with [method set_preview_source]; the callable takes
+## `(move, attacker, defender, board)` and returns the preview dictionary.
+var _preview_source: Callable = Callable()
+
+
+## Point the card at a different preview producer. Pass an empty [Callable] to restore
+## the production one. Used by the forecast suites to render a decided matchup without
+## authoring a chart entry, and by any future relocation of the previewer.
+func set_preview_source(source: Callable) -> void:
+	_preview_source = source
+
+
+## The preview dictionary for this aim. Shape (keys read defensively, so a producer that
+## does not carry the newer ones simply renders the card that shipped before):
+##
+##   total / damage, base, hit_pct, crit_pct, crit_damage, target_hp, remaining, lethal,
+##   element_mult: float, element_label: StringName,
+##   ability_bonus_percent: int, ability_notes: Array[String]
+func _preview_for(move, attacker, defender, board = null) -> Dictionary:
+	if _preview_source.is_valid():
+		var out = _preview_source.call(move, attacker, defender, board)
+		return out if out is Dictionary else {}
+	return MoveExecutor.preview_vs(move, attacker, defender, board)
+
+
 # --- Public API -------------------------------------------------------------
 
 func show_forecast(attacker, defender, move: MoveResource) -> void:
@@ -299,7 +349,7 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 	else:
 		_show_stat_row(_range_value, false)
 
-	var preview: Dictionary = MoveExecutor.preview_vs(move, attacker, defender)
+	var preview: Dictionary = _preview_for(move, attacker, defender)
 
 	# Defender column.
 	var target_hp: int = int(preview.get("target_hp", _hp_of(defender)))
@@ -312,7 +362,11 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 	if _move_has_damage(move, attacker):
 		var hit_pct: float = float(preview.get("hit_pct", 100.0))
 		var crit_pct: float = float(preview.get("crit_pct", 0.0))
-		var dmg: int = int(preview.get("damage", 0))
+		# "total" is the previewer's post-everything number (the contract the breakdown
+		# rows below are the explanation OF); "damage" is what the shipped previewer calls
+		# the same thing. Preferring total means the card follows the number the combat
+		# side declares final, and falls back cleanly while only one of the two exists.
+		var dmg: int = int(preview.get("total", preview.get("damage", 0)))
 		var crit_dmg: int = int(preview.get("crit_damage", dmg))
 		var remaining: int = int(preview.get("remaining", target_hp))
 		var lethal: bool = bool(preview.get("lethal", false))
@@ -335,6 +389,8 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 			_dmg_value.add_theme_color_override("font_color", ConquestTheme.HIT_ORANGE)
 		_dmg_value.text = dmg_text
 
+		_update_breakdown_rows(preview, move, defender)
+
 		_crit_value.text = "%d%%" % int(round(crit_pct))
 		_show_stat_row(_crit_value, crit_pct > 0.0)
 
@@ -351,12 +407,76 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 		_show_stat_row(_dmg_value, false)
 		_show_stat_row(_crit_value, false)
 		_show_stat_row(_result_value, false)
+		# A heal or a buff has no matchup and no damage for an ability to modify, so the
+		# breakdown rows go with the damage rows they explain.
+		_show_stat_row(_type_value, false)
+		_show_stat_row(_ability_value, false)
 		_lethal_label.visible = false
 		_hide_damage_preview()
 
 	_cover_viewport()
 	_fit_to_viewport()
 	visible = true
+
+## Explain the damage number: the element matchup, and whatever an ability is adding to
+## or taking off this particular hit.
+##
+## BOTH ROWS ARE SILENT ON THE COMMON CASE. A neutral matchup renders no Type row and a
+## 0% ability bonus renders no Ability row -- so most aims cost the card exactly the
+## height it had before, and a row APPEARING is itself the information. The words and
+## colours come from [ElementVisuals], which is also what puts the element badge on the
+## unit card, so "green means this hit is better for me" is one rule across the HUD.
+##
+## HEIGHT BUDGET. The card is TOP-anchored at [constant TOP_MARGIN] (70) with
+## GROW_DIRECTION_END and no fixed height -- its "flexible region" is the whole card, and
+## these two rows are absorbed by it. The arithmetic at 720p: the card's content is the
+## 4px stripe + a ~22px title + a ~51px combatant row + the stats plate, at 6px
+## separation, and the plate holds up to seven ~19px rows at 3px separation plus the
+## LETHAL line -- so a fully-populated card is ~290px and its bottom edge lands at
+## 70 + 290 == 360, half the 720px window. The two rows add ~44px to a worst case that
+## has ~360px of headroom. `test_battle_element_readout.gd` measures the real rect rather
+## than trusting this comment.
+func _update_breakdown_rows(preview: Dictionary, move, defender) -> void:
+	# The multiplier is the previewer's to decide -- this card only renders it. The
+	# fallback exists so the rows are correct against a previewer that has not yet started
+	# publishing them, and it asks the SAME helper the executor scales damage with, so the
+	# fallback can never disagree with the number printed above it.
+	var mult: float = float(preview.get("element_mult", _fallback_element_mult(move, defender)))
+	var label = preview.get("element_label", null)
+	var matchup: String = ElementVisuals.effectiveness_text(mult, label)
+	if matchup == "":
+		_show_stat_row(_type_value, false)
+	else:
+		if label == null:
+			label = ElementVisuals.label_for_multiplier(mult)
+		_type_value.text = matchup
+		_type_value.add_theme_color_override(
+				"font_color", ElementVisuals.effectiveness_color(label))
+		_show_stat_row(_type_value, true)
+
+	var percent: int = int(preview.get("ability_bonus_percent", 0))
+	var ability: String = ElementVisuals.ability_bonus_text(
+			percent, preview.get("ability_notes", null))
+	if ability == "":
+		_show_stat_row(_ability_value, false)
+	else:
+		_ability_value.text = ability
+		_ability_value.add_theme_color_override(
+				"font_color", ElementVisuals.ability_bonus_color(percent))
+		_show_stat_row(_ability_value, true)
+
+
+## The element multiplier for this hit when the preview did not carry one.
+##
+## [method ElementChart.damage_scale_for] is the single entry point both
+## [method DamageEffect.apply] and the previewer scale damage through, so reading it here
+## gives the row the same verdict the hit will have -- never a re-derivation. Null board:
+## the chart resolves the live one itself, and fails to NEUTRAL when there is none.
+func _fallback_element_mult(move, defender) -> float:
+	if move == null or defender == null:
+		return 1.0
+	return ElementChart.damage_scale_for(move, defender, null)
+
 
 ## Force this root to span the entire game window (regardless of the small sidebar
 ## parent), so the card's viewport-centred anchors are correct and it never lands

@@ -36,10 +36,9 @@ class_name DamageEffect
 
 
 func apply(ctx: MoveContext) -> void:
-	var bonus := 0
-	if scaling_stat != "":
-		bonus = int(round(ctx.get_caster_stat(scaling_stat) * scale))
-	var raw := power + bonus + bonus_power_for(ctx.caster)
+	# Authored power + stat scaling + caster-state power, through the SAME helper the
+	# forecast uses, so the two cannot compute a different starting number.
+	var raw := DamageMath.raw_power(self, ctx.caster)
 
 	# Running total of HP actually removed this cast, so lifesteal can heal a fixed
 	# fraction of it once all targets are resolved.
@@ -84,37 +83,20 @@ func apply(ctx: MoveContext) -> void:
 				"negated": true,
 			})
 			continue
-		var dealt := _mitigate(raw, target)
 		# --- Damage order, after mitigation ---------------------------------
-		# 1. Predation bonus: a caster whose passives declare "damage_vs_restricted"
-		#    hits harder into a target that cannot get away.
-		# 2. Defender's own "damage_taken_scale" (Eldroot's Grovebound).
-		# 3. Crit.
-		# Attacker's bonus is applied BEFORE the defender's reduction so the two are
-		# commutative multipliers on the mitigated number and neither one silently
-		# dominates; crit stays LAST so it multiplies whatever actually got through,
-		# which is what the forecast's crit_damage column claims it does.
-		var restricted_scale: float = _restricted_scale(ctx, target)
-		if restricted_scale > 1.0:
-			dealt = maxi(1, int(round(float(dealt) * restricted_scale)))
-		# 1b. Element-hunter bonus: a caster whose passives declare
-		#     "damage_vs_element_<elem>" hits harder into a target of that element
-		#     (Vineweave's Grass Cutter vs nature). Attacker-side, same shape as the
-		#     predation bonus above, applied before the defender's reduction.
-		var element_bonus: float = _element_bonus_scale(ctx, target)
-		if element_bonus > 1.0:
-			dealt = maxi(1, int(round(float(dealt) * element_bonus)))
-		var taken_scale: float = damage_taken_scale_for(target, ctx.board)
-		if not is_equal_approx(taken_scale, 1.0):
-			dealt = maxi(1, int(round(float(dealt) * taken_scale)))
-		# 4. TYPE MATCHUP: move-element vs target-type effectiveness, folded with the
-		#    tile amplifier (target on a matching-element tile) and the target's own-
-		#    element tile benefit. Resolved through the same shared helper the forecast
-		#    uses so preview and hit cannot drift; a no-op (1.0) when neither the move
-		#    nor the target carries an element, so unelemented content is unchanged.
-		var element_scale: float = ElementChart.damage_scale_for(ctx.move, target, ctx.board)
-		if not is_equal_approx(element_scale, 1.0):
-			dealt = maxi(1, int(round(float(dealt) * element_scale)))
+		# THE WHOLE post-mitigation chain -- the attacker's predation bonus, the
+		# attacker's element-hunter bonus, the defender's own damage_taken_scale, then
+		# the ElementChart matchup -- is DamageMath.apply_scales: the SAME function
+		# MoveExecutor.preview_vs runs. It is not a copy of the forecast's arithmetic,
+		# it IS that arithmetic, so the number the player was shown and the number the
+		# board applies cannot drift apart. A caster with no passives hitting a target
+		# with no element gets the mitigated number back untouched.
+		#
+		# Crit is deliberately NOT in the chain: it is ROLLED, and it stays LAST so it
+		# multiplies whatever actually got through -- which is what the forecast's
+		# crit_damage column claims it does.
+		var dealt: int = int(DamageMath.apply_scales(
+			_mitigate(raw, target), ctx.caster, target, ctx.move, ctx.board)["total"])
 		var crit: bool = outcome.get("crit", false)
 		# The escalating bow overrides the per-target crit with the single group roll:
 		# the shot either crits every pierced target or none of them.
@@ -335,261 +317,80 @@ static func hp_of(target) -> int:
 	return 0
 
 
-# --- Damage vs movement-restricted targets ----------------------------------
+# --- The damage-scaling rules, now owned by DamageMath -----------------------
 #
-# Routed entirely through the EXISTING passive-modifier mechanism rather than a
-# bespoke path: a PASSIVE AbilityResource contributes
-# `rule_modifiers = { "damage_vs_restricted": 0.5 }` (= +50%), AbilitySystem
-# merges it exactly like "extra_actions"/"extra_movement", and this effect reads
-# the merged value. Null-safe end to end -- no ability system, no statuses, no
-# board, or a mock unit missing any of the accessors all resolve to plain damage.
+# Predation ("damage_vs_restricted"), the element hunter ("damage_vs_element_<elem>"),
+# the defender's own "damage_taken_scale", invulnerability and category mitigation all
+# MOVED to [DamageMath] -- the single place the resolved hit and the combat forecast
+# now share. What stays here are thin delegations with unchanged signatures, so every
+# existing call site (and every test that pins one of these rules) keeps working while
+# there is still exactly ONE implementation of each rule.
+#
+# The dependency runs one way on purpose -- DamageEffect -> DamageMath. DamageMath
+# names nothing in this file (it duck-types damage effects instead), so the two can
+# never form a reference cycle.
 
 
-## Multiplier to apply to one hit: 1.0 normally, or 1.0 + the caster's merged
-## "damage_vs_restricted" modifier when the TARGET is movement-restricted.
+## Predation multiplier for this hit's context.
 static func _restricted_scale(ctx: MoveContext, target) -> float:
 	if ctx == null:
 		return 1.0
-	return restricted_scale_for(ctx.caster, target, ctx.board)
+	return DamageMath.restricted_scale_for(ctx.caster, target, ctx.board)
 
 
-## Same predation multiplier, addressed by CASTER/TARGET rather than a MoveContext.
-##
-## This is the shared entry point so the combat FORECAST and the actual resolution
-## can never disagree: MoveExecutor.preview_vs has no MoveContext (it deliberately
-## rolls nothing), and duplicating the rule there would drift the moment either
-## side was retuned. The bonus is fully deterministic -- it depends only on the
-## target's current state -- so previewing it reveals nothing a player could game,
-## unlike crit, which the forecast reports as a PROBABILITY and never rolls.
+## 1.0, or 1.0 + the caster's merged "damage_vs_restricted" when the TARGET cannot get
+## away. See [method DamageMath.restricted_scale_for].
 static func restricted_scale_for(caster, target, board = null) -> float:
-	if caster == null or target == null:
-		return 1.0
-	if not _is_movement_restricted(target):
-		return 1.0
-	var bonus: float = _restricted_modifier_of(caster, board)
-	if bonus <= 0.0:
-		return 1.0
-	return 1.0 + bonus
+	return DamageMath.restricted_scale_for(caster, target, board)
 
 
-## The caster's merged "damage_vs_restricted" rule modifier (0.0 when it has no
-## ability system, or no in-force passive that declares one).
-static func _caster_restricted_modifier(ctx: MoveContext) -> float:
-	if ctx == null:
-		return 0.0
-	return _restricted_modifier_of(ctx.caster, ctx.board)
-
-
-## The caster's merged "damage_vs_restricted" rule modifier, addressed directly.
-static func _restricted_modifier_of(caster, board) -> float:
-	if caster == null:
-		return 0.0
-	# A live Unit exposes its component; a test mock may BE the ability system.
-	var system = null
-	if caster.has_method("get_ability_system"):
-		system = caster.get_ability_system()
-	elif caster.has_method("passive_modifiers"):
-		system = caster
-	if system == null or not system.has_method("passive_modifiers"):
-		return 0.0
-	var modifiers: Dictionary = system.passive_modifiers(caster, board)
-	return float(modifiers.get("damage_vs_restricted", 0.0))
-
-
-# --- Damage vs a specific enemy element (attacker "element hunter") ----------
-#
-# The element mirror of the predation bonus above: a PASSIVE AbilityResource on the
-# CASTER contributes `rule_modifiers = { "damage_vs_element_nature": 0.5 }` (= +50%
-# vs nature-element targets). The key is "damage_vs_element_" + the element name, so
-# ONE generic hook serves any element without new plumbing. AbilitySystem sums the
-# float exactly like the other numeric modifiers; this reads it and scales the hit.
-# Distinct from ElementChart (which keys off the MOVE's element vs the target TYPE) --
-# this is keyed off the CASTER's passive vs the target's element, i.e. "I, personally,
-# cut grass." Null-safe end to end.
-
-
-## Multiplier for one hit: 1.0 normally, or 1.0 + the caster's merged
-## "damage_vs_element_<target element>" modifier when the target carries that element.
+## Element-hunter multiplier for this hit's context.
 static func _element_bonus_scale(ctx: MoveContext, target) -> float:
 	if ctx == null:
 		return 1.0
-	return element_bonus_scale_for(ctx.caster, target, ctx.board)
+	return DamageMath.element_bonus_scale_for(ctx.caster, target, ctx.board)
 
 
-## Same element-hunter multiplier, addressed by CASTER/TARGET so the FORECAST
-## ([method MoveExecutor.preview_vs]) reads the identical value. Deterministic (it
-## depends only on the target's element and the caster's passives), so previewing it
-## is honest information.
-static func element_bonus_scale_for(caster, target, board = null) -> float:
-	if caster == null or target == null:
-		return 1.0
-	if not target.has_method("get_element"):
-		return 1.0
-	var elem: String = String(target.get_element())
-	if elem == "":
-		return 1.0
-	var system = null
-	if caster.has_method("get_ability_system"):
-		system = caster.get_ability_system()
-	elif caster.has_method("passive_modifiers"):
-		system = caster
-	if system == null or not system.has_method("passive_modifiers"):
-		return 1.0
-	var modifiers: Dictionary = system.passive_modifiers(caster, board)
-	var bonus: float = float(modifiers.get("damage_vs_element_" + elem, 0.0))
-	if bonus <= 0.0:
-		return 1.0
-	return 1.0 + bonus
-
-
-# --- Defender-side damage reduction -----------------------------------------
-#
-# The mirror image of the predation bonus above. That one reads the ATTACKER's
-# passives; nothing let a DEFENDER's passives change what it TAKES, which is what
-# "boosted defenses while standing in my grove" needs -- and which a plain defense
-# stat modifier cannot express, because defense is subtractive and a fortress boss
-# needs the reduction to hold up against big hits too.
-#
-# Same mechanism, same vocabulary: a PASSIVE AbilityResource on the DEFENDER
-# contributes `rule_modifiers = { "damage_taken_scale": 0.75 }` (= takes 25% less)
-# and AbilitySystem merges it exactly like every other rule modifier.
-#
-# MERGING: AbilitySystem._merge_modifiers treats "damage_taken_scale" as a
-# STRONGEST-WINS key (it is in STRONGEST_WINS_KEYS), so two passives declaring 0.75
-# resolve to 0.75, NOT 1.5 -- reductions refresh to the strongest, they never
-# compound. The value is still floored at 0 here so a mis-authored negative can
-# never flip damage into healing.
-
-
-## Multiplier the TARGET's own passives apply to incoming damage: 1.0 normally,
-## below 1.0 for a damage reduction, above 1.0 for a vulnerability.
+## 1.0, or 1.0 + the caster's merged "damage_vs_element_<target element>" when the
+## target carries that element (Vineweave's Grass Cutter vs nature).
 ##
-## Static and addressed by TARGET/BOARD (not by MoveContext) for exactly the same
-## reason as [method restricted_scale_for]: [method MoveExecutor.preview_vs] has no
-## context, and the forecast must never disagree with the hit. Deterministic -- it
-## depends only on the defender's current state -- so previewing it is honest
-## information, not an exploit.
+## CONDITIONAL ON THE TARGET, never an aura: the modifier key is built from the element
+## of the unit actually being hit. The forecast evaluates this SAME function against the
+## SAME target, so what the panel promises and what the blow does cannot differ.
+## See [method DamageMath.element_bonus_scale_for].
+static func element_bonus_scale_for(caster, target, board = null) -> float:
+	return DamageMath.element_bonus_scale_for(caster, target, board)
+
+
+## What the TARGET's own passives and statuses multiply incoming damage by: 1.0
+## normally, below for a reduction, above for a vulnerability.
+## See [method DamageMath.damage_taken_scale_for].
 static func damage_taken_scale_for(target, board = null) -> float:
-	if target == null:
-		return 1.0
-	# Two INDEPENDENT sources combine multiplicatively: the defender's PASSIVE ability
-	# scale (Eldroot's Grovebound) and its STATUS scale (Braced). One of each -- passive
-	# x status -- is not compounding a single source: the status side is itself already
-	# reduced to a single "take the strongest" value (see StatusController), and the
-	# passive side is a single merged modifier. So a boss standing in its grove that ALSO
-	# braces genuinely gets both, while re-bracing can never deepen the status half.
-	return _passive_taken_scale(target, board) * _status_taken_scale(target)
-
-
-## The defender's own PASSIVE "damage_taken_scale" rule modifier (1.0 when it has no
-## ability system or no in-force passive declaring one). Floored at 0 so a mis-authored
-## negative can never flip damage into healing.
-static func _passive_taken_scale(target, board) -> float:
-	var system = null
-	# A live Unit exposes its component; a test mock may BE the ability system.
-	if target.has_method("get_ability_system"):
-		system = target.get_ability_system()
-	elif target.has_method("passive_modifiers"):
-		system = target
-	if system == null or not system.has_method("passive_modifiers"):
-		return 1.0
-	var modifiers: Dictionary = system.passive_modifiers(target, board)
-	if not modifiers.has("damage_taken_scale"):
-		return 1.0
-	return maxf(0.0, float(modifiers["damage_taken_scale"]))
-
-
-## The single strongest STATUS "damage_taken_scale" on the defender (Braced), 1.0 when
-## none. Duck-typed and null-safe: a target with no status controller simply carries no
-## status reduction. Reads the "take the strongest" aggregate so two same-kind
-## reductions never compound (see StatusController.status_damage_taken_scale).
-static func _status_taken_scale(target) -> float:
-	if target.has_method("status_damage_taken_scale"):
-		return maxf(0.0, float(target.status_damage_taken_scale()))
-	if target.has_method("get_status_controller"):
-		var controller = target.get_status_controller()
-		if controller != null and controller.has_method("status_damage_taken_scale"):
-			return maxf(0.0, float(controller.status_damage_taken_scale()))
-	return 1.0
+	return DamageMath.damage_taken_scale_for(target, board)
 
 
 ## True while [param target] takes NO damage at all.
-##
-## Sourced from the "invulnerable" RULE FLAG, so it is a timed [StatusCondition]
-## (Eldroot's Heartwood Guard grants `guarded`) rather than a stat -- the same
-## queried-not-applied mechanism as "immobilized". A PASSIVE ability may also
-## declare it as a boolean rule modifier. Duck-typed and independently optional at
-## every step, so a mock exposing none of the accessors is simply never invulnerable.
+## See [method DamageMath.is_invulnerable].
 static func is_invulnerable(target) -> bool:
-	if target == null:
-		return false
-	if target.has_method("is_invulnerable") and bool(target.is_invulnerable()):
-		return true
-	if target.has_method("has_status_rule_flag") and bool(target.has_status_rule_flag(&"invulnerable")):
-		return true
-	if target.has_method("get_status_controller"):
-		var controller = target.get_status_controller()
-		if controller != null and controller.has_method("has_rule_flag") \
-			and bool(controller.has_rule_flag(&"invulnerable")):
-			return true
-	if target.has_method("get_ability_system"):
-		var system = target.get_ability_system()
-		if system != null and system.has_method("passive_modifiers"):
-			var modifiers: Dictionary = system.passive_modifiers(target, null)
-			if bool(modifiers.get("invulnerable", false)):
-				return true
-	return false
+	return DamageMath.is_invulnerable(target)
 
 
 ## Is [param target] movement-restricted right now?
-##
-## DEFINITION (deliberately narrow, so the bonus is legible to the player):
-##   1. an active status sets the "immobilized" rule flag (Ensnared, Ingrained) —
-##      the unit cannot move at all; OR
-##   2. the unit's CURRENT "movement" stat is below its BASE — i.e. something is
-##      actively slowing it (Entangled's negative StatModifierEffect).
-##
-## A unit that simply has low base movement is NOT restricted — only one that has
-## been restricted by something. Both checks are duck-typed and independently
-## optional, so a mock exposing neither is never treated as restricted.
+## See [method DamageMath.is_movement_restricted].
 static func _is_movement_restricted(target) -> bool:
-	if target == null:
-		return false
-	if target.has_method("is_immobilized") and bool(target.is_immobilized()):
-		return true
-	if target.has_method("has_status_rule_flag") and bool(target.has_status_rule_flag(&"immobilized")):
-		return true
-	if target.has_method("get_status_controller"):
-		var controller = target.get_status_controller()
-		if controller != null and controller.has_method("has_rule_flag") \
-			and bool(controller.has_rule_flag(&"immobilized")):
-			return true
-	if target.has_method("get_stat") and target.has_method("get_base_stat"):
-		var base_movement: int = int(target.get_base_stat("movement"))
-		# Guard the "no movement stat at all" case: 0 base would make any unit with
-		# 0 current movement read as slowed.
-		if base_movement > 0 and int(target.get_stat("movement")) < base_movement:
-			return true
-	return false
+	return DamageMath.is_movement_restricted(target)
 
 
 func _mitigate(raw: int, target) -> int:
 	return _mitigate_for(raw, target, category)
 
 
-## Category-aware mitigation, addressed by an explicit [param category] rather than
-## the effect's own field so it can be reused off-instance (the hazard path below,
-## which has no MoveEffect). The instance [method _mitigate] delegates here, so the
-## live damage pipeline and the hazard resolve mitigation identically.
+## Category-aware mitigation, addressed by an explicit [param category] rather than the
+## effect's own field so it can be reused off-instance (the hazard path below, which has
+## no MoveEffect). See [method DamageMath.mitigate].
 static func _mitigate_for(raw: int, target, category_arg) -> int:
-	match category_arg:
-		CombatTypes.DamageCategory.TRUE:
-			return maxi(1, raw)
-		CombatTypes.DamageCategory.MAGICAL:
-			var res := _stat_or(target, "magic_defense", _stat_or(target, "defense", 0))
-			return maxi(1, raw - res)
-		_:  # PHYSICAL
-			return maxi(1, raw - _stat_or(target, "defense", 0))
+	return DamageMath.mitigate(raw, target, category_arg)
+
 
 
 ## Resolve ONE guaranteed hazard hit against [param target] and return the HP it
@@ -615,9 +416,3 @@ static func resolve_hazard_damage(target, raw: int, category_arg, board) -> int:
 		dealt = maxi(1, int(round(float(dealt) * taken_scale)))
 	return dealt
 
-
-static func _stat_or(unit, stat_name: String, fallback: int) -> int:
-	if unit and unit.has_method("get_stat"):
-		var v: int = unit.get_stat(stat_name)
-		return v if v > 0 else fallback
-	return fallback

@@ -1,14 +1,21 @@
 extends GutTest
 
-## CAMPAIGN <-> STORY WIRING: that a chapter's authored intro really plays BEFORE the battle
-## is loaded, that a replay of a campaign battle plays no story at all, and that the two
-## shipped chapter-1 scenes load and parse.
+## CAMPAIGN <-> STORY WIRING: that a chapter's authored intro is STAGED (never shown) when the
+## squad is confirmed, that a replay of a campaign battle plays no story at all, and that the
+## two shipped chapter-1 scenes load and parse.
 ##
-## THE ORDERING PROOF is the point of this suite: [method CampaignController.play_story]
-## takes the "load the battle" continuation as a [Callable] and must not call it until the
-## overlay has finished. So the test hands it a lambda that appends to an [Array] (captured
-## BY VALUE -- the Array reference is what is captured, and appending mutates the same
-## instance) and asserts the array is still EMPTY while the overlay is up.
+## THE INTRO NO LONGER PLAYS AT CHARACTER SELECT TIME. It used to mount over the squad picker
+## and change scene when it finished; it now goes into a latch that the battle boot consumes,
+## so the portraits come up over the LOADED BATTLE MAP. That the boot really mounts it, really
+## holds the first turn and really skips it on a resumed save is proven against a booted
+## GameWorld in integration/test_campaign_intro_boot.gd -- this suite owns the latch itself.
+##
+## THE ORDERING PROOF below still covers [method CampaignController.play_story], which is what
+## the chapter OUTRO (unchanged: it already plays over the live battle) rides on: it takes its
+## continuation as a [Callable] and must not call it until the overlay has finished. The test
+## hands it a lambda that appends to an [Array] (captured BY VALUE -- the Array reference is
+## what is captured, and appending mutates the same instance) and asserts the array is still
+## EMPTY while the overlay is up.
 ##
 ## Real autoload ([CampaignController]), real resources, real overlay -- integration.
 
@@ -100,7 +107,66 @@ func test_arming_a_resumed_chapter_still_resolves_its_story() -> void:
 		"chapter 1 arms for a resumed battle")
 	assert_not_null(CampaignController.story_scene_for(
 			CampaignController.active_chapter(), CampaignController.INTRO_SCENE_KEY),
-		"and the ACTIVE chapter -- the one play_intro_then_launch reads -- carries the intro")
+		"and the ACTIVE chapter -- the one stage_intro_for_launch reads -- carries the intro")
+
+
+# --- The latch: staged at confirm, consumed by the battle boot ------------------
+
+func test_staging_the_intro_shows_nothing_at_all() -> void:
+	# THE REGRESSION THIS FILE EXISTS FOR: confirming a squad used to mount the cutscene over
+	# the Character Select screen. Staging must be a pure latch -- no overlay, anywhere.
+	CampaignController.arm_for_resume(CampaignData.get_chapter(0), 0)
+
+	assert_true(CampaignController.stage_intro_for_launch(),
+		"a scripted chapter stages its intro for the battle that is about to boot")
+	assert_true(CampaignController.has_staged_intro(), "and the latch is holding it")
+	assert_false(CampaignController.is_story_playing(),
+		"THE POINT: nothing is on screen -- the story does NOT play over Character Select")
+	assert_null(CampaignController.story_overlay(), "no overlay was mounted by staging")
+
+
+func test_the_boot_consumes_the_staged_intro_exactly_once() -> void:
+	CampaignController.arm_for_resume(CampaignData.get_chapter(0), 0)
+	CampaignController.stage_intro_for_launch()
+
+	var scene: StoryScene = CampaignController.consume_staged_intro()
+	assert_not_null(scene, "the battle boot picks up the chapter's authored intro")
+	assert_false(scene.is_empty(), "with its beats intact")
+	assert_false(CampaignController.has_staged_intro(), "and the latch is spent")
+	assert_null(CampaignController.consume_staged_intro(),
+		"so a rematch on the same map can never replay the chapter's opening")
+
+
+func test_an_unscripted_chapter_stages_nothing() -> void:
+	CampaignController.arm_for_resume(CampaignData.get_chapter(1), 0)
+	assert_false(CampaignController.stage_intro_for_launch(),
+		"chapter 2 has no authored intro, so there is nothing to stage")
+	assert_false(CampaignController.has_staged_intro(), "and the latch stays empty")
+	assert_null(CampaignController.consume_staged_intro(), "the boot is handed nothing to play")
+
+
+func test_a_replay_is_refused_at_consumption_time() -> void:
+	# The staging call happens in a menu; whether this battle is a spectated replay is a fact
+	# about the BATTLE. So the guard lives on the consume side.
+	CampaignController.arm_for_resume(CampaignData.get_chapter(0), 0)
+	assert_true(CampaignController.stage_intro_for_launch(), "the intro stages as normal")
+
+	ReplayPlayback.begin_playback()
+	assert_null(CampaignController.consume_staged_intro(),
+		"a replay viewer is handed no cutscene -- they have already lived through it")
+	assert_false(CampaignController.has_staged_intro(),
+		"and the slot is still cleared, so it cannot leak into the next battle")
+
+
+func test_cancelling_a_run_drops_its_staged_intro() -> void:
+	CampaignController.arm_for_resume(CampaignData.get_chapter(0), 0)
+	CampaignController.stage_intro_for_launch()
+
+	CampaignController.cancel()
+	assert_false(CampaignController.has_staged_intro(),
+		"backing out of a chapter drops the opening it had queued")
+	assert_null(CampaignController.consume_staged_intro(),
+		"so an unrelated battle booted later never opens with it")
 
 
 # --- The gate -----------------------------------------------------------------
@@ -122,38 +188,41 @@ func test_a_replay_suppresses_story_outright() -> void:
 		"so the same scene is refused -- a replay viewer has already seen this cutscene")
 
 
-# --- The ordering proof: intro BEFORE the battle loads -------------------------
+# --- The ordering proof: play_story holds its continuation ---------------------
+#
+# This is the mount contract the chapter OUTRO rides on (and, before the fix, the intro).
+# The continuation must not fire while the overlay is still up.
 
-func test_the_intro_holds_the_battle_launch_until_the_scene_finishes() -> void:
+func test_play_story_holds_its_continuation_until_the_scene_finishes() -> void:
 	var scene: StoryScene = CampaignController.story_scene_for(
 		CampaignData.get_chapter(0), CampaignController.INTRO_SCENE_KEY)
 	# Array, so the lambda's by-value capture still mutates the instance the test reads.
 	var launched: Array = []
 
 	var started: bool = CampaignController.play_story(scene,
-		func() -> void: launched.append("battle"))
-	assert_true(started, "the intro went up, so the caller must NOT change scene itself")
+		func() -> void: launched.append("after"))
+	assert_true(started, "the story went up, so the caller must NOT run its follow-up itself")
 
 	await get_tree().process_frame
 	var overlay: StoryDialogue = CampaignController.story_overlay()
 	assert_not_null(overlay, "an overlay is mounted")
 	assert_true(overlay.root_control().visible, "and it is on screen, blocking the world behind it")
 	assert_eq(launched.size(), 0,
-		"THE POINT: the battle has NOT been loaded while the story is still playing")
+		"THE POINT: nothing after the story has run while the story is still playing")
 
 	overlay.skip()
 	await get_tree().process_frame
 
-	assert_eq(launched, ["battle"], "the battle loads exactly once, AFTER the story ends")
+	assert_eq(launched, ["after"], "the continuation fires exactly once, AFTER the story ends")
 	assert_false(CampaignController.is_story_playing(), "and the overlay is taken back down")
 
 
-func test_reading_the_intro_to_the_end_also_launches_exactly_once() -> void:
+func test_reading_a_story_to_the_end_also_continues_exactly_once() -> void:
 	var scene: StoryScene = CampaignController.story_scene_for(
 		CampaignData.get_chapter(0), CampaignController.INTRO_SCENE_KEY)
 	var launched: Array = []
-	assert_true(CampaignController.play_story(scene, func() -> void: launched.append("battle")),
-		"the intro went up")
+	assert_true(CampaignController.play_story(scene, func() -> void: launched.append("after")),
+		"the story went up")
 
 	var overlay: StoryDialogue = CampaignController.story_overlay()
 	overlay.auto_tick = false
@@ -163,22 +232,22 @@ func test_reading_the_intro_to_the_end_also_launches_exactly_once() -> void:
 		overlay.advance()
 	await get_tree().process_frame
 
-	assert_eq(launched, ["battle"], "reading through launches the battle once, not per beat")
+	assert_eq(launched, ["after"], "reading through continues once, not per beat")
 	assert_false(CampaignController.is_story_playing(), "and the overlay came down")
 
 
-func test_replay_mode_launches_the_battle_with_no_story_at_all() -> void:
+func test_replay_mode_plays_no_story_at_all() -> void:
 	ReplayPlayback.begin_playback()
 	var scene: StoryScene = CampaignController.story_scene_for(
 		CampaignData.get_chapter(0), CampaignController.INTRO_SCENE_KEY)
 	var launched: Array = []
 
 	var started: bool = CampaignController.play_story(scene,
-		func() -> void: launched.append("battle"))
+		func() -> void: launched.append("after"))
 	await get_tree().process_frame
 
 	assert_false(started,
-		"play_story reports 'nothing went up', which is the caller's signal to launch NOW")
+		"play_story reports 'nothing went up', which is the caller's signal to carry on NOW")
 	assert_false(CampaignController.is_story_playing(), "no overlay was mounted")
 	assert_eq(launched.size(), 0,
 		"and the continuation is not fired either -- the caller owns the immediate launch")

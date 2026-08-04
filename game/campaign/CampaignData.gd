@@ -13,7 +13,8 @@ extends RefCounted
 ##   map_path      String  res:// MapResource the battle is fought on
 ##   ai_difficulty int     BotController.Difficulty (EASY 0 .. BRUTAL 3) -- the ramp
 ##   squad_size    int     how many units the player may field (Character Select cap)
-##   intro_scene   String  OPTIONAL res:// StoryScene played before the battle loads
+##   intro_scene   String  OPTIONAL res:// StoryScene played over the loaded battle map,
+##                         at boot, before the first turn (see CampaignController)
 ##   outro_scene   String  OPTIONAL res:// StoryScene played after a VICTORY, before the
 ##                         results card (a loss never plays it -- see CampaignController)
 ##

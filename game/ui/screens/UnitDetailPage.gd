@@ -60,6 +60,10 @@ const MARGIN: float = 28.0
 ## Portrait plate on the identity header.
 const PORTRAIT_SIZE: float = 96.0
 
+## Widest the identity header's element badge may claim. Generous next to the card's
+## compact 72px sibling -- this page is a document, not a 260px column.
+const ELEMENT_BADGE_MAX_WIDTH: float = 140.0
+
 # --- Nodes (built in code -- no .tscn, like PauseMenu / SettingsPanel) ---------
 var _root: Control = null
 var _backdrop: ColorRect = null
@@ -68,6 +72,8 @@ var _portrait_plate: PanelContainer = null
 var _portrait_monogram: Label = null
 var _portrait_texture: TextureRect = null
 var _name_label: Label = null
+## The unit's elemental TYPE, beside its name. Hidden for a unit with no element.
+var _element_badge: PanelContainer = null
 var _tags_label: Label = null
 var _owner_label: Label = null
 var _body: VBoxContainer = null
@@ -323,11 +329,26 @@ func _build_header() -> Control:
 	identity.add_theme_constant_override("separation", 4)
 	header.add_child(identity)
 
+	# Name + element badge on ONE row. The element is an identity fact, so it belongs in
+	# the identity header rather than in the stat table -- and inline with the name it is
+	# free: a FONT_CAPTION (12px) pill is ~19px tall against a FONT_TITLE (22px) name at
+	# ~29px, so the row's height is still the name's and the header does not grow. The
+	# only cost is horizontal, and the header has 700+px to give.
+	var name_row := HBoxContainer.new()
+	name_row.name = "NameRow"
+	name_row.add_theme_constant_override("separation", 10)
+	identity.add_child(name_row)
+
 	_name_label = Label.new()
 	_name_label.name = "NameLabel"
 	_name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
 	_name_label.add_theme_color_override("font_color", MenuTheme.GOLD)
-	identity.add_child(_name_label)
+	_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_row.add_child(_name_label)
+
+	_element_badge = ElementVisuals.make_badge(
+			&"", MenuTheme.FONT_CAPTION, ELEMENT_BADGE_MAX_WIDTH)
+	name_row.add_child(_element_badge)
 
 	_tags_label = Label.new()
 	_tags_label.name = "TagsLabel"
@@ -415,6 +436,10 @@ func _populate_identity(unit, character) -> void:
 		display = String(character.display_name)
 	if _name_label != null:
 		_name_label.text = display if display != "" else "Unknown unit"
+
+	# Same badge, same colour source, same vocabulary as the compact battle card's.
+	ElementVisuals.update_badge(
+			_element_badge, ElementVisuals.of_unit(unit), ELEMENT_BADGE_MAX_WIDTH)
 
 	if _tags_label != null:
 		var tags: String = UnitPageContent.identity_tags(character)

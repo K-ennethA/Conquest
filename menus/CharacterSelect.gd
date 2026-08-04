@@ -1002,13 +1002,12 @@ func _on_confirm_pressed() -> void:
 		var campaign := get_node_or_null("/root/CampaignController")
 		if campaign != null and campaign.has_method("notify_squad_confirmed"):
 			campaign.notify_squad_confirmed()
-		# STORY (additive): a chapter with an authored intro plays it HERE -- over this
-		# screen, with input to everything behind it blocked -- and loads the battle itself
-		# once the scene finishes or is skipped. Returns false for an unscripted chapter (or
-		# a replay), in which case the launch below is the original, unchanged path.
-		if campaign != null and campaign.has_method("play_intro_then_launch") \
-				and bool(campaign.play_intro_then_launch(GAME_WORLD_SCENE)):
-			return
+		# STORY (additive): a chapter with an authored intro is STAGED here and played by the
+		# battle boot itself, over the loaded map (GameWorldManager._play_campaign_intro) --
+		# never over this screen. Staging shows nothing and changes nothing about the launch
+		# below, which stays the original, unchanged path for every chapter.
+		if campaign != null and campaign.has_method("stage_intro_for_launch"):
+			campaign.stage_intro_for_launch()
 		get_tree().change_scene_to_file(GAME_WORLD_SCENE)
 		return
 

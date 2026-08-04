@@ -36,6 +36,12 @@ const EL_ARCANE := Color("a860e0")
 const EL_HOLY := Color("e8b93a")
 const EL_NATURE := Color("5fb84e")
 const EL_STEEL := Color("c9cbd6")
+# Distinct accents for elements the chart treats as their own types (they used
+# to collapse onto EL_NATURE / the amber fallback, which made a dark unit's
+# badge indistinguishable from an unelemented one).
+const EL_DARK := Color("6b4a8f")
+const EL_WIND := Color("8fd6c8")
+const EL_EARTH := Color("a5763e")
 
 # --- Command-button role fills ---------------------------------------------
 # Three button roles share the warm palette but carry different weight so the
@@ -288,6 +294,9 @@ static func element_color(element: String) -> Color:
 		"frost", "water", "ice": return EL_FROST
 		"arcane", "magic": return EL_ARCANE
 		"holy", "light": return EL_HOLY
-		"nature", "earth", "wind": return EL_NATURE
+		"nature": return EL_NATURE
 		"steel", "metal", "physical": return EL_STEEL
+		"dark", "shadow": return EL_DARK
+		"wind", "air": return EL_WIND
+		"earth", "stone": return EL_EARTH
 		_: return AMBER

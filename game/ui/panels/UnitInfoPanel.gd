@@ -101,6 +101,18 @@ const DETAILS_BUTTON_HEIGHT: float = 30.0
 ## world-space health bar all overflow at the same point.
 const MAX_STATUS_CHIPS: int = 4
 
+## Widest the ELEMENT BADGE's label may claim on the name row.
+##
+## The badge rides beside the name inside the 48px portrait row, so the arithmetic that
+## matters is horizontal: the row is CONTENT_WIDTH (240) minus the 48px portrait plate and
+## the row's 8px separation == 184px for the name column. 72px for the badge plus the
+## name row's own 4px separation leaves the name label >= 108px, which is more than the
+## one-word names the project authors (see CONQUEST.md) ever need. VERTICALLY it costs
+## nothing at all: the badge is a FONT_CAPTION (11px) pill ~17px tall against a 15px name
+## label ~20px tall, so the row's height is still the name's, and the portrait row's
+## height is still the 48px plate's.
+const ELEMENT_BADGE_MAX_WIDTH: float = 72.0
+
 ## Widest one status chip's LABEL may claim.
 ##
 ## Two chips plus their pill padding and the flow's separation have to fit one row of the
@@ -123,6 +135,9 @@ var _status_strip: Control = null
 var _status_flow: HFlowContainer = null
 ## The DETAILS affordance. Opens [UnitDetailPage] for the card's current unit.
 var _details_button: Button = null
+## The unit's elemental TYPE, as a small coloured pill beside its name. Hidden entirely
+## for a unit with no element (see [method ElementVisuals.update_badge]).
+var _element_badge: PanelContainer = null
 
 ## The real captured portrait (game/ui/PortraitCache.gd), stacked over portrait_monogram
 ## inside the same PanelContainer.
@@ -140,6 +155,7 @@ func _ready() -> void:
 
 	# Append the code-built rows BEFORE theming, so they pick up the amber cascade along
 	# with the scene-authored ones.
+	_build_element_badge()
 	_build_stat_row()
 	_build_status_strip()
 	_build_details_button()
@@ -232,25 +248,13 @@ static func discipline_label(label: Label, wrap_width: float) -> void:
 ## So a chip label states its width explicitly. `custom_minimum_size` wins over the
 ## reported minimum, which keeps the ellipsis available for the over-long case while still
 ## reserving room for the ordinary one.
+##
+## The implementation lives in [method ElementVisuals.fit_label] so the element badge --
+## which is built by a theme-layer helper and hits the identical trap -- measures itself
+## by the same rule instead of carrying a copy of it. This stays the name the card's
+## chips and [TerrainInfoPanel] call it by.
 static func fit_chip_label(label: Label, cap: float = CHIP_MAX_WIDTH) -> float:
-	if label == null or not is_instance_valid(label):
-		return 0.0
-	var font: Font = label.get_theme_font("font")
-	if font == null:
-		font = ThemeDB.fallback_font
-	if font == null:
-		# No font to measure with (a stripped harness): claim the cap rather than 1px, so
-		# the chip is at worst too wide and never invisible.
-		label.custom_minimum_size.x = cap
-		return cap
-	var font_size: int = label.get_theme_font_size("font_size")
-	if font_size <= 0:
-		font_size = ThemeDB.fallback_font_size
-	var needed: float = font.get_string_size(
-			label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-	var claimed: float = minf(ceilf(needed), cap)
-	label.custom_minimum_size.x = claimed
-	return claimed
+	return ElementVisuals.fit_label(label, cap)
 
 
 ## Apply [method discipline_label] to every Label under [param node]. Static so the chip
@@ -270,7 +274,9 @@ static func discipline_subtree(node: Node, wrap_width: float) -> void:
 ## re-measuring a card whose content changes every time a status lands.
 ##
 ##   10  MarginContainer top margin
-##   48  portrait row (48px plate; name + class line sit beside it)
+##   48  portrait row (48px plate; name + element badge on one line, class line under it,
+##       both beside the plate -- the badge is a ~17px caption pill on a ~20px name row,
+##       so it adds nothing to this figure)
 ##    6  separation
 ##   18  HP numbers row
 ##    6  separation
@@ -385,9 +391,56 @@ func _update_unit_info(unit: Unit) -> void:
 		health_bar.max_value = maxf(1.0, float(unit.max_health))
 		health_bar.value = clampf(float(unit.current_health), 0.0, health_bar.max_value)
 
+	_update_element_badge(unit)
 	_update_stat_chips(unit)
 	_update_status_strip(unit)
 	_update_portrait(unit)
+
+
+# --- The element badge ----------------------------------------------------------
+
+## Put the name label and the element badge on ONE row.
+##
+## The badge belongs beside the name because the element is an identity fact, not a live
+## number -- it never changes mid-battle, so it reads as part of "who is this" rather than
+## as part of the HP/stat/status readout below it. The name label is REPARENTED into a new
+## HBox at its own index rather than a badge row being appended under it, because a third
+## line inside BasicInfoContainer would eat the portrait row's slack for a fact that costs
+## nothing to place inline (see [constant ELEMENT_BADGE_MAX_WIDTH] for the arithmetic).
+##
+## Called BEFORE [method _apply_width_discipline], so the badge's label is disciplined
+## along with every scene-authored one -- and that pass sets its minimum width back to 0,
+## which is why [method ElementVisuals.update_badge] re-asserts it on every repaint.
+func _build_element_badge() -> void:
+	if unit_name_label == null or not is_instance_valid(unit_name_label):
+		return
+	var basic := unit_name_label.get_parent() as Control
+	if basic == null:
+		return
+
+	var index: int = unit_name_label.get_index()
+	var row := HBoxContainer.new()
+	row.name = "NameRow"
+	row.add_theme_constant_override("separation", 4)
+	# IGNORE on the row itself, PASS on the badge: the row must not swallow a click meant
+	# for the card, while the badge stays reachable for its tooltip.
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	basic.add_child(row)
+	basic.move_child(row, index)
+
+	basic.remove_child(unit_name_label)
+	unit_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	unit_name_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(unit_name_label)
+
+	_element_badge = ElementVisuals.make_badge(
+			&"", ConquestTheme.FONT_CAPTION, ELEMENT_BADGE_MAX_WIDTH)
+	row.add_child(_element_badge)
+
+
+func _update_element_badge(unit) -> void:
+	ElementVisuals.update_badge(
+			_element_badge, ElementVisuals.of_unit(unit), ELEMENT_BADGE_MAX_WIDTH)
 
 
 # --- The four stat chips -------------------------------------------------------
