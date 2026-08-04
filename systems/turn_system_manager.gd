@@ -25,6 +25,15 @@ func register_turn_system(system: TurnSystemBase) -> void:
 		return
 
 	var system_key = TurnSystemBase.TurnSystemType.keys()[system.system_type]
+
+	# Registering over an occupied slot drops the manager's only reference to the old
+	# instance, so it must also be freed (see _free_owned_system) or it leaks as a
+	# parentless orphan Node.
+	var previous = available_turn_systems.get(system_key)
+	if previous != null and previous != system:
+		unregister_turn_system(previous)
+		_free_owned_system(previous)
+
 	available_turn_systems[system_key] = system
 
 	# Connect to turn system signals (guarded so registering the same instance twice
@@ -257,13 +266,34 @@ func reset_for_new_game() -> void:
 	active_turn_system (with freed registered_units) persists and advancing a turn
 	script-errors or silently wraps. apply_settings_to_game() registers a fresh
 	turn-system instance on each load, so clearing the dict here is safe."""
+	var was_active = active_turn_system
 	if active_turn_system:
 		deactivate_turn_system()
 
-	# Unregister every available system (disconnects signals) then clear the dict.
+	# Unregister every available system (disconnects signals), then FREE the ones the
+	# manager owns: these instances are built with .new() and never parented (see
+	# GameSettings.apply_settings_to_game), so dropping the dictionary reference alone
+	# leaked one parentless Node per battle boot.
 	for system in available_turn_systems.values().duplicate():
 		unregister_turn_system(system)
+		_free_owned_system(system)
 	available_turn_systems.clear()
+
+	# An active system that was never registered (switch_to_turn_system accepts raw
+	# instances) is owned here too; one that was in the dict is already freed and the
+	# is_instance_valid guard skips it.
+	_free_owned_system(was_active)
+
+## Free a turn system the manager owns. Registered systems are constructed with .new() and
+## deliberately NEVER parented -- SpeedFirstTurnSystem's move clock relies on being outside
+## the tree (the in-tree TurnTimer HUD drives the countdown) -- so when the manager drops
+## its reference it must also free the Node or every battle boot leaks an orphan. A system
+## somebody parented is theirs to free and is left alone. The parameter is untyped on
+## purpose: callers may hand it an already-freed reference, which a typed parameter would
+## reject with "cannot convert freed Object" before the guard could run.
+func _free_owned_system(system) -> void:
+	if system != null and is_instance_valid(system) and system.get_parent() == null:
+		system.free()
 
 # Turn system reset (for testing)
 func reset_turn_system() -> void:

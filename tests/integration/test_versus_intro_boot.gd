@@ -87,25 +87,16 @@ func _clear_globals() -> void:
 	PortraitCache.reset()
 
 
-## Tear the turn systems down AND free them.
+## Tear the turn systems down.
 ##
-## A turn system is constructed with `.new()` and registered without ever being parented (see
-## GameSettings.apply_settings_to_game / TurnSystemManager.register_turn_system), so every boot
-## leaves one PARENTLESS Node behind -- which is exactly what GUT counts as an orphan. That is a
-## runtime wart, not this suite's doing, but a test that boots a battle owns cleaning up after
-## it (tests/README rule 2), so the instances are captured before the reset drops the manager's
-## references and freed here.
+## reset_for_new_game() also FREES the manager-owned (parentless) instances now -- the
+## per-boot orphan this helper used to sweep up is fixed in the runtime itself (see
+## TurnSystemManager._free_owned_system), and integration/test_turn_system_lifecycle.gd pins
+## that. The call stays so a failed boot never hands an active system to the next suite.
 func _reset_turn_systems() -> void:
 	if TurnSystemManager == null:
 		return
-	var systems: Array = TurnSystemManager.available_turn_systems.values().duplicate()
-	if TurnSystemManager.active_turn_system != null \
-			and not (TurnSystemManager.active_turn_system in systems):
-		systems.append(TurnSystemManager.active_turn_system)
 	TurnSystemManager.reset_for_new_game()
-	for system in systems:
-		if system != null and is_instance_valid(system) and system.get_parent() == null:
-			system.free()
 
 
 # =====================================================================================

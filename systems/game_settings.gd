@@ -384,6 +384,9 @@ func apply_settings_to_game() -> void:
 	if TurnSystemManager:
 		# Create and register the selected turn system (but don't activate yet)
 		# The turn system will be activated when PlayerManager.start_game() is called
+		# Ownership: the instance is handed over parentless, and the manager FREES it on
+		# reset_for_new_game() or when a later registration replaces it (see
+		# TurnSystemManager._free_owned_system) -- do not keep references past that.
 		match selected_turn_system:
 			TurnSystemBase.TurnSystemType.TRADITIONAL:
 				var traditional_system = TraditionalTurnSystem.new()
