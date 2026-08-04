@@ -13,6 +13,13 @@ extends RefCounted
 ##   map_path      String  res:// MapResource the battle is fought on
 ##   ai_difficulty int     BotController.Difficulty (EASY 0 .. BRUTAL 3) -- the ramp
 ##   squad_size    int     how many units the player may field (Character Select cap)
+##   intro_scene   String  OPTIONAL res:// StoryScene played before the battle loads
+##   outro_scene   String  OPTIONAL res:// StoryScene played after a VICTORY, before the
+##                         results card (a loss never plays it -- see CampaignController)
+##
+## The two story keys are OPTIONAL and ABSENT by default: a chapter without them plays
+## exactly as it did before this system existed. Only chapter 1 is scripted today; the rest
+## are deliberately left bare rather than given placeholder scripts.
 ##
 ## UNLOCK RULE (enforced by CampaignController, not stored here): chapter 0 is always
 ## unlocked; every later chapter unlocks once the PREVIOUS chapter is cleared. Keeping
@@ -36,6 +43,8 @@ static func chapters() -> Array:
 			"map_path": "res://game/maps/resources/campaign_blighted_clearing.tres",
 			"ai_difficulty": 0,
 			"squad_size": 3,
+			"intro_scene": "res://game/campaign/story/ch1_blighted_clearing_intro.tres",
+			"outro_scene": "res://game/campaign/story/ch1_blighted_clearing_outro.tres",
 		},
 		{
 			"id": "ch2_elemental_crossroads",

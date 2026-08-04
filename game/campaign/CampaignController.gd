@@ -24,8 +24,36 @@ extends Node
 ## evaluation sees. Capture is gated on an active run AND on GameSettings still pointing at
 ## THIS chapter's map, so an elimination in a later, unrelated match never records a result.
 
+##
+## STORY SCENES (added on top of the above; every hook is additive and optional). A chapter
+## may carry an [code]intro_scene[/code] and/or an [code]outro_scene[/code] -- res:// paths
+## to a [StoryScene] (see [CampaignData]). This controller owns BOTH playbacks because it is
+## the one object that outlives the scene changes they straddle:
+##
+##   INTRO -- played by [method play_intro_then_launch], called from Character Select's
+##            campaign confirm branch INSTEAD of its immediate change_scene. The overlay
+##            mounts over the screen the player is already looking at, blocks input to
+##            everything behind it, and the battle scene is only loaded once the story
+##            finishes (or is skipped). A chapter with no intro returns false and the caller
+##            changes scene exactly as it did before.
+##   OUTRO -- played from [method _record_result] on a WIN only; a loss never plays one. It
+##            mounts over the live battle at [constant StoryDialogue.LAYER_INDEX] (135),
+##            which is above the battle's own "UI" CanvasLayer, so it covers [GameOverScreen]
+##            and the player reads the outro before the results card -- with NO edit to
+##            GameWorldManager or the end screen. The mount is DEFERRED, because
+##            _record_result runs deep inside the death -> elimination signal cascade and
+##            adding a node there would fight the teardown that cascade is driving.
+##
+## REPLAYS NEVER PLAY STORY. [method story_suppressed] reads [method ReplayPlayback.is_playing],
+## so watching a recorded campaign battle back is watching the battle, not sitting through
+## its cutscenes again.
+
 const CHARACTER_SELECT_SCENE := "res://menus/CharacterSelect.tscn"
 const CAMPAIGN_SCREEN_SCENE := "res://menus/CampaignScreen.tscn"
+
+## Chapter-dictionary keys the two optional story scenes live under (see [CampaignData]).
+const INTRO_SCENE_KEY := "intro_scene"
+const OUTRO_SCENE_KEY := "outro_scene"
 
 ## Where cleared-chapter progress + best turn counts live. Overridable so tests can
 ## round-trip against a temp file instead of the player's real save.
@@ -47,6 +75,10 @@ var _result_recorded: bool = false
 
 ## Player turns taken this battle (fed to the best-turn record).
 var _turns: int = 0
+
+## The live story overlay, or null. Exactly one at a time -- mounting a second dismisses
+## the first (see [method play_story]).
+var _story_overlay: StoryDialogue = null
 
 
 func _ready() -> void:
@@ -166,6 +198,141 @@ func cancel() -> void:
 	_active_rules = null
 	_result_recorded = false
 	_turns = 0
+	# A story mounted for a run the player just walked away from must come down with it.
+	_dismiss_story()
+
+
+# --- Story scenes -----------------------------------------------------------
+
+## The [StoryScene] at [param chapter]'s [param key] ("intro_scene" / "outro_scene"), or null
+## when the chapter carries no such key, the path is empty, the file is missing, or it is not
+## a StoryScene. A missing story is an ORDINARY, expected answer -- an unscripted chapter is
+## the norm -- so this returns null rather than logging (CONQUEST.md #1).
+static func story_scene_for(chapter: Dictionary, key: String) -> StoryScene:
+	if chapter.is_empty():
+		return null
+	var path: String = String(chapter.get(key, ""))
+	if path.is_empty():
+		return null
+	if not ResourceLoader.exists(path):
+		return null
+	return load(path) as StoryScene
+
+
+## True while story playback must be suppressed outright. Today that is exactly one case:
+## a REPLAY. A replay re-simulates a recorded battle for a viewer who has already lived
+## through its cutscene, and the overlay would block the spectator's own camera/inspection
+## input on top of that.
+static func story_suppressed() -> bool:
+	return ReplayPlayback.is_playing()
+
+
+## PURE decision: is [param scene] something we should actually put on screen? Static and
+## side-effect free so the gate is testable without a tree, an overlay or a battle.
+static func can_play_story(scene: StoryScene) -> bool:
+	if scene == null or scene.is_empty():
+		return false
+	return not story_suppressed()
+
+
+## Mount a [StoryDialogue] over whatever is currently on screen and play [param scene],
+## calling [param on_done] once it finishes OR is skipped.
+##
+## Returns TRUE when the overlay went up (so [param on_done] will fire later) and FALSE when
+## there was nothing to play -- which is the shape every call site wants: "false, so do the
+## thing you were going to do anyway, right now".
+##
+## The overlay is parented to the SceneTree ROOT rather than the current scene, because the
+## intro's whole job is to outlive the screen it started over and hand off to the battle.
+func play_story(scene: StoryScene, on_done: Callable) -> bool:
+	if not can_play_story(scene):
+		return false
+	var tree: SceneTree = get_tree()
+	if tree == null or tree.root == null:
+		return false
+
+	_dismiss_story()
+
+	var overlay := StoryDialogue.new()
+	_story_overlay = overlay
+	tree.root.add_child(overlay)
+
+	# ONE_SHOT: the overlay is torn down in this handler, so a second emission is impossible
+	# by construction -- but connecting one-shot means a future re-play of the same node
+	# could never double-fire the continuation either.
+	overlay.finished.connect(func(_skipped: bool) -> void:
+		_dismiss_story()
+		if on_done.is_valid():
+			on_done.call()
+	, CONNECT_ONE_SHOT)
+
+	if not overlay.play(scene):
+		# Defensive: can_play_story already rejected an empty scene, so this is the
+		# impossible-in-practice branch. Take the overlay back down rather than leaving a
+		# blank input blocker on screen.
+		_dismiss_story()
+		return false
+	return true
+
+
+## Play the ACTIVE chapter's intro, then load [param battle_scene_path]. Returns false when
+## there is no intro (or story is suppressed), leaving the caller to change scene itself --
+## see the campaign branch of [code]CharacterSelect._on_confirm_pressed[/code].
+func play_intro_then_launch(battle_scene_path: String) -> bool:
+	return play_story(story_scene_for(_active, INTRO_SCENE_KEY), func() -> void:
+		var tree: SceneTree = get_tree()
+		if tree != null:
+			tree.change_scene_to_file(battle_scene_path)
+	)
+
+
+## True while a story overlay is up. Public so a future caller (a pause menu, a mid-battle
+## trigger) can avoid stacking a second one.
+func is_story_playing() -> bool:
+	return _story_overlay != null and is_instance_valid(_story_overlay)
+
+
+## The live overlay, or null. Test/tooling hook -- gameplay code should use
+## [method is_story_playing] rather than reaching into the node.
+func story_overlay() -> StoryDialogue:
+	return _story_overlay
+
+
+## Play the just-cleared chapter's outro, if it has one. Called from [method _record_result]
+## on a WIN only.
+##
+## DEFERRED mount: _record_result runs inside the death -> elimination signal cascade, and
+## adding a CanvasLayer there means the rest of that cascade (including GameWorldManager's
+## own game-over reveal) runs with a half-built overlay in the tree. Deferring lets the
+## frame's cascade finish on the intact scene; the overlay then lands on top of the settled
+## result screen, which is exactly the read we want.
+func _play_outro() -> void:
+	var scene: StoryScene = story_scene_for(_active, OUTRO_SCENE_KEY)
+	if not can_play_story(scene):
+		return
+	call_deferred("_mount_outro", scene)
+
+
+func _mount_outro(scene: StoryScene) -> void:
+	# Nothing follows the outro: the results card is already behind it and becomes readable
+	# the moment the overlay tears itself down.
+	play_story(scene, Callable())
+
+
+## Take the live overlay down: out of the tree immediately (so it stops drawing and stops
+## blocking input on the very same call) and queued for deletion. Safe to call when there
+## is nothing mounted, and safe to call from inside the overlay's own finished handler --
+## removing a node from the tree during its signal emission is legal; freeing it there is
+## not, which is why this queues.
+func _dismiss_story() -> void:
+	var overlay: StoryDialogue = _story_overlay
+	_story_overlay = null
+	if overlay == null or not is_instance_valid(overlay):
+		return
+	var parent: Node = overlay.get_parent()
+	if parent != null:
+		parent.remove_child(overlay)
+	overlay.queue_free()
 
 
 # --- Mid-battle save / resume -----------------------------------------------
@@ -282,6 +449,9 @@ func _record_result(won: bool) -> void:
 	_result_recorded = true
 	if won:
 		mark_cleared(String(_active.get("id", "")), _turns)
+		# STORY: the chapter outro plays on a WIN only -- a loss goes straight to the
+		# defeat card. See the class doc for why it is mounted deferred.
+		_play_outro()
 	else:
 		_touch_play(String(_active.get("id", "")))
 

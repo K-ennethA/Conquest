@@ -1,0 +1,66 @@
+[gd_resource type="Resource" script_class="StoryScene" format=3]
+
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="1_beat"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="2_scene"]
+
+[sub_resource type="Resource" id="Resource_ch1_outro_b1"]
+script = ExtResource("1_beat")
+speaker_id = &"narrator"
+speaker_name = ""
+side = &"left"
+text = "The last cap bursts. The clearing goes quiet -- the wrong kind of quiet. The kind that is listening."
+emotion = &"cold"
+tint = Color(1, 1, 1, 1)
+music_cue = &""
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_ch1_outro_b2"]
+script = ExtResource("1_beat")
+speaker_id = &"vineweave"
+speaker_name = ""
+side = &"left"
+text = "This did not start here. Look at the runners -- every one of them is laid the same way, drawn east, toward the heartwood."
+emotion = &"grim"
+tint = Color(1, 1, 1, 1)
+music_cue = &""
+clear_portraits = false
+
+[sub_resource type="Resource" id="Resource_ch1_outro_b3"]
+script = ExtResource("1_beat")
+speaker_id = &"tree_grunt"
+speaker_name = "A Broken Barkling"
+side = &"right"
+text = "...hollow... the crown is hollow... it drank the wood to keep standing... Eldroot... Eldroot is still thirsty..."
+emotion = &"dying"
+tint = Color(0.72, 0.66, 0.6, 1)
+music_cue = &"sfx_death"
+clear_portraits = false
+
+[sub_resource type="Resource" id="Resource_ch1_outro_b4"]
+script = ExtResource("1_beat")
+speaker_id = &"vineweave"
+speaker_name = ""
+side = &"left"
+text = "Eldroot. Then the road east it is -- and every mile of it will be worse than this one."
+emotion = &"resolved"
+tint = Color(1, 1, 1, 1)
+music_cue = &""
+clear_portraits = false
+
+[sub_resource type="Resource" id="Resource_ch1_outro_b5"]
+script = ExtResource("1_beat")
+speaker_id = &"narrator"
+speaker_name = ""
+side = &"left"
+text = "The blight was pushed back a single mile today. The thing that grew it has not moved at all."
+emotion = &"ominous"
+tint = Color(1, 1, 1, 1)
+music_cue = &""
+clear_portraits = true
+
+[resource]
+script = ExtResource("2_scene")
+scene_id = &"ch1_blighted_clearing_outro"
+title = "Chapter 1 -- The Blighted Clearing (Outro)"
+music_cue = &""
+beats = Array[Resource]([SubResource("Resource_ch1_outro_b1"), SubResource("Resource_ch1_outro_b2"), SubResource("Resource_ch1_outro_b3"), SubResource("Resource_ch1_outro_b4"), SubResource("Resource_ch1_outro_b5")])

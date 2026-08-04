@@ -1,0 +1,66 @@
+[gd_resource type="Resource" script_class="StoryScene" format=3]
+
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="1_beat"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="2_scene"]
+
+[sub_resource type="Resource" id="Resource_ch1_intro_b1"]
+script = ExtResource("1_beat")
+speaker_id = &"narrator"
+speaker_name = ""
+side = &"left"
+text = "They call it the Blighted Clearing now. A season ago it was where the village children went for mushrooms."
+emotion = &"cold"
+tint = Color(1, 1, 1, 1)
+music_cue = &""
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_ch1_intro_b2"]
+script = ExtResource("1_beat")
+speaker_id = &"vineweave"
+speaker_name = ""
+side = &"left"
+text = "The rot has reached the treeline. Whatever is doing this is not finished with the forest -- it has only run out of forest to be finished with."
+emotion = &"grim"
+tint = Color(1, 1, 1, 1)
+music_cue = &""
+clear_portraits = false
+
+[sub_resource type="Resource" id="Resource_ch1_intro_b3"]
+script = ExtResource("1_beat")
+speaker_id = &"blightcap"
+speaker_name = "Something in the Ferns"
+side = &"right"
+text = "A wet, shuddering cough comes from under the ferns. Something squat drags itself upright on a knot of root-legs, and the smell of a turned log rolls across the glade."
+emotion = &"feral"
+tint = Color(0.86, 0.94, 0.8, 1)
+music_cue = &""
+clear_portraits = false
+
+[sub_resource type="Resource" id="Resource_ch1_intro_b4"]
+script = ExtResource("1_beat")
+speaker_id = &"vineweave"
+speaker_name = ""
+side = &"left"
+text = "Three of us, then. Cull what stands here before the spores take the road -- if the blight crosses to the village, there is nothing left to come back for."
+emotion = &"resolved"
+tint = Color(1, 1, 1, 1)
+music_cue = &""
+clear_portraits = false
+
+[sub_resource type="Resource" id="Resource_ch1_intro_b5"]
+script = ExtResource("1_beat")
+speaker_id = &"narrator"
+speaker_name = ""
+side = &"left"
+text = "Far to the east, at the heart of the Forgotten Forest, something very old feels the first cut -- and does not hurry."
+emotion = &"ominous"
+tint = Color(1, 1, 1, 1)
+music_cue = &""
+clear_portraits = true
+
+[resource]
+script = ExtResource("2_scene")
+scene_id = &"ch1_blighted_clearing_intro"
+title = "Chapter 1 -- The Blighted Clearing (Intro)"
+music_cue = &""
+beats = Array[Resource]([SubResource("Resource_ch1_intro_b1"), SubResource("Resource_ch1_intro_b2"), SubResource("Resource_ch1_intro_b3"), SubResource("Resource_ch1_intro_b4"), SubResource("Resource_ch1_intro_b5")])

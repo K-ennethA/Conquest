@@ -15,6 +15,11 @@ const GAME_OVER_SCREEN_SCENE := preload("res://game/ui/screens/GameOverScreen.ts
 const DAMAGE_NUMBERS_SCRIPT := preload("res://game/visuals/DamageNumbers.gd")
 const IMPACT_FX_SCRIPT := preload("res://game/visuals/ImpactFX.gd")
 
+## The pre-battle VS CLASH intro (see [VersusIntro]). Preloaded as a SCRIPT by path, for the
+## same reason as the two juice layers above: a fresh checkout resolves a brand-new global
+## class_name only after a rescan, and a preload by path never has that problem.
+const VERSUS_INTRO_SCRIPT := preload("res://game/ui/screens/VersusIntro.gd")
+
 var map_loader: MapLoader
 var current_map_path: String = ""
 
@@ -117,6 +122,15 @@ var _replay_log: Dictionary = {}
 ## A custom map materialised from the replay header's embedded payload, or null when the
 ## header names an ordinary map path. Consumed by _load_selected_map.
 var _replay_map: MapResource = null
+
+## The pre-battle VS CLASH intro for THIS battle, or null when it did not apply (see
+## [method _play_versus_intro]). Mounted on the scene root -- it carries its own CanvasLayer.
+##
+## Deliberately UNTYPED (`var x = null`, not `: CanvasLayer`): the overlay is reached through a
+## path-preloaded script rather than its global class_name (see VERSUS_INTRO_SCRIPT), and a
+## statically-typed CanvasLayer would make the analyser reject play() / `finished` as "not found
+## in base CanvasLayer". Same reason this file keeps its arena and challenge probes untyped.
+var _versus_intro = null
 
 func _ready() -> void:
 	# Discoverable by decoupled systems that need to spawn units mid-battle without a
@@ -645,6 +659,57 @@ func _setup_ultimate_cutin() -> void:
 	scene_root.add_child(_ultimate_cutin)
 
 
+# --- Pre-battle VS clash intro ------------------------------------------------
+
+func _play_versus_intro() -> void:
+	"""Mount and play the pre-battle VS CLASH intro, and do not return until it is done.
+
+	Eligibility is [VersusIntro]'s own pure static decision -- it plays for a local hotseat
+	versus match and for a networked versus match, and is suppressed for solo/skirmish, arena,
+	challenge, king-of-the-hill-vs-AI, campaign and replay playback. The one fact that overlay
+	cannot know for itself is whether this battle is a RESTORED mid-battle save, which is not a
+	battle starting, so that key is stamped on the context here (see _maybe_restore_battle_snapshot
+	-- _restore_snapshot is still populated at this point and is only cleared after _start_game).
+
+	Purely presentational: it issues no command and is never synchronised, so in a networked
+	match each machine plays its own copy and a few frames of drift between them is meaningless.
+
+	Mounted on the SCENE ROOT rather than the "UI" CanvasLayer because it carries its own
+	(higher) layer -- exactly like _setup_ultimate_cutin. Bails silently without a scene root,
+	which is the expected condition on a scene transition and in any scene that is not
+	GameWorld.tscn."""
+	if _versus_intro != null and is_instance_valid(_versus_intro):
+		return
+
+	var ctx: Dictionary = VERSUS_INTRO_SCRIPT.live_context()
+	ctx["resumed"] = not _restore_snapshot.is_empty()
+	if not VERSUS_INTRO_SCRIPT.should_show(ctx):
+		return
+
+	var tree := get_tree()
+	if tree == null or tree.current_scene == null:
+		return
+	var scene_root: Node = tree.current_scene
+	if scene_root.get_node_or_null("VersusIntro") != null:
+		return
+
+	_versus_intro = VERSUS_INTRO_SCRIPT.new()
+	_versus_intro.name = "VersusIntro"
+	scene_root.add_child(_versus_intro)
+
+	# play() never emits `finished` synchronously (both its animated and its animations-off
+	# paths end on a later frame), so this await always suspends and is always released --
+	# including when a scene change frees the overlay mid-play (see VersusIntro._exit_tree).
+	_versus_intro.play(VERSUS_INTRO_SCRIPT.collect_sources())
+	await _versus_intro.finished
+
+
+## The live VS intro overlay, or null when this battle did not get one. Read-only accessor for
+## tests and for any later system that wants to know whether the reveal is still up.
+func get_versus_intro():
+	return _versus_intro
+
+
 ## Latch so an ARENA round resolves exactly once: the enemy-wipe fires BOTH unit_eliminated
 ## and player_eliminated, and after ArenaController finishes the run it is no longer active,
 ## so a second _evaluate_game_end would fall through to the normal game-over path (which
@@ -1092,6 +1157,16 @@ func _setup_local_game() -> void:
 
 	# Wait one more frame before starting the game
 	await get_tree().process_frame
+	if not is_inside_tree():
+		return
+
+	# VS CLASH INTRO: the pre-battle reveal for a versus match. This is the insertion point
+	# precisely because of what is on either side of it -- the board, the players and the
+	# (registered but not yet activated) turn system all exist above, and _start_game() below
+	# is what activates the turn system. Awaiting here therefore IS the first-turn hold: no
+	# turn ticks until the intro finishes or the player skips it. Nothing new gates the boot;
+	# the existing ordering does. A no-op that returns immediately in every other mode.
+	await _play_versus_intro()
 	if not is_inside_tree():
 		return
 
