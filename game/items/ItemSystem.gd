@@ -65,11 +65,42 @@ var _watched_turn_system = null
 ## signals the deciding kill fires (the same guard every mode controller uses).
 var _drop_rolled: bool = false
 
+# --- What dropped THIS battle (the post-match summary's read) ----------------
+#
+# There was no public "what did the battle that just ended pay out" accessor at all, so the
+# post-match summary could report points, casualties and kills but never the loot -- the one
+# reward the player actually keeps. This is that accessor.
+#
+# STATIC, and deliberately so, even though everything else per-battle on this node is
+# instance state: [method award] is a STATIC entry point and the Arena run payout calls it
+# without an ItemSystem in hand at all ([code]ArenaController._finish_run[/code]). An
+# instance latch would therefore record some grants and silently miss others, which is worse
+# than no accessor. Process-wide static grant state is already how this feature works --
+# [ItemInventory] is the precedent.
+#
+# LIFECYCLE, one line each:
+#   * CLEARED at battle start, from [method setup] -- GameWorldManager frees and rebuilds
+#     this node per battle (see its _setup_item_system), so setup() IS the battle-start
+#     moment, and the previous battle's loot can never bleed into this one's summary.
+#   * APPENDED by [method award], the single grant entry point, so the latch cannot drift
+#     from what was actually granted and saved.
+#   * READ by [GameOverScreen] at reveal, through [method drops_this_battle].
+#
+# ARENA is unaffected either way: arena rounds skip the per-battle roll entirely and the
+# run's payout is rendered by ArenaResultsScreen off ArenaController's own `last_result`
+# snapshot, which this neither feeds nor consults. The run payout still lands in the latch
+# (award() is award()), but the summary that would read it is suppressed in arena.
+static var _drops_this_battle: Array[String] = []
+
 
 ## Wire the system into this battle. Mirrors [method HazardManager.setup]: everything is
 ## connected here rather than in _ready so the node can be constructed, parented, and armed
 ## in one explicit step by [GameWorldManager].
 func setup() -> void:
+	# Battle start: forget what the PREVIOUS battle dropped (see the latch's note). This node
+	# is freed and rebuilt per battle, so this runs exactly once per battle.
+	begin_battle_drop_log()
+
 	if TurnSystemManager != null:
 		if not TurnSystemManager.turn_system_activated.is_connected(_on_turn_system_activated):
 			TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
@@ -371,7 +402,27 @@ static func award(item: ItemResource, host: Node) -> void:
 		return
 	ItemInventory.grant(item.id)
 	ItemInventory.save()
+	# Recorded HERE rather than at the roll, so the summary can only ever list loot that was
+	# really granted and really persisted -- a roll that produced nothing, or an item the
+	# grant refused, is not a drop.
+	_drops_this_battle.append(String(item.id))
 	ItemToast.present(item, host)
+
+
+## Begin a fresh per-battle drop log. Called from [method setup]; exposed so a test (or a
+## future caller that grants outside a mounted battle) can state the battle boundary
+## explicitly rather than depending on node lifetime.
+static func begin_battle_drop_log() -> void:
+	_drops_this_battle.clear()
+
+
+## The item ids [method award] has granted since the current battle began, in the order they
+## dropped. Returns a COPY -- the summary must not be able to edit the record it is reading.
+##
+## Empty is the common answer (a battle drops nothing ~65% of the time) and it means exactly
+## that: nothing was earned. A reader shows NO row for it rather than an empty heading.
+static func drops_this_battle() -> Array[String]:
+	return _drops_this_battle.duplicate()
 
 
 # --- internals --------------------------------------------------------------

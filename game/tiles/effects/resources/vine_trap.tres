@@ -23,5 +23,7 @@ id = &"vine_trap"
 display_name = "Vine Trap"
 trigger = 0
 affected_factions = 1
+springs_on_pass = true
+halts_movement = true
 consume_on_trigger = true
 effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_vinetrap_dmg"), SubResource("Resource_vinetrap_hold")])

@@ -27,6 +27,8 @@ class_name GameOverScreen
 #   BATTLE    rounds | lost | defeated | dealt | taken
 #             > lost-unit rows (portrait + name), enemies-defeated names
 #   REWARDS   points gained this match | balance | challenge score (+PERFECT)
+#             > ITEMS FOUND rows (glyph + name), capped at 3 with a "+N more" tail;
+#               absent entirely when the battle dropped nothing
 #   VERSUS    (networked matches only) opponent name + rank chip + their lifetime
 #             points, your rank progress bar
 #
@@ -54,10 +56,12 @@ class_name GameOverScreen
 #                       challenge is live AND the persisted record's turn count matches the
 #                       live one, which is what proves the record is THIS attempt's rather
 #                       than a stale earlier one.
-#   * item drop         NOT SHOWN -- hook gap, unchanged. Neither ItemSystem nor the
-#                       inventory exposes a public "what dropped from the battle that just
-#                       ended" accessor a foreign screen can read, and inventing one is out
-#                       of scope here (those files are read-only for this work).
+#   * item drops        REAL, and no longer a hook gap: ItemSystem now keeps a per-battle
+#                       drop latch (cleared in its setup(), appended by its single award()
+#                       entry point) and answers ItemSystem.drops_this_battle() with the ids
+#                       it granted. Resolved to names/glyphs through ItemLibrary at reveal.
+#                       A battle that dropped nothing -- the usual case, ~65% -- renders NO
+#                       row at all rather than an empty heading.
 #   * opponent card     REAL, but exchanged at MATCH START, not read at match end: see
 #                       [MatchPeerInfo]. By the time a versus match ends the opponent may
 #                       have forfeited or dropped, so there would be nobody left to ask.
@@ -88,6 +92,12 @@ const ROW_FONT_SIZE := 14
 const MAX_LOST_ROWS := 3
 ## Square edge (px) of a lost-unit row's portrait / monogram badge.
 const PORTRAIT_PX := 26.0
+
+## At most this many item-drop rows are listed, with the same "+N more" tail the casualty
+## rows use. Same number and same discipline on purpose: the card's height budget does not
+## care which section grew, and a REWARDS block that could run long would push the buttons
+## off a small viewport exactly as an unbounded casualty list would.
+const MAX_DROP_ROWS := 3
 
 # Banner accents: bright gold for a win, desaturated red for a loss.
 const VICTORY_GOLD := Color("f5c95a")
@@ -129,6 +139,10 @@ var _balance_value: Label
 var _challenge_row: HBoxContainer
 var _challenge_value: Label
 var _perfect_badge: Label
+## Holder for the item-drop rows. Contains ONLY runtime-built children (see
+## [method _populate_drop_rows]), so it can be cleared wholesale without freeing anything
+## the one-time colour pass still points at.
+var _drop_rows_box: VBoxContainer
 
 var _versus_box: VBoxContainer
 var _opponent_name_label: Label
@@ -390,6 +404,15 @@ func _build_rewards_section(col: VBoxContainer) -> void:
 	_perfect_badge.add_theme_font_size_override("font_size", 12)
 	_perfect_badge.visible = false
 	_challenge_row.add_child(_perfect_badge)
+
+	# ITEM DROPS. Built empty and hidden; filled at reveal from the per-battle latch. Nothing
+	# persistent lives inside it (not even the heading) because _populate_drop_rows frees
+	# every child -- the same reason _populate_lost_rows builds its "+N more" inline.
+	_drop_rows_box = VBoxContainer.new()
+	_drop_rows_box.name = "DropRows"
+	_drop_rows_box.add_theme_constant_override("separation", 4)
+	_drop_rows_box.visible = false
+	col.add_child(_drop_rows_box)
 
 
 ## VERSUS: built ALWAYS (so the node references are never null) but hidden unless
@@ -866,6 +889,8 @@ func _populate_rewards() -> void:
 	if _balance_value != null:
 		_balance_value.text = str(_points_balance())
 
+	_populate_drop_rows()
+
 	if _challenge_row == null:
 		return
 	var result: Dictionary = _challenge_result()
@@ -877,6 +902,102 @@ func _populate_rewards() -> void:
 		_challenge_value.text = str(int(result.get("score", 0)))
 	if _perfect_badge != null:
 		_perfect_badge.visible = bool(result.get("perfect", false))
+
+
+## The LOOT the battle just paid out: one chip row per item, capped at
+## [constant MAX_DROP_ROWS] with the same "+N more" tail the casualty rows use.
+##
+## SILENT ON ZERO. Most battles drop nothing (the odds are ~65% nothing), so an empty latch
+## renders no heading, no placeholder and no row -- the block simply is not there. "Nothing
+## dropped" is not news; printing it every match would make the one match that DID pay out
+## harder to spot, not easier.
+##
+## The latch is [method ItemSystem.drops_this_battle] -- ids only, because the summary reads
+## it after the grant has already been persisted and an id is what survives. Names and
+## glyphs are resolved through [ItemLibrary], the same lookup the loadout screen's team chips
+## use, so an item reads identically wherever it appears.
+func _populate_drop_rows() -> void:
+	if _drop_rows_box == null:
+		return
+	for child in _drop_rows_box.get_children():
+		child.queue_free()
+
+	var drops: Array[String] = _drops_this_battle()
+	if drops.is_empty():
+		_drop_rows_box.visible = false
+		return
+	_drop_rows_box.visible = true
+
+	# Built inline rather than through _section_header / _caption_label: those helpers
+	# register the label for the ONE-TIME post-apply_to colour pass, and a runtime row would
+	# leave a freed pointer in those arrays. Runtime rows colour themselves.
+	var heading := Label.new()
+	heading.name = "DropsHeading"
+	heading.text = "ITEMS FOUND"
+	heading.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
+	heading.add_theme_color_override("font_color", ConquestTheme.EL_HOLY)
+	_drop_rows_box.add_child(heading)
+
+	var shown: int = mini(drops.size(), MAX_DROP_ROWS)
+	for i in range(shown):
+		_drop_rows_box.add_child(_build_drop_row(drops[i]))
+
+	var remaining: int = drops.size() - shown
+	if remaining > 0:
+		var more := Label.new()
+		more.text = "+%d more" % remaining
+		more.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
+		more.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
+		_drop_rows_box.add_child(more)
+
+
+## One drop row: the item's glyph badge and its display name, in the
+## "[icon_hint] [display_name]" vocabulary the loadout screen's item chips already use
+## ([code]CharacterSelect._refresh_team_chips[/code]).
+##
+## An id [ItemLibrary] cannot resolve (a shipped item later removed from the content dir)
+## is still LISTED, under its raw id and the default glyph. The player earned it and it is
+## in their inventory; hiding the row would under-report a real reward, and inventing a name
+## for it would be worse.
+func _build_drop_row(item_id: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+
+	var item: ItemResource = ItemLibrary.get_item(item_id)
+	var glyph: String = "*"
+	var label_text: String = item_id
+	if item != null:
+		label_text = item.display_name
+		if not item.icon_hint.strip_edges().is_empty():
+			glyph = item.icon_hint
+
+	var badge := Label.new()
+	badge.text = glyph
+	badge.custom_minimum_size = Vector2(PORTRAIT_PX, 0.0)
+	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	badge.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
+	badge.add_theme_color_override("font_color", ConquestTheme.EL_HOLY)
+	row.add_child(badge)
+
+	var label := Label.new()
+	label.text = label_text
+	label.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
+	label.add_theme_color_override("font_color", ConquestTheme.CREAM)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(label)
+
+	return row
+
+
+## What dropped this battle, from [ItemSystem]'s per-battle latch.
+##
+## Unguarded, unlike this screen's autoload reads: the latch is STATIC state on a class this
+## script already links against, so there is no tree, no autoload and no live battle for it
+## to be missing from. A bare harness reads an empty latch, which is the correct answer.
+func _drops_this_battle() -> Array[String]:
+	return ItemSystem.drops_this_battle()
 
 
 ## The VERSUS block: the opponent's card (name, rank chip, their lifetime points) and YOUR

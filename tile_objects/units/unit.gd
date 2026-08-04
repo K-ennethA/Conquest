@@ -49,7 +49,9 @@ var _leash_radius: int = -1
 signal unit_died(unit: Unit)
 signal unit_action_completed(unit: Unit, action_type: String)
 signal owner_changed(unit: Unit, old_owner: Player, new_owner: Player)
-## Temporary damage-soak shield changed (0 when depleted). Drives any shield HUD.
+## Temporary damage-soak shield changed (0 when depleted). Drives the shield HUD: the
+## world-space [HealthBar]'s silver segment binds to this, and every other HP surface
+## re-reads [method get_shield] when it repaints. See [ShieldVisuals].
 signal shield_changed(current: int)
 
 ## Temporary HP shield that absorbs incoming damage before real health (see
@@ -626,9 +628,9 @@ func take_damage(amount: int) -> void:
 	# before any of it reaches real health. Absorb up to what the shield holds, then
 	# let the remainder fall through to HP below.
 	if amount > 0 and shield_hp > 0:
-		var absorbed: int = mini(shield_hp, amount)
-		shield_hp = maxi(0, shield_hp - absorbed)
-		amount -= absorbed
+		var split: Dictionary = absorb_split(shield_hp, amount)
+		shield_hp = int(split["shield_left"])
+		amount = int(split["to_health"])
 		shield_changed.emit(shield_hp)
 	if amount <= 0:
 		return
@@ -654,6 +656,25 @@ func grant_shield(amount: int) -> void:
 ## Current shield points remaining (0 when none).
 func get_shield() -> int:
 	return shield_hp
+
+
+## How a shield of [param shield] splits an incoming hit of [param amount]:
+## [code]{ absorbed, shield_left, to_health }[/code].
+##
+## THE ABSORPTION RULE, in ONE place. [method take_damage] burns the shield with this, and
+## the combat forecast ([CombatForecastPanel], via [method ShieldVisuals.absorb_text])
+## PREDICTS the absorption with the same call -- so the line the player reads while aiming
+## and the soak the board performs cannot drift apart. Static and pure: no unit state, no
+## RNG, safe to call from a preview path (CONQUEST.md rule 9).
+static func absorb_split(shield: int, amount: int) -> Dictionary:
+	var sh: int = maxi(0, shield)
+	var dmg: int = maxi(0, amount)
+	var absorbed: int = mini(sh, dmg)
+	return {
+		"absorbed": absorbed,
+		"shield_left": sh - absorbed,
+		"to_health": dmg - absorbed,
+	}
 
 func heal(amount: int) -> void:
 	"""Heal the unit"""

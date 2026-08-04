@@ -220,6 +220,51 @@ func test_the_rendered_chip_names_the_status_its_severity_and_its_duration() -> 
 	assert_true(text.contains("2t"), "and how long it lasts: %s" % text)
 
 
+func test_the_rendered_chips_glyph_is_one_the_font_it_is_drawn_with_can_draw() -> void:
+	# THE TOFU PIN, taken off the REAL mounted card rather than off the vocabulary.
+	# StatusVisuals shipped ◆▲●▼■ -- every one of them absent from Godot's default font --
+	# so every chip on this card drew a box before its text, and the world-space Label3D
+	# badge (which has no font fallback at all) drew nothing but the box. A string
+	# assertion cannot see that: "◆ Poisoned" and "† Poisoned" are equally valid Strings.
+	# So this asks the font the chip is ACTUALLY drawn with whether it has the character.
+	var layout: Control = await _build_hud()
+	var unit := _poisoned_unit(2)
+	await _select(unit)
+
+	var chips: Array = _status_chips(layout.unit_info_panel)
+	assert_false(chips.is_empty(), "there is a rendered chip to inspect")
+	if chips.is_empty():
+		return
+
+	var label := chips[0].get_node("ChipLabel") as Label
+	var font: Font = label.get_theme_font("font")
+	assert_not_null(font, "the mounted chip resolves a real font")
+	if font == null:
+		return
+
+	var glyph: String = StatusVisuals.glyph_for_id(&"poisoned")
+	gut.p("chip glyph  : '%s' U+%04X in %s" % [glyph, glyph.unicode_at(0), label.text])
+	assert_true(label.text.begins_with(glyph),
+			"the rendered chip leads with the status glyph: %s" % label.text)
+	assert_true(font.has_char(glyph.unicode_at(0)),
+			"and the font this chip is drawn with can draw '%s' (U+%04X) -- otherwise the "
+			% [glyph, glyph.unicode_at(0)]
+			+ "player sees a tofu box in front of every status name")
+
+	# Not just this one status: EVERY glyph the vocabulary can emit, measured against the
+	# same live font. This is the pin that fails if anyone reintroduces an undrawable char.
+	for candidate in [StatusVisuals.GLYPH_DOT, StatusVisuals.GLYPH_HOT,
+			StatusVisuals.GLYPH_GUARD, StatusVisuals.GLYPH_BUFF,
+			StatusVisuals.GLYPH_DEBUFF, StatusVisuals.GLYPH_NEUTRAL,
+			ShieldVisuals.GLYPH]:
+		var code: int = String(candidate).unicode_at(0)
+		assert_true(font.has_char(code),
+				"the live HUD font can draw '%s' (U+%04X)" % [candidate, code])
+		assert_true(font.get_string_size(candidate, HORIZONTAL_ALIGNMENT_LEFT, -1,
+				label.get_theme_font_size("font_size")).x > 0.0,
+				"and '%s' occupies real width at the chip's own font size" % candidate)
+
+
 func test_a_chip_elaborates_on_hover_without_opening_the_page() -> void:
 	# "It showed a small green dot for poison but doesn't elaborate." The chip itself has
 	# to say what the status DOES, not just what it is called.

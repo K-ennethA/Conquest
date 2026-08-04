@@ -316,6 +316,13 @@ drifted is no longer a recording of anything, and showing it as one is the worst
 system could do. A log with no checksums left (a truncated recording) simply stops being
 checkable — that is a handled outcome, not a divergence.
 
+**Compatibility note — environmental damage no longer rolls.** Tile effects and
+`TravelingHazard` bands now land unconditionally (`MoveContext.guaranteed_hit`, the rule
+status ticks already followed), so a battle with terrain damage in it consumes fewer RNG
+draws than it used to; a replay recorded before that change replays against a shifted stream
+and trips the divergence guard above, which stops it at the offending turn and banners it —
+the designed behaviour, not a regression.
+
 The transport bar (`game/ui/hud/ReplayHUD.gd`, mounted by `UILayoutManager` exactly as
 `NetToast` is) is play/pause · step · speed · `Turn 4/12` · exit, plus that banner and the
 recorded outcome when the log runs out. It hides itself unless a replay is playing, so a

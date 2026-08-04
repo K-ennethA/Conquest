@@ -41,6 +41,24 @@ func describe() -> String:
 	return "Defeat the boss"
 
 
+## "Defeat Eldroot the Hollow Crown" while that boss is still standing, falling back to
+## the generic [method describe] when the state carries no living enemy boss to name (a
+## boss already dead, a board not yet built, a briefing screen with no units to hand).
+##
+## Naming the boss is the whole point: "Defeat the boss" tells a player nothing they could
+## not already guess, whereas the name is the unit they have to go and find on the board.
+func describe_progress(state: Dictionary) -> String:
+	for u in state.get("units", []):
+		if _team_of(u) == faction:
+			continue
+		if not _is_boss(u) or not _is_alive(u):
+			continue
+		var display: String = _display_name_of(u)
+		if display != "":
+			return "Defeat %s" % display
+	return describe()
+
+
 ## True when [param unit] is a boss. Duck-typed to match the live [Unit]
 ## (`is_boss()` reading `character_resource.is_boss`) while still resolving mocks
 ## that expose either a `character_resource.is_boss` property or a bare `is_boss`.

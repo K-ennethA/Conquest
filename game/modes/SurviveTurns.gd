@@ -27,6 +27,19 @@ func describe() -> String:
 	return "Survive for %d turns" % turns
 
 
+## "Survive 6 more turns" -- the same objective, counted down against the turns already
+## elapsed in [param state]. Falls back to the static [method describe] once the target is
+## reached (or when the state carries no turn count at all), so the line never reads
+## "Survive 0 more turns" or, worse, a negative one.
+func describe_progress(state: Dictionary) -> String:
+	var remaining: int = turns - int(state.get("turn", 0))
+	if remaining <= 0:
+		return describe()
+	if remaining == 1:
+		return "Survive 1 more turn"
+	return "Survive %d more turns" % remaining
+
+
 func _faction_has_survivor(state: Dictionary) -> bool:
 	for u in state.get("units", []):
 		if _team_of(u) == faction and _is_alive(u):

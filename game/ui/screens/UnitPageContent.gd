@@ -174,7 +174,8 @@ static func stat_rows(character, unit = null) -> Array:
 	return rows
 
 
-## The full stat table: HP first (live current/max when there is a unit), then every row
+## The full stat table: HP first (live current/max when there is a unit), then the shield
+## row while one is up (see [ShieldVisuals]), then every row
 ## from [method stat_rows] as `base → effective` with the [MoveStatVisuals] arrow and
 ## tint, then the character's power budget and movement profile.
 static func build_stat_table(character, unit = null) -> Control:
@@ -201,6 +202,16 @@ static func build_stat_table(character, unit = null) -> Control:
 		hp_text = str(character.base_health)
 	if hp_text != "":
 		_stat_pair(grid, "Health", hp_text, MenuTheme.CREAM)
+
+	# The damage-soak shield, DIRECTLY under Health because that is what it is -- a buffer
+	# that is spent before health is. Present only while one is up: an authored character
+	# has no shield, and a "Shield: 0" row on every unit would be furniture (the same rule
+	# the forecast's Type / Ability rows follow). Silver, matching the bar segment that
+	# says the same thing on every HP surface.
+	var live_shield: int = ShieldVisuals.shield_of(unit)
+	if live_shield > 0:
+		_stat_pair(grid, "Shield", ShieldVisuals.spaced_number_text(live_shield),
+				ShieldVisuals.SILVER)
 
 	for row in stat_rows(character, unit):
 		var base: int = int(row["base"])
@@ -534,7 +545,7 @@ static func _build_status_card(condition, count: int, turns_left: int) -> PanelC
 	body.add_child(header)
 
 	# The SAME one-line vocabulary the compact battle card and the hover panel use:
-	# "◆ Poisoned x3 · 2 turns". One phrasing across every surface that names a status.
+	# "† Poisoned x3 · 2 turns". One phrasing across every surface that names a status.
 	var name_label := Label.new()
 	name_label.text = StatusVisuals.chip_text(condition, count, turns_left)
 	name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)

@@ -27,7 +27,17 @@ class_name TravelingHazard
 ## [method DamageMath.environment_damage], the shared environmental chain) so a guarded /
 ## invulnerable unit takes 0, Grovebound-style reduction applies, and the vine's own
 ## [member element] is matched against the victim's -- exactly as a normal hit would.
-## [member damage] is the raw number snapshotted at CAST time. Each
+## [member damage] is the raw number snapshotted at CAST time.
+##
+## A BAND HIT ALWAYS LANDS. There is no accuracy roll, no evasion term and no crit on this
+## path -- [method DamageMath.environment_damage] is defender-side arithmetic only -- so a
+## vine cannot be dodged by standing in tall grass, and advancing a vine draws NOTHING from
+## any generator. That is the same rule environmental TILE damage follows (see
+## [method TileEffectResource.run], which reaches it by marking its context
+## [member MoveContext.guaranteed_hit]) and the same rule a status tick follows: what is
+## already on top of you is not a swing. Keep it that way -- putting a roll here would both
+## re-introduce the dodge and start consuming the lockstep RNG stream mid-advance.
+## Each
 ## landed hit is ANNOUNCED as [code]damage_dealt[/code] before it is applied, so a vine
 ## kill is attributed to [member source] (while that unit is alive and on the board)
 ## exactly like a swing -- see [method DamageEffect.credited_source].

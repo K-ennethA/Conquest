@@ -1,4 +1,4 @@
-extends GutTest
+﻿extends GutTest
 
 ## [MoveStatVisuals] -- the vocabulary the move buttons and the combat forecast share for
 ## "how far has this recharged" and "is this number still the authored one".
@@ -132,14 +132,14 @@ func test_an_unmodified_stat_gets_no_decoration() -> void:
 func test_a_boost_reads_as_a_change_not_a_number() -> void:
 	assert_eq(MoveStatVisuals.stat_text("Range", 3, 5), "Range 3 → 5",
 		"the question is 'did something change my reach', so both values are shown")
-	assert_eq(MoveStatVisuals.delta_suffix(3, 5), " ▲+2", "and the delta is signed and up")
+	assert_eq(MoveStatVisuals.delta_suffix(3, 5), " ^+2", "and the delta is signed and up")
 	assert_eq(MoveStatVisuals.delta_color(3, 5), MoveStatVisuals.BUFF_COLOR,
 		"a boost is the buff colour")
 
 
 func test_a_cut_reads_as_a_loss() -> void:
 	assert_eq(MoveStatVisuals.stat_text("Attack", 12, 8), "Attack 12 → 8")
-	assert_eq(MoveStatVisuals.delta_suffix(12, 8), " ▼-4", "a reduction points down")
+	assert_eq(MoveStatVisuals.delta_suffix(12, 8), " v-4", "a reduction points down")
 	assert_eq(MoveStatVisuals.delta_color(12, 8), MoveStatVisuals.NERF_COLOR)
 
 
@@ -186,7 +186,7 @@ func test_stat_info_compares_effective_against_base() -> void:
 	var info: Dictionary = MoveStatVisuals.stat_info(buffed, "attack", "Attack")
 	assert_true(bool(info["modified"]), "10 base vs 14 effective is a buffed attack")
 	assert_eq(String(info["text"]), "Attack 10 → 14")
-	assert_eq(String(info["suffix"]), " ▲+4")
+	assert_eq(String(info["suffix"]), " ^+4")
 
 
 func test_stat_info_on_a_unit_that_cannot_answer_reports_unmodified() -> void:

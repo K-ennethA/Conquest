@@ -24,7 +24,8 @@ class_name UnitInfoPanel
 ##
 ## THE CARD IS, IN ORDER, AND NOTHING ELSE:
 ##   * a small portrait thumb, the unit's name and its class line;
-##   * an HP bar with the numbers on it;
+##   * an HP bar with the numbers on it -- plus, only while a damage-soak shield is up, a
+##     silver tail on the bar and a "◊15" beside the numbers (see [ShieldVisuals]);
 ##   * ONE row of four stat chips -- ATK / DEF / SPD / MOV -- showing EFFECTIVE values,
 ##     tinted and arrowed when they are off base (see [method _build_stat_chip]);
 ##   * the status strip: one compact chip per active condition, wrapping to at most two
@@ -143,6 +144,18 @@ var _element_badge: PanelContainer = null
 ## inside the same PanelContainer.
 var _portrait_texture_rect: TextureRect = null
 
+## "◊15" -- the damage-soak shield, on the HP NUMBERS row, and the silver tail on the HP
+## BAR. Both hidden outright at zero shield, so an unshielded unit's card is exactly the
+## card that shipped before.
+##
+## ZERO HEIGHT COST, which is what let them onto a card whose height is pinned: the label
+## rides the existing HP numbers row at [constant ConquestTheme.FONT_CAPTION]+1 (12px,
+## drawing ~17px inside the 13px HP label's ~18px row -- the same measurement that put the
+## element badge on the name row), and the tail is a child of the HP bar, so neither adds
+## a row and [method fixed_content_height] is unchanged.
+var _shield_label: Label = null
+var _shield_tail: ColorRect = null
+
 
 func _ready() -> void:
 	GameEvents.unit_selected.connect(_on_unit_selected)
@@ -156,6 +169,7 @@ func _ready() -> void:
 	# Append the code-built rows BEFORE theming, so they pick up the amber cascade along
 	# with the scene-authored ones.
 	_build_element_badge()
+	_build_shield_readout()
 	_build_stat_row()
 	_build_status_strip()
 	_build_details_button()
@@ -388,9 +402,15 @@ func _update_unit_info(unit: Unit) -> void:
 	if health_label:
 		health_label.text = "%d/%d" % [unit.current_health, unit.max_health]
 	if health_bar:
-		health_bar.max_value = maxf(1.0, float(unit.max_health))
+		# The bar's scale is the SHARED one: max_value is max_health until a shield would
+		# overrun the bar, at which point HP and shield rescale together rather than the
+		# tail spilling out of the 240px column. Identical to max_health with no shield.
+		health_bar.max_value = maxf(1.0, float(ShieldVisuals.denominator(
+				int(unit.current_health), int(unit.max_health),
+				ShieldVisuals.shield_of(unit))))
 		health_bar.value = clampf(float(unit.current_health), 0.0, health_bar.max_value)
 
+	_update_shield_readout(unit)
 	_update_element_badge(unit)
 	_update_stat_chips(unit)
 	_update_status_strip(unit)
@@ -441,6 +461,77 @@ func _build_element_badge() -> void:
 func _update_element_badge(unit) -> void:
 	ElementVisuals.update_badge(
 			_element_badge, ElementVisuals.of_unit(unit), ELEMENT_BADGE_MAX_WIDTH)
+
+
+# --- The shield readout ---------------------------------------------------------
+
+## Put the shield number at the END of the HP numbers row, and the shield tail INSIDE the
+## HP bar. Both start hidden; [method _update_shield_readout] drives them.
+##
+## The numbers row is `HP | 58/108 (expand, right-aligned) | ◊15`: the expanding HP label
+## keeps pushing the pair to the right edge exactly as it did alone, so a unit with no
+## shield sees no change in where its numbers sit.
+func _build_shield_readout() -> void:
+	if health_label != null and is_instance_valid(health_label):
+		var row := health_label.get_parent() as Control
+		if row != null:
+			_shield_label = Label.new()
+			_shield_label.name = "ShieldLabel"
+			_shield_label.text = ""
+			_shield_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION + 1)
+			_shield_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			_shield_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_shield_label.visible = false
+			row.add_child(_shield_label)
+
+	if health_bar != null and is_instance_valid(health_bar):
+		# A child of the bar, so it draws OVER the bar's fill and needs no layout slot of
+		# its own -- the same recipe CombatForecastPanel's red damage band uses.
+		_shield_tail = ColorRect.new()
+		_shield_tail.name = "ShieldTail"
+		_shield_tail.color = ShieldVisuals.SILVER
+		_shield_tail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_shield_tail.anchor_top = 0.0
+		_shield_tail.anchor_bottom = 1.0
+		_shield_tail.offset_left = 0.0
+		_shield_tail.offset_right = 0.0
+		_shield_tail.offset_top = 0.0
+		_shield_tail.offset_bottom = 0.0
+		_shield_tail.visible = false
+		health_bar.add_child(_shield_tail)
+
+
+## Repaint the shield number and tail for [param unit]. Zero shield hides both, which is
+## byte-for-byte the card that shipped before the shield was visible at all.
+func _update_shield_readout(unit) -> void:
+	var shield: int = ShieldVisuals.shield_of(unit)
+
+	if _shield_label != null and is_instance_valid(_shield_label):
+		_shield_label.text = ShieldVisuals.number_text(shield)
+		_shield_label.visible = shield > 0
+		if shield > 0:
+			# Re-asserted on every repaint for the same reason the element badge is:
+			# ConquestTheme.apply_to strips baked font colours, and _apply_width_discipline
+			# clipped this label (reported minimum width 1px) at build time. fit_label states
+			# the width the text actually needs -- the established fix for the "drawn as a
+			# dot" trap.
+			_shield_label.add_theme_color_override("font_color", ShieldVisuals.SILVER)
+			ElementVisuals.fit_label(_shield_label, CHIP_MAX_WIDTH)
+
+	if _shield_tail == null or not is_instance_valid(_shield_tail):
+		return
+	var fractions: Dictionary = ShieldVisuals.bar_fractions(
+			int(unit.current_health), int(unit.max_health), shield)
+	var hp: float = float(fractions.get("hp", 0.0))
+	var tail: float = float(fractions.get("shield", 0.0))
+	if tail <= ShieldVisuals.MIN_FRACTION:
+		_shield_tail.visible = false
+		return
+	_shield_tail.anchor_left = clampf(hp, 0.0, 1.0)
+	_shield_tail.anchor_right = clampf(hp + tail, 0.0, 1.0)
+	_shield_tail.offset_left = 0.0
+	_shield_tail.offset_right = 0.0
+	_shield_tail.visible = true
 
 
 # --- The four stat chips -------------------------------------------------------
@@ -622,7 +713,7 @@ static func compact_turns(turns_left: int) -> String:
 	return "%dt" % turns_left
 
 
-## "◆ Poisoned x3 · 2t" -- the card's chip label.
+## "† Poisoned x3 · 2t" -- the card's chip label.
 ##
 ## Deliberately the same GRAMMAR as [method StatusVisuals.chip_text] (glyph, name, stack
 ## suffix, separator, duration) with only the duration compacted, so a chip on this card

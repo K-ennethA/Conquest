@@ -504,7 +504,35 @@ func _reachable_cells(unit: Unit, origin: Vector2i, board) -> Array:
 		return []
 	# Pass the unit so a multi-cell unit (e.g. a 2x2 boss) only considers cells where
 	# its WHOLE footprint fits; omitting it would path the boss as if it were 1x1.
-	return MovementResolver.new().reachable_cells(origin, profile, board, unit)
+	var resolver := MovementResolver.new()
+	var cells: Array[Vector2i] = resolver.reachable_cells(origin, profile, board, unit)
+	return _avoid_traps(unit, origin, profile, board, resolver, cells)
+
+
+## SEEING THE TRAP IS A DIFFICULTY. Traps spring where you STEP (CONQUEST.md rule 10), so a
+## route that merely crosses an armed trap costs the unit its move -- and noticing that is
+## exactly the kind of board-reading a stronger opponent should do and a weaker one should
+## not. HARD and BRUTAL re-flood with every armed trap cell EXCLUDED and plan from the safe
+## set; EASY and NORMAL keep the full set and blunder straight into the vines.
+##
+## Cheapest correct shape: the first flood already told us which cells are in play, so only
+## those are probed for traps, and the second flood runs only when there is a trap to avoid.
+## A trap outside the unit's reach can never be stepped on, so it is never considered.
+##
+## FALLS BACK TO THE FULL SET when avoidance leaves nothing reachable -- a unit boxed in
+## behind a trap still moves (through it) rather than freezing, which would be a worse tell
+## than walking into the snare.
+func _avoid_traps(unit, origin: Vector2i, profile, board, resolver: MovementResolver, cells: Array[Vector2i]) -> Array:
+	if cells.is_empty() or _ai_difficulty() < BotController.Difficulty.HARD:
+		return cells
+	var traps: Dictionary = {}
+	for cell in cells:
+		if TileEffectSystem.trap_on_cell(unit, cell, board) != null:
+			traps[cell] = true
+	if traps.is_empty():
+		return cells
+	var safe: Array[Vector2i] = resolver.reachable_cells(origin, profile, board, unit, traps)
+	return safe if not safe.is_empty() else cells
 
 
 ## True when [param unit] is a DEFENSIVE guard that will DEMONSTRABLY wait this turn,

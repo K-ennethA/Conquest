@@ -39,7 +39,7 @@ const COLOR_LOW := Color(0.82, 0.18, 0.16, 1.0)    # Red - critical
 # WHY THE ROW IS GROUPED BY ID: three stacked Poisoned instances are ONE status at
 # severity 3. Drawn per instance they filled the whole 4-slot budget with identical
 # pips and pushed every OTHER status on the unit into the overflow marker -- so the
-# row is built from [method StatusVisuals.group_by_id] and shows "◆3".
+# row is built from [method StatusVisuals.group_by_id] and shows "†3".
 #
 # The badges live under their own child Node3D at a FIXED local offset, so a unit
 # with no statuses gets no nodes and the bar itself never moves (no layout shift).
@@ -74,6 +74,21 @@ const TERRAIN_LEAF_GREEN := Color("5fb84e")  # == ConquestTheme.EL_NATURE
 
 var _background_material: StandardMaterial3D
 var _health_material: StandardMaterial3D
+
+# --- Shield segment -----------------------------------------------------------
+# A SILVER segment appended after the green HP fill: the damage-soak shield
+# ([member Unit.shield_hp]) drawn as an EXTENSION of the health bar. Both segments are
+# measured against ONE points-per-pixel scale, [method ShieldVisuals.bar_fractions] --
+# so with a shield that fits inside the missing health the green fill does not move at
+# all and the silver tail simply claims part of the depleted track, and with a shield
+# that would overrun the bar both segments rescale together rather than overflowing the
+# 1.4-wide track (which the pip row and the damage band both map fractions onto).
+#
+# Built LAZILY, exactly like the damage band: a unit that is never shielded pays for no
+# nodes, and a zero shield renders the bar this file drew before the segment existed.
+const SHIELD_COLOR := Color("aeb2c2")  # == ShieldVisuals.SILVER_WORLD (steel, map-legible)
+var _shield_seg: MeshInstance3D = null
+var _shield_material: StandardMaterial3D = null
 
 # --- Incoming-damage preview band --------------------------------------------
 # A blinking red band laid over the slice of the fill a pending move would remove,
@@ -127,6 +142,12 @@ func bind_unit(unit) -> void:
 	if unit != null and unit.unit_stats != null:
 		if not unit.unit_stats.health_changed.is_connected(_on_bound_health_changed):
 			unit.unit_stats.health_changed.connect(_on_bound_health_changed)
+	# The shield is NOT a stat, so health_changed never fires for it: a ward granted or
+	# depleted announces on the unit's own shield_changed and nowhere else. Without this
+	# the silver segment would only appear the next time HP happened to move.
+	if unit != null and unit.has_signal(&"shield_changed") \
+			and not unit.shield_changed.is_connected(_on_bound_shield_changed):
+		unit.shield_changed.connect(_on_bound_shield_changed)
 	# A new unit means a whole new status list; force the next refresh to rebuild.
 	_status_signature = SIGNATURE_UNSET
 	_refresh_from_unit()
@@ -139,6 +160,13 @@ func _on_bound_health_changed(_old_health: int, _new_health: int) -> void:
 	# the condition that caused it may have just expired in the same resolution.
 	_refresh_status_pips()
 	_refresh_terrain_tag()
+
+## The bound unit's shield changed (granted, soaked a hit, or ran out). Repaint the bar:
+## the silver tail is a function of HP and shield together, so this goes through the same
+## refresh HP changes do.
+func _on_bound_shield_changed(_current: int) -> void:
+	_refresh_from_unit()
+
 
 func _refresh_from_unit() -> void:
 	# Guard: unit freed, or _ready hasn't built the materials/meshes yet.
@@ -204,11 +232,26 @@ func update_health(percentage: float, current: int, maximum: int):
 	# Clamp percentage
 	percentage = clamp(percentage, 0.0, 1.0)
 
+	# The HP fill's share of the track is normally just `percentage` -- and with no shield
+	# it is EXACTLY that, the same float this line always used. A shield is what can move
+	# it, and only when current + shield would overrun the fixed track (see the shared
+	# scale in ShieldVisuals.bar_fractions). `percentage` remains the fallback for a caller
+	# that passes a fraction without meaningful current/maximum.
+	var shield: int = ShieldVisuals.shield_of(_bound_unit)
+	var fill_fraction: float = percentage
+	var shield_fraction: float = 0.0
+	if maximum > 0:
+		var fractions: Dictionary = ShieldVisuals.bar_fractions(current, maximum, shield)
+		fill_fraction = float(fractions.get("hp", percentage))
+		shield_fraction = float(fractions.get("shield", 0.0))
+
 	# Update fill width, keeping it left-aligned within the background frame
 	if health_fill and health_fill.mesh:
 		var mesh = health_fill.mesh as QuadMesh
-		mesh.size.x = FILL_MAX_WIDTH * percentage
-		health_fill.position.x = (FILL_MAX_WIDTH * percentage - FILL_MAX_WIDTH) * 0.5
+		mesh.size.x = FILL_MAX_WIDTH * fill_fraction
+		health_fill.position.x = (FILL_MAX_WIDTH * fill_fraction - FILL_MAX_WIDTH) * 0.5
+
+	_apply_shield_segment(fill_fraction, shield_fraction)
 
 	# Update color based on health percentage: green -> amber -> red
 	if _health_material:
@@ -226,6 +269,58 @@ func update_health(percentage: float, current: int, maximum: int):
 func set_visible_state(visible: bool):
 	"""Show or hide the health bar"""
 	self.visible = visible
+
+
+# --- Shield segment -----------------------------------------------------------
+
+## Draw (or hide) the silver shield tail. [param fill_fraction] is where the green fill
+## ends and [param shield_fraction] is how much of the track the shield claims after it,
+## both as fractions of [constant FILL_MAX_WIDTH].
+##
+## A zero (or sub-pixel) shield hides the segment WITHOUT building it, so an unshielded
+## unit's bar is exactly the two quads it always was.
+func _apply_shield_segment(fill_fraction: float, shield_fraction: float) -> void:
+	if shield_fraction <= ShieldVisuals.MIN_FRACTION:
+		if _shield_seg != null and is_instance_valid(_shield_seg):
+			_shield_seg.visible = false
+		return
+
+	_ensure_shield_segment()
+	var mesh := _shield_seg.mesh as QuadMesh
+	mesh.size = Vector2(FILL_MAX_WIDTH * shield_fraction, FILL_HEIGHT)
+	# Same fraction -> x mapping the fill and the damage band use: the track spans
+	# [-FILL_MAX_WIDTH/2, +FILL_MAX_WIDTH/2], and this quad is CENTRED on the midpoint of
+	# [fill_fraction, fill_fraction + shield_fraction] -- i.e. it starts exactly where the
+	# green fill ends, which is what makes it read as one continuous bar.
+	var mid: float = fill_fraction + shield_fraction * 0.5
+	_shield_seg.position.x = -FILL_MAX_WIDTH * 0.5 + FILL_MAX_WIDTH * mid
+	_shield_seg.visible = true
+
+
+func _ensure_shield_segment() -> void:
+	if _shield_seg != null and is_instance_valid(_shield_seg):
+		return
+	_shield_material = StandardMaterial3D.new()
+	_shield_material.albedo_color = SHIELD_COLOR
+	_shield_material.flags_unshaded = true
+	# Opaque like the fill it continues: a translucent tail would show the dark crimson
+	# "lost health" track through it and read as damage rather than as protection.
+	_shield_material.flags_transparent = false
+	_shield_material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+	_shield_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	_shield_material.billboard_keep_scale = true
+	_shield_material.render_priority = 2  # with the fill: above the background (1)
+
+	_shield_seg = MeshInstance3D.new()
+	_shield_seg.name = "ShieldSegment"
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(0.0, FILL_HEIGHT)
+	_shield_seg.mesh = mesh
+	_shield_seg.material_override = _shield_material
+	_shield_seg.position = Vector3(0.0, 0.0, 0.011)  # just in front of the fill (0.01)
+	_shield_seg.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_shield_seg.visible = false
+	add_child(_shield_seg)
 
 
 # --- Status pips --------------------------------------------------------------
@@ -493,9 +588,13 @@ func show_damage_preview(amount: int) -> void:
 		return
 
 	# Fractions along the bar: the band covers [remaining .. current], i.e. the
-	# slice between where HP will land and where it is now.
-	var cur_frac: float = clampf(float(cur) / float(mx), 0.0, 1.0)
-	var rem_frac: float = clampf(float(cur - amount) / float(mx), 0.0, cur_frac)
+	# slice between where HP will land and where it is now. Measured against the SAME
+	# denominator the fill and the shield tail use, so the band still lands on the HP it
+	# describes when a big shield has rescaled the track (identical to `mx` with no shield).
+	var denom: float = float(
+		ShieldVisuals.denominator(cur, mx, ShieldVisuals.shield_of(_bound_unit)))
+	var cur_frac: float = clampf(float(cur) / denom, 0.0, 1.0)
+	var rem_frac: float = clampf(float(cur - amount) / denom, 0.0, cur_frac)
 	var span: float = cur_frac - rem_frac
 	if span <= 0.001:
 		clear_damage_preview()

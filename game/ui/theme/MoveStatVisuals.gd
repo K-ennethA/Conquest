@@ -33,8 +33,12 @@ const RECHARGE_COLOR := Color("d9962f")
 ## The recharge bar's fill on the frame a move comes back up.
 const READY_COLOR := Color("6ddc63")
 
-const UP_ARROW := "▲"
-const DOWN_ARROW := "▼"
+# Godot's default fallback font has NO Geometric Shapes coverage — ▲/▼ render as
+# tofu boxes (probed 2026-08-03, see the table in tests/unit/test_status_feedback.gd).
+# ^/v are plain ASCII, guaranteed drawable everywhere including Label3D. If the
+# project ever ships a font with U+25B2/U+25BC, the triangles can return here.
+const UP_ARROW := "^"
+const DOWN_ARROW := "v"
 
 
 # --- Cooldown -----------------------------------------------------------------

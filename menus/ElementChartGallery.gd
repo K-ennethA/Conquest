@@ -1,4 +1,4 @@
-extends Control
+﻿extends Control
 
 class_name ElementChartGallery
 
@@ -315,9 +315,9 @@ func _build_legend() -> Control:
 	row.name = LEGEND_NAME
 	row.add_theme_constant_override("separation", 14)
 
-	row.add_child(_legend_part("LegendStrong", "▲ Strong  (above ×1)",
+	row.add_child(_legend_part("LegendStrong", "^ Strong  (above ×1)",
 			ElementVisuals.effectiveness_color(ElementVisuals.STRONG)))
-	row.add_child(_legend_part("LegendResisted", "▼ Resisted  (below ×1)",
+	row.add_child(_legend_part("LegendResisted", "v Resisted  (below ×1)",
 			ElementVisuals.effectiveness_color(ElementVisuals.RESISTED)))
 	row.add_child(_legend_part("LegendNeutral", "blank  Neutral  (×1)", MenuTheme.CREAM_DIM))
 

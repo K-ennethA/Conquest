@@ -32,32 +32,34 @@ class_name UILayoutManager
 #
 #   720   window height
 #   - 15  MarginContainer top margin
-#   - 56  TopBar (compact turn chip -- see _show_traditional_layout)
+#   - 77  TopBar (compact turn chip 48 + 5 separation + the 24px ObjectiveBanner row,
+#         which together out-measure the 56px floor _show_traditional_layout declares)
 #   - 10  MainContainer separation
-#   = 81  MiddleArea / left column TOP
+#   = 102 MiddleArea / left column TOP
 #
 #   - 176 bottom reserve owned by the floating TerrainInfoPanel: a 16px window margin +
 #         its 152px height cap + an 8px gap
 #         (UnitInfoPanel.BOTTOM_RESERVE == TerrainInfoPanel.MARGIN + MAX_HEIGHT + 8)
-#   = 463 usable column to share
+#   = 442 usable column to share
 #
 # The UnitInfoPanel is now the COMPACT BATTLE CARD, and its height is PINNED at
 # UnitInfoPanel.CARD_HEIGHT (228) rather than fitted to its content -- every row on it has
 # a fixed height, so the column budgets against a constant. Its claim is therefore:
 #
 #   228 card + 10 LeftSidebar separation = 238
-#   463 - 238 = 225px left for the battle log
+#   442 - 238 = 204px left for the battle log
 #
-# 225 >= BattleLog.PANEL_HEIGHT (158), so the log now expands IN FULL while a unit is
+# 204 >= BattleLog.PANEL_HEIGHT (158), so the log still expands IN FULL while a unit is
 # selected. That is the direct dividend of shrinking the card: the old sheet-style card
 # claimed a 358px fixed-content floor, which left the log only 95px -- under
 # BattleLog.MIN_EXPANDED_HEIGHT, so it was forced back to its 30px chip the whole time
 # anything was selected. Worst case on screen is now:
 #
-#   81 (column top) + 158 (expanded log) + 10 (separation) = 249  card TOP
-#   249 + 228 = 477  card BOTTOM, against the 544 (720 - 176) the terrain card leaves free
+#   102 (column top) + 158 (expanded log) + 10 (separation) = 270  card TOP
+#   270 + 228 = 498  card BOTTOM, against the 544 (720 - 176) the terrain card leaves free
 #
-# -- 67px of slack, so nothing in the column can be squeezed or cut off at 720p.
+# -- 46px of slack, so nothing in the column can be squeezed or cut off at 720p even with
+# the objective row added to the top band.
 const LEFT_COLUMN_WIDTH: float = 260.0
 const COLUMN_SEPARATION: float = 10.0
 ## Mirror of UnitInfoPanel.BOTTOM_RESERVE, the window-bottom band the terrain card owns.
@@ -101,6 +103,11 @@ var net_toast: NetToast = null
 # Speed First per-unit move clock chip, mounted next to the TurnQueue. Self-shows only
 # while a HUMAN unit's clock is armed (see TurnTimer / SpeedFirstTurnSystem).
 var turn_timer: TurnTimer = null
+# Persistent "what winning means here" line, mounted as a ROW of the top-centre column
+# directly under the turn chip. Typed as the base Control and built from
+# OBJECTIVE_BANNER_SCRIPT rather than its global class_name, for the same reason the skip
+# button is (see SKIP_ENEMY_TURN_BUTTON_SCRIPT below).
+var objective_banner: Control = null
 # Replay transport bar (play/pause, speed, step, turn counter, exit). Its own CanvasLayer,
 # mounted in every battle and self-hidden unless a replay is being watched -- see ReplayHUD.
 var replay_hud: ReplayHUD = null
@@ -116,6 +123,11 @@ var skip_enemy_turn_button: CanvasLayer = null
 ## a global class only resolves once the editor/engine has rescanned, so a fresh checkout (or a
 ## headless run against a stale class cache) would otherwise fail to compile this whole HUD.
 const SKIP_ENEMY_TURN_BUTTON_SCRIPT = preload("res://game/ui/hud/SkipEnemyTurnButton.gd")
+
+## The objective line's script (see [ObjectiveBanner]). Preloaded by PATH for exactly the
+## reason above -- a brand-new global class only resolves once the engine has rescanned,
+## and this HUD must compile on a fresh checkout.
+const OBJECTIVE_BANNER_SCRIPT = preload("res://game/ui/hud/ObjectiveBanner.gd")
 
 func _ready() -> void:
 	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
@@ -165,6 +177,10 @@ func _ready() -> void:
 	# Speed First move-clock chip, next to the TurnQueue in the top-centre column.
 	# Self-styled, so mounted AFTER theming to keep its explicit font size / colours.
 	_build_turn_timer()
+
+	# The persistent OBJECTIVE line, in the same top-centre column under the turn chip.
+	# Self-styled like the chip above it, so mounted AFTER theming.
+	_build_objective_banner()
 
 	# Replay transport bar. Self-styled CanvasLayer like the toast above, and self-hidden
 	# unless a replay is being watched, so a normal battle never sees it.
@@ -325,6 +341,27 @@ func _build_turn_timer() -> void:
 	else:
 		add_child(turn_timer)
 
+func _build_objective_banner() -> void:
+	"""Create and mount the persistent objective line as a ROW of the top-centre column.
+
+	Same one-call deal as NetToast / ReplayHUD: this only owns WHERE it lives. The banner
+	resolves the battle's own objectives (the loaded map's compiled WinConditions, or a
+	survive challenge's turn target), subscribes to the ACTIVE turn system for its
+	countdown, and repaints itself -- nothing here is wired.
+
+	WHY A ROW AND NOT AN OVERLAY. Placed in the CenterTopContainer VBox it is a SIBLING of
+	the turn chip, so overlapping it is structurally impossible rather than a matter of a
+	tuned offset -- and because the row grows the TopBar, ActionAnnouncer's existing
+	measurement of the LIVE top bar (ActionAnnouncer.banner_top) parks the action banner
+	below all of it with no change on its side. Three elements, one measurement."""
+	objective_banner = OBJECTIVE_BANNER_SCRIPT.new()
+	objective_banner.name = "ObjectiveBanner"
+	if center_top_container:
+		center_top_container.add_child(objective_banner)
+	else:
+		add_child(objective_banner)
+
+
 func _build_replay_hud() -> void:
 	"""Create and mount the replay transport bar.
 
@@ -378,10 +415,25 @@ func _build_settings_ui() -> void:
 	HUD panel. Both start ready-to-theme."""
 	# Pause button, immediately LEFT of the gear. Escape opens the same menu, but a
 	# touch/mouse player has no Escape key -- 44px is the project's touch-target floor.
+	#
+	# THE MARKS ON THESE TWO BUTTONS ARE PICKED FROM WHAT THE FONT CAN DRAW, NOT FROM
+	# TASTE. Godot's default font has no glyph for ⏸ (U+23F8) or ⚙ (U+2699): both drew as
+	# an empty tofu box, on every battle HUD in the game. The measured drawable set is the
+	# probe table in `tests/unit/test_status_feedback.gd`, and these two come out of it --
+	# "||" is plain ASCII (drawable by construction) and "¤" is Latin-1, probed drawable.
+	# Both are pinned on the MOUNTED HUD -- the font can draw every character, and the
+	# string still fits inside the 44px square at its font size -- by
+	# `tests/integration/test_battle_objective_banner.gd`.
+	#
+	# WHY NOT A WORD. "PAUSE" / "SETTINGS" at the button's 22px overflow a 44px square, and
+	# the size that would fit (~11px) puts HUD chrome at/below the smallest authored font
+	# in the theme (ConquestTheme.FONT_CAPTION). Two upright bars is the universal pause
+	# mark; the spoked ring is the nearest drawable thing to a gear, and both keep the
+	# paired 44px squares reading as one control group. The tooltips still say the words.
 	if top_bar:
 		pause_button = Button.new()
 		pause_button.name = "PauseButton"
-		pause_button.text = "⏸"
+		pause_button.text = "||"
 		pause_button.tooltip_text = "Pause (Esc)"
 		pause_button.custom_minimum_size = Vector2(44, 44)
 		pause_button.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -394,7 +446,7 @@ func _build_settings_ui() -> void:
 	if top_bar:
 		settings_button = Button.new()
 		settings_button.name = "SettingsButton"
-		settings_button.text = "⚙"  # gear glyph
+		settings_button.text = "¤"  # spoked ring -- the drawable stand-in for a gear
 		settings_button.tooltip_text = "Settings"
 		settings_button.custom_minimum_size = Vector2(44, 44)
 		settings_button.mouse_filter = Control.MOUSE_FILTER_STOP

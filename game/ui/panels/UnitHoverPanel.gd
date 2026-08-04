@@ -50,6 +50,13 @@ var _hp_bar: ProgressBar
 ## element, so the row is exactly what it was before for two thirds of the roster.
 var _element_badge: PanelContainer
 var _effects_container: HFlowContainer
+## "◊15" on the HP row and the silver tail on the HP bar -- the damage-soak shield, drawn
+## by the same rule as on the battle card and the world bar (see [ShieldVisuals]). Both
+## hidden at zero shield, so an unshielded unit's card is unchanged. The label is 12px, one
+## point under the HP label, so it draws inside the row's existing height and cannot grow
+## the card (the same measurement that put the element badge on this row).
+var _shield_label: Label
+var _shield_tail: ColorRect
 
 # The unit currently shown, or null. Lets _on_cursor_moved own a local "stays sticky
 # until the reported unit genuinely changes" guarantee -- see the TOUCH-READY
@@ -186,6 +193,15 @@ func _create_ui() -> void:
 	_hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hp_row.add_child(_hp_label)
 
+	_shield_label = Label.new()
+	_shield_label.name = "ShieldLabel"
+	_shield_label.text = ""
+	_shield_label.add_theme_font_size_override("font_size", 12)
+	_shield_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_shield_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shield_label.visible = false
+	hp_row.add_child(_shield_label)
+
 	_element_badge = ElementVisuals.make_badge(&"", 12, ELEMENT_BADGE_MAX_WIDTH, 0)
 	# This whole subtree is click-through by design (see _ready), so the badge gives up
 	# the tooltip its PASS default would earn it.
@@ -199,8 +215,28 @@ func _create_ui() -> void:
 	_hp_bar.min_value = 0.0
 	_hp_bar.max_value = 1.0
 	_hp_bar.value = 1.0
+	# CONTINUOUS, not stepped. A Range's default step is 0.01, so this 0..1 bar SNAPPED
+	# every fill to the nearest percent -- 25/40 drew as 0.63 rather than 0.625. That was
+	# invisible while the bar was the only thing on the track; with the shield tail anchored
+	# at the exact fraction it becomes a visible seam between the green and the silver.
+	_hp_bar.step = 0.0
 	_hp_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_vb.add_child(_hp_bar)
+
+	# The shield tail: a child of the bar, so it draws over the fill and claims no layout
+	# slot. Anchored per forecast in _update_shield_readout.
+	_shield_tail = ColorRect.new()
+	_shield_tail.name = "ShieldTail"
+	_shield_tail.color = ShieldVisuals.SILVER
+	_shield_tail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shield_tail.anchor_top = 0.0
+	_shield_tail.anchor_bottom = 1.0
+	_shield_tail.offset_left = 0.0
+	_shield_tail.offset_right = 0.0
+	_shield_tail.offset_top = 0.0
+	_shield_tail.offset_bottom = 0.0
+	_shield_tail.visible = false
+	_hp_bar.add_child(_shield_tail)
 
 	# HFlow so a unit with several statuses wraps onto a second line instead of
 	# stretching the card past PANEL_WIDTH.
@@ -243,14 +279,20 @@ func show_for_unit(unit) -> void:
 	if "max_health" in unit:
 		maximum = int(unit.max_health)
 
+	# The shield is part of the HP readout, not a separate fact: "HP 58/108 ◊15", with the
+	# bar's silver tail saying the same thing in geometry.
+	var shield: int = ShieldVisuals.shield_of(unit)
 	if maximum > 0:
 		_hp_label.text = "HP %d/%d" % [current, maximum]
-		_hp_bar.value = clampf(float(current) / float(maximum), 0.0, 1.0)
+		var fractions: Dictionary = ShieldVisuals.bar_fractions(current, maximum, shield)
+		_hp_bar.value = clampf(float(fractions.get("hp", 0.0)), 0.0, 1.0)
 		_hp_bar.visible = true
+		_update_shield_readout(shield, fractions)
 	else:
 		_hp_label.text = "HP --/--"
 		_hp_bar.value = 0.0
 		_hp_bar.visible = false
+		_update_shield_readout(0, {})
 
 	# Reveal BEFORE populating statuses: the name/HP rows are already valid, so
 	# even if status population ever failed we still surface the unit rather than
@@ -321,7 +363,7 @@ func _populate_effects(unit) -> void:
 
 	# Grouped by id, exactly like the world-space health-bar badges: three live Poisoned
 	# instances are ONE status at severity 3, and the hover card is where that severity
-	# has to be legible ("◆ Poisoned x3 · 2 turns"). Ungrouped, they filled the chip
+	# has to be legible ("† Poisoned x3 · 2 turns"). Ungrouped, they filled the chip
 	# budget with identical rows and hid every other condition behind the overflow marker
 	# -- so the one surface that could answer "how bad is the poison, and how long" never
 	# actually answered it.
@@ -346,6 +388,31 @@ func _populate_effects(unit) -> void:
 	if hidden > 0:
 		_effects_container.add_child(
 			_build_chip(StatusVisuals.overflow_label(hidden), StatusVisuals.OVERFLOW_COLOR))
+
+
+## Paint the "◊15" and the bar's silver tail for a shield of [param shield], given the
+## already-computed [param fractions] from [method ShieldVisuals.bar_fractions]. A zero
+## shield hides both and leaves the card exactly as it was before shields were drawn.
+func _update_shield_readout(shield: int, fractions: Dictionary) -> void:
+	if _shield_label != null and is_instance_valid(_shield_label):
+		_shield_label.text = ShieldVisuals.number_text(shield)
+		_shield_label.visible = shield > 0
+		if shield > 0:
+			# Re-asserted per repaint: ConquestTheme.apply_to strips baked font colours.
+			_shield_label.add_theme_color_override("font_color", ShieldVisuals.SILVER)
+
+	if _shield_tail == null or not is_instance_valid(_shield_tail):
+		return
+	var hp: float = float(fractions.get("hp", 0.0))
+	var tail: float = float(fractions.get("shield", 0.0))
+	if shield <= 0 or tail <= ShieldVisuals.MIN_FRACTION:
+		_shield_tail.visible = false
+		return
+	_shield_tail.anchor_left = clampf(hp, 0.0, 1.0)
+	_shield_tail.anchor_right = clampf(hp + tail, 0.0, 1.0)
+	_shield_tail.offset_left = 0.0
+	_shield_tail.offset_right = 0.0
+	_shield_tail.visible = true
 
 
 ## The evasion bonus the unit's current tile grants it (tall grass -> +avoid), or

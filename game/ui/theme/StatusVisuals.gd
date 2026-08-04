@@ -63,21 +63,47 @@ const _TABLE := {
 #
 # A one-character ICON per status, so a pip on the world-space health bar says WHAT
 # KIND of thing is on the unit before its colour is even resolved (and so a
-# colour-blind player still gets a signal).
+# colour-blind player still gets a signal). Category, not identity: the NAME and the
+# COLOUR identify the status, the glyph says which of five things it is doing to it.
 #
-# The set is deliberately tiny and drawn only from characters this project already
-# renders elsewhere (the ▲ / ▼ on the battle card's stat chips, via MoveStatVisuals).
-# Anything exotic -- a skull,
-# a heavy plus, a shield -- is outside Godot's default font and would draw as tofu on
-# the one surface (a Label3D over the battlefield) that cannot fall back to another
-# font. Category, not identity: the NAME and the COLOUR identify the status, the
-# glyph says which of five things it is doing to the unit.
-const GLYPH_DOT := "◆"      # damage over time (poison, burn, infestation)
-const GLYPH_HOT := "▲"      # heal over time -- shares the buff arrow on purpose
-const GLYPH_GUARD := "●"    # damage reduction / invulnerability
-const GLYPH_BUFF := "▲"
-const GLYPH_DEBUFF := "▼"
-const GLYPH_NEUTRAL := "■"
+# EVERY CHARACTER HERE IS MEASURED, NOT CHOSEN. A Label3D over the battlefield has NO
+# font fallback at all, so a glyph the theme font lacks is a literal tofu box on every
+# health bar, chip and status-tick float at once -- which is exactly what shipped.
+#
+# PROBE, 2026-08-03, Godot 4.6 default theme font (ThemeDB.fallback_font; this project
+# ships no font of its own). Re-run tests/unit/test_status_feedback.gd
+# (test_probe_which_icon_characters_the_theme_font_can_draw) to reproduce the table.
+#
+#   TOFU  ◆ U+25C6   ▲ U+25B2   ● U+25CF   ▼ U+25BC   ■ U+25A0   <- the ORIGINAL set
+#         ◦ ‣ ▪ ▸ ► ▻ ✦ ✧ ★ ☆    and ⚑ U+2691, ⚙ U+2699, ⚔ U+2694
+#   DRAW  ◊ • † ‡ § ¤ ± « » ÷ × ° ¶ µ ¬ · ∞  and all of ASCII
+#
+# The whole Geometric Shapes block is absent from the default font, so the original
+# five arrows/diamonds/squares ALL drew as boxes. The replacements below are the best
+# drawable stand-ins that keep the five categories apart at 12px:
+#
+#   †  a wound mark for damage over time -- the only "something is eating you"
+#      symbol in the drawable set, and not a letter
+#   +  / -  the ledger pair: what helps you, what hurts you. Directly replaces the
+#      ▲ / ▼ arrows and is more legible than they were
+#   O  the drawable circle, standing in for ● -- a closed ring reads as "shut in,
+#      unreachable", which is the guard fantasy
+#   ~  an unclassified marker for the neutral fallback. NOT • , which collides with
+#      the "·" separator chip_text puts between the name and the duration
+#
+# None of these is ◊ (U+25CA), which [ShieldVisuals] owns and which shares these
+# surfaces -- pinned by test_the_five_glyph_categories_stay_visually_distinct.
+#
+# IF THIS PROJECT EVER SHIPS A FONT WITH THE GEOMETRIC SHAPES BLOCK (U+25A0-U+25FF),
+# the original ◆ ▲ ● ▼ ■ can come straight back: they are better icons, they were only
+# ever undrawable. Re-run the probe first, and change nothing else -- every surface in
+# the game reads its glyph from here, so the swap is this one block.
+const GLYPH_DOT := "†"      # damage over time (poison, burn, infestation)
+const GLYPH_HOT := "+"      # heal over time -- shares the buff mark on purpose
+const GLYPH_GUARD := "O"    # damage reduction / invulnerability
+const GLYPH_BUFF := "+"
+const GLYPH_DEBUFF := "-"
+const GLYPH_NEUTRAL := "~"
 
 ## Ids whose glyph is NOT derivable from `kind` -- a damage-over-time debuff and a
 ## defensive buff both need to stand apart from the plain up/down arrows.
@@ -210,7 +236,7 @@ static func stack_suffix(count: int) -> String:
 const TURNS_FROM_CONDITION: int = -999999
 
 ## The full one-line label for a status chip / hover row:
-## "◆ Poisoned x3 · 2 turns". [param count] is the live stack count (1 = unstacked,
+## "† Poisoned x3 · 2 turns". [param count] is the live stack count (1 = unstacked,
 ## so the suffix disappears); [param turns_left] defaults to the condition's own
 ## remaining turns but may be overridden with a GROUP's longest (see
 ## [method group_by_id]) so a stack reports when the status actually leaves the unit.
@@ -247,7 +273,7 @@ static func expired_label(condition) -> String:
 
 
 ## The floating text for one status TICK: the status' glyph and the HP it just moved.
-## Heals are signed ("▲ +5"), damage is bare ("◆ 4") -- exactly the convention the
+## Heals are signed ("+ +5"), damage is bare ("† 4") -- exactly the convention the
 ## ordinary damage/heal popups already use, so a status tick reads as the same kind of
 ## event with a status marker on it. Empty for a non-positive amount (nothing happened).
 static func tick_text(condition, amount: int, healed: bool) -> String:
@@ -262,7 +288,7 @@ static func tick_text(condition, amount: int, healed: bool) -> String:
 ## [code][{ "condition": <first instance>, "count": int, "turns_left": int }][/code].
 ##
 ## Every compact surface (the health-bar pips, the hover chips) wants SEVERITY, not
-## instances: three stacked Poisoned conditions must render as one "◆ Poisoned x3"
+## instances: three stacked Poisoned conditions must render as one "† Poisoned x3"
 ## chip, not as three identical pips that eat the whole 4-slot budget and hide the
 ## other statuses on the unit. `turns_left` is the LONGEST of the group -- that is when
 ## the status actually leaves the unit.

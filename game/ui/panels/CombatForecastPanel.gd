@@ -57,6 +57,16 @@ var _type_value: Label
 ## some ability is doing something. Read out of the preview's `ability_bonus_percent` /
 ## `ability_notes`, so this panel enumerates no abilities of its own.
 var _ability_value: Label
+## "absorbs 12 (3 left)" -- shown ONLY when the TARGET is carrying a damage-soak shield.
+## Same "silent on the common case" rule as the Type / Range / Ability rows: almost nobody
+## is shielded, and a card that printed "Shield 0" on every aim would have turned a signal
+## into furniture.
+##
+## The split is [method Unit.absorb_split] -- the same function [method Unit.take_damage]
+## burns the shield with -- reached through [method ShieldVisuals.absorb_text]. This panel
+## does no absorption arithmetic of its own, so the line it prints and the soak the board
+## performs cannot drift (CONQUEST.md rule 9).
+var _shield_value: Label
 var _result_value: Label
 var _lethal_label: Label
 ## FE-style HP preview: a red rect over the DEFENDER bar covering exactly the chunk
@@ -190,6 +200,10 @@ func _create_ui() -> void:
 	_crit_value = _add_stat_row(stats_vb, "Crit")
 	_range_value = _add_stat_row(stats_vb, "Range")
 	_show_stat_row(_range_value, false)
+	# Between the damage rows and the HP outcome, because that is where it happens: the
+	# shield is what stands between the number above it and the health below it.
+	_shield_value = _add_stat_row(stats_vb, "Shield")
+	_show_stat_row(_shield_value, false)
 	_result_value = _add_stat_row(stats_vb, "HP")
 
 	_lethal_label = Label.new()
@@ -216,7 +230,7 @@ func _create_ui() -> void:
 	# Dark inset plate behind the exchange stats, cream text so it reads on it.
 	plate.add_theme_stylebox_override("panel", ConquestTheme.plate_box())
 	for lbl in [_hit_value, _dmg_value, _crit_value, _range_value, _result_value,
-			_type_value, _ability_value]:
+			_type_value, _ability_value, _shield_value]:
 		lbl.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	for row in stats_vb.get_children():
 		if row is HBoxContainer:
@@ -390,6 +404,7 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 		_dmg_value.text = dmg_text
 
 		_update_breakdown_rows(preview, move, defender)
+		_update_shield_row(defender, dmg)
 
 		_crit_value.text = "%d%%" % int(round(crit_pct))
 		_show_stat_row(_crit_value, crit_pct > 0.0)
@@ -411,6 +426,8 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 		# breakdown rows go with the damage rows they explain.
 		_show_stat_row(_type_value, false)
 		_show_stat_row(_ability_value, false)
+		# Nothing to absorb: a heal or a buff never reaches the target's shield.
+		_show_stat_row(_shield_value, false)
 		_lethal_label.visible = false
 		_hide_damage_preview()
 
@@ -431,11 +448,12 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 ## GROW_DIRECTION_END and no fixed height -- its "flexible region" is the whole card, and
 ## these two rows are absorbed by it. The arithmetic at 720p: the card's content is the
 ## 4px stripe + a ~22px title + a ~51px combatant row + the stats plate, at 6px
-## separation, and the plate holds up to seven ~19px rows at 3px separation plus the
-## LETHAL line -- so a fully-populated card is ~290px and its bottom edge lands at
-## 70 + 290 == 360, half the 720px window. The two rows add ~44px to a worst case that
-## has ~360px of headroom. `test_battle_element_readout.gd` measures the real rect rather
-## than trusting this comment.
+## separation, and the plate holds up to EIGHT ~19px rows at 3px separation (Hit, Damage,
+## Type, Ability, Crit, Range, Shield, HP) plus the LETHAL line -- so a fully-populated
+## card is ~312px and its bottom edge lands at 70 + 312 == 382, comfortably above half the
+## 720px window. These rows add ~22px each to a worst case that has ~360px of headroom.
+## `test_battle_element_readout.gd` and `test_shield_readout_live.gd` measure the real rect
+## rather than trusting this comment.
 func _update_breakdown_rows(preview: Dictionary, move, defender) -> void:
 	# The multiplier is the previewer's to decide -- this card only renders it. The
 	# fallback exists so the rows are correct against a previewer that has not yet started
@@ -464,6 +482,28 @@ func _update_breakdown_rows(preview: Dictionary, move, defender) -> void:
 		_ability_value.add_theme_color_override(
 				"font_color", ElementVisuals.ability_bonus_color(percent))
 		_show_stat_row(_ability_value, true)
+
+
+## Make a shielded target's absorption legible: "Shield  absorbs 12 (3 left)".
+##
+## SCOPE, deliberately narrow. The Damage number and the HP outcome above/below keep
+## exactly the meaning they always had -- they are the previewer's, and the previewer does
+## not model the shield -- so this row is ADDITIVE: it says how much of that damage the
+## ward will eat, and what is left of the ward afterwards. Nothing else on the card moves.
+##
+## The arithmetic is [method Unit.absorb_split] via [method ShieldVisuals.absorb_text], the
+## same function the live hit uses. Hidden whenever the target has no shield, which is
+## almost always.
+func _update_shield_row(defender, damage: int) -> void:
+	if _shield_value == null:
+		return
+	var text: String = ShieldVisuals.absorb_text(ShieldVisuals.shield_of(defender), damage)
+	if text == "":
+		_show_stat_row(_shield_value, false)
+		return
+	_shield_value.text = text
+	_shield_value.add_theme_color_override("font_color", ShieldVisuals.SILVER)
+	_show_stat_row(_shield_value, true)
 
 
 ## The element multiplier for this hit when the preview did not carry one.

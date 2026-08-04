@@ -98,5 +98,20 @@ named file is the canonical example — read it before you write the same kind o
    `tests/unit/test_tile_elements.gd` and
    `tests/integration/test_terrain_panel_elements.gd`
 
+10. **A glowing tile hurts where you STAND; a TRAP springs where you STEP.** Every tile
+    effect is landing-only by default — `ON_ENTER` fires for the cell a unit stops on, and
+    walking across is free. A **trap** is the authored exception: `springs_on_pass` makes an
+    effect fire on a unit merely crossing the cell, and `halts_movement` additionally ends
+    that unit's move ON the trap. Both are flags a designer ticks — trap-ness is never
+    inferred from an effect's payload — and the move's traversed cells come from
+    `MovementResolver.path_cells`, a deterministic derivation off the same profile and board
+    the reachable set was flooded with, so truncation is *resolution* (identical on every
+    lockstep peer and in replays) rather than anything a command carries. The preview and
+    the live walk share one function, so the ghost stands where the move ends.
+    → `game/tiles/effects/TileEffectResource.gd` (`springs_on_pass` / `halts_movement`),
+    `game/tiles/effects/TileEffectSystem.gd` (`preview_route` / `resolve_path`),
+    `game/world/GameWorldManager.gd` (`_walk_move_path`), pinned by
+    `tests/unit/test_pass_through_traps.gd`
+
 Testing conventions (orphans, global state, temp paths, shared doubles) live in
 [tests/README.md](tests/README.md).

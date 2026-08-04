@@ -31,6 +31,13 @@ class_name TileEffectResource
 ##
 ## A STATUS the tile applies is deliberately untouched (see that method's note), and so
 ## is [member move_cost_bonus]: an element cannot make stone cheaper to walk over.
+##
+## STANDING vs STEPPING. Every effect here is a STANDING effect by default: an ON_ENTER
+## effect fires for the cell a unit LANDS on and pass-through is free. [member
+## springs_on_pass] is the authored opt-out that makes an effect a TRAP -- it springs on a
+## unit that merely crosses the cell -- and [member halts_movement] additionally stops the
+## move dead on it. Nothing infers trap-ness from an effect's payload; a designer ticks the
+## box (CONQUEST.md rule 10).
 
 ## When the effect fires for an occupying unit.
 enum Trigger {
@@ -69,6 +76,28 @@ enum AffectedFactions {
 ## status, which only lands after the step and only if the unit STOPS on the cell. 0 = none.
 @export var move_cost_bonus: int = 0
 
+## PASS-THROUGH TRAP: when true, this effect springs on a unit that merely WALKS OVER the
+## cell, not only on one that STOPS there. This is THE one-rule distinction in the game's
+## terrain model (CONQUEST.md rule 10): a glowing tile hurts where you STAND, a TRAP springs
+## where you STEP. It is AUTHORED, never inferred -- an ON_ENTER effect stays a landing-only
+## effect unless a designer ticks this box, so rubble still only slows a unit that stops on
+## it while Petalfang's Vine Trap catches anyone crossing the cell.
+##
+## Only meaningful on [constant Trigger.ON_ENTER]: the other triggers are about occupying a
+## cell, which pass-through by definition is not.
+@export var springs_on_pass: bool = false
+
+## HALTS THE MOVE: when true, a unit that springs this trap mid-path STOPS on the trap cell --
+## the rest of its move is cancelled and the trap cell becomes its landing cell (so the
+## cell's ordinary ON_ENTER effects, this one included, resolve there exactly as if it had
+## been the destination all along).
+##
+## Deliberately SEPARATE from [member springs_on_pass]: a trap that springs without halting
+## (an alarm, a spore cloud) fires as the unit crosses and the move continues to its
+## authored destination. Meaningless on its own -- a trap that does not spring on pass never
+## gets the chance to halt anything.
+@export var halts_movement: bool = false
+
 ## SINGLE-USE: when true, this effect is EXTINGUISHED (removed from the cell) the moment
 ## it actually fires on a unit -- a snare that springs once (Petalfang's Vine Trap) rather
 ## than a lasting field. Only removes the RUNTIME-placed copy; map-authored terrain is
@@ -88,6 +117,36 @@ var owner_player = null
 ## [code]{ "untargetable": true }[/code] (stealth) or
 ## [code]{ "fortified": true }[/code]. Merged by [method TileEffectSystem.passive_flags].
 @export var rule_flags: Dictionary = {}
+
+
+## The one line a TRAP has to say for itself, shared by every surface that describes a
+## tile: the in-battle [TerrainInfoPanel] row and the compendium's tile gallery both read
+## THIS rather than writing their own wording, so "what a trap is" is data on the resource
+## (CONQUEST.md rule 10) and renaming the rule is a one-line content edit.
+##
+## Empty string for everything that is not a pass-through trap, which is the answer a
+## caller shows nothing for.
+const TRAP_DESCRIPTOR := "Trap - springs when stepped on"
+
+
+## [constant TRAP_DESCRIPTOR] when this effect is a pass-through trap, else [code]""[/code].
+func trap_descriptor() -> String:
+	return TRAP_DESCRIPTOR if is_pass_trap() else ""
+
+
+## True when this effect is a PASS-THROUGH TRAP at all -- authored [member springs_on_pass]
+## on an ON_ENTER effect. Everything that reasons about traps (the movement walk, the AI's
+## avoidance, the preview warning, the terrain panel) asks THIS rather than reading the flag
+## raw, so the "only ON_ENTER can spring" rule lives in exactly one place.
+func is_pass_trap() -> bool:
+	return springs_on_pass and trigger == Trigger.ON_ENTER
+
+
+## True when this effect is a pass-trap that is ARMED AGAINST [param unit] right now -- i.e.
+## walking over the cell would actually spring it. Combines [method is_pass_trap] with the
+## ordinary faction / tag filter, so a placer's own side crosses its own trap for free.
+func springs_on_pass_for(unit, board) -> bool:
+	return is_pass_trap() and applies_to(unit, board)
 
 
 ## True if this effect is allowed to act on [param unit] right now — combines the
@@ -130,6 +189,20 @@ func run(unit, board) -> Array:
 	if board.has_method("cell_of"):
 		cell = board.cell_of(unit)
 	var ctx := MoveContext.new(unit, board, _self_move(), cell, [cell] as Array[Vector2i])
+	# THE GROUND IS NOT A SWING YOU CAN DODGE. Exactly the rule a STATUS TICK follows
+	# ([method StatusCondition.tick]) and for exactly the same reason: routed through the
+	# ordinary pipeline, a tile effect rolled [method MoveContext.hit_chance] against the
+	# occupant -- and TERRAIN AVOID feeds that roll, so a unit standing on a cell that is
+	# BOTH tall grass (+15 avoid) and on fire got a 15% chance to dodge the fire it is
+	# standing in. Worse, a tile context carries no injected RNG, so that roll came off an
+	# unseeded generator and no two peers/replays agreed on which turns burned.
+	#
+	# Environmental damage LANDS. No roll, no crit, and (because guaranteed_hit
+	# short-circuits ahead of [method MoveContext._get_rng]) no draw from any generator at
+	# all -- which is what keeps a tile tick out of the lockstep RNG stream entirely.
+	# The sibling rule for a crawling hazard is [method DamageEffect.resolve_hazard_damage],
+	# which has never rolled either.
+	ctx.guaranteed_hit = true
 	for effect in effects:
 		if effect:
 			_at_home(effect, unit).apply(ctx)
@@ -197,8 +270,12 @@ func home_summary_for(unit) -> Dictionary:
 ## which is line for line what this does. It is the terrain panel's readout, so what the
 ## card promises is what the tile takes off.
 ##
-## Does NOT model the hit roll: like every forecast in this project, it reports damage ON
-## LANDING and leaves the chance to whoever displays it.
+## THERE IS NO HIT CHANCE TO MODEL. This path deliberately contains no accuracy/evasion
+## term, and since [method run] marks its context [member MoveContext.guaranteed_hit] the
+## tick contains none either -- so this is not "damage on landing, chance shown elsewhere",
+## it is the number the next tick takes off, full stop. Do not add a chance term to either
+## side: they are equal by construction and a forecast that modelled a dodge the tick
+## cannot perform would be the drift rule 9 exists to forbid.
 func damage_preview_for(unit, board) -> int:
 	if unit == null:
 		return 0

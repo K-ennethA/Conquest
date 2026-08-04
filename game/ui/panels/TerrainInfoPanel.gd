@@ -72,6 +72,14 @@ var _element_badge: PanelContainer
 ## is neutral, and a row that always shows spends a line of a 152px budget saying nothing.
 var _matchup_label: Label
 
+## "Trap - springs when stepped on", shown only for a cell carrying a pass-through trap.
+## TRAPS SPRING WHERE YOU STEP and glowing tiles hurt where you STAND (CONQUEST.md rule 10) —
+## the chip below already names the effect, but the chip cannot say WHICH of those two things
+## it is, and that is the whole difference between "walk around it" and "do not stop there".
+## The wording is [constant TileEffectResource.TRAP_DESCRIPTOR], read off the resource so the
+## compendium's tile gallery quotes the same sentence this card does.
+var _trap_label: Label
+
 ## The unit the player currently has selected, tracked off GameEvents so the matchup line
 ## knows who "you" is. Never dereferenced without an is_instance_valid check: a selected
 ## unit can die (or the map can be torn down) while this panel still holds it.
@@ -219,6 +227,21 @@ func _create_ui() -> void:
 	_matchup_label.visible = false
 	root_vb.add_child(_matchup_label)
 
+	# THE TRAP LINE. One 13px row, HIDDEN for every ordinary tile -- the same "spend a line
+	# only when there is news" budget the matchup row above follows, which is what keeps the
+	# card inside MAX_HEIGHT. When it does show, _reflow_card hands the extra height to the
+	# chip list's existing scroll rather than growing the card.
+	_trap_label = Label.new()
+	_trap_label.name = "TrapLabel"
+	_trap_label.text = ""
+	_trap_label.add_theme_font_size_override("font_size", 13)
+	_trap_label.add_theme_color_override("font_color", MoveStatVisuals.NERF_COLOR)
+	_trap_label.clip_text = true
+	_trap_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_trap_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_trap_label.visible = false
+	root_vb.add_child(_trap_label)
+
 	_effects_header = Label.new()
 	_effects_header.name = "EffectsHeader"
 	_effects_header.text = "Effects:"
@@ -283,6 +306,7 @@ func show_for_cell(cell: Vector2i) -> void:
 	# leaving a wired-but-hidden panel (the reported "never appears" symptom).
 	show()
 	_refresh_element_rows(cell)
+	_refresh_trap_row(cell)
 	_populate_effects(cell)
 
 
@@ -415,6 +439,34 @@ func _matchup_line(te, unit) -> Dictionary:
 	else:
 		text = "%s: boosts ×%s for you (+%d)" % [name, scale, landed]
 	return { "text": text, "color": MoveStatVisuals.BUFF_COLOR }
+
+
+## Show the trap row when [param cell] carries a pass-through trap, else hide it.
+##
+## Asked of the RESOURCE, never of a table here: [method TileEffectResource.trap_descriptor]
+## returns the line (empty for everything that is not a trap), so the rule and its wording
+## live with the data and every surface that describes a tile quotes the same sentence.
+## The first trap on the cell wins, in the cell's own effect order -- the same first-in-order
+## rule the element badge and the matchup line already use.
+##
+## Deliberately NOT filtered by the selected unit: a trap is a property of the tile the
+## player is inspecting, and hiding it because the currently-selected unit happens to be on
+## the side that placed it would make the card lie about the board.
+func _refresh_trap_row(cell: Vector2i) -> void:
+	if _trap_label == null or not is_instance_valid(_trap_label):
+		return
+	_trap_label.text = ""
+	_trap_label.visible = false
+	for te in CombatServices.tile_effects_at(cell):
+		if te == null or not te.has_method("trap_descriptor"):
+			continue
+		var line: String = te.trap_descriptor()
+		if line == "":
+			continue
+		_trap_label.text = line
+		_trap_label.visible = true
+		break
+	call_deferred("_reflow_card")
 
 
 ## Swap STRONG <-> RESISTED. The tile is the ATTACKER in an environmental matchup, so the

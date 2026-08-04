@@ -1183,11 +1183,24 @@ func _on_unit_moved_tile_effects(unit, from_position, to_position) -> void:
 	var from_cell := Vector2i(int(round(from_position.x)), int(round(from_position.z)))
 	var to_cell := Vector2i(int(round(to_position.x)), int(round(to_position.z)))
 	var board = _prime_tile_effects(from_cell)
-	if board != null:
-		_tile_effect_system.on_exit(unit, from_cell, board)
-	board = _prime_tile_effects(to_cell)
-	if board != null:
-		_tile_effect_system.on_enter(unit, to_cell, board)
+	if board == null:
+		return
+	# THE ONE MOVE-APPLY SEAM. Every mover in the game -- the FE tentative commit, the AI's
+	# relocate, and CommandApplier._apply_move_unit (so every networked peer and every
+	# replay) -- announces its move through GameEvents.unit_moved and nowhere else, which is
+	# why the whole terrain side of a move hangs off this one handler. apply_move runs
+	# ON_EXIT, walks the cells actually crossed springing any armed trap on them (traps
+	# spring where you STEP -- CONQUEST.md rule 10), and runs ON_ENTER on the cell the move
+	# REALLY ends on, which is short of `to_cell` when a halting trap caught the unit.
+	#
+	# Truncation is DETERMINISTIC RESOLUTION, not a new command: the command still carries
+	# the destination the player chose, and every peer independently walks the same route
+	# over the same board to the same stop cell. Nothing extra is transmitted or recorded.
+	#
+	# _prime_tile_effects is handed over as the per-cell refresh hook so the system's
+	# injected lookup is current for every cell the walk may fire on, exactly as it was for
+	# the single destination cell before.
+	_tile_effect_system.apply_move(unit, from_cell, to_cell, board, _prime_tile_effects)
 
 func _on_player_turn_started_tile_effects(player) -> void:
 	"""At each player's turn start, tick occupying-tile effects for their units."""

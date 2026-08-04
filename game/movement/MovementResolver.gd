@@ -67,7 +67,12 @@ const KNIGHT_OFFSETS: Array[Vector2i] = [
 ## within the profile's budget. The origin itself is never included. [param unit] is
 ## the moving unit, used only to honour a multi-cell footprint; omit it (or pass a
 ## 1x1 unit) for the original single-cell behaviour.
-func reachable_cells(origin: Vector2i, profile: MovementProfile, board, unit = null) -> Array[Vector2i]:
+## [param excluded] is an optional SET (a Dictionary used as `cell -> anything`) of cells
+## the flood may neither cross nor stop on, over and above the board's own rules. It exists
+## for callers that want to route AROUND something the board still considers perfectly
+## walkable -- the AI steering clear of an armed trap is the only shipped user. Empty (the
+## default) is byte-for-byte the original behaviour and costs one `is_empty()` per call.
+func reachable_cells(origin: Vector2i, profile: MovementProfile, board, unit = null, excluded: Dictionary = {}) -> Array[Vector2i]:
 	# LIVE MOVEMENT DEBUFFS/BUFFS shrink or grow the flood budget. The authored profile
 	# carries a STATIC range (base movement); a temporary movement-stat modifier -- e.g.
 	# the "Slowed" status a rubble field applies -- lowers the unit's live movement but
@@ -78,15 +83,15 @@ func reachable_cells(origin: Vector2i, profile: MovementProfile, board, unit = n
 	var raw: Array = []
 	match profile.shape:
 		MovementProfile.Shape.ORTHOGONAL:
-			raw = _flood(origin, profile, board, ORTHOGONAL_OFFSETS, unit)
+			raw = _flood(origin, profile, board, ORTHOGONAL_OFFSETS, unit, excluded)
 		MovementProfile.Shape.DIAGONAL:
-			raw = _flood(origin, profile, board, DIAGONAL_OFFSETS, unit)
+			raw = _flood(origin, profile, board, DIAGONAL_OFFSETS, unit, excluded)
 		MovementProfile.Shape.ALL8:
-			raw = _flood(origin, profile, board, ALL8_OFFSETS, unit)
+			raw = _flood(origin, profile, board, ALL8_OFFSETS, unit, excluded)
 		MovementProfile.Shape.KNIGHT:
-			raw = _knight(origin, profile, board, unit)
+			raw = _knight(origin, profile, board, unit, excluded)
 		MovementProfile.Shape.TELEPORT:
-			raw = _teleport(origin, profile, board, unit)
+			raw = _teleport(origin, profile, board, unit, excluded)
 
 	var seen := {}
 	var out: Array[Vector2i] = []
@@ -116,7 +121,7 @@ func can_reach(origin: Vector2i, target: Vector2i, profile: MovementProfile, boa
 ## Uniform-cost flood for stepping shapes. Expands only through traversable
 ## cells, accumulates entry cost, and keeps cells whose total cost is within
 ## range and on which the kind is allowed to stop.
-func _flood(origin: Vector2i, profile: MovementProfile, board, offsets: Array[Vector2i], unit = null) -> Array:
+func _flood(origin: Vector2i, profile: MovementProfile, board, offsets: Array[Vector2i], unit = null, excluded: Dictionary = {}) -> Array:
 	var best := { origin: 0 }
 	var open: Array[Vector2i] = [origin]
 	while not open.is_empty():
@@ -130,6 +135,8 @@ func _flood(origin: Vector2i, profile: MovementProfile, board, offsets: Array[Ve
 		for off in offsets:
 			var n: Vector2i = cur + off
 			if not _in_bounds(board, n):
+				continue
+			if excluded.has(n):
 				continue
 			if not _can_enter(unit, n, profile.kind, board):
 				continue
@@ -151,9 +158,113 @@ func _flood(origin: Vector2i, profile: MovementProfile, board, offsets: Array[Ve
 	return out
 
 
+# --- Path derivation --------------------------------------------------------
+
+## The cells [param unit] actually WALKS OVER going from [param origin] to [param dest],
+## in step order, EXCLUDING the origin and INCLUDING the destination. Empty when the
+## destination is the origin or cannot be reached under [param profile].
+##
+## WHY THIS EXISTS, and why it is here. Movement in this game is stored as a DESTINATION
+## (the MOVE_UNIT command carries one cell, not a route), so "what did the unit step on"
+## had no answer until traps needed one. Deriving it HERE -- from the same profile, the
+## same board queries and the same per-cell [method _enter_cost] the reachability flood
+## uses -- is what makes the answer agree with the reach the player was shown, on every
+## lockstep peer and in every replay, without a second pathfinder to drift from the first.
+##
+## DETERMINISTIC BY CONSTRUCTION. The frontier settles in (cost, x, y) order and the FIRST
+## predecessor to reach a cell at its final cost keeps it, so the route depends only on the
+## board state and the profile -- never on dictionary iteration, scene order or wall clock.
+## Two peers applying the same command to the same board derive the same cells.
+##
+## KNIGHT and TELEPORT have no traversed cells at all -- both deliberately ignore whatever
+## lies between (see the class note) -- so they return just [code][dest][/code]: the unit
+## arrives without stepping on anything, and nothing between origin and destination can
+## spring on it.
+func path_cells(origin: Vector2i, dest: Vector2i, profile: MovementProfile, board, unit = null) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if profile == null or dest == origin:
+		return out
+	profile = _effective_profile(profile, unit)
+	var offsets: Array[Vector2i] = _step_offsets(profile.shape)
+	if offsets.is_empty():
+		out.append(dest)
+		return out
+
+	var best := { origin: 0 }
+	var prev := {}
+	var open: Array[Vector2i] = [origin]
+	while not open.is_empty():
+		var bi: int = 0
+		for i in range(1, open.size()):
+			if _settles_first(open[i], open[bi], best):
+				bi = i
+		var cur: Vector2i = open[bi]
+		open.remove_at(bi)
+		var cur_cost: int = best[cur]
+		for off in offsets:
+			var n: Vector2i = cur + off
+			if not _in_bounds(board, n):
+				continue
+			if not _can_enter(unit, n, profile.kind, board):
+				continue
+			var nc: int = cur_cost + _enter_cost(n, profile, board, unit)
+			if nc > profile.range:
+				continue
+			if best.has(n) and best[n] <= nc:
+				continue
+			best[n] = nc
+			prev[n] = cur
+			if not open.has(n):
+				open.append(n)
+
+	if not prev.has(dest):
+		return out
+	var walk: Array[Vector2i] = []
+	var cell: Vector2i = dest
+	# The predecessor chain is acyclic by construction (every link strictly lowers the
+	# accumulated cost), but bound the unwind anyway: a corrupted chain must return an
+	# empty path -- "no route known" -- rather than hang the move.
+	var guard: int = best.size() + 1
+	while cell != origin:
+		walk.append(cell)
+		if not prev.has(cell):
+			return out
+		cell = prev[cell]
+		guard -= 1
+		if guard < 0:
+			return out
+	walk.reverse()
+	return walk
+
+
+## The per-step offsets for a stepping [param shape], or EMPTY for the shapes that do not
+## step at all (KNIGHT jumps, TELEPORT blinks).
+static func _step_offsets(shape: MovementProfile.Shape) -> Array[Vector2i]:
+	match shape:
+		MovementProfile.Shape.ORTHOGONAL:
+			return ORTHOGONAL_OFFSETS
+		MovementProfile.Shape.DIAGONAL:
+			return DIAGONAL_OFFSETS
+		MovementProfile.Shape.ALL8:
+			return ALL8_OFFSETS
+	return [] as Array[Vector2i]
+
+
+## Frontier ordering for [method path_cells]: cheaper first, ties broken by column then
+## row. A TOTAL order over cells, which is what makes the derived route reproducible.
+static func _settles_first(a: Vector2i, b: Vector2i, best: Dictionary) -> bool:
+	var ca: int = int(best[a])
+	var cb: int = int(best[b])
+	if ca != cb:
+		return ca < cb
+	if a.x != b.x:
+		return a.x < b.x
+	return a.y < b.y
+
+
 ## Breadth-first search over L-jumps. Each jump ignores intervening cells but
 ## must land on a cell the kind may stop on; range caps the number of jumps.
-func _knight(origin: Vector2i, profile: MovementProfile, board, unit = null) -> Array:
+func _knight(origin: Vector2i, profile: MovementProfile, board, unit = null, excluded: Dictionary = {}) -> Array:
 	var out: Array = []
 	var visited := { origin: true }
 	var frontier: Array[Vector2i] = [origin]
@@ -167,6 +278,8 @@ func _knight(origin: Vector2i, profile: MovementProfile, board, unit = null) -> 
 					continue
 				if not _in_bounds(board, n):
 					continue
+				if excluded.has(n):
+					continue
 				if not _can_finish(unit, n, profile.kind, board):
 					continue
 				visited[n] = true
@@ -177,7 +290,7 @@ func _knight(origin: Vector2i, profile: MovementProfile, board, unit = null) -> 
 
 
 ## Every cell within direct (Manhattan) range, obstacles ignored for pathing.
-func _teleport(origin: Vector2i, profile: MovementProfile, board, unit = null) -> Array:
+func _teleport(origin: Vector2i, profile: MovementProfile, board, unit = null, excluded: Dictionary = {}) -> Array:
 	var out: Array = []
 	var r: int = maxi(0, profile.range)
 	for dx in range(-r, r + 1):
@@ -188,6 +301,8 @@ func _teleport(origin: Vector2i, profile: MovementProfile, board, unit = null) -
 				continue
 			var n := Vector2i(origin.x + dx, origin.y + dy)
 			if not _in_bounds(board, n):
+				continue
+			if excluded.has(n):
 				continue
 			if not _can_finish(unit, n, profile.kind, board):
 				continue

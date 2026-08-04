@@ -223,6 +223,9 @@ func _ready() -> void:
 	# On-screen buttons for the two keyboard-only actions (Danger Zones / Next Unit).
 	_setup_touch_buttons()
 
+	# The one-line "this route springs a trap" warning (see _setup_trap_warning).
+	_setup_trap_warning()
+
 	# Tooltips + theme style-role metadata on the (simplified) sidebar buttons.
 	_setup_sidebar_tooltips_and_meta()
 
@@ -296,6 +299,98 @@ func _setup_touch_buttons() -> void:
 		content_container.move_child(utility_row, end_turn_separator.get_index())
 
 	_sync_danger_zones_button()
+
+# --- Trap route warning ------------------------------------------------------
+#
+# TRAPS SPRING WHERE YOU STEP (CONQUEST.md rule 10), so a route can cost the player a move
+# they never saw coming: the destination tile is clean, but a trap two cells back catches
+# the unit on the way. Traps are VISIBLE tiles -- nothing here reveals anything the player
+# could not already see on the board -- so the honest thing is to say so BEFORE the move is
+# confirmed rather than let the confirm be a surprise.
+#
+# Two moments, one line:
+#   * sweeping the cursor over the movement range (before the click), and
+#   * while a tentative move is staged and awaiting its confirm.
+# The staged case owns the line until the move is committed or cancelled, so the warning
+# that made the player think twice does not vanish the instant they stop moving the cursor.
+
+
+## Leading mark on the warning line. PLAIN ASCII, deliberately: the theme font has no
+## Geometric Shapes coverage, so the obvious warning triangle draws as tofu -- this project
+## has shipped that twice (see the probe table in unit/test_status_feedback.gd).
+const TRAP_WARNING_MARK := "!"
+
+## The warning line itself. Built in code (like the utility row above) and pinned at the top
+## of the sidebar's content, directly under the unit header, so it reads as a property of
+## the unit's pending move rather than of any one button.
+var trap_warning_label: Label = null
+
+
+func _setup_trap_warning() -> void:
+	"""Create the (initially hidden) trap warning line and pin it under the unit header."""
+	var content_container := get_node_or_null("MarginContainer/ContentContainer")
+	if content_container == null:
+		return
+
+	trap_warning_label = Label.new()
+	trap_warning_label.name = "TrapWarningLabel"
+	trap_warning_label.text = ""
+	trap_warning_label.add_theme_font_size_override("font_size", 13)
+	trap_warning_label.add_theme_color_override("font_color", MoveStatVisuals.NERF_COLOR)
+	trap_warning_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	trap_warning_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	trap_warning_label.visible = false
+	content_container.add_child(trap_warning_label)
+
+	var header := content_container.get_node_or_null("UnitHeaderContainer")
+	if header != null:
+		content_container.move_child(trap_warning_label, header.get_index() + 1)
+
+
+## Repaint the warning for the route to [param grid_pos] (a Vector3(col, 0, row) grid coord
+## under the cursor). Reads only -- [method TileEffectSystem.preview_route] applies nothing.
+func _refresh_trap_warning(grid_pos: Vector3) -> void:
+	if trap_warning_label == null or not is_instance_valid(trap_warning_label):
+		return
+	# A staged tentative move owns the line until confirm/cancel (see the block note).
+	if _tentative_active:
+		return
+	if not movement_mode or selected_unit == null or not _is_grid_pos_in_range(grid_pos):
+		_set_trap_warning(null)
+		return
+	var board = CombatServices.board()
+	if board == null:
+		_set_trap_warning(null)
+		return
+	var route: Dictionary = TileEffectSystem.preview_route(
+		selected_unit, board.cell_of(selected_unit), _grid_tile_to_cell(grid_pos), board)
+	_set_trap_warning(route.get("trap", null))
+
+
+## Show the warning line for [param trap], or hide it when [param trap] is null. The trap's
+## name comes from [TileEffectVisuals] -- the same source the terrain card's chip and the
+## board's own overlay pip use -- so the warning names the tile the player can see.
+func _set_trap_warning(trap) -> void:
+	if trap_warning_label == null or not is_instance_valid(trap_warning_label):
+		return
+	if trap == null:
+		trap_warning_label.text = ""
+		trap_warning_label.visible = false
+		return
+	var label: String = String(TileEffectVisuals.info_for(trap).get("name", "a trap"))
+	trap_warning_label.text = "%s Springs %s" % [TRAP_WARNING_MARK, label]
+	trap_warning_label.visible = true
+
+
+## The cell a move to [param dest_cell] would actually END on for the selected unit -- the
+## destination, or the armed halting trap that stops it short. Public so the ghost, the
+## commit and a test all ask the ONE function (see TileEffectSystem.preview_route).
+func planned_stop_cell(unit, dest_cell: Vector2i) -> Vector2i:
+	var board = CombatServices.board()
+	if board == null or unit == null:
+		return dest_cell
+	return TileEffectSystem.preview_route(unit, board.cell_of(unit), dest_cell, board).get("stop", dest_cell)
+
 
 func _on_danger_zones_button_pressed() -> void:
 	"""On-screen equivalent of the T hotkey: toggle every enemy's persistent danger
@@ -601,6 +696,9 @@ func _clear_movement_range() -> void:
 	"""Clear movement range visualization"""
 	movement_range_tiles.clear()
 	GameEvents.movement_range_cleared.emit()
+	# No range means no route to warn about. A tentative move that is being staged right
+	# now re-asserts its own warning immediately after clearing the range.
+	_set_trap_warning(null)
 
 func _clear_unit_header() -> void:
 	"""Clear the unit header information"""
@@ -2026,7 +2124,16 @@ func _begin_tentative_move(destination: Vector3) -> void:
 		_execute_movement_to_destination(destination)
 		return
 
-	var dest_cell: Vector2i = _grid_tile_to_cell(destination)
+	var clicked_cell: Vector2i = _grid_tile_to_cell(destination)
+	# THE GHOST SHOWS WHERE THE UNIT ACTUALLY STOPS. A route across an armed halting trap
+	# ends ON the trap, so the tentative preview stages there rather than at the cell the
+	# player clicked -- the FE loop's ghost IS the unit at its pending position, and a ghost
+	# standing somewhere the move cannot reach would be a lie the confirm then corrects.
+	# preview_route is the same derivation the move-apply seam walks, so what the player
+	# confirms and what the board resolves are the same cell by construction.
+	var route: Dictionary = TileEffectSystem.preview_route(
+		selected_unit, board.cell_of(selected_unit), clicked_cell, board)
+	var dest_cell: Vector2i = route.get("stop", clicked_cell)
 	_tentative_origin_cell = board.cell_of(selected_unit)
 	_tentative_origin_world = selected_unit.global_position
 	_tentative_dest_cell = dest_cell
@@ -2041,6 +2148,11 @@ func _begin_tentative_move(destination: Vector3) -> void:
 	# The post-move action menu replaces the movement-range highlight.
 	_clear_movement_range()
 	movement_mode = false
+
+	# The warning stands until the move is confirmed or cancelled (see _set_trap_warning).
+	# Asserted AFTER _clear_movement_range, which drops the cursor-sweep warning with the
+	# range it belonged to.
+	_set_trap_warning(route.get("trap", null))
 
 	# Refresh unit visuals (health bar etc. follow the moved node) and the action UI
 	# (Move now disabled; Moves / End Turn drive confirm-or-Wait).
@@ -2138,6 +2250,9 @@ func _revert_tentative_move() -> void:
 
 func _clear_tentative_state() -> void:
 	"""Drop all tentative-move bookkeeping (does NOT move the unit)."""
+	# The trap warning belonged to the staged move; it goes with it, on BOTH the commit and
+	# the cancel path (both funnel through here).
+	_set_trap_warning(null)
 	_tentative_active = false
 	_tentative_unit = null
 	_tentative_origin_cell = Vector2i.ZERO
@@ -2822,6 +2937,8 @@ func _on_cursor_moved_forecast(tile_position: Vector3) -> void:
 	feel as the player sweeps the cursor. Purely additive: reads only."""
 	_last_cursor_tile = tile_position
 	_refresh_move_forecast(tile_position)
+	# Same sweep, the movement half: warn when the route to this cell springs a trap.
+	_refresh_trap_warning(tile_position)
 
 func _refresh_move_forecast(grid_pos: Vector3) -> void:
 	"""Show the forecast for the current move against an eligible ENEMY at grid_pos

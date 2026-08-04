@@ -34,6 +34,33 @@ func describe() -> String:
 	return "Objective"
 
 
+## The LIVE one-line summary: [method describe], refined by [param state] wherever the
+## objective can say something more useful about the battle in front of the player than
+## its static phrasing can -- naming the boss still standing, counting down the turns
+## still to hold.
+##
+## Additive on purpose. It defaults to [method describe], so a condition with nothing
+## live to add needs no override and an unknown or future condition still produces
+## sensible text; and it reads the SAME neutral [param state] [method evaluate] scores,
+## so the line on screen can never describe a different battle than the rules do.
+func describe_progress(_state: Dictionary) -> String:
+	return describe()
+
+
+## Display name of [param unit] (via get_display_name(), or a `display_name` property),
+## or "" when it has neither. Shared by the subclasses that name a unit in their
+## [method describe_progress].
+static func _display_name_of(unit) -> String:
+	if unit == null:
+		return ""
+	if unit.has_method("get_display_name"):
+		return String(unit.get_display_name()).strip_edges()
+	var dn = unit.get("display_name")
+	if dn != null:
+		return String(dn).strip_edges()
+	return ""
+
+
 # --- Shared duck-typed unit accessors --------------------------------------
 
 ## Faction id of [param unit] (via get_team(), or a `team` / `faction` property).

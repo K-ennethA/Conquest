@@ -31,9 +31,12 @@ const BOTTOM_MARGIN: float = 18.0
 ## The project's touch-target floor.
 const BUTTON_SIZE: Vector2 = Vector2(52, 44)
 
-const LABEL_PLAY := "▶"
-const LABEL_PAUSE := "⏸"
-const LABEL_STEP := "⏭"
+# Godot's default font has no media-control or Geometric Shapes glyphs (probe table
+# in tests/unit/test_status_feedback.gd, 2026-08-03) -- ▶ ⏸ ⏭ are all tofu. ASCII
+# stand-ins match the pause button's "||" in UILayoutManager; ">" plays, ">|" steps.
+const LABEL_PLAY := ">"
+const LABEL_PAUSE := "||"
+const LABEL_STEP := ">|"
 const LABEL_EXIT := "EXIT"
 
 ## Slightly translucent plate, like [NetToast]: the bar floats over the board.

@@ -72,6 +72,95 @@ func test_every_authored_status_now_in_play_has_its_own_colour() -> void:
 
 
 # --- Glyphs -------------------------------------------------------------------
+#
+# THE FONT PROBE. This project has shipped tofu twice already (a ⚔ that drew as an empty
+# box, and this vocabulary's own ◆▲●▼■, every one of which the theme font cannot draw).
+# A glyph is therefore never a matter of taste -- it is a CAPABILITY of the font, measured
+# here and asserted before anything is allowed to print it.
+
+## Every glyph [StatusVisuals] can put on screen, from every path that emits one.
+func _emittable_glyphs() -> Array:
+	return [
+		StatusVisuals.GLYPH_DOT,
+		StatusVisuals.GLYPH_HOT,
+		StatusVisuals.GLYPH_GUARD,
+		StatusVisuals.GLYPH_BUFF,
+		StatusVisuals.GLYPH_DEBUFF,
+		StatusVisuals.GLYPH_NEUTRAL,
+	]
+
+
+## Standing evidence, printed rather than asserted: which candidate icons the theme font
+## can actually draw. Re-run this and read the table before proposing ANY glyph change.
+## (The companion table for the shield's ◊ lives in unit/test_shield_readout.gd.)
+func test_probe_which_icon_characters_the_theme_font_can_draw() -> void:
+	var font: Font = ThemeDB.fallback_font
+	assert_not_null(font, "there is a fallback font to measure against")
+	if font == null:
+		return
+	var drawable: PackedStringArray = []
+	var tofu: PackedStringArray = []
+	for candidate in [
+			# The vocabulary as it stood -- Geometric Shapes, all of it suspect.
+			"◆", "▲", "●", "▼", "■",
+			# Wider Geometric-Shapes / dingbat candidates.
+			"◊", "•", "◦", "‣", "▪", "▸", "►", "▻", "✦", "✧", "★", "☆",
+			# Latin-1 / General Punctuation marks, which the default font is likelier to hold.
+			"†", "‡", "§", "¤", "±", "«", "»", "÷", "×", "°", "¶", "µ", "¬", "·", "∞",
+			# Plain ASCII, the guaranteed floor.
+			"*", "+", "-", "!", "o", "x", "~", "^", "=", "#", "%", "v", "V", "O",
+			# Glyphs other surfaces in this project print, probed here so the evidence is
+			# in ONE table. Their files belong to other owners -- report, do not edit.
+			"⚑", "⚙", "⚔",
+	]:
+		var code: int = candidate.unicode_at(0)
+		var ok: bool = font.has_char(code)
+		var width: float = font.get_string_size(
+				candidate, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+		gut.p("  probe: '%s' U+%04X  has_char=%-5s  width@12px=%.1f" % [candidate, code, ok, width])
+		if ok:
+			drawable.append(candidate)
+		else:
+			tofu.append(candidate)
+	gut.p("  DRAWABLE : %s" % " ".join(drawable))
+	gut.p("  TOFU     : %s" % " ".join(tofu))
+
+
+func test_every_glyph_the_vocabulary_can_emit_is_one_the_font_can_draw() -> void:
+	# The pin. A world-space [Label3D] status badge has NO font fallback at all, so an
+	# undrawable glyph here is a literal box floating over the battlefield -- on every HP
+	# bar, every chip and every status tick float at once.
+	var font: Font = ThemeDB.fallback_font
+	assert_not_null(font, "there is a fallback font to measure against")
+	if font == null:
+		return
+	for glyph in _emittable_glyphs():
+		var code: int = String(glyph).unicode_at(0)
+		assert_true(font.has_char(code),
+			"the theme font can draw '%s' (U+%04X) -- see the probe table above" % [glyph, code])
+		assert_true(font.get_string_size(
+				glyph, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x > 0.0,
+			"and '%s' occupies real width at the 12px chip size" % glyph)
+
+
+func test_the_five_glyph_categories_stay_visually_distinct() -> void:
+	# Category, not identity: the NAME and COLOUR say WHICH status it is; the glyph says
+	# which of five things it is doing. DoT / HoT / guard / debuff / neutral must never
+	# collapse into each other, or the badge stops carrying information.
+	var distinct: Array = [
+		StatusVisuals.GLYPH_DOT, StatusVisuals.GLYPH_HOT,
+		StatusVisuals.GLYPH_GUARD, StatusVisuals.GLYPH_DEBUFF,
+		StatusVisuals.GLYPH_NEUTRAL,
+	]
+	var seen: Dictionary = {}
+	for glyph in distinct:
+		assert_false(seen.has(glyph), "'%s' is used for exactly one category" % glyph)
+		seen[glyph] = true
+	assert_eq(StatusVisuals.GLYPH_BUFF, StatusVisuals.GLYPH_HOT,
+		"a heal-over-time IS a buff -- the two share their glyph on purpose")
+	assert_ne(StatusVisuals.GLYPH_NEUTRAL, ShieldVisuals.GLYPH,
+		"and no status glyph collides with the shield's, which shares these surfaces")
+
 
 func test_glyphs_say_what_kind_of_thing_is_happening() -> void:
 	assert_eq(StatusVisuals.glyph_for_id(&"poisoned"), StatusVisuals.GLYPH_DOT,

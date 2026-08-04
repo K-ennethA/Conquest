@@ -142,7 +142,9 @@ func _build_top_bar() -> void:
 func _make_settings_gear() -> Button:
 	var gear := Button.new()
 	gear.name = "SettingsButton"
-	gear.text = "⚙"
+	# "¤" not "⚙": the default font has no gear glyph (tofu) -- same drawable
+	# stand-in the battle HUD's settings button uses (UILayoutManager).
+	gear.text = "¤"
 	gear.tooltip_text = "Settings"
 	gear.custom_minimum_size = Vector2(GEAR_SIZE, GEAR_SIZE)
 	gear.size_flags_vertical = Control.SIZE_SHRINK_CENTER

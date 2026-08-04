@@ -48,7 +48,7 @@ class_name DamageNumbers
 ##     condition's effects resolve, so the damage_dealt / unit_healed it produced are
 ##     already sitting in `_pending` -- the handler simply TAGS this frame's untagged
 ##     entries for that unit with the condition, and the flush draws them in the status'
-##     own colour with its glyph ("◆ 4" in toxic green rather than a bare white "4").
+##     own colour with its glyph ("† 4" in toxic green rather than a bare white "4").
 ##     This is why HEALS are buffered too now instead of spawning inline: a regen tick has
 ##     to be taggable exactly like a poison tick, and one code path for both is what keeps
 ##     them from drifting.
@@ -56,6 +56,13 @@ class_name DamageNumbers
 ##     number so the two never overlap. Both spawn inline -- there is nothing to correlate.
 ##   * nothing here decides WHAT a status is or does; the words, glyph and colour all come
 ##     from [StatusVisuals], the same vocabulary the health-bar pips and hover chips use.
+##
+## SHIELD ABSORPTION. Damage a damage-soak shield ate is drawn as a SILVER "◊ N" instead of
+## a white damage number, and only the remainder that actually reached HP is drawn as
+## damage -- so a hit that a ward swallowed whole no longer looks like a hit the game
+## forgot to apply. The split is sampled at announce time and comes from
+## [method Unit.absorb_split]; the glyph and colour come from [ShieldVisuals], the same
+## vocabulary the silver segment on every HP bar uses.
 
 # --- Placement ---------------------------------------------------------------
 @export_group("Placement")
@@ -81,6 +88,9 @@ class_name DamageNumbers
 @export var crit_color: Color = Color(1.0, 0.82, 0.28)
 ## Healing, drawn as "+N".
 @export var heal_color: Color = Color(0.42, 1.0, 0.52)
+## Damage a SHIELD ate. Silver, matching the shield segment on every HP bar
+## ([constant ShieldVisuals.SILVER]).
+@export var shield_color: Color = Color(0.788, 0.796, 0.839)
 ## Base font size of an ordinary number.
 @export_range(8, 192, 1) var font_size: int = 56
 ## Multiplier applied to [member font_size] for a status APPLIED / EXPIRED word label.
@@ -117,8 +127,10 @@ const _LIFETIME_MIN: float = 0.25
 const _LIFETIME_MAX: float = 2.0
 
 ## This frame's buffered HP changes, flushed deferred (see the crit note in the class doc).
-## Each entry: { "pos": Vector3, "amount": int, "attacker": Object, "defender": Object,
-## "heal": bool, "status": StatusCondition|null }.
+## Each entry: { "pos": Vector3, "amount": int, "absorbed": int, "attacker": Object,
+## "defender": Object, "heal": bool, "status": StatusCondition|null }.
+## `absorbed` is how much of `amount` a damage-soak shield ate, sampled at announce time
+## (see [method _on_damage_dealt]); 0 for every unshielded hit and every heal.
 ## `pos` is the authoritative popup placement, captured at signal time; the two object
 ## refs are BEST-EFFORT crit context only and are re-validated before any use. `status` is
 ## filled in by [method _on_status_ticked] when this frame's change came from a condition.
@@ -174,9 +186,22 @@ func _on_damage_dealt(attacker = null, defender = null, damage = null) -> void:
 	var pos = _anchor_of(defender)
 	if pos == null:
 		return
+	# SHIELD ABSORPTION, decided HERE and not at flush time. `damage_dealt` is announced
+	# BEFORE take_damage applies (DamageEffect and TravelingHazard both say so in their own
+	# docs, and the kill-attribution order depends on it), so at this instant the defender's
+	# shield is still whole -- read it now and the split is exact. By the deferred flush the
+	# ward has already been burned and the information is gone.
+	#
+	# The split itself is Unit.absorb_split, the same function take_damage soaks with, so
+	# the silver number cannot claim an absorption that did not happen. A defender with no
+	# shield (or no shield concept at all -- the mocks) splits to 0 absorbed, and everything
+	# below behaves exactly as it did before.
+	var shield_before: int = ShieldVisuals.shield_of(defender)
+	var absorbed: int = int(Unit.absorb_split(shield_before, amount).get("absorbed", 0))
 	_pending.append({
 		"pos": pos,
 		"amount": amount,
+		"absorbed": absorbed,
 		"attacker": attacker,
 		"defender": defender,
 		"heal": false,
@@ -203,6 +228,7 @@ func _on_unit_healed(unit = null, amount = null) -> void:
 	_pending.append({
 		"pos": pos,
 		"amount": healed,
+		"absorbed": 0,   # a heal is never soaked
 		"attacker": null,
 		"defender": unit,
 		"heal": true,
@@ -295,11 +321,23 @@ func _flush_pending() -> void:
 		var healed: bool = bool(entry.get("heal", false))
 		var condition = entry.get("status", null)
 
+		# SOAKED DAMAGE READS AS SOAKED. Without this a shielded unit took a plain white
+		# "12" and lost no HP, which looks like the game dropped the hit. The absorbed part
+		# spawns as its own SILVER "◊ 12" -- the same glyph and colour as the shield segment
+		# on the bar it just came off -- and only the part that reached HP is drawn as
+		# damage. A fully-absorbed hit is therefore silver and nothing else.
+		var absorbed: int = int(entry.get("absorbed", 0))
+		if absorbed > 0 and not healed:
+			_spawn_popup(pos, ShieldVisuals.absorbed_popup_text(absorbed), shield_color, 1.0)
+		var to_health: int = amount if healed else maxi(0, amount - absorbed)
+		if not healed and to_health <= 0:
+			continue
+
 		# A status tick wins the styling: it is the ONE case where the player cannot see
 		# where the damage came from, so it gets the status' colour and glyph. A status
 		# tick is never a crit (crits belong to casts), so the inference is skipped.
 		if condition != null:
-			var status_text: String = StatusVisuals.tick_text(condition, amount, healed)
+			var status_text: String = StatusVisuals.tick_text(condition, to_health, healed)
 			if status_text != "":
 				var status_color: Color = StatusVisuals.info_for(condition).get(
 					"color", heal_color if healed else damage_color)
@@ -307,14 +345,16 @@ func _flush_pending() -> void:
 			continue
 
 		if healed:
-			_spawn_popup(pos, "+%d" % amount, heal_color, 1.0)
+			_spawn_popup(pos, "+%d" % to_health, heal_color, 1.0)
 			continue
 
+		# Crit is inferred from the FULL dealt number (that is what the previewer's
+		# crit_damage is comparable with); only the printed value is the post-shield one.
 		var crit: bool = _infer_crit(entry)
 		any_crit = any_crit or crit
 		var color: Color = crit_color if crit else damage_color
 		var size_scale: float = crit_size_scale if crit else 1.0
-		_spawn_popup(pos, str(amount), color, size_scale)
+		_spawn_popup(pos, str(to_health), color, size_scale)
 
 	# Drop the cast context: it is only ever valid for the frame it was announced in.
 	_cast_move = null

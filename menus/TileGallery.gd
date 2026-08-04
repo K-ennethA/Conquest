@@ -3,6 +3,22 @@ extends Control
 class_name TileGallery
 
 # Tile Gallery - Browse and view all available tiles and their effects
+#
+# ELEMENTS. This gallery predates the element work, so a tile's page said nothing about
+# the matchup the board actually resolves for it. It does now: an elemented tile carries
+# the same ElementVisuals badge a unit or a move does, plus a one-line matchup hint
+# derived from the LIVE matrix.
+#
+# Where the element comes from is `element_chart.tres` and nothing else (CONQUEST.md rule
+# 9). Its `tile_elements` map is keyed on BOTH a TileEffectResource.id and, for terrain
+# that grows its own effect, the TILE's own id -- which is why deep_water is water with no
+# effect resource at all, and molten_lava is fire through a legacy TileEffect that carries
+# no id of its own. See `tile_element_of` / `effect_element_of`.
+#
+# ELEMENTLESS TILES GET NO BADGE. The chart leaves pure-utility terrain (grass, trees,
+# obsidian, the `stealth` flag) deliberately neutral because it has nothing to apply, and
+# a badge there would promise a matchup the board never resolves. Absence is the authored
+# answer -- never invent one.
 
 # UI Elements
 @onready var back_button: Button
@@ -18,6 +34,29 @@ class_name TileGallery
 @onready var filter_option: OptionButton
 @onready var sort_option: OptionButton
 
+# --- Element readout -----------------------------------------------------------
+
+## The tile-level badge in the detail header. Renamed off [constant
+## ElementVisuals.BADGE_NAME] so a test (and a future reader) can tell the ONE tile badge
+## from the per-effect badges further down the page.
+const TILE_BADGE_NAME := "TileElementBadge"
+## The row holding that badge and the matchup hint. Hidden whole for an elementless tile.
+const TILE_ELEMENT_ROW_NAME := "TileElementRow"
+## The matchup hint label inside that row.
+const TILE_MATCHUP_NAME := "TileMatchupHint"
+## Per-effect badge, on the card for an individual tile effect.
+const EFFECT_BADGE_NAME := "EffectElementBadge"
+
+## Cap for the tile badge. Wider than the shared default because this page has the room
+## and an elided element name on the Compendium's own tile page would be absurd.
+const BADGE_CAP: float = 96.0
+
+## Element badge + matchup hint for the selected tile, kept as fields so the header row is
+## built ONCE and only re-pointed per selection (the ElementVisuals contract).
+var tile_element_badge: PanelContainer = null
+var tile_element_row: HBoxContainer = null
+var tile_matchup_label: Label = null
+
 # Data
 var all_tiles: Array[TileResource] = []
 var filtered_tiles: Array[TileResource] = []
@@ -27,6 +66,117 @@ var current_tile_preview: Node3D
 # Filter and sort options
 var tile_types = ["All", "NORMAL", "DIFFICULT_TERRAIN", "WATER", "WALL", "SPECIAL", "LAVA", "ICE", "SWAMP", "SACRED_GROUND", "CORRUPTED"]
 var sort_options = ["Name", "Type", "Movement Cost", "Rarity", "Effect Count"]
+
+# ===========================================================================
+# Element derivation (pure statics -- no scene, so the rules are pinnable)
+# ===========================================================================
+
+## The element of [param tile], or &"" when nobody has elemented it.
+##
+## Two authored sources, in this order, both out of `element_chart.tres`:
+##   1. the TILE's own id -- how terrain that grows its own effect is elemented
+##      (deep_water -> water, molten_lava -> fire), including terrain whose effect is a
+##      legacy [TileEffect] carrying no id to key on;
+##   2. the first elemented [TileEffectResource] in its default effects -- how authored
+##      effect content is elemented (tall_grass -> nature, sacred_meadow -> nature).
+##
+## Never a field on the tile: the chart is the single authority (CONQUEST.md rule 9), so
+## elementing new terrain stays a one-file content edit.
+static func tile_element_of(tile) -> StringName:
+	if tile == null:
+		return &""
+
+	if tile.has_method("get_id"):
+		var by_tile_id: StringName = ElementChart.chart().tile_element(tile.get_id())
+		if by_tile_id != &"":
+			return by_tile_id
+
+	var defaults = tile.get("default_effects")
+	if defaults is Array:
+		for effect in (defaults as Array):
+			var el: StringName = _effect_own_element(effect)
+			if el != &"":
+				return el
+	return &""
+
+
+## The element of ONE tile effect on [param tile].
+##
+## A [TileEffectResource] answers for itself (its [method TileEffectResource.element]
+## reads the chart by its own id). A legacy [TileEffect] has no id at all, so it inherits
+## the TILE's element -- which is exactly how the chart authored it: `molten_lava -> fire`
+## is a TILE id entry standing in for the burn that terrain applies.
+static func effect_element_of(effect, tile) -> StringName:
+	var own: StringName = _effect_own_element(effect)
+	if own != &"":
+		return own
+	return tile_element_of(tile)
+
+
+static func _effect_own_element(effect) -> StringName:
+	if effect == null or typeof(effect) != TYPE_OBJECT:
+		return &""
+	if effect.has_method("element"):
+		return ElementChartResource.key_of(effect.element())
+	return &""
+
+
+## Elements [param element] hits for LESS than neutral -- the RESISTED half of its matrix
+## row.
+##
+## Deliberately a sibling of [method ElementChartGallery.strong_against] rather than
+## something inferred from it: the chart authors every direction explicitly and has no
+## implied symmetry, so "hits harder" and "hits softer" are two separate reads of the
+## same row.
+static func resisted_against(element) -> Array[StringName]:
+	var key: StringName = ElementChartResource.key_of(element)
+	var out: Array[StringName] = []
+	if key == &"":
+		return out
+	for defender in ElementChartGallery.elements():
+		if ElementVisuals.label_for_multiplier(ElementChart.multiplier(key, defender)) \
+				== ElementVisuals.RESISTED:
+			out.append(defender)
+	return out
+
+
+## "Deals more to nature, less to fire" -- the one-line matchup summary for
+## [param element]. "" for an elementless subject (nothing to say), and
+## [constant ElementChartGallery.NO_MATCHUPS_TEXT] for an element the chart has authored
+## no matchup for at all (wind today) -- reported rather than papered over.
+##
+## Every name here is READ from the live matrix through
+## [method ElementChartGallery.strong_against] / [method resisted_against], so retuning
+## `element_chart.tres` retunes this line with no code edit.
+static func matchup_hint(element) -> String:
+	var key: StringName = ElementChartResource.key_of(element)
+	if key == &"":
+		return ""
+	var more: Array[StringName] = ElementChartGallery.strong_against(key)
+	var less: Array[StringName] = resisted_against(key)
+	if more.is_empty() and less.is_empty():
+		return ElementChartGallery.NO_MATCHUPS_TEXT
+	var parts: Array[String] = []
+	if not more.is_empty():
+		parts.append("Deals more to " + _element_name_list(more))
+	if not less.is_empty():
+		if parts.is_empty():
+			parts.append("Deals less to " + _element_name_list(less))
+		else:
+			parts.append("less to " + _element_name_list(less))
+	return ", ".join(parts)
+
+
+## Element display names, lower-cased so they read as words inside the hint sentence
+## rather than as a second row of chips.
+static func _element_name_list(elements: Array) -> String:
+	var names: Array[String] = []
+	for e in elements:
+		var n: String = ElementVisuals.label_for(e).to_lower()
+		if n != "":
+			names.append(n)
+	return ", ".join(names)
+
 
 func _ready() -> void:
 	theme = MenuTheme.build()  # dark Legends-style menu look (matches Unit/Map galleries)
@@ -144,6 +294,30 @@ func _create_tile_display(parent: VBoxContainer) -> void:
 	tile_type_label = Label.new()
 	tile_type_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
 	info_container.add_child(tile_type_label)
+
+	# Element badge + matchup hint. ONE row, built once and re-pointed per selection
+	# (ElementVisuals badges are made to be re-pointed, not rebuilt), and hidden whole for
+	# an elementless tile so the header costs those tiles nothing.
+	tile_element_row = HBoxContainer.new()
+	tile_element_row.name = TILE_ELEMENT_ROW_NAME
+	tile_element_row.add_theme_constant_override("separation", 8)
+	info_container.add_child(tile_element_row)
+
+	tile_element_badge = ElementVisuals.make_badge(&"", MenuTheme.FONT_CAPTION, BADGE_CAP)
+	tile_element_badge.name = TILE_BADGE_NAME
+	# SHRINK_BEGIN, not the badge default SHRINK_END: this row is left-aligned under the
+	# tile's name, so the chip must hug the left edge rather than the far side of the panel.
+	tile_element_badge.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	tile_element_row.add_child(tile_element_badge)
+
+	tile_matchup_label = Label.new()
+	tile_matchup_label.name = TILE_MATCHUP_NAME
+	tile_matchup_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	tile_matchup_label.modulate = MenuTheme.CREAM_DIM
+	tile_matchup_label.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	tile_element_row.add_child(tile_matchup_label)
+
+	tile_element_row.visible = false
 
 	# Description
 	tile_display_container.add_child(_section_header("Description"))
@@ -484,9 +658,12 @@ func _display_tile(tile: TileResource) -> void:
 			"Legendary":
 				tile_type_label.modulate = MenuTheme.GOLD
 	
+	# Element badge + matchup hint (absent entirely for an unelemented tile).
+	_update_tile_element(tile)
+
 	if tile_description:
 		tile_description.text = tile.description
-	
+
 	# Update 3D preview
 	_update_tile_preview(tile)
 	
@@ -495,6 +672,29 @@ func _display_tile(tile: TileResource) -> void:
 	
 	# Update effects
 	_update_tile_effects(tile)
+
+func _update_tile_element(tile: TileResource) -> void:
+	"""Point the header's element badge + matchup hint at [param tile].
+
+	An elementless tile hides the WHOLE row, badge and hint together -- the chart leaves
+	pure-utility terrain neutral on purpose, and a row reading "Neutral / no matchups" on
+	most of the catalogue would be furniture rather than information."""
+	if tile_element_row == null or not is_instance_valid(tile_element_row):
+		return
+
+	var element: StringName = tile_element_of(tile)
+	if element == &"":
+		tile_element_row.visible = false
+		ElementVisuals.update_badge(tile_element_badge, &"", BADGE_CAP)
+		if tile_matchup_label != null:
+			tile_matchup_label.text = ""
+		return
+
+	tile_element_row.visible = true
+	ElementVisuals.update_badge(tile_element_badge, element, BADGE_CAP)
+	if tile_matchup_label != null:
+		tile_matchup_label.text = matchup_hint(element)
+
 
 func _update_tile_preview(tile: TileResource) -> void:
 	"""Update the 3D tile preview"""
@@ -583,64 +783,172 @@ func _update_tile_effects(tile: TileResource) -> void:
 		effects_container.add_child(no_effects)
 		return
 
-	# Get effects for this tile type
+	# Two authoring formats live side by side here, and the gallery used to show only the
+	# first: create_tile_effects() returns the LEGACY TileEffect list (type-derived, plus
+	# any legacy entries in default_effects) and silently drops every authored
+	# TileEffectResource -- which is exactly the half that carries an element. Both are
+	# listed now, so an elemented tile's page finally has an effect to badge.
 	var effects = tile.create_tile_effects()
+	var authored: Array = _authored_effect_resources(tile)
 
-	if effects.is_empty():
+	if effects.is_empty() and authored.is_empty():
 		var no_effects = Label.new()
 		no_effects.text = "No effects configured"
 		no_effects.modulate = MenuTheme.CREAM_DIM
 		effects_container.add_child(no_effects)
-	else:
-		# Accent tile effects in the piercing-orange used for hazards elsewhere, so
-		# each effect reads as a left-accented card matching the unit move cards.
-		var accent = Color("f0913c")
-		for effect in effects:
-			var card = PanelContainer.new()
-			card.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-			card.add_theme_stylebox_override("panel", MenuTheme.card_box(accent))
-			effects_container.add_child(card)
+		return
 
-			var effect_container = VBoxContainer.new()
-			effect_container.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-			card.add_child(effect_container)
+	# Accent tile effects in the piercing-orange used for hazards elsewhere, so
+	# each effect reads as a left-accented card matching the unit move cards.
+	var accent = Color("f0913c")
+	for effect in effects:
+		var card = PanelContainer.new()
+		card.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+		card.add_theme_stylebox_override("panel", MenuTheme.card_box(accent))
+		effects_container.add_child(card)
 
-			# Effect name and type chip
-			var effect_header = HBoxContainer.new()
-			effect_header.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-			effect_container.add_child(effect_header)
+		var effect_container = VBoxContainer.new()
+		effect_container.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+		card.add_child(effect_container)
 
-			var effect_name = Label.new()
-			effect_name.text = effect.effect_name
-			effect_name.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
-			effect_name.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-			effect_header.add_child(effect_name)
+		# Effect name and type chip
+		var effect_header = HBoxContainer.new()
+		effect_header.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+		effect_container.add_child(effect_header)
 
-			effect_header.add_child(MenuTheme.make_chip(
-				TileEffect.EffectType.keys()[effect.effect_type], accent))
+		var effect_name = Label.new()
+		effect_name.text = effect.effect_name
+		effect_name.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+		effect_name.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+		effect_header.add_child(effect_name)
 
-			# Effect description
-			var effect_desc = Label.new()
-			effect_desc.text = effect._get_effect_description()
-			effect_desc.modulate = MenuTheme.CREAM_DIM
-			effect_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			effect_desc.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-			effect_container.add_child(effect_desc)
+		_add_effect_element_badge(effect_header, effect, tile)
 
-			# Effect properties
-			var props_text = "Strength: " + str(effect.strength)
-			if effect.duration > 0:
-				props_text += "   -   Duration: " + str(effect.duration) + " turns"
-			elif effect.duration == -1:
-				props_text += "   -   Duration: Permanent"
-			else:
-				props_text += "   -   Duration: Instant"
+		effect_header.add_child(MenuTheme.make_chip(
+			TileEffect.EffectType.keys()[effect.effect_type], accent))
 
-			var effect_props = Label.new()
-			effect_props.text = props_text
-			effect_props.modulate = Color(0.72, 0.70, 0.78)
-			effect_props.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-			effect_container.add_child(effect_props)
+		# Effect description
+		var effect_desc = Label.new()
+		effect_desc.text = effect._get_effect_description()
+		effect_desc.modulate = MenuTheme.CREAM_DIM
+		effect_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		effect_desc.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+		effect_container.add_child(effect_desc)
+
+		# Effect properties
+		var props_text = "Strength: " + str(effect.strength)
+		if effect.duration > 0:
+			props_text += "   -   Duration: " + str(effect.duration) + " turns"
+		elif effect.duration == -1:
+			props_text += "   -   Duration: Permanent"
+		else:
+			props_text += "   -   Duration: Instant"
+
+		var effect_props = Label.new()
+		effect_props.text = props_text
+		effect_props.modulate = Color(0.72, 0.70, 0.78)
+		effect_props.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+		effect_container.add_child(effect_props)
+
+		_add_effect_matchup_hint(effect_container, effect, tile)
+
+	for authored_effect in authored:
+		_add_effect_resource_card(authored_effect, tile, accent)
+
+
+## The authored [TileEffectResource]s on [param tile]. Kept separate from
+## [method TileResource.create_tile_effects], which is typed Array[TileEffect] and
+## therefore cannot carry them.
+func _authored_effect_resources(tile: TileResource) -> Array:
+	var out: Array = []
+	var defaults = tile.get("default_effects")
+	if not (defaults is Array):
+		return out
+	for effect in (defaults as Array):
+		if effect != null and effect is TileEffectResource:
+			out.append(effect)
+	return out
+
+
+## One card for an authored [TileEffectResource]: its name, its element badge, the trigger
+## it fires on, and -- only when it differs from the header's -- its matchup hint.
+##
+## Deliberately COMPACT (a header row and at most one caption). The right column's budget
+## is already spent on the description, the 3D preview and the eight-row property grid;
+## this section gets the slack that is left, so a card here states what the effect IS and
+## sends the rest to the effect's own place in the game.
+func _add_effect_resource_card(effect: TileEffectResource, tile: TileResource, accent: Color) -> void:
+	var card := PanelContainer.new()
+	card.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	card.add_theme_stylebox_override("panel", MenuTheme.card_box(accent))
+	effects_container.add_child(card)
+
+	var body := VBoxContainer.new()
+	body.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	card.add_child(body)
+
+	var header := HBoxContainer.new()
+	header.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	body.add_child(header)
+
+	var name_label := Label.new()
+	var shown: String = effect.display_name.strip_edges()
+	if shown == "":
+		shown = String(effect.id).capitalize()
+	name_label.text = shown
+	name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	name_label.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	header.add_child(name_label)
+
+	_add_effect_element_badge(header, effect, tile)
+
+	header.add_child(MenuTheme.make_chip(
+			TileEffectResource.Trigger.keys()[effect.trigger], accent))
+
+	_add_effect_matchup_hint(body, effect, tile)
+
+	# A pass-through TRAP says so on its card -- the same authored line the terrain
+	# panel shows in battle (TileEffectResource.trap_descriptor, "" for non-traps).
+	var trap_line: String = String(effect.trap_descriptor()) if effect.has_method("trap_descriptor") else ""
+	if trap_line != "":
+		var trap_label := Label.new()
+		trap_label.name = "TrapDescriptor"
+		trap_label.text = trap_line
+		trap_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+		trap_label.add_theme_color_override("font_color", MenuTheme.GOLD)
+		body.add_child(trap_label)
+
+
+## Append the element badge for [param effect] to [param row], or nothing at all when the
+## effect is elementless. Absence is the authored answer -- see the file header.
+func _add_effect_element_badge(row: HBoxContainer, effect, tile: TileResource) -> void:
+	var element: StringName = effect_element_of(effect, tile)
+	if element == &"":
+		return
+	var badge := ElementVisuals.make_badge(element, MenuTheme.FONT_CAPTION, BADGE_CAP)
+	badge.name = EFFECT_BADGE_NAME
+	row.add_child(badge)
+
+
+## Append the matchup hint for [param effect] to [param body] -- but ONLY when it is not
+## already the line the header row is showing for the tile as a whole. Every shipped tile
+## takes its effect's element from the tile itself, so in practice this adds no row at all
+## and the section keeps its existing budget; a tile whose effect is elemented differently
+## from its terrain is the case that needs saying twice.
+func _add_effect_matchup_hint(body: VBoxContainer, effect, tile: TileResource) -> void:
+	var element: StringName = effect_element_of(effect, tile)
+	if element == &"" or element == tile_element_of(tile):
+		return
+	var hint: String = matchup_hint(element)
+	if hint == "":
+		return
+	var label := Label.new()
+	label.text = hint
+	label.modulate = MenuTheme.CREAM_DIM
+	label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	body.add_child(label)
 
 # Signal handlers
 func _on_back_pressed() -> void:

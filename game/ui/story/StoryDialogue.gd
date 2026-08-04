@@ -1,4 +1,4 @@
-class_name StoryDialogue
+﻿class_name StoryDialogue
 extends CanvasLayer
 
 ## FIRE-EMBLEM-STYLE STORY OVERLAY: two portrait panels that slide in from their own side of
@@ -271,7 +271,7 @@ func _build_textbox() -> void:
 
 	_advance_hint = Label.new()
 	_advance_hint.name = "StoryAdvanceHint"
-	_advance_hint.text = "▼  Click or press Space"
+	_advance_hint.text = "»  Click or press Space"
 	_advance_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_advance_hint.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
 	_advance_hint.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
