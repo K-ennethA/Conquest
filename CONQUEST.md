@@ -76,5 +76,27 @@ named file is the canonical example — read it before you write the same kind o
    → `game/combat/ElementChart.gd`, `game/combat/DamageMath.gd`, pinned by
    `tests/integration/test_element_preview_parity.gd`
 
+   **TILES AND HAZARDS ARE ELEMENTED TOO, from the same file.** A tile effect's element is
+   `element_chart.tres`'s `tile_elements` map, keyed on `TileEffectResource.id` — that map
+   is the **single authority**, and `TileEffectResource` deliberately carries no element
+   field of its own, so elementing new terrain is the same one-file content edit as
+   retuning a matchup. An unmapped id is elementless and resolves neutral. Two consequences,
+   both data:
+   - damage a tile or a `TravelingHazard` deals is scaled by the **matrix alone**
+     (`ElementChart.environment_scale_for` — a nature unit resists nature brambles ×0.75).
+     The tile amplifier and the own-tile benefit are deliberately *not* folded in: they
+     would count "you are standing in it" a second and third time. Tile damage reaches
+     that rule by stamping its synthetic move with `ElementChart.mark_environment`;
+     hazards reach it through `DamageMath.environment_damage`.
+   - what a tile **gives or takes** — a stat modifier, a heal, a shield — is re-scaled for
+     an occupant of the tile's own element by `ElementChart.home_effect_amount`
+     (`own_tile_effect_bonus` on a benefit, `own_tile_benefit` on a penalty). A **status**
+     a tile applies is never modulated: its only knob is a roll chance, and touching that
+     would put an RNG draw where an authored 1.0 short-circuits one, desyncing replays.
+   → `game/combat/resources/ElementChartResource.gd` (`tile_elements`),
+   `game/tiles/effects/TileEffectResource.gd`, pinned by
+   `tests/unit/test_tile_elements.gd` and
+   `tests/integration/test_terrain_panel_elements.gd`
+
 Testing conventions (orphans, global state, temp paths, shared doubles) live in
 [tests/README.md](tests/README.md).

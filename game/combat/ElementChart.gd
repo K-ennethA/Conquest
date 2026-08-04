@@ -16,6 +16,12 @@ class_name ElementChart
 ##   3. HOME benefit — a unit standing on a tile of ITS OWN element is "at home" and
 ##      takes slightly less.
 ##
+## Damage the ENVIRONMENT itself deals — a fire tile burning its occupant, a crawling
+## hazard entering a cell — is a fourth, SEPARATE case, and it is the matrix alone
+## ([method environment_scale_for]): the tile's element vs the occupant's. What a tile
+## GIVES rather than deals (an evasion bonus, a heal) is modulated by
+## [method home_effect_amount], the "at home" idea extended past damage.
+##
 ## UNKNOWN PAIRS ARE NEUTRAL, ALWAYS. An empty move element, an empty unit element, an
 ## element the chart has never heard of, a null, or outright garbage all resolve to
 ## [constant NEUTRAL] (1.0). Nothing here can push an error or fail a lookup — a move or
@@ -39,6 +45,15 @@ const DARK: StringName = &"dark"
 ## The only multiplier that is a code constant, because it is the IDENTITY — "nothing
 ## applies". Every real number (how strong is strong, how much a tile adds) is data.
 const NEUTRAL: float = 1.0
+
+## METADATA KEY marking a [MoveResource] as an ENVIRONMENTAL damage source — the
+## synthetic self-move a [TileEffectResource] resolves its effects through, and nothing
+## else. Carried as metadata rather than as a new exported field so no authored move
+## resource's schema changes and no .tres has to be touched.
+##
+## Its presence is what switches [method damage_scale_for] onto the environment rule
+## (matchup only). See [method mark_environment].
+const ENVIRONMENT_META: StringName = &"element_environment_source"
 
 ## Verdict a multiplier reads as, for UI and logs. THE vocabulary — panels label a
 ## matchup with exactly these three.
@@ -149,10 +164,121 @@ static func type_benefit_scale_for(target, board) -> float:
 ## deterministic — it depends only on the move's element and the target's current state
 ## — so previewing it is honest information, not an exploit. Returns [constant NEUTRAL]
 ## when nothing applies, which is the missing-element no-op path.
+##
+## ONE BRANCH: when [param move] is an ENVIRONMENTAL source (a tile burning its own
+## occupant — see [constant ENVIRONMENT_META]) the environment rule replaces the three
+## factors with the matchup alone. Amplifying a fire tile's burn because the victim is
+## standing in fire, and then discounting it again because the victim is at home in it,
+## would count the same fact three times; the matrix's own self-resist already says
+## everything there is to say about standing in your own element.
 static func damage_scale_for(move, target, board) -> float:
+	var environment: StringName = environment_element_of(move)
+	if environment != &"":
+		return environment_scale_for(environment, target)
 	return type_scale_for(move, target) \
 		* tile_scale_for(move, target, board) \
 		* type_benefit_scale_for(target, board)
+
+
+# --- Damage the ENVIRONMENT deals -------------------------------------------
+#
+# Tiles and hazards hurt the unit standing in them, and that damage is elemented too:
+# fire tiles are fire, brambles are nature. It is the MATRIX and nothing else --
+#
+#   * a nature unit in nature brambles resists them (nature>nature 0.75);
+#   * a nature unit on a fire tile is scorched (fire>nature 1.25);
+#   * an unelemented tile, or an unelemented occupant, is neutral and unchanged.
+#
+# Deterministic and board-independent: it reads the source's element and the victim's,
+# nothing else. The one function every environmental source resolves through, so a
+# damage tile, a hazard and the terrain panel's readout cannot disagree.
+
+
+## Multiplier for environmental damage of [param source_element] landing on
+## [param target]. [constant NEUTRAL] for an elementless source or victim.
+static func environment_scale_for(source_element, target) -> float:
+	return multiplier(source_element, element_of(target))
+
+
+## The element of [param tile_effect], read from the chart's
+## [member ElementChartResource.tile_elements] — THE authority (CONQUEST.md rule 9).
+## &"" for a null effect, an effect with no id, or an id nobody has elemented.
+static func tile_element_of(tile_effect) -> StringName:
+	if tile_effect == null or typeof(tile_effect) != TYPE_OBJECT:
+		return &""
+	return chart().tile_element(tile_effect.get("id"))
+
+
+## Stamp [param move] as the environmental source for [param element].
+##
+## Sets the move's own element (so element-aware UI and VFX colour the tile's hit like
+## anything else) AND the [constant ENVIRONMENT_META] marker that routes
+## [method damage_scale_for] onto the environment rule. A no-op for a null move or an
+## empty element, so an elementless tile behaves exactly as it did before this existed.
+static func mark_environment(move, element) -> void:
+	if move == null or typeof(move) != TYPE_OBJECT:
+		return
+	var key := ElementChartResource.key_of(element)
+	if key == &"":
+		return
+	move.set("element", key)
+	move.set_meta(ENVIRONMENT_META, key)
+
+
+## The environmental element [method mark_environment] stamped on [param move], or &"".
+static func environment_element_of(move) -> StringName:
+	if move == null or typeof(move) != TYPE_OBJECT or not is_instance_valid(move):
+		return &""
+	if not move.has_meta(ENVIRONMENT_META):
+		return &""
+	return ElementChartResource.key_of(move.get_meta(ENVIRONMENT_META))
+
+
+# --- Effects the environment applies (non-damage) ----------------------------
+
+
+## The magnitude a tile effect's non-damage payload actually lands at for [param unit].
+##
+## AT HOME, extended from damage to everything else a tile does. An occupant standing on
+## a tile of ITS OWN element gets more out of what that tile GIVES
+## ([member ElementChartResource.own_tile_effect_bonus]) and less of what it TAKES
+## ([member ElementChartResource.own_tile_benefit] applied to the magnitude) — a nature
+## unit reads tall grass better (+15 evasion -> +19); a water unit keeps its feet on ice
+## (-10 evasion -> -9). Every other pairing is returned untouched, so a tile with no
+## element, a unit with no element, and a mismatch are all exactly as before.
+##
+## Magnitude is floored at 1, so no scale can silently erase an authored effect, and the
+## SIGN is always preserved — a benefit can never be scaled into a penalty. Deterministic:
+## an integer round of authored data, no RNG.
+##
+## Deliberately NOT applied to a STATUS a tile hands out (rubble's slow, the vine trap's
+## ensnare): a status is binary, and the only knob it has is its roll CHANCE — scaling
+## that would introduce an RNG draw where an authored 1.0 short-circuits one today, and
+## change every replay downstream of it.
+## The SCALE [method home_effect_amount] applies to a magnitude of [param amount]'s sign:
+## [member ElementChartResource.own_tile_effect_bonus] for a benefit,
+## [member ElementChartResource.own_tile_benefit] for a penalty, [constant NEUTRAL] for 0.
+##
+## Split out for the surfaces that have to SAY what the rule did ("heals ×1.25 for you").
+## They print this authored knob rather than the ratio of the two integers, because
+## rounding makes the ratio lie: +15 becomes +19, and 19/15 is 1.27, not the 1.25 the
+## chart actually applied.
+static func home_effect_scale(amount: int) -> float:
+	if amount == 0:
+		return NEUTRAL
+	return chart().home_effect_bonus() if amount > 0 else chart().home_benefit()
+
+
+static func home_effect_amount(tile_effect, amount: int, unit) -> int:
+	if amount == 0:
+		return amount
+	var tile: StringName = tile_element_of(tile_effect)
+	if tile == &"" or tile != element_of(unit):
+		return amount
+	var res := chart()
+	var scale: float = res.home_effect_bonus() if amount > 0 else res.home_benefit()
+	var magnitude: int = maxi(1, roundi(float(absi(amount)) * scale))
+	return magnitude if amount > 0 else -magnitude
 
 
 # --- Reading elements off duck-typed things ----------------------------------
@@ -182,15 +308,21 @@ static func element_of(unit) -> StringName:
 ## through [member ElementChartResource.tile_elements], and dedupes. Null-safe: no
 ## board, no cell lookup, or a mock exposing neither simply yields an empty list.
 static func tile_elements_under(unit, board) -> Array:
-	var out: Array = []
 	if unit == null:
+		return []
+	return tile_elements_of(_effects_at(_cell_of(unit, board), board))
+
+
+## Distinct elements contributed by [param effects] (a cell's
+## [code]tile_effects_at[/code] list), in list order. The list-shaped half of
+## [method tile_elements_under], split out so a UI holding a cell's effects can ask the
+## same question without needing a unit standing on them. Nulls are skipped quietly.
+static func tile_elements_of(effects) -> Array:
+	var out: Array = []
+	if not (effects is Array):
 		return out
-	var res := chart()
-	var cell: Vector2i = _cell_of(unit, board)
-	for te in _effects_at(cell, board):
-		if te == null:
-			continue
-		var el: StringName = res.tile_element(te.get("id"))
+	for te in (effects as Array):
+		var el: StringName = tile_element_of(te)
 		if el != &"" and el not in out:
 			out.append(el)
 	return out

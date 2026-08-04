@@ -15,6 +15,22 @@ class_name TileEffectResource
 ## StatusCondition.tick]. State that isn't a mutation — stealth, fortification —
 ## is expressed as [member rule_flags] so other systems (e.g. targeting) can
 ## query it without anything being applied.
+##
+## ELEMENT. A tile effect HAS one, and it is not stored here: it is looked up by
+## [member id] in [member ElementChartResource.tile_elements], the single authority for
+## every element number in the game (CONQUEST.md rule 9). See [method element]. Two
+## things follow from it, both data-driven and both deterministic:
+##
+##   * DAMAGE the tile deals is scaled by the matchup, tile element vs occupant element
+##     — a nature unit resists nature brambles. Carried by stamping the synthetic move
+##     with [method ElementChart.mark_environment] in [method _self_move], so the damage
+##     rides the ordinary [DamageMath] chain and preview cannot drift from the tick.
+##   * WHAT THE TILE GIVES OR TAKES (an evasion bonus, a heal, a stat penalty) is
+##     modulated for an occupant of the tile's OWN element by
+##     [method ElementChart.home_effect_amount] — see [method run].
+##
+## A STATUS the tile applies is deliberately untouched (see that method's note), and so
+## is [member move_cost_bonus]: an element cannot make stone cheaper to walk over.
 
 ## When the effect fires for an occupying unit.
 enum Trigger {
@@ -86,9 +102,26 @@ func applies_to(unit, board) -> bool:
 	return true
 
 
+## This tile effect's ELEMENT, or &"" when nobody has elemented it.
+##
+## Read from the chart resource by [member id] — [ElementChartResource.tile_elements] is
+## the authority, never a field on this resource (see the class note). An unelemented
+## effect behaves in every respect as it did before elements reached tiles.
+func element() -> StringName:
+	return ElementChart.tile_element_of(self)
+
+
 ## Apply every effect to [param unit] once, resolved through a SELF-targeted
 ## [MoveContext] over the unit's cell (the same pipeline a move uses). Does NOT
 ## re-check [method applies_to] — callers filter first. Returns the event log.
+##
+## AT-HOME MODULATION: an effect carrying an authored MAGNITUDE (an [code]amount[/code],
+## i.e. [StatModifierEffect] / [HealEffect] / [ShieldEffect]) is re-scaled for an
+## occupant of this tile's own element, through [method ElementChart.home_effect_amount].
+## The re-scaled effect is a DUPLICATE — these resources are loaded once and handed to
+## every cell on the map, so mutating one in place would retune the terrain for everybody
+## (CONQUEST.md rule 7). When the scale changes nothing (no element, no match, an effect
+## with no magnitude) the authored resource is used untouched and nothing is allocated.
 func run(unit, board) -> Array:
 	var events: Array = []
 	if unit == null or board == null:
@@ -99,10 +132,85 @@ func run(unit, board) -> Array:
 	var ctx := MoveContext.new(unit, board, _self_move(), cell, [cell] as Array[Vector2i])
 	for effect in effects:
 		if effect:
-			effect.apply(ctx)
+			_at_home(effect, unit).apply(ctx)
 	for e in ctx.results:
 		events.append(e)
 	return events
+
+
+## [param effect] as it lands on [param unit] — the authored resource itself, or a
+## duplicate whose magnitude has been re-scaled by this tile's element vs the unit's.
+##
+## Duck-typed on an integer [code]amount[/code], which is exactly the set of effects that
+## express "how much": a buff, a debuff, a heal, a shield. [DamageEffect] carries
+## [code]power[/code] instead and is deliberately NOT caught here — tile damage is scaled
+## by the MATCHUP, one step later, inside [DamageMath].
+func _at_home(effect, unit):
+	var amount = effect.get("amount")
+	if not (amount is int):
+		return effect
+	var scaled: int = ElementChart.home_effect_amount(self, int(amount), unit)
+	if scaled == int(amount):
+		return effect
+	var copy = effect.duplicate()
+	copy.set("amount", scaled)
+	return copy
+
+
+## What this tile effect's NON-DAMAGE payload does for [param unit], and what it would
+## have done for anyone else:
+##
+##   authored -- int, the magnitude as authored (0 when the effect carries none)
+##   landed   -- int, the magnitude after [method ElementChart.home_effect_amount]
+##   kind     -- &"heal" / &"stat" / &"" , what the magnitude IS
+##
+## The first magnitude-bearing effect wins, in the effect's own authored order — the same
+## first-in-order rule the cell's element badge uses, so both are deterministic and both
+## point at the same thing.
+##
+## THE SAME FUNCTION THE RUN APPLIES. [method run] scales through
+## [method ElementChart.home_effect_amount] and so does this, so a panel that says the
+## meadow heals a nature unit for 13 is quoting the heal that unit is about to receive
+## rather than modelling it (CONQUEST.md rule 9). `landed == authored` is the "the element
+## rule changed nothing here" answer, which is what a UI checks to decide to say nothing.
+func home_summary_for(unit) -> Dictionary:
+	var out := { "authored": 0, "landed": 0, "kind": &"" }
+	for effect in effects:
+		if effect == null:
+			continue
+		var amount = effect.get("amount")
+		if not (amount is int) or int(amount) == 0:
+			continue
+		out["authored"] = int(amount)
+		out["landed"] = ElementChart.home_effect_amount(self, int(amount), unit)
+		out["kind"] = &"heal" if effect is HealEffect else &"stat"
+		return out
+	return out
+
+
+## What this tile effect's DAMAGE would take off [param unit] on its next tick — the
+## element-adjusted number, from the same arithmetic the tick itself runs.
+##
+## 0 for a tile that deals no damage. Preview == reality by construction (CONQUEST.md
+## rule 9): [method DamageEffect.apply] computes raw power, mitigates it, and hands it to
+## [method DamageMath.apply_scales] with this same environment-marked synthetic move —
+## which is line for line what this does. It is the terrain panel's readout, so what the
+## card promises is what the tile takes off.
+##
+## Does NOT model the hit roll: like every forecast in this project, it reports damage ON
+## LANDING and leaves the chance to whoever displays it.
+func damage_preview_for(unit, board) -> int:
+	if unit == null:
+		return 0
+	var synthetic := _self_move()
+	var total: int = 0
+	for effect in effects:
+		if not DamageMath.is_damage_effect(effect):
+			continue
+		var mitigated: int = DamageMath.mitigate(
+			DamageMath.raw_power(effect, unit), unit, effect.get("category"))
+		total += int(DamageMath.apply_scales(mitigated, unit, unit, synthetic, board)["total"])
+	return total
 
 
 func _faction_ok(unit, board) -> bool:
@@ -161,10 +269,18 @@ static func _unit_has_tag(unit, tag: StringName) -> bool:
 ## Synthetic self-targeted move used to route effects through a [MoveContext].
 ## SELF targeting makes [method MoveContext.gather_targets] return exactly the
 ## occupying unit.
+##
+## STAMPED WITH THIS TILE'S ELEMENT as an ENVIRONMENTAL source. That single mark is what
+## makes tile damage elemented at all: [method DamageMath.apply_scales] already asks
+## [method ElementChart.damage_scale_for] for every hit, and the mark tells that function
+## the damage came FROM the ground rather than from a move landing on it — so the matchup
+## applies and the tile amplifier / home benefit (which would both be double-counting the
+## same fact) do not. No new pipeline, no second implementation of the chain.
 func _self_move() -> MoveResource:
 	var m := MoveResource.new()
 	m.move_id = id if id != &"" else &"tile_effect"
 	m.display_name = display_name
+	ElementChart.mark_environment(m, element())
 	var pattern := TargetingPattern.new()
 	pattern.target_kind = CombatTypes.TargetKind.SELF
 	pattern.min_range = 0

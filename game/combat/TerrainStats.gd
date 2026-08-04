@@ -16,6 +16,14 @@ class_name TerrainStats
 ## Sum the [param stat_name] bonus from every passive tile effect under [param unit].
 ## [param board] is optional; when it exposes tile_effects_at/cell_of that source is
 ## used (keeps unit tests mockable), otherwise the live CombatServices board is queried.
+##
+## AT HOME: each contribution passes through [method ElementChart.home_effect_amount], so
+## a unit of the tile's own element reads its terrain better (a nature unit in nature tall
+## grass takes +19 evasion rather than +15) and shrugs off its penalties (a water unit on
+## water ice loses 9 evasion rather than 10). That is the SAME function the triggered tile
+## effects modulate through ([method TileEffectResource.run]), so a passive bonus and an
+## applied one cannot resolve the rule differently. A unit or tile with no element sums
+## exactly the authored numbers.
 static func bonus_for(unit, stat_name: String, board = null) -> int:
 	if unit == null:
 		return 0
@@ -26,7 +34,7 @@ static func bonus_for(unit, stat_name: String, board = null) -> int:
 			continue
 		for e in te.effects:
 			if e is StatModifierEffect and e.stat_name == stat_name:
-				total += e.amount
+				total += ElementChart.home_effect_amount(te, e.amount, unit)
 	return total
 
 

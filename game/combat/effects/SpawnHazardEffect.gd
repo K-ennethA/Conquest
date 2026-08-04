@@ -57,6 +57,11 @@ func apply(ctx: MoveContext) -> void:
 	# Carry the cast's bus onto the vine so its per-band damage_dealt announcements go
 	# wherever this cast's do (a mock in tests, the autoload in game).
 	hazard.event_bus = ctx.event_bus
+	# ...and the cast's ELEMENT, snapshotted like the damage: a vine is an environmental
+	# extension of the move that threw it, so every band hit is matched against the
+	# victim's element through the same chart a direct hit would use. An unelemented move
+	# leaves the vine elementless, which resolves neutral.
+	hazard.element = ElementChart.move_element(ctx.move)
 
 	# Resolve the FIRST segment immediately so the cast turn itself deals damage.
 	var first: Dictionary = hazard.advance(board)

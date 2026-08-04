@@ -396,23 +396,18 @@ static func _mitigate_for(raw: int, target, category_arg) -> int:
 ## Resolve ONE guaranteed hazard hit against [param target] and return the HP it
 ## should lose. This is the shared seam a [TravelingHazard] tick calls so that
 ## environmental lane damage honours the SAME defender-side rules as a normal hit:
-##
-##   1. "invulnerable" (Heartwood Guard's Guarded) -> a hard 0, short-circuited
-##      ahead of everything, exactly as [method apply] does.
-##   2. category mitigation (defense / magic_defense; TRUE ignores it).
-##   3. the defender's own "damage_taken_scale" passive (Eldroot's Grovebound).
+## invulnerability, category mitigation, the defender's own "damage_taken_scale", and
+## the ELEMENT MATCHUP between [param source_element] (the vine's own element, carried
+## from the move that cast it) and the target's.
 ##
 ## A hazard is environmental, so there is deliberately NO accuracy roll and NO crit
 ## here -- it always lands and never multiplies. The raw number is snapshotted by
 ## the caster at CAST time, so a later buff/debuff cannot retune an in-flight vine.
-static func resolve_hazard_damage(target, raw: int, category_arg, board) -> int:
-	if target == null:
-		return 0
-	if is_invulnerable(target):
-		return 0
-	var dealt := _mitigate_for(raw, target, category_arg)
-	var taken_scale: float = damage_taken_scale_for(target, board)
-	if not is_equal_approx(taken_scale, 1.0):
-		dealt = maxi(1, int(round(float(dealt) * taken_scale)))
-	return dealt
+##
+## The arithmetic itself is [method DamageMath.environment_damage] -- the one place the
+## environmental chain lives, shared with the terrain panel's readout. This is a thin
+## delegation with the historical signature (the element defaults to none, i.e. exactly
+## the pre-element behaviour) so every existing call site keeps working.
+static func resolve_hazard_damage(target, raw: int, category_arg, board, source_element = &"") -> int:
+	return DamageMath.environment_damage(target, raw, category_arg, source_element, board)
 

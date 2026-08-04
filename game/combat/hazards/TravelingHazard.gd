@@ -23,9 +23,11 @@ class_name TravelingHazard
 ## unit the vine has already passed is never re-hit, and a given unit takes damage
 ## at most once from one vine (tracked in [member _hit_units]).
 ##
-## DAMAGE: routed through [method DamageEffect.resolve_hazard_damage] so a guarded /
-## invulnerable unit takes 0 and Grovebound-style reduction applies, exactly as a
-## normal hit would. [member damage] is the raw number snapshotted at CAST time. Each
+## DAMAGE: routed through [method DamageEffect.resolve_hazard_damage] (i.e.
+## [method DamageMath.environment_damage], the shared environmental chain) so a guarded /
+## invulnerable unit takes 0, Grovebound-style reduction applies, and the vine's own
+## [member element] is matched against the victim's -- exactly as a normal hit would.
+## [member damage] is the raw number snapshotted at CAST time. Each
 ## landed hit is ANNOUNCED as [code]damage_dealt[/code] before it is applied, so a vine
 ## kill is attributed to [member source] (while that unit is alive and on the board)
 ## exactly like a swing -- see [method DamageEffect.credited_source].
@@ -51,6 +53,14 @@ var remaining: int = 6
 var damage: int = 0
 ## [enum CombatTypes.DamageCategory] the hit resolves as.
 var category: int = CombatTypes.DamageCategory.PHYSICAL
+
+## The vine's own ELEMENT, snapshotted from the casting move at cast time (see
+## [SpawnHazardEffect]). Every band hit is scaled by [ElementChart]'s matrix, this
+## element vs the victim's -- a nature vine into a nature unit is resisted, into a fire
+## unit it is strong. &"" (the default) is elementless: every hit resolves neutral,
+## exactly as it did before hazards carried an element, so a hazard restored from an
+## older save or built by an older call site is unchanged.
+var element: StringName = &""
 ## Who the band damages, relative to [member source] (see class docs).
 var affiliation: int = CombatTypes.TargetKind.ENEMY
 ## The casting unit; never damaged by its own vine.
@@ -140,7 +150,7 @@ func advance(board) -> Dictionary:
 				if not CombatTypes.unit_matches_target_kind(affiliation, source, unit, board):
 					continue  # spared by this vine's per-move affiliation filter
 				_hit_units[unit] = true
-				var dealt := DamageEffect.resolve_hazard_damage(unit, damage, category, board)
+				var dealt := DamageEffect.resolve_hazard_damage(unit, damage, category, board, element)
 				if dealt > 0:
 					# ANNOUNCE BEFORE APPLYING, for the same reason the ordinary damage
 					# pipeline does: take_damage can kill outright, and the kill is

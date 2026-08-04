@@ -156,6 +156,10 @@ func _emit_expired(hazard) -> void:
 # and the restore re-spawns those units in that same order. `_hit_units` is deliberately NOT
 # stored: it exists so a vine never hits the same unit twice, and every unit it has already
 # passed is behind the front, so the geometry alone keeps that promise across a resume.
+#
+# `element` is written as a plain string and read back with a &"" default, so a snapshot
+# taken before hazards carried an element restores an ELEMENTLESS vine -- which resolves
+# neutral, i.e. exactly the damage that save was written with. Additive, never breaking.
 
 ## A JSON-safe copy of every live vine. [param index_of_unit] maps a source [Unit] to its
 ## snapshot index (return -1 for "not on the board"), so this stays free of any dependency on
@@ -177,6 +181,7 @@ func snapshot_state(index_of_unit: Callable) -> Dictionary:
 			"damage": int(hazard.damage),
 			"category": int(hazard.category),
 			"affiliation": int(hazard.affiliation),
+				"element": String(hazard.element),
 			"front": int(hazard.front),
 			"source_index": source_index,
 		})
@@ -210,6 +215,7 @@ func restore_state(state: Dictionary, unit_at_index: Callable) -> void:
 			int(d.get("category", 0)),
 			int(d.get("affiliation", 0)),
 			source)
+		hazard.element = StringName(String(d.get("element", "")))
 		# `remaining` is set by _init from the travel range; `front` is how far it has already
 		# crawled and must be written back separately or the vine would restart its lane.
 		hazard.front = int(d.get("front", 0))

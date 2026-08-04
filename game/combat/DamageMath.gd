@@ -18,7 +18,13 @@ class_name DamageMath
 ##      target carries that element (Vineweave's Grass Cutter vs nature).
 ##   3. DEFENDER REDUCTION — the target's own "damage_taken_scale" (passive x status).
 ##   4. ELEMENT MATCHUP — [ElementChart], move element vs target element, folded with
-##      the tile amplifier and the target's own-element tile benefit.
+##      the tile amplifier and the target's own-element tile benefit. When the "move" is
+##      an ENVIRONMENTAL source (a tile burning its occupant) this step is the matrix
+##      alone — see [method ElementChart.damage_scale_for].
+##
+## Damage that never had a caster or a move at all — a crawling [TravelingHazard] —
+## resolves through [method environment_damage], which is the same steps 3 and 4 in the
+## same order with the same rounding.
 ##
 ## Attacker bonuses come BEFORE the defender's reduction so the two are commutative
 ## multipliers on the mitigated number and neither silently dominates. Crit is
@@ -91,6 +97,43 @@ static func apply_scales(mitigated: int, caster, target, move, board = null) -> 
 		"ability_notes": notes,
 		"defender_scale": taken,
 	}
+
+
+# --- The ENVIRONMENT's own chain ---------------------------------------------
+#
+# A crawling hazard resolves OFF the move pipeline: no caster stats, no accuracy, no
+# crit -- it always lands, for a number snapshotted at cast time. It still owes the
+# defender every defender-side rule a normal hit owes, and (since tiles and hazards are
+# elemented) the element matchup as well. This is the whole of it, in the SAME order and
+# with the SAME rounding as [method apply_scales]:
+#
+#   0. INVULNERABLE          -> a hard 0, ahead of everything.
+#   1. CATEGORY MITIGATION   -> defense / magic_defense; TRUE ignores it.
+#   2. DEFENDER REDUCTION    -> the target's own "damage_taken_scale" (= step 3).
+#   3. ELEMENT MATCHUP       -> the SOURCE's element vs the target's (= step 4, on the
+#                               environment rule: matrix only).
+#
+# A tile effect's damage does NOT come through here -- it rides the ordinary
+# [DamageEffect] pipeline with an environment-marked move, so it lands on step 4 of
+# apply_scales instead. Both roads therefore end at the same [ElementChart] call and
+# cannot report different numbers.
+
+
+## Resolve ONE guaranteed environmental hit and return the HP the target should lose.
+## [param source_element] is the tile's / hazard's element (&"" = elementless = neutral).
+static func environment_damage(target, raw: int, category_arg, source_element = &"", board = null) -> int:
+	if target == null:
+		return 0
+	if is_invulnerable(target):
+		return 0
+	var dealt: int = mitigate(raw, target, category_arg)
+	var taken: float = damage_taken_scale_for(target, board)
+	if not is_equal_approx(taken, NEUTRAL):
+		dealt = maxi(1, roundi(float(dealt) * taken))
+	var element_mult: float = ElementChart.environment_scale_for(source_element, target)
+	if not is_equal_approx(element_mult, NEUTRAL):
+		dealt = maxi(1, roundi(float(dealt) * element_mult))
+	return dealt
 
 
 # --- THE forecast ------------------------------------------------------------

@@ -63,9 +63,41 @@ an opposite when wind content is authored.
 
 EVERYTHING ELSE IS NEUTRAL (1.0), including every element this file has never
 heard of. Unlisted is not an error: a move or character authored with a brand new
-element simply plays neutral until someone adds its row here."
+element simply plays neutral until someone adds its row here.
+
+TILE ELEMENTS -- `tile_elements` below is THE authority (see its own doc). Every
+tile effect that ships today is assigned:
+
+  fire            -> fire     (lava's burn)
+  scorching_vent  -> fire     (volcanic vent)
+  molten_lava     -> fire     (tile id, for terrain that grows its own effect)
+  magma_vent      -> fire     (tile id)
+  scorched        -> fire     (the rule flag scorching_vent raises)
+  empowering_water-> water    (deep water's aquatic buff)
+  slippery_ice    -> water    (frozen surface)
+  deep_water      -> water    (tile id)
+  tall_grass      -> nature   (concealing grass)
+  vine_trap       -> nature   (Petalfang's snare)
+  fortify         -> earth    (sacred ground's dug-in defence)
+  rock_rubble     -> earth    (broken stone)
+  sacred_meadow   -> nature   (see below)
+
+SACRED MEADOW IS NATURE, NOT HOLY -- an authored design call, recorded here because
+the name argues the other way. The meadow is a living, growing place that heals,
+and its heal is meant to run STRONGER for the nature creatures that belong in it
+(the own_tile_effect_bonus path): 10 HP becomes 13 for a nature occupant, and
+everyone else -- including a holy one -- gets the authored 10. Elementing it holy
+would have handed that affinity to a roster that has no nature relationship with
+the ground it is standing on.
+
+DELIBERATELY ELEMENTLESS: `stealth` (a pure rule flag -- it neither damages nor
+grants a magnitude, so an element on it would colour a badge and change nothing),
+and every tile TYPE that imposes no effect (grass_plains, tree, forest_dirt,
+obsidian, snow_field, ...). A tile with nothing to apply has nothing to element:
+the badge would promise a matchup the board never resolves."
 tile_match_bonus = 1.25
 own_tile_benefit = 0.9
+own_tile_effect_bonus = 1.25
 tile_elements = {
 &"deep_water": &"water",
 &"empowering_water": &"water",
@@ -73,7 +105,8 @@ tile_elements = {
 &"fortify": &"earth",
 &"magma_vent": &"fire",
 &"molten_lava": &"fire",
-&"sacred_meadow": &"holy",
+&"rock_rubble": &"earth",
+&"sacred_meadow": &"nature",
 &"scorched": &"fire",
 &"scorching_vent": &"fire",
 &"slippery_ice": &"water",

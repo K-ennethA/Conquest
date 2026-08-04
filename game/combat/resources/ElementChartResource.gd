@@ -42,16 +42,40 @@ class_name ElementChartResource
 @export_group("Environment")
 ## Multiplier when the move's element matches an element of the tile the target stands
 ## on (a fire move into a target standing in flames). Independent of the matrix.
+##
+## Applies to a MOVE landing on an occupant only. Damage the tile itself deals is scaled
+## by the matrix ALONE (see [method ElementChart.environment_scale_for]) — amplifying a
+## fire tile's own burn because the target is standing in fire would count the same fact
+## twice.
 @export var tile_match_bonus: float = 1.25
 
 ## Multiplier when the target stands on a tile of ITS OWN element — "at home", so it
 ## takes slightly less. Independent of the matrix. < 1.0 is a benefit.
+##
+## Doubles as the AT-HOME PENALTY SOFTENER for non-damage tile effects: a matching
+## occupant takes only this fraction of a tile's negative magnitude (slippery ice's
+## -10 evasion reads as -9 for a water unit). See [method home_benefit].
 @export var own_tile_benefit: float = 0.9
 
-## Tile-effect id -> element. Keyed on [member TileEffectResource.id], which is what a
-## cell exposes at combat time through [code]board.tile_effects_at[/code], so a burning
-## tile reads as fire without touching the tile resources. Extend to give new terrain an
-## element.
+## Multiplier on the BENEFIT a tile effect grants an occupant of its OWN element — the
+## mirror of [member own_tile_benefit]. A nature unit gets more out of nature tall grass
+## (+15 evasion -> +19) than a stranger does. > 1.0 is a benefit.
+##
+## Only ever touches an authored MAGNITUDE (an [code]amount[/code] on a
+## [StatModifierEffect] / [HealEffect] / [ShieldEffect]). A STATUS a tile applies is
+## binary and is deliberately never modulated — scaling its chance would put a roll where
+## there is none today and desync replays.
+@export var own_tile_effect_bonus: float = 1.25
+
+## THE TILE-ELEMENT AUTHORITY: tile-effect id -> element.
+##
+## Keyed on [member TileEffectResource.id], which is what a cell exposes at combat time
+## through [code]board.tile_effects_at[/code], so a burning tile reads as fire without
+## touching the tile resources. This dictionary is the ONE place a tile's element is
+## decided — a [TileEffectResource] deliberately carries no element field of its own, so
+## elementing new terrain is the same one-file content edit as retuning a matchup
+## (CONQUEST.md rule 9). An id that is absent here is ELEMENTLESS, which resolves neutral
+## everywhere, exactly like an unauthored matrix pair.
 @export var tile_elements: Dictionary = {}
 
 
@@ -91,6 +115,11 @@ func tile_bonus() -> float:
 ## [member own_tile_benefit], guarded.
 func home_benefit() -> float:
 	return _positive(own_tile_benefit)
+
+
+## [member own_tile_effect_bonus], guarded.
+func home_effect_bonus() -> float:
+	return _positive(own_tile_effect_bonus)
 
 
 ## Is [param element] part of the authored vocabulary? Informational — an unlisted
