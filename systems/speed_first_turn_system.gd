@@ -59,6 +59,10 @@ func start_turn_system() -> void:
 	current_turn = 1
 	round_number = 1
 	is_turn_in_progress = false
+	# A fresh battle gets a fresh battle-start pass (this instance is reused across
+	# battles -- TurnSystemManager keeps it in a dictionary). Cleared HERE and fired
+	# from _start_unit_turn, so the late-registration kickoff below still gets it.
+	_battle_start_dispatched = false
 	units_acted_this_round.clear()
 
 	# Initialize BattleEffectsManager for this battle
@@ -331,6 +335,13 @@ func _is_unit_active(unit: Unit) -> bool:
 
 func _start_unit_turn(unit: Unit) -> void:
 	"""Start a specific unit's turn"""
+	# THE BATTLE-START PASS, first opened turn only (see the base class). Fired here
+	# rather than in start_turn_system() because this system can start with an empty
+	# queue and only receive its actors on the deferred kickoff -- this is the first
+	# moment a turn genuinely opens in EITHER order. Covers every registered unit, not
+	# just the one whose turn this is.
+	_dispatch_battle_start_once()
+
 	current_acting_unit = unit
 	is_turn_in_progress = true
 

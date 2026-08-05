@@ -76,6 +76,7 @@ tile effect that ships today is assigned:
   empowering_water-> water    (deep water's aquatic buff)
   slippery_ice    -> water    (frozen surface)
   deep_water      -> water    (tile id)
+  fountain        -> water    (a base's healing spring -- see below)
   tall_grass      -> nature   (concealing grass)
   vine_trap       -> nature   (Petalfang's snare)
   fortify         -> earth    (sacred ground's dug-in defence)
@@ -90,6 +91,18 @@ everyone else -- including a holy one -- gets the authored 10. Elementing it hol
 would have handed that affinity to a roster that has no nature relationship with
 the ground it is standing on.
 
+THE FOUNTAIN IS WATER, NOT HOLY -- and the reason is the opposite of the meadow's.
+A fountain sits inside a base pocket on a SYMMETRIC push map, where the two sides
+must get the identical number out of identical terrain; anything else is a mirror
+map that is not a mirror. Water is the element with NO roster content, so no squad
+anyone can field collects the own_tile_effect_bonus at its own fountain: the heal is
+the authored 30 for everybody, every time. Holy would have failed that test the
+moment a holy hero is authored (they would top up 25% faster at home than the
+opponent does), and it also collides with the meadow -- the sacred/shrine fiction is
+already spoken for by a NATURE tile, so a second "holy" healing surface would read as
+the same thing with different rules. Water is also just what a fountain is, and it
+puts it in the family the game already elements that way (deep_water, slippery_ice).
+
 DELIBERATELY ELEMENTLESS: `stealth` (a pure rule flag -- it neither damages nor
 grants a magnitude, so an element on it would colour a badge and change nothing),
 and every tile TYPE that imposes no effect (grass_plains, tree, forest_dirt,
@@ -102,6 +115,7 @@ tile_elements = {
 &"deep_water": &"water",
 &"empowering_water": &"water",
 &"fire": &"fire",
+&"fountain": &"water",
 &"fortify": &"earth",
 &"magma_vent": &"fire",
 &"molten_lava": &"fire",

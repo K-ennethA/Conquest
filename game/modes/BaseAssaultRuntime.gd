@@ -92,17 +92,28 @@ static func sync(rules: GameModeRules) -> BaseAssaultRuntime:
 	return _instance
 
 
-## True when [param rules] carries at least one [DestroyBase] objective.
+## True when this battle is a PUSH map -- one that fields a neutral guardian faction on slot 2
+## in front of endlessly reinforcing lines.
+##
+## That is BASE-ASSAULT ([DestroyBase]) and SIEGE alike. The two modes end differently -- one
+## by flattening a structure, one by holding its cell ([CaptureBase]) -- but the two jobs this
+## node does are about the BOARD, not the objective: a third faction has to be registered or
+## its guardians are unowned scenery, and felling one has to be worth the risk. Keying this to
+## DestroyBase alone was an accident of base-assault having shipped first; a Siege map with
+## jungle camps needs exactly the same two things, and got neither.
+##
+## A Siege map is recognised the same way [SiegeController] recognises one -- its compiled
+## objective OR its authored lanes + base cells -- so a Siege map that names "Destroy Enemy
+## Base" and one that names "Capture Enemy Base" both arm this, and nothing else changes.
 static func _rules_want_runtime(rules: GameModeRules) -> bool:
-	if rules == null:
-		return false
-	for c in rules.win_conditions:
-		if c is DestroyBase:
-			return true
-	for c in rules.lose_conditions:
-		if c is DestroyBase:
-			return true
-	return false
+	if rules != null:
+		for c in rules.win_conditions:
+			if c is DestroyBase or c is CaptureBase:
+				return true
+		for c in rules.lose_conditions:
+			if c is DestroyBase or c is CaptureBase:
+				return true
+	return SiegeController.map_declares_siege()
 
 
 ## Create the singleton and wire it to the event buses.

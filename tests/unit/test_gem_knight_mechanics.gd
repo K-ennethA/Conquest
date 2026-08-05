@@ -66,9 +66,32 @@ func test_geode_resolves_with_full_kit():
 	assert_eq(geode.element, &"earth", "Geode is an earth-element unit")
 	assert_eq(geode.moveset.size(), 4, "Geode has four moves")
 	var ab: Array = geode.get("abilities")
-	assert_eq(ab.size(), 2, "Geode has two abilities (Crystalline Ward + Reprisal)")
+	assert_eq(ab.size(), 3,
+		"Geode has three abilities (the opening Firstward, the earned Crystalline Ward, Reprisal)")
+	var ids: Array = []
+	for a in ab:
+		if a != null:
+			ids.append(String(a.id))
+	assert_true(ids.has("crystalline_ward_initial"),
+		"the roster entry carries the BATTLE-START half of the ward: %s" % [ids])
+	assert_true(ids.has("crystalline_ward"),
+		"alongside the re-earned half: %s" % [ids])
 
-func test_crystalline_ward_grants_a_shield_after_untouched_turns():
+func test_the_opening_ward_is_granted_at_battle_start_and_is_ungated():
+	# The half that changed: Geode used to open a battle unwarded. It no longer does.
+	var opening: AbilityResource = load("res://game/abilities/crystalline_ward_initial.tres")
+	assert_not_null(opening, "crystalline_ward_initial.tres loads")
+	if opening == null:
+		return
+	assert_eq(opening.trigger, AbilityTrigger.Trigger.ON_BATTLE_START, "fires when the battle begins")
+	assert_null(opening.condition, "and is unconditional -- nothing has to be earned first")
+	assert_eq(opening.effects.size(), 1, "one effect")
+	assert_true(opening.effects[0] is ShieldEffect, "the effect is a shield")
+	assert_eq(int(opening.effects[0].amount), 15, "a 15 HP shield")
+	assert_eq(int(opening.max_activations), -1,
+		"activation limits are not what makes it once-per-battle -- the trigger is")
+
+func test_crystalline_ward_recrystallizes_after_untouched_turns():
 	var ward: AbilityResource = load("res://game/abilities/crystalline_ward.tres")
 	assert_not_null(ward, "crystalline_ward.tres loads")
 	if ward == null:
@@ -79,6 +102,34 @@ func test_crystalline_ward_grants_a_shield_after_untouched_turns():
 	assert_eq(ward.effects.size(), 1, "one effect")
 	assert_true(ward.effects[0] is ShieldEffect, "the effect is a shield")
 	assert_eq(int(ward.effects[0].amount), 15, "a 15 HP shield")
+
+func test_both_halves_of_the_ward_grant_the_same_amount_so_they_can_only_refresh():
+	# The refresh-never-stack rule made structural: two entries that grant DIFFERENT amounts
+	# would let the pair produce a number neither one authored.
+	var opening: AbilityResource = load("res://game/abilities/crystalline_ward_initial.tres")
+	var earned: AbilityResource = load("res://game/abilities/crystalline_ward.tres")
+	if opening == null or earned == null:
+		return
+	assert_eq(int(opening.effects[0].amount), int(earned.effects[0].amount),
+		"the opening ward and the re-earned ward are the same 15 -- grant_shield takes the "
+		+ "strongest, so firing both can only ever leave 15")
+
+func test_the_authored_text_matches_the_data():
+	# The described bug class this pins: the ward's own description used to say it was EARNED
+	# after three untouched turns, which stopped being the whole truth the moment it was also
+	# issued at battle start. Text and data drift silently; assert them together.
+	var opening: AbilityResource = load("res://game/abilities/crystalline_ward_initial.tres")
+	var earned: AbilityResource = load("res://game/abilities/crystalline_ward.tres")
+	if opening == null or earned == null:
+		return
+	assert_true(String(opening.description).to_lower().contains("enters battle"),
+		"the opening ward's text says it is there from the start: '%s'" % opening.description)
+	assert_true(String(opening.description).contains("15"),
+		"and names the number: '%s'" % opening.description)
+	assert_true(String(earned.description).to_lower().contains("three turns"),
+		"the earned ward's text still states its streak: '%s'" % earned.description)
+	assert_false(String(earned.description).to_lower().contains("after three turns without taking a hit, it crystallizes a 15 hp shield"),
+		"and no longer claims the ward only ever arrives that way")
 
 func test_vineweave_wears_grass_cutter():
 	var vine: CharacterResource = CharacterLibrary.get_character(&"vineweave")

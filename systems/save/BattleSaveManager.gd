@@ -44,6 +44,10 @@ class_name BattleSaveManager
 ##   * ARENA runs -- a run's real state (squad, augments, currency, life) lives in
 ##     [ArenaController], not on the board. Saving only the board would resume a round into an
 ##     empty run. Excluded at the gate rather than half-serialised.
+##   * SIEGE battles -- same shape, different owner: the round clock, the creep-wave cadence,
+##     the respawn queue and any capture in flight live in [SiegeController]. See
+##     [method _is_siege_active] for why base-assault (King of the Hill) is NOT excluded
+##     alongside it.
 ##
 ## THE CHALLENGE END-OF-DAY RULE. A challenge attempt is a daily commitment: a paused attempt
 ## expires when the UTC date rolls over, and expiring FORFEITS it (recorded as a played,
@@ -299,18 +303,20 @@ func can_save_now() -> bool:
 		PlayerManager != null and PlayerManager.current_game_state == PlayerManager.GameState.IN_PROGRESS,
 		TurnSystemManager != null and TurnSystemManager.has_active_turn_system(),
 		_has_living_player_unit(),
-		ReplayPlayback.is_playing())
+		ReplayPlayback.is_playing(),
+		_is_siege_active())
 
 
 ## The PURE decision behind [method can_save_now], split out so the gate can be tested
 ## exhaustively without standing up a networked session or an Arena run. Every condition is
-## necessary; the interesting ones are the two exclusions documented in the class header
-## ([param networked] and [param arena_active]).
+## necessary; the interesting ones are the three exclusions documented in the class header
+## ([param networked], [param arena_active] and [param siege_active]).
 static func gate(solo: bool, networked: bool, arena_active: bool, in_progress: bool,
-		has_turn_system: bool, has_player_unit: bool, replay_playback: bool = false) -> bool:
+		has_turn_system: bool, has_player_unit: bool, replay_playback: bool = false,
+		siege_active: bool = false) -> bool:
 	if not solo:
 		return false
-	if networked or arena_active:
+	if networked or arena_active or siege_active:
 		return false
 	# A replay-boot battle is a SPECTATED re-simulation, not the player's progress --
 	# saving it would resurrect a finished battle as a resumable one.
@@ -327,6 +333,21 @@ func _is_networked() -> bool:
 func _is_arena_active() -> bool:
 	var arena = _node("/root/ArenaController")
 	return arena != null and arena.has_method("is_active") and arena.is_active()
+
+
+## True during a SIEGE battle. Excluded for the same reason as an Arena round, and NOT for the
+## reason base-assault (King of the Hill) is allowed: a KotH battle's only runtime clock is
+## [SpawnManager]'s, and that IS in the snapshot ([method SpawnManager.snapshot_state]), so
+## resuming one resumes everything. A Siege battle's clocks -- the round counter, the pending
+## creep-wave cadence, the queue of fallen squad units waiting to return, and any capture in
+## flight -- live in [SiegeController] and are in no snapshot at all. Saving only the board
+## would resume a battle whose reinforcements never arrive and whose capture silently
+## evaporated, which is worse than not offering the save. Excluded at the gate rather than
+## half-serialised; the fix that lifts this is snapshot_state/restore_state on SiegeController
+## plus a BattleSnapshot section, not a change here.
+func _is_siege_active() -> bool:
+	var siege = _node("/root/" + SiegeController.NODE_NAME)
+	return siege != null and siege.has_method("is_active") and siege.is_active()
 
 
 func _has_living_player_unit() -> bool:
@@ -637,7 +658,23 @@ static func restore_board(snapshot: Dictionary) -> void:
 ## cooldowns, stat-modifier durations or ON_TURN_START abilities a second time. Without this a
 ## resume would silently cost the player one extra poison tick, one extra cooldown step and
 ## one extra ability proc on the very turn they came back to.
+##
+## It ALSO spends each restored unit's ON_BATTLE_START moment
+## ([method AbilitySystem.suppress_battle_start]), for the same reason and against the same
+## boundary: a resume boots a turn system, and a booting turn system runs the battle-start
+## pass. A resume is NOT a battle starting. Without this, an opening grant would land AFTER
+## the snapshot's vitals (which are written back in phase 1, before the turn system exists)
+## and quietly overwrite them -- a Geode saved with its 15 HP ward already broken would come
+## back wearing a fresh one. Restore order alone cannot win here, because the grant happens
+## strictly later than the restore; the unit has to be stamped out of the pass instead.
 static func suppress_turn_start_tick(units: Array, turn_number: int) -> void:
+	for unit in units:
+		if unit == null or not is_instance_valid(unit):
+			continue
+		var ability_system = unit.get_ability_system() if unit.has_method("get_ability_system") else null
+		if ability_system != null and ability_system.has_method("suppress_battle_start"):
+			ability_system.suppress_battle_start()
+
 	if TurnSystemManager == null:
 		return
 	var systems: Array = TurnSystemManager.available_turn_systems.values()

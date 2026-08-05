@@ -28,7 +28,10 @@ class_name UnitInfoPanel
 ##     silver tail on the bar and a "◊15" beside the numbers (see [ShieldVisuals]);
 ##   * ONE row of four stat chips -- ATK / DEF / SPD / MOV -- showing EFFECTIVE values,
 ##     tinted and arrowed when they are off base (see [method _build_stat_chip]);
-##   * the status strip: one compact chip per active condition, wrapping to at most two
+##   * the effects strip: the TERRAIN chips first -- what the ground the unit is standing on
+##     is giving or taking ("±AVO+15"), which is computed at combat time and stored nowhere,
+##     so nothing else on the card would ever show it -- then one compact chip per active
+##     condition, wrapping to at most two
 ##     rows, with a "+N" overflow marker. Each chip NAMES its status, its severity and its
 ##     remaining turns, and ELABORATES on hover (see [method chip_tooltip]) -- a coloured
 ##     pip the player has to guess at is not a readout.
@@ -165,6 +168,12 @@ func _ready() -> void:
 	# Death is the OTHER way the card's subject can go away; without this, current_unit
 	# outlives the unit it points at (see _on_unit_eliminated).
 	GameEvents.unit_eliminated.connect(_on_unit_eliminated)
+	# A unit that MOVES changes the ground under it, and therefore its terrain chips -- with
+	# no selection change, no HP change and no status event to repaint the card off. This is
+	# the beat that puts "±AVO+15" on the card the instant the selected unit steps into tall
+	# grass. GameEvents.unit_moved, never a PlayerManager turn signal, which does not fire on
+	# an AI turn (CONQUEST.md rule 2).
+	GameEvents.unit_moved.connect(_on_unit_moved)
 
 	# Append the code-built rows BEFORE theming, so they pick up the amber cascade along
 	# with the scene-authored ones.
@@ -359,6 +368,13 @@ func _on_unit_eliminated(unit: Unit, _eliminator: Unit) -> void:
 	if unit != null and unit == current_unit:
 		current_unit = null
 		_hide_panel()
+
+
+## The unit the card is showing just moved: repaint it so the terrain chips describe the
+## cell it is standing on now. Any other unit's move is not this card's business.
+func _on_unit_moved(unit: Unit, _from_position: Vector3, _to_position: Vector3) -> void:
+	if unit != null and unit == current_unit and is_instance_valid(unit):
+		_update_unit_info(unit)
 
 
 func _on_unit_hover_started(unit: Unit) -> void:
@@ -660,6 +676,23 @@ func _update_status_strip(unit) -> void:
 		_status_flow.remove_child(child)
 		child.queue_free()
 
+	# WHAT THE GROUND IS GIVING IT, first in the strip and in the same slot it holds on the
+	# world-space badge row and the hover card. A terrain bonus is computed on the fly and
+	# never stored as a status (see [TerrainStats]), so without this the card showed a unit
+	# standing in tall grass exactly as it showed one standing on bare earth. Numbers, mark,
+	# colours and wording all come from [TerrainVisuals], the shared helper -- and the number
+	# it quotes is the one [method MoveContext.hit_chance] rolls against, home element boost
+	# and all (a nature unit in nature grass wears +19, not the authored +15).
+	var board = CombatServices.board() if CombatServices else null
+	var terrain: Array = TerrainVisuals.bonuses_for(unit, board)
+	var terrain_shown: int = TerrainVisuals.shown_count(terrain.size())
+	var terrain_hidden: int = TerrainVisuals.hidden_count(terrain.size())
+	for i in range(terrain_shown):
+		_status_flow.add_child(_build_terrain_chip(terrain[i]))
+	if terrain_hidden > 0:
+		_status_flow.add_child(_build_status_chip(
+				TerrainVisuals.overflow_label(terrain_hidden), StatusVisuals.OVERFLOW_COLOR))
+
 	# Grouped by id, exactly like the world-space health-bar pips and the hover card:
 	# three live Poisoned instances are ONE status at severity 3, not three chips that eat
 	# the whole strip and hide everything else behind the overflow marker.
@@ -667,6 +700,10 @@ func _update_status_strip(unit) -> void:
 	var total: int = groups.size()
 
 	if total == 0:
+		# Only claim "no effects" when the strip is genuinely empty; a terrain chip standing
+		# on its own is an effect, and contradicting it one chip later would be nonsense.
+		if not terrain.is_empty():
+			return
 		var none_label := Label.new()
 		none_label.name = "NoStatuses"
 		none_label.text = "No active effects"
@@ -680,8 +717,15 @@ func _update_status_strip(unit) -> void:
 		_status_flow.add_child(none_label)
 		return
 
-	var shown: int = StatusVisuals.shown_count(total, MAX_STATUS_CHIPS)
-	var hidden: int = StatusVisuals.hidden_count(total, MAX_STATUS_CHIPS)
+	# THE STRIP'S TWO ROWS ARE A FIXED BUDGET, and terrain chips spend from the same purse.
+	# MAX_STATUS_CHIPS chips fit two rows by the CHIP_MAX_WIDTH arithmetic above; a terrain
+	# chip is NARROWER than a status chip (a seven-character badge against a named, timed
+	# condition), so as long as the SLOT count holds, the two rows hold. Anything a terrain
+	# chip displaces is counted by the ordinary "+N" marker rather than silently clipped --
+	# which is the whole contract of a pinned-height card.
+	var status_cap: int = maxi(1, MAX_STATUS_CHIPS - terrain_shown - (1 if terrain_hidden > 0 else 0))
+	var shown: int = StatusVisuals.shown_count(total, status_cap)
+	var hidden: int = StatusVisuals.hidden_count(total, status_cap)
 
 	for i in range(shown):
 		var group: Dictionary = groups[i]
@@ -761,6 +805,51 @@ static func overflow_tooltip(groups: Array, shown: int) -> String:
 				int(group.get("count", 1)),
 				int(group.get("turns_left", StatusVisuals.TURNS_FROM_CONDITION))))
 	return "\n".join(lines)
+
+
+## A TERRAIN chip: "±AVO+15", and on hover the sentence that names the tile.
+##
+## DELIBERATELY THE INVERSE OF A STATUS CHIP, which is cream text on a tinted fill behind a
+## hairline frame with round corners. This is COLOURED text on a deep fill behind a 2px
+## frame with square corners. The two kinds of fact sit in one strip, so if they shared a
+## recipe the player would read "standing in grass" and "poisoned" as the same kind of
+## thing -- one is a consequence of position that ends the moment the unit walks away, the
+## other is a timed condition it carries with it.
+##
+## PASS, not IGNORE, for the same reason a status chip is: an IGNORE control is skipped by
+## the hit test and a control the hit test never returns can never show a tooltip.
+func _build_terrain_chip(entry: Dictionary) -> PanelContainer:
+	var color: Color = TerrainVisuals.color_for(entry)
+
+	var chip := PanelContainer.new()
+	chip.name = "TerrainChip"
+	chip.mouse_filter = Control.MOUSE_FILTER_PASS
+	chip.tooltip_text = TerrainVisuals.tooltip_for(entry)
+
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = color.darkened(0.72)
+	sb.set_corner_radius_all(2)
+	sb.set_border_width_all(2)
+	sb.border_color = color
+	sb.content_margin_left = 5
+	sb.content_margin_right = 5
+	sb.content_margin_top = 1
+	sb.content_margin_bottom = 1
+	chip.add_theme_stylebox_override("panel", sb)
+
+	var label := Label.new()
+	label.name = "TerrainChipLabel"
+	label.text = TerrainVisuals.chip_text(entry)
+	label.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
+	label.add_theme_color_override("font_color", color)
+	label.clip_text = true
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	# ...and therefore a reported minimum width of 1px, which inside the strip's flow means
+	# "draw me as a dot". State the width the text needs. See fit_chip_label.
+	fit_chip_label(label)
+	chip.add_child(label)
+
+	return chip
 
 
 ## A compact colour-coded pill: dim fill, 1px frame in the status colour, cream text.

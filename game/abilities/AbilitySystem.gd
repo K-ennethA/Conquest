@@ -46,6 +46,17 @@ var _last_damaged = null
 ## to gate "reward for staying untouched" abilities like Crystalline Ward.
 var _turns_since_damaged: int = 0
 
+## True once this unit has been handed its ON_BATTLE_START moment (see
+## [method dispatch_battle_start]). Latched PER UNIT rather than only on the turn
+## system so the two ways a unit can be excluded stay independent:
+##   - the turn system fires the pass once per battle, and
+##   - a RESTORED unit is stamped out of that pass before it runs
+##     ([method suppress_battle_start], called by BattleSaveManager's phase-2
+##     suppression) -- a resume is not a battle starting, and its saved shield /
+##     HP were written back BEFORE the turn system boots, so an unsuppressed
+##     re-grant would silently overwrite them.
+var _battle_start_fired: bool = false
+
 
 func _ready() -> void:
 	if owner_unit == null:
@@ -93,6 +104,37 @@ func trigger(event: AbilityTrigger.Trigger, unit = null, board = null, other = n
 	return events
 
 
+## Raise [constant AbilityTrigger.Trigger.ON_BATTLE_START] for this unit, at most
+## ONCE per battle. Returns the event log ([] when it has already fired, or was
+## suppressed).
+##
+## [param board] is the live board; null falls back to [method _board]. Called by
+## the active turn system's one-shot pass ([method TurnSystemBase._dispatch_battle_start_once]),
+## never by an ability itself.
+##
+## The double-grant this makes possible is safe BY CONSTRUCTION, not by luck:
+## Geode's opening ward and its re-earned one both land through
+## [ShieldEffect] -> [method Unit.grant_shield], which REFRESHES to the strongest
+## value (`maxi`) rather than stacking. A 15 granted onto a live 15 stays 15.
+func dispatch_battle_start(board = null) -> Array:
+	if _battle_start_fired:
+		return []
+	_battle_start_fired = true
+	var live_board = board if board != null else _board()
+	return trigger(AbilityTrigger.Trigger.ON_BATTLE_START, _unit(), live_board)
+
+
+## Spend this unit's battle-start moment WITHOUT running it, so the turn system's
+## pass skips it. Used by the mid-battle resume (see [member _battle_start_fired]).
+func suppress_battle_start() -> void:
+	_battle_start_fired = true
+
+
+## True once this unit's ON_BATTLE_START moment is spent (fired or suppressed).
+func battle_start_fired() -> bool:
+	return _battle_start_fired
+
+
 ## True if [param ability] is ready for THIS unit: off cooldown and with
 ## activations left. Mirrors [method MovesetController.can_use] for moves.
 func can_activate(ability: AbilityResource) -> bool:
@@ -135,6 +177,7 @@ func tick_cooldowns() -> void:
 func reset_activations() -> void:
 	_ability_state.clear()
 	_turns_since_damaged = 0
+	_battle_start_fired = false
 
 
 ## Consecutive own turn-starts begun without taking damage (see [member _turns_since_damaged]).

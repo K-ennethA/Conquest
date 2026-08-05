@@ -36,11 +36,9 @@ const MAX_CHIPS := 4
 ## Widest the element badge on the HP row may claim -- see the arithmetic in _create_ui.
 const ELEMENT_BADGE_MAX_WIDTH := 72.0
 
-## Green used for the terrain-bonus chip (== ConquestTheme.EL_NATURE). Terrain
-## avoid is a passive of WHERE the unit stands (tall grass -> +evasion), so it
-## reads as "nature" green rather than a status colour to set it apart from the
-## StatusVisuals-coloured condition chips.
-const TERRAIN_AVOID_COLOR := Color("5fb84e")
+## Terrain-bonus chips shown before the row collapses into a "+N" marker. Same cap the
+## world-space badge row and the battle card use -- [constant TerrainVisuals.MAX_CHIPS].
+const MAX_TERRAIN_CHIPS := TerrainVisuals.MAX_CHIPS
 
 var _card: PanelContainer
 var _name_label: Label
@@ -106,6 +104,13 @@ func _ready() -> void:
 			GameEvents.unit_selected.connect(_on_unit_selected)
 		if not GameEvents.unit_deselected.is_connected(_on_unit_deselected):
 			GameEvents.unit_deselected.connect(_on_unit_deselected)
+		# A unit that MOVES changes the ground under it, and nothing else on this card would
+		# notice: the cursor need not have moved, no HP changed, no status landed. This is
+		# the beat that makes the terrain chip appear the instant the shown unit steps into
+		# grass. Deliberately GameEvents.unit_moved and not a PlayerManager signal, which
+		# does not fire on an AI turn (CONQUEST.md rule 2).
+		if not GameEvents.unit_moved.is_connected(_on_unit_moved):
+			GameEvents.unit_moved.connect(_on_unit_moved)
 
 
 ## Pin our rect to the whole viewport so the bottom-right-anchored card lands on
@@ -319,6 +324,14 @@ func _on_unit_deselected(_unit) -> void:
 	_selected_unit = null
 
 
+## The unit this card is showing just moved: repaint it, so its terrain chips describe the
+## cell it is standing on now. Every other unit's move is ignored -- this card only ever
+## describes one.
+func _on_unit_moved(unit, _from_position = null, _to_position = null) -> void:
+	if unit != null and unit == _current_unit and visible:
+		show_for_unit(unit)
+
+
 # --- Internals ---------------------------------------------------------------
 
 func _display_name_of(unit) -> String:
@@ -338,21 +351,37 @@ func _populate_effects(unit) -> void:
 		_effects_container.remove_child(child)
 		child.queue_free()
 
-	# Terrain-derived avoid: a passive of the unit's TILE (tall grass -> +evasion),
-	# computed on the fly by TerrainStats, never stored as a status -- so it is
-	# surfaced here as its own green chip, first in the row, clearly labeled as
-	# terrain. Shown only when non-zero.
-	var terrain_avoid: int = _terrain_evasion_bonus(unit)
-	if terrain_avoid > 0:
-		_effects_container.add_child(
-			_build_chip("Avoid +%d (terrain)" % terrain_avoid, TERRAIN_AVOID_COLOR))
+	# WHAT THE GROUND IS GIVING IT, first in the row. A terrain bonus is a passive of the
+	# unit's TILE (tall grass -> +evasion, fortify -> +defense, ice -> -evasion), computed
+	# on the fly and never stored as a status, so nothing else on this card would show it.
+	#
+	# UNIFIED, not local: the numbers, the mark, the wording and the colours all come from
+	# [TerrainVisuals] -- the same helper the world-space badge row and the battle card read
+	# -- so the "+19" over a nature unit in nature grass and the "+19" on this card are one
+	# lookup off [method TerrainStats.bonus_for], which is also the number
+	# [method MoveContext.hit_chance] rolls against. This card used to compute an
+	# evasion-only version of its own; that is exactly the drift the helper removes.
+	var terrain: Array = _terrain_bonuses(unit)
+	var terrain_shown: int = TerrainVisuals.shown_count(terrain.size(), MAX_TERRAIN_CHIPS)
+	var terrain_hidden: int = TerrainVisuals.hidden_count(terrain.size(), MAX_TERRAIN_CHIPS)
+	for i in range(terrain_shown):
+		var entry: Dictionary = terrain[i]
+		# The ROOMY label: this card has 240px and its whole subtree is click-through (see
+		# _ready), so it can never show a tooltip -- naming the terrain in the label itself
+		# is the only way it can say WHERE the bonus comes from. The tooltip is still set,
+		# for the same reason the element badge keeps its own: it costs nothing and becomes
+		# correct the moment this card's input policy changes.
+		_effects_container.add_child(_build_terrain_chip(entry))
+	if terrain_hidden > 0:
+		_effects_container.add_child(_build_chip(
+			TerrainVisuals.overflow_label(terrain_hidden), StatusVisuals.OVERFLOW_COLOR))
 
 	# Empty for a unit with no StatusController, no statuses, or a freed unit.
 	var conditions: Array = StatusVisuals.active_conditions(unit)
 	if conditions.is_empty():
 		# Only claim "no effects" when there is ALSO no terrain bonus to show;
-		# otherwise the green terrain chip stands on its own.
-		if terrain_avoid <= 0:
+		# otherwise the terrain chip stands on its own.
+		if terrain.is_empty():
 			var none_label := Label.new()
 			none_label.text = "No active effects"
 			none_label.add_theme_font_size_override("font_size", 12)
@@ -415,16 +444,49 @@ func _update_shield_readout(shield: int, fractions: Dictionary) -> void:
 	_shield_tail.visible = true
 
 
-## The evasion bonus the unit's current tile grants it (tall grass -> +avoid), or
-## 0 when it stands on plain ground. Null-safe: a freed unit, an absent
-## CombatServices, or a null board all resolve to 0. TerrainStats reads the
-## PASSIVE_WHILE_OCCUPYING tile effects under the unit, the same source combat
-## uses when it forecasts the hit chance.
-func _terrain_evasion_bonus(unit) -> int:
+## Every nonzero stat bonus the unit's current tile grants it, from the shared helper.
+## Null-safe: a freed unit, an absent CombatServices, or a null board all resolve to an
+## empty array. [TerrainVisuals] reads the PASSIVE_WHILE_OCCUPYING tile effects under the
+## unit through [TerrainStats] -- the same source and the same arithmetic combat uses when
+## it forecasts the hit chance.
+func _terrain_bonuses(unit) -> Array:
 	if unit == null or not is_instance_valid(unit):
-		return 0
+		return []
 	var board = CombatServices.board() if CombatServices else null
-	return TerrainStats.bonus_for(unit, "evasion", board)
+	return TerrainVisuals.bonuses_for(unit, board)
+
+
+## A terrain chip: the shared mark and colours, but a THICKER frame, squarer corners and
+## COLOURED text on a deep fill -- the inverse of the status chips beside it (cream text on
+## a tinted fill, round corners, hairline frame). "Where I am standing" and "what is on me"
+## have to be distinguishable at a glance, or one row of chips reads as one kind of fact.
+func _build_terrain_chip(entry: Dictionary) -> PanelContainer:
+	var color: Color = TerrainVisuals.color_for(entry)
+	var chip := PanelContainer.new()
+	chip.name = "TerrainChip"
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.tooltip_text = TerrainVisuals.tooltip_for(entry)
+
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = color.darkened(0.72)
+	sb.set_corner_radius_all(3)
+	sb.set_border_width_all(2)
+	sb.border_color = color
+	sb.content_margin_left = 6
+	sb.content_margin_right = 6
+	sb.content_margin_top = 2
+	sb.content_margin_bottom = 2
+	chip.add_theme_stylebox_override("panel", sb)
+
+	var label := Label.new()
+	label.name = "TerrainChipLabel"
+	label.text = TerrainVisuals.full_chip_text(entry)
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", color)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.add_child(label)
+
+	return chip
 
 
 ## A compact colour-coded pill: dim fill, 1px frame in the status colour, cream

@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="TileEffectResource" format=3]
+
+[ext_resource type="Script" uid="uid://mjk7dm1nx1iq" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" uid="uid://c0yg0guul4cvy" path="res://game/combat/effects/HealEffect.gd" id="2_heal"]
+[ext_resource type="Script" uid="uid://fqvia73yafq4" path="res://game/tiles/effects/TileEffectResource.gd" id="3_tileeffect"]
+
+[sub_resource type="Resource" id="Resource_fountain_heal"]
+script = ExtResource("2_heal")
+amount = 30
+
+[resource]
+script = ExtResource("3_tileeffect")
+id = &"fountain"
+display_name = "Fountain"
+trigger = 1
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_fountain_heal")])
+rule_flags = {
+"sanctified": true
+}

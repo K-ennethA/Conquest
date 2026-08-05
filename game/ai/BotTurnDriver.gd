@@ -307,11 +307,26 @@ func act_for_turn_system(ts: TurnSystemBase) -> bool:
 	if ts == null or not ts.is_active:
 		return false
 	var player: Player = ts.get_current_active_player()
-	if player == null or not player.is_ai:
+	if player == null:
 		return false
 
-	var unit := _next_actable_ai_unit(ts, player)
+	# AI-DRIVEN UNITS ON A HUMAN'S SIDE. A whole AI player is driven unit-by-unit as before.
+	# A HUMAN player is normally none of this driver's business -- but a side can now field
+	# units the human does NOT command: Siege creeps are owned by their side (so they are
+	# ALLIES of that side's squad -- BoardAdapter.are_enemies keys purely on owner, so a
+	# separate "ally AI" player would have made a side's own creeps its enemies) yet must act
+	# themselves. Driving them from here rather than from a new per-mode turn hook is what
+	# keeps both turn systems untouched: they are just units of the active player that this
+	# driver happens to resolve, so the human's turn never waits on a creep order and Speed
+	# First's per-unit queue needs no special case either.
+	var only_ai_driven: bool = not player.is_ai
+
+	var unit := _next_actable_ai_unit(ts, player, only_ai_driven)
 	if unit == null:
+		# The human is in charge of everything else on their side -- no stun guard, no
+		# advance. Their End Turn button is the thing that moves the game on.
+		if only_ai_driven:
+			return false
 		# STUN STALL GUARD. A stunned unit is skipped by the turn system but stays in
 		# the turn order (that is what lets its statuses tick and the stun expire).
 		# Under Speed First that unit is still `current_acting_unit`, so with nothing
@@ -354,16 +369,47 @@ func act_for_turn_system(ts: TurnSystemBase) -> bool:
 ## is_turn_skipped in can_unit_act), but the check is repeated here explicitly: this
 ## is the one place that decides what the AI touches, and a stunned unit reaching
 ## the action path would act during a turn it is supposed to be skipping.
-func _next_actable_ai_unit(ts: TurnSystemBase, player: Player) -> Unit:
+##
+## [param only_ai_driven] restricts the search to units explicitly marked AI-driven (see
+## [method mark_ai_driven]). That is what the driver passes on a HUMAN player's turn, so it
+## resolves that side's creeps and touches nothing the player commands.
+func _next_actable_ai_unit(ts: TurnSystemBase, player: Player, only_ai_driven: bool = false) -> Unit:
 	for u in ts.get_active_units():
 		if u == null or not is_instance_valid(u):
 			continue
 		if u.get_owner_player() != player:
 			continue
+		if only_ai_driven and not BotTurnDriver.is_ai_driven(u):
+			continue
 		if ts.has_method("is_turn_skipped") and ts.is_turn_skipped(u):
 			continue
 		return u
 	return null
+
+
+# --- AI-driven units on a human side -----------------------------------------
+#
+# Metadata rather than a Unit field, for the same three reasons the march stance is metadata
+# (see BotController): it is mode state, not unit state; Object.set_meta works on every mock
+# in the suites; and an unmarked unit is unaffected, so the flag is self-disabling.
+
+## Metadata key marking a unit this driver resolves even on its owner's (human) turn.
+const AI_DRIVEN_META: StringName = &"ai_driven"
+
+
+## Mark [param unit] as AI-driven: the human never commands it, this driver acts it during
+## its OWNER's turn. Idempotent; silently skips anything that cannot hold metadata.
+static func mark_ai_driven(unit) -> void:
+	if unit == null or not is_instance_valid(unit) or not unit.has_method("set_meta"):
+		return
+	unit.set_meta(AI_DRIVEN_META, true)
+
+
+## True when [param unit] carries the AI-driven mark.
+static func is_ai_driven(unit) -> bool:
+	if unit == null or not is_instance_valid(unit) or not unit.has_method("has_meta"):
+		return false
+	return unit.has_meta(AI_DRIVEN_META) and bool(unit.get_meta(AI_DRIVEN_META))
 
 
 ## True if any of [param player]'s registered units is having its turn skipped by a
@@ -563,6 +609,13 @@ func _defender_certain_to_wait(unit: Unit, board) -> bool:
 	# Bosses plan through BossController, which has its own engagement logic -- never
 	# short-circuit it with BotController's defensive rule.
 	if unit.has_method("is_boss") and unit.is_boss():
+		return false
+	# A MARCHING unit is never certain to wait: with nothing in aggro range it still pushes
+	# its lane, which is the exact opposite of holding. (A creep is spawned aggressive, so it
+	# would normally fail the defensive test below anyway -- but the stance a character
+	# DECLARES can make it read defensive, and short-circuiting a marcher would freeze the
+	# lane push for the rest of the match.)
+	if not BotController.march_lane(unit).is_empty():
 		return false
 	# ONLY defensive units. Aggressive (and legacy/mock units reporting neither) always
 	# charge the nearest hostile, so they must still run the full plan.

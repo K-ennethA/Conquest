@@ -26,6 +26,9 @@ func start_turn_system() -> void:
 	is_active = true
 	current_turn = 1
 	is_turn_in_progress = false
+	# A fresh battle gets a fresh battle-start pass (this instance is reused across
+	# battles -- TurnSystemManager keeps it in a dictionary).
+	_battle_start_dispatched = false
 	units_acted_this_turn.clear()
 	turn_completed_manually = false
 	players_had_turn_this_round.clear()
@@ -129,6 +132,11 @@ func get_turn_order() -> Array:
 # Traditional turn system specific methods
 func _start_player_turn(player: Player) -> void:
 	"""Start a specific player's turn"""
+	# THE BATTLE-START PASS, first opened turn only (see the base class). Ahead of
+	# everything below so an ON_BATTLE_START ability resolves before the first
+	# ON_TURN_START tick -- and for EVERY registered unit, not just this player's side.
+	_dispatch_battle_start_once()
+
 	var previous_player = current_player
 
 	# End previous player's turn if there was one

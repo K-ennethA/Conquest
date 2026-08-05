@@ -35,6 +35,14 @@ class_name AbilityResource
 ## Optional inspector art for ability lists / tooltips. Purely cosmetic.
 @export var icon: Texture2D
 
+## The ONE moment this ability fires on. An ability that has to land on two different
+## moments -- or on the same moment under two different conditions -- is authored as TWO
+## resources listed side by side on the character, not as a multi-trigger schema: the
+## [member condition] is per-ability, so a second trigger sharing it could not be gated
+## differently. Geode's ward is the worked example: `crystalline_ward_initial.tres`
+## (ON_BATTLE_START, ungated) plus `crystalline_ward.tres` (ON_TURN_START, gated on three
+## untouched turns), both granting the same 15 through [ShieldEffect] -- which refreshes
+## rather than stacks, so the pair can never compound.
 @export var trigger: AbilityTrigger.Trigger = AbilityTrigger.Trigger.PASSIVE
 ## Optional gate; null means unconditional (always met). Compose several with
 ## [AllCondition] / [AnyCondition] / [NotCondition].

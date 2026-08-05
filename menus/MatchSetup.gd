@@ -16,6 +16,12 @@ class_name MatchSetup
 ##       ArenaController before going to Character Select, exactly as ArenaSetupScreen did.
 ##   * [constant MatchConfigPanel.MODE_LOCAL]    -- Local hot-seat versus. Map + Turn System.
 ##       Start stages the map and goes to Character Select.
+##   * [constant MatchConfigPanel.MODE_SIEGE] / [constant MatchConfigPanel.MODE_SIEGE_LOCAL]
+##       -- Siege, solo vs AI / hot-seat. Exactly the two above in every respect except one:
+##       the list opens PRESELECTED on the mode's own lane/base map when the catalog
+##       actually lists one (see [method _preferred_row]). Nothing is filtered out -- Siege
+##       on a small skirmish map is a legal, if short, match, and a picker that hid every
+##       map but one would be a launcher wearing a list.
 ##
 ## The mode is carried in a STATIC var so it survives the scene change AND a Back trip from
 ## Character Select (which returns here without re-picking the mode). Every dependency is
@@ -34,6 +40,31 @@ const MATCH_SETUP_SCENE := "res://menus/MatchSetup.tscn"
 ## refused. Preloaded BY PATH, not by class_name -- a brand new script is not in the global
 ## class cache until the project is next imported (the `menus/ReplayWatch.gd` rule).
 const MapRowBuilder := preload("res://menus/MapRowBuilder.gd")
+
+## Where the Siege mode controller lives when this build ships it. Tried in order, by PATH
+## with a has-method guard, exactly as [MapRowBuilder] resolves the map catalog: the mode is
+## built by a parallel workstream and this screen must parse and run in a build that does
+## not ship it yet. Its `recommended_map_path()` is the AUTHORITY on which map Siege opens
+## on; [method _siege_shaped_row] is the fallback for a build that has the map but not (yet)
+## the controller.
+const SIEGE_CONTROLLER_PATHS: Array[String] = [
+	"res://game/modes/SiegeController.gd",
+	"res://game/modes/siege/SiegeController.gd",
+]
+## The second probe: the controller as a member of this group, which is also the seam a UI
+## test injects a stand-in through. Same pair [SiegeFeedback] resolves it with.
+const SIEGE_CONTROLLER_GROUP: StringName = &"siege_controller"
+
+## What a map has to say about itself to read as a SIEGE map, in the absence of a controller
+## to ask. Any ONE of these is enough:
+##   * map_type == "Siege" (the catalog's own classification), or
+##   * a tag "siege", or
+##   * an authored victory condition naming a base CAPTURE -- which is the CaptureBase
+##     objective's own string, i.e. the same text WinConditionLibrary compiles and the
+##     objective banner draws. Matched on both words rather than an exact phrase, for the
+##     reason WinConditionLibrary.build_one matches "destroy"+"base" that way.
+const SIEGE_MAP_TYPE: String = "siege"
+const SIEGE_TAG: String = "siege"
 
 ## The variant to build, set by the caller (SoloModeSelect / MultiplayerModeSelection)
 ## before change_scene. Static so it persists across the scene load and a Back trip from
@@ -102,8 +133,18 @@ func _title_text() -> String:
 			return "ARENA RUN"
 		MatchConfigPanel.MODE_LOCAL:
 			return "LOCAL VERSUS"
+		MatchConfigPanel.MODE_SIEGE:
+			return "SIEGE"
+		MatchConfigPanel.MODE_SIEGE_LOCAL:
+			return "LOCAL SIEGE"
 		_:
 			return "SKIRMISH"
+
+
+## True when this screen is setting up a hot-seat match, i.e. Back goes to the VERSUS mode
+## picker rather than the SOLO one.
+func _is_hotseat() -> bool:
+	return _mode == MatchConfigPanel.MODE_LOCAL or _mode == MatchConfigPanel.MODE_SIEGE_LOCAL
 
 
 # --- UI construction --------------------------------------------------------
@@ -459,9 +500,9 @@ func _load_available_maps() -> void:
 
 	var target: int = _available_maps.find(previous)
 	if target < 0:
-		target = _first_selectable_row()
+		target = _preferred_row()
 	elif _map_list.is_item_disabled(target):
-		target = _first_selectable_row()
+		target = _preferred_row()
 	if target >= 0:
 		_map_list.select(target)
 		_on_map_selected(target)
@@ -469,6 +510,84 @@ func _load_available_maps() -> void:
 		_current_selected_map = ""
 		if _start_btn != null:
 			_start_btn.disabled = true
+
+
+## The row this screen should OPEN on: the mode's recommended map when there is one and it
+## is launchable, otherwise the plain first-selectable row every other mode uses.
+##
+## Only Siege has a recommendation today. It is a PRESELECTION, never a filter -- the
+## player can still pick any map in the list, which is why this returns a row index into the
+## list that was already built rather than rebuilding it.
+func _preferred_row() -> int:
+	if MatchConfigPanel.is_siege_mode(_mode):
+		var siege_row: int = _siege_row()
+		if siege_row >= 0:
+			return siege_row
+	return _first_selectable_row()
+
+
+## The listed row holding the Siege map, or -1. Asks the mode controller first (it owns
+## which map Siege ships with); falls back to reading the maps' own declarations.
+func _siege_row() -> int:
+	var recommended: String = _siege_recommended_path()
+	if not recommended.is_empty():
+		var direct: int = _available_maps.find(recommended)
+		if direct >= 0 and not _map_list.is_item_disabled(direct):
+			return direct
+	return _siege_shaped_row()
+
+
+## [code]SiegeController.recommended_map_path()[/code], or "" when this build ships no
+## controller / no recommendation. Resolved by PATH with a has-method guard (an autoload
+## node wins if one is registered), so this screen never names a class that may not exist --
+## the [MapRowBuilder.catalog] pattern.
+func _siege_recommended_path() -> String:
+	var source = get_node_or_null("/root/SiegeController")
+	if source == null or not MapRowBuilder.responds(source, "recommended_map_path"):
+		source = get_tree().get_first_node_in_group(SIEGE_CONTROLLER_GROUP) if get_tree() != null else null
+	if source == null or not MapRowBuilder.responds(source, "recommended_map_path"):
+		source = null
+		for path in SIEGE_CONTROLLER_PATHS:
+			if not ResourceLoader.exists(path):
+				continue
+			var script: Resource = load(path)
+			if script != null and MapRowBuilder.responds(script, "recommended_map_path"):
+				source = script
+				break
+	if source == null:
+		return ""
+	return String(source.recommended_map_path()).strip_edges()
+
+
+## The first listed row whose MAP declares itself a siege map, or -1. See SIEGE_MAP_TYPE.
+func _siege_shaped_row() -> int:
+	for i in _map_resources.size():
+		if _map_list.is_item_disabled(i):
+			continue
+		if _is_siege_map(_map_resources[i]):
+			return i
+	return -1
+
+
+## Does [param map_resource] declare itself a siege map? Pure and null-safe.
+static func _is_siege_map(map_resource) -> bool:
+	if map_resource == null:
+		return false
+	var map_type = map_resource.get("map_type")
+	if map_type != null and String(map_type).strip_edges().to_lower() == SIEGE_MAP_TYPE:
+		return true
+	var tags = map_resource.get("tags")
+	if tags is Array:
+		for tag in tags as Array:
+			if String(tag).strip_edges().to_lower() == SIEGE_TAG:
+				return true
+	var conditions = map_resource.get("victory_conditions")
+	if conditions is Array:
+		for c in conditions as Array:
+			var key: String = String(c).strip_edges().to_lower()
+			if key.contains("captur") and key.contains("base"):
+				return true
+	return false
 
 
 ## The first row the player can actually launch, or -1 when there is none.
@@ -628,7 +747,7 @@ func _on_back_pressed() -> void:
 	var arena := get_node_or_null("/root/ArenaController")
 	if arena != null and arena.has_method("abort_run"):
 		arena.abort_run()
-	if _mode == MatchConfigPanel.MODE_LOCAL:
+	if _is_hotseat():
 		get_tree().change_scene_to_file(MP_MODE_SELECT_SCENE)
 	else:
 		get_tree().change_scene_to_file(SOLO_MODE_SELECT_SCENE)

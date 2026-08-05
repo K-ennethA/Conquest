@@ -53,6 +53,35 @@ var rng: RandomNumberGenerator = null
 ## historical behaviour.
 var force_control: bool = false
 
+# --- The MARCH stance (metadata contract) ------------------------------------
+#
+# A marching unit is one that walks an authored WAYPOINT PATH and only fights what comes
+# near it -- the creep behaviour Siege pushes down its lanes. It is expressed as unit
+# METADATA rather than as a fourth `ai_stance` string for three reasons:
+#
+#   * a march needs DATA (the lane) as well as a mode, and configure_ai_behavior carries
+#     only scalars;
+#   * metadata is on Object, so every duck-typed mock in the suites already supports it and
+#     no unit class has to learn about a game mode; and
+#   * a unit with no lane is not marching, so the branch is self-disabling -- nothing that
+#     does not opt in changes behaviour.
+#
+# The stance is deliberately generic (nothing here says "Siege"): anything that wants a unit
+# to walk a path and defend it stamps these two keys. [SiegeController] is currently the only
+# stamper.
+
+## Metadata key holding the lane: an [Array] of [Vector2i] waypoints IN MARCH ORDER (first =
+## where the unit starts from, last = the goal it pushes toward). Absent or empty = not
+## marching.
+const MARCH_LANE_META: StringName = &"ai_march_lane"
+
+## Metadata key holding this unit's aggro radius (Manhattan). Absent falls back to
+## [constant DEFAULT_MARCH_AGGRO].
+const MARCH_AGGRO_META: StringName = &"ai_march_aggro"
+
+## Aggro radius a marching unit uses when its lane carries no explicit one.
+const DEFAULT_MARCH_AGGRO: int = 3
+
 
 ## Human-readable name for a [enum Difficulty] value (UI / logs).
 static func difficulty_name(d: int) -> String:
@@ -120,6 +149,19 @@ func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
 
 	var origin: Vector2i = board.cell_of(actor)
 	var hostiles := _list_hostiles(actor, board)
+
+	# MARCH BRANCH (a pushing CREEP). Runs FIRST, and before the no-hostiles early-out,
+	# because a creep's job is to advance whether or not anything is in front of it: an
+	# empty board must still see the lane pushed. While no hostile is inside the creep's
+	# aggro radius it walks its lane and does nothing else; the moment one IS inside, this
+	# branch declines and the creep falls through to the ORDINARY planner below (attack,
+	# support, trap, advance) -- so "engage with normal combat AI, then resume the march"
+	# needs no second AI, only a gate. Non-marching actors never enter here, so every other
+	# unit's planning is byte-for-byte what it was.
+	if _is_marching(actor) and not (_is_dormant(actor) and not _is_provoked(actor)):
+		if not _hostile_within(origin, hostiles, board, _march_aggro(actor)):
+			return _march_plan(actor, origin, board, reachable)
+
 	if hostiles.is_empty():
 		return _wait("no_hostiles")
 
@@ -648,6 +690,112 @@ func _hostile_within_aggro(actor, home: Vector2i, hostiles: Array, board) -> boo
 		if _manhattan(home, board.cell_of(h)) <= radius:
 			return true
 	return false
+
+
+# --- March (waypoint push) ---------------------------------------------------
+# See the metadata contract near the top of this file. Everything below is pure: given the
+# same lane, the same origin and the same reachable set it returns the same decision on every
+# peer, with no RNG and no stored progress -- which is what keeps a lockstep match in step.
+
+## True when [param actor] carries a non-empty march lane.
+func _is_marching(actor) -> bool:
+	return not march_lane(actor).is_empty()
+
+
+## The actor's lane, as an [Array] of [Vector2i] in march order. Empty when it has none (or
+## when the stamped value is not a usable array of cells).
+static func march_lane(actor) -> Array:
+	var out: Array = []
+	if actor == null or not is_instance_valid(actor):
+		return out
+	if not actor.has_method("has_meta") or not actor.has_meta(MARCH_LANE_META):
+		return out
+	var raw = actor.get_meta(MARCH_LANE_META)
+	if not (raw is Array):
+		return out
+	for cell in raw as Array:
+		if cell is Vector2i:
+			out.append(cell)
+	return out
+
+
+## The actor's march aggro radius, or [constant DEFAULT_MARCH_AGGRO].
+func _march_aggro(actor) -> int:
+	if actor != null and is_instance_valid(actor) and actor.has_method("has_meta") \
+			and actor.has_meta(MARCH_AGGRO_META):
+		return int(actor.get_meta(MARCH_AGGRO_META))
+	return DEFAULT_MARCH_AGGRO
+
+
+## True when any of [param hostiles] is within [param radius] (Manhattan) of [param origin].
+## A negative radius never triggers; radius 0 means "only something sharing my cell".
+func _hostile_within(origin: Vector2i, hostiles: Array, board, radius: int) -> bool:
+	if radius < 0:
+		return false
+	for h in hostiles:
+		if h == null:
+			continue
+		if _manhattan(origin, board.cell_of(h)) <= radius:
+			return true
+	return false
+
+
+## The waypoint a unit standing on [param origin] should currently be walking toward.
+##
+## Derived, never stored. The lane is walked to find the waypoint CLOSEST to the unit --
+## ties broken toward the LATER waypoint, so a creep sitting exactly between two never gets
+## dragged backwards -- and the answer is that waypoint, EXCEPT when the unit is already
+## standing on it, in which case it is the next one along. Standing on the final waypoint
+## (the enemy base) returns that same cell, which reads as "no progress left" and drops the
+## creep into a wait: creeps never capture, they only arrive and fight.
+static func march_target(lane: Array, origin: Vector2i) -> Vector2i:
+	if lane.is_empty():
+		return origin
+	var best: int = 0
+	var best_dist: int = 1 << 30
+	for i in range(lane.size()):
+		var d: int = _manhattan(origin, lane[i])
+		# `<=` is the tie-break toward the later waypoint.
+		if d <= best_dist:
+			best_dist = d
+			best = i
+	if best_dist == 0 and best < lane.size() - 1:
+		best += 1
+	return lane[best]
+
+
+## Advance along the lane: stand on whichever reachable cell gets closest to the current
+## waypoint. Returns a STEP decision, or a WAIT when nothing available makes progress (the
+## creep is boxed in, has no movement, or has arrived).
+func _march_plan(actor, origin: Vector2i, board, reachable: Array) -> Dictionary:
+	var lane: Array = march_lane(actor)
+	var goal: Vector2i = march_target(lane, origin)
+	if goal == origin:
+		return _wait("march_arrived")
+
+	var dest: Vector2i = origin
+	var dest_dist: int = _manhattan(origin, goal)
+	for c in reachable:
+		var d: int = _manhattan(c, goal)
+		if d < dest_dist:
+			dest_dist = d
+			dest = c
+		elif d == dest_dist and dest != origin and _cell_less(c, dest):
+			dest = c
+	if dest == origin:
+		return _wait("march_blocked")
+
+	return {
+		"action": ActionType.STEP,
+		"move": null,
+		"target": null,
+		"aim_cell": origin,
+		"dest_cell": dest,
+		"estimated_damage": 0,
+		"target_hp": 0,
+		"step_to": dest,
+		"reason": "march",
+	}
 
 
 # --- Support moves (self-buff / heal / debuff) -----------------------------

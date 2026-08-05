@@ -3,11 +3,15 @@ extends Control
 class_name MultiplayerModeSelection
 
 ## Multiplayer mode picker, reached from MainMenu's "Versus" button. Offers Local
-## (hot-seat) and Network (online) as large mode cards -- the same card pattern as
-## [SoloModeSelect] -- then hands off to the matching setup screen. Dark "Legends"
-## menu look via [MenuTheme].
+## (hot-seat), Local Siege (hot-seat on a lane/base map) and Network (online) as large mode
+## cards -- the same card pattern as [SoloModeSelect] -- then hands off to the matching
+## setup screen. Dark "Legends" menu look via [MenuTheme].
 ##
-## Keyboard: 1 = Local, 2 = Network, ESC = back.
+## Keyboard: 1 = Local, 2 = Siege, 3 = Network, ESC = back.
+##
+## 720p: three 300-wide cards + two 20px gaps = 940, inside the 1280 viewport (the page's
+## own 700 minimum is simply out-measured by the row, which is what a CenterContainer is
+## for). Card HEIGHT is untouched, so the page's vertical stack is the same it was.
 
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 const MATCH_SETUP_SCENE := "res://menus/MatchSetup.tscn"
@@ -54,7 +58,11 @@ func _build_ui() -> void:
 		"Hot-seat on the same device --\nplayers take turns sharing a screen.",
 		_on_local_multiplayer_pressed))
 	cards.add_child(_make_mode_card(
-		"2.  Network",
+		"2.  Siege",
+		"Hot-seat push mode -- lanes,\ncreeps, and each other's base.",
+		_on_local_siege_pressed))
+	cards.add_child(_make_mode_card(
+		"3.  Network",
 		"Play online over the internet\nor a local network.",
 		_on_network_multiplayer_pressed))
 
@@ -69,7 +77,8 @@ func _build_ui() -> void:
 	page.add_child(back)
 
 	var hint := Label.new()
-	hint.text = "1 Local  •  2 Network  •  ESC back"
+	hint.name = "KeyHint"
+	hint.text = "1 Local  •  2 Siege  •  3 Network  •  ESC back"
 	page.add_child(hint)
 	MenuTheme.style_caption(hint)
 
@@ -118,6 +127,17 @@ func _on_local_multiplayer_pressed() -> void:
 	get_tree().change_scene_to_file(MATCH_SETUP_SCENE)
 
 
+func _on_local_siege_pressed() -> void:
+	"""Local hot-seat SIEGE. Identical plumbing to the Local card -- two players on one box,
+	map + turn system -- with the siege variant of the setup screen, which preselects the
+	lane/base map when the catalog lists one."""
+	GameSettings.set_game_mode(GameSettings.GameMode.VERSUS)
+	GameSettings.set_player_count(2)
+
+	MatchSetup.requested_mode = MatchConfigPanel.MODE_SIEGE_LOCAL
+	get_tree().change_scene_to_file(MATCH_SETUP_SCENE)
+
+
 func _on_network_multiplayer_pressed() -> void:
 	"""Handle Network Multiplayer card press."""
 	get_tree().change_scene_to_file(NETWORK_SETUP_SCENE)
@@ -135,6 +155,8 @@ func _input(event: InputEvent) -> void:
 			KEY_1:
 				_on_local_multiplayer_pressed()
 			KEY_2:
+				_on_local_siege_pressed()
+			KEY_3:
 				_on_network_multiplayer_pressed()
 			KEY_ESCAPE:
 				_on_back_pressed()

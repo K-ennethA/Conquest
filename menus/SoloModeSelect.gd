@@ -4,16 +4,35 @@ class_name SoloModeSelect
 
 ## Solo mode picker, reached from MainMenu's "Solo" button. Offers the single-player
 ## registers as large mode cards -- Campaign (the story battles ending at the Eldroot
-## boss, via [CampaignScreen]), Skirmish (pick a map, fight the AI), Arena Run (draft
-## augments across a gauntlet) and Challenges -- then hands off to the matching screen.
-## Dark "Legends" menu look via [MenuTheme].
+## boss, via [CampaignScreen]), Skirmish (pick a map, fight the AI), Siege (push the lanes
+## and take their base), Arena Run (draft augments across a gauntlet) and Challenges --
+## then hands off to the matching screen. Dark "Legends" menu look via [MenuTheme].
 ##
-## Keyboard: 1 = Campaign, 2 = Skirmish, 3 = Arena Run, 4 = Challenges, ESC = back.
+## Keyboard: 1 = Campaign, 2 = Skirmish, 3 = Siege, 4 = Arena Run, 5 = Challenges,
+## ESC = back.
 
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 const MATCH_SETUP_SCENE := "res://menus/MatchSetup.tscn"
 const CHALLENGE_BROWSE_SCENE := "res://menus/ChallengeBrowse.tscn"
 const CAMPAIGN_SCREEN_SCENE := "res://menus/CampaignScreen.tscn"
+
+# --- Card row geometry (1280x720) --------------------------------------------
+#
+# The page is a 1180-wide column inside a CenterContainer, and the cards are EXPAND_FILL
+# inside one HBox, so the row's MINIMUM width is what has to fit -- a card narrower than
+# its custom_minimum is not something a container will give you.
+#
+#   5 cards x CARD_WIDTH + 4 x CARD_SEPARATION  =  5 x 220 + 4 x 20  =  1180
+#
+# ...which is exactly the page width, and 100px inside the 1280 viewport. Adding Siege as
+# a fifth card therefore cost width, not height: CARD_HEIGHT is unchanged, so the page's
+# vertical stack (title 40 + subtitle + 20 spacer + 180 cards + 10 + 44 back + caption) is
+# the same it was. The old per-card 268 is where the 1420 that would NOT have fitted came
+# from, so the number is declared here rather than repeated at each call site.
+const CARD_WIDTH: float = 220.0
+const CARD_HEIGHT: float = 180.0
+const CARD_SEPARATION: int = 20
+const PAGE_WIDTH: float = 1180.0
 
 
 func _ready() -> void:
@@ -28,7 +47,7 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var page := VBoxContainer.new()
-	page.custom_minimum_size = Vector2(1180.0, 0.0)
+	page.custom_minimum_size = Vector2(PAGE_WIDTH, 0.0)
 	page.add_theme_constant_override("separation", 16)
 	center.add_child(page)
 
@@ -47,8 +66,9 @@ func _build_ui() -> void:
 	page.add_child(spacer)
 
 	var cards := HBoxContainer.new()
+	cards.name = "ModeCards"
 	cards.alignment = BoxContainer.ALIGNMENT_CENTER
-	cards.add_theme_constant_override("separation", 20)
+	cards.add_theme_constant_override("separation", CARD_SEPARATION)
 	page.add_child(cards)
 
 	cards.add_child(_make_action_card(
@@ -59,12 +79,18 @@ func _build_ui() -> void:
 		"2.  Skirmish",
 		"Pick a map, choose your squad,\ndefeat the AI.",
 		MatchConfigPanel.MODE_SKIRMISH))
+	# Siege sits beside Skirmish, not off in its own register: both are "pick a map, take a
+	# squad, fight the AI", and what makes Siege different is the MAP's own objective.
 	cards.add_child(_make_mode_card(
-		"3.  Arena Run",
+		"3.  Siege",
+		"Push the lanes, hold your base,\ntake theirs.",
+		MatchConfigPanel.MODE_SIEGE))
+	cards.add_child(_make_mode_card(
+		"4.  Arena Run",
 		"Draft augments between rounds.\nSurvive the gauntlet.",
 		MatchConfigPanel.MODE_ARENA))
 	cards.add_child(_make_action_card(
-		"4.  Challenges",
+		"5.  Challenges",
 		"Beat maps other players built --\nor share your own gauntlet.",
 		_on_challenges_chosen))
 
@@ -79,7 +105,8 @@ func _build_ui() -> void:
 	page.add_child(back)
 
 	var hint := Label.new()
-	hint.text = "1 Campaign  •  2 Skirmish  •  3 Arena Run  •  4 Challenges  •  ESC back"
+	hint.name = "KeyHint"
+	hint.text = "1 Campaign  •  2 Skirmish  •  3 Siege  •  4 Arena Run  •  5 Challenges  •  ESC back"
 	page.add_child(hint)
 	MenuTheme.style_caption(hint)
 
@@ -87,7 +114,7 @@ func _build_ui() -> void:
 ## A tall, clickable mode card: a big gold heading over a dim description line.
 func _make_mode_card(heading: String, blurb: String, mode: String) -> Button:
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(268.0, 180.0)
+	btn.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.pressed.connect(_on_mode_chosen.bind(mode))
 
@@ -122,7 +149,7 @@ func _make_mode_card(heading: String, blurb: String, mode: String) -> Button:
 ## MatchSetup mode (used by Challenges, which navigates to its own browse screen).
 func _make_action_card(heading: String, blurb: String, callback: Callable) -> Button:
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(268.0, 180.0)
+	btn.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.pressed.connect(callback)
 
@@ -153,6 +180,14 @@ func _make_action_card(heading: String, blurb: String, callback: Callable) -> Bu
 
 
 func _on_mode_chosen(mode: String) -> void:
+	# Declare the register, exactly as MultiplayerModeSelection declares VERSUS on its way
+	# out. GameSettings.game_mode DEFAULTS to VERSUS, and GameWorldManager only scores a
+	# map's own compiled win conditions in SINGLE_PLAYER (_evaluate_game_end) -- so without
+	# this a Siege launched from here would fall through to the neutral "last side standing"
+	# path and a base capture would decide nothing. Arena already sets the same flag from
+	# ArenaController; this is the missing half of that pair for the map-launched modes.
+	if GameSettings != null and GameSettings.has_method("set_game_mode"):
+		GameSettings.set_game_mode(GameSettings.GameMode.SINGLE_PLAYER)
 	MatchSetup.requested_mode = mode
 	get_tree().change_scene_to_file(MATCH_SETUP_SCENE)
 
@@ -179,8 +214,10 @@ func _input(event: InputEvent) -> void:
 			KEY_2:
 				_on_mode_chosen(MatchConfigPanel.MODE_SKIRMISH)
 			KEY_3:
-				_on_mode_chosen(MatchConfigPanel.MODE_ARENA)
+				_on_mode_chosen(MatchConfigPanel.MODE_SIEGE)
 			KEY_4:
+				_on_mode_chosen(MatchConfigPanel.MODE_ARENA)
+			KEY_5:
 				_on_challenges_chosen()
 			KEY_ESCAPE:
 				_on_back_pressed()

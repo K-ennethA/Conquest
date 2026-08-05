@@ -294,46 +294,64 @@ func _try_spawn(state: Dictionary) -> bool:
 	produce again), we SPILL to the nearest free, in-bounds, passable cell in a small
 	ring around home (see _find_spill_cell). Only when the whole neighbourhood is full
 	do we defer to a later turn. Headless (no board) never blocks, exactly as before."""
-	var home: Vector2i = state["position"]
-	var spawn_cell: Vector2i = home
-	if _cell_blocked(home):
-		var spill: Vector2i = _find_spill_cell(home)
-		if spill.x < 0:
-			return false
-		spawn_cell = spill
-
-	if _map_loader == null:
-		return false
-
-	# When spilling, hand spawn_unit_now a home-cell override so the unit materialises
-	# on the free cell rather than the blocked home. The raw spawn dict is copied so
-	# the authored point is never mutated; every other key (character, player, kind...)
-	# is preserved.
-	var spawn_data = state["spawn"]
-	if spawn_cell != home:
-		var override: Dictionary = (state["spawn"] as Dictionary).duplicate()
-		override["position"] = spawn_cell
-		spawn_data = override
-
-	var new_unit = _map_loader.spawn_unit_now(spawn_data, int(state["produced"]))
+	var new_unit = spawn_and_adopt(state["spawn"], int(state["player_id"]), int(state["produced"]))
 	if new_unit == null:
 		return false
-
-	# Hand the fresh unit to its owning player and the turn system before anything else
-	# touches it (see _adopt_spawned_unit -- without this a scheduled wave is inert).
-	_adopt_spawned_unit(new_unit, int(state["player_id"]))
-
-	# A unit that spawns mid/end-turn does NOT get to act on the turn it appeared --
-	# it stands its post this turn and can move next turn. Mark it acted (duck-typed so
-	# the test doubles, which have no turn state, are unaffected).
-	if new_unit != null and new_unit.has_method("mark_action_completed"):
-		new_unit.mark_action_completed("spawn")
 
 	state["produced"] = int(state["produced"]) + 1
 	state["last_spawn_turn"] = _current_turn
 	state["death_turn"] = -1
 	_track_unit(state, new_unit)
 	return true
+
+
+## Materialise ONE unit from [param spawn_data] and hand it a place in the battle. The single
+## runtime-spawn entry point: occupancy guard + spill, then [method MapLoader.spawn_unit_now],
+## then the ADOPTION every runtime spawn owes (owner + turn registration -- CONQUEST.md rule
+## 4), then the already-acted mark. Returns the new node, or null when the spawn could not be
+## placed (whole neighbourhood occupied, no loader, loader refused).
+##
+## PUBLIC because the authored spawn KINDS are not the only thing that spawns mid-battle any
+## more: [SiegeController] pushes creep waves and returns fallen squad units on its own clock,
+## and both must land through THIS function rather than calling the loader themselves --
+## otherwise each grows its own copy of the adoption discipline, which is precisely the bug
+## CONQUEST.md rule 4 exists to name. [param count_hint] only feeds the loader's node-naming.
+func spawn_and_adopt(spawn_data, player_id: int, count_hint: int = 0):
+	if _map_loader == null or not (spawn_data is Dictionary):
+		return null
+
+	var home: Vector2i = (spawn_data as Dictionary).get("position", Vector2i(-1, -1))
+	var spawn_cell: Vector2i = home
+	if _cell_blocked(home):
+		var spill: Vector2i = _find_spill_cell(home)
+		if spill.x < 0:
+			return null
+		spawn_cell = spill
+
+	# When spilling, hand spawn_unit_now a home-cell override so the unit materialises
+	# on the free cell rather than the blocked home. The raw spawn dict is copied so
+	# the authored point is never mutated; every other key (character, player, kind...)
+	# is preserved.
+	var payload: Dictionary = spawn_data as Dictionary
+	if spawn_cell != home:
+		payload = (spawn_data as Dictionary).duplicate()
+		payload["position"] = spawn_cell
+
+	var new_unit = _map_loader.spawn_unit_now(payload, count_hint)
+	if new_unit == null:
+		return null
+
+	# Hand the fresh unit to its owning player and the turn system before anything else
+	# touches it (see _adopt_spawned_unit -- without this a scheduled wave is inert).
+	_adopt_spawned_unit(new_unit, player_id)
+
+	# A unit that spawns mid/end-turn does NOT get to act on the turn it appeared --
+	# it stands its post this turn and can move next turn. Mark it acted (duck-typed so
+	# the test doubles, which have no turn state, are unaffected).
+	if new_unit.has_method("mark_action_completed"):
+		new_unit.mark_action_completed("spawn")
+
+	return new_unit
 
 
 ## Give a freshly scheduled unit an OWNER and a place in the turn order.

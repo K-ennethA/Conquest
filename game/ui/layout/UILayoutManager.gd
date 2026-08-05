@@ -60,6 +60,17 @@ class_name UILayoutManager
 #
 # -- 46px of slack, so nothing in the column can be squeezed or cut off at 720p even with
 # the objective row added to the top band.
+#
+# WHAT SPENDS THAT SLACK: the Siege respawn row (SiegeFeedback, 24px + the column's 10px
+# separation = 34) is the only claim on it, and only while a Siege actually has a squad
+# member down -- it is HIDDEN otherwise, and a hidden BoxContainer child costs neither
+# height nor separation. Worst case with it on screen:
+#
+#   102 + 158 (expanded log) + 10 + 24 (respawn row) + 10 + 228 (card) = 532  card BOTTOM
+#
+# against the same 544 the terrain card leaves free -- 12px clear. The split below is
+# unchanged: the log is still handed `usable - card_claim`, and the row's 24px comes out of
+# the headroom that arithmetic already left over rather than out of the log's budget.
 const LEFT_COLUMN_WIDTH: float = 260.0
 const COLUMN_SEPARATION: float = 10.0
 ## Mirror of UnitInfoPanel.BOTTOM_RESERVE, the window-bottom band the terrain card owns.
@@ -129,6 +140,19 @@ const SKIP_ENEMY_TURN_BUTTON_SCRIPT = preload("res://game/ui/hud/SkipEnemyTurnBu
 ## and this HUD must compile on a fresh checkout.
 const OBJECTIVE_BANNER_SCRIPT = preload("res://game/ui/hud/ObjectiveBanner.gd")
 
+## Siege's respawn countdown + capture alarm (see [SiegeFeedback]). Preloaded by PATH for
+## the same reason as the two above.
+const SIEGE_FEEDBACK_SCRIPT = preload("res://game/ui/hud/SiegeFeedback.gd")
+
+# Siege-only left-column row: who is down and how long until they walk back out, plus the
+# one-shot capture alarm (routed through the ActionAnnouncer above, not a second toast).
+# Typed as the base Control and built from SIEGE_FEEDBACK_SCRIPT rather than its global
+# class_name, for the same reason the objective banner is. It HIDES itself outside a live
+# Siege with someone down, and a hidden BoxContainer child costs neither height nor
+# separation -- so every other mode's left column is untouched, to the pixel. Its 24px claim
+# and the arithmetic behind it are documented on the class.
+var siege_feedback: Control = null
+
 func _ready() -> void:
 	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -169,6 +193,10 @@ func _ready() -> void:
 	# Upper-centre action banner. Self-styled CanvasLayer (like the turn wipe), mounted
 	# AFTER theming so its explicit fonts/colours survive the font-override sweep.
 	_build_action_announcer()
+
+	# Siege's respawn row, under the log in the left column. Self-styled like the log above
+	# it, so mounted AFTER theming; hidden unless a Siege actually has someone down.
+	_build_siege_feedback()
 
 	# Network notice toast (refused commands). Self-styled CanvasLayer like the banner above,
 	# so it is mounted AFTER theming to keep its explicit ConquestTheme colours.
@@ -315,6 +343,27 @@ func _build_action_announcer() -> void:
 	action_announcer = ActionAnnouncer.new()
 	action_announcer.name = "ActionAnnouncer"
 	add_child(action_announcer)
+
+func _build_siege_feedback() -> void:
+	"""Create and mount Siege's respawn row as the SECOND row of the left column.
+
+	Same one-call deal as NetToast / ReplayHUD / the objective banner: this only owns WHERE
+	it lives. The row finds the mode controller, subscribes to the ACTIVE turn system for
+	its countdown, listens to the roster bus for deaths and respawns, routes its capture
+	alarm through the ActionAnnouncer mounted above, and shows/hides itself -- nothing here
+	is wired, and _rebudget_left_column is deliberately unchanged (the row's 24px is spent
+	out of the 46px of slack the column already had; the arithmetic is on the class).
+
+	Index 1, i.e. directly under the battle log and above the unit card: a fallen squad
+	member belongs with the running account of the battle, not down beside the stat sheet of
+	whoever happens to be selected."""
+	siege_feedback = SIEGE_FEEDBACK_SCRIPT.new()
+	siege_feedback.name = "SiegeFeedback"
+	if left_sidebar != null:
+		left_sidebar.add_child(siege_feedback)
+		left_sidebar.move_child(siege_feedback, 1)
+	else:
+		add_child(siege_feedback)
 
 func _build_net_toast() -> void:
 	"""Create and mount the network notice toast.

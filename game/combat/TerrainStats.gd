@@ -27,15 +27,33 @@ class_name TerrainStats
 static func bonus_for(unit, stat_name: String, board = null) -> int:
 	if unit == null:
 		return 0
-	var cell := _cell_of(unit, board)
 	var total := 0
-	for te in _effects_at(cell, board):
-		if te == null or te.trigger != TileEffectResource.Trigger.PASSIVE_WHILE_OCCUPYING:
-			continue
+	for te in passive_effects_for(unit, board):
 		for e in te.effects:
 			if e is StatModifierEffect and e.stat_name == stat_name:
 				total += ElementChart.home_effect_amount(te, e.amount, unit)
 	return total
+
+
+## READ-SIDE, for the HUD: every PASSIVE_WHILE_OCCUPYING tile effect under [param unit].
+##
+## Combat itself only ever needs [method bonus_for] -- this exists so a surface that wants
+## to SHOW what the ground is doing ([TerrainVisuals], and through it the world-space badge
+## row, the battle card and the hover card) can enumerate the same effects the sum above
+## walks instead of re-deriving "which effects count" and drifting from it. The MAGNITUDE
+## still only ever comes back from [method bonus_for]; this answers "which stats, from which
+## terrain", nothing more.
+##
+## Empty array for a null unit, a unit off the board, or plain ground.
+static func passive_effects_for(unit, board = null) -> Array:
+	var out: Array = []
+	if unit == null:
+		return out
+	for te in _effects_at(_cell_of(unit, board), board):
+		if te == null or te.trigger != TileEffectResource.Trigger.PASSIVE_WHILE_OCCUPYING:
+			continue
+		out.append(te)
+	return out
 
 
 static func _cell_of(unit, board) -> Vector2i:

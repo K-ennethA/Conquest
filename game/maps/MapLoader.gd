@@ -13,6 +13,18 @@ var map_root: Node3D
 var tiles_container: Node3D
 var units_container: Node3D
 
+## The map's DECORATIVE SURROUND (see [MapSurround]): rings of scenery, a dirt skirt and
+## a backdrop plane that stop the board reading as a slab floating in the void. Purely
+## cosmetic — it adds no board cells, registers no terrain with [CombatServices] and
+## carries no collision, so pathing / picking / spawns / lockstep never see it. Freed
+## with the map in [method clear_current_map].
+var map_surround: Node3D = null
+
+## Set false to load a map with NO surround. The MAP CREATOR's editing view wants the
+## true grid and nothing else; tests that assert on raw board geometry can flip it too.
+## Battles (including replays) leave it on, so every mode shows the same scenery.
+var surround_enabled: bool = true
+
 ## model_path values already reported by [method _note_tile_model_fallback], so a bad
 ## path is mentioned ONCE per load instead of once per cell that uses it.
 var _reported_tile_model_fallbacks: Dictionary = {}
@@ -239,8 +251,24 @@ func load_map(map_resource: MapResource, target_parent: Node3D) -> bool:
 		_emit_load_failed("Failed to load units")
 		return false
 
+	# Decorative scenery around the board. LAST, and never fatal: it is presentation
+	# only, so nothing here can cost the player a battle.
+	_build_map_surround()
+
 	map_loaded.emit(map_resource)
 	return true
+
+
+## Mount the cosmetic surround for the map just built (see [member map_surround]).
+##
+## Deliberately parented to map_root and NOT to "Tiles": CameraController fits the
+## board by scanning that container's children, so scenery placed there would inflate
+## the fit rect and pull the camera back off the real board. [method MapSurround.build]
+## also frees any stray surround already mounted, so a reload can never stack two.
+func _build_map_surround() -> void:
+	if not surround_enabled or current_map == null or map_root == null:
+		return
+	map_surround = MapSurround.build(current_map, map_root)
 
 func _sync_grid_size(map_resource) -> void:
 	"""Resize the shared board grid to match the loaded map (see load_map)."""
@@ -286,7 +314,15 @@ func clear_current_map() -> void:
 	if units_container:
 		units_container.queue_free()
 		units_container = null
-	
+
+	# The surround goes IMMEDIATELY (free, not queue_free): the very next thing a caller
+	# does is load another map, and a node that is queued-but-alive would still answer to
+	# get_node("MapSurround") when the new one mounts — freeing it there a second time is
+	# the "freeing a freed object" bug. Immediate disposal keeps that window shut.
+	if map_surround != null and is_instance_valid(map_surround):
+		map_surround.free()
+	map_surround = null
+
 	current_map = null
 
 func get_current_map() -> MapResource:

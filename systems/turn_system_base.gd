@@ -295,6 +295,47 @@ func _has_stun_flag(unit) -> bool:
 			return true
 	return false
 
+## Cleared when a battle's turn system starts, set by [method _dispatch_battle_start_once]
+## the first time a turn actually opens. See that method for why the latch lives here.
+var _battle_start_dispatched: bool = false
+
+
+## THE BATTLE-START PASS. Raise [constant AbilityTrigger.Trigger.ON_BATTLE_START] once
+## for every unit registered with this system, then never again for this battle.
+##
+## WHERE IT IS CALLED FROM, and why that boundary: the top of Traditional's
+## `_start_player_turn` and of Speed First's `_start_unit_turn` -- the first moment a
+## turn genuinely opens in either system. Everything a battle-start effect could want to
+## read is finished by then (units spawned, loadouts stamped, ownership adopted, players
+## and units registered), and it is BEFORE the first `_tick_unit_turn_start`, so a unit's
+## opening ON_BATTLE_START always resolves ahead of its first ON_TURN_START.
+##
+## It is deliberately NOT `start_turn_system()`: Speed First can start with an EMPTY queue
+## and only get its actors a frame later (an Arena round spawns them around activation, see
+## `register_unit` / `_kickoff_if_idle`), so dispatching there would hand the ward to nobody.
+## The first opened turn is the same boundary in both systems and in both orders.
+##
+## A unit that arrives AFTER this pass -- a summon, a reinforcement -- gets nothing. That is
+## the scope line drawn in [AbilityTrigger]: this is "the battle began", not "a unit exists".
+##
+## The per-unit half of the latch lives on each [AbilitySystem]
+## ([method AbilitySystem.dispatch_battle_start]), so a restored unit can be stamped out of
+## the pass individually without disarming it for everyone else.
+func _dispatch_battle_start_once() -> void:
+	if _battle_start_dispatched:
+		return
+	_battle_start_dispatched = true
+	var board = CombatServices.board() if CombatServices else null
+	# Iterate a COPY: an opening effect can, in principle, kill (a thorns-style burst) and a
+	# death unregisters the unit mid-loop.
+	for unit in registered_units.duplicate():
+		if unit == null or not is_instance_valid(unit):
+			continue
+		var ability_system = unit.get_ability_system() if unit.has_method("get_ability_system") else null
+		if ability_system != null and ability_system.has_method("dispatch_battle_start"):
+			ability_system.dispatch_battle_start(board)
+
+
 func _tick_unit_turn_start(unit) -> void:
 	"""Advance a single unit's move cooldowns and status conditions, then fire its
 	ON_TURN_START abilities.

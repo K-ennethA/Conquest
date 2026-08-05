@@ -27,12 +27,27 @@ signal wait_chosen
 signal cancel_chosen
 
 const MENU_MIN_WIDTH := 168.0
+## Hard ceiling on the card's width. The menu FLOATS next to the unit, so every pixel it
+## is wide is board it covers -- past this it stops being a context menu and starts being
+## a modal. A label that still does not fit at this width ellipsizes (see [method _fit_width]);
+## no shipped move name comes close (the longest, "Heartwood Guard", needs 188px of card).
+const MENU_MAX_WIDTH := 300.0
 ## Keep the menu fully on-screen: this much padding from every viewport edge.
 const SCREEN_MARGIN := 12.0
+
+## MarginContainer inset around the rows (kept as a constant because [method _fit_width]
+## has to account for it when it works out how much of the card is text space).
+const ROW_MARGIN := 6
+## Element stripe width + the gap between it and the button column, same reason.
+const SWATCH_WIDTH := 6
+const ROW_SEPARATION := 5
 
 var _card: PanelContainer
 var _rows: VBoxContainer
 var _unit: Node = null
+## Every Control in the current rows whose TEXT has to fit: the move/Wait/Cancel buttons
+## and the small hint captions. Rebuilt with the rows; drives [method _fit_width].
+var _fit_texts: Array[Control] = []
 
 ## "<unit instance id>:<move_id>" -> the cooldown count this menu last DREW. Only the
 ## READY FLASH needs it: "came back up" is a transition and the MovesetController only
@@ -60,10 +75,11 @@ func _build_ui() -> void:
 	add_child(_card)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 6)
-	margin.add_theme_constant_override("margin_right", 6)
-	margin.add_theme_constant_override("margin_top", 6)
-	margin.add_theme_constant_override("margin_bottom", 6)
+	margin.name = "Margin"
+	margin.add_theme_constant_override("margin_left", ROW_MARGIN)
+	margin.add_theme_constant_override("margin_right", ROW_MARGIN)
+	margin.add_theme_constant_override("margin_top", ROW_MARGIN)
+	margin.add_theme_constant_override("margin_bottom", ROW_MARGIN)
 	_card.add_child(margin)
 
 	_rows = VBoxContainer.new()
@@ -84,8 +100,20 @@ func open_for_unit(unit: Node, can_command: bool = true) -> void:
 		return
 
 	# Rebuild rows from the unit's live moveset.
+	#
+	# REMOVE FIRST, free after. A queue_free()d Control is still a CHILD (and still
+	# visible) until the delete queue flushes at the end of the frame, so it keeps
+	# counting toward the VBox's minimum size -- and both the immediate and the
+	# call_deferred() _reposition_to_unit() below run BEFORE that flush. The old code
+	# therefore baked "last menu + this menu" into _card.size on every reopen and, since
+	# that is an explicit size, nothing ever shrank it back: measured 345px of content in
+	# a 654px card from the second open onward. remove_child() takes the ghost rows out of
+	# the layout on the spot; queue_free() still defers the actual delete, so freeing a
+	# button from inside its own `pressed` handler stays safe.
 	for child in _rows.get_children():
+		_rows.remove_child(child)
 		child.queue_free()
+	_fit_texts.clear()
 
 	var moveset: Array = []
 	if unit.has_method("get_moveset"):
@@ -124,6 +152,9 @@ func open_for_unit(unit: Node, can_command: bool = true) -> void:
 	_rows.add_child(cancel_btn)
 
 	ConquestTheme.apply_to(_card)
+	# Widths are worked out AFTER the theme lands: the button styleboxes (and therefore
+	# the padding around each label) come from it.
+	_fit_width()
 	# Wire the shared UI-click SFX onto every (re)built row button (idempotent).
 	UIFeedback.attach_sfx(self)
 
@@ -143,31 +174,43 @@ func _add_move_row(move, slot: int, controller, actionable: bool) -> void:
 	if label_text == "":
 		label_text = "Move %d" % (slot + 1)
 
-	# Small damage / range hint, best-effort (never errors on a legacy move).
+	# The range/cooldown hint gets its OWN caption line below the button rather than being
+	# glued onto the name. Inline, the widest shipped pairing needs ~335px of card
+	# ("Heartwood Guard" 113px + a 141px hint + 75px of padding) -- past MENU_MAX_WIDTH, so
+	# the ellipsis landed in the middle of the NAME, which is the one part the player is
+	# reading. Split, the name alone sets the width (188px) and the hint rides at caption
+	# size underneath, where it costs 15px of height and never truncates anything.
 	var hint := _move_hint(move, controller)
-	if hint != "":
-		label_text += "  " + hint
 
 	var btn := _make_button(label_text, actionable and usable)
 	btn.tooltip_text = _move_tooltip(move)
 	# Element stripe down the left, Pokemon-menu style (guarded like above).
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 5)
+	row.add_theme_constant_override("separation", ROW_SEPARATION)
 	var swatch := ColorRect.new()
 	swatch.color = ConquestTheme.element_color(_move_element(move))
-	swatch.custom_minimum_size = Vector2(6, 0)
+	swatch.custom_minimum_size = Vector2(SWATCH_WIDTH, 0)
 	swatch.size_flags_vertical = Control.SIZE_FILL
 	row.add_child(swatch)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var captured_slot := slot
 	btn.pressed.connect(func() -> void: move_chosen.emit(captured_slot))
 
-	# Button + its recharge bar share one column, so the menu's width is untouched and a
-	# move with no cooldown costs no extra height at all.
+	# Button, its hint caption and its recharge bar share one column, so a move with
+	# nothing to report (no cooldown, no reach) costs no extra height at all.
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 2)
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_child(btn)
+
+	if hint != "":
+		var caption := Label.new()
+		caption.name = "Hint"
+		caption.text = hint
+		caption.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
+		caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		column.add_child(caption)
+		_fit_texts.append(caption)
 
 	var total_cd: int = int(move.cooldown) if ("cooldown" in move) else 0
 	var remaining: int = 0
@@ -213,9 +256,85 @@ func _make_button(text: String, enabled: bool) -> Button:
 	# >=44px hit target (touch-readiness): was 30, kept dense by padding rather
 	# than growing the font.
 	btn.custom_minimum_size = Vector2(0, 44)
-	btn.clip_text = true
+	# NOT clipped by default. clip_text makes a Button report a text width of ZERO from
+	# get_minimum_size(), which is how every label in this menu ended up cut off at the
+	# 168px floor ("Bramble Cleav"). _fit_width() sizes the card to the real labels and
+	# re-arms clipping only on whatever still overflows MENU_MAX_WIDTH.
+	btn.clip_text = false
+	btn.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	_fit_texts.append(btn)
 	return btn
+
+
+# --- Width budget --------------------------------------------------------------
+
+## Size the card to the WIDEST label it is actually drawing, capped at [constant
+## MENU_MAX_WIDTH], and ellipsize only what still does not fit at that cap.
+##
+## The widths are measured off the font rather than read from
+## get_combined_minimum_size(): a Control with any text trimming set reports a 1px (Label)
+## or padding-only (Button) minimum, so asking the engine "how wide do you need to be?"
+## while trimming is on always answers "not very" -- the trap that made this menu look
+## correctly sized while every move name was cut in half.
+func _fit_width() -> void:
+	if _card == null or not is_instance_valid(_card):
+		return
+	var needed := MENU_MIN_WIDTH
+	for c in _fit_texts:
+		if is_instance_valid(c):
+			needed = maxf(needed, _required_width(c))
+	var target := clampf(ceilf(needed), MENU_MIN_WIDTH, MENU_MAX_WIDTH)
+	_card.custom_minimum_size.x = target
+	for c in _fit_texts:
+		if is_instance_valid(c):
+			_set_trimmed(c, _required_width(c) > target)
+
+
+## How wide the CARD has to be for [param c] to draw its whole label.
+## The +1 is sub-pixel headroom: Font.get_string_size and the shaper the Button/Label
+## actually lays out with can disagree by a fraction, and losing that argument costs the
+## last glyph.
+func _required_width(c: Control) -> float:
+	return _chrome_for(c) + _text_width(c) + 1.0
+
+
+## How much of the card's width is NOT available to [param c]'s text: the panel's own
+## content margins, the rows inset, the element stripe + its gap, and (for a Button) the
+## button stylebox's own padding. Read off the live styleboxes so a theme retune moves
+## this with it. The stripe allowance is charged to Wait/Cancel too -- they sit in no
+## stripe row, so it only ever leaves them extra room.
+func _chrome_for(c: Control) -> float:
+	var chrome := float(ROW_MARGIN * 2 + SWATCH_WIDTH + ROW_SEPARATION)
+	var panel_sb := _card.get_theme_stylebox("panel")
+	if panel_sb != null:
+		chrome += panel_sb.get_minimum_size().x
+	if c is Button:
+		var btn_sb := c.get_theme_stylebox("normal")
+		if btn_sb != null:
+			chrome += btn_sb.get_minimum_size().x
+	return chrome
+
+
+func _text_width(c: Control) -> float:
+	var font: Font = c.get_theme_font("font")
+	if font == null:
+		return 0.0
+	var size: int = c.get_theme_font_size("font_size")
+	var text: String = String(c.get("text"))
+	return font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+
+
+## Turn ellipsis-on-overflow on or off for a Button or a Label. Off is the default so the
+## control reports (and gets) its full text width; on is the last resort past the cap.
+func _set_trimmed(c: Control, trimmed: bool) -> void:
+	var behavior: int = TextServer.OVERRUN_TRIM_ELLIPSIS if trimmed else TextServer.OVERRUN_NO_TRIMMING
+	if c is Button:
+		(c as Button).clip_text = trimmed
+		(c as Button).text_overrun_behavior = behavior
+	elif c is Label:
+		(c as Label).clip_text = trimmed
+		(c as Label).text_overrun_behavior = behavior
 
 func _move_element(move) -> String:
 	if move != null and "element" in move:
@@ -296,8 +415,12 @@ func _reposition_to_unit() -> void:
 	if vp == null:
 		return
 	var view_size: Vector2 = vp.get_visible_rect().size
-	var card_size: Vector2 = _card.get_combined_minimum_size()
-	card_size.x = maxf(card_size.x, MENU_MIN_WIDTH)
+	# HUG THE CONTENT. The card's parent is a plain Control, so nothing lays the card out
+	# for us -- its size is whatever was last assigned here, and an assignment that was too
+	# tall stayed too tall. reset_size() re-reads the rows' real minimum every time, so a
+	# menu can only ever be exactly its rows plus the panel's padding.
+	_card.reset_size()
+	var card_size: Vector2 = _card.size
 
 	var anchor := Vector2(view_size.x * 0.5, view_size.y * 0.5)
 	var cam := vp.get_camera_3d()

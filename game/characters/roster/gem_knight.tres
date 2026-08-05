@@ -11,13 +11,14 @@
 [ext_resource type="Resource" path="res://game/abilities/crystalline_ward.tres" id="9_ward"]
 [ext_resource type="Resource" path="res://game/abilities/reprisal.tres" id="10_reprisal"]
 [ext_resource type="Resource" path="res://game/movement/profiles/ground_standard.tres" id="11_mvprof"]
+[ext_resource type="Resource" path="res://game/abilities/crystalline_ward_initial.tres" id="12_ward_open"]
 
 [resource]
 script = ExtResource("1_char")
 character_id = &"gem_knight"
 element = &"earth"
 display_name = "Geode"
-description = "A knight hewn from living crystal, patient as stone. It does not so much block a blow as remember it -- every strike it endures is stored in its facets and returned, sharpened, to the one who dealt it."
+description = "A knight hewn from living crystal, patient as stone. It takes the field already sheathed in its own ward, and does not so much block a blow as remember it -- every strike it endures is stored in its facets and returned, sharpened, to the one who dealt it."
 model_scene = ExtResource("2_model")
 base_health = 120
 base_attack = 22
@@ -30,4 +31,4 @@ attack_range = 2
 movement_profile = ExtResource("11_mvprof")
 model_yaw_deg = 180.0
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_bulwark"), ExtResource("5_sling"), ExtResource("6_trap"), ExtResource("7_lance")])
-abilities = Array[ExtResource("8_abres")]([ExtResource("9_ward"), ExtResource("10_reprisal")])
+abilities = Array[ExtResource("8_abres")]([ExtResource("12_ward_open"), ExtResource("9_ward"), ExtResource("10_reprisal")])

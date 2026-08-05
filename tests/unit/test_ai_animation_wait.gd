@@ -24,6 +24,11 @@ var _guard
 
 func before_each() -> void:
 	_guard = Guard.new()
+	# PIN the precondition instead of inheriting the machine's real settings file:
+	# a player (or developer) who toggled animations OFF in-game persists that to
+	# user://settings.cfg, and these defer tests would then fail everywhere. The
+	# animations-off test overrides this per-test; the guard restores either way.
+	_guard.set_setting("animations_enabled", true)
 	ANIMATOR._clear_anim_registry()
 
 

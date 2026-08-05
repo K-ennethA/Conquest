@@ -411,3 +411,239 @@ func test_a_partly_soaked_hit_floats_the_soak_and_the_health_it_still_cost() -> 
 			"and the 7 that actually reached health floats as damage: %s" % [texts])
 	assert_eq(victim.current_health, 40 - 7, "which is exactly the HP the board took")
 	numbers.clear_popups()
+
+
+# ==============================================================================
+# 7. The bar reads the shield that is ALREADY there when it binds
+# ==============================================================================
+#
+# Every test above grants the ward while the bar is already watching, so the silver
+# arrives on `shield_changed`. The other order -- the unit is shielded FIRST and the bar
+# binds afterwards -- fires no signal at all, and it is the order the game actually uses
+# whenever a unit arrives pre-warded: a mid-battle save restored through
+# `BattleSnapshot._restore_shield` (grant_shield before any visual exists), a summon whose
+# visuals are built after its state, an ownership change that re-runs setup_unit_visuals.
+# If bind_unit only subscribed to the future, all of those would render an unshielded bar
+# until the ward next happened to move.
+
+func test_a_unit_that_is_already_shielded_renders_its_segment_the_moment_the_bar_binds() -> void:
+	var unit := _unit()
+	unit.take_damage(15)          # 25/40
+	unit.grant_shield(15)         # granted BEFORE any bar exists -- nothing is listening
+	var bar := _bar()             # _ready has already built materials + meshes
+	bar.bind_unit(unit)
+
+	# No shield_changed will ever fire for this ward. If the bind did not READ the
+	# unit's CURRENT shield, nothing would ever draw it.
+	var seg := _segment(bar)
+	assert_not_null(seg, "binding a pre-warded unit brings the silver segment into being")
+	if seg == null:
+		return
+	assert_true(seg.visible, "and draws it immediately -- no second event required")
+	assert_almost_eq(_segment_width(bar), bar.FILL_MAX_WIDTH * 15.0 / 40.0, 0.001,
+			"at the bar's own points-per-pixel, exactly as a live grant would")
+	assert_almost_eq(_fill_width(bar), bar.FILL_MAX_WIDTH * 25.0 / 40.0, 0.001,
+			"and the green fill is still plain current/max -- the ward claimed depleted track")
+
+
+func test_binding_a_shielded_unit_before_the_bar_enters_the_tree_still_paints_it() -> void:
+	# The tighter order: bind runs BEFORE _ready, so the materials and meshes the
+	# segment needs do not exist yet and the paint has to happen when they do.
+	var unit := _unit()            # 40/40
+	unit.grant_shield(20)
+	var bar: Node3D = HEALTH_BAR.instantiate()
+	bar.bind_unit(unit)            # no materials yet -- this refresh can only defer
+	add_child_autofree(bar)        # entering the tree runs _ready
+
+	var seg := _segment(bar)
+	assert_not_null(seg, "_ready repaints from the unit it was bound to before it existed")
+	if seg == null:
+		return
+	assert_true(seg.visible, "so the ward is on screen the first frame the bar is")
+	assert_almost_eq(_segment_width(bar), bar.FILL_MAX_WIDTH * 20.0 / 60.0, 0.001,
+			"20 ward over 40 HP rescales to the shared 60-point denominator")
+	assert_almost_eq(_fill_width(bar), bar.FILL_MAX_WIDTH * 40.0 / 60.0, 0.001,
+			"and the green takes its share of that same scale")
+
+
+func test_binding_an_unshielded_unit_still_grows_no_segment_node() -> void:
+	# The regression guard for the two above: reading the shield at bind time must not
+	# make the overwhelmingly common case pay for a node.
+	var unit := _unit()
+	var bar := _bar()
+	bar.bind_unit(unit)
+	assert_null(_segment(bar),
+			"a bind that finds no ward builds nothing -- the bar is the two quads it always was")
+
+
+# ==============================================================================
+# 8. WHEN the ward arrives -- Geode OPENS warded, and RE-EARNS it once broken
+# ==============================================================================
+#
+# A playtest report ("there is no gray shield on Geode even though match just started")
+# read the missing silver as a bug in the readout. It was not a readout bug -- it was the
+# DESIGN, and the design has since been changed: the ward is now issued at battle start and
+# re-crystallized on a three-untouched-turn streak after it breaks. Geode's kit therefore
+# carries TWO authored entries, because an AbilityResource has exactly one trigger and one
+# condition:
+#   crystalline_ward_initial.tres -- ON_BATTLE_START, ungated
+#   crystalline_ward.tres         -- ON_TURN_START, gated on UndamagedForTurnsCondition(3)
+# Both grant the SAME 15 through ShieldEffect, and Unit.grant_shield refreshes to the
+# strongest value, so the two firing over each other can only ever leave 15.
+#
+# These tests raise the triggers directly, which is the readout's own concern; that the
+# BOOT actually raises ON_BATTLE_START (in both turn systems, and never on a resume) is
+# pinned on real turn systems in integration/test_battle_start_trigger.gd.
+
+const Doubles := preload("res://tests/helpers/test_doubles.gd")
+
+
+## A live Geode carrying the REAL authored ward pair (so this asserts the shipped content,
+## not a hand-built copy of it), already standing on a board.
+func _warded_unit() -> Unit:
+	var kit: Array[AbilityResource] = []
+	kit.append(load("res://game/abilities/crystalline_ward_initial.tres"))
+	kit.append(load("res://game/abilities/crystalline_ward.tres"))
+	var c := _character()
+	c.abilities = kit
+	var u := Unit.new()
+	u.character_resource = c
+	add_child_autofree(u)   # _ready builds the AbilitySystem child from the kit
+	return u
+
+
+func test_geode_opens_the_battle_already_warded_and_the_silver_is_there_to_show_it() -> void:
+	var unit := _warded_unit()
+	var board = Doubles.MinimalBoard.new()
+	board.place(unit, Vector2i.ZERO)
+	var system = unit.get_ability_system()
+	assert_not_null(system, "the authored kit gave the unit a live AbilitySystem")
+	if system == null:
+		return
+
+	var bar := _bar()
+	bar.bind_unit(unit)
+	assert_eq(unit.shield_hp, 0, "before the battle opens there is nothing to draw")
+	assert_null(_segment(bar), "so no segment node has been paid for yet")
+
+	system.dispatch_battle_start(board)
+	await get_tree().process_frame
+
+	assert_eq(unit.shield_hp, 15,
+			"THE OPENING GRANT: Geode enters the fight already encased in the authored 15 HP ward")
+	var seg := _segment(bar)
+	assert_not_null(seg, "and the bar it was bound to grows the silver segment right there")
+	if seg == null:
+		return
+	assert_true(seg.visible, "visibly, on the very first turn")
+	assert_almost_eq(_segment_width(bar), bar.FILL_MAX_WIDTH * 15.0 / 55.0, 0.001,
+			"15 ward over a full 40 HP rescales to the shared 55-point denominator")
+
+
+func test_the_opening_grant_is_spent_once_and_never_re_fires() -> void:
+	var unit := _warded_unit()
+	var board = Doubles.MinimalBoard.new()
+	board.place(unit, Vector2i.ZERO)
+	var system = unit.get_ability_system()
+	if system == null:
+		return
+
+	assert_eq((system.dispatch_battle_start(board) as Array).size(), 1,
+			"the first dispatch runs the opening ward")
+	unit.take_damage(15)
+	assert_eq(unit.shield_hp, 0, "and the ward is spent by a hit that fills it")
+
+	assert_eq((system.dispatch_battle_start(board) as Array).size(), 0,
+			"a second dispatch does nothing at all -- ON_BATTLE_START is once per battle")
+	assert_eq(unit.shield_hp, 0,
+			"so a broken ward is NOT quietly re-issued: it has to be re-earned")
+
+
+func test_a_broken_ward_recrystallizes_on_the_third_untouched_turn() -> void:
+	var unit := _warded_unit()
+	var board = Doubles.MinimalBoard.new()
+	board.place(unit, Vector2i.ZERO)
+	var system = unit.get_ability_system()
+	if system == null:
+		return
+
+	system.dispatch_battle_start(board)
+	assert_eq(unit.shield_hp, 15, "the battle opened warded")
+
+	GameEvents.damage_dealt.emit(null, unit, 15)   # the hit the ability listens for
+	unit.take_damage(15)
+	assert_eq(unit.shield_hp, 0, "a 15 hit burns the whole ward")
+	assert_eq(int(system.turns_since_damaged()), 0, "and wipes the untouched streak with it")
+
+	var bar := _bar()
+	bar.bind_unit(unit)
+	assert_true(_segment(bar) == null or not _segment(bar).visible,
+			"with the ward spent there is no silver on the bar")
+
+	system.trigger(AbilityTrigger.Trigger.ON_TURN_START, unit, board)
+	assert_eq(unit.shield_hp, 0, "one untouched turn is not yet three")
+	system.trigger(AbilityTrigger.Trigger.ON_TURN_START, unit, board)
+	assert_eq(unit.shield_hp, 0, "nor is two")
+	system.trigger(AbilityTrigger.Trigger.ON_TURN_START, unit, board)
+	await get_tree().process_frame
+
+	assert_eq(unit.shield_hp, 15,
+			"the THIRD untouched turn start crystallizes the ward anew")
+	var seg := _segment(bar)
+	assert_not_null(seg, "and the silver comes back onto the bar")
+	if seg == null:
+		return
+	assert_true(seg.visible, "visibly")
+	assert_almost_eq(_segment_width(bar), bar.FILL_MAX_WIDTH * 15.0 / 55.0, 0.001,
+			"at the same 55-point scale -- the ward ate the whole hit, so HP never moved")
+
+
+func test_taking_a_hit_mid_streak_sends_it_back_to_zero() -> void:
+	# The ward is not merely re-earnable, it is CONDITIONAL -- a Geode that is being fought
+	# never reaches three, which is the whole design.
+	var unit := _warded_unit()
+	var board = Doubles.MinimalBoard.new()
+	board.place(unit, Vector2i.ZERO)
+	var system = unit.get_ability_system()
+	if system == null:
+		return
+
+	system.dispatch_battle_start(board)
+	GameEvents.damage_dealt.emit(null, unit, 15)
+	unit.take_damage(15)                          # opening ward broken, streak at 0
+
+	system.trigger(AbilityTrigger.Trigger.ON_TURN_START, unit, board)
+	system.trigger(AbilityTrigger.Trigger.ON_TURN_START, unit, board)
+	assert_eq(int(system.turns_since_damaged()), 2, "two untouched turns banked")
+
+	GameEvents.damage_dealt.emit(null, unit, 5)   # the hit the ability listens for
+	assert_eq(int(system.turns_since_damaged()), 0, "one hit wipes the streak")
+
+	system.trigger(AbilityTrigger.Trigger.ON_TURN_START, unit, board)
+	assert_eq(unit.shield_hp, 0,
+			"so the turn that WOULD have been the third grants nothing -- the ward has to "
+			+ "be re-earned from scratch")
+
+
+func test_the_two_ward_entries_refresh_each_other_and_never_stack() -> void:
+	# THE PIN that makes a double grant safe BY CONSTRUCTION rather than by scheduling: the
+	# opening ward and the earned one both go through Unit.grant_shield, which takes the
+	# STRONGEST value. Fire both while a full ward is already up and it is still 15.
+	var unit := _warded_unit()
+	var board = Doubles.MinimalBoard.new()
+	board.place(unit, Vector2i.ZERO)
+	var system = unit.get_ability_system()
+	if system == null:
+		return
+
+	system.dispatch_battle_start(board)
+	assert_eq(unit.shield_hp, 15, "the opening ward is up")
+
+	for _i in range(3):
+		system.trigger(AbilityTrigger.Trigger.ON_TURN_START, unit, board)
+	assert_eq(unit.shield_hp, 15,
+			"the streak ability crystallizing onto a LIVE 15 ward refreshes it to 15 -- "
+			+ "never 30, and never any other number")
+
+	unit.grant_shield(15)
+	assert_eq(unit.shield_hp, 15, "and a third grant of the same size changes nothing either")

@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="TileResource" load_steps=3 format=3]
+
+[ext_resource type="Script" uid="uid://t8b7cimcr6bw" path="res://game/tiles/resources/TileResource.gd" id="1_tres"]
+[ext_resource type="Resource" path="res://game/tiles/effects/resources/fountain.tres" id="2_fountain_fx"]
+
+[resource]
+script = ExtResource("1_tres")
+id = &"fountain"
+tile_name = "Fountain"
+tile_type = 8
+description = "A spring welling up at the heart of a stronghold. Anything standing in the water at the start of its turn is mended hard -- three times what a sacred meadow gives. It heals whoever is standing in it, friend or foe, so a base that loses its pocket loses its fountain too."
+base_movement_cost = 1
+is_passable = true
+blocks_line_of_sight = false
+material_style = 2
+base_color = Color(0.42, 0.76, 0.9, 1)
+emission_enabled = true
+emission_color = Color(0.16, 0.44, 0.58, 1)
+metallic = 0.3
+roughness = 0.15
+texture_path = ""
+model_path = ""
+has_default_effects = true
+default_effects = [ExtResource("2_fountain_fx")]
+provides_cover = false
+cover_bonus = 0
+elevation = 0
+special_properties = Array[String](["water", "healing", "base"])
+rarity = "Legendary"
+generation_weight = 0.05

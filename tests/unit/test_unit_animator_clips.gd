@@ -7,12 +7,24 @@ extends GutTest
 # commonly writes "Armature|Idle", and casing varies by artist. If matching were
 # strict, every rigged model would silently fall back to capsule tweens.
 
+const Guard := preload("res://tests/helpers/global_state_guard.gd")
+
 var animator: Node
+## Pins animations ON for the suite: play_clip is a no-op with animations disabled,
+## and the machine's REAL user://settings.cfg may carry animations_enabled=false
+## (a player preference) -- tests must never inherit that. Restored in after_each.
+var _guard
 
 
 func before_each() -> void:
+	_guard = Guard.new()
+	_guard.set_setting("animations_enabled", true)
 	animator = load("res://game/visuals/UnitAnimator.gd").new()
 	add_child_autofree(animator)
+
+
+func after_each() -> void:
+	_guard.restore()
 
 
 func _player_with(clip_names: Array) -> AnimationPlayer:

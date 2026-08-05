@@ -323,6 +323,12 @@ draws than it used to; a replay recorded before that change replays against a sh
 and trips the divergence guard above, which stops it at the offending turn and banners it —
 the designed behaviour, not a regression.
 
+**Compatibility note — abilities may now fire at battle start.** `ON_BATTLE_START` runs once
+per unit when the first turn opens (Geode's opening 15 HP ward is the first user), so a log
+recorded before that trigger existed replays against a board whose turn-0 state differs and
+trips the same divergence guard — again by design; the grant is deterministic boot
+resolution, so no command or RNG draw changed.
+
 The transport bar (`game/ui/hud/ReplayHUD.gd`, mounted by `UILayoutManager` exactly as
 `NetToast` is) is play/pause · step · speed · `Turn 4/12` · exit, plus that banner and the
 recorded outcome when the log runs out. It hides itself unless a replay is playing, so a

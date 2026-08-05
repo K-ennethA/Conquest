@@ -861,13 +861,32 @@ func _evaluate_game_end(just_removed) -> void:
 
 	var single_player: bool = GameSettings != null and GameSettings.game_mode == GameSettings.GameMode.SINGLE_PLAYER
 
-	if single_player and _game_mode_rules != null:
+	# WHO DECIDES THIS BATTLE: the map's compiled objectives, or the neutral last-side-standing
+	# fallback below. Solo is byte-for-byte what it always was ("rules exist -> score them");
+	# VERSUS now scores them too, but only when the map really authored an objective. See
+	# WinConditionLibrary.should_score_map_objectives for the whole reasoning -- it lives there,
+	# with the fallback it is about, and is pure so the decision is testable without a battle.
+	if WinConditionLibrary.should_score_map_objectives(single_player, _game_mode_rules):
 		var state: Dictionary = _build_win_state(just_removed)
 		var outcome: int = _game_mode_rules.evaluate(state)
-		if outcome == GameModeRules.Outcome.VICTORY:
-			_game_over_screen.show_victory()
-		elif outcome == GameModeRules.Outcome.DEFEAT:
-			_game_over_screen.show_defeat()
+		if outcome == GameModeRules.Outcome.ONGOING:
+			return
+		if single_player:
+			if outcome == GameModeRules.Outcome.VICTORY:
+				_game_over_screen.show_victory()
+			else:
+				_game_over_screen.show_defeat()
+			return
+		# VERSUS. The compiled objectives are always scored for faction 0 (see
+		# WinConditionLibrary.HUMAN_FACTION), so "victory" means player 1 took it and "defeat"
+		# means player 2 did -- there is no "you" on a shared screen to win or lose. Reported
+		# as a NAMED result for the same reason the last-standing fallback below is: a hotseat
+		# match ends by announcing who won, not by telling one of the two players they lost.
+		_game_over_screen.show_result(
+			GameOverScreen.OUTCOME_VICTORY,
+			_versus_winner_name(0 if outcome == GameModeRules.Outcome.VICTORY else 1).to_upper() + " WINS",
+			"The battle is decided."
+		)
 		return
 
 	# Versus / multiplayer (or single-player before a map's rules are built): end
@@ -883,6 +902,29 @@ func _evaluate_game_end(just_removed) -> void:
 			winner_name.to_upper() + " WINS",
 			"The battle is decided."
 		)
+
+
+## Display name of the player in [param slot], for a versus result line. Falls back to
+## "Player N" when the slot is not registered.
+func _versus_winner_name(slot: int) -> String:
+	if PlayerManager != null and PlayerManager.has_method("get_player_by_id"):
+		var player = PlayerManager.get_player_by_id(slot)
+		if player != null:
+			return player.get_display_name()
+	return "Player %d" % (slot + 1)
+
+
+## Re-run the end-of-battle evaluation from OUTSIDE a death.
+##
+## Every objective the game shipped with resolves when a unit dies, and the elimination signal
+## was therefore the only trigger this ever needed. [CaptureBase] is the first that resolves on
+## a TURN BOUNDARY -- a hero survives a turn on the enemy base and the match is over with
+## nothing having died -- so [SiegeController] needs a way back in. Public and named rather
+## than reached at through the private handler, because "an objective decided itself" is a
+## legitimate thing for a mode runtime to say. Idempotent: the evaluation already no-ops once
+## the end screen is up.
+func request_game_end_evaluation() -> void:
+	_evaluate_game_end(null)
 
 
 ## Assemble the neutral state dict a [WinCondition] scores against: every living

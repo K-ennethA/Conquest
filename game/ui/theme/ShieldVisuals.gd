@@ -64,7 +64,7 @@ const GLYPH := "◊"
 
 ## Silver/steel. == [constant ConquestTheme.EL_STEEL], written out rather than referenced
 ## so this file has no load-order dependency on the theme (the same idiom
-## [constant HealthBar.TERRAIN_LEAF_GREEN] uses).
+## [constant TerrainVisuals.GAIN_COLOR] uses).
 const SILVER := Color("c9cbd6")
 
 ## The world-space bar's segment, a touch deeper so it reads as METAL over the dark track

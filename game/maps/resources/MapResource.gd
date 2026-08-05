@@ -74,6 +74,40 @@ class_name MapResource
 # The unit reference is OPTIONAL: a "Start" point with none is an EMPTY SLOT to be
 # filled at match setup; the spawner kinds use it to say WHAT they spawn.
 
+# --- Push-mode geometry: lanes + bases ----------------------------------------
+# Both are OPTIONAL and EMPTY BY DEFAULT, so every map authored before they existed
+# stays valid and round-trips byte for byte. Only a map that actually declares them
+# pays for them, and only a map that declares them BADLY is rejected.
+
+## LANE ROUTES -- the ordered paths a push mode's waves walk between the two bases.
+##
+## Each entry is ONE lane: an [code]Array[/code] of [Vector2i] WAYPOINTS ordered from
+## PLAYER 0's SIDE TOWARD PLAYER 1's. That direction is the whole contract: a consumer
+## reads the FIRST waypoint as player 0's lane head and the LAST as player 1's, and
+## walks the list forwards for player 0's wave and backwards for player 1's -- so a lane
+## is authored ONCE and both sides read the same cells. See [method get_lane] and
+## [method lane_head].
+##
+## Deliberately an untyped [Array]: Godot 4 cannot express an exported
+## [code]Array[Array[Vector2i]][/code], and a JSON-parsed plain Array could not be
+## assigned to one anyway (CONQUEST.md rule 3). Read a lane through [method get_lane],
+## which coerces element-wise, rather than indexing [member lanes] raw.
+@export var lanes: Array = []
+
+## BASE CELLS -- player slot ([int]) -> the cell ([Vector2i]) that player's base stands on.
+##
+## The map's own statement of "this is where player N's base is", independent of which
+## unit happens to be spawned there, so a mode can reason about bases (distance to,
+## proximity auras, wave targets) without pattern-matching spawn entries. Authoring it
+## does NOT place anything: a map that wants a destructible base still spawns the
+## structure, and the two should agree.
+##
+## Keys are player slots that must actually EXIST on this map (own at least one spawn
+## point); values must be in-bounds cells. Empty = the map declares no bases, which is
+## every map that is not a base-assault / push map.
+@export var base_cells: Dictionary = {}
+
+
 # --- Spawn kinds --------------------------------------------------------------
 const SPAWN_KIND_START := "Start"                  # places one unit at map load
 const SPAWN_KIND_RESPAWN := "Respawn"              # replaces its unit every N turns
@@ -334,6 +368,86 @@ func get_total_units_for_player(player_id: int) -> int:
 			count += 1
 	return count
 
+# --- Lanes + bases: reading ---------------------------------------------------
+
+## How many lanes this map declares (0 for every map that declares none).
+func lane_count() -> int:
+	return lanes.size()
+
+
+## Lane [param index] as a typed [code]Array[Vector2i][/code] of waypoints, ordered from
+## player 0's side toward player 1's. Out-of-range index (or a lane that is not a list)
+## returns an empty array rather than erroring -- reading a lane a map does not have is
+## an ordinary "no lane here" answer, not a fault.
+##
+## THIS is the accessor to use, never [code]lanes[index][/code] raw: a lane that came
+## back from JSON is a plain Array of decoded cells, and assigning that to a typed local
+## is a runtime error (CONQUEST.md rule 3). The coercion lives here, once.
+func get_lane(index: int) -> Array[Vector2i]:
+	if index < 0 or index >= lanes.size():
+		return [] as Array[Vector2i]
+	return _to_cell_array(lanes[index])
+
+
+## The end of lane [param index] that belongs to [param player_id]: the FIRST waypoint
+## for player 0, the LAST for anybody else (see [member lanes] for why that is the whole
+## contract). [code]Vector2i(-1, -1)[/code] when there is no such lane.
+func lane_head(index: int, player_id: int) -> Vector2i:
+	var lane: Array[Vector2i] = get_lane(index)
+	if lane.is_empty():
+		return Vector2i(-1, -1)
+	return lane[0] if player_id == 0 else lane[lane.size() - 1]
+
+
+## Append a lane, coerced to a typed waypoint list. The primary authoring entry point.
+func add_lane(waypoints: Array) -> void:
+	lanes.append(_to_cell_array(waypoints))
+
+
+## [param player_id]'s base cell, or [code]Vector2i(-1, -1)[/code] when the map declares none.
+func get_base_cell(player_id: int) -> Vector2i:
+	if not base_cells.has(player_id):
+		return Vector2i(-1, -1)
+	var value = base_cells[player_id]
+	return value if value is Vector2i else Vector2i(-1, -1)
+
+
+## Record [param player_id]'s base cell. The primary authoring entry point.
+func set_base_cell(player_id: int, cell: Vector2i) -> void:
+	base_cells[player_id] = cell
+
+
+## Every player slot that owns at least one spawn point on this map -- the set a base
+## cell (and any other per-player declaration) has to name.
+func spawn_player_ids() -> Array[int]:
+	var seen: Dictionary = {}
+	var out: Array[int] = []
+	for spawn_data in unit_spawns:
+		if not (spawn_data is Dictionary):
+			continue
+		var player_id: int = int((spawn_data as Dictionary).get("player_id", -1))
+		if player_id < 0 or seen.has(player_id):
+			continue
+		seen[player_id] = true
+		out.append(player_id)
+	out.sort()
+	return out
+
+
+## Convert any waypoint list -- authored [Vector2i]s, or the plain dictionaries/arrays a
+## JSON round-trip produces -- into the typed [code]Array[Vector2i][/code] callers need.
+## Mirrors [method _to_string_array]: a plain Array cannot be assigned to a typed one, so
+## the conversion is element-wise (CONQUEST.md rule 3). Junk decodes to
+## [code]Vector2i(-1, -1)[/code], which validation then rejects as out of bounds rather
+## than silently dropping it.
+static func _to_cell_array(raw) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if raw is Array:
+		for v in raw:
+			out.append(_decode_position(v))
+	return out
+
+
 func validate_map(strict_catalog: bool = false) -> Dictionary:
 	"""Validate map configuration.
 
@@ -402,6 +516,12 @@ func validate_map(strict_catalog: bool = false) -> Dictionary:
 		if int(normalized["respawn_interval"]) < 1:
 			issues.append("Spawn point at %s has a respawn interval below 1 turn" % str(spawn_pos))
 
+	# Lanes + base cells. STRUCTURAL (not strict-only), for the same reason the
+	# out-of-bounds checks above are: a waypoint outside the board is broken on every
+	# install, not just on one that is missing an asset. Costs nothing for the maps that
+	# declare neither -- both loops run zero times.
+	_append_lane_and_base_issues(issues)
+
 	# Optional catalog resolution pass. Only NON-EMPTY references are checked: an
 	# empty tile_id / character_id is a legitimate "resolve me by type / legacy
 	# alias" and is handled by MapLoader, so it is never an issue here.
@@ -414,6 +534,64 @@ func validate_map(strict_catalog: bool = false) -> Dictionary:
 		"issues": issues,
 		"warnings": warnings
 	}
+
+
+func _append_lane_and_base_issues(issues: Array[String]) -> void:
+	"""Flag every structurally broken [member lanes] / [member base_cells] declaration.
+
+	The rules, and why each one is a HARD issue rather than a warning: a consumer walks a
+	lane cell by cell and indexes a base cell straight into the board, so anything that is
+	not an in-bounds cell would fault at the first step. A map is player-authored and
+	SHARED, so the failure has to happen at the gate (import returns null, quietly) rather
+	than mid-match.
+
+	  * a lane that is not a list of waypoints -- nothing to walk;
+	  * a lane with NO waypoints -- declaring a lane and giving it no route is the one
+	    case that reads as an authoring slip rather than "this map has no lanes"
+	    (which is the empty [member lanes] array, and is always fine);
+	  * a waypoint that is not an in-bounds cell;
+	  * a base cell keyed on anything but a player slot that EXISTS on this map (owns at
+	    least one spawn point) -- a base for nobody has no owner to win or lose it;
+	  * a base cell that is not an in-bounds cell.
+
+	Every map that declares neither costs two zero-iteration loops, so nothing that shipped
+	before these fields existed can change verdict.
+	"""
+	for i in range(lanes.size()):
+		var raw = lanes[i]
+		if not (raw is Array):
+			issues.append("Lane %d is not a list of waypoints" % i)
+			continue
+		var lane: Array = raw
+		if lane.is_empty():
+			issues.append("Lane %d has no waypoints" % i)
+			continue
+		for waypoint in lane:
+			if not (waypoint is Vector2i):
+				issues.append("Lane %d waypoint is not a cell: %s" % [i, str(waypoint)])
+				continue
+			var cell: Vector2i = waypoint
+			if cell.x < 0 or cell.x >= width or cell.y < 0 or cell.y >= height:
+				issues.append("Lane %d waypoint out of bounds: %s" % [i, str(cell)])
+
+	if base_cells.is_empty():
+		return
+	var known: Array[int] = spawn_player_ids()
+	for key in base_cells.keys():
+		if typeof(key) != TYPE_INT:
+			issues.append("Base cell is keyed on '%s', which is not a player slot" % str(key))
+			continue
+		var player_id: int = int(key)
+		if not known.has(player_id):
+			issues.append("Base cell names player %d, who has no spawns on this map" % player_id)
+			continue
+		var value = base_cells[key]
+		if not (value is Vector2i):
+			issues.append("Base cell for player %d is not a cell: %s" % [player_id, str(value)])
+			continue
+		var base_cell: Vector2i = value
+		if base_cell.x < 0 or base_cell.x >= width or base_cell.y < 0 or base_cell.y >= height:
+			issues.append("Base cell for player %d out of bounds: %s" % [player_id, str(base_cell)])
 
 
 func _append_terrain_placement_issues(issues: Array[String]) -> void:
@@ -564,7 +742,12 @@ func export_to_json() -> String:
 		},
 		"layout": {
 			"tiles": _entries_with_encoded_positions(tile_layout),
-			"unit_spawns": _entries_with_encoded_positions(unit_spawns)
+			"unit_spawns": _entries_with_encoded_positions(unit_spawns),
+			# Written unconditionally (as [] / {} for the maps that declare neither) so the
+			# payload shape is the same for every map and the importer never has to guess
+			# whether a missing key means "no lanes" or "an older export".
+			"lanes": _encoded_lanes(),
+			"base_cells": _encoded_base_cells()
 		},
 		"metadata": {
 			"tags": tags,
@@ -646,6 +829,10 @@ static func import_from_json(json_string: String, quiet: bool = false) -> MapRes
 	var layout = data.get("layout", {})
 	resource.tile_layout = _decode_layout_entries(layout.get("tiles", []))
 	resource.unit_spawns = _decode_layout_entries(layout.get("unit_spawns", []))
+	# Absent on every map exported before these fields existed -- the defaults are the
+	# "declares neither" answer, which is exactly what those maps mean.
+	resource.lanes = _decode_lanes(layout.get("lanes", []))
+	resource.base_cells = _decode_base_cells(layout.get("base_cells", {}))
 
 	# Metadata
 	var metadata = data.get("metadata", {})
@@ -701,6 +888,70 @@ static func _decode_layout_entries(entries: Array) -> Array[Dictionary]:
 		var copy: Dictionary = (entry as Dictionary).duplicate(true)
 		copy["position"] = _decode_position(copy.get("position", null))
 		out.append(copy)
+	return out
+
+
+## [member lanes] with every waypoint written as {"x","y"} -- the same encoding tile and
+## spawn positions use, and for the same reason (JSON has no vector type).
+func _encoded_lanes() -> Array:
+	var out: Array = []
+	for raw in lanes:
+		if not (raw is Array):
+			continue
+		var encoded: Array = []
+		for waypoint in (raw as Array):
+			if waypoint is Vector2i:
+				var cell: Vector2i = waypoint
+				encoded.append({"x": cell.x, "y": cell.y})
+		out.append(encoded)
+	return out
+
+
+## [member base_cells] as JSON: a player slot is written as its DECIMAL STRING, because a
+## JSON object key can only ever be a string. [method _decode_base_cells] turns it back
+## into the int the rest of the game keys on.
+func _encoded_base_cells() -> Dictionary:
+	var out: Dictionary = {}
+	for key in base_cells.keys():
+		var value = base_cells[key]
+		if typeof(key) != TYPE_INT or not (value is Vector2i):
+			continue
+		var cell: Vector2i = value
+		out[str(int(key))] = {"x": cell.x, "y": cell.y}
+	return out
+
+
+## Rebuild [member lanes] from JSON. Anything that IS a list becomes a typed waypoint
+## list; anything that is not is carried through UNTOUCHED rather than dropped, so
+## [method _append_lane_and_base_issues] gets to reject it (a silently discarded lane
+## would let a broken map import as a valid one with fewer lanes).
+static func _decode_lanes(raw) -> Array:
+	var out: Array = []
+	if not (raw is Array):
+		return out
+	for entry in (raw as Array):
+		if entry is Array:
+			out.append(_to_cell_array(entry))
+		else:
+			out.append(entry)
+	return out
+
+
+## Rebuild [member base_cells] from JSON, turning each decimal-string key back into an int.
+## A key that is NOT a valid integer is kept verbatim so validation rejects the map --
+## coercing it (String.to_int() answers 0 for "abc") would silently hand player 0 a base.
+static func _decode_base_cells(raw) -> Dictionary:
+	var out: Dictionary = {}
+	if not (raw is Dictionary):
+		return out
+	for key in (raw as Dictionary).keys():
+		var value: Variant = (raw as Dictionary)[key]
+		if typeof(key) == TYPE_INT:
+			out[int(key)] = _decode_position(value)
+		elif str(key).is_valid_int():
+			out[str(key).to_int()] = _decode_position(value)
+		else:
+			out[key] = _decode_position(value)
 	return out
 
 

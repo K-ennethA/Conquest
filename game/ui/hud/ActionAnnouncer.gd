@@ -216,6 +216,40 @@ func _safe(obj: Object, sig: StringName, cb: Callable) -> void:
 		obj.connect(sig, cb)
 
 
+# --- Public: a one-shot notice ----------------------------------------------
+
+## Flash [param text] (with an optional [param sub] line, tinted [param color]) on this
+## banner, exactly as a move would.
+##
+## The ENTRY POINT for the non-move events that are still worth the biggest text on screen
+## -- today, a Siege capture starting ([SiegeFeedback]). It exists so those events reuse the
+## surface the player already reads every action on, instead of each growing its own toast
+## layer with its own timings and its own place on screen.
+##
+## It PREEMPTS: the pending queue is cleared and any banner already on screen is cut short,
+## so the notice is what the player is looking at on the beat it fires. That is the same
+## discipline the move path already follows in the other direction -- a flurry of moves
+## keeps only the NEWEST pending banner (see the backlog note in
+## [method _on_move_performed]), because this surface exists to track what is happening now
+## rather than to guarantee every line is read to the end. A notice fires once per event and
+## has no second chance, so it must not queue behind a move banner that is about to be
+## superseded anyway.
+func announce(text: String, sub: String = "", color: Color = NEUTRAL_COLOR) -> void:
+	if String(text).strip_edges() == "":
+		return
+	_queue = [{
+		"text": text,
+		"sub": sub,
+		"color": color,
+		# No attacker: a notice has no unit to fold late damage into.
+		"attacker": null,
+	}]
+	# Unconditional: _next() pops this entry and _show() kills whatever tween is in flight,
+	# which is the preemption. When the notice's own tween ends it drains an empty queue and
+	# the banner goes idle, exactly as a move's would.
+	_next()
+
+
 # --- Handlers (all null-safe; freed units degrade to a generic name) ---------
 
 func _on_move_performed(caster = null, move = null) -> void:

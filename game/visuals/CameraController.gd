@@ -42,6 +42,11 @@ extends Camera3D
 ## How far past the board edge the focus may pan before being clamped back.
 @export var pan_edge_margin: float = 6.0
 
+## Cap on the EXTRA pan slack a decorative surround may ask for (see
+## [member _surround_pan_margin]). A scenery ring should let the player lean out and
+## look at the treeline; it must never let them fly off the board entirely.
+@export var surround_pan_margin_max: float = 10.0
+
 ## Screen-edge scroll (RTS style). Off by default.
 @export var edge_scroll_enabled: bool = false
 @export var edge_scroll_margin_px: float = 24.0
@@ -89,6 +94,14 @@ var _board_min: Vector2 = Vector2.ZERO
 var _board_max: Vector2 = Vector2.ZERO
 var _board_center: Vector3 = Vector3.ZERO
 var _has_bounds: bool = false
+
+## Extra PAN slack granted by the map's decorative surround ([MapSurround]), read from
+## that node's "peek_margin" meta at fit time and clamped to
+## [member surround_pan_margin_max]. Deliberately applied ONLY in [method
+## _clamp_to_board] -- the fit rect below is computed from "Map/Tiles" alone, so the
+## scenery can never change how the board is framed, only how far you may lean out to
+## look at it. Zero when no surround is mounted, which is exactly the old behaviour.
+var _surround_pan_margin: float = 0.0
 
 ## Effective upper distance clamp (>= dist_max; grows to frame oversized maps).
 var _dist_max_runtime: float = 90.0
@@ -241,6 +254,9 @@ func fit_to_map() -> void:
 ## Derive the board's XZ bounds from the live tiles under "Map/Tiles" (each tile a
 ## 2x2 cell at (col*2, 0, row*2)); expand by the cell footprint. Falls back to Grid.
 func _compute_board_bounds() -> bool:
+	# Refreshed alongside the fit, but kept strictly OUT of the bounds maths below.
+	_refresh_surround_margin()
+
 	var tiles := _find_tiles_container()
 	var min_x := INF
 	var min_z := INF
@@ -277,6 +293,23 @@ func _compute_board_bounds() -> bool:
 		return true
 
 	return false
+
+
+## Read the mounted surround's requested pan slack, if any. Null-safe and clamped: a
+## missing node, a missing meta or a junk value all resolve to 0.0 (no extra slack).
+func _refresh_surround_margin() -> void:
+	_surround_pan_margin = 0.0
+	var tree := get_tree()
+	if tree == null:
+		return
+	var scene := tree.current_scene
+	if scene == null:
+		return
+	var surround := scene.get_node_or_null("Map/MapSurround")
+	if surround == null or not surround.has_meta("peek_margin"):
+		return
+	_surround_pan_margin = clampf(float(surround.get_meta("peek_margin")),
+		0.0, maxf(surround_pan_margin_max, 0.0))
 
 
 func _find_tiles_container() -> Node:
@@ -447,10 +480,13 @@ func _clamp_to_board() -> void:
 	if not _has_bounds:
 		return
 	var focus := _camera_focus_ground()
-	var min_x: float = _board_min.x - pan_edge_margin
-	var max_x: float = _board_max.x + pan_edge_margin
-	var min_z: float = _board_min.y - pan_edge_margin
-	var max_z: float = _board_max.y + pan_edge_margin
+	# The scenery ring buys a little extra lean-out room, nothing more -- see
+	# _surround_pan_margin for why it never reaches the fit rect.
+	var margin: float = pan_edge_margin + _surround_pan_margin
+	var min_x: float = _board_min.x - margin
+	var max_x: float = _board_max.x + margin
+	var min_z: float = _board_min.y - margin
+	var max_z: float = _board_max.y + margin
 	var cx: float = clampf(focus.x, min_x, max_x)
 	var cz: float = clampf(focus.z, min_z, max_z)
 	global_position += Vector3(cx - focus.x, 0.0, cz - focus.z)

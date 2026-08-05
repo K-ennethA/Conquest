@@ -331,10 +331,29 @@ func _named(unit) -> String:
 	return "A unit"
 
 
-## bbcode colour for a unit by its side: enemy (AI) warm-red, ally cool, else neutral.
+## bbcode colour for a unit by its side: enemy (AI) warm-red, ally cool, else neutral --
+## except a CREEP, which is dimmed whichever side it fights for.
+##
+## WHY CREEPS ARE DIMMED. In Siege a wave arrives every few rounds down every lane, and
+## nothing else in the game distinguishes a lane creep from a squad hero: they get the same
+## world-space [HealthBar], the same portrait entitlement, the same turn-queue entry. Left at
+## full side tint, a wave's spawn-and-die lines are indistinguishable from "one of YOUR units
+## just died" -- the two events this log most has to keep apart. Dimming is the cheapest
+## marker that reads and the only one that lives entirely in a readout: it costs no extra
+## row, no glyph, and no per-unit state.
+##
+## The mark is read as METADATA rather than through the mode's class ([CaptureBase] stamps
+## `siege_creep`), for the same reason the HUD resolves the mode controller by path: a
+## battle-log line must never depend on a mode script being present. Every non-Siege battle
+## has no unit carrying the mark, so this branch is never taken there.
+const CREEP_META: StringName = &"siege_creep"
+
+
 func _tint(unit) -> String:
 	if unit == null or not is_instance_valid(unit) or not unit.has_method("get_owner_player"):
 		return NEUTRAL_COLOR
+	if unit.has_method("has_meta") and unit.has_meta(CREEP_META) and bool(unit.get_meta(CREEP_META)):
+		return DIM_COLOR
 	var owner = unit.get_owner_player()
 	if owner != null and "is_ai" in owner:
 		return ENEMY_COLOR if bool(owner.is_ai) else ALLY_COLOR

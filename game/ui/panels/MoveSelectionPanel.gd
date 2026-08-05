@@ -9,11 +9,22 @@ signal move_selected(move_index: int)
 signal move_cancelled
 
 const MAX_SLOTS := 4
+## The card's PREFERRED width: what it renders at whenever every label fits. It may
+## GROW past this (see [method _fit_width]) but only as far as a real label needs.
 const CARD_WIDTH := 340.0
+## Hard ceiling on growth. Past this a centered modal starts hiding the battlefield the
+## player is choosing a move FOR. A label that still does not fit at this width first
+## demotes its "(range ...)" hint to a caption line, and only then ellipsizes the name.
+const CARD_MAX_WIDTH := 460.0
 ## Never let the modal card exceed this fraction of the viewport width, so on a
 ## narrow window it shrinks instead of clipping past the screen edges.
 const CARD_MAX_FRAC := 0.92
 const CARD_MIN_WIDTH := 200.0
+## Element stripe width + the gap between it and the button column (kept as constants
+## because [method _fit_width] has to account for both when it works out how much of
+## the card's width is actually text space).
+const SWATCH_WIDTH := 7
+const ROW_SEPARATION := 6
 
 @onready var moves_container: VBoxContainer
 @onready var move_info_label: Label
@@ -22,6 +33,12 @@ const CARD_MIN_WIDTH := 200.0
 var current_unit: Node
 var move_buttons: Array[Button] = []
 var _card: PanelContainer
+## One record per rendered move row, driving [method _fit_width]:
+## { button, caption, boost, inline, name, hint } -- the button, the hidden Label the
+## hint demotes onto when inline cannot fit, the optional boost caption, the full
+## inline string ("Name (range 1-2) (CD 2/3)"), the bare name, and the hint alone.
+## Rebuilt with the rows on every _populate_moves.
+var _fit_entries: Array[Dictionary] = []
 
 ## READ-ONLY inspection: when true, the panel merely LISTS an (uncommandable) unit's
 ## moves and shows each move's details on hover/click. It never emits move_selected, so
@@ -73,8 +90,8 @@ func _ready() -> void:
 	# Keep the card capped to the viewport as the window (and canvas_items scale)
 	# changes. get_viewport() can be null in a stripped harness -- guard it.
 	var vp := get_viewport()
-	if vp != null and not vp.size_changed.is_connected(_apply_responsive_width):
-		vp.size_changed.connect(_apply_responsive_width)
+	if vp != null and not vp.size_changed.is_connected(_fit_width):
+		vp.size_changed.connect(_fit_width)
 
 	visible = false
 
@@ -132,9 +149,9 @@ func _create_ui() -> void:
 	move_info_label.name = "MoveInfoLabel"
 	move_info_label.text = "Hover over a move to see details"
 	move_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	# Width 0: let the label take the card's width (capped by _apply_responsive_width)
-	# and wrap, rather than forcing a 300px floor that could widen the card past a
-	# narrow viewport. Only the height floor is kept so the info area never collapses.
+	# Width 0: let the label take the card's width (capped by _fit_width) and wrap,
+	# rather than forcing a 300px floor that could widen the card past a narrow
+	# viewport. Only the height floor is kept so the info area never collapses.
 	move_info_label.custom_minimum_size = Vector2(0, 60)
 	move_info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	main_container.add_child(move_info_label)
@@ -150,18 +167,7 @@ func _create_ui() -> void:
 	# matches the rest of the HUD instead of the default grey Control theme.
 	ConquestTheme.apply_to(self)
 
-	_apply_responsive_width()
-
-## Cap the modal card to a fraction of the viewport width so it never clips off a
-## narrow window; falls back to the preferred CARD_WIDTH when there is no viewport.
-func _apply_responsive_width() -> void:
-	if _card == null or not is_instance_valid(_card):
-		return
-	var w := CARD_WIDTH
-	var vp := get_viewport()
-	if vp != null:
-		w = minf(CARD_WIDTH, vp.get_visible_rect().size.x * CARD_MAX_FRAC)
-	_card.custom_minimum_size.x = maxf(CARD_MIN_WIDTH, w)
+	_fit_width()
 
 func show_moves_for_unit(unit: Node, view_only_mode: bool = false) -> void:
 	"""Display the unit's real moveset (up to 4 MoveResource slots).
@@ -197,14 +203,16 @@ func show_moves_for_unit(unit: Node, view_only_mode: bool = false) -> void:
 
 func _populate_moves(moveset: Array[MoveResource], controller: MovesetController) -> void:
 	"""Populate the UI with the unit's moveset (up to MAX_SLOTS entries)."""
-	# Clear existing buttons
-	for button in move_buttons:
-		if button:
-			button.queue_free()
+	# REMOVE FIRST, free after (same reasoning as UnitActionMenu.open_for_unit): a
+	# queue_free()d row is still a child, still visible and still counted in the VBox's
+	# minimum size until the frame's delete queue flushes, so a cooldown refresh on an
+	# open panel briefly laid out last populate's rows on top of this one's.
+	# remove_child() takes the ghosts out of the layout on the spot; queue_free() still
+	# defers the actual delete, so repopulating from a button's own handler stays safe.
 	move_buttons.clear()
-
-	# Clear container
+	_fit_entries.clear()
 	for child in moves_container.get_children():
+		moves_container.remove_child(child)
 		child.queue_free()
 
 	if moveset.is_empty():
@@ -212,6 +220,7 @@ func _populate_moves(moveset: Array[MoveResource], controller: MovesetController
 		no_moves_label.text = "No moves available"
 		no_moves_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		moves_container.add_child(no_moves_label)
+		_fit_width()
 		return
 
 	var slot_count = mini(moveset.size(), MAX_SLOTS)
@@ -223,10 +232,10 @@ func _populate_moves(moveset: Array[MoveResource], controller: MovesetController
 		# Pokemon-style element cue: a colour-coded stripe down the left of each
 		# move, keyed to the move's element (see ConquestTheme.element_color).
 		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
+		row.add_theme_constant_override("separation", ROW_SEPARATION)
 		var swatch := ColorRect.new()
 		swatch.color = ConquestTheme.element_color(String(move.element))
-		swatch.custom_minimum_size = Vector2(7, 0)
+		swatch.custom_minimum_size = Vector2(SWATCH_WIDTH, 0)
 		swatch.size_flags_vertical = Control.SIZE_FILL
 		row.add_child(swatch)
 
@@ -239,9 +248,28 @@ func _populate_moves(moveset: Array[MoveResource], controller: MovesetController
 		move_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		column.add_child(move_button)
 
+		# The demotion target for this button's "(range ...) (CD ...)" hint: hidden
+		# unless _fit_width decides the inline form cannot fit inside CARD_MAX_WIDTH.
+		var hint_caption := Label.new()
+		hint_caption.name = "HintCaption"
+		hint_caption.text = String(move_button.get_meta("fit_hint", ""))
+		hint_caption.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
+		hint_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hint_caption.visible = false
+		column.add_child(hint_caption)
+
 		var boost_caption := _build_boost_caption(move)
 		if boost_caption != null:
 			column.add_child(boost_caption)
+
+		_fit_entries.append({
+			"button": move_button,
+			"caption": hint_caption,
+			"boost": boost_caption,
+			"inline": String(move_button.text),
+			"name": String(move_button.get_meta("fit_name", "")),
+			"hint": String(move_button.get_meta("fit_hint", "")),
+		})
 
 		var total_cd: int = int(move.cooldown)
 		var remaining: int = controller.remaining(move) if controller else 0
@@ -254,6 +282,11 @@ func _populate_moves(moveset: Array[MoveResource], controller: MovesetController
 		moves_container.add_child(row)
 		move_buttons.append(move_button)
 		_note_cooldown(move, remaining, column)
+
+	# Widths are worked out AFTER the theme has reached the new rows: the button
+	# styleboxes (and therefore the padding around each label) come from it.
+	ConquestTheme.apply_to(_card)
+	_fit_width()
 
 func _create_move_button(move: MoveResource, slot: int, controller: MovesetController) -> Button:
 	"""Create a button for a single moveset slot."""
@@ -277,16 +310,27 @@ func _create_move_button(move: MoveResource, slot: int, controller: MovesetContr
 	var range_text := MoveStatVisuals.range_phrase(move, current_unit)
 	if range_text == "":
 		range_text = "no range"
-	button.text = "%s (%s)%s" % [move.display_name, range_text, suffix]
+	# Name and hint kept apart (as metadata) so _fit_width can demote the hint to its
+	# caption line when the inline form does not fit inside CARD_MAX_WIDTH.
+	var name_text := str(move.display_name)
+	var hint_text := "(%s)%s" % [range_text, suffix]
+	button.text = "%s %s" % [name_text, hint_text]
+	button.set_meta("fit_name", name_text)
+	button.set_meta("fit_hint", hint_text)
 	# In view-only mode every move stays clickable so clicking reliably reveals its
 	# details (a disabled button would swallow the click). Cooldown/uses are still shown
 	# in the label + details text. Commandable mode keeps the real can-use gating.
 	button.disabled = (not view_only) and controller != null and not can_use
 	# Height floor only; width 0 + EXPAND_FILL (set by the caller) lets the button
-	# fill the card, and clip_text ellipsizes a long move name instead of stretching
-	# the card past its responsive width.
+	# fill the card.
 	button.custom_minimum_size = Vector2(0, 40)
-	button.clip_text = true
+	# NOT clipped by default. clip_text makes a Button report a text width of just its
+	# stylebox padding from get_minimum_size(), so the card sat at CARD_WIDTH looking
+	# correctly sized while a long label quietly lost its tail. _fit_width() sizes the
+	# card to the real labels and re-arms clipping only on whatever still overflows
+	# CARD_MAX_WIDTH after its hint has been demoted to a caption line.
+	button.clip_text = false
+	button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 
 	# Connect signals — slot is the index into the moveset (matches move_selected(slot)).
 	button.pressed.connect(func(): _on_move_selected(slot))
@@ -338,7 +382,10 @@ func _build_boost_caption(move: MoveResource) -> Label:
 	caption.add_theme_font_size_override("font_size", 12)
 	caption.add_theme_color_override("font_color", color)
 	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	caption.clip_text = true
+	# Untrimmed by default -- a trimmed Label reports a 1px minimum, hiding its real
+	# width from _fit_width(). Ellipsis is re-armed there only past CARD_MAX_WIDTH.
+	caption.clip_text = false
+	caption.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	return caption
 
 
@@ -350,6 +397,102 @@ func _move_deals_damage(move: MoveResource) -> bool:
 		if effect is DamageEffect:
 			return true
 	return false
+
+
+# --- Width budget --------------------------------------------------------------
+
+## Size the card to the WIDEST label it is actually drawing: from the preferred
+## CARD_WIDTH up to CARD_MAX_WIDTH (and never past the viewport's CARD_MAX_FRAC --
+## the old responsive rule, folded in here). A button whose inline
+## "Name (range ...) (CD ...)" form cannot fit even at the cap first DEMOTES the hint
+## onto its caption line, so the name -- the part the player is reading -- keeps the
+## whole width; only a name that alone still overflows the cap falls back to ellipsis.
+##
+## The widths are measured off the font rather than read from
+## get_combined_minimum_size(): a Control with any text trimming set reports a 1px
+## (Label) or padding-only (Button) minimum, so asking the engine "how wide do you
+## need to be?" while trimming is on always answers "not very" -- the trap that made
+## this card look correctly sized while a long move name was cut mid-word.
+func _fit_width() -> void:
+	if _card == null or not is_instance_valid(_card):
+		return
+	var cap := CARD_MAX_WIDTH
+	var vp := get_viewport()
+	if vp != null:
+		cap = minf(cap, vp.get_visible_rect().size.x * CARD_MAX_FRAC)
+	cap = maxf(cap, CARD_MIN_WIDTH)
+	var base := minf(CARD_WIDTH, cap)
+
+	var needed := base
+	for entry in _fit_entries:
+		var btn: Button = entry["button"]
+		if btn == null or not is_instance_valid(btn):
+			continue
+		var inline_fits: bool = \
+			_chrome_for(btn) + _string_width(btn, String(entry["inline"])) + 1.0 <= cap
+		btn.text = String(entry["inline"]) if inline_fits else String(entry["name"])
+		var caption: Label = entry["caption"]
+		if caption != null and is_instance_valid(caption):
+			caption.visible = not inline_fits and String(entry["hint"]) != ""
+			if caption.visible:
+				needed = maxf(needed, _required_width(caption))
+		needed = maxf(needed, _required_width(btn))
+		var boost: Label = entry["boost"]
+		if boost != null and is_instance_valid(boost):
+			needed = maxf(needed, _required_width(boost))
+	var target := clampf(ceilf(needed), base, cap)
+	_card.custom_minimum_size.x = target
+
+	# Re-arm ellipsis only on whatever still cannot fit at the width we just granted.
+	for entry in _fit_entries:
+		for key in ["button", "caption", "boost"]:
+			var c: Control = entry[key]
+			if c != null and is_instance_valid(c) and c.visible:
+				_set_trimmed(c, _required_width(c) > target)
+
+
+## How wide the CARD has to be for [param c] to draw its whole current text. The +1 is
+## sub-pixel headroom: Font.get_string_size and the shaper the control actually lays
+## out with can disagree by a fraction, and losing that argument costs the last glyph.
+func _required_width(c: Control) -> float:
+	return _chrome_for(c) + _string_width(c, String(c.get("text"))) + 1.0
+
+
+## How much of the card's width is NOT available to [param c]'s text: the panel's own
+## content margins, the element stripe + its gap, and (for a Button) the button
+## stylebox's own padding. Read off the live styleboxes so a theme retune moves this
+## with it.
+func _chrome_for(c: Control) -> float:
+	var chrome := float(SWATCH_WIDTH + ROW_SEPARATION)
+	var panel_sb := _card.get_theme_stylebox("panel")
+	if panel_sb != null:
+		chrome += panel_sb.get_minimum_size().x
+	if c is Button:
+		var btn_sb := (c as Button).get_theme_stylebox("normal")
+		if btn_sb != null:
+			chrome += btn_sb.get_minimum_size().x
+	return chrome
+
+
+## Width of [param text] in the font [param c] would draw it in.
+func _string_width(c: Control, text: String) -> float:
+	var font: Font = c.get_theme_font("font")
+	if font == null:
+		return 0.0
+	var size: int = c.get_theme_font_size("font_size")
+	return font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+
+
+## Turn ellipsis-on-overflow on or off for a Button or a Label. Off is the default so
+## the control reports (and gets) its full text width; on is the last resort past the cap.
+func _set_trimmed(c: Control, trimmed: bool) -> void:
+	var behavior: int = TextServer.OVERRUN_TRIM_ELLIPSIS if trimmed else TextServer.OVERRUN_NO_TRIMMING
+	if c is Button:
+		(c as Button).clip_text = trimmed
+		(c as Button).text_overrun_behavior = behavior
+	elif c is Label:
+		(c as Label).clip_text = trimmed
+		(c as Label).text_overrun_behavior = behavior
 
 
 func _note_cooldown(move: MoveResource, remaining: int, row: Control) -> void:

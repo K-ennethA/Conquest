@@ -54,23 +54,38 @@ const STATUS_GLYPH_PIXEL_SIZE := 0.0032
 const STATUS_GLYPH_INK := Color(0.10, 0.06, 0.03, 1.0)
 const STATUS_GLYPH_OUTLINE := Color(1.0, 0.97, 0.90, 0.75)
 
-## Sentinel for _status_signature. Real signatures are "id:turns" entries joined
-## by "|" (and "" for an empty list), so this can never collide with one -- which
-## makes the first refresh after _ready or a rebind always take the rebuild path.
+## Sentinel for _status_signature. Every real signature carries the "#" that separates its
+## status half from its terrain half (see _row_signature_for), so this can never collide
+## with one -- which makes the first refresh after _ready or a rebind always rebuild.
 const SIGNATURE_UNSET := "<unset>"
 
-# --- Terrain bonus tag -------------------------------------------------------
-# A single billboarded green "+AVO N" Label3D floating just BELOW the bar, shown
-# only while the bound unit stands on a tile that grants an evasion bonus (the
-# Fire-Emblem tall-grass "avoid": TerrainStats.bonus_for(unit, "evasion") > 0).
-# Terrain bonuses are computed on the fly, never stored as a status, so this is
-# the world-space readout that lets the player SEE that a unit is harder to hit
-# because of where it is standing. Created once and only toggled/retexted after,
-# so it costs nothing when the unit is off grass.
-const TERRAIN_TAG_Y := -0.28          # below the 0.32-tall bar, clear of it
-const TERRAIN_TAG_FONT_SIZE := 40
-const TERRAIN_TAG_PIXEL_SIZE := 0.005  # ~0.20 world-unit glyph height, pip-scale
-const TERRAIN_LEAF_GREEN := Color("5fb84e")  # == ConquestTheme.EL_NATURE
+# --- Terrain chips ------------------------------------------------------------
+# The badge row also carries what the GROUND is giving the unit: a wide "±AVO+15" chip per
+# affected stat while the bound unit stands on terrain that moves one (tall grass +evasion,
+# fortify +defense, empowering water +attack, slippery ice -evasion). Vocabulary, mark,
+# colour and wording all come from [TerrainVisuals] -- the same helper the battle card and
+# the hover card read, so the number over the unit and the number on the card are one
+# lookup, never two.
+#
+# THIS REPLACED A SEPARATE "+AVO N" TAG that hung below the bar. That tag knew about exactly
+# one stat, only in the positive direction, and shared none of its wording with the panels;
+# folding it into the badge row costs one fewer node, covers every stat and both directions,
+# and puts "where I am standing" beside "what is on me" where the player is already looking.
+#
+# TERRAIN CHIPS ARE DELIBERATELY THE INVERSE OF STATUS CHIPS. A status is a COLOURED chip
+# with DARK ink; terrain is a DARK PLATE with COLOURED ink, and it is drawn wider. So
+# "temporary condition" and "consequence of my position" are told apart by shape and by
+# figure/ground before any glyph is legible -- which is the whole point of showing them in
+# one row.
+const TERRAIN_CHIP_WIDTH := 0.50      # wide enough for "±AVO+15" -- pinned by the live suite
+const TERRAIN_CHIP_PLATE := Color(0.09, 0.07, 0.04, 0.94)  # dark bark; the coloured ink sits ON it
+const TERRAIN_GLYPH_FONT_SIZE := 44
+const TERRAIN_GLYPH_PIXEL_SIZE := 0.0022
+const TERRAIN_GLYPH_OUTLINE := Color(0.04, 0.03, 0.01, 0.9)
+
+## Gap between adjacent badges in the row. Equals STATUS_PIP_SPACING - STATUS_PIP_SIZE, so a
+## row of nothing but status chips lands exactly where it always did.
+const BADGE_GAP := STATUS_PIP_SPACING - STATUS_PIP_SIZE
 
 var _background_material: StandardMaterial3D
 var _health_material: StandardMaterial3D
@@ -104,15 +119,11 @@ var _dmg_band: MeshInstance3D = null
 var _dmg_band_material: StandardMaterial3D = null
 var _dmg_band_tween: Tween = null
 
-## Green "+AVO N" tag; built once in _setup_terrain_tag, then only shown/hidden
-## and re-texted. Null until _ready.
-var _terrain_tag: Label3D = null
-
 ## Parent of the pip row. Created once in _ready and then only ever has its
 ## children swapped, so the bar's own node layout is untouched.
 var _status_root: Node3D = null
 
-## Cheap change-detector: "id:turns|id:turns|…" for the statuses currently drawn.
+## Cheap change-detector: the statuses AND the terrain bonuses currently drawn.
 ## _refresh_status_pips() rebuilds ONLY when this string changes, so the refresh
 ## beats below can fire freely (several times per action) without any node churn.
 ## Seeded to a value no real signature can equal so the first refresh always runs.
@@ -128,12 +139,10 @@ func _ready():
 	_setup_materials()
 	_setup_meshes()
 	_setup_status_pips()
-	_setup_terrain_tag()
 	# If bind_unit ran before _ready (materials/meshes not built yet), paint now.
 	if _bound_unit != null:
 		_refresh_from_unit()
 	_refresh_status_pips()
-	_refresh_terrain_tag()
 
 ## Track [param unit] directly: connect to its stat signal and refresh on every HP
 ## change. Idempotent and safe to call before or after _ready.
@@ -152,14 +161,12 @@ func bind_unit(unit) -> void:
 	_status_signature = SIGNATURE_UNSET
 	_refresh_from_unit()
 	_refresh_status_pips()
-	_refresh_terrain_tag()
 
 func _on_bound_health_changed(_old_health: int, _new_health: int) -> void:
 	_refresh_from_unit()
 	# HP changing is itself a status beat: a burn/poison tick lands as damage, and
 	# the condition that caused it may have just expired in the same resolution.
 	_refresh_status_pips()
-	_refresh_terrain_tag()
 
 ## The bound unit's shield changed (granted, soaked a hit, or ran out). Repaint the bar:
 ## the silver tail is a function of HP and shield together, so this goes through the same
@@ -376,10 +383,10 @@ func _setup_status_pips() -> void:
 
 
 func _on_status_turn_beat(_unit) -> void:
+	# One refresh covers both halves of the row: a tile can gain or lose a passive bonus
+	# between turns (grass catching fire), and the signature guard below sees that change
+	# exactly as it sees a status landing.
 	_refresh_status_pips()
-	# A tile can gain/lose a passive bonus between turns (e.g. grass catching fire),
-	# so re-check the terrain tag on the same turn beats as the pips.
-	_refresh_terrain_tag()
 
 
 ## A status landed on / left SOME unit. Global like the other beats -- every bar wakes,
@@ -388,25 +395,26 @@ func _on_status_changed_beat(_unit, _condition) -> void:
 	_refresh_status_pips()
 
 
+## An action can displace a unit (knockback/pull) or alter its tile, either of which
+## changes the terrain half of the row without a move beat firing for this unit.
 func _on_status_action_beat(_unit, _action_type) -> void:
 	_refresh_status_pips()
-	# An action can displace a unit (knockback/pull) or alter its tile, either of
-	# which changes the terrain bonus without a move_beat firing for this unit.
-	_refresh_terrain_tag()
 
 
+## GameEvents.unit_moved -- THE beat for the terrain chips. A unit can walk onto or off tall
+## grass with no HP change and no status event at all, so this is what makes "±AVO+15" appear
+## the instant it steps into grass and vanish when it steps out. Deliberately this signal and
+## not PlayerManager's turn signals, which never fire on an AI turn (CONQUEST.md rule 2).
 func _on_status_move_beat(_unit, _from_position, _to_position) -> void:
 	_refresh_status_pips()
-	# A unit can walk onto or off tall grass with no HP change, so the terrain tag
-	# has to be re-evaluated on every move -- this is the beat that makes "+AVO"
-	# appear the instant a unit steps into grass and vanish when it steps out.
-	_refresh_terrain_tag()
 
 
-## "id:turns:count|…" for the GROUPED conditions. Any change in which statuses are
-## active, their order, their remaining turns, or their stack depth produces a
-## different string -- so a poison deepening from x2 to x3 rebuilds the row.
-func _status_signature_for(groups: Array) -> String:
+## "id:turns:count|…" for the GROUPED conditions, then "#" and "stat:amount|…" for the
+## TERRAIN bonuses. Any change in which statuses are active, their order, their remaining
+## turns, their stack depth, OR which stats the ground under the unit is moving and by how
+## much produces a different string -- so a poison deepening from x2 to x3 rebuilds the row,
+## and so does a step from bare earth into tall grass.
+func _row_signature_for(groups: Array, terrain: Array) -> String:
 	var parts: PackedStringArray = []
 	for group in groups:
 		var condition = group.get("condition", null)
@@ -415,12 +423,21 @@ func _status_signature_for(groups: Array) -> String:
 			id_text = String(condition.id)
 		parts.append("%s:%d:%d" % [
 			id_text, int(group.get("turns_left", 0)), int(group.get("count", 1))])
-	return "|".join(parts)
+	var terrain_parts: PackedStringArray = []
+	for entry in terrain:
+		terrain_parts.append("%s:%d" % [
+			String((entry as Dictionary).get("stat", "")),
+			int((entry as Dictionary).get("amount", 0))])
+	return "%s#%s" % ["|".join(parts), "|".join(terrain_parts)]
 
 
-## Rebuild the badge row from the bound unit's active conditions -- but only when
-## the list actually changed. No statuses (or no StatusController at all) leaves
-## the row empty, which is exactly today's appearance.
+## Rebuild the badge row: the TERRAIN chips the ground is granting, then the unit's active
+## conditions -- but only when either list actually changed. Nothing on the unit and plain
+## ground under it leaves the row empty, which is exactly today's appearance.
+##
+## Terrain first (leftmost), and in the same order the battle card and the hover card use:
+## where a unit is standing is the fact that changes every time it moves, so it holds the
+## same slot on every surface instead of shuffling behind whatever conditions it has.
 func _refresh_status_pips() -> void:
 	if _status_root == null or not is_instance_valid(_status_root):
 		return
@@ -430,42 +447,86 @@ func _refresh_status_pips() -> void:
 	# as one badge, not N identical ones.
 	var groups: Array = StatusVisuals.group_by_id(
 		StatusVisuals.active_conditions(_bound_unit))
+	# Terrain, from the shared helper -- the SAME numbers the panels quote and the same ones
+	# MoveContext.hit_chance rolls against, never a second derivation.
+	var board = CombatServices.board() if CombatServices else null
+	var terrain: Array = TerrainVisuals.bonuses_for(_bound_unit, board)
 
-	var signature: String = _status_signature_for(groups)
+	var signature: String = _row_signature_for(groups, terrain)
 	if signature == _status_signature:
 		return
 	_status_signature = signature
 
 	for child in _status_root.get_children():
 		child.queue_free()
-	if groups.is_empty():
-		return
 
-	# Cap the row: past MAX_PIPS the final slot becomes a neutral overflow marker
-	# so a heavily-afflicted unit never grows an unbounded ribbon of badges.
+	# Cap each half: past its budget the last slot becomes a neutral overflow marker, so
+	# neither a heavily-afflicted unit nor a freak stack of terrain layers can grow an
+	# unbounded ribbon of badges.
+	var terrain_shown: int = TerrainVisuals.shown_count(terrain.size())
+	var terrain_hidden: int = TerrainVisuals.hidden_count(terrain.size())
 	var total: int = groups.size()
 	var shown: int = StatusVisuals.shown_count(total)
 	var hidden: int = StatusVisuals.hidden_count(total)
-	var slots: int = shown + (1 if hidden > 0 else 0)
-	if slots <= 0:
+
+	# Lay the row out by MEASURED WIDTH rather than a fixed step: terrain chips are wider
+	# than status pips, so a uniform spacing would either overlap them or scatter the pips.
+	# With no terrain chips the arithmetic reduces to the old (i - (n-1)/2) * spacing exactly,
+	# because BADGE_GAP is defined as STATUS_PIP_SPACING - STATUS_PIP_SIZE.
+	var widths: Array[float] = []
+	for i in range(terrain_shown):
+		widths.append(TERRAIN_CHIP_WIDTH)
+	if terrain_hidden > 0:
+		widths.append(STATUS_PIP_SIZE)
+	for i in range(shown):
+		widths.append(STATUS_PIP_SIZE)
+	if hidden > 0:
+		widths.append(STATUS_PIP_SIZE)
+	if widths.is_empty():
 		return
 
-	# Center the row over the bar: badge i sits at (i - (n-1)/2) * spacing on X.
-	var x0: float = -0.5 * float(slots - 1) * STATUS_PIP_SPACING
+	var span: float = 0.0
+	for w in widths:
+		span += w
+	span += BADGE_GAP * float(widths.size() - 1)
+
+	# Walk left to right from the centred left edge, advancing by each slot's own width.
+	var cursor: float = -span * 0.5
+	var slot: int = 0
+	for i in range(terrain_shown):
+		var entry: Dictionary = terrain[i]
+		var cx: float = cursor + widths[slot] * 0.5
+		var plate := _make_chip(TERRAIN_CHIP_PLATE, cx, TERRAIN_CHIP_WIDTH)
+		plate.name = "TerrainChip"
+		_status_root.add_child(plate)
+		_status_root.add_child(_make_terrain_glyph(
+			TerrainVisuals.chip_text(entry), cx, TerrainVisuals.color_for(entry)))
+		cursor += widths[slot] + BADGE_GAP
+		slot += 1
+	if terrain_hidden > 0:
+		var tx: float = cursor + widths[slot] * 0.5
+		_status_root.add_child(_make_chip(TERRAIN_CHIP_PLATE, tx, STATUS_PIP_SIZE))
+		_status_root.add_child(_make_terrain_glyph(
+			TerrainVisuals.overflow_label(terrain_hidden), tx, TerrainVisuals.GAIN_COLOR))
+		cursor += widths[slot] + BADGE_GAP
+		slot += 1
+
 	for i in range(shown):
 		var group: Dictionary = groups[i]
 		var condition = group.get("condition", null)
 		var info: Dictionary = StatusVisuals.info_for(condition)
 		var color: Color = info.get("color", StatusVisuals.OVERFLOW_COLOR)
-		var x: float = x0 + float(i) * STATUS_PIP_SPACING
+		var x: float = cursor + widths[slot] * 0.5
 		_status_root.add_child(_make_status_pip(color, x))
 		var glyph: String = StatusVisuals.glyph_for(condition)
 		var count: int = int(group.get("count", 1))
 		if count > 1:
 			glyph += str(count)
 		_status_root.add_child(_make_status_glyph(glyph, x))
+		cursor += widths[slot] + BADGE_GAP
+		slot += 1
 	if hidden > 0:
-		var overflow_x: float = x0 + float(shown) * STATUS_PIP_SPACING
+		var overflow_x: float = cursor + widths[slot] * 0.5
 		_status_root.add_child(_make_status_pip(StatusVisuals.OVERFLOW_COLOR, overflow_x))
 		_status_root.add_child(
 			_make_status_glyph(StatusVisuals.overflow_label(hidden), overflow_x))
@@ -496,11 +557,17 @@ func _make_status_glyph(text: String, x: float) -> Label3D:
 	return label
 
 
-## One chip quad tinted [param color], placed at [param x] in the row's local space.
+## One SQUARE status chip quad tinted [param color], placed at [param x].
 func _make_status_pip(color: Color, x: float) -> MeshInstance3D:
+	return _make_chip(color, x, STATUS_PIP_SIZE)
+
+
+## One chip quad [param width] wide (and always [constant STATUS_PIP_SIZE] tall, so the row
+## has one baseline), tinted [param color] and centred on [param x] in the row's local space.
+func _make_chip(color: Color, x: float, width: float) -> MeshInstance3D:
 	var pip := MeshInstance3D.new()
 	var mesh := QuadMesh.new()
-	mesh.size = Vector2(STATUS_PIP_SIZE, STATUS_PIP_SIZE)
+	mesh.size = Vector2(width, STATUS_PIP_SIZE)
 	pip.mesh = mesh
 	pip.position = Vector3(x, 0.0, 0.0)
 
@@ -510,6 +577,10 @@ func _make_status_pip(color: Color, x: float) -> MeshInstance3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.flags_unshaded = true
+	# The terrain plate is nearly-but-not-quite opaque, so it has to be allowed to blend.
+	mat.flags_transparent = color.a < 1.0
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA if color.a < 1.0 \
+		else BaseMaterial3D.TRANSPARENCY_DISABLED
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	mat.billboard_keep_scale = true
 	mat.render_priority = 3  # above the bar's background (1) and fill (2)
@@ -517,54 +588,32 @@ func _make_status_pip(color: Color, x: float) -> MeshInstance3D:
 	return pip
 
 
-# --- Terrain bonus tag --------------------------------------------------------
-
-## Build the "+AVO N" Label3D once. It uses the SAME overlay recipe as the bar
-## (billboarded, unshaded, no cast shadow, constant on-screen size) so it faces
-## the camera and never drops a floating shadow rectangle onto the map. Starts
-## hidden; _refresh_terrain_tag drives its visibility and text.
-func _setup_terrain_tag() -> void:
-	if _terrain_tag != null and is_instance_valid(_terrain_tag):
-		return
-	_terrain_tag = Label3D.new()
-	_terrain_tag.name = "TerrainAvoidTag"
-	_terrain_tag.text = ""
-	_terrain_tag.position = Vector3(0.0, TERRAIN_TAG_Y, 0.02)
-	_terrain_tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_terrain_tag.shaded = false
-	# NOTE: do NOT set fixed_size -- with it on, pixel_size*font_size stops mapping to
-	# world units and the label renders screen-huge (the "#AVO 15 plastered across the
-	# whole map" bug). Left off, the tag is a ~0.20 world-unit billboarded label that
-	# scales with the camera like every other world marker.
-	_terrain_tag.font_size = TERRAIN_TAG_FONT_SIZE
-	_terrain_tag.pixel_size = TERRAIN_TAG_PIXEL_SIZE
-	_terrain_tag.modulate = TERRAIN_LEAF_GREEN
-	# A dark outline keeps the green legible over both grass and bright tiles.
-	_terrain_tag.outline_modulate = Color(0.05, 0.03, 0.0, 0.85)
-	_terrain_tag.outline_size = 6
-	_terrain_tag.render_priority = 4  # above bar background (1), fill (2), pips (3)
-	_terrain_tag.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_terrain_tag.visible = false
-	add_child(_terrain_tag)
-
-
-## Show "+AVO N" when the bound unit's tile grants an evasion bonus, hide it
-## otherwise. Fully null-safe: a freed unit, an absent CombatServices, or a null
-## board all resolve to a 0 bonus (hidden). TerrainStats.bonus_for reads the
-## PASSIVE_WHILE_OCCUPYING tile effects under the unit -- tall grass -> +evasion.
-func _refresh_terrain_tag() -> void:
-	if _terrain_tag == null or not is_instance_valid(_terrain_tag):
-		return
-	if not is_instance_valid(_bound_unit):
-		_terrain_tag.visible = false
-		return
-	var board = CombatServices.board() if CombatServices else null
-	var avoid: int = TerrainStats.bonus_for(_bound_unit, "evasion", board)
-	if avoid > 0:
-		_terrain_tag.text = "+AVO %d" % avoid
-		_terrain_tag.visible = true
-	else:
-		_terrain_tag.visible = false
+## The terrain chip's label ("±AVO+15"), drawn in the TERRAIN colour on the dark plate --
+## the deliberate inverse of a status badge's dark ink on a coloured chip, so the two kinds
+## of badge are told apart by figure/ground before either is read. Smaller pixel size than a
+## status glyph because it carries seven characters rather than one or two; the live suite
+## pins that the plate is wider than the string it has to draw.
+func _make_terrain_glyph(text: String, x: float, color: Color) -> Label3D:
+	var label := Label3D.new()
+	label.name = "TerrainChipLabel"
+	label.text = text
+	label.position = Vector3(x, 0.0, 0.01)  # just in front of the plate quad
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.shaded = false
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# NOTE: fixed_size stays OFF -- with it on, pixel_size * font_size stops mapping to world
+	# units and the label renders screen-huge (the "+AVO 15 plastered across the whole map"
+	# bug the retired tag recorded).
+	label.font_size = TERRAIN_GLYPH_FONT_SIZE
+	label.pixel_size = TERRAIN_GLYPH_PIXEL_SIZE
+	label.modulate = color
+	label.outline_modulate = TERRAIN_GLYPH_OUTLINE
+	label.outline_size = 5
+	label.render_priority = 5   # above bar bg (1), fill (2), chips (3)
+	label.outline_render_priority = 4
+	label.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return label
 
 
 # --- Incoming-damage preview band --------------------------------------------

@@ -14,6 +14,14 @@ class_name MatchConfigPanel
 ##                                 accent to signal the roguelite register.
 ##   * [constant MODE_VERSUS]   -- Turn System + Rounds (Bo1 / Bo3 / Bo5). Host-side lobby.
 ##   * [constant MODE_LOCAL]    -- Turn System only. Local hot-seat versus on a map.
+##   * [constant MODE_SIEGE]       -- Solo Siege vs the AI. Same rows as skirmish (Turn
+##       System + AI Difficulty); the mode differs in what the MAP declares, not in what
+##       this column has to ask.
+##   * [constant MODE_SIEGE_LOCAL] -- Local hot-seat Siege. Turn System only, exactly as
+##       MODE_LOCAL. Two strings rather than one flagged mode because that is already how
+##       this panel tells "solo vs AI" from "hot-seat" (skirmish vs local), and a single
+##       siege string would have to consult GameSettings.game_mode to know which rows to
+##       draw -- a dependency this panel deliberately does not have.
 ##
 ## Host reads back with [method get_turn_system] / [method get_ai_difficulty] /
 ## [method get_run_length] / [method get_versus_rounds], and can push the universal picks
@@ -25,6 +33,18 @@ const MODE_SKIRMISH := "skirmish"
 const MODE_ARENA := "arena"
 const MODE_VERSUS := "versus"
 const MODE_LOCAL := "local"
+const MODE_SIEGE := "siege"
+const MODE_SIEGE_LOCAL := "siege_local"
+
+## Every mode that is a SIEGE match, whichever side of the solo/versus split it came from.
+## Consumers ask this instead of comparing against the two strings, so a third siege
+## variant is one array entry rather than a scattered `or`.
+const SIEGE_MODES: Array[String] = [MODE_SIEGE, MODE_SIEGE_LOCAL]
+
+
+## True when [param mode] launches a Siege match (solo or hot-seat).
+static func is_siege_mode(mode: String) -> bool:
+	return SIEGE_MODES.has(mode)
 
 # Run-length presets (rounds). Standard is the default.
 const PRESET_SHORT := 4
@@ -72,7 +92,7 @@ func configure(mode: String) -> void:
 	col.add_child(_turn_system_row())
 
 	match _mode:
-		MODE_SKIRMISH:
+		MODE_SKIRMISH, MODE_SIEGE:
 			col.add_child(_difficulty_row())
 		MODE_ARENA:
 			col.add_child(_section_heading("RUN LENGTH", true))
@@ -80,7 +100,7 @@ func configure(mode: String) -> void:
 			col.add_child(_custom_rounds_row())
 		MODE_VERSUS:
 			col.add_child(_versus_rounds_row())
-		MODE_LOCAL:
+		MODE_LOCAL, MODE_SIEGE_LOCAL:
 			pass  # Turn System only for local hot-seat.
 
 
@@ -245,7 +265,7 @@ func apply_settings() -> void:
 		return
 	if GameSettings.has_method("set_turn_system"):
 		GameSettings.set_turn_system(get_turn_system())
-	if _mode == MODE_SKIRMISH and GameSettings.has_method("set_ai_difficulty"):
+	if (_mode == MODE_SKIRMISH or _mode == MODE_SIEGE) and GameSettings.has_method("set_ai_difficulty"):
 		GameSettings.set_ai_difficulty(get_ai_difficulty())
 	if _mode == MODE_VERSUS and GameSettings.has_method("set_versus_rounds"):
 		GameSettings.set_versus_rounds(get_versus_rounds())

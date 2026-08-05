@@ -1,0 +1,6446 @@
+[gd_resource type="Resource" script_class="MapResource" format=3]
+
+[ext_resource type="Script" path="res://game/maps/resources/MapResource.gd" id="1_58p40"]
+
+[resource]
+resource_name = "MapResource"
+script = ExtResource("1_58p40")
+map_name = "Riftwood"
+description = "A 35x35 forest siege. Two fortress-roots sit in opposite corners, each with a walled fountain spring at its back, and three lanes run between them: the Canopy Run along the north and east rim, the Root Run along the west and south, and the short Riftway straight through the middle. Everything between them is impassable wood and stone, cut by two jungle corridors where a pair of wild things sleeps. Creeps never stop coming down any of the three. The map is a true 180-degree mirror -- every cell on one side has its twin on the other."
+author = "System"
+version = "1.0"
+status = "Active"
+width = 35
+height = 35
+tile_layout = Array[Dictionary]([{
+"position": Vector2i(0, 0),
+"tile_id": "fountain",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(1, 0),
+"tile_id": "fountain",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(2, 0),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(4, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(5, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(6, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(7, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(8, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(9, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(13, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(14, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(15, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(16, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(17, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(18, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(19, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(20, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(21, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(22, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(23, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(27, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(28, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(29, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(30, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(31, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(32, 0),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 0),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(34, 0),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 1),
+"tile_id": "fountain",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(1, 1),
+"tile_id": "fountain",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(2, 1),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(4, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(5, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(6, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(7, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(8, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(9, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(13, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(14, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(15, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(16, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(17, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(18, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(19, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(20, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(21, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(22, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(23, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(27, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(28, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(29, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(30, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(31, 1),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(32, 1),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(33, 1),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(34, 1),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(0, 2),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(1, 2),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 2),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(3, 2),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(4, 2),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(5, 2),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(6, 2),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(7, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 2),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(34, 2),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(0, 3),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 3),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 3),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(3, 3),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(4, 3),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(5, 3),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(6, 3),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(7, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 3),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 3),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 3),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 3),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 3),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 3),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 3),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 4),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 4),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 4),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(3, 4),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(4, 4),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(5, 4),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(6, 4),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(7, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 4),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 4),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 4),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 4),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 4),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 4),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 4),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 5),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 5),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 5),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(3, 5),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(4, 5),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(5, 5),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(6, 5),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(7, 5),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(8, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 5),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 5),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 5),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 5),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 5),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 5),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 5),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 6),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 6),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 6),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(3, 6),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(4, 6),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(5, 6),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(6, 6),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(7, 6),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 6),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(9, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 6),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 6),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 6),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 6),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 6),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 6),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 6),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 7),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 7),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 7),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 7),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(6, 7),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 7),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(8, 7),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 7),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(10, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 7),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 7),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 7),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 7),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 7),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 7),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 7),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 8),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 8),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 8),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 8),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(7, 8),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 8),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(9, 8),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 8),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(11, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 8),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 8),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 8),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 8),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 8),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 8),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 8),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 9),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 9),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 9),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 9),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(8, 9),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 9),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 9),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 9),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(12, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 9),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 9),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 9),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 9),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 9),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 9),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 9),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 10),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 10),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 10),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 10),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(9, 10),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 10),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 10),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 10),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(13, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 10),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 10),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 10),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 10),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 10),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 10),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 10),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 11),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 11),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 11),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 11),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(10, 11),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 11),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 11),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 11),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(14, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 11),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 11),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 11),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 11),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 11),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 11),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 11),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 12),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 12),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 12),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(11, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 12),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(13, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 12),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(15, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 12),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 12),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 12),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 12),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 13),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 13),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 13),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 13),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 13),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 13),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 13),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 13),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(14, 13),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 13),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(16, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 13),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 13),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 13),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 13),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 13),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 13),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 13),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 14),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 14),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 14),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 14),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 14),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 14),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 14),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(13, 14),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 14),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(15, 14),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 14),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(17, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 14),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 14),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 14),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 14),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 14),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 14),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 14),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 15),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 15),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 15),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 15),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 15),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 15),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 15),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(13, 15),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(14, 15),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 15),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(16, 15),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(17, 15),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(18, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 15),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 15),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 15),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 15),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 15),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 15),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 15),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 16),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 16),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 16),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 16),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 16),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 16),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 16),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(15, 16),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 16),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(17, 16),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(18, 16),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(19, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 16),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 16),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 16),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 16),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 16),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 16),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 16),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 17),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 17),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 17),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 17),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 17),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 17),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 17),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(16, 17),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(17, 17),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(18, 17),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(19, 17),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(20, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 17),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 17),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 17),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 17),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 17),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 17),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 17),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 18),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 18),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 18),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 18),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 18),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 18),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 18),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(17, 18),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(18, 18),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(19, 18),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 18),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(21, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 18),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 18),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 18),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 18),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 18),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 18),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 18),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 19),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 19),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 19),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 19),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 19),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 19),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 19),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(18, 19),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(19, 19),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(20, 19),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 19),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(22, 19),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(23, 19),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 19),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 19),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 19),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 19),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 19),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 19),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 20),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 20),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 20),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 20),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 20),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 20),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 20),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(19, 20),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 20),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(21, 20),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 20),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(23, 20),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 20),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 20),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 20),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 20),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 20),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 20),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 21),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 21),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 21),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 21),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 21),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 21),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 21),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(20, 21),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 21),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(22, 21),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 21),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 21),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 21),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 21),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 21),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 21),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 21),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 22),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 22),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 22),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 22),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 22),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 22),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 22),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(21, 22),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 22),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(23, 22),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 22),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(25, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 22),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 22),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 22),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 22),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 23),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 23),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 23),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 23),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 23),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 23),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 23),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(22, 23),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 23),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 23),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 23),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(26, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 23),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 23),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 23),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 23),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 24),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 24),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 24),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 24),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 24),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 24),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 24),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(23, 24),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 24),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 24),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 24),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(27, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 24),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 24),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 24),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 24),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 25),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 25),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 25),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 25),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 25),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 25),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 25),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(24, 25),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 25),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 25),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 25),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(28, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 25),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 25),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 25),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 25),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 26),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 26),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 26),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 26),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 26),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 26),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 26),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(25, 26),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 26),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(27, 26),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 26),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(29, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(30, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 26),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 26),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 26),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 26),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 27),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 27),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 27),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 27),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 27),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 27),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 27),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(26, 27),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 27),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(28, 27),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(29, 27),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(30, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(31, 27),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(32, 27),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 27),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 27),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 28),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 28),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 28),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 28),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 28),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 28),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 28),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 28),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(27, 28),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 28),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(29, 28),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(30, 28),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(31, 28),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(32, 28),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(33, 28),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 28),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 29),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 29),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 29),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 29),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 29),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 29),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 29),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 29),
+"tile_id": "stone_wall",
+"tile_resource_path": "",
+"tile_type": "WALL"
+}, {
+"position": Vector2i(28, 29),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(29, 29),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(30, 29),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(31, 29),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(32, 29),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(33, 29),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 29),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 30),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 30),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 30),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 30),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 30),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 30),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 30),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 30),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(29, 30),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(30, 30),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(31, 30),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(32, 30),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(33, 30),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 30),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 31),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 31),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(2, 31),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 31),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 31),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 31),
+"tile_id": "forest_dirt",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 31),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 31),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(29, 31),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(30, 31),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(31, 31),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(32, 31),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(33, 31),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 31),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(0, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(1, 32),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(2, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(4, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(5, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(6, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(7, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(8, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(9, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(10, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(11, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(12, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(13, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(14, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(15, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(16, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(17, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(18, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(19, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(20, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(21, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(22, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(23, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(24, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(25, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(26, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(27, 32),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(28, 32),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(29, 32),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(30, 32),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(31, 32),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(32, 32),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(33, 32),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(34, 32),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(0, 33),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(1, 33),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(2, 33),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(3, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(4, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(5, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(6, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(7, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(8, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(9, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(13, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(14, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(15, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(16, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(17, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(18, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(19, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(20, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(21, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(22, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(23, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(27, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(28, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(29, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(30, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(31, 33),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(32, 33),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 33),
+"tile_id": "fountain",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(34, 33),
+"tile_id": "fountain",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(0, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(1, 34),
+"tile_id": "sacred_meadow",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(2, 34),
+"tile_id": "tall_grass",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(3, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(4, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(5, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(6, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(7, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(8, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(9, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(10, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(11, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(12, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(13, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(14, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(15, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(16, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(17, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(18, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(19, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(20, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(21, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(22, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(23, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(24, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(25, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(26, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(27, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(28, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(29, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(30, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(31, 34),
+"tile_id": "grass_plains",
+"tile_resource_path": "",
+"tile_type": "NORMAL"
+}, {
+"position": Vector2i(32, 34),
+"tile_id": "tree",
+"tile_resource_path": "",
+"tile_type": "DIFFICULT_TERRAIN"
+}, {
+"position": Vector2i(33, 34),
+"tile_id": "fountain",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}, {
+"position": Vector2i(34, 34),
+"tile_id": "fountain",
+"tile_resource_path": "",
+"tile_type": "SACRED_GROUND"
+}])
+unit_spawns = Array[Dictionary]([{
+"aggro_range": 1,
+"ai_stance": "defensive",
+"character_id": "bastion",
+"leash_radius": 0,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(3, 3),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "vineweave",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(2, 3),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "gem_knight",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(3, 2),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "petalfang",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(4, 3),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 0,
+"position": Vector2i(3, 4),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "gem_knight",
+"leash_radius": -1,
+"max_spawns": -1,
+"player_id": 0,
+"position": Vector2i(2, 2),
+"respawn_interval": 4,
+"spawn_kind": "Respawn",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": -1,
+"player_id": 0,
+"position": Vector2i(7, 1),
+"respawn_interval": 3,
+"spawn_kind": "Endless",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": -1,
+"player_id": 0,
+"position": Vector2i(1, 7),
+"respawn_interval": 3,
+"spawn_kind": "Endless",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": -1,
+"player_id": 0,
+"position": Vector2i(7, 7),
+"respawn_interval": 3,
+"spawn_kind": "Endless",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": 1,
+"ai_stance": "defensive",
+"character_id": "bastion",
+"leash_radius": 0,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(31, 31),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "vineweave",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(32, 31),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "gem_knight",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(31, 32),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "petalfang",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(30, 31),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "blightcap",
+"leash_radius": -1,
+"max_spawns": 1,
+"player_id": 1,
+"position": Vector2i(31, 30),
+"respawn_interval": 1,
+"spawn_kind": "Start",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "gem_knight",
+"leash_radius": -1,
+"max_spawns": -1,
+"player_id": 1,
+"position": Vector2i(32, 32),
+"respawn_interval": 4,
+"spawn_kind": "Respawn",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": -1,
+"player_id": 1,
+"position": Vector2i(27, 33),
+"respawn_interval": 3,
+"spawn_kind": "Endless",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": -1,
+"player_id": 1,
+"position": Vector2i(33, 27),
+"respawn_interval": 3,
+"spawn_kind": "Endless",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "",
+"character_id": "tree_grunt",
+"leash_radius": -1,
+"max_spawns": -1,
+"player_id": 1,
+"position": Vector2i(27, 27),
+"respawn_interval": 3,
+"spawn_kind": "Endless",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "dormant",
+"character_id": "petalfang",
+"leash_radius": 0,
+"max_spawns": 1,
+"player_id": 2,
+"position": Vector2i(24, 10),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "dormant",
+"character_id": "petalfang",
+"leash_radius": 0,
+"max_spawns": 1,
+"player_id": 2,
+"position": Vector2i(10, 24),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "dormant",
+"character_id": "petalfang",
+"leash_radius": 0,
+"max_spawns": 1,
+"player_id": 2,
+"position": Vector2i(24, 13),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}, {
+"aggro_range": -1,
+"ai_stance": "dormant",
+"character_id": "petalfang",
+"leash_radius": 0,
+"max_spawns": 1,
+"player_id": 2,
+"position": Vector2i(10, 21),
+"respawn_interval": 1,
+"spawn_kind": "Reinforcement",
+"spawn_turn": 1,
+"unit_resource_path": "",
+"unit_type": ""
+}])
+lanes = [Array[Vector2i]([Vector2i(7, 1), Vector2i(15, 1), Vector2i(24, 1), Vector2i(33, 1), Vector2i(33, 10), Vector2i(33, 19), Vector2i(33, 27)]), Array[Vector2i]([Vector2i(1, 7), Vector2i(1, 15), Vector2i(1, 24), Vector2i(1, 33), Vector2i(10, 33), Vector2i(19, 33), Vector2i(27, 33)]), Array[Vector2i]([Vector2i(7, 7), Vector2i(12, 12), Vector2i(17, 17), Vector2i(22, 22), Vector2i(27, 27)])]
+base_cells = {
+0: Vector2i(3, 3),
+1: Vector2i(31, 31)
+}
+max_players = 3
+recommended_players = 2
+difficulty = "Normal"
+map_type = "Skirmish"
+environment_preset = "Forest"
+lighting_preset = "Day"
+background_color = Color(0.12, 0.16, 0.12, 1)
+turn_limit = 0
+victory_conditions = Array[String](["Capture Enemy Base"])
+special_rules = Array[String]([])
+creation_date = "2026-08-04T00:00:00"
+last_modified = "2026-08-04T00:00:00"
+tags = Array[String](["siege", "push", "three-lane", "neutrals", "large"])
+preview_image_path = ""

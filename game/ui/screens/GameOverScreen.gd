@@ -110,6 +110,32 @@ const OUTCOME_DEFEAT := &"defeat"
 ## Subtitle shown instead of the caller's when the opponent quit rather than lost.
 const SUBTITLE_FORFEIT := "Opponent forfeited."
 
+# --- Mode-aware outcome lines ------------------------------------------------
+#
+# "All enemies defeated!" is the right sentence for exactly one shape of battle. A SIEGE is
+# decided by a base changing hands, and a player who just watched theirs fall being told
+# "Your forces have fallen" is being told about a different match than the one they played.
+#
+# The rule is kept as SMALL and as GENERAL as it can be: the live mode controller is asked
+# for its own identity and, when it has one, its own line; nothing here re-derives an
+# outcome (this screen is handed one) and nothing here knows how a Siege is scored. A build
+# with no mode controller -- Skirmish, Campaign, versus -- resolves to exactly the strings
+# it resolved to before.
+
+## Default subtitles, unchanged. Named rather than inlined so [method outcome_subtitle] can
+## be handed them as the fallback and stay pure.
+const SUBTITLE_VICTORY := "All enemies defeated!"
+const SUBTITLE_DEFEAT := "Your forces have fallen."
+
+## Matched as a case-insensitive SUBSTRING of the controller's reported id, so "siege",
+## &"siege", "Siege" and a future "siege_push" all resolve -- the mode's exact spelling is
+## the mode's business, not this screen's.
+const MODE_KEY_SIEGE := "siege"
+
+## Siege's own outcome lines, used when the controller does not supply one of its own.
+const SUBTITLE_SIEGE_VICTORY := "Their base is yours."
+const SUBTITLE_SIEGE_DEFEAT := "Your base has fallen."
+
 # Idempotency guard -- true once the screen has been revealed.
 var _shown: bool = false
 
@@ -117,6 +143,9 @@ var _shown: bool = false
 var _backdrop: ColorRect
 var _card: PanelContainer
 var _banner_label: Label
+## The mode's name over the banner ("SIEGE"). Hidden outside a named mode -- see
+## [method _resolve_mode].
+var _mode_label: Label
 var _subtitle_label: Label
 var _summary_card: PanelContainer
 ## Every gold section/stat header, recoloured after ConquestTheme.apply_to() strips overrides.
@@ -259,9 +288,19 @@ func _create_ui() -> void:
 	_banner_label.add_theme_font_size_override("font_size", 56)
 	vb.add_child(_banner_label)
 
+	# The mode's own name, over the banner ("SIEGE" / "VICTORY"). Hidden unless a mode
+	# controller names itself, so every existing battle's card is the card it always was --
+	# a hidden BoxContainer child costs neither height nor the VBox's separation.
+	_mode_label = Label.new()
+	_mode_label.name = "ModeLabel"
+	_mode_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_mode_label.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
+	_mode_label.visible = false
+	vb.add_child(_mode_label)
+
 	_subtitle_label = Label.new()
 	_subtitle_label.name = "SubtitleLabel"
-	_subtitle_label.text = "All enemies defeated!"
+	_subtitle_label.text = SUBTITLE_VICTORY
 	_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_subtitle_label.add_theme_font_size_override("font_size", 20)
 	vb.add_child(_subtitle_label)
@@ -304,6 +343,7 @@ func _create_ui() -> void:
 	_banner_label.add_theme_constant_override("outline_size", 8)
 	_banner_label.add_theme_color_override("font_outline_color", ConquestTheme.BROWN_DK)
 	_subtitle_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
+	_mode_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
 
 	_style_summary_card()
 
@@ -576,14 +616,27 @@ func is_shown() -> bool:
 	return _shown
 
 
-## Reveal a win for the local human ("VICTORY", gold).
+## Reveal a win for the local human ("VICTORY", gold). The subtitle is the MODE's if the
+## mode has one -- a Siege is won by taking a base, not by clearing the field.
 func show_victory() -> void:
-	show_result(OUTCOME_VICTORY, "VICTORY", "All enemies defeated!")
+	show_result(OUTCOME_VICTORY, "VICTORY", _mode_outcome_line(OUTCOME_VICTORY, SUBTITLE_VICTORY))
 
 
-## Reveal a loss for the local human ("DEFEAT", red).
+## Reveal a loss for the local human ("DEFEAT", red). Same deal as [method show_victory].
 func show_defeat() -> void:
-	show_result(OUTCOME_DEFEAT, "DEFEAT", "Your forces have fallen.")
+	show_result(OUTCOME_DEFEAT, "DEFEAT", _mode_outcome_line(OUTCOME_DEFEAT, SUBTITLE_DEFEAT))
+
+
+## PURE: the subtitle for [param outcome] under a mode reporting [param mode_id], falling
+## back to [param fallback] for every mode that has nothing of its own to say (which is
+## every mode shipped before Siege, so their cards are byte-identical).
+##
+## Static and side-effect free so the rule is testable with no scene, no autoload and no
+## battle -- the same discipline [method should_show_versus_block] follows.
+static func outcome_subtitle(mode_id: String, outcome: StringName, fallback: String) -> String:
+	if mode_id.to_lower().contains(MODE_KEY_SIEGE):
+		return SUBTITLE_SIEGE_VICTORY if outcome == OUTCOME_VICTORY else SUBTITLE_SIEGE_DEFEAT
+	return fallback
 
 
 ## Reveal the end screen with an explicit banner. Idempotent -- the first call
@@ -602,6 +655,7 @@ func show_result(outcome: StringName, title: String, subtitle: String) -> void:
 	_banner_label.text = title
 	# A forfeit / disconnect win is NOT "all enemies defeated" -- say what actually happened.
 	_subtitle_label.text = SUBTITLE_FORFEIT if _opponent_forfeited else subtitle
+	_apply_mode_name()
 
 	var accent: Color = VICTORY_GOLD if outcome == OUTCOME_VICTORY else DEFEAT_RED
 	_banner_label.add_theme_color_override("font_color", accent)
@@ -620,6 +674,94 @@ func show_result(outcome: StringName, title: String, subtitle: String) -> void:
 
 	# Give the primary action keyboard/controller focus.
 	_rematch_button.grab_focus()
+
+
+# --- Which mode was this? ----------------------------------------------------
+#
+# Resolved at REVEAL from the live mode controller, by autoload path then by group, with a
+# has-method guard on every call -- the "never name a class this build may not ship"
+# discipline MapRowBuilder uses for the map catalog and SiegeFeedback uses for this same
+# controller. A build with no mode controller answers "" to all three questions below and
+# nothing on this card changes.
+
+const MODE_CONTROLLER_NODE_PATH := "/root/SiegeController"
+const MODE_CONTROLLER_GROUP := &"siege_controller"
+
+
+## The live mode controller, or null.
+func _mode_controller():
+	var node := get_node_or_null(MODE_CONTROLLER_NODE_PATH)
+	if node != null and is_instance_valid(node):
+		return node
+	var tree := get_tree()
+	if tree == null:
+		return null
+	var found := tree.get_first_node_in_group(MODE_CONTROLLER_GROUP)
+	return found if found != null and is_instance_valid(found) else null
+
+
+## The mode's identity + display name, but ONLY while the controller says it is ACTIVE --
+## [SiegeController] installs itself once and is silenced on every other map, so trusting
+## its mere existence would label a Skirmish "SIEGE". Its ruleset is where both strings
+## live ([member SiegeRuleset.id] / [member SiegeRuleset.display_name]), with `mode_id()` /
+## `mode_name()` honoured first should a mode ever expose them directly.
+##
+## Returns {"id": String, "name": String}, both "" when there is no live mode.
+func _resolve_mode() -> Dictionary:
+	var blank := {"id": "", "name": ""}
+	var ctrl = _mode_controller()
+	if ctrl == null:
+		return blank
+	if not ctrl.has_method("is_active") or not bool(ctrl.is_active()):
+		return blank
+
+	var id: String = ""
+	var display: String = ""
+	if ctrl.has_method("mode_id"):
+		id = String(ctrl.mode_id()).strip_edges()
+	if ctrl.has_method("mode_name"):
+		display = String(ctrl.mode_name()).strip_edges()
+	if (id == "" or display == "") and ctrl.has_method("ruleset"):
+		var rules = ctrl.ruleset()
+		if rules != null:
+			if id == "" and "id" in rules:
+				id = String(rules.id).strip_edges()
+			if display == "" and "display_name" in rules:
+				display = String(rules.display_name).strip_edges()
+	if display == "":
+		display = id
+	return {"id": id, "name": display}
+
+
+## The outcome line for this battle: the controller's own if it has one, else the mode's
+## default from [method outcome_subtitle], else [param fallback] unchanged.
+##
+## One honest narrowing: a Siege that ended without a base changing hands (a wipe -- still a
+## legal way to end one) keeps the ORDINARY line. `captured_by()` is the mode's own record
+## of whether a capture decided it, so this never claims a base fell when none did.
+func _mode_outcome_line(outcome: StringName, fallback: String) -> String:
+	var mode: Dictionary = _resolve_mode()
+	var mode_id: String = String(mode.get("id", ""))
+	if mode_id == "":
+		return fallback
+
+	var ctrl = _mode_controller()
+	if ctrl != null and ctrl.has_method("outcome_line"):
+		var line: String = String(ctrl.outcome_line(outcome)).strip_edges()
+		if line != "":
+			return line
+	if ctrl != null and ctrl.has_method("captured_by") and int(ctrl.captured_by()) < 0:
+		return fallback
+	return outcome_subtitle(mode_id, outcome, fallback)
+
+
+## Show (or leave hidden) the mode-name line over the banner.
+func _apply_mode_name() -> void:
+	if _mode_label == null or not is_instance_valid(_mode_label):
+		return
+	var display: String = String(_resolve_mode().get("name", ""))
+	_mode_label.text = display.to_upper()
+	_mode_label.visible = display != ""
 
 
 ## PURE decision helper: does the post-match summary carry a VERSUS block?
