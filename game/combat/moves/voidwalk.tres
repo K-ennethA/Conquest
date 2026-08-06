@@ -1,0 +1,37 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/ApplyStatusEffect.gd" id="2_applystatus"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="4_targp"]
+[ext_resource type="Resource" path="res://game/combat/status/submerged.tres" id="5_submerged"]
+
+[sub_resource type="Resource" id="Resource_vw_status"]
+script = ExtResource("2_applystatus")
+condition = ExtResource("5_submerged")
+chance = 1.0
+to_caster = true
+
+[sub_resource type="Resource" id="Resource_vw_tgt"]
+script = ExtResource("4_targp")
+target_kind = 0
+min_range = 0
+max_range = 0
+area_shape = 0
+area_size = 0
+affects_caster_tile = true
+
+[resource]
+script = ExtResource("3_mvres")
+move_id = &"voidwalk"
+display_name = "Voidwalk"
+description = "Submerges into the dark. Nothing can touch it until it surfaces on its next turn."
+category = 1
+element = &"dark"
+energy_cost = 0
+max_uses = -1
+cooldown = 4
+accuracy = 1.0
+crit_chance = 0.0
+targeting = SubResource("Resource_vw_tgt")
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_vw_status")])

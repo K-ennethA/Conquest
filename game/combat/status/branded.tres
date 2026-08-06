@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BrandStatus" format=3]
+
+[ext_resource type="Script" path="res://game/combat/status/BrandStatus.gd" id="1_brand"]
+
+[resource]
+script = ExtResource("1_brand")
+id = &"branded"
+display_name = "Branded"
+duration_turns = -1
+stacking = 0
+max_stacks = -1
+rule_flags = {}
+damage_taken_scale = 1.3

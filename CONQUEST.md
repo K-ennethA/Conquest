@@ -113,5 +113,30 @@ named file is the canonical example — read it before you write the same kind o
     `game/world/GameWorldManager.gd` (`_walk_move_path`), pinned by
     `tests/unit/test_pass_through_traps.gd`
 
+11. **A MODE's tuning lives on that mode's RULESET RESOURCE, and the engine reads it through
+    ONE surface.** Every number a game mode turns on — Siege's wave cadence, its escalating
+    respawn curve, the movement it grants, how long a planted trap lives — is an `@export` on
+    the mode's own ruleset (`SiegeRuleset`, `ArenaRuleset`), so retuning a mode is a `.tres`
+    edit and a NEW mode gets the same knobs by authoring its own resource. Nothing in the
+    engine may hold a mode's constant, and nothing in the engine may reference a mode's
+    controller to find one: it asks `ModeTuning.get_int(&"knob_name", neutral)`, which
+    resolves the ACTIVE mode's ruleset — the mode's controller registers itself when it arms —
+    or hands back the caller's **neutral** value when no mode is armed. So a plain skirmish is
+    never "the mode with its knobs at zero"; it consults no ruleset at all and behaves exactly
+    as it did before the knob existed. A knob is also **declared, not required**: it is read
+    only off a ruleset that actually has a property of that name, so one mode can turn on trap
+    expiry while another says nothing about it.
+
+    Anything a mode knob SCHEDULES is **frozen at the moment it is created**, never recomputed
+    from the live ruleset — a respawn's wait is stamped from the death round, a placed trap's
+    expiry round is stamped at cast time. That is what keeps the numbers lockstep-safe and
+    stops a mid-match retune moving something already on the board. The clock they run on is
+    the mode's own round counter, edge-detected off the **active turn system's** signals
+    (rule 2).
+    → `game/modes/ModeTuning.gd`, `game/modes/SiegeRuleset.gd`,
+    `game/modes/SiegeController.gd` (`set_armed` registers, `_run_round_start` drives),
+    pinned by `tests/unit/test_mode_pacing.gd` and
+    `tests/integration/test_mode_pacing_live.gd`
+
 Testing conventions (orphans, global state, temp paths, shared doubles) live in
 [tests/README.md](tests/README.md).

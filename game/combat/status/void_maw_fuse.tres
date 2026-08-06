@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="DelayedBurstStatus" format=3]
+
+[ext_resource type="Script" path="res://game/combat/status/DelayedBurstStatus.gd" id="1_fuse"]
+
+[resource]
+script = ExtResource("1_fuse")
+id = &"void_maw_fuse"
+display_name = "Abyssal Maw"
+duration_turns = 1
+stacking = 0
+max_stacks = -1
+rule_flags = {}
+damage_taken_scale = 1.0

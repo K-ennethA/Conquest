@@ -154,6 +154,16 @@ func applied_tile_effects_at(cell: Vector2i) -> Array:
 	return []
 
 
+## Every cell currently carrying at least one RUNTIME (applied) tile effect.
+##
+## The APPLIED layer's key set and nothing else -- map-authored terrain is derived from the
+## tile type and never appears here, which is precisely what makes this the enumeration a
+## placed-trap sweep may walk ([method TileEffectSystem.expire_placed_effects]) without any
+## risk of reaching authored ground. A copy of the keys, safe to iterate while removing.
+func applied_effect_cells() -> Array:
+	return _applied_tile_effects.keys()
+
+
 ## Add a runtime tile effect to [param cell] (e.g. a move ignites the ground into
 ## fire). Idempotent; the effect layers on top of the tile's base effects.
 func add_tile_effect(cell: Vector2i, effect) -> void:

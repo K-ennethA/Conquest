@@ -10,7 +10,9 @@ extends GutTest
 ##
 ## The rest pins what the MODE depends on: three lanes with a creep portal on each head,
 ## a base cell and a destructible base on each side, a fountain sanctum behind each base,
-## a healing meadow at every lane's midpoint, and dormant neutral camps that stay dormant.
+## a CONTROL POINT at every lane's midpoint with its healing meadow beside it, two 1-wide
+## sneak TUNNELS that flank without shortening the push, and neutral camps in two tiers that
+## stay dormant.
 
 const MAP_PATH := "res://game/maps/resources/riftwood.tres"
 const BASE_ID := "bastion"
@@ -18,6 +20,33 @@ const BASE_ID := "bastion"
 const NEUTRAL_SLOT: int = 2
 const IMPASSABLE_IDS := ["tree", "stone_wall"]
 const ORTHO: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+
+## The three claimable midpoints the generator authors (game/maps/build_riftwood.gd).
+const POINT_CANOPY := Vector2i(33, 1)
+const POINT_ROOT := Vector2i(1, 33)
+const POINT_MID := Vector2i(17, 17)
+
+## The Canopy sneak tunnel's route, north-east half. The Root tunnel is r() of it.
+## Restated here rather than imported: this suite's whole job is to check that the SAVED
+## resource matches the intent, so it must not read the intent out of the generator.
+const TUNNEL_CANOPY: Array[Vector2i] = [
+	Vector2i(26, 17), Vector2i(27, 17), Vector2i(28, 17), Vector2i(29, 17), Vector2i(30, 17),
+	Vector2i(30, 18), Vector2i(30, 19), Vector2i(30, 20), Vector2i(30, 21), Vector2i(30, 22),
+	Vector2i(31, 22),
+]
+## The only two cells a tunnel may open into: the jungle corridor it leaves, and the rim
+## lane's far third it arrives at. (Their mirrors are the Root tunnel's.)
+const TUNNEL_MOUTHS: Array[Vector2i] = [Vector2i(25, 17), Vector2i(32, 22)]
+
+## The camp tiers, north-east half; each has its mirror.
+const OUTER_CAMPS: Array[Vector2i] = [Vector2i(24, 10), Vector2i(24, 13)]
+const INNER_CAMPS: Array[Vector2i] = [Vector2i(24, 17)]
+const OUTER_CAMP_ID := "petalfang"
+const INNER_CAMP_ID := "blightcap"
+
+## Player 0's base pocket: the 7x7 corner room. A sneak route that opened into one (or into
+## the fountain sanctum inside it) would delete this map's whole defensive geometry.
+const POCKET := 6
 
 var _map: MapResource
 ## cell -> tile_id, built once. get_tile_at_position is a linear scan over 1225 entries,
@@ -113,6 +142,23 @@ func test_map_passes_its_own_strict_validator() -> void:
 
 # --- Terrain -----------------------------------------------------------------
 
+## The exact cell composition of the board. Pinned to the CELL, not to a ">0" floor: this map
+## is generated, so a predicate edited by hand is the failure mode, and a silent drift of 30
+## trees into grass is exactly what nobody notices. Update these numbers deliberately when the
+## generator's layout changes, and only then.
+const COMPOSITION := {
+	"tree": 568,
+	"grass_plains": 302,
+	"tall_grass": 214,
+	"forest_dirt": 79,
+	"stone_wall": 42,
+	"sacred_meadow": 12,
+	"fountain": 8,
+}
+## Everything that is not a tree or a stone wall.
+const WALKABLE_CELLS := 615
+
+
 func test_every_cell_is_painted_and_resolves() -> void:
 	assert_eq(_map.tile_layout.size(), _map.width * _map.height, "every cell painted")
 	var composition: Dictionary = {}
@@ -121,10 +167,22 @@ func test_every_cell_is_painted_and_resolves() -> void:
 	for tile_id in composition.keys():
 		assert_not_null(TileCatalog.find_by_id(StringName(tile_id)),
 			"tile_id '%s' must resolve via TileCatalog" % tile_id)
-	assert_gt(int(composition.get("tall_grass", 0)), 0, "lanes are edged with ambush cover")
-	assert_gt(int(composition.get("tree", 0)), 0, "impassable wood shapes the lanes")
-	assert_gt(int(composition.get("stone_wall", 0)), 0, "and rock banks the middle")
-	assert_gt(int(composition.get("forest_dirt", 0)), 0, "the jungle corridors are walkable")
+	assert_eq(composition.size(), COMPOSITION.size(),
+		"exactly the authored terrain ids appear on the board (found %s)" % str(composition.keys()))
+	for tile_id in COMPOSITION.keys():
+		assert_eq(int(composition.get(tile_id, 0)), int(COMPOSITION[tile_id]),
+			"the board carries exactly %d '%s' cells" % [int(COMPOSITION[tile_id]), tile_id])
+
+
+func test_the_composition_adds_up_to_the_whole_board() -> void:
+	# A guard on the pin above: if somebody retunes COMPOSITION they cannot leave cells
+	# unaccounted for.
+	var total: int = 0
+	for count in COMPOSITION.values():
+		total += int(count)
+	assert_eq(total, 35 * 35, "every one of the 1225 cells is in the composition table")
+	var walkable: int = total - int(COMPOSITION["tree"]) - int(COMPOSITION["stone_wall"])
+	assert_eq(walkable, WALKABLE_CELLS, "and the walkable share is what the flood expects")
 
 
 func test_the_board_is_a_perfect_one_eighty_mirror() -> void:
@@ -144,6 +202,7 @@ func test_every_walkable_cell_is_reachable_from_player_zeros_base() -> void:
 	for tile_id in _tiles.values():
 		if not (tile_id in IMPASSABLE_IDS):
 			walkable += 1
+	assert_eq(walkable, WALKABLE_CELLS, "the walkable share of the board is what it was")
 	assert_eq(_flood_from(_map.get_base_cell(0)), walkable,
 		"every walkable cell is connected to player 0's base")
 
@@ -163,6 +222,46 @@ func _flood_from(origin: Vector2i) -> int:
 			seen[next] = true
 			queue.append(next)
 	return seen.size()
+
+
+## Shortest four-neighbour walk from [param from] to [param to], or -1 when unreachable.
+## [param extra_blocked] additionally walls off cells -- used to measure what a route is
+## WORTH by asking how far the same trip is without it.
+func _distance(from: Vector2i, to: Vector2i, extra_blocked: Dictionary = {}) -> int:
+	var seen: Dictionary = { from: 0 }
+	var queue: Array[Vector2i] = [from]
+	var head: int = 0
+	while head < queue.size():
+		var cell: Vector2i = queue[head]
+		head += 1
+		if cell == to:
+			return int(seen[cell])
+		for offset in ORTHO:
+			var next: Vector2i = cell + offset
+			if seen.has(next) or not _tiles.has(next) or extra_blocked.has(next):
+				continue
+			if _tile_at(next) in IMPASSABLE_IDS:
+				continue
+			seen[next] = int(seen[cell]) + 1
+			queue.append(next)
+	return -1
+
+
+## Both tunnels' cells (the authored north-east route and its mirror), as a set.
+func _tunnel_cells() -> Dictionary:
+	var out: Dictionary = {}
+	for cell in TUNNEL_CANOPY:
+		out[cell] = true
+		out[_mirror(cell)] = true
+	return out
+
+
+## True when [param cell] lies inside either 7x7 base pocket.
+func _in_a_pocket(cell: Vector2i) -> bool:
+	for c in [cell, _mirror(cell)]:
+		if c.x >= 0 and c.x <= POCKET and c.y >= 0 and c.y <= POCKET:
+			return true
+	return false
 
 
 # --- Bases + fountains --------------------------------------------------------
@@ -313,12 +412,205 @@ func _route_length(lane: Array[Vector2i]) -> int:
 	return total
 
 
-func test_every_lane_has_a_healing_meadow_at_its_midpoint() -> void:
+# --- Control points -----------------------------------------------------------
+
+func test_it_declares_a_control_point_at_every_lane_midpoint() -> void:
+	# "Hold the midpoint" and "hold the lane" must name the SAME cell, or a mode that reasons
+	# about one is reasoning about a cell the other never contests.
+	assert_eq(_map.control_point_count(), 3, "one claimable point per lane")
 	for i in range(_map.lane_count()):
 		var lane: Array[Vector2i] = _map.get_lane(i)
 		var midpoint: Vector2i = lane[lane.size() / 2]
-		assert_eq(_tile_at(midpoint), "sacred_meadow",
-			"lane %d's midpoint %s is a meadow to fight over" % [i, str(midpoint)])
+		assert_true(_map.has_control_point(midpoint),
+			"lane %d's midpoint %s is a control point" % [i, str(midpoint)])
+
+
+func test_the_three_points_are_the_two_rim_elbows_and_the_middle() -> void:
+	var points: Array[Vector2i] = _map.get_control_points()
+	for point in [POINT_CANOPY, POINT_ROOT, POINT_MID]:
+		assert_has(points, point, "%s is declared" % str(point))
+
+
+func test_every_control_point_stands_on_walkable_ground() -> void:
+	for point in _map.get_control_points():
+		assert_false(_tile_at(point) in IMPASSABLE_IDS,
+			"control point %s is walkable (it is '%s')" % [str(point), _tile_at(point)])
+
+
+func test_the_set_of_control_points_is_unchanged_by_the_mirror() -> void:
+	# As a SET, not point by point: the middle point is its OWN mirror and the two rim points
+	# are each other's, so neither side starts nearer to more of them than the other.
+	var points: Array[Vector2i] = _map.get_control_points()
+	for point in points:
+		assert_has(points, _mirror(point),
+			"control point %s's mirror twin %s is also a point" % [str(point), str(_mirror(point))])
+	assert_eq(_mirror(POINT_MID), POINT_MID, "and the middle one is its own twin")
+
+
+func test_each_point_is_a_stone_circle_with_the_meadow_beside_it() -> void:
+	# The distinct treatment is what makes a point READ as claimable rather than as more lane.
+	# The heal deliberately sits BESIDE the circle: standing on the point is a commitment.
+	for point in _map.get_control_points():
+		assert_eq(_tile_at(point), "forest_dirt",
+			"control point %s is laid in stone-circle dirt, not lane grass" % str(point))
+		for offset in ORTHO:
+			assert_eq(_tile_at(point + offset), "forest_dirt",
+				"and %s completes its circle" % str(point + offset))
+		var meadows: Array[Vector2i] = []
+		for dy in [-1, 0, 1]:
+			for dx in [-1, 0, 1]:
+				if _tile_at(point + Vector2i(dx, dy)) == "sacred_meadow":
+					meadows.append(point + Vector2i(dx, dy))
+		assert_gt(meadows.size(), 0, "the heal tiles ring %s" % str(point))
+		assert_false(_tile_at(point) == "sacred_meadow", "but never sit ON it")
+
+
+func test_neither_side_starts_nearer_to_a_control_point_than_the_other() -> void:
+	var base_zero: Vector2i = _map.get_base_cell(0)
+	var base_one: Vector2i = _map.get_base_cell(1)
+	for point in _map.get_control_points():
+		assert_eq(_distance(base_zero, point), _distance(base_one, point),
+			"both bases walk the same distance to %s" % str(point))
+	assert_eq(_distance(base_zero, POINT_MID), 28, "the middle point is 28 steps out")
+	assert_eq(_distance(base_zero, POINT_CANOPY), 32, "and each rim point 32")
+
+
+func test_the_middle_point_plugs_the_short_lane() -> void:
+	# The Riftway is three cells wide; the mid circle covers all three at y = 17, so the
+	# fastest route between the bases cannot avoid the thing being fought over.
+	var plugged: Dictionary = { POINT_MID: true }
+	for offset in ORTHO:
+		plugged[POINT_MID + offset] = true
+	assert_gt(_distance(_map.get_base_cell(0), _map.get_base_cell(1), plugged),
+		_distance(_map.get_base_cell(0), _map.get_base_cell(1)),
+		"walling the mid circle lengthens the base-to-base walk, so the lane runs through it")
+
+
+# --- Sneak tunnels --------------------------------------------------------------
+
+func test_two_mirrored_tunnels_are_cut_through_the_wood() -> void:
+	var cells: Dictionary = _tunnel_cells()
+	assert_eq(cells.size(), TUNNEL_CANOPY.size() * 2, "one tunnel per side, no overlap")
+	var wrong: Array[Vector2i] = []
+	for cell in cells.keys():
+		if _tile_at(cell) != "tall_grass":
+			wrong.append(cell)
+	assert_eq(wrong.size(), 0,
+		"a sneak route is ambush grass end to end (first offender: %s)" % (
+			str(wrong[0]) if not wrong.is_empty() else "none"))
+
+
+func test_the_tunnels_are_exactly_one_cell_wide() -> void:
+	# Width is the whole character of the route: meeting somebody inside it has to be a
+	# commitment, not a pass-by. A tunnel cell may only touch tunnel, wood, or a mouth.
+	var cells: Dictionary = _tunnel_cells()
+	var expected_mouths: Dictionary = {}
+	for mouth in TUNNEL_MOUTHS:
+		expected_mouths[mouth] = true
+		expected_mouths[_mirror(mouth)] = true
+	var openings: Dictionary = {}
+	for cell in cells.keys():
+		for offset in ORTHO:
+			var next: Vector2i = cell + offset
+			if not _tiles.has(next) or cells.has(next):
+				continue
+			if _tile_at(next) in IMPASSABLE_IDS:
+				continue
+			openings[next] = true
+	assert_eq(openings.keys().size(), 4, "four openings in all -- two per tunnel (got %s)" % str(openings.keys()))
+	for opening in openings.keys():
+		assert_true(expected_mouths.has(opening),
+			"%s is one of the authored mouths, not a hole in the tunnel's wall" % str(opening))
+
+
+func test_no_tunnel_opens_into_a_base_pocket_or_a_sanctum() -> void:
+	# The pockets are entered through their lanes and the sanctums through a single doorway
+	# cell. A backdoor past either would delete this map's defensive geometry.
+	var offenders: Array[Vector2i] = []
+	for cell in _tunnel_cells().keys():
+		for dy in [-1, 0, 1]:
+			for dx in [-1, 0, 1]:
+				if _in_a_pocket(cell + Vector2i(dx, dy)):
+					offenders.append(cell)
+	assert_eq(offenders.size(), 0,
+		"no tunnel cell reaches a base pocket (first offender: %s)" % (
+			str(offenders[0]) if not offenders.is_empty() else "none"))
+	for cell in _tunnel_cells().keys():
+		assert_ne(_tile_at(cell), "fountain", "and none of it is sanctum ground")
+
+
+func test_a_tunnel_shortens_a_flank_rotation_but_never_the_push() -> void:
+	# THE HIGHWAY CHECK, and the reason the tunnels are allowed to exist at all. What they buy
+	# is SIDEWAYS movement -- the jungle corridor to the rim lane's far third, past the elbow
+	# point. What they must not buy is a shorter road between the two bases.
+	var sealed: Dictionary = _tunnel_cells()
+	var base_zero: Vector2i = _map.get_base_cell(0)
+	var base_one: Vector2i = _map.get_base_cell(1)
+	assert_eq(_distance(base_zero, base_one), 56, "base to base is 56 steps")
+	assert_eq(_distance(base_zero, base_one, sealed), 56,
+		"and exactly as far with the tunnels walled off -- they are not a fourth lane")
+
+	var corridor := Vector2i(25, 17)
+	var far_third := Vector2i(32, 22)
+	assert_eq(_distance(corridor, far_third), 12, "the flank rotation is 12 steps through the tunnel")
+	assert_eq(_distance(corridor, far_third, sealed), 28, "and 28 the long way round")
+
+
+func test_the_tunnel_lands_in_the_far_third_of_the_rim_lane() -> void:
+	# A flank that arrives in front of the contested elbow is not a flank. The Canopy tunnel
+	# must come out on the stretch of lane that is closer to player 1's head than to the elbow.
+	var lane: Array[Vector2i] = _map.get_lane(0)
+	var exit_cell := Vector2i(32, 22)
+	assert_lt(_distance(exit_cell, _map.lane_head(0, 1)), _distance(exit_cell, POINT_CANOPY),
+		"the Canopy tunnel arrives past the elbow, nearer player 1's lane head")
+	assert_gt(lane.size(), 4, "the lane has enough waypoints for 'far third' to mean something")
+
+
+# --- Camp tiers ------------------------------------------------------------------
+
+func test_the_camps_come_in_two_tiers() -> void:
+	var by_cell: Dictionary = {}
+	for sd in _spawns_for(NEUTRAL_SLOT):
+		by_cell[sd["position"]] = String(sd["character_id"])
+	assert_eq(by_cell.size(), 6, "four outer creatures and two inner guardians")
+	for cell in OUTER_CAMPS:
+		for twin in [cell, _mirror(cell)]:
+			assert_eq(String(by_cell.get(twin, "")), OUTER_CAMP_ID,
+				"an outer camp creature holds %s" % str(twin))
+	for cell in INNER_CAMPS:
+		for twin in [cell, _mirror(cell)]:
+			assert_eq(String(by_cell.get(twin, "")), INNER_CAMP_ID,
+				"a tougher inner guardian holds %s" % str(twin))
+
+
+func test_the_inner_guardian_is_the_tougher_body() -> void:
+	# Tier is a THREAT statement, not a label: the inner camp has to actually be worse to fight.
+	var outer := CharacterLibrary.get_character(OUTER_CAMP_ID)
+	var inner := CharacterLibrary.get_character(INNER_CAMP_ID)
+	assert_not_null(outer, "the outer camp creature resolves")
+	assert_not_null(inner, "and so does the inner guardian")
+	assert_gt(inner.base_health, outer.base_health,
+		"the inner guardian outlasts the outer one (%d vs %d HP)" % [
+			inner.base_health, outer.base_health])
+	assert_gt(inner.base_defense, outer.base_defense, "and is harder to cut down")
+
+
+func test_the_inner_camps_sit_closer_to_the_middle_than_the_outer_ones() -> void:
+	var deepest_outer: int = 0
+	for cell in OUTER_CAMPS:
+		deepest_outer = maxi(deepest_outer, _distance(cell, POINT_MID))
+	for cell in INNER_CAMPS:
+		for twin in [cell, _mirror(cell)]:
+			assert_lt(_distance(twin, POINT_MID), deepest_outer,
+				"inner camp %s is deeper toward mid than the outer tier" % str(twin))
+
+
+func test_the_inner_camp_guards_the_tunnel_mouth() -> void:
+	# Why the second tier is where it is: clearing it opens the flank. It is dormant, so the
+	# alternative -- creeping past a sleeping guardian -- stays available and is the point.
+	for cell in INNER_CAMPS:
+		assert_lte(_distance(cell, TUNNEL_MOUTHS[0]), 2,
+			"inner camp %s sits on the tunnel's corridor mouth" % str(cell))
 
 
 # --- Spawn economy ------------------------------------------------------------
@@ -375,7 +667,7 @@ func test_the_portals_are_paced_and_unbounded() -> void:
 func test_the_jungle_camps_are_dormant_anchored_and_mirrored() -> void:
 	var camps: Array = _spawns_for(NEUTRAL_SLOT)
 	assert_gte(camps.size(), 2, "there is a camp to clear")
-	assert_lte(camps.size(), 4, "2-4 creatures, not an army")
+	assert_lte(camps.size(), 8, "a jungle economy in two tiers, not an army")
 	var cells: Dictionary = {}
 	for sd in camps:
 		cells[sd["position"]] = true

@@ -545,12 +545,23 @@ func _capture_board(index_of: Callable) -> Dictionary:
 			for y in range(int(size.z)):
 				var cell := Vector2i(x, y)
 				var ids: Array = []
+				# The PLACEMENT RECORD, parallel to `ids`. A placed trap can now carry a frozen
+				# expiry round (see TileEffectResource.stamp_placement) when the active mode
+				# declared a lifetime for it, and a resume that dropped it would hand the player
+				# back a permanent trap the battle had already put a clock on. -1 is "never",
+				# which is what every effect placed outside such a mode records and what a
+				# snapshot written before these keys existed reads back as.
+				var placed: Array = []
+				var expiry: Array = []
 				for effect in CombatServices.applied_tile_effects_at(cell):
 					if effect != null and not String(effect.id).is_empty():
 						ids.append(String(effect.id))
+						placed.append(int(effect.placed_round) if "placed_round" in effect else -1)
+						expiry.append(int(effect.expires_on_round) if "expires_on_round" in effect else -1)
 				if not ids.is_empty():
 					(out["applied_tile_effects"] as Array).append({
-						"cell": BattleSnapshot.cell_to_array(cell), "ids": ids })
+						"cell": BattleSnapshot.cell_to_array(cell), "ids": ids,
+						"placed": placed, "expiry": expiry })
 
 	var world = _game_world_manager()
 	if world != null:
@@ -645,10 +656,25 @@ static func restore_board(snapshot: Dictionary) -> void:
 		if not (item is Dictionary):
 			continue
 		var cell: Vector2i = BattleSnapshot.array_to_cell((item as Dictionary).get("cell", []))
-		for raw_id in (item as Dictionary).get("ids", []):
-			var effect = BattleSnapshot.tile_effect_by_id(StringName(String(raw_id)))
-			if effect != null:
-				CombatServices.add_tile_effect(cell, effect)
+		var ids: Array = (item as Dictionary).get("ids", [])
+		var placed: Array = (item as Dictionary).get("placed", [])
+		var expiry: Array = (item as Dictionary).get("expiry", [])
+		for i in range(ids.size()):
+			var effect = BattleSnapshot.tile_effect_by_id(StringName(String(ids[i])))
+			if effect == null:
+				continue
+			# Re-stamp the placement record the battle had frozen on this trap. Onto a
+			# DUPLICATE: tile_effect_by_id serves the shared authored resource, and stamping
+			# that would put an expiry on every future placement of the same trap
+			# (CONQUEST.md rule 7). A snapshot with no record (or -1) restores the effect
+			# exactly as it always did -- permanent, untouched, no copy allocated.
+			var placed_round: int = int(placed[i]) if i < placed.size() else -1
+			var expires_on: int = int(expiry[i]) if i < expiry.size() else -1
+			if placed_round >= 0 or expires_on >= 0:
+				effect = effect.duplicate()
+				effect.placed_round = placed_round
+				effect.expires_on_round = expires_on
+			CombatServices.add_tile_effect(cell, effect)
 
 
 ## PHASE 2, run after the turn system has been REGISTERED but before the game starts.

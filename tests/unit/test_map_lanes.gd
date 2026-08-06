@@ -1,7 +1,8 @@
 extends GutTest
 
 ## The push-mode geometry a MapResource carries: [code]lanes[/code] (ordered waypoint
-## routes, player 0's end FIRST) and [code]base_cells[/code] (player slot -> base cell).
+## routes, player 0's end FIRST), [code]base_cells[/code] (player slot -> base cell) and
+## [code]control_points[/code] (the unowned cells a mode lets a side claim and hold).
 ##
 ## The load-bearing property is BACKWARD COMPATIBILITY, exactly as it is for spawn points:
 ## every map that shipped before these fields existed declares neither, and has to keep
@@ -16,6 +17,7 @@ const LEGACY_MAP_PATH := "res://game/maps/resources/kings_crossing.tres"
 
 const LANE_A: Array[Vector2i] = [Vector2i(1, 1), Vector2i(5, 1), Vector2i(8, 8)]
 const LANE_B: Array[Vector2i] = [Vector2i(1, 8), Vector2i(4, 9), Vector2i(8, 8)]
+const POINTS: Array[Vector2i] = [Vector2i(4, 4), Vector2i(2, 7)]
 
 
 func after_all() -> void:
@@ -39,13 +41,15 @@ func _legacy_map() -> MapResource:
 	return m
 
 
-## The same map with two lanes and both bases declared.
+## The same map with two lanes, both bases and two control points declared.
 func _lane_map() -> MapResource:
 	var m := _legacy_map()
 	m.add_lane(LANE_A)
 	m.add_lane(LANE_B)
 	m.set_base_cell(0, Vector2i(1, 1))
 	m.set_base_cell(1, Vector2i(8, 8))
+	for point in POINTS:
+		m.add_control_point(point)
 	return m
 
 
@@ -64,8 +68,13 @@ func test_a_map_that_declares_nothing_reads_as_having_no_lanes() -> void:
 	var m := _legacy_map()
 	assert_eq(m.lane_count(), 0, "a map with no lanes declares none")
 	assert_true(m.base_cells.is_empty(), "and no bases")
+	assert_eq(m.control_point_count(), 0, "and no control points")
 	assert_eq(m.get_lane(0), [] as Array[Vector2i], "reading a lane it has not got is empty, not an error")
 	assert_eq(m.get_base_cell(0), Vector2i(-1, -1), "and so is reading a base it has not got")
+	assert_eq(m.get_control_point(0), Vector2i(-1, -1),
+		"and so is reading a control point it has not got")
+	assert_false(m.has_control_point(Vector2i(1, 1)),
+		"no cell on a map without control points is one")
 	assert_true(m.validate_map(true).get("valid", false), "and it is still a valid map")
 
 
@@ -81,6 +90,7 @@ func test_every_shipped_map_still_declares_no_lanes() -> void:
 			continue  # the one map authored WITH lanes
 		assert_eq(m.lane_count(), 0, "%s declares no lanes" % path)
 		assert_true(m.base_cells.is_empty(), "%s declares no base cells" % path)
+		assert_eq(m.control_point_count(), 0, "%s declares no control points" % path)
 	assert_gt(checked, 1, "the builtin map scan found maps to check")
 
 
@@ -91,6 +101,7 @@ func test_a_legacy_map_round_trips_through_json_unchanged() -> void:
 	assert_not_null(restored, "a map with no lanes still imports")
 	assert_eq(restored.lane_count(), 0, "and comes back with no lanes")
 	assert_true(restored.base_cells.is_empty(), "and no base cells")
+	assert_eq(restored.control_point_count(), 0, "and no control points")
 	assert_eq(restored.unit_spawns.size(), original.unit_spawns.size(),
 		"the rest of the payload is untouched")
 
@@ -131,6 +142,80 @@ func test_a_json_waypoint_is_a_real_vector_not_a_dictionary() -> void:
 	var restored := _json_round_trip(_lane_map())
 	for waypoint in restored.get_lane(0):
 		assert_true(waypoint is Vector2i, "waypoint %s is a cell" % str(waypoint))
+
+
+# --- Control points -----------------------------------------------------------
+
+func test_control_points_survive_a_tres_round_trip() -> void:
+	var m := _lane_map()
+	assert_eq(ResourceSaver.save(m, TEMP_MAP_PATH), OK, "the fixture saves")
+	var restored := load(TEMP_MAP_PATH) as MapResource
+	assert_not_null(restored, "and loads back")
+	assert_eq(restored.control_point_count(), POINTS.size(), "both points came back")
+	assert_eq(restored.get_control_points(), POINTS, "in the authored order, cell for cell")
+
+
+func test_control_points_survive_a_json_round_trip() -> void:
+	var restored := _json_round_trip(_lane_map())
+	assert_not_null(restored, "a map with control points passes the import gate")
+	assert_eq(restored.get_control_points(), POINTS, "the cells are exact")
+	for point in restored.get_control_points():
+		# JSON has no vector type, so a point is written {"x","y"}; if the importer left it a
+		# Dictionary every board lookup would silently miss (CONQUEST.md rule 3).
+		assert_true(point is Vector2i, "point %s came back a cell, not a dictionary" % str(point))
+
+
+func test_reading_a_control_point_is_indexed_and_membership_tested() -> void:
+	var m := _lane_map()
+	assert_eq(m.get_control_point(0), POINTS[0], "point 0 reads back")
+	assert_eq(m.get_control_point(9), Vector2i(-1, -1),
+		"asking for a point the map has not got answers, it does not fault")
+	assert_true(m.has_control_point(POINTS[1]), "a declared cell IS a control point")
+	assert_false(m.has_control_point(Vector2i(9, 9)), "and an undeclared one is not")
+
+
+func test_a_control_point_outside_the_board_is_rejected() -> void:
+	var m := _lane_map()
+	m.control_points[0] = Vector2i(99, 1)
+	assert_false(m.validate_map().get("valid", true), "a point off the board can never be held")
+	assert_string_contains(_issues(m), "out of bounds", "and the issue says why")
+
+
+func test_a_control_point_that_is_not_a_cell_is_rejected() -> void:
+	var m := _lane_map()
+	m.control_points[1] = "mid"
+	assert_false(m.validate_map().get("valid", true), "a control point has to be a cell")
+
+
+func test_the_same_control_point_declared_twice_is_rejected() -> void:
+	# A duplicate would be contested, scored and rewarded twice over from one square of
+	# ground -- there is no map that wants it, so it reads as an authoring slip.
+	var m := _lane_map()
+	m.add_control_point(POINTS[0])
+	assert_false(m.validate_map().get("valid", true), "one cell is one control point")
+	assert_string_contains(_issues(m), "declared twice", "and the issue says why")
+
+
+func test_a_control_point_in_a_wall_is_rejected_by_the_strict_gate() -> void:
+	# Structural validation cannot know what terrain is underneath; the catalog-strict pass
+	# can, and it is the same backstop that refuses a spawn standing in a tree.
+	var m := _lane_map()
+	m.set_tile_at_position(POINTS[0], "WALL", "", "stone_wall")
+	assert_true(m.validate_map().get("valid", false),
+		"structurally the point is still a fine cell")
+	var strict: Dictionary = m.validate_map(true)
+	assert_false(strict.get("valid", true), "but nobody can stand in a wall to claim it")
+	assert_string_contains("; ".join(strict.get("issues", [])), "impassable terrain",
+		"and the issue says why")
+
+
+func test_a_broken_control_point_makes_the_json_importer_refuse_the_map_quietly() -> void:
+	var json := JSON.new()
+	assert_eq(json.parse(_lane_map().export_to_json()), OK, "the fixture exports")
+	var data: Dictionary = json.data
+	data["layout"]["control_points"][0] = {"x": 404, "y": 0}
+	assert_null(MapResource.import_from_json(JSON.stringify(data), true),
+		"a map whose control point leaves the board is refused")
 
 
 # --- Reading ------------------------------------------------------------------

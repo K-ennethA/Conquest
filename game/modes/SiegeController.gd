@@ -54,6 +54,27 @@ class_name SiegeController
 ##    would make the last seconds of a match the one moment reinforcements stop, which is
 ##    exactly backwards.
 ##
+## 3b. PACING. The mode grants movement ([member SiegeRuleset.hero_move_bonus] /
+##    [member SiegeRuleset.creep_move_bonus]) and expires the traps its battles plant
+##    ([member SiegeRuleset.trap_expiry_rounds]). Both are ruleset DATA the engine reads
+##    through [ModeTuning] rather than anything the engine knows about Siege, so a future mode
+##    turns the same knobs on by authoring its own resource (CONQUEST.md rule 11). What this
+##    node contributes is the round clock they run on and the registration that makes its
+##    ruleset the active one.
+##
+## 3c. CONTROL POINTS. A map may author MIDPOINTS ([code]MapResource.control_points[/code])
+##    that either side takes by the SAME rule that takes a base -- end your turn standing on
+##    one, still be there at your next turn start, and it is yours; the enemy repeats the trick
+##    to flip it; a creep can no more claim a midpoint than it can capture a base. Ownership is
+##    a per-cell latch on this node ([method control_point_owner]) and PERSISTS through its
+##    holder's death: a point is lost by being taken, not by being left. What a point pays is
+##    two ruleset knobs ([member SiegeRuleset.control_point_extra_creeps] /
+##    [member SiegeRuleset.control_point_heal]) spent through machinery the mode already has --
+##    extra creeps in the owner's wave, entering AT the point and marching the nearest lane
+##    (still bounded by the same live cap), and a round-start heal for the owner's units
+##    standing on it, through the ordinary heal pipeline. Multi-point work walks the cells in
+##    SORTED order, so a board with four midpoints resolves identically on every peer.
+##
 ## 4. THE CAPTURE STATE MACHINE. See [CaptureBase] for the rule; this owns the latch.
 ##      * on turn ENDED  -- a hero of the acting side standing on the enemy base cell BEGINS
 ##        a capture (unit + cell + side recorded);
@@ -83,6 +104,19 @@ const DEFAULT_RULESET_PATH := "res://game/modes/rulesets/siege_default.tres"
 ## drops into the ordinary planner.
 const CREEP_SPAWN_KIND := "Reinforcement"
 
+## Node name of the battle's announcer, looked up by name so this mode holds no reference to a
+## UI class (and runs unchanged in a build or a test with no HUD).
+const ANNOUNCER_NODE := "ActionAnnouncer"
+
+## The lines a midpoint changing hands announces.
+const ANNOUNCE_POINT_CLAIMED := "Midpoint claimed!"
+const ANNOUNCE_POINT_FLIPPED := "Midpoint taken!"
+const ANNOUNCE_POINT_SUB := "Hold it for reinforcements and healing."
+
+## Move id stamped on the synthetic move a control point's heal resolves through, so the event
+## log and any listener can tell a midpoint's sustain from a healing move somebody cast.
+const CONTROL_HEAL_MOVE_ID: StringName = &"siege_control_point_heal"
+
 ## The single live instance, or null before the first Siege map.
 static var _instance: SiegeController = null
 
@@ -98,6 +132,19 @@ var _lanes: Array = []
 
 ## player_id -> capture cell ([Vector2i]).
 var _base_cells: Dictionary = {}
+
+## Authored CONTROL POINT cells, deduplicated and held in SORTED order -- which is the order
+## every multi-point pass walks, so the sequence is a property of the map rather than of how
+## the array happened to be authored. Empty on a map that declares no midpoints.
+var _control_points: Array = []
+
+## Control point ownership: [Vector2i] cell -> player_id. A cell absent from this map is
+## NEUTRAL; there is no "owned by -1" entry.
+var _control_owner: Dictionary = {}
+
+## Claims in flight: [Vector2i] cell -> { "player_id": int, "unit": Unit }. Exactly the shape
+## [member _capture] takes, because it is exactly the same state machine.
+var _control_claim: Dictionary = {}
 
 ## Round boundaries observed this battle (0 before the first turn).
 var _rounds_elapsed: int = 0
@@ -228,13 +275,24 @@ static func _install() -> SiegeController:
 func set_armed(value: bool) -> void:
 	_armed = value
 	if not value:
+		# Stand the tuning surface down with the mode. Every knob the engine reads through
+		# [ModeTuning] falls back to its neutral value the moment this happens, which is what
+		# makes the next non-Siege battle in the same app run a plain battle again.
+		ModeTuning.unregister(self)
 		return
+	# THE MODE'S TUNING IS NOW THE ACTIVE ONE. Everything Siege turns on that the ENGINE has to
+	# read -- the movement grant, the placed-trap lifetime -- is declared on [SiegeRuleset] and
+	# reached through this one surface, never through a reference to this class
+	# (CONQUEST.md rule 11).
+	ModeTuning.register(self)
 	_rounds_elapsed = 0
 	_last_seen_round = -1
 	_creep_serial.clear()
 	_respawn_queue.clear()
 	_capture.clear()
 	_captured_by = -1
+	_control_owner.clear()
+	_control_claim.clear()
 	if _ruleset == null:
 		_ruleset = load_ruleset()
 	if is_inside_tree():
@@ -288,6 +346,9 @@ static func load_ruleset() -> SiegeRuleset:
 func configure_from_map(map_resource) -> void:
 	_lanes = []
 	_base_cells = {}
+	_control_points = []
+	_control_owner.clear()
+	_control_claim.clear()
 	if map_resource == null:
 		return
 
@@ -321,6 +382,18 @@ func configure_from_map(map_resource) -> void:
 				cell = _to_cell((raw_bases as Dictionary)[key])
 			if cell.x >= 0 and cell.y >= 0:
 				_base_cells[int(key)] = cell
+
+	# CONTROL POINTS -- a third OPTIONAL field, read by exact name off whatever the map layer
+	# hands us and coerced element-wise like the lanes (CONQUEST.md rule 3). A map (or a
+	# MapResource build) that does not carry it leaves the array empty, which is what makes the
+	# whole midpoint machine self-disabling rather than something every map has to opt out of.
+	# Deduplicated and SORTED here, once, so every pass downstream can simply iterate.
+	var raw_points = map_resource.get("control_points")
+	if raw_points is Array:
+		for cell in _to_cells(raw_points):
+			if not (cell in _control_points):
+				_control_points.append(cell)
+		_control_points.sort_custom(_cell_less)
 
 
 ## Inject a ruleset (tests, and a future setup screen). Null restores the authored/default one.
@@ -400,6 +473,7 @@ func _on_turn_ended(player) -> void:
 
 
 func _exit_tree() -> void:
+	ModeTuning.unregister(self)
 	if TurnSystemManager != null \
 			and TurnSystemManager.turn_system_activated.is_connected(_on_turn_system_activated):
 		TurnSystemManager.turn_system_activated.disconnect(_on_turn_system_activated)
@@ -456,12 +530,72 @@ func observe_round(round_value: int) -> void:
 	_run_round_start()
 
 
-## Everything that happens on a round boundary, in a fixed order: returns first (a unit that
-## is due back is on the board before this round's wave measures the creep cap), then the
-## wave. Order is part of the determinism contract -- do not reorder without a test.
+## Everything that happens on a round boundary, in a fixed order: expired traps are swept off
+## the board FIRST (so nothing arriving this round walks onto a trap that should already be
+## gone), then returns (a unit that is due back is on the board before this round's wave
+## measures the creep cap), then the control points' HEAL (before the wave, so the sustain lands
+## on the units that fought for the point rather than on creeps that arrive at full health this
+## instant), then the wave, and finally the movement grant -- last, so the units that just
+## returned and the creeps that just spawned are boosted in the SAME pass rather than waiting a
+## round for their pace. Order is part of the determinism contract -- do not reorder without a
+## test.
 func _run_round_start() -> void:
+	_expire_placed_effects()
 	_process_respawns()
+	_process_control_point_heal()
 	_process_wave()
+	_grant_march_bonuses()
+
+
+# --- 1b. Pacing: the movement grant and the trap sweep -------------------------
+#
+# THE TWO THINGS THE MODE CHANGES ABOUT THE BOARD ITSELF, both pure ruleset data.
+#
+# MOVEMENT. A Siege map is long and its lanes are longer, so the mode GRANTS movement
+# ([member SiegeRuleset.hero_move_bonus] / [member SiegeRuleset.creep_move_bonus]) rather than
+# asking every character to be re-tuned for one mode. It is handed out as an ordinary
+# permanent status through [method ModeTuning.grant_move_bonus], which means it rides the
+# machinery that already exists: the modifier lands on `get_stat("movement")`, so
+# [MovementResolver]'s flood budget, the AI's reach estimate and the card's MOV chip all pick
+# it up with no code of their own, and a re-grant REFRESHES the one instance instead of
+# stacking a second bonus (CONQUEST.md rule 6).
+#
+# WHY RE-GRANT EVERY ROUND. Because refresh makes it free, and because it is the only sweep
+# that cannot miss a unit: a wave creep, a squad respawn, a summon or a unit adopted by some
+# path nobody thought about all get their pace on the next boundary at the latest. The spawn
+# sites below ALSO grant directly, so a freshly placed unit is boosted the instant it lands
+# rather than one round later.
+#
+# TRAPS. A placed trap's lifetime is [member SiegeRuleset.trap_expiry_rounds], frozen onto each
+# placement when it goes down; the sweep itself is the engine's
+# ([method TileEffectSystem.expire_placed_effects]), driven from here because this node is what
+# owns the round clock. A future mode that declares the same knob drives it with the same line.
+
+
+## Sweep the board's expired runtime-placed tile effects for the round just entered.
+func _expire_placed_effects() -> void:
+	TileEffectSystem.expire_placed_effects(_rounds_elapsed)
+
+
+## Re-grant the mode's movement bonus to every unit of every side that has a base. Neutrals
+## and unowned props are untouched; a re-grant on a unit that already has it is a REFRESH.
+func _grant_march_bonuses() -> void:
+	if not is_active():
+		return
+	var sides: Array = _base_cells.keys()
+	sides.sort()   # fixed iteration order == fixed grant order
+	for side in sides:
+		for unit in _units_of(int(side)):
+			grant_march_bonus(unit)
+
+
+## Grant ONE unit the pace its kind is owed: the creep bonus for a creep, the hero bonus for
+## a squad unit. Public so the spawn sites (and a test) can boost a unit the instant it lands.
+## Returns true when a status was handed over.
+func grant_march_bonus(unit) -> bool:
+	if unit == null or not is_instance_valid(unit):
+		return false
+	return ModeTuning.grant_move_bonus(unit, ruleset().move_bonus_for(CaptureBase.is_creep(unit)))
 
 
 # --- 2. Creep waves -----------------------------------------------------------
@@ -496,24 +630,45 @@ func _process_wave() -> void:
 
 
 ## Spawn one wave for [param player_id]: [member SiegeRuleset.creeps_per_lane] creeps at that
-## side's end of EVERY lane, truncated by the live cap. Lanes are walked in authored order and
-## slots in index order, so the whole sequence is fixed.
+## side's end of EVERY lane, then [member SiegeRuleset.control_point_extra_creeps] more at EVERY
+## midpoint that side holds, all truncated by the one live cap. Lanes are walked in authored
+## order, midpoints in sorted cell order and slots in index order, so the whole sequence is
+## fixed.
+##
+## THE CAP IS SHARED ON PURPOSE. A side holding every midpoint on the map reaches
+## [member SiegeRuleset.max_live_creeps_per_side] FASTER -- it never fields more than a side
+## holding none. The reward for the map control is tempo, not an army the opponent cannot match.
 func _push_wave_for(player_id: int) -> void:
 	var rs: SiegeRuleset = ruleset()
-	var per_lane: int = rs.wave_size()
-	if per_lane <= 0:
-		return
 	var cap: int = rs.creep_cap()
 	var live: int = live_creep_count(player_id)
 
-	for lane_index in range(_lanes.size()):
-		var lane: Array = march_lane_for(player_id, lane_index)
-		if lane.size() < 2:
+	var per_lane: int = rs.wave_size()
+	if per_lane > 0:
+		for lane_index in range(_lanes.size()):
+			var lane: Array = march_lane_for(player_id, lane_index)
+			if lane.size() < 2:
+				continue
+			for i in range(per_lane):
+				if cap >= 0 and live >= cap:
+					return
+				if _spawn_creep(player_id, lane, lane[0]) != null:
+					live += 1
+
+	# The midpoint reinforcements. They enter AT the point rather than at a lane end -- that is
+	# the whole point of holding one -- and march the lane NEAREST it, which puts them into the
+	# push instead of leaving them milling around the cell they spawned on.
+	var extra: int = rs.control_point_creeps()
+	if extra <= 0:
+		return
+	for cell in control_points_owned(player_id):
+		var march: Array = march_lane_for(player_id, nearest_lane_index(cell))
+		if march.size() < 2:
 			continue
-		for i in range(per_lane):
+		for i in range(extra):
 			if cap >= 0 and live >= cap:
 				return
-			if _spawn_creep(player_id, lane) != null:
+			if _spawn_creep(player_id, march, cell) != null:
 				live += 1
 
 
@@ -529,11 +684,16 @@ func march_lane_for(player_id: int, lane_index: int) -> Array:
 	return lane
 
 
-## Materialise ONE creep for [param player_id] at the head of [param lane] and stamp it: the
-## march lane + aggro radius the AI planner reads, the AI-driven mark that makes
-## [BotTurnDriver] resolve it on its owner's turn, and the creep mark that bars it from ever
-## capturing a base. Returns the new unit, or null when it could not be placed.
-func _spawn_creep(player_id: int, lane: Array):
+## Materialise ONE creep for [param player_id] ON [param at_cell] and stamp it: the march lane
+## + aggro radius the AI planner reads, the AI-driven mark that makes [BotTurnDriver] resolve it
+## on its owner's turn, and the creep mark that bars it from ever capturing a base. Returns the
+## new unit, or null when it could not be placed.
+##
+## The spawn CELL is a separate argument from the LANE because a midpoint's reinforcements enter
+## off-lane: [method BotController.march_target] picks the nearest waypoint from wherever a
+## marcher is standing, so a creep dropped beside a lane joins it on its first step with no
+## special case anywhere in the AI.
+func _spawn_creep(player_id: int, lane: Array, at_cell: Vector2i):
 	var spawner = _spawn_manager()
 	if spawner == null or not spawner.has_method("spawn_and_adopt"):
 		return null
@@ -544,7 +704,7 @@ func _spawn_creep(player_id: int, lane: Array):
 		return null
 
 	var unit = spawner.spawn_and_adopt({
-		"position": lane[0],
+		"position": at_cell,
 		"player_id": player_id,
 		"character_id": character_id,
 		"spawn_kind": CREEP_SPAWN_KIND,
@@ -555,6 +715,8 @@ func _spawn_creep(player_id: int, lane: Array):
 
 	_creep_serial[player_id] = serial + 1
 	stamp_creep(unit, lane, ruleset().creep_aggro_radius)
+	# Marked a creep FIRST, so the grant reads the creep knob rather than the hero one.
+	grant_march_bonus(unit)
 	return unit
 
 
@@ -630,6 +792,12 @@ func handle_unit_eliminated(unit, _eliminator = null) -> void:
 	# cleared here too so the objective banner stops claiming a capture is in flight.
 	if not _capture.is_empty() and _capture.get("unit") == unit:
 		_capture.clear()
+	# Same for a midpoint claim in flight. OWNERSHIP is deliberately untouched: a control point
+	# already held is lost by being TAKEN, not by its claimant dying, which is what makes the
+	# midpoints worth contesting rather than worth camping.
+	for cell in _control_claim.keys():
+		if (_control_claim[cell] as Dictionary).get("unit") == unit:
+			_control_claim.erase(cell)
 	if not is_active():
 		return
 	if not ruleset().respawn_enabled:
@@ -696,6 +864,10 @@ func _return_unit(entry: Dictionary) -> bool:
 		return false
 
 	_restore_moves(unit, entry.get("moves", {}))
+	# A returning unit is a FRESH unit -- full HP, no statuses -- so the mode's pace has to be
+	# handed back with everything else, or a respawn would quietly be the slowest unit on the
+	# board until the next round boundary.
+	grant_march_bonus(unit)
 	return true
 
 
@@ -745,37 +917,49 @@ func handle_turn_started(player, ts = null) -> void:
 	if not _armed:
 		return
 	observe_round(system_round(ts))
-	if _captured_by >= 0 or _capture.is_empty():
+	if _captured_by >= 0:
 		return
 	var side: int = _player_id_of_player(player)
-	if side < 0 or side != int(_capture["player_id"]):
+	if side < 0:
 		return
-	# Speed First: a turn belongs to a UNIT, so only the capturing unit's OWN next turn
-	# resolves it. Traditional has no acting unit and the side's turn is the unit's turn.
+	# Speed First: a turn belongs to a UNIT, so only the holding unit's OWN next turn resolves
+	# what it began. Traditional has no acting unit and the side's turn is the unit's turn.
 	var acting = _acting_unit(ts)
+	_resolve_control_claims(side, acting)
+	if _capture.is_empty() or side != int(_capture["player_id"]):
+		return
 	if acting != null and acting != _capture["unit"]:
 		return
 	_resolve_capture()
 
 
-## A turn ENDS: a hero of this side standing on the enemy base cell begins a capture.
+## A turn ENDS: a hero of this side standing on the enemy base cell begins a capture, and one
+## standing on a control point begins a claim. The two are the same rule on different cells, so
+## they are sampled from the same candidate set in the same pass.
 func handle_turn_ended(player, ts = null) -> void:
 	if not _armed or _captured_by >= 0 or not is_active():
 		return
 	var side: int = _player_id_of_player(player)
 	if side < 0:
 		return
-	var target: Vector2i = enemy_base_cell_for(side)
-	if target == Vector2i(-1, -1):
-		return
 
 	# Narrow to the acting unit under Speed First; consider the whole side under Traditional.
-	var candidates: Array = []
 	var acting = _acting_unit(ts)
+	var candidates: Array = []
 	if acting != null:
 		candidates.append(acting)
 	else:
 		candidates = _units_of(side)
+
+	_sample_base_capture(side, acting, candidates)
+	_sample_control_claims(side, acting, candidates)
+
+
+## The base half of [method handle_turn_ended].
+func _sample_base_capture(side: int, acting, candidates: Array) -> void:
+	var target: Vector2i = enemy_base_cell_for(side)
+	if target == Vector2i(-1, -1):
+		return
 
 	for unit in candidates:
 		if not CaptureBase.is_capturing_hero(unit, side):
@@ -838,7 +1022,259 @@ func _announce_result() -> void:
 		gwm.call_deferred("request_game_end_evaluation")
 
 
+# --- 5. Control points (the midpoints) ----------------------------------------
+#
+# THE SAME STATE MACHINE AS THE BASE CAPTURE, on a different set of cells and with a different
+# payout. Deliberately so: a player who has learned how a base is taken has learned how a
+# midpoint is taken, and the two halves are sampled in ONE pass over ONE candidate set (see
+# [method handle_turn_ended]) so they can never disagree about who is standing where.
+#
+# THE FOUR DIFFERENCES, all of them consequences of a midpoint not ending the battle:
+#   * a point is NEUTRAL until first claimed, and claiming it does not win anything;
+#   * the enemy FLIPS it by repeating the claim -- there is no "recapture" special case;
+#   * ownership OUTLIVES its claimant. A capture is a moment; ownership is a state, and a
+#     state that evaporated when its holder died would make every midpoint a camping spot;
+#   * a point already yours cannot be re-claimed, so standing on your own midpoint is not a
+#     turn spent doing nothing that the machine has to keep re-latching.
+#
+# WHAT IT PAYS is section 3c's two knobs, both spent through machinery that already exists (the
+# wave spawner and the heal pipeline) rather than through anything this mode invented.
+
+
+## Every authored control point, in the SORTED order every pass walks them in (a copy).
+func control_points() -> Array:
+	return _control_points.duplicate()
+
+
+## True when the loaded map authored any midpoints at all. A map that did not never reaches a
+## line of this section, which is what keeps the mode's behaviour on an older Siege map exactly
+## what it was.
+func has_control_points() -> bool:
+	return not _control_points.is_empty()
+
+
+## Who owns the control point at [param cell]: a player id, or -1 for NEUTRAL (never claimed,
+## or not a control point at all). THE accessor the visuals layer reads, behind a has_method
+## guard -- so a build without this mode simply draws nothing.
+func control_point_owner(cell: Vector2i) -> int:
+	return int(_control_owner.get(cell, -1))
+
+
+## Every control point [param player_id] currently owns, in sorted cell order. The second half
+## of the visuals contract, and what the wave spawner iterates.
+func control_points_owned(player_id: int) -> Array:
+	var out: Array = []
+	for cell in _control_points:
+		if int(_control_owner.get(cell, -1)) == player_id:
+			out.append(cell)
+	return out
+
+
+## Side with a claim IN FLIGHT on [param cell] (one turn from owning it), or -1. The midpoint
+## mirror of [method capturing_by].
+func control_point_claimer(cell: Vector2i) -> int:
+	var claim = _control_claim.get(cell)
+	if claim == null:
+		return -1
+	return int((claim as Dictionary)["player_id"])
+
+
+## A turn ENDED: begin (or cancel) a claim on every control point, from the same candidate
+## sample the base capture was read from.
+func _sample_control_claims(side: int, acting, candidates: Array) -> void:
+	if _control_points.is_empty():
+		return
+	for cell in _control_points:          # sorted: fixed order on every peer
+		var holder = null
+		for unit in candidates:
+			# The SAME predicate the base uses, so "creeps cannot claim" and "neutrals cannot
+			# claim" are one rule with one definition rather than two that can drift.
+			if not CaptureBase.is_capturing_hero(unit, side):
+				continue
+			if _cell_of(unit) != cell:
+				continue
+			holder = unit
+			break
+
+		if holder != null:
+			if int(_control_owner.get(cell, -1)) == side:
+				# Already ours. Standing on it is a hold, not a claim.
+				_control_claim.erase(cell)
+			else:
+				_control_claim[cell] = { "player_id": side, "unit": holder }
+			continue
+
+		# Nobody in this sample is on the cell. Cancel a claim in flight ONLY when the sample
+		# can speak for it -- the same qualifier the base capture carries, and for the same
+		# reason (under Speed First one unit's turn end says nothing about another's position).
+		var claim = _control_claim.get(cell)
+		if claim == null or int((claim as Dictionary)["player_id"]) != side:
+			continue
+		if acting != null and acting != (claim as Dictionary)["unit"]:
+			continue
+		_control_claim.erase(cell)
+
+
+## A turn STARTED: finish every claim of [param side] whose unit is still alive and still on
+## the cell. Walked in sorted cell order, so a turn that completes two claims at once announces
+## them in a fixed sequence.
+func _resolve_control_claims(side: int, acting) -> void:
+	if _control_claim.is_empty():
+		return
+	var cells: Array = _control_claim.keys()
+	cells.sort_custom(_cell_less)
+	for cell in cells:
+		var claim: Dictionary = _control_claim[cell]
+		if int(claim["player_id"]) != side:
+			continue
+		var unit = claim["unit"]
+		if acting != null and acting != unit:
+			continue
+		_control_claim.erase(cell)
+		# The authoritative re-check: death and displacement both read as "not alive on that
+		# cell any more".
+		if not CaptureBase.is_capturing_hero(unit, side):
+			continue
+		if _cell_of(unit) != cell:
+			continue
+		var previous: int = int(_control_owner.get(cell, -1))
+		if previous == side:
+			continue
+		_control_owner[cell] = side
+		_announce_control_point(previous)
+
+
+## Say a midpoint changed hands, through the battle's EXISTING [code]ActionAnnouncer[/code] --
+## the surface the player already reads every action on, which is the same reuse
+## [SiegeFeedback] makes for the capture alarm rather than growing a second toast layer.
+##
+## Reached by NAME through the live scene, with a has_method guard on the call, so this mode
+## carries no reference to a UI class and runs identically in a headless test where there is no
+## HUD at all. The announcer's own default tint is used: which side took it is the visuals
+## layer's job to colour, off [method control_point_owner].
+func _announce_control_point(previous_owner: int) -> void:
+	var line: String = ANNOUNCE_POINT_FLIPPED if previous_owner >= 0 else ANNOUNCE_POINT_CLAIMED
+	var announcer = _action_announcer()
+	if announcer == null:
+		return
+	announcer.announce(line, ANNOUNCE_POINT_SUB)
+
+
+## The battle's announcer, or null outside a battle. Searched rather than cached: the HUD is
+## rebuilt per battle, so a stored handle would be a dangling one on the second.
+func _action_announcer():
+	var tree: SceneTree = _tree()
+	if tree == null or tree.current_scene == null:
+		return null
+	var found := tree.current_scene.find_child(ANNOUNCER_NODE, true, false)
+	if found == null or not is_instance_valid(found) or not found.has_method("announce"):
+		return null
+	return found
+
+
+# --- 5b. What an owned control point pays --------------------------------------
+
+## ROUND START: heal the owner's units standing on each owned point.
+##
+## THE OWNER'S ONLY. An enemy squatting on your midpoint has taken the cell, not the sustain --
+## and a creep of the owning side standing there is healed like anything else it owns, because
+## the point pays a SIDE rather than a rank.
+##
+## Routed through [HealEffect] over a real [MoveContext] -- the same pipeline a healing move and
+## a regen tick resolve on (CONQUEST.md rule 9: never re-implement a rule in a second path). So
+## the restored number floats, [code]GameEvents.unit_healed[/code] fires for the flash and the
+## audio cue, and anything the heal pipeline learns later applies here for free.
+func _process_control_point_heal() -> void:
+	if not is_active() or _control_owner.is_empty():
+		return
+	var amount: int = ruleset().control_point_heal_amount()
+	if amount <= 0:
+		return
+	for cell in _control_points:          # sorted: fixed heal order
+		var side: int = int(_control_owner.get(cell, -1))
+		if side < 0:
+			continue
+		for unit in _units_of(side):
+			if unit.has_method("is_alive") and not unit.is_alive():
+				continue
+			if _cell_of(unit) != cell:
+				continue
+			_heal_unit(unit, amount)
+
+
+## Restore [param amount] to [param unit] through the ordinary effect pipeline. Silently does
+## nothing without a board that can answer [code]units_at[/code] (a mock, a headless run with no
+## live board) rather than growing a second, direct heal path that would drift from the real one.
+func _heal_unit(unit, amount: int) -> void:
+	if unit == null or not is_instance_valid(unit) or amount <= 0:
+		return
+	var board = _board()
+	if board == null or not board.has_method("units_at"):
+		return
+	var cell: Vector2i = _cell_of(unit)
+	var effect := HealEffect.new()
+	effect.amount = amount
+	var ctx := MoveContext.new(unit, board, _control_heal_move(), cell, [cell] as Array[Vector2i])
+	# A midpoint's sustain is not a swing: it always lands, and it must not draw on an RNG that
+	# a lockstep peer is not drawing on (the reason a status tick sets the same flag).
+	ctx.guaranteed_hit = true
+	effect.apply(ctx)
+
+
+## The synthetic SELF-targeted move the heal above resolves through, mirroring
+## [method StatusCondition._tick_move]: SELF targeting makes [method MoveContext.gather_targets]
+## return exactly the unit standing on the point.
+static func _control_heal_move() -> MoveResource:
+	var m := MoveResource.new()
+	m.move_id = CONTROL_HEAL_MOVE_ID
+	m.display_name = "Control Point"
+	var pattern := TargetingPattern.new()
+	pattern.target_kind = CombatTypes.TargetKind.SELF
+	pattern.min_range = 0
+	pattern.max_range = 0
+	pattern.area_shape = CombatTypes.AreaShape.SINGLE
+	pattern.affects_caster_tile = true
+	m.targeting = pattern
+	return m
+
+
+## The index of the lane NEAREST [param cell]: the lane with the smallest Manhattan distance
+## from any of its waypoints to the cell, ties broken by the lower lane index. -1 with no lanes.
+##
+## Pure arithmetic over the authored map, so the reinforcements a midpoint sends walk the same
+## lane on every peer and in every replay. Public because it is exactly the kind of derivation a
+## test should be able to pin without spawning anything.
+func nearest_lane_index(cell: Vector2i) -> int:
+	var best: int = -1
+	var best_dist: int = 1 << 30
+	for lane_index in range(_lanes.size()):
+		var lane: Array = _lanes[lane_index]
+		for waypoint in lane:
+			var d: int = absi(waypoint.x - cell.x) + absi(waypoint.y - cell.y)
+			if d < best_dist:
+				best_dist = d
+				best = lane_index
+	return best
+
+
 # --- Shared helpers -----------------------------------------------------------
+
+## Sort comparator putting cells in a canonical order (x, then y). The one definition of "sorted
+## cell order", used everywhere a multi-cell pass has to be reproducible.
+static func _cell_less(a: Vector2i, b: Vector2i) -> bool:
+	if a.x != b.x:
+		return a.x < b.x
+	return a.y < b.y
+
+
+## The live board: the injected seam first, then [CombatServices]. Null outside a battle.
+func _board():
+	if _board_override != null:
+		return _board_override
+	if CombatServices == null:
+		return null
+	return CombatServices.board()
+
 
 ## The unit whose turn it is, when the turn system is unit-scoped (Speed First). Null under
 ## Traditional, whose turns belong to a player.
@@ -861,9 +1297,7 @@ static func _acting_unit(ts):
 ## seam tests inject, which is what lets the whole mode run headless.)
 func _units_of(player_id: int) -> Array:
 	var out: Array = []
-	var board = _board_override
-	if board == null and CombatServices != null:
-		board = CombatServices.board()
+	var board = _board()
 	if board != null and board.has_method("all_units"):
 		for u in board.all_units():
 			if u != null and is_instance_valid(u) and _player_id_of(u) == player_id:
@@ -918,11 +1352,7 @@ static func _character_id_of(unit) -> String:
 
 ## The cell [param unit] stands on, via the shared live board. (-1,-1) with no board.
 func _cell_of(unit) -> Vector2i:
-	if _board_override != null:
-		return _board_override.cell_of(unit)
-	if CombatServices == null:
-		return Vector2i(-1, -1)
-	var board = CombatServices.board()
+	var board = _board()
 	if board == null or not board.has_method("cell_of"):
 		return Vector2i(-1, -1)
 	return board.cell_of(unit)

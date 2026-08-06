@@ -113,6 +113,63 @@ enum AffectedFactions {
 ## exported: it is set live, per placement.
 var owner_player = null
 
+# --- The runtime PLACEMENT RECORD -------------------------------------------
+#
+# AUTHORED TERRAIN AND A PLACED TRAP ARE DIFFERENT THINGS, and only the second one can
+# expire. The distinction is structural, not a guess: a map-authored effect is derived from
+# the tile TYPE and served out of [method CombatServices.tile_effects_at]'s BASE layer, while
+# a placed one is a per-cast DUPLICATE living in the APPLIED layer -- so lava can never be
+# swept off a cell however long a battle runs. These two fields are the placed copy's record
+# of itself, stamped once by [ApplyTileEffect] and never recomputed.
+#
+# NOT EXPORTED, exactly like [member owner_player]: they are per-placement runtime state, so
+# [method Resource.duplicate] resets them to -1 on a fresh copy and the shared authoring
+# .tres is never stamped (CONQUEST.md rule 7).
+
+## The round this copy was PLACED on; -1 for map-authored terrain and for any copy that was
+## never stamped.
+var placed_round: int = -1
+
+## The round this copy EXPIRES on -- frozen at placement from the ACTIVE mode's declared
+## lifetime, never re-read afterwards. -1 means it never expires, which is the answer
+## everywhere no mode declares a [code]trap_expiry_rounds[/code] (CONQUEST.md rule 11).
+var expires_on_round: int = -1
+
+
+## Record this copy as a RUNTIME PLACEMENT made on [param round_index], expiring
+## [param expiry_rounds] full rounds later.
+##
+## FROZEN, deliberately -- the same discipline a Siege respawn's wait follows. The expiry
+## round is computed once, here, from the round the trap went down and the lifetime the mode
+## declared AT THAT MOMENT; nothing recomputes it later. So retuning the ruleset mid-match
+## cannot retroactively move a trap that is already on the board, and two lockstep peers that
+## placed the same trap on the same round agree on the round it vanishes without exchanging
+## anything.
+##
+## An [param expiry_rounds] of 0 or less is "never" -- the placement is still recorded, it
+## simply has no clock.
+func stamp_placement(round_index: int, expiry_rounds: int) -> void:
+	placed_round = maxi(0, round_index)
+	expires_on_round = placed_round + expiry_rounds if expiry_rounds > 0 else -1
+
+
+## True when this copy was stamped as a runtime placement (rather than being map-authored
+## terrain or an unstamped shared resource).
+func is_runtime_placement() -> bool:
+	return placed_round >= 0 or expires_on_round >= 0
+
+
+## True when this placement carries an expiry clock at all.
+func expires() -> bool:
+	return expires_on_round >= 0
+
+
+## True when this placement is due to be swept on [param round_index]. Pure arithmetic on the
+## frozen record: no RNG, no wall clock, so every peer and every replay expires it on the same
+## round.
+func is_expired_on(round_index: int) -> bool:
+	return expires_on_round >= 0 and round_index >= expires_on_round
+
 ## Passive states that are queried rather than applied, e.g.
 ## [code]{ "untargetable": true }[/code] (stealth) or
 ## [code]{ "fortified": true }[/code]. Merged by [method TileEffectSystem.passive_flags].

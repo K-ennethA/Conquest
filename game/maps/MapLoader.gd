@@ -25,6 +25,19 @@ var map_surround: Node3D = null
 ## Battles (including replays) leave it on, so every mode shows the same scenery.
 var surround_enabled: bool = true
 
+## The map's OBJECTIVE BANNERS (see [ObjectiveMarkers]): one tall team-tinted pole-and-pennant
+## standing over every cell [member MapResource.base_cells] declares, so the bases stay
+## findable on a board too big to read at a glance. Purely cosmetic on exactly the same terms
+## as [member map_surround] — no board cells, no terrain registration, no collision, no RNG —
+## and null on the (majority) of maps that declare no bases. Freed with the map in
+## [method clear_current_map].
+var objective_markers: Node3D = null
+
+## Set false to load a map with NO objective banners, for the same reasons
+## [member surround_enabled] exists. Separate knob: the Map Creator wants the bare grid, but
+## a preview that IS about base placement may well want the banners without the scenery.
+var objective_markers_enabled: bool = true
+
 ## model_path values already reported by [method _note_tile_model_fallback], so a bad
 ## path is mentioned ONCE per load instead of once per cell that uses it.
 var _reported_tile_model_fallbacks: Dictionary = {}
@@ -254,6 +267,7 @@ func load_map(map_resource: MapResource, target_parent: Node3D) -> bool:
 	# Decorative scenery around the board. LAST, and never fatal: it is presentation
 	# only, so nothing here can cost the player a battle.
 	_build_map_surround()
+	_build_objective_markers()
 
 	map_loaded.emit(map_resource)
 	return true
@@ -269,6 +283,20 @@ func _build_map_surround() -> void:
 	if not surround_enabled or current_map == null or map_root == null:
 		return
 	map_surround = MapSurround.build(current_map, map_root)
+
+
+## Mount the world-space objective banners for the map just built (see
+## [member objective_markers]).
+##
+## Parented to map_root and NOT to "Tiles" for the same reason the surround is: CameraController
+## fits the board by scanning that container's children, and a 6-metre banner placed there would
+## inflate the fit rect. [method ObjectiveMarkers.build] frees any stray set already mounted and
+## returns null when the map declares no base cells, so the overwhelming majority of maps mount
+## nothing at all.
+func _build_objective_markers() -> void:
+	if not objective_markers_enabled or current_map == null or map_root == null:
+		return
+	objective_markers = ObjectiveMarkers.build(current_map, map_root)
 
 func _sync_grid_size(map_resource) -> void:
 	"""Resize the shared board grid to match the loaded map (see load_map)."""
@@ -322,6 +350,12 @@ func clear_current_map() -> void:
 	if map_surround != null and is_instance_valid(map_surround):
 		map_surround.free()
 	map_surround = null
+
+	# Same immediate disposal, for the same reason: a queued-but-alive banner set would still
+	# answer to get_node("ObjectiveMarkers") when the next map mounts its own.
+	if objective_markers != null and is_instance_valid(objective_markers):
+		objective_markers.free()
+	objective_markers = null
 
 	current_map = null
 

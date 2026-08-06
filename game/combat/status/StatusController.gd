@@ -147,25 +147,40 @@ func has_rule_flag(flag_name: StringName) -> bool:
 	return false
 
 
-## The single most-protective [member StatusCondition.damage_taken_scale] across
-## every active condition -- i.e. the MINIMUM scale (1.0 when none carries one).
+## What this unit's active conditions multiply incoming damage by: the single
+## most-protective REDUCTION in force times the single most-dangerous
+## VULNERABILITY in force (1.0 for either side when nothing carries one).
 ##
-## DELIBERATELY "TAKE THE STRONGEST", NOT A PRODUCT OR A SUM. Compounding two
-## same-kind reductions would let a unit re-cast its way to near-invulnerability
-## (0.6 * 0.6 = 0.36), and summing is the additive-merge bug the passive side warns
-## about. Exactly one reduction applies -- the best one in force -- so stacking timed
-## defensive buffs can refresh but never deepen. [DamageEffect.damage_taken_scale_for]
-## combines THIS single status scale with the defender's single passive scale
-## (passive x status), which is one of each source, not compounding one source.
+## DELIBERATELY "TAKE THE STRONGEST" ON EACH SIDE, NEVER A PRODUCT OR A SUM WITHIN A
+## SIDE. Compounding two same-kind reductions would let a unit re-cast its way to
+## near-invulnerability (0.6 * 0.6 = 0.36), and summing is the additive-merge bug the
+## passive side warns about. Exactly one reduction applies -- the best one in force --
+## so stacking timed defensive buffs can refresh but never deepen, and exactly one
+## vulnerability applies for the mirrored reason: two brands must never multiply into
+## x1.69. [DamageEffect.damage_taken_scale_for] then combines THIS single status number
+## with the defender's single passive scale (passive x status), which is one of each
+## source rather than compounding one source.
+##
+## THE TWO SIDES DO MULTIPLY EACH OTHER, and that is the point rather than an oversight:
+## a reduction and a vulnerability are OPPOSING effects from different sources, and
+## "braced but branded" has to be able to land between the two. Reducing them to a single
+## min/max would let whichever was authored louder silently erase the other.
+##
+## The vulnerability half was appended: with no condition above 1.0 this returns the
+## MINIMUM exactly as it always did, so every status authored before brands existed reads
+## back an unchanged number.
 func status_damage_taken_scale() -> float:
-	var best: float = 1.0
+	var best_reduction: float = 1.0
+	var worst_vulnerability: float = 1.0
 	for condition in _active:
 		if condition == null:
 			continue
 		var scale: float = maxf(0.0, condition.damage_taken_scale)
-		if scale < best:
-			best = scale
-	return best
+		if scale < best_reduction:
+			best_reduction = scale
+		elif scale > worst_vulnerability:
+			worst_vulnerability = scale
+	return best_reduction * worst_vulnerability
 
 
 ## Remove every live instance of [param condition_id], firing each on_expire hook.

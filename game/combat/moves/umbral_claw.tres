@@ -1,0 +1,37 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/DamageEffect.gd" id="2_dmgef"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="4_targp"]
+
+[sub_resource type="Resource" id="Resource_uc_dmg"]
+script = ExtResource("2_dmgef")
+power = 16
+scaling_stat = "magic"
+scale = 1.0
+category = 1
+
+[sub_resource type="Resource" id="Resource_uc_tgt"]
+script = ExtResource("4_targp")
+target_kind = 2
+min_range = 1
+max_range = 1
+area_shape = 4
+area_size = 3
+affects_caster_tile = false
+
+[resource]
+script = ExtResource("3_mvres")
+move_id = &"umbral_claw"
+display_name = "Umbral Claw"
+description = "A raking swipe of shadow that runs three cells straight out, cutting every enemy in the line."
+category = 1
+element = &"dark"
+energy_cost = 0
+max_uses = -1
+cooldown = 1
+accuracy = 0.95
+crit_chance = 0.05
+targeting = SubResource("Resource_uc_tgt")
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_uc_dmg")])

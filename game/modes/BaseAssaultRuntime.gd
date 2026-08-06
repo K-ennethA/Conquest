@@ -31,6 +31,14 @@ class_name BaseAssaultRuntime
 ##    units that arrive LATER -- and on this map they arrive endlessly -- spawn with the
 ##    bounty already applied instead of the buff evaporating with the units that earned it.
 ##
+##    A MODE MAY MAKE THAT REWARD TEMPORARY. The permanent bump is the right shape for one
+##    push and one fight; a mode that re-fights the same jungle for twenty rounds compounds it
+##    into a lead nothing can answer. So a mode declares [constant CAMP_BUFF_KNOB] on its own
+##    ruleset and the reward becomes a TIMED status of that many turns instead -- same event,
+##    same side-wide scope, different vehicle. The knob is read through [ModeTuning], so this
+##    node still knows nothing about which mode is running and a map that declares nothing
+##    pays the permanent bounty exactly as it always did (CONQUEST.md rule 11).
+##
 ## LIFETIME. A process-wide singleton (like the mode controllers that are autoloads),
 ## parented to the scene-tree root so it outlives every scene change. It is created
 ## lazily the first time a base-assault map compiles its rules and simply goes quiet
@@ -44,6 +52,11 @@ const NODE_NAME := "BaseAssaultRuntime"
 ## Stat the guardian bounty raises, and by how much per guardian felled.
 const BOUNTY_STAT := "attack"
 const BOUNTY_AMOUNT := 1
+
+## The knob a MODE declares to convert its camp reward from the permanent bounty above into a
+## TIMED buff (see [method camp_buff_turns]). Named here, read through [ModeTuning]: this node
+## never references a mode's controller or holds a mode's constant (CONQUEST.md rule 11).
+const CAMP_BUFF_KNOB: StringName = &"camp_buff_turns"
 
 ## The player slot the neutral faction always occupies. Mirrors
 ## [code]PlayerManager.NEUTRAL_PLAYER_INDEX[/code] the same way
@@ -68,6 +81,11 @@ var _team_bonus: Dictionary = {}
 ## GameEvents.unit_eliminated is emitted with a NULL eliminator (see Unit._on_unit_died),
 ## so the killer has to be reconstructed the same way [member Unit._last_damager] does.
 var _last_damager: Dictionary = {}
+
+## Optional board seam. When null the live board is read off CombatServices; tests inject a
+## lightweight fake so the bounty can be paid headless. Mirrors
+## [code]SiegeController._board_override[/code].
+var _board_override = null
 
 
 # --- Arming (called from WinConditionLibrary) --------------------------------
@@ -155,6 +173,23 @@ func is_armed() -> bool:
 ## Public for tests / HUD.
 func team_bonus(team: int) -> int:
 	return int(_team_bonus.get(team, 0))
+
+
+## Full TURNS a camp kill's buff lasts under the ACTIVE mode, or 0 for "no timer".
+##
+## 0 is the answer on a base-assault map, in a skirmish, and anywhere else no mode declares
+## the knob -- and 0 means the PERMANENT bounty this node has always paid, unchanged. A mode
+## that declares [constant CAMP_BUFF_KNOB] (Siege does: it respawns both squads and re-fights
+## the same jungle for twenty rounds, where a permanent per-kill bump compounds into a lead
+## nothing can answer) gets a timed buff of that many turns instead. Public so a HUD and the
+## tests can ask which reward is live.
+func camp_buff_turns() -> int:
+	return ModeTuning.camp_buff_turns()
+
+
+## Inject a board (tests). Null restores the live one off CombatServices.
+func set_board_override(board) -> void:
+	_board_override = board
 
 
 # --- Bus wiring --------------------------------------------------------------
@@ -251,6 +286,14 @@ func _on_unit_eliminated(unit, eliminator = null) -> void:
 	if team < 0:
 		return
 
+	# THE TIMED FORK. Same event, same SCOPE (the killer's whole side, so the reward survives
+	# the killer's own death), two vehicles -- and which one is live is the active mode's data,
+	# never a branch on which mode is running.
+	var turns: int = camp_buff_turns()
+	if turns > 0:
+		_grant_timed_buff(team, turns)
+		return
+
 	_team_bonus[team] = team_bonus(team) + BOUNTY_AMOUNT
 	_grant_to_living(team, BOUNTY_AMOUNT)
 
@@ -279,14 +322,50 @@ func _apply_carried_bonus(unit) -> void:
 
 ## Apply [param amount] to every unit currently owned by [param team].
 func _grant_to_living(team: int, amount: int) -> void:
+	for u in _side_units(team):
+		_add_modifier(u, amount)
+
+
+## Hand every living unit of [param team] the TIMED camp buff, for [param turns] turns.
+##
+## Nothing is accumulated into [member _team_bonus]: that ledger exists so a unit arriving
+## LATER can be given a bounty earned before it spawned, which is exactly the property a timed
+## buff must NOT have -- a reinforcement three rounds after the kill would otherwise walk out
+## with a fresh full-length copy of a buff that has already run out. So under the timed reward
+## the buff is granted once, to who is on the board, and it times out on its own.
+##
+## Iteration order is the roster's, and a re-grant REFRESHES ([ModeTuning.grant_camp_buff]),
+## so a second camp kill resets one timer rather than deepening anything.
+func _grant_timed_buff(team: int, turns: int) -> void:
+	for u in _side_units(team):
+		ModeTuning.grant_camp_buff(u, turns)
+
+
+## Every living unit belonging to [param team].
+##
+## Read off the BOARD first -- the same source the win conditions are scored against, and the
+## seam a test injects -- and only through [PlayerManager] when there is no board with an
+## `all_units` hook. Mirrors [code]SiegeController._units_of[/code].
+func _side_units(team: int) -> Array:
+	var out: Array = []
+	var board = _board_override
+	if board == null and CombatServices != null:
+		board = CombatServices.board()
+	if board != null and board.has_method("all_units"):
+		for u in board.all_units():
+			if u != null and is_instance_valid(u) and _team_of_unit(u) == team:
+				out.append(u)
+		return out
+
 	if PlayerManager == null or not PlayerManager.has_method("get_player_by_id"):
-		return
+		return out
 	var player = PlayerManager.get_player_by_id(team)
 	if player == null or not ("owned_units" in player):
-		return
+		return out
 	for u in player.owned_units:
 		if u != null and is_instance_valid(u):
-			_add_modifier(u, amount)
+			out.append(u)
+	return out
 
 
 ## Indefinite (-1 duration) stat modifier: nothing expires it, so the bounty lasts the

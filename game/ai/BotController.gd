@@ -536,6 +536,15 @@ func _advance_full(origin: Vector2i, hostiles: Array, board, reachable: Array) -
 ## Non-mutating estimate of the damage [param move] would deal to [param target].
 ## Mirrors [DamageEffect]'s scaling + mitigation so planning matches execution.
 func _estimate_damage(move: MoveResource, actor, target) -> int:
+	# AN UNTOUCHABLE TARGET IS WORTH NOTHING. Invulnerability (Eldroot's Guarded,
+	# Monster's Voidwalk) short-circuits the ENTIRE damage pipeline to a hard 0 ahead of
+	# mitigation, so an estimate that ignored it would have the bot happily spend its turn
+	# swinging at a unit it cannot possibly hurt. Read from the SAME
+	# [method DamageMath.is_invulnerable] the resolved hit and the forecast read, so the
+	# planner cannot disagree with them about who is reachable. Both ranked-attack paths
+	# already drop a candidate scoring <= 0, so this one early-out is the whole skip.
+	if DamageMath.is_invulnerable(target):
+		return 0
 	var total := 0
 	for effect in move.effects_for(actor):
 		if effect is DamageEffect:
@@ -548,6 +557,13 @@ func _estimate_damage(move: MoveResource, actor, target) -> int:
 
 
 ## [param actor] selects the move's active MODE (a single-mode move ignores it).
+##
+## Deliberately `is DamageEffect` and not the looser
+## [method DamageMath.is_damage_effect]: a move whose damage is resolved by a BESPOKE
+## effect off the gather path ([DashThroughEffect]) has landing rules this planner cannot
+## evaluate, so proposing it would let the bot spend turns on charges that then refuse.
+## Such a move is invisible to the generic planner and needs bespoke support to be used,
+## exactly as Eldroot's lane vine does (see BossController's aligned-lane check).
 func _move_has_damage(move: MoveResource, actor = null) -> bool:
 	for effect in move.effects_for(actor):
 		if effect is DamageEffect:

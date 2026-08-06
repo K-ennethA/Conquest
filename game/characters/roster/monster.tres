@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/dark/monster.glb" id="2_model"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Resource" path="res://game/combat/moves/abyssal_maw.tres" id="4_maw"]
+[ext_resource type="Resource" path="res://game/combat/moves/umbral_claw.tres" id="5_claw"]
+[ext_resource type="Resource" path="res://game/combat/moves/voidwalk.tres" id="6_voidwalk"]
+[ext_resource type="Resource" path="res://game/combat/moves/shadow_dash.tres" id="7_dash"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="8_abres"]
+[ext_resource type="Resource" path="res://game/abilities/dread_brand.tres" id="9_dread"]
+[ext_resource type="Resource" path="res://game/movement/profiles/ground_standard.tres" id="10_mvprof"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"monster"
+element = &"dark"
+display_name = "Monster"
+description = "A void-black horror crowned in fire, with a red maw that opens wider than the head that carries it. It does not close on you. It waits at the edge of the light, marks what it wants, and takes it out of the dark from a distance you thought was safe."
+model_scene = ExtResource("2_model")
+base_health = 78
+base_attack = 9
+base_defense = 7
+base_magic = 32
+base_magic_defense = 14
+base_speed = 14
+base_movement = 5
+attack_range = 4
+movement_profile = ExtResource("10_mvprof")
+model_yaw_deg = 180.0
+default_ai_stance = "aggressive"
+moveset = Array[ExtResource("3_mvres")]([ExtResource("4_maw"), ExtResource("5_claw"), ExtResource("6_voidwalk"), ExtResource("7_dash")])
+abilities = Array[ExtResource("8_abres")]([ExtResource("9_dread")])

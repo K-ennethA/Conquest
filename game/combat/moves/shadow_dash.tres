@@ -1,0 +1,47 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/DashThroughEffect.gd" id="2_dashfx"]
+[ext_resource type="Script" path="res://game/combat/effects/ApplyStatusEffect.gd" id="3_applystatus"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="4_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="5_targp"]
+[ext_resource type="Resource" path="res://game/combat/status/void_surge.tres" id="6_surge"]
+
+[sub_resource type="Resource" id="Resource_sd_dash"]
+script = ExtResource("2_dashfx")
+power = 10
+scaling_stat = "magic"
+scale = 1.0
+category = 1
+max_pierce = 3
+max_distance = 6
+
+[sub_resource type="Resource" id="Resource_sd_surge"]
+script = ExtResource("3_applystatus")
+condition = ExtResource("6_surge")
+chance = 1.0
+to_caster = true
+
+[sub_resource type="Resource" id="Resource_sd_tgt"]
+script = ExtResource("5_targp")
+target_kind = 4
+min_range = 1
+max_range = 3
+area_shape = 0
+area_size = 0
+affects_caster_tile = false
+
+[resource]
+script = ExtResource("4_mvres")
+move_id = &"shadow_dash"
+display_name = "Shadow Dash"
+description = "Tears straight through the enemy line, cutting everything it passes, and comes out the far side still moving -- though slower."
+category = 1
+element = &"dark"
+energy_cost = 0
+max_uses = -1
+cooldown = 3
+accuracy = 1.0
+crit_chance = 0.0
+targeting = SubResource("Resource_sd_tgt")
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_sd_dash"), SubResource("Resource_sd_surge")])

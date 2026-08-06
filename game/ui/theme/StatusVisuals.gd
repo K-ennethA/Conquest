@@ -41,6 +41,10 @@ const _TABLE := {
 	# the violet/rose restraints an ENEMY put on you.
 	&"ingrained":  { "name": "Ingrained",  "color": Color("6f8f4e"), "kind": "buff" },
 	&"burn":       { "name": "Burn",       "color": Color("e0552b"), "kind": "debuff" },
+	# Monster's Dread Brand: the NEXT damage this unit takes is amplified, then the
+	# brand is spent. Ember red-orange -- it reads as "lit up / marked for death",
+	# and its one-shot nature separates it from Burn's ongoing scorch.
+	&"branded":    { "name": "Branded",    "color": Color("e8734a"), "kind": "debuff" },
 	# Timberfall's flinch: the unit loses its whole next turn. Deep ember rather
 	# than the violet restraints, because it is a CONCUSSIVE effect (you were hit
 	# too hard) rather than something binding you in place.
@@ -57,6 +61,12 @@ const _TABLE := {
 	&"empowered":  { "name": "Empowered",  "color": Color("ffcf4d"), "kind": "buff" },
 	&"prism_guard": { "name": "Prism Guard", "color": Color("9fd8e8"), "kind": "buff" },
 	&"reprisal_charge": { "name": "Reprisal Charge", "color": Color("ff8f5e"), "kind": "buff" },
+	# Monster's Voidwalk: submerged into the void, untouchable for a turn. Near-black
+	# violet -- the darkest hue in the table, because the fantasy is ABSENCE (the unit
+	# is not really here), unlike Guarded's "shelled up" bark-blue.
+	&"submerged":  { "name": "Submerged",  "color": Color("3d2f52"), "kind": "buff" },
+	# Monster's Shadow Dash follow-through: one more action at reduced stride.
+	&"void_surge": { "name": "Void Surge", "color": Color("7a5fd0"), "kind": "buff" },
 }
 
 # --- Glyphs -------------------------------------------------------------------
@@ -116,6 +126,8 @@ const _GLYPH_OVERRIDES := {
 	&"braced": GLYPH_GUARD,
 	&"prism_guard": GLYPH_GUARD,
 	&"fortified": GLYPH_GUARD,
+	# Submerged is full immunity -- the guard mark, not a generic buff arrow.
+	&"submerged": GLYPH_GUARD,
 }
 
 const _FALLBACK := { "name": "Status", "color": Color("9a8768"), "kind": "neutral" }

@@ -28,10 +28,21 @@ func apply(ctx: MoveContext) -> void:
 		var owner = null
 		if ctx.caster != null and ctx.caster.has_method("get_owner_player"):
 			owner = ctx.caster.get_owner_player()
+		# THE PLACEMENT RECORD. The active MODE decides how long a planted trap lives
+		# (0 = forever, which is every battle outside a mode that declares otherwise), and the
+		# expiry round is FROZEN onto this copy right now -- read once, here, from the round
+		# the trap goes down. Nothing recomputes it, so retuning the ruleset mid-match cannot
+		# move a trap already on the board and two lockstep peers agree on the round it goes
+		# without exchanging anything. See TileEffectResource.stamp_placement.
+		var expiry: int = ModeTuning.trap_expiry_rounds()
 		var placed = effect
-		if owner != null:
+		if owner != null or expiry > 0:
+			# Duplicated for the same reason it always was (CONQUEST.md rule 7): this resource
+			# is loaded once and handed to every caster, so the owner AND the placement record
+			# have to land on a per-cast copy. Shallow -- sub-effects are shared and immutable.
 			placed = effect.duplicate()
 			placed.owner_player = owner
+			placed.stamp_placement(ModeTuning.current_round(), expiry)
 		for cell in ctx.affected_cells:
 			CombatServices.add_tile_effect(cell, placed)
 			ctx.log_event({ "effect": "apply_tile_effect", "cell": cell, "tile_effect": placed })

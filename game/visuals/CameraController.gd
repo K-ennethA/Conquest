@@ -35,6 +35,25 @@ extends Camera3D
 @export var dist_min: float = 10.0
 @export var dist_max: float = 90.0
 
+## ZOOM-OUT SCALES WITH THE BOARD. [member dist_max] was authored against the ~13x11 boards
+## this game shipped with: at that size the fit distance is ~20, so 90 leaves the player
+## about 4.4x the framing distance of headroom to pull back and read the whole board plus
+## its surroundings. On a 35x35 map the fit distance is ~64 and that same 90 leaves barely
+## 1.4x -- the map got 7x bigger while the pull-back budget stayed put, which is exactly the
+## "visual clarity is harder on this big map" the first big-map playtest reported.
+##
+## So the runtime upper clamp is derived from the ACTUAL board (see [method
+## board_zoom_limit]): the DIAGONAL of the fit rect times this factor, never below the
+## authored [member dist_max]. Data, not a mode check -- a small map's limit is unchanged
+## byte-for-byte (13x11 -> 44.3 < 90, so the authored value still wins) and ANY map that
+## grows past the authored budget gets the headroom, whatever mode is playing it.
+##
+## Deliberately the DIAGONAL rather than width or depth: it is the one measure that grows
+## with both axes, so a long thin map and a square one of the same area get comparable
+## pull-back. Raise the factor for more headroom; 0 disables the scaling entirely and
+## restores the pre-existing "authored max only" behaviour.
+@export var zoom_out_board_factor: float = 1.3
+
 ## Extra headroom around the board when fitting (1.0 = exact). A bit generous so the
 ## whole board frames without the edges hugging the screen.
 @export var fit_margin: float = 1.12
@@ -245,14 +264,36 @@ func fit_to_map() -> void:
 	var half_fov: float = deg_to_rad(fov) * 0.5
 	var dist: float = (span * 0.5) / maxf(tan(half_fov), 0.01)
 
-	_dist_max_runtime = maxf(dist_max, dist)
+	_dist_max_runtime = board_zoom_limit(world_w, world_d, dist)
 	_move_focus_to(Vector3(_board_center.x, 0.0, _board_center.z))
 	_set_distance(clampf(dist, dist_min, _dist_max_runtime))
 	_base_distance = maxf(_current_distance(), 1.0)
 
 
-## Derive the board's XZ bounds from the live tiles under "Map/Tiles" (each tile a
-## 2x2 cell at (col*2, 0, row*2)); expand by the cell footprint. Falls back to Grid.
+## The runtime ZOOM-OUT clamp for a board whose fit rect is [param world_w] x [param world_d]
+## world units and which frames at [param fit_distance] (see [member zoom_out_board_factor]).
+##
+## The largest of three numbers, so no input can ever make the camera MORE constrained than
+## it was before this existed:
+##   * the authored [member dist_max] -- the floor, and on every board small enough for it
+##     (13x11 -> a 34.1-unit diagonal -> 44.3) it is still the answer, unchanged.
+##   * the board diagonal x [member zoom_out_board_factor] -- the part that scales (35x35 ->
+##     a 99.0-unit diagonal -> 128.7).
+##   * the fit distance itself -- the pre-existing guarantee that a board which needs an
+##     extreme distance to frame (a very wide map on a tall viewport) can still reach it.
+##
+## Pure and instance-only-through-the-exports, so a test can pin the two board sizes without
+## standing up a viewport.
+func board_zoom_limit(world_w: float, world_d: float, fit_distance: float) -> float:
+	var diagonal: float = Vector2(world_w, world_d).length()
+	var scaled: float = maxf(zoom_out_board_factor, 0.0) * diagonal
+	return maxf(maxf(dist_max, scaled), fit_distance)
+
+
+## Derive the board's XZ bounds from the live tiles under "Map/Tiles". Each tile is a
+## 2x2 cell whose origin sits at the CELL CENTER, (col*2+1, 0, row*2+1) -- see
+## MapLoader._create_tile_at_position -- so the measured origin extremes are expanded
+## by a HALF cell on every side, giving exactly (0,0)..(2w,2h). Falls back to Grid.
 func _compute_board_bounds() -> bool:
 	# Refreshed alongside the fit, but kept strictly OUT of the bounds maths below.
 	_refresh_surround_margin()
@@ -275,8 +316,10 @@ func _compute_board_bounds() -> bool:
 				count += 1
 
 	if count > 0:
-		_board_min = Vector2(min_x, min_z)
-		_board_max = Vector2(max_x + 2.0, max_z + 2.0)
+		# Origins are cell CENTERS: a 2x2 tile at (c, c) covers [c-1, c+1], so the rect
+		# grows half a cell each way rather than a full cell past the far origin.
+		_board_min = Vector2(min_x - 1.0, min_z - 1.0)
+		_board_max = Vector2(max_x + 1.0, max_z + 1.0)
 		_board_center = Vector3((_board_min.x + _board_max.x) * 0.5, 0.0,
 			(_board_min.y + _board_max.y) * 0.5)
 		_has_bounds = true

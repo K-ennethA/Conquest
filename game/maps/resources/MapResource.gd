@@ -107,6 +107,25 @@ class_name MapResource
 ## every map that is not a base-assault / push map.
 @export var base_cells: Dictionary = {}
 
+## CONTROL POINTS -- the cells a mode may let a side CLAIM and hold (a captured midpoint
+## that spawns grunts, heals, or pays a timed augment).
+##
+## An [code]Array[/code] of [Vector2i]. Deliberately UNOWNED and UNORDERED: the map states
+## only WHERE the contested cells are, exactly as [member base_cells] states where the bases
+## are. Who holds one, what holding it grants, and how long it takes to flip are the MODE's
+## business (CONQUEST.md rule 11 -- a mode's tuning lives on that mode's ruleset resource),
+## so a map does not have to be re-authored when a mode retunes its objective.
+##
+## Deliberately an untyped [Array] for the same reason [member lanes] is: a JSON-parsed plain
+## Array cannot be assigned to a typed one (CONQUEST.md rule 3). Read it through
+## [method get_control_points], which coerces element-wise.
+##
+## OPTIONAL and EMPTY BY DEFAULT, so every map authored before this field existed stays valid
+## and round-trips unchanged. A declared point must be an in-bounds cell (structural) and, at
+## catalog-strict validation, must stand on WALKABLE ground -- a point inside a wall could
+## never be captured.
+@export var control_points: Array = []
+
 
 # --- Spawn kinds --------------------------------------------------------------
 const SPAWN_KIND_START := "Start"                  # places one unit at map load
@@ -417,6 +436,43 @@ func set_base_cell(player_id: int, cell: Vector2i) -> void:
 	base_cells[player_id] = cell
 
 
+# --- Control points: reading + authoring --------------------------------------
+
+## How many control points this map declares (0 for every map that declares none).
+func control_point_count() -> int:
+	return control_points.size()
+
+
+## Every declared control point as a typed [code]Array[Vector2i][/code]. THIS is the accessor
+## to use, never [member control_points] raw: a list that came back from JSON is a plain Array
+## of decoded cells, and assigning that to a typed local is a runtime error (CONQUEST.md
+## rule 3). The coercion lives here, once.
+func get_control_points() -> Array[Vector2i]:
+	return _to_cell_array(control_points)
+
+
+## Control point [param index], or [code]Vector2i(-1, -1)[/code] when there is no such point --
+## reading a point a map does not have is an ordinary answer, not a fault (matches
+## [method get_lane] / [method get_base_cell]).
+func get_control_point(index: int) -> Vector2i:
+	if index < 0 or index >= control_points.size():
+		return Vector2i(-1, -1)
+	return _decode_position(control_points[index])
+
+
+## Append a control point. The primary authoring entry point.
+func add_control_point(cell: Vector2i) -> void:
+	control_points.append(cell)
+
+
+## True when [param cell] is one of this map's declared control points.
+func has_control_point(cell: Vector2i) -> bool:
+	for point in get_control_points():
+		if point == cell:
+			return true
+	return false
+
+
 ## Every player slot that owns at least one spawn point on this map -- the set a base
 ## cell (and any other per-player declaration) has to name.
 func spawn_player_ids() -> Array[int]:
@@ -516,11 +572,12 @@ func validate_map(strict_catalog: bool = false) -> Dictionary:
 		if int(normalized["respawn_interval"]) < 1:
 			issues.append("Spawn point at %s has a respawn interval below 1 turn" % str(spawn_pos))
 
-	# Lanes + base cells. STRUCTURAL (not strict-only), for the same reason the
-	# out-of-bounds checks above are: a waypoint outside the board is broken on every
+	# Lanes + base cells + control points. STRUCTURAL (not strict-only), for the same reason
+	# the out-of-bounds checks above are: a waypoint outside the board is broken on every
 	# install, not just on one that is missing an asset. Costs nothing for the maps that
-	# declare neither -- both loops run zero times.
+	# declare none -- every loop runs zero times.
 	_append_lane_and_base_issues(issues)
+	_append_control_point_issues(issues)
 
 	# Optional catalog resolution pass. Only NON-EMPTY references are checked: an
 	# empty tile_id / character_id is a legitimate "resolve me by type / legacy
@@ -594,6 +651,43 @@ func _append_lane_and_base_issues(issues: Array[String]) -> void:
 			issues.append("Base cell for player %d out of bounds: %s" % [player_id, str(base_cell)])
 
 
+func _append_control_point_issues(issues: Array[String]) -> void:
+	"""Flag every structurally broken [member control_points] declaration.
+
+	The rules, and why each one is a HARD issue:
+
+	  * a point that is not a cell, or not an IN-BOUNDS cell -- a mode indexes it straight
+	    into the board to ask who is standing on it, so anything else faults at the first tick;
+	  * the SAME cell declared twice -- a duplicate is scored, contested and rewarded twice
+	    over from one square of ground, which reads as an authoring slip rather than an
+	    intention. There is no legitimate map that wants it.
+
+	The WALKABLE check deliberately is NOT here: it needs the tile layout resolved through the
+	live [TileCatalog], so it rides with the other placement checks in
+	[method _append_terrain_placement_issues] (catalog-strict only), exactly as the "a spawn
+	must not sit in a wall" backstop does.
+
+	Empty [member control_points] -- every map authored before the field existed -- runs this
+	loop zero times and cannot change verdict.
+	"""
+	if control_points.is_empty():
+		return
+	var seen: Dictionary = {}
+	for i in range(control_points.size()):
+		var raw = control_points[i]
+		if not (raw is Vector2i):
+			issues.append("Control point %d is not a cell: %s" % [i, str(raw)])
+			continue
+		var cell: Vector2i = raw
+		if cell.x < 0 or cell.x >= width or cell.y < 0 or cell.y >= height:
+			issues.append("Control point %d out of bounds: %s" % [i, str(cell)])
+			continue
+		if seen.has(cell):
+			issues.append("Control point %s is declared twice" % str(cell))
+			continue
+		seen[cell] = true
+
+
 func _append_terrain_placement_issues(issues: Array[String]) -> void:
 	"""Flag any unit spawn or objective/throne marker sitting on impassable terrain (a
 	wall, a tree, ...). This is the BACKSTOP for the live Map Creator's placement guard
@@ -624,6 +718,14 @@ func _append_terrain_placement_issues(issues: Array[String]) -> void:
 			continue
 		if not MapMakerModel.tile_dict_is_passable(get_tile_at_position(pos)):
 			issues.append("Objective marker at %s sits on impassable terrain" % str(pos))
+
+	# A control point nobody can stand on can never be claimed. Same backstop, same shared
+	# passability rule (see [method _append_control_point_issues] for why it lives here).
+	for point in get_control_points():
+		if point.x < 0 or point.x >= width or point.y < 0 or point.y >= height:
+			continue
+		if not MapMakerModel.tile_dict_is_passable(get_tile_at_position(point)):
+			issues.append("Control point at %s sits on impassable terrain" % str(point))
 
 
 func _append_catalog_issues(issues: Array[String]) -> void:
@@ -747,7 +849,8 @@ func export_to_json() -> String:
 			# payload shape is the same for every map and the importer never has to guess
 			# whether a missing key means "no lanes" or "an older export".
 			"lanes": _encoded_lanes(),
-			"base_cells": _encoded_base_cells()
+			"base_cells": _encoded_base_cells(),
+			"control_points": _encoded_control_points()
 		},
 		"metadata": {
 			"tags": tags,
@@ -833,6 +936,7 @@ static func import_from_json(json_string: String, quiet: bool = false) -> MapRes
 	# "declares neither" answer, which is exactly what those maps mean.
 	resource.lanes = _decode_lanes(layout.get("lanes", []))
 	resource.base_cells = _decode_base_cells(layout.get("base_cells", {}))
+	resource.control_points = _decode_control_points(layout.get("control_points", []))
 
 	# Metadata
 	var metadata = data.get("metadata", {})
@@ -918,6 +1022,32 @@ func _encoded_base_cells() -> Dictionary:
 			continue
 		var cell: Vector2i = value
 		out[str(int(key))] = {"x": cell.x, "y": cell.y}
+	return out
+
+
+## [member control_points] with every cell written as {"x","y"} -- the same encoding tile,
+## spawn and lane positions use, and for the same reason (JSON has no vector type).
+func _encoded_control_points() -> Array:
+	var out: Array = []
+	for raw in control_points:
+		if not (raw is Vector2i):
+			continue
+		var cell: Vector2i = raw
+		out.append({"x": cell.x, "y": cell.y})
+	return out
+
+
+## Rebuild [member control_points] from JSON. Junk decodes to [code]Vector2i(-1, -1)[/code]
+## rather than being dropped, so [method _append_control_point_issues] rejects it as out of
+## bounds -- a silently discarded point would let a broken map import as a valid one with
+## fewer objectives. A payload whose "control_points" is not a list at all reads as "declares
+## none", which is what every map exported before this field existed means.
+static func _decode_control_points(raw) -> Array:
+	var out: Array = []
+	if not (raw is Array):
+		return out
+	for entry in (raw as Array):
+		out.append(_decode_position(entry))
 	return out
 
 

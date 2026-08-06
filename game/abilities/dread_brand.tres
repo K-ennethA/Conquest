@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="AbilityResource" format=3]
+
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="1_abres"]
+[ext_resource type="Script" path="res://game/abilities/AlwaysCondition.gd" id="2_always"]
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="3_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/DreadBrandEffect.gd" id="4_brandfx"]
+[ext_resource type="Resource" path="res://game/combat/status/branded.tres" id="5_branded"]
+
+[sub_resource type="Resource" id="Resource_dread_cond"]
+script = ExtResource("2_always")
+
+[sub_resource type="Resource" id="Resource_dread_brandfx"]
+script = ExtResource("4_brandfx")
+brand = ExtResource("5_branded")
+
+[resource]
+script = ExtResource("1_abres")
+id = &"dread_brand"
+display_name = "Dread Brand"
+description = "Nothing it wounds heals clean. The mark it leaves does not burn or bleed -- it simply opens, and the next thing to reach that wound goes in deeper than it should. Then the mark is gone, spent on whoever happened to strike next."
+trigger = 5
+condition = SubResource("Resource_dread_cond")
+effects = Array[ExtResource("3_moveeffect")]([SubResource("Resource_dread_brandfx")])
+targets_triggering_unit = true
+cooldown = 0
+max_activations = -1

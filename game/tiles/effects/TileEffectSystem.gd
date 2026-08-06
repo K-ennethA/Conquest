@@ -243,6 +243,65 @@ func _run_trigger(unit, cell: Vector2i, board, trigger: int, pass_traps_only: bo
 	return events
 
 
+# --- Placed-trap expiry -------------------------------------------------------
+#
+# A TRAP THAT LASTS FOREVER STOPS BEING A PLAY AND BECOMES TERRAIN. A mode may declare a
+# lifetime for the traps its battles plant ([member SiegeRuleset.trap_expiry_rounds], read
+# through [method ModeTuning.trap_expiry_rounds]); this is the sweep that honours it.
+#
+# TWO THINGS IT CANNOT TOUCH, both by construction rather than by check:
+#   * MAP-AUTHORED TERRAIN. The walk is over CombatServices' APPLIED layer only -- the
+#     per-cast runtime placements. Base effects derived from the tile type are in a different
+#     layer and are never enumerated here, so lava is not on the table at any round.
+#   * A PLACEMENT WITH NO CLOCK. Only a copy that [method TileEffectResource.stamp_placement]
+#     gave an expiry round is ever removed, and that is stamped only when the active mode
+#     declared a lifetime AT PLACEMENT TIME. With no mode armed nothing is stamped, so a
+#     skirmish trap is permanent exactly as it always was.
+
+
+## Sweep every runtime-placed tile effect whose frozen expiry round has arrived on
+## [param round_index]. Returns the removals as [code]{ "cell": Vector2i, "effect": ... }[/code].
+##
+## THE SAME REMOVAL PATH A SPRUNG TRAP TAKES -- [method CombatServices.remove_tile_effect],
+## which is what [method _extinguish] calls when a single-use snare fires. So an expired trap
+## and a spent one leave the board identically: the same board state cleared, the same
+## [signal CombatServices.tile_effects_changed] raised, and therefore the same marker pulled
+## off the cell by the overlay. There is deliberately no second "remove a trap" path.
+##
+## DRIVEN BY THE MODE'S ROUND CLOCK, which is itself edge-detected off the ACTIVE turn
+## system's turn_started (CONQUEST.md rule 2) -- see [method SiegeController._run_round_start].
+## A future mode calls this same line from its own round boundary.
+##
+## Deterministic: cells are walked in sorted order and the verdict is pure arithmetic on each
+## placement's frozen record, so two peers sweep the same traps in the same order.
+static func expire_placed_effects(round_index: int) -> Array:
+	var removed: Array = []
+	if round_index <= 0:
+		return removed
+	var svc = _combat_services()
+	if svc == null or not svc.has_method("applied_effect_cells"):
+		return removed
+	var cells: Array = svc.applied_effect_cells()
+	cells.sort_custom(_cell_before)
+	for cell in cells:
+		for te in svc.applied_tile_effects_at(cell):
+			if te == null or not te.has_method("is_expired_on"):
+				continue
+			if not te.is_expired_on(round_index):
+				continue
+			svc.remove_tile_effect(cell, te)
+			removed.append({ "cell": cell, "effect": te })
+	return removed
+
+
+## Row-major cell order. Explicit rather than relying on [Vector2i]'s own comparison, so the
+## sweep order is stated where it is depended on.
+static func _cell_before(a: Vector2i, b: Vector2i) -> bool:
+	if a.x != b.x:
+		return a.x < b.x
+	return a.y < b.y
+
+
 ## Remove a spent runtime tile effect from the live board. Reaches the CombatServices
 ## autoload directly (the applied-effects owner); null-safe for headless/mocked tests
 ## where there is no live services node.
@@ -252,7 +311,7 @@ func _extinguish(cell: Vector2i, te) -> void:
 		svc.remove_tile_effect(cell, te)
 
 
-func _combat_services():
+static func _combat_services():
 	var loop := Engine.get_main_loop()
 	if loop is SceneTree:
 		return (loop as SceneTree).root.get_node_or_null("CombatServices")

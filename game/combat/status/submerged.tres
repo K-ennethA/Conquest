@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SubmergedStatus" format=3]
+
+[ext_resource type="Script" path="res://game/combat/status/SubmergedStatus.gd" id="1_submerged"]
+
+[resource]
+script = ExtResource("1_submerged")
+id = &"submerged"
+display_name = "Submerged"
+duration_turns = 1
+stacking = 0
+max_stacks = -1
+rule_flags = {
+"invulnerable": true
+}
+damage_taken_scale = 1.0

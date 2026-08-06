@@ -5,7 +5,9 @@ extends GutTest
 ##
 ## unit/test_riftwood.gd asserts what the RESOURCE says; this asserts what the game does
 ## with it -- two different failures (a map can be internally perfect and still fail to
-## load because a tile id resolves to nothing the loader can instance).
+## load because a tile id resolves to nothing the loader can instance). That includes the v2
+## geometry: the three CONTROL POINTS resolve to bare, standable ground, the two 1-wide sneak
+## TUNNELS are really walkable with wood on both flanks, and both CAMP TIERS put a body down.
 ##
 ## ONE LOAD FOR THE WHOLE SUITE. Riftwood is 35x35 = 1225 tiles plus ~22 actors; loading it
 ## per test would make this the slowest suite in the run for no extra coverage. The battle
@@ -28,8 +30,17 @@ const BASE_ID := "bastion"
 const NEUTRAL_SLOT: int = 2
 ## The deepest cell of player 0's fountain sanctum.
 const FOUNTAIN_CELL := Vector2i(0, 0)
-## The middle lane's midpoint meadow.
-const MEADOW_CELL := Vector2i(17, 17)
+## The middle lane's control point, and one of the meadow cells ringing its stone circle.
+const MID_POINT_CELL := Vector2i(17, 17)
+const MEADOW_CELL := Vector2i(16, 16)
+## The Canopy sneak tunnel's two ends and one cell in the middle of it.
+const TUNNEL_MOUTH_CELL := Vector2i(26, 17)
+const TUNNEL_MID_CELL := Vector2i(30, 19)
+const TUNNEL_EXIT_CELL := Vector2i(31, 22)
+## The two camp tiers on the north-east side.
+const OUTER_CAMP_CELL := Vector2i(24, 10)
+const INNER_CAMP_CELL := Vector2i(24, 17)
+const INNER_CAMP_ID := "blightcap"
 
 var _map_res: MapResource = null
 ## Manually managed (not add_child_autofree): the fixture outlives every test in the
@@ -127,9 +138,38 @@ func test_the_authored_terrain_registers_on_the_live_board() -> void:
 	assert_has(_effect_ids_at(FOUNTAIN_CELL), "fountain",
 		"the sanctum cell behind player 0's base carries the fountain effect")
 	assert_has(_effect_ids_at(MEADOW_CELL), "sacred_meadow",
-		"the middle lane's midpoint carries the meadow heal")
+		"the meadow ringing the middle control point carries the heal")
 	assert_eq(_effect_ids_at(_map_res.get_base_cell(0)), [],
 		"and the plain grass under the base carries nothing")
+
+
+func test_the_control_points_are_bare_ground_on_the_live_board() -> void:
+	# A control point GIVES nothing by standing on it. Its stone circle is plain dirt, so what
+	# holding it is worth is entirely the mode's to decide (CONQUEST.md rule 11) rather than a
+	# tile effect baked into the map -- and the heal is a step away, on the meadow beside it.
+	var board := CombatServices.board()
+	assert_not_null(board, "a board was built over the loaded map")
+	for point in _map_res.get_control_points():
+		assert_false(board.is_blocked(point),
+			"control point %s can be stood on to be claimed" % str(point))
+		assert_eq(_effect_ids_at(point), [],
+			"and carries no authored tile effect of its own (%s)" % str(point))
+	assert_true(_map_res.has_control_point(MID_POINT_CELL),
+		"the middle of the board is one of them")
+
+
+func test_the_sneak_tunnel_is_walkable_and_walled_on_the_live_board() -> void:
+	# The generator's 1-wide cut has to survive as a real corridor: walkable end to end, wood
+	# on both flanks. If the wood were not blocking, this would be open jungle, not a tunnel.
+	var board := CombatServices.board()
+	assert_not_null(board, "a board was built over the loaded map")
+	for cell in [TUNNEL_MOUTH_CELL, TUNNEL_MID_CELL, TUNNEL_EXIT_CELL]:
+		assert_false(board.is_blocked(cell), "tunnel cell %s is walkable" % str(cell))
+		assert_has(_effect_ids_at(cell), "tall_grass",
+			"and carries the ambush-grass effect (%s)" % str(cell))
+	# The flanks of the tunnel's long east-west leg.
+	assert_true(board.is_blocked(TUNNEL_MOUTH_CELL + Vector2i(0, -1)), "wood above the tunnel")
+	assert_true(board.is_blocked(TUNNEL_MOUTH_CELL + Vector2i(0, 1)), "and wood below it")
 
 
 func test_the_jungle_is_impassable_and_the_pocket_is_not() -> void:
@@ -169,6 +209,24 @@ func test_the_jungle_camps_spawn_neutral_and_dormant() -> void:
 	for unit in camps:
 		assert_true(unit.is_dormant(), "a camp creature holds until it is struck")
 		assert_false(unit.provoked, "and nothing has struck it yet")
+
+
+func test_both_camp_tiers_actually_stand_where_the_map_says() -> void:
+	# The map declares two tiers; the loader has to have put a body on each of them, or the
+	# jungle economy is a line in a .tres and nothing on the board.
+	var by_cell: Dictionary = {}
+	for unit in _units_by_slot().get(NEUTRAL_SLOT, []):
+		by_cell[_cell_of(unit)] = unit
+	assert_eq(by_cell.size(), 6, "four outer creatures and two inner guardians stand up")
+	assert_true(by_cell.has(OUTER_CAMP_CELL), "the outer camp holds %s" % str(OUTER_CAMP_CELL))
+	assert_true(by_cell.has(INNER_CAMP_CELL), "the inner camp holds %s" % str(INNER_CAMP_CELL))
+	var guardian = by_cell.get(INNER_CAMP_CELL, null)
+	if guardian == null:
+		return
+	assert_true(String(guardian.name).begins_with(INNER_CAMP_ID),
+		"and the body standing there is the tougher guardian, not another outer creature")
+	assert_gt(guardian.get_base_stat("health"), by_cell[OUTER_CAMP_CELL].get_base_stat("health"),
+		"which really does outlast the outer tier on the live board")
 
 
 func test_the_fountain_heals_whoever_is_standing_in_it() -> void:
