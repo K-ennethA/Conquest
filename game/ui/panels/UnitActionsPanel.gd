@@ -2565,6 +2565,14 @@ func _compute_enemy_threat_cells(enemy: Unit) -> Array[Vector3]:
 	is exactly where the enemy could actually go."""
 	if enemy == null or not enemy.has_character():
 		return []
+	# FOG: threat is computed from VISIBLE enemies only. A danger zone drawn for a unit you
+	# cannot see is a free map of where it is standing -- the overlay would out the ambush
+	# the fog exists to hide. Returning an empty set here covers BOTH channels at once (the
+	# T-key persistent sweep and the click-inspect transient), and _refresh_danger_overlays
+	# already treats an empty set as "clear this enemy's overlay", so a unit that walks into
+	# the mist loses its zone on the next turn boundary without any extra wiring.
+	if FogOfWarOverlay.unit_hidden(enemy):
+		return []
 	var board = CombatServices.board()
 	var profile = enemy.get_movement_profile()
 	if board == null or profile == null:

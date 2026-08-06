@@ -123,6 +123,42 @@ enum AffectedFactions {
 ## can never sweep lava off a cell. See [method destroyed_by].
 @export var destroyed_by_hostile_entry: bool = false
 
+## CONCEALS ITS OCCUPANTS: a unit standing on a cell carrying this effect is HIDDEN from
+## every other side under fog of war, even when the cell itself is inside their sight radius --
+## unless a seer comes within [constant VisionSystem.CONCEAL_ADJACENCY] cells of it (the
+## thicket-ambush rule; see [VisionSystem]). A hidden unit that ATTACKS gives itself away for a
+## turn or so whatever it is standing in, so a veil is cover, never immunity.
+##
+## THIS FLAG IS THE WHOLE "SMALLER FOG OF WAR ON A MOVE" HOOK, and it is why concealment is a
+## property of an EFFECT rather than a list of terrain the vision system knows about: a
+## smoke-cloud move needs no vision code at all, only an [ApplyTileEffect] carrying a resource
+## with this ticked (`smoke_veil.tres` is the shipped demonstration), and it inherits the
+## owner-stamping and expiry machinery placed effects already have. Nothing infers concealment
+## from an effect's payload -- a designer ticks the box, exactly as with
+## [member springs_on_pass].
+##
+## INERT WITHOUT FOG. With [member MapResource.fog_of_war] off every vision query answers
+## "visible", so an effect carrying this flag behaves on a legacy map precisely as it would
+## without it.
+@export var conceals_occupants: bool = false
+
+## AUTHORED LIFETIME, in full rounds, for a RUNTIME PLACEMENT of this effect. 0 -- every
+## effect that shipped before this field existed -- means "this effect declares no lifetime",
+## and the placement then falls back to whatever the ACTIVE MODE declares
+## ([method ModeTuning.trap_expiry_rounds]), which is exactly the behaviour placements had
+## before.
+##
+## WHY AN EFFECT MAY OWN ITS OWN CLOCK. A mode's trap lifetime answers "how long do the traps
+## THIS MODE's battles plant survive" -- a pacing knob (CONQUEST.md rule 11). A smoke veil that
+## lasts three rounds is not pacing, it is the move's DESIGN: it must last three rounds in a
+## skirmish, in Siege and in an Arena run alike. So when this is set it WINS over the mode
+## knob rather than being added to it; a mode retunes the traps that have no opinion, not the
+## ones that do.
+##
+## Frozen at placement like every other scheduled number ([method stamp_placement]), so
+## retuning the resource mid-match cannot move a veil already on the board.
+@export var expiry_rounds: int = 0
+
 ## RUNTIME owner of a PLACED effect (a trap laid by a unit), stamped by
 ## ApplyTileEffect at cast time; null for map-authored terrain. When set, the
 ## OCCUPANT_ENEMIES / OCCUPANT_ALLIES faction check is resolved against THIS owner
@@ -187,6 +223,24 @@ func expires() -> bool:
 ## round.
 func is_expired_on(round_index: int) -> bool:
 	return expires_on_round >= 0 and round_index >= expires_on_round
+
+
+## The lifetime a placement of this effect should be stamped with, given the lifetime the
+## ACTIVE MODE declares in [param mode_expiry_rounds]. The effect's own
+## [member expiry_rounds] wins when it declares one; otherwise the mode's answer stands.
+##
+## The one place that precedence is spelled, so [ApplyTileEffect] reads it rather than
+## restating it and a second placement path (should one ever exist) cannot disagree.
+func lifetime_rounds(mode_expiry_rounds: int) -> int:
+	return expiry_rounds if expiry_rounds > 0 else maxi(0, mode_expiry_rounds)
+
+
+## True when this effect HIDES [param unit] while it stands on the cell -- the authored
+## [member conceals_occupants] flag combined with the ordinary faction / tag filter, so a veil
+## authored as enemies-only conceals nobody on its placer's own side. The mirror of
+## [method springs_on_pass_for], and the single question [VisionSystem] asks of the ground.
+func conceals(unit, board) -> bool:
+	return conceals_occupants and applies_to(unit, board)
 
 ## Passive states that are queried rather than applied, e.g.
 ## [code]{ "untargetable": true }[/code] (stealth) or

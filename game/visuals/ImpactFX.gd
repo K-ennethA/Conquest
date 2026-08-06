@@ -147,6 +147,11 @@ func _spawn_burst(world_pos: Vector3, color: Color, amount: int, base_time: floa
 		return
 	if get_child_count() >= max_live_bursts:
 		return
+	# FOG: a spark shower over a cell this screen cannot see would give away both the hit and
+	# the position. One additive, live-read check at the single construction point, so every
+	# caller -- hit spark, death ember, the MoveFX-borrowed burst -- is covered at once.
+	if FogOfWarOverlay.world_hidden(world_pos):
+		return
 
 	var life: float = clampf(_scaled(base_time), _LIFETIME_MIN, _LIFETIME_MAX)
 

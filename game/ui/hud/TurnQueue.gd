@@ -34,6 +34,11 @@ const COLOR_ENEMY_BORDER := Color(0.92, 0.50, 0.45, 1.0)
 const COLOR_NEUTRAL_BG := Color(0.28, 0.26, 0.22, 0.92)
 const COLOR_NEUTRAL_BORDER := Color(0.6, 0.58, 0.52, 1.0)
 
+# What a FOG-MASKED chip says instead of a name and a speed. See _create_unit_portrait:
+# the slot stays (order is not a secret), the identity goes.
+const FOG_MASK_NAME := "???"
+const FOG_MASK_SPEED := "SPD:?"
+
 # Scroll state
 var scroll_offset: int = 0
 var total_units: int = 0
@@ -244,6 +249,16 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 	# Store unit reference for interaction / highlight lookup
 	chip.set_meta("unit", unit)
 
+	# FOG: this unit is somewhere in the mist. Speed First's whole promise is that you can
+	# see the ORDER of what is coming, so the chip stays in the queue and keeps its slot
+	# number and its side tint -- "an enemy acts next" is information the fog was never
+	# hiding. What it loses is IDENTITY: no portrait, no name, no speed number, because
+	# those are exactly what a scouting move is supposed to buy. The chip is also inert
+	# (see _on_portrait_clicked / _on_portrait_hovered).
+	var masked: bool = FogOfWarOverlay.unit_hidden(unit)
+	if masked:
+		chip.set_meta("fog_masked", true)
+
 	var chip_w: float = PORTRAIT_SIZE.x
 	var chip_h: float = PORTRAIT_SIZE.y
 
@@ -302,6 +317,8 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 	chip.add_child(scrim)
 
 	var character_id: String = unit.get_unit_type() if unit.has_method("get_unit_type") else ""
+	if masked:
+		character_id = ""  # never even ASK the cache: a portrait is an identity
 	if not character_id.is_empty():
 		var cached_portrait: Texture2D = PortraitCache.get_cached(character_id)
 		if cached_portrait != null:
@@ -330,7 +347,8 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 
 	# --- Unit name label (elided if long) ---
 	var name_label := Label.new()
-	name_label.text = unit.get_display_name()
+	name_label.name = "NameLabel"
+	name_label.text = FOG_MASK_NAME if masked else unit.get_display_name()
 	name_label.position = Vector2(3, 17)
 	name_label.size = Vector2(chip_w - 6, 16)
 	name_label.custom_minimum_size = Vector2(chip_w - 6, 16)
@@ -348,8 +366,12 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 
 	# --- Speed label (bottom strip) ---
 	var speed_label := Label.new()
-	var current_speed = turn_system.get_unit_current_speed(unit) if turn_system else unit.get_stat("speed")
-	speed_label.text = "SPD:" + str(current_speed)
+	speed_label.name = "SpeedLabel"
+	if masked:
+		speed_label.text = FOG_MASK_SPEED
+	else:
+		var current_speed = turn_system.get_unit_current_speed(unit) if turn_system else unit.get_stat("speed")
+		speed_label.text = "SPD:" + str(current_speed)
 	speed_label.position = Vector2(0, chip_h - 16)
 	speed_label.size = Vector2(chip_w, 14)
 	speed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -431,6 +453,11 @@ func _on_portrait_clicked(unit: Unit) -> void:
 	# hand a freed instance to every unit_selected listener at once.
 	if not is_instance_valid(unit):
 		return
+	# FOG: a masked "?" chip is inert. Selecting through it would open the full unit card
+	# for a unit the player cannot see -- the exact leak the mask exists to prevent, reached
+	# by clicking the mask itself.
+	if FogOfWarOverlay.unit_hidden(unit):
+		return
 	unit_portrait_clicked.emit(unit)
 
 	# Also trigger unit info panel to show details
@@ -438,6 +465,9 @@ func _on_portrait_clicked(unit: Unit) -> void:
 
 func _on_portrait_hovered(unit: Unit) -> void:
 	"""Handle portrait hover - show preview info"""
+	# FOG: hovering a masked chip must not light the unit up on the board.
+	if FogOfWarOverlay.unit_hidden(unit):
+		return
 	unit_portrait_hovered.emit(unit)
 
 func _on_portrait_unhovered(unit: Unit) -> void:

@@ -159,6 +159,21 @@ const MAX_MAP_SIZE := 40
 
 # Gameplay Properties
 @export var turn_limit: int = 0  # 0 = no limit
+
+## FOG OF WAR -- whether this map is fought in the dark. Per-MAP, exactly as lanes and
+## control points are per-map: the engine never decides it, and a map that says nothing says
+## false, which is every map authored before this field existed.
+##
+## Off is not "fog with an infinite radius", it is NO VISION SYSTEM AT ALL: every
+## [VisionSystem] query short-circuits to "visible", the targeting gather, the AI's target
+## selection and the forecast run precisely the code they ran before fog existed, and the
+## whole game behaves byte-identically to how it did. That is what makes this a safe toggle to
+## hand to a map author.
+##
+## Nothing to validate beyond the type. A bool cannot be out of bounds, cannot name an asset
+## this install lacks, and cannot be authored into an unwinnable state -- unlike a lane
+## waypoint or a control point, which is why those carry structural checks and this does not.
+@export var fog_of_war: bool = false
 @export var victory_conditions: Array[String] = ["Eliminate All Enemies"]
 @export var special_rules: Array[String] = []
 
@@ -829,6 +844,11 @@ func export_to_json() -> String:
 			"difficulty": difficulty,
 			"map_type": map_type,
 			"turn_limit": turn_limit,
+			# Written unconditionally (false for every map that never touched it) for the same
+			# reason lanes/base_cells/control_points are: one payload shape for every map, so
+			# the importer never has to guess whether a missing key means "no fog" or "an
+			# older export".
+			"fog_of_war": fog_of_war,
 			"victory_conditions": victory_conditions,
 			"special_rules": special_rules
 		},
@@ -909,6 +929,9 @@ static func import_from_json(json_string: String, quiet: bool = false) -> MapRes
 	resource.difficulty = gameplay.get("difficulty", "Normal")
 	resource.map_type = gameplay.get("map_type", "Skirmish")
 	resource.turn_limit = gameplay.get("turn_limit", 0)
+	# Absent on every map exported before the field existed -- false is exactly what those
+	# maps mean, and is the value that keeps them behaving as they always have.
+	resource.fog_of_war = bool(gameplay.get("fog_of_war", false))
 	# JSON.parse gives plain Arrays; these properties are typed Array[String], and Godot
 	# rejects a direct plain->typed assignment. Convert element-wise.
 	resource.victory_conditions = _to_string_array(gameplay.get("victory_conditions", ["Eliminate All Enemies"]))

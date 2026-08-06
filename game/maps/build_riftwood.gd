@@ -208,6 +208,11 @@ func _initialize() -> void:
 	res.lighting_preset = "Day"
 	res.background_color = Color(0.12, 0.16, 0.12, 1.0)
 	res.turn_limit = 0
+	# FOG OF WAR. Riftwood is the map the mechanic was designed for: a 35x35 wood whose whole
+	# shape is lanes, jungle and ambush cover, where knowing where the enemy is NOT is the
+	# information the flank routes and the tunnels are worth walking for. Off on every other
+	# map (the field defaults false), so this is the one board that plays in the dark.
+	res.fog_of_war = true
 	# Typed locals: a plain Array literal cannot be assigned to an Array[String] property.
 	# A siege is won by TAKING the enemy fortress, not by flattening it: a hero of yours has
 	# to stand on their base cell and still be standing there when its next turn comes round

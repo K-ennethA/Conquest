@@ -39,6 +39,19 @@ static func execute(move: MoveResource, caster, board, aim_cell: Vector2i, rng: 
 	var ctx := MoveContext.new(caster, board, move, aim_cell, cells)
 	ctx.rng = rng  # null -> MoveContext lazily makes a randomized one
 
+	# REVEAL ON ATTACK, and the ORDER IS THE RULE. A unit hidden by fog or by a concealing tile
+	# gives itself away the moment it resolves a HOSTILE move, and it must be visible BEFORE the
+	# blow is announced -- otherwise the victim's side receives a damage_dealt from nobody and
+	# the presentation layer has an attacker it cannot draw. So the mark lands here, after
+	# validation and before the first effect applies, which is the last instant that is still
+	# "before the damage" on every path (the human commit, the AI driver, and CommandApplier on
+	# every networked peer and in every replay all resolve through this one function).
+	#
+	# What counts as hostile is the move's own DATA (VisionSystem.is_hostile_move), so walking,
+	# healing, self-buffing and PLANTING a tile effect never light a unit up -- laying the veil
+	# you are about to hide in must not be the thing that reveals you. A no-op with fog off.
+	VisionSystem.note_hostile_move(caster, move)
+
 	for effect in move.effects_for(caster):
 		if effect:
 			effect.apply(ctx)
@@ -97,6 +110,25 @@ static func preview_vs(move: MoveResource, caster, target, board = null) -> Dict
 		"lethal": hp > 0 and dmg >= hp,
 	}
 	out.merge(preview)
+	# NO FORECAST FOR SOMETHING YOU CANNOT SEE. A hidden defender is not gathered by
+	# MoveContext, so the swing would deal exactly nothing -- quoting a mitigated number for it
+	# would be the forecast/reality drift CONQUEST.md rule 9 exists to forbid, and would also
+	# hand the player the position of a unit fog is hiding.
+	#
+	# The dictionary SHAPE is untouched (every key a panel reads is still present, and the
+	# element/ability breakdown still describes the matchup) -- only the outcome is zeroed, and
+	# "hidden" is added so a panel can choose to show nothing at all rather than a row of
+	# zeroes. Mirrors how invulnerability already resolves to a hard 0 through DamageMath.
+	# With fog off gatherable() is unconditionally true and this branch never runs.
+	if not VisionSystem.gatherable(caster, target):
+		out["hidden"] = true
+		out["hit_pct"] = 0.0
+		out["crit_pct"] = 0.0
+		out["damage"] = 0
+		out["crit_damage"] = 0
+		out["total"] = 0
+		out["remaining"] = maxi(0, hp)
+		out["lethal"] = false
 	return out
 
 

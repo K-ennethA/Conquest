@@ -592,13 +592,20 @@ func _get_unit_at_position(grid_pos: Vector3) -> Unit:
 	var units = _find_all_units()
 	
 	for unit in units:
+		# FOG: a unit this screen cannot see is not standing here as far as the cursor is
+		# concerned. Selection IS inspection in this game (see _handle_selection), so
+		# answering with a fogged unit would let a click read its whole card -- and clicking
+		# its tile would silently refuse to be a move destination for no visible reason.
+		# Returning null instead makes the cell behave exactly like empty ground.
+		if FogOfWarOverlay.unit_hidden(unit):
+			continue
 		var unit_world_pos = unit.global_position
 		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
-		
+
 		# Check if positions match (with some tolerance)
 		if abs(unit_grid_pos.x - grid_pos.x) < 0.1 and abs(unit_grid_pos.z - grid_pos.z) < 0.1:
 			return unit
-	
+
 	return null
 
 func _find_all_units() -> Array[Unit]:

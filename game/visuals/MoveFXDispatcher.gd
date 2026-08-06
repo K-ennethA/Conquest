@@ -451,6 +451,12 @@ func _spawn_cast_accent(cell: Vector2i, spec: Dictionary) -> void:
 		return
 	if get_child_count() >= max_live_impacts:
 		return
+	# FOG: a cast accent under a caster you cannot see would draw a bright element-tinted
+	# ring on an apparently empty tile. One additive check, live-read, at the last moment
+	# before anything is built -- so a caster the vision core reveals by attacking still
+	# gets its accent (the reveal lands before the announcement).
+	if FogOfWarOverlay.cell_hidden(cell):
+		return
 	var color: Color = spec["color"]
 	var container := Node3D.new()
 	container.name = "CastAccent"
@@ -484,6 +490,11 @@ func _spawn_impact(cell: Vector2i, spec: Dictionary) -> void:
 	if not is_inside_tree():
 		return
 	if get_child_count() >= max_live_impacts:
+		return
+	# FOG: an eruption is per-CELL, so this is where a 3x3 blast reaching into the mist gets
+	# clipped -- the cells you can see erupt, the cells you cannot stay dark. That is the
+	# genre answer to "what does a hit in fog look like": nothing at all.
+	if FogOfWarOverlay.cell_hidden(cell):
 		return
 
 	var color: Color = spec["color"]

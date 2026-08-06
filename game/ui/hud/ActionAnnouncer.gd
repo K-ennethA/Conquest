@@ -253,6 +253,13 @@ func announce(text: String, sub: String = "", color: Color = NEUTRAL_COLOR) -> v
 # --- Handlers (all null-safe; freed units degrade to a generic name) ---------
 
 func _on_move_performed(caster = null, move = null) -> void:
+	# FOG: no banner for a caster this screen cannot see. This overlay's entire job is to
+	# make a unit's action IMPOSSIBLE to miss -- 40px of text across the top of the board
+	# naming the unit and its move -- which is precisely the wrong service to render for
+	# something standing in the mist. The move still resolves; the player just is not told.
+	# Read live, so a caster the vision core reveals by attacking IS announced.
+	if _unseen(caster):
+		return
 	var move_name: String = "a move"
 	if move != null and "display_name" in move and String(move.display_name) != "":
 		move_name = String(move.display_name)
@@ -420,7 +427,15 @@ func _now() -> float:
 
 # --- Naming / side helpers (mirror BattleLog) -------------------------------
 
+## FOG: true when [param unit] is hidden from this screen. Same rule (and same live read)
+## the [BattleLog] uses -- see [FogOfWarOverlay].
+func _unseen(unit) -> bool:
+	return FogOfWarOverlay.unit_hidden(unit)
+
+
 func _named(unit) -> String:
+	if _unseen(unit):
+		return "???"
 	if unit != null and is_instance_valid(unit) and unit.has_method("get_display_name"):
 		return String(unit.get_display_name())
 	return "A unit"

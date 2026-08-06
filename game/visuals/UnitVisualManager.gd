@@ -406,6 +406,71 @@ func _unit_has_acted(unit: Unit) -> bool:
 		return false
 	return bool(unit.has_acted_this_turn)
 
+# --- Fog of war: the "you are not there" channel -----------------------------
+#
+# See [FogOfWarOverlay], which owns the decision; this owns the CHANNEL.
+
+## Marks a unit currently hidden BY FOG. Only ever set by [method set_fog_hidden], and the
+## only thing that authorises putting the unit back -- so nothing here can un-hide a unit
+## that something else made invisible.
+const FOG_HIDDEN_META: StringName = &"fog_hidden"
+
+## Hide (or reveal) [param unit] because of fog. STATIC: fog gating has to work from the
+## overlay, from tests, and from a battle where no visual manager instance exists yet
+## (this manager is created lazily by the first unit that spawns).
+##
+## IT TOGGLES THE UNIT NODE'S `visible`, AND THAT IS THE WHOLE POINT.
+##
+##   * It takes EVERYTHING at once. The world-space [HealthBar], the status badge row, the
+##     terrain chips and the model are all CHILDREN of the unit, so one flag on the parent
+##     hides the lot. Hiding only the model would leave a floating health bar over an empty
+##     tile -- an outline of exactly the unit we were trying to conceal.
+##   * It COMPOSES with [SubmergedStatus] instead of fighting it. That status hides the
+##     MODEL ROOT ("CharacterModel" / "MeshInstance3D"); this hides the unit ABOVE it. Two
+##     different nodes on one parent chain, so Godot's scene-tree visibility ANDs them
+##     together for us: neither reads the other's flag, neither restores the other's value,
+##     and no ordering of apply/expire/hide/reveal can strand a unit invisible.
+##   * It is not a material channel, so it also cannot fight [method apply_acted_visual]'s
+##     `material_overlay` wash or [UnitAnimator]'s `material_override` flashes.
+##
+## Revealing is guarded on the meta: a unit we never hid is left exactly as it was, so this
+## can never force-show something another system deliberately hid.
+static func set_fog_hidden(unit, hidden: bool) -> void:
+	if unit == null or typeof(unit) != TYPE_OBJECT or not is_instance_valid(unit):
+		return
+	if not (unit is Node3D):
+		return
+	var node := unit as Node3D
+	if hidden:
+		if node.has_meta(FOG_HIDDEN_META):
+			return
+		node.set_meta(FOG_HIDDEN_META, true)
+		node.visible = false
+	else:
+		if not node.has_meta(FOG_HIDDEN_META):
+			return
+		node.remove_meta(FOG_HIDDEN_META)
+		node.visible = true
+
+
+## True when this CHANNEL currently has [param unit] hidden -- i.e. whether the last repaint
+## took its `visible` flag away.
+##
+## NOT the gate the HUD asks. Every refusal (hover, cursor-select, threat, log, queue) calls
+## [method FogOfWarOverlay.unit_hidden], which reads the vision core LIVE at event time; this
+## reads a mark stamped at the last repaint, which is one beat behind by construction. That
+## difference is load-bearing: the vision core reveals an attacker BEFORE announcing its
+## damage, and a gate reading this mark would have suppressed the very attack that revealed
+## it. Use this to ask "is the model currently hidden", never "may the player see this".
+static func is_fog_hidden(unit) -> bool:
+	if unit == null or typeof(unit) != TYPE_OBJECT or not is_instance_valid(unit):
+		return false
+	if not (unit is Node):
+		return false
+	var node := unit as Node
+	return node.has_meta(FOG_HIDDEN_META) and bool(node.get_meta(FOG_HIDDEN_META))
+
+
 # --- Friend / foe ------------------------------------------------------------
 
 ## Which outline a unit should wear, from the LOCAL human player's point of view.

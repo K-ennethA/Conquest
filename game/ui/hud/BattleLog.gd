@@ -271,6 +271,10 @@ func _safe(obj: Object, sig: StringName, cb: Callable) -> void:
 # --- Handlers (all null-safe; freed units degrade to a generic name) ---------
 
 func _on_unit_moved(unit = null, _from = null, to = null) -> void:
+	# FOG: a move line is a POSITION. There is no masked wording that survives -- "??? moved
+	# to (7, 3)" hands over the very coordinate the mist was hiding -- so the line goes.
+	if _unseen(unit):
+		return
 	if to is Vector3:
 		var t: Vector3 = to
 		_append("%s moved to (%d, %d)" % [_named(unit), int(round(t.x)), int(round(t.z))], _tint(unit))
@@ -279,6 +283,11 @@ func _on_unit_moved(unit = null, _from = null, to = null) -> void:
 
 
 func _on_move_performed(caster = null, move = null) -> void:
+	# FOG: naming the MOVE names the unit ("used Forest Barrage" is Eldroot, in this roster).
+	# A cast by someone you cannot see is not reported at all; if it hurt one of yours, the
+	# damage line below still lands.
+	if _unseen(caster):
+		return
 	var mv: String = "a move"
 	if move != null and "display_name" in move and String(move.display_name) != "":
 		mv = String(move.display_name)
@@ -286,11 +295,19 @@ func _on_move_performed(caster = null, move = null) -> void:
 
 
 func _on_damage_dealt(attacker = null, defender = null, damage = null) -> void:
+	# FOG: this is the ONE line that survives with a mask, and it must. Your unit taking a
+	# hit from nowhere is information you are entitled to -- you can see your own soldier
+	# bleed -- so it reads "??? hit Vineweave for 12". Only a blow struck entirely out of
+	# sight (both parties unseen) is dropped: you would have no way of knowing it happened.
+	if _unseen(attacker) and _unseen(defender):
+		return
 	var dmg: int = int(damage) if damage != null else 0
 	_append("%s hit %s for %d" % [_named(attacker), _named(defender), dmg], _tint(attacker))
 
 
 func _on_unit_healed(unit = null, amount = null) -> void:
+	if _unseen(unit):
+		return
 	var amt: int = int(amount) if amount != null else 0
 	if amt <= 0:
 		return
@@ -301,10 +318,16 @@ func _on_unit_spawned(unit = null, runtime = null) -> void:
 	# Only announce runtime waves (reinforcements / endless), not the load-time flood.
 	if runtime != true:
 		return
+	if _unseen(unit):
+		return
 	_append("%s appeared" % _named(unit), _tint(unit))
 
 
 func _on_unit_eliminated(unit = null, _eliminator = null) -> void:
+	# A death in the dark is not news. (The unit is unhidden the moment it comes into view,
+	# so this only ever drops kills you genuinely could not have witnessed.)
+	if _unseen(unit):
+		return
 	_append("%s was defeated" % _named(unit), DIM_COLOR)
 
 
@@ -325,7 +348,25 @@ func _append(text: String, color: String) -> void:
 			_header.text = _header_text()
 
 
+## FOG DISCRETION, in two rules (chosen over blanket suppression so the player is never left
+## wondering why their unit lost 12 HP):
+##   1. A unit this screen cannot see is never NAMED -- it renders as [constant FOG_MASK].
+##   2. A line whose every named unit is unseen is SUPPRESSED outright, because a masked
+##      version of it would still leak the fact (and often the position) of the event.
+## Both read visibility LIVE at event time, so a unit the vision core reveals by attacking
+## is named normally in the very line that reports its attack.
+const FOG_MASK := "???"
+
+
+## True when [param unit] exists but is hidden by fog. A null / freed unit is NOT unseen --
+## it is simply unknown, and already degrades to the generic name below.
+func _unseen(unit) -> bool:
+	return FogOfWarOverlay.unit_hidden(unit)
+
+
 func _named(unit) -> String:
+	if _unseen(unit):
+		return FOG_MASK
 	if unit != null and is_instance_valid(unit) and unit.has_method("get_display_name"):
 		return String(unit.get_display_name())
 	return "A unit"
@@ -350,6 +391,10 @@ const CREEP_META: StringName = &"siege_creep"
 
 
 func _tint(unit) -> String:
+	# An unseen unit is dimmed as well as masked: the side tint would say "an ENEMY did
+	# that", which is one more fact than "???" is meant to give away.
+	if _unseen(unit):
+		return DIM_COLOR
 	if unit == null or not is_instance_valid(unit) or not unit.has_method("get_owner_player"):
 		return NEUTRAL_COLOR
 	if unit.has_method("has_meta") and unit.has_meta(CREEP_META) and bool(unit.get_meta(CREEP_META)):

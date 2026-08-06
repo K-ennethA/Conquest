@@ -401,6 +401,13 @@ func _spawn_popup(world_pos: Vector3, text: String, color: Color, size_scale: fl
 		return
 	if get_child_count() >= max_live_popups:
 		return
+	# FOG: nothing floats out of the mist. A "-12" rising over an empty-looking tile is a
+	# perfect marker for a unit you are not supposed to know is there -- worse than the model
+	# itself, because it is drawn with no_depth_test and reads over everything. Gated on the
+	# CELL rather than the unit so status ticks, tile damage and hazard chip-damage are all
+	# covered by one check, and read live so a just-revealed attacker's numbers do show.
+	if FogOfWarOverlay.world_hidden(world_pos):
+		return
 
 	var label := Label3D.new()
 	label.text = text

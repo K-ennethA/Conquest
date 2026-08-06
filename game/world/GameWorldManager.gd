@@ -33,6 +33,15 @@ var _tile_effect_system: TileEffectSystem = null
 # The turn system the tile-effect per-turn tick is currently bound to (re-wired on switch).
 var _tile_fx_watched_ts = null
 
+## FOG OF WAR runtime: derives who can see what from the live board and the loaded map's
+## [member MapResource.fog_of_war] toggle. Mounted exactly like [member _tile_effect_system]
+## (a child of this node, created once, torn down with the battle) because vision is
+## per-battle state that must NOT survive a map change -- a stale lit set from the previous
+## board would be worse than no fog at all. The system registers itself as the live instance
+## in its own _ready, which is how the static seams (MoveExecutor, MoveContext, BotController)
+## reach it without an autoload. Inert on every map that does not ask for fog.
+var _vision_system: VisionSystem = null
+
 ## Terrain / tile inspection HUD (Fire Emblem-style terrain window): shows the
 ## terrain name, movement cost, and active tile effects for the cell under the
 ## board cursor. Self-contained -- see [TerrainInfoPanel] -- this just
@@ -52,6 +61,13 @@ var _unit_hover_panel: UnitHoverPanel = null
 ## scene root (NOT the "UI" CanvasLayer). Rebuilds itself reactively off
 ## CombatServices.board_ready / tile_effects_changed.
 var _tile_effect_overlay: TileEffectOverlay = null
+
+## Fog-of-war presentation layer (Node3D): the batched cell shroud plus the unit-hiding and
+## interaction gating that go with it. Self-contained -- see [FogOfWarOverlay] -- this just
+## instantiates it into the 3D scene root beside the tile-effect overlay above and lets it
+## repaint itself off CombatServices.board_ready and the vision core's vision_changed. Costs
+## nothing on a map with fog authored off, and mounts childless in that case.
+var _fog_overlay: FogOfWarOverlay = null
 
 ## Animated end screen (see [GameOverScreen]). Instantiated once during setup and
 ## kept hidden; revealed by _on_player_eliminated() when the battle is decided.
@@ -168,6 +184,11 @@ func _ready() -> void:
 	# the very first move/turn.
 	_setup_tile_effects()
 
+	# Fog-of-war runtime, mounted alongside the tile-effect one and before any map load so its
+	# invalidation hooks are live for the very first spawn and the very first move. It stays
+	# fully inert until _on_map_loaded hands it a map that actually asks for fog.
+	_setup_vision()
+
 	# Wait a frame for all singletons to be ready. Backing out of the battle during boot
 	# (Main Menu, a rematch, an Arena hand-off) frees this node mid-await; everything
 	# below touches `self` and the live tree, so bail if we are no longer in it.
@@ -195,6 +216,12 @@ func _ready() -> void:
 	# panel, safe to add before the map loads -- it rebuilds itself on
 	# CombatServices.board_ready and stays empty until a board/effects exist.
 	_setup_tile_effect_overlay()
+
+	# FOG OF WAR presentation: the cell shroud + unit hiding + interaction gating. Additive
+	# and idle unless the loaded map authored fog on -- it repaints itself on
+	# CombatServices.board_ready and on the vision core's vision_changed, exactly like the
+	# tile-effect overlay above, and costs nothing at all with fog off.
+	_setup_fog_overlay()
 
 	# Ultimate cut-in flash: its own high CanvasLayer overlay, additive and hidden until a
 	# unit fires an ultimate. Safe to add now -- it stays idle until GameEvents.ultimate_casting.
@@ -345,6 +372,12 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# is the target parent the loader just filled with units and tiles.
 	if map_loader and map_loader.map_root:
 		CombatServices.rebuild(map_loader.map_root)
+
+	# THE FOG TOGGLE IS THE MAP'S. Hand the freshly loaded resource to the vision runtime --
+	# this one line is the entire wiring, and a map with fog_of_war false leaves every vision
+	# query answering "visible" exactly as it did before the system existed.
+	if _vision_system != null and is_instance_valid(_vision_system):
+		_vision_system.set_map(map_resource)
 
 	# Stand up the runtime spawn scheduler for THIS battle. Done after the rebuild so
 	# it can adopt the load-time seed units off the fresh board (to time their deaths).
@@ -967,6 +1000,22 @@ func _setup_tile_effect_overlay() -> void:
 	_tile_effect_overlay = TileEffectOverlay.new()
 	scene_root.add_child(_tile_effect_overlay)
 
+func _setup_fog_overlay() -> void:
+	"""Instantiate [FogOfWarOverlay] and add it to the 3D scene root, mirroring
+	_setup_tile_effect_overlay exactly (same Node3D mount, same null guards, same
+	self-wiring: it subscribes to CombatServices.board_ready and the vision core's
+	vision_changed in its own _ready). Mounted once and reactive per map load, so the
+	battle-scoped free-then-recreate discipline is not needed here."""
+	if _fog_overlay != null and is_instance_valid(_fog_overlay):
+		return
+
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
+
+	_fog_overlay = FogOfWarOverlay.new()
+	scene_root.add_child(_fog_overlay)
+
 # --- Runtime spawn scheduler ------------------------------------------------
 
 func _setup_spawn_manager() -> void:
@@ -1194,6 +1243,22 @@ func _setup_hazard_manager() -> void:
 	_hazard_manager.name = "HazardManager"
 	add_child(_hazard_manager)
 	_hazard_manager.setup()
+
+# --- Fog of war -------------------------------------------------------------
+
+func _setup_vision() -> void:
+	"""Instantiate the VisionSystem and let it subscribe to everything that can change what
+	anybody can see. Idempotent; purely additive -- with no fogged map loaded the system holds
+	one empty cache and answers every query 'visible'."""
+	if _vision_system != null and is_instance_valid(_vision_system):
+		return
+	_vision_system = VisionSystem.new()
+	_vision_system.name = "VisionSystem"
+	add_child(_vision_system)
+	# Movement / spawns / deaths / tile-effect placements / turn boundaries. The full
+	# invalidation set and the reason for each entry are documented on VisionSystem.setup.
+	_vision_system.setup()
+
 
 # --- Tile effects (T14) -----------------------------------------------------
 

@@ -205,7 +205,31 @@ func _matches_target_kind(unit) -> bool:
 	var kind: int = pattern.target_kind
 	if caster != null and caster.has_method("is_controlled") and caster.is_controlled():
 		kind = _invert_allegiance(kind)
-	return CombatTypes.unit_matches_target_kind(kind, caster, unit, board)
+	if not CombatTypes.unit_matches_target_kind(kind, caster, unit, board):
+		return false
+	# FOG OF WAR, AND THE ONE PLACE IT TOUCHES TARGETING. A unit the CASTER'S OWN SIDE cannot
+	# see is not gathered, so a move aimed into the dark resolves against exactly what a move
+	# aimed at empty ground resolves against: nothing.
+	#
+	# WHY HERE AND NOT IN THE AIM VALIDITY. Refusing the AIM at a hidden unit's cell would make
+	# that cell behave differently from the empty ground it is supposed to look like -- the
+	# player (or a script) could sweep the board with a legal/illegal probe and read off exactly
+	# where the hidden units are. Fog that can be probed is not fog. Gathering nothing leaks
+	# nothing, and it keeps every GROUND-targeted move castable anywhere in its range, which is
+	# the rule: fog hides units, not terrain.
+	#
+	# WHY THE SUBMERGED PRECEDENT DOES NOT APPLY. SubmergedStatus deliberately does NOT filter
+	# this path, because an untargetable flag here would also make a submerged unit unhealable
+	# and unbuffable BY ITS OWN SIDE. Vision cannot do that: a side always sees its own units
+	# (VisionSystem.is_unit_visible short-circuits on ownership), so a heal or a buff can never
+	# be blocked by this line -- only a reach into somebody else's dark.
+	#
+	# LOCKSTEP-SAFE with no network code: `caster` is the unit the command names, identical on
+	# every peer, so every peer resolves this gather through the SAME side's vision over the
+	# same board and reaches the same targets. And with fog off (every map that predates it)
+	# gatherable() returns true unconditionally, so this line is the identity function and the
+	# gather is byte-for-byte what it always was.
+	return VisionSystem.gatherable(caster, unit)
 
 
 ## Swap ENEMY <-> ALLY, leaving SELF / ANY_UNIT / tile kinds untouched. The one place

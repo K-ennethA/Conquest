@@ -28,13 +28,19 @@ func apply(ctx: MoveContext) -> void:
 		var owner = null
 		if ctx.caster != null and ctx.caster.has_method("get_owner_player"):
 			owner = ctx.caster.get_owner_player()
-		# THE PLACEMENT RECORD. The active MODE decides how long a planted trap lives
-		# (0 = forever, which is every battle outside a mode that declares otherwise), and the
-		# expiry round is FROZEN onto this copy right now -- read once, here, from the round
+		# THE PLACEMENT RECORD. How long a placement lives is the EFFECT's own authored
+		# lifetime when it declares one -- a smoke veil lasts three rounds in every mode and in
+		# none -- and otherwise the active MODE's trap lifetime (0 = forever, which is every
+		# battle outside a mode that declares otherwise). That precedence lives on the resource
+		# ([method TileEffectResource.lifetime_rounds]), not here, so there is one statement of
+		# it; every effect that shipped before the authored field existed reports 0 and reaches
+		# ModeTuning exactly as it always did.
+		#
+		# The expiry round is FROZEN onto this copy right now -- read once, here, from the round
 		# the trap goes down. Nothing recomputes it, so retuning the ruleset mid-match cannot
 		# move a trap already on the board and two lockstep peers agree on the round it goes
 		# without exchanging anything. See TileEffectResource.stamp_placement.
-		var expiry: int = ModeTuning.trap_expiry_rounds()
+		var expiry: int = effect.lifetime_rounds(ModeTuning.trap_expiry_rounds())
 		var placed = effect
 		if owner != null or expiry > 0:
 			# Duplicated for the same reason it always was (CONQUEST.md rule 7): this resource

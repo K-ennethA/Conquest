@@ -533,6 +533,12 @@ func _unit_at(cell: Vector2i):
 		# Skip corpses awaiting cleanup so the card never describes a dead unit.
 		if unit.has_method("is_alive") and not unit.is_alive():
 			continue
+		# FOG: a unit this screen cannot see is not there to be inspected. The board still
+		# knows it is standing here -- that is the whole point -- but hovering the cell must
+		# read as empty ground, or the card becomes an x-ray that names the unit, its HP and
+		# its statuses through the mist. Falls through to `null`, so the panel simply hides.
+		if FogOfWarOverlay.unit_hidden(unit):
+			continue
 		return unit
 	return null
 

@@ -545,6 +545,17 @@ func _estimate_damage(move: MoveResource, actor, target) -> int:
 	# already drop a candidate scoring <= 0, so this one early-out is the whole skip.
 	if DamageMath.is_invulnerable(target):
 		return 0
+	# A TARGET YOU CANNOT SEE IS WORTH NOTHING EITHER, and for the same structural reason: under
+	# fog the gather path (MoveContext._matches_target_kind) will not hand a hidden unit to a
+	# single effect, so the swing lands on nothing. Scored here rather than by filtering the
+	# hostile list, so the bot still ADVANCES on a side it knows is out there somewhere -- it
+	# simply never spends a turn attacking into the dark. Both ranked-attack paths already drop
+	# a candidate scoring <= 0, so this one early-out is the whole skip.
+	#
+	# Null-safe and unconditional-true with fog off (or outside a battle), so every existing
+	# planner test and every fog-less battle ranks exactly as it did.
+	if not VisionSystem.gatherable(actor, target):
+		return 0
 	var total := 0
 	for effect in move.effects_for(actor):
 		if effect is DamageEffect:
@@ -941,6 +952,11 @@ func _debuff_candidate(move: MoveResource, actor, origin: Vector2i, hostiles: Ar
 	var best_target = null
 	var best_threat: int = -1
 	for h in hostiles:
+		# The same fog skip _estimate_damage applies to the attack ranking. A pure debuff
+		# scores no damage, so it never reaches that early-out and would otherwise be the one
+		# play the bot still made into the dark. Unconditional-true with fog off.
+		if not VisionSystem.gatherable(actor, h):
+			continue
 		var hcell: Vector2i = board.cell_of(h)
 		if not move.can_target(origin, hcell, actor, board):
 			continue

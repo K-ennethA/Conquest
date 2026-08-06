@@ -27,6 +27,19 @@ const MAX_MOVES: int = 4
 @export var base_movement: int = 3
 @export var attack_range: int = 1
 
+## SIGHT RADIUS (Chebyshev cells) under FOG OF WAR -- how far this character lights the board
+## for its own side. 0 means "no opinion", and the unit then sees
+## [constant VisionSystem.DEFAULT_SIGHT_RANGE], which is what every character that predates
+## this field says and why adding it changed nothing about the roster.
+##
+## Deliberately NOT one of the stats [method get_stat] serves and NOT touched by buffs: sight
+## is a property of who a character IS (a scout sees further, a burrower barely at all), and
+## making it modifiable would put a per-turn recompute of the whole lit set behind every stat
+## change. Retune it here, in data.
+##
+## Inert on a map with [member MapResource.fog_of_war] off -- there is nothing to see through.
+@export var sight_range: int = 0
+
 @export_group("Profile")
 ## Elemental TYPE for matchup effectiveness (Fire-Emblem / Pokemon style). Damage a
 ## unit deals/takes is scaled by [ElementChart] against a move's element and the tile
@@ -143,6 +156,14 @@ func get_movement_profile() -> MovementProfile:
 ## value authored in the inspector still reads back as a usable span.
 func get_footprint() -> Vector2i:
 	return Vector2i(maxi(1, footprint.x), maxi(1, footprint.y))
+
+
+## This character's authored [member sight_range], or 0 when it declares none. Kept a plain
+## reader (the fallback to [constant VisionSystem.DEFAULT_SIGHT_RANGE] lives in
+## [method VisionSystem.sight_range_of]) so the default is stated ONCE, on the system that owns
+## the rule, rather than in every resource that has no opinion about it.
+func get_sight_range() -> int:
+	return maxi(0, sight_range)
 
 
 ## Minimum spawn difficulty, clamped to the valid 0..3 range.

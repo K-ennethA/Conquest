@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="TileEffectResource" format=3]
+
+[ext_resource type="Script" path="res://game/tiles/effects/TileEffectResource.gd" id="1_tileeffect"]
+
+[resource]
+script = ExtResource("1_tileeffect")
+id = &"smoke_veil"
+display_name = "Smoke Veil"
+trigger = 3
+affected_factions = 0
+required_unit_tag = &""
+move_cost_bonus = 0
+springs_on_pass = false
+halts_movement = false
+consume_on_trigger = false
+destroyed_by_hostile_entry = false
+conceals_occupants = true
+expiry_rounds = 3
+rule_flags = {}
