@@ -27,8 +27,8 @@ const START := Vector2i(0, 0)
 const TRAP_CELL := Vector2i(1, 0)
 
 ## Where the fixture aims the move: the far end of the corridor within the mover's OWN
-## movement budget, read off its profile rather than hard-coded, so retuning the roster
-## character's movement stat cannot silently turn these tests into no-ops (an unreachable
+## movement budget, read off its movement STAT rather than hard-coded, so retuning the
+## roster character's stride cannot silently turn these tests into no-ops (an unreachable
 ## destination derives no route, which would pass every "no trap" assertion vacuously).
 var _aimed: Vector2i = Vector2i(3, 0)
 
@@ -91,9 +91,13 @@ func _build_board() -> Dictionary:
 	var profile: MovementProfile = unit.get_movement_profile()
 	if profile == null:
 		return {}
-	_aimed = Vector2i(clampi(profile.range, 2, 4), 0)
-	gut.p("mover: movement profile range=%d, aiming at %s over a trap at %s"
-		% [profile.range, _aimed, TRAP_CELL])
+	# Derived from the MOVEMENT STAT, which is what MovementResolver actually floods with --
+	# the profile's own `range` is only the no-mover fallback and would name a cell this
+	# unit's real budget has nothing to do with.
+	var stride: int = int(unit.get_stat("movement"))
+	_aimed = Vector2i(clampi(stride, 2, 4), 0)
+	gut.p("mover: movement stat=%d (profile fallback range=%d), aiming at %s over a trap at %s"
+		% [stride, profile.range, _aimed, TRAP_CELL])
 	# A destination the unit cannot actually walk to would make every assertion below
 	# vacuous, so prove the corridor is real before anything is measured against it.
 	var route: Array[Vector2i] = MovementResolver.new().path_cells(START, _aimed, profile, board, unit)

@@ -63,6 +63,22 @@ class_name MoveResource
 @export var alt_targeting: TargetingPattern
 @export var alt_effects: Array[MoveEffect] = []
 
+@export_group("Presentation")
+## OPTIONAL per-move FX override -- a [MoveFXResource] that retints, resizes or re-sounds
+## what [MoveFXDispatcher] draws when this move resolves. Purely cosmetic: nothing in the
+## combat layer, the AI, the command vocabulary or a replay reads it, so two peers with
+## different FX resolve identical damage.
+##
+## LEFT NULL (the default, and every move authored before this field existed) the dispatcher
+## renders its DERIVED defaults -- the move's element tint, a burst and ground ring on every
+## cell its own [TargetingPattern] covers, and a default cue. Authoring is therefore purely
+## opt-in polish, never a prerequisite for a move reading on screen.
+##
+## Typed as plain [Resource] rather than [MoveFXResource] on purpose: a `.tres` referencing
+## a brand-new global class only resolves once the engine has rescanned, and a loosely-typed
+## field never has that problem. The dispatcher reads it duck-typed for the same reason.
+@export var fx: Resource = null
+
 
 func is_valid() -> bool:
 	return targeting != null and not effects.is_empty()

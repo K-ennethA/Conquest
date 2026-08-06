@@ -1,12 +1,13 @@
 extends GutTest
 
-# Monster's kit, on the CLOCK -- the half of the character that is about WHEN.
+# DUSKMAW's kit, on the CLOCK -- the half of the character that is about WHEN.
 #
 #   * Abyssal Maw erupts at the start of the CASTER's next turn, in BOTH turn systems,
 #     and NOT on the turn that happens in between.
 #   * Voidwalk's immunity lasts exactly one turn and then lets go.
-#   * Shadow Dash's Void Surge hands its extra action and its movement penalty back at
-#     the same boundary.
+#   * Shadow Dash leaves the caster under CANTO -- it has acted, but still owes ONE
+#     MOVEMENT -- and BOTH turn systems must hold the turn open for that step, then
+#     close it the moment the step (or a Wait) is taken.
 #
 # All three ride [method TurnSystemBase._tick_unit_turn_start] -- the ONE per-unit
 # turn-start hook both turn systems drive (Speed First for the single unit whose turn
@@ -56,14 +57,36 @@ class TeamBoard:
 
 # --- Fixtures ---------------------------------------------------------------
 
+const Guard := preload("res://tests/helpers/global_state_guard.gd")
+
+## Untyped on purpose: a `: RefCounted` annotation makes the static analyser reject
+## _guard.set_setting() as "not found in base RefCounted" (tests/README rule 3).
+var _guard
+
+
+func before_each() -> void:
+	_guard = Guard.new()
+	# Traditional's auto-end is a SETTING, and the canto tests assert both halves of it
+	# (held open during the canto, fired the moment it is spent). Pin it so another suite
+	# cannot decide the outcome.
+	_guard.set_setting("auto_end_turn", true)
+
+
+func after_each() -> void:
+	_guard.restore()
+
+
 ## A live [Unit] with a [StatusController], built the way test_eldroot.gd builds one.
-func _real_unit(display_name: String) -> Unit:
+## [param speed] is a parameter because Speed First orders its queue by it and the canto
+## tests need a KNOWN first actor; it must be set on the resource BEFORE the unit enters
+## the tree, since that is when UnitStats reads the block.
+func _real_unit(display_name: String, speed: int = 8) -> Unit:
 	var u := Unit.new()
 	var res := UnitStatsResource.new()
 	res.unit_name = display_name
 	res.unit_type = "warrior"
 	res.max_health = 200
-	res.base_speed = 8
+	res.base_speed = speed
 	res.movement_range = 3
 	u.stats_resource = res
 	add_child_autofree(u)
@@ -257,12 +280,228 @@ func test_voidwalk_immunity_is_read_by_the_damage_layer_not_just_the_status():
 
 
 # ===========================================================================
-# SHADOW DASH -- the Void Surge is handed back on schedule
+# SHADOW DASH -- CANTO: it has acted, and still owes ONE movement
 # ===========================================================================
+#
+# THE SHIPPED BUG THIS SECTION EXISTS FOR. The first build expressed "move again after
+# dashing" as the Arena's arena_extra_actions budget, because movement-only "was not
+# expressible". Two things were wrong with that, and only the second was visible:
+#   * it granted a FULL action, so Duskmaw could strike twice; and
+#   * NEITHER turn system understood the grant. Traditional appended the unit to
+#     units_acted_this_turn the instant the dash resolved (so can_unit_act went false,
+#     the movement range went dark, and the click on a reachable cell was refused --
+#     the reported "could not move to a spot"), while Speed First simply advanced its
+#     queue and retired the unit outright.
+# Canto is therefore state the UNIT owns and BOTH turn systems ASK about.
 
-func test_the_void_surge_returns_the_action_budget_at_the_next_turn_start():
+
+## The live sequence a dash produces, with no board required: the move's effects resolve
+## INSIDE perform_move (Void Surge lands, arming canto) and the CALLER marks the action
+## complete afterwards -- exactly what UnitActionsPanel, CommandApplier and BotTurnDriver
+## all do. Getting this order right is the whole reason grant_canto only ARMS.
+func _resolve_dash(unit: Unit) -> void:
+	unit.get_status_controller().add_status(_void_surge())
+	unit.mark_action_completed("move")
+
+
+func test_the_dash_leaves_the_unit_able_to_MOVE_but_never_to_act_again():
+	var unit := _real_unit("Duskmaw")
+	var board := TeamBoard.new()
+	board.place(unit, Vector2i(0, 0), 0)
+	unit.reset_turn_actions()
+	unit.mark_moved()   # it walked before dashing, the ordinary FE opening
+
+	_resolve_dash(unit)
+
+	assert_true(unit.has_canto(), "the dash leaves it under canto")
+	assert_false(unit.can_act(),
+		"and it may NOT act again -- no second dash, no attack, no move at all")
+	assert_true(unit.can_move(),
+		"but it may still MOVE, even though it had already used its walk this turn")
+
+
+func test_the_canto_movement_is_exactly_one_and_it_closes_the_turn():
+	var unit := _real_unit("Duskmaw")
+	unit.reset_turn_actions()
+	_resolve_dash(unit)
+
+	# GUT lambdas capture BY VALUE, so the announcement is collected through a shared Array.
+	var closed: Array = []
+	unit.unit_action_completed.connect(func(_u, action) -> void: closed.append(action))
+
+	unit.mark_moved()
+
+	assert_eq(closed, ["canto_move"],
+		"taking the owed step announces the unit done -- that is what ends its turn")
+	assert_false(unit.has_canto(), "the canto is spent")
+	assert_false(unit.can_move(), "there is no second free step")
+	assert_true(unit.has_acted_this_turn, "and the unit is latched done for the turn")
+
+
+func test_waiting_instead_forfeits_the_canto_and_still_ends_the_turn():
+	var unit := _real_unit("Duskmaw")
+	unit.reset_turn_actions()
+	_resolve_dash(unit)
+
+	var closed: Array = []
+	unit.unit_action_completed.connect(func(_u, action) -> void: closed.append(action))
+
+	unit.finish_canto("wait")
+
+	assert_eq(closed, ["wait"], "Wait closes the turn just as the step does")
+	assert_false(unit.has_canto(), "with the owed movement given up")
+	unit.finish_canto("wait")
+	assert_eq(closed, ["wait"], "and finish_canto is idempotent -- never a second announcement")
+
+
+func test_any_further_completed_action_forfeits_an_armed_canto():
+	# The networked WAIT_UNIT command lands as a plain mark_action_completed, so this is
+	# what lets a canto turn be closed from the command layer with no special case there.
+	var unit := _real_unit("Duskmaw")
+	unit.reset_turn_actions()
+	_resolve_dash(unit)
+	assert_true(unit.has_canto(), "armed by the dash")
+
+	unit.mark_action_completed("wait")
+
+	assert_false(unit.has_canto(), "a later completed action gives the movement up")
+	assert_false(unit.can_move(), "so nothing is owed and the unit is done")
+
+
+func test_the_canto_move_is_taken_on_a_stride_two_cells_shorter():
+	var unit := _real_unit("Duskmaw")
+	var base_movement: int = unit.get_stat("movement")
+	unit.reset_turn_actions()
+	_resolve_dash(unit)
+
+	assert_eq(unit.get_stat("movement"), base_movement - 2,
+		"the free step is PAID FOR: Void Surge shortens the stride by exactly 2")
+	assert_true(unit.has_canto(), "and the two halves arrive together, never one without the other")
+
+
+# --- Both turn systems hold the turn open for it ----------------------------
+
+func test_traditional_holds_the_players_turn_open_for_the_canto_then_auto_ends():
 	var ts: TraditionalTurnSystem = add_child_autofree(TraditionalTurnSystem.new())
-	var unit := _real_unit("Monster")
+	var mine := _real_unit("Duskmaw")
+	var theirs := _real_unit("Target")
+	var my_player := _register(ts, mine, 0)
+	_register(ts, theirs, 1)
+	ts.start_turn_system()
+	assert_eq(ts.get_current_active_player(), my_player, "the turn opens on our side")
+
+	_resolve_dash(mine)
+
+	assert_true(ts.can_unit_act(mine),
+		"REGRESSION: a unit that still owes its canto movement is NOT 'already acted'")
+	assert_true(mine in ts.get_units_that_can_act(),
+		"so it is still one of the units the player has left to command")
+	await get_tree().process_frame
+	assert_eq(ts.get_current_active_player(), my_player,
+		"and the all-acted sweep must NOT auto-end the player turn on top of it")
+
+	mine.mark_moved()   # the canto step
+
+	assert_false(ts.can_unit_act(mine), "with the step taken it is genuinely done")
+	await get_tree().process_frame
+	assert_ne(ts.get_current_active_player(), my_player,
+		"and NOW the auto-end fires, exactly once, at the right moment")
+
+
+func test_speed_first_holds_the_queue_open_for_the_canto():
+	var ts: SpeedFirstTurnSystem = add_child_autofree(SpeedFirstTurnSystem.new())
+	var fast := _real_unit("Duskmaw", 20)
+	var slow := _real_unit("Target", 1)
+	_register(ts, fast, 0)
+	_register(ts, slow, 1)
+	ts.start_turn_system()
+	assert_eq(ts.get_current_acting_unit(), fast, "the faster unit acts first")
+
+	_resolve_dash(fast)
+
+	assert_eq(ts.get_current_acting_unit(), fast,
+		"REGRESSION: the queue advanced the instant the dash resolved, retiring the unit " +
+		"before it could take the movement it was owed")
+	assert_true(ts.can_unit_act(fast), "its turn is still open")
+
+	fast.mark_moved()   # the canto step
+
+	assert_eq(ts.get_current_acting_unit(), slow,
+		"taking the step hands the queue on, exactly as any completed action does")
+
+
+func test_speed_first_hands_the_queue_on_when_the_canto_is_waited_out():
+	var ts: SpeedFirstTurnSystem = add_child_autofree(SpeedFirstTurnSystem.new())
+	var fast := _real_unit("Duskmaw", 20)
+	var slow := _real_unit("Target", 1)
+	_register(ts, fast, 0)
+	_register(ts, slow, 1)
+	ts.start_turn_system()
+
+	_resolve_dash(fast)
+	fast.finish_canto("wait")
+
+	assert_eq(ts.get_current_acting_unit(), slow,
+		"a unit that gives its canto up does not hold the queue hostage")
+
+
+func test_the_canto_never_survives_into_the_next_turn():
+	# The anti-lockout shape every per-turn grant here follows: the flag is turn-scoped
+	# state on the unit, so even a dispel, a save/load or a dropped signal cannot leak a
+	# free step into a later turn.
+	var ts: TraditionalTurnSystem = add_child_autofree(TraditionalTurnSystem.new())
+	var unit := _real_unit("Duskmaw")
+	_register(ts, unit, 0)
+	ts.start_turn_system()
+
+	_resolve_dash(unit)
+	assert_true(unit.has_canto(), "owed this turn")
+
+	ts.reset_all_unit_actions()   # what every turn start runs
+
+	assert_false(unit.has_canto(), "and gone at the next turn boundary")
+	assert_true(unit.can_act(), "the unit starts its next turn whole")
+
+
+# --- The command seam -------------------------------------------------------
+
+func test_the_command_layer_accepts_the_canto_move_as_an_ordinary_MOVE_UNIT():
+	# Networked play and replays carry the canto step as a plain MOVE_UNIT -- there is no
+	# canto command. What has to be true is that the applier's move path (which asks the
+	# unit nothing about its acted state) still lands it AND still closes the turn.
+	var ts: TraditionalTurnSystem = add_child_autofree(TraditionalTurnSystem.new())
+	var unit := _real_unit("Duskmaw")
+	var player := _register(ts, unit, 0)
+	_register(ts, _real_unit("Target"), 1)
+	ts.start_turn_system()
+
+	var board := TeamBoard.new()
+	board.place(unit, Vector2i(0, 0), 0)
+
+	_resolve_dash(unit)
+	assert_true(ts.can_unit_act(unit), "the seam is asked while the canto is still owed")
+
+	var registry := CommandApplier.UnitRegistry.new()
+	registry.register(unit, 1)
+	var applier := CommandApplier.new(registry)
+	var cmd: Dictionary = NetProtocol.stamp_resolution(
+		NetProtocol.make_move_unit(1, Vector2i(2, 0)), 1, 0)
+	var res: Dictionary = applier.apply_command(cmd, board)
+
+	assert_true(bool(res.get("ok", false)),
+		"the applier accepts the move: %s" % str(res.get("reason", "")))
+	assert_eq(board.cell_of(unit), Vector2i(2, 0), "and the unit is standing on the destination")
+	assert_false(unit.has_canto(), "the applier's mark_moved() spent the canto")
+	assert_false(ts.can_unit_act(unit), "so the turn closed through the ordinary path")
+	assert_eq(ts.get_current_active_player(), player,
+		"(the deferred auto-end has not run yet -- this asserts the seam, not the advance)")
+
+
+# --- The stride comes back at the next turn start ---------------------------
+
+func test_the_void_surge_hands_the_stride_back_at_the_next_turn_start():
+	var ts: TraditionalTurnSystem = add_child_autofree(TraditionalTurnSystem.new())
+	var unit := _real_unit("Duskmaw")
 	_register(ts, unit, 0)
 	var board := TeamBoard.new()
 	board.place(unit, Vector2i(0, 0), 0)
@@ -271,32 +510,12 @@ func test_the_void_surge_returns_the_action_budget_at_the_next_turn_start():
 
 	var base_movement: int = unit.get_stat("movement")
 	unit.get_status_controller().add_status(_void_surge())
-
-	assert_eq(unit.arena_extra_actions, 1,
-		"the surge grants exactly one more action for this turn")
 	assert_eq(unit.get_stat("movement"), base_movement - 2,
-		"paid for with a shortened stride")
+		"the free step is paid for with a shortened stride")
 
 	ts.current_turn += 1
 	_open_turn_for(ts, unit, board)
 
-	assert_eq(unit.arena_extra_actions, 0, "the budget is handed back next turn")
+	assert_false(unit.get_status_controller().has_status(&"void_surge"),
+		"one turn only")
 	assert_eq(unit.get_stat("movement"), base_movement, "and the stride comes back with it")
-
-
-func test_the_surge_lets_the_unit_act_a_second_time_and_no_more():
-	# The action ECONOMY, through the real Unit: with the budget raised, the first
-	# completed action does not latch the unit done -- the second one does.
-	var unit := _real_unit("Monster")
-	var board := TeamBoard.new()
-	board.place(unit, Vector2i(0, 0), 0)
-	unit.reset_turn_actions()
-	unit.get_status_controller().add_status(_void_surge())
-
-	unit.mark_action_completed("move")
-	assert_true(unit.can_act(),
-		"the dash itself is the first action, and the surge keeps the unit actable")
-	assert_true(unit.can_move(), "with its movement refreshed, so it may reposition")
-
-	unit.mark_action_completed("move")
-	assert_false(unit.can_act(), "the second action closes the turn -- it is ONE extra, not many")

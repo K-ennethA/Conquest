@@ -85,6 +85,17 @@ func can_unit_act(unit: Unit) -> bool:
 	if not current_player.owns_unit(unit):
 		return false
 
+	# CANTO short-circuits both "acted" tests below: a unit that has acted but still owes
+	# ONE MOVEMENT is not finished with its turn. Reporting it as acted here is precisely
+	# what broke the granted step -- UnitActionsPanel read "already acted this turn" and
+	# refused the click, validate_turn_action("move") refused it again, and (worse) the
+	# all-acted sweep in _check_turn_completion auto-ended the whole player turn on top of
+	# the unit. It is still barred from ACTING: Unit.can_act() stays false, so the action
+	# menu offers no moves and only Wait. A stun or a hijack still wins over it -- those
+	# take the turn away entirely.
+	if TurnSystemBase.has_canto(unit) and not is_turn_skipped(unit) and not is_turn_forced_control(unit):
+		return true
+
 	# Unit must not have acted this turn (once they act, they can't act again).
 	# Two INDEPENDENT sources are honored so completion never depends on just one:
 	#   1. units_acted_this_turn -- the turn system's SIDE LIST (populated by

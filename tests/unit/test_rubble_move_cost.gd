@@ -36,10 +36,12 @@ func _rubble(bonus: int) -> TileEffectResource:
 
 func test_rubble_costs_extra_to_cross():
 	var board := MockBoard.new()
-	var unit := RefCounted.new()  # applies_to only needs non-null + faction/tag; ALL passes both
+	# applies_to only needs non-null + faction/tag; ALL passes both. Carrying no stats, it
+	# is budgeted by the profile's fallback range -- which is all this case is about.
+	var unit := RefCounted.new()
 	var res := MovementResolver.new()
 
-	# Clear ground: with movement 2, the cell two steps straight ahead is reachable.
+	# Clear ground: with a budget of 2, the cell two steps straight ahead is reachable.
 	var clear := res.reachable_cells(Vector2i(0, 0), _profile(2), board, unit)
 	assert_true(clear.has(Vector2i(0, 2)), "on open ground a 2-move unit reaches two cells out")
 
@@ -59,9 +61,11 @@ func test_zero_bonus_rubble_does_not_slow():
 	assert_true(cells.has(Vector2i(0, 2)), "a tile effect with move_cost_bonus 0 never changes reach")
 
 
-## A unit exposing a LIVE movement stat below its base -- the shape a "Slowed" status
-## produces via a stat modifier. MovementResolver must fold the (current - base) delta
-## into its flood budget so the reachable set shrinks by the debuff.
+## A unit exposing a LIVE movement stat that differs from its base -- the shape a "Slowed"
+## status produces via a stat modifier. THE FLOOD BUDGET IS THAT LIVE STAT: the resolver
+## reads `get_stat("movement")` directly, so a debuff shrinks the reachable set and a haste
+## grows it with no arithmetic on the profile at all. `base` is carried purely so these
+## cases still describe a modifier rather than a bare number.
 class MoverStub:
 	var cur: int
 	var base: int
@@ -74,31 +78,48 @@ class MoverStub:
 		return base if name == "movement" else 0
 
 
+## The cells reachable straight down the open column, derived rather than listed, so each
+## case below asserts a DISTANCE against the stat instead of hard-coded coordinates.
+func _reach_down_column(unit, profile_range: int) -> int:
+	var cells := MovementResolver.new().reachable_cells(
+		Vector2i(0, 0), _profile(profile_range), MockBoard.new(), unit)
+	var farthest: int = 0
+	for c in cells:
+		if c.x == 0 and c.y > 0:
+			farthest = maxi(farthest, c.y)
+	return farthest
+
+
 func test_movement_debuff_shrinks_reachable_set():
-	# Base movement 3, but a -2 debuff drops live movement to 1: only one cell out is
-	# reachable, the cells two and three out are cut off (profile.range 3 + (1 - 3) = 1).
-	var board := MockBoard.new()
-	var res := MovementResolver.new()
+	# Base movement 3 with a -2 debuff: the LIVE stat is 1, so exactly one cell out.
 	var unit := MoverStub.new(1, 3)
-	var cells := res.reachable_cells(Vector2i(0, 0), _profile(3), board, unit)
-	assert_true(cells.has(Vector2i(0, 1)), "one step out is still reachable while slowed")
-	assert_false(cells.has(Vector2i(0, 2)), "two steps out is cut off by the -2 movement debuff")
-	assert_false(cells.has(Vector2i(0, 3)), "three steps out is cut off too")
+	assert_eq(_reach_down_column(unit, 3), unit.cur,
+		"a slowed unit reaches exactly its LIVE movement stat (%d), not its base %d"
+			% [unit.cur, unit.base])
 
 
 func test_no_movement_delta_leaves_reach_unchanged():
-	# current == base -> zero delta -> the full authored range-3 reach stands (byte-for-byte).
-	var board := MockBoard.new()
-	var res := MovementResolver.new()
+	# No modifier: live == base, and the reach is that number.
 	var unit := MoverStub.new(3, 3)
-	var cells := res.reachable_cells(Vector2i(0, 0), _profile(3), board, unit)
-	assert_true(cells.has(Vector2i(0, 3)), "with no movement delta the unit reaches the full range")
+	assert_eq(_reach_down_column(unit, 3), unit.cur,
+		"an unmodified unit reaches its own movement stat")
 
 
 func test_movement_buff_grows_reachable_set():
-	# A positive delta (a haste) EXTENDS reach: base 2, live 3 -> range 2 + (3 - 2) = 3.
-	var board := MockBoard.new()
-	var res := MovementResolver.new()
+	# A haste EXTENDS reach past the base, and past the profile's fallback range (2).
 	var unit := MoverStub.new(3, 2)
-	var cells := res.reachable_cells(Vector2i(0, 0), _profile(2), board, unit)
-	assert_true(cells.has(Vector2i(0, 3)), "a +1 movement buff lets the unit reach one cell farther")
+	assert_eq(_reach_down_column(unit, 2), unit.cur,
+		"a hasted unit reaches its raised stat (%d), one farther than its base %d"
+			% [unit.cur, unit.base])
+
+
+func test_the_profile_range_is_only_the_fallback_for_a_mover_with_no_stats():
+	# THE SPLIT, stated once: a unit that can report a movement stat is budgeted by it and
+	# the profile's own `range` is ignored entirely; a mover that cannot (a bare RefCounted,
+	# a tool, a mock) falls back to the profile. Same profile, two different budgets.
+	assert_eq(_reach_down_column(MoverStub.new(4, 4), 2), 4,
+		"a stat-bearing mover ignores the profile's range-2 and uses its own 4")
+	assert_eq(_reach_down_column(RefCounted.new(), 2), 2,
+		"a mover with no stats falls back to the profile's authored range")
+	assert_eq(_reach_down_column(null, 2), 2,
+		"and so does a call with no mover at all")

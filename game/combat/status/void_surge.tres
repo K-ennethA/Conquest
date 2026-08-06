@@ -1,6 +1,6 @@
-[gd_resource type="Resource" script_class="ExtraActionStatus" format=3]
+[gd_resource type="Resource" script_class="CantoStatus" format=3]
 
-[ext_resource type="Script" path="res://game/combat/status/ExtraActionStatus.gd" id="1_surge"]
+[ext_resource type="Script" path="res://game/combat/status/CantoStatus.gd" id="1_surge"]
 
 [resource]
 script = ExtResource("1_surge")
@@ -13,4 +13,3 @@ rule_flags = {}
 damage_taken_scale = 1.0
 stat_name = "movement"
 amount = -2
-extra_actions = 1

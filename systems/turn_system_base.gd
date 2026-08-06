@@ -237,6 +237,30 @@ var _stun_skipped_turn: Dictionary = {}
 # auto-resolves it through the AI planner with allegiance inverted.
 var _control_forced_turn: Dictionary = {}
 
+# --- CANTO ------------------------------------------------------------------
+#
+# "Has acted, but may still take ONE movement" (see the block note on [Unit]). Unlike the
+# stun and control latches above this is NOT turn-system bookkeeping: canto is state the
+# UNIT owns and clears, because it is granted mid-action by a move effect and consumed by
+# the unit's own mark_moved(). What the turn systems need is only the QUESTION, asked in
+# one duck-typed place so Traditional's completion check and Speed First's queue advance
+# agree -- and so a mock unit that has never heard of canto simply answers no.
+#
+# WHY IT HAS TO BE ASKED AT ALL. Both systems treat a completed action as "this unit is
+# done": Traditional appends it to units_acted_this_turn (so can_unit_act goes false and
+# the auto-end fires), Speed First advances the queue on the spot. A unit that still owes
+# its movement is NOT done, and saying otherwise is what made the granted step unusable.
+
+## True when [param unit] has acted but still owes its one canto movement. STATIC and
+## fully duck-typed: a unit without the accessor is never under canto.
+static func has_canto(unit) -> bool:
+	if unit == null or not is_instance_valid(unit):
+		return false
+	if not unit.has_method("has_canto"):
+		return false
+	return bool(unit.has_canto())
+
+
 ## True if [param unit]'s turn is being skipped by a stun THIS turn. Consulted by
 ## both turn systems' can_unit_act() and by the AI driver.
 func is_turn_skipped(unit) -> bool:

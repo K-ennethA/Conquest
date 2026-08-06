@@ -769,11 +769,47 @@ var arena_extra_actions: int = 0
 ## Actions already completed this turn, compared against arena_extra_actions.
 var _actions_taken_this_turn: int = 0
 
+# --- CANTO: "has acted, but may still take ONE movement" ---------------------
+#
+# The Fire-Emblem cavalry rule, and the honest expression of Shadow Dash's "comes out
+# the far side still moving". A unit under canto has SPENT its action -- [method can_act]
+# is false, so no second cast and no attack -- but still owes exactly one MOVEMENT, which
+# [method can_move] permits. Taking that movement (or Waiting) is what finally closes its
+# turn.
+#
+# WHY A FLAG AND NOT [member arena_extra_actions]. The Arena's "act twice" budget grants a
+# FULL extra action, which is a different mechanic and was the wrong one here twice over:
+# it left the unit able to strike again, and -- the shipped bug -- neither turn system
+# understood it. Both read a completed action as "this unit is done" (Traditional appends
+# it to units_acted_this_turn, Speed First advances its queue on the spot), so the granted
+# action was banked as spent the instant the dash resolved: the unit's movement range went
+# dark, `can_unit_act` reported "already acted this turn", and the click on a perfectly
+# reachable cell was refused. Canto is therefore a state BOTH turn systems ASK about
+# ([method TurnSystemBase.has_canto]) rather than a budget only this class knows.
+#
+# ARMED BY THE ACTION THAT GRANTS IT, not the instant the status lands. A move's effects
+# resolve INSIDE [method perform_move] and the caller marks the action complete AFTERWARDS
+# (UnitActionsPanel / CommandApplier / BotTurnDriver all do), so a grant that armed
+# immediately would be wiped by its own action. [method grant_canto] therefore only sets
+# [member _canto_granted]; [method mark_action_completed] promotes it -- and any LATER
+# completed action clears an armed canto, which is exactly what lets a plain Wait (or the
+# networked WAIT_UNIT command) end a canto turn through the ordinary path, on every peer,
+# with no special case in the command layer.
+
+## True while this unit has acted but still owes one movement. Cleared by taking that
+## movement, by completing any further action, and at the next [method reset_turn_actions].
+var canto_pending: bool = false
+## Set by [method grant_canto]; promoted to [member canto_pending] by the action that
+## granted it (see the block note above).
+var _canto_granted: bool = false
+
 func reset_turn_actions() -> void:
 	"""Reset unit's actions for a new turn"""
 	has_acted_this_turn = false
 	has_moved_this_turn = false
 	_actions_taken_this_turn = 0
+	canto_pending = false
+	_canto_granted = false
 
 func mark_action_completed(action_type: String) -> void:
 	"""Mark that this unit has completed an action. Normally this ends its turn, but a
@@ -786,6 +822,15 @@ func mark_action_completed(action_type: String) -> void:
 		has_moved_this_turn = false
 	else:
 		has_acted_this_turn = true
+	# CANTO, both directions (see the block note): the action that GRANTED canto arms it
+	# here -- the grant landed during this same action's own resolution -- while any other
+	# completed action forfeits a canto that was already armed.
+	if _canto_granted:
+		_canto_granted = false
+		canto_pending = true
+		has_moved_this_turn = false
+	else:
+		canto_pending = false
 	unit_action_completed.emit(self, action_type)
 
 func mark_moved() -> void:
@@ -793,10 +838,38 @@ func mark_moved() -> void:
 	the unit can still take an action). Moving again is blocked until reset or an
 	extra-move grant."""
 	has_moved_this_turn = true
+	# CANTO: this WAS the movement the unit still owed, so it closes the turn. The
+	# announcement is what both turn systems act on (see finish_canto). No-op otherwise,
+	# so an ordinary move is byte-for-byte unchanged.
+	if canto_pending:
+		finish_canto("canto_move")
 
 func grant_extra_move() -> void:
 	"""Allow the unit to move again this turn (for abilities / move effects)."""
 	has_moved_this_turn = false
+
+## Arm CANTO for the action currently resolving: once that action completes the unit is
+## done ACTING but still owes one MOVEMENT (see the block note above). Called by
+## [CantoStatus] when the carrier status lands.
+func grant_canto() -> void:
+	_canto_granted = true
+
+## True while this unit has acted and still owes its one movement. The ONE predicate the
+## turn systems, the command panel and the AI driver all read.
+func has_canto() -> bool:
+	return canto_pending and is_alive()
+
+## Close a canto turn: forfeit whatever movement was still owed and announce the unit as
+## done, so the active turn system advances/completes exactly as it does for any other
+## finished action. IDEMPOTENT -- a unit with no canto pending is untouched and nothing is
+## announced, so a caller may call it unconditionally.
+func finish_canto(action_type: String = "canto") -> void:
+	if not canto_pending:
+		return
+	canto_pending = false
+	_canto_granted = false
+	has_acted_this_turn = true
+	unit_action_completed.emit(self, action_type)
 
 func can_act() -> bool:
 	"""Check if unit can still take its action this turn"""
@@ -805,8 +878,12 @@ func can_act() -> bool:
 func can_move() -> bool:
 	"""Check if unit can move this turn (once, unless granted extra movement, and
 	never while an active status roots the unit in place)"""
-	return is_alive() and not has_acted_this_turn and not has_moved_this_turn \
-		and not is_immobilized()
+	if not is_alive() or has_moved_this_turn or is_immobilized():
+		return false
+	# CANTO: it has already acted, and may still move exactly once.
+	if canto_pending:
+		return true
+	return not has_acted_this_turn
 
 ## True if any active [StatusCondition] on this unit sets [param flag_name] in its
 ## rule_flags. Null-safe: a unit with no StatusController (legacy / non-character

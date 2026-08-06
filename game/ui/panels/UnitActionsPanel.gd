@@ -759,6 +759,13 @@ func _player_is_human(player: Player) -> bool:
 		return int(player.player_id) == local_id
 	return not player.is_ai
 
+## True when [param unit] has acted but still owes its one CANTO movement (see the block
+## note on [Unit]). Duck-typed so a legacy/mock unit simply answers no; this is the ONE
+## place the panel asks, and every canto branch below reads it.
+func _unit_has_canto(unit) -> bool:
+	return unit != null and is_instance_valid(unit) \
+		and unit.has_method("has_canto") and bool(unit.has_canto())
+
 func _human_may_command(unit: Unit) -> bool:
 	"""True only when the LOCAL human may issue commands to `unit` this turn: there is
 	a current turn player, that player owns the unit, AND that player is human. Any
@@ -1069,7 +1076,15 @@ func _on_end_unit_turn_pressed() -> void:
 	# FE loop. Drop any half-aimed move UI, then commit the tentative move (if one is
 	# staged) so the unit stays where it previewed before its turn ends.
 	_cancel_move_targeting()
+	# CANTO (see _on_action_menu_wait_chosen): the unit has no action left to spend, so
+	# ending its turn means giving up the movement it still owed. Committing a staged step
+	# already does that; finish_canto is idempotent and covers the un-staged case. Both run
+	# BEFORE the mark_unit_acted call below, which for a canto unit is a no-op (the turn
+	# system already holds it in its acted list).
+	var canto_end: bool = _unit_has_canto(selected_unit)
 	_commit_tentative_move()
+	if canto_end and selected_unit.has_method("finish_canto"):
+		selected_unit.finish_canto("wait")
 
 	ReplayRecorder.note_wait_unit(selected_unit)  # REPLAY: solo WAIT_UNIT (End Unit Turn)
 
@@ -2425,8 +2440,17 @@ func _on_action_menu_wait_chosen() -> void:
 		_finish_command(unit)
 		return
 
+	# CANTO: the unit already spent its action, so there is no action left to consume --
+	# what Wait does here is give up the movement it still owed. _commit_tentative_move
+	# above may already have closed the turn (mark_moved -> finish_canto) when a step was
+	# staged; finish_canto is idempotent, so this covers the "stand still and be done"
+	# case without double-announcing the one that moved.
+	var canto_wait: bool = _unit_has_canto(unit)
 	_commit_tentative_move()
-	if unit.has_method("mark_action_completed"):
+	if canto_wait:
+		if unit.has_method("finish_canto"):
+			unit.finish_canto("wait")
+	elif unit.has_method("mark_action_completed"):
 		unit.mark_action_completed("wait")
 	ReplayRecorder.note_wait_unit(unit)  # REPLAY: solo WAIT_UNIT
 	_refresh_unit_visuals()
@@ -2880,6 +2904,18 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 	# Reset targeting state (and emit targeting_cleared) and refresh the action UI.
 	_cancel_move_targeting()
 	_update_actions()
+
+	# CANTO: the cast spent the unit's ACTION but left it owing ONE MOVEMENT (Shadow
+	# Dash). Do NOT close the command loop -- drop straight back into MOVEMENT-ONLY
+	# selection with the (now shortened, -2 from Void Surge) reachable range lit, so the
+	# player finishes the step without having to re-select the unit. The contextual menu
+	# that opens on the destination offers no moves at all, because Unit.can_act() is now
+	# false; Wait there, or Cancel, are the only ways out and both end the turn honestly.
+	if result.get("success", false) and _unit_has_canto(acting_unit):
+		_set_state(CommandState.UNIT_SELECTED)
+		_calculate_and_show_movement_range()
+		_update_actions()
+		return
 
 	# The action fully resolved: close the command loop and deselect (Speed First then
 	# auto-selects the next acting human unit via the cursor). Only when the action was

@@ -551,9 +551,18 @@ func _check_turn_completion() -> void:
 
 # Unit action handling
 func mark_unit_acted(unit: Unit) -> void:
-	"""Mark a unit as having acted and advance turn"""
-	if unit == current_acting_unit:
-		advance_turn()
+	"""Mark a unit as having acted and advance turn.
+
+	CANTO holds the queue open. A unit that has acted but still owes ONE MOVEMENT is not
+	finished, and this system's queue is unforgiving: advancing here retired the unit the
+	instant its dash resolved, so the granted step was gone before the player could take
+	it. The movement (Unit.mark_moved -> finish_canto) or a Wait re-enters this function
+	with the canto spent, and the queue advances then."""
+	if unit != current_acting_unit:
+		return
+	if TurnSystemBase.has_canto(unit):
+		return
+	advance_turn()
 
 # Manual turn control
 func end_turn_manually() -> bool:

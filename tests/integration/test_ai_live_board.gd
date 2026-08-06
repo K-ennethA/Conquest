@@ -236,7 +236,11 @@ func test_ai_steps_toward_distant_enemy_within_reachable_cells() -> void:
 	assert_not_null(profile, "a character-backed unit should expose a movement profile")
 
 	var origin: Vector2i = board.cell_of(ai_unit)
-	var reachable: Array[Vector2i] = MovementResolver.new().reachable_cells(origin, profile, board)
+	# The MOVER is passed, exactly as every production caller does: the flood budget is the
+	# unit's movement stat, so omitting it here would measure the profile's fallback range
+	# instead of the reach the AI actually planned against.
+	var reachable: Array[Vector2i] = MovementResolver.new().reachable_cells(
+		origin, profile, board, ai_unit)
 	assert_true(reachable.has(decision["step_to"]),
 		"the chosen step_to cell (%s) must be one MovementResolver actually considers reachable from %s"
 			% [decision["step_to"], origin])

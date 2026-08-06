@@ -1,6 +1,6 @@
 extends GutTest
 
-# Monster's kit -- the long-range dark attacker.
+# DUSKMAW's kit -- the long-range dark attacker.
 #
 #   DREAD BRAND (ON_ATTACK passive)  -- damage it deals BRANDS the victim; the next
 #                                       damage instance from ANY source is x1.3, then
@@ -9,7 +9,8 @@ extends GutTest
 #   UMBRAL CLAW  (move 2)            -- a 3-cell piercing line.
 #   VOIDWALK     (move 3)            -- one turn of taking no damage at all.
 #   SHADOW DASH  (move 4)            -- charge through up to 3 enemies, land beyond,
-#                                       then move again on a shortened leash.
+#                                       then MOVE again (CANTO) on a shortened leash --
+#                                       movement only, never a second strike.
 #
 # Everything here is pure mocks + resources: no scene tree, no autoloads, no disk. The
 # turn-flow half of the kit (WHEN the maw erupts, WHEN Voidwalk and the Void Surge run
@@ -59,8 +60,12 @@ class StatusUnit:
 	var team: int
 	var stats: Dictionary
 	var hp: int
+	## How many times CantoStatus armed the movement-only grant on this unit. A COUNT,
+	## not a bool, so "refresh never grants twice" is provable.
+	var canto_grants: int = 0
+	## The Arena's full-extra-action budget, present so a test can prove the canto path
+	## no longer touches it (the arena machinery is untouched, and unused here).
 	var arena_extra_actions: int = 0
-	var extra_moves_granted: int = 0
 	var modifiers: Array = []
 	var controller = null
 	func _init(p_team: int, p_stats: Dictionary) -> void:
@@ -81,8 +86,8 @@ class StatusUnit:
 	func remove_stat_modifier(id: int) -> void:
 		if id >= 1 and id <= modifiers.size():
 			modifiers[id - 1]["removed"] = true
-	func grant_extra_move() -> void:
-		extra_moves_granted += 1
+	func grant_canto() -> void:
+		canto_grants += 1
 
 
 ## The board every test here uses: placement, allegiance, and the two mutators the dash
@@ -949,7 +954,7 @@ func test_shadow_dash_resolves_identically_when_replayed():
 		"the same dash replayed lands on the same cell for the same damage")
 
 
-func test_the_dash_grants_one_extra_action_on_a_shortened_leash():
+func test_the_dash_grants_canto_on_a_shortened_leash():
 	var caster := StatusUnit.new(0, { "magic": 10 })
 	var enemy := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
@@ -961,34 +966,47 @@ func test_the_dash_grants_one_extra_action_on_a_shortened_leash():
 	_cast_dash(caster, board, Vector2i(1, 0), bus)
 
 	assert_true(controller.has_status(&"void_surge"), "the dash leaves the caster surging")
-	assert_eq(caster.arena_extra_actions, 1,
-		"which raises the action budget by exactly one, so it may act again this turn")
-	assert_eq(caster.extra_moves_granted, 1,
-		"and hands its movement back, so the extra action can be a reposition")
+	assert_eq(caster.canto_grants, 1,
+		"which arms CANTO exactly once -- one more MOVEMENT, not one more action")
 	assert_eq(caster.modifiers.size(), 1, "one stat modifier was taken")
 	assert_eq(caster.modifiers[0]["stat"], "movement", "on movement")
 	assert_eq(int(caster.modifiers[0]["amount"]), -2, "shortening the leash by 2")
 
 
-func test_the_void_surge_hands_everything_back_when_it_expires():
+func test_the_void_surge_never_touches_the_arena_action_budget():
+	# The user decision this kit was rebuilt around: "they shouldn't be able to attack
+	# after dashing, simply move". The Arena's act-twice budget is a DIFFERENT mechanic
+	# and the dash must not reach for it -- if it did, the unit could strike again.
 	var caster := StatusUnit.new(0, {})
 	var board := MockBoard.new()
 	board.place(caster, Vector2i(0, 0))
 	var controller := _controller_for(caster)
 
 	controller.add_status(_void_surge())
-	assert_eq(caster.arena_extra_actions, 1, "granted")
+
+	assert_eq(caster.arena_extra_actions, 0,
+		"Void Surge grants no extra ACTION at all -- the arena budget is left alone")
+	assert_eq(caster.canto_grants, 1, "what it grants is the movement-only canto")
+
+
+func test_the_void_surge_hands_the_stride_back_when_it_expires():
+	var caster := StatusUnit.new(0, {})
+	var board := MockBoard.new()
+	board.place(caster, Vector2i(0, 0))
+	var controller := _controller_for(caster)
+
+	controller.add_status(_void_surge())
+	assert_eq(caster.canto_grants, 1, "granted")
 
 	controller.tick_all(board)
 
 	assert_false(controller.has_status(&"void_surge"), "it is a one-turn grant")
-	assert_eq(caster.arena_extra_actions, 0, "the action budget is handed straight back")
 	assert_true(bool(caster.modifiers[0].get("removed", false)),
-		"and the movement penalty is revoked with it")
+		"and the movement penalty is revoked when it goes")
 
 
 func test_the_void_surge_refreshes_and_never_stacks():
-	# CONQUEST.md rule 6: two dashes in one turn must not bank two extra actions or double
+	# CONQUEST.md rule 6: two dashes in one turn must not bank two movements or double
 	# the slow -- and expiry must then return exactly what was taken, once.
 	var caster := StatusUnit.new(0, {})
 	var board := MockBoard.new()
@@ -1000,11 +1018,12 @@ func test_the_void_surge_refreshes_and_never_stacks():
 	controller.add_status(_void_surge())
 
 	assert_eq(controller.stack_count(&"void_surge"), 1, "one instance")
-	assert_eq(caster.arena_extra_actions, 1, "one extra action, not three")
+	assert_eq(caster.canto_grants, 1, "canto armed once, not three times")
 	assert_eq(caster.modifiers.size(), 1, "one movement penalty, not three")
 
 	controller.tick_all(board)
-	assert_eq(caster.arena_extra_actions, 0, "and it all comes back exactly once")
+	assert_true(bool(caster.modifiers[0].get("removed", false)),
+		"and it all comes back exactly once")
 
 
 # ===========================================================================
@@ -1062,8 +1081,22 @@ func test_character_library_picks_the_roster_file_up():
 		"the directory scan lists the new character")
 	var character: CharacterResource = CharacterLibrary.get_character(&"monster")
 	assert_not_null(character, "and it resolves by id")
-	assert_eq(character.display_name, "Monster", "with its display name")
+	assert_eq(character.display_name, "Duskmaw", "with its display name")
 	CharacterLibrary.clear_cache()
+
+
+func test_the_creature_is_named_duskmaw_and_its_fiction_says_so():
+	# The id stays &"monster" -- the .glb, the roster filename and every spawn path are
+	# keyed on it -- so this is a DISPLAY-ONLY rename and the two must not drift.
+	var character := load("res://game/characters/roster/monster.tres") as CharacterResource
+	assert_eq(character.display_name, "Duskmaw",
+		"the roster creature-compound name, like Petalfang / Blightcap / Timberfall")
+	assert_eq(character.character_id, &"monster",
+		"while the id -- which the model path and every spawn are keyed on -- is unchanged")
+	assert_eq(character.display_name.split(" ").size(), 1,
+		"one word: it is not a boss (CONQUEST.md, Units/Names)")
+	assert_string_contains(character.description, "Duskmaw",
+		"and the fiction names the creature rather than describing an anonymous thing")
 
 
 func test_the_unit_gallery_can_build_a_row_for_it():

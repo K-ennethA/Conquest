@@ -34,9 +34,20 @@ enum Shape {
 ## walls, PHASING ignores both — none may END on an occupied cell).
 @export var kind: CombatTypes.MovementKind = CombatTypes.MovementKind.GROUND
 
-## Movement budget: accumulated move cost for stepping shapes, number of jumps
-## for [constant Shape.KNIGHT], or direct (Manhattan) distance for
-## [constant Shape.TELEPORT].
+## FALLBACK movement budget, used only WHEN NO UNIT IS SUPPLIED.
+##
+## A live unit's stride is its movement STAT ([code]get_stat("movement")[/code]) — the
+## number its card prints, already carrying every modifier and mode grant — and
+## [MovementResolver] reads that directly. This field is what the resolver falls back to
+## for a call with no mover: an editor tool, a range preview for a profile not yet attached
+## to anybody, a mock board in a test.
+##
+## That is deliberate, and it is why the whole roster can share one `ground_standard.tres`
+## while every character still moves its own printed distance: a profile describes HOW a
+## unit moves (kind, shape, terrain costs), never HOW FAR.
+##
+## Units: accumulated move cost for stepping shapes, number of jumps for
+## [constant Shape.KNIGHT], direct (Manhattan) distance for [constant Shape.TELEPORT].
 @export var range: int = 1
 
 ## Geometry of the movement pattern.

@@ -46,6 +46,26 @@ class_name MovementResolver
 ## needs the board to positively confirm friendship (`units_at` + `are_allies`); a board
 ## that cannot answer either question falls back to the old "any occupant blocks" behaviour,
 ## so mock boards and non-allegiance-aware callers are unchanged.
+##
+## [b]THE BUDGET IS THE MOVER'S MOVEMENT STAT.[/b] How FAR a unit goes is
+## [code]unit.get_stat("movement")[/code] — the very number the card's MOV chip prints —
+## and NOT [member MovementProfile.range]. There is one source of truth for that number and
+## it is the unit's stat block: base movement, plus every live modifier (a Slowed status, a
+## haste, Void Surge's canto debuff), plus anything a mode grants (Siege's march bonus).
+## Nothing has to be folded in by hand, because the stat has already folded it.
+##
+## The profile keeps its real jobs — the movement KIND, the stepping SHAPE, and the
+## per-terrain cost overrides — and its [member MovementProfile.range] survives only as the
+## FALLBACK for a call with no mover (a tool, a mock, a range preview for a profile that has
+## no unit attached yet). That split is why the roster can share one `ground_standard.tres`
+## and still have eleven different strides.
+##
+## WHY IT MATTERS. This used to flood with `profile.range` and fold in only the DELTA of the
+## live modifiers (`current - base`), which is 0 for a clean unit. Every roster entry shares
+## a range-3 profile, so a character with a printed MOV of 5 actually reached 3 — the card
+## and the board disagreed for the whole roster. Reading the stat directly makes the printed
+## number the true one.
+## → pinned by `tests/integration/test_duskmaw_movement_sweep.gd`
 
 const ORTHOGONAL_OFFSETS: Array[Vector2i] = [
 	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
@@ -63,35 +83,33 @@ const KNIGHT_OFFSETS: Array[Vector2i] = [
 ]
 
 
-## Returns the sorted, de-duplicated set of cells reachable from [param origin]
-## within the profile's budget. The origin itself is never included. [param unit] is
-## the moving unit, used only to honour a multi-cell footprint; omit it (or pass a
-## 1x1 unit) for the original single-cell behaviour.
+## Returns the sorted, de-duplicated set of cells reachable from [param origin] within
+## the mover's budget. The origin itself is never included. [param unit] is the moving
+## unit: it supplies the BUDGET ([code]get_stat("movement")[/code]) and honours a
+## multi-cell footprint. Omit it and the flood falls back to
+## [member MovementProfile.range] with the original single-cell rules.
 ## [param excluded] is an optional SET (a Dictionary used as `cell -> anything`) of cells
 ## the flood may neither cross nor stop on, over and above the board's own rules. It exists
 ## for callers that want to route AROUND something the board still considers perfectly
 ## walkable -- the AI steering clear of an armed trap is the only shipped user. Empty (the
 ## default) is byte-for-byte the original behaviour and costs one `is_empty()` per call.
 func reachable_cells(origin: Vector2i, profile: MovementProfile, board, unit = null, excluded: Dictionary = {}) -> Array[Vector2i]:
-	# LIVE MOVEMENT DEBUFFS/BUFFS shrink or grow the flood budget. The authored profile
-	# carries a STATIC range (base movement); a temporary movement-stat modifier -- e.g.
-	# the "Slowed" status a rubble field applies -- lowers the unit's live movement but
-	# never touched the profile, so it used to do nothing to reachability. Fold the delta
-	# (current - base movement) into an effective range here so a slow visibly shrinks the
-	# reachable set the same turn (and a haste grows it).
-	profile = _effective_profile(profile, unit)
+	# HOW FAR comes from the MOVER, not from the profile (see the class note): the unit's
+	# effective movement stat already carries its base stride, every live buff/debuff and
+	# any mode grant. The profile still says HOW it moves -- kind, shape, terrain costs.
+	var budget: int = _budget(profile, unit)
 	var raw: Array = []
 	match profile.shape:
 		MovementProfile.Shape.ORTHOGONAL:
-			raw = _flood(origin, profile, board, ORTHOGONAL_OFFSETS, unit, excluded)
+			raw = _flood(origin, profile, budget, board, ORTHOGONAL_OFFSETS, unit, excluded)
 		MovementProfile.Shape.DIAGONAL:
-			raw = _flood(origin, profile, board, DIAGONAL_OFFSETS, unit, excluded)
+			raw = _flood(origin, profile, budget, board, DIAGONAL_OFFSETS, unit, excluded)
 		MovementProfile.Shape.ALL8:
-			raw = _flood(origin, profile, board, ALL8_OFFSETS, unit, excluded)
+			raw = _flood(origin, profile, budget, board, ALL8_OFFSETS, unit, excluded)
 		MovementProfile.Shape.KNIGHT:
-			raw = _knight(origin, profile, board, unit, excluded)
+			raw = _knight(origin, budget, profile, board, unit, excluded)
 		MovementProfile.Shape.TELEPORT:
-			raw = _teleport(origin, profile, board, unit, excluded)
+			raw = _teleport(origin, budget, profile, board, unit, excluded)
 
 	var seen := {}
 	var out: Array[Vector2i] = []
@@ -120,8 +138,8 @@ func can_reach(origin: Vector2i, target: Vector2i, profile: MovementProfile, boa
 
 ## Uniform-cost flood for stepping shapes. Expands only through traversable
 ## cells, accumulates entry cost, and keeps cells whose total cost is within
-## range and on which the kind is allowed to stop.
-func _flood(origin: Vector2i, profile: MovementProfile, board, offsets: Array[Vector2i], unit = null, excluded: Dictionary = {}) -> Array:
+## [param budget] (the mover's movement stat) and on which the kind is allowed to stop.
+func _flood(origin: Vector2i, profile: MovementProfile, budget: int, board, offsets: Array[Vector2i], unit = null, excluded: Dictionary = {}) -> Array:
 	var best := { origin: 0 }
 	var open: Array[Vector2i] = [origin]
 	while not open.is_empty():
@@ -141,7 +159,7 @@ func _flood(origin: Vector2i, profile: MovementProfile, board, offsets: Array[Ve
 			if not _can_enter(unit, n, profile.kind, board):
 				continue
 			var nc: int = cur_cost + _enter_cost(n, profile, board, unit)
-			if nc > profile.range:
+			if nc > budget:
 				continue
 			if best.has(n) and best[n] <= nc:
 				continue
@@ -184,7 +202,9 @@ func path_cells(origin: Vector2i, dest: Vector2i, profile: MovementProfile, boar
 	var out: Array[Vector2i] = []
 	if profile == null or dest == origin:
 		return out
-	profile = _effective_profile(profile, unit)
+	# The SAME budget the reachable flood used (the mover's movement stat), so the route
+	# and the reach the player was shown can never disagree.
+	var budget: int = _budget(profile, unit)
 	var offsets: Array[Vector2i] = _step_offsets(profile.shape)
 	if offsets.is_empty():
 		out.append(dest)
@@ -208,7 +228,7 @@ func path_cells(origin: Vector2i, dest: Vector2i, profile: MovementProfile, boar
 			if not _can_enter(unit, n, profile.kind, board):
 				continue
 			var nc: int = cur_cost + _enter_cost(n, profile, board, unit)
-			if nc > profile.range:
+			if nc > budget:
 				continue
 			if best.has(n) and best[n] <= nc:
 				continue
@@ -263,12 +283,12 @@ static func _settles_first(a: Vector2i, b: Vector2i, best: Dictionary) -> bool:
 
 
 ## Breadth-first search over L-jumps. Each jump ignores intervening cells but
-## must land on a cell the kind may stop on; range caps the number of jumps.
-func _knight(origin: Vector2i, profile: MovementProfile, board, unit = null, excluded: Dictionary = {}) -> Array:
+## must land on a cell the kind may stop on; [param budget] caps the number of jumps.
+func _knight(origin: Vector2i, budget: int, profile: MovementProfile, board, unit = null, excluded: Dictionary = {}) -> Array:
 	var out: Array = []
 	var visited := { origin: true }
 	var frontier: Array[Vector2i] = [origin]
-	var jumps: int = maxi(0, profile.range)
+	var jumps: int = maxi(0, budget)
 	for _step in range(jumps):
 		var nxt: Array[Vector2i] = []
 		for cell in frontier:
@@ -289,10 +309,10 @@ func _knight(origin: Vector2i, profile: MovementProfile, board, unit = null, exc
 	return out
 
 
-## Every cell within direct (Manhattan) range, obstacles ignored for pathing.
-func _teleport(origin: Vector2i, profile: MovementProfile, board, unit = null, excluded: Dictionary = {}) -> Array:
+## Every cell within direct (Manhattan) [param budget], obstacles ignored for pathing.
+func _teleport(origin: Vector2i, budget: int, profile: MovementProfile, board, unit = null, excluded: Dictionary = {}) -> Array:
 	var out: Array = []
-	var r: int = maxi(0, profile.range)
+	var r: int = maxi(0, budget)
 	for dx in range(-r, r + 1):
 		for dy in range(-r, r + 1):
 			if dx == 0 and dy == 0:
@@ -450,31 +470,27 @@ static func _unit_alive(unit) -> bool:
 	return true
 
 
-# --- Effective range (live movement stat delta) ----------------------------
+# --- The flood budget: the mover's movement STAT ----------------------------
 
-## The profile to actually flood with, once the unit's LIVE movement modifiers are
-## folded in. When the unit exposes both a current and a base movement stat and they
-## differ (a temporary buff/debuff is active), return a DUPLICATE whose range is
-## [code]maxi(0, profile.range + (current - base))[/code] -- a -2 movement debuff shrinks
-## the reachable set by 2, a +1 haste grows it by 1. The shared authoring resource is
-## never mutated (a fresh duplicate is returned only when the delta is nonzero).
+## How far [param unit] may travel this move: its EFFECTIVE movement stat.
 ##
-## Fully null-safe for mocks: a null profile/unit, or a unit that cannot report both
-## stats (the RefCounted units tests pass), yields the ORIGINAL profile untouched, so
-## every existing caller and test is byte-for-byte unchanged.
-static func _effective_profile(profile: MovementProfile, unit) -> MovementProfile:
-	if profile == null or unit == null:
-		return profile
-	if not (unit.has_method("get_stat") and unit.has_method("get_base_stat")):
-		return profile
-	var current: int = int(unit.get_stat("movement"))
-	var base: int = int(unit.get_base_stat("movement"))
-	var delta: int = current - base
-	if delta == 0:
-		return profile
-	var adjusted: MovementProfile = profile.duplicate()
-	adjusted.range = maxi(0, profile.range + delta)
-	return adjusted
+## ONE SOURCE OF TRUTH. `get_stat("movement")` is base movement with every live modifier
+## already applied -- a Slowed status, a haste, Void Surge's canto debuff, a mode's march
+## grant -- and it is the exact number the card's MOV chip prints. Reading it here is what
+## makes the printed stride and the reachable set the same number, for every character, with
+## no arithmetic of our own to drift.
+##
+## THE FALLBACK. With no mover (a profile-only call: a tool, a preview, a mock board test)
+## there is no stat to read, so [member MovementProfile.range] stands in. It is also the
+## fallback for a mover that cannot report stats at all -- a bare RefCounted double. Nothing
+## clamps a stat of 0 up to the profile: a unit debuffed to 0 movement genuinely goes
+## nowhere, and inventing a stride for it would be the same class of bug this replaced.
+static func _budget(profile: MovementProfile, unit) -> int:
+	if unit != null and unit.has_method("get_stat"):
+		return maxi(0, int(unit.get_stat("movement")))
+	if profile == null:
+		return 0
+	return maxi(0, profile.range)
 
 
 # --- Duck-typed board accessors -------------------------------------------

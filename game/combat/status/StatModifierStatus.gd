@@ -15,8 +15,8 @@ class_name StatModifierStatus
 ##
 ## Because the live modifier lowers [method Unit.get_stat] ("movement"), it is picked up
 ## everywhere the game reads the stat -- the HUD, the AI's reach estimates, and
-## [MovementResolver], which folds (current - base) movement into its flood budget so the
-## slow visibly shrinks the reachable set the same turn.
+## [MovementResolver], whose flood budget IS that stat, so the slow visibly shrinks the
+## reachable set the same turn with no arithmetic of its own.
 
 ## Which stat to shift while active (matches [member StatModifierEffect.stat_name]).
 @export var stat_name: String = "movement"

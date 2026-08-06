@@ -126,17 +126,34 @@ func open_for_unit(unit: Node, can_command: bool = true) -> void:
 	if unit.has_method("can_act"):
 		has_action = unit.can_act()
 
-	var slot := 0
-	for move in moveset:
-		if move != null:
-			_add_move_row(move, slot, controller, can_command and has_action)
-		slot += 1
+	# CANTO (see the block note on [Unit]): the unit has SPENT its action and owes only one
+	# MOVEMENT, so the move rows are not merely greyed -- they are not built at all. A
+	# disabled row still reads as "you could have picked this", and the whole point of the
+	# rule is that after a dash there is nothing left to pick: walk, or stand still. The
+	# caption below says which. Wait and Cancel are unaffected and are the only two rows.
+	var canto: bool = unit.has_method("has_canto") and bool(unit.has_canto())
 
-	if moveset.is_empty():
-		var none_label := Label.new()
-		none_label.text = "No moves"
-		none_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_rows.add_child(none_label)
+	if canto:
+		var canto_label := Label.new()
+		canto_label.name = "CantoHint"
+		canto_label.text = "Move only"
+		canto_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		canto_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
+		canto_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_rows.add_child(canto_label)
+		_fit_texts.append(canto_label)
+	else:
+		var slot := 0
+		for move in moveset:
+			if move != null:
+				_add_move_row(move, slot, controller, can_command and has_action)
+			slot += 1
+
+		if moveset.is_empty():
+			var none_label := Label.new()
+			none_label.text = "No moves"
+			none_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			_rows.add_child(none_label)
 
 	# Wait: commit where you stand and end the unit's turn (the missing finalize).
 	var wait_btn := _make_button("Wait", can_command)

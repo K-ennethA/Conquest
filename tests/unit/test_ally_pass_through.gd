@@ -24,6 +24,11 @@ extends GutTest
 
 ## A unit with a side, a footprint and a liveness flag -- the three things the resolver
 ## asks about while deciding who blocks whom.
+##
+## Deliberately carries NO movement stat: this suite is about who blocks whom, not about
+## how far anyone goes, so every flood below is budgeted by the profile's fallback range
+## (`_profile(n)`) rather than by a stride. Giving Fighter a stat would make each case's
+## `n` a lie without testing anything more.
 class Fighter:
 	var team: int
 	var footprint: Vector2i

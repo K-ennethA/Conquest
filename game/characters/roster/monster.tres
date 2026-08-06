@@ -15,8 +15,8 @@
 script = ExtResource("1_char")
 character_id = &"monster"
 element = &"dark"
-display_name = "Monster"
-description = "A void-black horror crowned in fire, with a red maw that opens wider than the head that carries it. It does not close on you. It waits at the edge of the light, marks what it wants, and takes it out of the dark from a distance you thought was safe."
+display_name = "Duskmaw"
+description = "A void-black horror crowned in slow embers, and the reason nobody scouts a treeline after sundown. Duskmaw does not close on you: it holds at the edge of the light, marks what it wants, and takes it from a distance you thought was safe. The red maw is glimpsed only in the instant it strikes -- and by then the dark has already closed behind it again."
 model_scene = ExtResource("2_model")
 base_health = 78
 base_attack = 9

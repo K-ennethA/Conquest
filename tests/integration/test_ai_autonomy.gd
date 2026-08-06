@@ -1,4 +1,4 @@
-extends GutTest
+﻿extends GutTest
 
 ## Integration test: proves an AI-controlled player acts AUTONOMOUSLY through the
 ## turn system + [BotTurnDriver], for BOTH turn systems.
@@ -201,7 +201,7 @@ func test_traditional_ai_attacks_adjacent_enemy() -> void:
 	var start_hp := human_unit.get_hp()
 
 	var driver := _make_driver()
-	var acted := driver.act_for_turn_system(ts)
+	var acted: bool = await driver.act_for_turn_system(ts)
 
 	assert_true(acted, "the driver should act for the AI player (not sit inert)")
 	assert_lt(human_unit.get_hp(), start_hp,
@@ -231,7 +231,7 @@ func test_traditional_ai_advances_toward_distant_enemy() -> void:
 	var start_dist := _manhattan(start_cell, board.cell_of(human_unit))
 
 	var driver := _make_driver()
-	var acted := driver.act_for_turn_system(ts)
+	var acted: bool = await driver.act_for_turn_system(ts)
 
 	assert_true(acted, "the driver should act for the AI player (not sit inert)")
 	var end_cell: Vector2i = board.cell_of(ai_unit)
@@ -266,7 +266,7 @@ func test_traditional_ai_moves_into_range_and_attacks_same_turn() -> void:
 	var start_hp := human_unit.get_hp()
 
 	var driver := _make_driver()
-	var acted := driver.act_for_turn_system(ts)
+	var acted: bool = await driver.act_for_turn_system(ts)
 
 	assert_true(acted, "the driver should act for the AI player (not sit inert)")
 	assert_ne(board.cell_of(ai_unit), start_cell,
@@ -276,7 +276,7 @@ func test_traditional_ai_moves_into_range_and_attacks_same_turn() -> void:
 	# resolve it -- still the SAME turn (the unit never yielded, it just spread its
 	# move and its strike over two readable moments).
 	if human_unit.get_hp() >= start_hp:
-		driver.act_for_turn_system(ts)
+		await driver.act_for_turn_system(ts)
 	assert_lt(human_unit.get_hp(), start_hp,
 		"after closing the gap the AI attacks the same turn, so the enemy's HP drops")
 
@@ -309,7 +309,7 @@ func test_traditional_ai_advances_full_move_range_not_one_cell() -> void:
 	var start_dist := _manhattan(start_cell, board.cell_of(human_unit))
 
 	var driver := _make_driver()
-	var acted := driver.act_for_turn_system(ts)
+	var acted: bool = await driver.act_for_turn_system(ts)
 
 	assert_true(acted, "the driver should act for the AI player (not sit inert)")
 	var end_cell: Vector2i = board.cell_of(ai_unit)
@@ -352,7 +352,7 @@ func test_speed_first_ai_acts_on_its_unit_turn() -> void:
 	var start_cell: Vector2i = board.cell_of(ai_unit)
 
 	var driver := _make_driver()
-	var acted := driver.act_for_turn_system(ts)
+	var acted: bool = await driver.act_for_turn_system(ts)
 
 	assert_true(acted, "the driver should act the AI's current unit in Speed First too")
 	# Adjacent enemy: expect an attack; accept a move as well so the assertion tracks

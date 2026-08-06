@@ -475,9 +475,54 @@ func _act(unit: Unit) -> bool:
 		# turn cleanly; it already spent its move on the previous beat.
 		_finish(unit, "wait")
 		return false
+	# CANTO: this unit already acted (it dashed) and owes exactly ONE MOVEMENT. It must
+	# NOT reach the planner's normal path -- that would plan a whole fresh action and let
+	# it strike twice -- and it must NOT be left alone either: both turn systems are
+	# holding the turn open FOR the owed step, so an AI that simply skipped it would stall
+	# the match with no End Turn button to rescue it.
+	if board != null and _unit_has_canto(unit):
+		return _act_canto(unit, board)
 	if board != null and unit.has_character():
 		return await _act_character(unit, board)
 	return _act_fallback(unit, board)
+
+
+## True when [param unit] has acted but still owes its canto movement. Duck-typed, so the
+## legacy / mocked units this driver also handles simply report false.
+func _unit_has_canto(unit) -> bool:
+	return unit != null and is_instance_valid(unit) \
+		and unit.has_method("has_canto") and bool(unit.has_canto())
+
+
+## Spend a canto unit's owed MOVEMENT and close its turn.
+##
+## Reuses the ordinary planner purely as a POSITIONING oracle: whatever cell it would want
+## to stand on this turn (to strike from, or to advance toward the nearest enemy) is the
+## best place to end up, and taking only its `dest_cell` is what keeps this movement-only
+## -- no move is ever cast from here. If there is nowhere better to be, or the unit is
+## rooted, the canto is given up and the turn closes; either way this ALWAYS makes
+## progress, so the driver can never sit on a unit the turn system is waiting for.
+func _act_canto(unit: Unit, board) -> bool:
+	var origin: Vector2i = board.cell_of(unit)
+	var dest: Vector2i = origin
+	if not _is_immobilized(unit) and unit.has_method("get_moveset"):
+		var controller := BotController.new()
+		controller.difficulty = _ai_difficulty()
+		var decision = controller.plan(unit, unit.get_moveset(), board, _reachable_cells(unit, origin, board))
+		if decision != null and not decision.is_empty():
+			dest = decision.get("dest_cell", origin)
+	if dest != origin:
+		# mark_moved() consumes the owed movement AND announces the unit done (see
+		# Unit.mark_moved -> finish_canto), which is what advances/completes the turn.
+		_relocate(unit, board, origin, dest)
+		unit.mark_moved()
+		if verbose:
+			print("[BotAI] %s repositions on canto" % unit.get_display_name())
+		return true
+	if unit.has_method("finish_canto"):
+		unit.finish_canto("wait")
+	ReplayRecorder.note_wait_unit(unit)
+	return false
 
 
 # --- Character planning path -----------------------------------------------

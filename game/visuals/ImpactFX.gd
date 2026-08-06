@@ -62,12 +62,20 @@ const _LIFETIME_MAX: float = 3.0
 ## particles finish drawing before the node is freed.
 const _FREE_MARGIN: float = 0.25
 
+## Group this layer joins so OTHER presentation layers can borrow its spark without holding
+## a reference to it (and without depending on which of them was mounted first). The one
+## consumer today is [MoveFXDispatcher], which calls [method burst_at] for each cell of a
+## move's area; a scene with no ImpactFX simply gets no spark, which is why that call site
+## is a no-op rather than an error.
+const GROUP := &"impact_fx"
+
 ## Cached only on a HIT, so a late-registered autoload is still picked up.
 var _game_settings_cached: Node = null
 
 
 func _ready() -> void:
 	name = "ImpactFX"
+	add_to_group(GROUP)
 	var bus := get_node_or_null("/root/GameEvents")
 	if bus == null:
 		return
@@ -101,6 +109,29 @@ func _on_unit_eliminated(unit = null, _eliminator = null) -> void:
 		return
 	_spawn_burst(pos, death_ember_color, death_amount, death_time,
 		death_speed_min, death_speed_max, death_particle_size, false)
+
+
+# --- Public spark API --------------------------------------------------------
+
+## Fire ONE hit spark at [param world_pos] in [param color], sized by [param scale_mult].
+##
+## The generalization of the two handlers above: they answer "a unit was hit / died", this
+## answers "something happened HERE" -- which is what a move's AREA needs, because a cell of
+## a blast with nobody standing in it has no unit to anchor a spark to. Additive: the
+## handlers still call [method _spawn_burst] directly and behave exactly as before.
+##
+## Every guard the handlers rely on still applies -- animations off, a detached layer, and
+## the live-burst cap all make this a silent no-op -- so a caller never has to check any of
+## them, and a headless run (where a [GPUParticles3D] has no rendering device) degrades to
+## nothing rather than to an error.
+func burst_at(world_pos: Vector3, color: Color, scale_mult: float = 1.0) -> void:
+	if not _fx_enabled():
+		return
+	var mult: float = clampf(scale_mult, 0.1, 6.0)
+	_spawn_burst(world_pos, color,
+		int(round(float(spark_amount) * mult)), spark_time,
+		spark_speed_min * mult, spark_speed_max * mult,
+		spark_particle_size * mult, true)
 
 
 # --- Burst construction ------------------------------------------------------

@@ -47,6 +47,10 @@ class Walker:
 	var statuses: Array = []
 	var profile: MovementProfile = null
 
+	## [param p_range] is written to BOTH the movement STAT and the profile's fallback
+	## range, deliberately. The stat is what MovementResolver actually budgets by; the
+	## matching profile range means these fixtures still read the same whether a case
+	## passes the walker or only its profile.
 	func _init(p_team: int, p_range: int) -> void:
 		team = p_team
 		stats = { "health": 100, "defense": 0, "magic_defense": 0, "movement": p_range }

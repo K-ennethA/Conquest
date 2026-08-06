@@ -14,6 +14,7 @@ const GAME_OVER_SCREEN_SCENE := preload("res://game/ui/screens/GameOverScreen.ts
 ## only once the editor/engine has rescanned -- a preload by path never has that problem.
 const DAMAGE_NUMBERS_SCRIPT := preload("res://game/visuals/DamageNumbers.gd")
 const IMPACT_FX_SCRIPT := preload("res://game/visuals/ImpactFX.gd")
+const MOVE_FX_SCRIPT := preload("res://game/visuals/MoveFXDispatcher.gd")
 
 ## The pre-battle VS CLASH intro (see [VersusIntro]). Preloaded as a SCRIPT by path, for the
 ## same reason as the two juice layers above: a fresh checkout resolves a brand-new global
@@ -98,6 +99,14 @@ var _item_system: ItemSystem = null
 ## Both self-wire to GameEvents in their own _ready; there is nothing to connect here.
 var _damage_numbers: Node3D = null
 var _impact_fx: Node3D = null
+
+## Default move FX (see [MoveFXDispatcher]): the layer that draws a cast accent and an
+## element-tinted eruption on EVERY cell a move or a hazard covers -- including the cells
+## with nobody standing in them, which is what a 3x3 Abyssal Maw needs to read at all.
+## Same per-battle free-then-recreate discipline as the two layers above, same self-wiring
+## to GameEvents in its own _ready, and mounted AFTER _impact_fx purely so the spark layer
+## it borrows through the &"impact_fx" group already exists on the first cast.
+var _move_fx: Node3D = null
 
 ## Mid-battle SAVE & RESUME seam (see [BattleSaveManager]). Mounted once per battle as a
 ## child so the pause menu can find it through group &"battle_save_manager" and ask it
@@ -346,6 +355,7 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# never inherits a popup or a burst from the previous one.
 	_setup_damage_numbers()
 	_setup_impact_fx()
+	_setup_move_fx()
 
 	# Stand up the per-battle hazard runtime alongside it, so crawling vines cast this
 	# battle tick forward and none leak into the next one.
@@ -1015,6 +1025,23 @@ func _setup_impact_fx() -> void:
 
 	_impact_fx = IMPACT_FX_SCRIPT.new()
 	scene_root.add_child(_impact_fx)
+
+func _setup_move_fx() -> void:
+	"""Create (or recreate) the per-battle [MoveFXDispatcher], exactly as
+	_setup_impact_fx does -- same 3D scene-root mount, same per-battle lifetime, same
+	self-wiring. Called AFTER _setup_impact_fx so the spark layer it borrows through the
+	&"impact_fx" group is already mounted when the first cast lands."""
+	if _move_fx != null and is_instance_valid(_move_fx):
+		_move_fx.queue_free()
+	_move_fx = null
+
+	var tree := get_tree()
+	if tree == null or tree.current_scene == null:
+		return
+	var scene_root: Node = tree.current_scene
+
+	_move_fx = MOVE_FX_SCRIPT.new()
+	scene_root.add_child(_move_fx)
 
 # --- Networked command seam (CommandApplier + registry per battle) ----------
 
