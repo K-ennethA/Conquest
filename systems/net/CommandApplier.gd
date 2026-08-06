@@ -158,8 +158,17 @@ func _apply_cast_move(cmd: Dictionary, data: Dictionary, board, seq: int) -> Dic
 	# lit and never advanced Speed First. Guarded so headless/mock units lacking the hook
 	# are skipped. The move (if any) arrives as a SEPARATE MOVE_UNIT command that marks
 	# the move, so this only spends the action -- never double-consuming the move.
-	if bool(res.get("success", false)) and unit.has_method("mark_action_completed"):
-		unit.mark_action_completed("move")
+	if bool(res.get("success", false)):
+		# COOLDOWN / CHARGE ACCOUNTING, APPLY-SIDE, and in the SAME ORDER the local path books
+		# it (UnitActionsPanel._execute_move_on_target: on_used, THEN mark_action_completed).
+		# Without this a networked cast started no cooldown and spent no charge on EITHER peer,
+		# so every cooldown move could be spammed and every max_uses move was unlimited. Booking
+		# here rather than at the submit site is what keeps it identical on all peers: the local
+		# UI's networked branch returns BEFORE its own perform_move/on_used, so apply is the only
+		# booking point and a cast can never be booked twice.
+		_book_move_use(unit, int(data[NetProtocol.KEY_MOVE_SLOT]))
+		if unit.has_method("mark_action_completed"):
+			unit.mark_action_completed("move")
 	return {
 		"ok": bool(res.get("success", false)),
 		"type": NetProtocol.Action.CAST_MOVE,
@@ -297,6 +306,31 @@ func _announce_ultimate_cast(unit, move_slot: int) -> void:
 	if typeof(GameEvents) == TYPE_OBJECT and GameEvents != null \
 			and GameEvents.has_signal(&"ultimate_casting"):
 		GameEvents.ultimate_casting.emit(unit, move)
+
+
+## Spend a charge and start the cooldown for the move the caster just resolved --
+## [method MovesetController.on_used], the exact call the local path makes after a successful
+## perform_move.
+##
+## ORDERING IS THE WHOLE POINT. It runs AFTER resolution (the effects already ran inside
+## perform_move), because on_used starts the wait at `maxi(authored, remaining)` and so never
+## shortens one a resolution set for itself through [method MovesetController.cooldown_started]
+## -- Duskmaw's Voidstep charges 4 turns to step to its anchor where the move authors 1. Booking
+## before resolution would stamp that straight back down to the authored number, on every peer.
+##
+## Duck-typed and null-safe end to end: a headless/mock unit with no get_move or no
+## MovesetController, an empty slot, and a legacy controller lacking on_used all return without
+## touching anything, so the mock-driven apply suites are unchanged.
+func _book_move_use(unit, move_slot: int) -> void:
+	if unit == null or not unit.has_method("get_move") or not unit.has_method("get_moveset_controller"):
+		return
+	var move = unit.get_move(move_slot)
+	if move == null:
+		return
+	var mc = unit.get_moveset_controller()
+	if mc == null or not mc.has_method("on_used"):
+		return
+	mc.on_used(move)
 
 
 func _register_summons(events: Array, seq: int) -> void:

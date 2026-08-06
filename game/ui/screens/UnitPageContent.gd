@@ -70,6 +70,10 @@ static func live_move_state(unit, move) -> Dictionary:
 		out[LIVE_COOLDOWN_REMAINING] = int(controller.remaining(move))
 	if "cooldown" in move:
 		out[LIVE_COOLDOWN_TOTAL] = int(move.cooldown)
+	# The LIVE total, for a move whose resolution chose its own wait (see
+	# MovesetController.total). Identical to the authored number for every other move.
+	if controller.has_method("total"):
+		out[LIVE_COOLDOWN_TOTAL] = int(controller.total(move))
 	if controller.has_method("uses_left"):
 		out[LIVE_USES_LEFT] = int(controller.uses_left(move))
 	return out

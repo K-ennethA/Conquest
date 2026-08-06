@@ -271,7 +271,9 @@ func _populate_moves(moveset: Array[MoveResource], controller: MovesetController
 			"hint": String(move_button.get_meta("fit_hint", "")),
 		})
 
-		var total_cd: int = int(move.cooldown)
+		# TOTAL through the controller (see UnitActionMenu): a move whose resolution chose
+		# its own wait must divide the bar by the length actually running.
+		var total_cd: int = int(controller.total(move)) if controller else int(move.cooldown)
 		var remaining: int = controller.remaining(move) if controller else 0
 		if total_cd > 0:
 			var bar := MoveStatVisuals.make_recharge_bar()
@@ -300,7 +302,7 @@ func _create_move_button(move: MoveResource, slot: int, controller: MovesetContr
 		if remaining > 0:
 			# "CD 2/3" rather than the old bare "Cooldown: 2": the recharge bar under the
 			# button shows the PROGRESS, and this says how far through the wait that is.
-			suffix = " (%s)" % MoveStatVisuals.cooldown_badge(remaining, int(move.cooldown))
+			suffix = " (%s)" % MoveStatVisuals.cooldown_badge(remaining, int(controller.total(move)))
 		elif move.max_uses >= 0:
 			suffix = " (%d/%d uses)" % [controller.uses_left(move), move.max_uses]
 
@@ -550,7 +552,7 @@ func _show_move_info(move: MoveResource, controller: MovesetController) -> void:
 		if remaining > 0:
 			info_text += "\nRECHARGING: %s left (%s)" % [
 				MoveStatVisuals.cooldown_label(remaining),
-				MoveStatVisuals.cooldown_badge(remaining, int(move.cooldown)),
+				MoveStatVisuals.cooldown_badge(remaining, int(controller.total(move))),
 			]
 
 	move_info_label.text = info_text

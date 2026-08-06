@@ -105,6 +105,24 @@ enum AffectedFactions {
 ## leaves for a few turns): that would persist and expire on its own, not on first contact.
 @export var consume_on_trigger: bool = false
 
+## STOMPED: when true, this placement is DESTROYED the moment a unit that is not on its
+## owner's side ENTERS its cell -- whether that unit lands there, merely walks across it, is
+## knocked onto it, or arrives by any other relocation. Nothing fires; the placement simply
+## stops existing.
+##
+## THE COUNTERPLAY FLAG. An effect that does nothing to whoever stands on it (Duskmaw's void
+## spot is the case this exists for) would otherwise be untouchable: an anchor the enemy can
+## see but cannot answer. Stepping on it IS the answer, and it costs the stomper the move it
+## spent getting there.
+##
+## AUTHORED, never inferred, exactly like [member springs_on_pass]: an ordinary placed effect
+## is unaffected by anyone walking over it, and stays that way unless a designer ticks this.
+##
+## Only ever true of a RUNTIME PLACEMENT. Map-authored terrain carries no
+## [member owner_player], and with nobody to be hostile TO the rule cannot fire -- so this
+## can never sweep lava off a cell. See [method destroyed_by].
+@export var destroyed_by_hostile_entry: bool = false
+
 ## RUNTIME owner of a PLACED effect (a trap laid by a unit), stamped by
 ## ApplyTileEffect at cast time; null for map-authored terrain. When set, the
 ## OCCUPANT_ENEMIES / OCCUPANT_ALLIES faction check is resolved against THIS owner
@@ -204,6 +222,27 @@ func is_pass_trap() -> bool:
 ## ordinary faction / tag filter, so a placer's own side crosses its own trap for free.
 func springs_on_pass_for(unit, board) -> bool:
 	return is_pass_trap() and applies_to(unit, board)
+
+
+## True when [param unit] ENTERING this cell destroys this placement (see
+## [member destroyed_by_hostile_entry]).
+##
+## HOSTILITY IS THE OWNER COMPARISON, not the board's perspective: a placement knows who laid
+## it, so "not my side" is decided against [member owner_player] exactly as the placed-trap
+## branch of [method _faction_ok] decides it. Three consequences worth stating:
+##   * the OWNER and its ALLIES never stomp their own anchor -- they may stand on it, which
+##     only closes it as a destination for as long as they are there;
+##   * a NEUTRAL or unowned unit DOES stomp it. It reports no owner, so it is not the owner's
+##     side, and a wild beast trampling a mark reads exactly right;
+##   * an unowned PLACEMENT is never stomped by anybody, which is what keeps map-authored
+##     terrain structurally out of reach of this rule.
+##
+## [param board] is accepted and unused: the answer needs no world, and taking it keeps this
+## the same shape as every other per-unit query on this class.
+func destroyed_by(unit, _board = null) -> bool:
+	if not destroyed_by_hostile_entry or owner_player == null or unit == null:
+		return false
+	return _unit_owner(unit) != owner_player
 
 
 ## True if this effect is allowed to act on [param unit] right now — combines the

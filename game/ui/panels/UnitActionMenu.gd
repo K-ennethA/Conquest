@@ -229,10 +229,16 @@ func _add_move_row(move, slot: int, controller, actionable: bool) -> void:
 		column.add_child(caption)
 		_fit_texts.append(caption)
 
+	# TOTAL through the controller, not off the move: a move whose RESOLUTION chose its own
+	# wait (Voidstep charges 1 to plant an anchor and 4 to step to one) has to divide the
+	# bar by the length actually running, or a 4-turn wait would render as "3/1".
+	# MovesetController.total falls back to the authored number for every other move.
 	var total_cd: int = int(move.cooldown) if ("cooldown" in move) else 0
 	var remaining: int = 0
 	if controller != null and controller.has_method("remaining"):
 		remaining = int(controller.remaining(move))
+	if controller != null and controller.has_method("total"):
+		total_cd = int(controller.total(move))
 	if total_cd > 0:
 		var bar := MoveStatVisuals.make_recharge_bar()
 		MoveStatVisuals.update_recharge_bar(bar, remaining, total_cd)
@@ -376,6 +382,8 @@ func _move_hint(move, controller) -> String:
 		var rem: int = controller.remaining(move)
 		if rem > 0:
 			var total: int = int(move.cooldown) if ("cooldown" in move) else 0
+			if controller.has_method("total"):
+				total = int(controller.total(move))
 			parts.append(MoveStatVisuals.cooldown_badge(rem, total))
 	return "(" + ", ".join(parts) + ")" if not parts.is_empty() else ""
 

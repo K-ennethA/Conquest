@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="TileEffectResource" format=3]
+
+[ext_resource type="Script" path="res://game/tiles/effects/TileEffectResource.gd" id="1_tileeffect"]
+
+[resource]
+script = ExtResource("1_tileeffect")
+id = &"void_spot"
+display_name = "Void Spot"
+trigger = 3
+affected_factions = 0
+required_unit_tag = &""
+move_cost_bonus = 0
+springs_on_pass = false
+halts_movement = false
+consume_on_trigger = false
+destroyed_by_hostile_entry = true
+rule_flags = {}

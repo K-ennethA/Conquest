@@ -47,6 +47,28 @@ class_name TargetingPattern
 ## anchor cell.
 @export var requires_adjacent_enemy: bool = false
 
+## OPTIONAL PER-MOVE AIM RULE -- a resource exposing
+## [code]allows_aim(origin, aim, caster, board) -> bool[/code], consulted LAST in
+## [method is_aim_allowed]. Like the two flags above it can only ever NARROW what may be
+## aimed at, never widen it: the range test has already run by the time it is asked.
+##
+## This is the escape hatch for a move whose legality is not expressible as a flag -- one
+## whose valid cells depend on RUNTIME BOARD STATE rather than on geometry. Duskmaw's
+## Voidstep is the case it exists for: within 4 it may plant an anchor on free ground,
+## and at any distance up to its reach it may step to an anchor IT ALREADY PLANTED, so
+## "which cells are legal" is a question only the move's own effect can answer.
+##
+## AUTHORED AS THE MOVE'S OWN EFFECT, normally. Pointing this at the same sub-resource the
+## move already lists under [member MoveResource.effects] is what keeps the rule and the
+## resolution the same object: the highlight, [MoveExecutor]'s validation and the effect
+## itself then read ONE function, and they cannot drift.
+##
+## Typed as plain [Resource] and read duck-typed, exactly as [member MoveResource.fx] is:
+## a `.tres` referencing a brand-new global class only resolves once the engine has
+## rescanned. Left null (the default, and every pattern authored before this existed) it
+## contributes nothing.
+@export var aim_rule: Resource = null
+
 ## The four orthogonal neighbours -- the sides a leap may land on. Diagonals are
 ## excluded to match the game's orthogonal movement.
 const ORTHOGONAL_STEPS: Array[Vector2i] = [
@@ -92,6 +114,11 @@ func is_aim_allowed(origin: Vector2i, aim: Vector2i, caster = null, board = null
 	if requires_empty_cell and not _is_free_cell(aim, caster, board):
 		return false
 	if requires_adjacent_enemy and not _has_adjacent_enemy(aim, caster, board):
+		return false
+	# LAST, and narrowing only: everything above has already had its say, so a rule can
+	# refuse a cell but never rescue one the pattern itself rejected.
+	if aim_rule != null and aim_rule.has_method("allows_aim") \
+			and not bool(aim_rule.allows_aim(origin, aim, caster, board)):
 		return false
 	return true
 

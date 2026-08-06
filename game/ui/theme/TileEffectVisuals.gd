@@ -13,6 +13,10 @@ const _TABLE := {
 	&"empowering_water": { "name": "Empowering Water", "color": Color("3b82c4"), "kind": "buff" },
 	&"fortify":          { "name": "Fortify",          "color": Color("c79a3b"), "kind": "buff" },
 	&"tall_grass":       { "name": "Tall Grass",       "color": Color("4e9e4a"), "kind": "buff" },
+	# Duskmaw's teleport anchor. "neutral", deliberately: it neither harms nor helps
+	# whoever stands on it, so it must not pulse like a hazard or read as a buff -- it is a
+	# steady dark mark that says only "something can arrive here".
+	&"void_spot":        { "name": "Void Spot",        "color": Color("5c2b8a"), "kind": "neutral" },
 }
 
 const _FALLBACK := { "name": "Effect", "color": Color("9a8768"), "kind": "neutral" }

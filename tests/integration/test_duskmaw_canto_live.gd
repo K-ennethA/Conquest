@@ -1,8 +1,13 @@
 extends GutTest
 
-## CANTO on the REAL screen: Duskmaw's Shadow Dash, driven through the mounted
-## GameUILayout's own UnitActionsPanel and UnitActionMenu, against a live board and a live
-## turn system.
+## CANTO on the REAL screen: a Shadow Dash driven through the mounted GameUILayout's own
+## UnitActionsPanel and UnitActionMenu, against a live board and a live turn system.
+##
+## THE DASHER IS NO LONGER DUSKMAW. Duskmaw's slot 3 is Voidstep now; the dash + canto
+## machinery was kept as a generic mechanic for a future charger (see
+## tests/unit/test_dash_through_canto.gd), so this suite spawns a test character built from
+## Duskmaw's shape with Shadow Dash back in slot 3. What is under test is the SCREEN's
+## behaviour around canto, which is character-agnostic and is the part that shipped broken.
 ##
 ## WHY THIS SUITE IS MOUNTED RATHER THAN HELPER-LEVEL. The shipped defect was invisible to
 ## every non-mounted test: the Unit's own flags said "you may move again", and only the
@@ -20,10 +25,12 @@ const LAYOUT := preload("res://game/ui/layout/GameUILayout.tscn")
 const CHARACTER_UNIT_SCENE: PackedScene = preload("res://game/characters/CharacterUnit.tscn")
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
 
-## Shadow Dash's slot in Duskmaw's authored moveset.
+## Shadow Dash's slot in the dasher's moveset.
 const DASH_SLOT: int = 3
 ## A throwaway enemy: one melee strike, no dash, nothing that could confuse the AI test.
 const FODDER_ID: StringName = &"test_canto_fodder"
+## The charger under test -- Duskmaw's body and stats with Shadow Dash restored to slot 3.
+const DASHER_ID: StringName = &"test_canto_dasher"
 
 ## Untyped on purpose (tests/README rule 3): a `: RefCounted` annotation makes the static
 ## analyser reject _guard.set_setting().
@@ -53,6 +60,7 @@ func before_each() -> void:
 	_prev_grid_size = _grid().size
 	_grid().size = Vector3(10, 0, 10)
 	CharacterLibrary._cache[FODDER_ID] = _make_fodder()
+	CharacterLibrary._cache[DASHER_ID] = _make_dasher()
 
 
 func after_each() -> void:
@@ -80,6 +88,27 @@ func _make_fodder() -> CharacterResource:
 	c.base_speed = 4
 	c.base_movement = 2
 	c.attack_range = 1
+	return c
+
+
+## Duskmaw's roster entry with Shadow Dash put back in slot 3.
+##
+## DUPLICATED, never mutated in place (CONQUEST.md rule 7): the roster resource is loaded
+## once and shared, so the moveset is REPLACED with a fresh array rather than edited. Built
+## off the roster rather than from scratch so the dasher keeps a real imported model and a
+## real movement profile -- the panel path under test needs both.
+func _make_dasher() -> CharacterResource:
+	var base := load("res://game/characters/roster/monster.tres") as CharacterResource
+	if base == null:
+		return null
+	var c: CharacterResource = base.duplicate()
+	c.character_id = DASHER_ID
+	c.display_name = "Dasher"
+	var moves: Array[MoveResource] = []
+	for i in range(3):
+		moves.append(base.get_move(i))
+	moves.append(load("res://game/combat/moves/shadow_dash.tres") as MoveResource)
+	c.moveset = moves
 	return c
 
 
@@ -112,7 +141,7 @@ func _boot(duskmaw_is_ai: bool = false) -> Dictionary:
 	var ai := Player.new(1, "AI")
 	ai.is_ai = true
 
-	var duskmaw := _spawn(&"monster", Vector2i(1, 1), ai if duskmaw_is_ai else human)
+	var duskmaw := _spawn(DASHER_ID, Vector2i(1, 1), ai if duskmaw_is_ai else human)
 	var near := _spawn(FODDER_ID, Vector2i(2, 1), human if duskmaw_is_ai else ai)
 	var far := _spawn(FODDER_ID, Vector2i(3, 1), human if duskmaw_is_ai else ai)
 	if duskmaw == null or near == null or far == null:

@@ -25,11 +25,24 @@ class_name TileEffectSystem
 ## Used only when the board does not supply effects for that cell.
 var tile_effects: Dictionary = {}
 
+## The turn system this instance's expiry sweep is currently riding (see [method setup]).
+var _expiry_turn_system = null
+
 
 ## Run every [enum TileEffectResource.Trigger].ON_ENTER effect on [param cell]
-## that applies to [param unit]. Returns the merged event log.
+## that applies to [param unit], then STOMP any placement this unit's arrival destroys.
+## Returns the merged event log.
+##
+## ORDER IS PART OF THE RULE: the ground gets its say FIRST. A unit stepping onto a cell that
+## holds both an armed trap and a hostile anchor springs the trap AND breaks the anchor --
+## the trap fires against a board that still contains the anchor, and the anchor then dies.
+## Stomping first would let a placement disappear before an effect layered on the same cell
+## had resolved against it.
 func on_enter(unit, cell: Vector2i, board) -> Array:
-	return _run_trigger(unit, cell, board, TileEffectResource.Trigger.ON_ENTER)
+	var events: Array = _run_trigger(unit, cell, board, TileEffectResource.Trigger.ON_ENTER)
+	for te in stomp_hostile_placements(unit, cell, board):
+		events.append({ "effect": "tile_effect_stomped", "cell": cell, "tile_effect": te, "unit": unit })
+	return events
 
 
 ## Run every ON_EXIT effect on the cell the unit is leaving.
@@ -150,13 +163,48 @@ func resolve_path(unit, path: Array, board, fallback: Vector2i = Vector2i.ZERO) 
 	for i in range(path.size()):
 		var cell: Vector2i = path[i]
 		var trap = armed_trap_at(unit, cell, board)
-		if trap == null:
-			continue
-		if bool(trap.get("halts_movement")):
+		if trap != null and bool(trap.get("halts_movement")):
+			# The walk ends here, so this cell is a LANDING: the caller's on_enter pass fires
+			# the trap and stomps whatever the arrival breaks. Nothing more to do here.
 			return cell
-		if i < last:
+		if i == last:
+			continue  # the destination is a landing too -- same reason.
+		if trap != null:
 			on_pass(unit, cell, board)
+		# STOMPED IN PASSING. A hostile placement dies to a unit merely CROSSING its cell,
+		# not only to one that stops on it: it is the arrival that breaks it, and a unit
+		# running over an anchor has arrived on it however briefly. Deliberately AFTER the
+		# trap fires, matching the landing order in on_enter.
+		stomp_hostile_placements(unit, cell, board)
 	return path[last]
+
+
+## Destroy every placement on [param cell] that [param unit] ARRIVING there breaks -- the
+## authored [member TileEffectResource.destroyed_by_hostile_entry] rule. Returns what was
+## removed, so a caller can log or announce it.
+##
+## THE SAME REMOVAL PATH a sprung, an evicted and an expired placement all take
+## ([method CombatServices.remove_tile_effect] via [method _extinguish]), so a stomped anchor
+## leaves the board identically: the same state cleared, the same
+## [signal CombatServices.tile_effects_changed] raised, and therefore the same marker pulled
+## off the cell by the overlay. There is deliberately no second "remove a placement" path.
+##
+## Deterministic: the verdict is an owner comparison per effect, walked in the cell's own
+## array order, with no RNG and no clock -- two lockstep peers break the same anchors.
+## Removal happens AFTER the walk so the cell's effect list is never mutated mid-iteration,
+## exactly as [method _run_trigger] extinguishes a spent snare.
+func stomp_hostile_placements(unit, cell: Vector2i, board) -> Array:
+	var broken: Array = []
+	if unit == null:
+		return broken
+	for te in _effects_at(cell, board):
+		if te == null or not te.has_method("destroyed_by"):
+			continue
+		if te.destroyed_by(unit, board):
+			broken.append(te)
+	for te in broken:
+		_extinguish(cell, te)
+	return broken
 
 
 ## THE WHOLE TERRAIN SIDE OF ONE APPLIED MOVE, in order: ON_EXIT on the cell left, the trap
@@ -292,6 +340,65 @@ static func expire_placed_effects(round_index: int) -> Array:
 			svc.remove_tile_effect(cell, te)
 			removed.append({ "cell": cell, "effect": te })
 	return removed
+
+
+# --- The GENERIC expiry clock -------------------------------------------------
+#
+# [method expire_placed_effects] is the sweep; something has to DRIVE it. [SiegeController]
+# drives it from its own round boundary for the mode-declared trap lifetime, but a
+# placement can also carry an expiry AUTHORED ON THE EFFECT ITSELF -- Duskmaw's void spots
+# live 12 turns whatever mode is (or is not) running -- and in a plain skirmish there is no
+# mode controller to turn the handle.
+#
+# So this node turns it too, on every turn boundary. Two things make that safe rather than a
+# second, competing clock:
+#   * THE VERDICT IS PURE ARITHMETIC on each placement's FROZEN record
+#     ([method TileEffectResource.is_expired_on]), and both drivers read the SAME round
+#     number ([method ModeTuning.current_round] resolves the active mode's counter first).
+#     Sweeping twice in a round is therefore idempotent: the second pass finds nothing the
+#     first did not already take, so Siege's behaviour is unchanged.
+#   * IT RIDES THE ACTIVE TURN SYSTEM'S turn_started, never PlayerManager's -- those do not
+#     fire on AI turns, so anything wired to them silently stops ticking the moment the
+#     enemy is acting (CONQUEST.md rule 2).
+
+
+## Start driving the expiry sweep off the active turn system. Called once by
+## [code]GameWorldManager._setup_tile_effects[/code]; idempotent, and a no-op in a headless
+## harness with no [TurnSystemManager] autoload.
+func setup() -> void:
+	if typeof(TurnSystemManager) != TYPE_OBJECT or TurnSystemManager == null:
+		return
+	if not TurnSystemManager.turn_system_activated.is_connected(_on_expiry_turn_system_activated):
+		TurnSystemManager.turn_system_activated.connect(_on_expiry_turn_system_activated)
+	if TurnSystemManager.has_active_turn_system():
+		_on_expiry_turn_system_activated(TurnSystemManager.get_active_turn_system())
+
+
+## (Re)point the sweep at whichever turn system is now active, dropping the previous one.
+func _on_expiry_turn_system_activated(ts) -> void:
+	if _expiry_turn_system == ts:
+		return
+	if _expiry_turn_system != null and is_instance_valid(_expiry_turn_system) \
+			and _expiry_turn_system.turn_started.is_connected(_on_expiry_turn_started):
+		_expiry_turn_system.turn_started.disconnect(_on_expiry_turn_started)
+	_expiry_turn_system = ts
+	if ts != null and is_instance_valid(ts) and not ts.turn_started.is_connected(_on_expiry_turn_started):
+		ts.turn_started.connect(_on_expiry_turn_started)
+
+
+## One turn boundary: sweep whatever the round the battle is now on has outlived.
+func _on_expiry_turn_started(_player = null) -> void:
+	expire_placed_effects(ModeTuning.current_round())
+
+
+func _exit_tree() -> void:
+	# The battle is over; stop holding the turn system's signal. Godot would drop the
+	# connection when either end is freed, but a system torn down between battles while the
+	# turn system survives would otherwise keep sweeping for a board it no longer serves.
+	_on_expiry_turn_system_activated(null)
+	if typeof(TurnSystemManager) == TYPE_OBJECT and TurnSystemManager != null \
+			and TurnSystemManager.turn_system_activated.is_connected(_on_expiry_turn_system_activated):
+		TurnSystemManager.turn_system_activated.disconnect(_on_expiry_turn_system_activated)
 
 
 ## Row-major cell order. Explicit rather than relying on [Vector2i]'s own comparison, so the

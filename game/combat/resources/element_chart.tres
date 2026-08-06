@@ -82,6 +82,14 @@ tile effect that ships today is assigned:
   fortify         -> earth    (sacred ground's dug-in defence)
   rock_rubble     -> earth    (broken stone)
   sacred_meadow   -> nature   (see below)
+  void_spot       -> dark     (Duskmaw's teleport anchor)
+
+VOID_SPOT IS ELEMENTED THOUGH IT DOES NOTHING. It carries no damage and no magnitude, so
+every element path resolves to nothing for it today -- but unlike `stealth` (which is
+deliberately elementless because an element there would colour a badge and change
+nothing) a void spot is a MOVE'S OWN MARK and reads as the caster's element on every
+surface that badges a cell. Elementing it is what keeps the tile badge, the terrain panel
+and the move that planted it all saying "dark".
 
 SACRED MEADOW IS NATURE, NOT HOLY -- an authored design call, recorded here because
 the name argues the other way. The meadow is a living, growing place that heals,
@@ -125,5 +133,6 @@ tile_elements = {
 &"scorching_vent": &"fire",
 &"slippery_ice": &"water",
 &"tall_grass": &"nature",
-&"vine_trap": &"nature"
+&"vine_trap": &"nature",
+&"void_spot": &"dark"
 }

@@ -329,6 +329,14 @@ recorded before that trigger existed replays against a board whose turn-0 state 
 trips the same divergence guard — again by design; the grant is deterministic boot
 resolution, so no command or RNG draw changed.
 
+**Compatibility note — an applied cast now books its cooldown.** `CommandApplier`'s
+`CAST_MOVE` branch calls `MovesetController.on_used` after a successful `perform_move`, so
+playback (which applies through that same seam) now starts cooldowns and spends `max_uses`
+charges exactly as the recorded battle did — it previously booked neither, a silent divergence
+from live play. A log recorded before this change replays against a board whose cooldown state
+differs from the recording's and trips the divergence guard above; that is the designed
+behaviour, and no command or RNG draw changed.
+
 The transport bar (`game/ui/hud/ReplayHUD.gd`, mounted by `UILayoutManager` exactly as
 `NetToast` is) is play/pause · step · speed · `Turn 4/12` · exit, plus that banner and the
 recorded outcome when the log runs out. It hides itself unless a replay is playing, so a

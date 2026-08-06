@@ -1,0 +1,56 @@
+[gd_resource type="Resource" script_class="MoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_moveeffect"]
+[ext_resource type="Script" path="res://game/combat/effects/VoidstepEffect.gd" id="2_voidstep"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="4_targp"]
+[ext_resource type="Resource" path="res://game/tiles/effects/resources/void_spot.tres" id="5_spot"]
+[ext_resource type="Script" path="res://game/visuals/MoveFXResource.gd" id="6_movefx"]
+
+[sub_resource type="Resource" id="Resource_vs_step"]
+script = ExtResource("2_voidstep")
+spot = ExtResource("5_spot")
+place_range = 4
+lifetime_turns = 12
+max_spots = 3
+teleport_cooldown = 4
+
+[sub_resource type="Resource" id="Resource_vs_fx"]
+script = ExtResource("6_movefx")
+color = Color(0.36, 0.16, 0.56, 1)
+burst_scale = 1.3
+ring_enabled = true
+ring_scale = 1.4
+cast_cue = &""
+impact_cue = &""
+shake_strength = 0.06
+impact_scene = null
+lifetime_scale = 1.35
+
+[sub_resource type="Resource" id="Resource_vs_tgt"]
+script = ExtResource("4_targp")
+target_kind = 5
+min_range = 1
+max_range = 12
+area_shape = 0
+area_size = 0
+affects_caster_tile = false
+requires_empty_cell = false
+requires_adjacent_enemy = false
+aim_rule = SubResource("Resource_vs_step")
+
+[resource]
+script = ExtResource("3_mvres")
+move_id = &"voidstep"
+display_name = "Voidstep"
+description = "Tears a void spot into distant ground -- or, if the ground already holds one of its own, steps through it and comes out standing there. Up to three marks at a time; they fade after a dozen turns. Marking is cheap; stepping is not."
+category = 1
+element = &"dark"
+energy_cost = 0
+max_uses = -1
+cooldown = 1
+accuracy = 1.0
+crit_chance = 0.0
+targeting = SubResource("Resource_vs_tgt")
+effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_vs_step")])
+fx = SubResource("Resource_vs_fx")

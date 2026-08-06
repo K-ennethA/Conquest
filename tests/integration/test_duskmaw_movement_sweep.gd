@@ -338,34 +338,32 @@ func test_move_then_dash_then_canto_move_is_accepted_at_every_step() -> void:
 	assert_eq(panel.get_command_state(), UnitActionsPanel.CommandState.ACTION_MENU,
 		"and the post-move menu is up, exactly as it is for any other unit")
 
-	# 2. DASH from the menu, east down the row the two enemies are lined up on. The panel
-	#    commits the staged walk first, so this is genuinely move-THEN-dash in one turn.
+	# 2. VOIDSTEP from the menu (slot 3 is the teleport-anchor move now -- the dash it
+	#    replaced lives on as generic machinery pinned by test_dash_through_canto.gd).
+	#    The panel commits the staged walk first, so this is genuinely move-THEN-cast
+	#    in one turn -- the shape that used to break the turn accounting.
 	panel._on_action_menu_move_chosen(DASH_SLOT)
 	await get_tree().process_frame
 	assert_eq(panel.get_command_state(), UnitActionsPanel.CommandState.TARGETING,
-		"the dash is being aimed")
+		"the voidstep is being aimed")
 	panel.handle_move_target_selected(Vector3(4, 0, 4))
 	for _i in range(2):
 		await get_tree().process_frame
-	assert_eq(board.cell_of(duskmaw), Vector2i(7, 4),
-		"step two: the dash ran through both enemies and landed beyond them")
-	assert_true(duskmaw.has_canto(), "arming the canto")
-	assert_false(duskmaw.can_act(), "the action is now spent as well as the walk")
+	assert_eq(board.cell_of(duskmaw), Vector2i(3, 4),
+		"step two: placing an anchor does not move the caster")
+	var services = board if board.has_method("tile_effects_at") else null
+	if services != null:
+		var ids: Array = []
+		for te in services.tile_effects_at(Vector2i(4, 4)):
+			ids.append(String(te.id))
+		assert_true(ids.has("void_spot"), "the anchor was planted on the aimed cell")
 
-	# 3. CANTO STEP. The unit has both MOVED and ACTED this turn -- the exact state that
-	#    used to refuse every destination.
-	assert_true(duskmaw.can_move(), "step three: the unit may still move")
-	assert_true(ts.can_unit_act(duskmaw), "and the turn system has not written it off")
-	assert_false(panel.movement_range_tiles.is_empty(), "a range is on screen to click")
-	var target: Vector2i = _grid_to_cell(panel.movement_range_tiles[0])
-	panel.handle_movement_destination_selected(panel.movement_range_tiles[0])
-	await get_tree().process_frame
-	assert_true(panel.is_tentative_move_active(),
-		"REGRESSION: the canto destination was refused after a move-then-dash turn")
-	panel._on_action_menu_wait_chosen()
-	await get_tree().process_frame
-	assert_eq(board.cell_of(duskmaw), target, "the unit took its canto step")
-	assert_false(ts.can_unit_act(duskmaw), "and that closed its turn")
+	# 3. VOIDSTEP GRANTS NO CANTO: unlike the old dash, the cast closes the unit's turn
+	#    outright -- moved AND acted, nothing left to click.
+	assert_false(duskmaw.has_canto(), "voidstep arms no canto")
+	assert_false(duskmaw.can_act(), "the action is spent")
+	assert_false(duskmaw.can_move(), "and no further movement is owed")
+	assert_false(ts.can_unit_act(duskmaw), "the turn system has written the unit off")
 
 
 func _grid_to_cell(tile: Vector3) -> Vector2i:

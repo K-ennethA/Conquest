@@ -8,14 +8,17 @@ extends GutTest
 #   ABYSSAL MAW  (move 1)            -- a delayed 3x3 eruption at long range.
 #   UMBRAL CLAW  (move 2)            -- a 3-cell piercing line.
 #   VOIDWALK     (move 3)            -- one turn of taking no damage at all.
-#   SHADOW DASH  (move 4)            -- charge through up to 3 enemies, land beyond,
-#                                       then MOVE again (CANTO) on a shortened leash --
-#                                       movement only, never a second strike.
+#   VOIDSTEP     (move 4)            -- plant a void spot within 4, or step to one of your
+#                                       own from anywhere. Cheap to mark, expensive to
+#                                       step. Covered by its own suites (see below); only
+#                                       its PLACE IN THE KIT is asserted here.
 #
-# Everything here is pure mocks + resources: no scene tree, no autoloads, no disk. The
-# turn-flow half of the kit (WHEN the maw erupts, WHEN Voidwalk and the Void Surge run
-# out) needs real turn systems and lives in
-# tests/integration/test_monster_turn_flow.gd instead.
+# Everything here is pure mocks + resources: no scene tree, no autoloads, no disk. Two
+# halves of the kit live elsewhere because they need more than that:
+#   * WHEN the maw erupts and WHEN Voidwalk runs out needs real turn systems --
+#     tests/integration/test_monster_turn_flow.gd;
+#   * Voidstep's anchors live in the real CombatServices applied-effect layer --
+#     tests/integration/test_voidstep.gd and tests/integration/test_voidstep_live.gd.
 #
 # Mock style follows test_eldroot.gd / test_bot_controller.gd. The event BUS is a bare
 # RefCounted carrying an untyped `damage_dealt`, exactly as test_kill_attribution_order.gd
@@ -155,8 +158,8 @@ func _umbral_claw() -> MoveResource:
 func _voidwalk() -> MoveResource:
 	return load("res://game/combat/moves/voidwalk.tres") as MoveResource
 
-func _shadow_dash() -> MoveResource:
-	return load("res://game/combat/moves/shadow_dash.tres") as MoveResource
+func _voidstep() -> MoveResource:
+	return load("res://game/combat/moves/voidstep.tres") as MoveResource
 
 
 # --- Helpers ---------------------------------------------------------------
@@ -814,216 +817,20 @@ func test_the_bot_never_spends_its_turn_swinging_at_a_submerged_unit():
 
 
 # ===========================================================================
-# SHADOW DASH -- through the line, and moving again
+# SHADOW DASH -- MIGRATED OUT
 # ===========================================================================
-
-## Cast Shadow Dash from [param caster] toward [param aim].
-func _cast_dash(caster, board, aim: Vector2i, bus) -> MoveContext:
-	var move := _shadow_dash()
-	var ctx := MoveContext.new(caster, board, move, aim, [aim] as Array[Vector2i])
-	ctx.event_bus = bus
-	for effect in move.effects:
-		effect.apply(ctx)
-	return ctx
-
-
-func test_shadow_dash_runs_through_enemies_and_lands_on_the_first_free_cell():
-	var caster := StatusUnit.new(0, { "magic": 10 })
-	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	var victims: Array = []
-	for x in [1, 2]:
-		var e := StatusUnit.new(1, { "health": 100 })
-		board.place(e, Vector2i(x, 0))
-		victims.append(e)
-	_controller_for(caster)
-	var bus := MockBus.new()
-
-	_cast_dash(caster, board, Vector2i(3, 0), bus)
-
-	assert_eq(board.cell_of(caster), Vector2i(3, 0),
-		"the caster comes to rest on the first free cell beyond the last enemy")
-	# power 10 + magic 10 = 20 raw, mitigated by 0 magic defense.
-	for v in victims:
-		assert_eq(v.hp, 80, "every enemy it ran through takes the pass-through hit")
-
-
-func test_shadow_dash_caps_at_three_enemies():
-	var caster := StatusUnit.new(0, { "magic": 10 })
-	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	var line: Array = []
-	for x in [1, 2, 3, 4]:
-		var e := StatusUnit.new(1, { "health": 100 })
-		board.place(e, Vector2i(x, 0))
-		line.append(e)
-	_controller_for(caster)
-	var bus := MockBus.new()
-
-	_cast_dash(caster, board, Vector2i(2, 0), bus)
-
-	assert_eq(board.cell_of(caster), Vector2i(0, 0),
-		"a FOURTH body in the way stops the charge dead -- nobody moves")
-	for e in line:
-		assert_eq(e.hp, 100, "and a refused dash deals no damage at all")
-
-
-func test_shadow_dash_refuses_cleanly_when_there_is_nowhere_to_land():
-	var caster := StatusUnit.new(0, { "magic": 10 })
-	var enemy := StatusUnit.new(1, { "health": 100 })
-	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))
-	board.block(Vector2i(2, 0))   # a wall right behind the enemy
-	_controller_for(caster)
-	var bus := MockBus.new()
-
-	var ctx := _cast_dash(caster, board, Vector2i(1, 0), bus)
-
-	assert_eq(board.cell_of(caster), Vector2i(0, 0), "the caster does not move")
-	assert_eq(enemy.hp, 100, "and nothing is damaged")
-	var refusal := {}
-	for e in ctx.results:
-		if e.get("effect") == "dash":
-			refusal = e
-	assert_false(bool(refusal.get("moved", true)), "the dash reports that it did not move")
-	assert_eq(String(refusal.get("reason", "")), "no_free_cell",
-		"...and says why, as a VALUE -- a refused dash is board state, never an error")
-
-
-func test_shadow_dash_will_not_run_through_its_own_side():
-	var caster := StatusUnit.new(0, { "magic": 10 })
-	var ally := StatusUnit.new(0, { "health": 100 })
-	var enemy := StatusUnit.new(1, { "health": 100 })
-	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(ally, Vector2i(1, 0))
-	board.place(enemy, Vector2i(2, 0))
-	_controller_for(caster)
-	var bus := MockBus.new()
-
-	var ctx := _cast_dash(caster, board, Vector2i(2, 0), bus)
-
-	assert_eq(board.cell_of(caster), Vector2i(0, 0), "an ally in the lane blocks the charge")
-	assert_eq(ally.hp, 100, "the ally is never damaged")
-	assert_eq(enemy.hp, 100, "and the enemy behind it is never reached")
-	var refusal := {}
-	for e in ctx.results:
-		if e.get("effect") == "dash":
-			refusal = e
-	assert_eq(String(refusal.get("reason", "")), "blocked_line", "reported as a blocked line")
-
-
-func test_shadow_dash_crosses_open_ground_to_reach_the_first_enemy():
-	# Empty cells before the first enemy are run across, not landed on -- otherwise a dash
-	# aimed down a corridor would stop one step out having hit nobody.
-	var caster := StatusUnit.new(0, { "magic": 10 })
-	var enemy := StatusUnit.new(1, { "health": 100 })
-	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(enemy, Vector2i(3, 0))
-	_controller_for(caster)
-	var bus := MockBus.new()
-
-	_cast_dash(caster, board, Vector2i(2, 0), bus)
-
-	assert_eq(board.cell_of(caster), Vector2i(4, 0), "it lands past the enemy it found")
-	assert_eq(enemy.hp, 80, "having run through it on the way")
-
-
-func test_shadow_dash_resolves_identically_when_replayed():
-	# Determinism pin: the lane walk, the landing rule and the damage all read only the
-	# board and authored numbers -- no generator is touched.
-	var runs: Array = []
-	for _i in range(2):
-		var caster := StatusUnit.new(0, { "magic": 10 })
-		var board := MockBoard.new()
-		board.place(caster, Vector2i(0, 0))
-		var hps: Array = []
-		var mobs: Array = []
-		for x in [1, 2]:
-			var e := StatusUnit.new(1, { "health": 100, "magic_defense": x })
-			board.place(e, Vector2i(x, 0))
-			mobs.append(e)
-		_controller_for(caster)
-		_cast_dash(caster, board, Vector2i(3, 0), MockBus.new())
-		for m in mobs:
-			hps.append(m.hp)
-		runs.append([board.cell_of(caster), hps])
-	assert_eq(runs[0], runs[1],
-		"the same dash replayed lands on the same cell for the same damage")
-
-
-func test_the_dash_grants_canto_on_a_shortened_leash():
-	var caster := StatusUnit.new(0, { "magic": 10 })
-	var enemy := StatusUnit.new(1, { "health": 100 })
-	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))
-	var controller := _controller_for(caster)
-	var bus := MockBus.new()
-
-	_cast_dash(caster, board, Vector2i(1, 0), bus)
-
-	assert_true(controller.has_status(&"void_surge"), "the dash leaves the caster surging")
-	assert_eq(caster.canto_grants, 1,
-		"which arms CANTO exactly once -- one more MOVEMENT, not one more action")
-	assert_eq(caster.modifiers.size(), 1, "one stat modifier was taken")
-	assert_eq(caster.modifiers[0]["stat"], "movement", "on movement")
-	assert_eq(int(caster.modifiers[0]["amount"]), -2, "shortening the leash by 2")
-
-
-func test_the_void_surge_never_touches_the_arena_action_budget():
-	# The user decision this kit was rebuilt around: "they shouldn't be able to attack
-	# after dashing, simply move". The Arena's act-twice budget is a DIFFERENT mechanic
-	# and the dash must not reach for it -- if it did, the unit could strike again.
-	var caster := StatusUnit.new(0, {})
-	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	var controller := _controller_for(caster)
-
-	controller.add_status(_void_surge())
-
-	assert_eq(caster.arena_extra_actions, 0,
-		"Void Surge grants no extra ACTION at all -- the arena budget is left alone")
-	assert_eq(caster.canto_grants, 1, "what it grants is the movement-only canto")
-
-
-func test_the_void_surge_hands_the_stride_back_when_it_expires():
-	var caster := StatusUnit.new(0, {})
-	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	var controller := _controller_for(caster)
-
-	controller.add_status(_void_surge())
-	assert_eq(caster.canto_grants, 1, "granted")
-
-	controller.tick_all(board)
-
-	assert_false(controller.has_status(&"void_surge"), "it is a one-turn grant")
-	assert_true(bool(caster.modifiers[0].get("removed", false)),
-		"and the movement penalty is revoked when it goes")
-
-
-func test_the_void_surge_refreshes_and_never_stacks():
-	# CONQUEST.md rule 6: two dashes in one turn must not bank two movements or double
-	# the slow -- and expiry must then return exactly what was taken, once.
-	var caster := StatusUnit.new(0, {})
-	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	var controller := _controller_for(caster)
-
-	controller.add_status(_void_surge())
-	controller.add_status(_void_surge())
-	controller.add_status(_void_surge())
-
-	assert_eq(controller.stack_count(&"void_surge"), 1, "one instance")
-	assert_eq(caster.canto_grants, 1, "canto armed once, not three times")
-	assert_eq(caster.modifiers.size(), 1, "one movement penalty, not three")
-
-	controller.tick_all(board)
-	assert_true(bool(caster.modifiers[0].get("removed", false)),
-		"and it all comes back exactly once")
+#
+# Duskmaw's slot 3 is VOIDSTEP now, so the dash is no longer part of this kit. The
+# machinery it shipped on -- DashThroughEffect and CantoStatus / Void Surge -- is generic
+# and was KEPT for a future charger character, so its tests MOVED rather than being
+# deleted:
+#
+#     tests/unit/test_dash_through_canto.gd     the lane walk, the landing rule, canto
+#     tests/integration/test_voidstep.gd        what slot 3 does instead
+#     tests/integration/test_voidstep_live.gd   and what the booted screen lights up for it
+#
+# game/combat/moves/shadow_dash.tres is still on disk as the authored exemplar of a dash;
+# no character's moveset references it.
 
 
 # ===========================================================================
@@ -1064,12 +871,33 @@ func test_the_moveset_and_passive_are_intact():
 	var ids: Array = []
 	for i in range(character.move_count()):
 		ids.append(character.get_move(i).move_id)
-	assert_eq(ids, [&"abyssal_maw", &"umbral_claw", &"voidwalk", &"shadow_dash"],
-		"in the authored order")
+	assert_eq(ids, [&"abyssal_maw", &"umbral_claw", &"voidwalk", &"voidstep"],
+		"in the authored order -- slot 3 is VOIDSTEP, which replaced Shadow Dash")
 	for i in range(character.move_count()):
 		assert_eq(character.get_move(i).element, &"dark", "every move is dark")
+	assert_true(MoveResource.is_ultimate_move(character.get_move(3), 3),
+		"and slot 3 gets the ultimate cut-in by the slot rule, which is where a signature "
+		+ "teleport belongs")
 	assert_eq(character.ability_count(), 1, "one passive")
 	assert_eq(character.abilities[0].id, &"dread_brand", "and it is Dread Brand")
+
+
+func test_voidstep_carries_its_own_fx_override():
+	# Purely cosmetic and purely opt-in -- nothing in combat, the AI, the command vocabulary
+	# or a replay reads it. Pinned because a signature move that renders as the generic
+	# default is the thing this override exists to prevent.
+	var character := load("res://game/characters/roster/monster.tres") as CharacterResource
+	var voidstep: MoveResource = character.get_move(3)
+	assert_not_null(voidstep, "slot 3 is authored")
+	if voidstep == null:
+		return
+	assert_not_null(voidstep.fx, "and it hangs a MoveFXResource off itself")
+	if voidstep.fx == null:
+		return
+	assert_true(voidstep.fx.has_method("has_color") and bool(voidstep.fx.has_color()),
+		"with an AUTHORED tint (alpha > 0), so the dispatcher uses it instead of deriving one")
+	assert_gt(float(voidstep.fx.ring_scale), 1.0,
+		"and a wider ring than the default -- a portal opening reads bigger than a poke")
 
 
 func test_character_library_picks_the_roster_file_up():

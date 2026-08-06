@@ -1203,6 +1203,12 @@ func _setup_tile_effects() -> void:
 		_tile_effect_system = TileEffectSystem.new()
 		_tile_effect_system.name = "TileEffectSystem"
 		add_child(_tile_effect_system)
+		# The board-wide PLACED-EFFECT EXPIRY sweep, which is the system's own clock (see
+		# TileEffectSystem.setup): it rides the active turn system so an effect carrying an
+		# AUTHORED lifetime -- Duskmaw's void spots -- runs out on schedule in every mode
+		# and in none, not only inside Siege's round boundary. Distinct from the per-unit
+		# occupying tick wired below.
+		_tile_effect_system.setup()
 
 	# Movement: run ON_EXIT on the tile a unit leaves, ON_ENTER on the tile it
 	# steps onto. GameEvents.unit_moved carries Vector3(col, 0, row) grid coords
