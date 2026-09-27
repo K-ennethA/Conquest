@@ -101,6 +101,20 @@ visuals, **world skirt** so maps no longer float, `WorldLook` (single owner of l
 tweenable; bridged to weather via `apply_weather_look`), optional grid lines setting.
 Camera opens at a readable zoom (`CameraController.MIN_CELL_PX`) and scrolls on big maps.
 
+### Combat text + Encyclopedia
+- **Floating combat text** (`game/visuals/FloatingCombatText.gd`) for EVERY HP change:
+  attacks, CRIT!, MISS, IMMUNE, shield "Blocked N", lifesteal, heals, tile effects
+  (fire/vents tagged with the tile name), status ticks, sandstorm chip, Overbloom
+  regrowth, ability heals (Rain Bath), hazards. Sources annotate via a GameEvents
+  signal; unannotated HP changes still show a plain number. The battle log names sources.
+- Legacy `game/tiles/TileEffectManager.gd` (unreachable, called missing methods) deleted.
+- **Compendium** (`menus/Compendium.gd`), fully data-driven: Units (all moves +
+  abilities), Tiles, Maps, Weather, Tile Effects, Statuses, Rules (element chart,
+  hit/crit/evasion, height, multi-floor, weather, turn systems, facing, controls);
+  search + cross-links. In battle: Map Menu → Encyclopedia overlay; HUD chips share
+  its tooltip text. `tests/unit/test_compendium.gd` fails if any weather, tile effect,
+  status, unit, move or ability is missing.
+
 ### Weather (read `docs/WEATHER.md`)
 Data-driven `WeatherResource`s (`game/weather/resources`): Clear, Bright Sun, Rain,
 Desert Storm, Overbloom — element damage scales, turn-start effects, stat rules,
@@ -130,4 +144,18 @@ Settings: Weather Effects Full/Reduced/Off (visual only).
 7. Unit roles on squad cards ("Striker", "Caster") are derived from stats — add a real
    `role` field to `CharacterResource` if roles matter.
 
-See the section below for the final work item's status (combat text + Compendium).
+8. Combat text gaps: HP resets between arena rounds may show plain numbers; the
+   in-battle Encyclopedia overlay fully covers the battle (could dim instead).
+
+---
+
+## 4. State at handoff
+
+- All work merged into this branch; full suite **847/847** passing (plus the 6 known
+  pre-existing parse lines), multi-process net checks PASS (dedicated + player-hosted,
+  multi-floor maps, dynamic weather).
+- Screenshots of every area: `docs/screenshots/{menus,battle_ui,multi_floor,facing,
+  grass,world_art,weather,combat_text,compendium}/` (all `.gdignore`d).
+- Headless screenshot tip: `xvfb-run -a <godot> --rendering-driver opengl3 -s <script>`
+  works in containers; a GameWorld frame with the world skirt takes a while on the
+  software renderer, so give renders several minutes.
