@@ -97,6 +97,13 @@ func _build_shell() -> void:
 
 	# ONE back control for the whole reference (the hosted galleries' own headers
 	# are hidden in _build_hosted_section).
+	# The in-game Map Maker lives here too: author your own battlefield.
+	var map_maker_button := MenuKit.button("Map Maker", &"", 180)
+	map_maker_button.name = "MapMakerButton"
+	map_maker_button.tooltip_text = "Build and save your own maps (multi-floor, spawns, stairs)."
+	map_maker_button.pressed.connect(_on_map_maker_pressed)
+	page.actions.add_child(map_maker_button)
+
 	back_button = MenuKit.button("Back", MenuKit.GHOST, 140)
 	back_button.name = "BackButton"
 	back_button.pressed.connect(_on_back_pressed)
@@ -104,6 +111,13 @@ func _build_shell() -> void:
 	page.hints.add_child(MenuKit.key_hint("Q / R", "LB / RB", "Switch section"))
 	page.hints.add_child(MenuKit.key_hint("Esc", "B", "Back"))
 	MenuNav.focus_deferred(tab_container.get_tab_bar())
+
+
+const MAP_MAKER_SCENE := "res://game/mapmaker/MapMakerScene.tscn"
+
+
+func _on_map_maker_pressed() -> void:
+	MenuNav.change_scene(self, MAP_MAKER_SCENE)
 
 
 func _on_tab_changed(tab: int) -> void:
