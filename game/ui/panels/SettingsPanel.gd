@@ -23,6 +23,7 @@ var _anim_check: CheckButton = null
 var _speed_slider: HSlider = null
 var _speed_value_label: Label = null
 var _focus_option: OptionButton = null
+var _grid_option: OptionButton = null
 
 # Controls tab: action -> the Button showing (and capturing) its keyboard binding.
 var _bind_buttons: Dictionary = {}
@@ -171,6 +172,16 @@ func _build_ui() -> void:
 	_focus_option.item_selected.connect(_on_focus_selected)
 	focus_row.add_child(_focus_option)
 	general.add_child(focus_row)
+
+	# --- Optional board grid overlay (GameSettings.GridLines: OFF=0, SUBTLE=1) ---
+	var grid_row := _make_row("Grid Lines")
+	_grid_option = OptionButton.new()
+	_grid_option.mouse_filter = Control.MOUSE_FILTER_STOP
+	_grid_option.add_item("Off", 0)
+	_grid_option.add_item("Subtle", 1)
+	_grid_option.item_selected.connect(_on_grid_selected)
+	grid_row.add_child(_grid_option)
+	general.add_child(grid_row)
 
 	tabs.add_child(_build_controls_tab())
 
@@ -339,6 +350,11 @@ func _refresh_from_settings() -> void:
 		if idx >= 0:
 			_focus_option.select(idx)
 
+	if _grid_option and "grid_lines" in GameSettings:
+		var gidx := _grid_option.get_item_index(int(GameSettings.grid_lines))
+		if gidx >= 0:
+			_grid_option.select(gidx)
+
 	_syncing = false
 
 
@@ -385,6 +401,13 @@ func _on_focus_selected(index: int) -> void:
 	var mode := _focus_option.get_item_id(index)
 	if _has_settings():
 		GameSettings.set_camera_auto_focus(mode)
+
+
+func _on_grid_selected(index: int) -> void:
+	if _syncing or not _grid_option:
+		return
+	if _has_settings() and GameSettings.has_method("set_grid_lines"):
+		GameSettings.set_grid_lines(_grid_option.get_item_id(index))
 
 
 # --- Controls: rebinding ------------------------------------------------------

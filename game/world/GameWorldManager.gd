@@ -325,38 +325,16 @@ func _setup_lighting(map_resource: MapResource) -> void:
 	if scene_root == null:
 		return
 
-	var sun := scene_root.get_node_or_null("Sun") as DirectionalLight3D
-	if sun == null:
-		sun = DirectionalLight3D.new()
-		sun.name = "Sun"
-		scene_root.add_child(sun)
-	# Angled from above-front so faces catch light and cast readable shadows.
-	sun.rotation_degrees = Vector3(-52.0, -38.0, 0.0)
-	sun.shadow_enabled = true
-
-	var sun_color := Color(1.0, 0.96, 0.88)
-	var sun_energy := 1.7
-	var ambient_energy := 0.6
-	match str(map_resource.lighting_preset):
-		"Night":
-			sun_color = Color(0.62, 0.70, 0.95)
-			sun_energy = 0.55
-			ambient_energy = 0.20
-		"Dawn", "Dusk":
-			sun_color = Color(1.0, 0.78, 0.62)
-			sun_energy = 1.0
-			ambient_energy = 0.30
-		_:
-			pass  # Day / Default: the warm values above
-	sun.light_color = sun_color
-	sun.light_energy = sun_energy
-
-	# Sky-sourced ambient so shadowed sides aren't crushed to black.
-	var we := scene_root.get_node_or_null("WorldEnvironment") as WorldEnvironment
-	if we != null and we.environment != null:
-		var env: Environment = we.environment
-		env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-		env.ambient_light_energy = ambient_energy
+	# Everything look-related lives in ONE node (WorldLook: sun, sky, ambient,
+	# fog, tonemap / glow / grade, haze, unit contact shadows) so the weather
+	# system can tween named properties instead of poking the environment.
+	var look := scene_root.get_node_or_null("WorldLook") as WorldLook
+	if look == null:
+		look = WorldLook.new()
+		look.name = "WorldLook"
+		scene_root.add_child(look)
+	look.setup(scene_root)
+	look.apply_preset(str(map_resource.lighting_preset))
 
 
 func _setup_game_over_screen() -> void:

@@ -158,7 +158,9 @@ func _on_hazard_advanced(hazard, cells, next_cells, _damage) -> void:
 			var vine := _make_vine()
 			var center: Vector3 = GRID.calculate_map_position(Cells.to_grid(c))
 			vine.position = Vector3(center.x, center.y + VINE_BASE_Y, center.z)
-			vine.rotation.y = randf() * TAU  # per-instance twist so they aren't clones
+			# Per-instance twist so they aren't clones -- hashed from the cell so the
+			# same band always looks the same (no run-to-run randomness).
+			vine.rotation.y = ProcMesh.hash01(c.x, c.y, c.z + 5) * TAU
 			current.add_child(vine)
 
 	# Faint translucent telegraph on the band it will sweep next turn.
@@ -297,8 +299,8 @@ func _build_shared_resources() -> void:
 	_coil_mesh = TorusMesh.new()
 	_coil_mesh.inner_radius = 0.6
 	_coil_mesh.outer_radius = 0.92
-	_coil_mesh.rings = 4          # low poly -> chunky faceted ring
-	_coil_mesh.ring_segments = 14
+	_coil_mesh.rings = 18         # segments around the ring (round, still low-poly)
+	_coil_mesh.ring_segments = 5  # chunky faceted cross-section
 
 	# Mossy palette: a couple of greens, a dark base, a pale thorn accent.
 	_vine_mat = _lit_mat(Color(0.22, 0.5, 0.18))
@@ -311,7 +313,7 @@ func _build_shared_resources() -> void:
 	_trap_coil_mat = _lit_mat(Color(0.24, 0.68, 0.26))
 	_trap_coil_mat.emission_enabled = true
 	_trap_coil_mat.emission = Color(0.35, 0.95, 0.4)
-	_trap_coil_mat.emission_energy_multiplier = 1.1
+	_trap_coil_mat.emission_energy_multiplier = 0.6
 	_trap_thorn_mat = _lit_mat(Color(0.6, 0.6, 0.25))
 
 	# Telegraph: translucent, unshaded, glowing green -- clearly fainter/flatter than
@@ -328,12 +330,18 @@ func _build_shared_resources() -> void:
 	_telegraph_mat.render_priority = 2
 
 
-## Flat-ish lit material for the low-poly vine/trap look (rough, non-metallic).
+## Toon-lit material for the low-poly vine/trap look: the same cel diffuse + soft
+## warm rim as the world's painterly foliage, so hazards sit in the art style.
 func _lit_mat(color: Color) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.roughness = 1.0
 	mat.metallic = 0.0
+	mat.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mat.rim_enabled = true
+	mat.rim = 0.35
+	mat.rim_tint = 0.6
 	return mat
 
 
@@ -362,8 +370,9 @@ func _make_vine() -> Node3D:
 func _make_telegraph() -> Node3D:
 	var g := Node3D.new()
 
-	var footprint := _mi(_telegraph_quad_mesh, _telegraph_mat)
-	footprint.position = Vector3(0.0, 0.02, 0.0)
+	# Painterly pulsing danger ring (EffectFX decal) instead of a flat square.
+	var footprint := EffectFX.decal(EffectFX.Kind.TELEGRAPH, Color(0.45, 0.95, 0.4), 0.9)
+	footprint.position = Vector3(0.0, 0.0, 0.0)
 	g.add_child(footprint)
 
 	var ghost := _mi(_seg_mesh_1, _telegraph_mat)
@@ -381,6 +390,11 @@ func _make_trap() -> Node3D:
 	var coil := _mi(_coil_mesh, _trap_coil_mat)
 	coil.scale = Vector3(1.0, 0.55, 1.0)  # flatten into a low coil
 	t.add_child(coil)
+	# A mossy, pulsing snare patch under the ring so the trap reads as part of the
+	# ground rather than a floating torus.
+	var patch := EffectFX.decal(EffectFX.Kind.TELEGRAPH, Color(0.35, 0.8, 0.3), 0.7)
+	patch.position = Vector3(0.0, -0.05, 0.0)
+	t.add_child(patch)
 
 	# Spikes ride ON the big ring (radius ~0.76), not inside its hole.
 	var spikes: int = 8

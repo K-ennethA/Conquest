@@ -58,8 +58,9 @@ var clear_button: Button
 
 # Data
 var tile_types = ["NORMAL", "DIFFICULT_TERRAIN", "WATER", "WALL", "SPECIAL", "LAVA", "ICE", "SWAMP", "SACRED_GROUND", "CORRUPTED"]
-# Order matches TileResource.MaterialStyle (FLAT = 0, GRASS = 1, WATER = 2, BURN = 3).
-var material_styles = ["Flat (Solid Color)", "Grass (Animated)", "Water (Animated)", "Burn (Animated)"]
+# Order matches TileResource.MaterialStyle (FLAT = 0, GRASS = 1, WATER = 2, BURN = 3, ...).
+var material_styles = ["Flat (Solid Color)", "Grass (Animated)", "Water (Animated)", "Burn / Lava (Animated)",
+	"Dirt / Path", "Snow", "Ice", "Tundra", "Ash", "Obsidian", "Sacred Stone"]
 var effect_types = []
 var rarities = ["Common", "Uncommon", "Rare", "Epic", "Legendary"]
 var current_tile_effects: Array[TileEffect] = []
