@@ -943,7 +943,7 @@ func _grant_kill_reward() -> void:
 	controller.add_status(kill_reward.duplicate(true))
 
 # Visual feedback (updated to use visual manager)
-func _on_unit_selected(unit: Unit) -> void:
+func _on_unit_selected(unit: Unit, _position: Vector3 = Vector3.ZERO) -> void:
 	if unit == self and visual_manager:
 		visual_manager.apply_selection_visual(self, true)
 
