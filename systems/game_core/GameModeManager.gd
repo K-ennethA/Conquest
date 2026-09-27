@@ -1,277 +1,219 @@
 extends Node
 
-# High-level manager that coordinates between single-player and multiplayer modes
-# Provides a simple interface for the entire game
+## GameModeManager -- live-game glue for NETWORK versus.
+##
+## [NetSession] (autoload) is the transport / lobby / ordering layer and knows
+## nothing about units; [NetGameRules] is the deterministic validate/apply layer.
+## This autoload wires them into the running game:
+##   * on [signal NetSession.match_started] it copies the host's match config into
+##     [GameSettings] (map, turn system, player names) and loads the battle scene;
+##   * [method on_network_world_ready] (called by GameWorldManager once the map,
+##     players and turn system exist) builds the NetGameRules over the LIVE board
+##     (CombatServices) and turn system (TurnSystemManager) and attaches it;
+##   * the UI submits intents through request_move / request_use_move /
+##     request_wait / request_end_turn instead of mutating state directly;
+##   * disconnects / desyncs end the match and return to the main menu with a
+##     message; [method end_network_session] closes the session and restores the
+##     local game mode so single-player / hotseat afterwards is unaffected.
+##
+## Outside a network match every query answers like local play (local player id 0,
+## always "my turn"), so hotseat and single-player code paths are unchanged.
 
-signal game_mode_changed(new_mode: GameManager.GameMode)
-signal game_started(mode: GameManager.GameMode)
-signal game_ended(winner_id: int)
+signal network_action_applied(action: Dictionary, result: Dictionary)
+signal network_intent_rejected(action: Dictionary, reason: String)
+signal network_turn_changed(slot: int)
 
-var _game_manager: GameManager
-var _network_handler: NetworkHandler = null
+const GAME_WORLD_SCENE := "res://game/world/GameWorld.tscn"
+const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 
-func _get_log_prefix() -> String:
-	"""Get a log prefix to identify host vs client"""
-	var prefix = "[UNKNOWN] "
+## A message for the main menu to show once (e.g. "Opponent disconnected.").
+var pending_menu_message: String = ""
 
-	# Be more defensive about accessing _network_handler and _game_manager
-	if _network_handler and _network_handler.has_method("is_host"):
-		if _network_handler.is_host():
-			prefix = "[HOST] "
-		else:
-			prefix = "[CLIENT] "
-	elif _game_manager and _game_manager.has_method("get_game_mode") and _game_manager.get_game_mode() == GameManager.GameMode.NETWORK_MULTIPLAYER:
-		# Fallback - try to determine from local player ID
-		var local_id = get_local_player_id()
-		if local_id == 0:
-			prefix = "[HOST] "
-		elif local_id == 1:
-			prefix = "[CLIENT] "
-		else:
-			prefix = "[PLAYER" + str(local_id) + "] "
-	else:
-		prefix = "[SINGLE] "
+var _rules: NetGameRules = null
+var _match_finished: bool = false
+var _saved_ai_difficulty: int = -1
 
-	return prefix
 
 func _ready() -> void:
 	name = "GameModeManager"
+	var ns := _session()
+	if ns != null:
+		ns.match_started.connect(_on_match_started)
+		ns.match_aborted.connect(_on_match_aborted)
+		ns.action_applied.connect(_on_action_applied)
+		ns.intent_rejected.connect(_on_intent_rejected)
+		ns.turn_changed.connect(func(slot): network_turn_changed.emit(slot))
+		ns.desync_detected.connect(_on_desync_detected)
+	if PlayerManager:
+		PlayerManager.game_state_changed.connect(_on_game_state_changed)
 
-	# Create game manager
-	_game_manager = GameManager.new()
-	if not _game_manager:
-		return
 
-	add_child(_game_manager)
+func _session() -> NetSessionNode:
+	return get_node_or_null("/root/NetSession") as NetSessionNode
 
-	# Connect signals
-	_game_manager.game_started.connect(_on_game_started)
-	_game_manager.game_ended.connect(_on_game_ended)
-	_game_manager.player_action_processed.connect(_on_player_action_processed)
-	_game_manager.turn_changed.connect(_on_turn_changed)
 
-# Public API - Simple interface for the game
-func start_single_player(player_name: String = "Player", ai_count: int = 1) -> bool:
-	"""Start a single-player game"""
-	var settings = {
-		"player_name": player_name,
-		"ai_players": ai_count
-	}
+# ---------------------------------------------------------------------------
+# Queries (safe in every mode)
+# ---------------------------------------------------------------------------
 
-	return _game_manager.start_single_player_game(settings)
+## True while a NETWORK match is running on this instance.
+func is_multiplayer_active() -> bool:
+	var ns := _session()
+	return ns != null and ns.is_in_match() \
+		and GameSettings != null and GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER
 
-func start_local_multiplayer(player_names: Array[String]) -> bool:
-	"""Start a local multiplayer game (hot-seat)"""
-	return _game_manager.start_local_multiplayer_game(player_names)
 
-func start_network_multiplayer_host(player_name: String = "Host", network_mode: String = "p2p") -> bool:
-	"""Start hosting a network multiplayer game"""
-	# Create network handler
-	_network_handler = MultiplayerNetworkHandler.new()
-
-	var settings = {
-		"network_mode": network_mode,
-		"player_name": player_name,
-		"is_host": true
-	}
-
-	# Initialize network handler
-	var success = await _network_handler.initialize(settings)
-	if not success:
-		return false
-
-	# Start hosting on a consistent port (8910) for local development
-	var host_port = 8910
-
-	if not _network_handler.start_host(host_port):
-		return false
-
-	# Start game with network handler
-	var game_success = _game_manager.start_network_multiplayer_game(_network_handler, settings)
-
-	return game_success
-
-func join_network_multiplayer(address: String, port: int, player_name: String = "Player", network_mode: String = "p2p") -> bool:
-	"""Join a network multiplayer game"""
-	# Create network handler
-	_network_handler = MultiplayerNetworkHandler.new()
-
-	var settings = {
-		"network_mode": network_mode,
-		"player_name": player_name,
-		"is_host": false
-	}
-
-	# Initialize network handler
-	var success = await _network_handler.initialize(settings)
-	if not success:
-		return false
-
-	# Join host
-	if not _network_handler.join_host(address, port):
-		return false
-
-	# Wait for connection to establish (increased timeout for P2P)
-	var max_wait_time = 5.0
-	var wait_interval = 0.5
-	var total_waited = 0.0
-
-	while total_waited < max_wait_time:
-		await get_tree().create_timer(wait_interval).timeout
-		total_waited += wait_interval
-
-		var connection_status = _network_handler.get_connection_status()
-
-		if connection_status == "connected":
-			break
-		elif connection_status.begins_with("failed"):
-			return false
-
-	# Final check
-	var final_status = _network_handler.get_connection_status()
-	if final_status != "connected":
-		return false
-
-	# Start game with network handler
-	var game_success = _game_manager.start_network_multiplayer_game(_network_handler, settings)
-
-	return game_success
-
-func end_current_game() -> void:
-	"""End the current game"""
-	if not _game_manager:
-		return
-
-	_game_manager.end_game()
-
-	# Clean up network handler
-	if _network_handler:
-		_network_handler.disconnect_network()
-		_network_handler = null
-
-# Action submission - unified interface
-func submit_action(action_type: String, action_data: Dictionary) -> bool:
-	"""Submit a player action (works for all game modes)"""
-	if not _game_manager:
-		return false
-	return _game_manager.submit_player_action(action_type, action_data)
-
-# Status queries
-func get_current_game_mode() -> GameManager.GameMode:
-	"""Get current game mode"""
-	if not _game_manager:
-		return GameManager.GameMode.SINGLE_PLAYER
-	if not _game_manager.has_method("get_game_mode"):
-		return GameManager.GameMode.SINGLE_PLAYER
-	return _game_manager.get_game_mode()
-
-func is_game_active() -> bool:
-	"""Check if a game is currently active"""
-	if not _game_manager:
-		return false
-	return _game_manager.is_game_active()
-
-func is_my_turn() -> bool:
-	"""Check if it's the local player's turn"""
-	if not _game_manager:
-		return false
-
-	var current_mode = _game_manager.get_game_mode()
-	if current_mode == GameManager.GameMode.NETWORK_MULTIPLAYER:
-		var local_player_id = get_local_player_id()
-		var current_player_id = _game_manager.get_current_player_id()
-		return local_player_id == current_player_id
-	else:
-		return _game_manager.is_local_player_turn()
-
-func can_i_act() -> bool:
-	"""Check if the local player can currently act"""
-	if not _game_manager:
-		return false
-
-	var current_player = _game_manager.get_current_player_id()
-	return _game_manager.can_player_act(current_player)
-
+## The local player's slot: the seat in a network match, 0 otherwise (single
+## player / hotseat), so outlines and ownership checks never inherit a stale
+## network seat after a session ends.
 func get_local_player_id() -> int:
-	"""Get the local player ID for this client"""
-	if _network_handler and _network_handler.has_method("get_local_player_id"):
-		return _network_handler.get_local_player_id()
-
-	# For single player and local multiplayer, always return 0 (first player)
+	if is_multiplayer_active():
+		return _session().local_slot()
 	return 0
 
+
 func is_local_player(player_id: int) -> bool:
-	"""Check if the given player ID represents the local player"""
 	return player_id == get_local_player_id()
 
-func get_game_status() -> Dictionary:
-	"""Get comprehensive game status"""
-	if not _game_manager:
-		return {
-			"error": "GameManager not available",
-			"game_mode": "UNKNOWN",
-			"is_active": false
-		}
 
-	var status = _game_manager.get_game_status()
+## Network: true when the (deterministically derived) active slot is ours.
+## Local play: always true (turn gating is the turn system's job there).
+func is_my_turn() -> bool:
+	if not is_multiplayer_active():
+		return true
+	var slot := _rules.current_turn_slot() if _rules != null else _session().current_turn_slot()
+	return slot != -1 and slot == _session().local_slot()
 
-	# Add network info if available
-	if _network_handler:
-		status["network_status"] = _network_handler.get_connection_status()
-		status["network_stats"] = _network_handler.get_network_statistics()
-		status["connection_info"] = _network_handler.get_connection_info()
 
-	return status
+func get_rules() -> NetGameRules:
+	return _rules
 
-# Signal handlers
-func _on_game_started(mode: GameManager.GameMode, players: Array) -> void:
-	"""Handle game started"""
-	game_mode_changed.emit(mode)
-	game_started.emit(mode)
 
-func _on_game_ended(winner_id: int) -> void:
-	"""Handle game ended"""
-	game_ended.emit(winner_id)
+# ---------------------------------------------------------------------------
+# Intents (network only; each returns false outside a network match)
+# ---------------------------------------------------------------------------
 
-func _on_player_action_processed(action: Dictionary) -> void:
-	"""Handle player action processed"""
-	# This can be used to update UI or trigger other systems
-	pass
+func request_move(unit, cell: Vector2i) -> bool:
+	return submit_intent(NetProtocol.move(NetUnitIds.id_of(unit), cell))
 
-func _on_turn_changed(current_player_id: int) -> void:
-	"""Handle turn change"""
-	pass
 
-# Convenience methods for existing code integration
-func get_multiplayer_status() -> Dictionary:
-	"""Get multiplayer status (for compatibility with existing code)"""
-	var status = get_game_status()
+func request_use_move(unit, slot: int, aim_cell: Vector2i) -> bool:
+	return submit_intent(NetProtocol.use_move(NetUnitIds.id_of(unit), slot, aim_cell))
 
-	# Transform to match existing interface
-	return {
-		"is_active": status.get("is_active", false),
-		"game_mode": status.get("game_mode", "SINGLE_PLAYER"),
-		"local_player_id": status.get("current_player", -1),
-		"players": status.get("players", {}),
-		"network_status": status.get("network_status", "disconnected")
-	}
 
-func is_multiplayer_active() -> bool:
-	"""Check if multiplayer is active (for compatibility)"""
-	if not _game_manager:
+func request_wait(unit) -> bool:
+	return submit_intent(NetProtocol.wait(NetUnitIds.id_of(unit)))
+
+
+func request_end_turn() -> bool:
+	return submit_intent(NetProtocol.end_turn())
+
+
+func submit_intent(action: Dictionary) -> bool:
+	if not is_multiplayer_active():
 		return false
+	return _session().submit_intent(action)
 
-	var mode = get_current_game_mode()
-	return mode == GameManager.GameMode.NETWORK_MULTIPLAYER
 
-func is_local_player_turn() -> bool:
-	"""Check if it's local player's turn (for compatibility)"""
-	if not _game_manager:
-		return false
-	return is_my_turn()
+# ---------------------------------------------------------------------------
+# Match lifecycle
+# ---------------------------------------------------------------------------
 
-func submit_game_action(action_type: String, action_data: Dictionary) -> bool:
-	"""Submit game action (for compatibility)"""
-	if not _game_manager:
-		return false
-	return submit_action(action_type, action_data)
+func _on_match_started(config: Dictionary) -> void:
+	_match_finished = false
+	_rules = null
+	GameSettings.set_game_mode(GameSettings.GameMode.MULTIPLAYER)
+	GameSettings.set_selected_map(String(config.get("map_path", GameSettings.get_selected_map())))
+	GameSettings.set_turn_system(int(config.get("turn_system", TurnSystemBase.TurnSystemType.TRADITIONAL)))
+	GameSettings.player_count = 2
+	var slots: Dictionary = config.get("slots", {})
+	var names: Array[String] = []
+	for s in range(2):
+		names.append(String(slots.get(s, "Player %d" % (s + 1))))
+	GameSettings.player_names = names
+	# Every peer must build the IDENTICAL board: the map's authored rosters, not a
+	# locally picked squad; and identical rules toggles.
+	GameSettings.clear_selected_squad()
+	GameSettings.auto_end_turn = bool(config.get("auto_end_turn", true))
+	# Forced-control (mind-control) turns are planned by BotController; EASY rolls a
+	# private RNG, so pin the deterministic NORMAL planner for the match.
+	if _saved_ai_difficulty < 0:
+		_saved_ai_difficulty = GameSettings.ai_difficulty
+	GameSettings.ai_difficulty = 1
+	get_tree().change_scene_to_file(GAME_WORLD_SCENE)
+
+
+## Called by GameWorldManager once the battle scene has loaded the map, seated
+## both players and started the turn system (every peer).
+func on_network_world_ready() -> void:
+	if not is_multiplayer_active():
+		return
+	var seed_value := int(_session().get_match_config().get("seed", 1))
+	_rules = NetGameRules.new(
+		func(): return CombatServices.board(),
+		func(): return TurnSystemManager.get_active_turn_system() if TurnSystemManager.has_active_turn_system() else null,
+		seed_value)
+	_rules.assign_initial_ids()
+	_session().attach_game(_rules)
+
+
+func _on_action_applied(action: Dictionary, result: Dictionary) -> void:
+	var scene := get_tree().current_scene
+	var vm = scene.get_node_or_null("UnitVisualManager") if scene != null else null
+	if vm != null and vm.has_method("update_all_unit_visuals"):
+		vm.update_all_unit_visuals()
+	network_action_applied.emit(action, result)
+
+
+func _on_intent_rejected(action: Dictionary, reason: String) -> void:
+	push_warning("Network intent %s rejected by host: %s" % [NetProtocol.type_name(int(action.get("type", -1))), reason])
+	network_intent_rejected.emit(action, reason)
+
+
+func _on_game_state_changed(state) -> void:
+	if is_multiplayer_active() and state == PlayerManager.GameState.FINISHED:
+		_match_finished = true
+
+
+func _on_match_aborted(reason: String) -> void:
+	if _match_finished:
+		# The battle was already decided; keep the end screen up, just drop the link.
+		end_network_session()
+		return
+	var msg := "Opponent disconnected. The match has ended." if reason == "opponent_disconnected" \
+		else "Lost connection to the host. The match has ended."
+	end_network_session(msg)
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+
+
+func _on_desync_detected(seq: int, _local: int, _host: int) -> void:
+	if not is_multiplayer_active():
+		return
+	end_network_session("Game state went out of sync with the host (action %d). The match has ended." % seq)
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+
+
+## Close any network session and restore local play defaults. Idempotent; call
+## whenever leaving a network match (menu, game over, disconnect).
+func end_network_session(message: String = "") -> void:
+	if message != "":
+		pending_menu_message = message
+	var ns := _session()
+	if ns != null and ns.is_active():
+		ns.leave()
+	_rules = null
+	_match_finished = false
+	if GameSettings != null and GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
+		GameSettings.set_game_mode(GameSettings.GameMode.VERSUS)
+	if _saved_ai_difficulty >= 0 and GameSettings != null:
+		GameSettings.ai_difficulty = _saved_ai_difficulty
+	_saved_ai_difficulty = -1
+	if CombatServices != null:
+		CombatServices.match_rng = null
+
+
+## Return (and clear) the one-shot main-menu message.
+func consume_menu_message() -> String:
+	var m := pending_menu_message
+	pending_menu_message = ""
+	return m

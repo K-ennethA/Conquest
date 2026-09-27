@@ -21,16 +21,14 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-AutoClientDetector="*res://systems/AutoClientDetector.gd"
 GameEvents="*res://systems/game_events.gd"
 ResourceManager="*res://systems/resource_manager.gd"
 PlayerManager="*res://systems/player_manager.gd"
 TurnSystemManager="*res://systems/turn_system_manager.gd"
 GameSettings="*res://systems/game_settings.gd"
 BattleEffectsManager="*res://systems/battle_effects_manager.gd"
-GameModeManager="*res://systems/game_core/GameModeManager.gd"
-MultiplayerLauncher="*res://systems/multiplayer_launcher.gd"
 NetSession="*res://systems/net/NetSession.gd"
+GameModeManager="*res://systems/game_core/GameModeManager.gd"
 CombatServices="*res://game/combat/CombatServices.gd"
 AudioManager="*res://game/audio/AudioManager.gd"
 UnitAnimator="*res://game/visuals/UnitAnimator.gd"

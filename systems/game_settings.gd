@@ -12,7 +12,7 @@ signal settings_changed
 enum GameMode {
 	SINGLE_PLAYER,
 	VERSUS,
-	MULTIPLAYER  # For future expansion
+	MULTIPLAYER  # Network versus (a NetSession match); set/cleared by GameModeManager
 }
 
 ## How aggressively the camera chases live events (spawns, moves, attacks).
