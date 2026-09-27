@@ -247,7 +247,10 @@ func _refine_fit() -> void:
 				var q := a.lerp(b, t)
 				pts.append(Vector3(q.x, y, q.y))
 	var frame := HudSafeArea.board_frame(vp)
-	var avoid := HudSafeArea.board_avoid(vp)
+	# The bottom-corner cards may overlap the board's corners (as in Fire Emblem): only
+	# the top strip is kept clear. Avoiding the cards too pushed the camera so far back
+	# that units became tiny on every map.
+	var avoid: Array[Rect2] = []
 
 	# Bisection on distance: nearer = bigger board. _fit_at recentres and reports
 	# whether the board fits at that distance (monotonic enough to bisect).
@@ -267,6 +270,40 @@ func _refine_fit() -> void:
 			lo = mid
 	_dist_max_runtime = maxf(_dist_max_runtime, hi)
 	_fit_at(hi, pts, frame, avoid)
+	_cap_to_readable_zoom(vp)
+
+
+## Minimum on-screen size of one cell (logical px, 1280x720 base) at the initial fit.
+## A board that would need to be smaller to fit whole opens at this zoom instead and is
+## explored by scrolling / cursor-follow, like Fire Emblem.
+const MIN_CELL_PX := 58.0
+
+
+## If the whole-board fit left cells smaller than [constant MIN_CELL_PX], zoom in until
+## a cell at the board centre reaches that size (keeping the current focus point).
+func _cap_to_readable_zoom(vp: Vector2) -> void:
+	var cell := 2.0
+	var c := Vector3(_board_center.x, 0.0, _board_center.z)
+	if _cell_px(c, cell) >= MIN_CELL_PX * (vp.y / 720.0):
+		return
+	var want := MIN_CELL_PX * (vp.y / 720.0)
+	var lo := dist_min
+	var hi := _current_distance()
+	for _i in 16:
+		var mid := (lo + hi) * 0.5
+		_set_distance(mid)
+		if _cell_px(c, cell) >= want:
+			lo = mid
+		else:
+			hi = mid
+	_set_distance(lo)
+
+
+## Projected width in px of a [param size]-wide cell centred on [param at].
+func _cell_px(at: Vector3, size: float) -> float:
+	var a := unproject_position(at - Vector3(size * 0.5, 0.0, 0.0))
+	var b := unproject_position(at + Vector3(size * 0.5, 0.0, 0.0))
+	return a.distance_to(b)
 
 
 ## Headroom above the top floor for unit models + their HP bars / status pips.
