@@ -8,11 +8,9 @@ class_name NetProtocol
 ## shape. Kept tiny and dependency-free on purpose: everything that crosses the
 ## wire is a plain [Dictionary] of ints / Strings / Arrays.
 ##
-## CELLS: board cells are ALWAYS serialised through [method cell_to_wire] /
-## [method cell_from_wire] as a plain int Array ([x, y] today). When the board
-## grows floors (Vector3i cells with z = floor) only those two helpers change --
-## the wire already accepts [x, y, z] and ignores trailing components it does
-## not understand.
+## CELLS: board cells are Vector3i (col, row, floor) -- see docs/MULTI_FLOOR.md --
+## and are ALWAYS serialised through [method cell_to_wire] / [method cell_from_wire]
+## as a plain int Array [col, row, floor] (built on Cells.to_array / from_variant).
 
 ## Action types a client may request (an INTENT); the host validates and, if
 ## legal, broadcasts the same dictionary back as an ACCEPTED action (stamped
@@ -66,25 +64,22 @@ static func end_turn() -> Dictionary:
 
 # --- Cells -------------------------------------------------------------------
 
-## THE single cell serialiser. Vector2i -> [x, y]; Vector3i -> [x, y, z] (future
-## multi-floor cells). Anything else yields an empty array (never well-formed).
+## THE single cell serialiser: any cell (Vector3i (col, row, floor), or a legacy
+## Vector2i lifted to floor 0) -> [col, row, floor] via [Cells]. Anything
+## unreadable yields an empty array (never well-formed).
 static func cell_to_wire(cell) -> Array:
-	if cell is Vector2i:
-		return [cell.x, cell.y]
-	if cell is Vector3i:
-		return [cell.x, cell.y, cell.z]
-	if cell is Vector2:
-		return [int(round(cell.x)), int(round(cell.y))]
-	return []
+	var c: Vector3i = Cells.from_variant(cell)
+	if c == Cells.INVALID:
+		return []
+	return Cells.to_array(c)
 
 
-## THE single cell deserialiser: [x, y(, z...)] -> Vector2i (today's board cell).
-## Returns [param fallback] on a malformed value. When the board moves to
-## Vector3i this is the one place to start returning Vector3i(x, y, z).
-static func cell_from_wire(wire, fallback: Vector2i = Vector2i(-1, -1)) -> Vector2i:
+## THE single cell deserialiser: [col, row(, floor)] -> Vector3i (a missing floor
+## reads as 0). Returns [param fallback] on a malformed value.
+static func cell_from_wire(wire, fallback: Vector3i = Cells.INVALID) -> Vector3i:
 	if not is_cell(wire):
 		return fallback
-	return Vector2i(int(wire[0]), int(wire[1]))
+	return Cells.from_variant(wire)
 
 
 ## True when [param wire] is an array of 2..3 ints.

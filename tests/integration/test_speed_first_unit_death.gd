@@ -28,7 +28,7 @@ func after_each() -> void:
 	CharacterLibrary.clear_cache()
 
 
-func _spawn(map: Node3D, cell: Vector2i, owner: Player) -> Unit:
+func _spawn(map: Node3D, cell: Vector3i, owner: Player) -> Unit:
 	var unit: Unit = CHARACTER_UNIT_SCENE.instantiate()
 	unit.character_resource = CharacterLibrary.get_character(CHAR_ID)
 	unit.position = BoardAdapter.new(GRID, []).cell_to_world(cell)
@@ -42,9 +42,9 @@ func test_dead_queued_unit_leaves_the_queue() -> void:
 	add_child_autofree(map)
 	var p0 := Player.new(0, "A")
 	var p1 := Player.new(1, "B")
-	_spawn(map, Vector2i(0, 0), p0)
-	_spawn(map, Vector2i(1, 0), p0)
-	var victim := _spawn(map, Vector2i(4, 4), p1)
+	_spawn(map, Vector3i(0, 0, 0), p0)
+	_spawn(map, Vector3i(1, 0, 0), p0)
+	var victim := _spawn(map, Vector3i(4, 4, 0), p1)
 	var ts := SpeedFirstTurnSystem.new()
 	add_child_autofree(ts)
 	ts.register_player(p0)

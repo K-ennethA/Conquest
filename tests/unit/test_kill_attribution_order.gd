@@ -26,14 +26,14 @@ class MockUnit:
 
 class MockBoard:
 	var placements: Array = []
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -55,8 +55,8 @@ func test_damage_is_announced_before_the_target_can_die():
 	var caster := MockUnit.new(0, order)
 	var victim := MockUnit.new(1, order)
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(victim, Vector2i(0, 1))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(0, 1, 0))
 
 	var move := MoveResource.new()
 	move.accuracy = 1.0
@@ -73,8 +73,8 @@ func test_damage_is_announced_before_the_target_can_die():
 	dmg.scale = 0.0
 	move.effects = [dmg]
 
-	var aim := Vector2i(0, 1)
-	var ctx := MoveContext.new(caster, board, move, aim, [aim] as Array[Vector2i])
+	var aim := Vector3i(0, 1, 0)
+	var ctx := MoveContext.new(caster, board, move, aim, [aim] as Array[Vector3i])
 	ctx.event_bus = bus  # route the announcement through our mock bus
 	dmg.apply(ctx)
 

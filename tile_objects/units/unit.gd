@@ -39,7 +39,7 @@ var has_moved_this_turn: bool = false
 # default. Until configured, the getters fall back to the CharacterResource
 # defaults, so a unit spawned outside the map loader (e.g. in a test) still has a
 # sane stance. Bot/BossController read these every turn.
-var home_cell: Vector2i = Vector2i(-1, -1)
+var home_cell: Vector3i = Vector3i(-1, -1, 0)  # (col, row, floor), see Cells
 var _ai_configured: bool = false
 var _ai_stance: String = ""
 var _aggro_range: int = -1
@@ -688,7 +688,7 @@ func is_boss() -> bool:
 ## default); [param aggro] is the defensive wake distance (< 0 falls back);
 ## [param leash] is the max cells from home the unit may move (< 0 falls back,
 ## and a fallen-back-to-negative resolves to untethered).
-func configure_ai_behavior(p_home: Vector2i, stance: String = "", aggro: int = -1, leash: int = -1) -> void:
+func configure_ai_behavior(p_home: Vector3i, stance: String = "", aggro: int = -1, leash: int = -1) -> void:
 	home_cell = p_home
 	# "dormant" = a neutral camp: holds and does NOTHING until it is attacked (see
 	# provoked / take_damage), then behaves aggressively. Accepted here alongside the
@@ -703,7 +703,7 @@ func has_ai_behavior() -> bool:
 	return _ai_configured
 
 ## This unit's home / guard-post cell, or an invalid cell (-1,-1) if never set.
-func get_home_cell() -> Vector2i:
+func get_home_cell() -> Vector3i:
 	return home_cell
 
 func has_home_cell() -> bool:
@@ -789,7 +789,7 @@ func get_move(slot: int) -> MoveResource:
 		return character_resource.get_move(slot)
 	return null
 
-func perform_move(slot: int, aim_cell: Vector2i, board_adapter, rng: RandomNumberGenerator = null) -> Dictionary:
+func perform_move(slot: int, aim_cell: Vector3i, board_adapter, rng: RandomNumberGenerator = null) -> Dictionary:
 	"""Resolve the move in [param slot] aimed at [param aim_cell] against the
 	live board (a BoardAdapter). Delegates to MoveExecutor and returns its
 	structured result dictionary (see MoveExecutor.execute). [param rng] is the

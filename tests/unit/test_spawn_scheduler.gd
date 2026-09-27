@@ -56,20 +56,20 @@ class FakeMapLoader extends RefCounted:
 # cell exists); otherwise per-cell dictionaries drive individual answers.
 class FakeBoard extends RefCounted:
 	var all_occupied: bool = false
-	var occupied: Dictionary = {}   # Vector2i -> bool
-	var blocked: Dictionary = {}    # Vector2i -> bool
+	var occupied: Dictionary = {}   # Vector3i cell -> bool
+	var blocked: Dictionary = {}    # Vector3i cell -> bool
 	var bounds_min: Vector2i = Vector2i(0, 0)
 	var bounds_max: Vector2i = Vector2i(19, 19)
 
-	func is_occupied(cell: Vector2i) -> bool:
+	func is_occupied(cell: Vector3i) -> bool:
 		if all_occupied:
 			return true
 		return bool(occupied.get(cell, false))
 
-	func is_blocked(cell: Vector2i) -> bool:
+	func is_blocked(cell: Vector3i) -> bool:
 		return bool(blocked.get(cell, false))
 
-	func in_bounds(cell: Vector2i) -> bool:
+	func in_bounds(cell: Vector3i) -> bool:
 		return (cell.x >= bounds_min.x and cell.x <= bounds_max.x
 			and cell.y >= bounds_min.y and cell.y <= bounds_max.y)
 
@@ -196,7 +196,7 @@ func test_endless_spills_to_a_free_neighbour_when_home_is_permanently_occupied()
 		"respawn_interval": 1,
 	})
 	var board := FakeBoard.new()
-	board.occupied[home] = true  # home occupant that never leaves
+	board.occupied[Cells.lift(home)] = true  # home occupant that never leaves
 	_manager._board_override = board
 	_manager.initialize(_loader, map)
 
@@ -205,7 +205,7 @@ func test_endless_spills_to_a_free_neighbour_when_home_is_permanently_occupied()
 	assert_eq(_loader.spawn_calls, 1, "Endless spills to a free cell instead of deferring forever")
 	var placed: Vector2i = _loader.spawn_positions[0]
 	assert_ne(placed, home, "the spilled unit must NOT land on the occupied home cell")
-	assert_true(board.in_bounds(placed) and not board.is_occupied(placed),
+	assert_true(board.in_bounds(Cells.lift(placed)) and not board.is_occupied(Cells.lift(placed)),
 		"the spilled unit lands on a free, in-bounds neighbour")
 	var chebyshev: int = maxi(absi(placed.x - home.x), absi(placed.y - home.y))
 	assert_true(chebyshev >= 1 and chebyshev <= SpawnManager.SPILL_RADIUS,
@@ -238,12 +238,12 @@ func test_respawn_spills_when_home_is_blocked_on_the_due_turn() -> void:
 		"respawn_interval": 1,
 	})
 	var board := FakeBoard.new()
-	board.occupied[home] = true
+	board.occupied[Cells.lift(home)] = true
 	_manager._board_override = board
 	_manager.initialize(_loader, map)
 
 	var seed := FakeUnit.new()
-	_manager.track_seed_unit(home, 0, seed)
+	_manager.track_seed_unit(Cells.lift(home), 0, seed)
 	seed.kill()
 
 	_manager.process_turn()  # interval 1 elapsed -> replacement due, home blocked
@@ -263,7 +263,7 @@ func test_respawn_stops_after_max_spawns() -> void:
 
 	# Adopt the load-time seed (in the live game this comes off the board).
 	var seed := FakeUnit.new()
-	assert_true(_manager.track_seed_unit(Vector2i(3, 3), 0, seed),
+	assert_true(_manager.track_seed_unit(Vector3i(3, 3, 0), 0, seed),
 		"scheduler should adopt the seed unit for the Respawn point")
 
 	# Kill each unit and let the interval elapse; expect exactly two respawns, no more.
@@ -286,7 +286,7 @@ func test_respawn_waits_the_full_interval_after_death() -> void:
 	_manager.initialize(_loader, map)
 
 	var seed := FakeUnit.new()
-	_manager.track_seed_unit(Vector2i(4, 4), 0, seed)
+	_manager.track_seed_unit(Vector3i(4, 4, 0), 0, seed)
 
 	# Seed alive: no respawn no matter how long we wait.
 	_tick(4)
@@ -310,7 +310,7 @@ func test_max_spawns_one_respawn_never_produces_a_second() -> void:
 	_manager.initialize(_loader, map)
 
 	var seed := FakeUnit.new()
-	_manager.track_seed_unit(Vector2i(0, 4), 0, seed)
+	_manager.track_seed_unit(Vector3i(0, 4, 0), 0, seed)
 
 	seed.kill()
 	_tick(5)

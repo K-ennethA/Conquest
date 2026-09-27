@@ -90,15 +90,15 @@ func _strike(id: StringName, accuracy: float, max_range: int) -> MoveResource:
 ## Standard layout: slot 0 owns a Fighter at (0,0) and a Fighter at (4,0);
 ## slot 1 owns a Fighter at (0,1) (adjacent to 0:0) and one at (4,4).
 const LAYOUT := [
-	{"id": FIGHTER_ID, "cell": Vector2i(0, 0), "owner": 0},
-	{"id": FIGHTER_ID, "cell": Vector2i(4, 0), "owner": 0},
-	{"id": FIGHTER_ID, "cell": Vector2i(0, 1), "owner": 1},
-	{"id": FIGHTER_ID, "cell": Vector2i(4, 4), "owner": 1},
+	{"id": FIGHTER_ID, "cell": Vector3i(0, 0, 0), "owner": 0},
+	{"id": FIGHTER_ID, "cell": Vector3i(4, 0, 0), "owner": 0},
+	{"id": FIGHTER_ID, "cell": Vector3i(0, 1, 0), "owner": 1},
+	{"id": FIGHTER_ID, "cell": Vector3i(4, 4, 0), "owner": 1},
 ]
 
 
 ## Build one peer's copy of the game under its peer root.
-func _build_world(parent: Node, layout: Array, speed_first: bool = false, seed_value: int = SEED) -> Dictionary:
+func _build_world(parent: Node, layout: Array, speed_first: bool = false, seed_value: int = SEED, configure: Callable = Callable()) -> Dictionary:
 	var world := Node3D.new()
 	world.name = "World"
 	parent.add_child(world)
@@ -118,6 +118,8 @@ func _build_world(parent: Node, layout: Array, speed_first: bool = false, seed_v
 		ts.register_player(p)
 	ts.start_turn_system()
 	var board := BoardAdapter.new(GRID, map)
+	if configure.is_valid():
+		configure.call(board)
 	var rules := NetGameRules.new(func(): return board, func(): return ts, seed_value)
 	rules.assign_initial_ids()
 	return {"world": world, "map": map, "players": players, "ts": ts, "board": board, "rules": rules}
@@ -140,7 +142,7 @@ func _cr() -> NetGameRules:
 
 
 ## Connect, ready up, start, and attach a game world on both peers.
-func _start_match(layout: Array = LAYOUT, speed_first: bool = false) -> bool:
+func _start_match(layout: Array = LAYOUT, speed_first: bool = false, configure: Callable = Callable()) -> bool:
 	if _hs().host_game("Host", _port) != OK:
 		return false
 	_cs().join_game("127.0.0.1", "Client", _port)
@@ -153,8 +155,8 @@ func _start_match(layout: Array = LAYOUT, speed_first: bool = false) -> bool:
 	_hs().start_match(SEED)
 	if not await H.wait_until(get_tree(), func(): return _cs().is_in_match()):
 		return false
-	_hw = _build_world(_host["root"], layout, speed_first, int(_hs().get_match_config()["seed"]))
-	_cw = _build_world(_client["root"], layout, speed_first, int(_cs().get_match_config()["seed"]))
+	_hw = _build_world(_host["root"], layout, speed_first, int(_hs().get_match_config()["seed"]), configure)
+	_cw = _build_world(_client["root"], layout, speed_first, int(_cs().get_match_config()["seed"]), configure)
 	# Let deferred turn-system kickoff (Speed First) settle before attaching.
 	await H.wait_frames(get_tree(), 2)
 	_hs().attach_game(_hr())
@@ -188,9 +190,9 @@ func _expect_warning(text: String) -> int:
 	return n
 
 
-func _cell(world: Dictionary, unit_id: String) -> Vector2i:
+func _cell(world: Dictionary, unit_id: String) -> Vector3i:
 	var u = world["rules"].find_unit(unit_id)
-	return world["board"].cell_of(u) if u != null else Vector2i(-99, -99)
+	return world["board"].cell_of(u) if u != null else Vector3i(-99, -99, 0)
 
 
 func _hp(world: Dictionary, unit_id: String) -> int:
@@ -214,31 +216,31 @@ func test_unit_ids_are_stable_and_unique_on_mirror_layout() -> void:
 func test_out_of_turn_intent_is_rejected() -> void:
 	assert_true(await _start_match(), "match started")
 	assert_eq(_hr().current_turn_slot(), 0, "slot 0 opens")
-	var reason := await _submit(_cs(), NetProtocol.move("1:1", Vector2i(3, 4)))
+	var reason := await _submit(_cs(), NetProtocol.move("1:1", Vector3i(3, 4, 0)))
 	assert_eq(reason, "not_your_turn", "client cannot act on the host's turn")
-	assert_eq(_cell(_hw, "1:1"), Vector2i(4, 4), "host state untouched")
-	assert_eq(_cell(_cw, "1:1"), Vector2i(4, 4), "client state untouched")
+	assert_eq(_cell(_hw, "1:1"), Vector3i(4, 4, 0), "host state untouched")
+	assert_eq(_cell(_cw, "1:1"), Vector3i(4, 4, 0), "client state untouched")
 
 
 func test_foreign_unit_is_rejected() -> void:
 	assert_true(await _start_match(), "match started")
-	var reason := await _submit(_hs(), NetProtocol.move("1:1", Vector2i(3, 4)))
+	var reason := await _submit(_hs(), NetProtocol.move("1:1", Vector3i(3, 4, 0)))
 	assert_eq(reason, "not_your_unit", "host cannot command the client's unit")
-	assert_eq(_cell(_cw, "1:1"), Vector2i(4, 4), "unit did not move")
+	assert_eq(_cell(_cw, "1:1"), Vector3i(4, 4, 0), "unit did not move")
 
 
 func test_illegal_destination_is_rejected() -> void:
 	assert_true(await _start_match(), "match started")
-	assert_eq(await _submit(_hs(), NetProtocol.move("0:1", Vector2i(0, 4))), "illegal_destination",
+	assert_eq(await _submit(_hs(), NetProtocol.move("0:1", Vector3i(0, 4, 0))), "illegal_destination",
 		"beyond movement range")
-	assert_eq(await _submit(_hs(), NetProtocol.move("0:0", Vector2i(0, 1))), "illegal_destination",
+	assert_eq(await _submit(_hs(), NetProtocol.move("0:0", Vector3i(0, 1, 0))), "illegal_destination",
 		"occupied by an enemy")
-	assert_eq(await _submit(_hs(), NetProtocol.use_move("0:1", 0, Vector2i(4, 4))), "illegal_target",
+	assert_eq(await _submit(_hs(), NetProtocol.use_move("0:1", 0, Vector3i(4, 4, 0))), "illegal_target",
 		"strike out of range")
-	assert_eq(await _submit(_hs(), NetProtocol.use_move("0:0", 3, Vector2i(0, 1))), "no_move_in_slot",
+	assert_eq(await _submit(_hs(), NetProtocol.use_move("0:0", 3, Vector3i(0, 1, 0))), "no_move_in_slot",
 		"empty move slot")
-	assert_eq(_cell(_hw, "0:1"), Vector2i(4, 0), "nothing moved on the host")
-	assert_eq(_cell(_cw, "0:1"), Vector2i(4, 0), "nothing moved on the client")
+	assert_eq(_cell(_hw, "0:1"), Vector3i(4, 0, 0), "nothing moved on the host")
+	assert_eq(_cell(_cw, "0:1"), Vector3i(4, 0, 0), "nothing moved on the client")
 
 
 func test_malformed_intent_never_reaches_the_host_queue() -> void:
@@ -252,12 +254,12 @@ func test_accepted_move_is_applied_identically() -> void:
 	assert_true(await _start_match(), "match started")
 	var desyncs := []
 	_cs().desync_detected.connect(func(s, _a, _b): desyncs.append(s))
-	assert_eq(await _submit(_hs(), NetProtocol.move("0:1", Vector2i(3, 1))), "", "legal move accepted")
-	assert_eq(_cell(_hw, "0:1"), Vector2i(3, 1), "host moved the unit")
-	assert_eq(_cell(_cw, "0:1"), Vector2i(3, 1), "client moved the same unit to the same cell")
+	assert_eq(await _submit(_hs(), NetProtocol.move("0:1", Vector3i(3, 1, 0))), "", "legal move accepted")
+	assert_eq(_cell(_hw, "0:1"), Vector3i(3, 1, 0), "host moved the unit")
+	assert_eq(_cell(_cw, "0:1"), Vector3i(3, 1, 0), "client moved the same unit to the same cell")
 	assert_true(_hr().find_unit("0:1").has_moved_this_turn, "move consumed on host")
 	assert_true(_cr().find_unit("0:1").has_moved_this_turn, "move consumed on client")
-	assert_eq(await _submit(_hs(), NetProtocol.move("0:1", Vector2i(2, 1))), "unit_cannot_move",
+	assert_eq(await _submit(_hs(), NetProtocol.move("0:1", Vector3i(2, 1, 0))), "unit_cannot_move",
 		"a unit moves once per turn")
 	assert_eq(_hr().state_digest(), _cr().state_digest(), "digests agree")
 	assert_eq(desyncs, [], "no desync reported")
@@ -268,10 +270,10 @@ func test_attack_applied_identically_and_turn_passes() -> void:
 	var turns := []
 	_cs().turn_changed.connect(func(slot): turns.append(slot))
 	var hp_before := _hp(_cw, "1:0")
-	assert_eq(await _submit(_hs(), NetProtocol.use_move("0:0", 0, Vector2i(0, 1))), "", "sure strike accepted")
+	assert_eq(await _submit(_hs(), NetProtocol.use_move("0:0", 0, Vector3i(0, 1, 0))), "", "sure strike accepted")
 	assert_lt(_hp(_hw, "1:0"), hp_before, "target damaged on host")
 	assert_eq(_hp(_cw, "1:0"), _hp(_hw, "1:0"), "identical HP on client")
-	assert_eq(await _submit(_hs(), NetProtocol.use_move("0:0", 0, Vector2i(0, 1))), "unit_cannot_act",
+	assert_eq(await _submit(_hs(), NetProtocol.use_move("0:0", 0, Vector3i(0, 1, 0))), "unit_cannot_act",
 		"a unit acts once per turn")
 	# Last slot-0 unit waits -> Traditional auto-ends the turn on both peers.
 	assert_eq(await _submit(_hs(), NetProtocol.wait("0:1")), "", "wait accepted")
@@ -285,9 +287,9 @@ func test_attack_applied_identically_and_turn_passes() -> void:
 	assert_true(turns.has(1), "turn_changed(1) emitted on client")
 	# Now the host is the one out of turn, and the client may act.
 	assert_eq(await _submit(_hs(), NetProtocol.end_turn()), "not_your_turn", "host out of turn")
-	assert_eq(await _submit(_cs(), NetProtocol.move("1:1", Vector2i(3, 3))), "", "client move accepted")
-	assert_eq(_cell(_hw, "1:1"), Vector2i(3, 3), "client's move applied on host")
-	assert_eq(_cell(_cw, "1:1"), Vector2i(3, 3), "client's move applied on client")
+	assert_eq(await _submit(_cs(), NetProtocol.move("1:1", Vector3i(3, 3, 0))), "", "client move accepted")
+	assert_eq(_cell(_hw, "1:1"), Vector3i(3, 3, 0), "client's move applied on host")
+	assert_eq(_cell(_cw, "1:1"), Vector3i(3, 3, 0), "client's move applied on client")
 
 
 func test_end_turn_round_trip() -> void:
@@ -309,7 +311,7 @@ func test_seeded_combat_is_identical_across_peers() -> void:
 	# Alternate turns; each turn slot 0's (0:1 at 4,0) coin-strikes 1:1 at (4,4)...
 	# out of range 4? (4,0)->(4,4) is distance 4 = max range: legal.
 	for i in range(6):
-		assert_eq(await _submit(_hs(), NetProtocol.use_move("0:1", 1, Vector2i(4, 4))), "", "coin strike %d" % i)
+		assert_eq(await _submit(_hs(), NetProtocol.use_move("0:1", 1, Vector3i(4, 4, 0))), "", "coin strike %d" % i)
 		assert_eq(_hp(_hw, "1:1"), _hp(_cw, "1:1"), "same HP after coin strike %d" % i)
 		assert_eq(await _submit(_hs(), NetProtocol.end_turn()), "", "host ends turn %d" % i)
 		await H.wait_until(get_tree(), func(): return _cs().current_turn_slot() == 1)
@@ -329,7 +331,7 @@ func test_rules_rng_is_a_pure_function_of_seed_and_seq() -> void:
 		for key in ["a", "b", "c"]:
 			var w: Dictionary = {"a": a, "b": b, "c": c}[key]
 			var before := _hp(w, "1:0")
-			var act := NetProtocol.use_move("0:0", 1, Vector2i(0, 1))
+			var act := NetProtocol.use_move("0:0", 1, Vector3i(0, 1, 0))
 			act[NetProtocol.KEY_SEQ] = seq
 			w["rules"].apply_action(act)
 			hits[key].append(_hp(w, "1:0") < before)
@@ -347,7 +349,7 @@ func test_desync_is_detected() -> void:
 	_cs().desync_detected.connect(func(s, _a, _b): desyncs.append(s))
 	# Corrupt the CLIENT's copy behind the protocol's back.
 	_cr().find_unit("1:1").take_damage(7)
-	assert_eq(await _submit(_hs(), NetProtocol.move("0:1", Vector2i(3, 0))), "", "move accepted")
+	assert_eq(await _submit(_hs(), NetProtocol.move("0:1", Vector3i(3, 0, 0))), "", "move accepted")
 	await H.wait_until(get_tree(), func(): return desyncs.size() > 0)
 	assert_eq(desyncs.size(), 1, "client flagged the divergence at the next checkpoint")
 	assert_eq(_expect_warning("DESYNC"), 1, "desync warned once")
@@ -356,15 +358,15 @@ func test_desync_is_detected() -> void:
 func test_speed_first_turn_sync() -> void:
 	# Slowpoke (speed 5) vs Fighter (speed 12): the client's Fighter acts first.
 	var layout := [
-		{"id": SLOW_ID, "cell": Vector2i(0, 0), "owner": 0},
-		{"id": FIGHTER_ID, "cell": Vector2i(4, 4), "owner": 1},
+		{"id": SLOW_ID, "cell": Vector3i(0, 0, 0), "owner": 0},
+		{"id": FIGHTER_ID, "cell": Vector3i(4, 4, 0), "owner": 1},
 	]
 	assert_true(await _start_match(layout, true), "match started")
 	await H.wait_until(get_tree(), func(): return _cs().current_turn_slot() == 1)
 	assert_eq(_hr().current_turn_slot(), 1, "fastest unit (client's) acts first on host")
 	assert_eq(_cr().current_turn_slot(), 1, "... and on client")
 	assert_eq(await _submit(_hs(), NetProtocol.wait("0:0")), "not_your_turn", "host must wait its turn")
-	assert_eq(await _submit(_cs(), NetProtocol.move("1:0", Vector2i(4, 2))), "", "client moves")
+	assert_eq(await _submit(_cs(), NetProtocol.move("1:0", Vector3i(4, 2, 0))), "", "client moves")
 	assert_eq(await _submit(_cs(), NetProtocol.wait("1:0")), "", "client waits -> next unit")
 	await H.wait_until(get_tree(), func(): return _hs().current_turn_slot() == 0)
 	assert_eq(_hr().current_turn_slot(), 0, "host's unit is up on host")
@@ -390,3 +392,31 @@ func test_host_disconnect_mid_match_aborts_on_client() -> void:
 	await H.wait_until(get_tree(), func(): return aborted.size() > 0)
 	assert_eq(aborted, ["host_disconnected"], "client told the host left")
 	assert_false(_cs().is_active(), "client session closed")
+
+
+## Multi-floor: a floor-1 walkway over (1..3, 0) reached by a stair link
+## (4,0,0) <-> (3,0,1). Applied identically to both peers' boards.
+static func _add_walkway(board: BoardAdapter) -> void:
+	var present := {}
+	for x in range(1, 4):
+		present[Vector3i(x, 0, 1)] = true
+	board.set_present_cells(present)
+	board.set_links([{"from": Vector3i(4, 0, 0), "to": Vector3i(3, 0, 1)}])
+
+
+func test_move_across_floors_via_link() -> void:
+	assert_true(await _start_match(LAYOUT, false, _add_walkway), "match started")
+	# Air next to the walkway is not a floor: rejected by the floor-aware resolver.
+	assert_eq(await _submit(_hs(), NetProtocol.move("0:1", Vector3i(2, 1, 1))), "illegal_destination",
+		"cannot stop in air on floor 1")
+	# Up the stairs (link hop) and along the walkway: [4,0,0] -> [3,0,1] -> [2,0,1].
+	assert_eq(await _submit(_hs(), NetProtocol.move("0:1", Vector3i(2, 0, 1))), "", "cross-floor move accepted")
+	assert_eq(_cell(_hw, "0:1"), Vector3i(2, 0, 1), "host: unit on floor 1")
+	assert_eq(_cell(_cw, "0:1"), Vector3i(2, 0, 1), "client: same unit, same floor")
+	var hu: Unit = _hr().find_unit("0:1")
+	var cu: Unit = _cr().find_unit("0:1")
+	assert_almost_eq(hu.position.y, cu.position.y, 0.001, "same world height on both peers")
+	assert_gt(hu.position.y, Cells.floor_y(1) - 0.5, "unit was lifted onto the upper floor")
+	# The ground cell under the walkway is a different cell: still free.
+	assert_true(_hw["board"].units_at(Vector3i(2, 0, 0)).is_empty(), "ground below the bridge unoccupied")
+	assert_eq(_hr().state_digest(), _cr().state_digest(), "digests (which include the floor) agree")

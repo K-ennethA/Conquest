@@ -24,7 +24,7 @@ class StubUnit:
 	var hp: int
 	# AI behaviour contract (mirrors the live Unit getters plan() reads).
 	var stance: String = "aggressive"
-	var home: Vector2i = Vector2i(-1, -1)
+	var home: Vector3i = Vector3i(-1, -1, 0)
 	var aggro: int = 0
 	var leash: int = -1
 
@@ -52,7 +52,7 @@ class StubUnit:
 	func is_defensive() -> bool:
 		return stance == "defensive"
 
-	func get_home_cell() -> Vector2i:
+	func get_home_cell() -> Vector3i:
 		return home
 
 	func has_home_cell() -> bool:
@@ -71,16 +71,16 @@ class StubUnit:
 class MockBoard:
 	var placements: Array = []  # { unit, cell }
 
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
 
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
+		return Vector3i(-999, -999, 0)
 
-	func units_at(cell: Vector2i) -> Array:
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -102,12 +102,12 @@ class MockBoard:
 
 # --- Small helpers ----------------------------------------------------------
 
-func _manhattan(a: Vector2i, b: Vector2i) -> int:
+func _manhattan(a: Vector3i, b: Vector3i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)
 
 
 func _cells(list: Array) -> Array:
-	# Identity pass-through -- documents intent at call sites (an Array[Vector2i]).
+	# Identity pass-through -- documents intent at call sites (an Array[Vector3i]).
 	return list
 
 
@@ -119,15 +119,15 @@ func test_aggressive_untethered_advances_toward_distant_hostile() -> void:
 	var actor := StubUnit.new(0, { "attack": 10 })  # aggressive, no home, leash -1
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(5, 0))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(5, 0, 0))
 
-	var reachable := _cells([Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)])
+	var reachable := _cells([Vector3i(1, 0, 0), Vector3i(2, 0, 0), Vector3i(3, 0, 0)])
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [MoveLibrary.basic_strike()], board, reachable)
 
 	assert_eq(decision["action"], BotController.ActionType.STEP, "advances when nothing in range")
-	assert_eq(decision["dest_cell"], Vector2i(3, 0), "closes its whole move range toward the enemy")
+	assert_eq(decision["dest_cell"], Vector3i(3, 0, 0), "closes its whole move range toward the enemy")
 
 
 # --- Defensive + aggro 0: turret never chases -------------------------------
@@ -138,14 +138,14 @@ func test_defensive_aggro_zero_waits_on_unattackable_hostile() -> void:
 	# advance.
 	var actor := StubUnit.new(0, { "attack": 10 })
 	actor.stance = "defensive"
-	actor.home = Vector2i(0, 0)
+	actor.home = Vector3i(0, 0, 0)
 	actor.aggro = 0
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(5, 0))  # dist 5 from home; strike range is 1
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(5, 0, 0))  # dist 5 from home; strike range is 1
 
-	var reachable := _cells([Vector2i(1, 0), Vector2i(2, 0)])  # nearest is dist 3 from enemy
+	var reachable := _cells([Vector3i(1, 0, 0), Vector3i(2, 0, 0)])  # nearest is dist 3 from enemy
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [MoveLibrary.basic_strike()], board, reachable)
 
@@ -160,10 +160,10 @@ func test_defensive_aggro_range_wakes_within_and_holds_beyond() -> void:
 	var board := MockBoard.new()
 	var actor := StubUnit.new(0, { "attack": 10 })
 	actor.stance = "defensive"
-	actor.home = Vector2i(0, 0)
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(5, 0))  # dist 5 from home; not attackable from reachable
-	var reachable := _cells([Vector2i(1, 0), Vector2i(2, 0)])
+	actor.home = Vector3i(0, 0, 0)
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(5, 0, 0))  # dist 5 from home; not attackable from reachable
+	var reachable := _cells([Vector3i(1, 0, 0), Vector3i(2, 0, 0)])
 	var strike := [MoveLibrary.basic_strike()]
 
 	# Within aggro (5 <= 6): the unit wakes and advances.
@@ -171,7 +171,7 @@ func test_defensive_aggro_range_wakes_within_and_holds_beyond() -> void:
 	var bot := BotController.new()
 	var woke := bot.plan(actor, strike, board, reachable)
 	assert_eq(woke["action"], BotController.ActionType.STEP, "hostile inside aggro range wakes the unit")
-	assert_eq(woke["dest_cell"], Vector2i(2, 0), "it advances toward the hostile once woken")
+	assert_eq(woke["dest_cell"], Vector3i(2, 0, 0), "it advances toward the hostile once woken")
 
 	# Beyond aggro (5 > 4): the unit holds.
 	actor.aggro = 4
@@ -186,23 +186,23 @@ func test_leashed_advance_never_leaves_leash_radius() -> void:
 	# Aggressive but anchored: a far hostile would pull an untethered unit all the
 	# way out, but the leash caps every stop at radius 2 from home.
 	var actor := StubUnit.new(0, { "attack": 10 })
-	actor.home = Vector2i(0, 0)
+	actor.home = Vector3i(0, 0, 0)
 	actor.leash = 2  # aggressive stance, tethered to 2 cells from home
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(9, 0))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(9, 0, 0))
 
 	# Movement range 4 could reach (4,0), but only (1,0)/(2,0) are inside the leash.
-	var reachable := _cells([Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0), Vector2i(4, 0)])
+	var reachable := _cells([Vector3i(1, 0, 0), Vector3i(2, 0, 0), Vector3i(3, 0, 0), Vector3i(4, 0, 0)])
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [MoveLibrary.basic_strike()], board, reachable)
 
 	assert_eq(decision["action"], BotController.ActionType.STEP, "still advances, just not past the tether")
-	var dest: Vector2i = decision["dest_cell"]
+	var dest: Vector3i = decision["dest_cell"]
 	assert_true(_manhattan(dest, actor.home) <= 2,
 		"the chosen destination (%s) stays within the leash radius of home" % dest)
-	assert_eq(dest, Vector2i(2, 0), "picks the leashed cell closest to the enemy, not a farther reachable one")
+	assert_eq(dest, Vector3i(2, 0, 0), "picks the leashed cell closest to the enemy, not a farther reachable one")
 
 
 # --- Defensive turret still ATTACKS from a leashed stand cell ----------------
@@ -212,15 +212,15 @@ func test_defensive_turret_attacks_reachable_hostile() -> void:
 	# stance: a hostile it can strike from a leashed stand cell is hit, not ignored.
 	var actor := StubUnit.new(0, { "attack": 10 })
 	actor.stance = "defensive"
-	actor.home = Vector2i(0, 0)
+	actor.home = Vector3i(0, 0, 0)
 	actor.aggro = 0
 	actor.leash = 1
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))  # adjacent -> strike range 1 from origin
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(1, 0, 0))  # adjacent -> strike range 1 from origin
 
-	var reachable := _cells([Vector2i(0, 1)])
+	var reachable := _cells([Vector3i(0, 1, 0)])
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [MoveLibrary.basic_strike()], board, reachable)
 
@@ -235,19 +235,19 @@ func test_boss_inherits_leash_filter() -> void:
 	# leash filter must apply to it unchanged. A leashed boss advancing on a far
 	# hostile must still stop inside its tether.
 	var boss := StubUnit.new(0, { "attack": 10, "health": 400 })
-	boss.home = Vector2i(0, 0)
+	boss.home = Vector3i(0, 0, 0)
 	boss.leash = 2
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(boss, Vector2i(0, 0))
-	board.place(enemy, Vector2i(9, 0))
+	board.place(boss, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(9, 0, 0))
 
-	var reachable := _cells([Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0), Vector2i(4, 0)])
+	var reachable := _cells([Vector3i(1, 0, 0), Vector3i(2, 0, 0), Vector3i(3, 0, 0), Vector3i(4, 0, 0)])
 	var boss_ai := BossController.new()
 	var decision := boss_ai.plan(boss, [MoveLibrary.basic_strike()], board, reachable)
 
 	assert_eq(decision["action"], BotController.ActionType.STEP, "boss advances")
-	var dest: Vector2i = decision["dest_cell"]
+	var dest: Vector3i = decision["dest_cell"]
 	assert_true(_manhattan(dest, boss.home) <= 2,
 		"the boss's destination (%s) never leaves its leash radius" % dest)
 

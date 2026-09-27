@@ -11,7 +11,7 @@ network handlers, `MultiplayerLauncher`, `AutoClientDetector`, the
 | File | Role |
 |---|---|
 | `NetSession.gd` (class `NetSessionNode`, autoload `NetSession`) | Transport, lobby, peer→slot seating, intent queue, action ordering (seq), checkpoints, disconnects. Knows nothing about units. |
-| `NetProtocol.gd` | Wire format: action types (`MOVE`, `USE_MOVE`, `WAIT`, `END_TURN`), builders, shape validation, and THE cell (de)serialiser (`cell_to_wire` / `cell_from_wire`, `[x, y]` today, `[x, y, z]` ready for floors). |
+| `NetProtocol.gd` | Wire format: action types (`MOVE`, `USE_MOVE`, `WAIT`, `END_TURN`), builders, shape validation, and THE cell (de)serialiser (`cell_to_wire` / `cell_from_wire`: `[col, row, floor]` via `Cells.to_array` / `from_variant`, see docs/MULTI_FLOOR.md). |
 | `NetGameRules.gd` | Game rules for a match: host-side `validate_intent` and the ONE deterministic `apply_action` every peer runs; `state_digest` for desync detection. Works on any board / turn system handed to it (live game or test fixtures). |
 | `NetUnitIds.gd` | Stable unit ids (`"<slot>:<n>"` at match start, `"<slot>:s<k>"` for mid-match spawns) stored as `net_id` meta; `find(board, id)`. |
 | `systems/game_core/GameModeManager.gd` (autoload) | Live-game glue: applies the host's match config to `GameSettings`, loads the battle, builds `NetGameRules` over `CombatServices.board()` + the active turn system, exposes `request_move / request_use_move / request_wait / request_end_turn` to the UI, handles disconnect/desync → main menu, and `end_network_session()` which restores local play. |

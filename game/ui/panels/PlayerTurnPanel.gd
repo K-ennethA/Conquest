@@ -167,13 +167,16 @@ func _update_display() -> void:
 		else:
 			can_end_turn = active_player and active_player.can_end_turn()
 		
+		var local_human := _current_player_is_local_human()
 		# Network match: only the seat whose turn it is may end it.
 		if GameModeManager and GameModeManager.is_multiplayer_active() and not GameModeManager.is_my_turn():
-			can_end_turn = false
-		end_turn_button.disabled = not can_end_turn
+			local_human = false
+		end_turn_button.disabled = not (can_end_turn and local_human)
 		
-		if can_end_turn:
-			end_turn_button.text = ("End Enemy Turn" if active_player.is_ai else "End Your Turn")
+		if not local_human:
+			end_turn_button.text = ("Enemy Turn" if active_player.is_ai else "Opponent's Turn")
+		elif can_end_turn:
+			end_turn_button.text = "End Your Turn"
 		else:
 			end_turn_button.text = "Cannot End Turn"
 		
@@ -187,8 +190,29 @@ func _update_display() -> void:
 		end_turn_button.disabled = true
 		visible = true
 
+## True when the player whose turn it is may be ended from THIS screen: a human in
+## single-player / hotseat (never the AI's turn), or this client's own slot in
+## multiplayer. Mirrors UnitActionsPanel._player_is_human -- the button and the
+## end_turn shortcut both bypass the disabled-button check, so gate here too.
+func _current_player_is_local_human() -> bool:
+	var player: Player = null
+	if TurnSystemManager and TurnSystemManager.has_active_turn_system():
+		player = TurnSystemManager.get_active_turn_system().get_current_active_player()
+	if player == null and PlayerManager:
+		player = PlayerManager.get_current_player()
+	if player == null:
+		return false
+	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
+		var local_id_raw = GameModeManager.get_local_player_id() if GameModeManager else -1
+		var local_id = int(local_id_raw) if local_id_raw is String else local_id_raw
+		return int(player.player_id) == local_id
+	return not player.is_ai
+
 func _on_end_turn_pressed() -> void:
 	"""Handle End Turn button press - ends the entire player's turn"""
+	# Never end the AI's (or, online, the other client's) turn from this panel.
+	if not _current_player_is_local_human():
+		return
 	var turn_ended = false
 
 	# Network match: ending the turn is a host-validated intent, never a local change.
@@ -218,13 +242,11 @@ func get_current_player() -> Player:
 	"""Get the currently displayed player"""
 	return current_player
 
-# Debug method for testing
 func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
+	# End Turn shortcut (named action, default P / gamepad Back). Handled here ONLY
+	# (not also in UnitActionsPanel) so one press ends exactly one turn.
+	if InputActions.gameplay_input_blocked(get_tree()):
 		return
-	
-	if event is InputEventKey:
-		match event.keycode:
-			KEY_P:
-				if current_player:
-					_on_end_turn_pressed()
+	if event.is_action_pressed(InputActions.END_TURN) and current_player:
+		_on_end_turn_pressed()
+		get_viewport().set_input_as_handled()

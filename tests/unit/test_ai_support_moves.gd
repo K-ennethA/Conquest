@@ -38,7 +38,7 @@ class StubUnit:
 	var stats: Dictionary
 	var hp: int
 	var stance: String = "aggressive"
-	var home: Vector2i = Vector2i(-1, -1)
+	var home: Vector3i = Vector3i(-1, -1, 0)
 	var aggro: int = 0
 	var leash: int = -1
 	var moveset_controller = null  # a StubMoveset, or null for "everything ready"
@@ -63,7 +63,7 @@ class StubUnit:
 	func is_defensive() -> bool:
 		return stance == "defensive"
 
-	func get_home_cell() -> Vector2i:
+	func get_home_cell() -> Vector3i:
 		return home
 
 	func has_home_cell() -> bool:
@@ -85,16 +85,16 @@ class StubUnit:
 class MockBoard:
 	var placements: Array = []  # { unit, cell }
 
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
 
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
+		return Vector3i(-999, -999, 0)
 
-	func units_at(cell: Vector2i) -> Array:
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -192,8 +192,8 @@ func test_self_buff_fires_only_when_no_attack_is_reachable() -> void:
 	var actor := StubUnit.new(0, { "health": 100, "attack": 10 })
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(2, 0))  # within threat range, outside range-1 reach
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(2, 0, 0))  # within threat range, outside range-1 reach
 
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [_self_buff_move(), _strike_move(8)], board, [])
@@ -201,8 +201,8 @@ func test_self_buff_fires_only_when_no_attack_is_reachable() -> void:
 	assert_eq(decision["action"], BotController.ActionType.MOVE, "it acts (uses the buff)")
 	assert_eq(decision["move"].move_id, &"test_guard", "with no attack reachable, the self-buff is chosen")
 	assert_eq(decision["target"], actor, "the buff targets the caster itself")
-	assert_eq(decision["aim_cell"], Vector2i(0, 0), "a SELF cast aims at the actor's own cell")
-	assert_eq(decision["dest_cell"], Vector2i(0, 0), "and is cast in place -- no walk before it")
+	assert_eq(decision["aim_cell"], Vector3i(0, 0, 0), "a SELF cast aims at the actor's own cell")
+	assert_eq(decision["dest_cell"], Vector3i(0, 0, 0), "and is cast in place -- no walk before it")
 
 
 # --- Damage-first: ANY reachable attack beats the self-buff ------------------
@@ -214,8 +214,8 @@ func test_any_reachable_attack_is_taken_over_the_self_buff() -> void:
 	var actor := StubUnit.new(0, { "health": 100, "attack": 10 })
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))  # adjacent -> the strike reaches it
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(1, 0, 0))  # adjacent -> the strike reaches it
 
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [_self_buff_move(), _strike_move(8)], board, [])
@@ -235,8 +235,8 @@ func test_low_hp_unit_heals_over_a_reachable_nonlethal_attack() -> void:
 	actor.hp = 20  # 20% -- well under the heal threshold
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))  # adjacent -> the strike is reachable
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(1, 0, 0))  # adjacent -> the strike is reachable
 
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [_heal_move(), _strike_move(8)], board, [])
@@ -244,7 +244,7 @@ func test_low_hp_unit_heals_over_a_reachable_nonlethal_attack() -> void:
 	assert_eq(decision["action"], BotController.ActionType.MOVE, "it acts (heals)")
 	assert_eq(decision["move"].move_id, &"test_heal", "a badly hurt healer heals over a non-lethal attack")
 	assert_eq(decision["target"], actor, "it heals the most-hurt valid target -- itself")
-	assert_eq(decision["aim_cell"], Vector2i(0, 0), "aimed at its own cell")
+	assert_eq(decision["aim_cell"], Vector3i(0, 0, 0), "aimed at its own cell")
 
 
 func test_lethal_attack_is_taken_over_the_heal() -> void:
@@ -254,8 +254,8 @@ func test_lethal_attack_is_taken_over_the_heal() -> void:
 	actor.hp = 20
 	var enemy := StubUnit.new(1, { "health": 8, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(1, 0, 0))
 
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [_heal_move(), _strike_move(8)], board, [])
@@ -271,11 +271,11 @@ func test_full_hp_unit_does_not_heal() -> void:
 	var actor := StubUnit.new(0, { "health": 100, "attack": 10 })  # hp defaults to 100
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(10, 0))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(10, 0, 0))
 
 	var bot := BotController.new()
-	var decision := bot.plan(actor, [_heal_move()], board, [Vector2i(1, 0), Vector2i(2, 0)])
+	var decision := bot.plan(actor, [_heal_move()], board, [Vector3i(1, 0, 0), Vector3i(2, 0, 0)])
 
 	assert_ne(decision["action"], BotController.ActionType.MOVE, "a full-HP unit does not cast the heal")
 	assert_eq(decision["action"], BotController.ActionType.STEP, "it advances toward the enemy instead")
@@ -294,8 +294,8 @@ func test_self_buff_on_cooldown_is_not_chosen() -> void:
 	actor.moveset_controller = mc
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(2, 0))  # threatened, but out of range-1 reach
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(2, 0, 0))  # threatened, but out of range-1 reach
 
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [_self_buff_move(), _strike_move(8)], board, [])
@@ -312,8 +312,8 @@ func test_ready_self_buff_would_fire_in_the_cooldown_setup() -> void:
 	actor.moveset_controller = StubMoveset.new()  # nothing blocked -> buff ready
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(2, 0))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(2, 0, 0))
 
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [_self_buff_move(), _strike_move(8)], board, [])
@@ -329,8 +329,8 @@ func test_damage_only_unit_still_attacks_as_before() -> void:
 	var actor := StubUnit.new(0, { "health": 100, "attack": 10 })
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(1, 0, 0))
 
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [_strike_move(8)], board, [])

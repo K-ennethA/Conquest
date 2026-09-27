@@ -44,7 +44,7 @@ func apply(ctx: MoveContext) -> void:
 			push_warning("SummonEffect: no summoner (GameWorldManager.summon_unit) reachable -- nothing raised.")
 		return
 
-	var origin: Vector2i = ctx.aim_cell
+	var origin: Vector3i = ctx.aim_cell
 	var cells: Array = _summon_cells(ctx, origin, count)
 	if cells.is_empty():
 		push_warning("SummonEffect: no free cell near %s -- nothing raised." % str(origin))
@@ -104,7 +104,7 @@ func _find_summoner_in(node: Node):
 ## skipping out-of-bounds and occupied cells so summons never stack on a corpse or a
 ## standing unit. The origin itself is included only if free -- at an ON_KILL raise the
 ## victim still occupies it this frame, so the raise lands on an adjacent cell.
-func _summon_cells(ctx: MoveContext, origin: Vector2i, n: int) -> Array:
+func _summon_cells(ctx: MoveContext, origin: Vector3i, n: int) -> Array:
 	var out: Array = []
 	var board = ctx.board
 	var ring: int = 0
@@ -116,7 +116,7 @@ func _summon_cells(ctx: MoveContext, origin: Vector2i, n: int) -> Array:
 				# Only the current ring's PERIMETER, so cells fill nearest-first.
 				if maxi(absi(dx), absi(dy)) != ring:
 					continue
-				var cell: Vector2i = origin + Vector2i(dx, dy)
+				var cell: Vector3i = origin + Vector3i(dx, dy, 0)
 				if cell in out:
 					continue
 				if not _cell_is_free(board, cell):
@@ -128,7 +128,7 @@ func _summon_cells(ctx: MoveContext, origin: Vector2i, n: int) -> Array:
 
 ## True when [param cell] is a legal, empty landing spot. Duck-typed / null-safe so a
 ## bare mock board (or none) never blocks the spiral.
-func _cell_is_free(board, cell: Vector2i) -> bool:
+func _cell_is_free(board, cell: Vector3i) -> bool:
 	if board == null:
 		return true
 	if board.has_method("in_bounds") and not board.in_bounds(cell):
@@ -136,6 +136,9 @@ func _cell_is_free(board, cell: Vector2i) -> bool:
 	if board.has_method("is_occupied") and board.is_occupied(cell):
 		return false
 	if board.has_method("is_blocked") and board.is_blocked(cell):
+		return false
+	# Multi-floor: never raise a servant into the air (a gap on an upper floor).
+	if board.has_method("has_tile") and not board.has_tile(cell):
 		return false
 	return true
 

@@ -165,7 +165,7 @@ static func tile_elements_under(unit, board) -> Array:
 	var out: Array = []
 	if unit == null:
 		return out
-	var cell: Vector2i = _cell_of(unit, board)
+	var cell: Vector3i = _cell_of(unit, board)
 	for te in _effects_at(cell, board):
 		if te == null:
 			continue
@@ -182,17 +182,17 @@ static func _effect_id(te) -> StringName:
 	return StringName(v) if v != null else &""
 
 
-static func _cell_of(unit, board) -> Vector2i:
+static func _cell_of(unit, board) -> Vector3i:
 	if board != null and board.has_method("cell_of"):
 		return board.cell_of(unit)
 	var svc = _services()
 	if svc != null and svc.has_method("board") and svc.board() != null \
 		and svc.board().has_method("cell_of"):
 		return svc.board().cell_of(unit)
-	return Vector2i(-9999, -9999)  # off-board sentinel => no tile => no element
+	return Vector3i(-9999, -9999, 0)  # off-board sentinel => no tile => no element
 
 
-static func _effects_at(cell: Vector2i, board) -> Array:
+static func _effects_at(cell: Vector3i, board) -> Array:
 	if board != null and board.has_method("tile_effects_at"):
 		var arr = board.tile_effects_at(cell)
 		if arr is Array:

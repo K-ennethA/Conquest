@@ -47,23 +47,23 @@ class MockUnit:
 ## multi-cell reading of OnTerrainTagCondition can be pinned without a live map.
 class MockBoard:
 	var placements: Array = []          # { unit, cell, footprint }
-	var tags: Dictionary = {}           # Vector2i -> Array[String]
+	var tags: Dictionary = {}           # Vector3i -> Array[String]
 
-	func place(unit, cell: Vector2i, footprint: Vector2i = Vector2i.ONE) -> void:
+	func place(unit, cell: Vector3i, footprint: Vector2i = Vector2i.ONE) -> void:
 		placements.append({ "unit": unit, "cell": cell, "footprint": footprint })
 
-	func set_tags(cell: Vector2i, cell_tags: Array) -> void:
+	func set_tags(cell: Vector3i, cell_tags: Array) -> void:
 		tags[cell] = cell_tags
 
-	func tile_tags_at(cell: Vector2i) -> Array:
+	func tile_tags_at(cell: Vector3i) -> Array:
 		var found = tags.get(cell, [])
 		return found if found is Array else []
 
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
+		return Vector3i(-999, -999, 0)
 
 	## Footprint-aware, exactly like BoardAdapter.cells_of: every cell the unit covers.
 	func cells_of(unit) -> Array:
@@ -71,17 +71,17 @@ class MockBoard:
 		for p in placements:
 			if p.unit != unit:
 				continue
-			var anchor: Vector2i = p.cell
+			var anchor: Vector3i = p.cell
 			var fp: Vector2i = p.footprint
 			for dx in range(fp.x):
 				for dy in range(fp.y):
-					out.append(Vector2i(anchor.x + dx, anchor.y + dy))
+					out.append(Vector3i(anchor.x + dx, anchor.y + dy, 0))
 		return out
 
-	func units_at(cell: Vector2i) -> Array:
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
-			var anchor: Vector2i = p.cell
+			var anchor: Vector3i = p.cell
 			var fp: Vector2i = p.footprint
 			if cell.x >= anchor.x and cell.x < anchor.x + fp.x \
 				and cell.y >= anchor.y and cell.y < anchor.y + fp.y:
@@ -94,7 +94,7 @@ class MockBoard:
 	func are_allies(a, b) -> bool:
 		return a.team == b.team
 
-	func move_unit(unit, to_cell: Vector2i) -> void:
+	func move_unit(unit, to_cell: Vector3i) -> void:
 		for p in placements:
 			if p.unit == unit:
 				p.cell = to_cell
@@ -146,7 +146,7 @@ func _controller_for(unit) -> StatusController:
 ## Resolve a single DamageEffect from [param caster] onto [param target] through
 ## the shared pipeline. Returns the HP actually lost.
 func _hit(effect: DamageEffect, board, caster, target) -> int:
-	var cell: Vector2i = board.cell_of(target)
+	var cell: Vector3i = board.cell_of(target)
 	var move := MoveResource.new()
 	var pattern := TargetingPattern.new()
 	pattern.target_kind = CombatTypes.TargetKind.ENEMY
@@ -156,7 +156,7 @@ func _hit(effect: DamageEffect, board, caster, target) -> int:
 	move.move_id = &"test_hit"
 	move.targeting = pattern
 	var before: int = target.hp
-	var ctx := MoveContext.new(caster, board, move, cell, [cell] as Array[Vector2i])
+	var ctx := MoveContext.new(caster, board, move, cell, [cell] as Array[Vector3i])
 	effect.apply(ctx)
 	return before - target.hp
 
@@ -202,8 +202,8 @@ func _real_unit(display_name: String) -> Unit:
 func test_forest_tag_condition_holds_on_a_forest_tile():
 	var unit := MockUnit.new(0, {})
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(2, 2))
-	board.set_tags(Vector2i(2, 2), ["forest"])
+	board.place(unit, Vector3i(2, 2, 0))
+	board.set_tags(Vector3i(2, 2, 0), ["forest"])
 
 	var cond := OnTerrainTagCondition.new()
 	cond.tag = &"forest"
@@ -217,17 +217,17 @@ func test_forest_tag_condition_fails_on_volcano_and_ice():
 	# would get wrong -- so it is included deliberately.
 	var unit := MockUnit.new(0, {})
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var cond := OnTerrainTagCondition.new()
 	cond.tag = &"forest"
 
-	board.set_tags(Vector2i(0, 0), ["volcano", "difficult"])
+	board.set_tags(Vector3i(0, 0, 0), ["volcano", "difficult"])
 	assert_false(cond.is_met(unit, board), "volcano ground is not forest")
 
-	board.set_tags(Vector2i(0, 0), ["ice", "slippery"])
+	board.set_tags(Vector3i(0, 0, 0), ["ice", "slippery"])
 	assert_false(cond.is_met(unit, board), "ice is not forest")
 
-	board.set_tags(Vector2i(0, 0), [])
+	board.set_tags(Vector3i(0, 0, 0), [])
 	assert_false(cond.is_met(unit, board), "an untagged tile is not forest")
 
 
@@ -236,8 +236,8 @@ func test_forest_tag_condition_matches_a_secondary_tag():
 	# carries -- not only its primary/biome one.
 	var unit := MockUnit.new(0, {})
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
-	board.set_tags(Vector2i(0, 0), ["volcano", "hazard", "fire"])
+	board.place(unit, Vector3i(0, 0, 0))
+	board.set_tags(Vector3i(0, 0, 0), ["volcano", "hazard", "fire"])
 	var cond := OnTerrainTagCondition.new()
 	cond.tag = &"hazard"
 	assert_true(cond.is_met(unit, board), "a non-primary tag still matches")
@@ -251,12 +251,12 @@ func test_forest_tag_condition_is_ANY_cell_for_a_multi_cell_unit():
 	# every edge. One root in the grove is enough.
 	var eldroot := MockUnit.new(0, {})
 	var board := MockBoard.new()
-	board.place(eldroot, Vector2i(3, 3), Vector2i(2, 2))  # covers (3,3) (3,4) (4,3) (4,4)
+	board.place(eldroot, Vector3i(3, 3, 0), Vector2i(2, 2))  # covers (3,3) (3,4) (4,3) (4,4)
 	# Three cells of volcano, ONE corner of forest.
-	board.set_tags(Vector2i(3, 3), ["volcano"])
-	board.set_tags(Vector2i(3, 4), ["volcano"])
-	board.set_tags(Vector2i(4, 3), ["volcano"])
-	board.set_tags(Vector2i(4, 4), ["forest"])
+	board.set_tags(Vector3i(3, 3, 0), ["volcano"])
+	board.set_tags(Vector3i(3, 4, 0), ["volcano"])
+	board.set_tags(Vector3i(4, 3, 0), ["volcano"])
+	board.set_tags(Vector3i(4, 4, 0), ["forest"])
 
 	var cond := OnTerrainTagCondition.new()
 	cond.tag = &"forest"
@@ -269,8 +269,8 @@ func test_forest_tag_condition_false_when_no_covered_cell_is_forest():
 	# must be false, or the passive would simply never turn off.
 	var eldroot := MockUnit.new(0, {})
 	var board := MockBoard.new()
-	board.place(eldroot, Vector2i(3, 3), Vector2i(2, 2))
-	for cell in [Vector2i(3, 3), Vector2i(3, 4), Vector2i(4, 3), Vector2i(4, 4)]:
+	board.place(eldroot, Vector3i(3, 3, 0), Vector2i(2, 2))
+	for cell in [Vector3i(3, 3, 0), Vector3i(3, 4, 0), Vector3i(4, 3, 0), Vector3i(4, 4, 0)]:
 		board.set_tags(cell, ["volcano", "difficult"])
 
 	var cond := OnTerrainTagCondition.new()
@@ -284,7 +284,7 @@ func test_forest_tag_condition_covers_the_whole_biome():
 	# including ones added later. Asserted against the real tile resources.
 	var unit := MockUnit.new(0, {})
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var cond := OnTerrainTagCondition.new()
 	cond.tag = &"forest"
 
@@ -296,7 +296,7 @@ func test_forest_tag_condition_covers_the_whole_biome():
 		if not ResourceLoader.exists(path):
 			continue
 		var res := load(path) as TileResource
-		board.set_tags(Vector2i(0, 0), res.special_properties)
+		board.set_tags(Vector3i(0, 0, 0), res.special_properties)
 		assert_true(cond.is_met(unit, board),
 			"%s is tagged forest, so one condition covers it" % tile_name)
 
@@ -319,9 +319,9 @@ func _grove_defender(defense: int = 0) -> Array:
 	var defender := MockUnit.new(1, { "health": 100, "defense": defense })
 	defender.ability_system = _ability_system_with(defender, _grovebound())
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(defender, Vector2i(1, 0), Vector2i(2, 2))
-	for cell in [Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 0), Vector2i(2, 1)]:
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(defender, Vector3i(1, 0, 0), Vector2i(2, 2))
+	for cell in [Vector3i(1, 0, 0), Vector3i(1, 1, 0), Vector3i(2, 0, 0), Vector3i(2, 1, 0)]:
 		board.set_tags(cell, ["forest"])
 	return [attacker, defender, board]
 
@@ -343,7 +343,7 @@ func test_grovebound_does_nothing_off_the_grove():
 	var board: MockBoard = parts[2]
 	# Same defender, same passive -- but every covered cell is now volcano, so the
 	# condition is unmet and the reduction must not apply.
-	for cell in [Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 0), Vector2i(2, 1)]:
+	for cell in [Vector3i(1, 0, 0), Vector3i(1, 1, 0), Vector3i(2, 0, 0), Vector3i(2, 1, 0)]:
 		board.set_tags(cell, ["volcano"])
 
 	var dealt := _hit(_damage_effect(20, CombatTypes.DamageCategory.PHYSICAL), board, attacker, defender)
@@ -391,9 +391,9 @@ func test_a_defender_without_the_passive_is_unaffected():
 	var attacker := MockUnit.new(0, {})
 	var defender := MockUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(defender, Vector2i(1, 0))
-	board.set_tags(Vector2i(1, 0), ["forest"])
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(defender, Vector3i(1, 0, 0))
+	board.set_tags(Vector3i(1, 0, 0), ["forest"])
 
 	var dealt := _hit(_damage_effect(20, CombatTypes.DamageCategory.PHYSICAL), board, attacker, defender)
 	assert_eq(dealt, 20, "standing on forest does nothing without Grovebound")
@@ -409,8 +409,8 @@ func test_invulnerable_zeroes_damage():
 	defender.status_controller = autofree(_controller_for(defender))
 	defender.status_controller.add_status(_guarded())
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(defender, Vector2i(1, 0))
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(defender, Vector3i(1, 0, 0))
 
 	var dealt := _hit(_damage_effect(50, CombatTypes.DamageCategory.PHYSICAL), board, attacker, defender)
 	assert_eq(dealt, 0, "Guarded negates the hit entirely")
@@ -426,8 +426,8 @@ func test_invulnerable_beats_true_damage_too():
 	defender.status_controller = autofree(_controller_for(defender))
 	defender.status_controller.add_status(_guarded())
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(defender, Vector2i(1, 0))
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(defender, Vector3i(1, 0, 0))
 
 	var dealt := _hit(_damage_effect(999, CombatTypes.DamageCategory.TRUE), board, attacker, defender)
 	assert_eq(dealt, 0, "not even TRUE damage gets through")
@@ -440,8 +440,8 @@ func test_invulnerable_hit_is_logged_as_negated():
 	defender.status_controller = autofree(_controller_for(defender))
 	defender.status_controller.add_status(_guarded())
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(defender, Vector2i(1, 0))
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(defender, Vector3i(1, 0, 0))
 
 	var move := MoveResource.new()
 	var pattern := TargetingPattern.new()
@@ -451,8 +451,8 @@ func test_invulnerable_hit_is_logged_as_negated():
 	pattern.area_shape = CombatTypes.AreaShape.SINGLE
 	move.move_id = &"test_hit"
 	move.targeting = pattern
-	var cell := Vector2i(1, 0)
-	var ctx := MoveContext.new(attacker, board, move, cell, [cell] as Array[Vector2i])
+	var cell := Vector3i(1, 0, 0)
+	var ctx := MoveContext.new(attacker, board, move, cell, [cell] as Array[Vector3i])
 	_damage_effect(30, CombatTypes.DamageCategory.PHYSICAL).apply(ctx)
 
 	assert_eq(ctx.results.size(), 1, "one damage event was logged")
@@ -468,8 +468,8 @@ func test_forecast_shows_zero_against_an_invulnerable_target():
 	defender.status_controller = autofree(_controller_for(defender))
 	defender.status_controller.add_status(_guarded())
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(defender, Vector2i(1, 0))
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(defender, Vector3i(1, 0, 0))
 
 	var effect := _damage_effect(30, CombatTypes.DamageCategory.PHYSICAL)
 	var move := MoveResource.new()
@@ -488,30 +488,30 @@ func test_forecast_shows_zero_against_an_invulnerable_target():
 
 func test_arc_resolves_three_cells_for_each_cardinal_aim():
 	var pattern := _arc_pattern()
-	var origin := Vector2i(5, 5)
+	var origin := Vector3i(5, 5, 0)
 
 	# Aiming NORTH (-Y) sweeps the three cells across the north face.
-	var north := pattern.resolve_cells(origin, Vector2i(5, 4))
+	var north := pattern.resolve_cells(origin, Vector3i(5, 4, 0))
 	assert_eq(north.size(), 3, "the arc is exactly three cells")
-	for cell in [Vector2i(5, 4), Vector2i(4, 4), Vector2i(6, 4)]:
+	for cell in [Vector3i(5, 4, 0), Vector3i(4, 4, 0), Vector3i(6, 4, 0)]:
 		assert_true(cell in north, "north sweep covers %s" % cell)
 
 	# EAST (+X): the three cells down the east face.
-	var east := pattern.resolve_cells(origin, Vector2i(6, 5))
+	var east := pattern.resolve_cells(origin, Vector3i(6, 5, 0))
 	assert_eq(east.size(), 3, "the arc is exactly three cells")
-	for cell in [Vector2i(6, 5), Vector2i(6, 4), Vector2i(6, 6)]:
+	for cell in [Vector3i(6, 5, 0), Vector3i(6, 4, 0), Vector3i(6, 6, 0)]:
 		assert_true(cell in east, "east sweep covers %s" % cell)
 
 	# SOUTH (+Y).
-	var south := pattern.resolve_cells(origin, Vector2i(5, 6))
+	var south := pattern.resolve_cells(origin, Vector3i(5, 6, 0))
 	assert_eq(south.size(), 3, "the arc is exactly three cells")
-	for cell in [Vector2i(5, 6), Vector2i(4, 6), Vector2i(6, 6)]:
+	for cell in [Vector3i(5, 6, 0), Vector3i(4, 6, 0), Vector3i(6, 6, 0)]:
 		assert_true(cell in south, "south sweep covers %s" % cell)
 
 	# WEST (-X).
-	var west := pattern.resolve_cells(origin, Vector2i(4, 5))
+	var west := pattern.resolve_cells(origin, Vector3i(4, 5, 0))
 	assert_eq(west.size(), 3, "the arc is exactly three cells")
-	for cell in [Vector2i(4, 5), Vector2i(4, 4), Vector2i(4, 6)]:
+	for cell in [Vector3i(4, 5, 0), Vector3i(4, 4, 0), Vector3i(4, 6, 0)]:
 		assert_true(cell in west, "west sweep covers %s" % cell)
 
 
@@ -519,8 +519,8 @@ func test_arc_never_includes_the_casters_own_cell():
 	# "In front of" must never mean "on top of me" -- a self-hitting sweep would
 	# make the boss kill itself with its own bread-and-butter attack.
 	var pattern := _arc_pattern()
-	var origin := Vector2i(5, 5)
-	for aim in [Vector2i(5, 4), Vector2i(6, 5), Vector2i(5, 6), Vector2i(4, 5)]:
+	var origin := Vector3i(5, 5, 0)
+	for aim in [Vector3i(5, 4, 0), Vector3i(6, 5, 0), Vector3i(5, 6, 0), Vector3i(4, 5, 0)]:
 		var cells := pattern.resolve_cells(origin, aim)
 		assert_false(origin in cells, "aiming %s never covers the origin" % aim)
 
@@ -531,18 +531,18 @@ func test_arc_snaps_a_diagonal_aim_to_its_dominant_axis():
 	# shapes can never disagree about what a diagonal means. The arc still centres
 	# on the cell actually aimed at -- only the FACING is snapped.
 	var pattern := _arc_pattern()
-	var origin := Vector2i(5, 5)
+	var origin := Vector3i(5, 5, 0)
 
 	# Perfectly diagonal: |dx| == |dy|, so the tie resolves to the X axis, giving a
 	# vertical flank pair.
-	var tied := pattern.resolve_cells(origin, Vector2i(6, 4))
+	var tied := pattern.resolve_cells(origin, Vector3i(6, 4, 0))
 	assert_eq(tied.size(), 3, "still exactly three cells")
-	for cell in [Vector2i(6, 4), Vector2i(6, 3), Vector2i(6, 5)]:
+	for cell in [Vector3i(6, 4, 0), Vector3i(6, 3, 0), Vector3i(6, 5, 0)]:
 		assert_true(cell in tied, "a tied diagonal sweeps the X face at %s" % cell)
 
 	# Y-dominant: the facing is south, so the flanks run along X.
-	var y_dominant := pattern.resolve_cells(origin, Vector2i(6, 8))
-	for cell in [Vector2i(6, 8), Vector2i(5, 8), Vector2i(7, 8)]:
+	var y_dominant := pattern.resolve_cells(origin, Vector3i(6, 8, 0))
+	for cell in [Vector3i(6, 8, 0), Vector3i(5, 8, 0), Vector3i(7, 8, 0)]:
 		assert_true(cell in y_dominant, "a Y-dominant aim sweeps the Y face at %s" % cell)
 
 
@@ -552,7 +552,7 @@ func test_arc_is_reusable_by_any_move_not_just_eldroot():
 	var pattern := TargetingPattern.new()
 	pattern.area_shape = CombatTypes.AreaShape.ARC
 	pattern.affects_caster_tile = true
-	var cells := pattern.resolve_cells(Vector2i(0, 0), Vector2i(1, 0))
+	var cells := pattern.resolve_cells(Vector3i(0, 0, 0), Vector3i(1, 0, 0))
 	assert_eq(cells.size(), 3, "ARC works on a bare pattern with no move attached")
 
 
@@ -560,21 +560,21 @@ func test_arc_hits_three_opponents_at_once():
 	# End to end: three enemies lined up across one face all take the hit.
 	var caster := MockUnit.new(0, {})
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(5, 5))
+	board.place(caster, Vector3i(5, 5, 0))
 	var victims: Array = []
-	for cell in [Vector2i(4, 4), Vector2i(5, 4), Vector2i(6, 4)]:
+	for cell in [Vector3i(4, 4, 0), Vector3i(5, 4, 0), Vector3i(6, 4, 0)]:
 		var v := MockUnit.new(1, { "health": 100, "defense": 0 })
 		board.place(v, cell)
 		victims.append(v)
 	# One ally standing behind, to prove the sweep is directional and ENEMY-keyed.
 	var bystander := MockUnit.new(1, { "health": 100, "defense": 0 })
-	board.place(bystander, Vector2i(5, 6))
+	board.place(bystander, Vector3i(5, 6, 0))
 
 	var move := MoveResource.new()
 	move.move_id = &"test_arc"
 	move.targeting = _arc_pattern()
-	var aim := Vector2i(5, 4)
-	var ctx := MoveContext.new(caster, board, move, aim, move.targeting.resolve_cells(Vector2i(5, 5), aim))
+	var aim := Vector3i(5, 4, 0)
+	var ctx := MoveContext.new(caster, board, move, aim, move.targeting.resolve_cells(Vector3i(5, 5, 0), aim))
 	_damage_effect(10, CombatTypes.DamageCategory.PHYSICAL).apply(ctx)
 
 	for v in victims:
@@ -615,7 +615,7 @@ func test_traditional_turn_system_skips_a_stunned_unit():
 	var unit := _real_unit("Flinched One")
 	var player := _register_one_unit(ts, unit)
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 
 	ts.is_active = true
 	ts.current_player = player
@@ -635,7 +635,7 @@ func test_speed_first_turn_system_skips_a_stunned_unit():
 	var unit := _real_unit("Flinched One")
 	_register_one_unit(ts, unit)
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 
 	ts.is_active = true
 	ts.is_turn_in_progress = true
@@ -659,7 +659,7 @@ func test_the_stun_expires_during_the_turn_it_skips():
 	var unit := _real_unit("Flinched One")
 	var player := _register_one_unit(ts, unit)
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 
 	ts.is_active = true
 	ts.current_player = player
@@ -685,7 +685,7 @@ func test_the_stun_expires_in_speed_first_too():
 	var unit := _real_unit("Flinched One")
 	_register_one_unit(ts, unit)
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 
 	ts.is_active = true
 	ts.is_turn_in_progress = true
@@ -711,7 +711,7 @@ func test_a_stunned_unit_stays_registered_so_it_can_still_tick():
 	var unit := _real_unit("Flinched One")
 	var player := _register_one_unit(ts, unit)
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	ts.is_active = true
 	ts.current_player = player
 	ts.is_turn_in_progress = true
@@ -728,7 +728,7 @@ func test_the_ai_driver_skips_a_stunned_unit():
 	var unit := _real_unit("Flinched Bot")
 	var player := _register_one_unit(ts, unit, true)
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 
 	ts.is_active = true
 	ts.current_player = player
@@ -759,7 +759,7 @@ func test_turn_tick_state_is_cleared_on_reset():
 	var unit := _real_unit("Flinched One")
 	var player := _register_one_unit(ts, unit)
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	ts.is_active = true
 	ts.current_player = player
 	ts.is_turn_in_progress = true
@@ -800,7 +800,7 @@ func test_bough_sweep_is_an_uncooled_adjacent_arc():
 	assert_eq(move.targeting.max_range, 1, "adjacent only")
 	assert_eq(move.targeting.target_kind, CombatTypes.TargetKind.ENEMY)
 	# Three cells, so a moderate per-target number rather than a single-target one.
-	assert_eq(move.targeting.resolve_cells(Vector2i(0, 0), Vector2i(1, 0)).size(), 3)
+	assert_eq(move.targeting.resolve_cells(Vector3i(0, 0, 0), Vector3i(1, 0, 0)).size(), 3)
 
 
 func test_heartwood_guard_is_a_self_buff_on_cooldown():

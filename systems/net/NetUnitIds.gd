@@ -89,8 +89,8 @@ static func find(board, id: String):
 	return null
 
 
-## Sort key: owner slot, then anchor row, then column. Cells are unique per
+## Sort key: owner slot, then floor, anchor row, column. Cells are unique per
 ## unit, so the order is total and identical on every peer.
 static func _sort_key(board, unit) -> Array:
-	var cell: Vector2i = board.cell_of(unit)
-	return [owner_slot(unit), cell.y, cell.x]
+	var cell: Vector3i = board.cell_of(unit)
+	return [owner_slot(unit), cell.z, cell.y, cell.x]

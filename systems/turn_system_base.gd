@@ -444,7 +444,7 @@ func _auto_resolve_control(unit, board) -> void:
 	# BotController._is_hostile).
 	controller.force_control = true
 
-	var origin: Vector2i = board.cell_of(unit)
+	var origin: Vector3i = board.cell_of(unit)
 	var reachable: Array = _control_reachable_cells(unit, origin, board)
 	var decision = controller.plan(unit, unit.get_moveset(), board, reachable)
 	if decision == null or decision.is_empty() \
@@ -457,17 +457,17 @@ func _auto_resolve_control(unit, board) -> void:
 		return
 
 	# Walk to the planned stand cell first (if any), then strike the ally from there.
-	var dest: Vector2i = decision.get("dest_cell", origin)
+	var dest: Vector3i = decision.get("dest_cell", origin)
 	if dest != origin and not (unit.has_method("is_immobilized") and unit.is_immobilized()):
 		board.move_unit(unit, dest)
 		if GameEvents:
 			GameEvents.unit_moved.emit(unit,
-				Vector3(origin.x, 0, origin.y), Vector3(dest.x, 0, dest.y))
+				Cells.to_grid(origin), Cells.to_grid(dest))
 		if unit.has_method("mark_moved"):
 			unit.mark_moved()
 
 	var move = decision.get("move", null)
-	var aim_cell: Vector2i = decision.get("aim_cell", board.cell_of(unit))
+	var aim_cell: Vector3i = decision.get("aim_cell", board.cell_of(unit))
 	var victim = decision.get("target", null)
 	var slot: int = _slot_of_move(unit, move)
 	if slot >= 0:
@@ -489,7 +489,7 @@ func _spend_forced_turn(unit) -> void:
 
 ## Cells a controlled unit can reach this turn, via its movement profile and the live
 ## board (empty when it has none -- the planner then only strikes from its own cell).
-func _control_reachable_cells(unit, origin: Vector2i, board) -> Array:
+func _control_reachable_cells(unit, origin: Vector3i, board) -> Array:
 	if unit.has_method("is_immobilized") and unit.is_immobilized():
 		return []
 	if not unit.has_method("get_movement_profile"):

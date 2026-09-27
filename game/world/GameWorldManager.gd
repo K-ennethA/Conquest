@@ -101,6 +101,10 @@ func _ready() -> void:
 	# create now -- nobody is eliminated at boot, so it just sits hidden.
 	_setup_game_over_screen()
 
+	# Survive / Seize objectives are decided without a death, so also re-score the
+	# map objectives on every turn start and committed move.
+	_setup_objective_checks()
+
 	# Tile-effect 3D overlay: additive Node3D floating effect pips over affected
 	# cells. Added to the 3D scene root (not the CanvasLayer) and, like the terrain
 	# panel, safe to add before the map loads -- it rebuilds itself on
@@ -129,11 +133,12 @@ func _ready() -> void:
 ## marks it as having already acted so it holds the summon turn and only acts next turn
 ## (the same "summoning sickness" [SpawnManager]'s runtime spawns use). Returns the new
 ## [Unit], or null if the summon could not be placed. Null-safe end to end.
-func summon_unit(character_id: StringName, cell: Vector2i, player_id: int, stance: String = "aggressive") -> Node:
+func summon_unit(character_id: StringName, cell: Vector3i, player_id: int, stance: String = "aggressive") -> Node:
 	if map_loader == null:
 		return null
 	var unit = map_loader.spawn_unit_now({
-		"position": cell,
+		"position": Cells.flat(cell),
+		"floor": cell.z,
 		"player_id": player_id,
 		"character_id": String(character_id),
 		"spawn_kind": "Reinforcement",
@@ -232,7 +237,9 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# Compile THIS map's authored win conditions into a live rule set. This is what
 	# makes objectives per-map: a boss map ends on the boss's death, a skirmish on a
 	# wipe -- same engine, different WinCondition list (see _evaluate_game_end).
-	_game_mode_rules = WinConditionLibrary.build_rules(map_resource.victory_conditions)
+	# build_rules_for_map also threads the map's THRONE objective marker (seize) and
+	# turn_limit (survive) through, so those objectives resolve from map data.
+	_game_mode_rules = WinConditionLibrary.build_rules_for_map(map_resource)
 
 	# Light the battle: a sun + sky ambient so the 3D map reads with depth and
 	# shadow instead of flat ambient. The scene shipped with a WorldEnvironment but
@@ -479,7 +486,63 @@ func _build_win_state(just_removed) -> Dictionary:
 			units.append(u)
 	if just_removed != null and just_removed not in units:
 		units.append(just_removed)
-	return { "units": units, "board": board, "turn": 0 }
+	return { "units": units, "board": board, "turn": _current_win_turn() }
+
+
+## Full rounds elapsed in the active turn system -- the "turn" SurviveTurns counts
+## (see WinConditionLibrary.completed_rounds). 0 before any turn system is active.
+func _current_win_turn() -> int:
+	if TurnSystemManager == null or not TurnSystemManager.has_active_turn_system():
+		return 0
+	return WinConditionLibrary.completed_rounds(TurnSystemManager.get_active_turn_system())
+
+
+# --- Objective re-checks outside of deaths ------------------------------------
+# Survive-N-turns is decided by the clock and Seize by a unit STANDING on the throne,
+# neither of which kills anything -- so besides the death/elimination triggers the map
+# objectives are re-scored at every turn start and after every committed unit move.
+
+## Turn system the objective turn-start re-check is bound to (re-wired on switch).
+var _objective_watched_ts = null
+
+func _setup_objective_checks() -> void:
+	if GameEvents and not GameEvents.unit_moved.is_connected(_on_unit_moved_objectives):
+		GameEvents.unit_moved.connect(_on_unit_moved_objectives)
+	if TurnSystemManager != null:
+		if not TurnSystemManager.turn_system_activated.is_connected(_on_turn_system_activated_objectives):
+			TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated_objectives)
+		if TurnSystemManager.has_active_turn_system():
+			_on_turn_system_activated_objectives(TurnSystemManager.get_active_turn_system())
+
+func _on_turn_system_activated_objectives(ts) -> void:
+	if _objective_watched_ts == ts:
+		return
+	if _objective_watched_ts != null and is_instance_valid(_objective_watched_ts) \
+			and _objective_watched_ts.turn_started.is_connected(_on_turn_started_objectives):
+		_objective_watched_ts.turn_started.disconnect(_on_turn_started_objectives)
+	_objective_watched_ts = ts
+	if ts != null and not ts.turn_started.is_connected(_on_turn_started_objectives):
+		ts.turn_started.connect(_on_turn_started_objectives)
+
+func _on_turn_started_objectives(_player) -> void:
+	_recheck_map_objectives()
+
+func _on_unit_moved_objectives(_unit, _from, _to) -> void:
+	_recheck_map_objectives()
+
+## Re-score the map's objectives when nothing died. Only the single-player,
+## map-driven path is re-checked here: the versus "last side standing" fallback is
+## purely elimination-driven and stays on the death triggers. Skipped while the board
+## is empty (e.g. mid-load), where every side would read as wiped out.
+func _recheck_map_objectives() -> void:
+	if _game_mode_rules == null or _game_over_screen == null:
+		return
+	if GameSettings == null or GameSettings.game_mode != GameSettings.GameMode.SINGLE_PLAYER:
+		return
+	var board = CombatServices.board() if CombatServices != null else null
+	if board == null or not board.has_method("all_units") or board.all_units().is_empty():
+		return
+	_evaluate_game_end(null)
 
 func _setup_tile_effect_overlay() -> void:
 	"""Instantiate TileEffectOverlay and add it to the 3D scene root (GameWorld
@@ -570,7 +633,7 @@ func _on_turn_system_activated_tile_effects(ts) -> void:
 	if ts != null and not ts.turn_started.is_connected(_on_player_turn_started_tile_effects):
 		ts.turn_started.connect(_on_player_turn_started_tile_effects)
 
-func _prime_tile_effects(cell: Vector2i):
+func _prime_tile_effects(cell: Vector3i):
 	"""Feed the system the effects on `cell` (base + runtime) through its injected
 	lookup, recomputed each event so tile transforms and runtime ignite/douse are
 	always reflected. Returns the live board, or null if it/the system is absent."""
@@ -583,11 +646,11 @@ func _prime_tile_effects(cell: Vector2i):
 	return board
 
 func _on_unit_moved_tile_effects(unit, from_position, to_position) -> void:
-	"""Terrain enter/exit hook. from/to are Vector3(col, 0, row) grid coords."""
+	"""Terrain enter/exit hook. from/to are Vector3(col, floor, row) grid coords."""
 	if unit == null or _tile_effect_system == null:
 		return
-	var from_cell := Vector2i(int(round(from_position.x)), int(round(from_position.z)))
-	var to_cell := Vector2i(int(round(to_position.x)), int(round(to_position.z)))
+	var from_cell := Cells.from_grid(from_position)
+	var to_cell := Cells.from_grid(to_position)
 	var board = _prime_tile_effects(from_cell)
 	if board != null:
 		_tile_effect_system.on_exit(unit, from_cell, board)
@@ -605,7 +668,7 @@ func _on_player_turn_started_tile_effects(player) -> void:
 	for unit in player.owned_units:
 		if unit == null:
 			continue
-		var cell: Vector2i = board.cell_of(unit)
+		var cell: Vector3i = board.cell_of(unit)
 		_prime_tile_effects(cell)
 		_tile_effect_system.on_turn_start(unit, board)
 
@@ -746,15 +809,13 @@ func _start_game() -> void:
 # - TurnSystemIndicator: (20, 960) to (320, 1060) - 300x100
 # - PlayerTurnPanel: (340, 960) to (620, 1060) - 280x100
 
-# Debug input handling
+# Developer hotkeys. Debug builds only AND Ctrl+Shift held (InputActions.is_debug_hotkey),
+# so none of them can fire from a plain gameplay key: M is Move, S is camera pan, etc.
+# The old plain-M "quit to main menu" binding is gone entirely -- leaving a battle must
+# never happen from a single keypress.
 func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
-		return
-	
-	if event is InputEventKey:
-		match event.keycode:
-			KEY_M:
-				_return_to_main_menu()
+	if InputActions.is_debug_hotkey(event):
+		match (event as InputEventKey).keycode:
 			KEY_S:
 				_print_game_status()
 			KEY_V:
@@ -816,10 +877,6 @@ func _check_ui_layout() -> void:
 		ui_manager.print_layout_status()
 	else:
 		var ui_layer = get_tree().current_scene.get_node_or_null("UI")
-
-func _return_to_main_menu() -> void:
-	"""Return to the main menu"""
-	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
 
 func _print_game_status() -> void:
 	"""Print current game status"""

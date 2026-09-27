@@ -111,7 +111,8 @@ func _find_all_units() -> Array[Unit]:
 
 func _input(event: InputEvent) -> void:
 	"""Handle test input"""
-	if event is InputEventKey and event.pressed:
+	# Dev-only: debug builds + Ctrl+Shift held (see InputActions.is_debug_hotkey).
+	if InputActions.is_debug_hotkey(event):
 		match event.keycode:
 			KEY_F9:
 				print("F9 pressed - running movement system test")

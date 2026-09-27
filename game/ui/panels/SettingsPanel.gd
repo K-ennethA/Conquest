@@ -24,6 +24,12 @@ var _speed_slider: HSlider = null
 var _speed_value_label: Label = null
 var _focus_option: OptionButton = null
 
+# Controls tab: action -> the Button showing (and capturing) its keyboard binding.
+var _bind_buttons: Dictionary = {}
+# Action currently waiting for a key press ("" when not capturing).
+var _capturing_action: StringName = &""
+var _controls_status: Label = null
+
 # True while we are pushing GameSettings values INTO the controls, so the
 # controls' change signals don't bounce back out into the setters (feedback loop).
 var _syncing: bool = false
@@ -35,6 +41,8 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	visible = false
+	# While open, board/HUD gameplay handlers ignore input (InputActions.gameplay_input_blocked).
+	add_to_group(InputActions.OVERLAY_GROUP)
 
 	_build_ui()
 
@@ -44,6 +52,8 @@ func _ready() -> void:
 	# Stay in sync with external changes (other systems / a second panel).
 	if _has_settings() and not GameSettings.settings_changed.is_connected(_on_settings_changed):
 		GameSettings.settings_changed.connect(_on_settings_changed)
+	if _has_settings() and not GameSettings.controls_changed.is_connected(_refresh_bindings):
+		GameSettings.controls_changed.connect(_refresh_bindings)
 
 	_refresh_from_settings()
 
@@ -51,6 +61,8 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if _has_settings() and GameSettings.settings_changed.is_connected(_on_settings_changed):
 		GameSettings.settings_changed.disconnect(_on_settings_changed)
+	if _has_settings() and GameSettings.controls_changed.is_connected(_refresh_bindings):
+		GameSettings.controls_changed.disconnect(_refresh_bindings)
 
 
 func _has_settings() -> bool:
@@ -75,7 +87,7 @@ func _build_ui() -> void:
 	add_child(center)
 
 	_frame = PanelContainer.new()
-	_frame.custom_minimum_size = Vector2(380, 0)
+	_frame.custom_minimum_size = Vector2(460, 0)
 	_frame.mouse_filter = Control.MOUSE_FILTER_STOP
 	center.add_child(_frame)
 
@@ -97,7 +109,16 @@ func _build_ui() -> void:
 	title.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(title)
 
-	vbox.add_child(_make_separator())
+	# Two tabs: General (presentation) and Controls (keyboard rebinding).
+	var tabs := TabContainer.new()
+	tabs.name = "Tabs"
+	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(tabs)
+
+	var general := VBoxContainer.new()
+	general.name = "General"
+	general.add_theme_constant_override("separation", 14)
+	tabs.add_child(general)
 
 	# --- Animations toggle ---
 	var anim_row := _make_row("Animations")
@@ -105,7 +126,7 @@ func _build_ui() -> void:
 	_anim_check.mouse_filter = Control.MOUSE_FILTER_STOP
 	_anim_check.toggled.connect(_on_anim_toggled)
 	anim_row.add_child(_anim_check)
-	vbox.add_child(anim_row)
+	general.add_child(anim_row)
 
 	# --- Battle speed slider (0.5x - 3.0x, step 0.25) ---
 	var speed_header := _make_row("Battle Speed")
@@ -115,7 +136,7 @@ func _build_ui() -> void:
 	_speed_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_speed_value_label.add_theme_font_size_override("font_size", 16)
 	speed_header.add_child(_speed_value_label)
-	vbox.add_child(speed_header)
+	general.add_child(speed_header)
 
 	_speed_slider = HSlider.new()
 	_speed_slider.min_value = _settings_speed_min()
@@ -126,9 +147,9 @@ func _build_ui() -> void:
 	_speed_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_speed_slider.mouse_filter = Control.MOUSE_FILTER_STOP
 	_speed_slider.value_changed.connect(_on_speed_changed)
-	vbox.add_child(_speed_slider)
+	general.add_child(_speed_slider)
 
-	vbox.add_child(_make_separator())
+	general.add_child(_make_separator())
 
 	# --- Camera auto-focus ---
 	var focus_row := _make_row("Camera Focus")
@@ -140,7 +161,9 @@ func _build_ui() -> void:
 	_focus_option.add_item("Cinematic", 2)
 	_focus_option.item_selected.connect(_on_focus_selected)
 	focus_row.add_child(_focus_option)
-	vbox.add_child(focus_row)
+	general.add_child(focus_row)
+
+	tabs.add_child(_build_controls_tab())
 
 	vbox.add_child(_make_separator())
 
@@ -151,6 +174,69 @@ func _build_ui() -> void:
 	close_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	close_btn.pressed.connect(close)
 	vbox.add_child(close_btn)
+
+
+func _build_controls_tab() -> Control:
+	"""Controls tab: one row per rebindable action (InputActions.REBINDABLE) with a
+	button showing its current keyboard key(s). Click a button, then press the new
+	key (Esc cancels). Gamepad bindings are fixed and listed for reference."""
+	var root := VBoxContainer.new()
+	root.name = "Controls"
+	root.add_theme_constant_override("separation", 8)
+
+	var hint := Label.new()
+	hint.text = "Click an action, then press a key. Esc cancels."
+	hint.add_theme_font_size_override("font_size", 13)
+	root.add_child(hint)
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 300)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	root.add_child(scroll)
+
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 4)
+	scroll.add_child(grid)
+
+	for entry in InputActions.REBINDABLE:
+		var action: StringName = entry["action"]
+		var lbl := Label.new()
+		lbl.text = entry["label"]
+		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lbl.add_theme_font_size_override("font_size", 14)
+		grid.add_child(lbl)
+
+		var btn := Button.new()
+		btn.custom_minimum_size = Vector2(120, 28)
+		btn.mouse_filter = Control.MOUSE_FILTER_STOP
+		btn.pressed.connect(_begin_capture.bind(action))
+		grid.add_child(btn)
+		_bind_buttons[action] = btn
+
+		var pad := Label.new()
+		pad.text = InputActions.describe(action, true)
+		pad.add_theme_font_size_override("font_size", 12)
+		pad.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
+		grid.add_child(pad)
+
+	_controls_status = Label.new()
+	_controls_status.add_theme_font_size_override("font_size", 13)
+	_controls_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	root.add_child(_controls_status)
+
+	var reset_btn := Button.new()
+	reset_btn.text = "Reset to Defaults"
+	reset_btn.custom_minimum_size = Vector2(0, 30)
+	reset_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	reset_btn.pressed.connect(_on_reset_bindings)
+	root.add_child(reset_btn)
+
+	_refresh_bindings()
+	return root
 
 
 func _make_row(label_text: String) -> HBoxContainer:
@@ -195,6 +281,7 @@ func open() -> void:
 
 
 func close() -> void:
+	_cancel_capture()
 	visible = false
 
 
@@ -284,3 +371,72 @@ func _on_focus_selected(index: int) -> void:
 	var mode := _focus_option.get_item_id(index)
 	if _has_settings():
 		GameSettings.set_camera_auto_focus(mode)
+
+
+# --- Controls: rebinding ------------------------------------------------------
+
+func _refresh_bindings() -> void:
+	for action in _bind_buttons.keys():
+		var btn: Button = _bind_buttons[action]
+		if action == _capturing_action:
+			btn.text = "Press a key..."
+			continue
+		var keys := InputActions.describe_keys(action)
+		btn.text = keys if not keys.is_empty() else "(unbound)"
+
+
+func _begin_capture(action: StringName) -> void:
+	_capturing_action = action
+	if _controls_status:
+		_controls_status.text = "Press a key for %s (Esc to cancel)." % InputActions.label_for(action)
+	_refresh_bindings()
+
+
+func _cancel_capture() -> void:
+	if _capturing_action == &"":
+		return
+	_capturing_action = &""
+	if _controls_status:
+		_controls_status.text = ""
+	_refresh_bindings()
+
+
+## Capture the next key press for the action being rebound. Runs in _input so the
+## key never reaches gameplay handlers (the panel is also an input-blocking overlay).
+func _input(event: InputEvent) -> void:
+	if _capturing_action == &"" or not visible:
+		return
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	var k := event as InputEventKey
+	get_viewport().set_input_as_handled()
+	if k.keycode == KEY_ESCAPE:
+		_cancel_capture()
+		return
+	# A lone modifier is not a binding; wait for the real key (Shift+Tab etc.).
+	if k.keycode in [KEY_SHIFT, KEY_CTRL, KEY_ALT, KEY_META]:
+		return
+	var action := _capturing_action
+	var code: int = k.get_keycode_with_modifiers()
+	var conflict := InputActions.find_conflict(code, action)
+	_capturing_action = &""
+	if _has_settings():
+		GameSettings.set_key_binding(action, code)
+	else:
+		InputActions.set_keyboard_bindings(action, [code])
+	if _controls_status:
+		_controls_status.text = "%s bound to %s." % [InputActions.label_for(action), OS.get_keycode_string(code)]
+		if conflict != &"":
+			_controls_status.text += " Swapped with %s." % InputActions.label_for(conflict)
+	_refresh_bindings()
+
+
+func _on_reset_bindings() -> void:
+	_capturing_action = &""
+	if _has_settings():
+		GameSettings.reset_key_bindings()
+	else:
+		InputActions.restore_all_defaults()
+	if _controls_status:
+		_controls_status.text = "Controls reset to defaults."
+	_refresh_bindings()

@@ -93,11 +93,11 @@ func get_rules() -> NetGameRules:
 # Intents (network only; each returns false outside a network match)
 # ---------------------------------------------------------------------------
 
-func request_move(unit, cell: Vector2i) -> bool:
+func request_move(unit, cell: Vector3i) -> bool:
 	return submit_intent(NetProtocol.move(NetUnitIds.id_of(unit), cell))
 
 
-func request_use_move(unit, slot: int, aim_cell: Vector2i) -> bool:
+func request_use_move(unit, slot: int, aim_cell: Vector3i) -> bool:
 	return submit_intent(NetProtocol.use_move(NetUnitIds.id_of(unit), slot, aim_cell))
 
 
@@ -168,6 +168,51 @@ func _on_action_applied(action: Dictionary, result: Dictionary) -> void:
 func _on_intent_rejected(action: Dictionary, reason: String) -> void:
 	push_warning("Network intent %s rejected by host: %s" % [NetProtocol.type_name(int(action.get("type", -1))), reason])
 	network_intent_rejected.emit(action, reason)
+	show_toast(REJECTION_TEXT.get(reason, "Action not allowed (%s)." % reason))
+
+
+const REJECTION_TEXT := {
+	"not_your_turn": "It is not your turn.",
+	"not_your_unit": "That unit is not yours.",
+	"illegal_destination": "That unit cannot move there.",
+	"illegal_target": "That target is not valid.",
+	"unit_cannot_move": "That unit has already moved.",
+	"unit_cannot_act": "That unit has already acted.",
+	"move_unavailable": "That move is not ready yet.",
+	"unknown_unit": "That unit is no longer on the board.",
+	"cannot_end_turn": "The turn cannot be ended right now.",
+}
+
+
+## Brief on-screen message (top-center, fades out). Self-contained: builds its own
+## CanvasLayer on the current scene; a no-op when there is no scene (tests).
+func show_toast(text: String, seconds: float = 2.0) -> void:
+	var scene := get_tree().current_scene if get_tree() != null else null
+	if scene == null:
+		return
+	var layer := scene.get_node_or_null("NetToastLayer") as CanvasLayer
+	if layer == null:
+		layer = CanvasLayer.new()
+		layer.name = "NetToastLayer"
+		layer.layer = 50
+		scene.add_child(layer)
+	for old in layer.get_children():
+		old.queue_free()
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	label.offset_top = 90
+	label.add_theme_font_size_override("font_size", 22)
+	label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 6)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(label)
+	var tween := label.create_tween()
+	tween.tween_interval(seconds)
+	tween.tween_property(label, "modulate:a", 0.0, 0.4)
+	tween.tween_callback(label.queue_free)
 
 
 func _on_game_state_changed(state) -> void:

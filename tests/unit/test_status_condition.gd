@@ -29,14 +29,14 @@ class MockUnit:
 class MockBoard:
 	var placements: Array = []
 	var tiles: Dictionary = {}
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -46,9 +46,9 @@ class MockBoard:
 		return a.team != b.team
 	func are_allies(a, b) -> bool:
 		return a.team == b.team
-	func set_tile(cell: Vector2i, tile_id) -> void:
+	func set_tile(cell: Vector3i, tile_id) -> void:
 		tiles[cell] = tile_id
-	func move_unit(unit, to_cell: Vector2i) -> void:
+	func move_unit(unit, to_cell: Vector3i) -> void:
 		for p in placements:
 			if p.unit == unit:
 				p.cell = to_cell
@@ -89,7 +89,7 @@ func _controller_for(unit) -> StatusController:
 func test_burn_tick_deals_damage_to_self():
 	var unit := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(2, 2))
+	board.place(unit, Vector3i(2, 2, 0))
 	_burn(3).tick(unit, board)
 	assert_eq(unit.hp, 90, "single burn tick deals 10 true damage")
 
@@ -97,7 +97,7 @@ func test_regen_tick_heals_self():
 	var unit := MockUnit.new(0, { "health": 100 })
 	unit.hp = 50
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	_regen(2).tick(unit, board)
 	assert_eq(unit.hp, 58, "single regen tick heals 8")
 
@@ -106,7 +106,7 @@ func test_regen_tick_heals_self():
 func test_burn_ticks_n_turns_then_expires():
 	var unit := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(1, 1))
+	board.place(unit, Vector3i(1, 1, 0))
 	var sc := _controller_for(unit)
 	sc.add_status(_burn(3))
 	sc.tick_all(board)   # 100 -> 90, 2 turns left
@@ -121,7 +121,7 @@ func test_burn_ticks_n_turns_then_expires():
 func test_permanent_condition_never_expires():
 	var unit := MockUnit.new(0, { "health": 1000 })
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var sc := _controller_for(unit)
 	sc.add_status(_burn(-1))
 	for i in range(5):
@@ -132,7 +132,7 @@ func test_permanent_condition_never_expires():
 func test_stacking_refresh_resets_duration():
 	var unit := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var sc := _controller_for(unit)
 	sc.add_status(_burn(3))
 	sc.tick_all(board)              # 2 turns left
@@ -144,7 +144,7 @@ func test_stacking_refresh_resets_duration():
 func test_stacking_stack_adds_second_instance():
 	var unit := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var sc := _controller_for(unit)
 	var a := _burn(3); a.stacking = StatusCondition.Stacking.STACK
 	var b := _burn(3); b.stacking = StatusCondition.Stacking.STACK
@@ -157,7 +157,7 @@ func test_stacking_stack_adds_second_instance():
 func test_stacking_ignore_keeps_original():
 	var unit := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var sc := _controller_for(unit)
 	var a := _burn(3); a.stacking = StatusCondition.Stacking.IGNORE
 	sc.add_status(a)
@@ -182,9 +182,9 @@ func test_apply_status_inflicts_condition_on_enemies():
 	var enemy := MockUnit.new(1, { "health": 100 })
 	var ally := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))
-	board.place(ally, Vector2i(0, 1))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(1, 0, 0))
+	board.place(ally, Vector3i(0, 1, 0))
 
 	var move := MoveResource.new()
 	move.move_id = &"ignite"
@@ -199,7 +199,7 @@ func test_apply_status_inflicts_condition_on_enemies():
 	apply.condition = _burn(3)
 	move.effects = [apply]
 
-	var result := MoveExecutor.execute(move, caster, board, Vector2i(1, 0))
+	var result := MoveExecutor.execute(move, caster, board, Vector3i(1, 0, 0))
 	assert_true(result.success, "ignite resolves")
 	assert_eq(enemy.added_statuses.size(), 1, "enemy received the burn condition")
 	assert_eq(ally.added_statuses.size(), 0, "ally not affected by an ENEMY-targeted status move")
@@ -210,9 +210,9 @@ func test_apply_status_gives_each_target_independent_duplicate():
 	var enemy_a := MockUnit.new(1, { "health": 100 })
 	var enemy_b := MockUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(enemy_a, Vector2i(2, 0))
-	board.place(enemy_b, Vector2i(2, 1))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(enemy_a, Vector3i(2, 0, 0))
+	board.place(enemy_b, Vector3i(2, 1, 0))
 
 	var move := MoveResource.new()
 	move.move_id = &"spread_burn"
@@ -227,7 +227,7 @@ func test_apply_status_gives_each_target_independent_duplicate():
 	apply.condition = _burn(3)
 	move.effects = [apply]
 
-	MoveExecutor.execute(move, caster, board, Vector2i(2, 0))
+	MoveExecutor.execute(move, caster, board, Vector3i(2, 0, 0))
 	assert_eq(enemy_a.added_statuses.size(), 1, "enemy A got a condition")
 	assert_eq(enemy_b.added_statuses.size(), 1, "enemy B got a condition")
 	assert_ne(enemy_a.added_statuses[0], enemy_b.added_statuses[0], "each target gets its own duplicate")

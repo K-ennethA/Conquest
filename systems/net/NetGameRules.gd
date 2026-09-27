@@ -116,7 +116,7 @@ func validate_intent(action: Dictionary, actor_slot: int) -> String:
 	return "unknown_action"
 
 
-func _validate_move(unit, to: Vector2i, ts, b) -> String:
+func _validate_move(unit, to: Vector3i, ts, b) -> String:
 	if ts.has_method("validate_turn_action") and not ts.validate_turn_action(unit, "move"):
 		return "unit_cannot_move"
 	if unit.has_method("can_move") and not unit.can_move():
@@ -124,16 +124,16 @@ func _validate_move(unit, to: Vector2i, ts, b) -> String:
 	var profile = unit.get_movement_profile() if unit.has_method("get_movement_profile") else null
 	if profile == null:
 		return "no_movement_profile"
-	var origin: Vector2i = b.cell_of(unit)
+	var origin: Vector3i = b.cell_of(unit)
 	if to == origin:
 		return "illegal_destination"
-	var reachable: Array[Vector2i] = MovementResolver.new().reachable_cells(origin, profile, b, unit)
+	var reachable: Array[Vector3i] = MovementResolver.new().reachable_cells(origin, profile, b, unit)
 	if not reachable.has(to):
 		return "illegal_destination"
 	return ""
 
 
-func _validate_use_move(unit, slot: int, aim: Vector2i, ts, b) -> String:
+func _validate_use_move(unit, slot: int, aim: Vector3i, ts, b) -> String:
 	if ts.has_method("can_unit_act") and not ts.can_unit_act(unit):
 		return "unit_cannot_act"
 	if unit.has_method("can_act") and not unit.can_act():
@@ -144,8 +144,10 @@ func _validate_use_move(unit, slot: int, aim: Vector2i, ts, b) -> String:
 	var controller = unit.get_moveset_controller() if unit.has_method("get_moveset_controller") else null
 	if controller != null and controller.has_method("can_use") and not controller.can_use(move):
 		return "move_unavailable"
-	var origin: Vector2i = b.cell_of(unit)
-	if not move.can_aim_at(origin, aim, unit) or not move.can_target(origin, aim, unit, b):
+	var origin: Vector3i = b.cell_of(unit)
+	# Floor-aware: range = Cells.distance, melee only on-floor or across a link,
+	# line of sight / elevation rules via the pattern (same checks MoveExecutor runs).
+	if not move.can_aim_at(origin, aim, unit, b) or not move.can_target(origin, aim, unit, b):
 		return "illegal_target"
 	if requires_unit_target(move, unit) and not has_eligible_unit_at(b, move, unit, aim):
 		return "illegal_target"
@@ -165,7 +167,7 @@ static func requires_unit_target(move, caster) -> bool:
 
 
 ## Mirrors UnitActionsPanel._has_eligible_unit_at (allegiance via the board).
-static func has_eligible_unit_at(b, move, caster, aim: Vector2i) -> bool:
+static func has_eligible_unit_at(b, move, caster, aim: Vector3i) -> bool:
 	var pattern = move.targeting_for(caster)
 	for occupant in b.units_at(aim):
 		if occupant == null:
@@ -228,19 +230,19 @@ func _apply(action: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 
 	match t:
 		NetProtocol.Action.MOVE:
-			var from: Vector2i = b.cell_of(unit)
-			var to: Vector2i = NetProtocol.cell_from_wire(d.get(NetProtocol.K_TO))
+			var from: Vector3i = b.cell_of(unit)
+			var to: Vector3i = NetProtocol.cell_from_wire(d.get(NetProtocol.K_TO))
 			# Same primitive the AI uses (BotTurnDriver._relocate): the board snaps
 			# the unit's root; UnitAnimator glides the mesh off unit_moved.
 			b.move_unit(unit, to)
 			if GameEvents:
-				GameEvents.unit_moved.emit(unit, Vector3(from.x, 0, from.y), Vector3(to.x, 0, to.y))
+				GameEvents.unit_moved.emit(unit, Cells.to_grid(from), Cells.to_grid(to))
 			if unit.has_method("mark_moved"):
 				unit.mark_moved()
 			return {"ok": true, "from": from, "to": to}
 		NetProtocol.Action.USE_MOVE:
 			var slot: int = int(d.get(NetProtocol.K_SLOT, -1))
-			var aim: Vector2i = NetProtocol.cell_from_wire(d.get(NetProtocol.K_AIM))
+			var aim: Vector3i = NetProtocol.cell_from_wire(d.get(NetProtocol.K_AIM))
 			var move = unit.get_move(slot)
 			var res: Dictionary = unit.perform_move(slot, aim, b, rng)
 			if bool(res.get("success", false)):
@@ -280,10 +282,10 @@ func state_digest() -> int:
 		for u in b.all_units():
 			if u == null or not is_instance_valid(u):
 				continue
-			var cell: Vector2i = b.cell_of(u)
+			var cell: Vector3i = b.cell_of(u)
 			rows.append([
 				NetUnitIds.id_of(u),
-				cell.x, cell.y,
+				cell.x, cell.y, cell.z,
 				int(u.get_hp()) if u.has_method("get_hp") else 0,
 				bool(u.has_acted_this_turn) if "has_acted_this_turn" in u else false,
 				bool(u.has_moved_this_turn) if "has_moved_this_turn" in u else false,

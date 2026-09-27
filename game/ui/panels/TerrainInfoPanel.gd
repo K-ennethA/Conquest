@@ -32,7 +32,7 @@ var _effects_header: Label
 var _effects_container: VBoxContainer
 
 # Sentinel so the very first _on_cursor_moved always does a fresh lookup.
-var _current_cell: Vector2i = Vector2i(-999999, -999999)
+var _current_cell: Vector3i = Vector3i(-999999, -999999, 0)
 
 
 func _ready() -> void:
@@ -68,6 +68,11 @@ func _ready() -> void:
 
 	if GameEvents and not GameEvents.cursor_moved.is_connected(_on_cursor_moved):
 		GameEvents.cursor_moved.connect(_on_cursor_moved)
+	# Track the selected unit so Move Cost reflects ITS movement profile.
+	if GameEvents and not GameEvents.unit_selected.is_connected(_on_unit_selected):
+		GameEvents.unit_selected.connect(_on_unit_selected)
+	if GameEvents and not GameEvents.unit_deselected.is_connected(_on_unit_deselected):
+		GameEvents.unit_deselected.connect(_on_unit_deselected)
 
 
 ## Pin our rect to the whole viewport so the bottom-left-anchored card lands on
@@ -146,7 +151,7 @@ func _create_ui() -> void:
 ## Populate and show the panel for a specific board cell. Hides itself (and
 ## returns) when the cell has no registered terrain -- e.g. off the loaded
 ## map, or no map/board loaded yet.
-func show_for_cell(cell: Vector2i) -> void:
+func show_for_cell(cell: Vector3i) -> void:
 	# NOTE: a null tile here means the cursor is on an IN-BOUNDS cell whose terrain
 	# isn't registered (a registry miss), NOT off-board -- _on_cursor_moved already
 	# rejected off-board cells. Blanking the whole panel in that case was the
@@ -157,15 +162,18 @@ func show_for_cell(cell: Vector2i) -> void:
 
 	_current_cell = cell
 
+	var unit_cost := _unit_move_cost_text(cell)
 	if tile != null:
 		_name_label.text = tile.tile_name if tile.tile_name != "" else "Unknown Terrain"
-		if tile.is_tile_passable():
+		if not unit_cost.is_empty():
+			_move_label.text = unit_cost
+		elif tile.is_tile_passable():
 			_move_label.text = "Move Cost: %d" % maxi(1, tile.base_movement_cost)
 		else:
 			_move_label.text = "Move Cost: -- (Impassable)"
 	else:
 		_name_label.text = "Unknown Terrain"
-		_move_label.text = "Move Cost: 1"
+		_move_label.text = unit_cost if not unit_cost.is_empty() else "Move Cost: 1"
 
 	# Reveal BEFORE populating effects: the name/move rows are already valid, so
 	# even if effect population ever failed we still surface the terrain instead of
@@ -174,16 +182,68 @@ func show_for_cell(cell: Vector2i) -> void:
 	_populate_effects(cell)
 
 
+# --- Per-unit move cost ----------------------------------------------------------
+# MovementResolver prices a step with the MOVER's profile (per-terrain overrides,
+# and flying/phasing kinds ignore blocking terrain), so the tile's base cost can be
+# wrong for the unit the player cares about. When a unit is selected -- or, with
+# nothing selected, a unit stands on the hovered cell -- show the cost for THAT
+# unit's profile via the resolver's own (read-only) cost/blocking helpers.
+
+var _selected_unit = null
+
+func _on_unit_selected(unit, _world_pos) -> void:
+	_selected_unit = unit
+	_refresh_current_cell()
+
+func _on_unit_deselected(_unit) -> void:
+	_selected_unit = null
+	_refresh_current_cell()
+
+func _refresh_current_cell() -> void:
+	if visible and _current_cell != Vector3i(-999999, -999999, 0):
+		show_for_cell(_current_cell)
+
+## The unit whose profile prices the hovered cell: the selected unit, else the unit
+## standing on [param cell]; null when neither exists.
+func _cost_unit_for(cell: Vector3i, board):
+	if _selected_unit != null and is_instance_valid(_selected_unit):
+		return _selected_unit
+	if board != null and board.has_method("units_at"):
+		for u in board.units_at(cell):
+			if u != null and is_instance_valid(u):
+				return u
+	return null
+
+## "Move Cost: N (Unit)" for the cost-unit's movement profile, or "" when there is no
+## unit / profile to price with (the caller then shows the tile's base cost).
+func _unit_move_cost_text(cell: Vector3i) -> String:
+	var board = CombatServices.board()
+	if board == null:
+		return ""
+	var unit = _cost_unit_for(cell, board)
+	if unit == null or not unit.has_method("get_movement_profile"):
+		return ""
+	var profile = unit.get_movement_profile()
+	if not (profile is MovementProfile):
+		return ""
+	var who: String = unit.get_display_name() if unit.has_method("get_display_name") else ""
+	var suffix := " (%s)" % who if not who.is_empty() else ""
+	# Only GROUND movers are stopped by blocking terrain (see MovementResolver._can_traverse).
+	if profile.kind == CombatTypes.MovementKind.GROUND and MovementResolver._is_blocked(board, cell):
+		return "Move Cost: -- (Impassable)" + suffix
+	return "Move Cost: %d" % MovementResolver._enter_cost(cell, profile, board) + suffix
+
+
 ## Hide the panel and reset its tracked cell so the next show_for_cell always
 ## repopulates fresh.
 func hide_panel() -> void:
-	_current_cell = Vector2i(-999999, -999999)
+	_current_cell = Vector3i(-999999, -999999, 0)
 	hide()
 
 
 # --- Internals -----------------------------------------------------------------
 
-func _populate_effects(cell: Vector2i) -> void:
+func _populate_effects(cell: Vector3i) -> void:
 	for child in _effects_container.get_children():
 		child.queue_free()
 
@@ -276,7 +336,7 @@ func _build_effect_chip(te: TileEffectResource, is_temporary: bool) -> PanelCont
 ## of re-deriving it through BoardAdapter.world_to_cell (which expects a raw
 ## world-space position, not grid coordinates).
 func _on_cursor_moved(grid_pos: Vector3) -> void:
-	var cell := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var cell := Cells.from_grid(grid_pos)  # Vector3(col, floor, row) -> cell
 
 	# No live board yet (no map loaded / between rebuilds) -- nothing to show.
 	var board := CombatServices.board()

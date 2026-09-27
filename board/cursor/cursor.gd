@@ -42,13 +42,14 @@ var tile_position := Vector3.ZERO:
 		var old_position = tile_position
 		tile_position = new_position
 		position = grid.calculate_map_position(tile_position)
+		# (Multi-floor: tile_position.y is the FLOOR; the bracket sits on that floor.)
 		# Sit the bracket just above the tile top so it reads as ON the tile. Under a
 		# tilted orthographic view any vertical offset shifts the cursor's SCREEN
 		# position off the ground cell (~offset*sin(tilt)); a large lift (the old 3.0)
 		# floated it well above the tile under the mouse. The bracket material uses
 		# no_depth_test, so this small lift only prevents z-fighting with the tile top
 		# and never causes occlusion.
-		position.y = 0.15
+		position.y = Cells.floor_y(int(tile_position.y)) + 0.15
 		
 		# Emit movement event
 		GameEvents.cursor_moved.emit(tile_position)
@@ -78,7 +79,7 @@ var is_mouse_enabled: bool = true
 func _ready() -> void:
 	_setup_cursor_visuals()
 	position = grid.calculate_map_position(tile_position)
-	position.y = 0.15  # Sit on the tile (see the tile_position setter for why)
+	position.y = Cells.floor_y(int(tile_position.y)) + 0.15  # Sit on the tile (see the tile_position setter for why)
 	GameEvents.cursor_moved.emit(tile_position)
 	_check_unit_at_cursor()
 	
@@ -198,38 +199,71 @@ func _process(delta: float) -> void:
 	_pulse_time += delta
 	var pulse := 1.0 + sin(_pulse_time * PULSE_SPEED) * PULSE_AMPLITUDE
 	mesh_instance.scale = _bracket_base_scale * pulse
+	_update_joy_repeat(delta)
+
+# --- Gamepad held-direction repeat -----------------------------------------------
+# Keyboard repeat comes from OS echo events; a gamepad d-pad/stick has none, so a
+# held gamepad direction is re-stepped here: first repeat after JOY_REPEAT_DELAY,
+# then every JOY_REPEAT_INTERVAL while the action stays pressed.
+const JOY_REPEAT_DELAY := 0.3
+const JOY_REPEAT_INTERVAL := 0.08
+var _joy_held_action: StringName = &""
+var _joy_repeat_timer: float = 0.0
+
+func _update_joy_repeat(delta: float) -> void:
+	if _joy_held_action == &"":
+		return
+	if not Input.is_action_pressed(_joy_held_action) or InputActions.gameplay_input_blocked(get_tree()):
+		_joy_held_action = &""
+		return
+	_joy_repeat_timer -= delta
+	if _joy_repeat_timer <= 0.0:
+		_joy_repeat_timer = JOY_REPEAT_INTERVAL
+		_step_cursor(InputActions.CURSOR_STEPS[_joy_held_action])
+
+func _step_cursor(step: Vector3) -> void:
+	var new_position = tile_position + step
+	if grid.is_within_bounds(new_position):
+		self.tile_position = new_position
 
 func _unhandled_input(event: InputEvent) -> void:
-	# Handle keyboard input first (always works)
-	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_F5:
-			_test_unit_selection_signal()
+	# A full-screen overlay (Settings, ...) owns input while it is open.
+	if InputActions.gameplay_input_blocked(get_tree()):
+		return
+
+	# Dev helper: Ctrl+Shift+F5 (debug builds only) fires a synthetic unit_selected.
+	if InputActions.is_debug_hotkey(event, KEY_F5):
+		_test_unit_selection_signal()
+		return
+
+	# Named actions (keyboard + gamepad, rebindable -- see InputActions).
+	if event.is_action_pressed(InputActions.CONFIRM):
+		_handle_selection()
+		return
+	if event.is_action_pressed(InputActions.CANCEL):
+		_handle_deselection()
+		return
+
+	# Cursor movement. Keys step on press AND on OS key-repeat (echo), so holding a
+	# direction glides the cursor. Gamepad d-pad / stick send no echo, so a held
+	# gamepad direction repeats via _process (see _update_joy_repeat).
+	for action in InputActions.CURSOR_STEPS:
+		if not event.is_action(action):
+			continue
+		var is_joy := event is InputEventJoypadButton or event is InputEventJoypadMotion
+		if is_joy:
+			if event.is_action_pressed(action) and _joy_held_action != action:
+				_joy_held_action = action
+				_joy_repeat_timer = JOY_REPEAT_DELAY
+				_step_cursor(InputActions.CURSOR_STEPS[action])
+			elif not event.is_action_pressed(action) and _joy_held_action == action \
+					and not Input.is_action_pressed(action):
+				_joy_held_action = &""
 			return
-		elif event.is_action_pressed("ui_accept"):
-			_handle_selection()
+		if event.is_action_pressed(action, true):
+			_step_cursor(InputActions.CURSOR_STEPS[action])
 			return
-		elif event.is_action_pressed("ui_cancel"):
-			_handle_deselection()
-			return
-		
-		# Handle movement input
-		var input_vector = Vector3.ZERO
-		
-		if event.is_action_pressed("ui_right"):
-			input_vector.x += 1
-		elif event.is_action_pressed("ui_left"):
-			input_vector.x -= 1
-		elif event.is_action_pressed("ui_down"):
-			input_vector.z += 1
-		elif event.is_action_pressed("ui_up"):
-			input_vector.z -= 1
-		
-		if input_vector != Vector3.ZERO:
-			var new_position = tile_position + input_vector
-			if grid.is_within_bounds(new_position):
-				self.tile_position = new_position
-			return
-	
+
 	# Handle mouse input (only if not handled by UI)
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -328,7 +362,24 @@ func _cell_under_mouse(mouse_pos: Vector2):
 		return null
 
 	var point: Vector3 = origin + dir * t
-	return grid.calculate_grid_coordinates(point)
+	# MULTI-FLOOR: pick the TOP-MOST existing tile under the ray. March the floors
+	# from the top down, intersecting each floor's walking plane; the first floor
+	# that has a tile at the hit column wins. Floor 0 (the plane above) is the
+	# fallback, so single-floor maps behave exactly as before.
+	var board = CombatServices.board() if CombatServices else null
+	if board != null and board.has_method("floor_count") and board.floor_count() > 1:
+		for f in range(board.floor_count() - 1, 0, -1):
+			var plane_y: float = Cells.floor_y(f) + 0.1
+			var tf: float = (plane_y - origin.y) / dir.y
+			if tf < 0.0:
+				continue
+			var p: Vector3 = origin + dir * tf
+			var col := Vector3i(int(floor(p.x / grid.cell_size.x)), int(floor(p.z / grid.cell_size.z)), f)
+			if board.has_tile(col):
+				return Cells.to_grid(col)
+	var ground: Vector3 = grid.calculate_grid_coordinates(point)
+	ground.y = 0.0
+	return ground
 
 
 func _handle_mouse_click(mouse_pos: Vector2) -> void:
@@ -523,7 +574,9 @@ func _get_unit_at_position(grid_pos: Vector3) -> Unit:
 		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
 		
 		# Check if positions match (with some tolerance)
-		if abs(unit_grid_pos.x - grid_pos.x) < 0.1 and abs(unit_grid_pos.z - grid_pos.z) < 0.1:
+		# (y = floor: a unit on a bridge is not "at" the road cell beneath it)
+		if abs(unit_grid_pos.x - grid_pos.x) < 0.1 and abs(unit_grid_pos.z - grid_pos.z) < 0.1 \
+				and abs(unit_grid_pos.y - grid_pos.y) < 0.1:
 			return unit
 	
 	return null
@@ -538,15 +591,19 @@ func _find_all_units() -> Array[Unit]:
 	if scene_root == null:
 		return units
 
-	# Look for units in Player1 and Player2 nodes
-	var player_nodes = ["Map/Player1", "Map/Player2"]
-	
-	for player_path in player_nodes:
-		var player_node = scene_root.get_node_or_null(player_path)
-		if player_node:
+	# Units live under Map/Player<N> containers (any number of players, incl. the
+	# neutral / spawned ones), plus anything registered in the "units" group.
+	var map_node = scene_root.get_node_or_null("Map")
+	if map_node:
+		for player_node in map_node.get_children():
+			if not String(player_node.name).begins_with("Player"):
+				continue
 			for child in player_node.get_children():
-				if child is Unit:
+				if child is Unit and not units.has(child):
 					units.append(child)
+	for node in tree.get_nodes_in_group("units"):
+		if node is Unit and not units.has(node):
+			units.append(node)
 	
 	return units
 
