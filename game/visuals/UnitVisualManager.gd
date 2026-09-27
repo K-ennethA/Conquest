@@ -391,8 +391,8 @@ func _unit_has_acted(unit: Unit) -> bool:
 ##
 ## Friend/foe is decided exactly the way the rest of the game decides who the human
 ## may command (see PlayerManager.can_current_player_select_unit): the local human is
-## `GameModeManager.get_local_player_id()` (0 in single-player / hotseat, the real
-## slot in multiplayer), and any unit owned by an `is_ai` player -- or by any other
+## [method _perspective_player_id] (the human whose turn it is in single-player /
+## hotseat, the real slot in multiplayer), and any unit owned by an `is_ai` player -- or by any other
 ## player id -- is hostile and gets the RED outline. A unit with no owner, or one
 ## owned by a dormant NEUTRAL faction (jungle-camp style, hostile to nobody until
 ## provoked), gets no outline at all so it reads as a third party rather than as
@@ -415,10 +415,35 @@ func _outline_side_for_unit(unit: Unit) -> OutlineSide:
 	if owner_player.is_ai:
 		return OutlineSide.ENEMY
 
-	var local_id: int = 0
-	if GameModeManager and GameModeManager.has_method("get_local_player_id"):
-		local_id = int(GameModeManager.get_local_player_id())
+	var local_id: int = _perspective_player_id()
 	return OutlineSide.ALLY if owner_player.player_id == local_id else OutlineSide.ENEMY
+
+
+## Last human player whose turn it was in LOCAL play (hotseat / VERSUS). Outlines keep
+## this perspective through an AI phase so they don't flip to the AI's point of view.
+var _hotseat_perspective_id: int = 0
+
+## Whose point of view friend/foe outlines are drawn from.
+##   MULTIPLAYER : the local client's slot (GameModeManager.get_local_player_id()) --
+##                 the other side is always "enemy" on this screen.
+##   local play  : the HUMAN whose turn it currently is. In a two-human hotseat game
+##                 both players share one screen, so Player 2's units must read as
+##                 friendly (blue) on Player 2's turn. Single-player has only one human
+##                 (slot 0), so this is identical to the old fixed-0 behaviour there.
+## Refreshed on every turn change via _on_turn_started -> update_all_unit_visuals.
+func _perspective_player_id() -> int:
+	if GameSettings and GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
+		if GameModeManager and GameModeManager.has_method("get_local_player_id"):
+			return int(GameModeManager.get_local_player_id())
+		return 0
+	var current: Player = null
+	if TurnSystemManager and TurnSystemManager.has_active_turn_system():
+		current = TurnSystemManager.get_active_turn_system().get_current_active_player()
+	if current == null and PlayerManager:
+		current = PlayerManager.get_current_player()
+	if current != null and not current.is_ai and not current.is_neutral:
+		_hotseat_perspective_id = int(current.player_id)
+	return _hotseat_perspective_id
 
 # --- Shared overlay materials ------------------------------------------------
 
