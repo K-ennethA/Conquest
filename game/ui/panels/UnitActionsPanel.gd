@@ -930,13 +930,16 @@ func is_showing_actions_for_unit(unit: Unit) -> bool:
 	"""Check if panel is showing actions for specific unit"""
 	return selected_unit == unit and visible
 
-# Debug method to test button functionality
+# Keyboard / gamepad shortcuts (named actions -- see InputActions).
 func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
+	# A full-screen overlay (Settings, ...) owns input while it is open.
+	if InputActions.gameplay_input_blocked(get_tree()):
 		return
-	
-	if event is InputEventKey:
-		match event.keycode:
+
+	# Developer helpers: debug builds only, Ctrl+Shift held (never a plain key --
+	# F1 used to end the selected unit's turn during normal play).
+	if InputActions.is_debug_hotkey(event):
+		match (event as InputEventKey).keycode:
 			KEY_F1:
 				_on_end_unit_turn_pressed()
 			KEY_F2:
@@ -947,32 +950,32 @@ func _input(event: InputEvent) -> void:
 				_test_manual_unit_selection()
 			KEY_F5:
 				_test_movement_range_calculation_direct()
+		return
 
-			# Keyboard shortcuts for actions (only when panel is visible and unit selected)
-			KEY_M:
-				if visible and selected_unit:
-					if movement_mode:
-						_exit_movement_mode()
-					else:
-						_on_move_pressed()
-			KEY_E:
-				if visible and selected_unit and not movement_mode:
-					_on_end_unit_turn_pressed()
-			KEY_P:
-				if visible and selected_unit and not movement_mode:
-					_on_end_player_turn_pressed()
-			KEY_S:
-				if visible and selected_unit and not movement_mode:
-					_on_unit_summary_pressed()
-			KEY_C, KEY_ESCAPE:
-				if visible and selected_unit:
-					_on_cancel_pressed()
-					# Consume ESC so the board cursor's own ui_cancel handler does not
-					# ALSO fire and deselect the unit -- that would collapse the staged
-					# FE back-out (drop targeting -> revert tentative -> deselect) into a
-					# single press. This panel's _input runs before the cursor's
-					# _unhandled_input, so marking it handled keeps the staging intact.
-					get_viewport().set_input_as_handled()
+	# Action shortcuts (named, rebindable actions -- see InputActions). Only while the
+	# panel is showing a selected unit. End Player Turn (end_turn) is handled once by
+	# PlayerTurnPanel so a single press can never end two turns.
+	if not (visible and selected_unit):
+		return
+	if event.is_action_pressed(InputActions.UNIT_MOVE):
+		if movement_mode:
+			_exit_movement_mode()
+		else:
+			_on_move_pressed()
+	elif event.is_action_pressed(InputActions.WAIT):
+		if not movement_mode:
+			_on_end_unit_turn_pressed()
+	elif event.is_action_pressed(InputActions.UNIT_INFO):
+		if not movement_mode:
+			_on_unit_summary_pressed()
+	elif event.is_action_pressed(InputActions.CANCEL):
+		_on_cancel_pressed()
+		# Consume cancel so the board cursor's own cancel handler does not ALSO fire
+		# and deselect the unit -- that would collapse the staged FE back-out (drop
+		# targeting -> revert tentative -> deselect) into a single press. This
+		# panel's _input runs before the cursor's _unhandled_input, so marking it
+		# handled keeps the staging intact.
+		get_viewport().set_input_as_handled()
 
 func _test_manual_unit_selection() -> void:
 	"""Test manual unit selection for debugging"""
@@ -1896,6 +1899,7 @@ func _cancel_move_targeting() -> void:
 	also want to refresh or drop selection do that around this call."""
 	move_mode = false
 	selected_move_index = -1
+	_aoe_preview_active = false
 	# Clears both the attack-range and AoE-preview overlay meshes (the visualizer's
 	# _on_targeting_cleared wipes both dictionaries). Covers cancel via BACK/ESC/
 	# right-click AND move resolution, since every path funnels through here.
@@ -1934,6 +1938,8 @@ func _refresh_move_forecast(grid_pos: Vector3) -> void:
 	# damage this aim would deal (the forecast card only covers the single enemy at
 	# the cursor). Self-clears when the aim is illegal or off any unit.
 	_refresh_overworld_damage_preview(grid_pos)
+	# Live AoE footprint while aiming (not only after committing the attack).
+	_refresh_aoe_preview(grid_pos)
 
 	if combat_forecast_panel == null:
 		return
@@ -1968,6 +1974,32 @@ func _refresh_move_forecast(grid_pos: Vector3) -> void:
 		return
 
 	combat_forecast_panel.show_forecast(selected_unit, enemy, move)
+
+# True while this panel has an AoE footprint on the board from the live aim preview,
+# so an illegal aim clears it exactly once instead of re-emitting every cursor step.
+var _aoe_preview_active: bool = false
+
+func _refresh_aoe_preview(grid_pos: Vector3) -> void:
+	"""While aiming, paint the full area the move would hit at the cursor cell
+	(GameEvents.aoe_preview_calculated) whenever that aim is LEGAL -- the same
+	can_target test the executor runs -- and clear it once the aim turns illegal.
+	Targeting exit clears it via _cancel_move_targeting (targeting_cleared)."""
+	var cells: Array = []
+	if is_targeting_move() and selected_unit:
+		var move: MoveResource = selected_unit.get_move(selected_move_index)
+		var board = CombatServices.board()
+		if move != null and move.targeting != null and board != null:
+			var origin: Vector2i = board.cell_of(selected_unit)
+			var aim := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+			if move.can_target(origin, aim, selected_unit, board):
+				cells = _cells_to_grid_vec3(move.targeting_for(selected_unit).resolve_cells(origin, aim))
+	if cells.is_empty():
+		if _aoe_preview_active:
+			_aoe_preview_active = false
+			GameEvents.aoe_preview_calculated.emit([])
+		return
+	_aoe_preview_active = true
+	GameEvents.aoe_preview_calculated.emit(cells)
 
 func _refresh_overworld_damage_preview(grid_pos: Vector3) -> void:
 	"""Blink the world-space health bar of EVERY enemy this aim would hit with the

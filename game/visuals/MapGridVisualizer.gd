@@ -261,18 +261,21 @@ func is_grid_visible() -> bool:
 # Input handling
 func _input(event: InputEvent) -> void:
 	"""Handle global input for grid toggle"""
-	if event is InputEventKey and event.pressed:
+	# Dev toggles: debug builds + Ctrl+Shift only (never plain F1 / L in play).
+	if InputActions.is_debug_hotkey(event, KEY_F1):
+		toggle_grid()
+		return
+	if InputActions.is_debug_hotkey(event, KEY_L):
+		_test_line_visibility()
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
-			KEY_F1:
-				toggle_grid()
 			KEY_EQUAL, KEY_PLUS:  # + key
 				user_toggled_off = false
 				_update_grid_visibility()
 			KEY_MINUS:
 				user_toggled_off = true
 				_update_grid_visibility()
-			KEY_L:
-				_test_line_visibility()
 
 # Cleanup
 func cleanup() -> void:

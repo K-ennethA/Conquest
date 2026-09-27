@@ -13,7 +13,8 @@ func _ready() -> void:
 	print("Starting movement range debug test...")
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed:
+	# Dev-only: debug builds + Ctrl+Shift held (see InputActions.is_debug_hotkey).
+	if InputActions.is_debug_hotkey(event):
 		match event.keycode:
 			KEY_T:
 				print("T pressed - Testing movement range display")

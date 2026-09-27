@@ -10,7 +10,7 @@ extends Camera3D
 ## looks and how close it is change.
 ##
 ## Controls:
-##   * PAN   -- WASD/arrows (smooth, in [method _process]), middle-mouse grab-drag,
+##   * PAN   -- WASD / right stick (camera_pan_* actions, smooth, in [method _process]; arrows step the cursor), middle-mouse grab-drag,
 ##              and optional screen-edge scroll.
 ##   * ZOOM  -- mouse wheel (dollies toward the cursor), clamped to a distance range.
 ##   * FIT   -- on [signal CombatServices.board_ready] the camera centers on the
@@ -263,15 +263,15 @@ func _find_tiles_container() -> Node:
 func _process(delta: float) -> void:
 	var dir := Vector3.ZERO
 
-	if not _text_field_has_focus():
-		if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-			dir -= _ground_right
-		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-			dir += _ground_right
-		if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-			dir += _ground_forward
-		if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-			dir -= _ground_forward
+	# Named camera-pan actions (default WASD + right stick; rebindable). Arrow keys
+	# are deliberately NOT here: they step the board cursor, and panning on them too
+	# made every cursor step drag the view. Suppressed while a full-screen overlay
+	# (Settings) is open or a text field has focus.
+	if not _text_field_has_focus() and not InputActions.gameplay_input_blocked(get_tree()):
+		dir -= _ground_right * Input.get_action_strength(InputActions.CAMERA_PAN_LEFT)
+		dir += _ground_right * Input.get_action_strength(InputActions.CAMERA_PAN_RIGHT)
+		dir += _ground_forward * Input.get_action_strength(InputActions.CAMERA_PAN_UP)
+		dir -= _ground_forward * Input.get_action_strength(InputActions.CAMERA_PAN_DOWN)
 
 	if edge_scroll_enabled:
 		dir += _edge_scroll_dir()
