@@ -54,8 +54,11 @@ const MAX_MOVES: int = 4
 @export var footprint: Vector2i = Vector2i.ONE
 
 @export_group("Model")
-## Extra yaw (Y rotation, degrees) applied to the authored model when it enters the
-## board -- use 180 for a sculpt that faces the wrong way. 0 = as authored.
+## Extra yaw (Y rotation, degrees) applied to the authored model so that it faces
+## +Z (south, toward the battle camera) -- the model-forward convention the unit
+## facing system builds on (UnitFacing / CONQUEST.md "Unit facing"). The Blender
+## pipeline exports facing +Z, so 0 is normal; use 180 for a sculpt that faces
+## away. Verify with dev_scripts/render_unit_facing.gd.
 @export var model_yaw_deg: float = 0.0
 ## Uniform scale multiplier on the model (1.0 = the pipeline-fit size). Scales about
 ## the feet-at-origin, so the unit stays grounded. Use < 1 for a small creature
