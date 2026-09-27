@@ -202,8 +202,10 @@ func _floor_container(floor_index: int) -> Node3D:
 
 
 func _load_links() -> void:
-	"""Register every link with the board and drop a simple marker for each (a thin
-	ramp between the two tile tops) so stairs are visible until a later art pass."""
+	"""Register every link with the board and give each a readable visual (stairs /
+	ladder / ramp -- see FloorDecor), then dress the upper floors (walls under
+	ramparts, parapets, broken-bridge edges). All of it is derived from the map data."""
+	FloorDecor.build_floor_decor(current_map, tiles_container)
 	var links: Array = current_map.get_links()
 	if links.is_empty():
 		return
@@ -213,7 +215,10 @@ func _load_links() -> void:
 	for l in links:
 		if CombatServices:
 			CombatServices.register_link(l)
-		markers.add_child(_make_link_marker(l["from"], l["to"]))
+		var visual := FloorDecor.make_link_visual(l)
+		if visual == null:
+			visual = _make_link_marker(l["from"], l["to"])
+		markers.add_child(visual)
 
 
 static func _make_link_marker(a: Vector3i, b: Vector3i) -> Node3D:

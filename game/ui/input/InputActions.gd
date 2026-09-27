@@ -22,12 +22,12 @@ class_name InputActions
 ##  end_turn          P                             Back / Select
 ##  map_menu          Esc (only when nothing is     Start       (MapMenu; Cancel
 ##                    selected / nothing to cancel)             also opens it then)
-##  cycle_next        Tab, R                        RB / R1     [reserved]
-##  cycle_prev        Shift+Tab, Q                  LB / L1     [reserved]
+##  cycle_next        Tab, R                        RB / R1     (next ready unit)
+##  cycle_prev        Shift+Tab, Q                  LB / L1     (previous ready unit)
 ##  danger_zone       Z  (toggle enemy threat)      L3          (DangerZoneOverlay)
 ##  fast_forward      Shift (hold: 4x AI/anims)     R3 (hold)   (GameSettings)
 ##  camera_pan_*      W / A / S / D                 right stick
-##  floor_up/down     Page Up / Page Down           RT / LT     [reserved: multi-floor]
+##  floor_up/down     Page Up / Page Down           RT / LT     (multi-floor view)
 ##
 ## Arrow keys move ONLY the board cursor (the camera no longer pans on them); the
 ## camera pans on WASD, the right stick, the screen edge and mouse drag. Unit

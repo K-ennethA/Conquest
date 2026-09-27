@@ -297,7 +297,11 @@ func test_melee_reaches_across_a_stair_link_only() -> void:
 	assert_true(strike.can_target(Vector3i(1, 1, 0), Vector3i(2, 1, 1), a, b), "stair foot -> stair top")
 	assert_true(strike.can_target(Vector3i(2, 1, 1), Vector3i(1, 1, 0), t, b), "and back down")
 	assert_false(strike.can_target(Vector3i(2, 2, 0), Vector3i(2, 1, 1), a, b), "adjacent-but-below without a link is out of reach")
-	var res := MoveExecutor.execute(strike, a, b, Vector3i(2, 1, 1))
+	# Seeded: the lower attacker has a hit penalty, so an unseeded roll made this
+	# test flaky (an occasional miss left hp at 100).
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var res := MoveExecutor.execute(strike, a, b, Vector3i(2, 1, 1), rng)
 	assert_true(res.success)
 	assert_lt(t.hp, 100)
 

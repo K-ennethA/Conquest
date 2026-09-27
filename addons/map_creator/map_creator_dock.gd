@@ -128,6 +128,11 @@ var tool_mode_option: OptionButton
 var clear_grid_button: Button
 var fill_all_button: Button
 var brush_size_input: SpinBox
+## Multi-floor (minimal): the floor painted / spawned / erased on. Upper floors only
+## exist where a tile is placed (air elsewhere); the 2D grid and 3D preview still
+## show the ground floor -- use the in-game Map Maker (game/mapmaker) for full
+## floor editing (ghosted floor below, stairs, links, validation).
+var floor_input: SpinBox
 
 # Painting State (drag-to-paint strokes)
 var _is_painting: bool = false          # True between a left press on a cell and the left release
@@ -430,6 +435,18 @@ func _create_tool_mode_section():
 	var hint_label = Label.new()
 	hint_label.text = "(drag to paint, right-click to erase)"
 	brush_container.add_child(hint_label)
+
+	var floor_container = HBoxContainer.new()
+	main_container.add_child(floor_container)
+	var floor_label = Label.new()
+	floor_label.text = "Floor:"
+	floor_container.add_child(floor_label)
+	floor_input = SpinBox.new()
+	floor_input.min_value = 0
+	floor_input.max_value = 4
+	floor_input.value = 0
+	floor_input.tooltip_text = "Floor to paint / spawn / erase on (0 = ground). Upper floors are air until painted."
+	floor_container.add_child(floor_input)
 
 func _load_tile_palette_entries() -> void:
 	"""Scan res://game/tiles/resources/ and build one palette entry per TileResource.
@@ -1368,7 +1385,11 @@ func _place_tile_at_position(pos: Vector2i):
 	tile assets are reorganised, on this install or on whoever it gets shared with.
 	"""
 	current_map.set_tile_at_position(
-		pos, selected_tile_type, selected_tile_resource_path, selected_tile_id)
+		pos, selected_tile_type, selected_tile_resource_path, selected_tile_id, _edit_floor())
+
+
+func _edit_floor() -> int:
+	return int(floor_input.value) if floor_input != null else 0
 
 func _place_spawn_at_position(pos: Vector2i):
 	"""Place a spawn POINT at a position using the current palette configuration.
@@ -1378,8 +1399,11 @@ func _place_spawn_at_position(pos: Vector2i):
 	"""
 	if not current_map:
 		return
+	var opts := _spawn_opts()
+	if _edit_floor() > 0:
+		opts["floor"] = _edit_floor()
 	current_map.set_spawn_point_at_position(
-		pos, selected_player_id, selected_spawn_kind, _spawn_opts())
+		pos, selected_player_id, selected_spawn_kind, opts)
 
 func _resource_path_for_type(type_name: String) -> String:
 	"""First palette resource path registered for a tile type, or "" if none"""
@@ -1397,6 +1421,11 @@ func _tile_id_for_type(type_name: String) -> String:
 
 func _erase_at_position(pos: Vector2i):
 	"""Erase tile/unit at position"""
+	if _edit_floor() > 0:
+		# Upper floor: back to air.
+		current_map.remove_tile_at_position(pos, _edit_floor())
+		current_map.remove_unit_spawn_at_position(pos, _edit_floor())
+		return
 	# Reset tile to normal (using the real NORMAL resource when the palette has one)
 	current_map.set_tile_at_position(
 		pos, "NORMAL", _resource_path_for_type("NORMAL"), _tile_id_for_type("NORMAL"))

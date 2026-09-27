@@ -113,6 +113,11 @@ func _ready() -> void:
 
 	# Fire Emblem danger zone (combined enemy threat, toggled with `danger_zone`).
 	_setup_danger_zone_overlay()
+	# Multi-floor cutaway: fades floors above the cursor's view floor (no-op on flat
+	# maps). Listens to GameEvents.view_floor_changed, so it must exist before the
+	# map load's board_ready makes the cursor broadcast the initial view.
+	var cutaway := FloorCutaway.new()
+	add_child(cutaway)
 
 	# Load the selected map or default map
 	await _load_selected_map()

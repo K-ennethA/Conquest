@@ -108,6 +108,13 @@ signal attack_fringe_calculated(cells: Array)
 signal path_preview_updated(cells: Array)
 signal danger_zone_changed(active: bool, cell_count: int)
 
+## Multi-floor VIEW FLOOR (APPENDED). The board cursor owns it: floors above
+## `view_floor` are cut away (faded) so units under a bridge / inside a castle are
+## visible. `cut_floor` is the floor actually cut to (it can sit BELOW view_floor
+## when the cursor or the selected unit is under a deck -- the auto cutaway);
+## `floor_count` is the board's floor total (1 on a classic flat map).
+signal view_floor_changed(view_floor: int, cut_floor: int, floor_count: int)
+
 func _ready() -> void:
 	# Make this a singleton
 	name = "GameEvents"

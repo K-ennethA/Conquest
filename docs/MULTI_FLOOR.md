@@ -1,9 +1,14 @@
-# Multi-floor maps (Option B) — core
+# Multi-floor maps (Option B)
 
 Status: **core implemented** (data model, loading, movement, targeting/LOS, height
-advantage, AI, tests). **Next phase** (not done here): cursor floor-cycling, camera,
-cutaway/fade of upper floors, floor HUD indicator, Map Maker editor UI, showcase maps,
-step-by-step path walking/arrows.
+advantage, AI, tests) and **player-facing layer implemented** (view floor + floor
+cycling, cutaway, floor HUD, stairs/edge visuals, camera fit/follow, unit cycling,
+multi-floor Map Maker, showcase maps -- see section 10). Still open: step-by-step path
+walking/arrows (owned elsewhere), camera rotation.
+
+Showcase maps (Active): `river_crossing.tres` (`game/maps/build_river_crossing.gd`),
+`castle_siege.tres` (`game/maps/build_castle_siege.gd`). Screenshots:
+`docs/screenshots/multi_floor/`.
 
 Fixture map: `res://game/maps/resources/test_bridge_map.tres` (built by
 `game/maps/build_test_bridge_map.gd`, status *Inactive*). Tests:
@@ -64,8 +69,12 @@ convention:
   upper floors only for their entries.
 - Every tile registers with `CombatServices.register_tile(cell, res)` (upper-floor tiles
   register even without a resolvable resource, so they still exist for movement).
-- Links: `CombatServices.register_link(l)` for each `map.get_links()`, plus a simple
-  ramp marker under `Tiles/Links` (placeholder art).
+- Links: `CombatServices.register_link(l)` for each `map.get_links()`, plus a visual per
+  link under `Tiles/Links` (`FloorDecor.make_link_visual`: stairs / ladder / hatch
+  ladder / ramp; meta `cutaway_floor` = upper floor).
+- Dressing: `FloorDecor.build_floor_decor` -> `Tiles/Decor/Floor_<f>/Decor_<x>_<y>`
+  (one mesh per upper tile) + `Rubble_<x>_<y>` on the floor below a gap. All derived
+  from the map data -- see section 10.
 - Units spawn at `floor_y(f) + UNIT_GROUND_Y`; `configure_ai_behavior` gets the Vector3i home.
 - `MapLoader.resolve_tile_resource_for_entry(entry)` (static) and
   `BoardAdapter.configure_from_map(map)` build a board **headlessly** (tools, AI sims, tests).
@@ -138,23 +147,73 @@ take the stairs rather than hugging the wall below their target; single-floor bo
 the historical Manhattan behaviour byte-for-byte. Leash / aggro / threat radii use
 `Cells.distance`. Melee plans across stair links work through `can_target`.
 
-## 8. UI keep-alive (minimal, next phase owns the real UX)
+## 8. Overlays
 
-- Mouse picking ray-marches floors top-down and returns the **top-most** tile's grid coord
-  (`Vector3(col, floor, row)`); the cursor bracket sits on that floor. Keyboard movement
-  stays on the cursor's current floor.
+- Mouse picking ray-marches floors from the **view floor** down and returns the top-most
+  tile's grid coord (`Vector3(col, floor, row)`).
 - Movement/attack/AOE overlays are raised to the cell's floor (grid coords carry the floor).
 - `UnitActionsPanel` sweeps every floor for legal aim cells.
 
 ## 9. Known gaps / next phase
 
-- No floor cycling: a cell *under* a bridge can only be picked by keyboard (mouse picks the deck).
-- No cutaway/fade: units under a bridge are visually hidden by the deck.
-- Map Maker / map_creator addon still edit floor 0 only; showcase maps not built.
-- ~~Units teleport+glide~~ Done: the player's path arrow and the unit walk (player + AI)
-  follow `path_to()` cell by cell, stairs included (`PathArrow`, `UnitAnimator.walk_path`).
-  Move range / fringe / danger-zone overlays sit on each cell's floor.
+- The camera never rotates (the local-fade occlusion rule assumes the camera looks
+  from +row / south).
+- The map_creator editor addon only has a minimal Floor field (its grid/3D preview show
+  the ground); use the in-game Map Maker for real floor editing. The in-game Map Maker
+  scene (`game/mapmaker/MapMakerScene.tscn`) is not linked from the main menu yet.
+- Units walk the `path_to()` route cell by cell, stairs included (`PathArrow`,
+  `UnitAnimator.walk_path`); move range / fringe / danger-zone overlays sit on each
+  cell's floor.
 - AI stand-cell tie-break uses `Cells.distance`, not exact path cost.
 - Traveling hazards and knockback stay on their floor; knockback never pushes into air.
 - `NetProtocol` still documents `to: Vector2i` — serialize cells with `Cells.to_array` /
   `Cells.from_variant`.
+
+## 10. Player-facing layer (view floor, cutaway, HUD, camera, authoring)
+
+**View floor** (`board/cursor/cursor.gd`, rules in `game/board/FloorNav.gd`, tested in
+`tests/unit/test_floor_nav.gd`). The cursor owns `view_floor` (reset to the top floor on
+every `board_ready`) and broadcasts `GameEvents.view_floor_changed(view, cut, count)`.
+
+| Input | Effect |
+|---|---|
+| Arrows / d-pad | step; land on the top-most tile **at or below** the view floor (rides over bridges at the top view, drops off a bridge end, walks under it at view 0) |
+| `floor_up` / `floor_down` (PgUp/PgDn, RT/LT) | next floor up/down **in the cursor's column** (view follows); on a single-floor column only the view floor moves |
+| `cycle_next` / `cycle_prev` (Tab,R / Shift+Tab,Q; RB/LB) | jump to the human player's next/previous **ready** unit (reading order row, col, floor); the selection follows if a unit is selected; ignored while aiming / a tentative move is staged |
+| Mouse | picks the top-most tile at or below the view floor |
+
+`focus_cell(cell)` (cycling, turn start) snaps the view to the unit: a covered unit
+lowers the view to its floor, a higher one raises it. Turn start puts the cursor on the
+player's last selected unit if it can still act, else the first ready unit.
+
+**Cut floor** = the view floor, lowered to the cursor's / selected unit's floor while
+either is directly under a deck. `game/visuals/FloorCutaway.gd` ghosts every floor above
+it (tiles, decor, links, the units there; their HP bars hide) by swapping in one shared
+translucent material per floor and tweening its alpha (~0.18 s). It also ghosts, one cell
+at a time, the few deck cells that hide the cursor / selected unit on screen (directly
+above, and one row further south per floor of height). Material swapping instead of
+`GeometryInstance3D.transparency` because Compatibility ignores the latter.
+
+**HUD** (`TerrainInfoPanel`): the terrain card gains the cell's floor, its links
+("Stairs ▲ Upper", "Ladder ▼ Ground (cost 2)") and "Under cover"; a floor badge above it
+("Floor 2 / 3 · Upper", pips, key hint) appears on multi-floor maps only.
+
+**Camera** (`CameraController`): board bounds read `Tiles/Floor_<f>/Tile_*`; the fit is
+refined in screen space (perspective, upper floors, room for the turn banner); the focus
+plane sits at the view floor's height; `follow_world_point` (called by the cursor for
+keyboard / cycle / turn-start moves only, never mouse hover) keeps the cursor inside an
+18 % screen margin with an eased pan.
+
+**Dressing** (`game/maps/FloorDecor.gd`, `ProcMesh.gd`): masonry under ramparts (tile
+below impassable), deck beam + piers over water, parapets (crenellated on castle walls,
+plain toward `flagstones` courtyards) or timber rails (wood-ish tile ids), jagged broken
+edge + rubble when the same floor continues two cells on (a one-cell gap), open edges
+where a link arrives. New tiles `structures/flagstones` and `structures/wooden_planks`
+(`PavedTileBuilder`).
+
+**Map Maker** (`game/mapmaker/`): `MapMakerModel` keys tiles/spawns by Vector3i and takes
+a trailing `floor_index` everywhere; `set_stairs`, `add_link/remove_link/get_links_at`,
+`validate()` (spawn on air, link/stairs into missing cells, same-floor neighbour links,
+unreachable decks). `MapMakerScene`: floor selector (PgUp/PgDn), floor below ghosted,
+Stairs and two-click Link tools, validation list. Tests in
+`tests/unit/test_mapmaker_model.gd`.

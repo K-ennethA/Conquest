@@ -142,6 +142,11 @@ func _ready() -> void:
 	_setup_auto_focus()
 	_setup_turn_focus()
 
+	var ev := get_node_or_null("/root/GameEvents")
+	if ev != null and ev.has_signal("view_floor_changed") \
+			and not ev.view_floor_changed.is_connected(_on_view_floor_changed):
+		ev.view_floor_changed.connect(_on_view_floor_changed)
+
 
 ## Flatten the authored camera axes onto the ground plane. Called once; the basis
 ## never changes because pan only translates and zoom only dollies along -Z.
@@ -202,9 +207,59 @@ func fit_to_map() -> void:
 	var dist: float = (span * 0.5) / maxf(tan(half_fov), 0.01)
 
 	_dist_max_runtime = maxf(dist_max, dist)
-	_move_focus_to(Vector3(_board_center.x, 0.0, _board_center.z))
+	_move_focus_to(_plane_point_for(Vector3(_board_center.x, 0.0, _board_center.z)))
 	_set_distance(clampf(dist, dist_min, _dist_max_runtime))
+	_refine_fit()
 	_base_distance = maxf(_current_distance(), 1.0)
+
+
+## Screen-space fit refinement: the analytic fit above ignores perspective (the near
+## edge of the board projects larger) and anything built above the ground (bridges,
+## towers). Project the board's corners -- at ground level and at the top floor's
+## height -- and iterate: centre their screen rect in the view (leaving room for the
+## turn banner on top) and dolly so it fills the frame without clipping.
+func _refine_fit() -> void:
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	if vp.x <= 0.0 or vp.y <= 0.0 or not _has_bounds:
+		return
+	var top_y := 0.0
+	var board = CombatServices.board() if CombatServices else null
+	if board != null and board.has_method("floor_count"):
+		top_y = Cells.floor_y(maxi(0, int(board.floor_count()) - 1)) + 0.6
+	var pts: Array[Vector3] = []
+	for y in [-0.5, top_y]:
+		for x in [_board_min.x, _board_max.x]:
+			for z in [_board_min.y, _board_max.y]:
+				pts.append(Vector3(x, y, z))
+	# Usable frame: small side margins, extra room at the top for the turn banner.
+	var frame := Rect2(Vector2(vp.x * 0.03, vp.y * 0.1), Vector2(vp.x * 0.94, vp.y * 0.86))
+	for _i in 8:
+		var r := Rect2()
+		var first := true
+		for p in pts:
+			if is_position_behind(p):
+				continue
+			var sp := unproject_position(p)
+			if first:
+				r = Rect2(sp, Vector2.ZERO)
+				first = false
+			else:
+				r = r.expand(sp)
+		if first or r.size.x <= 1.0 or r.size.y <= 1.0:
+			return
+		# Recentre (on the ground plane) ...
+		var a = _plane_point_at(r.get_center(), 0.0)
+		var b = _plane_point_at(frame.get_center(), 0.0)
+		if a != null and b != null:
+			var d: Vector3 = a - b
+			global_position += Vector3(d.x, 0.0, d.z)
+		# ... then dolly so the rect just fills the frame.
+		var s := maxf(r.size.x / frame.size.x, r.size.y / frame.size.y)
+		if absf(s - 1.0) < 0.01 and (a == null or b == null or (a - b).length() < 0.05):
+			break
+		var want := _current_distance() * s
+		_dist_max_runtime = maxf(_dist_max_runtime, want)
+		_set_distance(want)
 
 
 ## Derive the board's XZ bounds from the live tiles under "Map/Tiles" (each tile a
@@ -218,9 +273,22 @@ func _compute_board_bounds() -> bool:
 	var count := 0
 
 	if tiles:
+		# Tiles live under per-floor containers (Tiles/Floor_<f>/Tile_x_y_f, see
+		# MapLoader); legacy scenes put them directly under Tiles. The containers
+		# (and Tiles/Links) themselves sit at the origin and must not count.
+		var tile_nodes: Array = []
 		for child in tiles.get_children():
+			var cname := String(child.name)
+			if cname.begins_with("Floor_"):
+				for t in child.get_children():
+					if String(t.name).begins_with("Tile_"):
+						tile_nodes.append(t)
+			elif cname.begins_with("Tile"):
+				tile_nodes.append(child)
+		for child in tile_nodes:
 			if child is Node3D:
-				var p: Vector3 = child.position
+				# Tiles are centered on their cell (col*2+1): take the cell's corner.
+				var p: Vector3 = child.position - Vector3(1.0, 0.0, 1.0)
 				min_x = minf(min_x, p.x)
 				min_z = minf(min_z, p.z)
 				max_x = maxf(max_x, p.x)
@@ -261,6 +329,7 @@ func _find_tiles_container() -> Node:
 # --- Per-frame keyboard + edge pan ------------------------------------------
 
 func _process(delta: float) -> void:
+	_process_follow(delta)
 	var dir := Vector3.ZERO
 
 	# Named camera-pan actions (default WASD + right stick; rebindable). Arrow keys
@@ -354,26 +423,98 @@ func _zoom_at(screen_pos: Vector2, factor: float) -> void:
 
 # --- Ground-plane helpers ---------------------------------------------------
 
-## World point where the ray through [param screen_pos] meets y=0, or null.
+## World point where the ray through [param screen_pos] meets the FOCUS PLANE
+## (y = [member _focus_y], the view floor's height), or null.
 func _ground_point_at(screen_pos: Vector2):
+	return _plane_point_at(screen_pos, _focus_y)
+
+
+## World point where the ray through [param screen_pos] meets the plane y = [param y].
+func _plane_point_at(screen_pos: Vector2, y: float):
 	var origin := project_ray_origin(screen_pos)
 	var normal := project_ray_normal(screen_pos)
 	if absf(normal.y) < 0.00001:
 		return null
-	var t: float = -origin.y / normal.y
+	var t: float = (y - origin.y) / normal.y
 	if t < 0.0:
 		return null
 	return origin + normal * t
 
 
-## World point where the camera's CENTER ray meets y=0 (the focus point).
+## World point where the camera's CENTER ray meets the focus plane (the focus point).
 func _camera_focus_ground() -> Vector3:
 	var o := global_position
 	var d := -global_transform.basis.z
 	if absf(d.y) < 0.00001:
-		return Vector3(o.x, 0.0, o.z)
-	var t: float = -o.y / d.y
+		return Vector3(o.x, _focus_y, o.z)
+	var t: float = (_focus_y - o.y) / d.y
 	return o + d * t
+
+
+## The focus-plane point whose center ray passes through [param world_pos]: move the
+## focus there and [param world_pos] (a unit on any floor) lands at screen center.
+func _plane_point_for(world_pos: Vector3) -> Vector3:
+	var d := -global_transform.basis.z
+	if absf(d.y) < 0.00001:
+		return Vector3(world_pos.x, _focus_y, world_pos.z)
+	return world_pos + d * ((_focus_y - world_pos.y) / d.y)
+
+
+# --- Multi-floor focus plane + cursor follow -----------------------------------
+
+## Height of the focus plane: the VIEW floor's walking height (0 on flat maps), so
+## zoom anchoring, pan clamping and auto-focus track the floor being looked at.
+var _focus_y: float = 0.0
+
+## Fraction of the screen (each side) the cursor may enter before the camera
+## follows it. 0.18 = the cursor stays inside the central 64% of the view.
+@export var follow_edge_margin: float = 0.18
+## Follow smoothing rate (1/s): higher = snappier.
+@export var follow_speed: float = 10.0
+## World offset the follow still has to travel (eased out in [method _process_follow]).
+var _follow_remaining: Vector3 = Vector3.ZERO
+
+
+func _on_view_floor_changed(view_floor: int, _cut_floor: int, _floor_count: int) -> void:
+	_focus_y = Cells.floor_y(maxi(0, view_floor))
+
+
+## Keep [param world_point] (the board cursor) inside the screen minus an edge
+## margin, panning smoothly just enough to bring it back in. Called by the cursor
+## for keyboard / gamepad / cycle moves only (never mouse hover).
+func follow_world_point(world_point: Vector3) -> void:
+	if not is_inside_tree() or _dragging:
+		return
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	if vp.x <= 0.0 or vp.y <= 0.0:
+		return
+	# Project where the point WILL be once the pending follow has finished (shifting
+	# the camera by r is the same as shifting the point by -r).
+	var p := world_point - _follow_remaining
+	if is_position_behind(p):
+		return
+	var sp := unproject_position(p)
+	var m := vp * clampf(follow_edge_margin, 0.0, 0.45)
+	var target := Vector2(clampf(sp.x, m.x, vp.x - m.x), clampf(sp.y, m.y, vp.y - m.y))
+	if sp.distance_to(target) < 1.0:
+		return
+	var a = _plane_point_at(sp, world_point.y)
+	var b = _plane_point_at(target, world_point.y)
+	if a == null or b == null:
+		return
+	var delta: Vector3 = a - b
+	_follow_remaining += Vector3(delta.x, 0.0, delta.z)
+
+
+func _process_follow(delta: float) -> void:
+	if _follow_remaining.length_squared() < 0.0001:
+		_follow_remaining = Vector3.ZERO
+		return
+	var k := 1.0 - exp(-follow_speed * delta)
+	var step := _follow_remaining * k
+	global_position += step
+	_follow_remaining -= step
+	_clamp_to_board()
 
 
 ## Translate the camera so its focus lands on [param target] (XZ only).
@@ -492,6 +633,7 @@ func _request_auto_focus(world_pos: Vector3, cinematic: bool, bypass_cooldown: b
 
 
 func _kill_focus_tween() -> void:
+	_follow_remaining = Vector3.ZERO
 	if _focus_tween != null and _focus_tween.is_valid():
 		_focus_tween.kill()
 	_focus_tween = null
@@ -512,7 +654,7 @@ func focus_on(world_pos: Vector3, cinematic: bool = false) -> void:
 	_action_zoom_active = false
 
 	var start: Vector3 = _camera_focus_ground()
-	var dest: Vector3 = Vector3(world_pos.x, 0.0, world_pos.z)
+	var dest: Vector3 = _plane_point_for(world_pos)
 	var moved: float = Vector2(dest.x - start.x, dest.z - start.z).length()
 
 	# CINEMATIC pulls in toward a close framing only when currently further out.
@@ -576,7 +718,7 @@ func _focus_hit(world_pos: Vector3) -> void:
 		return
 
 	var start: Vector3 = _camera_focus_ground()
-	var dest: Vector3 = Vector3(world_pos.x, 0.0, world_pos.z)
+	var dest: Vector3 = _plane_point_for(world_pos)
 	var moved: float = Vector2(dest.x - start.x, dest.z - start.z).length()
 
 	var cur_dist: float = _current_distance()
