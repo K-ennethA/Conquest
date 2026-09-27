@@ -10,18 +10,30 @@ var v := PackedVector3Array()
 var n := PackedVector3Array()
 var c := PackedColorArray()
 
-static var _mat: StandardMaterial3D = null
+static var _mat: Material = null
+
+const PROPS_SHADER := "res://tile_objects/tiles/shaders/stylized_props.gdshader"
 
 
-## Shared opaque vertex-colour material.
-static func material() -> StandardMaterial3D:
+## Shared opaque vertex-colour material: the painterly props shader (vertex colour
+## = base paint, plus world-space dabs / wood grain / moss / weather -- see
+## stylized_props.gdshader). Falls back to a flat vertex-colour material if the
+## shader is missing.
+static func material() -> Material:
 	if _mat == null:
-		_mat = StandardMaterial3D.new()
-		_mat.vertex_color_use_as_albedo = true
-		# Colours below are authored in sRGB (like every Color literal in the project).
-		_mat.vertex_color_is_srgb = true
-		_mat.roughness = 0.95
-		_mat.metallic = 0.0
+		var sh = load(PROPS_SHADER) if ResourceLoader.exists(PROPS_SHADER) else null
+		if sh is Shader:
+			var sm := ShaderMaterial.new()
+			sm.shader = sh
+			_mat = sm
+		else:
+			var m := StandardMaterial3D.new()
+			m.vertex_color_use_as_albedo = true
+			# Colours below are authored in sRGB (like every Color literal in the project).
+			m.vertex_color_is_srgb = true
+			m.roughness = 0.95
+			m.metallic = 0.0
+			_mat = m
 	return _mat
 
 

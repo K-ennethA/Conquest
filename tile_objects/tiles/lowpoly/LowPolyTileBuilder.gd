@@ -15,12 +15,15 @@ class_name LowPolyTileBuilder
 ## across faces). Variation is DETERMINISTIC (an LCG seeded from the tile's world
 ## XZ) -- no Math.random / Time, so the board never flickers.
 
-enum Style { GRASS, TALL_GRASS, DIRT, MEADOW, TREE }
+## APPEND new styles at the end: scenes store the enum by index.
+enum Style { GRASS, TALL_GRASS, DIRT, MEADOW, TREE, WATER, LAVA, SACRED, WALL }
 @export var style: Style = Style.GRASS
 
 const HALF: float = 1.0
 const CAP_TOP: float = 0.10        # walkable surface == UNIT_GROUND_Y
 const CAP_LIP: float = -0.05       # cap skirt bottom (slight overhang lip)
+const WATER_TOP: float = 0.03      # water / lava surface: a little below the grass banks
+const WALL_TOP: float = 0.75       # dry-stone wall height (kept low so units behind stay readable)
 const DIRT_TOP: float = 0.02
 const DIRT_BOTTOM: float = -0.7
 const DIRT_HALF: float = 0.94      # inset so the green cap overhangs the dirt
@@ -28,16 +31,16 @@ const DIRT_HALF: float = 0.94      # inset so the green cap overhangs the dirt
 # Layered soil sides: a dark humus band under the grass lip, warm earth in the
 # middle, a cooler clay base. Two shades per band alternate by face so the block
 # still reads as faceted under flat lighting.
-const DIRT_COLOR: Color = Color(0.55, 0.37, 0.23, 1.0)   # warm earth (mid band)
-const DIRT_DARK: Color = Color(0.45, 0.29, 0.18, 1.0)
-const HUMUS_COLOR: Color = Color(0.30, 0.21, 0.14, 1.0)  # dark top band
+const DIRT_COLOR: Color = Color(0.46, 0.31, 0.2, 1.0)   # warm earth (mid band)
+const DIRT_DARK: Color = Color(0.38, 0.25, 0.16, 1.0)
+const HUMUS_COLOR: Color = Color(0.26, 0.18, 0.12, 1.0)  # dark top band
 const HUMUS_DARK: Color = Color(0.24, 0.17, 0.11, 1.0)
-const CLAY_COLOR: Color = Color(0.47, 0.36, 0.27, 1.0)   # cooler bottom band
-const CLAY_DARK: Color = Color(0.39, 0.29, 0.22, 1.0)
+const CLAY_COLOR: Color = Color(0.42, 0.33, 0.26, 1.0)   # cooler bottom band
+const CLAY_DARK: Color = Color(0.34, 0.27, 0.21, 1.0)
 const HUMUS_BOTTOM: float = -0.16
 const CLAY_TOP: float = -0.48
-const ROCK_COLOR: Color = Color(0.74, 0.73, 0.68, 1.0)   # weathered stone
-const ROCK_DARK: Color = Color(0.58, 0.57, 0.53, 1.0)
+const ROCK_COLOR: Color = Color(0.56, 0.55, 0.51, 1.0)   # weathered stone
+const ROCK_DARK: Color = Color(0.43, 0.42, 0.39, 1.0)
 
 # Short-grass tuft gradient (opaque): shadowed base -> leaf green -> sunlit tip.
 # Each tuft picks a lush or a sun-dried variant so the field isn't uniform.
@@ -51,6 +54,12 @@ const FLOWER_COLORS: Array[Color] = [
 	Color(0.80, 0.68, 0.97, 1.0),   # lilac
 ]
 const FLOWER_CENTRE: Color = Color(0.96, 0.66, 0.16, 1.0)
+# Sacred meadow blooms: pale, luminous whites / golds / sky blue.
+const SACRED_FLOWER_COLORS: Array[Color] = [
+	Color(1.0, 0.99, 0.94, 1.0),
+	Color(1.0, 0.9, 0.55, 1.0),
+	Color(0.72, 0.86, 1.0, 1.0),
+]
 const STEM_COLOR: Color = Color(0.20, 0.42, 0.18, 1.0)
 
 # Tall-grass blade gradient: a dark green base rising to a bright, faintly
@@ -66,7 +75,13 @@ const GRASS_BLADE_TIP: Color = Color(0.44, 0.82, 0.32, 0.68)   # bright (but sti
 
 var _rng: int = 1
 static var _decor_mat: ShaderMaterial = null
-static var _grass_mat: StandardMaterial3D = null
+static var _grass_mat: ShaderMaterial = null
+static var _mote_mat: ShaderMaterial = null
+
+const DECOR_SHADER := "res://tile_objects/tiles/shaders/stylized_decor.gdshader"
+const TALL_GRASS_SHADER := "res://tile_objects/tiles/shaders/stylized_tall_grass.gdshader"
+const MOTE_SHADER := "res://tile_objects/tiles/shaders/stylized_motes.gdshader"
+const TALL_TIP_DRY: Color = Color(0.78, 0.74, 0.36, 0.62)
 
 
 func _ready() -> void:
@@ -99,6 +114,33 @@ func _ready() -> void:
 	elif grass != null:
 		grass.queue_free()
 
+	# Sacred tiles float soft golden motes (one static billboard mesh, animated
+	# entirely in the shader).
+	var motes := get_node_or_null("Motes") as MeshInstance3D
+	if style == Style.MEADOW or style == Style.SACRED:
+		if motes == null:
+			motes = MeshInstance3D.new()
+			motes.name = "Motes"
+			add_child(motes)
+		motes.mesh = _build_motes(7 if style == Style.MEADOW else 10)
+		motes.material_override = _get_mote_mat()
+		motes.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		motes.custom_aabb = AABB(Vector3(-1.2, -0.2, -1.2), Vector3(2.4, 1.8, 2.4))
+	elif motes != null:
+		motes.queue_free()
+
+	# Stone walls: a chunky dry-stone block (painterly props shader).
+	var wall := get_node_or_null("Wall") as MeshInstance3D
+	if style == Style.WALL:
+		if wall == null:
+			wall = MeshInstance3D.new()
+			wall.name = "Wall"
+			add_child(wall)
+		wall.mesh = _build_wall()
+		wall.material_override = ProcMesh.material()
+	elif wall != null:
+		wall.queue_free()
+
 
 # --- Deterministic RNG ------------------------------------------------------
 
@@ -130,7 +172,7 @@ func _build_cap() -> ArrayMesh:
 		for ix in range(subdiv + 1):
 			var fx: float = -HALF + 2.0 * HALF * float(ix) / float(subdiv)
 			var fz: float = -HALF + 2.0 * HALF * float(iz) / float(subdiv)
-			var y: float = CAP_TOP
+			var y: float = _cap_top()
 			# Grassy caps stay perfectly flat so neighbouring tiles light identically and
 			# the field reads seamless; only bare DIRT keeps its lumpy facets.
 			if style == Style.DIRT and ix != 0 and ix != subdiv and iz != 0 and iz != subdiv:
@@ -148,6 +190,9 @@ func _build_cap() -> ArrayMesh:
 			_tri(v, n, null, p00, p01, p11, Vector3.UP, Color.WHITE)
 
 	# Skirt: from the flat perimeter (CAP_TOP) down to CAP_LIP, facing outward.
+	# Water / lava sit below their banks: no skirt (the soil block shows at edges).
+	if style == Style.WATER or style == Style.LAVA:
+		return _mesh(v, n, null)
 	var corners := [
 		Vector3(-HALF, CAP_TOP, -HALF), Vector3(HALF, CAP_TOP, -HALF),
 		Vector3(HALF, CAP_TOP, HALF), Vector3(-HALF, CAP_TOP, HALF)
@@ -163,6 +208,12 @@ func _build_cap() -> ArrayMesh:
 		_tri(v, n, null, t0, b1, b0, outward, Color.WHITE)
 
 	return _mesh(v, n, null)
+
+
+func _cap_top() -> float:
+	if style == Style.WATER or style == Style.LAVA:
+		return WATER_TOP
+	return CAP_TOP
 
 
 func _cap_jitter(ix: int, iz: int) -> float:
@@ -183,6 +234,10 @@ func _build_decor() -> ArrayMesh:
 	# built as three soil bands (humus / earth / clay) for a layered cross-section.
 	var d := DIRT_HALF
 	var top := DIRT_TOP
+	if style == Style.WATER or style == Style.LAVA:
+		# Full-width bed under the surface so the board edge shows a soil bank.
+		d = HALF * 0.995
+		top = WATER_TOP - 0.005
 	var bot := DIRT_BOTTOM
 	var corners_bot := [
 		Vector3(-d, bot, -d), Vector3(d, bot, -d), Vector3(d, bot, d), Vector3(-d, bot, d)]
@@ -231,13 +286,17 @@ func _build_decor() -> ArrayMesh:
 	# single-spike tufts the other grassy styles use, at per-style density:
 	#   MEADOW -> slightly denser,  TREE -> a few (tree prop owns the centre),
 	#   DIRT   -> 0-2 sparse blades (it's a dirt patch, not grassy).
-	if style != Style.TALL_GRASS:
+	if style == Style.WATER or style == Style.LAVA or style == Style.WALL:
+		pass
+	elif style == Style.SACRED:
+		_add_shrine_stones(v, n, c)
+	elif style != Style.TALL_GRASS:
 		var tuft_count: int = 8
 		var flower_chance: float = 0.45
 		match style:
 			Style.MEADOW:
-				tuft_count = 10
-				flower_chance = 0.9
+				tuft_count = 9
+				flower_chance = 1.0
 			Style.TREE:
 				tuft_count = 5
 				flower_chance = 0.2
@@ -253,6 +312,8 @@ func _build_decor() -> ArrayMesh:
 		var flowers: int = 0
 		if _rand() < flower_chance:
 			flowers = 1 + int(_rand() * 2.0)
+		if style == Style.MEADOW:
+			flowers = 5 + int(_rand() * 3.0)
 		for f in range(flowers):
 			var fx: float = _rand_range(-0.7, 0.7)
 			var fz: float = _rand_range(-0.7, 0.7)
@@ -345,7 +406,8 @@ func _add_flower(v: PackedVector3Array, n: PackedVector3Array, c: PackedColorArr
 	_tri(v, n, c, s0, s1, head, Vector3(0, 0, -1), STEM_COLOR)
 	_tri(v, n, c, s1, s2, head, Vector3(1, 0, 1).normalized(), STEM_COLOR)
 	_tri(v, n, c, s2, s0, head, Vector3(-1, 0, 1).normalized(), STEM_COLOR)
-	var col: Color = FLOWER_COLORS[int(_rand() * float(FLOWER_COLORS.size())) % FLOWER_COLORS.size()]
+	var pal: Array[Color] = SACRED_FLOWER_COLORS if style == Style.MEADOW else FLOWER_COLORS
+	var col: Color = pal[int(_rand() * float(pal.size())) % pal.size()]
 	var r: float = _rand_range(0.045, 0.065)
 	var spin: float = _rand() * TAU
 	var centre := head + Vector3(0.0, 0.004, 0.0)
@@ -378,33 +440,136 @@ func _add_pebble(v: PackedVector3Array, n: PackedVector3Array, c: PackedColorArr
 		_tri(v, n, c, top, a, b, ((top + a + b) / 3.0) - centre, col)
 
 
-## A bushy clump of pointed grass blades fanning out from [param base] to roughly
-## [param s] tall -- the tall-grass "tuft" look. Each blade is one flat pointed
-## triangle (base wide, tip a point) leaning outward on its own yaw, with a dark
-## base -> bright tip vertex gradient, plus one tall upright central blade so the
-## clump peaks in the middle like the reference art. The grass material is
-## double-sided + translucent (see _get_grass_mat) so the flat blades read from every
-## angle and a unit standing in the clump shows through it.
+## A bushy clump of tall, CURVED grass blades fanning out from [param base] to
+## roughly [param s] tall -- the tall-grass evasion terrain. Each blade is a
+## tapered two-segment ribbon (wide root -> bent mid -> point) arching outward on
+## its own yaw, dark shadowed root -> leaf green -> sunlit tip (a few tips sun-dried
+## gold), with a taller upright core so the clump peaks in the middle. The material
+## (stylized_tall_grass) is double-sided + softly translucent and sways, so a unit
+## standing in the clump still shows through it.
 func _add_grass_clump(v: PackedVector3Array, n: PackedVector3Array, c: PackedColorArray, base: Vector3, s: float) -> void:
-	var blades: int = 11 + int(_rand() * 4.0)   # 11-14 blades ringing the clump (bushy)
-	var wdt: float = 0.06                        # half-width of a blade base
+	var blades: int = 12 + int(_rand() * 5.0)
 	for i in range(blades):
 		var ang: float = TAU * float(i) / float(blades) + _rand_range(-0.35, 0.35)
-		var lean: float = _rand_range(0.12, 0.36)          # how far the tip leans out
-		var bh: float = s * _rand_range(0.68, 1.16)        # this blade's height
-		var dx: float = cos(ang)
-		var dz: float = sin(ang)
-		var tip: Vector3 = base + Vector3(dx * lean, bh, dz * lean)
-		var perp: Vector3 = Vector3(-dz, 0.0, dx) * wdt    # blade width across its lean
-		var b0: Vector3 = base - perp
-		var b1: Vector3 = base + perp
-		_tri_grad(v, n, c, b0, b1, tip, Vector3.UP,
-			GRASS_BLADE_BASE, GRASS_BLADE_MID, GRASS_BLADE_TIP)
-	# Tall upright central blade so the clump has a peaked, star-shaped silhouette.
-	var ctip: Vector3 = base + Vector3(_rand_range(-0.03, 0.03), s * 1.3, _rand_range(-0.03, 0.03))
-	var cperp: Vector3 = Vector3(wdt, 0.0, 0.0)
-	_tri_grad(v, n, c, base - cperp, base + cperp, ctip, Vector3.UP,
-		GRASS_BLADE_BASE, GRASS_BLADE_MID, GRASS_BLADE_TIP)
+		var core: bool = i % 4 == 0
+		var lean: float = _rand_range(0.08, 0.2) if core else _rand_range(0.2, 0.45)
+		var bh: float = s * (_rand_range(1.0, 1.3) if core else _rand_range(0.6, 1.05))
+		var tip_col: Color = GRASS_BLADE_TIP if _rand() < 0.75 else TALL_TIP_DRY
+		_add_curved_blade(v, n, c, base + Vector3(_rand_range(-0.05, 0.05), 0.0, _rand_range(-0.05, 0.05)),
+			ang, bh, lean, _rand_range(0.045, 0.065), tip_col)
+
+
+func _add_curved_blade(v: PackedVector3Array, n: PackedVector3Array, c: PackedColorArray, root: Vector3, ang: float, h: float, lean: float, w: float, tip_col: Color) -> void:
+	var dir := Vector3(cos(ang), 0.0, sin(ang))
+	var perp := Vector3(-dir.z, 0.0, dir.x)
+	# Quadratic arch: rises mostly straight, then bends outward near the top.
+	var mid: Vector3 = root + dir * lean * 0.25 + Vector3(0.0, h * 0.55, 0.0)
+	var tip: Vector3 = root + dir * lean + Vector3(0.0, h, 0.0) - Vector3(0.0, lean * 0.25, 0.0)
+	var r0: Vector3 = root - perp * w
+	var r1: Vector3 = root + perp * w
+	var m0: Vector3 = mid - perp * w * 0.6
+	var m1: Vector3 = mid + perp * w * 0.6
+	var face: Vector3 = (dir + Vector3.UP * 0.6).normalized()
+	_tri_grad(v, n, c, r0, r1, m1, face, GRASS_BLADE_BASE, GRASS_BLADE_BASE, GRASS_BLADE_MID)
+	_tri_grad(v, n, c, r0, m1, m0, face, GRASS_BLADE_BASE, GRASS_BLADE_MID, GRASS_BLADE_MID)
+	_tri_grad(v, n, c, m0, m1, tip, face, GRASS_BLADE_MID, GRASS_BLADE_MID, tip_col)
+
+
+## Tiny camera-facing mote quads (billboarded + animated in stylized_motes).
+## COLOR.a = per-mote phase; UV = quad corner.
+func _build_motes(count: int) -> ArrayMesh:
+	var v := PackedVector3Array()
+	var uv := PackedVector2Array()
+	var c := PackedColorArray()
+	var corners := [Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 0), Vector2(1, 1), Vector2(0, 1)]
+	for i in range(count):
+		var p := Vector3(_rand_range(-0.8, 0.8), CAP_TOP + _rand_range(0.1, 0.7), _rand_range(-0.8, 0.8))
+		var phase := _rand()
+		for k in corners:
+			v.append(p)
+			uv.append(k)
+			c.append(Color(1, 1, 1, phase))
+	var m := ArrayMesh.new()
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = v
+	arrays[Mesh.ARRAY_TEX_UV] = uv
+	arrays[Mesh.ARRAY_COLOR] = c
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return m
+
+
+## Four weathered standing stones and a low ring of pale pavers: the shrine read
+## for Sacred Ground (its cap carries the pale SACRED stone material).
+func _add_shrine_stones(v: PackedVector3Array, n: PackedVector3Array, c: PackedColorArray) -> void:
+	var stone := Color(0.7, 0.68, 0.6, 1.0)
+	var stone_dk := Color(0.54, 0.52, 0.47, 1.0)
+	# At most one weathered standing stone per cell, at a hashed spot, so a shrine
+	# area reads as scattered menhirs rather than a grid of posts.
+	if _rand() > 0.45:
+		return
+	for i in range(1):
+		var a: float = _rand() * TAU
+		var p := Vector3(cos(a) * _rand_range(0.2, 0.7), CAP_TOP, sin(a) * _rand_range(0.2, 0.7))
+		var hgt: float = _rand_range(0.22, 0.36)
+		var wdt: float = 0.09
+		var top := p + Vector3(0.0, hgt, 0.0)
+		var ring := [p + Vector3(wdt, 0, 0), p + Vector3(0, 0, wdt), p + Vector3(-wdt, 0, 0), p + Vector3(0, 0, -wdt)]
+		for k in range(4):
+			var q0: Vector3 = ring[k]
+			var q1: Vector3 = ring[(k + 1) % 4]
+			var t0 := q0 + Vector3(0, hgt * 0.85, 0) + (p - q0) * 0.25
+			var t1 := q1 + Vector3(0, hgt * 0.85, 0) + (p - q1) * 0.25
+			var out: Vector3 = ((q0 + q1) * 0.5 - p).normalized()
+			var col: Color = stone if k % 2 == 0 else stone_dk
+			_tri(v, n, c, q0, q1, t1, out, col)
+			_tri(v, n, c, q0, t1, t0, out, col)
+			_tri(v, n, c, t0, t1, top, (out + Vector3.UP).normalized(), stone)
+
+
+## A dry-stone wall block filling the cell: irregular coursed stones (props shader
+## adds dabs + moss), a mossy capstone course on top.
+func _build_wall() -> ArrayMesh:
+	var pm := ProcMesh.new()
+	var kx: int = int(round(global_position.x))
+	var kz: int = int(round(global_position.z))
+	var stone := Color(0.47, 0.45, 0.42)
+	var stone_dk := Color(0.33, 0.31, 0.29)
+	pm.box(Vector3(-0.93, CAP_TOP - 0.02, -0.93), Vector3(0.93, WALL_TOP - 0.05, 0.93), stone_dk)
+	var course := 0.22
+	var y := CAP_TOP
+	var k := 0
+	while y < WALL_TOP - 0.1:
+		var y1 := minf(WALL_TOP - 0.03, y + course - 0.03)
+		for side in 4:
+			var t := -0.95 + (0.0 if k % 2 == 0 else 0.22)
+			var i := 0
+			while t < 0.95:
+				var t1 := minf(0.95, t + 0.38 + ProcMesh.hash01(kx + side, kz + k, i) * 0.22)
+				var h := ProcMesh.hash01(kx * 3 + side, kz * 5 + k, i + 7)
+				var col := stone.lerp(stone_dk, h * 0.7)
+				var o := 0.02 + h * 0.03
+				var a0 := t + 0.02
+				var a1 := t1 - 0.02
+				match side:
+					0: pm.box(Vector3(a0, y, 0.93), Vector3(a1, y1, 0.93 + o), col)
+					1: pm.box(Vector3(a0, y, -0.93 - o), Vector3(a1, y1, -0.93), col)
+					2: pm.box(Vector3(0.93, y, a0), Vector3(0.93 + o, y1, a1), col)
+					3: pm.box(Vector3(-0.93 - o, y, a0), Vector3(-0.93, y1, a1), col)
+				t = t1
+				i += 1
+		y += course
+		k += 1
+	# Capstones.
+	var x := -0.97
+	var j := 0
+	while x < 0.97:
+		var x1 := minf(0.97, x + 0.45 + ProcMesh.hash01(kx, kz, j + 30) * 0.2)
+		var hh := ProcMesh.hash01(kx, kz, j + 40)
+		pm.box(Vector3(x + 0.02, WALL_TOP - 0.05, -0.97), Vector3(x1 - 0.02, WALL_TOP + 0.02 + hh * 0.05, 0.97), stone.lerp(stone_dk, hh * 0.5), stone.lightened(0.08))
+		x = x1
+		j += 1
+	return pm.commit()
 
 
 # --- Mesh helpers -----------------------------------------------------------
@@ -470,46 +635,27 @@ func _mesh(v: PackedVector3Array, n: PackedVector3Array, c) -> ArrayMesh:
 	return m
 
 
-## Shared vertex-coloured material for the dirt base, rocks, tufts and flowers.
-## Anything above the grass surface (CAP_TOP) sways gently in the wind, more at the
-## tips; the soil block below never moves. World-space phase so neighbouring tiles
-## ripple together like one field.
+## Shared vertex-coloured material for the dirt base, rocks, tufts and flowers
+## (stylized_decor.gdshader: wind sway above the grass surface, weather, haze).
 func _get_decor_mat() -> ShaderMaterial:
 	if _decor_mat == null:
-		var sh := Shader.new()
-		sh.code = """
-shader_type spatial;
-render_mode cull_back;
-uniform float sway_strength = 0.035;
-uniform float sway_speed = 1.3;
-uniform float ground_y = %f;
-void vertex() {
-	float above = max(VERTEX.y - ground_y, 0.0);
-	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	float ph = TIME * sway_speed + wp.x * 0.7 + wp.z * 0.45;
-	float k = above * above * 6.0;
-	VERTEX.x += sin(ph) * sway_strength * k;
-	VERTEX.z += cos(ph * 0.8) * sway_strength * 0.6 * k;
-}
-void fragment() {
-	ALBEDO = COLOR.rgb;
-	ROUGHNESS = 1.0;
-}
-""" % CAP_TOP
 		_decor_mat = ShaderMaterial.new()
-		_decor_mat.shader = sh
+		_decor_mat.shader = load(DECOR_SHADER)
 	return _decor_mat
 
 
-## Material for the tall-grass blade mesh: double-sided (flat blades read from every
-## angle) and alpha-blended (vertex-colour alpha < 1 lets a unit in the grass show
-## through). Shared/static like the decor material so every tile reuses one instance.
-func _get_grass_mat() -> StandardMaterial3D:
+## Material for the tall-grass blade mesh: double-sided, alpha-blended (vertex alpha
+## < 1 lets a unit in the grass show through) and swaying (stylized_tall_grass).
+## Shared/static like the decor material so every tile reuses one instance.
+func _get_grass_mat() -> ShaderMaterial:
 	if _grass_mat == null:
-		_grass_mat = StandardMaterial3D.new()
-		_grass_mat.vertex_color_use_as_albedo = true
-		_grass_mat.roughness = 1.0
-		_grass_mat.metallic = 0.0
-		_grass_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-		_grass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_grass_mat = ShaderMaterial.new()
+		_grass_mat.shader = load(TALL_GRASS_SHADER)
 	return _grass_mat
+
+
+func _get_mote_mat() -> ShaderMaterial:
+	if _mote_mat == null:
+		_mote_mat = ShaderMaterial.new()
+		_mote_mat.shader = load(MOTE_SHADER)
+	return _mote_mat

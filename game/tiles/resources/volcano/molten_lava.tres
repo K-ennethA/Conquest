@@ -28,3 +28,4 @@ has_default_effects = true
 default_effects = [SubResource("Resource_xk26l")]
 rarity = "Rare"
 generation_weight = 0.3
+model_path = "res://tile_objects/tiles/scenes/volcano/lava_tile.tscn"

@@ -53,6 +53,11 @@ var camera_auto_focus: int = AutoFocus.QUICK
 ## Weather VISUALS only (particles / screen overlay) -- gameplay is never affected.
 enum WeatherEffects { FULL, REDUCED, OFF }
 var weather_effects: int = WeatherEffects.FULL
+## Optional board grid overlay drawn by the tile shaders (the terrain itself is
+## seamless). 0 = Off (default), 1 = Subtle. Drives the `grid_lines` global shader
+## uniform (see docs/WORLD_ART.md).
+enum GridLines { OFF, SUBTLE }
+var grid_lines: int = GridLines.OFF
 
 ## FAST-FORWARD (Fire Emblem's hold-to-speed-up): while the `fast_forward` action is
 ## held, every scaled animation runs [constant FAST_FORWARD_MULTIPLIER]x faster and
@@ -95,6 +100,7 @@ var ai_difficulty: int = 1  # NORMAL
 func _ready() -> void:
 	name = "GameSettings"
 	_load_presentation_settings()
+	_apply_grid_lines()
 	load_key_bindings()
 	print("GameSettings initialized")
 
@@ -167,6 +173,18 @@ func set_weather_effects(mode: int) -> void:
 	_save_presentation_settings()
 	settings_changed.emit()
 
+func set_grid_lines(mode: int) -> void:
+	var clamped := clampi(mode, 0, GridLines.keys().size() - 1)
+	if grid_lines == clamped:
+		return
+	grid_lines = clamped
+	_apply_grid_lines()
+	_save_presentation_settings()
+	settings_changed.emit()
+
+func _apply_grid_lines() -> void:
+	RenderingServer.global_shader_parameter_set(&"grid_lines", 1.0 if grid_lines == GridLines.SUBTLE else 0.0)
+
 # --- Persistence ------------------------------------------------------------
 
 func _load_presentation_settings() -> void:
@@ -177,6 +195,7 @@ func _load_presentation_settings() -> void:
 	battle_speed = clampf(float(cfg.get_value("presentation", "battle_speed", battle_speed)), BATTLE_SPEED_MIN, BATTLE_SPEED_MAX)
 	camera_auto_focus = clampi(int(cfg.get_value("presentation", "camera_auto_focus", camera_auto_focus)), 0, AutoFocus.keys().size() - 1)
 	weather_effects = clampi(int(cfg.get_value("presentation", "weather_effects", weather_effects)), 0, WeatherEffects.keys().size() - 1)
+	grid_lines = clampi(int(cfg.get_value("presentation", "grid_lines", grid_lines)), 0, GridLines.keys().size() - 1)
 
 func _save_presentation_settings() -> void:
 	var cfg := ConfigFile.new()
@@ -185,6 +204,7 @@ func _save_presentation_settings() -> void:
 	cfg.set_value("presentation", "battle_speed", battle_speed)
 	cfg.set_value("presentation", "camera_auto_focus", camera_auto_focus)
 	cfg.set_value("presentation", "weather_effects", weather_effects)
+	cfg.set_value("presentation", "grid_lines", grid_lines)
 	cfg.save(_SETTINGS_PATH)
 
 # --- Controls (keyboard rebinding) -----------------------------------------------

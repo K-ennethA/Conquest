@@ -24,6 +24,7 @@ class_name TileEffectOverlay
 const PIP_SIZE := 0.2
 const PIP_SPACING := 0.22   # world units between adjacent pip centers along X
 const PIP_Y := 0.55         # height above the cell center
+const GROUND_Y := 0.1       # tile top (MapLoader.UNIT_GROUND_Y): ground FX sit here
 
 # Hazard pulse: a slow sine varying alpha/emission so a "hazard" pip (Fire) reads
 # as active/dangerous while buffs sit calm. Kept subtle -- not a strobe.
@@ -171,6 +172,23 @@ func _build_cell_marker(cell: Vector3i, effects: Array) -> void:
 		container.add_child(pip)
 
 	container.set_meta("hazard_mats", hazard_mats)
+
+	# Painterly GROUND FX for effects applied this battle (a move ignited / froze /
+	# poisoned the cell): scorch + flames, bubbling mist, frost, healing runes...
+	# (see EffectFX). Inherent terrain effects are shown by the terrain itself.
+	if CombatServices != null and CombatServices.has_method("applied_tile_effects_at"):
+		var applied: Array = CombatServices.applied_tile_effects_at(cell)
+		var seed := cell.x * 131 + cell.y * 71 + cell.z * 17
+		for fx_effect in applied:
+			if fx_effect == null or not ("id" in fx_effect):
+				continue
+			var fx_info: Dictionary = TileEffectVisuals.info_for(fx_effect)
+			var fx := EffectFX.make(fx_effect.id, fx_info.get("color", Color.WHITE), seed)
+			if fx != null:
+				fx.position = Vector3(0.0, GROUND_Y - PIP_Y, 0.0)
+				container.add_child(fx)
+				seed += 7
+
 	add_child(container)
 	_markers[cell] = container
 

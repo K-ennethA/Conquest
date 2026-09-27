@@ -24,6 +24,7 @@ var _speed_slider: HSlider = null
 var _speed_value_label: Label = null
 var _focus_option: OptionButton = null
 var _weather_option: OptionButton = null
+var _grid_option: OptionButton = null
 
 # Controls tab: action -> the Button showing (and capturing) its keyboard binding.
 var _bind_buttons: Dictionary = {}
@@ -190,6 +191,15 @@ func _build_ui() -> void:
 	_weather_option.item_selected.connect(_on_weather_selected)
 	weather_row.add_child(_weather_option)
 	general.add_child(weather_row)
+	# --- Optional board grid overlay (GameSettings.GridLines: OFF=0, SUBTLE=1) ---
+	var grid_row := _make_row("Grid Lines")
+	_grid_option = OptionButton.new()
+	_grid_option.mouse_filter = Control.MOUSE_FILTER_STOP
+	_grid_option.add_item("Off", 0)
+	_grid_option.add_item("Subtle", 1)
+	_grid_option.item_selected.connect(_on_grid_selected)
+	grid_row.add_child(_grid_option)
+	general.add_child(grid_row)
 
 	tabs.add_child(_build_controls_tab())
 
@@ -362,6 +372,10 @@ func _refresh_from_settings() -> void:
 		var widx := _weather_option.get_item_index(int(GameSettings.weather_effects))
 		if widx >= 0:
 			_weather_option.select(widx)
+	if _grid_option and "grid_lines" in GameSettings:
+		var gidx := _grid_option.get_item_index(int(GameSettings.grid_lines))
+		if gidx >= 0:
+			_grid_option.select(gidx)
 
 	_syncing = false
 
@@ -416,6 +430,12 @@ func _on_weather_selected(index: int) -> void:
 		return
 	if _has_settings() and GameSettings.has_method("set_weather_effects"):
 		GameSettings.set_weather_effects(_weather_option.get_item_id(index))
+
+func _on_grid_selected(index: int) -> void:
+	if _syncing or not _grid_option:
+		return
+	if _has_settings() and GameSettings.has_method("set_grid_lines"):
+		GameSettings.set_grid_lines(_grid_option.get_item_id(index))
 
 
 # --- Controls: rebinding ------------------------------------------------------

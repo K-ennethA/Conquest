@@ -85,6 +85,11 @@ func load_map(map_resource: MapResource, target_parent: Node3D) -> bool:
 		_emit_load_failed("Failed to load tiles")
 		return false
 	
+	# Purely visual world dressing (skipped on the headless renderer): publish the
+	# terrain-class mask the tile shaders read (shorelines, path fringes), then
+	# grow the non-interactive landscape around the board (see WorldSkirt).
+	_build_world_dressing()
+
 	# Load units
 	if not _load_units():
 		_emit_load_failed("Failed to load units")
@@ -92,6 +97,16 @@ func load_map(map_resource: MapResource, target_parent: Node3D) -> bool:
 
 	map_loaded.emit(map_resource)
 	return true
+
+func _build_world_dressing() -> void:
+	if DisplayServer.get_name() == "headless" or current_map == null or tiles_container == null:
+		return
+	TerrainMask.publish(current_map)
+	var skirt := WorldSkirt.build_for(current_map)
+	if skirt != null:
+		# Under Tiles so it is freed with the map; its name matches neither the
+		# "Floor_" nor "Tile" prefixes the camera / board adapters look for.
+		tiles_container.add_child(skirt)
 
 func _sync_grid_size(map_resource) -> void:
 	"""Resize the shared board grid to match the loaded map (see load_map)."""

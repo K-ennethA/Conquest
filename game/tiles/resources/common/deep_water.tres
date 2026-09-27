@@ -16,3 +16,4 @@ metallic = 0.8
 roughness = 0.1
 elevation = -1
 generation_weight = 0.8
+model_path = "res://tile_objects/tiles/scenes/common/water_tile.tscn"

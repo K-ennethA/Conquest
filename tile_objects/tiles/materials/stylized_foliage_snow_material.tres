@@ -1,0 +1,9 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://tile_objects/tiles/shaders/stylized_foliage.gdshader" id="1_foliage"]
+
+[resource]
+resource_name = "StylizedFoliageSnow"
+shader = ExtResource("1_foliage")
+shader_parameter/snow_amount = 0.7
+shader_parameter/autumn_chance = 0.0
