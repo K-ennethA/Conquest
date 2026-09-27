@@ -23,6 +23,7 @@ const HALF: float = 1.0
 const CAP_TOP: float = 0.10        # walkable surface == UNIT_GROUND_Y
 const CAP_LIP: float = -0.05       # cap skirt bottom (slight overhang lip)
 const WATER_TOP: float = 0.03      # water / lava surface: a little below the grass banks
+const WALL_TOP: float = 0.75       # dry-stone wall height (kept low so units behind stay readable)
 const DIRT_TOP: float = 0.02
 const DIRT_BOTTOM: float = -0.7
 const DIRT_HALF: float = 0.94      # inset so the green cap overhangs the dirt
@@ -534,12 +535,12 @@ func _build_wall() -> ArrayMesh:
 	var kz: int = int(round(global_position.z))
 	var stone := Color(0.47, 0.45, 0.42)
 	var stone_dk := Color(0.33, 0.31, 0.29)
-	pm.box(Vector3(-0.93, CAP_TOP - 0.02, -0.93), Vector3(0.93, 0.95, 0.93), stone_dk)
-	var course := 0.28
+	pm.box(Vector3(-0.93, CAP_TOP - 0.02, -0.93), Vector3(0.93, WALL_TOP - 0.05, 0.93), stone_dk)
+	var course := 0.22
 	var y := CAP_TOP
 	var k := 0
-	while y < 0.9:
-		var y1 := minf(0.97, y + course - 0.03)
+	while y < WALL_TOP - 0.1:
+		var y1 := minf(WALL_TOP - 0.03, y + course - 0.03)
 		for side in 4:
 			var t := -0.95 + (0.0 if k % 2 == 0 else 0.22)
 			var i := 0
@@ -565,7 +566,7 @@ func _build_wall() -> ArrayMesh:
 	while x < 0.97:
 		var x1 := minf(0.97, x + 0.45 + ProcMesh.hash01(kx, kz, j + 30) * 0.2)
 		var hh := ProcMesh.hash01(kx, kz, j + 40)
-		pm.box(Vector3(x + 0.02, 0.95, -0.97), Vector3(x1 - 0.02, 1.02 + hh * 0.05, 0.97), stone.lerp(stone_dk, hh * 0.5), stone.lightened(0.08))
+		pm.box(Vector3(x + 0.02, WALL_TOP - 0.05, -0.97), Vector3(x1 - 0.02, WALL_TOP + 0.02 + hh * 0.05, 0.97), stone.lerp(stone_dk, hh * 0.5), stone.lightened(0.08))
 		x = x1
 		j += 1
 	return pm.commit()

@@ -13,6 +13,7 @@ render_mode cull_back, diffuse_toon, specular_disabled;
 
 #include "res://tile_objects/tiles/shaders/noise_lib.gdshaderinc"
 #include "res://tile_objects/tiles/shaders/world_lib.gdshaderinc"
+#include "res://tile_objects/tiles/shaders/ground_lib.gdshaderinc"
 
 group_uniforms Palette;
 uniform vec3 char_dark  : source_color = vec3(0.10, 0.07, 0.07);
@@ -66,8 +67,9 @@ void fragment() {
 	// Crust plates, thicker near the banks.
 	float bank = 0.0;
 	float rock_rim = 0.0;
+	float lb = 1.0;
 	if (terrain_mask_on > 0.5) {
-		float lb = terrain_at_warped(wp, 1.1).b;
+		lb = terrain_at_warped(wp, 1.1).b;
 		bank = 1.0 - smoothstep(0.45, 0.9, lb);
 		rock_rim = 1.0 - smoothstep(0.54, 0.62, lb);
 	}
@@ -84,9 +86,20 @@ void fragment() {
 	vec3 crust_col = mix(char_dark, crust, crust_shade);
 	plate = max(plate, rock_rim);
 	vec3 col = mix(molten, crust_col, plate);
+	// Outside the (warped) lava outline the cell paints scorched turf fading into
+	// the neighbouring grass, so a lava pool has an organic, burnt shoreline.
+	float scorch_zone = 1.0 - smoothstep(0.44, 0.54, lb);
+	if (scorch_zone > 0.0) {
+		float cdist = length(world_pos - CAMERA_POSITION_WORLD);
+		vec3 turf = grass_color(wp, ground_near(cdist), TIME);
+		float burnt = smoothstep(0.2, 0.46, lb);
+		vec3 scorched = mix(turf * 0.9, mix(vec3(0.16, 0.12, 0.1), vec3(0.3, 0.24, 0.18), fbm(wp * 4.0)), burnt);
+		col = mix(col, scorched, scorch_zone);
+	}
 	// Glowing rim of each plate.
 	float rim = (1.0 - smoothstep(0.0, 0.1, e)) * (1.0 - plate);
 	vec3 glow = molten * (1.0 - plate) + flame_hot * rim * 0.4;
+	glow *= 1.0 - (1.0 - smoothstep(0.44, 0.54, lb));
 
 	float wny = (INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).y;
 	float side = smoothstep(0.2, 0.8, wny);

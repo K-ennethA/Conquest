@@ -145,11 +145,18 @@ static func shadow_mesh() -> QuadMesh:
 
 # --- Cached variant meshes -------------------------------------------------------
 
-static func canopy_mesh_for(sp: int, v: int) -> ArrayMesh:
-	var key := sp * 16 + v
+## [param lod] 1 = low-poly variant (un-subdivided blobs, fewer pine points) for
+## distant world-skirt forests: ~4x fewer triangles, same silhouette at range.
+static func canopy_mesh_for(sp: int, v: int, lod: int = 0) -> ArrayMesh:
+	var key := sp * 16 + v + lod * 1000
 	if not _canopy_cache.has(key):
+		_build_lod = lod
 		_canopy_cache[key] = _build_canopy(sp, v)
+		_build_lod = 0
 	return _canopy_cache[key]
+
+
+static var _build_lod: int = 0
 
 
 static func trunk_mesh_for(sp: int, v: int) -> ArrayMesh:
@@ -229,7 +236,7 @@ static func _set_conifer_colour(m: ArrayMesh, flag: float) -> void:
 ## A lumpy icosphere blob (1 subdivision). Normals are "spherized" toward the whole
 ## crown's centre [param crown] so clusters shade as one soft painted mass.
 static func _blob(st: SurfaceTool, centre: Vector3, radius: float, crown: Vector3, salt: int, _unused: float) -> void:
-	var tris := _icosphere_tris()
+	var tris := _icosphere_tris(_build_lod)
 	for tri in tris:
 		var pts: Array = []
 		var nrms: Array = []
@@ -249,9 +256,12 @@ static func _blob(st: SurfaceTool, centre: Vector3, radius: float, crown: Vector
 
 
 static var _ico: Array = []
+static var _ico_low: Array = []
 
-static func _icosphere_tris() -> Array:
-	if not _ico.is_empty():
+static func _icosphere_tris(lod: int = 0) -> Array:
+	if lod > 0 and not _ico_low.is_empty():
+		return _ico_low
+	if lod == 0 and not _ico.is_empty():
 		return _ico
 	var t := (1.0 + sqrt(5.0)) / 2.0
 	var verts := [
@@ -272,22 +282,24 @@ static func _icosphere_tris() -> Array:
 		var ab := ((a + b) * 0.5).normalized()
 		var bc := ((b + c) * 0.5).normalized()
 		var ca := ((c + a) * 0.5).normalized()
+		var subtris := [[a, b, c]] if lod > 0 else [[a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]]
 		# Wind so the outward face is front-facing (Godot: clockwise).
-		for tri in [[a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]]:
+		for tri in subtris:
 			var p0: Vector3 = tri[0]
 			var p1: Vector3 = tri[1]
 			var p2: Vector3 = tri[2]
 			var nrm := (p1 - p0).cross(p2 - p0)
+			var out_list: Array = _ico_low if lod > 0 else _ico
 			if nrm.dot(p0 + p1 + p2) > 0.0:
-				_ico.append([p0, p2, p1])
+				out_list.append([p0, p2, p1])
 			else:
-				_ico.append([p0, p1, p2])
-	return _ico
+				out_list.append([p0, p1, p2])
+	return _ico_low if lod > 0 else _ico
 
 
 ## One drooping pine tier: a cone whose rim alternates long / short points.
 static func _cone_tier(st: SurfaceTool, base: Vector3, radius: float, height: float, salt: int) -> void:
-	var n := 10
+	var n := 10 if _build_lod == 0 else 6
 	var apex := base + Vector3(0.0, height, 0.0)
 	var rim: Array = []
 	for i in n:

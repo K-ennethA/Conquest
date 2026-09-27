@@ -30,8 +30,8 @@ uniform vec3 leaf_bright : source_color = vec3(0.50, 0.64, 0.27);
 uniform vec3 pine_dark   : source_color = vec3(0.05, 0.19, 0.15);
 uniform vec3 pine_mid    : source_color = vec3(0.12, 0.33, 0.22);
 uniform vec3 pine_bright : source_color = vec3(0.30, 0.52, 0.30);
-uniform vec3 autumn_mid  : source_color = vec3(0.78, 0.42, 0.12);
-uniform vec3 autumn_bright : source_color = vec3(0.98, 0.72, 0.26);
+uniform vec3 autumn_mid  : source_color = vec3(0.7, 0.4, 0.13);
+uniform vec3 autumn_bright : source_color = vec3(0.88, 0.64, 0.25);
 uniform vec3 rim_color   : source_color = vec3(0.95, 0.92, 0.6);
 uniform vec3 snow_color  : source_color = vec3(0.92, 0.95, 1.0);
 group_uniforms;
@@ -141,7 +141,7 @@ void fragment() {
 	col = mix(col, rim_color * bright * 1.6, fres * 0.35 * up);
 
 	// Optional snow caps (frozen pines).
-	col = mix(col, snow_color, snow_amount * smoothstep(0.72, 0.9, up + (n - 0.5) * 0.3));
+	col = mix(col, snow_color, snow_amount * smoothstep(0.55, 0.72, up + (n - 0.5) * 0.3));
 
 	col = apply_weather(col, 0.0);
 	col = apply_outside(col, world_pos.xz);

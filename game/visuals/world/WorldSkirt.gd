@@ -357,13 +357,18 @@ func _build_props() -> void:
 				buckets[key2].append(Transform3D(Basis(Vector3.UP, r * 30.0).scaled(Vector3.ONE * 0.8), Vector3(jx, y, jz)))
 		x += spacing
 		ix += 1
+	var total := 0
+	for key in buckets.keys():
+		total += (buckets[key] as Array).size()
+	print_verbose("[WorldSkirt] %d trees/bushes, %d rocks" % [total, rocks.size()])
+	set_meta(&"tree_count", total)
 	for key in buckets.keys():
 		var parts := String(key).split("_")
 		var sp := int(parts[0])
 		var v := int(parts[1])
 		var near := int(parts[2]) == 0
 		var list: Array = buckets[key]
-		_add_multimesh("Canopy_" + key, TreeBuilder.canopy_mesh_for(sp, v), TreeBuilder.foliage_material(false), list, near)
+		_add_multimesh("Canopy_" + key, TreeBuilder.canopy_mesh_for(sp, v, 0 if near else 1), TreeBuilder.foliage_material(false), list, near)
 		_add_multimesh("Trunk_" + key, TreeBuilder.trunk_mesh_for(sp, v), TreeBuilder.decor_material(), list, near)
 	_add_multimesh("TreeShadows", TreeBuilder.shadow_mesh(), TreeBuilder.shadow_material(), shadows, false)
 	_add_multimesh("Rocks", _rock_mesh(), ProcMesh.material(), rocks, true)

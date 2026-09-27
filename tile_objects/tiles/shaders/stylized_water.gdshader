@@ -21,9 +21,9 @@ render_mode cull_back, diffuse_toon, specular_toon;
 
 group_uniforms Palette;
 uniform vec3 water_deep    : source_color = vec3(0.07, 0.25, 0.42);
-uniform vec3 water_mid     : source_color = vec3(0.13, 0.42, 0.56);
-uniform vec3 water_shallow : source_color = vec3(0.30, 0.64, 0.63);
-uniform vec3 foam_color    : source_color = vec3(0.90, 0.97, 0.95);
+uniform vec3 water_mid     : source_color = vec3(0.11, 0.37, 0.54);
+uniform vec3 water_shallow : source_color = vec3(0.2, 0.52, 0.6);
+uniform vec3 foam_color    : source_color = vec3(0.84, 0.94, 0.94);
 group_uniforms;
 
 group_uniforms Waves;
@@ -34,7 +34,7 @@ uniform float glint_amount : hint_range(0.0, 1.0) = 0.5;
 group_uniforms;
 
 group_uniforms Shore;
-uniform float shore_foam : hint_range(0.0, 1.0) = 0.65;
+uniform float shore_foam : hint_range(0.0, 1.0) = 0.5;
 // Mask level below which a water cell paints its bank (organic shoreline).
 uniform float shore_line : hint_range(0.0, 0.8) = 0.58;
 uniform vec3 mud_color : source_color = vec3(0.24, 0.2, 0.13);
@@ -111,7 +111,7 @@ void fragment() {
 		// than the cell square. Only on up-facing water that borders land.
 		if (wet < shore_line) {
 			float near_g = ground_near(cam_dist);
-			vec3 turf = grass_color(wp, near_g, TIME) * 0.82;
+			vec3 turf = grass_color(wp, near_g, TIME) * 0.95;
 			float mud = smoothstep(shore_line - 0.12, shore_line, wet);
 			col = mix(turf, mud_color, mud * 0.85);
 			bank_out = 1.0;

@@ -37,7 +37,7 @@ void fragment() {
 	// Grassy cap skirts (the little bank above water / at the board edge) read
 	// as darker turf rather than a flat green wall.
 	float wny = (INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).y;
-	col *= mix(0.62, 1.0, smoothstep(0.2, 0.8, wny));
+	col *= mix(0.8, 1.0, smoothstep(0.2, 0.8, wny));
 	col = apply_grid(col, world_pos, cam_dist);
 	col = apply_weather(col, 1.0);
 	col = apply_outside(col, world_pos.xz);
