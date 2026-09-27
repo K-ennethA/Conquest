@@ -320,7 +320,10 @@ static func phase_title(player) -> String:
 	if gs != null and mode == GameSettings.GameMode.MULTIPLAYER:
 		return "YOUR TURN" if LocalPlayer.is_local_human(player) else "OPPONENT'S TURN"
 	if gs != null and mode == GameSettings.GameMode.VERSUS and not bool(player.is_ai):
-		return "PLAYER %d PHASE" % (int(player.player_id) + 1)
+		# Spelled out: the Cinzel display face draws "1" almost like "I".
+		var n: int = int(player.player_id)
+		var words := ["ONE", "TWO", "THREE", "FOUR"]
+		return "PLAYER %s PHASE" % (words[n] if n >= 0 and n < words.size() else str(n + 1))
 	return "ENEMY PHASE" if bool(player.is_ai) else "PLAYER PHASE"
 
 

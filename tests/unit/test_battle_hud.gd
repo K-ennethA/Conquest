@@ -88,7 +88,7 @@ func test_phase_titles() -> void:
 	assert_eq(ConquestTheme.phase_title(ai), "ENEMY PHASE")
 	assert_eq(ConquestTheme.side_label(ai), "Enemy")
 	GameSettings.game_mode = GameSettings.GameMode.VERSUS
-	assert_eq(ConquestTheme.phase_title(Player.new(1, "P2")), "PLAYER 2 PHASE")
+	assert_eq(ConquestTheme.phase_title(Player.new(1, "P2")), "PLAYER TWO PHASE")
 	GameSettings.game_mode = prev
 	assert_eq(ConquestTheme.team_color(human), ConquestTheme.TEAM_BLUE)
 	assert_eq(ConquestTheme.team_color(ai), ConquestTheme.TEAM_RED)
