@@ -117,11 +117,7 @@ static func move_threat_from(stand: Vector3i, move: MoveResource, unit, board, i
 ## [param respect_turn_state].
 static func unit_threat(unit, board, respect_turn_state: bool = false) -> Dictionary:
 	var stands := stand_cells(unit, board, respect_turn_state)
-	var hit := {}
-	var moves := offensive_moves(unit)
-	for s in stands:
-		for m in moves:
-			move_threat_from(s, m, unit, board, hit)
+	var hit := attack_set_from(stands, unit, board)
 	var stand_set := {}
 	for s in stands:
 		stand_set[s] = true
@@ -134,6 +130,30 @@ static func unit_threat(unit, board, respect_turn_state: bool = false) -> Dictio
 	attack.sort_custom(Cells.less)
 	fringe.sort_custom(Cells.less)
 	return { "move": stands, "attack": attack, "fringe": fringe }
+
+
+## Set (cell -> true) of every cell [param unit]'s offensive moves could hit from
+## any of [param stands]. For callers that already ran the movement flood.
+static func attack_set_from(stands: Array, unit, board) -> Dictionary:
+	var hit := {}
+	var moves := offensive_moves(unit)
+	for s in stands:
+		for m in moves:
+			move_threat_from(s, m, unit, board, hit)
+	return hit
+
+
+## The red FRINGE for a unit whose stand cells are already known: attackable cells
+## that are not in [param stands]. Sorted with [method Cells.less].
+static func fringe_from(stands: Array, unit, board) -> Array[Vector3i]:
+	var hit := attack_set_from(stands, unit, board)
+	for s in stands:
+		hit.erase(s)
+	var out: Array[Vector3i] = []
+	for c in hit.keys():
+		out.append(c)
+	out.sort_custom(Cells.less)
+	return out
 
 
 ## Union of the attack cells of every unit in [param units] (the DANGER ZONE when

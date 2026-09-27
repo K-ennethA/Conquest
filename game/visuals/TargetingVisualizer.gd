@@ -12,8 +12,8 @@ class_name TargetingVisualizer
 
 # Overlay mesh settings
 var overlay_size: float = 2.0            # Matches tile size (2x2 units)
-var attack_range_height: float = 1.0     # Height above tiles for attack-range markers
-var aoe_preview_height: float = 1.05     # Slightly higher so AoE markers render on top
+var attack_range_height: float = 0.18    # Height above tiles for attack-range markers
+var aoe_preview_height: float = 0.2     # Slightly higher so AoE markers render on top
 
 # Visual state
 var attack_range_meshes: Dictionary = {}  # Vector3 cell -> MeshInstance3D
