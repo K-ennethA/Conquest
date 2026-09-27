@@ -183,3 +183,26 @@ floor_down={
 , Object(InputEventJoypadMotion,"resource_local_to_scene":false,"resource_name":"","device":-1,"axis":4,"axis_value":1.0,"script":null)
 ]
 }
+
+[shader_globals]
+
+weather_wetness={
+"type": "float",
+"value": 0.0
+}
+weather_dust={
+"type": "float",
+"value": 0.0
+}
+weather_bloom={
+"type": "float",
+"value": 0.0
+}
+weather_sun={
+"type": "float",
+"value": 0.0
+}
+wind_strength_global={
+"type": "float",
+"value": 1.0
+}

@@ -41,6 +41,7 @@ var action_announcer: ActionAnnouncer = null
 # persistent objective chip under the turn indicator.
 var map_menu: MapMenu = null
 var objective_chip: ObjectiveChip = null
+var weather_chip: Control = null
 
 func _ready() -> void:
 	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
@@ -106,6 +107,8 @@ func _build_map_menu() -> void:
 	if center_top_container:
 		objective_chip = ObjectiveChip.new()
 		center_top_container.add_child(objective_chip)
+		weather_chip = WeatherChip.new()
+		center_top_container.add_child(weather_chip)
 		_place_objective_chip()
 	map_menu = MapMenu.new()
 	map_menu.unit_actions_panel = unit_actions_panel
@@ -220,7 +223,12 @@ func _place_objective_chip() -> void:
 	if banner_shown:
 		turn_indicator.attach_objective(objective_chip)
 		objective_chip.set_inline(true)
+		# Weather rides in the same banner row so the top HUD stays one compact strip.
+		if weather_chip != null and is_instance_valid(weather_chip):
+			turn_indicator.attach_objective(weather_chip)
 	elif center_top_container != null and objective_chip.get_parent() != center_top_container:
+		if weather_chip != null and is_instance_valid(weather_chip) and weather_chip.get_parent() != center_top_container:
+			weather_chip.reparent(center_top_container)
 		objective_chip.reparent(center_top_container)
 		objective_chip.set_inline(false)
 	elif center_top_container != null:

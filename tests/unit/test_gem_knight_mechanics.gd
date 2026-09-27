@@ -66,7 +66,7 @@ func test_geode_resolves_with_full_kit():
 	assert_eq(geode.element, &"earth", "Geode is an earth-element unit")
 	assert_eq(geode.moveset.size(), 4, "Geode has four moves")
 	var ab: Array = geode.get("abilities")
-	assert_eq(ab.size(), 2, "Geode has two abilities (Crystalline Ward + Reprisal)")
+	assert_eq(ab.size(), 3, "Geode has three abilities (Crystalline Ward + Reprisal + Sand Veil)")
 
 func test_crystalline_ward_grants_a_shield_after_untouched_turns():
 	var ward: AbilityResource = load("res://game/abilities/crystalline_ward.tres")

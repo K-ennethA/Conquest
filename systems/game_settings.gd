@@ -50,6 +50,10 @@ var battle_speed: float = 1.0
 ## Camera auto-focus mode (see [enum AutoFocus]).
 var camera_auto_focus: int = AutoFocus.QUICK
 
+## Weather VISUALS only (particles / screen overlay) -- gameplay is never affected.
+enum WeatherEffects { FULL, REDUCED, OFF }
+var weather_effects: int = WeatherEffects.FULL
+
 ## FAST-FORWARD (Fire Emblem's hold-to-speed-up): while the `fast_forward` action is
 ## held, every scaled animation runs [constant FAST_FORWARD_MULTIPLIER]x faster and
 ## the AI's between-action beats shrink by the same factor. Runtime only -- polled
@@ -155,6 +159,14 @@ func set_camera_auto_focus(mode: int) -> void:
 	_save_presentation_settings()
 	settings_changed.emit()
 
+func set_weather_effects(mode: int) -> void:
+	var clamped := clampi(mode, 0, WeatherEffects.keys().size() - 1)
+	if weather_effects == clamped:
+		return
+	weather_effects = clamped
+	_save_presentation_settings()
+	settings_changed.emit()
+
 # --- Persistence ------------------------------------------------------------
 
 func _load_presentation_settings() -> void:
@@ -164,6 +176,7 @@ func _load_presentation_settings() -> void:
 	animations_enabled = bool(cfg.get_value("presentation", "animations_enabled", animations_enabled))
 	battle_speed = clampf(float(cfg.get_value("presentation", "battle_speed", battle_speed)), BATTLE_SPEED_MIN, BATTLE_SPEED_MAX)
 	camera_auto_focus = clampi(int(cfg.get_value("presentation", "camera_auto_focus", camera_auto_focus)), 0, AutoFocus.keys().size() - 1)
+	weather_effects = clampi(int(cfg.get_value("presentation", "weather_effects", weather_effects)), 0, WeatherEffects.keys().size() - 1)
 
 func _save_presentation_settings() -> void:
 	var cfg := ConfigFile.new()
@@ -171,6 +184,7 @@ func _save_presentation_settings() -> void:
 	cfg.set_value("presentation", "animations_enabled", animations_enabled)
 	cfg.set_value("presentation", "battle_speed", battle_speed)
 	cfg.set_value("presentation", "camera_auto_focus", camera_auto_focus)
+	cfg.set_value("presentation", "weather_effects", weather_effects)
 	cfg.save(_SETTINGS_PATH)
 
 # --- Controls (keyboard rebinding) -----------------------------------------------

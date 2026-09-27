@@ -65,6 +65,9 @@ func _run_trigger(unit, cell: Vector3i, board, trigger: int) -> Array:
 			continue
 		if not te.applies_to(unit, board):
 			continue
+		# Weather can make a tile effect inert (Rain douses fire -- see WeatherResource).
+		if Weather.suppresses_tile_effect(te):
+			continue
 		for e in te.run(unit, board):
 			events.append(e)
 		# A single-use snare (Vine Trap) is spent the instant it springs on a unit.

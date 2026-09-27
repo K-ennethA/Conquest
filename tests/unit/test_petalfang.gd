@@ -627,7 +627,7 @@ func test_petalfang_loads_with_four_moves_and_one_ability():
 	assert_eq(petal.character_id, &"petalfang", "character_id is petalfang")
 	assert_eq(petal.display_name, "Petalfang", "display name is Petalfang")
 	assert_eq(petal.move_count(), 4, "Petalfang carries exactly 4 moves")
-	assert_eq(petal.ability_count(), 1, "and exactly 1 ability")
+	assert_eq(petal.ability_count(), 2, "Thornlust + Sunlit")
 	assert_eq(petal.get_move(0).move_id, &"thorn_spit", "slot 0 is thorn_spit")
 	assert_eq(petal.get_move(1).move_id, &"vine_trap", "slot 1 is vine_trap")
 	assert_eq(petal.get_move(2).move_id, &"gathering_vines", "slot 2 is gathering_vines")

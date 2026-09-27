@@ -45,6 +45,8 @@ static func mirror(p: Vector2i) -> Vector2i:
 static func build() -> MapResource:
 	var m := MapResource.new()
 	m.map_name = "River Crossing"
+	# Battle weather (docs/WEATHER.md).
+	m.set_weather_settings({"mode": "dynamic", "weather": "rain", "pool": {"bright_sun": 1, "clear": 2, "rain": 3}, "change_every": 3})
 	m.description = "A river splits the field. Hold the stone bridge -- or slip along the towpaths beneath it -- while archers duel from the ruins of the broken bridge downstream. Multi-floor: Page Up / Page Down to look under the bridge."
 	m.author = "System"
 	m.width = WIDTH

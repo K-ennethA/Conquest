@@ -299,6 +299,16 @@ func _set_current_stat(stat_name: String, value: int) -> void:
 			current_range = value
 		"range_bonus":
 			current_range_bonus = value
+		# These are readable through get_stat() but were missing here, so a timed
+		# modifier to them (e.g. an evasion buff) silently did nothing.
+		"magic", "mag":
+			current_magic = value
+		"magic_defense", "mdef", "resistance", "res":
+			current_magic_defense = value
+		"evasion", "eva", "evade":
+			current_evasion = value
+		"crit":
+			current_crit = value
 
 func _modify_base_stat(stat_name: String, amount: int) -> void:
 	"""Modify base stat in resource (permanent change)"""

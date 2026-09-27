@@ -321,6 +321,32 @@ func test_seeded_combat_is_identical_across_peers() -> void:
 	assert_eq(desyncs, [], "no desync across the whole exchange")
 
 
+func test_dynamic_weather_stays_in_lockstep_across_peers() -> void:
+	# Dynamic weather seeded from the match's public seed (as GameWorldManager does),
+	# changing every round; ranged coin strikes feel the Desert Storm hit penalty.
+	assert_true(await _start_match(), "match started")
+	var seed_value := int(_hs().get_match_config()["seed"])
+	assert_eq(seed_value, int(_cs().get_match_config()["seed"]), "both peers see the same seed")
+	var settings := { "mode": "dynamic", "weather": "desert_storm",
+		"pool": { "desert_storm": 1, "rain": 1, "bright_sun": 1, "clear": 1 }, "change_every": 1 }
+	CombatServices.weather.configure(settings, seed_value)
+	var desyncs := []
+	_cs().desync_detected.connect(func(s, _a, _b): desyncs.append(s))
+	for i in range(5):
+		assert_eq(await _submit(_hs(), NetProtocol.use_move("0:1", 1, Vector3i(4, 4, 0))), "", "coin strike %d" % i)
+		assert_eq(_hp(_hw, "1:1"), _hp(_cw, "1:1"), "same HP after strike %d" % i)
+		assert_eq(await _submit(_hs(), NetProtocol.end_turn()), "", "host ends turn %d" % i)
+		await H.wait_until(get_tree(), func(): return _cs().current_turn_slot() == 1)
+		assert_eq(await _submit(_cs(), NetProtocol.end_turn()), "", "client ends turn %d" % i)
+		await H.wait_until(get_tree(), func(): return _hs().current_turn_slot() == 0)
+	assert_gt(CombatServices.weather.round, 1, "the weather advanced with the rounds")
+	for r in range(1, CombatServices.weather.round + 1):
+		assert_eq(CombatServices.weather.id_for_round(r), WeatherState.base_id_for_round(settings, seed_value, r),
+			"round %d weather is the pure function of (settings, seed, round)" % r)
+	assert_eq(_hr().state_digest(), _cr().state_digest(), "final digests agree (weather included)")
+	assert_eq(desyncs, [], "no desync")
+
+
 func test_rules_rng_is_a_pure_function_of_seed_and_seq() -> void:
 	# No network: three independent worlds replay the same 30 accepted coin strikes.
 	var a := _build_world(self, LAYOUT, false, 777)

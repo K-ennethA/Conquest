@@ -233,7 +233,7 @@ func test_tree_grunt_loads_with_two_moves_and_one_ability():
 	var grunt := _tree_grunt()
 	assert_not_null(grunt, "tree_grunt.tres loads")
 	assert_eq(grunt.character_id, &"tree_grunt", "character_id is preserved")
-	assert_eq(grunt.move_count(), 2, "the grunt carries exactly 2 moves")
+	assert_eq(grunt.move_count(), 3, "Tree Bash, Rooted, Verdant Call")
 	assert_eq(grunt.ability_count(), 1, "the grunt carries exactly 1 ability")
 	assert_eq(grunt.get_move(0).move_id, &"tree_bash", "slot 0 is tree_bash")
 	assert_eq(grunt.get_move(1).move_id, &"rooted", "slot 1 is rooted")

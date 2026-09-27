@@ -5,6 +5,7 @@
 [ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
 [ext_resource type="Resource" path="res://game/combat/moves/tree_bash.tres" id="4_bash"]
 [ext_resource type="Resource" path="res://game/combat/moves/rooted.tres" id="5_rooted"]
+[ext_resource type="Resource" path="res://game/combat/moves/verdant_call.tres" id="20_verdant"]
 [ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="6_abres"]
 [ext_resource type="Resource" path="res://game/abilities/natures_blessing.tres" id="7_blessing"]
 
@@ -21,5 +22,5 @@ base_defense = 8
 base_magic = 2
 base_magic_defense = 6
 base_speed = 7
-moveset = Array[ExtResource("3_mvres")]([ExtResource("4_bash"), ExtResource("5_rooted")])
+moveset = Array[ExtResource("3_mvres")]([ExtResource("4_bash"), ExtResource("5_rooted"), ExtResource("20_verdant")])
 abilities = Array[ExtResource("6_abres")]([ExtResource("7_blessing")])

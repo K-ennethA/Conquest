@@ -10,6 +10,14 @@ description = "A river splits the field. Hold the stone bridge -- or slip along 
 author = "System"
 width = 15
 height = 11
+weather_mode = "dynamic"
+weather = "rain"
+weather_pool = {
+"bright_sun": 1.0,
+"clear": 2.0,
+"rain": 3.0
+}
+weather_change_every = 3
 tile_layout = Array[Dictionary]([{
 "position": Vector2i(0, 2),
 "tile_id": "grass_plains",

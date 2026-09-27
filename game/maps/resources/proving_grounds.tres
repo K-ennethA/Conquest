@@ -10,6 +10,8 @@ description = "A 17x13 point-symmetric combat arena: three walled approach lanes
 author = "Map Maker (build_proving_grounds.gd)"
 width = 17
 height = 13
+weather_mode = "fixed"
+weather = "bright_sun"
 tile_layout = Array[Dictionary]([{
 "position": Vector2i(0, 0),
 "tile_resource_path": "",

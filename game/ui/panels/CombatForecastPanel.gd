@@ -52,6 +52,7 @@ var _flash_tween: Tween
 var _chip_row: HBoxContainer
 var _type_chip: Label
 var _height_chip: Label
+var _weather_chip: Label
 var _move_label: Label
 var _attacker_portrait: PanelContainer
 var _defender_portrait: PanelContainer
@@ -186,6 +187,8 @@ func _create_ui() -> void:
 	_chip_row.add_child(_type_chip)
 	_height_chip = _make_chip()
 	_chip_row.add_child(_height_chip)
+	_weather_chip = _make_chip()
+	_chip_row.add_child(_weather_chip)
 
 	# Big numbers plate: DMG | HIT | CRIT (+ the HP result row kept for callers).
 	var plate := PanelContainer.new()
@@ -280,7 +283,8 @@ func _make_chip() -> Label:
 ##   "height": "" | "▲ High ground" | "▼ Low ground", "height_good": bool }.
 ## Static + pure so it is unit-testable without building the panel.
 static func matchup_chips(attacker, defender, move, board) -> Dictionary:
-	var out := { "type": "", "type_good": true, "height": "", "height_good": true }
+	var out := { "type": "", "type_good": true, "height": "", "height_good": true,
+		"weather": "", "weather_good": true }
 	var mult: float = ElementChart.type_scale_for(move, defender)
 	if mult > 1.001:
 		out["type"] = "▲ Effective"
@@ -296,13 +300,36 @@ static func matchup_chips(attacker, defender, move, board) -> Dictionary:
 		elif adv < 0:
 			out["height"] = "▼ Low ground"
 			out["height_good"] = false
+	var wc := weather_chip(move)
+	out["weather"] = wc[0]
+	out["weather_good"] = wc[1]
 	return out
+
+
+## Weather modifier chip for [param move]: ["▲ Bright Sun ×1.3", true],
+## ["▼ Desert Storm -15 hit", false], or ["", true] when the weather is neutral.
+static func weather_chip(move) -> Array:
+	var w := Weather.current()
+	var parts: Array[String] = []
+	var score := 0.0
+	var mult := Weather.damage_scale_for(move)
+	if not is_equal_approx(mult, 1.0):
+		parts.append("×%s" % String.num(mult, 2))
+		score += mult - 1.0
+	if w.ranged_hit_modifier != 0 and Weather.is_ranged(move, w):
+		parts.append("%+d hit" % w.ranged_hit_modifier)
+		score += float(w.ranged_hit_modifier) / 100.0
+	if parts.is_empty():
+		return ["", true]
+	var good := score >= 0.0
+	return ["%s %s %s" % ["▲" if good else "▼", w.display_name, " ".join(parts)], good]
 
 func _apply_chips(attacker, defender, move, board) -> void:
 	var chips := matchup_chips(attacker, defender, move, board)
 	_set_chip(_type_chip, chips["type"], chips["type_good"])
 	_set_chip(_height_chip, chips["height"], chips["height_good"])
-	_chip_row.visible = _type_chip.visible or _height_chip.visible
+	_set_chip(_weather_chip, chips["weather"], chips["weather_good"])
+	_chip_row.visible = _type_chip.visible or _height_chip.visible or _weather_chip.visible
 
 func _set_chip(chip: Label, text: String, good: bool) -> void:
 	# (Styled here, after ConquestTheme.apply_to has swept the card's overrides.)

@@ -112,6 +112,8 @@ func _initialize() -> void:
 	# resulting MapResource via set_character_spawn_at_position - the
 	# authoritative, character-aware API documented on MapResource.gd.
 	var res := model.to_map_resource()
+	# Battle weather (docs/WEATHER.md).
+	res.set_weather_settings({"mode": "schedule", "weather": "clear", "schedule": [{"weather": "clear", "rounds": 2}, {"weather": "bright_sun", "rounds": 2}, {"weather": "rain", "rounds": 2}, {"weather": "desert_storm", "rounds": 2}, {"weather": "overbloom", "rounds": 2}]})
 	res.difficulty = "Normal"  # balanced skirmish, no boss - a showcase/test map, not an encounter
 	_place_spawns(res)
 

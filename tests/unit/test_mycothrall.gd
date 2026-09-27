@@ -669,7 +669,7 @@ func test_mycothrall_character_sheet():
 	assert_true(&"infesting_lunge" in move_ids, "it knows Infesting Lunge")
 	assert_true(&"siphon_bite" in move_ids, "and Siphon Bite")
 
-	assert_eq(myco.abilities.size(), 1, "one ability")
+	assert_eq(myco.abilities.size(), 2, "Parasitic Hold + Rain Bath")
 	assert_eq(myco.abilities[0].id, &"parasitic_hold", "Parasitic Hold")
 
 	# A fast, fragile skirmisher relative to the tanky Blightcap.

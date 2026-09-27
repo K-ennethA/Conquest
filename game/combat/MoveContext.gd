@@ -62,7 +62,9 @@ func hit_chance(target) -> float:
 	var evasion := float(_stat(target, "evasion")) + float(TerrainStats.bonus_for(target, "evasion", board))
 	# Height advantage (multi-floor): +/- a few points; exactly 0 on a shared floor.
 	var height := Elevation.hit_modifier_for(caster, target, board)
-	return clampf(move.accuracy * 100.0 - evasion + height, 0.0, 100.0)
+	# Weather: ranged penalty (Desert Storm) and the target's weather evasion bonus.
+	var weather := Weather.hit_modifier_for(move, caster, target, board)
+	return clampf(move.accuracy * 100.0 - evasion + height + weather, 0.0, 100.0)
 
 
 ## Percent chance (0..100) of a critical hit on [param target]: the move's base

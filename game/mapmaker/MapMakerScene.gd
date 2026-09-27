@@ -72,6 +72,7 @@ var _player_spin: SpinBox
 var _grid_container: GridContainer
 var _status_label: Label
 var _name_edit: LineEdit
+var _weather_opt: OptionButton
 var _floor_label: Label
 var _issues_label: RichTextLabel
 var _tool_buttons: Dictionary = {}  # Tool -> Button
@@ -134,6 +135,14 @@ func _build_ui() -> void:
 	_name_edit.custom_minimum_size = Vector2(160, 0)
 	_name_edit.text_changed.connect(func(t): model.map_name = t)
 	top.add_child(_name_edit)
+
+	# Battle weather (docs/WEATHER.md): a fixed weather, a dynamic mix, or the map's
+	# own schedule/dynamic settings kept as-is.
+	top.add_child(_make_label("Weather:"))
+	_weather_opt = OptionButton.new()
+	_weather_opt.item_selected.connect(_on_weather_selected)
+	top.add_child(_weather_opt)
+	_sync_weather_option()
 
 	top.add_child(_make_label("Width:"))
 	_width_spin = _make_spin(1, MapResource.MAX_MAP_SIZE, model.width)
@@ -609,7 +618,43 @@ func load_model(m: MapMakerModel) -> void:
 		_name_edit.text = model.map_name
 		_width_spin.value = model.width
 		_height_spin.value = model.height
+	_sync_weather_option()
 	_rebuild_grid()
+
+
+## Weather dropdown: one entry per authored weather (fixed), "Dynamic (all)", and a
+## "Custom" entry that keeps a loaded map's own schedule / dynamic settings.
+func _sync_weather_option() -> void:
+	if _weather_opt == null:
+		return
+	_weather_opt.clear()
+	var s := WeatherState.normalize_settings(model.weather_settings)
+	var selected := -1
+	for id in Weather.all_ids():
+		_weather_opt.add_item(Weather.get_weather(id).display_name)
+		_weather_opt.set_item_metadata(_weather_opt.item_count - 1, String(id))
+		if s["mode"] == WeatherState.MODE_FIXED and s["weather"] == id:
+			selected = _weather_opt.item_count - 1
+	_weather_opt.add_item("Dynamic (all)")
+	_weather_opt.set_item_metadata(_weather_opt.item_count - 1, "__dynamic")
+	if s["mode"] != WeatherState.MODE_FIXED:
+		_weather_opt.add_item("Custom (%s)" % s["mode"])
+		_weather_opt.set_item_metadata(_weather_opt.item_count - 1, "__custom")
+		selected = _weather_opt.item_count - 1
+	_weather_opt.select(maxi(selected, 0))
+
+
+func _on_weather_selected(index: int) -> void:
+	var key := String(_weather_opt.get_item_metadata(index))
+	if key == "__custom":
+		return
+	if key == "__dynamic":
+		var pool := {}
+		for id in Weather.all_ids():
+			pool[String(id)] = 1
+		model.weather_settings = {"mode": "dynamic", "weather": "clear", "pool": pool, "change_every": 3}
+	else:
+		model.weather_settings = {"mode": "fixed", "weather": key}
 
 
 func _set_status(text: String) -> void:

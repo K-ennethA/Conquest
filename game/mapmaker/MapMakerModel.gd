@@ -33,6 +33,8 @@ var map_name: String = "New Map"
 var description: String = ""
 var author: String = ""
 var max_players: int = 2
+## Battle weather settings ([method MapResource.get_weather_settings] shape); {} = Clear.
+var weather_settings: Dictionary = {}
 
 ## Grid dimensions in cells.
 var width: int = 5
@@ -447,6 +449,8 @@ func to_map_resource() -> MapResource:
 		var marker: Dictionary = _objectives[pos]
 		rules.append(_encode_objective(pos, marker))
 	res.special_rules = rules
+	if not weather_settings.is_empty():
+		res.set_weather_settings(weather_settings)
 
 	res.last_modified = Time.get_datetime_string_from_system()
 	return res
@@ -474,6 +478,7 @@ func load_from_map_resource(res: MapResource) -> void:
 	_objectives.clear()
 	_links.clear()
 	_extra_special_rules.clear()
+	weather_settings = {}
 
 	if res == null:
 		return
@@ -482,6 +487,7 @@ func load_from_map_resource(res: MapResource) -> void:
 	description = res.description
 	author = res.author
 	max_players = res.max_players
+	weather_settings = res.get_weather_settings()
 	width = max(1, res.width)
 	height = max(1, res.height)
 

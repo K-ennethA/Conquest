@@ -32,6 +32,16 @@ signal tile_effects_changed(cell: Vector3i)
 ## effects) draws from it, so every peer rolls identically.
 var match_rng: RandomNumberGenerator = null
 
+## Relays [signal WeatherState.changed] for the live battle (HUD chip, WeatherFX,
+## announcer). [param weather] / [param previous] are [WeatherResource]s.
+signal weather_changed(weather, previous)
+
+## The live battle weather (see [WeatherState], docs/WEATHER.md). Always present;
+## permanent Clear until [method configure_weather] runs on map load. Advanced by
+## the turn systems' per-unit turn-start tick with the current round, so it is a
+## pure function of (map settings, seed, applied actions) on every peer.
+var weather: WeatherState = null
+
 ## The single live adapter. Null until the first successful [method rebuild].
 var _board: BoardAdapter = null
 
@@ -98,6 +108,52 @@ var _base_tile_effects: Dictionary = {}
 var _applied_tile_effects: Dictionary = {}
 
 
+func _init() -> void:
+	weather = WeatherState.new()
+	weather.changed.connect(_on_weather_changed)
+
+
+## Start this battle's weather from [param map] (a [MapResource]; null = Clear).
+## [param weather_seed] seeds dynamic weather: the match's public setup seed in a
+## network match (identical on every peer), any value in single-player.
+func configure_weather(map, weather_seed: int) -> void:
+	var settings: Dictionary = {}
+	if map != null and map.has_method("get_weather_settings"):
+		settings = map.get_weather_settings()
+	weather.configure(settings, weather_seed)
+
+
+## Advance the weather to [param round_number] (no-op unless later). Called from
+## [method TurnSystemBase._tick_unit_turn_start] before any per-unit tick.
+func advance_weather(round_number: int) -> void:
+	if weather.advance_to_round(round_number):
+		return  # _on_weather_changed already doused
+	_douse_suppressed_tile_effects()
+
+
+func _on_weather_changed(now, previous) -> void:
+	_douse_suppressed_tile_effects()
+	if DisplayServer.get_name() == "headless" and now != null:
+		# Server / bot logs: lets the multi-process net check show the weather moving.
+		print("[Weather] round %d -> %s" % [weather.round, now.id])
+	weather_changed.emit(now, previous)
+
+
+## Remove RUNTIME tile effects the active weather suppresses (Rain puts out fires a
+## move lit). Base terrain effects are never removed -- they are merely inert while
+## suppressed (see [method TileEffectSystem._run_trigger]).
+func _douse_suppressed_tile_effects() -> void:
+	var w: WeatherResource = weather.current if weather != null else null
+	if w == null or w.suppressed_tile_effects.is_empty():
+		return
+	var cells: Array = _applied_tile_effects.keys()
+	cells.sort_custom(func(a, b): return Cells.less(a, b))
+	for cell in cells:
+		for te in applied_tile_effects_at(cell):
+			if te != null and w.suppresses(StringName(te.get("id") if te.get("id") != null else &"")):
+				remove_tile_effect(cell, te)
+
+
 ## Rebuild the shared [BoardAdapter] against a freshly loaded map.
 ##
 ## [param map_root] is the "Map" node the [MapLoader] populated; it doubles as
@@ -134,6 +190,8 @@ func clear() -> void:
 	_links.clear()
 	# Drop any runtime tile effects (ignited/doused cells) from the old map.
 	_applied_tile_effects.clear()
+	# Back to permanent Clear until the next map configures its weather.
+	weather.reset()
 
 
 ## Register the [TileResource] backing [param cell] (called by [MapLoader]).
