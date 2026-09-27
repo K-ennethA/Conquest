@@ -13,8 +13,8 @@ render_mode cull_back, diffuse_toon, specular_disabled;
 //         reading like brushed grass rather than noise.
 //      3. Clover clumps: soft cellular blobs, slightly darker/cooler.
 //      4. Wildflower specks: rare, tiny, colour-varied dots (near only).
-//  - Tile readability: a fake bevel (lit top-left rim, shaded bottom-right
-//    rim) plus a fine seam, instead of a flat uniform edge darkening.
+//  - Seamless: no per-tile edges -- the board reads as one continuous
+//    field; cells are shown by the cursor / range overlays, not the ground.
 //  - Gentle wind drift so the field reads as "alive".
 //  Reuse: assign this same material to any grass tile.
 // =============================================================
@@ -49,18 +49,6 @@ uniform float wind_strength : hint_range(0.0, 0.6) = 0.12;
 uniform vec2 wind_dir = vec2(1.0, 0.35);
 group_uniforms;
 
-group_uniforms Edges;
-// Fake bevel: lit rim on the top-left edges, shaded rim bottom-right. Keeps the
-// grid readable for units/cursor while giving each tile a soft pillowy volume.
-uniform float bevel_light : hint_range(0.0, 0.6) = 0.16;
-uniform float bevel_shade : hint_range(0.0, 0.8) = 0.26;
-uniform float bevel_width : hint_range(0.02, 0.4) = 0.13;
-// Thin seam right at the tile border.
-uniform float seam_darken : hint_range(0.0, 0.8) = 0.30;
-// Legacy knobs (kept so existing materials/overrides still load).
-uniform float edge_darken : hint_range(0.0, 0.8) = 0.22;
-uniform float edge_softness : hint_range(0.5, 1.0) = 0.78;
-group_uniforms;
 
 #include "res://tile_objects/tiles/shaders/noise_lib.gdshaderinc"
 
@@ -144,19 +132,6 @@ void fragment() {
 		fcol = mix(fcol, vec3(0.95, 0.70, 0.20), centre * 0.8);
 		col = mix(col, fcol, petal * near_amt * near_amt);
 	}
-
-	// Tile edges: fake bevel + seam. The cap mesh is generated (no UVs) and randomly
-	// rotated per tile, so derive the 0..1 in-tile position from WORLD xz instead
-	// (cells are 2 units wide, aligned to even world coordinates).
-	vec2 uv = fract(base_wp * 0.5);
-	float to_left = uv.x, to_right = 1.0 - uv.x;
-	float to_top = uv.y, to_bottom = 1.0 - uv.y;
-	float lit_rim = 1.0 - smoothstep(0.0, bevel_width, min(to_left, to_top));
-	float shade_rim = 1.0 - smoothstep(0.0, bevel_width, min(to_right, to_bottom));
-	col *= 1.0 + bevel_light * lit_rim;
-	col *= 1.0 - bevel_shade * shade_rim;
-	float seam = 1.0 - smoothstep(0.0, 0.022, min(min(to_left, to_right), min(to_top, to_bottom)));
-	col *= 1.0 - seam_darken * seam;
 
 	ALBEDO = col;
 	ROUGHNESS = 1.0;

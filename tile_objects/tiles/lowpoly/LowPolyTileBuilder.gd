@@ -131,7 +131,9 @@ func _build_cap() -> ArrayMesh:
 			var fx: float = -HALF + 2.0 * HALF * float(ix) / float(subdiv)
 			var fz: float = -HALF + 2.0 * HALF * float(iz) / float(subdiv)
 			var y: float = CAP_TOP
-			if ix != 0 and ix != subdiv and iz != 0 and iz != subdiv:
+			# Grassy caps stay perfectly flat so neighbouring tiles light identically and
+			# the field reads seamless; only bare DIRT keeps its lumpy facets.
+			if style == Style.DIRT and ix != 0 and ix != subdiv and iz != 0 and iz != subdiv:
 				y = CAP_TOP + _cap_jitter(ix, iz)
 			row.append(Vector3(fx, y, fz))
 		pts.append(row)
