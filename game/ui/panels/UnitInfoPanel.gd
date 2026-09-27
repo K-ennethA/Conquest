@@ -293,13 +293,13 @@ func _build_ability_chip(unit, ability) -> PanelContainer:
 
 	var chip := PanelContainer.new()
 
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = color.darkened(0.35)
-	sb.set_corner_radius_all(6)
+	# Pointed tag chip (the shared grove chip shape).
+	var sb := MenuTheme.pill_box(color.darkened(0.35), color)
+	sb.corner = 8.0
 	sb.set_border_width_all(1)
 	sb.border_color = color
-	sb.content_margin_left = 6
-	sb.content_margin_right = 6
+	sb.content_margin_left = 12
+	sb.content_margin_right = 12
 	sb.content_margin_top = 3
 	sb.content_margin_bottom = 3
 	chip.add_theme_stylebox_override("panel", sb)
@@ -447,13 +447,13 @@ func _build_status_chip(condition) -> PanelContainer:
 
 	var chip := PanelContainer.new()
 
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = color.darkened(0.35)
-	sb.set_corner_radius_all(6)
+	# Pointed tag chip (the shared grove chip shape).
+	var sb := MenuTheme.pill_box(color.darkened(0.35), color)
+	sb.corner = 8.0
 	sb.set_border_width_all(1)
 	sb.border_color = color
-	sb.content_margin_left = 6
-	sb.content_margin_right = 6
+	sb.content_margin_left = 12
+	sb.content_margin_right = 12
 	sb.content_margin_top = 3
 	sb.content_margin_bottom = 3
 	chip.add_theme_stylebox_override("panel", sb)

@@ -44,8 +44,8 @@ const OVERLAY_LAYER := 128
 var _overlay: Control = null
 var _fade: ColorRect = null
 var _turn_label: Label = null
-var _accent: ColorRect = null
-var _band: ColorRect = null
+var _accent: GroveRule = null
+var _band: Panel = null
 var _rule_top: ColorRect = null
 var _rule_bottom: ColorRect = null
 var _sub_label: Label = null
@@ -113,20 +113,21 @@ func _build_ui() -> void:
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_overlay.add_child(_fade)
 
-	# Full-width phase band across the middle, framed by team-colour rules.
-	_band = ColorRect.new()
+	# Thin team-colour rules run the full width; the heraldic phase RIBBON (swallow-
+	# tailed, gold filigree, crest on top) spans the middle over them.
+	_rule_top = _make_rule(-62.0)
+	_rule_bottom = _make_rule(58.0)
+	_band = Panel.new()
 	_band.name = "Band"
-	_band.color = Color(ConquestTheme.PANEL.r, ConquestTheme.PANEL.g, ConquestTheme.PANEL.b, 0.96)
-	_band.anchor_left = 0.0
-	_band.anchor_right = 1.0
+	_band.anchor_left = 0.14
+	_band.anchor_right = 0.86
 	_band.anchor_top = 0.5
 	_band.anchor_bottom = 0.5
-	_band.offset_top = -78.0
-	_band.offset_bottom = 78.0
+	_band.offset_top = -80.0
+	_band.offset_bottom = 80.0
 	_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_band.add_theme_stylebox_override("panel", _band_box(ConquestTheme.GOLD))
 	_overlay.add_child(_band)
-	_rule_top = _make_rule(-78.0)
-	_rule_bottom = _make_rule(74.0)
 
 	# Centred content column.
 	var center := CenterContainer.new()
@@ -145,7 +146,7 @@ func _build_ui() -> void:
 	_turn_label.name = "TurnLabel"
 	_turn_label.text = "PLAYER PHASE"
 	_turn_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_turn_label.add_theme_font_override("font", MenuTheme.bold_font(0.8, 8))
+	_turn_label.add_theme_font_override("font", MenuTheme.display_font(8))
 	_turn_label.add_theme_font_size_override("font_size", 60)
 	_turn_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	_turn_label.add_theme_color_override("font_outline_color", ConquestTheme.BG_DEEP)
@@ -154,10 +155,11 @@ func _build_ui() -> void:
 	vbox.add_child(_turn_label)
 
 	# Short gold rule / team accent under the title.
-	_accent = ColorRect.new()
+	_accent = GroveRule.new()
 	_accent.name = "Accent"
 	_accent.color = ConquestTheme.GOLD
-	_accent.custom_minimum_size = Vector2(160, 3)
+	_accent.centered = true
+	_accent.custom_minimum_size = Vector2(320, 12)
 	_accent.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(_accent)
@@ -171,6 +173,23 @@ func _build_ui() -> void:
 	vbox.add_child(_sub_label)
 
 
+## The phase ribbon: navy, swallow-tailed ends, team-colour edge, gold filigree
+## and crest.
+func _band_box(team: Color) -> StyleBox:
+	var sb := MenuTheme.ribbon_box(ConquestTheme.PANEL, team, 46.0)
+	sb.bg_color = Color(ConquestTheme.PANEL.lightened(0.1), 0.97)
+	sb.bg_color_end = Color(ConquestTheme.PANEL.darkened(0.4), 0.97)
+	sb.border_width = 3.0
+	sb.inner_line_color = Color(ConquestTheme.GOLD, 0.55)
+	sb.inner_inset = 7.0
+	sb.crest = true
+	sb.ornament_color = ConquestTheme.GOLD
+	sb.ornament_size = 5.0
+	sb.shadow_size = 18.0
+	sb.shadow_color = Color(0, 0, 0, 0.55)
+	return sb
+
+
 func _make_rule(offset_top: float) -> ColorRect:
 	var r := ColorRect.new()
 	r.color = ConquestTheme.GOLD
@@ -179,7 +198,7 @@ func _make_rule(offset_top: float) -> ColorRect:
 	r.anchor_top = 0.5
 	r.anchor_bottom = 0.5
 	r.offset_top = offset_top
-	r.offset_bottom = offset_top + 4.0
+	r.offset_bottom = offset_top + 2.0
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_overlay.add_child(r)
 	return r
@@ -310,9 +329,11 @@ func _apply_player(player: Player) -> void:
 		_turn_label.text = "NEXT TURN"
 		_turn_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	_accent.color = ConquestTheme.GOLD
+	if _band:
+		_band.add_theme_stylebox_override("panel", _band_box(team))
 	if _rule_top:
-		_rule_top.color = team
-		_rule_bottom.color = team
+		_rule_top.color = Color(team, 0.7)
+		_rule_bottom.color = Color(team, 0.7)
 	if _sub_label:
 		var round_no := _round_number()
 		_sub_label.text = "Round %d" % round_no if round_no > 0 else ""

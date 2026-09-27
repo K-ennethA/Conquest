@@ -34,6 +34,7 @@ const MODEL_SPIN_SPEED := 0.45
 @onready var unit_list: ItemList
 @onready var unit_display_container: VBoxContainer
 @onready var unit_name_label: Label
+var _crest: PanelContainer = null
 @onready var unit_type_label: Label
 @onready var unit_description: RichTextLabel
 @onready var unit_portrait: TextureRect
@@ -221,12 +222,17 @@ func _create_unit_display(parent: VBoxContainer) -> void:
 	portrait_placeholder.modulate = MUTED
 	portrait_slot.add_child(portrait_placeholder)
 
+	# Heraldic crest: the unit's element on a shield, its initial in Cinzel.
+	_crest = MenuKit.crest("?", MenuTheme.GOLD, MenuTheme.GOLD_DK, 56.0)
+	_crest.name = "UnitCrest"
+	header_container.add_child(_crest)
+
 	var info_container := VBoxContainer.new()
 	info_container.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	header_container.add_child(info_container)
 
 	unit_name_label = Label.new()
-	unit_name_label.add_theme_font_size_override("font_size", 22)
+	unit_name_label.theme_type_variation = &"HeadingLabel"
 	info_container.add_child(unit_name_label)
 
 	unit_type_label = Label.new()
@@ -555,6 +561,8 @@ func _display_character(character: CharacterResource) -> void:
 		if shown_name.is_empty():
 			shown_name = String(character.character_id)
 		unit_name_label.text = shown_name
+		if _crest != null:
+			MenuKit.set_crest(_crest, shown_name, MenuKit.element_color(String(character.element)))
 
 	if unit_type_label:
 		var tags: Array[String] = []
@@ -963,14 +971,16 @@ func _clear_container(container: Node) -> void:
 		child.queue_free()
 
 
-func _card_box(accent: Color) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(MenuTheme.PANEL_HI.r, MenuTheme.PANEL_HI.g, MenuTheme.PANEL_HI.b, 0.85)
-	sb.set_corner_radius_all(8)
-	sb.set_border_width_all(1)
-	sb.border_width_left = 5
-	sb.border_color = accent
+func _card_box(accent: Color) -> StyleBox:
+	# Move / ability card: a small grove frame with the element colour down its edge.
+	var sb := MenuTheme.accented_card(accent, SIDE_LEFT, MenuTheme.PANEL_HI, 0.85)
+	sb.border_color = Color(accent, 0.6)
+	sb.corner = 9.0
+	sb.shadow_size = 4.0
+	sb.vignette_width = 10.0
+	sb.ornament_size = 2.8
 	sb.set_content_margin_all(10)
+	sb.content_margin_left = 16
 	return sb
 
 

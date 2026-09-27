@@ -78,6 +78,7 @@ func _build_ui() -> void:
 	var bd := MenuBackdrop.new()
 	bd.name = "Backdrop"
 	bd.motes = false
+	bd.flourishes = false
 	bd.vignette_strength = 0.0
 	add_child(bd)
 
@@ -129,9 +130,9 @@ func _build_ui() -> void:
 	var rule_row := HBoxContainer.new()
 	rule_row.add_theme_constant_override("separation", MenuTheme.SP_M)
 	col.add_child(rule_row)
-	var rule := ColorRect.new()
+	var rule := GroveRule.new()
 	rule.color = MenuTheme.GOLD
-	rule.custom_minimum_size = Vector2(56, 3)
+	rule.custom_minimum_size = Vector2(96, 12)
 	rule.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	rule_row.add_child(rule)
 	var tagline := MenuKit.label("TURN-BASED GRID TACTICS", &"SectionLabel")
@@ -192,8 +193,10 @@ func _build_ui() -> void:
 	_status_panel.name = "StatusPanel"
 	_status_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_status_panel.custom_minimum_size = Vector2(430, 0)
-	_status_panel.add_theme_stylebox_override("panel",
-		MenuTheme.box(Color(MenuTheme.PANEL, 0.92), MenuTheme.ACCENT, 1, 10, 16, 10))
+	var status_sb := MenuTheme.accented_card(MenuTheme.ACCENT, SIDE_LEFT, MenuTheme.PANEL, 0.94)
+	status_sb.content_margin_top = 12
+	status_sb.content_margin_bottom = 12
+	_status_panel.add_theme_stylebox_override("panel", status_sb)
 	_status_panel.visible = false
 	col.add_child(_status_panel)
 	_status_label = MenuKit.label("", &"", true)

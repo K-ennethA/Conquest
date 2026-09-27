@@ -108,7 +108,7 @@ func _create_ui() -> void:
 	# Title + gold rule
 	var title = Label.new()
 	title.text = "Choose a Skill"
-	title.add_theme_font_override("font", MenuTheme.bold_font(0.6, 2))
+	title.add_theme_font_override("font", MenuTheme.display_font(2))
 	title.add_theme_font_size_override("font_size", 26)
 	main_container.add_child(title)
 	_title_label = title
@@ -155,12 +155,17 @@ func _create_ui() -> void:
 	ConquestTheme.apply_to(self)
 	var card_sb := ConquestTheme.panel_box(0.97)
 	card_sb.border_color = ConquestTheme.GOLD_DK
+	card_sb.crest = true
 	card_sb.content_margin_left = 22
 	card_sb.content_margin_right = 22
 	card_sb.content_margin_top = 18
 	card_sb.content_margin_bottom = 16
 	card.add_theme_stylebox_override("panel", card_sb)
+	# Our subtree is already themed: keep a later HUD-wide sweep off the card.
+	ConquestTheme.keep_style(card)
 	info_plate.add_theme_stylebox_override("panel", ConquestTheme.plate_box())
+	if _title_label != null:
+		_title_label.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
 	move_info_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
 	move_info_label.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
 	var back_key := ConquestTheme.action_glyph(InputActions.CANCEL)
@@ -251,10 +256,11 @@ func _populate_moves(moveset: Array[MoveResource], controller: MovesetController
 		# move, keyed to the move's element (see ConquestTheme.element_color).
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
-		var swatch := ColorRect.new()
+		var swatch := GroveGem.new()
+		swatch.name = "ElementGem"
 		swatch.color = ConquestTheme.element_color(String(move.element))
-		swatch.custom_minimum_size = Vector2(6, 0)
-		swatch.size_flags_vertical = Control.SIZE_FILL
+		swatch.custom_minimum_size = Vector2(14, 18)
+		swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(swatch)
 		move_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(move_button)

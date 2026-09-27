@@ -113,7 +113,7 @@ func _build_ui() -> void:
 	_header.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_header.focus_mode = Control.FOCUS_NONE
 	_header.mouse_filter = Control.MOUSE_FILTER_STOP  # capture clicks even though the panel is IGNORE
-	_header.add_theme_font_override("font", MenuTheme.bold_font(0.45, 2))
+	_header.add_theme_font_override("font", MenuTheme.heading_font(2))
 	_header.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
 	_header.add_theme_color_override("font_color", ConquestTheme.GOLD)
 	_header.add_theme_color_override("font_hover_color", ConquestTheme.GOLD_LITE)

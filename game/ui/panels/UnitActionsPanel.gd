@@ -314,6 +314,8 @@ func _update_unit_header() -> void:
 	if _portrait:
 		var cols := ConquestTheme.unit_portrait_colors(selected_unit)
 		ConquestTheme.set_portrait(_portrait, display_name, cols[0], cols[1])
+	# Team-coloured edge stripe on the command card (element lives in the crest).
+	add_theme_stylebox_override("panel", ConquestTheme.unit_card_box(selected_unit, 0.96))
 	_update_header_hp()
 
 	# Legacy icon texture (hidden node; kept so callers / tests stay valid).

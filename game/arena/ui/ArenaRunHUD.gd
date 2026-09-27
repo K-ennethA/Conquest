@@ -97,10 +97,10 @@ func _build_panel() -> void:
 	_panel.add_child(_body)
 
 
-func _panel_style() -> StyleBoxFlat:
+func _panel_style() -> StyleBox:
 	# Prefer the shared amber card look; fall back to an inline equivalent.
 	if _has_conquest_theme():
-		var themed: StyleBoxFlat = ConquestTheme.panel_box()
+		var themed: StyleBox = ConquestTheme.panel_box()
 		if themed != null:
 			return themed
 	var sb: StyleBoxFlat = StyleBoxFlat.new()
@@ -160,7 +160,7 @@ func _make_title(text: String) -> Label:
 	l.text = text
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	l.add_theme_color_override("font_color", ConquestTheme.GOLD)
-	l.add_theme_font_override("font", MenuTheme.bold_font(0.45, 2))
+	l.add_theme_font_override("font", MenuTheme.heading_font(2))
 	l.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
 	return l
 

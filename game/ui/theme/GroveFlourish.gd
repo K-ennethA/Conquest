@@ -8,14 +8,14 @@ extends Control
 ## diamond at the knot. Faint by design (it frames, never competes). Drawn once and
 ## cached by the canvas item; redraws only on resize.
 
-@export var color: Color = Color(MenuTheme.GOLD, 0.34):
+@export var color: Color = Color(MenuTheme.GOLD, 0.3):
 	set(v):
 		color = v
 		queue_redraw()
 ## Distance of the corner knot from the screen edges.
 @export var inset: float = 12.0
 ## Length of each arm.
-@export var arm: float = 130.0
+@export var arm: float = 110.0
 
 
 func _init() -> void:

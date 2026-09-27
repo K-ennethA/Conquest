@@ -232,7 +232,7 @@ func _humanize_id(id: String) -> String:
 	return trimmed.replace("_", " ").capitalize()
 
 
-func _plate_box() -> StyleBoxFlat:
+func _plate_box() -> StyleBox:
 	var sb := MenuTheme.card_box()
 	sb.set_content_margin_all(0.0)
 	return sb

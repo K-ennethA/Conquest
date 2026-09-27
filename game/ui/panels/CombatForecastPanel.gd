@@ -235,6 +235,8 @@ func _create_ui() -> void:
 	card_sb.accent_width = 4.0
 	_card_sb = card_sb
 	_card.add_theme_stylebox_override("panel", card_sb)
+	# Our subtree is already themed: keep a later HUD-wide sweep off the card.
+	ConquestTheme.keep_style(_card)
 	plate.add_theme_stylebox_override("panel", ConquestTheme.plate_box())
 
 	_move_label.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
