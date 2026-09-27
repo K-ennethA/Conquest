@@ -58,6 +58,9 @@ const SCENE_PATH := "res://menus/Compendium.tscn"
 
 ## True when shown over a battle (Back closes instead of changing scene).
 var overlay_mode: bool = false
+## Tab shown first (set before the node enters the tree; the overlay opens on
+## Weather so the 3D unit gallery is not spun up unless asked for).
+var start_section: int = SECTION_UNITS
 
 # --- Shell ---
 var tab_container: TabContainer
@@ -91,6 +94,7 @@ static func open_overlay(tree: SceneTree, start_section: int = SECTION_WEATHER) 
 	var packed := load(SCENE_PATH) as PackedScene
 	var comp := packed.instantiate() as Compendium
 	comp.overlay_mode = true
+	comp.start_section = start_section
 	comp.add_to_group(InputActions.OVERLAY_GROUP)
 	layer.add_child(comp)
 	# Added AFTER the Compendium so its _input runs FIRST (reverse tree order): the
@@ -101,13 +105,14 @@ static func open_overlay(tree: SceneTree, start_section: int = SECTION_WEATHER) 
 	var host: Node = tree.current_scene if tree.current_scene != null else tree.root
 	host.add_child(layer)
 	comp.closed.connect(layer.queue_free)
-	comp.select_tab(start_section)
 	return comp
 
 
 func _ready() -> void:
 	theme = MenuTheme.build()
 	_build_shell()
+	if start_section != tab_container.current_tab:
+		tab_container.current_tab = clampi(start_section, 0, tab_container.get_tab_count() - 1)
 	_ensure_section(tab_container.current_tab)
 	_sync_section_input()
 
