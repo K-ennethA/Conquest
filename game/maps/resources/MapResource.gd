@@ -522,18 +522,20 @@ static func import_from_json(json_string: String) -> MapResource:
 	
 	# Dimensions
 	var dimensions = data.get("dimensions", {})
-	resource.width = dimensions.get("width", 5)
-	resource.height = dimensions.get("height", 5)
+	resource.width = int(dimensions.get("width", 5))
+	resource.height = int(dimensions.get("height", 5))
 	
 	# Gameplay
 	var gameplay = data.get("gameplay", {})
-	resource.max_players = gameplay.get("max_players", 2)
-	resource.recommended_players = gameplay.get("recommended_players", 2)
+	resource.max_players = int(gameplay.get("max_players", 2))
+	resource.recommended_players = int(gameplay.get("recommended_players", 2))
 	resource.difficulty = gameplay.get("difficulty", "Normal")
 	resource.map_type = gameplay.get("map_type", "Skirmish")
-	resource.turn_limit = gameplay.get("turn_limit", 0)
-	resource.victory_conditions = gameplay.get("victory_conditions", ["Eliminate All Enemies"])
-	resource.special_rules = gameplay.get("special_rules", [])
+	resource.turn_limit = int(gameplay.get("turn_limit", 0))
+	# JSON arrays come back untyped; the exported properties are Array[String] /
+	# Array[Dictionary], which reject a plain Array -- rebuild them typed.
+	resource.victory_conditions = _json_string_array(gameplay.get("victory_conditions", ["Eliminate All Enemies"]))
+	resource.special_rules = _json_string_array(gameplay.get("special_rules", []))
 	
 	# Visual
 	var visual = data.get("visual", {})
@@ -549,12 +551,70 @@ static func import_from_json(json_string: String) -> MapResource:
 	
 	# Layout
 	var layout = data.get("layout", {})
-	resource.tile_layout = layout.get("tiles", [])
-	resource.unit_spawns = layout.get("unit_spawns", [])
+	resource.tile_layout = _json_entry_array(layout.get("tiles", []))
+	resource.unit_spawns = _json_entry_array(layout.get("unit_spawns", []))
 	
 	# Metadata
 	var metadata = data.get("metadata", {})
-	resource.tags = metadata.get("tags", [])
+	resource.tags = _json_string_array(metadata.get("tags", []))
 	resource.preview_image_path = metadata.get("preview_image_path", "")
 	
 	return resource
+
+# --- JSON -> typed value helpers (import_from_json) ---------------------------
+# JSON has no Vector2i and no int: JSON.stringify writes a Vector2i as the string
+# "(x, y)" and every number comes back as a float. These restore the typed values
+# the rest of the game expects (MapLoader / MapMakerModel read "position" as
+# Vector2i and ids/counts as int).
+
+static func _json_string_array(value) -> Array[String]:
+	var out: Array[String] = []
+	if value is Array:
+		for v in value:
+			out.append(String(v) if v is String or v is StringName else str(v))
+	return out
+
+static func _json_entry_array(value) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if value is Array:
+		for entry in value:
+			if entry is Dictionary:
+				out.append(_json_entry(entry))
+	return out
+
+## One tile / spawn entry: "position" back to a Vector2i, integral floats to int.
+static func _json_entry(entry: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for key in entry.keys():
+		var v = entry[key]
+		if key == "position":
+			v = json_to_vector(v)
+		elif v is float and is_equal_approx(v, roundf(v)):
+			v = int(roundf(v))
+		out[key] = v
+	return out
+
+## Parse a JSON-encoded grid position back to a Vector2i (or a Vector3i when it has
+## three components). Accepts the "(x, y)" string JSON.stringify writes, an [x, y]
+## array, or an {"x":..,"y":..} object; passes an already-typed vector through.
+## Unparseable input yields Vector2i(-1, -1) (out of bounds, so loaders skip it).
+static func json_to_vector(v):
+	if v is Vector2i or v is Vector3i:
+		return v
+	if v is Vector2:
+		return Vector2i(int(v.x), int(v.y))
+	var parts: Array = []
+	if v is String:
+		for p in (v as String).strip_edges().trim_prefix("(").trim_suffix(")").split(","):
+			parts.append(p.strip_edges())
+	elif v is Array:
+		parts = v
+	elif v is Dictionary:
+		parts = [v.get("x", -1), v.get("y", -1)]
+		if v.has("z"):
+			parts.append(v["z"])
+	if parts.size() == 3:
+		return Vector3i(int(float(parts[0])), int(float(parts[1])), int(float(parts[2])))
+	if parts.size() == 2:
+		return Vector2i(int(float(parts[0])), int(float(parts[1])))
+	return Vector2i(-1, -1)
