@@ -328,10 +328,12 @@ func _input(event: InputEvent) -> void:
 	if not visible:
 		return
 
-	if event is InputEventKey and event.pressed:
+	# Back out on the named cancel action (Esc / Backspace / gamepad B; rebindable).
+	if event.is_action_pressed(InputActions.CANCEL):
+		_on_back_pressed()
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
-			KEY_ESCAPE:
-				_on_back_pressed()
 			KEY_1, KEY_2, KEY_3, KEY_4:
 				var move_index = event.keycode - KEY_1
 				if move_index < move_buttons.size() and move_buttons[move_index]:

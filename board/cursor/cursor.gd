@@ -198,38 +198,71 @@ func _process(delta: float) -> void:
 	_pulse_time += delta
 	var pulse := 1.0 + sin(_pulse_time * PULSE_SPEED) * PULSE_AMPLITUDE
 	mesh_instance.scale = _bracket_base_scale * pulse
+	_update_joy_repeat(delta)
+
+# --- Gamepad held-direction repeat -----------------------------------------------
+# Keyboard repeat comes from OS echo events; a gamepad d-pad/stick has none, so a
+# held gamepad direction is re-stepped here: first repeat after JOY_REPEAT_DELAY,
+# then every JOY_REPEAT_INTERVAL while the action stays pressed.
+const JOY_REPEAT_DELAY := 0.3
+const JOY_REPEAT_INTERVAL := 0.08
+var _joy_held_action: StringName = &""
+var _joy_repeat_timer: float = 0.0
+
+func _update_joy_repeat(delta: float) -> void:
+	if _joy_held_action == &"":
+		return
+	if not Input.is_action_pressed(_joy_held_action) or InputActions.gameplay_input_blocked(get_tree()):
+		_joy_held_action = &""
+		return
+	_joy_repeat_timer -= delta
+	if _joy_repeat_timer <= 0.0:
+		_joy_repeat_timer = JOY_REPEAT_INTERVAL
+		_step_cursor(InputActions.CURSOR_STEPS[_joy_held_action])
+
+func _step_cursor(step: Vector3) -> void:
+	var new_position = tile_position + step
+	if grid.is_within_bounds(new_position):
+		self.tile_position = new_position
 
 func _unhandled_input(event: InputEvent) -> void:
-	# Handle keyboard input first (always works)
-	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_F5:
-			_test_unit_selection_signal()
+	# A full-screen overlay (Settings, ...) owns input while it is open.
+	if InputActions.gameplay_input_blocked(get_tree()):
+		return
+
+	# Dev helper: Ctrl+Shift+F5 (debug builds only) fires a synthetic unit_selected.
+	if InputActions.is_debug_hotkey(event, KEY_F5):
+		_test_unit_selection_signal()
+		return
+
+	# Named actions (keyboard + gamepad, rebindable -- see InputActions).
+	if event.is_action_pressed(InputActions.CONFIRM):
+		_handle_selection()
+		return
+	if event.is_action_pressed(InputActions.CANCEL):
+		_handle_deselection()
+		return
+
+	# Cursor movement. Keys step on press AND on OS key-repeat (echo), so holding a
+	# direction glides the cursor. Gamepad d-pad / stick send no echo, so a held
+	# gamepad direction repeats via _process (see _update_joy_repeat).
+	for action in InputActions.CURSOR_STEPS:
+		if not event.is_action(action):
+			continue
+		var is_joy := event is InputEventJoypadButton or event is InputEventJoypadMotion
+		if is_joy:
+			if event.is_action_pressed(action) and _joy_held_action != action:
+				_joy_held_action = action
+				_joy_repeat_timer = JOY_REPEAT_DELAY
+				_step_cursor(InputActions.CURSOR_STEPS[action])
+			elif not event.is_action_pressed(action) and _joy_held_action == action \
+					and not Input.is_action_pressed(action):
+				_joy_held_action = &""
 			return
-		elif event.is_action_pressed("ui_accept"):
-			_handle_selection()
+		if event.is_action_pressed(action, true):
+			_step_cursor(InputActions.CURSOR_STEPS[action])
 			return
-		elif event.is_action_pressed("ui_cancel"):
-			_handle_deselection()
-			return
-		
-		# Handle movement input
-		var input_vector = Vector3.ZERO
-		
-		if event.is_action_pressed("ui_right"):
-			input_vector.x += 1
-		elif event.is_action_pressed("ui_left"):
-			input_vector.x -= 1
-		elif event.is_action_pressed("ui_down"):
-			input_vector.z += 1
-		elif event.is_action_pressed("ui_up"):
-			input_vector.z -= 1
-		
-		if input_vector != Vector3.ZERO:
-			var new_position = tile_position + input_vector
-			if grid.is_within_bounds(new_position):
-				self.tile_position = new_position
-			return
-	
+
 	# Handle mouse input (only if not handled by UI)
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -538,15 +571,19 @@ func _find_all_units() -> Array[Unit]:
 	if scene_root == null:
 		return units
 
-	# Look for units in Player1 and Player2 nodes
-	var player_nodes = ["Map/Player1", "Map/Player2"]
-	
-	for player_path in player_nodes:
-		var player_node = scene_root.get_node_or_null(player_path)
-		if player_node:
+	# Units live under Map/Player<N> containers (any number of players, incl. the
+	# neutral / spawned ones), plus anything registered in the "units" group.
+	var map_node = scene_root.get_node_or_null("Map")
+	if map_node:
+		for player_node in map_node.get_children():
+			if not String(player_node.name).begins_with("Player"):
+				continue
 			for child in player_node.get_children():
-				if child is Unit:
+				if child is Unit and not units.has(child):
 					units.append(child)
+	for node in tree.get_nodes_in_group("units"):
+		if node is Unit and not units.has(node):
+			units.append(node)
 	
 	return units
 

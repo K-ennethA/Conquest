@@ -9,6 +9,10 @@ extends Node
 ## emits this -- match-setup fields (map, players) are read at load time.
 signal settings_changed
 
+## Emitted after a keyboard binding is changed / reset (Settings > Controls), so
+## button hints and the controls list can refresh.
+signal controls_changed
+
 enum GameMode {
 	SINGLE_PLAYER,
 	VERSUS,
@@ -76,6 +80,7 @@ var ai_difficulty: int = 1  # NORMAL
 func _ready() -> void:
 	name = "GameSettings"
 	_load_presentation_settings()
+	load_key_bindings()
 	print("GameSettings initialized")
 
 # --- Presentation helpers ---------------------------------------------------
@@ -138,6 +143,77 @@ func _save_presentation_settings() -> void:
 	cfg.set_value("presentation", "battle_speed", battle_speed)
 	cfg.set_value("presentation", "camera_auto_focus", camera_auto_focus)
 	cfg.save(_SETTINGS_PATH)
+
+# --- Controls (keyboard rebinding) -----------------------------------------------
+# Player keyboard overrides for the named actions in InputActions.REBINDABLE,
+# stored in the [controls] section of the same ConfigFile as the presentation
+# settings: action name -> Array of keycode-with-modifiers ints. Only the KEYBOARD
+# side of an action is overridden; gamepad bindings always keep their defaults.
+# Actions without an entry use the project.godot defaults.
+
+const CONTROLS_SECTION := "controls"
+
+## action (String) -> Array[int] keycodes-with-modifiers. See the block comment above.
+var key_binding_overrides: Dictionary = {}
+
+## Bind [param action]'s keyboard side to the single key [param code]
+## (keycode-with-modifiers). If another rebindable action already uses that key it
+## is SWAPPED onto this action's previous primary key, so no two actions share a key.
+## Persists to [param path] and applies immediately.
+func set_key_binding(action: StringName, code: int, path: String = _SETTINGS_PATH) -> void:
+	if not InputMap.has_action(action):
+		return
+	var previous: Array[int] = InputActions.key_codes(action)
+	var conflict := InputActions.find_conflict(code, action)
+	if conflict != &"":
+		var theirs: Array[int] = InputActions.key_codes(conflict)
+		theirs.erase(code)
+		if theirs.is_empty() and not previous.is_empty() and previous[0] != code:
+			theirs.append(previous[0])
+		key_binding_overrides[String(conflict)] = theirs
+	key_binding_overrides[String(action)] = [code]
+	apply_key_bindings()
+	save_key_bindings(path)
+	controls_changed.emit()
+
+## Drop every keyboard override (back to project.godot defaults), persist, apply.
+func reset_key_bindings(path: String = _SETTINGS_PATH) -> void:
+	key_binding_overrides.clear()
+	InputActions.restore_all_defaults()
+	save_key_bindings(path)
+	controls_changed.emit()
+
+## Push [member key_binding_overrides] into the live InputMap.
+func apply_key_bindings() -> void:
+	for action in key_binding_overrides.keys():
+		var codes = key_binding_overrides[action]
+		if codes is Array and InputMap.has_action(StringName(action)):
+			InputActions.set_keyboard_bindings(StringName(action), codes)
+
+## Read the [controls] section from [param path] and apply it (defaults when absent).
+func load_key_bindings(path: String = _SETTINGS_PATH) -> void:
+	key_binding_overrides.clear()
+	var cfg := ConfigFile.new()
+	if cfg.load(path) == OK and cfg.has_section(CONTROLS_SECTION):
+		for action in cfg.get_section_keys(CONTROLS_SECTION):
+			var codes = cfg.get_value(CONTROLS_SECTION, action, [])
+			if codes is Array and InputMap.has_action(StringName(action)):
+				var ints: Array[int] = []
+				for c in codes:
+					ints.append(int(c))
+				key_binding_overrides[action] = ints
+	apply_key_bindings()
+
+## Write [member key_binding_overrides] to the [controls] section of [param path],
+## preserving every other section of the file.
+func save_key_bindings(path: String = _SETTINGS_PATH) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(path)  # Preserve other sections; ignore load failure.
+	if cfg.has_section(CONTROLS_SECTION):
+		cfg.erase_section(CONTROLS_SECTION)
+	for action in key_binding_overrides.keys():
+		cfg.set_value(CONTROLS_SECTION, action, key_binding_overrides[action])
+	cfg.save(path)
 
 # Configuration methods
 func set_game_mode(mode: GameMode) -> void:
