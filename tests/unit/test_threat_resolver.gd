@@ -250,3 +250,45 @@ func test_flyer_passes_allies_too() -> void:
 	var ally := _unit(Vector3i(1, 0, 0), p0, 0)
 	var board := BoardAdapter.new(g, [mover, ally])
 	assert_true(MovementResolver.new().reachable_cells(Vector3i(0, 0, 0), mover.profile, board, mover).has(Vector3i(2, 0, 0)))
+
+
+# --- Fast path == reference, snapshot ------------------------------------------------
+
+func test_offset_stamp_matches_per_aim_reference() -> void:
+	var arc := _attack(1, 1, CombatTypes.TargetKind.ENEMY)
+	arc.targeting.area_shape = CombatTypes.AreaShape.ARC
+	var line := _attack(1, 2, CombatTypes.TargetKind.ENEMY)
+	line.targeting.area_shape = CombatTypes.AreaShape.LINE
+	line.targeting.area_size = 2
+	var bow := _attack(2, 3)
+	var u := _unit(Vector3i(4, 4, 0), p1, 3, [arc, line, bow])
+	var blocker := _unit(Vector3i(5, 4, 0), p0, 0)
+	var board := _board([u, blocker])
+	var stands := ThreatResolver.stand_cells(u, board)
+	var fast := ThreatResolver.attack_set_from(stands, u, board)
+	var ref := {}
+	for s in stands:
+		for m in [arc, line, bow]:
+			ThreatResolver.move_threat_from(s, m, u, board, ref)
+	assert_eq(fast.size(), ref.size(), "same cell count as the per-aim reference")
+	for c in ref:
+		assert_true(fast.has(c), "fast path covers %s" % str(c))
+
+
+func test_board_snapshot_indexes_occupancy() -> void:
+	var a := _unit(Vector3i(1, 1, 0), p0, 2)
+	var b := _unit(Vector3i(2, 1, 0), p1, 2)
+	var board := _board([a, b])
+	var snap = BoardSnapshot.of(board)
+	assert_true(snap is BoardSnapshot)
+	assert_eq(BoardSnapshot.of(snap), snap, "never double-wrapped")
+	assert_true(snap.is_occupied(Vector3i(2, 1, 0)))
+	assert_false(snap.is_occupied(Vector3i(3, 1, 0)))
+	assert_eq(snap.units_at(Vector3i(1, 1, 0)), [a])
+	assert_true(snap.are_enemies(a, b))
+	assert_false(snap.can_fit(a, Vector3i(2, 1, 0)))
+	assert_true(snap.can_fit(a, Vector3i(1, 1, 0)), "its own cell fits")
+	assert_eq(snap.cols, 10)
+	var plain := MovementResolver.new().reachable_cells(Vector3i(1, 1, 0), a.profile, board, a)
+	var fast := MovementResolver.new().reachable_cells(Vector3i(1, 1, 0), a.profile, snap, a)
+	assert_eq(fast, plain, "same flood through the snapshot")

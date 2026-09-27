@@ -54,7 +54,7 @@ var _type_chip: Label
 var _height_chip: Label
 
 const CHIP_GOOD := Color("7be07a")
-const CHIP_BAD := Color("ff7a6a")
+const CHIP_BAD := Color("ff8a78")
 
 func _ready() -> void:
 	name = "CombatForecastPanel"
@@ -224,8 +224,8 @@ func _create_ui() -> void:
 	_lethal_label.add_theme_color_override("font_color", ConquestTheme.HIT_ORANGE)
 
 func _make_chip() -> Label:
+	# Bright text on a small dark plate so it reads on the amber card.
 	var l := Label.new()
-	l.add_theme_font_size_override("font_size", 13)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	l.visible = false
 	return l
@@ -260,6 +260,14 @@ func _apply_chips(attacker, defender, move, board) -> void:
 	_chip_row.visible = _type_chip.visible or _height_chip.visible
 
 func _set_chip(chip: Label, text: String, good: bool) -> void:
+	# (Styled here, after ConquestTheme.apply_to has swept the card's overrides.)
+	if not chip.has_theme_stylebox_override("normal"):
+		var sb := ConquestTheme.plate_box()
+		sb.set_content_margin_all(3)
+		sb.content_margin_left = 8
+		sb.content_margin_right = 8
+		chip.add_theme_stylebox_override("normal", sb)
+		chip.add_theme_font_size_override("font_size", 13)
 	chip.text = text
 	chip.visible = text != ""
 	chip.add_theme_color_override("font_color", CHIP_GOOD if good else CHIP_BAD)

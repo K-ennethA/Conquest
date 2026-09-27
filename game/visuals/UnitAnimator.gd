@@ -26,9 +26,10 @@ extends Node
 ## path on the live board -- stairs included), the model walks it CELL BY CELL
 ## instead of gliding in a straight line. Seconds per cell step (battle-speed /
 ## fast-forward scaled; animations off = instant).
-@export_range(0.0, 0.5, 0.01) var walk_step_time: float = 0.1
-## Cap on a whole walk (before scaling), so a long march never stalls the turn.
-@export_range(0.1, 3.0, 0.05) var walk_max_time: float = 0.9
+@export_range(0.0, 0.5, 0.01) var walk_step_time: float = 0.09
+## Cap on a whole walk (before scaling), so a long march never stalls the turn; kept
+## under BotTurnDriver.min_move_dwell so an AI walk ends before its strike beat.
+@export_range(0.1, 3.0, 0.05) var walk_max_time: float = 0.55
 
 # --- Hit flash ------------------------------------------------------------
 @export_group("Hit Flash")
@@ -240,7 +241,7 @@ func resolve_walk_path(unit, from_cell: Vector3i, board = null) -> Array[Vector3
 	var prof: MovementProfile = profile.duplicate()
 	prof.range = maxi(profile.range, Cells.distance(from_cell, dest)) + 4
 	var resolver := MovementResolver.new()
-	resolver.reachable_cells(from_cell, prof, board, unit)
+	resolver.reachable_cells(from_cell, prof, BoardSnapshot.of(board), unit)
 	return resolver.path_to(dest)
 
 

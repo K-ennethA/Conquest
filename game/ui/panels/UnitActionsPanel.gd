@@ -78,6 +78,9 @@ var _popup_closed_frame: int = -1
 var _range_resolver: MovementResolver = null
 var _range_origin: Vector3i = Cells.INVALID
 var _path_shown: bool = false
+# The red fringe last published for the current range (grid coords), so it can be
+# hidden while aiming a move (the attack-range highlight takes over) and restored.
+var _fringe_grid: Array = []
 
 func _ready() -> void:
 	# Ensure proper mouse handling
@@ -1128,7 +1131,7 @@ func _show_inspect_movement_range() -> void:
 		_clear_movement_range()
 		return
 	var origin: Vector3i = board.cell_of(selected_unit)
-	var cells: Array[Vector3i] = MovementResolver.new().reachable_cells(origin, profile, board, selected_unit)
+	var cells: Array[Vector3i] = MovementResolver.new().reachable_cells(origin, profile, BoardSnapshot.of(board), selected_unit)
 	# Visual only -- the move-target set stays empty so the enemy can never be commanded.
 	movement_range_tiles = []
 	_range_resolver = null
@@ -1164,7 +1167,8 @@ func _try_show_movement_range_via_resolver() -> bool:
 	# kept: its path_to() drives the path arrow and the walk animation.
 	_range_resolver = MovementResolver.new()
 	_range_origin = origin
-	var cells: Array[Vector3i] = _range_resolver.reachable_cells(origin, profile, board, selected_unit)
+	# BoardSnapshot: occupancy indexed once instead of walking every unit per step.
+	var cells: Array[Vector3i] = _range_resolver.reachable_cells(origin, profile, BoardSnapshot.of(board), selected_unit)
 
 	# Convert each cell into the Vector3(col, floor, row) grid-coord form the
 	# visualizer + GameEvents.movement_range_calculated + downstream validation expect.
@@ -1188,7 +1192,8 @@ func _emit_attack_fringe(origin: Vector3i, reachable: Array[Vector3i], board) ->
 	var stands: Array = [origin]
 	stands.append_array(reachable)
 	var fringe := ThreatResolver.fringe_from(stands, selected_unit, board)
-	GameEvents.attack_fringe_calculated.emit(_cells_to_grid_vec3(fringe))
+	_fringe_grid = _cells_to_grid_vec3(fringe)
+	GameEvents.attack_fringe_calculated.emit(_fringe_grid)
 
 
 func _refresh_path_preview(grid_pos: Vector3) -> void:
@@ -1852,6 +1857,10 @@ func _on_move_selected(slot: int) -> void:
 	# Compute every legal aim cell (within [min_range, max_range]) from the unit's
 	# current board cell and emit them as Vector3 grid coords for the visualizer.
 	var aim_cells := _compute_in_range_aim_cells(move)
+	# While aiming, the move's own red range replaces the threat fringe and path arrow.
+	GameEvents.attack_fringe_calculated.emit([])
+	_path_shown = false
+	GameEvents.path_preview_updated.emit([])
 	GameEvents.attack_range_calculated.emit(_cells_to_grid_vec3(aim_cells))
 
 	# Seed the forecast off the cursor's current tile, so if it already rests on an
@@ -1986,9 +1995,13 @@ func _cancel_move_targeting() -> void:
 
 	It intentionally does NOT touch selected_unit / the action panel; callers that
 	also want to refresh or drop selection do that around this call."""
+	var was_targeting := is_targeting_move()
 	move_mode = false
 	selected_move_index = -1
 	_aoe_preview_active = false
+	# Back out of aiming with the blue range still up: bring its fringe back.
+	if was_targeting and selected_unit != null and not movement_range_tiles.is_empty() and not _fringe_grid.is_empty():
+		GameEvents.attack_fringe_calculated.emit(_fringe_grid)
 	# Clears both the attack-range and AoE-preview overlay meshes (the visualizer's
 	# _on_targeting_cleared wipes both dictionaries). Covers cancel via BACK/ESC/
 	# right-click AND move resolution, since every path funnels through here.
@@ -2182,8 +2195,8 @@ func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector3i]:
 		for dx in range(-max_r, max_r + 1):
 			for dy in range(-max_r, max_r + 1):
 				var aim := Vector3i(origin.x + dx, origin.y + dy, f)
-				if f != origin.z and board.has_method("has_tile") and not board.has_tile(aim):
-					continue  # never offer an aim in the air on another floor
+				if f > 0 and board.has_method("has_tile") and not board.has_tile(aim):
+					continue  # never offer an aim in the air (upper floors are sparse)
 				if move.can_target(origin, aim, selected_unit, board):
 					cells.append(aim)
 	return cells
