@@ -111,6 +111,12 @@ func _ready() -> void:
 	# CombatServices.board_ready and stays empty until a board/effects exist.
 	_setup_tile_effect_overlay()
 
+	# Multi-floor cutaway: fades floors above the cursor's view floor (no-op on flat
+	# maps). Listens to GameEvents.view_floor_changed, so it must exist before the
+	# map load's board_ready makes the cursor broadcast the initial view.
+	var cutaway := FloorCutaway.new()
+	add_child(cutaway)
+
 	# Load the selected map or default map
 	await _load_selected_map()
 	

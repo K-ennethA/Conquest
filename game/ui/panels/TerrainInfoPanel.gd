@@ -34,6 +34,48 @@ var _effects_container: VBoxContainer
 # Sentinel so the very first _on_cursor_moved always does a fresh lookup.
 var _current_cell: Vector3i = Vector3i(-999999, -999999, 0)
 
+# --- Multi-floor readout -------------------------------------------------------
+var _floor_label: Label
+var _floor_badge: PanelContainer
+var _floor_badge_label: Label
+var _floor_hint_label: Label
+var _floor_pips: FloorPips
+var _view_floor: int = 0
+var _cut_floor: int = 0
+var _floor_count: int = 1
+
+
+## Tiny vertical stack of floor pips for the floor badge: one bar per floor
+## (bottom = ground), the view floor filled, cut-away floors hollow.
+class FloorPips extends Control:
+	var count: int = 1
+	var view: int = 0
+	var cut: int = 0
+	var cursor_floor: int = 0
+
+	func set_state(c: int, v: int, k: int, cf: int) -> void:
+		count = maxi(1, c)
+		view = v
+		cut = k
+		cursor_floor = cf
+		custom_minimum_size = Vector2(18, maxf(22.0, count * 9.0))
+		queue_redraw()
+
+	func _draw() -> void:
+		var h := size.y
+		var bar_h := minf(7.0, (h - 2.0) / count - 2.0)
+		for f in count:
+			var y := h - (f + 1) * (bar_h + 2.0)
+			var r := Rect2(Vector2(1, y), Vector2(size.x - 2, bar_h))
+			var ink := Color(0.24, 0.14, 0.05)
+			if f == cursor_floor:
+				draw_rect(r, Color(0.98, 0.78, 0.25))
+				draw_rect(r, ink, false, 1.5)
+			elif f <= cut:
+				draw_rect(r, Color(0.45, 0.30, 0.12))
+			else:
+				draw_rect(r, Color(0.45, 0.30, 0.12, 0.5), false, 1.0)
+
 
 func _ready() -> void:
 	name = "TerrainInfoPanel"
@@ -73,6 +115,9 @@ func _ready() -> void:
 		GameEvents.unit_selected.connect(_on_unit_selected)
 	if GameEvents and not GameEvents.unit_deselected.is_connected(_on_unit_deselected):
 		GameEvents.unit_deselected.connect(_on_unit_deselected)
+	if GameEvents and GameEvents.has_signal("view_floor_changed") \
+			and not GameEvents.view_floor_changed.is_connected(_on_view_floor_changed):
+		GameEvents.view_floor_changed.connect(_on_view_floor_changed)
 
 
 ## Pin our rect to the whole viewport so the bottom-left-anchored card lands on
@@ -117,6 +162,15 @@ func _create_ui() -> void:
 	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_vb.add_child(_name_label)
 
+	# Multi-floor: which floor the cell is on + where its stairs/ladders lead.
+	# Hidden on single-floor maps.
+	_floor_label = Label.new()
+	_floor_label.name = "FloorLabel"
+	_floor_label.add_theme_font_size_override("font_size", 13)
+	_floor_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_floor_label.visible = false
+	root_vb.add_child(_floor_label)
+
 	var sep := HSeparator.new()
 	sep.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_vb.add_child(sep)
@@ -140,6 +194,46 @@ func _create_ui() -> void:
 	_effects_container.add_theme_constant_override("separation", 2)
 	_effects_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_vb.add_child(_effects_container)
+
+	# Floor badge: a small separate card stacked just above the terrain card
+	# (multi-floor maps only) -- see _layout_floor_badge / FloorLabels.
+	_floor_badge = PanelContainer.new()
+	_floor_badge.name = "FloorBadge"
+	_floor_badge.anchor_left = 0.0
+	_floor_badge.anchor_right = 0.0
+	_floor_badge.anchor_top = 1.0
+	_floor_badge.anchor_bottom = 1.0
+	_floor_badge.grow_horizontal = Control.GROW_DIRECTION_END
+	_floor_badge.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_floor_badge.offset_left = MARGIN
+	_floor_badge.offset_bottom = -MARGIN
+	_floor_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_floor_badge.visible = false
+	add_child(_floor_badge)
+	var badge_hb := HBoxContainer.new()
+	badge_hb.add_theme_constant_override("separation", 8)
+	badge_hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_floor_badge.add_child(badge_hb)
+	_floor_pips = FloorPips.new()
+	_floor_pips.custom_minimum_size = Vector2(18, 30)
+	_floor_pips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_hb.add_child(_floor_pips)
+	var badge_vb := VBoxContainer.new()
+	badge_vb.add_theme_constant_override("separation", 0)
+	badge_vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_hb.add_child(badge_vb)
+	_floor_badge_label = Label.new()
+	_floor_badge_label.name = "FloorBadgeLabel"
+	_floor_badge_label.add_theme_font_size_override("font_size", 16)
+	_floor_badge_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_vb.add_child(_floor_badge_label)
+	_floor_hint_label = Label.new()
+	_floor_hint_label.name = "FloorHintLabel"
+	_floor_hint_label.add_theme_font_size_override("font_size", 11)
+	_floor_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_vb.add_child(_floor_hint_label)
+	_card.resized.connect(_layout_floor_badge)
+	_card.visibility_changed.connect(_layout_floor_badge)
 
 	# Amber HUD look, applied last (see CombatForecastPanel._create_ui) so it
 	# doesn't get stripped by any later local overrides.
@@ -174,6 +268,8 @@ func show_for_cell(cell: Vector3i) -> void:
 	else:
 		_name_label.text = "Unknown Terrain"
 		_move_label.text = unit_cost if not unit_cost.is_empty() else "Move Cost: 1"
+
+	_refresh_floor_info(cell)
 
 	# Reveal BEFORE populating effects: the name/move rows are already valid, so
 	# even if effect population ever failed we still surface the terrain instead of
@@ -232,6 +328,65 @@ func _unit_move_cost_text(cell: Vector3i) -> String:
 	if profile.kind == CombatTypes.MovementKind.GROUND and MovementResolver._is_blocked(board, cell):
 		return "Move Cost: -- (Impassable)" + suffix
 	return "Move Cost: %d" % MovementResolver._enter_cost(cell, profile, board) + suffix
+
+
+# --- Multi-floor readout ---------------------------------------------------------
+
+func _on_view_floor_changed(view_floor: int, cut_floor: int, floor_count: int) -> void:
+	_view_floor = view_floor
+	_cut_floor = cut_floor
+	_floor_count = maxi(1, floor_count)
+	if _current_cell != Vector3i(-999999, -999999, 0):
+		_refresh_floor_info(_current_cell)
+	else:
+		_refresh_floor_badge(0)
+
+
+## Floor line ("Upper floor · Stairs ▼ Ground") in the terrain card, and the floor
+## badge above it. Both hidden on single-floor maps.
+func _refresh_floor_info(cell: Vector3i) -> void:
+	if _floor_label == null:
+		return
+	var board = CombatServices.board() if CombatServices else null
+	if board != null and board.has_method("floor_count"):
+		_floor_count = maxi(_floor_count, int(board.floor_count()))
+	if _floor_count <= 1:
+		_floor_label.visible = false
+		_refresh_floor_badge(cell.z)
+		return
+	var parts := PackedStringArray(["%s floor" % FloorNav.floor_name(cell.z, _floor_count)])
+	parts.append_array(FloorNav.describe_links(board, cell))
+	if FloorNav.is_covered(board, cell):
+		parts.append("Under cover")
+	_floor_label.text = "\n".join(parts)
+	_floor_label.visible = true
+	_refresh_floor_badge(cell.z)
+
+
+func _refresh_floor_badge(cursor_floor: int) -> void:
+	if _floor_badge == null:
+		return
+	if _floor_count <= 1:
+		_floor_badge.visible = false
+		return
+	_floor_badge_label.text = "Floor %d / %d  ·  %s" % [
+		_view_floor + 1, _floor_count, FloorNav.floor_name(_view_floor, _floor_count)]
+	var up := InputActions.describe(InputActions.FLOOR_UP)
+	var down := InputActions.describe(InputActions.FLOOR_DOWN)
+	var hint := "%s / %s to change floor" % [up, down]
+	if _cut_floor < _view_floor:
+		hint = "Cutaway: showing %s  ·  %s" % [FloorNav.floor_name(_cut_floor, _floor_count), hint]
+	_floor_hint_label.text = hint
+	_floor_pips.set_state(_floor_count, _view_floor, _cut_floor, cursor_floor)
+	_floor_badge.visible = true
+	_layout_floor_badge()
+
+
+## Stack the floor badge just above the terrain card.
+func _layout_floor_badge() -> void:
+	if _floor_badge == null or _card == null:
+		return
+	_floor_badge.offset_bottom = -(MARGIN + _card.size.y + 6.0)
 
 
 ## Hide the panel and reset its tracked cell so the next show_for_cell always
