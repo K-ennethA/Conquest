@@ -87,6 +87,44 @@ It only redraws when its control does (commands are cached by the canvas item).
 - A HUD panel that styles its own card after `ConquestTheme.apply_to()` should mark
   the card with `ConquestTheme.keep_style()` so the HUD-wide sweep leaves it alone.
 
+## Floating combat text
+
+Every HP change shows a number over the unit (`game/visuals/FloatingCombatText.gd`, a
+CanvasLayer under the HUD added by `GameWorldManager`). It listens to each unit's
+`UnitStats.health_changed` (the universal HP chokepoint) and pairs it with the context
+event `GameEvents.combat_text_annotated(unit, info)` that every damage / heal source
+emits just before changing HP (`game/combat/CombatText.gd`; pairing logic in
+`game/visuals/CombatTextPairer.gd`). Unannotated changes still show a plain number;
+unclaimed annotations become MISS / IMMUNE / "Blocked N" at the end of the frame.
+
+| Case | Look |
+|---|---|
+| Attack damage | cream number, bold, dark outline |
+| Environmental damage (tile, status, weather, hazard) | salmon number + small source tag (gem in the tile / status colour, or the weather glyph) |
+| Crit | gold, larger, Cinzel "CRIT!" above, punch-in scale |
+| Effectiveness | "▲ Effective" / "▼ Resisted" above the number |
+| Heal | green "+N" (+ source tag for Regrowth, Rain Bath, Lifesteal...) |
+| Shield | blue "Blocked N" (full soak) or a "Blocked N" source tag (partial) |
+| Miss / invulnerable | grey Cinzel "MISS" / blue "IMMUNE" |
+
+Fixed screen size (2D overlay projected from 3D), stacked upward per unit and
+decluttered against neighbours, timed by battle speed / fast-forward, hidden while
+the unit's floor is cut away. Presentation only (no RNG, no state): network-safe.
+The BattleLog names the non-attack sources ("Vineweave took 7 from Scouring Sand
+(Desert Storm)", "Barkling burned for 15"). Screenshots: `docs/screenshots/combat_text/`.
+
+## Compendium
+
+`menus/Compendium.gd` hosts the Unit / Tile / Map galleries and four entry browsers
+(Weather, Tile Effects, Statuses, Rules) rendered from `menus/CompendiumData.gd`, which
+derives every entry from the authored resources (weather rules, tile-effect numbers and
+triggers, map schedules, weather-reactive units, the element chart, Elevation constants,
+live key bindings) -- new content appears without code. A global search spans every
+section; `[url=<section>:<id>]` cross-links jump between entries. In battle, Map Menu >
+Encyclopedia opens it as an overlay (`Compendium.open_overlay`, input-blocking). The
+weather chip, status chips and terrain-card chips use `CompendiumData.*_tooltip` so the
+HUD words things exactly like the Compendium. Screenshots: `docs/screenshots/compendium/`.
+
 ## Screenshots
 
 `docs/screenshots/menus/after_*` and `docs/screenshots/battle_ui/after_*` (the

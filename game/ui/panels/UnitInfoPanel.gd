@@ -446,6 +446,9 @@ func _build_status_chip(condition) -> PanelContainer:
 	var status_name: String = String(info.get("name", "Status"))
 
 	var chip := PanelContainer.new()
+	# Compendium-worded tooltip (PASS so it never eats clicks).
+	chip.mouse_filter = Control.MOUSE_FILTER_PASS
+	chip.tooltip_text = CompendiumData.status_tooltip(condition, StatusVisuals.turns_left_of(condition))
 
 	# Pointed tag chip (the shared grove chip shape).
 	var sb := MenuTheme.pill_box(color.darkened(0.35), color)

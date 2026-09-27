@@ -188,7 +188,7 @@ func test_map_menu_pages_and_back() -> void:
 	add_child_autofree(menu)
 	menu.open()
 	assert_true(menu.is_open())
-	assert_eq(menu.button_texts(), PackedStringArray(["Units", "Objective", "Settings", "End Turn", "Return to Title"]))
+	assert_eq(menu.button_texts(), PackedStringArray(["Units", "Objective", "Encyclopedia", "Settings", "End Turn", "Return to Title"]))
 	menu.show_page(MapMenu.Page.OBJECTIVE)
 	await get_tree().process_frame
 	assert_eq(menu.button_texts(), PackedStringArray(["Back"]))

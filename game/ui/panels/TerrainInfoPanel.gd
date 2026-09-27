@@ -461,7 +461,9 @@ func _build_effect_chip(te: TileEffectResource, is_temporary: bool) -> PanelCont
 		label_text += " · temp"
 
 	var chip := PanelContainer.new()
-	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# PASS (not STOP): the Compendium-worded tooltip shows without eating board clicks.
+	chip.mouse_filter = Control.MOUSE_FILTER_PASS
+	chip.tooltip_text = CompendiumData.tile_effect_tooltip(te)
 	chip.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	ConquestTheme.keep_style(chip)
 	var sb := ConquestTheme.chip_style(color)
