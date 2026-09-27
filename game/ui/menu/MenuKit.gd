@@ -102,9 +102,10 @@ static func header_block(crumbs: Array, title: String, subtitle: String) -> Dict
 	title_lbl.text = title
 	title_row.add_child(title_lbl)
 
-	var rule := ColorRect.new()
+	var rule := GroveRule.new()
+	rule.name = "Rule"
 	rule.color = MenuTheme.GOLD
-	rule.custom_minimum_size = Vector2(72, 3)
+	rule.custom_minimum_size = Vector2(220, 10)
 	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	box.add_child(rule)
 
@@ -240,11 +241,16 @@ static func option_card(min_size: Vector2, toggle: bool = false) -> Dictionary:
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_theme_constant_override("separation", MenuTheme.SP_S)
 	m.add_child(v)
-	# Keyboard / pad focus lifts the card like a mouse hover does.
+	# Keyboard / pad focus lifts the card like a mouse hover does. (A card tinted with
+	# [method accent_card] keeps its own resting box in meta "card_normal".)
 	b.focus_entered.connect(func() -> void:
 		if not b.button_pressed:
 			b.add_theme_stylebox_override("normal", b.get_theme_stylebox("hover")))
-	b.focus_exited.connect(func() -> void: b.remove_theme_stylebox_override("normal"))
+	b.focus_exited.connect(func() -> void:
+		if b.has_meta(&"card_normal"):
+			b.add_theme_stylebox_override("normal", b.get_meta(&"card_normal"))
+		else:
+			b.remove_theme_stylebox_override("normal"))
 	# A Button does not size to its children: grow it to fit the content.
 	m.minimum_size_changed.connect(func() -> void:
 		var need: float = maxf(min_size.y, m.get_combined_minimum_size().y)
@@ -275,12 +281,30 @@ static func set_status(l: Label, text: String, tone: String = "") -> void:
 	l.add_theme_color_override("font_color", c)
 
 
-## Colour for an element name (menus-side twin of ConquestTheme.element_color).
+## Colour for an element name (the shared crest palette, see MenuTheme.EL_*).
 static func element_color(element: String) -> Color:
-	match element.to_lower():
-		"dark", "shadow": return Color("9b7be0")
-		"earth", "stone": return Color("c9955a")
 	return ConquestTheme.element_color(element)
+
+
+## Give an [method option_card] button an accent stripe down its left edge (element /
+## team colour) in every state -- unit cards, map cards, mode cards.
+static func accent_card(b: Button, accent: Color) -> void:
+	var boxes := MenuTheme.option_card_boxes(accent)
+	for state in boxes:
+		b.add_theme_stylebox_override(state, boxes[state])
+	b.set_meta(&"card_normal", boxes["normal"])
+
+
+## A heraldic unit crest: a shield in the element colour, rimmed in [param ring]
+## (team colour in battle, gold in menus), with the unit's initial in Cinzel.
+static func crest(letter: String, element_col: Color, ring: Color = MenuTheme.GOLD_DK,
+		px: float = 48.0) -> PanelContainer:
+	return ConquestTheme.portrait(letter, element_col, ring, px)
+
+
+static func set_crest(p: PanelContainer, letter: String, element_col: Color,
+		ring: Color = MenuTheme.GOLD_DK) -> void:
+	ConquestTheme.set_portrait(p, letter, element_col, ring)
 
 
 ## A large "pick one" card: accent bar, title, tagline, body, bullet list and an
@@ -292,10 +316,11 @@ static func choice_card(title: String, tagline: String, body: String, bullets: A
 	var b: Button = parts["button"]
 	var v: VBoxContainer = parts["content"]
 	v.add_theme_constant_override("separation", MenuTheme.SP_M)
+	accent_card(b, accent)
 
-	var bar := ColorRect.new()
+	var bar := GroveRule.new()
 	bar.color = accent
-	bar.custom_minimum_size = Vector2(48, 4)
+	bar.custom_minimum_size = Vector2(120, 10)
 	bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	v.add_child(bar)
 
@@ -315,7 +340,7 @@ static func choice_card(title: String, tagline: String, body: String, bullets: A
 	for line in bullets:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", MenuTheme.SP_S)
-		var dot := label("+", &"")
+		var dot := label("✦", &"")
 		dot.add_theme_color_override("font_color", accent)
 		row.add_child(dot)
 		var bl := label(String(line), &"", true)

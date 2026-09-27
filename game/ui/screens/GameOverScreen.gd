@@ -106,6 +106,13 @@ func _create_ui() -> void:
 	_banner_label.add_theme_font_size_override("font_size", 64)
 	vb.add_child(_banner_label)
 
+	var rule := GroveRule.new()
+	rule.name = "BannerRule"
+	rule.centered = true
+	rule.custom_minimum_size = Vector2(280, 12)
+	rule.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vb.add_child(rule)
+
 	_subtitle_label = Label.new()
 	_subtitle_label.name = "SubtitleLabel"
 	_subtitle_label.text = "All enemies defeated!"
@@ -140,6 +147,10 @@ func _create_ui() -> void:
 	var card_sb := MenuTheme.card_box(MenuTheme.PANEL, MenuTheme.GOLD_DK)
 	card_sb.set_border_width_all(2)
 	card_sb.set_content_margin_all(28)
+	card_sb.crest = true
+	card_sb.ornament = OrnateStyleBox.Ornament.LEAF
+	card_sb.ornament_size = 4.5
+	card_sb.inner_line_color = Color(MenuTheme.GOLD, 0.5)
 	_card.add_theme_stylebox_override("panel", card_sb)
 	_rematch_button.theme_type_variation = &"PrimaryButton"
 	_quit_button.theme_type_variation = &"GhostButton"
@@ -147,7 +158,7 @@ func _create_ui() -> void:
 		MenuNav.hover_focus(b)
 
 	# Punchy dark outline on the big banner, and a softer subtitle.
-	_banner_label.add_theme_font_override("font", MenuTheme.bold_font(0.8, 6))
+	_banner_label.add_theme_font_override("font", MenuTheme.display_font(6))
 	_banner_label.add_theme_constant_override("outline_size", 10)
 	_banner_label.add_theme_color_override("font_outline_color", Color("1a1206"))
 	_subtitle_label.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)

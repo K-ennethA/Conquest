@@ -220,7 +220,7 @@ func _build_ui() -> void:
 
 
 func _build_detail_pane() -> Control:
-	var card := MenuKit.card()
+	var card := MenuKit.card(&"CrestCard")
 	card.name = "UnitDetail"
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.custom_minimum_size = Vector2(340, 0)
@@ -234,8 +234,8 @@ func _build_detail_pane() -> Control:
 	var art := Control.new()
 	art.custom_minimum_size = Vector2(110, 110)
 	top.add_child(art)
-	_detail_emblem = _emblem("?", MenuTheme.GOLD, 88)
-	_detail_emblem.position = Vector2(11, 11)
+	_detail_emblem = _emblem("?", MenuTheme.GOLD, 96)
+	_detail_emblem.position = Vector2(14, 7)
 	art.add_child(_detail_emblem)
 	_detail_emblem_label = _detail_emblem.get_child(0) as Label
 	_detail_model = UnitPreview3D.new()
@@ -328,7 +328,8 @@ func _make_unit_cell(entry: Dictionary) -> Control:
 	h.add_theme_constant_override("separation", 10)
 	content.add_child(h)
 	var ecol := MenuKit.element_color(String(entry["element"]))
-	var emblem := _emblem(String(entry["name"]).left(1), ecol, 40)
+	MenuKit.accent_card(btn, ecol)
+	var emblem := _emblem(String(entry["name"]).left(1), ecol, 46)
 	emblem.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(emblem)
 
@@ -353,12 +354,16 @@ func _make_unit_cell(entry: Dictionary) -> Control:
 
 	# Pick-order badge (top-right), shown when the unit is in the squad.
 	var order := PanelContainer.new()
-	order.add_theme_stylebox_override("panel", MenuTheme.box(MenuTheme.GOLD, MenuTheme.GOLD_LITE, 1, 999, 8, 0))
+	var order_sb := MenuTheme.pill_box(MenuTheme.GOLD, MenuTheme.GOLD_LITE)
+	order_sb.sheen = 0.35
+	order_sb.content_margin_left = 12
+	order_sb.content_margin_right = 12
+	order.add_theme_stylebox_override("panel", order_sb)
 	order.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	order.offset_left = -38
-	order.offset_top = 8
-	order.offset_right = -8
-	order.offset_bottom = 34
+	order.offset_left = -50
+	order.offset_top = 12
+	order.offset_right = -14
+	order.offset_bottom = 36
 	order.visible = false
 	var order_lbl := MenuKit.label("1", &"")
 	order_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -376,22 +381,9 @@ func _make_unit_cell(entry: Dictionary) -> Control:
 	return btn
 
 
+## The unit's heraldic crest: element-coloured shield, gold rim, Cinzel initial.
 func _emblem(letter: String, color: Color, px: float) -> PanelContainer:
-	var p := PanelContainer.new()
-	var sb := MenuTheme.box(color.darkened(0.45), color, 2, 999, 0, 0)
-	p.add_theme_stylebox_override("panel", sb)
-	p.custom_minimum_size = Vector2(px, px)
-	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var l := Label.new()
-	l.text = letter.to_upper()
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.add_theme_font_override("font", MenuTheme.bold_font(0.6))
-	l.add_theme_font_size_override("font_size", int(px * 0.5))
-	l.add_theme_color_override("font_color", color.lightened(0.5))
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_child(l)
-	return p
+	return MenuKit.crest(letter, color, MenuTheme.GOLD_DK, px)
 
 
 # --- Detail pane -------------------------------------------------------------
@@ -415,9 +407,7 @@ func _show_detail(id_str: String) -> void:
 	var has_model := _detail_model.show_character(chr)
 	_detail_model.visible = has_model
 	_detail_emblem.visible = not has_model
-	_detail_emblem_label.text = String(entry["name"]).left(1).to_upper()
-	_detail_emblem.add_theme_stylebox_override("panel", MenuTheme.box(ecol.darkened(0.45), ecol, 2, 999, 0, 0))
-	_detail_emblem_label.add_theme_color_override("font_color", ecol.lightened(0.5))
+	MenuKit.set_crest(_detail_emblem, String(entry["name"]), ecol)
 
 	for c in _detail_stats.get_children():
 		c.queue_free()
@@ -519,8 +509,13 @@ func _rebuild_slots() -> void:
 			text = "%d  %s" % [i + 1, e.get("name", _chosen_ids[i])]
 			color = MenuKit.element_color(String(e.get("element", "")))
 		var slot := PanelContainer.new()
-		var sb := MenuTheme.box(Color(color.r, color.g, color.b, 0.18) if filled else Color(0, 0, 0, 0.2),
-			color if filled else MenuTheme.BORDER_SOFT, 2, 8, 14, 6)
+		var sb := MenuTheme.pill_box(Color(color, 0.2) if filled else Color(0, 0, 0, 0.25),
+			color if filled else MenuTheme.BORDER)
+		sb.corner = 14.0
+		sb.content_margin_top = 6
+		sb.content_margin_bottom = 6
+		if filled:
+			sb.bg_color_end = Color(color.darkened(0.4), 0.25)
 		slot.add_theme_stylebox_override("panel", sb)
 		slot.custom_minimum_size = Vector2(150, 0)
 		var l := MenuKit.label(text, &"" if filled else &"MutedLabel")

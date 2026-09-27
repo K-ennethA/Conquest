@@ -22,7 +22,7 @@ class_name CombatForecastPanel
 const CARD_WIDTH := 420.0
 ## Minimum distance from the TOP edge the card floats at. The card is pushed further
 ## down to clear the Battle Log (top-left, see _top_offset) so the two never overlap.
-const TOP_MARGIN := 64.0
+const TOP_MARGIN := HudSafeArea.TOP_RESERVE
 ## Distance from the LEFT edge the card floats at.
 const SIDE_MARGIN := ConquestTheme.MARGIN
 ## Panel background opacity so board units partly show through the card while aiming;
@@ -31,7 +31,8 @@ const CARD_BG_ALPHA := 0.95
 
 # --- Node references (built once in _ready, only re-populated in show_forecast) --
 var _card: PanelContainer
-var _element_stripe: ColorRect
+var _element_stripe: GroveGem
+var _card_sb: OrnateStyleBox
 var _attacker_name: Label
 var _attacker_bar: ProgressBar
 var _attacker_hp: Label
@@ -55,6 +56,9 @@ var _move_label: Label
 var _attacker_portrait: PanelContainer
 var _defender_portrait: PanelContainer
 var _crit_dmg_label: Label
+## The two units currently forecast (see shows_unit).
+var _shown_attacker = null
+var _shown_defender = null
 
 const CHIP_GOOD := Color("7be07a")
 const CHIP_BAD := Color("ff8a78")
@@ -118,9 +122,9 @@ func _create_ui() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title_row.add_child(title)
-	_element_stripe = ColorRect.new()
+	_element_stripe = GroveGem.new()
 	_element_stripe.color = ConquestTheme.GOLD
-	_element_stripe.custom_minimum_size = Vector2(5, 20)
+	_element_stripe.custom_minimum_size = Vector2(15, 19)
 	_element_stripe.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_element_stripe.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title_row.add_child(_element_stripe)
@@ -225,7 +229,14 @@ func _create_ui() -> void:
 	card_sb.border_color = ConquestTheme.GOLD_DK
 	card_sb.content_margin_top = 12
 	card_sb.content_margin_bottom = 14
+	card_sb.crest = true
+	# Attacker's team on the left edge, defender's on the right (set per forecast).
+	card_sb.accent_side = SIDE_LEFT
+	card_sb.accent_width = 4.0
+	_card_sb = card_sb
 	_card.add_theme_stylebox_override("panel", card_sb)
+	# Our subtree is already themed: keep a later HUD-wide sweep off the card.
+	ConquestTheme.keep_style(_card)
 	plate.add_theme_stylebox_override("panel", ConquestTheme.plate_box())
 
 	_move_label.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
@@ -251,7 +262,7 @@ func _create_ui() -> void:
 				if child is Label and child != _result_value:
 					child.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
 					child.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
-	_lethal_label.add_theme_font_override("font", MenuTheme.bold_font(0.7, 6))
+	_lethal_label.add_theme_font_override("font", MenuTheme.display_font(4))
 	_lethal_label.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
 	_lethal_label.add_theme_color_override("font_color", ConquestTheme.INK)
 	var lethal_sb := MenuTheme.box(ConquestTheme.DANGER, ConquestTheme.DANGER.lightened(0.3), 1, 8, 12, 4)
@@ -392,6 +403,12 @@ func show_forecast(attacker, defender, move: MoveResource, board = null) -> void
 	if attacker == null or defender == null or move == null:
 		hide_forecast()
 		return
+	_shown_attacker = attacker
+	_shown_defender = defender
+	if _card_sb != null:
+		_card_sb.accent_color = ConquestTheme.team_color(ConquestTheme.owner_of(attacker))
+		_card_sb.accent_color_2 = ConquestTheme.team_color(ConquestTheme.owner_of(defender))
+		_card_sb.emit_changed()
 
 	# Attacker column.
 	_attacker_name.text = _name_of(attacker)
@@ -509,6 +526,14 @@ func hide_forecast() -> void:
 	"""Hide the forecast (targeting cancelled/cleared, or the move resolved)."""
 	_hide_damage_preview()
 	visible = false
+	_shown_attacker = null
+	_shown_defender = null
+
+
+## True while the forecast is up and [param unit] is one of its two sides (the hover
+## card uses this to avoid repeating a unit already on screen).
+func shows_unit(unit) -> bool:
+	return visible and unit != null and (unit == _shown_attacker or unit == _shown_defender)
 
 # --- Damage preview (FE-style flashing red HP chunk) ------------------------
 

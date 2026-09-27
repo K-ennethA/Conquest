@@ -99,8 +99,10 @@ func _build_card(opt: Object, arena: Node) -> Control:
 
 	var card: PanelContainer = PanelContainer.new()
 	card.custom_minimum_size = CARD_SIZE
-	var normal_box: StyleBoxFlat = _card_box(_card_fill, accent.darkened(0.15), 2)
-	var hover_box: StyleBoxFlat = _card_box(_card_fill_hover, accent, 4)
+	var normal_box: OrnateStyleBox = _card_box(_card_fill, accent.darkened(0.15), 2)
+	var hover_box: OrnateStyleBox = _card_box(_card_fill_hover, accent, 3)
+	hover_box.crest = true
+	hover_box.crest_color = accent
 	# Focus / hover glows gold (the menus' focus colour) around the rarity frame.
 	hover_box.shadow_color = Color(MenuTheme.GOLD.r, MenuTheme.GOLD.g, MenuTheme.GOLD.b, 0.35)
 	hover_box.shadow_size = 16
@@ -123,7 +125,7 @@ func _build_card(opt: Object, arena: Node) -> Control:
 	# Rarity ribbon.
 	var rarity_label: Label = Label.new()
 	rarity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rarity_label.add_theme_font_override("font", MenuTheme.bold_font(0.45, 2))
+	rarity_label.add_theme_font_override("font", MenuTheme.heading_font(2))
 	rarity_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	rarity_label.add_theme_color_override("font_color", accent.lightened(0.25))
 	rarity_label.text = rarity_text.to_upper()
@@ -134,7 +136,7 @@ func _build_card(opt: Object, arena: Node) -> Control:
 	var name_label: Label = Label.new()
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name_label.add_theme_font_override("font", MenuTheme.bold_font(0.5))
+	name_label.add_theme_font_override("font", MenuTheme.heading_font(1))
 	name_label.add_theme_font_size_override("font_size", 24)
 	name_label.add_theme_color_override("font_color", _cream)
 	name_label.text = _augment_name(opt)
@@ -211,17 +213,14 @@ func _build_card(opt: Object, arena: Node) -> Control:
 
 # --- Styleboxes -------------------------------------------------------------
 
-func _card_box(fill: Color, border: Color, border_w: int) -> StyleBoxFlat:
-	var sb: StyleBoxFlat = StyleBoxFlat.new()
-	sb.bg_color = fill
-	sb.set_corner_radius_all(12)
-	sb.set_border_width_all(border_w)
-	sb.border_color = border
+## An augment card: the grove frame edged in the rarity colour (rarity stripe on top).
+func _card_box(fill: Color, border: Color, border_w: int) -> OrnateStyleBox:
+	var sb := MenuTheme.card_box(fill, border, fill.a if fill.a > 0.0 else 0.96)
+	sb.border_width = float(border_w)
+	sb.accent_color = border
+	sb.accent_side = SIDE_TOP
+	sb.accent_width = 4.0
 	sb.set_content_margin_all(0.0)
-	sb.shadow_color = Color(0, 0, 0, 0.45)
-	sb.shadow_size = 8
-	sb.shadow_offset = Vector2(0, 4)
-	sb.anti_aliasing = true
 	return sb
 
 

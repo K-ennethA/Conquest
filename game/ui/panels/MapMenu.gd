@@ -104,14 +104,15 @@ func _build_ui() -> void:
 func _style() -> void:
 	var sb := ConquestTheme.panel_box(0.97)
 	sb.border_color = ConquestTheme.GOLD_DK
+	sb.crest = true
 	sb.content_margin_left = 22
 	sb.content_margin_right = 22
 	sb.content_margin_top = 18
 	sb.content_margin_bottom = 14
 	_card.add_theme_stylebox_override("panel", sb)
-	_title.add_theme_font_override("font", MenuTheme.bold_font(0.6, 2))
+	_title.add_theme_font_override("font", MenuTheme.display_font(2))
 	_title.add_theme_font_size_override("font_size", 26)
-	_title.add_theme_color_override("font_color", ConquestTheme.CREAM)
+	_title.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
 
 
 # --- Open / close ---------------------------------------------------------------

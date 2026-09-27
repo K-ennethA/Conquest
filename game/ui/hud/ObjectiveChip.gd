@@ -1,9 +1,13 @@
 extends PanelContainer
 class_name ObjectiveChip
 
-## Small persistent HUD chip under the turn indicator: the map's objective in a few
-## words ("Rout the enemy", "Survive 3/8 turns", "Seize the throne", see
-## [ObjectiveText]) plus a "Danger zone" tag while that overlay is on.
+## Small persistent HUD chip: the map's objective in a few words ("Rout the enemy",
+## "Survive 3/8 turns", "Seize the throne", see [ObjectiveText]) plus a "Danger zone"
+## tag while that overlay is on.
+##
+## Two presentations (see [method set_inline]): INLINE -- frameless, riding in the
+## phase banner's info row (the traditional-turn HUD, so the top HUD stays one strip)
+## -- or STANDALONE -- its own small notched plate under the Speed-First turn queue.
 ##
 ## Reads the compiled rules from the GameWorldManager (group "game_world_manager").
 ## Refreshed on turn starts / board rebuilds / danger-zone toggles, with a slow poll
@@ -14,6 +18,8 @@ var _danger: Label
 var _danger_chip: Control
 var _poll: Timer
 var _danger_on: bool = false
+var _tag: Label
+var _inline: bool = false
 
 
 func _ready() -> void:
@@ -23,10 +29,7 @@ func _ready() -> void:
 	# Matches the phase chip above it: a slim navy strip with a gold diamond, cream
 	# objective text, and a violet "Danger zone" tag while that overlay is on.
 	ConquestTheme.keep_style(self)
-	var sb := ConquestTheme.chip_box(ConquestTheme.BORDER_SOFT, 0.9)
-	sb.content_margin_top = 3
-	sb.content_margin_bottom = 4
-	add_theme_stylebox_override("panel", sb)
+	_apply_frame()
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
@@ -46,7 +49,9 @@ func _ready() -> void:
 	tag.theme_type_variation = &"SectionLabel"
 	tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tag.visible = not _inline
 	row.add_child(tag)
+	_tag = tag
 
 	_label = Label.new()
 	_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
@@ -85,6 +90,31 @@ func _ready() -> void:
 	_poll.timeout.connect(refresh)
 	add_child(_poll)
 	refresh()
+
+
+## INLINE (true): frameless, for the phase banner's info row -- the "OBJECTIVE" tag
+## is dropped (the gold diamond marks it). STANDALONE (false): its own notched plate.
+func set_inline(on: bool) -> void:
+	_inline = on
+	if _tag != null:
+		_tag.visible = not on
+	_apply_frame()
+
+
+func is_inline() -> bool:
+	return _inline
+
+
+func _apply_frame() -> void:
+	if _inline:
+		var e := StyleBoxEmpty.new()
+		e.content_margin_left = 2
+		add_theme_stylebox_override("panel", e)
+	else:
+		var sb := ConquestTheme.chip_box(ConquestTheme.BORDER_SOFT, 0.9)
+		sb.content_margin_top = 3
+		sb.content_margin_bottom = 4
+		add_theme_stylebox_override("panel", sb)
 
 
 func _on_turn_started(_p) -> void:

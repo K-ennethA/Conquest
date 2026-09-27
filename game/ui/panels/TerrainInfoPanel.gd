@@ -22,7 +22,7 @@ class_name TerrainInfoPanel
 # GameWorldManager._setup_terrain_info_panel) only need to instantiate it and
 # add it to the "UI" CanvasLayer -- nothing else to wire up.
 
-const PANEL_WIDTH := 300.0
+const PANEL_WIDTH := HudSafeArea.CORNER_CARD_WIDTH
 const MARGIN := ConquestTheme.MARGIN
 
 var _card: PanelContainer

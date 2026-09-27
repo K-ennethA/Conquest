@@ -138,7 +138,15 @@ func _build_ui() -> void:
 	# Local testing tip.
 	var tip := PanelContainer.new()
 	tip.name = "LocalTip"
-	tip.add_theme_stylebox_override("panel", MenuTheme.box(Color(MenuTheme.ACCENT, 0.08), Color(MenuTheme.ACCENT, 0.45), 1, 10, 16, 10))
+	var tip_sb := MenuTheme.accented_card(MenuTheme.ACCENT, SIDE_LEFT, MenuTheme.PANEL_SUNK, 0.85)
+	tip_sb.border_color = Color(MenuTheme.ACCENT, 0.45)
+	tip_sb.ornament = OrnateStyleBox.Ornament.NONE
+	tip_sb.inner_line_color = Color(MenuTheme.ACCENT, 0.18)
+	tip_sb.shadow_size = 0.0
+	tip_sb.corner = 8.0
+	tip_sb.content_margin_top = 10
+	tip_sb.content_margin_bottom = 10
+	tip.add_theme_stylebox_override("panel", tip_sb)
 	_tip = tip
 	body.add_child(tip)
 	var tip_row := HBoxContainer.new()
@@ -505,16 +513,23 @@ func _refresh_lobby() -> void:
 ## empty slot (name "") reads "Waiting for a player...".
 func _player_row(slot: int, player_name: String, you: bool, ready: bool) -> PanelContainer:
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", MenuTheme.box(Color(MenuTheme.PANEL_SUNK, 0.8),
-		MenuTheme.GOLD_DK if you else MenuTheme.BORDER_SOFT, 1, 8, 14, 8))
+	var team := MenuTheme.TEAM_BLUE if slot == 0 else MenuTheme.TEAM_RED
+	# A notched well with the seat's team colour down its edge and a heraldic crest.
+	var row_sb := MenuTheme.inset_box()
+	row_sb.border_color = MenuTheme.GOLD_DK if you else MenuTheme.BORDER_SOFT
+	row_sb.accent_color = team if player_name != "" else Color(team, 0.3)
+	row_sb.accent_width = 4.0
+	row_sb.content_margin_left = 16
+	row_sb.content_margin_top = 8
+	row_sb.content_margin_bottom = 8
+	p.add_theme_stylebox_override("panel", row_sb)
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", MenuTheme.SP_M)
 	p.add_child(h)
-	var team := MenuTheme.TEAM_BLUE if slot == 0 else MenuTheme.TEAM_RED
-	var sw := ColorRect.new()
-	sw.color = team if player_name != "" else Color(team, 0.3)
-	sw.custom_minimum_size = Vector2(6, 30)
-	h.add_child(sw)
+	var crest_letter := player_name.left(1) if player_name != "" else "?"
+	var crest := MenuKit.crest(crest_letter, team if player_name != "" else MenuTheme.BORDER,
+		MenuTheme.GOLD_DK if player_name != "" else MenuTheme.BORDER_SOFT, 36.0)
+	h.add_child(crest)
 	var tag := MenuKit.label("P%d" % (slot + 1), &"SectionLabel")
 	tag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(tag)

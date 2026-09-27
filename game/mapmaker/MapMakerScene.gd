@@ -122,7 +122,7 @@ func _build_ui() -> void:
 	top.add_child(back_btn)
 	var title := Label.new()
 	title.text = "Map Maker"
-	title.add_theme_font_override("font", MenuTheme.bold_font(0.5))
+	title.add_theme_font_override("font", MenuTheme.heading_font(1))
 	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
 	top.add_child(title)
@@ -428,8 +428,8 @@ func _compact_theme() -> Theme:
 	for type in ["Button", "OptionButton"]:
 		for state in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
 			var sb := t.get_stylebox(state, type)
-			if sb is StyleBoxFlat:
-				var c := (sb as StyleBoxFlat).duplicate()
+			if sb != null:
+				var c := sb.duplicate() as StyleBox
 				c.content_margin_left = 10
 				c.content_margin_right = 10
 				c.content_margin_top = 4
@@ -437,16 +437,16 @@ func _compact_theme() -> Theme:
 				t.set_stylebox(state, type, c)
 	for state in ["normal", "hover", "pressed"]:
 		var gsb := t.get_stylebox(state, "GhostButton")
-		if gsb is StyleBoxFlat:
-			var g := (gsb as StyleBoxFlat).duplicate()
+		if gsb != null:
+			var g := gsb.duplicate() as StyleBox
 			g.content_margin_left = 10
 			g.content_margin_right = 12
 			g.content_margin_top = 4
 			g.content_margin_bottom = 4
 			t.set_stylebox(state, "GhostButton", g)
 	var field := t.get_stylebox("normal", "LineEdit")
-	if field is StyleBoxFlat:
-		var f := (field as StyleBoxFlat).duplicate()
+	if field != null:
+		var f := field.duplicate() as StyleBox
 		f.content_margin_top = 4
 		f.content_margin_bottom = 4
 		t.set_stylebox("normal", "LineEdit", f)

@@ -128,7 +128,10 @@ func _build_body(body: VBoxContainer) -> void:
 	var well := MenuKit.card(&"InsetPanel")
 	well.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	well.custom_minimum_size = Vector2(0, 200)
-	well.add_theme_stylebox_override("panel", MenuTheme.box(MenuTheme.PANEL_SUNK, MenuTheme.BORDER_SOFT, 1, 10, 2, 2))
+	var well_sb := MenuTheme.inset_box()
+	well_sb.hatch_alpha = 0.0
+	well_sb.set_content_margin_all(3)
+	well.add_theme_stylebox_override("panel", well_sb)
 	dv.add_child(well)
 	_preview = MapPreview3D.new()
 	_preview.name = "MapPreview"
@@ -261,7 +264,11 @@ func _make_map_card(res: MapResource, index: int) -> Button:
 	content.add_child(h)
 
 	var thumb_frame := PanelContainer.new()
-	thumb_frame.add_theme_stylebox_override("panel", MenuTheme.box(MenuTheme.PANEL_SUNK, MenuTheme.BORDER_SOFT, 1, 6, 3, 3))
+	var thumb_sb := MenuTheme.inset_box()
+	thumb_sb.corner = 6.0
+	thumb_sb.border_color = MenuTheme.GOLD_DK
+	thumb_sb.set_content_margin_all(3)
+	thumb_frame.add_theme_stylebox_override("panel", thumb_sb)
 	thumb_frame.custom_minimum_size = Vector2(118, 78)
 	thumb_frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(thumb_frame)

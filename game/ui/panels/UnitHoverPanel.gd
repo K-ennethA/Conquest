@@ -27,7 +27,7 @@ class_name UnitHoverPanel
 # Self-contained: builds its own UI and wires its own cursor handler in _ready().
 # See GameWorldManager._setup_unit_hover_panel(), which only instantiates it.
 
-const PANEL_WIDTH := 300.0
+const PANEL_WIDTH := HudSafeArea.CORNER_CARD_WIDTH
 const MARGIN := ConquestTheme.MARGIN
 
 ## Status chips shown before the row collapses into a "+N" overflow marker.
@@ -209,6 +209,9 @@ func _create_ui() -> void:
 	# HUD look, applied first; the deliberate colours / sizes go on after it.
 	ConquestTheme.apply_to(self)
 	_sub_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+	# Cinzel runs wide: a touch smaller so long names ("Eldroot, the Hollow Crown")
+	# wrap to two lines at most in the corner card.
+	_name_label.add_theme_font_size_override("font_size", 19)
 	_hp_value.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
 	_hp_value.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	for v in _stat_values.values():
@@ -227,21 +230,35 @@ func _process(_delta: float) -> void:
 		return
 	modulate = Color(0.5, 0.5, 0.55) if InputActions.gameplay_input_blocked(get_tree()) else Color.WHITE
 	var want := -MARGIN
-	var duplicate := false
 	var panel := get_tree().get_first_node_in_group("unit_actions_panel") as Control
-	if panel != null and panel.is_visible_in_tree():
+	var duplicate := is_duplicate_of_hud(panel, _shown_unit)
+	if panel != null and panel.is_visible_in_tree() and not duplicate:
 		var pr := panel.get_global_rect()
 		var card_h := _card.size.y
 		var card_top := size.y - MARGIN - card_h
 		if pr.end.y + 8.0 > card_top:
 			want = -(size.x - pr.position.x + 12.0)
-			# The command menu already shows this very unit: don't repeat it
-			# mid-screen, just step aside.
-			duplicate = "selected_unit" in panel and panel.selected_unit != null \
-				and panel.selected_unit == _shown_unit
 	if not is_equal_approx(_card.offset_right, want):
 		_card.offset_right = want
 	_card.visible = not duplicate
+
+
+## True when [param unit] is already on screen in another HUD card, so the hover card
+## would just repeat it: the command menu's header (the selected unit, while that
+## menu is up) or either side of the combat forecast. Hover for any OTHER unit is
+## unaffected.
+static func is_duplicate_of_hud(panel: Node, unit) -> bool:
+	if unit == null or not is_instance_valid(unit) or panel == null:
+		return false
+	var panel_up := panel is CanvasItem and (panel as CanvasItem).is_visible_in_tree()
+	if panel_up and "selected_unit" in panel and panel.selected_unit != null \
+			and panel.selected_unit == unit:
+		return true
+	var fc = panel.get("combat_forecast_panel")
+	if fc != null and is_instance_valid(fc) and fc is CanvasItem and (fc as CanvasItem).is_visible_in_tree() \
+			and fc.has_method("shows_unit") and fc.shows_unit(unit):
+		return true
+	return false
 
 
 # --- Public API --------------------------------------------------------------
@@ -267,6 +284,7 @@ func show_for_unit(unit) -> void:
 	_sub_label.add_theme_color_override("font_color", ConquestTheme.team_text_color(owner))
 	var cols := ConquestTheme.unit_portrait_colors(unit)
 	ConquestTheme.set_portrait(_portrait, display, cols[0], cols[1])
+	_card.add_theme_stylebox_override("panel", ConquestTheme.unit_card_box(unit, 0.95))
 
 	# HP is read through `in` guards: a legacy/mock unit with no stats component
 	# simply shows a dashed readout instead of erroring.
@@ -296,6 +314,8 @@ func show_for_unit(unit) -> void:
 	# even if status population ever failed we still surface the unit rather than
 	# leaving a wired-but-hidden panel (TerrainInfoPanel records the same lesson).
 	show()
+	var panel := get_tree().get_first_node_in_group("unit_actions_panel") if is_inside_tree() else null
+	_card.visible = not is_duplicate_of_hud(panel, unit)
 	_populate_effects(unit)
 
 

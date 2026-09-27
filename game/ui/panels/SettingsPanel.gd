@@ -50,7 +50,13 @@ func _ready() -> void:
 	ConquestTheme.apply_to(self)
 	var frame_sb := ConquestTheme.panel_box(0.98)
 	frame_sb.border_color = MenuTheme.GOLD_DK
+	frame_sb.crest = true
 	_frame.add_theme_stylebox_override("panel", frame_sb)
+	# Our subtree is already themed: keep a later HUD-wide sweep off the frame.
+	ConquestTheme.keep_style(_frame)
+	var title_node := _frame.find_child("Title", true, false) as Label
+	if title_node != null:
+		title_node.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
 
 	# Stay in sync with external changes (other systems / a second panel).
 	if _has_settings() and not GameSettings.settings_changed.is_connected(_on_settings_changed):
@@ -109,12 +115,12 @@ func _build_ui() -> void:
 	var title := Label.new()
 	title.name = "Title"
 	title.text = "Settings"
-	title.add_theme_font_override("font", MenuTheme.bold_font(0.6, 2))
+	title.add_theme_font_override("font", MenuTheme.display_font(2))
 	title.add_theme_font_size_override("font_size", 28)
 	vbox.add_child(title)
-	var rule := ColorRect.new()
+	var rule := GroveRule.new()
 	rule.color = MenuTheme.GOLD
-	rule.custom_minimum_size = Vector2(56, 3)
+	rule.custom_minimum_size = Vector2(160, 10)
 	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	vbox.add_child(rule)
 

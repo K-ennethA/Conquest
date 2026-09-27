@@ -111,7 +111,7 @@ func _build_ui() -> void:
 	_main_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_main_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_main_label.custom_minimum_size = Vector2(BANNER_MAX_WIDTH, 0.0)
-	_main_label.add_theme_font_override("font", MenuTheme.bold_font(0.5, 1))
+	_main_label.add_theme_font_override("font", MenuTheme.display_font(2))
 	_main_label.add_theme_font_size_override("font_size", 34)
 	_main_label.add_theme_color_override("font_color", NEUTRAL_COLOR)
 	_main_label.add_theme_color_override("font_outline_color", OUTLINE_COLOR)
@@ -136,22 +136,18 @@ func _build_ui() -> void:
 
 
 func _apply_plate_style(side: Color) -> void:
-	var box: StyleBoxFlat = StyleBoxFlat.new()
-	box.bg_color = PLATE_BG
-	box.set_corner_radius_all(12)
-	box.set_content_margin_all(14)
-	box.content_margin_left = 26.0
-	box.content_margin_right = 26.0
-	box.border_width_left = 2
-	box.border_width_top = 2
-	box.border_width_right = 2
-	box.border_width_bottom = 2
-	var edge: Color = side
-	edge.a = 0.85
-	box.border_color = edge
-	# A soft shadow lifts the plate off the busy board.
+	# A swallow-tailed heraldic ribbon edged in the acting side's colour.
+	var box := MenuTheme.ribbon_box(ConquestTheme.PANEL, Color(side, 0.9), 22.0)
+	box.bg_color = Color(PLATE_BG.lightened(0.06), PLATE_BG.a)
+	box.bg_color_end = Color(PLATE_BG.darkened(0.3), PLATE_BG.a)
+	box.border_width = 2.0
+	box.inner_line_color = Color(ConquestTheme.GOLD, 0.4)
 	box.shadow_color = Color(0.0, 0.0, 0.0, 0.5)
-	box.shadow_size = 6
+	box.shadow_size = 10.0
+	box.content_margin_left = 48.0
+	box.content_margin_right = 48.0
+	box.content_margin_top = 12.0
+	box.content_margin_bottom = 14.0
 	_plate.add_theme_stylebox_override("panel", box)
 
 

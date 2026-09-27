@@ -215,9 +215,11 @@ func fit_to_map() -> void:
 
 ## Screen-space fit refinement: the analytic fit above ignores perspective (the near
 ## edge of the board projects larger) and anything built above the ground (bridges,
-## towers). Project the board's corners -- at ground level and at the top floor's
-## height -- and iterate: centre their screen rect in the view (leaving room for the
-## turn banner on top) and dolly so it fills the frame without clipping.
+## towers, and the units' floating HP bars). Project the board's outline -- at ground
+## level and at the top floor's height plus a unit's height (so back-row HP bars
+## count) -- and find the CLOSEST distance at which, once centred, it sits entirely
+## inside the HUD-free frame and clear of the bottom-corner cards ([HudSafeArea]),
+## so the board never starts under the phase banner or a side card.
 func _refine_fit() -> void:
 	var vp: Vector2 = get_viewport().get_visible_rect().size
 	if vp.x <= 0.0 or vp.y <= 0.0 or not _has_bounds:
@@ -227,39 +229,93 @@ func _refine_fit() -> void:
 	if board != null and board.has_method("floor_count"):
 		top_y = Cells.floor_y(maxi(0, int(board.floor_count()) - 1)) + 0.6
 	var pts: Array[Vector3] = []
-	for y in [-0.5, top_y]:
-		for x in [_board_min.x, _board_max.x]:
-			for z in [_board_min.y, _board_max.y]:
-				pts.append(Vector3(x, y, z))
-	# Usable frame: small side margins, extra room at the top for the turn banner.
-	var frame := Rect2(Vector2(vp.x * 0.03, vp.y * 0.1), Vector2(vp.x * 0.94, vp.y * 0.86))
-	for _i in 8:
-		var r := Rect2()
-		var first := true
-		for p in pts:
-			if is_position_behind(p):
-				continue
-			var sp := unproject_position(p)
-			if first:
-				r = Rect2(sp, Vector2.ZERO)
-				first = false
-			else:
-				r = r.expand(sp)
-		if first or r.size.x <= 1.0 or r.size.y <= 1.0:
-			return
-		# Recentre (on the ground plane) ...
+	var corners := [Vector2(_board_min.x, _board_min.y), Vector2(_board_max.x, _board_min.y),
+		Vector2(_board_max.x, _board_max.y), Vector2(_board_min.x, _board_max.y)]
+	# Ground-floor units' HP bars can sit anywhere on the board edge; units on upper
+	# floors are counted from their live positions below (when already spawned).
+	var head_y := maxf(top_y, 0.6 + FIT_UNIT_HEADROOM)
+	if board != null and board.has_method("all_units"):
+		for u in board.all_units():
+			if u is Node3D and is_instance_valid(u):
+				pts.append((u as Node3D).global_position + Vector3(0.0, FIT_UNIT_HEADROOM, 0.0))
+	for y in [-0.5, top_y, head_y]:
+		for k in 4:
+			var a: Vector2 = corners[k]
+			var b: Vector2 = corners[(k + 1) % 4]
+			# Sample along each edge so a yawed (diamond) board can't clip a corner card.
+			for t in [0.0, 0.25, 0.5, 0.75]:
+				var q := a.lerp(b, t)
+				pts.append(Vector3(q.x, y, q.y))
+	var frame := HudSafeArea.board_frame(vp)
+	var avoid := HudSafeArea.board_avoid(vp)
+
+	# Bisection on distance: nearer = bigger board. _fit_at recentres and reports
+	# whether the board fits at that distance (monotonic enough to bisect).
+	var d0 := _current_distance()
+	var lo := maxf(0.5, d0 * 0.35)
+	var hi := d0 * 1.6
+	var guard := 0
+	while not _fit_at(hi, pts, frame, avoid) and guard < 6:
+		lo = hi
+		hi *= 1.6
+		guard += 1
+	for _i in 14:
+		var mid := (lo + hi) * 0.5
+		if _fit_at(mid, pts, frame, avoid):
+			hi = mid
+		else:
+			lo = mid
+	_dist_max_runtime = maxf(_dist_max_runtime, hi)
+	_fit_at(hi, pts, frame, avoid)
+
+
+## Headroom above the top floor for unit models + their HP bars / status pips.
+const FIT_UNIT_HEADROOM := 2.7
+
+
+## Put the camera at [param dist], centre the projected board in [param frame], and
+## return whether every point lands in the frame and outside the [param avoid] rects.
+func _fit_at(dist: float, pts: Array[Vector3], frame: Rect2, avoid: Array[Rect2]) -> bool:
+	_dist_max_runtime = maxf(_dist_max_runtime, dist)
+	_set_distance(dist)
+	for _k in 3:
+		var r := _projected_rect(pts)
+		if r.size.x <= 1.0 or r.size.y <= 1.0:
+			return false
 		var a = _plane_point_at(r.get_center(), 0.0)
 		var b = _plane_point_at(frame.get_center(), 0.0)
-		if a != null and b != null:
-			var d: Vector3 = a - b
-			global_position += Vector3(d.x, 0.0, d.z)
-		# ... then dolly so the rect just fills the frame.
-		var s := maxf(r.size.x / frame.size.x, r.size.y / frame.size.y)
-		if absf(s - 1.0) < 0.01 and (a == null or b == null or (a - b).length() < 0.05):
+		if a == null or b == null:
 			break
-		var want := _current_distance() * s
-		_dist_max_runtime = maxf(_dist_max_runtime, want)
-		_set_distance(want)
+		var d: Vector3 = a - b
+		if Vector2(d.x, d.z).length() < 0.01:
+			break
+		global_position += Vector3(d.x, 0.0, d.z)
+	var bounds := frame.grow(0.5)
+	for p in pts:
+		if is_position_behind(p):
+			return false
+		var sp := unproject_position(p)
+		if not bounds.has_point(sp):
+			return false
+		for q in avoid:
+			if q.has_point(sp):
+				return false
+	return true
+
+
+func _projected_rect(pts: Array[Vector3]) -> Rect2:
+	var r := Rect2()
+	var first := true
+	for p in pts:
+		if is_position_behind(p):
+			continue
+		var sp := unproject_position(p)
+		if first:
+			r = Rect2(sp, Vector2.ZERO)
+			first = false
+		else:
+			r = r.expand(sp)
+	return r
 
 
 ## Derive the board's XZ bounds from the live tiles under "Map/Tiles" (each tile a

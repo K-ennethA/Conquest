@@ -253,7 +253,10 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 	background.position = Vector2.ZERO
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	var style_box := StyleBoxFlat.new()
+	# Notched grove plate (OrnateStyleBox keeps StyleBoxFlat's property names).
+	var style_box := OrnateStyleBox.new()
+	style_box.sheen = 0.12
+	style_box.hatch_alpha = 0.03
 	var amber: Color = ConquestTheme.GOLD
 	var brown_dk: Color = ConquestTheme.INK
 	if is_current:
