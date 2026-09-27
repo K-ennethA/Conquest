@@ -112,6 +112,8 @@ func _on_game_state_changed(new_state: PlayerManager.GameState) -> void:
 func _turn_title(player: Player) -> String:
 	"""Ally/enemy framing for the panel -- reads better than "Player 1/2" in
 	single-player. Keyed off Player.is_ai."""
+	if GameModeManager and GameModeManager.is_multiplayer_active():
+		return "Your Turn" if GameModeManager.is_my_turn() else "Opponent's Turn"
 	if player != null and player.is_ai:
 		return "Enemy Turn"
 	return "Your Turn"
@@ -165,6 +167,9 @@ func _update_display() -> void:
 		else:
 			can_end_turn = active_player and active_player.can_end_turn()
 		
+		# Network match: only the seat whose turn it is may end it.
+		if GameModeManager and GameModeManager.is_multiplayer_active() and not GameModeManager.is_my_turn():
+			can_end_turn = false
 		end_turn_button.disabled = not can_end_turn
 		
 		if can_end_turn:
@@ -185,6 +190,12 @@ func _update_display() -> void:
 func _on_end_turn_pressed() -> void:
 	"""Handle End Turn button press - ends the entire player's turn"""
 	var turn_ended = false
+
+	# Network match: ending the turn is a host-validated intent, never a local change.
+	if GameModeManager and GameModeManager.is_multiplayer_active():
+		if GameModeManager.is_my_turn():
+			GameModeManager.request_end_turn()
+		return
 
 	# Use turn system if available
 	if TurnSystemManager.has_active_turn_system():

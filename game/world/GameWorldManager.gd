@@ -109,7 +109,11 @@ func _ready() -> void:
 
 	# Load the selected map or default map
 	await _load_selected_map()
-	
+	# The scene may have been left while the map loaded (e.g. a network match was
+	# aborted by a disconnect) -- nothing left to set up then.
+	if not is_inside_tree():
+		return
+
 	# Check if this is a network multiplayer game
 	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
 		await _setup_network_multiplayer()
@@ -606,27 +610,48 @@ func _on_player_turn_started_tile_effects(player) -> void:
 		_tile_effect_system.on_turn_start(unit, board)
 
 func _setup_network_multiplayer() -> void:
-	"""Set up network multiplayer game"""
-	# Check if GameModeManager is already handling multiplayer
-	if GameModeManager and GameModeManager.is_multiplayer_active():
-		# Connect to GameModeManager signals
-		if not GameModeManager.game_ended.is_connected(_on_multiplayer_game_ended):
-			GameModeManager.game_ended.connect(_on_multiplayer_game_ended)
-		
-		# Set up players for network multiplayer
-		await _setup_multiplayer_players()
-		
-		# Apply settings but don't start game (GameModeManager handles this)
-		if GameSettings:
-			GameSettings.apply_settings_to_game()
-		
-		# Wait one more frame before starting the game
-		await get_tree().process_frame
-		
-		# Start the game for multiplayer
-		_start_game()
-	else:
+	"""Network versus (a NetSession match). Both peers build the IDENTICAL battle
+	from the host's match config (GameModeManager copied it into GameSettings):
+	same map, same two human players in slot order, same turn system. From here on
+	the board only changes through accepted network actions, applied identically
+	on every peer by NetGameRules."""
+	if not (GameModeManager and GameModeManager.is_multiplayer_active()):
 		await _setup_local_game()
+		return
+
+	PlayerManager.reset_for_new_game()
+	TurnSystemManager.reset_for_new_game()
+
+	# Slot i == PlayerManager.players[i] == Map/Player{i+1}. Both seats are human;
+	# no BotTurnDriver is created (no AI runs on either peer).
+	for i in range(2):
+		var pname: String = GameSettings.player_names[i] if i < GameSettings.player_names.size() else ""
+		PlayerManager.register_player(pname)
+	PlayerManager.assign_units_by_parent()
+	for p in PlayerManager.players:
+		p.is_ai = false
+
+	# Each await can outlive this scene: if the opponent drops mid-setup,
+	# GameModeManager returns to the menu and this node leaves the tree -- stop then.
+	await get_tree().process_frame
+	if not _network_setup_alive():
+		return
+	if GameSettings:
+		GameSettings.apply_settings_to_game()
+	await get_tree().process_frame
+	if not _network_setup_alive():
+		return
+	_start_game()
+	# Let the turn system's activation (and any deferred kickoff) settle, then hand
+	# the live board + turn system to the network rules.
+	await get_tree().process_frame
+	if not _network_setup_alive():
+		return
+	GameModeManager.on_network_world_ready()
+
+
+func _network_setup_alive() -> bool:
+	return is_inside_tree() and GameModeManager != null and GameModeManager.is_multiplayer_active()
 
 func _setup_local_game() -> void:
 	"""Set up local single-player or local multiplayer game"""
@@ -662,28 +687,6 @@ func _setup_local_game() -> void:
 	
 	# Start the game
 	_start_game()
-
-func _setup_multiplayer_players() -> void:
-	"""Set up players for network multiplayer"""
-	# Get player info from GameModeManager
-	var multiplayer_status = GameModeManager.get_multiplayer_status()
-	var network_players = multiplayer_status.get("players", {})
-	var local_player_id = GameModeManager.get_local_player_id()
-
-	# Reset per-session autoload state before registering players. Replaces the old
-	# ad-hoc players.clear(): also resets game state back to SETUP and tears down any
-	# turn system left over from a prior session (freed units). This runs BEFORE the
-	# Player 1/2 registration below so the registration order is preserved.
-	PlayerManager.reset_for_new_game()
-	TurnSystemManager.reset_for_new_game()
-
-	# Set up multiplayer players with proper IDs
-	# Always create 2 players for multiplayer
-	var player1 = PlayerManager.register_player("Player 1")
-	var player2 = PlayerManager.register_player("Player 2")
-
-	# Assign units to players based on scene structure
-	PlayerManager.assign_units_by_parent()
 
 func _setup_players() -> void:
 	"""Set up players and assign units"""
@@ -729,12 +732,6 @@ func _start_game() -> void:
 	"""Start the game"""
 	# Start the game in PlayerManager
 	PlayerManager.start_game()
-
-func _on_multiplayer_game_ended(winner_id: int) -> void:
-	"""Handle multiplayer game ended"""
-	# Show game over screen or return to menu
-	await get_tree().create_timer(2.0).timeout
-	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
 
 # Current UI Layout (1920x1080 reference):
 # 

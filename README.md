@@ -29,7 +29,7 @@ Tests use [GUT](https://github.com/bitwes/Gut) (bundled in `addons/gut`).
 | Path | Purpose |
 |------|---------|
 | `systems/` | Autoload singletons & core subsystems (events, players, turns, networking) |
-| `systems/net/` | **New** consolidated server-authoritative multiplayer core (`NetSession`) |
+| `systems/net/` | Network versus: host-authoritative `NetSession`, protocol, rules, unit ids |
 | `game/` | Gameplay content: units, maps, tiles, UI, visuals, world |
 | `tile_objects/` | Unit / board / tile scene implementations (`class_name Unit`, etc.) |
 | `board/`, `turns/` | Grid, cursor, and early turn/priority prototypes |
@@ -42,10 +42,10 @@ Tests use [GUT](https://github.com/bitwes/Gut) (bundled in `addons/gut`).
 ## Autoloads
 
 Defined in `project.godot` under `[autoload]`. Core singletons: `GameEvents` (event bus),
-`PlayerManager`, `TurnSystemManager`, `GameSettings`, `ResourceManager`, `GameModeManager`.
+`PlayerManager`, `TurnSystemManager`, `GameSettings`, `ResourceManager`, `NetSession`,
+`GameModeManager` (network-match glue).
 
 ## Multiplayer
 
 See [`systems/net/README.md`](systems/net/README.md) for the current (consolidated) networking
-architecture and how to host/join. The older `systems/networking/` and `systems/multiplayer/`
-stacks are being superseded by `systems/net/` — see the migration note in that README.
+architecture, how to host/join, and how to test with two instances on one machine.

@@ -18,28 +18,14 @@ func _ready() -> void:
 	print("[DEBUG] MainMenu: _ready() called")
 	theme = MenuTheme.build()  # dark Legends-style menu look
 	
-	# Add AutoClientDetector test
-	var autoclient_test = Node.new()
-	autoclient_test.name = "AutoClientDetectorTest"
-	autoclient_test.set_script(load("res://dev_scripts/test_autoclient_detector.gd"))
-	add_child(autoclient_test)
-	
-	# Add debug test script for development
-	var debug_test = Node.new()
-	debug_test.name = "HostAutoClientDebugTest"
-	debug_test.set_script(load("res://dev_scripts/test_host_auto_client_debug.gd"))
-	add_child(debug_test)
-	
-	# Add end-to-end test script
-	var e2e_test = Node.new()
-	e2e_test.name = "EndToEndMultiplayerTest"
-	e2e_test.set_script(load("res://dev_scripts/test_end_to_end_multiplayer.gd"))
-	add_child(e2e_test)
-	
-	# Note: AutoClientDetector now runs as an autoload, so client detection
-	# happens before this scene loads. If we reach here, we're not a client.
-	print("[SINGLE] MainMenu: Setting up normal menu")
-	
+	# Arriving at the main menu always ends any network match: close the session
+	# and restore local play, so single-player / hotseat afterwards starts clean.
+	if GameModeManager:
+		GameModeManager.end_network_session()
+		var net_msg: String = GameModeManager.consume_menu_message()
+		if net_msg != "":
+			_show_status_message(net_msg)
+
 	# Connect button signals for normal menu operation
 	if single_player_button:
 		single_player_button.pressed.connect(_on_single_player_pressed)
@@ -53,22 +39,6 @@ func _ready() -> void:
 		quit_button.pressed.connect(_on_quit_pressed)
 	
 	print("Main Menu initialized")
-
-func _show_auto_join_status() -> void:
-	"""Show auto-join connection status"""
-	# Hide menu buttons
-	if single_player_button:
-		single_player_button.visible = false
-	if versus_button:
-		versus_button.visible = false
-	if quit_button:
-		quit_button.visible = false
-	
-	# Show connection status
-	var info = MultiplayerLauncher.get_auto_join_info()
-	var status_text = "Auto-joining multiplayer game...\nConnecting to %s:%d as %s" % [info.address, info.port, info.player_name]
-	
-	_show_status_message(status_text)
 
 func _show_status_message(message: String) -> void:
 	"""Show a status message on the main menu"""
