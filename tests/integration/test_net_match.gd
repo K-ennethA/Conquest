@@ -152,7 +152,7 @@ func _start_match(layout: Array = LAYOUT, speed_first: bool = false, configure: 
 	_cs().set_ready(true)
 	if not await H.wait_until(get_tree(), func(): return _hs().can_start_match()):
 		return false
-	_hs().start_match(SEED)
+	_hs().start_match()
 	if not await H.wait_until(get_tree(), func(): return _cs().is_in_match()):
 		return false
 	_hw = _build_world(_host["root"], layout, speed_first, int(_hs().get_match_config()["seed"]), configure)
