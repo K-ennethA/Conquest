@@ -123,6 +123,10 @@ func _initialize() -> void:
 	cam.current = true
 	for i in 20:
 		await process_frame
-	root.get_viewport().get_texture().get_image().save_png(out)
+	var img := root.get_viewport().get_texture().get_image()
+	if out.ends_with(".jpg"):
+		img.save_jpg(out, 0.85)
+	else:
+		img.save_png(out)
 	print("saved ", out, " (", chars.size(), " characters)")
 	quit()
