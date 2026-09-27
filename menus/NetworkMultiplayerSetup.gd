@@ -7,6 +7,9 @@ class_name NetworkMultiplayerSetup
 ## NetSession autoload; when the host starts, GameModeManager loads the battle on
 ## both machines. Two instances on one machine work out of the box: host with the
 ## default port, join 127.0.0.1 with the same port (see systems/net/README.md).
+## Joining a DEDICATED server is the same Join: the server holds no seat, so the
+## roster shows the two players; the slot-0 player picks the map / turn system
+## (unless the server fixed them) and the match starts once both are ready.
 ##
 ## Presentation: a "You" row (name + shared port), then side-by-side HOST and JOIN
 ## cards; once connected, those are swapped for the lobby (Players card + Match
@@ -122,7 +125,7 @@ func _build_ui() -> void:
 	host["box"].add_child(host_button)
 
 	var join := _action_card("JOIN", "Join a Lobby",
-		"Connect to a friend who is hosting.")
+		"Connect to a friend who is hosting, or to a dedicated server.")
 	cards.add_child(join["card"])
 	address_input = _field(NetSession.DEFAULT_ADDRESS, "Host IP address, e.g. 192.168.1.20")
 	address_input.name = "AddressInput"
@@ -239,7 +242,12 @@ func _on_join_pressed() -> void:
 
 func _on_joined(_slot: int) -> void:
 	_show_lobby(false)
-	_update_status("Connected. Waiting for the host to start.")
+	if NetSession.is_dedicated_server():
+		# Lobby leader on a server that did not fix the map: publish our defaults.
+		_push_config()
+		_update_status("Connected to a dedicated server. The match starts when both players are ready.")
+	else:
+		_update_status("Connected. Waiting for the host to start.")
 
 
 func _on_join_rejected(reason: String) -> void:
@@ -388,15 +396,24 @@ func _show_lobby(as_host: bool) -> void:
 	back_button.visible = false
 	lobby_container.visible = true
 	_leave_button.visible = true
-	_map_dropdown.disabled = not as_host
-	_turn_dropdown.disabled = not as_host
+	var dedicated := NetSession.is_dedicated_server()
+	var leader := NetSession.is_lobby_leader()
+	_map_dropdown.disabled = not leader
+	_turn_dropdown.disabled = not leader
 	_start_button.visible = as_host
-	_host_only_note.text = "You are the host: choose the map and turn system, then start once both players are ready." \
-		if as_host else "The host chooses the map and turn system."
-	_lobby_info.text = ("Hosting on port %d -- opponents join %s:%d (or this machine's LAN IP)." % [_port(), NetSession.DEFAULT_ADDRESS, _port()]) \
-		if as_host else "Connected to the host."
+	if as_host:
+		_host_only_note.text = "You are the host: choose the map and turn system, then start once both players are ready."
+		_lobby_info.text = "Hosting on port %d -- opponents join %s:%d (or this machine's LAN IP)." % [_port(), NetSession.DEFAULT_ADDRESS, _port()]
+	elif dedicated:
+		_host_only_note.text = "You lead this lobby: choose the map and turn system." if leader \
+			else "The server (or the first player) chooses the map and turn system."
+		_lobby_info.text = "Connected to a dedicated server."
+	else:
+		_host_only_note.text = "The host chooses the map and turn system."
+		_lobby_info.text = "Connected to the host."
 	(_page.title as Label).text = "Lobby"
-	(_page.subtitle as Label).text = "Both players mark themselves ready, then the host starts the match."
+	(_page.subtitle as Label).text = "Both players mark themselves ready; the match starts automatically." if dedicated \
+		else "Both players mark themselves ready, then the host starts the match."
 	_refresh_lobby()
 	MenuNav.focus_deferred(_ready_button)
 
@@ -422,7 +439,7 @@ func _on_leave_pressed() -> void:
 
 
 func _push_config() -> void:
-	if not NetSession.is_host():
+	if not NetSession.is_lobby_leader():
 		return
 	var idx := clampi(_map_dropdown.selected, 0, _map_paths.size() - 1)
 	NetSession.set_match_config({
@@ -437,7 +454,7 @@ func _on_roster_changed(_roster: Dictionary) -> void:
 
 
 func _on_config_changed(config: Dictionary) -> void:
-	# Clients mirror the host's choice in their (disabled) dropdowns.
+	# Clients mirror the host's / leader's choice in their dropdowns.
 	if NetSession.is_host() or config.is_empty():
 		_refresh_lobby()
 		return
