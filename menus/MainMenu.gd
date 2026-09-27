@@ -305,9 +305,25 @@ func _on_arena_pressed() -> void:
 
 func _on_settings_pressed() -> void:
 	if _settings_panel == null:
+		# Hosted on its own CanvasLayer so it does NOT inherit the menu theme: it
+		# keeps exactly the amber look (and readable ink-on-amber text) it has in
+		# battle, where it lives on the HUD's CanvasLayer.
+		var layer := CanvasLayer.new()
+		layer.name = "SettingsLayer"
+		layer.layer = 10
+		add_child(layer)
 		_settings_panel = SettingsPanel.new()
 		_settings_panel.name = "SettingsPanel"
-		add_child(_settings_panel)
+		layer.add_child(_settings_panel)
+		# The engine-default tab well is a dark translucent brown under the panel's
+		# dark-ink labels; give it a light amber plate here so every row reads.
+		var tabs := _settings_panel.find_child("Tabs", true, false) as TabContainer
+		if tabs != null:
+			var well := ConquestTheme.plate_box()
+			well.bg_color = ConquestTheme.AMBER_LITE
+			well.border_color = ConquestTheme.BROWN
+			well.set_content_margin_all(14)
+			tabs.add_theme_stylebox_override("panel", well)
 		_settings_panel.visibility_changed.connect(_on_settings_visibility_changed)
 	_settings_panel.open()
 
