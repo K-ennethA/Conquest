@@ -209,6 +209,9 @@ func _create_ui() -> void:
 	# HUD look, applied first; the deliberate colours / sizes go on after it.
 	ConquestTheme.apply_to(self)
 	_sub_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+	# Cinzel runs wide: a touch smaller so long names ("Eldroot, the Hollow Crown")
+	# wrap to two lines at most in the corner card.
+	_name_label.add_theme_font_size_override("font_size", 19)
 	_hp_value.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
 	_hp_value.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	for v in _stat_values.values():

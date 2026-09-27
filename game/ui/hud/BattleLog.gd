@@ -13,6 +13,8 @@ class_name BattleLog
 const MAX_LINES: int = 60
 const PANEL_WIDTH: float = 360.0
 const PANEL_HEIGHT: float = 190.0
+## Width of the collapsed header chip.
+const COLLAPSED_WIDTH: float = 250.0
 const MARGIN: float = 16.0
 ## The log lives in the TOP-LEFT corner, not the bottom-left. The bottom-left corner is
 ## already shared by the TerrainInfoPanel (hover) and TurnSystemIndicator, and the log
@@ -69,6 +71,8 @@ func _apply_layout() -> void:
 	var h: float = PANEL_HEIGHT if _expanded else COLLAPSED_HEIGHT
 	offset_top = TOP_MARGIN
 	offset_bottom = TOP_MARGIN + h
+	# Collapsed, the log is a compact chip so it never runs under the phase banner.
+	offset_right = MARGIN + (PANEL_WIDTH if _expanded else COLLAPSED_WIDTH)
 	if _log:
 		_log.visible = _expanded
 	if _header:
