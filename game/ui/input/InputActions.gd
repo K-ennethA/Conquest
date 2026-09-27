@@ -22,12 +22,12 @@ class_name InputActions
 ##  end_turn          P                             Back / Select
 ##  map_menu          Esc (only when nothing is     Start       [reserved]
 ##                    selected / nothing to cancel)
-##  cycle_next        Tab, R                        RB / R1     [reserved]
-##  cycle_prev        Shift+Tab, Q                  LB / L1     [reserved]
+##  cycle_next        Tab, R                        RB / R1     (next ready unit)
+##  cycle_prev        Shift+Tab, Q                  LB / L1     (previous ready unit)
 ##  danger_zone       Z                             L3          [reserved]
 ##  fast_forward      Shift (hold)                  R3 (hold)   [reserved]
 ##  camera_pan_*      W / A / S / D                 right stick
-##  floor_up/down     Page Up / Page Down           RT / LT     [reserved: multi-floor]
+##  floor_up/down     Page Up / Page Down           RT / LT     (multi-floor view)
 ##
 ## Arrow keys move ONLY the board cursor (the camera no longer pans on them); the
 ## camera pans on WASD, the right stick, the screen edge and mouse drag. Unit

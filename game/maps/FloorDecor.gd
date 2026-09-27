@@ -15,18 +15,20 @@ class_name FloorDecor
 ##    cell rising to the upper cell's edge), a LADDER (kind "ladder"), a vertical
 ##    ladder for same-column links, or a plank RAMP for anything else.
 ##
-## All geometry is vertex-coloured boxes merged into ONE mesh per floor (plus one
-## small mesh per link), so the cost is a handful of draw calls per map.
-## Scene layout: Tiles/Decor/Floor_<f>/Decor (MeshInstance3D) and
+## All geometry is vertex-coloured boxes merged into ONE mesh per upper tile (plus
+## one small mesh per link), so the cost is a few dozen draw calls per map.
+## Scene layout: Tiles/Decor/Floor_<f>/Decor_<x>_<y> (+ Rubble_<x>_<y> under a gap) and
 ## Tiles/Links/Link_* (one Node3D per link, meta "cutaway_floor" = its upper floor),
 ## so FloorCutaway can ghost them together with their floor.
 
-const STONE := Color(0.47, 0.45, 0.41)
-const STONE_DARK := Color(0.34, 0.32, 0.3)
-const STONE_TOP := Color(0.58, 0.55, 0.5)
+const STONE := Color(0.36, 0.34, 0.31)
+const STONE_DARK := Color(0.25, 0.235, 0.22)
+const STAIR := Color(0.5, 0.4, 0.28)
+const STAIR_TREAD := Color(0.62, 0.52, 0.38)
+const STONE_TOP := Color(0.44, 0.42, 0.38)
 const WOOD := Color(0.5, 0.34, 0.2)
 const WOOD_DARK := Color(0.36, 0.24, 0.14)
-const RUBBLE := Color(0.52, 0.5, 0.46)
+const RUBBLE := Color(0.36, 0.34, 0.31)
 
 const DIRS := [Vector2i(0, -1), Vector2i(0, 1), Vector2i(1, 0), Vector2i(-1, 0)]
 const META_FLOOR := &"cutaway_floor"
@@ -40,29 +42,35 @@ static func build_floor_decor(map: MapResource, tiles_root: Node3D) -> void:
 	decor_root.name = "Decor"
 	tiles_root.add_child(decor_root)
 	var links: Array = map.get_links()
-	var by_floor: Dictionary = {}  # floor -> ProcMesh
+	# One mesh per upper tile ("Decor_x_y", so FloorCutaway can ghost a single deck
+	# cell that hides the cursor) plus the rubble it drops on the floor below.
+	var holders: Dictionary = {}  # floor -> Node3D
 	for entry in map.tile_layout:
 		var f := MapResource.entry_floor(entry)
 		if f <= 0:
 			continue
-		if not by_floor.has(f):
-			by_floor[f] = ProcMesh.new()
-		if not by_floor.has(f - 1):
-			by_floor[f - 1] = ProcMesh.new()
-		_tile_decor(by_floor[f], by_floor[f - 1], map, entry, links)
-	for f in by_floor:
-		var pm: ProcMesh = by_floor[f]
-		if pm.is_empty():
-			continue
+		var pos := MapResource.entry_position(entry)
+		var pm := ProcMesh.new()
+		var pm_below := ProcMesh.new()
+		_tile_decor(pm, pm_below, map, entry, links)
+		_add_mesh(decor_root, holders, f, "Decor_%d_%d" % [pos.x, pos.y], pm)
+		_add_mesh(decor_root, holders, f - 1, "Rubble_%d_%d" % [pos.x, pos.y], pm_below)
+
+
+static func _add_mesh(root: Node3D, holders: Dictionary, f: int, mesh_name: String, pm: ProcMesh) -> void:
+	if pm.is_empty():
+		return
+	if not holders.has(f):
 		var holder := Node3D.new()
 		holder.name = "Floor_%d" % f
 		holder.set_meta(META_FLOOR, f)
-		decor_root.add_child(holder)
-		var mi := MeshInstance3D.new()
-		mi.name = "Decor"
-		mi.mesh = pm.commit()
-		mi.material_override = ProcMesh.material()
-		holder.add_child(mi)
+		root.add_child(holder)
+		holders[f] = holder
+	var mi := MeshInstance3D.new()
+	mi.name = mesh_name
+	mi.mesh = pm.commit()
+	mi.material_override = ProcMesh.material()
+	holders[f].add_child(mi)
 
 
 ## True for wood-styled decks (planks, dirt, ...); stone otherwise.
@@ -211,7 +219,7 @@ static func _broken_edge(pm: ProcMesh, pm_below: ProcMesh, c: Vector3, fy: float
 	for i in 6:
 		var x0 := -1.0 + i * 0.34
 		var h := ProcMesh.hash01(pos.x * 11 + i, pos.y * 13, f)
-		var reach := 0.95 + h * 0.4
+		var reach := 1.0 + h * 0.75 * float((i * 7 + pos.x) % 3 != 0)
 		var drop := -0.1 - h * 0.5
 		pm.box_oriented(o, right, d, Vector3(x0, drop - 0.25, 0.7), Vector3(x0 + 0.3, 0.02 + h * 0.06 - 0.06, reach), dark, col)
 	# Splintered stubs of the parapet / rail on each side of the break.
@@ -282,8 +290,8 @@ static func _stairs(pm: ProcMesh, lc: Vector3, fwd: Vector3, y0: float, y1: floa
 	for k in steps:
 		var z0 := s0 + run * float(k) / float(steps)
 		var top := rise * float(k + 1) / float(steps)
-		var tread := STONE_TOP if k % 2 == 0 else STONE_TOP.darkened(0.06)
-		pm.box_oriented(o, right, fwd, Vector3(-0.62, -0.05, z0), Vector3(0.62, top, 1.0), STONE, tread)
+		var tread := STAIR_TREAD if k % 2 == 0 else STAIR_TREAD.darkened(0.07)
+		pm.box_oriented(o, right, fwd, Vector3(-0.62, -0.05, z0), Vector3(0.62, top, 1.0), STAIR, tread)
 	# Side walls (stringers) with a sloped look: short stepped caps each side.
 	for side in [-1.0, 1.0]:
 		for k in steps:

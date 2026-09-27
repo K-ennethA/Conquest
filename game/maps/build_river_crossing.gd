@@ -16,7 +16,8 @@ extends SceneTree
 ##             ((3,4|5,0) -> east, (11,4|5,0) -> west);
 ##             a BROKEN timber bridge (row 8, cols 4-6 | 8-10, gap over col 7)
 ##             reached by ladders (cost 2) from (3,8,0) and (11,8,0).
-##   spawns  : five units a side on the flanks, plus each side's Petalfang archer
+##   spawns  : four units a side on the flanks, a Blightcap scout on each towpath
+##             UNDER the stone bridge, and each side's Petalfang archer
 ##             perched on its half of the broken bridge (floor 1).
 
 const OUTPUT_PATH := "res://game/maps/resources/river_crossing.tres"
@@ -104,7 +105,7 @@ static func build() -> MapResource:
 		[Vector2i(1, 4), "vineweave", 0],
 		[Vector2i(1, 5), "gem_knight", 0],
 		[Vector2i(0, 3), "tree_grunt", 0],
-		[Vector2i(0, 6), "blightcap", 0],
+		[Vector2i(5, 5), "blightcap", 0],  # a scout lurking on the towpath UNDER the bridge
 		[Vector2i(1, 7), "mycothrall", 0],
 		[Vector2i(BRIDGE_X0, BROKEN_ROW), "petalfang", 1],
 	]

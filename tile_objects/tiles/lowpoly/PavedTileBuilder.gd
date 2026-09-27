@@ -13,11 +13,11 @@ enum Style { FLAGSTONE, PLANKS }
 @export var style: Style = Style.FLAGSTONE
 
 const TOP := 0.10          # walkable surface == MapLoader.UNIT_GROUND_Y
-const STONE := Color(0.5, 0.48, 0.44)
-const STONE_ALT := Color(0.41, 0.4, 0.38)
+const STONE := Color(0.42, 0.4, 0.37)
+const STONE_ALT := Color(0.34, 0.33, 0.31)
 const WOOD := Color(0.56, 0.38, 0.22)
 const WOOD_ALT := Color(0.47, 0.31, 0.18)
-const BASE_STONE := Color(0.36, 0.34, 0.32)
+const BASE_STONE := Color(0.27, 0.25, 0.23)
 const BASE_WOOD := Color(0.36, 0.25, 0.15)
 
 

@@ -18,6 +18,8 @@ static func material() -> StandardMaterial3D:
 	if _mat == null:
 		_mat = StandardMaterial3D.new()
 		_mat.vertex_color_use_as_albedo = true
+		# Colours below are authored in sRGB (like every Color literal in the project).
+		_mat.vertex_color_is_srgb = true
 		_mat.roughness = 0.95
 		_mat.metallic = 0.0
 	return _mat

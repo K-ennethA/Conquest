@@ -1045,7 +1045,7 @@ unit_spawns = Array[Dictionary]([{
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 0,
-"position": Vector2i(0, 6),
+"position": Vector2i(5, 5),
 "respawn_interval": 1,
 "spawn_kind": "Start",
 "spawn_turn": 1,
@@ -1058,7 +1058,7 @@ unit_spawns = Array[Dictionary]([{
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 1,
-"position": Vector2i(14, 6),
+"position": Vector2i(9, 5),
 "respawn_interval": 1,
 "spawn_kind": "Start",
 "spawn_turn": 1,
@@ -1132,6 +1132,6 @@ links = Array[Dictionary]([{
 "kind": "ladder",
 "to": Vector3i(10, 8, 1)
 }])
-creation_date = "2026-09-27T05:45:17"
-last_modified = "2026-09-27T05:45:17"
+creation_date = "2026-09-27T06:02:32"
+last_modified = "2026-09-27T06:02:32"
 tags = Array[String](["multi-floor", "bridge", "river"])

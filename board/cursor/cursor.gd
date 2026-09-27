@@ -337,9 +337,10 @@ func _unit_cell(unit: Node3D) -> Vector3i:
 ## Move the cursor onto [param cell], adjusting the view floor so the cell is
 ## visible: a covered cell (under a bridge) cuts the view down to it, a cell above
 ## the view floor raises it. Used by unit cycling and turn-start positioning.
+## [param follow] = false (an AI turn) leaves both the camera and the view alone.
 func focus_cell(cell: Vector3i, follow: bool = true) -> void:
 	var board = _board()
-	if board != null and _floor_count > 1:
+	if follow and board != null and _floor_count > 1:
 		if cell.z > view_floor or FloorNav.is_covered(board, cell):
 			view_floor = cell.z
 	var g := Cells.to_grid(cell)

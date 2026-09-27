@@ -17,13 +17,22 @@ class_name FloorCutaway
 ## per-frame cost during a fade is a single material property, and zero otherwise.
 ## (Material swapping is used rather than GeometryInstance3D.transparency because
 ## the latter is ignored by the Compatibility renderer.)
+##
+## LOCAL fade: independent of the view floor, the few upper-floor deck cells that
+## hide the board cursor or the selected unit on screen are ghosted individually
+## (lighter ghost, same material trick): the cell directly above, and -- because
+## the battle camera looks from the south (+row) -- the cells one row further
+## south per floor of height difference. So a unit just north of a bridge or
+## behind a rampart stays readable without cutting the whole floor away.
 
 ## Ghost alpha of a fully cut-away floor, and where the fade starts / ends.
-const GHOST_ALPHA := 0.08
+const GHOST_ALPHA := 0.09
+## Ghost alpha of a single deck cell faded because it hides the cursor / selection.
+const LOCAL_GHOST_ALPHA := 0.22
 const GHOST_ALPHA_START := 0.6
 ## Seconds a floor takes to fade out / back in.
 const FADE_TIME := 0.18
-const GHOST_COLOR := Color(0.86, 0.9, 1.0)
+const GHOST_COLOR := Color(0.7, 0.76, 0.88)
 
 const META_OVERRIDE := &"_cutaway_prev_override"
 const META_OVERLAY := &"_cutaway_prev_overlay"
@@ -42,6 +51,12 @@ var _tweens: Dictionary = {}
 var _geo_cache: Dictionary = {}
 ## Unit -> floor it was ghosted on.
 var _ghost_units: Dictionary = {}
+## Locally ghosted upper cells (Vector3i -> true) and their shared material.
+var _local: Dictionary = {}
+var _local_mat: StandardMaterial3D = null
+## Cells the local fade keeps clear: the cursor and the selected unit.
+var _cursor_cell: Vector3i = Cells.INVALID
+var _selected_unit: Node3D = null
 
 
 func _ready() -> void:
@@ -57,6 +72,12 @@ func _ready() -> void:
 		GameEvents.unit_spawned.connect(_on_unit_spawned)
 	if CombatServices and not CombatServices.board_ready.is_connected(_on_board_ready):
 		CombatServices.board_ready.connect(_on_board_ready)
+	if GameEvents and not GameEvents.cursor_moved.is_connected(_on_cursor_moved):
+		GameEvents.cursor_moved.connect(_on_cursor_moved)
+	if GameEvents and not GameEvents.unit_selected.is_connected(_on_unit_selected):
+		GameEvents.unit_selected.connect(_on_unit_selected)
+	if GameEvents and not GameEvents.unit_deselected.is_connected(_on_unit_deselected):
+		GameEvents.unit_deselected.connect(_on_unit_deselected)
 
 
 ## The floor currently cut to (floors above it are ghosted).
@@ -77,6 +98,7 @@ func _on_board_ready() -> void:
 	_geo_cache.clear()
 	_cut.clear()
 	_ghost_units.clear()
+	_local.clear()
 	var board = CombatServices.board() if CombatServices else null
 	_floor_count = int(board.floor_count()) if board != null and board.has_method("floor_count") else 1
 	_cut_floor = _floor_count - 1
@@ -88,6 +110,7 @@ func _on_view_floor_changed(_view_floor: int, cut_floor: int, floor_count: int) 
 	for f in range(1, _floor_count):
 		_set_floor_cut(f, f > _cut_floor)
 	_apply_units()
+	_update_local()
 
 
 func _ghost_material(f: int) -> StandardMaterial3D:
@@ -113,6 +136,10 @@ func _set_floor_cut(f: int, cut: bool) -> void:
 	if running != null and running.is_valid():
 		running.kill()
 	if cut:
+		# The whole floor takes over from any locally ghosted cells on it.
+		for c in _local.keys():
+			if c.z == f:
+				_local.erase(c)
 		for n in _floor_geometry(f):
 			_ghost_node(n, mat)
 		mat.albedo_color.a = GHOST_ALPHA_START
@@ -141,6 +168,7 @@ func _restore_floor(f: int) -> void:
 	for n in _floor_geometry(f):
 		_restore_node(n)
 	_apply_units()
+	_update_local()
 
 
 ## Ghost / restore every unit according to its CURRENT floor (units move).
@@ -211,7 +239,8 @@ func _restore_node(n: Node) -> void:
 		return
 	var gi := n as GeometryInstance3D
 	# Only put the old material back if nobody replaced our ghost meanwhile.
-	if gi.material_override is StandardMaterial3D and _ghost.values().has(gi.material_override):
+	if gi.material_override is StandardMaterial3D and (_ghost.values().has(gi.material_override) \
+			or gi.material_override == _local_mat):
 		gi.material_override = gi.get_meta(META_OVERRIDE)
 		gi.material_overlay = gi.get_meta(META_OVERLAY)
 	gi.cast_shadow = gi.get_meta(META_SHADOW)
@@ -278,3 +307,79 @@ func _on_unit_moved(_unit, _from, _to) -> void:
 func _on_unit_spawned(_unit, _runtime) -> void:
 	if _floor_count > 1:
 		call_deferred("_apply_units")
+
+
+# --- Local fade (deck cells hiding the cursor / selected unit) --------------------
+
+func _on_cursor_moved(grid_pos: Vector3) -> void:
+	_cursor_cell = Cells.from_grid(grid_pos)
+	if _floor_count > 1:
+		_update_local()
+
+
+func _on_unit_selected(unit, _world_pos) -> void:
+	_selected_unit = unit if unit is Node3D else null
+	if _floor_count > 1:
+		_update_local()
+
+
+func _on_unit_deselected(_unit) -> void:
+	_selected_unit = null
+	if _floor_count > 1:
+		_update_local()
+
+
+## The upper cells that hide [param c] on screen: directly above it, and one row
+## further south (toward the camera) per floor of height difference.
+static func occluders_of(board, c: Vector3i, floor_count: int) -> Array[Vector3i]:
+	var out: Array[Vector3i] = []
+	if board == null or c == Cells.INVALID:
+		return out
+	for f in range(c.z + 1, floor_count):
+		for k in range(0, f - c.z + 1):
+			var cc := Vector3i(c.x, c.y + k, f)
+			if board.has_tile(cc):
+				out.append(cc)
+	return out
+
+
+func _update_local() -> void:
+	var board = CombatServices.board() if CombatServices else null
+	var want := {}
+	if board != null and _floor_count > 1:
+		var focus: Array[Vector3i] = [_cursor_cell]
+		if _selected_unit != null and is_instance_valid(_selected_unit):
+			focus.append(board.cell_of(_selected_unit))
+		for c in focus:
+			for cc in occluders_of(board, c, _floor_count):
+				if not bool(_cut.get(cc.z, false)):
+					want[cc] = true
+	for cc in _local.keys():
+		if not want.has(cc):
+			_local.erase(cc)
+			for n in _cell_geometry(cc):
+				_restore_node(n)
+	if want.is_empty():
+		return
+	if _local_mat == null:
+		_local_mat = _ghost_material(-1).duplicate()
+		_local_mat.albedo_color.a = LOCAL_GHOST_ALPHA
+	for cc in want:
+		if _local.has(cc):
+			continue
+		_local[cc] = true
+		for n in _cell_geometry(cc):
+			_ghost_node(n, _local_mat)
+
+
+## Tile + decor geometry of one upper cell.
+func _cell_geometry(cc: Vector3i) -> Array:
+	var out: Array = []
+	var tiles := _tiles_root()
+	if tiles == null:
+		return out
+	for path in ["Floor_%d/Tile_%d_%d_%d" % [cc.z, cc.x, cc.y, cc.z], "Decor/Floor_%d/Decor_%d_%d" % [cc.z, cc.x, cc.y]]:
+		var n := tiles.get_node_or_null(path)
+		if n != null:
+			out.append_array(_collect(n))
+	return out
