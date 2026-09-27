@@ -37,6 +37,10 @@ var battle_log: BattleLog = null
 # Upper-centre action banner ("Eldroot used Forest Barrage!") that flashes when any unit
 # acts, so the enemy/AI turn is legible before per-move VFX exist. Its own high CanvasLayer.
 var action_announcer: ActionAnnouncer = null
+# Fire-Emblem map menu (Units / Objective / Settings / End Turn / Title) and the
+# persistent objective chip under the turn indicator.
+var map_menu: MapMenu = null
+var objective_chip: ObjectiveChip = null
 
 func _ready() -> void:
 	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
@@ -73,6 +77,9 @@ func _ready() -> void:
 	# AFTER theming so its explicit fonts/colours survive the font-override sweep.
 	_build_action_announcer()
 
+	# Map menu + objective chip: self-styled, so also mounted after theming.
+	_build_map_menu()
+
 	is_layout_initialized = true
 
 func _build_turn_transition() -> void:
@@ -92,6 +99,17 @@ func _build_action_announcer() -> void:
 	action_announcer = ActionAnnouncer.new()
 	action_announcer.name = "ActionAnnouncer"
 	add_child(action_announcer)
+
+func _build_map_menu() -> void:
+	"""Mount the objective chip (under the turn indicator) and the map menu overlay."""
+	if center_top_container:
+		objective_chip = ObjectiveChip.new()
+		center_top_container.add_child(objective_chip)
+	map_menu = MapMenu.new()
+	map_menu.unit_actions_panel = unit_actions_panel
+	map_menu.settings_panel = settings_panel
+	map_menu.turn_transition = turn_transition
+	add_child(map_menu)
 
 func _apply_theme() -> void:
 	"""Apply the amber ConquestTheme to this HUD subtree (panels, buttons, text)."""
@@ -271,6 +289,8 @@ func is_mouse_over_ui(mouse_position: Vector2) -> bool:
 	# The Settings overlay covers the whole screen while open, so any position is
 	# "over UI" -- keep board/camera input from leaking through underneath it.
 	if settings_panel and settings_panel.is_open():
+		return true
+	if map_menu and map_menu.is_open():
 		return true
 
 	# The Settings button itself is part of the HUD chrome.

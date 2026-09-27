@@ -111,6 +111,9 @@ func _ready() -> void:
 	# CombatServices.board_ready and stays empty until a board/effects exist.
 	_setup_tile_effect_overlay()
 
+	# Fire Emblem danger zone (combined enemy threat, toggled with `danger_zone`).
+	_setup_danger_zone_overlay()
+
 	# Load the selected map or default map
 	await _load_selected_map()
 	
@@ -556,6 +559,23 @@ func _setup_tile_effect_overlay() -> void:
 
 	_tile_effect_overlay = TileEffectOverlay.new()
 	scene_root.add_child(_tile_effect_overlay)
+
+func _setup_danger_zone_overlay() -> void:
+	"""Add the DangerZoneOverlay (3D, scene root). It owns its toggle input and
+	recomputes itself off GameEvents / board_ready / turn starts."""
+	var scene_root := get_tree().current_scene
+	if scene_root == null or scene_root.get_node_or_null("DangerZoneOverlay") != null:
+		return
+	scene_root.add_child(DangerZoneOverlay.new())
+
+## The current map's compiled objectives (null before a map loads). Read by the HUD
+## objective chip and the map menu's Objective page.
+func get_game_mode_rules() -> GameModeRules:
+	return _game_mode_rules
+
+## Full rounds elapsed, the count Survive objectives use (HUD progress).
+func get_objective_rounds_done() -> int:
+	return _current_win_turn()
 
 # --- Runtime spawn scheduler ------------------------------------------------
 
