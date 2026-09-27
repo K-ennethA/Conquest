@@ -28,7 +28,6 @@ var current_material: Material
 var highlight_material: StandardMaterial3D
 
 # Effect system integration
-var effect_manager: TileEffectManager
 var active_effects: Array[TileEffect] = []
 var effect_particles: GPUParticles3D
 var effect_overlay: MeshInstance3D
@@ -544,25 +543,3 @@ func process_turn_effects(turn_type: String = "start"):
 	# Remove expired effects
 	for effect in effects_to_remove:
 		remove_effect(effect)
-
-# Factory Methods for Common Tile Configurations
-static func create_fire_tile() -> Tile:
-	var tile = Tile.new()
-	tile.tile_type = TileType.LAVA
-	var fire_effect = TileEffectManager.create_fire_tile(2, 5)
-	tile.add_effect(fire_effect)
-	return tile
-
-static func create_healing_tile() -> Tile:
-	var tile = Tile.new()
-	tile.tile_type = TileType.SACRED_GROUND
-	var healing_effect = TileEffectManager.create_healing_spring(3, -1)
-	tile.add_effect(healing_effect)
-	return tile
-
-static func create_trap_tile() -> Tile:
-	var tile = Tile.new()
-	tile.tile_type = TileType.NORMAL
-	var trap_effect = TileEffectManager.create_trap_tile(3)
-	tile.add_effect(trap_effect)
-	return tile
