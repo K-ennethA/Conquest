@@ -144,6 +144,35 @@ func set_links(links: Array) -> void:
 	refresh_floors()
 
 
+## Build this adapter's terrain + floor structure straight from a [MapResource],
+## WITHOUT a scene: a fresh registry (every floor-0 column, plus each upper-floor
+## entry, resolved exactly like MapLoader does), the upper-floor present-cell set,
+## and the map's links (explicit + stair-generated). For headless tools, AI
+## simulations and tests; the live game gets the same data via CombatServices.
+## Returns self for chaining.
+func configure_from_map(map: MapResource) -> BoardAdapter:
+	var registry := {}
+	var present := {}
+	for x in range(map.width):
+		for y in range(map.height):
+			var res0 := MapLoader.resolve_tile_resource_for_entry(map.get_tile_at_position(Vector2i(x, y)))
+			if res0 != null:
+				registry[Vector3i(x, y, 0)] = res0
+	for entry in map.tile_layout:
+		var f := MapResource.entry_floor(entry)
+		if f <= 0:
+			continue
+		var cell := MapResource.entry_cell(entry)
+		present[cell] = true
+		var res := MapLoader.resolve_tile_resource_for_entry(entry)
+		if res != null:
+			registry[cell] = res
+	_tile_registry = registry
+	_present_cells = present
+	set_links(map.get_links())
+	return self
+
+
 ## Canonical form of a link entry, or {} when its endpoints are unreadable.
 static func normalize_link(raw: Dictionary) -> Dictionary:
 	var a := Cells.from_variant(raw.get("from", null))

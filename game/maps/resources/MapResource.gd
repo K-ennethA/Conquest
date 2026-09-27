@@ -801,8 +801,9 @@ static func import_from_json(json_string: String) -> MapResource:
 	resource.difficulty = gameplay.get("difficulty", "Normal")
 	resource.map_type = gameplay.get("map_type", "Skirmish")
 	resource.turn_limit = gameplay.get("turn_limit", 0)
-	resource.victory_conditions = gameplay.get("victory_conditions", ["Eliminate All Enemies"])
-	resource.special_rules = gameplay.get("special_rules", [])
+	# Typed-array properties: .assign() converts the untyped JSON arrays.
+	resource.victory_conditions.assign(gameplay.get("victory_conditions", ["Eliminate All Enemies"]))
+	resource.special_rules.assign(gameplay.get("special_rules", []))
 	
 	# Visual
 	var visual = data.get("visual", {})
@@ -830,7 +831,7 @@ static func import_from_json(json_string: String) -> MapResource:
 	
 	# Metadata
 	var metadata = data.get("metadata", {})
-	resource.tags = metadata.get("tags", [])
+	resource.tags.assign(metadata.get("tags", []))
 	resource.preview_image_path = metadata.get("preview_image_path", "")
 	
 	return resource

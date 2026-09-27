@@ -9,7 +9,10 @@ class_name LineOfSight
 ##     ceiling lies between them -- i.e. no [code]board.is_solid_ceiling[/code] cell on
 ##     floors (lower, upper]. The upper unit stands on such a tile, so in practice
 ##     you cannot shoot straight through the floor you (or your target) stand on.
-##  3. Otherwise a segment is traced between the two cells' EYE points (cell center,
+##  3. COVER: between different floors, a solid ceiling directly over the LOWER
+##     endpoint (any floor above it up to the higher endpoint's floor) blocks the
+##     shot -- a unit under a bridge deck is covered from archers standing on it.
+##  4. Otherwise a segment is traced between the two cells' EYE points (cell center,
 ##     [constant EYE_HEIGHT] above the floor's tile) in world space and sampled:
 ##     a. WALLS: a sample inside a column other than the two endpoint columns whose
 ##        cell at the sample's floor band [code]blocks_los_at[/code] (walls, trees)
@@ -43,6 +46,16 @@ static func has_line_of_sight(board, from: Vector3i, to: Vector3i, check_walls: 
 			if _solid_ceiling(board, Vector3i(from.x, from.y, k)):
 				return false
 		return true
+
+	# Rule 3 (COVER): a solid ceiling over the LOWER endpoint, anywhere up to the
+	# higher endpoint's floor, blocks plunging / upward fire outright -- a unit under
+	# a bridge is covered from archers on it, and cannot shoot up through it either.
+	if from.z != to.z:
+		var low := from if from.z < to.z else to
+		var high_z := maxi(from.z, to.z)
+		for k2 in range(low.z + 1, high_z + 1):
+			if _solid_ceiling(board, Vector3i(low.x, low.y, k2)):
+				return false
 
 	var p0 := _eye(from)
 	var p1 := _eye(to)

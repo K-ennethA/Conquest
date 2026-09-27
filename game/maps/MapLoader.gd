@@ -345,7 +345,13 @@ const TYPE_TO_TILE_ID: Dictionary = {
 	"SACRED_GROUND": &"sacred_ground",
 }
 
-func _resolve_tile_resource(resource_path: String, tile_type: String, tile_id = "") -> TileResource:
+## The [TileResource] a map tile ENTRY resolves to (same rules MapLoader uses when
+## building the scene), or null. Static so headless tools / tests can build a
+## terrain registry without a scene (see [method BoardAdapter.configure_from_map]).
+static func resolve_tile_resource_for_entry(entry: Dictionary) -> TileResource:
+	return _resolve_tile_resource(str(entry.get("tile_resource_path", "")), str(entry.get("tile_type", "NORMAL")), entry.get("tile_id", ""))
+
+static func _resolve_tile_resource(resource_path: String, tile_type: String, tile_id = "") -> TileResource:
 	"""Resolve the TileResource for a tile from its map data.
 
 	Resolution order, most durable reference first:
