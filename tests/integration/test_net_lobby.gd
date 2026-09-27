@@ -72,13 +72,14 @@ func test_start_requires_everyone_ready_and_is_single_shot() -> void:
 	var client_started := []
 	_hs().match_started.connect(func(cfg): host_started.append(cfg))
 	_cs().match_started.connect(func(cfg): client_started.append(cfg))
-	assert_true(_hs().start_match(1234), "start succeeds once")
-	assert_false(_hs().start_match(1234), "second start is refused (single start guard)")
+	assert_true(_hs().start_match(), "start succeeds once")
+	assert_false(_hs().start_match(), "second start is refused (single start guard)")
 	await H.wait_until(get_tree(), func(): return client_started.size() == 1)
 	assert_eq(host_started.size(), 1, "host got match_started exactly once")
 	assert_eq(client_started.size(), 1, "client got match_started exactly once")
 	var cfg: Dictionary = client_started[0]
-	assert_eq(int(cfg["seed"]), 1234, "seed synced")
+	assert_eq(int(cfg["seed"]), int(host_started[0]["seed"]), "setup seed (derived from the RNG commitments) agrees")
+	assert_eq(cfg["anchors"].size(), 2, "host + client committed a hash-chain anchor")
 	assert_eq(cfg["map_path"], "res://x.tres", "map synced")
 	assert_eq(String(cfg["slots"][1]), "Clienty", "slot assignment synced")
 	assert_true(_cs().is_in_match(), "client is in match")

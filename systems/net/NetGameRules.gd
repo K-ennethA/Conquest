@@ -20,14 +20,22 @@ class_name NetGameRules
 ## mark_action_completed; turn_system.mark_unit_acted; end_turn_manually), so a
 ## network move behaves exactly like a hotseat move.
 ##
-## DETERMINISM: combat rolls come from an RNG seeded from (match_seed, seq) and
-## installed as [member CombatServices.match_rng] for the whole apply, so the
-## executor AND secondary contexts (abilities, status ticks, tile effects that
-## build their own MoveContext) roll identically on every peer.
+## DETERMINISM + FAIR RANDOMNESS: every accepted action carries a 64-bit seed
+## ([constant NetProtocol.KEY_RNG]) that each peer derived itself from the
+## verified commit-reveal shares of that action ([NetCommitReveal], stamped by
+## [NetSession]). The generator seeded from it is passed to the executor AND
+## installed as [member CombatServices.match_rng], where it STAYS until the next
+## action -- so secondary contexts (abilities, status ticks, tile effects, and the
+## turn-start ticks deferred after an END_TURN / last WAIT) all draw from the same
+## verified stream and roll identically on every peer. Before the first action,
+## [method install_setup_rng] installs a generator from the public setup seed
+## (derived from the commitments) for anything rolled while the board is built.
 
 ## Emitted on every peer after an accepted action was applied.
 signal action_applied(action: Dictionary, result: Dictionary)
 
+## Public setup seed (config "seed", derived from the RNG commitments). Only
+## seeds rolls made BEFORE the first accepted action.
 var match_seed: int = 0
 var _board_provider: Callable
 var _turn_provider: Callable
@@ -191,20 +199,32 @@ static func has_eligible_unit_at(b, move, caster, aim: Vector3i) -> bool:
 # Apply (every peer, identical)
 # ---------------------------------------------------------------------------
 
-## The RNG for accepted action [param seq]: a pure function of (match_seed, seq)
-## so every peer rolls the same numbers for the same action.
-func rng_for(seq: int) -> RandomNumberGenerator:
+## The RNG for an accepted action: a pure function of its stamped seed
+## ([constant NetProtocol.KEY_RNG]). An action without one (offline replays /
+## tests only -- NetSession always stamps) falls back to (match_seed, seq).
+func rng_for_action(action: Dictionary) -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([match_seed, seq])
+	if action.has(NetProtocol.KEY_RNG):
+		rng.seed = int(action[NetProtocol.KEY_RNG])
+	else:
+		rng.seed = hash([match_seed, int(action.get(NetProtocol.KEY_SEQ, 0))])
 	return rng
+
+
+## Install the setup generator (public seed) for rolls made while the match is
+## being set up, before any accepted action. Call on every peer before the turn
+## system starts.
+static func install_setup_rng(setup_seed: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = setup_seed
+	_install_rng(rng)
 
 
 ## Apply an ACCEPTED action. Runs on every peer in host order. Never validates
 ## (the host already did) beyond null-safety, so peers cannot diverge on a
 ## re-check that reads presentation state.
 func apply_action(action: Dictionary) -> Dictionary:
-	var seq: int = int(action.get(NetProtocol.KEY_SEQ, 0))
-	var rng := rng_for(seq)
+	var rng := rng_for_action(action)
 	_install_rng(rng)
 	var result := _apply(action, rng)
 	# Units that appeared as a consequence (summons, reinforcements) get ids now,

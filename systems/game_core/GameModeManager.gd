@@ -46,6 +46,60 @@ func _ready() -> void:
 		ns.desync_detected.connect(_on_desync_detected)
 	if PlayerManager:
 		PlayerManager.game_state_changed.connect(_on_game_state_changed)
+	# Headless roles chosen on the command line (after "--"): a dedicated server
+	# or (dev / CI) a scripted network client. Deferred: the main scene is not
+	# in the tree yet while autoloads run _ready.
+	var args := OS.get_cmdline_user_args()
+	if args.has("--server") or OS.has_feature("dedicated_server"):
+		call_deferred("_boot_dedicated_server", args)
+	elif args.has("--net-bot"):
+		call_deferred("_boot_net_bot", args)
+
+
+# ---------------------------------------------------------------------------
+# Headless roles
+# ---------------------------------------------------------------------------
+
+const NET_BOT_SCRIPT := "res://dev_scripts/net_bot_client.gd"
+
+var _server: DedicatedServer = null
+
+
+## True in a dedicated-server process (no seat, no menus).
+func is_dedicated_server_process() -> bool:
+	return _server != null
+
+
+func _boot_dedicated_server(args: PackedStringArray) -> void:
+	# No menus on a server: drop the main scene; battles are loaded per match.
+	if get_tree().current_scene != null:
+		get_tree().unload_current_scene()
+	_server = DedicatedServer.new()
+	_server.name = "DedicatedServer"
+	get_tree().root.add_child(_server)
+	if _server.start(args, _session()) != OK:
+		get_tree().quit(1)
+
+
+func _boot_net_bot(args: PackedStringArray) -> void:
+	if not ResourceLoader.exists(NET_BOT_SCRIPT):
+		push_error("--net-bot: %s missing" % NET_BOT_SCRIPT)
+		get_tree().quit(1)
+		return
+	var bot: Node = load(NET_BOT_SCRIPT).new()
+	bot.name = "NetBotClient"
+	get_tree().root.add_child(bot)
+	bot.call("start", args)
+
+
+## Dedicated server: forget the finished match (the session itself stays open).
+func reset_server_match() -> void:
+	_rules = null
+	_match_finished = false
+	if GameSettings != null and GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
+		GameSettings.set_game_mode(GameSettings.GameMode.VERSUS)
+	if CombatServices != null:
+		CombatServices.match_rng = null
 
 
 func _session() -> NetSessionNode:
@@ -140,6 +194,10 @@ func _on_match_started(config: Dictionary) -> void:
 	if _saved_ai_difficulty < 0:
 		_saved_ai_difficulty = GameSettings.ai_difficulty
 	GameSettings.ai_difficulty = 1
+	# Anything rolled while the battle is set up (before the first accepted
+	# action) uses the public setup seed; every accepted action then installs its
+	# own commit-reveal generator (see NetGameRules / NetCommitReveal).
+	NetGameRules.install_setup_rng(int(config.get("seed", 1)))
 	get_tree().change_scene_to_file(GAME_WORLD_SCENE)
 
 
@@ -225,10 +283,20 @@ func _on_match_aborted(reason: String) -> void:
 		# The battle was already decided; keep the end screen up, just drop the link.
 		end_network_session()
 		return
-	var msg := "Opponent disconnected. The match has ended." if reason == "opponent_disconnected" \
-		else "Lost connection to the host. The match has ended."
-	end_network_session(msg)
+	if is_dedicated_server_process():
+		return  # DedicatedServer reopens the lobby itself
+	end_network_session(ABORT_TEXT.get(reason, "Lost connection to the host. The match has ended."))
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+
+
+const ABORT_TEXT := {
+	"opponent_disconnected": "Opponent disconnected. The match has ended.",
+	"host_disconnected": "Lost connection to the host. The match has ended.",
+	"rng_verification_failed": "A player's dice rolls failed verification (possible tampering). The match has ended.",
+	"host_verification_failed": "The host sent dice rolls or actions that failed verification (possible tampering). The match has ended.",
+	"reveal_timeout": "A player stopped responding. The match has ended.",
+	"match_complete": "The server closed the match.",
+}
 
 
 func _on_desync_detected(seq: int, _local: int, _host: int) -> void:

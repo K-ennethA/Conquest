@@ -27,6 +27,10 @@ const KEY_TYPE := "type"        ## int, one of [enum Action]
 const KEY_DATA := "data"        ## Dictionary payload
 const KEY_ACTOR := "actor"      ## int, player slot that issued the action (host-stamped)
 const KEY_SEQ := "seq"          ## int, host-assigned order (0 on the wire from a client)
+## int, the action's 64-bit RNG seed. NEVER read from the wire: every peer stamps
+## it locally from the VERIFIED commit-reveal shares (see NetCommitReveal) just
+## before applying; senders strip it.
+const KEY_RNG := "rng"
 
 ## Payload keys.
 const K_UNIT := "unit_id"
