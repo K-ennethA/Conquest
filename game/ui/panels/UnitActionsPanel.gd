@@ -72,6 +72,13 @@ var _tentative_origin_world: Vector3 = Vector3.ZERO
 # (a mouse BACK on an earlier frame never matches the current frame).
 var _popup_closed_frame: int = -1
 
+# Fire-Emblem path arrow: the resolver that produced the CURRENT blue range (kept so
+# path_to() can answer "how would I walk to the hovered cell" without re-flooding),
+# the cell it was flooded from, and whether an arrow is on the board right now.
+var _range_resolver: MovementResolver = null
+var _range_origin: Vector3i = Cells.INVALID
+var _path_shown: bool = false
+
 func _ready() -> void:
 	# Ensure proper mouse handling
 	mouse_filter = Control.MOUSE_FILTER_STOP  # Make sure panel stops mouse events
@@ -436,6 +443,7 @@ func _on_unit_deselected(unit: Unit) -> void:
 func _clear_movement_range() -> void:
 	"""Clear movement range visualization"""
 	movement_range_tiles.clear()
+	_path_shown = false
 	GameEvents.movement_range_cleared.emit()
 
 func _clear_unit_header() -> void:
@@ -860,6 +868,12 @@ func _on_cancel_pressed() -> void:
 	elif selected_unit:
 		GameEvents.unit_deselected.emit(selected_unit)
 
+func request_end_player_turn() -> void:
+	"""Public End Turn entry (the map menu). Same guarded path as the End Player Turn
+	button: local-human only, and multiplayer submits the network action."""
+	_on_end_player_turn_pressed()
+
+
 func request_cancel() -> void:
 	"""Public entry point for an external cancel request (the board cursor's
 	right-click back-out). Only acts while a unit is selected; routes through the
@@ -1117,7 +1131,13 @@ func _show_inspect_movement_range() -> void:
 	var cells: Array[Vector3i] = MovementResolver.new().reachable_cells(origin, profile, board, selected_unit)
 	# Visual only -- the move-target set stays empty so the enemy can never be commanded.
 	movement_range_tiles = []
-	GameEvents.movement_range_calculated.emit(_cells_to_grid_tiles(cells))
+	_range_resolver = null
+	# Include its own cell (FE shows the inspected unit standing in its blue range).
+	var shown: Array[Vector3i] = [origin]
+	shown.append_array(cells)
+	GameEvents.movement_range_calculated.emit(_cells_to_grid_tiles(shown))
+	# FE threat read: the red cells it could strike from anywhere it can reach.
+	_emit_attack_fringe(origin, cells, board)
 
 
 func _try_show_movement_range_via_resolver() -> bool:
@@ -1140,8 +1160,11 @@ func _try_show_movement_range_via_resolver() -> bool:
 	# origin cell (Vector3i(col, row, floor)) straight from the board.
 	var origin: Vector3i = board.cell_of(selected_unit)
 	# Pass the unit so a multi-cell unit (e.g. a 2x2 boss) only gets cells where its
-	# WHOLE footprint fits. Omitting it would resolve every unit as 1x1.
-	var cells: Array[Vector3i] = MovementResolver.new().reachable_cells(origin, profile, board, selected_unit)
+	# WHOLE footprint fits. Omitting it would resolve every unit as 1x1. The resolver is
+	# kept: its path_to() drives the path arrow and the walk animation.
+	_range_resolver = MovementResolver.new()
+	_range_origin = origin
+	var cells: Array[Vector3i] = _range_resolver.reachable_cells(origin, profile, board, selected_unit)
 
 	# Convert each cell into the Vector3(col, floor, row) grid-coord form the
 	# visualizer + GameEvents.movement_range_calculated + downstream validation expect.
@@ -1149,7 +1172,42 @@ func _try_show_movement_range_via_resolver() -> bool:
 
 	# Keep the same highlight flow: emit the calculated range for the visualizer.
 	GameEvents.movement_range_calculated.emit(movement_range_tiles)
+	_path_shown = false
+	# FE red attack fringe around the blue range.
+	_emit_attack_fringe(origin, cells, board)
+	# The cursor may already rest on a reachable cell (e.g. re-shown after an undo).
+	_refresh_path_preview(_last_cursor_tile)
 	return true
+
+
+func _emit_attack_fringe(origin: Vector3i, reachable: Array[Vector3i], board) -> void:
+	"""Publish the red attack fringe for selected_unit: every cell its offensive moves
+	could hit from its own cell or any reachable one, minus those cells (ThreatResolver)."""
+	if selected_unit == null or board == null:
+		return
+	var stands: Array = [origin]
+	stands.append_array(reachable)
+	var fringe := ThreatResolver.fringe_from(stands, selected_unit, board)
+	GameEvents.attack_fringe_calculated.emit(_cells_to_grid_vec3(fringe))
+
+
+func _refresh_path_preview(grid_pos: Vector3) -> void:
+	"""FE path arrow: while the selected (commandable) unit's blue range is up, draw
+	its route to the hovered cell (MovementResolver.path_to of the range's own flood).
+	Hidden off-range, on the unit itself, while aiming, or once a move is staged."""
+	var route: Array = []
+	if selected_unit != null and _range_resolver != null and not movement_range_tiles.is_empty() \
+			and not is_targeting_move() and not _tentative_active:
+		var board = CombatServices.board()
+		if board != null and board.cell_of(selected_unit) == _range_origin and _is_grid_pos_in_range(grid_pos):
+			route = _cells_to_grid_vec3(_range_resolver.path_to(Cells.from_grid(grid_pos)))
+	if route.size() < 2:
+		if _path_shown:
+			_path_shown = false
+			GameEvents.path_preview_updated.emit([])
+		return
+	_path_shown = true
+	GameEvents.path_preview_updated.emit(route)
 
 
 func _cells_to_grid_tiles(cells: Array[Vector3i]) -> Array[Vector3]:
@@ -1193,18 +1251,12 @@ func _try_execute_move_via_board(destination: Vector3) -> bool:
 	if not _is_grid_pos_in_range(destination):
 		return true  # handled (rejected); do NOT fall back to BFS for a character unit
 
-	var old_world_pos: Vector3 = selected_unit.global_position
 	var old_cell: Vector3i = board.cell_of(selected_unit)
 
 	# Authoritative board move: snaps the unit onto the cell center (preserving its
-	# height). We then rewind the world position so the existing tween can animate
-	# from the old spot to the cell's world center.
+	# height, lifted/lowered by whole floors). The unit node stays there; UnitAnimator
+	# hears unit_moved below and walks the MODEL cell by cell along the route.
 	board.move_unit(selected_unit, dest_cell)
-
-	# move_unit already set the correct height (lifted/lowered by whole floors).
-	var new_world_pos: Vector3 = selected_unit.global_position
-	selected_unit.global_position = old_world_pos
-	_animate_unit_movement(selected_unit, old_world_pos, new_world_pos)
 
 	# unit_moved contract: Vector3(col, floor, row) grid coords.
 	var old_grid_pos := Cells.to_grid(old_cell)
@@ -1547,6 +1599,10 @@ func _begin_tentative_move(destination: Vector3) -> void:
 	var dest_cell: Vector3i = _grid_tile_to_cell(destination)
 	_tentative_origin_cell = board.cell_of(selected_unit)
 	_tentative_origin_world = selected_unit.global_position
+	# The route the range flood found (walks through allies, climbs stairs).
+	var route: Array[Vector3i] = []
+	if _range_resolver != null and _range_origin == _tentative_origin_cell:
+		route = _range_resolver.path_to(dest_cell)
 	_tentative_dest_cell = dest_cell
 	_tentative_unit = selected_unit
 	_tentative_active = true
@@ -1555,6 +1611,10 @@ func _begin_tentative_move(destination: Vector3) -> void:
 	# the visual position AND makes board.cell_of(unit) == dest immediately, with no
 	# tween race: every subsequent cell query reads the tentative position at once.
 	board.move_unit(selected_unit, dest_cell)
+	# Walk the MODEL along the route (visual only -- the unit node is already on the
+	# destination, so every cell query above stays exact). Speed / on-off follow the
+	# Battle Speed and Animations settings; fast-forward speeds it up.
+	_walk_unit(selected_unit, route)
 
 	# The post-move action menu replaces the movement-range highlight.
 	_clear_movement_range()
@@ -1600,6 +1660,11 @@ func _commit_tentative_move() -> void:
 
 	var from_grid := Cells.to_grid(origin_cell)
 	var to_grid := Cells.to_grid(dest_cell)
+	# The walk already played when the move was staged; tell the animator the unit is
+	# home so unit_moved does not replay a glide from the origin.
+	var animator := _unit_animator()
+	if animator != null:
+		animator.sync_position(unit)
 	GameEvents.unit_moved.emit(unit, from_grid, to_grid)
 
 	var tree = get_tree()
@@ -1635,6 +1700,10 @@ func _revert_tentative_move() -> void:
 		# No board (shouldn't happen for a staged tentative move): fall back to the
 		# remembered world position.
 		unit.global_position = origin_world
+	# Cut any walk still playing and put the model back on the (restored) unit.
+	var animator := _unit_animator()
+	if animator != null:
+		animator.stop_motion(unit)
 
 	var tree = get_tree()
 	var visual_manager = null
@@ -1642,6 +1711,26 @@ func _revert_tentative_move() -> void:
 		visual_manager = tree.current_scene.get_node_or_null("UnitVisualManager")
 	if visual_manager:
 		visual_manager.update_all_unit_visuals()
+
+
+func _unit_animator() -> Node:
+	"""The UnitAnimator autoload (null in bare harnesses)."""
+	var tree := get_tree()
+	if tree == null or tree.root == null:
+		return null
+	var a := tree.root.get_node_or_null("UnitAnimator")
+	return a if a != null and a.has_method("walk_path") else null
+
+
+func _walk_unit(unit: Unit, route: Array[Vector3i]) -> void:
+	"""Animate [param unit]'s model along [param route] to where the unit now stands."""
+	var animator := _unit_animator()
+	if animator == null:
+		return
+	if route.size() >= 2:
+		animator.walk_path(unit, route)
+	else:
+		animator.stop_motion(unit)
 
 
 func _clear_tentative_state() -> void:
@@ -1929,6 +2018,7 @@ func _on_cursor_moved_forecast(tile_position: Vector3) -> void:
 	feel as the player sweeps the cursor. Purely additive: reads only."""
 	_last_cursor_tile = tile_position
 	_refresh_move_forecast(tile_position)
+	_refresh_path_preview(tile_position)
 
 func _refresh_move_forecast(grid_pos: Vector3) -> void:
 	"""Show the forecast for the current move against an eligible ENEMY at grid_pos
@@ -1973,7 +2063,7 @@ func _refresh_move_forecast(grid_pos: Vector3) -> void:
 		combat_forecast_panel.hide_forecast()
 		return
 
-	combat_forecast_panel.show_forecast(selected_unit, enemy, move)
+	combat_forecast_panel.show_forecast(selected_unit, enemy, move, board)
 
 # True while this panel has an AoE footprint on the board from the live aim preview,
 # so an illegal aim clears it exactly once instead of re-emitting every cursor step.
