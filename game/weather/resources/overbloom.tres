@@ -1,0 +1,69 @@
+[gd_resource type="Resource" script_class="WeatherResource" format=3]
+
+[ext_resource type="Script" path="res://game/weather/WeatherResource.gd" id="1_wres"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="2_abres"]
+[ext_resource type="Script" path="res://game/abilities/UnitElementCondition.gd" id="3_elem"]
+[ext_resource type="Script" path="res://game/abilities/NotCondition.gd" id="4_not"]
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="5_mvefx"]
+[ext_resource type="Script" path="res://game/combat/effects/HealEffect.gd" id="6_heal"]
+
+[sub_resource type="Resource" id="Resource_nature"]
+script = ExtResource("3_elem")
+elements = Array[StringName]([&"nature"])
+
+[sub_resource type="Resource" id="Resource_heal_fx"]
+script = ExtResource("6_heal")
+amount = 0
+percent_of_max_health = 0.1
+
+[sub_resource type="Resource" id="Resource_bloom_heal"]
+script = ExtResource("2_abres")
+id = &"overbloom_regrowth"
+display_name = "Regrowth"
+description = "Nature units restore 1/10 max HP at their turn start."
+trigger = 1
+condition = SubResource("Resource_nature")
+effects = Array[ExtResource("5_mvefx")]([SubResource("Resource_heal_fx")])
+
+[sub_resource type="Resource" id="Resource_not_nature"]
+script = ExtResource("4_not")
+condition = SubResource("Resource_nature")
+
+[sub_resource type="Resource" id="Resource_pollen"]
+script = ExtResource("2_abres")
+id = &"overbloom_pollen"
+display_name = "Pollen Haze"
+description = "Non-Nature units are dazed by pollen: -5 evasion."
+trigger = 0
+condition = SubResource("Resource_not_nature")
+rule_modifiers = {
+"stat_evasion": -5
+}
+
+[resource]
+script = ExtResource("1_wres")
+id = &"overbloom"
+display_name = "Overbloom"
+icon = "✿"
+color = Color(0.98, 0.56, 0.82, 1)
+description = "The wilds erupt in bloom. Nature units heal 1/10 max HP each turn; Nature moves x1.15 damage; pollen gives non-Nature units -5 evasion."
+element_damage_scale = {
+&"nature": 1.15
+}
+stat_rules = Array[ExtResource("2_abres")]([SubResource("Resource_pollen")])
+turn_start_rules = Array[ExtResource("2_abres")]([SubResource("Resource_bloom_heal")])
+fx_kind = &"bloom"
+sun_color = Color(1, 0.93, 0.86, 1)
+sun_energy_scale = 1.1
+ambient_scale = 1.15
+ambient_tint = Color(1, 0.92, 0.98, 1)
+fog_color = Color(0.96, 0.84, 0.92, 1)
+fog_density = 0.006
+glow_scale = 1.6
+glow_bloom = 0.1
+saturation = 1.3
+brightness = 1.04
+contrast = 1.0
+sky_tint = Color(1.0, 0.9, 1.0, 1)
+shader_bloom = 1.0
+wind_strength = 0.8

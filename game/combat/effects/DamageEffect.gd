@@ -115,6 +115,11 @@ func apply(ctx: MoveContext) -> void:
 		var element_scale: float = ElementChart.damage_scale_for(ctx.move, target, ctx.board)
 		if not is_equal_approx(element_scale, 1.0):
 			dealt = maxi(1, int(round(float(dealt) * element_scale)))
+		# 4b. WEATHER: the active weather's multiplier for the move's element (Bright
+		#     Sun fire x1.3, Rain water x1.3 ...). Same step in MoveExecutor.preview_vs.
+		var weather_scale: float = Weather.damage_scale_for(ctx.move)
+		if not is_equal_approx(weather_scale, 1.0):
+			dealt = maxi(1, int(round(float(dealt) * weather_scale)))
 		# 5. HEIGHT ADVANTAGE (multi-floor): attacker above / below the target. Exactly
 		#    1.0 on a shared floor. Mirrored in MoveExecutor.preview_vs at this step.
 		var height_scale: float = Elevation.damage_scale_for(ctx.caster, target, ctx.board)
@@ -466,9 +471,11 @@ static func _mitigate_for(raw: int, target, category_arg) -> int:
 			return maxi(1, raw)
 		CombatTypes.DamageCategory.MAGICAL:
 			var res := _stat_or(target, "magic_defense", _stat_or(target, "defense", 0))
+			res += Weather.stat_bonus_for(target, "magic_defense")
 			return maxi(1, raw - res)
 		_:  # PHYSICAL
-			return maxi(1, raw - _stat_or(target, "defense", 0))
+			# + the weather's combat-time defense bonus (Desert Storm: earth units).
+			return maxi(1, raw - (_stat_or(target, "defense", 0) + Weather.stat_bonus_for(target, "defense")))
 
 
 ## Resolve ONE guaranteed hazard hit against [param target] and return the HP it

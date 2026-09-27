@@ -313,4 +313,13 @@ func state_digest() -> int:
 	rows.sort_custom(func(a, b): return String(a[0]) < String(b[0]))
 	var ts = turn_system()
 	var turn_no: int = int(ts.current_turn) if ts != null and "current_turn" in ts else 0
-	return hash([rows, current_turn_slot(), turn_no])
+	return hash([rows, current_turn_slot(), turn_no, weather_digest()])
+
+
+## The battle weather's comparable state ([method WeatherState.digest]): weather id,
+## round, and any summoned override. Folded into [method state_digest] so a peer
+## whose weather diverged (a seed or schedule mismatch) is caught as a desync.
+static func weather_digest() -> Array:
+	if CombatServices != null and "weather" in CombatServices and CombatServices.weather != null:
+		return CombatServices.weather.digest()
+	return []

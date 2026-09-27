@@ -10,6 +10,14 @@ description = "A 15x11 point-symmetric 2-player arena: three horizontal lanes di
 author = "Map Maker (build_sample_map.gd)"
 width = 15
 height = 11
+weather_mode = "dynamic"
+weather = "bright_sun"
+weather_pool = {
+"bright_sun": 2.0,
+"clear": 1.0,
+"desert_storm": 2.0
+}
+weather_change_every = 2
 tile_layout = Array[Dictionary]([{
 "position": Vector2i(0, 0),
 "tile_resource_path": "",

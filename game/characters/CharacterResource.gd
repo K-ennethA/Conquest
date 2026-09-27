@@ -34,6 +34,9 @@ const MAX_MOVES: int = 4
 ## Use one vocabulary shared with move elements and tile elements: &"fire", &"water",
 ## &"nature", &"wind", &"earth", &"holy", &"dark".
 @export var element: StringName = &""
+## Free-form trait tags read by conditions ([UnitElementCondition]), e.g.
+## &"sand_proof" (immune to Desert Storm chip damage). Empty by default.
+@export var tags: Array[StringName] = []
 @export var movement_kind: CombatTypes.MovementKind = CombatTypes.MovementKind.GROUND
 ## Optional authored movement profile. When unset, [method get_movement_profile]
 ## synthesizes one from [member movement_kind] + [member base_movement] so

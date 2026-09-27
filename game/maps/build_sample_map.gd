@@ -46,6 +46,8 @@ func _initialize() -> void:
 	model.description = "A 15x11 point-symmetric 2-player arena: three horizontal lanes divided by walls, flanking water pools, a hazardous lava-guarded centre, and a neutral throne to capture."
 	model.author = "Map Maker (build_sample_map.gd)"
 	model.max_players = 2
+	# Battle weather (docs/WEATHER.md): a dry arena -- sun and sandstorm trade places.
+	model.weather_settings = {"mode": "dynamic", "weather": "bright_sun", "pool": {"bright_sun": 2, "clear": 1, "desert_storm": 2}, "change_every": 2}
 
 	# --- Wall lane-dividers ------------------------------------------------
 	# Two horizontal wall rows (y=3 and its mirror y=7) split the arena into a

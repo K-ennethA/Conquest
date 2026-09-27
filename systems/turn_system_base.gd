@@ -304,6 +304,12 @@ func _tick_unit_turn_start(unit) -> void:
 		return
 	_last_tick_turn[unit] = current_turn
 
+	# WEATHER: roll the battle weather forward to the current round FIRST, so every
+	# condition below (and the unit's abilities) sees this round's weather. A pure
+	# function of the round number, which every peer derives identically.
+	if CombatServices and CombatServices.has_method("advance_weather"):
+		CombatServices.advance_weather(WinConditionLibrary.completed_rounds(self) + 1)
+
 	# Sample "stunned" FIRST, ahead of every tick below. The status ticks that
 	# follow are what EXPIRE the stun, so by the time they have run the flag is
 	# gone; latching it here is what makes the skip land on this turn while still
@@ -346,6 +352,11 @@ func _tick_unit_turn_start(unit) -> void:
 		var board = CombatServices.board() if CombatServices else null
 		if board != null:
 			status.tick_all(board)
+
+	# Weather turn-start rules (Desert Storm chip, Overbloom healing), after the status
+	# ticks and before the unit's own abilities (so Rain Bath heals after the sand).
+	if CombatServices and CombatServices.board() != null:
+		Weather.run_turn_start(unit, CombatServices.board())
 
 	# Character abilities: only present when the character declares some. This is
 	# the one per-unit turn-start hook BOTH turn systems share -- SpeedFirst calls

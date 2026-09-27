@@ -1,0 +1,72 @@
+[gd_resource type="Resource" script_class="WeatherResource" format=3]
+
+[ext_resource type="Script" path="res://game/weather/WeatherResource.gd" id="1_wres"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="2_abres"]
+[ext_resource type="Script" path="res://game/abilities/UnitElementCondition.gd" id="3_elem"]
+[ext_resource type="Script" path="res://game/abilities/NotCondition.gd" id="4_not"]
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="5_mvefx"]
+[ext_resource type="Script" path="res://game/combat/effects/PercentHealthLossEffect.gd" id="6_chip"]
+
+[sub_resource type="Resource" id="Resource_earth"]
+script = ExtResource("3_elem")
+elements = Array[StringName]([&"earth"])
+
+[sub_resource type="Resource" id="Resource_stone_def"]
+script = ExtResource("2_abres")
+id = &"storm_stoneskin"
+display_name = "Stoneskin"
+description = "Earth units shrug off the sand: +3 defense."
+trigger = 0
+condition = SubResource("Resource_earth")
+rule_modifiers = {
+"stat_defense": 3
+}
+
+[sub_resource type="Resource" id="Resource_sandproof"]
+script = ExtResource("3_elem")
+elements = Array[StringName]([&"earth"])
+tags = Array[StringName]([&"sand_proof"])
+
+[sub_resource type="Resource" id="Resource_not_sandproof"]
+script = ExtResource("4_not")
+condition = SubResource("Resource_sandproof")
+
+[sub_resource type="Resource" id="Resource_chip_fx"]
+script = ExtResource("6_chip")
+fraction = 0.0625
+min_amount = 1
+
+[sub_resource type="Resource" id="Resource_chip"]
+script = ExtResource("2_abres")
+id = &"storm_sand_chip"
+display_name = "Scouring Sand"
+description = "Units that are not Earth (or sand-proof) lose 1/16 max HP at their turn start."
+trigger = 1
+condition = SubResource("Resource_not_sandproof")
+effects = Array[ExtResource("5_mvefx")]([SubResource("Resource_chip_fx")])
+
+[resource]
+script = ExtResource("1_wres")
+id = &"desert_storm"
+display_name = "Desert Storm"
+icon = "≋"
+color = Color(0.93, 0.66, 0.36, 1)
+description = "A howling sandstorm. Non-Earth units lose 1/16 max HP each turn; ranged moves (range 2+) -15 hit; Earth units +3 defense."
+ranged_hit_modifier = -15
+ranged_min_range = 2
+stat_rules = Array[ExtResource("2_abres")]([SubResource("Resource_stone_def")])
+turn_start_rules = Array[ExtResource("2_abres")]([SubResource("Resource_chip")])
+fx_kind = &"sand"
+sun_color = Color(1, 0.72, 0.45, 1)
+sun_energy_scale = 0.62
+ambient_scale = 0.95
+ambient_tint = Color(1, 0.84, 0.66, 1)
+fog_color = Color(0.8, 0.6, 0.38, 1)
+fog_density = 0.03
+glow_scale = 1.0
+saturation = 0.85
+brightness = 0.95
+contrast = 0.96
+sky_tint = Color(1.0, 0.76, 0.52, 1)
+shader_dust = 1.0
+wind_strength = 2.4

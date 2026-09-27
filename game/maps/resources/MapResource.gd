@@ -140,6 +140,18 @@ const MAX_MAP_SIZE := 40
 @export var victory_conditions: Array[String] = ["Eliminate All Enemies"]
 @export var special_rules: Array[String] = []
 
+# Weather (see docs/WEATHER.md). Ids name game/weather/resources/<id>.tres.
+#   fixed    -- [member weather] all battle.
+#   schedule -- [member weather_schedule] entries {"weather": id, "rounds": n}, looping.
+#   dynamic  -- starts as [member weather]; every [member weather_change_every] rounds
+#               re-rolls from [member weather_pool] {id: weight}, seeded per match
+#               (deterministic + network-safe, see WeatherState.base_id_for_round).
+@export_enum("fixed", "schedule", "dynamic") var weather_mode: String = "fixed"
+@export var weather: String = "clear"
+@export var weather_schedule: Array[Dictionary] = []
+@export var weather_pool: Dictionary = {}
+@export var weather_change_every: int = 3
+
 # Metadata
 @export var creation_date: String = ""
 @export var last_modified: String = ""
@@ -632,6 +644,34 @@ func is_active() -> bool:
 	return status != "Inactive"
 
 
+## The map's weather settings as the plain dictionary [WeatherState] consumes
+## ({mode, weather, schedule, pool, change_every}).
+func get_weather_settings() -> Dictionary:
+	return {
+		"mode": weather_mode,
+		"weather": weather,
+		"schedule": weather_schedule.duplicate(true),
+		"pool": weather_pool.duplicate(true),
+		"change_every": weather_change_every,
+	}
+
+
+## Apply a settings dictionary (the inverse of [method get_weather_settings]).
+func set_weather_settings(settings: Dictionary) -> void:
+	var n := WeatherState.normalize_settings(settings)
+	weather_mode = String(n["mode"])
+	weather = String(n["weather"])
+	var sched: Array[Dictionary] = []
+	for e in n["schedule"]:
+		sched.append({ "weather": String(e["weather"]), "rounds": int(e["rounds"]) })
+	weather_schedule = sched
+	var pool: Dictionary = {}
+	for k in n["pool"]:
+		pool[String(k)] = float(n["pool"][k])
+	weather_pool = pool
+	weather_change_every = int(n["change_every"])
+
+
 func get_display_info() -> Dictionary:
 	"""Get formatted info for UI display"""
 	var player_counts = {}
@@ -713,6 +753,7 @@ func export_to_json() -> String:
 				"a": background_color.a
 			}
 		},
+		"weather": get_weather_settings(),
 		"layout": {
 			# Positions are written as [col, row] arrays and link ends as
 			# [col, row, floor] -- raw Vector2i/Vector3i would be stringified by JSON.
@@ -800,6 +841,11 @@ static func import_from_json(json_string: String) -> MapResource:
 		bg_color.get("a", 1.0)
 	)
 	
+	# Weather (absent in older exports -> fixed Clear)
+	var weather_data = data.get("weather", {})
+	if weather_data is Dictionary:
+		resource.set_weather_settings(weather_data)
+
 	# Layout (positions parsed back from arrays -- or legacy "(x, y)" strings)
 	var layout = data.get("layout", {})
 	resource.tile_layout = _json_entry_array(layout.get("tiles", []))

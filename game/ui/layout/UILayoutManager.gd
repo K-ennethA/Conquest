@@ -105,6 +105,7 @@ func _build_map_menu() -> void:
 	if center_top_container:
 		objective_chip = ObjectiveChip.new()
 		center_top_container.add_child(objective_chip)
+		center_top_container.add_child(WeatherChip.new())
 	map_menu = MapMenu.new()
 	map_menu.unit_actions_panel = unit_actions_panel
 	map_menu.settings_panel = settings_panel

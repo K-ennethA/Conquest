@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="WeatherResource" format=3]
+
+[ext_resource type="Script" path="res://game/weather/WeatherResource.gd" id="1_wres"]
+
+[resource]
+script = ExtResource("1_wres")
+id = &"bright_sun"
+display_name = "Bright Sun"
+icon = "☀"
+color = Color(1, 0.74, 0.3, 1)
+description = "Harsh sunlight. Fire moves deal x1.3 damage, Water moves x0.8."
+element_damage_scale = {
+&"fire": 1.3,
+&"water": 0.8
+}
+fx_kind = &"sun"
+sun_color = Color(1, 0.88, 0.66, 1)
+sun_energy_scale = 1.25
+ambient_scale = 1.05
+ambient_tint = Color(1, 0.95, 0.85, 1)
+glow_scale = 1.4
+glow_bloom = 0.12
+saturation = 1.02
+brightness = 0.98
+contrast = 1.08
+sky_tint = Color(1.05, 0.97, 0.85, 1)
+shader_sun = 1.0
+wind_strength = 0.7

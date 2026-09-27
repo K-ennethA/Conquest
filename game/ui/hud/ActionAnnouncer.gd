@@ -71,6 +71,7 @@ var _damage_buffer: Array[Dictionary] = []
 
 func _ready() -> void:
 	layer = OVERLAY_LAYER
+	add_to_group("action_announcer")
 	_build_ui()
 	_connect_events()
 
@@ -189,6 +190,16 @@ func _on_move_performed(caster = null, move = null) -> void:
 	# turn used to pile up banners that then drained one-per-hold long after the fact --
 	# spilling the enemy's moves into the PLAYER's turn. Keeping only the newest pending
 	# entry drops that stale backlog so the banner tracks what just happened, not history.
+	if _queue.size() > 1:
+		_queue = [_queue[_queue.size() - 1]]
+	if not _busy:
+		_next()
+
+
+## Queue a free-form banner (e.g. a weather change: "Rain begins to fall"). Same
+## queue / timing as a move banner; newest wins.
+func announce(text: String, sub: String = "", color: Color = NEUTRAL_COLOR) -> void:
+	_queue.append({ "text": text, "sub": sub, "color": color, "attacker": null })
 	if _queue.size() > 1:
 		_queue = [_queue[_queue.size() - 1]]
 	if not _busy:

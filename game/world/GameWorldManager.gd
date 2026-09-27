@@ -254,9 +254,38 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# NO key light, which is why everything looked washed out.
 	_setup_lighting(map_resource)
 
+	# Battle weather (docs/WEATHER.md): gameplay state on CombatServices, seeded from
+	# the match's public seed in a network match so every peer rolls the same
+	# dynamic weather; plus the visual rig, which reads it (never the reverse).
+	CombatServices.configure_weather(map_resource, _weather_seed())
+	_setup_weather_fx()
+
 	# Update GameSettings with map info if available
 	if GameSettings.has_method("set_current_map"):
 		GameSettings.set_current_map(map_resource)
+
+## Seed for dynamic weather: the network match's public setup seed (identical on
+## every peer, see systems/net/README.md) or a fresh random one locally.
+func _weather_seed() -> int:
+	if GameModeManager != null and GameModeManager.is_multiplayer_active():
+		var ns := get_node_or_null("/root/NetSession")
+		if ns != null and ns.has_method("get_match_config"):
+			return int(ns.get_match_config().get("seed", 1))
+	return randi()
+
+## The per-battle weather visual rig (particles + light/fog adapter), reused across
+## map loads. Purely cosmetic; skipped on a headless dedicated server.
+func _setup_weather_fx() -> void:
+	var scene_root := get_tree().current_scene
+	if scene_root == null or DisplayServer.get_name() == "headless":
+		return
+	var existing := scene_root.get_node_or_null("WeatherFX")
+	if existing != null:
+		existing.rebase()  # the map load re-lit the scene: re-capture its base look
+		return
+	var fx := WeatherFX.new()
+	fx.name = "WeatherFX"
+	scene_root.add_child(fx)
 
 func _on_map_load_failed(error_message: String) -> void:
 	"""Handle map loading failure"""

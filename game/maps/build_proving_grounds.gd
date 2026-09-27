@@ -108,6 +108,8 @@ func _initialize() -> void:
 	# resulting MapResource via set_character_spawn_at_position - the
 	# authoritative, character-aware API documented on MapResource.gd.
 	var res := model.to_map_resource()
+	# Battle weather (docs/WEATHER.md).
+	res.set_weather_settings({"mode": "fixed", "weather": "bright_sun"})
 	res.difficulty = "Hard"  # a boss-guarded throne on the AI side warrants the harder rating
 	_place_spawns(res)
 

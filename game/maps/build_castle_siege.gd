@@ -52,6 +52,8 @@ static func is_ring(p: Vector2i) -> bool:
 static func build() -> MapResource:
 	var m := MapResource.new()
 	m.map_name = "Castle Siege"
+	# Battle weather (docs/WEATHER.md).
+	m.set_weather_settings({"mode": "schedule", "weather": "clear", "schedule": [{"weather": "clear", "rounds": 3}, {"weather": "rain", "rounds": 3}]})
 	m.description = "Storm the keep. Archers man the ramparts and towers, the gate passage runs beneath the gatehouse walk, and stairs climb from the courtyard to the walls. Multi-floor: Page Up / Page Down to see inside the walls."
 	m.author = "System"
 	m.width = WIDTH

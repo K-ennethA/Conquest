@@ -23,6 +23,7 @@ var _anim_check: CheckButton = null
 var _speed_slider: HSlider = null
 var _speed_value_label: Label = null
 var _focus_option: OptionButton = null
+var _weather_option: OptionButton = null
 
 # Controls tab: action -> the Button showing (and capturing) its keyboard binding.
 var _bind_buttons: Dictionary = {}
@@ -171,6 +172,18 @@ func _build_ui() -> void:
 	_focus_option.item_selected.connect(_on_focus_selected)
 	focus_row.add_child(_focus_option)
 	general.add_child(focus_row)
+
+	# --- Weather effects (visual only; gameplay unaffected) ---
+	var weather_row := _make_row("Weather Effects")
+	_weather_option = OptionButton.new()
+	_weather_option.mouse_filter = Control.MOUSE_FILTER_STOP
+	# Indices map onto GameSettings.WeatherEffects (FULL=0, REDUCED=1, OFF=2).
+	_weather_option.add_item("Full", 0)
+	_weather_option.add_item("Reduced", 1)
+	_weather_option.add_item("Off (visual only)", 2)
+	_weather_option.item_selected.connect(_on_weather_selected)
+	weather_row.add_child(_weather_option)
+	general.add_child(weather_row)
 
 	tabs.add_child(_build_controls_tab())
 
@@ -339,6 +352,11 @@ func _refresh_from_settings() -> void:
 		if idx >= 0:
 			_focus_option.select(idx)
 
+	if _weather_option and "weather_effects" in GameSettings:
+		var widx := _weather_option.get_item_index(int(GameSettings.weather_effects))
+		if widx >= 0:
+			_weather_option.select(widx)
+
 	_syncing = false
 
 
@@ -385,6 +403,13 @@ func _on_focus_selected(index: int) -> void:
 	var mode := _focus_option.get_item_id(index)
 	if _has_settings():
 		GameSettings.set_camera_auto_focus(mode)
+
+
+func _on_weather_selected(index: int) -> void:
+	if _syncing or not _weather_option:
+		return
+	if _has_settings() and GameSettings.has_method("set_weather_effects"):
+		GameSettings.set_weather_effects(_weather_option.get_item_id(index))
 
 
 # --- Controls: rebinding ------------------------------------------------------

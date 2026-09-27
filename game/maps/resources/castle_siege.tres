@@ -10,6 +10,15 @@ description = "Storm the keep. Archers man the ramparts and towers, the gate pas
 author = "System"
 width = 15
 height = 13
+weather_mode = "schedule"
+weather = "clear"
+weather_schedule = Array[Dictionary]([{
+"rounds": 3,
+"weather": "clear"
+}, {
+"rounds": 3,
+"weather": "rain"
+}])
 tile_layout = Array[Dictionary]([{
 "position": Vector2i(0, 1),
 "tile_id": "grass_plains",

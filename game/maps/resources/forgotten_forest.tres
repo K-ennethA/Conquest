@@ -10,6 +10,14 @@ description = "Forgotten Forest Boss Level"
 author = "Kenneth"
 width = 20
 height = 20
+weather_mode = "dynamic"
+weather = "overbloom"
+weather_pool = {
+"clear": 2.0,
+"overbloom": 3.0,
+"rain": 2.0
+}
+weather_change_every = 3
 tile_layout = Array[Dictionary]([{
 "position": Vector2i(1, 1),
 "tile_id": "grass_plains",

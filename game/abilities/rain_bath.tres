@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="AbilityResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_mvefx"]
+[ext_resource type="Script" path="res://game/combat/effects/HealEffect.gd" id="2_heal"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="3_abres"]
+[ext_resource type="Script" path="res://game/weather/WeatherCondition.gd" id="4_wcond"]
+
+[sub_resource type="Resource" id="Resource_rb_heal"]
+script = ExtResource("2_heal")
+amount = 0
+percent_of_max_health = 0.125
+
+[sub_resource type="Resource" id="Resource_rb_cond"]
+script = ExtResource("4_wcond")
+weathers = Array[StringName]([&"rain"])
+
+[resource]
+script = ExtResource("3_abres")
+id = &"rain_bath"
+display_name = "Rain Bath"
+description = "Fungal flesh drinks the downpour. While it rains, restore 1/8 of max health at the start of every turn."
+trigger = 1
+condition = SubResource("Resource_rb_cond")
+effects = Array[ExtResource("1_mvefx")]([SubResource("Resource_rb_heal")])

@@ -50,6 +50,8 @@ func _initialize() -> void:
 
 	# Name correction: the draft was authored "Forbidden Forest" by mistake.
 	res.map_name = "Forgotten Forest"
+	# Battle weather (docs/WEATHER.md).
+	res.set_weather_settings({"mode": "dynamic", "weather": "overbloom", "pool": {"clear": 2, "overbloom": 3, "rain": 2}, "change_every": 3})
 	# This is a boss encounter: you win by defeating Eldroot, not by clearing every
 	# spawn (the Hard+ parasites would otherwise make elimination the wrong goal).
 	res.victory_conditions = ["Defeat Boss"]

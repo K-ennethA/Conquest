@@ -73,7 +73,9 @@ static func preview_vs(move: MoveResource, caster, target, board = null) -> Dict
 		var evasion := float(_stat(target, "evasion")) + float(TerrainStats.bonus_for(target, "evasion"))
 		# Height advantage (0 on a shared floor), mirrored from MoveContext.hit_chance.
 		var height_hit := Elevation.hit_modifier_for(caster, target, board)
-		hit_pct = clampf(move.accuracy * 100.0 - evasion + height_hit, 0.0, 100.0)
+		# Weather (ranged penalty, weather evasion), mirrored from MoveContext.hit_chance.
+		var weather_hit := Weather.hit_modifier_for(move, caster, target, board)
+		hit_pct = clampf(move.accuracy * 100.0 - evasion + height_hit + weather_hit, 0.0, 100.0)
 		crit_pct = clampf(move.crit_chance * 100.0 + float(_stat(caster, "crit")), 0.0, 100.0)
 		# Mode-aware, so the forecast previews the mode that would actually resolve.
 		for effect in move.effects_for(caster):
@@ -105,15 +107,8 @@ static func _preview_damage(effect: DamageEffect, move, caster, target, board = 
 	# the forecast would under-report a charged release -- and the AI, which ranks moves off
 	# this same preview, would dismiss it as weak.
 	var raw: int = effect.power + bonus + effect.bonus_power_for(caster)
-	var mitigated: int = 0
-	match effect.category:
-		CombatTypes.DamageCategory.TRUE:
-			mitigated = maxi(1, raw)
-		CombatTypes.DamageCategory.MAGICAL:
-			var res := _stat_or(target, "magic_defense", _stat_or(target, "defense", 0))
-			mitigated = maxi(1, raw - res)
-		_:
-			mitigated = maxi(1, raw - _stat_or(target, "defense", 0))
+	# The SAME category mitigation the hit uses (incl. the weather defense bonus).
+	var mitigated: int = DamageEffect._mitigate_for(raw, target, effect.category)
 
 	# Predation bonus (e.g. Petalfang's Thornlust vs a snared target). Shown in the
 	# forecast because it is DETERMINISTIC: it depends only on the target's current
@@ -151,6 +146,10 @@ static func _preview_damage(effect: DamageEffect, move, caster, target, board = 
 	var element_scale: float = ElementChart.damage_scale_for(move, target, board)
 	if not is_equal_approx(element_scale, 1.0):
 		mitigated = maxi(1, roundi(float(mitigated) * element_scale))
+	# WEATHER multiplier for the move's element, same step as DamageEffect.apply().
+	var weather_scale: float = Weather.damage_scale_for(move)
+	if not is_equal_approx(weather_scale, 1.0):
+		mitigated = maxi(1, roundi(float(mitigated) * weather_scale))
 	# HEIGHT ADVANTAGE, same position as in DamageEffect.apply() (after the type
 	# matchup, before crit). 1.0 on a shared floor.
 	var height_scale: float = Elevation.damage_scale_for(caster, target, board)
