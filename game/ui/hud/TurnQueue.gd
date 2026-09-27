@@ -22,17 +22,17 @@ var unit_portraits: Array[Control] = []
 # Chip settings -- compact so the strip stays a slim top bar, not a screen-eater.
 # Row budget: 8 chips * 66 + 7 * 4 separation = ~556px + paging buttons ~= 640px, so the
 # whole queue occupies barely half the top instead of spanning the screen.
-const PORTRAIT_SIZE := Vector2(66, 50)
+const PORTRAIT_SIZE := Vector2(80, 60)
 const PORTRAIT_MARGIN := 4
 const PORTRAITS_PER_PAGE := 8  # Slim strip; paging reaches the rest of a big roster
 
 # Warm/cool side colors (the amber theme is warm-only, so ally/enemy tints live here).
-const COLOR_ALLY_BG := Color(0.16, 0.30, 0.52, 0.92)      # cool blue
-const COLOR_ALLY_BORDER := Color(0.45, 0.66, 0.92, 1.0)
-const COLOR_ENEMY_BG := Color(0.52, 0.18, 0.16, 0.92)     # warm red
-const COLOR_ENEMY_BORDER := Color(0.92, 0.50, 0.45, 1.0)
-const COLOR_NEUTRAL_BG := Color(0.28, 0.26, 0.22, 0.92)
-const COLOR_NEUTRAL_BORDER := Color(0.6, 0.58, 0.52, 1.0)
+const COLOR_ALLY_BG := Color(0.12, 0.2, 0.4, 0.94)       # navy, blue-leaning
+const COLOR_ALLY_BORDER := ConquestTheme.TEAM_BLUE
+const COLOR_ENEMY_BG := Color(0.25, 0.12, 0.2, 0.94)      # navy, red-leaning
+const COLOR_ENEMY_BORDER := ConquestTheme.TEAM_RED
+const COLOR_NEUTRAL_BG := Color(0.09, 0.125, 0.26, 0.94)
+const COLOR_NEUTRAL_BORDER := ConquestTheme.BORDER
 
 # Scroll state
 var scroll_offset: int = 0
@@ -254,11 +254,11 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var style_box := StyleBoxFlat.new()
-	var amber: Color = _theme_color("AMBER", Color(0.90, 0.65, 0.29))
-	var brown_dk: Color = _theme_color("BROWN_DK", Color(0.22, 0.13, 0.06))
+	var amber: Color = ConquestTheme.GOLD
+	var brown_dk: Color = ConquestTheme.INK
 	if is_current:
 		style_box.bg_color = amber
-		style_box.border_color = _theme_color("CREAM", Color(0.99, 0.94, 0.84))
+		style_box.border_color = ConquestTheme.GOLD_LITE
 		style_box.set_border_width_all(3)
 	else:
 		var player = unit.get_owner_player()
@@ -286,11 +286,11 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 		pos_label.text = str(queue_position + 1)
 		pos_label.add_theme_color_override("font_color", _theme_color("CREAM", Color.WHITE))
 	pos_label.position = Vector2(0, 2)
-	pos_label.size = Vector2(chip_w, 14)
+	pos_label.size = Vector2(chip_w, 17)
 	pos_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	pos_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	pos_label.add_theme_font_size_override("font_size", 11)
-	pos_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	pos_label.add_theme_font_size_override("font_size", 14)
+	pos_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.0 if is_current else 0.6))
 	pos_label.add_theme_constant_override("shadow_offset_x", 1)
 	pos_label.add_theme_constant_override("shadow_offset_y", 1)
 	pos_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -299,16 +299,17 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 	# --- Unit name label (elided if long) ---
 	var name_label := Label.new()
 	name_label.text = unit.get_display_name()
-	name_label.position = Vector2(3, 17)
-	name_label.size = Vector2(chip_w - 6, 16)
-	name_label.custom_minimum_size = Vector2(chip_w - 6, 16)
+	name_label.position = Vector2(3, 20)
+	name_label.size = Vector2(chip_w - 6, 19)
+	name_label.custom_minimum_size = Vector2(chip_w - 6, 19)
+	name_label.tooltip_text = unit.get_display_name()
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_label.clip_text = true
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	name_label.add_theme_font_size_override("font_size", 11)
-	name_label.add_theme_color_override("font_color", brown_dk if is_current else Color(0.99, 0.94, 0.84))
-	name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	name_label.add_theme_font_size_override("font_size", 15)
+	name_label.add_theme_color_override("font_color", brown_dk if is_current else ConquestTheme.CREAM)
+	name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.0 if is_current else 0.6))
 	name_label.add_theme_constant_override("shadow_offset_x", 1)
 	name_label.add_theme_constant_override("shadow_offset_y", 1)
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -317,14 +318,14 @@ func _create_unit_portrait(unit: Unit, is_current: bool, queue_position: int) ->
 	# --- Speed label (bottom strip) ---
 	var speed_label := Label.new()
 	var current_speed = turn_system.get_unit_current_speed(unit) if turn_system else unit.get_stat("speed")
-	speed_label.text = "SPD:" + str(current_speed)
-	speed_label.position = Vector2(0, chip_h - 16)
-	speed_label.size = Vector2(chip_w, 14)
+	speed_label.text = "SPD " + str(current_speed)
+	speed_label.position = Vector2(0, chip_h - 19)
+	speed_label.size = Vector2(chip_w, 17)
 	speed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	speed_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	speed_label.add_theme_font_size_override("font_size", 10)
-	speed_label.add_theme_color_override("font_color", brown_dk if is_current else Color(0.90, 0.90, 0.90))
-	speed_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	speed_label.add_theme_font_size_override("font_size", 14)
+	speed_label.add_theme_color_override("font_color", brown_dk if is_current else ConquestTheme.TEXT_DIM)
+	speed_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.0 if is_current else 0.6))
 	speed_label.add_theme_constant_override("shadow_offset_x", 1)
 	speed_label.add_theme_constant_override("shadow_offset_y", 1)
 	speed_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -444,10 +445,10 @@ func highlight_portrait(unit: Unit, highlight: bool) -> void:
 			if background is Panel:
 				var style_box = background.get_theme_stylebox("panel").duplicate()
 				if highlight:
-					style_box.border_color = Color.YELLOW
+					style_box.border_color = ConquestTheme.GOLD_LITE
 					style_box.set_border_width_all(3)
 				else:
-					style_box.border_color = Color(0.8, 0.8, 0.8, 0.8)
+					style_box.border_color = ConquestTheme.BORDER
 					style_box.set_border_width_all(1)
 				background.add_theme_stylebox_override("panel", style_box)
 			break

@@ -19,16 +19,15 @@ class_name CombatForecastPanel
 # END grow so it can never collapse to zero height (the old "forecast is gone" bug that
 # forced the move off the bottom edge in the first place).
 
-const CARD_WIDTH := 360.0
-## Distance from the TOP edge the card floats at. Sits just below the slim turn chip
-## (~56px top bar), so it no longer overlaps the banner but still reliably renders
-## (a bottom-anchored grow collapsed to zero height -- the "forecast is gone" bug).
-const TOP_MARGIN := 70.0
+const CARD_WIDTH := 420.0
+## Minimum distance from the TOP edge the card floats at. The card is pushed further
+## down to clear the Battle Log (top-left, see _top_offset) so the two never overlap.
+const TOP_MARGIN := 64.0
 ## Distance from the LEFT edge the card floats at.
-const SIDE_MARGIN := 16.0
+const SIDE_MARGIN := ConquestTheme.MARGIN
 ## Panel background opacity so board units partly show through the card while aiming;
 ## kept high enough (0.9) that the forecast text stays fully readable.
-const CARD_BG_ALPHA := 0.9
+const CARD_BG_ALPHA := 0.95
 
 # --- Node references (built once in _ready, only re-populated in show_forecast) --
 var _card: PanelContainer
@@ -52,6 +51,10 @@ var _flash_tween: Tween
 var _chip_row: HBoxContainer
 var _type_chip: Label
 var _height_chip: Label
+var _move_label: Label
+var _attacker_portrait: PanelContainer
+var _defender_portrait: PanelContainer
+var _crit_dmg_label: Label
 
 const CHIP_GOOD := Color("7be07a")
 const CHIP_BAD := Color("ff8a78")
@@ -85,9 +88,8 @@ func _ready() -> void:
 
 func _create_ui() -> void:
 	# The floating card, anchored to the TOP-LEFT of the viewport: off the board centre so
-	# the player can see the units being targeted, clear of the top-center turn banner and
-	# the right-edge sidebar. Grows DOWNWARD (and rightward) from the top-left margin to fit
-	# its content, so it can never collapse to zero height / slide off-screen.
+	# the player can see the units being targeted, clear of the top-center phase chip and
+	# the right-edge command menu. Grows DOWNWARD from its top edge (never collapses).
 	_card = PanelContainer.new()
 	_card.name = "ForecastCard"
 	_card.anchor_left = 0.0
@@ -103,23 +105,71 @@ func _create_ui() -> void:
 	add_child(_card)
 
 	var root_vb := VBoxContainer.new()
-	root_vb.add_theme_constant_override("separation", 6)
+	root_vb.add_theme_constant_override("separation", 8)
 	root_vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card.add_child(root_vb)
 
-	# Element accent stripe (Pokemon-style type cue), colour set per-move.
+	# Title row: gold section tag + the move being used (element-coloured stripe).
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 10)
+	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root_vb.add_child(title_row)
+	var title := ConquestTheme.section_label("Battle Forecast")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title_row.add_child(title)
 	_element_stripe = ColorRect.new()
-	_element_stripe.color = ConquestTheme.AMBER
-	_element_stripe.custom_minimum_size = Vector2(0, 4)
+	_element_stripe.color = ConquestTheme.GOLD
+	_element_stripe.custom_minimum_size = Vector2(5, 20)
+	_element_stripe.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_element_stripe.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root_vb.add_child(_element_stripe)
+	title_row.add_child(_element_stripe)
+	_move_label = Label.new()
+	_move_label.name = "MoveLabel"
+	_move_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_row.add_child(_move_label)
 
-	var title := Label.new()
-	title.text = "BATTLE FORECAST"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 16)
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root_vb.add_child(title)
+	# Attacker | vs | Defender.
+	var sides := HBoxContainer.new()
+	sides.add_theme_constant_override("separation", 10)
+	sides.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root_vb.add_child(sides)
+
+	var attacker_col := _build_side(false)
+	_attacker_name = attacker_col["name"]
+	_attacker_bar = attacker_col["bar"]
+	_attacker_hp = attacker_col["hp"]
+	_attacker_portrait = attacker_col["portrait"]
+	attacker_col["root"].size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sides.add_child(attacker_col["root"])
+
+	var vs := Label.new()
+	vs.text = "VS"
+	vs.theme_type_variation = &"SectionLabel"
+	vs.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	vs.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sides.add_child(vs)
+
+	var defender_col := _build_side(true)
+	_defender_name = defender_col["name"]
+	_defender_bar = defender_col["bar"]
+	_defender_hp = defender_col["hp"]
+	_defender_portrait = defender_col["portrait"]
+	# Red "about to be lost" overlay, anchored to a fraction of the bar (set per forecast).
+	_dmg_preview = ColorRect.new()
+	_dmg_preview.name = "DamagePreview"
+	_dmg_preview.color = ConquestTheme.HP_LOSS
+	_dmg_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_dmg_preview.anchor_top = 0.0
+	_dmg_preview.anchor_bottom = 1.0
+	_dmg_preview.offset_left = 0.0
+	_dmg_preview.offset_right = 0.0
+	_dmg_preview.offset_top = 0.0
+	_dmg_preview.offset_bottom = 0.0
+	_dmg_preview.visible = false
+	_defender_bar.add_child(_dmg_preview)  # children draw over the bar fill
+	defender_col["root"].size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sides.add_child(defender_col["root"])
 
 	# Matchup chips ("▲ Effective" / "▼ Resisted", "▲ High ground" / "▼ Low ground"),
 	# shown only when they apply.
@@ -133,95 +183,79 @@ func _create_ui() -> void:
 	_height_chip = _make_chip()
 	_chip_row.add_child(_height_chip)
 
-	# Attacker | vs | Defender row.
-	var sides := HBoxContainer.new()
-	sides.add_theme_constant_override("separation", 10)
-	sides.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root_vb.add_child(sides)
-
-	var attacker_col := _build_side()
-	_attacker_name = attacker_col["name"]
-	_attacker_bar = attacker_col["bar"]
-	_attacker_hp = attacker_col["hp"]
-	attacker_col["root"].size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sides.add_child(attacker_col["root"])
-
-	var vs := Label.new()
-	vs.text = "vs"
-	vs.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	vs.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	sides.add_child(vs)
-
-	var defender_col := _build_side()
-	_defender_name = defender_col["name"]
-	_defender_bar = defender_col["bar"]
-	_defender_hp = defender_col["hp"]
-	# Red "about to be lost" overlay, anchored to a fraction of the bar (set per forecast).
-	_dmg_preview = ColorRect.new()
-	_dmg_preview.name = "DamagePreview"
-	_dmg_preview.color = Color(1.0, 0.22, 0.16, 0.9)
-	_dmg_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_dmg_preview.anchor_top = 0.0
-	_dmg_preview.anchor_bottom = 1.0
-	_dmg_preview.offset_left = 0.0
-	_dmg_preview.offset_right = 0.0
-	_dmg_preview.offset_top = 0.0
-	_dmg_preview.offset_bottom = 0.0
-	_dmg_preview.visible = false
-	_defender_bar.add_child(_dmg_preview)  # children draw over the bar fill
-	defender_col["root"].size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sides.add_child(defender_col["root"])
-
-	# Exchange stats plate (dark inset, cream text).
+	# Big numbers plate: DMG | HIT | CRIT (+ the HP result row kept for callers).
 	var plate := PanelContainer.new()
 	plate.name = "StatsPlate"
 	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_vb.add_child(plate)
 
 	var stats_vb := VBoxContainer.new()
-	stats_vb.add_theme_constant_override("separation", 3)
+	stats_vb.add_theme_constant_override("separation", 4)
 	stats_vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	plate.add_child(stats_vb)
 
-	_hit_value = _add_stat_row(stats_vb, "Hit")
-	_dmg_value = _add_stat_row(stats_vb, "Damage")
-	_crit_value = _add_stat_row(stats_vb, "Crit")
-	_result_value = _add_stat_row(stats_vb, "HP")
+	var big := HBoxContainer.new()
+	big.name = "BigNumbers"
+	big.add_theme_constant_override("separation", 4)
+	big.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stats_vb.add_child(big)
+	_dmg_value = _add_big_stat(big, "Damage")
+	_hit_value = _add_big_stat(big, "Hit")
+	_crit_value = _add_big_stat(big, "Crit")
+	_crit_dmg_label = Label.new()
+	_crit_dmg_label.name = "CritDamage"
+	_crit_dmg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_crit_dmg_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_dmg_value.get_parent().add_child(_crit_dmg_label)
+
+	_result_value = _add_stat_row(stats_vb, "Target HP")
 
 	_lethal_label = Label.new()
 	_lethal_label.text = "LETHAL"
 	_lethal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lethal_label.add_theme_font_size_override("font_size", 16)
 	_lethal_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_lethal_label.visible = false
-	stats_vb.add_child(_lethal_label)
+	root_vb.add_child(_lethal_label)
 
-	# Apply the amber HUD theme to the whole subtree FIRST (it strips baked-in
-	# font colours / per-panel styleboxes), THEN layer our local plate + text
-	# overrides so they survive.
+	# HUD theme FIRST (it strips baked-in colours / per-panel styleboxes), THEN our
+	# deliberate local plate + text overrides so they survive.
 	ConquestTheme.apply_to(self)
 
-	# Make the amber card slightly translucent so board units partly show through it while
-	# aiming (secondary to the top-left move above; text stays fully readable at 0.9).
-	var card_box: StyleBox = _card.get_theme_stylebox("panel")
-	if card_box is StyleBoxFlat:
-		var translucent: StyleBoxFlat = (card_box as StyleBoxFlat).duplicate()
-		translucent.bg_color.a = CARD_BG_ALPHA
-		_card.add_theme_stylebox_override("panel", translucent)
-
-	# Dark inset plate behind the exchange stats, cream text so it reads on it.
+	var card_sb := ConquestTheme.panel_box(CARD_BG_ALPHA)
+	card_sb.border_color = ConquestTheme.GOLD_DK
+	card_sb.content_margin_top = 12
+	card_sb.content_margin_bottom = 14
+	_card.add_theme_stylebox_override("panel", card_sb)
 	plate.add_theme_stylebox_override("panel", ConquestTheme.plate_box())
-	for lbl in [_hit_value, _dmg_value, _crit_value, _result_value]:
+
+	_move_label.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
+	_move_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
+	for lbl in [_attacker_name, _defender_name]:
 		lbl.add_theme_color_override("font_color", ConquestTheme.CREAM)
+	for lbl in [_attacker_hp, _defender_hp]:
+		lbl.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
+		lbl.add_theme_color_override("font_color", ConquestTheme.CREAM)
+	for lbl in [_dmg_value, _hit_value, _crit_value]:
+		lbl.add_theme_font_override("font", MenuTheme.bold_font(0.6))
+		lbl.add_theme_font_size_override("font_size", ConquestTheme.FS_BIG_NUMBER)
+	_dmg_value.add_theme_color_override("font_color", ConquestTheme.DMG_COLOR)
+	_hit_value.add_theme_color_override("font_color", ConquestTheme.HIT_COLOR)
+	_crit_value.add_theme_color_override("font_color", ConquestTheme.CRIT_COLOR)
+	_crit_dmg_label.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
+	_crit_dmg_label.add_theme_color_override("font_color", ConquestTheme.CRIT_COLOR)
+	_result_value.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
+	_result_value.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	for row in stats_vb.get_children():
-		if row is HBoxContainer:
+		if row is HBoxContainer and row.name != "BigNumbers":
 			for child in row.get_children():
-				if child is Label:
-					child.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
-	_hit_value.add_theme_color_override("font_color", ConquestTheme.CREAM)
-	_dmg_value.add_theme_color_override("font_color", ConquestTheme.HIT_ORANGE)
-	_result_value.add_theme_color_override("font_color", ConquestTheme.HP_CYAN)
-	_lethal_label.add_theme_color_override("font_color", ConquestTheme.HIT_ORANGE)
+				if child is Label and child != _result_value:
+					child.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
+					child.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+	_lethal_label.add_theme_font_override("font", MenuTheme.bold_font(0.7, 6))
+	_lethal_label.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
+	_lethal_label.add_theme_color_override("font_color", ConquestTheme.INK)
+	var lethal_sb := MenuTheme.box(ConquestTheme.DANGER, ConquestTheme.DANGER.lightened(0.3), 1, 8, 12, 4)
+	_lethal_label.add_theme_stylebox_override("normal", lethal_sb)
 
 func _make_chip() -> Label:
 	# Bright text on a small dark plate so it reads on the amber card.
@@ -261,48 +295,72 @@ func _apply_chips(attacker, defender, move, board) -> void:
 
 func _set_chip(chip: Label, text: String, good: bool) -> void:
 	# (Styled here, after ConquestTheme.apply_to has swept the card's overrides.)
-	if not chip.has_theme_stylebox_override("normal"):
-		var sb := ConquestTheme.plate_box()
-		sb.set_content_margin_all(3)
-		sb.content_margin_left = 8
-		sb.content_margin_right = 8
-		chip.add_theme_stylebox_override("normal", sb)
-		chip.add_theme_font_size_override("font_size", 13)
+	var col := CHIP_GOOD if good else CHIP_BAD
+	chip.add_theme_stylebox_override("normal", ConquestTheme.chip_style(col))
+	chip.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
 	chip.text = text
 	chip.visible = text != ""
-	chip.add_theme_color_override("font_color", CHIP_GOOD if good else CHIP_BAD)
+	chip.add_theme_color_override("font_color", col.lightened(0.3))
 
-func _build_side() -> Dictionary:
-	"""One combatant column: name label + cyan HP bar + 'current/max' label."""
+func _build_side(defender: bool) -> Dictionary:
+	"""One combatant column: portrait + name, HP bar, 'current/max' (defender:
+	'current -> remaining'). The defender column mirrors the attacker's (portrait
+	on the right) so the two face each other like FE's forecast."""
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 2)
+	vb.add_theme_constant_override("separation", 4)
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	head.alignment = BoxContainer.ALIGNMENT_END if defender else BoxContainer.ALIGNMENT_BEGIN
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(head)
+	var portrait := ConquestTheme.portrait("?", ConquestTheme.GOLD, ConquestTheme.BORDER, 38.0)
 	var name_lbl := Label.new()
 	name_lbl.text = "-"
-	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
+	name_lbl.theme_type_variation = &"SubheadingLabel"
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if defender else HORIZONTAL_ALIGNMENT_LEFT
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name_lbl.clip_text = true
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.custom_minimum_size = Vector2(60, 0)
 	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vb.add_child(name_lbl)
+	if defender:
+		head.add_child(name_lbl)
+		head.add_child(portrait)
+	else:
+		head.add_child(portrait)
+		head.add_child(name_lbl)
 
-	var bar := ProgressBar.new()
-	bar.show_percentage = false
-	bar.min_value = 0
-	bar.max_value = 1
-	bar.value = 1
-	bar.custom_minimum_size = Vector2(140, 12)
-	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bar := ConquestTheme.hp_bar(12.0)
+	bar.custom_minimum_size = Vector2(150, 12)
 	vb.add_child(bar)
 
 	var hp_lbl := Label.new()
 	hp_lbl.text = "-/-"
-	hp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hp_lbl.add_theme_font_size_override("font_size", 12)
+	hp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if defender else HORIZONTAL_ALIGNMENT_LEFT
 	hp_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(hp_lbl)
 
-	return {"root": vb, "name": name_lbl, "bar": bar, "hp": hp_lbl}
+	return {"root": vb, "name": name_lbl, "bar": bar, "hp": hp_lbl, "portrait": portrait}
+
+
+## One big-number column ("DAMAGE" caption over a large value). Returns the value.
+func _add_big_stat(parent: HBoxContainer, caption: String) -> Label:
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", -4)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var cap := ConquestTheme.section_label(caption)
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(cap)
+	var value := Label.new()
+	value.text = "-"
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	value.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(value)
+	parent.add_child(col)
+	return value
 
 func _add_stat_row(parent: VBoxContainer, label_text: String) -> Label:
 	"""A 'Label ....... value' row; returns the (right-aligned) value Label."""
@@ -341,10 +399,13 @@ func show_forecast(attacker, defender, move: MoveResource, board = null) -> void
 	var att_max := _max_hp_of(attacker)
 	_attacker_bar.max_value = maxi(1, att_max)
 	_attacker_bar.value = clampi(att_hp, 0, maxi(1, att_max))
+	ConquestTheme.tint_hp_bar(_attacker_bar, float(att_hp) / float(maxi(1, att_max)))
 	_attacker_hp.text = "%d/%d" % [att_hp, att_max]
+	_set_portrait(_attacker_portrait, attacker)
 
-	# Element accent stripe.
+	# Move name + element accent stripe.
 	_element_stripe.color = ConquestTheme.element_color(String(move.element))
+	_move_label.text = move.display_name_for(attacker) if move.has_method("display_name_for") else move.display_name
 
 	if board == null:
 		board = MoveExecutor._live_board()
@@ -357,7 +418,9 @@ func show_forecast(attacker, defender, move: MoveResource, board = null) -> void
 	_defender_name.text = _name_of(defender)
 	_defender_bar.max_value = maxi(1, def_max)
 	_defender_bar.value = clampi(target_hp, 0, maxi(1, def_max))
+	ConquestTheme.tint_hp_bar(_defender_bar, float(target_hp) / float(maxi(1, def_max)))
 	_defender_hp.text = "%d/%d" % [target_hp, def_max]
+	_set_portrait(_defender_portrait, defender)
 
 	if _move_has_damage(move, attacker):
 		var hit_pct: float = float(preview.get("hit_pct", 100.0))
@@ -369,23 +432,26 @@ func show_forecast(attacker, defender, move: MoveResource, board = null) -> void
 
 		_hit_value.text = "%d%%" % int(round(hit_pct))
 
-		var dmg_text := str(dmg)
-		if crit_pct > 0.0 and crit_dmg != dmg:
-			dmg_text += " (%d crit)" % crit_dmg
-		_dmg_value.text = dmg_text
+		_dmg_value.text = str(dmg)
+		_crit_dmg_label.text = "%d on crit" % crit_dmg if crit_pct > 0.0 and crit_dmg != dmg else ""
+		_crit_dmg_label.visible = _crit_dmg_label.text != ""
 
 		_crit_value.text = "%d%%" % int(round(crit_pct))
-		_show_stat_row(_crit_value, crit_pct > 0.0)
+		_show_stat_row(_crit_value, true)
 
-		_result_value.text = "%d -> %d" % [target_hp, remaining]
-		_show_stat_row(_result_value, true)
+		_result_value.text = "%d  →  %d" % [target_hp, remaining]
+		_defender_hp.text = "%d → %d" % [target_hp, remaining]
+		# The defender column already reads "55 → 23"; the legacy HP row stays
+		# populated (callers / tests read it) but hidden to avoid saying it twice.
+		_show_stat_row(_result_value, false)
 		_show_stat_row(_dmg_value, true)
 		_show_stat_row(_hit_value, true)
 		_lethal_label.visible = lethal
 		_show_damage_preview(remaining, target_hp, maxi(1, def_max))
 	else:
 		# Pure heal/buff/tile move aimed here: keep it clean, no fake damage.
-		_hit_value.text = "No damage"
+		_hit_value.text = "—"
+		_crit_dmg_label.visible = false
 		_show_stat_row(_hit_value, true)
 		_show_stat_row(_dmg_value, false)
 		_show_stat_row(_crit_value, false)
@@ -424,6 +490,20 @@ func _fit_to_viewport() -> void:
 	# Top-left anchored: pin the left edge at the margin and size the width to the right.
 	_card.offset_left = SIDE_MARGIN
 	_card.offset_right = SIDE_MARGIN + w
+	_card.offset_top = _top_offset()
+
+
+## Top edge for the card: just under the top-left HUD stack (Battle Log -- taller
+## when expanded -- and the Arena run panel) so they never overlap.
+func _top_offset() -> float:
+	var top := TOP_MARGIN
+	if not is_inside_tree():
+		return top
+	for n in get_tree().get_nodes_in_group("hud_top_left"):
+		var c := n as Control
+		if c != null and c.is_visible_in_tree():
+			top = maxf(top, c.get_global_rect().end.y + 10.0)
+	return top
 
 func hide_forecast() -> void:
 	"""Hide the forecast (targeting cancelled/cleared, or the move resolved)."""
@@ -494,6 +574,13 @@ func _move_has_damage(move: MoveResource, caster = null) -> bool:
 		if effect is DamageEffect:
 			return true
 	return false
+
+func _set_portrait(p: PanelContainer, unit) -> void:
+	if p == null or unit == null:
+		return
+	var cols := ConquestTheme.unit_portrait_colors(unit)
+	ConquestTheme.set_portrait(p, _name_of(unit), cols[0], cols[1])
+
 
 func _name_of(unit) -> String:
 	if unit and unit.has_method("get_display_name"):

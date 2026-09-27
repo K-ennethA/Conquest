@@ -186,6 +186,18 @@ static func describe(action: StringName, prefer_joypad: bool = false) -> String:
 	return fallback
 
 
+## True when a gamepad is connected -- HUD hints then show pad glyph names.
+static func using_gamepad() -> bool:
+	return not Input.get_connected_joypads().is_empty()
+
+
+## The hint glyph to SHOW for [param action] right now: the gamepad button name
+## ("A", "Y", "Start") when a pad is connected, else the first keyboard key ("E").
+## Follows rebinding (reads the live InputMap). "" when unbound.
+static func hint(action: StringName) -> String:
+	return describe(action, using_gamepad())
+
+
 ## Every keyboard binding of [param action], joined ("Esc / Backspace / X / C").
 static func describe_keys(action: StringName, separator: String = " / ") -> String:
 	var parts: PackedStringArray = []

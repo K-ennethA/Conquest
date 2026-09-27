@@ -40,6 +40,8 @@ func _ready() -> void:
 	var squad: Array = result.get("squad", []) if result.get("squad", []) is Array else []
 	var has_result: bool = not result.is_empty()
 
+	theme = MenuTheme.build()
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_background(victory, has_result)
 
 	var page: VBoxContainer = VBoxContainer.new()
@@ -51,10 +53,7 @@ func _ready() -> void:
 	# --- Banner --------------------------------------------------------------
 	var banner: Label = Label.new()
 	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	banner.add_theme_font_size_override("font_size", 72)
-	banner.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
-	banner.add_theme_constant_override("shadow_offset_y", 3)
-	banner.add_theme_constant_override("shadow_offset_x", 2)
+	banner.theme_type_variation = &"DisplayLabel"
 	if not has_result:
 		banner.text = "RUN COMPLETE"
 		banner.add_theme_color_override("font_color", _amber_lite)
@@ -69,7 +68,7 @@ func _ready() -> void:
 	# --- Subtitle / round reached -------------------------------------------
 	var subtitle: Label = Label.new()
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_font_size_override("font_size", 22)
+	subtitle.add_theme_font_size_override("font_size", MenuTheme.FS_SUBHEADING)
 	subtitle.add_theme_color_override("font_color", _cream)
 	if not has_result:
 		subtitle.text = "The arena run has ended."
@@ -82,7 +81,7 @@ func _ready() -> void:
 	if has_result:
 		var reached: Label = Label.new()
 		reached.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		reached.add_theme_font_size_override("font_size", 18)
+		reached.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
 		reached.add_theme_color_override("font_color", _cream_dim)
 		reached.text = "Reached round %d of %d" % [rounds_cleared, total_rounds]
 		page.add_child(reached)
@@ -98,30 +97,34 @@ func _ready() -> void:
 # --- Background -------------------------------------------------------------
 
 func _build_background(victory: bool, has_result: bool) -> void:
-	var bg: ColorRect = ColorRect.new()
-	bg.color = _bg_top
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# The shared menu backdrop (navy gradient + drifting motes).
+	var bg := MenuBackdrop.new()
+	bg.name = "Backdrop"
 	add_child(bg)
 
 	# Faint accent wash from the bottom -- gold on a win, dim red on a loss.
 	var accent: Color = _amber
 	if has_result:
 		accent = _gold if victory else _defeat_red
-	var glow: ColorRect = ColorRect.new()
-	glow.color = Color(accent.r, accent.g, accent.b, 0.12)
+	# A soft vertical gradient (no hard edge) rising from the bottom of the screen.
+	var grad := Gradient.new()
+	grad.set_color(0, Color(accent.r, accent.g, accent.b, 0.0))
+	grad.set_color(1, Color(accent.r, accent.g, accent.b, 0.16))
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.fill_from = Vector2(0.0, 0.0)
+	tex.fill_to = Vector2(0.0, 1.0)
+	tex.width = 8
+	tex.height = 256
+	var glow := TextureRect.new()
+	glow.texture = tex
+	glow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	glow.stretch_mode = TextureRect.STRETCH_SCALE
 	glow.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	glow.anchor_top = 0.4
+	glow.anchor_top = 0.35
 	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(glow)
 
-	var vignette: ColorRect = ColorRect.new()
-	vignette.color = Color(_bg_bottom.r, _bg_bottom.g, _bg_bottom.b, 0.55)
-	vignette.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	vignette.anchor_top = 0.55
-	vignette.offset_top = 0.0
-	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(vignette)
 
 
 # --- Squad panel ------------------------------------------------------------
@@ -143,20 +146,11 @@ func _build_squad_panel(squad: Array) -> Control:
 	col.custom_minimum_size = Vector2(420.0, 0.0)
 	margin.add_child(col)
 
-	var heading: Label = Label.new()
+	var heading: Label = MenuKit.section("Final Squad")
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	heading.add_theme_font_size_override("font_size", 18)
-	heading.add_theme_color_override("font_color", _amber_lite)
-	heading.text = "FINAL SQUAD"
 	col.add_child(heading)
 
-	var sep: HSeparator = HSeparator.new()
-	var sep_box: StyleBoxFlat = StyleBoxFlat.new()
-	sep_box.bg_color = _amber.darkened(0.2)
-	sep_box.content_margin_top = 1.0
-	sep_box.content_margin_bottom = 1.0
-	sep.add_theme_stylebox_override("separator", sep_box)
-	col.add_child(sep)
+	col.add_child(HSeparator.new())
 
 	for entry in squad:
 		if not (entry is Dictionary):
@@ -168,10 +162,14 @@ func _build_squad_panel(squad: Array) -> Control:
 
 func _build_squad_row(entry: Dictionary) -> Control:
 	var row: HBoxContainer = HBoxContainer.new()
-	row.add_theme_constant_override("separation", 16)
+	row.add_theme_constant_override("separation", 12)
+
+	var unit_name := _humanize_id(String(entry.get("name", "")))
+	row.add_child(ConquestTheme.portrait(unit_name, MenuTheme.GOLD, MenuTheme.TEAM_BLUE, 34.0))
 
 	var name_label: Label = Label.new()
-	name_label.add_theme_font_size_override("font_size", 18)
+	name_label.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_label.add_theme_color_override("font_color", _cream)
 	name_label.text = _humanize_id(String(entry.get("name", "")))
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -180,8 +178,9 @@ func _build_squad_row(entry: Dictionary) -> Control:
 	var count: int = int(entry.get("augment_count", 0))
 	var aug_label: Label = Label.new()
 	aug_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	aug_label.add_theme_font_size_override("font_size", 16)
-	aug_label.add_theme_color_override("font_color", _amber)
+	aug_label.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	aug_label.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
+	aug_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	var noun: String = "augment" if count == 1 else "augments"
 	aug_label.text = "%d %s" % [count, noun]
 	row.add_child(aug_label)
@@ -192,15 +191,8 @@ func _build_squad_row(entry: Dictionary) -> Control:
 # --- Return button ----------------------------------------------------------
 
 func _build_return_button() -> Control:
-	var btn: Button = Button.new()
-	btn.text = "Return to Menu"
-	btn.custom_minimum_size = Vector2(260.0, 56.0)
-	btn.add_theme_font_size_override("font_size", 22)
-	btn.add_theme_stylebox_override("normal", _button_box(_amber_lite))
-	btn.add_theme_stylebox_override("hover", _button_box(_amber_lite.lightened(0.10)))
-	btn.add_theme_stylebox_override("pressed", _button_box(_amber))
-	btn.add_theme_color_override("font_color", _ink)
-	btn.add_theme_color_override("font_hover_color", _brown_dk)
+	var btn: Button = MenuKit.button("Return to Menu", MenuKit.PRIMARY, 280.0, 56.0)
+	MenuNav.focus_deferred(btn)
 
 	var wrap: HBoxContainer = HBoxContainer.new()
 	wrap.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -241,16 +233,8 @@ func _humanize_id(id: String) -> String:
 
 
 func _plate_box() -> StyleBoxFlat:
-	var sb: StyleBoxFlat = StyleBoxFlat.new()
-	sb.bg_color = _plate_fill
-	sb.set_corner_radius_all(12)
-	sb.set_border_width_all(3)
-	sb.border_color = _brown_dk
+	var sb := MenuTheme.card_box()
 	sb.set_content_margin_all(0.0)
-	sb.shadow_color = Color(0, 0, 0, 0.45)
-	sb.shadow_size = 8
-	sb.shadow_offset = Vector2(0, 4)
-	sb.anti_aliasing = true
 	return sb
 
 
@@ -272,16 +256,16 @@ func _button_box(fill: Color) -> StyleBoxFlat:
 
 # --- Palette load -----------------------------------------------------------
 
-## Pull the warm colours from ConquestTheme (a verified script class_name; resolves at
-## author time). The hardcoded defaults above stand in if the class is ever removed.
+## The shared menu tokens (MenuTheme) -- navy + gold, same as every other screen.
 func _load_palette() -> void:
-	_plate_fill = ConquestTheme.PLATE_BG
-	_ink = ConquestTheme.INK
-	_cream = ConquestTheme.CREAM
-	_cream_dim = ConquestTheme.CREAM_DIM
-	_amber = ConquestTheme.AMBER
-	_amber_lite = ConquestTheme.AMBER_LITE
-	_brown_dk = ConquestTheme.BROWN_DK
-	_gold = ConquestTheme.EL_HOLY
-	_bg_top = ConquestTheme.INK.lerp(Color.BLACK, 0.15)
-	_bg_bottom = ConquestTheme.BROWN_DK.darkened(0.35)
+	_plate_fill = MenuTheme.PANEL
+	_ink = MenuTheme.INK
+	_cream = MenuTheme.CREAM
+	_cream_dim = MenuTheme.TEXT_DIM
+	_amber = MenuTheme.GOLD
+	_amber_lite = MenuTheme.GOLD_LITE
+	_brown_dk = MenuTheme.BG_DEEP
+	_gold = MenuTheme.GOLD_LITE
+	_defeat_red = MenuTheme.DANGER
+	_bg_top = MenuTheme.BG
+	_bg_bottom = MenuTheme.BG_DEEP

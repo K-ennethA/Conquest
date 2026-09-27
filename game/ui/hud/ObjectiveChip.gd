@@ -11,6 +11,7 @@ class_name ObjectiveChip
 
 var _label: Label
 var _danger: Label
+var _danger_chip: Control
 var _poll: Timer
 var _danger_on: bool = false
 
@@ -19,12 +20,12 @@ func _ready() -> void:
 	name = "ObjectiveChip"
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	var sb := ConquestTheme.plate_box()
-	sb.bg_color = Color(ConquestTheme.PLATE_BG, 0.88)
+	# Matches the phase chip above it: a slim navy strip with a gold diamond, cream
+	# objective text, and a violet "Danger zone" tag while that overlay is on.
+	ConquestTheme.keep_style(self)
+	var sb := ConquestTheme.chip_box(ConquestTheme.BORDER_SOFT, 0.9)
 	sb.content_margin_top = 3
-	sb.content_margin_bottom = 3
-	sb.content_margin_left = 12
-	sb.content_margin_right = 12
+	sb.content_margin_bottom = 4
 	add_theme_stylebox_override("panel", sb)
 
 	var row := HBoxContainer.new()
@@ -34,24 +35,33 @@ func _ready() -> void:
 
 	var icon := Label.new()
 	icon.text = "◆"
-	icon.add_theme_color_override("font_color", ConquestTheme.AMBER)
-	icon.add_theme_font_size_override("font_size", 13)
+	icon.add_theme_color_override("font_color", ConquestTheme.GOLD)
+	icon.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
+	icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(icon)
 
+	var tag := Label.new()
+	tag.text = "OBJECTIVE"
+	tag.theme_type_variation = &"SectionLabel"
+	tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(tag)
+
 	_label = Label.new()
 	_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
-	_label.add_theme_font_size_override("font_size", 14)
+	_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(_label)
 
-	_danger = Label.new()
-	_danger.text = "Danger zone"
-	_danger.add_theme_color_override("font_color", Color(0.82, 0.6, 1.0))
-	_danger.add_theme_font_size_override("font_size", 13)
-	_danger.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_danger.visible = false
-	row.add_child(_danger)
+	var danger_col := Color(0.72, 0.5, 1.0)
+	var danger_chip := ConquestTheme.chip("Danger zone", danger_col, ConquestTheme.FS_CAPTION)
+	danger_chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	danger_chip.visible = false
+	row.add_child(danger_chip)
+	_danger = danger_chip.get_node("Text") as Label
+	_danger_chip = danger_chip
 
 	if GameEvents:
 		GameEvents.danger_zone_changed.connect(_on_danger_zone_changed)
@@ -92,5 +102,5 @@ func refresh() -> void:
 	if gwm != null and gwm.has_method("get_game_mode_rules"):
 		text = ObjectiveText.chip_text(gwm.get_game_mode_rules(), gwm.get_objective_rounds_done())
 	_label.text = text
-	_danger.visible = _danger_on
+	_danger_chip.visible = _danger_on
 	visible = text != "" or _danger_on

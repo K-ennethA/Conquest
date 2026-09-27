@@ -46,8 +46,11 @@ func _ready() -> void:
 
 	_build_ui()
 
-	# Match the amber HUD look (self-themes; also inherits the parent theme).
+	# The shared navy + gold look (same tokens in battle and in the main menu).
 	ConquestTheme.apply_to(self)
+	var frame_sb := ConquestTheme.panel_box(0.98)
+	frame_sb.border_color = MenuTheme.GOLD_DK
+	_frame.add_theme_stylebox_override("panel", frame_sb)
 
 	# Stay in sync with external changes (other systems / a second panel).
 	if _has_settings() and not GameSettings.settings_changed.is_connected(_on_settings_changed):
@@ -74,7 +77,7 @@ func _has_settings() -> bool:
 func _build_ui() -> void:
 	# Dim backdrop behind the card; absorbs clicks (and closes on click-away).
 	_backdrop = ColorRect.new()
-	_backdrop.color = Color(0, 0, 0, 0.55)
+	_backdrop.color = Color(0.02, 0.03, 0.08, 0.6)
 	_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	_backdrop.gui_input.connect(_on_backdrop_input)
@@ -87,7 +90,7 @@ func _build_ui() -> void:
 	add_child(center)
 
 	_frame = PanelContainer.new()
-	_frame.custom_minimum_size = Vector2(460, 0)
+	_frame.custom_minimum_size = Vector2(560, 0)
 	_frame.mouse_filter = Control.MOUSE_FILTER_STOP
 	center.add_child(_frame)
 
@@ -104,10 +107,16 @@ func _build_ui() -> void:
 
 	# Title
 	var title := Label.new()
+	title.name = "Title"
 	title.text = "Settings"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_override("font", MenuTheme.bold_font(0.6, 2))
+	title.add_theme_font_size_override("font_size", 28)
 	vbox.add_child(title)
+	var rule := ColorRect.new()
+	rule.color = MenuTheme.GOLD
+	rule.custom_minimum_size = Vector2(56, 3)
+	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	vbox.add_child(rule)
 
 	# Two tabs: General (presentation) and Controls (keyboard rebinding).
 	var tabs := TabContainer.new()
@@ -134,7 +143,7 @@ func _build_ui() -> void:
 	_speed_value_label.text = "1.0x"
 	_speed_value_label.custom_minimum_size = Vector2(52, 0)
 	_speed_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_speed_value_label.add_theme_font_size_override("font_size", 16)
+	_speed_value_label.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
 	speed_header.add_child(_speed_value_label)
 	general.add_child(speed_header)
 
@@ -170,7 +179,8 @@ func _build_ui() -> void:
 	# --- Close ---
 	var close_btn := Button.new()
 	close_btn.text = "Close"
-	close_btn.custom_minimum_size = Vector2(0, 34)
+	close_btn.custom_minimum_size = Vector2(0, 44)
+	close_btn.theme_type_variation = &"PrimaryButton"
 	close_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	close_btn.pressed.connect(close)
 	vbox.add_child(close_btn)
@@ -186,7 +196,8 @@ func _build_controls_tab() -> Control:
 
 	var hint := Label.new()
 	hint.text = "Click an action, then press a key. Esc cancels."
-	hint.add_theme_font_size_override("font_size", 13)
+	hint.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	hint.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
 	root.add_child(hint)
 
 	var scroll := ScrollContainer.new()
@@ -207,11 +218,12 @@ func _build_controls_tab() -> Control:
 		var lbl := Label.new()
 		lbl.text = entry["label"]
 		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lbl.add_theme_font_size_override("font_size", 14)
+		lbl.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 		grid.add_child(lbl)
 
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(120, 28)
+		btn.custom_minimum_size = Vector2(150, 34)
+		btn.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 		btn.mouse_filter = Control.MOUSE_FILTER_STOP
 		btn.pressed.connect(_begin_capture.bind(action))
 		grid.add_child(btn)
@@ -219,18 +231,20 @@ func _build_controls_tab() -> Control:
 
 		var pad := Label.new()
 		pad.text = InputActions.describe(action, true)
-		pad.add_theme_font_size_override("font_size", 12)
-		pad.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
+		pad.custom_minimum_size = Vector2(70, 0)
+		pad.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+		pad.add_theme_color_override("font_color", MenuTheme.TEXT_MUTED)
 		grid.add_child(pad)
 
 	_controls_status = Label.new()
-	_controls_status.add_theme_font_size_override("font_size", 13)
+	_controls_status.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	_controls_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root.add_child(_controls_status)
 
 	var reset_btn := Button.new()
 	reset_btn.text = "Reset to Defaults"
-	reset_btn.custom_minimum_size = Vector2(0, 30)
+	reset_btn.custom_minimum_size = Vector2(0, 38)
+	reset_btn.theme_type_variation = &"GhostButton"
 	reset_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	reset_btn.pressed.connect(_on_reset_bindings)
 	root.add_child(reset_btn)
@@ -245,7 +259,7 @@ func _make_row(label_text: String) -> HBoxContainer:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var lbl := Label.new()
 	lbl.text = label_text
-	lbl.add_theme_font_size_override("font_size", 16)
+	lbl.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(lbl)

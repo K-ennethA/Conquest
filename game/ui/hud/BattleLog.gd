@@ -11,9 +11,9 @@ class_name BattleLog
 ## bottom-left anchors resolve against the whole window (no top_level needed).
 
 const MAX_LINES: int = 60
-const PANEL_WIDTH: float = 330.0
-const PANEL_HEIGHT: float = 158.0
-const MARGIN: float = 12.0
+const PANEL_WIDTH: float = 360.0
+const PANEL_HEIGHT: float = 190.0
+const MARGIN: float = 16.0
 ## The log lives in the TOP-LEFT corner, not the bottom-left. The bottom-left corner is
 ## already shared by the TerrainInfoPanel (hover) and TurnSystemIndicator, and the log
 ## kept overlapping / rendering behind the terrain card there (different CanvasLayers, so
@@ -21,18 +21,18 @@ const MARGIN: float = 12.0
 ## persistent panel -- only the CombatForecastPanel appears there, and only briefly while
 ## aiming a move -- so parking the log here keeps it clear of the inspection cluster. It
 ## grows DOWNWARD from TOP_MARGIN.
-const TOP_MARGIN: float = 8.0
+const TOP_MARGIN: float = 12.0
 ## Height when collapsed to just its clickable header (default). Click the header
 ## to expand to PANEL_HEIGHT; click again to collapse. Starts collapsed so the log
 ## stays out of the way (a tiny header) until the player wants to read it.
-const COLLAPSED_HEIGHT: float = 30.0
+const COLLAPSED_HEIGHT: float = 38.0
 
 # Side tints (bbcode): the local/ally side reads cool, the AI/enemy side warm-red, so
 # you can scan who did what at a glance. Neutral events use cream.
-const ALLY_COLOR: String = "#cfe8ff"
-const ENEMY_COLOR: String = "#ffb3a0"
-const NEUTRAL_COLOR: String = "#efe2c4"
-const DIM_COLOR: String = "#b9a97f"
+const ALLY_COLOR: String = "#8cc4ff"
+const ENEMY_COLOR: String = "#ff8f80"
+const NEUTRAL_COLOR: String = "#f5eedc"
+const DIM_COLOR: String = "#9ba5c8"
 
 var _log: RichTextLabel
 var _lines: Array[String] = []
@@ -49,6 +49,8 @@ var _unread: int = 0
 
 func _ready() -> void:
 	name = "BattleLog"
+	add_to_group("battle_log")
+	add_to_group("hud_top_left")
 	_build_ui()
 	# TOP-left corner (see TOP_MARGIN note): out of the contested bottom-left inspection
 	# cluster, so it no longer overlaps / hides behind the terrain card. Grows downward.
@@ -90,16 +92,14 @@ func _toggle_expanded() -> void:
 
 func _build_ui() -> void:
 	# Dark, semi-transparent plate so log text reads over the 3D board.
-	var box := StyleBoxFlat.new()
-	box.bg_color = Color(0.10, 0.075, 0.05, 0.72)
-	box.set_corner_radius_all(8)
-	box.set_content_margin_all(8)
-	box.border_width_left = 1
-	box.border_width_top = 1
-	box.border_width_right = 1
-	box.border_width_bottom = 1
-	box.border_color = Color(0.85, 0.62, 0.30, 0.5)  # faint amber edge
+	# Navy HUD plate (same tokens as every other panel), a touch more translucent.
+	var box := ConquestTheme.chip_box(ConquestTheme.BORDER_SOFT, 0.86)
+	box.content_margin_left = 12
+	box.content_margin_right = 12
+	box.content_margin_top = 4
+	box.content_margin_bottom = 6
 	add_theme_stylebox_override("panel", box)
+	ConquestTheme.keep_style(self)
 
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 3)
@@ -113,9 +113,12 @@ func _build_ui() -> void:
 	_header.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_header.focus_mode = Control.FOCUS_NONE
 	_header.mouse_filter = Control.MOUSE_FILTER_STOP  # capture clicks even though the panel is IGNORE
-	_header.add_theme_font_size_override("font_size", 12)
-	_header.add_theme_color_override("font_color", Color(0.85, 0.62, 0.30))
-	_header.add_theme_color_override("font_hover_color", Color(1.0, 0.82, 0.45))
+	_header.add_theme_font_override("font", MenuTheme.bold_font(0.45, 2))
+	_header.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
+	_header.add_theme_color_override("font_color", ConquestTheme.GOLD)
+	_header.add_theme_color_override("font_hover_color", ConquestTheme.GOLD_LITE)
+	_header.add_theme_color_override("font_pressed_color", ConquestTheme.GOLD_LITE)
+	_header.add_theme_color_override("font_focus_color", ConquestTheme.GOLD_LITE)
 	# Flat button still draws hover/pressed plates; blank them so it reads as a label.
 	var clear_sb := StyleBoxEmpty.new()
 	_header.add_theme_stylebox_override("normal", clear_sb)
@@ -131,8 +134,8 @@ func _build_ui() -> void:
 	_log.scroll_following = true   # keep the newest line in view
 	_log.fit_content = false
 	_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_log.custom_minimum_size = Vector2(PANEL_WIDTH - 16.0, PANEL_HEIGHT - 34.0)
-	_log.add_theme_font_size_override("normal_font_size", 12)
+	_log.custom_minimum_size = Vector2(PANEL_WIDTH - 24.0, PANEL_HEIGHT - 46.0)
+	_log.add_theme_font_size_override("normal_font_size", ConquestTheme.FS_SMALL)
 	_log.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(_log)
 

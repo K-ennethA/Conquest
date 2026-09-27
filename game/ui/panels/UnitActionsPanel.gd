@@ -15,8 +15,8 @@ class_name UnitActionsPanel
 @onready var unit_type_label: Label = $MarginContainer/ContentContainer/UnitHeaderContainer/UnitInfoContainer/UnitTypeLabel
 @onready var move_button: Button = $MarginContainer/ContentContainer/ActionsContainer/MoveButton
 @onready var end_unit_turn_button: Button = $MarginContainer/ContentContainer/ActionsContainer/EndUnitTurnButton
-@onready var unit_summary_button: Button = $MarginContainer/ContentContainer/UnitSummaryButton
-@onready var stats_container: VBoxContainer = $MarginContainer/ContentContainer/StatsContainer
+@onready var unit_summary_button: Button = $MarginContainer/ContentContainer/ActionsContainer/UnitSummaryButton
+@onready var stats_container: GridContainer = $MarginContainer/ContentContainer/StatsContainer
 @onready var health_label: Label = $MarginContainer/ContentContainer/StatsContainer/HealthLabel
 @onready var attack_label: Label = $MarginContainer/ContentContainer/StatsContainer/AttackLabel
 @onready var defense_label: Label = $MarginContainer/ContentContainer/StatsContainer/DefenseLabel
@@ -24,7 +24,7 @@ class_name UnitActionsPanel
 @onready var movement_label: Label = $MarginContainer/ContentContainer/StatsContainer/MovementLabel
 @onready var range_label: Label = $MarginContainer/ContentContainer/StatsContainer/RangeLabel
 @onready var end_player_turn_button: Button = $MarginContainer/ContentContainer/EndPlayerTurnButton
-@onready var cancel_button: Button = $MarginContainer/ContentContainer/CancelButton
+@onready var cancel_button: Button = $MarginContainer/ContentContainer/ActionsContainer/CancelButton
 
 var selected_unit: Unit = null
 var stats_expanded: bool = false
@@ -82,7 +82,14 @@ var _path_shown: bool = false
 # hidden while aiming a move (the attack-range highlight takes over) and restored.
 var _fringe_grid: Array = []
 
+# Code-built header pieces (portrait emblem + HP row); see _setup_unit_header_styling.
+var _portrait: PanelContainer = null
+var _hp_row: HBoxContainer = null
+var _hp_bar: ProgressBar = null
+var _hp_text: Label = null
+
 func _ready() -> void:
+	add_to_group("unit_actions_panel")
 	# Ensure proper mouse handling
 	mouse_filter = Control.MOUSE_FILTER_STOP  # Make sure panel stops mouse events
 	
@@ -158,20 +165,87 @@ func _notification(what: int) -> void:
 			pass
 
 func _setup_unit_header_styling() -> void:
-	"""Setup styling for the unit header background"""
-	if unit_header_background:
-		var style_box = StyleBoxFlat.new()
-		style_box.bg_color = Color(0.2, 0.2, 0.2, 0.8)
-		style_box.border_color = Color(0.4, 0.4, 0.4, 0.8)
-		style_box.border_width_left = 1
-		style_box.border_width_top = 1
-		style_box.border_width_right = 1
-		style_box.border_width_bottom = 1
-		style_box.corner_radius_top_left = 4
-		style_box.corner_radius_top_right = 4
-		style_box.corner_radius_bottom_left = 4
-		style_box.corner_radius_bottom_right = 4
-		unit_header_background.add_theme_stylebox_override("panel", style_box)
+	"""Build the FE-style unit header: a circular portrait emblem (initial on the
+	unit's element colour, ringed in its team colour), the full name (wraps -- never
+	truncated; tooltip carries it too), a side / element subtitle, and a slim HP bar
+	with numbers. The command rows below get key-hint caps (see _set_command)."""
+	if unit_header_container and _portrait == null:
+		_portrait = ConquestTheme.portrait("?", ConquestTheme.GOLD, ConquestTheme.BORDER, 52.0)
+		unit_header_container.add_child(_portrait)
+		unit_header_container.move_child(_portrait, unit_info_container.get_index() if unit_info_container else 0)
+	if unit_name_label:
+		unit_name_label.theme_type_variation = &"SubheadingLabel"
+		unit_name_label.clip_text = false
+		unit_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		unit_name_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	if unit_type_label:
+		unit_type_label.clip_text = false
+		unit_type_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	if unit_info_container and _hp_row == null:
+		_hp_row = HBoxContainer.new()
+		_hp_row.name = "HPRow"
+		_hp_row.add_theme_constant_override("separation", 8)
+		_hp_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ConquestTheme.keep_style(_hp_row)
+		unit_info_container.add_child(_hp_row)
+		_hp_bar = ConquestTheme.hp_bar(9.0)
+		_hp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_hp_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_hp_row.add_child(_hp_bar)
+		_hp_text = Label.new()
+		_hp_text.name = "HPText"
+		_hp_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_hp_text.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+		_hp_text.add_theme_color_override("font_color", ConquestTheme.CREAM)
+		_hp_row.add_child(_hp_text)
+	if stats_container:
+		ConquestTheme.keep_style(stats_container)
+		for c in stats_container.get_children():
+			if c is Label:
+				(c as Label).add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+				(c as Label).add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
+	# Tooltips for the commands (mouse users; the key caps cover keyboard / pad).
+	if move_button:
+		move_button.tooltip_text = "Move this unit. Pick a blue tile, then act or Wait."
+	if end_unit_turn_button:
+		end_unit_turn_button.tooltip_text = "Wait: end this unit's action for the turn (keeps any move)."
+	if unit_summary_button:
+		unit_summary_button.tooltip_text = "Show / hide this unit's stats."
+	if cancel_button:
+		cancel_button.tooltip_text = "Back out one step (undo the move, then deselect)."
+	for b in [move_button, end_unit_turn_button, unit_summary_button, cancel_button]:
+		if b:
+			b.theme_type_variation = &"HudCommand"
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			b.focus_mode = Control.FOCUS_NONE
+
+
+## Set a command row's label and its right-aligned hint: a key cap for [param action]
+## (from InputActions -- follows rebinding and shows the pad glyph when a gamepad is
+## connected), or a short [param note] ("Done", "4/4 ready") instead.
+func _set_command(button: Button, label: String, action: StringName = &"", note: String = "",
+		note_color: Color = ConquestTheme.TEXT_MUTED) -> void:
+	if button == null:
+		return
+	button.text = label
+	ConquestTheme.set_button_hint(button, ConquestTheme.action_glyph(action) if note == "" else "", note, note_color)
+
+
+## The key-hint text currently shown on a command row ("" when none) -- tests.
+func command_hint_text(button: Button) -> String:
+	var hint := button.get_node_or_null("Hint") if button else null
+	if hint == null:
+		return ""
+	for c in hint.get_children():
+		if c.is_queued_for_deletion():
+			continue
+		if c is Label:
+			return (c as Label).text
+		var k := c.get_node_or_null("Key") as Label
+		if k != null:
+			return k.text
+	return ""
+
 
 func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	"""Handle unit selection - show actions for selected unit"""
@@ -210,37 +284,54 @@ func _show_movement_range_on_selection() -> void:
 	_calculate_and_show_movement_range()
 
 func _update_unit_header() -> void:
-	"""Update the unit header with name, type, and icon"""
+	"""Update the unit header: portrait, full name (never truncated), side / element
+	subtitle in the team colour, and HP."""
 	if not selected_unit:
 		return
-	
-	# Update unit name with player info
+	var player = selected_unit.get_owner_player()
+	var display_name: String = selected_unit.get_display_name()
+
 	if unit_name_label:
-		var player = selected_unit.get_owner_player()
-		var player_info = ""
-		if player:
-			player_info = " (" + player.get_display_name() + ")"
-		unit_name_label.text = selected_unit.get_display_name() + player_info
-	
-	# Update unit type. Post-migration get_unit_type() returns a String (the
-	# character_id), not an object -- show a humanized form, and hide the label
-	# when it would just duplicate the unit's name.
+		unit_name_label.text = display_name
+		unit_name_label.tooltip_text = display_name
+
+	# Subtitle: "Ally · Nature · Vineweave" (the type only when it adds information).
 	if unit_type_label:
-		var unit_type: String = selected_unit.get_unit_type()
-		var type_text := _humanize_id(unit_type)
-		if type_text == "" or type_text == selected_unit.get_display_name():
-			unit_type_label.visible = false
-		else:
-			unit_type_label.visible = true
-			unit_type_label.text = type_text
-	
-	# Update unit icon
+		var parts: PackedStringArray = [ConquestTheme.side_label(player)]
+		var el := String(selected_unit.get_element()) if selected_unit.has_method("get_element") else ""
+		if el != "":
+			parts.append(el.capitalize())
+		if selected_unit.has_method("is_boss") and selected_unit.is_boss():
+			parts.append("Boss")
+		var type_text := _humanize_id(selected_unit.get_unit_type())
+		if type_text != "" and not display_name.to_lower().contains(type_text.to_lower()):
+			parts.append(type_text)
+		unit_type_label.text = "  ·  ".join(parts)
+		unit_type_label.visible = true
+		unit_type_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+		unit_type_label.add_theme_color_override("font_color", ConquestTheme.team_text_color(player))
+
+	if _portrait:
+		var cols := ConquestTheme.unit_portrait_colors(selected_unit)
+		ConquestTheme.set_portrait(_portrait, display_name, cols[0], cols[1])
+	_update_header_hp()
+
+	# Legacy icon texture (hidden node; kept so callers / tests stay valid).
 	if unit_icon:
 		_update_unit_icon()
-	
-	# Update header background color based on player
 	if unit_header_background:
 		_update_header_background_color()
+
+
+func _update_header_hp() -> void:
+	if not selected_unit or _hp_bar == null:
+		return
+	var cur: int = int(selected_unit.current_health)
+	var mx: int = maxi(1, int(selected_unit.max_health))
+	var frac := clampf(float(cur) / float(mx), 0.0, 1.0)
+	_hp_bar.value = frac
+	ConquestTheme.tint_hp_bar(_hp_bar, frac)
+	_hp_text.text = "%d/%d" % [cur, mx]
 
 ## Turn a snake_case id ("vineweave") into a display string
 ## ("Torvald Ironhide"). Empty in -> empty out.
@@ -308,82 +399,41 @@ func _update_unit_icon() -> void:
 	unit_icon.texture = texture
 
 func _update_header_background_color() -> void:
-	"""Update header background color based on player"""
+	"""Team colour now lives in the portrait ring + subtitle; the old header plate
+	is hidden. Kept as a no-op-safe hook for callers."""
 	if not selected_unit or not unit_header_background:
 		return
-	
-	var player = selected_unit.get_owner_player()
-	var style_box = StyleBoxFlat.new()
-	
-	# Base styling
-	style_box.border_width_left = 1
-	style_box.border_width_top = 1
-	style_box.border_width_right = 1
-	style_box.border_width_bottom = 1
-	style_box.corner_radius_top_left = 4
-	style_box.corner_radius_top_right = 4
-	style_box.corner_radius_bottom_left = 4
-	style_box.corner_radius_bottom_right = 4
-	
-	# Color based on player
-	if player:
-		if player.player_id == 0:
-			# Player 1 - blue theme
-			style_box.bg_color = Color(0.1, 0.2, 0.4, 0.8)
-			style_box.border_color = Color(0.2, 0.4, 0.8, 0.8)
-		elif player.player_id == 1:
-			# Player 2 - red theme
-			style_box.bg_color = Color(0.4, 0.1, 0.1, 0.8)
-			style_box.border_color = Color(0.8, 0.2, 0.2, 0.8)
-		else:
-			# Neutral - gray theme
-			style_box.bg_color = Color(0.2, 0.2, 0.2, 0.8)
-			style_box.border_color = Color(0.4, 0.4, 0.4, 0.8)
-	else:
-		# No player - default gray
-		style_box.bg_color = Color(0.2, 0.2, 0.2, 0.8)
-		style_box.border_color = Color(0.4, 0.4, 0.4, 0.8)
-	
-	unit_header_background.add_theme_stylebox_override("panel", style_box)
+	unit_header_background.visible = false
 
 func _update_unit_stats() -> void:
-	"""Update the unit stats display"""
+	"""Update the compact stats grid (HP / ATK / DEF / SPD / MOV / RNG)."""
 	if not selected_unit:
 		return
-	
-	# Update all stat labels
+	_update_header_hp()
+	var st := func(n: String) -> int:
+		return int(selected_unit.get_stat(n)) if selected_unit.has_method("get_stat") else 0
 	if health_label:
-		health_label.text = "Health: " + str(selected_unit.current_health) + "/" + str(selected_unit.max_health)
-	
+		health_label.text = "HP  %d/%d" % [selected_unit.current_health, selected_unit.max_health]
 	if attack_label:
-		var attack = selected_unit.get_stat("attack") if selected_unit.has_method("get_stat") else 0
-		attack_label.text = "Attack: " + str(attack)
-	
+		attack_label.text = "ATK  %d" % st.call("attack")
 	if defense_label:
-		var defense = selected_unit.get_stat("defense") if selected_unit.has_method("get_stat") else 0
-		defense_label.text = "Defense: " + str(defense)
-	
+		defense_label.text = "DEF  %d" % st.call("defense")
 	if speed_label:
-		var speed = selected_unit.get_stat("speed") if selected_unit.has_method("get_stat") else 0
+		var speed: int = st.call("speed")
 		# Show current speed if different from base (due to battle effects)
 		var current_speed = speed
 		if TurnSystemManager.has_active_turn_system():
 			var turn_system = TurnSystemManager.get_active_turn_system()
 			if turn_system is SpeedFirstTurnSystem:
 				current_speed = (turn_system as SpeedFirstTurnSystem).get_unit_current_speed(selected_unit)
-		
 		if current_speed != speed:
-			speed_label.text = "Speed: " + str(current_speed) + " (base: " + str(speed) + ")"
+			speed_label.text = "SPD  %d (%d)" % [current_speed, speed]
 		else:
-			speed_label.text = "Speed: " + str(speed)
-	
+			speed_label.text = "SPD  %d" % speed
 	if movement_label:
-		var movement = selected_unit.get_stat("movement") if selected_unit.has_method("get_stat") else 0
-		movement_label.text = "Movement: " + str(movement)
-	
+		movement_label.text = "MOV  %d" % st.call("movement")
 	if range_label:
-		var range_val = selected_unit.get_stat("range") if selected_unit.has_method("get_stat") else 0
-		range_label.text = "Range: " + str(range_val)
+		range_label.text = "RNG  %d" % st.call("range")
 
 func _on_unit_summary_pressed() -> void:
 	"""Handle Unit Summary button press - toggle stats display"""
@@ -393,10 +443,7 @@ func _on_unit_summary_pressed() -> void:
 		stats_container.visible = stats_expanded
 	
 	if unit_summary_button:
-		if stats_expanded:
-			unit_summary_button.text = "Unit Summary ▲"
-		else:
-			unit_summary_button.text = "Unit Summary ▼"
+		_set_command(unit_summary_button, "Info ▴" if stats_expanded else "Info", InputActions.UNIT_INFO)
 
 func _on_unit_deselected(unit: Unit) -> void:
 	"""Handle unit deselection - hide actions"""
@@ -420,7 +467,7 @@ func _on_unit_deselected(unit: Unit) -> void:
 		if stats_container:
 			stats_container.visible = false
 		if unit_summary_button:
-			unit_summary_button.text = "Unit Summary ▼"
+			unit_summary_button.text = "Info"
 
 		# Clear movement range when unit is deselected
 		_clear_movement_range()
@@ -571,76 +618,61 @@ func _update_actions() -> void:
 	# while a tentative move is staged: the unit has already moved (pending confirm),
 	# so re-entering movement would let it move twice. It reverts to available if the
 	# tentative move is cancelled.
+	# FE command list: Move / Skills / Wait / Info / Cancel. Each row shows its key
+	# (or pad) glyph from InputActions; an unavailable command shows WHY instead.
+	var reason_note := "N/A"
+	if not can_control:
+		reason_note = "Not yours" if not (current_player and current_player.owns_unit(selected_unit)) else "Not your turn"
+	elif action_restriction_reason == "not this unit's turn":
+		reason_note = "Not its turn"
+	elif action_restriction_reason in ["already acted this round", "already acted this turn"]:
+		reason_note = "Done"
+
+	# Move is also disabled while a tentative move is staged: the unit has already
+	# moved (pending confirm), so re-entering movement would let it move twice. It
+	# reverts to available if the tentative move is cancelled.
 	if move_button:
 		var can_move = can_control and can_perform_unit_actions and selected_unit.can_move() and not _tentative_active
 		move_button.disabled = not can_move
-
 		if can_move:
-			move_button.text = "Move (M)"
-		elif not can_control:
-			move_button.text = "Move (M)\n[Not Yours]"
-		elif action_restriction_reason == "not this unit's turn":
-			move_button.text = "Move (M)\n[Not Turn]"
-		elif action_restriction_reason == "already acted this round":
-			move_button.text = "Move (M)\n[Used]"
-		elif action_restriction_reason == "already acted this turn":
-			move_button.text = "Move (M)\n[Used]"
+			_set_command(move_button, "Move", InputActions.UNIT_MOVE)
+		elif can_control and can_perform_unit_actions and (_tentative_active or not selected_unit.can_move()):
+			_set_command(move_button, "Move", &"", "Moved")
 		else:
-			move_button.text = "Move (M)\n[N/A]"
-	
+			_set_command(move_button, "Move", &"", reason_note)
+
 	# Update Moves (action) button - available if the unit still has its action.
 	if moves_button:
 		moves_button.disabled = not (can_control and can_perform_unit_actions and selected_unit.can_act())
 
-	# Update End Unit Turn button - only available if unit can perform actions
+	# WAIT: ends THIS unit's action (the old "End Turn (E)" label read like ending
+	# the whole phase -- that lives in the Map Menu now).
 	if end_unit_turn_button:
 		var can_end_unit_turn = can_control and can_perform_unit_actions and selected_unit.can_act()
 		end_unit_turn_button.disabled = not can_end_unit_turn
-		
 		if can_end_unit_turn:
-			end_unit_turn_button.text = "End Turn (E)"
-		elif not can_control:
-			end_unit_turn_button.text = "End Turn (E)\n[Not Yours]"
-		elif action_restriction_reason == "not this unit's turn":
-			end_unit_turn_button.text = "End Turn (E)\n[Not Turn]"
-		elif action_restriction_reason == "already acted this round":
-			end_unit_turn_button.text = "End Turn (E)\n[Used]"
-		elif action_restriction_reason == "already acted this turn":
-			end_unit_turn_button.text = "End Turn (E)\n[Used]"
+			_set_command(end_unit_turn_button, "Wait", InputActions.WAIT)
 		else:
-			end_unit_turn_button.text = "End Turn (E)\n[N/A]"
-	
-	# Update End Player Turn button - decoupled from the INSPECTED unit: it is about
-	# whose turn it is, not which unit is selected. Enabled only when the game is active
-	# AND the current turn player is human-controlled (so it stays disabled during the
-	# AI's turn / when it is not this client's turn).
+			_set_command(end_unit_turn_button, "Wait", &"", reason_note)
+
+	# End Player Turn is not part of the per-unit command list any more (Map Menu >
+	# End Turn, or the end_turn action). The hidden button keeps its state in sync
+	# for any caller that still reads it.
 	if end_player_turn_button:
 		var current_is_human = _player_is_human(current_player)
-		var can_end_player_turn = game_active and current_is_human
-		end_player_turn_button.disabled = not can_end_player_turn
+		end_player_turn_button.disabled = not (game_active and current_is_human)
+		end_player_turn_button.visible = false
 
-		if can_end_player_turn:
-			end_player_turn_button.text = "End Player Turn (P)"
-		elif not game_active:
-			end_player_turn_button.text = "End Player Turn (P)\n[N/A]"
-		elif GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
-			end_player_turn_button.text = "End Player Turn (P)\n[Not Your Turn]"
-		else:
-			end_player_turn_button.text = "End Player Turn (P)\n[AI Turn]"
-	
-	# Unit Summary button is always available when unit is selected (handled in _on_unit_summary_pressed)
+	# Info is always available when a unit is selected.
 	if unit_summary_button:
 		unit_summary_button.disabled = false
-		if stats_expanded:
-			unit_summary_button.text = "Unit Summary ▲"
-		else:
-			unit_summary_button.text = "Unit Summary ▼"
-	
-	# Cancel button is always available when unit is selected
+		_set_command(unit_summary_button, "Info ▴" if stats_expanded else "Info", InputActions.UNIT_INFO)
+
+	# Cancel is always available when a unit is selected.
 	if cancel_button:
 		cancel_button.disabled = false
-		cancel_button.text = "Cancel (C/ESC)"
-	
+		_set_command(cancel_button, "Cancel", InputActions.CANCEL)
+
 	# Update Moves button availability
 	_update_moves_button_availability()
 
@@ -1697,8 +1729,12 @@ func _setup_move_system() -> void:
 
 	# Create moves button and add it to the actions container
 	moves_button = Button.new()
-	moves_button.text = "MOVES"
-	moves_button.custom_minimum_size = Vector2(120, 40)
+	moves_button.name = "MovesButton"
+	moves_button.text = "Skills"
+	moves_button.theme_type_variation = &"HudCommand"
+	moves_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	moves_button.focus_mode = Control.FOCUS_NONE
+	moves_button.tooltip_text = "Attack or use a skill: pick one of this unit's moves, then a target."
 	moves_button.pressed.connect(_on_moves_pressed)
 	
 	# Add moves button to the actions container (after move button)
@@ -2195,16 +2231,18 @@ func _update_moves_button_availability() -> void:
 	# Legacy (non-character) units have no authored MoveResource moveset.
 	if not selected_unit.has_character():
 		moves_button.disabled = true
-		moves_button.text = "MOVES (None)"
+		_set_command(moves_button, "Skills", &"", "None")
 		return
 
 	var moveset: Array[MoveResource] = selected_unit.get_moveset()
 	var controller = selected_unit.get_moveset_controller()
 
 	var usable := 0
+	var total := 0
 	for move in moveset:
 		if move == null:
 			continue
+		total += 1
 		if controller and controller.has_method("can_use"):
 			if controller.can_use(move):
 				usable += 1
@@ -2213,12 +2251,14 @@ func _update_moves_button_availability() -> void:
 
 	# READ-ONLY VIEW: a unit the local human may NOT command (enemy / AI / not-your-turn)
 	# can still open its move list to READ each move's details. Keep the button enabled
-	# whenever the unit HAS a moveset and relabel it VIEW MOVES; clicking opens the popup
-	# in view-only mode (no targeting, no execution). Cooldown/uses do not matter for
-	# reading, so availability here is purely "does it have moves to show".
+	# whenever the unit HAS a moveset; clicking opens the popup in view-only mode (no
+	# targeting, no execution). Cooldown/uses do not matter for reading.
 	if not _human_may_command(selected_unit):
 		moves_button.disabled = moveset.is_empty()
-		moves_button.text = "MOVES (None)" if moveset.is_empty() else "VIEW MOVES"
+		if moveset.is_empty():
+			_set_command(moves_button, "Skills", &"", "None")
+		else:
+			_set_command(moves_button, "Skills", &"", "View %d" % total, ConquestTheme.TEXT_DIM)
 		return
 
 	var has_action := true
@@ -2228,8 +2268,10 @@ func _update_moves_button_availability() -> void:
 	moves_button.disabled = usable == 0 or not has_action
 
 	if moveset.is_empty():
-		moves_button.text = "MOVES (None)"
+		_set_command(moves_button, "Skills", &"", "None")
+	elif not has_action:
+		_set_command(moves_button, "Skills", &"", "Done")
 	elif usable == 0:
-		moves_button.text = "MOVES (All on cooldown)"
+		_set_command(moves_button, "Skills", &"", "Cooldown")
 	else:
-		moves_button.text = "MOVES (" + str(usable) + " available)"
+		_set_command(moves_button, "Skills", &"", "%d/%d ready" % [usable, total], ConquestTheme.TEXT_DIM)

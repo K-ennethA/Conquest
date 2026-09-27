@@ -112,7 +112,7 @@ func _build_map_menu() -> void:
 	add_child(map_menu)
 
 func _apply_theme() -> void:
-	"""Apply the amber ConquestTheme to this HUD subtree (panels, buttons, text)."""
+	"""Apply the navy + gold ConquestTheme (MenuTheme tokens) to this HUD subtree."""
 	ConquestTheme.apply_to(self)
 
 func _build_settings_ui() -> void:
@@ -188,7 +188,7 @@ func _initialize_layout() -> void:
 		left_sidebar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	
 	if right_sidebar:
-		right_sidebar.custom_minimum_size = Vector2(220, 0)
+		right_sidebar.custom_minimum_size = Vector2(290, 0)
 		right_sidebar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	
 	# Game area should expand to fill remaining space
@@ -347,11 +347,11 @@ func _on_viewport_size_changed() -> void:
 	if viewport_size.x < 1200:
 		# On smaller screens, make right sidebar slightly smaller
 		if right_sidebar:
-			right_sidebar.custom_minimum_size.x = 180  # Slightly smaller
+			right_sidebar.custom_minimum_size.x = 260  # Slightly smaller
 	else:
 		# On larger screens, use full sidebar width
 		if right_sidebar:
-			right_sidebar.custom_minimum_size.x = 220
+			right_sidebar.custom_minimum_size.x = 290
 
 func force_layout_update() -> void:
 	"""Force a complete layout update (useful for debugging)"""

@@ -17,8 +17,10 @@ class_name MapMenu
 ## Modal: while open it is in [constant InputActions.OVERLAY_GROUP], so the board
 ## cursor / unit panel / danger zone ignore input. Keyboard + gamepad navigable
 ## (focus moves with ui_up/ui_down, ui_accept picks, cancel / map_menu go back).
-## Also handles the `end_turn` shortcut when nothing is selected (the HUD has no
-## PlayerTurnPanel in the battle scene), opening the End Turn confirm.
+## Also handles the `end_turn` shortcut (the HUD has no PlayerTurnPanel in the
+## battle scene), opening the SAME End Turn confirm -- also while a unit is
+## selected, since the per-unit command list no longer carries "End Player Turn".
+## A confirm opened by the shortcut closes straight back to the board on Cancel.
 
 signal closed
 
@@ -37,6 +39,10 @@ var _card: PanelContainer
 var _title: Label
 var _body: VBoxContainer
 var _hint: Label
+var _footer: HBoxContainer
+## True when the End Turn confirm was opened straight from the `end_turn` shortcut
+## (not from the main page): Cancel / Esc then close the menu instead of showing MAIN.
+var _direct_confirm: bool = false
 
 
 func _ready() -> void:
@@ -47,14 +53,12 @@ func _ready() -> void:
 	add_to_group(InputActions.OVERLAY_GROUP)
 	_build_ui()
 	ConquestTheme.apply_to(self)
-	_title.add_theme_font_size_override("font_size", 20)
-	_hint.add_theme_font_size_override("font_size", 12)
-	_hint.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
+	_style()
 
 
 func _build_ui() -> void:
 	_backdrop = ColorRect.new()
-	_backdrop.color = Color(0, 0, 0, 0.45)
+	_backdrop.color = Color(0.02, 0.03, 0.08, 0.55)
 	_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	_backdrop.gui_input.connect(func(e):
@@ -68,7 +72,8 @@ func _build_ui() -> void:
 	add_child(center)
 
 	_card = PanelContainer.new()
-	_card.custom_minimum_size = Vector2(340, 0)
+	_card.name = "Card"
+	_card.custom_minimum_size = Vector2(380, 0)
 	center.add_child(_card)
 
 	var vb := VBoxContainer.new()
@@ -76,16 +81,37 @@ func _build_ui() -> void:
 	_card.add_child(vb)
 
 	_title = Label.new()
-	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title.name = "Title"
 	vb.add_child(_title)
+	vb.add_child(ConquestTheme.accent_rule())
 
 	_body = VBoxContainer.new()
-	_body.add_theme_constant_override("separation", 6)
+	_body.name = "Body"
+	_body.add_theme_constant_override("separation", 2)
 	vb.add_child(_body)
 
+	vb.add_child(HSeparator.new())
+	_footer = HBoxContainer.new()
+	_footer.name = "Footer"
+	_footer.add_theme_constant_override("separation", 18)
+	vb.add_child(_footer)
+	# Legacy one-line hint (kept for callers reading it; the footer shows key caps).
 	_hint = Label.new()
-	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint.visible = false
 	vb.add_child(_hint)
+
+
+func _style() -> void:
+	var sb := ConquestTheme.panel_box(0.97)
+	sb.border_color = ConquestTheme.GOLD_DK
+	sb.content_margin_left = 22
+	sb.content_margin_right = 22
+	sb.content_margin_top = 18
+	sb.content_margin_bottom = 14
+	_card.add_theme_stylebox_override("panel", sb)
+	_title.add_theme_font_override("font", MenuTheme.bold_font(0.6, 2))
+	_title.add_theme_font_size_override("font_size", 26)
+	_title.add_theme_color_override("font_color", ConquestTheme.CREAM)
 
 
 # --- Open / close ---------------------------------------------------------------
@@ -105,7 +131,25 @@ func can_open() -> bool:
 	return LocalPlayer.current_is_local_human()
 
 
+## May the `end_turn` shortcut open the End Turn confirm now? Like [method can_open]
+## but a selected unit (or a staged move / aim) does not block it -- only another
+## overlay, a turn wipe, or the SELECT MOVE popup being open does.
+func can_open_end_turn() -> bool:
+	if visible or not is_inside_tree():
+		return false
+	if InputActions.gameplay_input_blocked(get_tree()):
+		return false
+	if turn_transition != null and turn_transition.has_method("is_blocking_input") and turn_transition.is_blocking_input():
+		return false
+	if unit_actions_panel != null and "move_selection_panel" in unit_actions_panel:
+		var msp = unit_actions_panel.move_selection_panel
+		if msp != null and is_instance_valid(msp) and msp.visible:
+			return false
+	return LocalPlayer.current_is_local_human()
+
+
 func open(start_page: int = Page.MAIN) -> void:
+	_direct_confirm = false
 	visible = true
 	move_to_front()
 	show_page(start_page)
@@ -114,6 +158,7 @@ func open(start_page: int = Page.MAIN) -> void:
 func close() -> void:
 	if not visible:
 		return
+	_direct_confirm = false
 	visible = false
 	closed.emit()
 
@@ -130,7 +175,7 @@ func _input(event: InputEvent) -> void:
 		# even if the gameplay cancel action was rebound.
 		if event.is_action_pressed(InputActions.CANCEL) or event.is_action_pressed(InputActions.MAP_MENU) \
 				or event.is_action_pressed(&"ui_cancel"):
-			if page == Page.MAIN:
+			if page == Page.MAIN or (page == Page.CONFIRM_END and _direct_confirm):
 				close()
 			else:
 				show_page(Page.MAIN)
@@ -143,7 +188,8 @@ func _input(event: InputEvent) -> void:
 			open()
 			get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(InputActions.END_TURN):
-		if can_open() and not _player_turn_panel_present():
+		# Same End Turn confirm the menu uses -- with or without a unit selected.
+		if can_open_end_turn() and not _player_turn_panel_present():
 			_on_end_turn()
 			get_viewport().set_input_as_handled()
 
@@ -157,54 +203,74 @@ func show_page(p: int) -> void:
 		c.queue_free()
 	match p:
 		Page.MAIN:
-			_title.text = "MAP MENU"
-			_add_button("Units", func(): show_page(Page.UNITS))
+			_title.text = "Map Menu"
+			var n_ready := ready_units().size()
+			_add_button("Units", func(): show_page(Page.UNITS), false, "",
+				"%d ready" % n_ready if n_ready > 0 else "")
 			_add_button("Objective", func(): show_page(Page.OBJECTIVE))
 			_add_button("Settings", _on_settings)
-			_add_button("End Turn", _on_end_turn, not LocalPlayer.current_is_local_human())
+			_add_button("End Turn", _on_end_turn, not LocalPlayer.current_is_local_human(),
+				ConquestTheme.action_glyph(InputActions.END_TURN))
 			_add_button("Return to Title", func(): show_page(Page.CONFIRM_TITLE))
 		Page.UNITS:
-			_title.text = "READY UNITS"
+			_title.text = "Ready Units"
 			var ready := ready_units()
 			if ready.is_empty():
 				_add_label("No units can act.")
 			for u in ready:
-				var label := "%s   %d/%d HP" % [_name_of(u), _hp_of(u), _max_hp_of(u)]
-				_add_button(label, func(): jump_to_unit(u))
+				var b := _add_button(_name_of(u), func(): jump_to_unit(u), false, "",
+					"%d/%d HP" % [_hp_of(u), _max_hp_of(u)])
+				b.tooltip_text = "Jump the cursor to %s" % _name_of(u)
 			_add_button("Back", func(): show_page(Page.MAIN))
 		Page.OBJECTIVE:
-			_title.text = "OBJECTIVE"
+			_title.text = "Objective"
 			for line in ObjectiveText.detail_lines(_rules(), _rounds_done()):
 				_add_label(line)
 			_add_button("Back", func(): show_page(Page.MAIN))
 		Page.CONFIRM_END:
-			_title.text = "END TURN?"
+			_title.text = "End Turn?"
 			var n := ready_units().size()
 			_add_label("%d unit%s can still act." % [n, "" if n == 1 else "s"])
 			_add_button("End Turn", _do_end_turn)
-			_add_button("Cancel", func(): show_page(Page.MAIN))
+			_add_button("Cancel", func():
+				if _direct_confirm:
+					close()
+				else:
+					show_page(Page.MAIN))
 		Page.CONFIRM_TITLE:
-			_title.text = "RETURN TO TITLE?"
+			_title.text = "Return to Title?"
 			_add_label("This battle's progress will be lost.")
 			_add_button("Return to Title", _do_return_to_title)
 			_add_button("Cancel", func(): show_page(Page.MAIN))
-	var back_key := InputActions.describe(InputActions.CANCEL)
-	_hint.text = ("%s: Close" if p == Page.MAIN else "%s: Back") % (back_key if back_key != "" else "Esc")
+	var back_key := ConquestTheme.action_glyph(InputActions.CANCEL)
+	if back_key == "":
+		back_key = "Esc"
+	var closes := p == Page.MAIN or (p == Page.CONFIRM_END and _direct_confirm)
+	_hint.text = "%s: %s" % [back_key, "Close" if closes else "Back"]
+	for c in _footer.get_children():
+		_footer.remove_child(c)
+		c.queue_free()
+	_footer.add_child(ConquestTheme.key_hint(ConquestTheme.action_glyph(InputActions.CONFIRM), "Select"))
+	_footer.add_child(ConquestTheme.key_hint(back_key, "Close" if closes else "Back"))
 	_focus_first.call_deferred()
 
 
-func _add_button(text: String, cb: Callable, disabled: bool = false) -> Button:
+func _add_button(text: String, cb: Callable, disabled: bool = false, key: String = "",
+		note: String = "") -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(300, 38)
+	b.theme_type_variation = &"HudCommand"
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.custom_minimum_size = Vector2(336, 44)
 	b.disabled = disabled
 	b.focus_mode = Control.FOCUS_ALL
-	# Dark text on the focused/hovered amber so the gamepad focus stays readable.
-	b.add_theme_color_override("font_focus_color", ConquestTheme.INK)
-	b.add_theme_color_override("font_hover_color", ConquestTheme.INK)
-	b.add_theme_color_override("font_hover_pressed_color", ConquestTheme.INK)
+	b.mouse_entered.connect(func():
+		if not b.disabled:
+			b.grab_focus())
 	b.pressed.connect(cb)
 	_body.add_child(b)
+	if key != "" or note != "":
+		ConquestTheme.set_button_hint(b, key, note, ConquestTheme.TEXT_DIM)
 	return b
 
 
@@ -212,7 +278,8 @@ func _add_label(text: String) -> void:
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.custom_minimum_size = Vector2(300, 0)
+	l.custom_minimum_size = Vector2(336, 0)
+	l.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
 	_body.add_child(l)
 
 
@@ -281,6 +348,8 @@ func _on_end_turn() -> void:
 	else:
 		if not visible:
 			open(Page.CONFIRM_END)
+			_direct_confirm = true
+			show_page(Page.CONFIRM_END)
 		else:
 			show_page(Page.CONFIRM_END)
 
