@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="TileResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/tiles/resources/TileResource.gd" id="1_tres"]
+
+[resource]
+resource_name = "TileResource"
+script = ExtResource("1_tres")
+id = &"flagstones"
+tile_name = "Flagstones"
+tile_type = 0
+description = "Worn stone paving of roads, courtyards, bridges and castle walks. Firm, open footing."
+base_movement_cost = 1
+is_passable = true
+blocks_line_of_sight = false
+material_style = 0
+base_color = Color(0.33, 0.31, 0.29, 1)
+roughness = 1.0
+model_path = "res://tile_objects/tiles/scenes/structures/flagstone_tile.tscn"
+special_properties = Array[String](["stone", "built"])
+rarity = "Common"
+generation_weight = 0.4

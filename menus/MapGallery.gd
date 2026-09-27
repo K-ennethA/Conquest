@@ -486,7 +486,7 @@ func _build_map_3d(map_res: MapResource) -> void:
 		map_root.add_child(visual)
 		visual.position = Vector3(
 			float(pos.x) * TILE_STEP - offset_x,
-			0.0,
+			Cells.floor_y(MapResource.entry_floor(entry)),  # multi-floor: decks sit up high
 			float(pos.y) * TILE_STEP - offset_z)
 
 	# Spawn markers, sitting on top of their tile.
@@ -506,7 +506,7 @@ func _build_map_3d(map_res: MapResource) -> void:
 		marker.material_override = _solid_material(marker_color)
 		marker.position = Vector3(
 			float(pos.x) * TILE_STEP - offset_x,
-			SPAWN_Y,
+			SPAWN_Y + Cells.floor_y(MapResource.entry_floor(spawn)),
 			float(pos.y) * TILE_STEP - offset_z)
 		map_root.add_child(marker)
 
