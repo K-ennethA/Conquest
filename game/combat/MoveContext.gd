@@ -25,6 +25,11 @@ var aim_cell: Vector3i
 var affected_cells: Array[Vector3i]
 var results: Array[Dictionary] = []
 
+## Presentation-only SOURCE of this resolution for floating combat text and the log:
+## empty for a normal move (an attack), else a [method CombatText.make_source] block
+## ("Fire" tile, "Poisoned" tick, a weather rule, an ability). Never read by gameplay.
+var source: Dictionary = {}
+
 ## Optional event-bus override for effects that announce themselves (see
 ## [DamageEffect]). Left null in the live game, where those effects fall back to
 ## the [code]GameEvents[/code] autoload; tests inject a mock bus here.

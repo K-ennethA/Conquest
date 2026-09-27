@@ -570,6 +570,10 @@ func _display_character(character: CharacterResource) -> void:
 		if not id_text.is_empty():
 			tags.append(id_text)
 		tags.append("Boss" if character.is_boss else "Standard")
+		if character.element != &"":
+			tags.append(String(character.element).capitalize())
+		for t in character.tags:
+			tags.append(String(t))
 		var footprint: Vector2i = character.get_footprint()
 		if footprint != Vector2i.ONE:
 			tags.append("%dx%d" % [footprint.x, footprint.y])

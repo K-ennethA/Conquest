@@ -7,6 +7,8 @@ class_name MapMenu
 ##   Units         -- the viewer's units that can still act; picking one jumps the
 ##                    board cursor (and camera) onto it.
 ##   Objective     -- the map's victory / defeat conditions ([ObjectiveText]).
+##   Encyclopedia  -- the Compendium as an overlay over the battle ([method
+##                    Compendium.open_overlay]); Back / Esc returns to the board.
 ##   Settings      -- opens the existing [SettingsPanel].
 ##   End Turn      -- ends the turn (asks first when units can still act). Only the
 ##                    current LOCAL human may end it (same guard as PlayerTurnPanel,
@@ -32,6 +34,8 @@ enum Page { MAIN, UNITS, OBJECTIVE, CONFIRM_END, CONFIRM_TITLE }
 var unit_actions_panel: Node = null   ## set by UILayoutManager
 var settings_panel: Node = null       ## set by UILayoutManager
 var turn_transition: Node = null      ## set by UILayoutManager (blocks opening mid-wipe)
+## The in-battle Compendium overlay while it is open (Encyclopedia), else null.
+var encyclopedia: Node = null
 
 var page: int = Page.MAIN
 var _backdrop: ColorRect
@@ -209,6 +213,7 @@ func show_page(p: int) -> void:
 			_add_button("Units", func(): show_page(Page.UNITS), false, "",
 				"%d ready" % n_ready if n_ready > 0 else "")
 			_add_button("Objective", func(): show_page(Page.OBJECTIVE))
+			_add_button("Encyclopedia", _on_encyclopedia)
 			_add_button("Settings", _on_settings)
 			_add_button("End Turn", _on_end_turn, not LocalPlayer.current_is_local_human(),
 				ConquestTheme.action_glyph(InputActions.END_TURN))
@@ -333,6 +338,13 @@ func jump_to_unit(unit) -> void:
 	var cam := get_viewport().get_camera_3d()
 	if cam != null and cam.has_method("focus_on"):
 		cam.focus_on((unit as Node3D).global_position)
+
+
+## Open the Compendium over the battle (board input blocked while it is up; Back /
+## Esc returns straight to the board).
+func _on_encyclopedia() -> void:
+	close()
+	encyclopedia = Compendium.open_overlay(get_tree(), Compendium.SECTION_WEATHER)
 
 
 func _on_settings() -> void:

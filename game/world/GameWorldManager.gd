@@ -121,6 +121,10 @@ func _ready() -> void:
 	# Unit facing (visual only): rest facing toward the nearest enemy, attacker /
 	# target facing on every move. Before the map load so it hears board_ready.
 	add_child(FacingController.new())
+	# Floating combat text: a number over the unit for every HP change (hits, crits,
+	# misses, heals, tile / status / weather damage). Presentation only; a CanvasLayer
+	# under the HUD. Before the map load so it hears board_ready.
+	add_child(FloatingCombatText.new())
 
 	# Load the selected map or default map
 	await _load_selected_map()

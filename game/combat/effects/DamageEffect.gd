@@ -60,6 +60,7 @@ func apply(ctx: MoveContext) -> void:
 	for target in targets:
 		var outcome := ctx.resolve_hit(target)
 		if not outcome.get("hit", true):
+			CombatText.annotate(target, CombatText.info_for(ctx, CombatText.KIND_MISS, 0), ctx.event_bus)
 			ctx.log_event({
 				"effect": "damage",
 				"target": target,
@@ -74,6 +75,7 @@ func apply(ctx: MoveContext) -> void:
 		# otherwise drag it back up to 1. Logged explicitly so the combat log can say
 		# the hit was NEGATED rather than silently reporting a 0 that reads like a bug.
 		if is_invulnerable(target):
+			CombatText.annotate(target, CombatText.info_for(ctx, CombatText.KIND_NEGATED, 0), ctx.event_bus)
 			_announce(ctx, target, 0)
 			ctx.log_event({
 				"effect": "damage",
@@ -138,6 +140,11 @@ func apply(ctx: MoveContext) -> void:
 		# damage_dealt signal fires -- so announcing afterwards meant the victim died before
 		# anyone knew who hit it, and ON_KILL abilities (Mortis's Reanimate) silently never
 		# fired. Emitting first makes the attacker known by the time the death resolves.
+		# Floating combat text / log annotation (presentation only, consumes no RNG).
+		CombatText.annotate(target, CombatText.info_for(ctx, CombatText.KIND_DAMAGE, dealt, {
+			"crit": crit,
+			"effectiveness": ElementChart.type_scale_for(ctx.move, target),
+		}), ctx.event_bus)
 		_announce(ctx, target, dealt)
 		if target.has_method("take_damage"):
 			target.take_damage(dealt)
@@ -156,6 +163,10 @@ func apply(ctx: MoveContext) -> void:
 	if lifesteal > 0.0 and total_dealt > 0 and ctx.caster != null and ctx.caster.has_method("heal"):
 		var healed: int = int(round(float(total_dealt) * lifesteal))
 		if healed > 0:
+			CombatText.annotate(ctx.caster, {
+				"kind": CombatText.KIND_HEAL, "amount": healed,
+				"source_kind": CombatText.SRC_LIFESTEAL, "source": "Lifesteal",
+			}, ctx.event_bus)
 			ctx.caster.heal(healed)
 			ctx.log_event({
 				"effect": "lifesteal",

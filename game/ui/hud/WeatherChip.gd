@@ -112,4 +112,5 @@ func refresh() -> void:
 	_name.add_theme_color_override("font_color", w.color.lightened(0.35))
 	_sub.text = countdown
 	_sub.visible = countdown != ""
-	tooltip_text = w.description
+	# The Compendium's wording: description + every rule derived from the data.
+	tooltip_text = CompendiumData.weather_tooltip(w)

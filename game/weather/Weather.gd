@@ -178,7 +178,10 @@ static func run_turn_start(unit, board) -> Array:
 			break
 		if not rule.is_condition_met(unit, board):
 			continue
-		for e in rule.run_effects(unit, board):
+		var src := CombatText.make_source(CombatText.SRC_WEATHER, rule.display_name, rule.id, w.color)
+		src["weather"] = w.display_name
+		src["weather_fx"] = w.fx_kind
+		for e in rule.run_effects(unit, board, null, src):
 			e["weather"] = w.id
 			events.append(e)
 	return events

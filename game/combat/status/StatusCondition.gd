@@ -93,6 +93,7 @@ func tick(target, board) -> Array[Dictionary]:
 	if board.has_method("cell_of"):
 		cell = board.cell_of(target)
 	var ctx := MoveContext.new(target, board, _tick_move(), cell, [cell] as Array[Vector3i])
+	ctx.source = CombatText.make_source(CombatText.SRC_STATUS, display_name if display_name != "" else String(id), id)
 	for effect in tick_effects:
 		if effect:
 			effect.apply(ctx)

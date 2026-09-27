@@ -384,9 +384,8 @@ func _populate_effects(unit) -> void:
 			String(info.get("name", "Status")),
 			StatusVisuals.turns_label(StatusVisuals.turns_left_of(condition)),
 		]
-		var desc := StatusVisuals.describe_condition(condition)
-		var tip := String(info.get("name", "Status")) + (": " + desc if desc != "" else "")
-		tip += " (%s)" % StatusVisuals.turns_label(StatusVisuals.turns_left_of(condition))
+		# Same wording as the Compendium's Statuses entry.
+		var tip := CompendiumData.status_tooltip(condition, StatusVisuals.turns_left_of(condition))
 		_effects_container.add_child(_build_chip(text, color, tip))
 
 	if hidden > 0:
