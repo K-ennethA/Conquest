@@ -101,10 +101,12 @@ func _build_action_announcer() -> void:
 	add_child(action_announcer)
 
 func _build_map_menu() -> void:
-	"""Mount the objective chip (under the turn indicator) and the map menu overlay."""
+	"""Mount the objective chip (inline in the phase banner, or under the Speed-First
+	turn queue -- see _place_objective_chip) and the map menu overlay."""
 	if center_top_container:
 		objective_chip = ObjectiveChip.new()
 		center_top_container.add_child(objective_chip)
+		_place_objective_chip()
 	map_menu = MapMenu.new()
 	map_menu.unit_actions_panel = unit_actions_panel
 	map_menu.settings_panel = settings_panel
@@ -206,6 +208,24 @@ func _update_layout_for_turn_system() -> void:
 		# Traditional mode: Show TurnIndicator, hide TurnQueue
 		_show_traditional_layout()
 
+## Keep the top HUD one compact strip: with the phase banner showing (traditional
+## turns) the objective rides INSIDE the banner's info row; under the Speed-First
+## turn queue (banner hidden) it stands on its own below the queue.
+func _place_objective_chip() -> void:
+	if objective_chip == null or not is_instance_valid(objective_chip):
+		return
+	var banner_shown := turn_indicator != null \
+		and turn_indicator.has_method("attach_objective") \
+		and current_turn_system_type != TurnSystemBase.TurnSystemType.INITIATIVE
+	if banner_shown:
+		turn_indicator.attach_objective(objective_chip)
+		objective_chip.set_inline(true)
+	elif center_top_container != null and objective_chip.get_parent() != center_top_container:
+		objective_chip.reparent(center_top_container)
+		objective_chip.set_inline(false)
+	elif center_top_container != null:
+		objective_chip.set_inline(false)
+
 func _show_speed_first_layout() -> void:
 	"""Configure layout for Speed First turn system"""
 	
@@ -220,6 +240,7 @@ func _show_speed_first_layout() -> void:
 	# Adjust top bar height for Speed First display
 	if top_bar:
 		top_bar.custom_minimum_size = Vector2(0, 180)  # Taller for queue with proper spacing
+	_place_objective_chip()
 
 func _show_traditional_layout() -> void:
 	"""Configure layout for Traditional turn system"""
@@ -238,6 +259,7 @@ func _show_traditional_layout() -> void:
 	# announcement is handled by the full-screen TurnTransition overlay).
 	if top_bar:
 		top_bar.custom_minimum_size = Vector2(0, 56)
+	_place_objective_chip()
 
 func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
 	"""Handle turn system activation and update layout accordingly"""

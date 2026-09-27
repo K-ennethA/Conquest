@@ -2,11 +2,15 @@ extends Control
 
 class_name TurnIndicator
 
-# The persistent PHASE chip at the top-centre of the battle HUD (Fire Emblem's
-# "PLAYER PHASE / ENEMY PHASE"): the phase title in the acting side's team colour,
-# a team-coloured frame, and "Round N  ·  X units ready" underneath. In a network
-# match it reads YOUR TURN / OPPONENT'S TURN, in local versus PLAYER N PHASE (see
-# ConquestTheme.phase_title). The cinematic wipe lives in TurnTransition.
+# The persistent PHASE BANNER at the top-centre of the battle HUD (Fire Emblem's
+# "PLAYER PHASE / ENEMY PHASE"): a swallow-tailed heraldic ribbon edged in the acting
+# side's team colour with a gold crest, the phase title in Cinzel, and ONE compact
+# info row underneath -- "Round N · X units ready" followed by the map objective
+# (the ObjectiveChip, mounted inline via [method attach_objective]) and the "Danger
+# zone" tag. Keeping the objective INSIDE the banner keeps the whole top HUD to a
+# single ~64px strip (see HudSafeArea), so it never covers the back row of the board.
+# In a network match it reads YOUR TURN / OPPONENT'S TURN, in local versus PLAYER N
+# PHASE (see ConquestTheme.phase_title). The cinematic wipe lives in TurnTransition.
 
 @onready var player_name_label: Label = $CenterContainer/VBoxContainer/PlayerNameLabel
 @onready var turn_info_label: Label = $CenterContainer/VBoxContainer/TurnInfoLabel
@@ -31,13 +35,38 @@ var player_colors = {
 	3: Color(0.8, 0.8, 0.2, 0.8),  # Yellow - Player 4
 }
 
+## Swallow-tail depth of the banner ends (base px).
+const BANNER_NOTCH := 20.0
+## Horizontal / vertical padding of the banner content.
+const BANNER_PAD := Vector2(BANNER_NOTCH + 26.0, 5.0)
+
+## Row under the title: round / ready count, then the inline objective.
+var _info_row: HBoxContainer = null
+
+
 func _ready() -> void:
-	custom_minimum_size = Vector2(320, 70)
+	custom_minimum_size = Vector2(340, 62)
 	if player_name_label:
-		player_name_label.add_theme_font_override("font", MenuTheme.bold_font(0.65, 2))
+		player_name_label.add_theme_font_override("font", MenuTheme.display_font(3))
 		player_name_label.add_theme_font_size_override("font_size", ConquestTheme.FS_PHASE)
+		player_name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
+		player_name_label.add_theme_constant_override("shadow_offset_y", 2)
 	if turn_info_label:
 		turn_info_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+		# One compact info row: the round label, then (attach_objective) the objective.
+		var vb := turn_info_label.get_parent()
+		_info_row = HBoxContainer.new()
+		_info_row.name = "InfoRow"
+		_info_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		_info_row.add_theme_constant_override("separation", 10)
+		_info_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_child(_info_row)
+		vb.move_child(_info_row, turn_info_label.get_index())
+		turn_info_label.reparent(_info_row)
+		ConquestTheme.keep_style(_info_row)
+	var vbox := get_node_or_null("CenterContainer/VBoxContainer") as Control
+	if vbox:
+		vbox.minimum_size_changed.connect(_refit)
 	# Connect to turn system events
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
@@ -179,18 +208,44 @@ func _update_fallback_display(active_player: Player) -> void:
 	player_name_label.text = _turn_title(active_player)
 	turn_info_label.text = "Turn in progress"
 
-func _chip_box(team: Color) -> StyleBoxFlat:
-	"""Navy HUD chip framed in the acting side's team colour (thicker left edge, like
-	a phase banner), so whose phase it is reads at a glance."""
-	var sb := ConquestTheme.chip_box(team, 0.95)
-	sb.set_border_width_all(2)
-	sb.border_width_left = 6
-	sb.border_width_right = 6
-	sb.content_margin_left = 22
-	sb.content_margin_right = 22
-	sb.content_margin_top = 4
-	sb.content_margin_bottom = 6
+func _chip_box(team: Color) -> StyleBox:
+	"""The phase banner: a swallow-tailed navy ribbon edged in the acting side's team
+	colour, gold filigree inside and a gold crest on top, so whose phase it is reads
+	at a glance."""
+	var sb := MenuTheme.ribbon_box(ConquestTheme.PANEL, team, BANNER_NOTCH)
+	sb.bg_color = Color(ConquestTheme.PANEL.lightened(0.08), 0.96)
+	sb.bg_color_end = Color(ConquestTheme.PANEL.darkened(0.35), 0.96)
+	sb.border_width = 2.0
+	sb.inner_line_color = Color(ConquestTheme.GOLD, 0.42)
+	sb.crest = true
+	sb.ornament_color = ConquestTheme.GOLD
+	sb.ornament_size = 3.2
+	sb.accent_color = Color(team, 0.85)
+	sb.accent_side = SIDE_BOTTOM
+	sb.accent_width = 3.0
 	return sb
+
+
+## Mount the objective chip inline in the info row (see UILayoutManager).
+func attach_objective(chip: Control) -> void:
+	if _info_row == null or chip == null:
+		return
+	if chip.get_parent() != null:
+		chip.reparent(_info_row)
+	else:
+		_info_row.add_child(chip)
+
+
+## The banner is a plain Control (its min size does not follow its children), so size
+## it to the content: title / info row plus the ribbon's tails and padding.
+func _refit() -> void:
+	var vbox := get_node_or_null("CenterContainer/VBoxContainer") as Control
+	if vbox == null:
+		return
+	var need := vbox.get_combined_minimum_size() + BANNER_PAD * 2.0
+	var want := Vector2(maxf(340.0, ceilf(need.x)), maxf(58.0, ceilf(need.y)))
+	if not custom_minimum_size.is_equal_approx(want):
+		custom_minimum_size = want
 
 
 func _update_background_color(player: Player) -> void:
