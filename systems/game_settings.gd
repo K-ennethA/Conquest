@@ -13,6 +13,10 @@ signal settings_changed
 ## button hints and the controls list can refresh.
 signal controls_changed
 
+## Emitted when the held FAST-FORWARD modifier (action `fast_forward`, Shift / R3)
+## starts or stops. Runtime only, never persisted. See [method set_fast_forward].
+signal fast_forward_changed(active: bool)
+
 enum GameMode {
 	SINGLE_PLAYER,
 	VERSUS,
@@ -45,6 +49,13 @@ var battle_speed: float = 1.0
 
 ## Camera auto-focus mode (see [enum AutoFocus]).
 var camera_auto_focus: int = AutoFocus.QUICK
+
+## FAST-FORWARD (Fire Emblem's hold-to-speed-up): while the `fast_forward` action is
+## held, every scaled animation runs [constant FAST_FORWARD_MULTIPLIER]x faster and
+## the AI's between-action beats shrink by the same factor. Runtime only -- polled
+## each frame in _process, not saved.
+const FAST_FORWARD_MULTIPLIER := 4.0
+var fast_forward_active: bool = false
 
 const _SETTINGS_PATH := "user://settings.cfg"
 const BATTLE_SPEED_MIN := 0.5
@@ -83,6 +94,24 @@ func _ready() -> void:
 	load_key_bindings()
 	print("GameSettings initialized")
 
+func _process(_delta: float) -> void:
+	# Hold-to-fast-forward. Polled (not event-driven) so a release is never missed
+	# when focus changes mid-hold.
+	if InputMap.has_action(&"fast_forward"):
+		set_fast_forward(Input.is_action_pressed(&"fast_forward"))
+
+## Turn fast-forward on/off (normally driven by the held `fast_forward` action).
+func set_fast_forward(active: bool) -> void:
+	if fast_forward_active == active:
+		return
+	fast_forward_active = active
+	fast_forward_changed.emit(active)
+
+## Extra speed-up from the fast-forward modifier: FAST_FORWARD_MULTIPLIER while
+## held, else 1.0. Pacing code (AI beats, the turn wipe) divides its waits by this.
+func fast_forward_factor() -> float:
+	return FAST_FORWARD_MULTIPLIER if fast_forward_active else 1.0
+
 # --- Presentation helpers ---------------------------------------------------
 
 ## True when unit animations should play at all. Systems that animate should
@@ -96,7 +125,7 @@ func animations_on() -> bool:
 func anim_duration_scale() -> float:
 	if not animations_enabled:
 		return 0.0
-	return 1.0 / clampf(battle_speed, BATTLE_SPEED_MIN, BATTLE_SPEED_MAX)
+	return 1.0 / (clampf(battle_speed, BATTLE_SPEED_MIN, BATTLE_SPEED_MAX) * fast_forward_factor())
 
 ## Scale an authored duration by the current speed/enabled state. Convenience for
 ## animation code: `var t := GameSettings.scaled_time(base_time)`.
