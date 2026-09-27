@@ -38,7 +38,7 @@ const HOSTED_SCENES: Dictionary = {
 	SECTION_MAPS: "res://menus/MapGallery.tscn",
 }
 
-const MUTED := Color(0.72, 0.70, 0.78)
+const MUTED := MenuTheme.TEXT_MUTED
 
 # --- Shell ---
 var tab_container: TabContainer
@@ -73,57 +73,37 @@ func _ready() -> void:
 # ---------------------------------------------------------------------------
 
 func _build_shell() -> void:
-	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var background := ColorRect.new()
-	background.name = "Background"
-	background.color = MenuTheme.DARK
-	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(background)
-
-	var root := VBoxContainer.new()
-	root.name = "Root"
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(root)
-
-	# Header: ONE title and ONE back button for the whole reference. The hosted
-	# galleries' own BACK buttons are hidden in _ensure_section so the shell does
-	# not stack three of them down the left edge.
-	var header := HBoxContainer.new()
-	header.name = "Header"
-	root.add_child(header)
-
-	var title := Label.new()
-	title.text = "COMPENDIUM"
-	title.add_theme_font_size_override("font_size", 24)
-	title.modulate = MenuTheme.GOLD
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title)
-
-	back_button = Button.new()
-	back_button.name = "BackButton"
-	back_button.text = "BACK"
-	back_button.custom_minimum_size = Vector2(80, 40)
-	back_button.pressed.connect(_on_back_pressed)
-	header.add_child(back_button)
+	var page := MenuKit.build_page(self, [], "Compendium",
+		"Every unit, tile, map and status in the game.")
+	(page.subtitle as Label).visible = false
 
 	tab_container = TabContainer.new()
 	tab_container.name = "Sections"
 	tab_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	tab_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	root.add_child(tab_container)
+	page.body.add_child(tab_container)
 
 	for i in SECTION_TITLES.size():
 		var host := Control.new()
 		host.name = SECTION_TITLES[i]
 		host.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		host.clip_contents = true
 		tab_container.add_child(host)
 		tab_container.set_tab_title(i, SECTION_TITLES[i])
 		_section_hosts[i] = host
 
 	tab_container.tab_changed.connect(_on_tab_changed)
+
+	# ONE back control for the whole reference (the hosted galleries' own headers
+	# are hidden in _build_hosted_section).
+	back_button = MenuKit.button("Back", MenuKit.GHOST, 140)
+	back_button.name = "BackButton"
+	back_button.pressed.connect(_on_back_pressed)
+	page.actions.add_child(back_button)
+	page.hints.add_child(MenuKit.key_hint("Q / R", "LB / RB", "Switch section"))
+	page.hints.add_child(MenuKit.key_hint("Esc", "B", "Back"))
+	MenuNav.focus_deferred(tab_container.get_tab_bar())
 
 
 func _on_tab_changed(tab: int) -> void:
@@ -177,6 +157,10 @@ func _build_hosted_section(host: Control, scene_path: String) -> void:
 	var gallery: Control = inst as Control
 	gallery.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	host.add_child(gallery)
+	# The standalone scene's flat background would cover the tab panel.
+	var gallery_bg := gallery.get_node_or_null("Background")
+	if gallery_bg is CanvasItem:
+		(gallery_bg as CanvasItem).visible = false
 
 	# The gallery builds its UI (and its BACK button) in _ready, which has now
 	# run. Hide that button: the shell supplies the single back control. Guarded
@@ -186,6 +170,11 @@ func _build_hosted_section(host: Control, scene_path: String) -> void:
 		var gallery_back = gallery.get("back_button")
 		if gallery_back is Button:
 			(gallery_back as Button).visible = false
+			# Its header row only holds the gallery's own title ("UNIT GALLERY")
+			# and that back button -- the tab already names the section.
+			var header := (gallery_back as Button).get_parent()
+			if header is HBoxContainer and header.get_child_count() <= 2:
+				(header as HBoxContainer).visible = false
 
 
 func _add_placeholder(host: Control, message: String) -> void:
@@ -197,7 +186,7 @@ func _add_placeholder(host: Control, message: String) -> void:
 	label.text = message
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.modulate = MUTED
+	label.theme_type_variation = &"MutedLabel"
 	center.add_child(label)
 
 
@@ -232,6 +221,8 @@ func _build_statuses_section(host: Control) -> void:
 	left.custom_minimum_size = Vector2(280, 0)
 	split.add_child(left)
 
+	left.add_theme_constant_override("separation", 8)
+	split.add_theme_constant_override("separation", 20)
 	var search_label := Label.new()
 	search_label.text = "Search:"
 	left.add_child(search_label)
@@ -267,6 +258,9 @@ func _build_statuses_section(host: Control) -> void:
 	status_detail.add_child(status_empty_label)
 
 	_load_all_statuses()
+	if not filtered_statuses.is_empty():
+		status_list.select(0)
+		_on_status_selected(0)
 
 
 func _load_all_statuses() -> void:
@@ -362,7 +356,7 @@ func _display_status(status: StatusCondition) -> void:
 
 	var id_label := Label.new()
 	id_label.text = String(status.id) if not String(status.id).is_empty() else "(no id)"
-	id_label.add_theme_font_size_override("font_size", 12)
+	id_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	id_label.modulate = MUTED
 	status_detail.add_child(id_label)
 
@@ -501,7 +495,7 @@ func _add_heading(parent: VBoxContainer, text: String) -> void:
 
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", 14)
+	label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	label.modulate = MenuTheme.GOLD
 	parent.add_child(label)
 
@@ -558,21 +552,18 @@ func _build_weather_section(host: Control) -> void:
 # ---------------------------------------------------------------------------
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
+	MenuNav.change_scene(self, "res://menus/MainMenu.tscn")
 
 
-func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
+func _unhandled_input(event: InputEvent) -> void:
+	if MenuNav.is_next_event(event) or MenuNav.is_prev_event(event):
+		var step := 1 if MenuNav.is_next_event(event) else -1
+		var n := tab_container.get_tab_count()
+		tab_container.current_tab = posmod(tab_container.current_tab + step, n)
+		get_viewport().set_input_as_handled()
 		return
-	if not (event is InputEventKey):
-		return
-	var key_event := event as InputEventKey
-	if key_event.echo:
-		return
-	# Only the shell's own ESC is handled here. A hosted gallery on screen keeps
-	# its own ESC (which leaves to the main menu too), and hidden ones have had
-	# input disabled, so ESC always means exactly "leave the Compendium".
-	if key_event.keycode == KEY_ESCAPE:
+	if MenuNav.is_back_event(event):
+		get_viewport().set_input_as_handled()
 		if status_search != null and status_search.has_focus():
 			status_search.release_focus()
 			return
