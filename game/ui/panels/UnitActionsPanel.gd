@@ -63,6 +63,8 @@ var _tentative_unit: Unit = null
 var _tentative_origin_cell: Vector3i = Vector3i.ZERO
 var _tentative_dest_cell: Vector3i = Vector3i.ZERO
 var _tentative_origin_world: Vector3 = Vector3.ZERO
+## Facing before the staged walk, restored on undo (visual only; see UnitFacing).
+var _tentative_origin_facing: Vector2i = Vector2i.ZERO
 
 # Frame on which the SELECT MOVE popup closed itself in response to ESC/BACK
 # (MoveSelectionPanel emits move_cancelled -> _on_move_cancelled). Both that panel
@@ -1559,6 +1561,7 @@ func _begin_tentative_move(destination: Vector3) -> void:
 	var dest_cell: Vector3i = _grid_tile_to_cell(destination)
 	_tentative_origin_cell = board.cell_of(selected_unit)
 	_tentative_origin_world = selected_unit.global_position
+	_tentative_origin_facing = selected_unit.get_facing() if selected_unit.has_method("get_facing") else Vector2i.ZERO
 	# The route the range flood found (walks through allies, climbs stairs).
 	var route: Array[Vector3i] = []
 	if _range_resolver != null and _range_origin == _tentative_origin_cell:
@@ -1649,6 +1652,7 @@ func _revert_tentative_move() -> void:
 	var unit := _tentative_unit
 	var origin_cell := _tentative_origin_cell
 	var origin_world := _tentative_origin_world  # capture BEFORE clearing (which zeroes it)
+	var origin_facing := _tentative_origin_facing
 	_clear_tentative_state()
 
 	var board = CombatServices.board()
@@ -1664,6 +1668,9 @@ func _revert_tentative_move() -> void:
 	var animator := _unit_animator()
 	if animator != null:
 		animator.stop_motion(unit)
+	# Undo also restores the facing the unit had before the staged walk.
+	if origin_facing != Vector2i.ZERO and unit.has_method("set_facing"):
+		unit.set_facing(origin_facing)
 
 	var tree = get_tree()
 	var visual_manager = null
@@ -1700,6 +1707,7 @@ func _clear_tentative_state() -> void:
 	_tentative_origin_cell = Vector3i.ZERO
 	_tentative_dest_cell = Vector3i.ZERO
 	_tentative_origin_world = Vector3.ZERO
+	_tentative_origin_facing = Vector2i.ZERO
 
 
 func is_tentative_move_active() -> bool:

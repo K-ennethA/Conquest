@@ -199,6 +199,10 @@ func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 	if not _anims_on() or offset.length() < 0.001 or move_glide_time <= 0.0:
 		_kill_motion(unit)
 		node.position = base
+		# No walk to watch, but the unit still ends facing the way it went.
+		# (A negligible offset = an already-animated staged move being committed.)
+		if from_cell != null and offset.length() >= 0.001:
+			_face_last_step(unit, resolve_walk_path(unit, from_cell), -offset)
 		return
 
 	# Walk the actual route cell by cell when it is known and is not a straight hop.
@@ -207,6 +211,8 @@ func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 		if route.size() > 2 or (route.size() == 2 and route[0].z != route[1].z):
 			_walk_model(unit, node, base, dest, start, route)
 			return
+	# Straight hop (one step / no known route): face the travel direction.
+	_face(unit, _facing_of(-offset), -1.0)
 	var t: float = _scaled(move_glide_time)
 	if t <= 0.0:
 		_kill_motion(unit)
@@ -259,13 +265,14 @@ func walk_path(unit, route: Array) -> void:
 	var base: Vector3 = _base_pos(unit, node)
 	var dest: Vector3 = (unit as Node3D).global_position
 	_last_world_pos[unit.get_instance_id()] = dest
-	if not _anims_on() or route.size() < 2:
-		_kill_motion(unit)
-		node.position = base
-		return
 	var cells: Array[Vector3i] = []
 	for c in route:
 		cells.append(c if c is Vector3i else Cells.from_grid(c))
+	if not _anims_on() or route.size() < 2:
+		_kill_motion(unit)
+		node.position = base
+		_face_last_step(unit, cells, Vector3.ZERO)
+		return
 	play_clip(unit, CLIP_WALK)
 	_walk_model(unit, node, base, dest, _world_of(cells[0], dest, cells[cells.size() - 1]), cells)
 
@@ -305,12 +312,20 @@ func _walk_model(unit, node: Node3D, base: Vector3, dest: Vector3, start: Vector
 	if step_t <= 0.0:
 		_kill_motion(unit)
 		node.position = base
+		_face_last_step(unit, cells, Vector3.ZERO)
 		return
 	var dest_cell: Vector3i = cells[steps]
 	var tw := _begin_motion(unit, node)
 	node.position = base + (start - dest)
+	# Turn at most as long as one step takes, so every step reads its own facing.
+	var turn_t: float = minf(_scaled(UnitFacing.TURN_TIME), step_t)
 	for i in range(1, cells.size()):
 		var p: Vector3 = _world_of(cells[i], dest, dest_cell)
+		# Face each step's direction as it starts (a vertical-only step keeps the
+		# current facing: step_dir is ZERO and set_facing ignores it).
+		var step_dir := Vector2i(cells[i].x - cells[i - 1].x, cells[i].y - cells[i - 1].y)
+		if step_dir != Vector2i.ZERO:
+			tw.tween_callback(_face.bind(unit, step_dir, turn_t))
 		var tweener := tw.tween_property(node, "position", base + (p - dest), step_t)
 		if i == cells.size() - 1:
 			tweener.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -319,6 +334,33 @@ func _walk_model(unit, node: Node3D, base: Vector3, dest: Vector3, start: Vector
 	tw.tween_callback(func():
 		if is_instance_valid(node):
 			node.position = base)
+
+
+## Turn [param unit] toward grid direction [param dir] (see [method Unit.set_facing]);
+## no-op for ZERO, for mocks without set_facing, or a freed unit.
+func _face(unit, dir: Vector2i, turn_time: float = -1.0) -> void:
+	if dir == Vector2i.ZERO or unit == null or not is_instance_valid(unit):
+		return
+	if unit.has_method("set_facing"):
+		unit.set_facing(dir, turn_time)
+
+
+## Grid facing of a world-space travel vector (x = +col, z = +row).
+func _facing_of(world_delta: Vector3) -> Vector2i:
+	return UnitFacing.cardinal(Vector2(world_delta.x, world_delta.z))
+
+
+## Snap [param unit] to the direction of the LAST horizontal step of [param cells]
+## (an un-animated walk still ends facing the way it went), else [param fallback]'s.
+func _face_last_step(unit, cells: Array, fallback: Vector3) -> void:
+	for i in range(cells.size() - 1, 0, -1):
+		var a: Vector3i = cells[i - 1]
+		var b: Vector3i = cells[i]
+		var d := Vector2i(b.x - a.x, b.y - a.y)
+		if d != Vector2i.ZERO:
+			_face(unit, UnitFacing.cardinal(Vector2(d)), 0.0)
+			return
+	_face(unit, _facing_of(fallback), 0.0)
 
 
 ## World point of [param cell] at the same height above its floor as the unit stands
@@ -396,13 +438,20 @@ func _shake(unit) -> void:
 	# lunge would start from the old cell and read as a slide-correction, not a strike.
 	# Starting every lunge from base makes the attack a clean, always-visible tell.
 	var seg: float = total / 4.0
+	# Lunge the way the unit FACES (it turned toward its aim just before this; see
+	# FacingController), then a sideways shudder perpendicular to it.
+	var f: Vector2i = unit.get_facing() if unit.has_method("get_facing") else Vector2i(0, -1)
+	var fwd := Vector3(f.x, 0.0, f.y).normalized()
+	if fwd == Vector3.ZERO:
+		fwd = Vector3(0.0, 0.0, -1.0)
+	var side := Vector3(-fwd.z, 0.0, fwd.x)
 	var tw := _begin_motion(unit, node)
 	node.position = base
 	tw.set_trans(Tween.TRANS_SINE)
-	tw.tween_property(node, "position", base + Vector3(0.0, 0.0, -d), seg)\
+	tw.tween_property(node, "position", base + fwd * d, seg)\
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_property(node, "position", base + Vector3(d * 0.5, 0.0, 0.0), seg)
-	tw.tween_property(node, "position", base + Vector3(-d * 0.35, 0.0, 0.0), seg)
+	tw.tween_property(node, "position", base + side * (d * 0.5), seg)
+	tw.tween_property(node, "position", base - side * (d * 0.35), seg)
 	tw.tween_property(node, "position", base, seg)\
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 

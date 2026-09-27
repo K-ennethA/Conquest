@@ -110,6 +110,10 @@ var _has_footprint_base_scale: bool = false
 # signal, or a heal-then-lethal edge). Latches true on the first death.
 var _is_dead: bool = false
 
+# Grid facing (visual only) and the tween turning the model toward it.
+var _facing: Vector2i = UnitFacing.DEFAULT_FACING
+var _facing_tween: Tween = null
+
 func _ready() -> void:
 	_setup_stats_component()
 	_setup_visuals()
@@ -295,11 +299,63 @@ func _setup_character_model() -> void:
 		m.position = get_footprint_offset()
 		var yaw: float = character_resource.model_yaw_deg if "model_yaw_deg" in character_resource else 0.0
 		var model_scale: float = character_resource.model_scale if "model_scale" in character_resource else 1.0
-		m.rotation = Vector3(0.0, deg_to_rad(yaw), 0.0)
+		# Yaw = the authored correction (model now faces +Z / south) + the unit's facing.
+		m.rotation = Vector3(0.0, UnitFacing.model_yaw(yaw, _facing), 0.0)
 		m.scale = Vector3.ONE * maxf(0.05, model_scale)
 
 	if _mesh_instance:
 		_mesh_instance.visible = false
+
+# --- Facing (VISUAL only; see UnitFacing / FacingController, CONQUEST.md) -----
+
+## The direction this unit faces on the grid: Vector2i(dcol, drow), a cardinal
+## (UnitFacing.ALLOW_DIAGONAL off). (0, 1) = +row / south (toward the camera).
+## Purely presentational today -- combat, AI and the net digest never read it -- but
+## this is the accessor a future facing rule (flanking / back attacks) should use.
+func get_facing() -> Vector2i:
+	return _facing
+
+
+## Turn to face [param dir] (ZERO = keep the current facing). [param turn_time] < 0
+## uses UnitFacing.TURN_TIME scaled by battle speed / fast-forward (0 when animations
+## are off); 0 snaps. Only the visible CharacterModel rotates -- the unit root (HP
+## bar, selection, board position) never does.
+func set_facing(dir: Vector2i, turn_time: float = -1.0) -> void:
+	var d := UnitFacing.normalized(dir)
+	if d == Vector2i.ZERO:
+		return
+	_facing = d
+	var model := get_node_or_null("CharacterModel") as Node3D
+	if model == null:
+		return
+	var yaw_deg: float = character_resource.model_yaw_deg if character_resource != null else 0.0
+	var target: float = UnitFacing.model_yaw(yaw_deg, d)
+	if _facing_tween != null and _facing_tween.is_valid():
+		_facing_tween.kill()
+	_facing_tween = null
+	var current: float = model.rotation.y
+	var delta: float = wrapf(target - current, -PI, PI)
+	if absf(delta) < 0.001:
+		model.rotation.y = target
+		return
+	var t: float = turn_time
+	if t < 0.0:
+		t = UnitFacing.TURN_TIME
+		var gs := get_node_or_null("/root/GameSettings")
+		if gs != null and gs.has_method("scaled_time"):
+			t = float(gs.scaled_time(UnitFacing.TURN_TIME))
+	if t <= 0.0 or not is_inside_tree():
+		model.rotation.y = target
+		return
+	_facing_tween = model.create_tween()
+	_facing_tween.tween_property(model, "rotation:y", current + delta, t)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+
+## True while a facing turn is still animating.
+func is_turning() -> bool:
+	return _facing_tween != null and _facing_tween.is_valid() and _facing_tween.is_running()
+
 
 func _connect_events() -> void:
 	"""Connect to game events"""
@@ -803,13 +859,39 @@ func perform_move(slot: int, aim_cell: Vector3i, board_adapter, rng: RandomNumbe
 			"events": [],
 			"cells": [],
 		}
+	# Who stands in the area BEFORE it resolves (a kill / knockback changes that) --
+	# only for the move_aimed presentation signal below, never for resolution.
+	var origin_cell := Vector3i.ZERO
+	var pre_targets: Array = []
+	if board_adapter != null and board_adapter.has_method("cell_of"):
+		origin_cell = board_adapter.cell_of(self)
+		pre_targets = _units_in_area(move, origin_cell, aim_cell, board_adapter)
 	var result: Dictionary = MoveExecutor.execute(move, self, board_adapter, aim_cell, rng)
 	# Announce a successful cast so the visual layer animates EVERY move, not only
 	# the ones that deal damage (damage_dealt covers those). Best-effort + guarded so
 	# tests and headless runs without the autoload simply don't animate.
 	if bool(result.get("success", false)) and typeof(GameEvents) == TYPE_OBJECT and GameEvents != null:
+		if GameEvents.has_signal("move_aimed"):
+			GameEvents.move_aimed.emit(self, move, origin_cell, aim_cell, pre_targets)
 		GameEvents.move_performed.emit(self, move)
 	return result
+
+## Units (other than this one) standing in [param move]'s area when aimed from
+## [param origin] at [param aim]. Presentation helper for move_aimed; read-only.
+func _units_in_area(move: MoveResource, origin: Vector3i, aim: Vector3i, board_adapter) -> Array:
+	var out: Array = []
+	if move == null or not board_adapter.has_method("units_at"):
+		return out
+	var pattern = move.targeting_for(self) if move.has_method("targeting_for") else null
+	if pattern == null or not pattern.has_method("resolve_cells"):
+		return out
+	for c in pattern.resolve_cells(origin, aim):
+		if not (c is Vector3i):
+			continue
+		for u in board_adapter.units_at(c):
+			if u != self and u != null and not out.has(u):
+				out.append(u)
+	return out
 
 # Movement methods
 func get_movement_range() -> int:

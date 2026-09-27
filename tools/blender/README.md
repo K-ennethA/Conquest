@@ -94,7 +94,10 @@ Tune `N` by eye and re-render. `petalfang` uses `--thorns 40`.
   You don't need to sculpt at that size; the pipeline rescales to fit the cell.
 - **Origin at the feet** — units sit at `y = 0` on a cell centre. Handled for you.
 - **Facing** — face **−Y in Blender**. The +Y-up export turns that into Godot's
-  −Z forward. This is the one thing worth getting right while sculpting.
+  **+Z** (toward the battle camera), which is the game's model-forward convention:
+  leave `model_yaw_deg` at 0. A sculpt that ends up facing away needs
+  `model_yaw_deg = 180`. Check with `dev_scripts/render_unit_facing.gd` (CONQUEST.md
+  "Unit facing"). This is the one thing worth getting right while sculpting.
 - **Up axis** — Blender Z-up becomes Godot Y-up automatically.
 - **Animations** — name clips `idle`, `walk`, `attack`, `hit`, `death` so the game
   can find them without per-unit configuration.

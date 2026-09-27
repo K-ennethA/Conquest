@@ -27,6 +27,5 @@ base_speed = 12
 base_movement = 5
 attack_range = 2
 movement_profile = ExtResource("8_mvprof")
-model_yaw_deg = 180.0
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_cleave"), ExtResource("5_thornward"), ExtResource("6_volley"), ExtResource("7_roots")])
 abilities = Array[ExtResource("9_abres")]([ExtResource("10_grasscutter")])

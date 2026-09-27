@@ -115,6 +115,14 @@ signal danger_zone_changed(active: bool, cell_count: int)
 ## `floor_count` is the board's floor total (1 on a classic flat map).
 signal view_floor_changed(view_floor: int, cut_floor: int, floor_count: int)
 
+## A move RESOLVED from [param origin_cell] at [param aim_cell] (both Vector3i board
+## cells), hitting [param targets] (the units standing in its area when it was cast,
+## caster excluded). APPENDED. Fired by Unit.perform_move just before move_performed,
+## on every path (player, AI, network apply). Presentation only -- FacingController
+## turns the caster toward the aim and the targets toward the caster. Untyped for
+## the same reason as the hazard / control signals above.
+signal move_aimed(caster, move, origin_cell, aim_cell, targets)
+
 func _ready() -> void:
 	# Make this a singleton
 	name = "GameEvents"
