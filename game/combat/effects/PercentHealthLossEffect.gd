@@ -21,6 +21,7 @@ func apply(ctx: MoveContext) -> void:
 		if amount <= 0:
 			continue
 		if target.has_method("take_damage"):
+			CombatText.annotate(target, CombatText.info_for(ctx, CombatText.KIND_DAMAGE, amount), ctx.event_bus)
 			target.take_damage(amount)
 		ctx.log_event({
 			"effect": "damage",

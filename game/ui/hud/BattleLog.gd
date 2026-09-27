@@ -47,6 +47,9 @@ var _header: Button
 ## Lines logged while collapsed, shown as a "(N)" badge on the header so the player
 ## knows something happened without expanding. Reset when expanded.
 var _unread: int = 0
+## Annotation context waiting for the matching damage_dealt / unit_healed line.
+var _last_crit: Dictionary = {}
+var _heal_source: Dictionary = {}
 
 
 func _ready() -> void:
@@ -156,6 +159,7 @@ func _connect_events() -> void:
 	_safe(bus, &"unit_healed", _on_unit_healed)
 	_safe(bus, &"unit_spawned", _on_unit_spawned)
 	_safe(bus, &"unit_eliminated", _on_unit_eliminated)
+	_safe(bus, &"combat_text_annotated", _on_combat_text_annotated)
 
 
 func _safe(obj: Object, sig: StringName, cb: Callable) -> void:
@@ -181,15 +185,81 @@ func _on_move_performed(caster = null, move = null) -> void:
 
 
 func _on_damage_dealt(attacker = null, defender = null, damage = null) -> void:
+	# A tile / status tick resolves with the unit as its own "caster"; those are logged
+	# with their SOURCE by _on_combat_text_annotated instead ("Barkling burned for 15").
+	if attacker != null and attacker == defender:
+		_last_crit.erase(defender)
+		return
 	var dmg: int = int(damage) if damage != null else 0
-	_append("%s hit %s for %d" % [_named(attacker), _named(defender), dmg], _tint(attacker))
+	var crit: bool = bool(_last_crit.get(defender, false))
+	_last_crit.erase(defender)
+	_append("%s hit %s for %d%s" % [_named(attacker), _named(defender), dmg,
+		" (critical!)" if crit else ""], _tint(attacker))
 
 
 func _on_unit_healed(unit = null, amount = null) -> void:
 	var amt: int = int(amount) if amount != null else 0
+	var src: String = String(_heal_source.get(unit, ""))
+	_heal_source.erase(unit)
 	if amt <= 0:
 		return
-	_append("%s healed %d" % [_named(unit), amt], ALLY_COLOR)
+	if src != "":
+		_append("%s restored %d from %s" % [_named(unit), amt, src], ALLY_COLOR)
+	else:
+		_append("%s healed %d" % [_named(unit), amt], ALLY_COLOR)
+
+
+## Context for the next damage / heal line: crits, misses, and every NON-attack damage
+## source (tiles, status ticks, weather, hazards), which never raise damage_dealt with
+## a real attacker. Emitted just before the HP change (see CombatText).
+func _on_combat_text_annotated(unit = null, info = null) -> void:
+	if not (info is Dictionary):
+		return
+	var kind := StringName(info.get("kind", &""))
+	var src_kind := StringName(info.get("source_kind", CombatText.SRC_ATTACK))
+	var amount: int = int(info.get("amount", 0))
+	var source := source_text(info)
+	match kind:
+		CombatText.KIND_MISS:
+			var attacker = info.get("attacker")
+			if src_kind == CombatText.SRC_ATTACK and attacker != null and attacker != unit:
+				_append("%s missed %s" % [_named(attacker), _named(unit)], DIM_COLOR)
+			elif source != "":
+				_append("%s avoided %s" % [_named(unit), source], DIM_COLOR)
+		CombatText.KIND_NEGATED:
+			_append("%s is unharmed (immune)" % _named(unit), DIM_COLOR)
+		CombatText.KIND_HEAL:
+			if src_kind == CombatText.SRC_LIFESTEAL:
+				# Lifesteal heals the caster directly (no unit_healed): log it here.
+				_append("%s drained %d HP" % [_named(unit), amount], _tint(unit))
+			else:
+				_heal_source[unit] = source  # "" clears a stale source
+		CombatText.KIND_DAMAGE:
+			if src_kind == CombatText.SRC_ATTACK:
+				_last_crit[unit] = bool(info.get("crit", false))
+			elif src_kind in [CombatText.SRC_TILE, CombatText.SRC_STATUS,
+					CombatText.SRC_WEATHER, CombatText.SRC_HAZARD]:
+				_append(damage_line(_named(unit), amount, info), _tint(unit))
+
+
+## "Vineweave took 7 from Scouring Sand (Desert Storm)", "Barkling burned for 15".
+## Static so the wording is unit-testable.
+static func damage_line(who: String, amount: int, info: Dictionary) -> String:
+	var id := StringName(info.get("source_id", &""))
+	if id in [&"fire", &"scorching_vent", &"burn"]:
+		return "%s burned for %d" % [who, amount]
+	if StringName(info.get("source_kind", &"")) == CombatText.SRC_HAZARD:
+		return "%s was struck by %s for %d" % [who, source_text(info), amount]
+	return "%s took %d from %s" % [who, amount, source_text(info)]
+
+
+## The player-facing source name, with the weather in brackets for a weather rule.
+static func source_text(info: Dictionary) -> String:
+	var src := String(info.get("source", ""))
+	var weather := String(info.get("weather", ""))
+	if weather != "" and src != "" and src != weather:
+		return "%s (%s)" % [src, weather]
+	return src if src != "" else weather
 
 
 func _on_unit_spawned(unit = null, runtime = null) -> void:

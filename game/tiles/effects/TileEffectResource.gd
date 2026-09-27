@@ -90,6 +90,7 @@ func run(unit, board) -> Array:
 	if board.has_method("cell_of"):
 		cell = board.cell_of(unit)
 	var ctx := MoveContext.new(unit, board, _self_move(), cell, [cell] as Array[Vector3i])
+	ctx.source = CombatText.make_source(CombatText.SRC_TILE, display_name if display_name != "" else String(id), id)
 	for effect in effects:
 		if effect:
 			effect.apply(ctx)

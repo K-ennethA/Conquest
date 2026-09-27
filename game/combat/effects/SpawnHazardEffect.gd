@@ -54,6 +54,8 @@ func apply(ctx: MoveContext) -> void:
 	var half_width: int = maxi(0, (width - 1) / 2)
 	var hazard := TravelingHazard.new(origin, facing, half_width, speed, travel_range,
 		raw, category, affiliation, ctx.caster)
+	if ctx.move != null:
+		hazard.label = String(ctx.move.display_name)
 
 	# Resolve the FIRST segment immediately so the cast turn itself deals damage.
 	var first: Dictionary = hazard.advance(board)

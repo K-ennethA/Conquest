@@ -90,7 +90,10 @@ func is_condition_met(unit, board) -> bool:
 ##
 ## Returns the accumulated event log. Does not check [member condition]; callers
 ## gate first via [method is_condition_met] (as [AbilitySystem] does).
-func run_effects(unit, board, other = null) -> Array:
+## [param source] is an optional presentation-only [member MoveContext.source] block
+## (floating combat text / battle log); empty = this ability's own name. Weather
+## turn-start rules pass the weather's block so the text reads "Desert Storm".
+func run_effects(unit, board, other = null, source: Dictionary = {}) -> Array:
 	if unit == null or board == null or effects.is_empty():
 		return []
 	var anchor = unit
@@ -104,6 +107,8 @@ func run_effects(unit, board, other = null) -> Array:
 	if targeting != null:
 		cells = targeting.resolve_cells(origin, aim)
 	var ctx := MoveContext.new(unit, board, _synthetic_move(), aim, cells)
+	ctx.source = source if not source.is_empty() \
+		else CombatText.make_source(CombatText.SRC_ABILITY, display_name, id)
 	for effect in effects:
 		if effect:
 			effect.apply(ctx)

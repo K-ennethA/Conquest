@@ -123,6 +123,15 @@ signal view_floor_changed(view_floor: int, cut_floor: int, floor_count: int)
 ## the same reason as the hazard / control signals above.
 signal move_aimed(caster, move, origin_cell, aim_cell, targets)
 
+## FLOATING COMBAT TEXT annotation (APPENDED). Emitted by every HP-changing source
+## (DamageEffect, HealEffect, PercentHealthLossEffect, TravelingHazard, lifesteal)
+## JUST BEFORE it changes the unit's HP, describing why: crit, effectiveness, the
+## source name ("Fire", "Poisoned", a weather rule), or a miss. Presentation only
+## (FloatingCombatText pairs it with the unit's next health_changed; BattleLog names
+## non-attack sources). See game/combat/CombatText.gd for the info keys. Untyped
+## like the hazard/control signals so mocks can ride it.
+signal combat_text_annotated(unit, info)
+
 func _ready() -> void:
 	# Make this a singleton
 	name = "GameEvents"

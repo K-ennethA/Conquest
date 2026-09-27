@@ -52,6 +52,9 @@ var category: int = CombatTypes.DamageCategory.PHYSICAL
 var affiliation: int = CombatTypes.TargetKind.ENEMY
 ## The casting unit; never damaged by its own vine.
 var source
+## Player-facing name of the move that cast this hazard ("Forest Barrage"), for
+## floating combat text and the battle log. Presentation only.
+var label: String = ""
 
 ## Rows already entered (advances forward by [member speed] each tick).
 var front: int = 0
@@ -134,6 +137,12 @@ func advance(board) -> Dictionary:
 				_hit_units[unit] = true
 				var dealt := DamageEffect.resolve_hazard_damage(unit, damage, category, board)
 				if dealt > 0 and unit.has_method("take_damage"):
+					CombatText.annotate(unit, {
+						"kind": CombatText.KIND_DAMAGE, "amount": dealt,
+						"source_kind": CombatText.SRC_HAZARD,
+						"source": label if label != "" else "Hazard",
+						"attacker": source,
+					})
 					unit.take_damage(dealt)
 				damaged.append({ "unit": unit, "amount": dealt })
 
