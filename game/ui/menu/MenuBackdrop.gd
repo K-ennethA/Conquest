@@ -3,8 +3,10 @@ extends Control
 
 ## Atmospheric full-screen background shared by every out-of-battle screen: a deep
 ## navy vertical gradient, a warm gold glow and a cool counter-glow, slow drifting
-## ember motes, and an edge vignette. Pure presentation, ignores the mouse, and
-## costs a handful of TextureRects plus one CPUParticles2D.
+## gold motes and pale-green grove spores, an edge vignette, and gilded vine
+## flourishes in the four corners (the "illuminated grove" page border). Pure
+## presentation, ignores the mouse, and costs a handful of TextureRects, two
+## CPUParticles2D and one cached _draw.
 ##
 ## Add it as the FIRST child of a screen (MenuKit.build_page does this). Set
 ## [member motes] false before adding it for a static background.
@@ -15,8 +17,11 @@ extends Control
 ## Draw the solid gradient ground. The main menu turns this off so its 3D diorama
 ## shows through and only the glows / motes / vignette are layered on top.
 @export var solid: bool = true
+## Gilded vine flourishes in the page corners.
+@export var flourishes: bool = true
 
 var _particles: CPUParticles2D
+var _spores: CPUParticles2D
 
 
 func _ready() -> void:
@@ -34,6 +39,11 @@ func _ready() -> void:
 	if motes:
 		_add_motes()
 	_add_texture(_vignette(vignette_strength))
+	if flourishes:
+		var f := GroveFlourish.new()
+		f.name = "Flourishes"
+		f.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		add_child(f)
 	resized.connect(_on_resized)
 	_on_resized()
 
@@ -119,10 +129,30 @@ func _add_motes() -> void:
 	_particles.color_ramp = ramp
 	add_child(_particles)
 
+	# Grove spores: fewer, slower, pale green, drifting with a slight sway.
+	_spores = _particles.duplicate() as CPUParticles2D
+	_spores.name = "Spores"
+	_spores.amount = 16
+	_spores.lifetime = 18.0
+	_spores.preprocess = 18.0
+	_spores.initial_velocity_min = 10.0
+	_spores.initial_velocity_max = 26.0
+	_spores.spread = 35.0
+	_spores.scale_amount_min = 1.2
+	_spores.scale_amount_max = 2.6
+	var sp := MenuTheme.EL_NATURE.lightened(0.45)
+	var sramp := Gradient.new()
+	sramp.offsets = PackedFloat32Array([0.0, 0.25, 0.75, 1.0])
+	sramp.colors = PackedColorArray([Color(sp, 0.0), Color(sp, 0.45), Color(sp, 0.25), Color(sp, 0.0)])
+	_spores.color_ramp = sramp
+	add_child(_spores)
+
 
 func _on_resized() -> void:
 	if _particles == null:
 		return
 	# Emit from a band just below the bottom edge, full width.
-	_particles.position = Vector2(size.x * 0.5, size.y + 10.0)
-	_particles.emission_rect_extents = Vector2(size.x * 0.55, 20.0)
+	for p in [_particles, _spores]:
+		if p != null:
+			p.position = Vector2(size.x * 0.5, size.y + 10.0)
+			p.emission_rect_extents = Vector2(size.x * 0.55, 20.0)

@@ -93,54 +93,63 @@ const HP_CYAN := HP_HIGH
 const HIT_ORANGE := DMG_COLOR
 
 # Element / move-type accents (Pokemon-style colour coding).
-const EL_EMBER := Color("e8623c")
-const EL_FROST := Color("3fa9e0")
-const EL_ARCANE := Color("a860e0")
-const EL_HOLY := Color("e8b93a")
-const EL_NATURE := Color("5fb84e")
-const EL_STEEL := Color("c9cbd6")
+const EL_EMBER := MenuTheme.EL_FIRE
+const EL_FROST := MenuTheme.EL_WATER
+const EL_ARCANE := MenuTheme.EL_ARCANE
+const EL_HOLY := MenuTheme.EL_HOLY
+const EL_NATURE := MenuTheme.EL_NATURE
+const EL_STEEL := MenuTheme.EL_STEEL
 
 
 # --- Stylebox factories ------------------------------------------------------------
 
 ## The HUD card: translucent navy over the board, soft edge, drop shadow.
-static func panel_box(alpha: float = 0.94) -> StyleBoxFlat:
-	var sb := MenuTheme.box(Color(PANEL.r, PANEL.g, PANEL.b, alpha), BORDER, 1, RADIUS, 16, 12)
+static func panel_box(alpha: float = 0.94) -> OrnateStyleBox:
+	var sb := MenuTheme.card_box(PANEL, BORDER, alpha)
+	sb.corner = 11.0
+	sb.vignette_width = 14.0
+	sb.shadow_size = 10.0
+	sb.shadow_offset = Vector2(0, 4)
+	sb.content_margin_left = 18
+	sb.content_margin_right = 18
+	sb.content_margin_top = 14
+	sb.content_margin_bottom = 14
+	return sb
+
+## A darker inset "plate" behind values (forecast numbers, stat grids).
+## A HUD unit card (command menu, hover card): the grove frame with the owning
+## side's team colour as its edge stripe and a team-tinted border. The unit's
+## element lives in its crest (see [method portrait]).
+static func unit_card_box(unit, alpha: float = 0.95) -> OrnateStyleBox:
+	var team := team_color(owner_of(unit))
+	var sb := panel_box(alpha)
+	sb.accent_color = Color(team, 0.95)
+	sb.accent_side = SIDE_LEFT
+	sb.accent_width = 4.0
+	sb.border_color = BORDER.lerp(team, 0.45)
+	return sb
+
+
+static func plate_box() -> OrnateStyleBox:
+	var sb := MenuTheme.inset_box()
+	sb.content_margin_top = 8
+	sb.content_margin_bottom = 8
+	return sb
+
+## Compact strip (turn chip, objective chip): same card, tighter margins.
+static func chip_box(border: Color = BORDER, alpha: float = 0.94) -> OrnateStyleBox:
+	var sb := MenuTheme.plate_box(Color(PANEL, alpha), border, 8.0, 16, 6, 1.5)
+	sb.hatch_alpha = 0.03
+	sb.hatch_spacing = 5.0
+	sb.inner_line_color = Color(GOLD, 0.22)
+	sb.inner_inset = 4.0
 	sb.shadow_color = Color(0, 0, 0, 0.4)
-	sb.shadow_size = 8
+	sb.shadow_size = 7.0
 	sb.shadow_offset = Vector2(0, 3)
 	return sb
 
-
-## A darker inset "plate" behind values (forecast numbers, stat grids).
-static func plate_box() -> StyleBoxFlat:
-	return MenuTheme.box(Color(PANEL_SUNK.r, PANEL_SUNK.g, PANEL_SUNK.b, 0.92), BORDER_SOFT, 1, 8, 12, 8)
-
-
-## Compact strip (turn chip, objective chip): same card, tighter margins.
-static func chip_box(border: Color = BORDER, alpha: float = 0.94) -> StyleBoxFlat:
-	var sb := MenuTheme.box(Color(PANEL.r, PANEL.g, PANEL.b, alpha), border, 1, 10, 16, 6)
-	sb.shadow_color = Color(0, 0, 0, 0.35)
-	sb.shadow_size = 6
-	sb.shadow_offset = Vector2(0, 2)
-	return sb
-
-
-static func _command_box(fill: Color, bar: Color) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = fill
-	sb.border_width_left = 4
-	sb.border_color = bar
-	sb.set_corner_radius_all(6)
-	sb.corner_radius_top_left = 2
-	sb.corner_radius_bottom_left = 2
-	sb.content_margin_left = 14
-	sb.content_margin_right = 12
-	sb.content_margin_top = 7
-	sb.content_margin_bottom = 7
-	sb.anti_aliasing = true
-	return sb
-
+static func _command_box(fill: Color, bar: Color) -> OrnateStyleBox:
+	return MenuTheme.row_box(fill, bar, Color(bar, bar.a * 0.4), 30, 12, 7)
 
 # --- Assemble the Theme --------------------------------------------------------------
 
@@ -157,32 +166,32 @@ static func build() -> Theme:
 
 	# A HUD button is a touch more compact than a menu button.
 	for type in ["Button", "OptionButton"]:
-		t.set_stylebox("normal", type, MenuTheme.box(Color(PANEL_HI.r, PANEL_HI.g, PANEL_HI.b, 0.75), BORDER, 2, 8, 16, 8))
-		t.set_stylebox("hover", type, MenuTheme.box(PANEL_HI, GOLD_DK, 2, 8, 16, 8))
-		t.set_stylebox("pressed", type, MenuTheme.box(GOLD, GOLD_LITE, 2, 8, 16, 8))
-		t.set_stylebox("disabled", type, MenuTheme.box(Color(PANEL_SUNK.r, PANEL_SUNK.g, PANEL_SUNK.b, 0.7), BORDER_SOFT, 2, 8, 16, 8))
-		t.set_stylebox("focus", type, MenuTheme.focus_box(8))
+		t.set_stylebox("normal", type, MenuTheme.plate_box(Color(PANEL_HI, 0.8), BORDER, 7.0, 16, 8))
+		var hov := MenuTheme.plate_box(PANEL_HI, GOLD_DK, 7.0, 16, 8)
+		hov.inner_line_color = Color(GOLD, 0.22)
+		hov.inner_inset = 4.0
+		t.set_stylebox("hover", type, hov)
+		t.set_stylebox("pressed", type, MenuTheme.plate_box(GOLD, GOLD_LITE, 7.0, 16, 8))
+		t.set_stylebox("disabled", type, MenuTheme.plate_box(Color(PANEL_SUNK, 0.7), BORDER_SOFT, 7.0, 16, 8))
+		t.set_stylebox("focus", type, MenuTheme.focus_box(7))
 
 	# HudCommand: an FE command-list entry. Transparent at rest; hover / focus light
 	# a gold bar on the left with a navy wash. Text stays cream / gold on navy (never
 	# light-on-light).
 	t.set_type_variation("HudCommand", "Button")
 	t.set_stylebox("normal", "HudCommand", _command_box(Color(0, 0, 0, 0), Color(0, 0, 0, 0)))
-	t.set_stylebox("hover", "HudCommand", _command_box(Color(PANEL_HI.r, PANEL_HI.g, PANEL_HI.b, 0.9), GOLD_DK))
-	t.set_stylebox("pressed", "HudCommand", _command_box(Color(GOLD.r, GOLD.g, GOLD.b, 0.28), GOLD_LITE))
-	t.set_stylebox("hover_pressed", "HudCommand", _command_box(Color(GOLD.r, GOLD.g, GOLD.b, 0.28), GOLD_LITE))
+	t.set_stylebox("hover", "HudCommand", _command_box(Color(GOLD_DK, 0.22), Color(GOLD_DK, 0.9)))
+	t.set_stylebox("pressed", "HudCommand", _command_box(Color(GOLD, 0.36), GOLD_LITE))
+	t.set_stylebox("hover_pressed", "HudCommand", _command_box(Color(GOLD, 0.36), GOLD_LITE))
 	t.set_stylebox("disabled", "HudCommand", _command_box(Color(0, 0, 0, 0), Color(0, 0, 0, 0)))
-	var cmd_focus := _command_box(Color(PANEL_HI.r, PANEL_HI.g, PANEL_HI.b, 0.95), GOLD)
-	cmd_focus.shadow_color = Color(GOLD.r, GOLD.g, GOLD.b, 0.16)
-	cmd_focus.shadow_size = 6
-	t.set_stylebox("focus", "HudCommand", cmd_focus)
+	t.set_stylebox("focus", "HudCommand", _command_box(Color(GOLD, 0.3), GOLD))
 	t.set_color("font_color", "HudCommand", CREAM)
 	t.set_color("font_hover_color", "HudCommand", GOLD_LITE)
 	t.set_color("font_focus_color", "HudCommand", GOLD_LITE)
 	t.set_color("font_pressed_color", "HudCommand", GOLD_LITE)
 	t.set_color("font_hover_pressed_color", "HudCommand", GOLD_LITE)
 	t.set_color("font_disabled_color", "HudCommand", Color(TEXT_MUTED.r, TEXT_MUTED.g, TEXT_MUTED.b, 0.75))
-	t.set_font("font", "HudCommand", MenuTheme.bold_font(0.35))
+	t.set_font("font", "HudCommand", MenuTheme.heading_font(1))
 	t.set_font_size("font_size", "HudCommand", FS_COMMAND)
 	t.set_constant("h_separation", "HudCommand", 10)
 	return t
@@ -194,6 +203,9 @@ static func build() -> Theme:
 ## older stylebox it shipped with. Safe no-op on null.
 static func style_panel_background(node: Control) -> void:
 	if node != null and (node is Panel or node is PanelContainer):
+		# A panel that asked for a theme variation (Card / InsetPanel / Pill...) keeps it.
+		if node.theme_type_variation != &"":
+			return
 		node.add_theme_stylebox_override("panel", panel_box())
 
 
@@ -226,16 +238,16 @@ static func _restyle(node: Node) -> void:
 ## Colour for a move/ability element tag; falls back to gold for unknowns.
 static func element_color(element: String) -> Color:
 	match element.to_lower():
-		"ember", "fire": return EL_EMBER
-		"frost", "water", "ice": return EL_FROST
-		"arcane", "magic": return EL_ARCANE
-		"holy", "light": return EL_HOLY
-		"nature", "earth", "wind": return EL_NATURE
-		"steel", "metal", "physical": return EL_STEEL
-		"dark", "shadow": return Color("9b7be0")
-		"stone": return Color("c9955a")
+		"ember", "fire": return MenuTheme.EL_FIRE
+		"frost", "water", "ice": return MenuTheme.EL_WATER
+		"arcane", "magic": return MenuTheme.EL_ARCANE
+		"holy", "light": return MenuTheme.EL_HOLY
+		"nature", "grass", "plant": return MenuTheme.EL_NATURE
+		"wind", "air": return MenuTheme.EL_WIND
+		"earth", "stone", "gem", "rock": return MenuTheme.EL_EARTH
+		"steel", "metal", "physical": return MenuTheme.EL_STEEL
+		"dark", "shadow", "blight": return MenuTheme.EL_DARK
 		_: return GOLD
-
 
 ## HP colour tier for a 0..1 fraction (same thresholds as the 3D map bar).
 static func hp_color(frac: float) -> Color:
@@ -341,9 +353,8 @@ static func portrait(letter: String, fill: Color, ring: Color, px: float = 48.0)
 	var p := PanelContainer.new()
 	p.name = "Portrait"
 	p.set_meta(KEEP_META, true)
-	var sb := MenuTheme.box(fill.darkened(0.5), ring, 3, 999, 0, 0)
-	p.add_theme_stylebox_override("panel", sb)
-	p.custom_minimum_size = Vector2(px, px)
+	p.add_theme_stylebox_override("panel", MenuTheme.crest_box(fill, ring, px))
+	p.custom_minimum_size = Vector2(px * 0.86, px)
 	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var l := Label.new()
@@ -351,25 +362,25 @@ static func portrait(letter: String, fill: Color, ring: Color, px: float = 48.0)
 	l.text = letter.left(1).to_upper()
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.add_theme_font_override("font", MenuTheme.bold_font(0.6))
-	l.add_theme_font_size_override("font_size", int(px * 0.46))
-	l.add_theme_color_override("font_color", fill.lightened(0.55))
+	l.add_theme_font_override("font", MenuTheme.display_font(0))
+	l.add_theme_font_size_override("font_size", int(px * 0.42))
+	l.add_theme_color_override("font_color", fill.lightened(0.7))
+	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	l.add_theme_constant_override("shadow_offset_y", 2)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.add_child(l)
 	return p
-
 
 ## Recolour / re-letter a [method portrait] in place.
 static func set_portrait(p: PanelContainer, letter: String, fill: Color, ring: Color) -> void:
 	if p == null:
 		return
-	var px := p.custom_minimum_size.x
-	p.add_theme_stylebox_override("panel", MenuTheme.box(fill.darkened(0.5), ring, 3 if px >= 40.0 else 2, 999, 0, 0))
+	var px := p.custom_minimum_size.y
+	p.add_theme_stylebox_override("panel", MenuTheme.crest_box(fill, ring, px))
 	var l := p.get_node_or_null("Initial") as Label
 	if l != null:
 		l.text = letter.left(1).to_upper()
-		l.add_theme_color_override("font_color", fill.lightened(0.55))
-
+		l.add_theme_color_override("font_color", fill.lightened(0.7))
 
 ## Portrait fill + ring for [param unit]: element colour inside, team colour ring.
 static func unit_portrait_colors(unit) -> Array:
@@ -396,10 +407,13 @@ static func chip(text: String, color: Color, font_size: int = FS_SMALL) -> Panel
 	return p
 
 
-static func chip_style(color: Color) -> StyleBoxFlat:
-	var sb := MenuTheme.box(Color(color.r, color.g, color.b, 0.2), color, 1, 999, 10, 2)
+static func chip_style(color: Color) -> OrnateStyleBox:
+	var sb := MenuTheme.pill_box(Color(color, 0.2), color)
+	sb.content_margin_left = 13
+	sb.content_margin_right = 13
+	sb.content_margin_top = 2
+	sb.content_margin_bottom = 2
 	return sb
-
 
 ## Key-cap pill ("E", "Esc", "A") in gold on a raised navy cap.
 static func key_cap(text: String, font_size: int = FS_CAPTION) -> PanelContainer:
@@ -515,10 +529,29 @@ static func section_label(text: String) -> Label:
 
 
 ## A thin gold accent rule.
-static func accent_rule(color: Color = GOLD, width: float = 48.0, height: float = 3.0) -> ColorRect:
-	var r := ColorRect.new()
+static func accent_rule(color: Color = GOLD, width: float = 96.0, height: float = 10.0) -> Control:
+	var r := GroveRule.new()
 	r.color = color
 	r.custom_minimum_size = Vector2(width, height)
 	r.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return r
+
+
+## A card title strip: a swallow-tailed ribbon holding [param text] in Cinzel caps.
+## [param accent] tints the ribbon's edge (team / element colour).
+static func title_ribbon(text: String, accent: Color = GOLD_DK, font_size: int = FS_BODY) -> PanelContainer:
+	var p := PanelContainer.new()
+	p.name = "TitleRibbon"
+	p.set_meta(KEEP_META, true)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_theme_stylebox_override("panel", MenuTheme.ribbon_box(PANEL_HI, accent, 12.0))
+	var l := Label.new()
+	l.name = "Text"
+	l.text = text
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.add_theme_font_override("font", MenuTheme.heading_font(2))
+	l.add_theme_font_size_override("font_size", font_size)
+	l.add_theme_color_override("font_color", GOLD_LITE)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(l)
+	return p
