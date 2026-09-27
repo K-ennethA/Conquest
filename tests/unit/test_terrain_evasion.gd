@@ -22,14 +22,14 @@ class MockUnit:
 # Board where cell (1,0) is tall grass (+15 evasion). extra_burn adds a second,
 # non-evasion effect on that same cell to prove effects stack.
 class GrassBoard:
-	var grass_cell := Vector2i(1, 0)
+	var grass_cell := Vector3i(1, 0, 0)
 	var placements := {}
 	var extra_burn := false
-	func place(u, c: Vector2i) -> void:
+	func place(u, c: Vector3i) -> void:
 		placements[u] = c
-	func cell_of(u) -> Vector2i:
-		return placements.get(u, Vector2i(-999, -999))
-	func tile_effects_at(c: Vector2i) -> Array:
+	func cell_of(u) -> Vector3i:
+		return placements.get(u, Vector3i(-999, -999, 0))
+	func tile_effects_at(c: Vector3i) -> Array:
 		if c != grass_cell:
 			return []
 		var out: Array = [_tall_grass()]
@@ -64,9 +64,9 @@ func test_terrain_evasion_lowers_hit_chance() -> void:
 	var caster := MockUnit.new(0, {})
 	var target := MockUnit.new(1, { "evasion": 0 })
 	var board := GrassBoard.new()
-	board.place(caster, Vector2i(0, 0))
+	board.place(caster, Vector3i(0, 0, 0))
 	board.place(target, board.grass_cell)
-	var ctx := MoveContext.new(caster, board, _move(1.0), Vector2i.ZERO, [] as Array[Vector2i])
+	var ctx := MoveContext.new(caster, board, _move(1.0), Vector3i.ZERO, [] as Array[Vector3i])
 	assert_eq(ctx.hit_chance(target), 85.0, "100% accuracy - 15 terrain evasion = 85%")
 
 
@@ -74,9 +74,9 @@ func test_no_terrain_means_no_avoid() -> void:
 	var caster := MockUnit.new(0, {})
 	var target := MockUnit.new(1, { "evasion": 0 })
 	var board := GrassBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(5, 5))  # bare ground, no tile effect
-	var ctx := MoveContext.new(caster, board, _move(1.0), Vector2i.ZERO, [] as Array[Vector2i])
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(5, 5, 0))  # bare ground, no tile effect
+	var ctx := MoveContext.new(caster, board, _move(1.0), Vector3i.ZERO, [] as Array[Vector3i])
 	assert_eq(ctx.hit_chance(target), 100.0, "no terrain => full accuracy")
 
 
@@ -87,10 +87,10 @@ func test_multiple_effects_on_one_cell_still_grant_evasion() -> void:
 	var target := MockUnit.new(1, { "evasion": 0 })
 	var board := GrassBoard.new()
 	board.extra_burn = true
-	board.place(caster, Vector2i(0, 0))
+	board.place(caster, Vector3i(0, 0, 0))
 	board.place(target, board.grass_cell)
 	assert_eq(board.tile_effects_at(board.grass_cell).size(), 2, "cell holds two effects")
-	var ctx := MoveContext.new(caster, board, _move(1.0), Vector2i.ZERO, [] as Array[Vector2i])
+	var ctx := MoveContext.new(caster, board, _move(1.0), Vector3i.ZERO, [] as Array[Vector3i])
 	assert_eq(ctx.hit_chance(target), 85.0, "evasion layer still applies through the burn")
 
 

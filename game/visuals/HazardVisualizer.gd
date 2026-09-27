@@ -27,7 +27,7 @@ class_name HazardVisualizer
 # expiry/removal so nothing leaks. Honors GameSettings.animations_on() -- when
 # animations are off the vine/trap still appear, only the grow/pulse is skipped.
 
-# Grid <-> world. A cell Vector2i(col,row) centers at
+# Grid <-> world. A cell Vector3i(col,row,floor) centers at
 # GRID.calculate_map_position(Vector3(col, 0, row)); cell_size is 2 so the center
 # is (col*2+1, 0, row*2+1). Meshes float just above the tile top (~y 0.1-0.2).
 const GRID := preload("res://board/Grid.tres")
@@ -41,7 +41,7 @@ const PULSE_SPEED := 2.4         # radians/sec for the idle telegraph/trap pulse
 # telegraph meshes. One entry per live hazard so simultaneous vines stay separate.
 var _hazard_visuals: Dictionary = {}
 
-# cell (Vector2i) -> trap marker Node3D. Persistent until the effect leaves.
+# cell (Vector3i) -> trap marker Node3D. Persistent until the effect leaves.
 var _trap_markers: Dictionary = {}
 
 var _time: float = 0.0
@@ -154,20 +154,20 @@ func _on_hazard_advanced(hazard, cells, next_cells, _damage) -> void:
 	# Solid vines on every current-band cell.
 	if cells is Array:
 		for cell in cells:
-			var c: Vector2i = cell
+			var c: Vector3i = cell
 			var vine := _make_vine()
-			var center: Vector3 = GRID.calculate_map_position(Vector3(c.x, 0, c.y))
-			vine.position = Vector3(center.x, VINE_BASE_Y, center.z)
+			var center: Vector3 = GRID.calculate_map_position(Cells.to_grid(c))
+			vine.position = Vector3(center.x, center.y + VINE_BASE_Y, center.z)
 			vine.rotation.y = randf() * TAU  # per-instance twist so they aren't clones
 			current.add_child(vine)
 
 	# Faint translucent telegraph on the band it will sweep next turn.
 	if next_cells is Array:
 		for cell2 in next_cells:
-			var nc: Vector2i = cell2
+			var nc: Vector3i = cell2
 			var ghost := _make_telegraph()
-			var center2: Vector3 = GRID.calculate_map_position(Vector3(nc.x, 0, nc.y))
-			ghost.position = Vector3(center2.x, TELEGRAPH_Y, center2.z)
+			var center2: Vector3 = GRID.calculate_map_position(Cells.to_grid(nc))
+			ghost.position = Vector3(center2.x, center2.y + TELEGRAPH_Y, center2.z)
 			telegraph.add_child(ghost)
 
 	# Grow/uncoil the fresh current band from the ground so it reads as crawling in.
@@ -201,7 +201,7 @@ func _on_board_ready() -> void:
 	_rebuild_all_traps()
 
 
-func _on_tile_effects_changed(cell: Vector2i) -> void:
+func _on_tile_effects_changed(cell: Vector3i) -> void:
 	_rebuild_trap_cell(cell)
 
 
@@ -220,14 +220,21 @@ func _rebuild_all_traps() -> void:
 	var rows: int = int(GRID.size.z)
 	for col in range(cols):
 		for row in range(rows):
-			var cell := Vector2i(col, row)
+			var cell := Vector3i(col, row, 0)
 			if _cell_has_trap(cell):
 				_place_trap(cell)
+	# Upper floors (multi-floor maps): only cells that have a tile there.
+	var board = CombatServices.board()
+	if board != null and board.has_method("floor_count"):
+		for f in range(1, board.floor_count()):
+			for up_cell in board.cells_on_floor(f):
+				if _cell_has_trap(up_cell):
+					_place_trap(up_cell)
 
 
 ## Single-cell reconcile: add a marker if the trap just appeared, remove it if the
 ## trap is gone, otherwise leave the existing marker in place.
-func _rebuild_trap_cell(cell: Vector2i) -> void:
+func _rebuild_trap_cell(cell: Vector3i) -> void:
 	var has_trap: bool = _cell_has_trap(cell)
 	var existing = _trap_markers.get(cell, null)
 	var existing_valid: bool = existing != null and is_instance_valid(existing)
@@ -239,7 +246,7 @@ func _rebuild_trap_cell(cell: Vector2i) -> void:
 		_trap_markers.erase(cell)
 
 
-func _cell_has_trap(cell: Vector2i) -> bool:
+func _cell_has_trap(cell: Vector3i) -> bool:
 	if CombatServices == null:
 		return false
 	var effects: Array = CombatServices.tile_effects_at(cell)
@@ -249,10 +256,10 @@ func _cell_has_trap(cell: Vector2i) -> bool:
 	return false
 
 
-func _place_trap(cell: Vector2i) -> void:
-	var center: Vector3 = GRID.calculate_map_position(Vector3(cell.x, 0, cell.y))
+func _place_trap(cell: Vector3i) -> void:
+	var center: Vector3 = GRID.calculate_map_position(Cells.to_grid(cell))
 	var trap := _make_trap()
-	trap.position = Vector3(center.x, TRAP_Y, center.z)
+	trap.position = Vector3(center.x, center.y + TRAP_Y, center.z)
 	add_child(trap)
 	_trap_markers[cell] = trap
 

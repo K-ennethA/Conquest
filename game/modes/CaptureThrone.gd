@@ -9,7 +9,7 @@ class_name CaptureThrone
 ## The faction that must hold the cell.
 @export var faction: int = 0
 ## The cell that must be occupied.
-@export var target_cell: Vector2i = Vector2i.ZERO
+@export var target_cell: Vector3i = Vector3i.ZERO
 
 
 func evaluate(state: Dictionary) -> int:

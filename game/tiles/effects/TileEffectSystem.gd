@@ -15,19 +15,19 @@ class_name TileEffectSystem
 ## fortified, and so on. Every method resolves effects in deterministic order
 ## (the cell's array order, then each effect's own order).
 
-## Optional injected lookup: cell ([Vector2i]) -> [code]Array[TileEffectResource][/code].
+## Optional injected lookup: cell ([Vector3i]) -> [code]Array[TileEffectResource][/code].
 ## Used only when the board does not supply effects for that cell.
 var tile_effects: Dictionary = {}
 
 
 ## Run every [enum TileEffectResource.Trigger].ON_ENTER effect on [param cell]
 ## that applies to [param unit]. Returns the merged event log.
-func on_enter(unit, cell: Vector2i, board) -> Array:
+func on_enter(unit, cell: Vector3i, board) -> Array:
 	return _run_trigger(unit, cell, board, TileEffectResource.Trigger.ON_ENTER)
 
 
 ## Run every ON_EXIT effect on the cell the unit is leaving.
-func on_exit(unit, cell: Vector2i, board) -> Array:
+func on_exit(unit, cell: Vector3i, board) -> Array:
 	return _run_trigger(unit, cell, board, TileEffectResource.Trigger.ON_EXIT)
 
 
@@ -55,7 +55,7 @@ func passive_flags(unit, board) -> Dictionary:
 	return flags
 
 
-func _run_trigger(unit, cell: Vector2i, board, trigger: int) -> Array:
+func _run_trigger(unit, cell: Vector3i, board, trigger: int) -> Array:
 	var events: Array = []
 	if unit == null:
 		return events
@@ -80,7 +80,7 @@ func _run_trigger(unit, cell: Vector2i, board, trigger: int) -> Array:
 ## Remove a spent runtime tile effect from the live board. Reaches the CombatServices
 ## autoload directly (the applied-effects owner); null-safe for headless/mocked tests
 ## where there is no live services node.
-func _extinguish(cell: Vector2i, te) -> void:
+func _extinguish(cell: Vector3i, te) -> void:
 	var svc = _combat_services()
 	if svc != null and svc.has_method("remove_tile_effect"):
 		svc.remove_tile_effect(cell, te)
@@ -94,7 +94,7 @@ func _combat_services():
 
 
 ## Prefer the board's own authoring source; fall back to the injected dictionary.
-func _effects_at(cell: Vector2i, board) -> Array:
+func _effects_at(cell: Vector3i, board) -> Array:
 	if board and board.has_method("tile_effects_at"):
 		var arr = board.tile_effects_at(cell)
 		if arr is Array and not arr.is_empty():
@@ -106,7 +106,7 @@ func _effects_at(cell: Vector2i, board) -> Array:
 	return []
 
 
-static func _cell_of(unit, board) -> Vector2i:
+static func _cell_of(unit, board) -> Vector3i:
 	if board and board.has_method("cell_of"):
 		return board.cell_of(unit)
-	return Vector2i.ZERO
+	return Vector3i.ZERO

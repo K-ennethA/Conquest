@@ -25,8 +25,8 @@ func apply(ctx: MoveContext) -> void:
 	if not ctx.board.has_method("cell_of") or not ctx.board.has_method("move_unit"):
 		return
 
-	var from: Vector2i = ctx.board.cell_of(ctx.caster)
-	var to: Vector2i = ctx.aim_cell
+	var from: Vector3i = ctx.board.cell_of(ctx.caster)
+	var to: Vector3i = ctx.aim_cell
 	if not _can_land(ctx, to):
 		ctx.log_event({
 			"effect": "leap",
@@ -60,13 +60,15 @@ func describe() -> String:
 ## multi-cell unit is never squeezed into a gap it does not fit. Boards without it
 ## fall back to the individual queries they do expose; anything a board cannot
 ## answer is treated as permissive, exactly as the rest of the pipeline does.
-static func _can_land(ctx: MoveContext, cell: Vector2i) -> bool:
+static func _can_land(ctx: MoveContext, cell: Vector3i) -> bool:
 	var board = ctx.board
 	if board.has_method("can_fit"):
 		return bool(board.can_fit(ctx.caster, cell))
 	if board.has_method("in_bounds") and not bool(board.in_bounds(cell)):
 		return false
 	if board.has_method("is_blocked") and bool(board.is_blocked(cell)):
+		return false
+	if board.has_method("has_tile") and not bool(board.has_tile(cell)):
 		return false
 	for unit in board.units_at(cell):
 		if unit != null and unit != ctx.caster:

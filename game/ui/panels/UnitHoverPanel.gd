@@ -304,7 +304,7 @@ func _build_chip(text: String, color: Color) -> PanelContainer:
 ## The first living unit covering [param cell], or null. Goes through
 ## [code]BoardAdapter.units_at[/code], which is FOOTPRINT-aware -- so a 2x2 unit
 ## is found from any of the four cells it covers, not only its anchor.
-func _unit_at(cell: Vector2i):
+func _unit_at(cell: Vector3i):
 	if CombatServices == null:
 		return null
 	var board = CombatServices.board()
@@ -325,7 +325,7 @@ func _unit_at(cell: Vector2i):
 ## Vector3(col, 0, row) -- already grid-clamped by board/cursor/cursor.gd. No
 ## world->cell math needed; this mirrors TerrainInfoPanel._on_cursor_moved exactly.
 func _on_cursor_moved(grid_pos: Vector3) -> void:
-	var cell := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var cell := Cells.from_grid(grid_pos)  # Vector3(col, floor, row) -> cell
 
 	# No live board yet (no map loaded / mid-rebuild) -- nothing to inspect.
 	var board = CombatServices.board() if CombatServices else null

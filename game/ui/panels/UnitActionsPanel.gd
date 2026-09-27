@@ -60,8 +60,8 @@ var _last_cursor_tile: Vector3 = Vector3.ZERO
 # commit is the only place mark_moved() + GameEvents.unit_moved fire.
 var _tentative_active: bool = false
 var _tentative_unit: Unit = null
-var _tentative_origin_cell: Vector2i = Vector2i.ZERO
-var _tentative_dest_cell: Vector2i = Vector2i.ZERO
+var _tentative_origin_cell: Vector3i = Vector3i.ZERO
+var _tentative_dest_cell: Vector3i = Vector3i.ZERO
 var _tentative_origin_world: Vector3 = Vector3.ZERO
 
 # Frame on which the SELECT MOVE popup closed itself in response to ESC/BACK
@@ -1110,8 +1110,8 @@ func _show_inspect_movement_range() -> void:
 	if board == null or profile == null:
 		_clear_movement_range()
 		return
-	var origin: Vector2i = board.cell_of(selected_unit)
-	var cells: Array[Vector2i] = MovementResolver.new().reachable_cells(origin, profile, board, selected_unit)
+	var origin: Vector3i = board.cell_of(selected_unit)
+	var cells: Array[Vector3i] = MovementResolver.new().reachable_cells(origin, profile, board, selected_unit)
 	# Visual only -- the move-target set stays empty so the enemy can never be commanded.
 	movement_range_tiles = []
 	GameEvents.movement_range_calculated.emit(_cells_to_grid_tiles(cells))
@@ -1134,13 +1134,13 @@ func _try_show_movement_range_via_resolver() -> bool:
 		# Character present but no usable profile yet -> let the BFS fallback run.
 		return false
 
-	# origin cell (Vector2i(col, row)) straight from the board.
-	var origin: Vector2i = board.cell_of(selected_unit)
+	# origin cell (Vector3i(col, row, floor)) straight from the board.
+	var origin: Vector3i = board.cell_of(selected_unit)
 	# Pass the unit so a multi-cell unit (e.g. a 2x2 boss) only gets cells where its
 	# WHOLE footprint fits. Omitting it would resolve every unit as 1x1.
-	var cells: Array[Vector2i] = MovementResolver.new().reachable_cells(origin, profile, board, selected_unit)
+	var cells: Array[Vector3i] = MovementResolver.new().reachable_cells(origin, profile, board, selected_unit)
 
-	# Convert each Vector2i(col, row) into the Vector3(col, 0, row) grid-coord form the
+	# Convert each cell into the Vector3(col, floor, row) grid-coord form the
 	# visualizer + GameEvents.movement_range_calculated + downstream validation expect.
 	movement_range_tiles = _cells_to_grid_tiles(cells)
 
@@ -1149,25 +1149,25 @@ func _try_show_movement_range_via_resolver() -> bool:
 	return true
 
 
-func _cells_to_grid_tiles(cells: Array[Vector2i]) -> Array[Vector3]:
-	"""Vector2i(col, row) cells -> Vector3(col, 0, row) grid coords used everywhere
-	downstream (movement_range_tiles, the visualizer, GameEvents)."""
+func _cells_to_grid_tiles(cells: Array[Vector3i]) -> Array[Vector3]:
+	"""Vector3i(col, row, floor) cells -> Vector3(col, floor, row) grid coords used
+	everywhere downstream (movement_range_tiles, the visualizer, GameEvents)."""
 	var out: Array[Vector3] = []
 	for cell in cells:
-		out.append(Vector3(cell.x, 0, cell.y))
+		out.append(Cells.to_grid(cell))
 	return out
 
 
-func _grid_tile_to_cell(grid_pos: Vector3) -> Vector2i:
-	"""Vector3(col, 0, row) grid coord -> Vector2i(col, row) board cell."""
-	return Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+func _grid_tile_to_cell(grid_pos: Vector3) -> Vector3i:
+	"""Vector3(col, floor, row) grid coord -> Vector3i(col, row, floor) board cell."""
+	return Cells.from_grid(grid_pos)
 
 
 func _is_grid_pos_in_range(grid_pos: Vector3) -> bool:
 	"""True when grid_pos matches a tile in the current reachable set (which, for
 	character-backed units, is the MovementResolver output)."""
 	for tile in movement_range_tiles:
-		if abs(tile.x - grid_pos.x) < 0.1 and abs(tile.z - grid_pos.z) < 0.1:
+		if abs(tile.x - grid_pos.x) < 0.1 and abs(tile.z - grid_pos.z) < 0.1 and abs(tile.y - grid_pos.y) < 0.1:
 			return true
 	return false
 
@@ -1184,27 +1184,27 @@ func _try_execute_move_via_board(destination: Vector3) -> bool:
 	if board == null:
 		return false
 
-	var dest_cell: Vector2i = _grid_tile_to_cell(destination)
+	var dest_cell: Vector3i = _grid_tile_to_cell(destination)
 
 	# Validate the destination is within the reachable set before moving.
 	if not _is_grid_pos_in_range(destination):
 		return true  # handled (rejected); do NOT fall back to BFS for a character unit
 
 	var old_world_pos: Vector3 = selected_unit.global_position
-	var old_cell: Vector2i = board.cell_of(selected_unit)
+	var old_cell: Vector3i = board.cell_of(selected_unit)
 
 	# Authoritative board move: snaps the unit onto the cell center (preserving its
 	# height). We then rewind the world position so the existing tween can animate
 	# from the old spot to the cell's world center.
 	board.move_unit(selected_unit, dest_cell)
 
-	var new_world_pos: Vector3 = board.cell_to_world(dest_cell)
-	new_world_pos.y = old_world_pos.y
+	# move_unit already set the correct height (lifted/lowered by whole floors).
+	var new_world_pos: Vector3 = selected_unit.global_position
 	selected_unit.global_position = old_world_pos
 	_animate_unit_movement(selected_unit, old_world_pos, new_world_pos)
 
-	# Preserve the legacy unit_moved contract: Vector3(col, 0, row) grid coords.
-	var old_grid_pos := Vector3(old_cell.x, 0, old_cell.y)
+	# unit_moved contract: Vector3(col, floor, row) grid coords.
+	var old_grid_pos := Cells.to_grid(old_cell)
 	GameEvents.unit_moved.emit(selected_unit, old_grid_pos, destination)
 
 	# mark_moved() semantics: consumes the move but NOT the action.
@@ -1246,7 +1246,7 @@ func _is_tile_passable(grid_pos: Vector3) -> bool:
 	# Terrain first. A wall or a tree is impassable regardless of occupancy, and
 	# this legacy BFS previously only looked at units -- which made solid trees show
 	# up as reachable instead of forcing a path around them.
-	var cell := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var cell := Cells.from_grid(grid_pos)
 	var tile: TileResource = CombatServices.tile_at(cell)
 	if tile != null and not tile.is_tile_passable():
 		return false
@@ -1541,7 +1541,7 @@ func _begin_tentative_move(destination: Vector3) -> void:
 		_execute_movement_to_destination(destination)
 		return
 
-	var dest_cell: Vector2i = _grid_tile_to_cell(destination)
+	var dest_cell: Vector3i = _grid_tile_to_cell(destination)
 	_tentative_origin_cell = board.cell_of(selected_unit)
 	_tentative_origin_world = selected_unit.global_position
 	_tentative_dest_cell = dest_cell
@@ -1595,8 +1595,8 @@ func _commit_tentative_move() -> void:
 	if unit.has_method("mark_moved"):
 		unit.mark_moved()
 
-	var from_grid := Vector3(origin_cell.x, 0, origin_cell.y)
-	var to_grid := Vector3(dest_cell.x, 0, dest_cell.y)
+	var from_grid := Cells.to_grid(origin_cell)
+	var to_grid := Cells.to_grid(dest_cell)
 	GameEvents.unit_moved.emit(unit, from_grid, to_grid)
 
 	var tree = get_tree()
@@ -1645,8 +1645,8 @@ func _clear_tentative_state() -> void:
 	"""Drop all tentative-move bookkeeping (does NOT move the unit)."""
 	_tentative_active = false
 	_tentative_unit = null
-	_tentative_origin_cell = Vector2i.ZERO
-	_tentative_dest_cell = Vector2i.ZERO
+	_tentative_origin_cell = Vector3i.ZERO
+	_tentative_dest_cell = Vector3i.ZERO
 	_tentative_origin_world = Vector3.ZERO
 
 
@@ -1794,9 +1794,9 @@ func handle_move_target_selected(grid_pos: Vector3) -> void:
 		_cancel_move_targeting()
 		return
 
-	var origin: Vector2i = board.cell_of(selected_unit)
-	# Vector3(col, 0, row) grid coord -> Vector2i(col, row) board cell.
-	var aim := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var origin: Vector3i = board.cell_of(selected_unit)
+	# Vector3(col, floor, row) grid coord -> Vector3i(col, row, floor) board cell.
+	var aim := Cells.from_grid(grid_pos)
 
 	# Must be a legal aim point for this pattern (respects min/max range plus the
 	# unit's own range bonus -- see MoveResource.effective_max_range -- and the
@@ -1816,7 +1816,7 @@ func handle_move_target_selected(grid_pos: Vector3) -> void:
 
 	_execute_move_on_target(aim, move, selected_move_index)
 
-func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) -> void:
+func _execute_move_on_target(aim_cell: Vector3i, move: MoveResource, slot: int) -> void:
 	"""Resolve the selected move at aim_cell through the unit's perform_move
 	(-> MoveExecutor). On success: record the use for cooldown/charges, print the
 	resolved events, consume the unit's action, and clear targeting."""
@@ -1953,12 +1953,12 @@ func _refresh_move_forecast(grid_pos: Vector3) -> void:
 		combat_forecast_panel.hide_forecast()
 		return
 
-	var origin: Vector2i = board.cell_of(selected_unit)
-	# Vector3(col, 0, row) grid coord -> Vector2i(col, row) board cell.
-	var aim := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var origin: Vector3i = board.cell_of(selected_unit)
+	# Vector3(col, floor, row) grid coord -> Vector3i(col, row, floor) board cell.
+	var aim := Cells.from_grid(grid_pos)
 
 	# Forecast only a legal aim that lands on an enemy the caster may attack.
-	if not move.can_aim_at(origin, aim, selected_unit):
+	if not move.can_aim_at(origin, aim, selected_unit, board):
 		combat_forecast_panel.hide_forecast()
 		return
 
@@ -1994,8 +1994,8 @@ func _refresh_overworld_damage_preview(grid_pos: Vector3) -> void:
 		vm.clear_damage_previews()
 		return
 
-	var origin: Vector2i = board.cell_of(selected_unit)
-	var aim := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var origin: Vector3i = board.cell_of(selected_unit)
+	var aim := Cells.from_grid(grid_pos)
 	# Only preview a legal aim (respects range + pattern constraints, same test the
 	# executor runs), so bands never light up on a cell the move can't actually reach.
 	if not move.can_target(origin, aim, selected_unit, board):
@@ -2016,7 +2016,7 @@ func _refresh_overworld_damage_preview(grid_pos: Vector3) -> void:
 				previews[occupant] = dmg
 	vm.preview_damage(previews)
 
-func _first_enemy_at(board, cell: Vector2i):
+func _first_enemy_at(board, cell: Vector3i):
 	"""First occupant of `cell` that is an enemy of selected_unit (per the shared
 	BoardAdapter), else null. Matches how targeting resolves units at a cell."""
 	var occupants: Array = board.units_at(cell)
@@ -2029,7 +2029,7 @@ func _first_enemy_at(board, cell: Vector2i):
 
 # --- Move targeting helpers -------------------------------------------------
 
-func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector2i]:
+func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector3i]:
 	"""Every legal aim cell for [param move] from the unit's current board cell,
 	i.e. cells whose Manhattan distance is within [min_range, effective max range]
 	AND that satisfy the pattern's board constraints (an empty landing cell beside
@@ -2041,8 +2041,11 @@ func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector2i]:
 	a cell the executor then rejects, or hide one it would allow. can_target rather
 	than can_aim_at for the same reason: it is the check the executor runs, and the
 	live board is right here to answer it. A move with no board constraints is
-	unaffected -- the two agree cell for cell."""
-	var cells: Array[Vector2i] = []
+	unaffected -- the two agree cell for cell.
+
+	MULTI-FLOOR: sweeps every floor of the board (the reach shrinks by the floor
+	difference, and grows by the high-ground bonus when aiming down)."""
+	var cells: Array[Vector3i] = []
 	if not selected_unit or move == null or move.targeting == null:
 		return cells
 
@@ -2050,22 +2053,26 @@ func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector2i]:
 	if board == null:
 		return cells
 
-	var origin: Vector2i = board.cell_of(selected_unit)
-	var max_r: int = move.effective_max_range(selected_unit)
-	for dx in range(-max_r, max_r + 1):
-		for dy in range(-max_r, max_r + 1):
-			var aim := origin + Vector2i(dx, dy)
-			if move.can_target(origin, aim, selected_unit, board):
-				cells.append(aim)
+	var origin: Vector3i = board.cell_of(selected_unit)
+	var max_r: int = move.effective_max_range(selected_unit) + Elevation.HIGH_GROUND_RANGE_BONUS
+	var floors: int = board.floor_count() if board.has_method("floor_count") else 1
+	for f in range(floors):
+		for dx in range(-max_r, max_r + 1):
+			for dy in range(-max_r, max_r + 1):
+				var aim := Vector3i(origin.x + dx, origin.y + dy, f)
+				if f != origin.z and board.has_method("has_tile") and not board.has_tile(aim):
+					continue  # never offer an aim in the air on another floor
+				if move.can_target(origin, aim, selected_unit, board):
+					cells.append(aim)
 	return cells
 
-func _cells_to_grid_vec3(cells: Array[Vector2i]) -> Array:
-	"""Vector2i(col, row) board cells -> Vector3(col, 0, row) grid coords, the form
-	GameEvents.attack_range_calculated / aoe_preview_calculated (and the
+func _cells_to_grid_vec3(cells: Array[Vector3i]) -> Array:
+	"""Vector3i(col, row, floor) board cells -> Vector3(col, floor, row) grid coords,
+	the form GameEvents.attack_range_calculated / aoe_preview_calculated (and the
 	TargetingVisualizer) expect."""
 	var out: Array = []
 	for c in cells:
-		out.append(Vector3(c.x, 0, c.y))
+		out.append(Cells.to_grid(c))
 	return out
 
 func _move_requires_unit_target(move: MoveResource) -> bool:
@@ -2084,7 +2091,7 @@ func _move_requires_unit_target(move: MoveResource) -> bool:
 		_:
 			return false
 
-func _has_eligible_unit_at(board, move: MoveResource, aim: Vector2i) -> bool:
+func _has_eligible_unit_at(board, move: MoveResource, aim: Vector3i) -> bool:
 	"""True when the aim cell holds a unit the move may legally target, per its
 	TargetKind (allegiance checked through the shared BoardAdapter)."""
 	var occupants: Array = board.units_at(aim)

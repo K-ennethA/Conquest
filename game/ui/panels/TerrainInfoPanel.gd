@@ -32,7 +32,7 @@ var _effects_header: Label
 var _effects_container: VBoxContainer
 
 # Sentinel so the very first _on_cursor_moved always does a fresh lookup.
-var _current_cell: Vector2i = Vector2i(-999999, -999999)
+var _current_cell: Vector3i = Vector3i(-999999, -999999, 0)
 
 
 func _ready() -> void:
@@ -146,7 +146,7 @@ func _create_ui() -> void:
 ## Populate and show the panel for a specific board cell. Hides itself (and
 ## returns) when the cell has no registered terrain -- e.g. off the loaded
 ## map, or no map/board loaded yet.
-func show_for_cell(cell: Vector2i) -> void:
+func show_for_cell(cell: Vector3i) -> void:
 	# NOTE: a null tile here means the cursor is on an IN-BOUNDS cell whose terrain
 	# isn't registered (a registry miss), NOT off-board -- _on_cursor_moved already
 	# rejected off-board cells. Blanking the whole panel in that case was the
@@ -177,13 +177,13 @@ func show_for_cell(cell: Vector2i) -> void:
 ## Hide the panel and reset its tracked cell so the next show_for_cell always
 ## repopulates fresh.
 func hide_panel() -> void:
-	_current_cell = Vector2i(-999999, -999999)
+	_current_cell = Vector3i(-999999, -999999, 0)
 	hide()
 
 
 # --- Internals -----------------------------------------------------------------
 
-func _populate_effects(cell: Vector2i) -> void:
+func _populate_effects(cell: Vector3i) -> void:
 	for child in _effects_container.get_children():
 		child.queue_free()
 
@@ -276,7 +276,7 @@ func _build_effect_chip(te: TileEffectResource, is_temporary: bool) -> PanelCont
 ## of re-deriving it through BoardAdapter.world_to_cell (which expects a raw
 ## world-space position, not grid coordinates).
 func _on_cursor_moved(grid_pos: Vector3) -> void:
-	var cell := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var cell := Cells.from_grid(grid_pos)  # Vector3(col, floor, row) -> cell
 
 	# No live board yet (no map loaded / between rebuilds) -- nothing to show.
 	var board := CombatServices.board()

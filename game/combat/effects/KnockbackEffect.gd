@@ -10,11 +10,16 @@ class_name KnockbackEffect
 func apply(ctx: MoveContext) -> void:
 	if not ctx.board.has_method("cell_of") or not ctx.board.has_method("move_unit"):
 		return
-	var origin: Vector2i = ctx.board.cell_of(ctx.caster)
+	var origin: Vector3i = ctx.board.cell_of(ctx.caster)
 	for target in ctx.gather_targets():
-		var from: Vector2i = ctx.board.cell_of(target)
+		var from: Vector3i = ctx.board.cell_of(target)
 		var dir := _push_dir(origin, from)
 		var dest := from + dir * distance
+		# Multi-floor: never shove a unit into the AIR (off a bridge edge / into a
+		# broken bridge's gap) -- it braces at the edge instead.
+		if ctx.board.has_method("has_tile") and not bool(ctx.board.has_tile(dest)):
+			ctx.log_event({ "effect": "knockback", "target": target, "from": from, "to": from })
+			continue
 		ctx.board.move_unit(target, dest)
 		ctx.log_event({ "effect": "knockback", "target": target, "from": from, "to": dest })
 
@@ -25,10 +30,12 @@ func describe() -> String:
 	return "Knock target back %d" % distance
 
 
-static func _push_dir(origin: Vector2i, target_cell: Vector2i) -> Vector2i:
-	var delta := target_cell - origin
-	if delta == Vector2i.ZERO:
-		return Vector2i(1, 0)
+## Horizontal push direction (the floor never changes; a target directly above or
+## below the caster is pushed +X).
+static func _push_dir(origin: Vector3i, target_cell: Vector3i) -> Vector3i:
+	var delta := Vector3i(target_cell.x - origin.x, target_cell.y - origin.y, 0)
+	if delta == Vector3i.ZERO:
+		return Vector3i(1, 0, 0)
 	if absi(delta.x) >= absi(delta.y):
-		return Vector2i(signi(delta.x), 0)
-	return Vector2i(0, signi(delta.y))
+		return Vector3i(signi(delta.x), 0, 0)
+	return Vector3i(0, signi(delta.y), 0)

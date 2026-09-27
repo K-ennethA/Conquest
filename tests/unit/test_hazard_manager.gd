@@ -46,21 +46,21 @@ class MockUnit:
 class MockBoard:
 	var placements: Array = []  # { unit, cell }
 
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
 
-	func units_at(cell: Vector2i) -> Array:
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
 				out.append(p.unit)
 		return out
 
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
+		return Vector3i(-999, -999, 0)
 
 	func are_enemies(a, b) -> bool:
 		return a.team != b.team
@@ -71,11 +71,11 @@ class MockBoard:
 
 # --- Helpers ---------------------------------------------------------------
 
-const EAST := Vector2i(1, 0)
+const EAST := Vector3i(1, 0, 0)
 
 ## An east-crawling vine from (0,0): width 5 (half_width 2), speed 2, range 6.
 func _vine(source, damage: int, affiliation: int) -> TravelingHazard:
-	return TravelingHazard.new(Vector2i(0, 0), EAST, 2, 2, 6, damage,
+	return TravelingHazard.new(Vector3i(0, 0, 0), EAST, 2, 2, 6, damage,
 		CombatTypes.DamageCategory.PHYSICAL, affiliation, source)
 
 
@@ -112,11 +112,11 @@ func test_vine_advances_three_ticks_then_expires():
 func test_each_advance_damages_only_the_newly_entered_band():
 	var source := MockUnit.new(0)
 	var board := MockBoard.new()
-	board.place(source, Vector2i(-5, -5))          # source well out of the lane
+	board.place(source, Vector3i(-5, -5, 0))          # source well out of the lane
 	var front_unit := MockUnit.new(1, 100)          # depth 1 (entered tick 1)
 	var deep_unit := MockUnit.new(1, 100)           # depth 3 (entered tick 2)
-	board.place(front_unit, Vector2i(1, 0))
-	board.place(deep_unit, Vector2i(3, 0))
+	board.place(front_unit, Vector3i(1, 0, 0))
+	board.place(deep_unit, Vector3i(3, 0, 0))
 	var vine := _vine(source, 10, CombatTypes.TargetKind.ANY_UNIT)
 
 	vine.advance(board)  # rows 1-2
@@ -131,7 +131,7 @@ func test_each_advance_damages_only_the_newly_entered_band():
 func test_the_source_unit_is_never_damaged():
 	var source := MockUnit.new(0, 100)
 	var board := MockBoard.new()
-	board.place(source, Vector2i(1, 1))  # squarely inside the first band
+	board.place(source, Vector3i(1, 1, 0))  # squarely inside the first band
 	var vine := _vine(source, 10, CombatTypes.TargetKind.ANY_UNIT)
 
 	vine.advance(board)
@@ -147,7 +147,7 @@ func test_an_invulnerable_unit_in_the_path_takes_zero():
 	var board := MockBoard.new()
 	var guarded := MockUnit.new(1, 100)
 	guarded.invuln = true
-	board.place(guarded, Vector2i(1, 0))
+	board.place(guarded, Vector3i(1, 0, 0))
 	var vine := _vine(source, 50, CombatTypes.TargetKind.ANY_UNIT)
 
 	var result: Dictionary = vine.advance(board)
@@ -162,7 +162,7 @@ func test_a_grovebound_style_reduction_applies_to_the_vine():
 	var board := MockBoard.new()
 	var tough := MockUnit.new(1, 100)
 	tough.taken_scale = 0.5  # "damage_taken_scale" passive, like Grovebound
-	board.place(tough, Vector2i(1, 0))
+	board.place(tough, Vector3i(1, 0, 0))
 	var vine := _vine(source, 20, CombatTypes.TargetKind.ANY_UNIT)
 
 	vine.advance(board)
@@ -178,8 +178,8 @@ func test_enemy_affiliation_spares_allies_but_hits_enemies():
 	var board := MockBoard.new()
 	var ally := MockUnit.new(0, 100)   # same team as source
 	var enemy := MockUnit.new(1, 100)  # opposing team
-	board.place(ally, Vector2i(1, 0))
-	board.place(enemy, Vector2i(1, 1))
+	board.place(ally, Vector3i(1, 0, 0))
+	board.place(enemy, Vector3i(1, 1, 0))
 	var vine := _vine(source, 10, CombatTypes.TargetKind.ENEMY)
 
 	vine.advance(board)
@@ -192,8 +192,8 @@ func test_any_unit_affiliation_is_indiscriminate():
 	var board := MockBoard.new()
 	var ally := MockUnit.new(0, 100)
 	var enemy := MockUnit.new(1, 100)
-	board.place(ally, Vector2i(1, 0))
-	board.place(enemy, Vector2i(1, 1))
+	board.place(ally, Vector3i(1, 0, 0))
+	board.place(enemy, Vector3i(1, 1, 0))
 	var vine := _vine(source, 10, CombatTypes.TargetKind.ANY_UNIT)
 
 	vine.advance(board)
@@ -213,7 +213,7 @@ func test_the_band_is_five_wide_perpendicular_to_travel():
 	assert_eq(band.size(), 10, "two rows x five wide")
 	# The width runs perpendicular to the east heading -> along Y, offsets -2..+2.
 	for k in [-2, -1, 0, 1, 2]:
-		assert_true(Vector2i(1, k) in band, "depth-1 band covers (1,%d)" % k)
+		assert_true(Vector3i(1, k, 0) in band, "depth-1 band covers (1,%d)" % k)
 
 
 # ===========================================================================

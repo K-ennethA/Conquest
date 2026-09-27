@@ -30,16 +30,16 @@ static func bonus_for(unit, stat_name: String, board = null) -> int:
 	return total
 
 
-static func _cell_of(unit, board) -> Vector2i:
+static func _cell_of(unit, board) -> Vector3i:
 	if board != null and board.has_method("cell_of"):
 		return board.cell_of(unit)
 	var svc = _services()
 	if svc != null and svc.board() != null and svc.board().has_method("cell_of"):
 		return svc.board().cell_of(unit)
-	return Vector2i(-9999, -9999)  # off-board sentinel => no tile => no bonus
+	return Vector3i(-9999, -9999, 0)  # off-board sentinel => no tile => no bonus
 
 
-static func _effects_at(cell: Vector2i, board) -> Array:
+static func _effects_at(cell: Vector3i, board) -> Array:
 	if board != null and board.has_method("tile_effects_at"):
 		var arr = board.tile_effects_at(cell)
 		if arr is Array and not arr.is_empty():

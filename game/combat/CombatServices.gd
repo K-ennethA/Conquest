@@ -15,19 +15,19 @@ extends Node
 ## Wiring: [code]GameWorldManager[/code] calls [method rebuild] with the "Map"
 ## node the [MapLoader] populated, and [method clear] when the map is torn down.
 
-## Grid resource shared by the whole board (col = X, row = Z, y = 0).
+## Grid resource shared by the whole board (col = X, row = Z, grid y = floor).
 const GRID: Grid = preload("res://board/Grid.tres")
 
 ## Emitted after [method rebuild] installs a fresh, live [BoardAdapter].
 signal board_ready
 ## Emitted when a cell's RUNTIME tile effects change (a move ignited/doused it),
 ## so the 3D map overlay can restack that cell's effect markers reactively.
-signal tile_effects_changed(cell: Vector2i)
+signal tile_effects_changed(cell: Vector3i)
 
 ## The single live adapter. Null until the first successful [method rebuild].
 var _board: BoardAdapter = null
 
-## Shared terrain registry: cell ([Vector2i]) -> [TileResource].
+## Shared terrain registry: cell ([Vector3i]) -> [TileResource].
 ##
 ## Populated by [MapLoader] via [method register_tile] as it instantiates tiles,
 ## and read back by the live [BoardAdapter] (which is handed this exact
@@ -36,6 +36,16 @@ var _board: BoardAdapter = null
 ## and this autoload pointed at the same data, so [BoardAdapter.set_tile] updates
 ## are visible through [method tile_at] and vice-versa.
 var _tile_registry: Dictionary = {}
+
+## Every UPPER-floor cell (floor > 0) that has a tile, [Vector3i] -> true -- even a
+## tile whose [TileResource] failed to resolve. Floor 0 is implicitly full. Handed
+## to the adapter by reference in [method rebuild] ([method BoardAdapter.set_present_cells]).
+var _present_cells: Dictionary = {}
+
+## Cross-floor links (stairs / ladders) for the loaded map, as raw link dictionaries
+## ({from, to, cost, kind, bidirectional}); registered by [MapLoader] and handed to
+## the adapter in [method rebuild] ([method BoardAdapter.set_links]).
+var _links: Array = []
 
 # --- Tile effect lookup (T14) -----------------------------------------------
 #
@@ -76,7 +86,7 @@ const _TILE_EFFECT_PATHS := {
 ## Cache: canonical tile id -> [code]Array[TileEffectResource][/code] (base effects).
 var _base_tile_effects: Dictionary = {}
 
-## Runtime applied effects: cell ([Vector2i]) -> [code]Array[TileEffectResource][/code].
+## Runtime applied effects: cell ([Vector3i]) -> [code]Array[TileEffectResource][/code].
 var _applied_tile_effects: Dictionary = {}
 
 
@@ -97,6 +107,8 @@ func rebuild(map_root: Node3D) -> void:
 	# during load_map(), which runs BEFORE this rebuild -- it is cleared in
 	# clear() (invoked before each map reload) instead.
 	_board.set_tile_registry(_tile_registry)
+	_board.set_present_cells(_present_cells)
+	_board.set_links(_links)
 	_assert_units_round_trip(_board, map_root)
 	board_ready.emit()
 
@@ -110,17 +122,39 @@ func clear() -> void:
 	# otherwise leave stale out-of-bounds tiles behind). Mutated in place so the
 	# reference handed to any adapter stays valid.
 	_tile_registry.clear()
+	_present_cells.clear()
+	_links.clear()
 	# Drop any runtime tile effects (ignited/doused cells) from the old map.
 	_applied_tile_effects.clear()
 
 
 ## Register the [TileResource] backing [param cell] (called by [MapLoader]).
-func register_tile(cell: Vector2i, res) -> void:
-	_tile_registry[cell] = res
+## [param res] may be null for an upper-floor tile with no resolvable resource: the
+## cell still EXISTS (is walkable) but reads as flat default terrain.
+func register_tile(cell: Vector3i, res) -> void:
+	if res != null:
+		_tile_registry[cell] = res
+	if cell.z > 0:
+		_present_cells[cell] = true
+	if _board != null:
+		_board.refresh_floors()
+
+
+## Register a cross-floor link (called by [MapLoader] from [method MapResource.get_links]).
+## Takes effect on the next [method rebuild] (or immediately if a board is live).
+func register_link(link: Dictionary) -> void:
+	_links.append(link)
+	if _board != null:
+		_board.set_links(_links)
+
+
+## The registered links (raw dictionaries, see [method register_link]).
+func get_links() -> Array:
+	return _links.duplicate()
 
 
 ## The [TileResource] bound to [param cell], or null if none is registered.
-func tile_at(cell: Vector2i) -> TileResource:
+func tile_at(cell: Vector3i) -> TileResource:
 	var r = _tile_registry.get(cell, null)
 	return r if r is TileResource else null
 
@@ -129,7 +163,7 @@ func tile_at(cell: Vector2i) -> TileResource:
 ## tile type first, then the runtime APPLIED set. This is the cell->effects
 ## lookup the [TileEffectSystem] consumes (fed in via [GameWorldManager] because
 ## the live [BoardAdapter] does not expose one). Never returns null.
-func tile_effects_at(cell: Vector2i) -> Array:
+func tile_effects_at(cell: Vector3i) -> Array:
 	var out: Array = []
 	var res := tile_at(cell)
 	if res != null:
@@ -147,7 +181,7 @@ func tile_effects_at(cell: Vector2i) -> Array:
 ## Just the RUNTIME (applied-this-battle) tile effects on [param cell], excluding
 ## the terrain's inherent base effects. Lets the UI mark those as temporary. Never
 ## returns null; the returned array is a copy, safe to iterate while mutating.
-func applied_tile_effects_at(cell: Vector2i) -> Array:
+func applied_tile_effects_at(cell: Vector3i) -> Array:
 	var applied = _applied_tile_effects.get(cell, null)
 	if applied is Array:
 		return applied.duplicate()
@@ -156,7 +190,7 @@ func applied_tile_effects_at(cell: Vector2i) -> Array:
 
 ## Add a runtime tile effect to [param cell] (e.g. a move ignites the ground into
 ## fire). Idempotent; the effect layers on top of the tile's base effects.
-func add_tile_effect(cell: Vector2i, effect) -> void:
+func add_tile_effect(cell: Vector3i, effect) -> void:
 	if effect == null:
 		return
 	var applied = _applied_tile_effects.get(cell, null)
@@ -170,7 +204,7 @@ func add_tile_effect(cell: Vector2i, effect) -> void:
 
 ## Remove a runtime tile effect from [param cell] (e.g. a move douses the fire).
 ## Only affects the runtime set; base terrain effects are never removed here.
-func remove_tile_effect(cell: Vector2i, effect) -> void:
+func remove_tile_effect(cell: Vector3i, effect) -> void:
 	var applied = _applied_tile_effects.get(cell, null)
 	if applied is Array and effect in applied:
 		applied.erase(effect)
@@ -283,9 +317,9 @@ func _assert_units_round_trip(board_adapter: BoardAdapter, map_root: Node3D) -> 
 	# Derive "one cell" in world units from the adapter itself so this stays
 	# correct if the grid's cell_size changes. The step between adjacent cell
 	# centers equals the grid's cell_size on each axis.
-	var origin: Vector3 = board_adapter.cell_to_world(Vector2i.ZERO)
-	var step_x: float = absf(board_adapter.cell_to_world(Vector2i(1, 0)).x - origin.x)
-	var step_z: float = absf(board_adapter.cell_to_world(Vector2i(0, 1)).z - origin.z)
+	var origin: Vector3 = board_adapter.cell_to_world(Vector3i.ZERO)
+	var step_x: float = absf(board_adapter.cell_to_world(Vector3i(1, 0, 0)).x - origin.x)
+	var step_z: float = absf(board_adapter.cell_to_world(Vector3i(0, 1, 0)).z - origin.z)
 	var tolerance: float = maxf(maxf(step_x, step_z), 0.001)
 
 	var mismatches: int = 0
@@ -293,7 +327,7 @@ func _assert_units_round_trip(board_adapter: BoardAdapter, map_root: Node3D) -> 
 		if unit == null:
 			continue
 		var actual: Vector3 = unit.global_position
-		var cell: Vector2i = board_adapter.cell_of(unit)
+		var cell: Vector3i = board_adapter.cell_of(unit)
 		var expected: Vector3 = board_adapter.cell_to_world(cell)
 		# Compare on the XZ plane only: MapLoader lifts units to Y = 1.5 while the
 		# grid centers cells at Y = 0, which is an intended height offset, not a

@@ -115,6 +115,11 @@ func apply(ctx: MoveContext) -> void:
 		var element_scale: float = ElementChart.damage_scale_for(ctx.move, target, ctx.board)
 		if not is_equal_approx(element_scale, 1.0):
 			dealt = maxi(1, int(round(float(dealt) * element_scale)))
+		# 5. HEIGHT ADVANTAGE (multi-floor): attacker above / below the target. Exactly
+		#    1.0 on a shared floor. Mirrored in MoveExecutor.preview_vs at this step.
+		var height_scale: float = Elevation.damage_scale_for(ctx.caster, target, ctx.board)
+		if not is_equal_approx(height_scale, 1.0):
+			dealt = maxi(1, int(round(float(dealt) * height_scale)))
 		var crit: bool = outcome.get("crit", false)
 		# The escalating bow overrides the per-target crit with the single group roll:
 		# the shot either crits every pierced target or none of them.

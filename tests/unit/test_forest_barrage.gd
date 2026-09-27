@@ -48,16 +48,16 @@ class Stub:
 class MockBoard:
 	var placements: Array = []  # { unit, cell }
 
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
 
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
+		return Vector3i(-999, -999, 0)
 
-	func units_at(cell: Vector2i) -> Array:
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -125,11 +125,11 @@ func test_casting_resolves_the_first_segment_and_requests_a_hazard():
 	var caster := Stub.new(0, { "attack": 24 })
 	var victim := Stub.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))  # depth 1 of an east-aimed lane
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))  # depth 1 of an east-aimed lane
 
-	var aim := Vector2i(3, 0)
-	var cells := move.targeting.resolve_cells(Vector2i(0, 0), aim)
+	var aim := Vector3i(3, 0, 0)
+	var cells := move.targeting.resolve_cells(Vector3i(0, 0, 0), aim)
 	var ctx := MoveContext.new(caster, board, move, aim, cells)
 
 	watch_signals(GameEvents)
@@ -156,8 +156,8 @@ func test_boss_fires_the_lane_at_an_aligned_hostile():
 	var boss := Stub.new(0, { "attack": 24, "health": 400 }, true)
 	var enemy := Stub.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(boss, Vector2i(0, 0))
-	board.place(enemy, Vector2i(0, 3))  # same column -> a cardinal lane sweeps it
+	board.place(boss, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(0, 3, 0))  # same column -> a cardinal lane sweeps it
 
 	var boss_ai := BossController.new()
 	var decision := boss_ai.plan(boss, [move], board, [])
@@ -165,7 +165,7 @@ func test_boss_fires_the_lane_at_an_aligned_hostile():
 	assert_eq(decision["action"], BotController.ActionType.MOVE, "it acts rather than holding")
 	assert_eq(decision["move"], move, "it chose the lane hazard")
 	assert_eq(decision["reason"], "hazard_lane", "via the lane pre-emption, not the generic planner")
-	assert_eq(decision["aim_cell"], Vector2i(0, 3), "aimed at the aligned hostile")
+	assert_eq(decision["aim_cell"], Vector3i(0, 3, 0), "aimed at the aligned hostile")
 
 
 func test_boss_does_not_fire_the_lane_when_no_hostile_is_aligned():
@@ -173,8 +173,8 @@ func test_boss_does_not_fire_the_lane_when_no_hostile_is_aligned():
 	var boss := Stub.new(0, { "attack": 24, "health": 400 }, true)
 	var enemy := Stub.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(boss, Vector2i(0, 0))
-	board.place(enemy, Vector2i(2, 3))  # neither same row nor same column
+	board.place(boss, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(2, 3, 0))  # neither same row nor same column
 
 	var boss_ai := BossController.new()
 	var decision := boss_ai.plan(boss, [move], board, [])
@@ -196,8 +196,8 @@ func test_defensive_boss_holds_the_lane_until_a_hostile_is_in_aggro_range():
 	boss.aggro = 3
 	var enemy := Stub.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(boss, Vector2i(0, 0))
-	board.place(enemy, Vector2i(0, 6))  # aligned but distance 6 -> beyond aggro 3
+	board.place(boss, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(0, 6, 0))  # aligned but distance 6 -> beyond aggro 3
 
 	var decision := BossController.new().plan(boss, [move], board, [])
 	assert_ne(decision.get("reason", ""), "hazard_lane",
@@ -211,8 +211,8 @@ func test_defensive_boss_fires_the_lane_once_a_hostile_enters_aggro_range():
 	boss.aggro = 3
 	var enemy := Stub.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(boss, Vector2i(0, 0))
-	board.place(enemy, Vector2i(0, 2))  # aligned AND within aggro 3
+	board.place(boss, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(0, 2, 0))  # aligned AND within aggro 3
 
 	var decision := BossController.new().plan(boss, [move], board, [])
 	assert_eq(decision.get("reason", ""), "hazard_lane",

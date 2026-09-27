@@ -32,14 +32,14 @@ class MockUnit:
 class MockBoard:
 	var placements: Array = []       # { unit, cell }
 	var tags: Dictionary = {}        # cell -> terrain tag (StringName)
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -49,15 +49,15 @@ class MockBoard:
 		return a.team != b.team
 	func are_allies(a, b) -> bool:
 		return a.team == b.team
-	func set_tile(cell: Vector2i, _tile_id) -> void:
+	func set_tile(cell: Vector3i, _tile_id) -> void:
 		pass
-	func move_unit(unit, to_cell: Vector2i) -> void:
+	func move_unit(unit, to_cell: Vector3i) -> void:
 		for p in placements:
 			if p.unit == unit:
 				p.cell = to_cell
-	func tag_tile(cell: Vector2i, tag: StringName) -> void:
+	func tag_tile(cell: Vector3i, tag: StringName) -> void:
 		tags[cell] = tag
-	func tile_tag_at(cell: Vector2i) -> StringName:
+	func tile_tag_at(cell: Vector3i) -> StringName:
 		return tags.get(cell, &"")
 
 # Stand-in for the GameEvents autoload, injected via MoveContext.event_bus. The
@@ -167,9 +167,9 @@ func test_no_targeting_still_affects_only_its_own_unit():
 	var foe := MockUnit.new(1, { "health": 100 })
 	foe.hp = 50
 	var board := MockBoard.new()
-	board.place(holder, Vector2i(2, 2))
-	board.place(ally, Vector2i(2, 3))
-	board.place(foe, Vector2i(3, 2))
+	board.place(holder, Vector3i(2, 2, 0))
+	board.place(ally, Vector3i(2, 3, 0))
+	board.place(foe, Vector3i(3, 2, 0))
 	var ability := _ability_with_heal(10)
 	assert_null(ability.targeting, "targeting defaults to null")
 	ability.run_effects(holder, board)
@@ -190,8 +190,8 @@ func test_natures_blessing_resource_still_self_heals():
 	var neighbour := MockUnit.new(0, { "health": 100 })
 	neighbour.hp = 50
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
-	board.place(neighbour, Vector2i(0, 1))
+	board.place(unit, Vector3i(0, 0, 0))
+	board.place(neighbour, Vector3i(0, 1, 0))
 	var events := ability.run_effects(unit, board)
 	assert_eq(events.size(), 1, "exactly one target: the unit itself")
 	assert_eq(events[0].get("target"), unit, "the heal landed on its own unit")
@@ -212,10 +212,10 @@ func test_ally_radius_pattern_affects_the_units_the_pattern_selects():
 	var foe := MockUnit.new(1, { "health": 100 })
 	foe.hp = 50
 	var board := MockBoard.new()
-	board.place(holder, Vector2i(4, 4))
-	board.place(near_ally, Vector2i(4, 5))    # distance 1
-	board.place(far_ally, Vector2i(4, 7))     # distance 3 -- outside
-	board.place(foe, Vector2i(3, 4))          # distance 1 but hostile
+	board.place(holder, Vector3i(4, 4, 0))
+	board.place(near_ally, Vector3i(4, 5, 0))    # distance 1
+	board.place(far_ally, Vector3i(4, 7, 0))     # distance 3 -- outside
+	board.place(foe, Vector3i(3, 4, 0))          # distance 1 but hostile
 	var ability := _ability_with_heal(10)
 	ability.targeting = _pattern(CombatTypes.TargetKind.ALLY, CombatTypes.AreaShape.DIAMOND, 1)
 	ability.run_effects(holder, board)
@@ -230,10 +230,10 @@ func test_enemy_radius_pattern_hits_every_adjacent_foe():
 	var foe_b := MockUnit.new(1, { "health": 100 })
 	var ally := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(holder, Vector2i(0, 0))
-	board.place(foe_a, Vector2i(1, 0))
-	board.place(foe_b, Vector2i(0, 1))
-	board.place(ally, Vector2i(0, -1))
+	board.place(holder, Vector3i(0, 0, 0))
+	board.place(foe_a, Vector3i(1, 0, 0))
+	board.place(foe_b, Vector3i(0, 1, 0))
+	board.place(ally, Vector3i(0, -1, 0))
 	var ability := _ability_with_damage(7)
 	ability.targeting = _pattern(CombatTypes.TargetKind.ENEMY, CombatTypes.AreaShape.DIAMOND, 1)
 	ability.run_effects(holder, board)
@@ -250,8 +250,8 @@ func test_targets_triggering_unit_applies_effects_to_other():
 	var defender := MockUnit.new(0, { "health": 100 })
 	var attacker := MockUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(defender, Vector2i(0, 0))
-	board.place(attacker, Vector2i(6, 6))
+	board.place(defender, Vector3i(0, 0, 0))
+	board.place(attacker, Vector3i(6, 6, 0))
 	var ability := _ability_with_damage(5)
 	ability.targets_triggering_unit = true
 	ability.run_effects(defender, board, attacker)
@@ -262,8 +262,8 @@ func test_targets_triggering_unit_no_ops_without_one():
 	var defender := MockUnit.new(0, { "health": 100 })
 	var bystander := MockUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(defender, Vector2i(0, 0))
-	board.place(bystander, Vector2i(0, 1))
+	board.place(defender, Vector3i(0, 0, 0))
+	board.place(bystander, Vector3i(0, 1, 0))
 	var ability := _ability_with_damage(5)
 	ability.targets_triggering_unit = true
 	var events := ability.run_effects(defender, board)   # no triggering unit
@@ -276,8 +276,8 @@ func test_trigger_threads_other_through_to_the_ability():
 	var defender := MockUnit.new(0, { "health": 100 })
 	var attacker := MockUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(defender, Vector2i(0, 0))
-	board.place(attacker, Vector2i(1, 0))
+	board.place(defender, Vector3i(0, 0, 0))
+	board.place(attacker, Vector3i(1, 0, 0))
 	var ability := _ability_with_damage(5)
 	ability.trigger = AbilityTrigger.Trigger.ON_DAMAGED
 	ability.targets_triggering_unit = true
@@ -297,8 +297,8 @@ func test_thornskin_resource_retaliates():
 	var defender := MockUnit.new(0, { "health": 100 })
 	var attacker := MockUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(defender, Vector2i(0, 0))
-	board.place(attacker, Vector2i(1, 0))
+	board.place(defender, Vector3i(0, 0, 0))
+	board.place(attacker, Vector3i(1, 0, 0))
 	ability.run_effects(defender, board, attacker)
 	assert_lt(attacker.hp, 100, "the attacker is hurt in return")
 	assert_eq(defender.hp, 100, "the defender takes no extra damage from its own ability")
@@ -309,7 +309,7 @@ func test_cooldown_skips_until_ticked():
 	var unit := MockUnit.new(0, { "health": 100 })
 	unit.hp = 10
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var ability := _ability_with_heal(5)
 	ability.trigger = AbilityTrigger.Trigger.ON_TURN_START
 	ability.cooldown = 1
@@ -332,7 +332,7 @@ func test_max_activations_one_fires_exactly_once():
 	var unit := MockUnit.new(0, { "health": 100 })
 	unit.hp = 10
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var ability := _ability_with_heal(5)
 	ability.trigger = AbilityTrigger.Trigger.ON_TURN_START
 	ability.max_activations = 1
@@ -351,7 +351,7 @@ func test_unlimited_by_default():
 	var unit := MockUnit.new(0, { "health": 100 })
 	unit.hp = 0
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var ability := _ability_with_heal(5)
 	ability.trigger = AbilityTrigger.Trigger.ON_TURN_START
 	var sys := _system_for(unit)
@@ -371,8 +371,8 @@ func test_two_units_sharing_one_resource_track_independently():
 	var unit_b := MockUnit.new(0, { "health": 100 })
 	unit_b.hp = 10
 	var board := MockBoard.new()
-	board.place(unit_a, Vector2i(0, 0))
-	board.place(unit_b, Vector2i(5, 5))
+	board.place(unit_a, Vector3i(0, 0, 0))
+	board.place(unit_b, Vector3i(5, 5, 0))
 
 	var shared := _ability_with_heal(5)          # ONE instance, both units
 	shared.trigger = AbilityTrigger.Trigger.ON_TURN_START
@@ -406,7 +406,7 @@ func test_reset_activations_clears_per_unit_state():
 	var unit := MockUnit.new(0, { "health": 100 })
 	unit.hp = 10
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var ability := _ability_with_heal(5)
 	ability.trigger = AbilityTrigger.Trigger.ON_TURN_START
 	ability.max_activations = 1
@@ -422,7 +422,7 @@ func test_reset_activations_clears_per_unit_state():
 func test_all_condition_requires_every_child():
 	var unit := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var both := AllCondition.new()
 	both.conditions = [FixedCondition.new(true), FixedCondition.new(true)]
 	assert_true(both.is_met(unit, board), "all children met -> met")
@@ -435,7 +435,7 @@ func test_all_condition_requires_every_child():
 func test_any_condition_needs_one_child():
 	var unit := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var one_passes := AnyCondition.new()
 	one_passes.conditions = [FixedCondition.new(false), FixedCondition.new(true)]
 	assert_true(one_passes.is_met(unit, board), "one met child is enough for OR")
@@ -448,7 +448,7 @@ func test_any_condition_needs_one_child():
 func test_not_condition_inverts():
 	var unit := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var inverted := NotCondition.new()
 	inverted.condition = FixedCondition.new(false)
 	assert_true(inverted.is_met(unit, board), "NOT of an unmet condition is met")
@@ -462,7 +462,7 @@ func test_composites_nest_with_real_conditions():
 	# authorable without a single new condition class.
 	var unit := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(1, 1))
+	board.place(unit, Vector3i(1, 1, 0))
 	var wounded := HealthBelowCondition.new()
 	wounded.threshold = 0.3
 	var sacred := OnTerrainCondition.new()
@@ -472,7 +472,7 @@ func test_composites_nest_with_real_conditions():
 
 	unit.hp = 20                                     # wounded, wrong tile
 	assert_false(combo.is_met(unit, board), "wounded alone is not enough")
-	board.tag_tile(Vector2i(1, 1), &"sacred_ground") # wounded AND on sacred ground
+	board.tag_tile(Vector3i(1, 1, 0), &"sacred_ground") # wounded AND on sacred ground
 	assert_true(combo.is_met(unit, board), "both halves hold")
 	unit.hp = 90                                     # healthy, right tile
 	assert_false(combo.is_met(unit, board), "the terrain alone is not enough")
@@ -485,7 +485,7 @@ func test_composites_nest_with_real_conditions():
 func test_composed_condition_gates_a_real_ability():
 	var unit := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var ability := _ability_with_heal(5)
 	ability.trigger = AbilityTrigger.Trigger.ON_TURN_START
 	ability.max_activations = 1
@@ -505,8 +505,8 @@ func test_damage_effect_announces_damage_dealt():
 	var attacker := MockUnit.new(0, { "health": 100, "attack": 0 })
 	var defender := MockUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(defender, Vector2i(1, 0))
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(defender, Vector3i(1, 0, 0))
 	var bus := MockEventBus.new()
 	autofree(bus)
 
@@ -519,8 +519,8 @@ func test_damage_effect_announces_damage_dealt():
 	var pattern := TargetingPattern.new()
 	pattern.target_kind = CombatTypes.TargetKind.ENEMY
 	move.targeting = pattern
-	var cells: Array[Vector2i] = [Vector2i(1, 0)] as Array[Vector2i]
-	var ctx := MoveContext.new(attacker, board, move, Vector2i(1, 0), cells)
+	var cells: Array[Vector3i] = [Vector3i(1, 0, 0)] as Array[Vector3i]
+	var ctx := MoveContext.new(attacker, board, move, Vector3i(1, 0, 0), cells)
 	ctx.event_bus = bus
 	dmg.apply(ctx)
 
@@ -535,8 +535,8 @@ func test_damage_effect_without_a_bus_still_resolves():
 	var attacker := MockUnit.new(0, { "health": 100 })
 	var defender := MockUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(defender, Vector2i(1, 0))
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(defender, Vector3i(1, 0, 0))
 	var dmg := DamageEffect.new()
 	dmg.power = 9
 	dmg.scaling_stat = ""
@@ -545,7 +545,7 @@ func test_damage_effect_without_a_bus_still_resolves():
 	var pattern := TargetingPattern.new()
 	pattern.target_kind = CombatTypes.TargetKind.ENEMY
 	move.targeting = pattern
-	var cells: Array[Vector2i] = [Vector2i(1, 0)] as Array[Vector2i]
-	var ctx := MoveContext.new(attacker, board, move, Vector2i(1, 0), cells)
+	var cells: Array[Vector3i] = [Vector3i(1, 0, 0)] as Array[Vector3i]
+	var ctx := MoveContext.new(attacker, board, move, Vector3i(1, 0, 0), cells)
 	dmg.apply(ctx)
 	assert_eq(defender.hp, 91, "mock units never reach the typed autoload signal, and damage resolves")

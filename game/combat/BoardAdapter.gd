@@ -4,31 +4,43 @@ class_name BoardAdapter
 ## Live bridge between the combat/move model and the running game scene.
 ##
 ## The combat module ([MoveExecutor] / [MoveContext] / [MoveEffect]) speaks a
-## small, board-agnostic interface in its own [Vector2i]``(col, row)`` cell space.
-## This adapter implements that interface against the real game, translating each
-## combat cell to/from the game's [Grid] (a Vector3 grid where X = column and
-## Z = row, y = 0) and answering allegiance queries through unit ``owner_player``.
+## small, board-agnostic interface in its own [Vector3i]``(col, row, floor)`` cell
+## space (see [Cells]). This adapter implements that interface against the real game,
+## translating each combat cell to/from the game's [Grid] (grid coords
+## ``Vector3(col, floor, row)``; world Y = floor * [constant Cells.FLOOR_HEIGHT]) and
+## answering allegiance queries through unit ``owner_player``.
+##
+## [b]Floors[/b] (see docs/MULTI_FLOOR.md): floor 0 exists at every in-bounds column.
+## A cell on floor f > 0 exists only where a tile was registered there (a bridge, a
+## rampart); a missing floor-1 cell is AIR (a broken-bridge gap). Explicit [b]links[/b]
+## (stairs / ladders, injected via [method set_links]) join cells across floors.
+## Occupancy is per [Vector3i], so a unit under a bridge and one on it coexist.
 ##
 ## Implemented board interface (see [MoveContext]):
-##   cell_of(unit) -> Vector2i
-##   units_at(cell: Vector2i) -> Array
+##   cell_of(unit) -> Vector3i
+##   units_at(cell: Vector3i) -> Array
 ##   are_enemies(a, b) -> bool
 ##   are_allies(a, b) -> bool
-##   set_tile(cell: Vector2i, tile_id) -> void
-##   move_unit(unit, to_cell: Vector2i) -> void
+##   set_tile(cell: Vector3i, tile_id) -> void
+##   move_unit(unit, to_cell: Vector3i) -> void
 ##
 ## Also implements the [BotController] board-query superset:
 ##   all_units() -> Array
 ##
 ## Also implements the [MovementResolver] board interface:
-##   cells_of(unit) -> Array[Vector2i]
-##   can_fit(unit, anchor: Vector2i) -> bool
-##   in_bounds(cell: Vector2i) -> bool
-##   is_blocked(cell: Vector2i) -> bool
-##   is_occupied(cell: Vector2i) -> bool
-##   move_cost(cell: Vector2i) -> int
-##   tile_id_at(cell: Vector2i) -> StringName
-##   tile_tag_at(cell: Vector2i) -> StringName
+##   cells_of(unit) -> Array[Vector3i]
+##   can_fit(unit, anchor: Vector3i) -> bool
+##   in_bounds(cell: Vector3i) -> bool
+##   is_blocked(cell: Vector3i) -> bool
+##   is_occupied(cell: Vector3i) -> bool
+##   move_cost(cell: Vector3i) -> int
+##   tile_id_at(cell: Vector3i) -> StringName
+##   tile_tag_at(cell: Vector3i) -> StringName
+##   has_tile(cell: Vector3i) -> bool           # floor structure (air = false)
+##   links_from(cell: Vector3i) -> Array        # [{to, cost, kind}]
+##   floor_count() -> int
+##
+## Line of sight ([LineOfSight]) reads: has_tile, blocks_los_at, is_solid_ceiling.
 ##
 ## Terrain answers (is_blocked/move_cost/tile_id_at/tile_tag_at) come from a
 ## shared cell -> [TileResource] registry owned by [CombatServices] and injected
@@ -57,8 +69,18 @@ class_name BoardAdapter
 
 var _grid                 ## Grid resource (col=X, row=Z); may be null in mocks.
 var _units_provider       ## See class docs for accepted shapes.
-var _tile_overrides: Dictionary = {}  ## Vector2i -> tile_id, best-effort terrain state.
-var _tile_registry: Dictionary = {}   ## Vector2i -> TileResource; injected by CombatServices (empty in mocks).
+var _tile_overrides: Dictionary = {}  ## Vector3i -> tile_id, best-effort terrain state.
+var _tile_registry: Dictionary = {}   ## Vector3i -> TileResource; injected by CombatServices (empty in mocks).
+## Vector3i -> true for every upper-floor cell that has a tile, even one with no
+## resolvable TileResource. Injected by CombatServices ([method set_present_cells]).
+var _present_cells: Dictionary = {}
+## Vector3i -> Array of { "to": Vector3i, "cost": int, "kind": StringName } -- the
+## directed adjacency built from [method set_links] (bidirectional links add both).
+var _link_adjacency: Dictionary = {}
+## The normalized link list last passed to [method set_links].
+var _link_list: Array = []
+## Cached number of floors (highest floor with any tile or link endpoint + 1).
+var _floor_count: int = 1
 
 ## Terrain ids ([method set_tile] / [TileTransformEffect]) -> the STABLE
 ## [member TileResource.id] of the tile to swap a live tile to. Keyed by the
@@ -92,34 +114,99 @@ func _init(grid, units_provider) -> void:
 ## that construct the adapter directly, which then behave like flat terrain.
 func set_tile_registry(registry: Dictionary) -> void:
 	_tile_registry = registry
+	refresh_floors()
+
+
+## Inject the set of upper-floor cells that have a tile (Vector3i -> true). Floor-0
+## cells always exist; this is what makes a floor-1 bridge cell walkable and a gap
+## in it air. Passed by reference, like the registry.
+func set_present_cells(cells: Dictionary) -> void:
+	_present_cells = cells
+	refresh_floors()
+
+
+## Inject cross-floor links (stairs, ladders...). Each entry is a Dictionary
+## { from, to, cost = 1, kind = "stairs", bidirectional = true } where from/to are
+## anything [method Cells.from_variant] reads. Replaces any previous links.
+func set_links(links: Array) -> void:
+	_link_adjacency = {}
+	_link_list = []
+	for raw in links:
+		if not (raw is Dictionary):
+			continue
+		var l := normalize_link(raw)
+		if l.is_empty():
+			continue
+		_link_list.append(l)
+		_add_link_edge(l["from"], l["to"], l["cost"], l["kind"])
+		if l["bidirectional"]:
+			_add_link_edge(l["to"], l["from"], l["cost"], l["kind"])
+	refresh_floors()
+
+
+## Canonical form of a link entry, or {} when its endpoints are unreadable.
+static func normalize_link(raw: Dictionary) -> Dictionary:
+	var a := Cells.from_variant(raw.get("from", null))
+	var b := Cells.from_variant(raw.get("to", null))
+	if a == Cells.INVALID or b == Cells.INVALID or a == b:
+		return {}
+	return {
+		"from": a,
+		"to": b,
+		"cost": maxi(1, int(raw.get("cost", 1))),
+		"kind": StringName(str(raw.get("kind", "stairs"))),
+		"bidirectional": bool(raw.get("bidirectional", true)),
+	}
+
+
+func _add_link_edge(a: Vector3i, b: Vector3i, cost: int, kind: StringName) -> void:
+	if not _link_adjacency.has(a):
+		_link_adjacency[a] = []
+	_link_adjacency[a].append({ "to": b, "cost": cost, "kind": kind })
+
+
+## Recompute the cached floor count from the injected registry / present cells /
+## links. Called by every setter; call it yourself after mutating an injected
+## dictionary in place.
+func refresh_floors() -> void:
+	var top := 0
+	for c in _tile_registry:
+		if c is Vector3i:
+			top = maxi(top, c.z)
+	for c in _present_cells:
+		if c is Vector3i:
+			top = maxi(top, c.z)
+	for l in _link_list:
+		top = maxi(top, maxi(l["from"].z, l["to"].z))
+	_floor_count = top + 1
 
 
 # --- MoveContext board interface -------------------------------------------
 
 ## Grid cell the unit currently occupies, derived from its world position.
-func cell_of(unit) -> Vector2i:
+func cell_of(unit) -> Vector3i:
 	if unit == null:
-		return Vector2i.ZERO
+		return Vector3i.ZERO
 	return world_to_cell(_unit_position(unit))
 
 
 ## Every cell [param unit] covers: its [method cell_of] anchor plus the rest of its
 ## footprint span. A normal 1x1 unit returns exactly [code][anchor][/code].
-func cells_of(unit) -> Array[Vector2i]:
-	var out: Array[Vector2i] = []
+func cells_of(unit) -> Array[Vector3i]:
+	var out: Array[Vector3i] = []
 	if unit == null:
 		return out
 	var anchor := cell_of(unit)
 	var fp := _footprint_of(unit)
 	for dx in range(fp.x):
 		for dy in range(fp.y):
-			out.append(Vector2i(anchor.x + dx, anchor.y + dy))
+			out.append(Vector3i(anchor.x + dx, anchor.y + dy, anchor.z))
 	return out
 
 
 ## Every known unit covering [param cell] -- for a multi-cell unit that is any cell
 ## of its footprint, not just its anchor, so a large boss is found from all of them.
-func units_at(cell: Vector2i) -> Array:
+func units_at(cell: Vector3i) -> Array:
 	var result: Array = []
 	for u in _all_units():
 		if u == null:
@@ -134,12 +221,12 @@ func units_at(cell: Vector2i) -> Array:
 ## unit. The unit's own current cells never count against it, so a large unit is
 ## never blocked by itself when shuffling within its own footprint. This is the
 ## primitive [MovementResolver] uses to place multi-cell units.
-func can_fit(unit, anchor: Vector2i) -> bool:
+func can_fit(unit, anchor: Vector3i) -> bool:
 	var fp := _footprint_of(unit)
 	for dx in range(fp.x):
 		for dy in range(fp.y):
-			var c := Vector2i(anchor.x + dx, anchor.y + dy)
-			if not in_bounds(c):
+			var c := Vector3i(anchor.x + dx, anchor.y + dy, anchor.z)
+			if not in_bounds(c) or not has_tile(c):
 				return false
 			if is_blocked(c):
 				return false
@@ -175,23 +262,28 @@ func are_allies(a, b) -> bool:
 ## move-cost/blocking/id queries. Resolution and the live-node update are
 ## best-effort: an unknown id or a mock (non-Node) provider simply leaves the
 ## override recorded, so tests and headless logic still observe a consistent id.
-func set_tile(cell: Vector2i, tile_id) -> void:
+func set_tile(cell: Vector3i, tile_id) -> void:
 	_tile_overrides[cell] = tile_id
 	var res := _resolve_tile_resource(tile_id)
 	if res != null:
 		_tile_registry[cell] = res
+		if cell.z >= _floor_count:
+			refresh_floors()
 		var node = _tile_node_at(cell)
 		if node != null and node.has_method("set_tile_resource"):
 			node.set_tile_resource(res)
 
 
-## Move [param unit] onto [param to_cell], snapping to the cell's world center
-## while preserving the unit's current height.
-func move_unit(unit, to_cell: Vector2i) -> void:
+## Move [param unit] onto [param to_cell], snapping to the cell's world center.
+## The unit keeps its height ABOVE its floor (e.g. MapLoader's tile-top offset) and
+## is lifted/lowered by whole floors when [param to_cell] is on another floor.
+func move_unit(unit, to_cell: Vector3i) -> void:
 	if unit == null:
 		return
 	var world := cell_to_world(to_cell)
-	world.y = _unit_position(unit).y
+	var cur := _unit_position(unit)
+	var offset := cur.y - Cells.floor_y(Cells.floor_from_world_y(cur.y))
+	world.y = Cells.floor_y(to_cell.z) + offset
 	unit.set("position", world)
 	# TODO: When integrating with the live board, emit GameEvents.unit_moved and
 	#       notify any pathing/occupancy subsystem here. No occupancy bookkeeping
@@ -212,9 +304,16 @@ func all_units() -> Array:
 
 # --- MovementResolver board interface ---------------------------------------
 
-## True when [param cell] lies within the grid's bounds. With no grid attached
-## (e.g. lightweight test doubles), every cell is considered in bounds.
-func in_bounds(cell: Vector2i) -> bool:
+## True when [param cell] lies within the grid's bounds: its column is on the map
+## and its floor is between 0 and the top floor. With no grid attached (e.g.
+## lightweight test doubles), every column is considered in bounds.
+func in_bounds(cell: Vector3i) -> bool:
+	if cell.z < 0 or cell.z >= _floor_count:
+		return false
+	return _column_in_bounds(cell)
+
+
+func _column_in_bounds(cell: Vector3i) -> bool:
 	if _grid == null:
 		return true
 	if _grid.has_method("is_within_bounds"):
@@ -222,8 +321,104 @@ func in_bounds(cell: Vector2i) -> bool:
 	return true
 
 
+## True when [param cell] has a floor to stand on. Every in-bounds floor-0 cell
+## does; an upper-floor cell only where a tile was placed (else it is AIR).
+func has_tile(cell: Vector3i) -> bool:
+	if cell.z < 0 or not _column_in_bounds(cell):
+		return false
+	if cell.z == 0:
+		return true
+	return _tile_registry.has(cell) or _present_cells.has(cell)
+
+
+# --- Floor / link queries (the multi-floor API; see docs/MULTI_FLOOR.md) ------
+
+## Number of floors on this board (1 for a classic flat map).
+func floor_count() -> int:
+	return _floor_count
+
+
+## Every floor with a tile in column [param col] (Vector2i or Vector3i; the floor
+## part is ignored), ascending. Floor 0 is always present for an in-bounds column.
+func floors_at(col) -> Array[int]:
+	var c := Cells.from_variant(col)
+	var out: Array[int] = []
+	for f in range(_floor_count):
+		if has_tile(Vector3i(c.x, c.y, f)):
+			out.append(f)
+	return out
+
+
+## Highest floor with a tile in column [param col] (0 when only the ground exists,
+## -1 when the column is off the board).
+func top_floor_at(col) -> int:
+	var fl := floors_at(col)
+	return fl[fl.size() - 1] if not fl.is_empty() else -1
+
+
+## Every cell that has a tile on floor [param floor_index]. Floor 0 enumerates the
+## grid (needs a grid; without one, only registered floor-0 cells are known).
+func cells_on_floor(floor_index: int) -> Array[Vector3i]:
+	var out: Array[Vector3i] = []
+	if floor_index == 0 and _grid != null and "size" in _grid:
+		for x in range(int(_grid.size.x)):
+			for y in range(int(_grid.size.z)):
+				out.append(Vector3i(x, y, 0))
+		return out
+	var seen := {}
+	for c in _tile_registry.keys() + _present_cells.keys():
+		if c is Vector3i and c.z == floor_index and not seen.has(c):
+			seen[c] = true
+			out.append(c)
+	out.sort_custom(Cells.less)
+	return out
+
+
+## Live units standing (anchored) on floor [param floor_index].
+func units_on_floor(floor_index: int) -> Array:
+	var out: Array = []
+	for u in all_units():
+		if cell_of(u).z == floor_index:
+			out.append(u)
+	return out
+
+
+## Outgoing link edges from [param cell]: Array of { to, cost, kind }.
+func links_from(cell: Vector3i) -> Array:
+	return _link_adjacency.get(cell, [])
+
+
+## True when a link leads directly from [param a] to [param b].
+func are_linked(a: Vector3i, b: Vector3i) -> bool:
+	for e in links_from(a):
+		if e["to"] == b:
+			return true
+	return false
+
+
+## Every link as normalized { from, to, cost, kind, bidirectional } dictionaries.
+func links() -> Array:
+	return _link_list.duplicate()
+
+
+## True when the tile at [param cell] blocks line of sight (walls, trees).
+func blocks_los_at(cell: Vector3i) -> bool:
+	var res := _resource_at(cell)
+	return res != null and res.blocks_line_of_sight
+
+
+## True when [param cell] is an upper-floor tile that acts as a CEILING for the
+## cell below it (blocks line of sight through it). Tiles default to solid; a tile
+## resource may opt out ([member TileResource.solid_ceiling] = false, e.g. a grate).
+func is_solid_ceiling(cell: Vector3i) -> bool:
+	if cell.z <= 0 or not has_tile(cell):
+		return false
+	var res := _resource_at(cell)
+	return res == null or res.solid_ceiling
+
+
 ## True when a live unit currently occupies [param cell].
-func is_occupied(cell: Vector2i) -> bool:
+func is_occupied(cell: Vector3i) -> bool:
 	for u in units_at(cell):
 		if _is_alive(u):
 			return true
@@ -232,7 +427,7 @@ func is_occupied(cell: Vector2i) -> bool:
 
 ## True when [param cell] is impassable terrain (its [TileResource] is not
 ## passable). Cells with no registered terrain (e.g. mocks) are never blocked.
-func is_blocked(cell: Vector2i) -> bool:
+func is_blocked(cell: Vector3i) -> bool:
 	var res := _resource_at(cell)
 	if res != null:
 		return not res.is_tile_passable()
@@ -241,7 +436,7 @@ func is_blocked(cell: Vector2i) -> bool:
 
 ## Cost to enter [param cell]: the terrain's movement cost (clamped to at least
 ## 1), or a flat 1 when [param cell] has no registered terrain.
-func move_cost(cell: Vector2i) -> int:
+func move_cost(cell: Vector3i) -> int:
 	var res := _resource_at(cell)
 	if res != null:
 		return maxi(1, res.base_movement_cost)
@@ -251,7 +446,7 @@ func move_cost(cell: Vector2i) -> int:
 ## Terrain id for [param cell]. A [method set_tile] override wins (so a just-applied
 ## transform reads back its id); otherwise the registered [TileResource]'s canonical
 ## id. Returns [code]&""[/code] when neither is present.
-func tile_id_at(cell: Vector2i) -> StringName:
+func tile_id_at(cell: Vector3i) -> StringName:
 	var t = _tile_overrides.get(cell, null)
 	if t != null:
 		return t if t is StringName else StringName(str(t))
@@ -265,7 +460,7 @@ func tile_id_at(cell: Vector2i) -> StringName:
 ## first special_property, else its canonical id). Falls back to a [method set_tile]
 ## override id, then [code]&""[/code]. Used for broad terrain-keyed rules
 ## ("empowered on water") and movement cost overrides.
-func tile_tag_at(cell: Vector2i) -> StringName:
+func tile_tag_at(cell: Vector3i) -> StringName:
 	var res := _resource_at(cell)
 	if res != null:
 		if res.special_properties != null and not res.special_properties.is_empty():
@@ -286,7 +481,7 @@ func tile_tag_at(cell: Vector2i) -> StringName:
 ## list, so they read this instead. Never returns null; an unregistered cell, or
 ## one known only through a [method set_tile] override, yields the override id (or
 ## the canonical id) as a single-entry list so a tag-less tile can still be named.
-func tile_tags_at(cell: Vector2i) -> Array[String]:
+func tile_tags_at(cell: Vector3i) -> Array[String]:
 	var out: Array[String] = []
 	var res := _resource_at(cell)
 	if res != null:
@@ -305,30 +500,37 @@ func tile_tags_at(cell: Vector2i) -> Array[String]:
 
 # --- Coordinate mapping helpers --------------------------------------------
 
-## Vector2i(col, row) -> world position of that cell's center.
-func cell_to_world(cell: Vector2i) -> Vector3:
+## Vector3i(col, row, floor) -> world position of that cell's center, at the
+## floor's height (floor * [constant Cells.FLOOR_HEIGHT]).
+func cell_to_world(cell: Vector3i) -> Vector3:
 	if _grid and _grid.has_method("calculate_map_position"):
-		return _grid.calculate_map_position(Vector3(cell.x, 0, cell.y))
-	return Vector3(cell.x, 0, cell.y)
+		return _grid.calculate_map_position(Cells.to_grid(cell))
+	return Vector3(cell.x, Cells.floor_y(cell.z), cell.y)
 
 
-## World position -> the Vector2i(col, row) cell containing it.
-func world_to_cell(world: Vector3) -> Vector2i:
+## World position -> the Vector3i(col, row, floor) cell containing it (the floor
+## is read from the height, rounded to the nearest floor).
+func world_to_cell(world: Vector3) -> Vector3i:
 	if _grid and _grid.has_method("calculate_grid_coordinates"):
 		var gc: Vector3 = _grid.calculate_grid_coordinates(world)
-		return Vector2i(int(gc.x), int(gc.z))
-	return Vector2i(int(round(world.x)), int(round(world.z)))
+		return Cells.from_grid(gc)
+	return Vector3i(int(round(world.x)), int(round(world.z)), Cells.floor_from_world_y(world.y))
+
+
+## World Y of floor [param floor_index] (tile origin height).
+func floor_world_y(floor_index: int) -> float:
+	return Cells.floor_y(floor_index)
 
 
 ## Best-effort terrain lookup (see [method set_tile]). Returns null if unset.
-func get_tile(cell: Vector2i):
+func get_tile(cell: Vector3i):
 	return _tile_overrides.get(cell, null)
 
 
 # --- Internal helpers ------------------------------------------------------
 
 ## The [TileResource] registered for [param cell], or null.
-func _resource_at(cell: Vector2i) -> TileResource:
+func _resource_at(cell: Vector3i) -> TileResource:
 	var r = _tile_registry.get(cell, null)
 	return r if r is TileResource else null
 
@@ -354,15 +556,19 @@ func _resolve_tile_resource(tile_id) -> TileResource:
 	return TileCatalog.find_by_id(mapped)
 
 
-## The live tile node at [param cell], found under the map root's "Tiles"
-## container (MapLoader names tiles "Tile_<x>_<y>"). Null for non-Node providers
-## (mocks) or if the tile is absent.
-func _tile_node_at(cell: Vector2i):
+## The live tile node at [param cell], found under the map root's
+## "Tiles/Floor_<f>" container (MapLoader names tiles "Tile_<x>_<y>_<f>"; a legacy
+## flat "Tiles/Tile_<x>_<y>" is still found for floor 0). Null for non-Node
+## providers (mocks) or if the tile is absent.
+func _tile_node_at(cell: Vector3i):
 	var root = _units_provider
 	if root is Node:
 		var tiles = root.get_node_or_null("Tiles")
 		if tiles != null:
-			return tiles.get_node_or_null("Tile_%d_%d" % [cell.x, cell.y])
+			var n = tiles.get_node_or_null("Floor_%d/Tile_%d_%d_%d" % [cell.z, cell.x, cell.y, cell.z])
+			if n == null and cell.z == 0:
+				n = tiles.get_node_or_null("Tile_%d_%d" % [cell.x, cell.y])
+			return n
 	return null
 
 
@@ -376,9 +582,11 @@ func _footprint_of(unit) -> Vector2i:
 	return Vector2i.ONE
 
 
-## True when [param cell] falls inside [param unit]'s footprint span.
-func _covers(unit, cell: Vector2i) -> bool:
+## True when [param cell] falls inside [param unit]'s footprint span (on its floor).
+func _covers(unit, cell: Vector3i) -> bool:
 	var anchor := world_to_cell(_unit_position(unit))
+	if anchor.z != cell.z:
+		return false
 	var fp := _footprint_of(unit)
 	return cell.x >= anchor.x and cell.x < anchor.x + fp.x \
 		and cell.y >= anchor.y and cell.y < anchor.y + fp.y
