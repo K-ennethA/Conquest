@@ -250,8 +250,11 @@ GODOT=/path/to/godot dev_scripts/net_multiprocess_check.sh \
 ```
 
 It passes when the server and both bots print the same `FINAL seq=… digest=…`
-with no desync / verification failure. A bot alone:
-`godot --headless --path . -- --net-bot --connect 127.0.0.1 --port 8910 --name BotA`.
+with no desync / verification failure. `HOSTED=1` runs the player-hosted
+variant (a host bot = listen server + seat 0, and a guest bot). A bot alone:
+`godot --headless --path . -- --net-bot --connect 127.0.0.1 --port 8910 --name BotA`
+(add `--host [--map … --turn-system … --end-after-actions N]` to make it the player-host).
+Large maps are slow with the naive bot (it pre-validates every candidate intent).
 
 **Two interactive instances:** Debug → *Customize Run Instances…* → 2, Run;
 Host in one, Join `127.0.0.1` in the other (or both Join a local dedicated server).

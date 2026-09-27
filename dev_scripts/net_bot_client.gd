@@ -6,6 +6,11 @@ extends Node
 ##
 ##   godot --headless --path . -- --net-bot --connect 127.0.0.1 --port 8910 --name BotA
 ##
+## or, as a PLAYER-HOST (listen server, seat 0; starts once the other bot is ready):
+##
+##   godot --headless --path . -- --net-bot --host --port 8910 --name Host \
+##         [--map res://...] [--turn-system traditional] [--end-after-actions N]
+##
 ## It joins, readies up, and -- when it is its turn -- submits one legal intent at
 ## a time (attack an enemy in range > move toward the nearest enemy > wait > end
 ## turn), chosen deterministically from its local copy of the game and
@@ -23,6 +28,8 @@ var _last_digest := 0
 var _desyncs := 0
 var _cheats := 0
 var _done := false
+var _host_map := ""
+var _host_end_after := 0
 
 
 func start(args: PackedStringArray) -> void:
@@ -45,14 +52,37 @@ func start(args: PackedStringArray) -> void:
 	_ns.cheat_detected.connect(func(_p, _r): _cheats += 1)
 	_ns.match_aborted.connect(_finish)
 	_ns.disconnected.connect(_finish)
-	var err := _ns.join_game(String(opts.get("connect", "127.0.0.1")), bot_name,
-		int(opts.get("port", NetSessionNode.DEFAULT_PORT)))
+	var port := int(opts.get("port", NetSessionNode.DEFAULT_PORT))
+	var err: Error
+	if opts.has("host"):
+		# PLAYER-HOSTED: this bot is the listen server AND seat 0.
+		_host_map = String(opts.get("map", "res://game/maps/resources/default_skirmish.tres"))
+		err = _ns.host_game(bot_name, port)
+		if err == OK:
+			_ns.set_match_config({"map_path": _host_map, "turn_system": int(opts.get("turn_system", 0)), "auto_end_turn": true})
+			_ns.set_ready(true)
+			_host_end_after = int(opts.get("end_after_actions", 0))
+	else:
+		err = _ns.join_game(String(opts.get("connect", "127.0.0.1")), bot_name, port)
 	if err != OK:
 		_finish("join_failed")
 
 
 func _process(_delta: float) -> void:
-	if _done or _ns == null or not _ns.is_in_match():
+	if _done or _ns == null:
+		return
+	if _ns.is_host() and _ns.can_start_match():
+		_ns.start_match()
+	if not _ns.is_in_match():
+		return
+	var decided: bool = PlayerManager.current_game_state == PlayerManager.GameState.FINISHED
+	if _ns.is_host() and (decided or (_host_end_after > 0 and _ns.last_applied_seq() >= _host_end_after)) \
+			and not _ns.has_pending_actions() and _last_seq == _ns.last_applied_seq() \
+			and GameModeManager.get_rules() != null:
+		# At least one frame after the last apply: deferred turn logic has settled.
+		_last_digest = GameModeManager.get_rules().state_digest()
+		_ns.end_match("match_complete")
+		_finish("match_complete")
 		return
 	var rules: NetGameRules = GameModeManager.get_rules()
 	if rules == null:
