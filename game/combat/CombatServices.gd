@@ -24,6 +24,14 @@ signal board_ready
 ## so the 3D map overlay can restack that cell's effect markers reactively.
 signal tile_effects_changed(cell: Vector3i)
 
+## Deterministic RNG for a NETWORK match (see [NetGameRules]). Null in
+## single-player / hotseat, where every [MoveContext] keeps its own randomized
+## generator exactly as before. While a network match applies an accepted action
+## this holds a generator seeded from (match seed, action seq), and any
+## MoveContext created without an injected rng (abilities, status ticks, tile
+## effects) draws from it, so every peer rolls identically.
+var match_rng: RandomNumberGenerator = null
+
 ## The single live adapter. Null until the first successful [method rebuild].
 var _board: BoardAdapter = null
 

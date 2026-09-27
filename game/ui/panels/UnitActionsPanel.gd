@@ -125,6 +125,10 @@ func _ready() -> void:
 	else:
 		push_error("Cancel button not found!")
 	
+	# Network matches: refresh when an accepted action (ours or the opponent's) lands.
+	if GameModeManager and GameModeManager.has_signal("network_action_applied"):
+		GameModeManager.network_action_applied.connect(_on_network_action_applied)
+
 	# Hide panel initially
 	_hide_panel()
 	
@@ -165,28 +169,9 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	# its info (including enemy / AI-owned units). Commanding is gated separately via
 	# _human_may_command() -- _update_actions() renders disabled buttons for units the
 	# player cannot command. The single-player AI hard-gate, the PlayerManager gate and
-	# the Traditional can-act gate that used to REJECT selection here are gone. The
-	# multiplayer rejection branch is intentionally kept for this pass.
-	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
-		# Get local player ID and unit owner
-		var local_player_id_raw = GameModeManager.get_local_player_id()
-		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
-		var unit_owner = PlayerManager.get_player_owning_unit(unit)
-
-		if not unit_owner:
-			return
-
-		# Ensure player_id is int for comparison and arithmetic
-		var owner_player_id = int(unit_owner.player_id) if unit_owner.player_id is String else unit_owner.player_id
-
-		if owner_player_id != local_player_id:
-			# Could show a message to the player here
-			return
-	else:
-		# Local (single-player / hotseat): accept every selection for inspection.
-		# _update_actions() gates the actual commands via _human_may_command().
-		pass
-
+	# the Traditional can-act gate that used to REJECT selection here are gone -- in
+	# network matches too: _player_is_human() compares against the local network seat,
+	# so an opponent's unit is inspectable but never commandable.
 	selected_unit = unit
 
 	_update_unit_header()
@@ -447,6 +432,16 @@ func _clear_unit_header() -> void:
 	if unit_icon:
 		unit_icon.texture = null
 
+func _on_network_action_applied(_action: Dictionary, _result: Dictionary) -> void:
+	"""An accepted network action was applied to the board on this peer."""
+	if selected_unit != null and not is_instance_valid(selected_unit):
+		selected_unit = null
+		_hide_panel()
+		return
+	if move_selection_panel and move_selection_panel.visible:
+		move_selection_panel.update_move_cooldowns()
+	_update_actions()
+
 func _on_player_turn_changed(player: Player) -> void:
 	"""Handle player turn changes"""
 	_update_actions()
@@ -643,32 +638,6 @@ func _on_move_pressed() -> void:
 	if not selected_unit:
 		return
 
-	# Check if we're in multiplayer mode and submit action through GameModeManager
-	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
-		# Validate that this is our unit and our turn
-		var local_player_id_raw = GameModeManager.get_local_player_id()
-		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
-		var unit_owner = PlayerManager.get_player_owning_unit(selected_unit)
-		
-		# Ensure player_id is int for comparison
-		var owner_player_id = int(unit_owner.player_id) if (unit_owner and unit_owner.player_id is String) else (unit_owner.player_id if unit_owner else -1)
-		
-		if not unit_owner or owner_player_id != local_player_id:
-			return
-
-		if not GameModeManager.is_my_turn():
-			return
-
-		# Submit move action through multiplayer system
-		var action_data = {
-			"unit_id": selected_unit.get_display_name(),
-			"player_id": local_player_id
-		}
-
-		if GameModeManager.submit_action("unit_move_start", action_data):
-			_enter_movement_mode()
-		return
-
 	# Handler-level command guard: keyboard shortcut (KEY_M) bypasses the disabled
 	# button, so re-check command permission here before acting on an enemy / AI unit.
 	if not _human_may_command(selected_unit):
@@ -687,31 +656,12 @@ func _on_end_unit_turn_pressed() -> void:
 	if not selected_unit:
 		return
 	
-	# Check if we're in multiplayer mode and submit action through GameModeManager
-	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
-		# Validate that this is our unit and our turn
-		var local_player_id_raw = GameModeManager.get_local_player_id()
-		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
-		var unit_owner = PlayerManager.get_player_owning_unit(selected_unit)
-		
-		# Ensure player_id is int for comparison
-		var owner_player_id = int(unit_owner.player_id) if (unit_owner and unit_owner.player_id is String) else (unit_owner.player_id if unit_owner else -1)
-		
-		if not unit_owner or owner_player_id != local_player_id:
-			return
-
-		if not GameModeManager.is_my_turn():
-			return
-
-		# Submit end unit turn action through multiplayer system
-		var action_data = {
-			"unit_id": selected_unit.get_display_name(),
-			"player_id": local_player_id
-		}
-
-		if GameModeManager.submit_action("end_unit_turn", action_data):
-			# The action will be processed when received back from network
-			pass
+	# Network match: WAIT is an intent; the host validates it and the accepted
+	# action is applied on every peer (NetGameRules), which refreshes this panel.
+	if GameModeManager and GameModeManager.is_multiplayer_active():
+		if _human_may_command(selected_unit) and GameModeManager.is_my_turn():
+			_cancel_move_targeting()
+			GameModeManager.request_wait(selected_unit)
 		return
 
 	# Handler-level command guard: the KEY_E shortcut bypasses the disabled button and
@@ -758,29 +708,11 @@ func _on_end_player_turn_pressed() -> void:
 	if not current_player:
 		return
 
-	# Check if we're in multiplayer mode and submit action through GameModeManager
-	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
-		# Validate that it's our turn
-		var local_player_id_raw = GameModeManager.get_local_player_id()
-		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
-		
-		# Ensure player_id is int for comparison
-		var current_player_id = int(current_player.player_id) if current_player.player_id is String else current_player.player_id
-		
-		if current_player_id != local_player_id:
-			return
-
-		if not GameModeManager.is_my_turn():
-			return
-
-		# Submit end turn action through multiplayer system
-		var action_data = {
-			"player_id": local_player_id
-		}
-
-		if GameModeManager.submit_action("end_turn", action_data):
-			# The action will be processed when received back from network
-			pass
+	# Network match: END_TURN is an intent (host-validated, applied on every peer).
+	if GameModeManager and GameModeManager.is_multiplayer_active():
+		if GameModeManager.is_my_turn():
+			_cancel_move_targeting()
+			GameModeManager.request_end_turn()
 		return
 
 	# Handler-level command guard: the KEY_P shortcut bypasses the disabled button.
@@ -1338,6 +1270,12 @@ func _execute_movement(destination: Vector3) -> void:
 	if not selected_unit:
 		return
 
+	# Network match: never move locally -- submit the intent (see _move_to_destination).
+	if GameModeManager and GameModeManager.is_multiplayer_active():
+		_move_to_destination(destination)
+		_exit_movement_mode()
+		return
+
 	# Character-backed units route through the shared BoardAdapter (resolver-backed).
 	if _try_execute_move_via_board(destination):
 		_exit_movement_mode()
@@ -1387,29 +1325,6 @@ func _complete_movement_action() -> void:
 	if not selected_unit:
 		return
 
-	# Check if we're in multiplayer mode and submit action through GameModeManager
-	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
-		# Validate that this is our unit
-		var local_player_id_raw = GameModeManager.get_local_player_id()
-		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
-		var unit_owner = PlayerManager.get_player_owning_unit(selected_unit)
-		
-		# Ensure player_id is int for comparison
-		var owner_player_id = int(unit_owner.player_id) if (unit_owner and unit_owner.player_id is String) else (unit_owner.player_id if unit_owner else -1)
-		
-		if unit_owner and owner_player_id == local_player_id:
-			# Submit movement completion action through multiplayer system
-			var action_data = {
-				"unit_id": selected_unit.get_display_name(),
-				"player_id": local_player_id,
-				"from_position": selected_unit.global_position,
-				"to_position": selected_unit.global_position  # Current position after move
-			}
-			
-			GameModeManager.submit_action("unit_move_complete", action_data)
-
-		# Still do local processing for immediate feedback
-	
 	# Moving consumes only the unit's MOVE for this turn, not its action: the unit
 	# can still attack / use a move, or End Turn. Re-moving is blocked by can_move()
 	# until an ability or move effect grants extra movement.
@@ -1465,20 +1380,28 @@ func handle_movement_destination_selected(destination: Vector3) -> void:
 
 func _move_to_destination(destination: Vector3) -> void:
 	"""Route a validated destination click to either the Fire-Emblem TENTATIVE move
-	(character-backed unit, live board, single-player) or the legacy INSTANT-commit
-	move (non-character unit / no board / multiplayer, which keeps its existing
-	authoritative networked flow). The tentative path is the canonical FE loop:
-	the unit moves for preview only and does not commit until the player confirms
-	an action (attack or Wait)."""
+	(character-backed unit, live board, local play), the legacy INSTANT-commit move
+	(non-character unit / no board), or -- in a network match -- a MOVE intent.
+	The tentative path is the canonical FE loop: the unit moves for preview only and
+	does not commit until the player confirms an action (attack or Wait).
+
+	Network matches commit immediately through the host instead of previewing: the
+	local board is never mutated outside an accepted action, so every peer's state
+	(and the host's desync checkpoints) stay identical."""
+	if GameModeManager and GameModeManager.is_multiplayer_active():
+		if GameModeManager.is_my_turn():
+			GameModeManager.request_move(selected_unit, _grid_tile_to_cell(destination))
+		_clear_movement_range()
+		movement_mode = false
+		return
 	var use_tentative := (
 		selected_unit.has_character()
 		and CombatServices.board() != null
-		and GameSettings.game_mode != GameSettings.GameMode.MULTIPLAYER
 	)
 	if use_tentative:
 		_begin_tentative_move(destination)
 	else:
-		# Legacy / multiplayer: commit immediately (unchanged behavior).
+		# Legacy (non-character unit / no board): commit immediately.
 		_execute_movement_to_destination(destination)
 
 func _execute_movement_to_destination(destination: Vector3) -> void:
@@ -1841,6 +1764,15 @@ func _execute_move_on_target(aim_cell: Vector3i, move: MoveResource, slot: int) 
 	if gate_controller and gate_controller.has_method("can_use") and not gate_controller.can_use(move):
 		# Not usable -- abort without executing or spending the action; refresh the UI
 		# (which reflects the remaining cooldown) and drop targeting.
+		_cancel_move_targeting()
+		_update_actions()
+		return
+
+	# Network match: the attack / ability is an intent. The host validates it and
+	# every peer resolves it with the same seeded RNG when it is accepted.
+	if GameModeManager and GameModeManager.is_multiplayer_active():
+		if GameModeManager.is_my_turn():
+			GameModeManager.request_use_move(selected_unit, slot, aim_cell)
 		_cancel_move_targeting()
 		_update_actions()
 		return

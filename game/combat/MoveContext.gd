@@ -105,9 +105,25 @@ func roll(probability: float) -> bool:
 
 func _get_rng() -> RandomNumberGenerator:
 	if rng == null:
-		rng = RandomNumberGenerator.new()
-		rng.randomize()
+		# Network matches install a seeded, shared generator (CombatServices.match_rng)
+		# so contexts built outside MoveExecutor (abilities, status / tile ticks) stay
+		# deterministic across peers. Null outside a network match -> unchanged.
+		var shared = _shared_match_rng()
+		if shared != null:
+			rng = shared
+		else:
+			rng = RandomNumberGenerator.new()
+			rng.randomize()
 	return rng
+
+
+static func _shared_match_rng() -> RandomNumberGenerator:
+	var loop = Engine.get_main_loop()
+	if loop is SceneTree:
+		var cs = loop.root.get_node_or_null("CombatServices")
+		if cs != null and "match_rng" in cs:
+			return cs.match_rng
+	return null
 
 
 func _stat(unit, stat_name: String) -> int:

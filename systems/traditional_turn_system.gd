@@ -154,9 +154,6 @@ func _start_player_turn(player: Player) -> void:
 	# turn-start call unwinds rather than re-entering it.
 	call_deferred("_drive_controlled_units", get_units_for_player(player))
 
-	# Notify GameManager of turn change for network synchronization
-	_notify_game_manager_of_turn_change(player)
-
 	# Emit turn started signal
 	turn_started.emit(player)
 
@@ -568,43 +565,3 @@ func _to_string() -> String:
 	"""String representation for debugging"""
 	var player_name = current_player.get_display_name() if current_player else "No Player"
 	return system_name + " (Round " + str(current_turn) + " - " + player_name + ")"
-
-func _notify_game_manager_of_turn_change(player: Player) -> void:
-	"""Notify GameManager of turn change for network synchronization"""
-	# Check if we're in multiplayer mode and need to sync turns
-	if GameModeManager and GameModeManager.is_multiplayer_active():
-		# Get the GameManager through GameModeManager
-		var game_manager = GameModeManager._game_manager
-		if game_manager:
-			# Find the player index in the GameManager's player list
-			var players = game_manager.get_players()
-			var player_id = -1
-
-			# Strategy 1: Direct player ID match (most reliable)
-			if players.has(player.player_id):
-				player_id = player.player_id
-			else:
-				# Strategy 2: Name matching (should work now with simplified names)
-				for pid in players:
-					var p = players[pid]
-					var gm_name = p.get("name", "")
-
-					if gm_name == player.get_display_name():
-						player_id = pid
-						break
-
-			if player_id >= 0:
-				game_manager._current_turn_player = player_id
-
-				game_manager.turn_changed.emit(player_id)
-
-				# Also trigger network sync if we're the host
-				if game_manager._network_handler and game_manager._network_handler.is_host():
-					var turn_action = {
-						"type": "turn_change",
-						"data": {
-							"current_player": player_id,
-							"timestamp": Time.get_ticks_msec()
-						}
-					}
-					var success = game_manager._network_handler.submit_action(turn_action)

@@ -44,11 +44,6 @@ layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
 text = "Host Game"
 
-[node name="HostWithClientButton" type="Button" parent="CenterContainer/VBoxContainer/NetworkButtons"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 50)
-text = "Host + Auto Client (Testing)"
-
 [node name="JoinButton" type="Button" parent="CenterContainer/VBoxContainer/NetworkButtons"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 50)

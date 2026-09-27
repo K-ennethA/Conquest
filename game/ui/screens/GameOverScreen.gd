@@ -193,8 +193,16 @@ func show_result(outcome: StringName, title: String, subtitle: String) -> void:
 	_play_reveal_animation()
 	_play_sting(outcome)
 
+	# A network match cannot be restarted locally (reloading one peer's scene would
+	# desync it) -- offer only Main Menu / Quit, which also closes the session.
+	var networked: bool = GameModeManager != null and GameModeManager.is_multiplayer_active()
+	_rematch_button.visible = not networked
+
 	# Give the primary action keyboard/controller focus.
-	_rematch_button.grab_focus()
+	if networked:
+		_menu_button.grab_focus()
+	else:
+		_rematch_button.grab_focus()
 
 
 # --- Reveal animation --------------------------------------------------------

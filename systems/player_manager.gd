@@ -42,28 +42,6 @@ func _ready() -> void:
 	GameEvents.unit_selected.connect(_on_unit_selected)
 	GameEvents.unit_action_completed.connect(_on_unit_action_completed)
 
-	# Connect to GameModeManager for multiplayer turn synchronization
-	if GameModeManager:
-		GameModeManager.game_started.connect(_on_game_mode_manager_game_started)
-		GameModeManager.game_ended.connect(_on_game_mode_manager_game_ended)
-
-		# Try to connect to GameManager immediately
-		_try_connect_to_game_manager()
-
-		# Also try again after a short delay in case GameManager isn't ready yet
-		await get_tree().create_timer(0.1).timeout
-		_try_connect_to_game_manager()
-
-func _try_connect_to_game_manager() -> void:
-	"""Try to connect to GameManager's turn_changed signal"""
-	if not GameModeManager:
-		return
-
-	var game_manager = GameModeManager._game_manager
-	if game_manager:
-		# Check if already connected to avoid duplicate connections
-		if not game_manager.turn_changed.is_connected(_on_network_turn_changed):
-			var connection_result = game_manager.turn_changed.connect(_on_network_turn_changed)
 
 # Player registration and setup
 func register_player(player_name: String = "") -> Player:
@@ -346,35 +324,6 @@ func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
 	var owner = get_player_owning_unit(unit)
 	if owner:
 		owner.mark_unit_acted(unit)
-
-func _on_network_turn_changed(current_player_id: int) -> void:
-	"""Handle turn changes from network multiplayer"""
-	# Update local player manager state
-	if current_player_id >= 0 and current_player_id < players.size():
-		current_player_index = current_player_id
-
-		# Update player states
-		for i in range(players.size()):
-			var player = players[i]
-			var old_state = player.current_state
-			if i == current_player_id:
-				player.set_state(Player.PlayerState.ACTIVE)
-			else:
-				if player.current_state != Player.PlayerState.ELIMINATED:
-					player.set_state(Player.PlayerState.WAITING)
-
-		# Emit local signals for UI updates
-		var current_player = get_current_player()
-		if current_player:
-			player_turn_started.emit(current_player)
-
-func _on_game_mode_manager_game_started(mode: GameManager.GameMode) -> void:
-	"""Handle game started from GameModeManager"""
-	pass
-
-func _on_game_mode_manager_game_ended(winner_id: int) -> void:
-	"""Handle game ended from GameModeManager"""
-	pass
 
 func _on_player_state_changed(player: Player, old_state: Player.PlayerState, new_state: Player.PlayerState) -> void:
 	"""Handle player state changes"""
