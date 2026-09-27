@@ -12,10 +12,11 @@ extends Control
 ##                      here. MAX = ArenaController.pending_squad_size(). Confirm calls
 ##                      begin_pending_run(), which starts the run AND changes scene itself.
 ##
-## The UI is built PROGRAMMATICALLY in _ready (the .tscn is just a Control root) using the
-## warm-amber ConquestTheme palette, mirroring ArenaSetupScreen's look and structure. Every
-## dependency is null-guarded: a missing autoload, an unreadable map, or an empty roster all
-## degrade gracefully (fall back to MAX=4 / "Battle", or offer only BACK).
+## Layout (built in code with MenuKit / MenuTheme; the .tscn is just a Control root):
+##   squad bar (numbered slots + count)  |  unit card grid  |  detail pane for the
+##   focused / hovered unit (3D model or emblem, role, description, stat bars).
+## Every dependency is null-guarded: a missing autoload, an unreadable map, or an empty
+## roster all degrade gracefully (fall back to MAX=4 / "Battle", or offer only BACK).
 
 const GAME_WORLD_SCENE := "res://game/world/GameWorld.tscn"
 const MAP_SELECTION_SCENE := "res://menus/MapSelection.tscn"
@@ -27,19 +28,11 @@ const GRID_COLUMNS := 3
 # beast and the summon-only undead body are never player squad picks.
 const EXCLUDED_IDS := ["undead"]
 
-# --- Warm palette (ConquestTheme with hardcoded fallbacks so a missing constant
-# can never crash the screen; mirrors ArenaSetupScreen). ----------------------
-var _bg_top: Color = Color(0.10, 0.075, 0.05, 1.0)
-var _bg_bottom: Color = Color(0.05, 0.035, 0.02, 1.0)
-var _ink: Color = Color("2a1608")
-var _cream: Color = Color("fcefd6")
-var _cream_dim: Color = Color("e7d3ad")
-var _amber: Color = Color("e6a64b")
-var _amber_lite: Color = Color("f0c072")
-var _amber_dk: Color = Color("c6822f")
-var _brown: Color = Color("5a3a1e")
-var _brown_dk: Color = Color("37220f")
-var _gold: Color = Color("f0c040")
+## Stats shown as bars in the detail pane: [key, label].
+const STAT_ROWS := [
+	["health", "HP"], ["attack", "Attack"], ["defense", "Defense"], ["magic", "Magic"],
+	["magic_defense", "Resist"], ["speed", "Speed"], ["movement", "Move"], ["range", "Range"],
+]
 
 # --- Mode / selection state -------------------------------------------------
 var _is_arena: bool = false
@@ -49,21 +42,32 @@ var _destination: String = "Battle"
 var _chosen_ids: Array = []
 # character_id String -> its toggle Button, so we can refresh visuals / disabled state.
 var _unit_buttons: Dictionary = {}
-# character_id String -> [name_label, element_label], so selection can recolor text
-# (cream on the dim unselected plate, dark ink on the lit amber selected plate).
-var _unit_labels: Dictionary = {}
+# character_id String -> the order badge Label on its card ("1", "2", ...).
+var _order_badges: Dictionary = {}
+# character_id String -> roster entry Dictionary.
+var _entries: Dictionary = {}
+var _stat_max: Dictionary = {}
 
 # --- Live node refs ---------------------------------------------------------
 var _counter_label: Label = null
 var _message_label: Label = null
 var _confirm_btn: Button = null
 var _back_btn: Button = null
+var _slots: HBoxContainer = null
+var _detail_name: Label = null
+var _detail_tags: HBoxContainer = null
+var _detail_desc: Label = null
+var _detail_stats: GridContainer = null
+var _detail_moves: Label = null
+var _detail_model: UnitPreview3D = null
+var _detail_emblem: PanelContainer = null
+var _detail_emblem_label: Label = null
+var _detail_action_hint: Label = null
+var _shown_id: String = ""
 
 
 func _ready() -> void:
-	_load_palette()
 	_resolve_mode()
-	_build_background()
 	_build_ui()
 	_refresh_selection_visuals()
 
@@ -112,100 +116,165 @@ func _resolve_mode() -> void:
 
 # --- UI construction --------------------------------------------------------
 
+func _crumbs() -> Array:
+	if _is_arena:
+		return ["Arena"]
+	var settings := get_node_or_null("/root/GameSettings")
+	if settings != null and settings.game_mode == GameSettings.GameMode.VERSUS:
+		return ["Local Versus", _destination]
+	return ["Single Player", _destination]
+
+
 func _build_ui() -> void:
-	var page := VBoxContainer.new()
-	page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	page.add_theme_constant_override("separation", 14)
-	# Keep everything inside the 1280x720 window with a comfortable margin.
-	page.offset_left = 48.0
-	page.offset_right = -48.0
-	page.offset_top = 28.0
-	page.offset_bottom = -28.0
-	add_child(page)
+	var page := MenuKit.build_page(self, _crumbs(), "Assemble Your Squad",
+		"Choose up to %d unit%s for %s. Selected units deploy in the order you pick them." % [
+			_max_units, "" if _max_units == 1 else "s", _destination])
 
-	# --- Header --------------------------------------------------------------
-	var title := Label.new()
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 56)
-	title.add_theme_color_override("font_color", _gold)
-	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
-	title.add_theme_constant_override("shadow_offset_y", 3)
-	title.add_theme_constant_override("shadow_offset_x", 2)
-	title.text = "SELECT YOUR SQUAD"
-	page.add_child(title)
-
-	var subtitle := Label.new()
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_font_size_override("font_size", 20)
-	subtitle.add_theme_color_override("font_color", _cream)
-	subtitle.text = _destination
-	page.add_child(subtitle)
-
-	# --- Counter / limit -----------------------------------------------------
-	_counter_label = Label.new()
-	_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_counter_label.add_theme_font_size_override("font_size", 18)
-	_counter_label.add_theme_color_override("font_color", _cream_dim)
-	page.add_child(_counter_label)
-
-	# --- Roster ---------------------------------------------------------------
 	var roster := _build_roster()
 
-	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", _card_box())
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	page.add_child(card)
+	# --- Squad bar -----------------------------------------------------------
+	var bar := HBoxContainer.new()
+	bar.name = "SquadBar"
+	bar.add_theme_constant_override("separation", MenuTheme.SP_M)
+	page.body.add_child(bar)
+	var bar_label := MenuKit.section("Squad")
+	bar_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bar.add_child(bar_label)
+	_slots = HBoxContainer.new()
+	_slots.add_theme_constant_override("separation", MenuTheme.SP_S)
+	bar.add_child(_slots)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(spacer)
+	_counter_label = MenuKit.label("", &"HeadingLabel")
+	_counter_label.name = "Counter"
+	bar.add_child(_counter_label)
 
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 18)
-	margin.add_theme_constant_override("margin_right", 18)
-	margin.add_theme_constant_override("margin_top", 16)
-	margin.add_theme_constant_override("margin_bottom", 16)
-	card.add_child(margin)
+	# --- Grid + detail ---------------------------------------------------------
+	var row := HBoxContainer.new()
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", MenuTheme.SP_XL)
+	page.body.add_child(row)
 
 	if roster.is_empty():
 		# Degrade gracefully: no pickable characters -> message, BACK only.
-		var empty_lbl := Label.new()
+		var empty_card := MenuKit.card()
+		empty_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(empty_card)
+		var empty_lbl := MenuKit.label("No characters are available to pick.", &"HeadingLabel")
 		empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		empty_lbl.add_theme_font_size_override("font_size", 20)
-		empty_lbl.add_theme_color_override("font_color", _ink)
-		empty_lbl.text = "No characters are available to pick."
-		margin.add_child(empty_lbl)
+		empty_card.add_child(empty_lbl)
 	else:
 		var scroll := ScrollContainer.new()
+		scroll.name = "RosterScroll"
 		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		margin.add_child(scroll)
-
+		scroll.size_flags_stretch_ratio = 2.3
+		scroll.follow_focus = true
+		row.add_child(scroll)
+		var pad := MarginContainer.new()
+		pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		for side in ["left", "top", "bottom", "right"]:
+			pad.add_theme_constant_override("margin_" + side, 12 if side != "right" else 18)
+		scroll.add_child(pad)
 		var grid := GridContainer.new()
+		grid.name = "RosterGrid"
 		grid.columns = GRID_COLUMNS
-		grid.add_theme_constant_override("h_separation", 12)
-		grid.add_theme_constant_override("v_separation", 12)
+		grid.add_theme_constant_override("h_separation", MenuTheme.SP_M)
+		grid.add_theme_constant_override("v_separation", MenuTheme.SP_M)
 		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		scroll.add_child(grid)
-
+		pad.add_child(grid)
 		for entry in roster:
 			grid.add_child(_make_unit_cell(entry))
+		row.add_child(_build_detail_pane())
 
 	# --- Inline message (limit-reached flash / guards) ----------------------
-	_message_label = Label.new()
-	_message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_message_label.add_theme_font_size_override("font_size", 16)
-	_message_label.add_theme_color_override("font_color", Color("d87a4a"))
+	_message_label = MenuKit.label("", &"")
+	_message_label.name = "Message"
 	_message_label.visible = false
-	page.add_child(_message_label)
+	page.hints.add_child(_message_label)
 
 	# --- Actions -------------------------------------------------------------
-	page.add_child(_build_actions(roster.is_empty()))
+	_back_btn = MenuKit.button("Back", MenuKit.GHOST, 140)
+	_back_btn.name = "BackButton"
+	_back_btn.pressed.connect(_on_back_pressed)
+	page.actions.add_child(_back_btn)
+	_confirm_btn = MenuKit.button("Start Run  >" if _is_arena else "To Battle  >", MenuKit.PRIMARY, 240, 54)
+	_confirm_btn.name = "ConfirmButton"
+	_confirm_btn.disabled = true
+	_confirm_btn.pressed.connect(_on_confirm_pressed)
+	# With no pickable roster there is nothing to confirm; hide it, offer only BACK.
+	_confirm_btn.visible = not roster.is_empty()
+	page.actions.add_child(_confirm_btn)
+	MenuKit.add_standard_hints(page.hints, "Add / remove")
+	page.hints.move_child(_message_label, page.hints.get_child_count() - 1)
 
 	_update_counter()
+	if not roster.is_empty():
+		var first: Button = _unit_buttons[String(roster[0]["id"])]
+		MenuNav.focus_deferred(first)
+		_show_detail(String(roster[0]["id"]))
+	else:
+		MenuNav.focus_deferred(_back_btn)
+
+
+func _build_detail_pane() -> Control:
+	var card := MenuKit.card()
+	card.name = "UnitDetail"
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.custom_minimum_size = Vector2(340, 0)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", MenuTheme.SP_S)
+	card.add_child(v)
+
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", MenuTheme.SP_L)
+	v.add_child(top)
+	var art := Control.new()
+	art.custom_minimum_size = Vector2(110, 110)
+	top.add_child(art)
+	_detail_emblem = _emblem("?", MenuTheme.GOLD, 88)
+	_detail_emblem.position = Vector2(11, 11)
+	art.add_child(_detail_emblem)
+	_detail_emblem_label = _detail_emblem.get_child(0) as Label
+	_detail_model = UnitPreview3D.new()
+	_detail_model.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	art.add_child(_detail_model)
+
+	var id_col := VBoxContainer.new()
+	id_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	id_col.alignment = BoxContainer.ALIGNMENT_CENTER
+	id_col.add_theme_constant_override("separation", 6)
+	top.add_child(id_col)
+	_detail_name = MenuKit.label("", &"HeadingLabel")
+	_detail_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	id_col.add_child(_detail_name)
+	_detail_tags = HBoxContainer.new()
+	_detail_tags.add_theme_constant_override("separation", 6)
+	id_col.add_child(_detail_tags)
+	_detail_action_hint = MenuKit.label("", &"MutedLabel")
+	id_col.add_child(_detail_action_hint)
+
+	_detail_desc = MenuKit.label("", &"DimLabel", true)
+	_detail_desc.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	_detail_desc.max_lines_visible = 3
+	_detail_desc.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	v.add_child(_detail_desc)
+
+	_detail_stats = GridContainer.new()
+	_detail_stats.columns = 6
+	_detail_stats.add_theme_constant_override("h_separation", MenuTheme.SP_M)
+	_detail_stats.add_theme_constant_override("v_separation", 5)
+	v.add_child(_detail_stats)
+
+	_detail_moves = MenuKit.label("", &"MutedLabel", true)
+	v.add_child(_detail_moves)
+	return card
 
 
 ## Assemble the sorted, filtered pickable roster. Each entry is a small Dictionary
-## { id: String, name: String, element: String }.
+## { id, name, element, role, stats, chr }.
 func _build_roster() -> Array:
 	var entries: Array = []
 	var ids: Array = CharacterLibrary.all_ids()
@@ -218,93 +287,178 @@ func _build_roster() -> Array:
 		var id_str := String(chr.character_id)
 		if id_str in EXCLUDED_IDS:
 			continue
-		entries.append({
+		var stats := {
+			"health": chr.base_health, "attack": chr.base_attack, "defense": chr.base_defense,
+			"magic": chr.base_magic, "magic_defense": chr.base_magic_defense,
+			"speed": chr.base_speed, "movement": chr.base_movement, "range": chr.attack_range,
+		}
+		for k in stats:
+			_stat_max[k] = maxi(int(_stat_max.get(k, 1)), int(stats[k]))
+		var entry := {
 			"id": id_str,
 			"name": chr.display_name,
 			"element": _element_label(chr.element),
-		})
+			"role": _role_for(chr),
+			"stats": stats,
+			"chr": chr,
+		}
+		entries.append(entry)
+		_entries[id_str] = entry
 	entries.sort_custom(func(a, b): return String(a["name"]).naturalnocasecmp_to(String(b["name"])) < 0)
 	return entries
 
 
-## A clickable unit cell: an amber toggle Button carrying the display name and, in a
-## smaller dim line, the element. Clicking toggles membership in the chosen squad.
+## A unit card: element emblem, name, element / role line, key stats, and an order
+## badge once picked. Pressing toggles membership in the chosen squad; focusing or
+## hovering it shows the unit in the detail pane.
 func _make_unit_cell(entry: Dictionary) -> Control:
 	var id_str := String(entry["id"])
-
-	var btn := Button.new()
-	btn.toggle_mode = true
-	btn.custom_minimum_size = Vector2(230.0, 66.0)
+	var parts := MenuKit.option_card(Vector2(236, 112), true)
+	var btn: Button = parts["button"]
+	btn.name = "Unit_" + id_str
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.clip_text = true
-	_style_choice_button(btn)
+	var m: MarginContainer = parts["margin"]
+	m.add_theme_constant_override("margin_left", 12)
+	m.add_theme_constant_override("margin_right", 12)
+	m.add_theme_constant_override("margin_top", 12)
+	m.add_theme_constant_override("margin_bottom", 12)
+	var content: VBoxContainer = parts["content"]
 
-	# Two stacked labels (name big, element smaller) laid out over the button;
-	# mouse_filter IGNORE so clicks fall through to the button itself.
-	var col := VBoxContainer.new()
-	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_theme_constant_override("separation", 2)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 10)
+	content.add_child(h)
+	var ecol := MenuKit.element_color(String(entry["element"]))
+	var emblem := _emblem(String(entry["name"]).left(1), ecol, 40)
+	emblem.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(emblem)
 
-	var name_lbl := Label.new()
-	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 19)
-	name_lbl.add_theme_color_override("font_color", _cream)
-	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	name_lbl.text = String(entry["name"])
-	col.add_child(name_lbl)
+	var text := VBoxContainer.new()
+	text.add_theme_constant_override("separation", 2)
+	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(text)
+	var name_lbl := MenuKit.label(String(entry["name"]), &"SubheadingLabel")
+	name_lbl.clip_text = true
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	text.add_child(name_lbl)
+	var kind := MenuKit.label("%s  ·  %s" % [entry["element"], entry["role"]], &"")
+	kind.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	kind.add_theme_color_override("font_color", ecol.lightened(0.35))
+	kind.clip_text = true
+	text.add_child(kind)
+	var st: Dictionary = entry["stats"]
+	var line := MenuKit.label("HP %d · ATK %d · SPD %d" % [st["health"], maxi(st["attack"], st["magic"]), st["speed"]], &"DimLabel")
+	line.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	line.clip_text = true
+	text.add_child(line)
 
-	var el_lbl := Label.new()
-	el_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	el_lbl.add_theme_font_size_override("font_size", 13)
-	el_lbl.add_theme_color_override("font_color", _cream_dim)
-	el_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	el_lbl.text = String(entry["element"])
-	col.add_child(el_lbl)
+	# Pick-order badge (top-right), shown when the unit is in the squad.
+	var order := PanelContainer.new()
+	order.add_theme_stylebox_override("panel", MenuTheme.box(MenuTheme.GOLD, MenuTheme.GOLD_LITE, 1, 999, 8, 0))
+	order.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	order.offset_left = -38
+	order.offset_top = 8
+	order.offset_right = -8
+	order.offset_bottom = 34
+	order.visible = false
+	var order_lbl := MenuKit.label("1", &"")
+	order_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	order_lbl.add_theme_color_override("font_color", MenuTheme.INK)
+	order_lbl.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	order.add_child(order_lbl)
+	btn.add_child(order)
+	_order_badges[id_str] = order
 
-	btn.add_child(col)
+	MenuKit.ignore_mouse(btn)
+	MenuNav.hover_focus(btn)
+	btn.focus_entered.connect(_show_detail.bind(id_str))
 	btn.pressed.connect(_on_unit_pressed.bind(id_str))
 	_unit_buttons[id_str] = btn
-	_unit_labels[id_str] = [name_lbl, el_lbl]
 	return btn
 
 
-func _build_actions(roster_empty: bool) -> Control:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 18)
+func _emblem(letter: String, color: Color, px: float) -> PanelContainer:
+	var p := PanelContainer.new()
+	var sb := MenuTheme.box(color.darkened(0.45), color, 2, 999, 0, 0)
+	p.add_theme_stylebox_override("panel", sb)
+	p.custom_minimum_size = Vector2(px, px)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var l := Label.new()
+	l.text = letter.to_upper()
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.add_theme_font_override("font", MenuTheme.bold_font(0.6))
+	l.add_theme_font_size_override("font_size", int(px * 0.5))
+	l.add_theme_color_override("font_color", color.lightened(0.5))
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(l)
+	return p
 
-	_back_btn = Button.new()
-	_back_btn.text = "Back"
-	_back_btn.custom_minimum_size = Vector2(160.0, 52.0)
-	_back_btn.add_theme_font_size_override("font_size", 20)
-	_back_btn.add_theme_stylebox_override("normal", _button_box(_brown.lerp(_amber, 0.10)))
-	_back_btn.add_theme_stylebox_override("hover", _button_box(_brown.lerp(_amber, 0.22)))
-	_back_btn.add_theme_stylebox_override("pressed", _button_box(_brown_dk))
-	_back_btn.add_theme_color_override("font_color", _cream)
-	_back_btn.add_theme_color_override("font_hover_color", _cream)
-	_back_btn.pressed.connect(_on_back_pressed)
-	row.add_child(_back_btn)
 
-	_confirm_btn = Button.new()
-	_confirm_btn.text = "TO BATTLE"
-	_confirm_btn.custom_minimum_size = Vector2(240.0, 52.0)
-	_confirm_btn.add_theme_font_size_override("font_size", 24)
-	_confirm_btn.add_theme_stylebox_override("normal", _button_box(_amber_lite))
-	_confirm_btn.add_theme_stylebox_override("hover", _button_box(_amber_lite.lightened(0.10)))
-	_confirm_btn.add_theme_stylebox_override("pressed", _button_box(_amber_dk))
-	_confirm_btn.add_theme_stylebox_override("disabled", _button_box(_amber.darkened(0.24).lerp(_brown, 0.15), _brown_dk))
-	_confirm_btn.add_theme_color_override("font_color", _ink)
-	_confirm_btn.add_theme_color_override("font_hover_color", _brown_dk)
-	_confirm_btn.add_theme_color_override("font_disabled_color", Color("5c4020"))
-	_confirm_btn.disabled = true
-	_confirm_btn.pressed.connect(_on_confirm_pressed)
-	# With no pickable roster there is nothing to confirm; hide it, offer only BACK.
-	_confirm_btn.visible = not roster_empty
-	row.add_child(_confirm_btn)
+# --- Detail pane -------------------------------------------------------------
 
-	return row
+func _show_detail(id_str: String) -> void:
+	var entry: Dictionary = _entries.get(id_str, {})
+	if entry.is_empty() or _detail_name == null:
+		return
+	_shown_id = id_str
+	var chr: CharacterResource = entry["chr"]
+	var ecol := MenuKit.element_color(String(entry["element"]))
+	_detail_name.text = String(entry["name"])
+	for c in _detail_tags.get_children():
+		c.queue_free()
+	_detail_tags.add_child(MenuKit.badge(String(entry["element"]), ecol))
+	_detail_tags.add_child(MenuKit.badge(String(entry["role"]), MenuTheme.TEXT_DIM))
+	if chr.movement_kind != CombatTypes.MovementKind.GROUND:
+		_detail_tags.add_child(MenuKit.badge(String(CombatTypes.MovementKind.keys()[chr.movement_kind]).capitalize(), MenuTheme.ACCENT))
+	_detail_desc.text = chr.description if chr.description != "" else "No field notes yet."
+
+	var has_model := _detail_model.show_character(chr)
+	_detail_model.visible = has_model
+	_detail_emblem.visible = not has_model
+	_detail_emblem_label.text = String(entry["name"]).left(1).to_upper()
+	_detail_emblem.add_theme_stylebox_override("panel", MenuTheme.box(ecol.darkened(0.45), ecol, 2, 999, 0, 0))
+	_detail_emblem_label.add_theme_color_override("font_color", ecol.lightened(0.5))
+
+	for c in _detail_stats.get_children():
+		c.queue_free()
+	var st: Dictionary = entry["stats"]
+	for row in STAT_ROWS:
+		var key: String = row[0]
+		var name_l := MenuKit.label(row[1], &"DimLabel")
+		name_l.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+		name_l.custom_minimum_size = Vector2(62, 0)
+		_detail_stats.add_child(name_l)
+		var bar := ProgressBar.new()
+		bar.show_percentage = false
+		bar.max_value = maxf(float(_stat_max.get(key, 1)), 1.0)
+		bar.value = float(st[key])
+		bar.custom_minimum_size = Vector2(40, 8)
+		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_detail_stats.add_child(bar)
+		var val := MenuKit.label(str(st[key]), &"")
+		val.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		val.custom_minimum_size = Vector2(30, 0)
+		_detail_stats.add_child(val)
+
+	var moves: Array[String] = []
+	for mv in chr.moveset:
+		if mv != null:
+			moves.append(mv.display_name)
+	_detail_moves.text = ("Moves: " + ", ".join(moves)) if not moves.is_empty() else ""
+	_update_detail_hint()
+
+
+func _update_detail_hint() -> void:
+	if _detail_action_hint == null or _shown_id == "":
+		return
+	if _chosen_ids.has(_shown_id):
+		_detail_action_hint.text = "In squad (#%d)" % (_chosen_ids.find(_shown_id) + 1)
+		_detail_action_hint.add_theme_color_override("font_color", MenuTheme.SUCCESS)
+	else:
+		_detail_action_hint.text = "Not in squad"
+		_detail_action_hint.remove_theme_color_override("font_color")
 
 
 # --- Selection logic --------------------------------------------------------
@@ -324,10 +478,12 @@ func _on_unit_pressed(id_str: String) -> void:
 	_hide_message()
 	_refresh_selection_visuals()
 	_update_counter()
+	# A full squad: jump to the confirm button so Confirm again starts the battle.
+	if _chosen_ids.size() >= _max_units and _confirm_btn != null and _confirm_btn.visible:
+		_confirm_btn.grab_focus()
 
 
-## Keep every button's toggled state and highlight in sync with _chosen_ids, and
-## grey out unselected units when the squad is full.
+## Keep every card's toggled state, order badge and dimming in sync with _chosen_ids.
 func _refresh_selection_visuals() -> void:
 	var full := _chosen_ids.size() >= _max_units
 	for id_str in _unit_buttons.keys():
@@ -336,27 +492,50 @@ func _refresh_selection_visuals() -> void:
 			continue
 		var selected: bool = _chosen_ids.has(id_str)
 		btn.set_pressed_no_signal(selected)
-		btn.modulate = Color(1, 1, 1, 1) if (selected or not full) else Color(1, 1, 1, 0.55)
-		# Recolor the cell text so it stays readable in either state: dark ink on the
-		# lit amber selected plate, cream on the dim unselected plate.
-		var labels: Array = _unit_labels.get(id_str, [])
-		if labels.size() == 2:
-			labels[0].add_theme_color_override("font_color", _ink if selected else _cream)
-			labels[1].add_theme_color_override("font_color", _brown_dk if selected else _cream_dim)
+		btn.modulate = Color(1, 1, 1, 1) if (selected or not full) else Color(1, 1, 1, 0.5)
+		var badge: PanelContainer = _order_badges.get(id_str)
+		if badge != null:
+			badge.visible = selected
+			if selected:
+				(badge.get_child(0) as Label).text = str(_chosen_ids.find(id_str) + 1)
 
 	if _confirm_btn != null:
 		_confirm_btn.disabled = _chosen_ids.is_empty()
-		# Make CONFIRM the default focus once a selection exists (keyboard flow).
-		if not _chosen_ids.is_empty() and not _confirm_btn.has_focus():
-			_confirm_btn.grab_focus()
+	_rebuild_slots()
+	_update_detail_hint()
+
+
+func _rebuild_slots() -> void:
+	if _slots == null:
+		return
+	for c in _slots.get_children():
+		c.queue_free()
+	for i in _max_units:
+		var filled := i < _chosen_ids.size()
+		var text := "Empty"
+		var color := MenuTheme.BORDER
+		if filled:
+			var e: Dictionary = _entries.get(String(_chosen_ids[i]), {})
+			text = "%d  %s" % [i + 1, e.get("name", _chosen_ids[i])]
+			color = MenuKit.element_color(String(e.get("element", "")))
+		var slot := PanelContainer.new()
+		var sb := MenuTheme.box(Color(color.r, color.g, color.b, 0.18) if filled else Color(0, 0, 0, 0.2),
+			color if filled else MenuTheme.BORDER_SOFT, 2, 8, 14, 6)
+		slot.add_theme_stylebox_override("panel", sb)
+		slot.custom_minimum_size = Vector2(150, 0)
+		var l := MenuKit.label(text, &"" if filled else &"MutedLabel")
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+		slot.add_child(l)
+		_slots.add_child(slot)
 
 
 func _update_counter() -> void:
 	if _counter_label == null:
 		return
-	_counter_label.text = "Choose up to %d units      Selected: %d / %d" % [
-		_max_units, _chosen_ids.size(), _max_units
-	]
+	_counter_label.text = "%d / %d" % [_chosen_ids.size(), _max_units]
+	_counter_label.add_theme_color_override("font_color",
+		MenuTheme.GOLD_LITE if _chosen_ids.size() >= _max_units else MenuTheme.CREAM)
 
 
 func _flash_limit() -> void:
@@ -380,7 +559,7 @@ func _on_confirm_pressed() -> void:
 		arena.begin_pending_run(_chosen_ids)
 		return
 
-	get_tree().change_scene_to_file(GAME_WORLD_SCENE)
+	MenuNav.change_scene(self, GAME_WORLD_SCENE)
 
 
 func _on_back_pressed() -> void:
@@ -388,23 +567,17 @@ func _on_back_pressed() -> void:
 	if _is_arena and arena != null:
 		if arena.has_method("abort_run"):
 			arena.abort_run()
-		get_tree().change_scene_to_file(ARENA_SETUP_SCENE)
+		MenuNav.change_scene(self, ARENA_SETUP_SCENE)
 		return
-	get_tree().change_scene_to_file(MAP_SELECTION_SCENE)
+	MenuNav.change_scene(self, MAP_SELECTION_SCENE)
 
 
-# --- Keyboard ---------------------------------------------------------------
+# --- Input ------------------------------------------------------------------
 
-func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
-		return
-	if event is InputEventKey:
-		match event.keycode:
-			KEY_ESCAPE:
-				_on_back_pressed()
-			KEY_ENTER, KEY_KP_ENTER:
-				if _confirm_btn != null and not _confirm_btn.disabled:
-					_on_confirm_pressed()
+func _unhandled_input(event: InputEvent) -> void:
+	if MenuNav.is_back_event(event):
+		get_viewport().set_input_as_handled()
+		_on_back_pressed()
 
 
 # --- Messages ---------------------------------------------------------------
@@ -412,7 +585,7 @@ func _input(event: InputEvent) -> void:
 func _show_message(text: String) -> void:
 	if _message_label == null:
 		return
-	_message_label.text = text
+	MenuKit.set_status(_message_label, text, "warn")
 	_message_label.visible = true
 
 
@@ -431,88 +604,14 @@ func _element_label(element: StringName) -> String:
 	return s.capitalize()
 
 
-# --- Background -------------------------------------------------------------
-
-func _build_background() -> void:
-	var bg := ColorRect.new()
-	bg.color = _bg_top
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bg)
-
-	var glow := ColorRect.new()
-	glow.color = Color(_amber.r, _amber.g, _amber.b, 0.10)
-	glow.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	glow.anchor_top = 0.45
-	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(glow)
-
-	var vignette := ColorRect.new()
-	vignette.color = Color(_bg_bottom.r, _bg_bottom.g, _bg_bottom.b, 0.55)
-	vignette.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	vignette.anchor_top = 0.6
-	vignette.offset_top = 0.0
-	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(vignette)
-
-
-# --- Styleboxes -------------------------------------------------------------
-
-func _card_box() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = _amber
-	sb.set_corner_radius_all(14)
-	sb.set_border_width_all(3)
-	sb.border_color = _brown
-	sb.set_content_margin_all(0.0)
-	sb.shadow_color = Color(0, 0, 0, 0.42)
-	sb.shadow_size = 8
-	sb.shadow_offset = Vector2(0, 4)
-	sb.anti_aliasing = true
-	return sb
-
-
-func _button_box(fill: Color, border: Color = Color(0.35, 0.23, 0.12, 1.0)) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = fill
-	sb.set_corner_radius_all(9)
-	sb.set_border_width_all(2)
-	sb.border_color = border
-	sb.content_margin_left = 12.0
-	sb.content_margin_right = 12.0
-	sb.content_margin_top = 7.0
-	sb.content_margin_bottom = 8.0
-	sb.shadow_color = Color(0, 0, 0, 0.28)
-	sb.shadow_size = 3
-	sb.shadow_offset = Vector2(0, 2)
-	return sb
-
-
-## Segmented-choice look: unselected reads as a dim inset plate; the selected
-## (pressed / toggled-on) state lights up amber so the current pick is obvious.
-func _style_choice_button(btn: Button) -> void:
-	btn.add_theme_stylebox_override("normal", _button_box(_brown.lerp(_amber, 0.14)))
-	btn.add_theme_stylebox_override("hover", _button_box(_brown.lerp(_amber, 0.28)))
-	btn.add_theme_stylebox_override("pressed", _button_box(_amber_lite))
-	btn.add_theme_stylebox_override("focus", _button_box(Color(0, 0, 0, 0), _cream))
-	btn.add_theme_color_override("font_color", _cream)
-	btn.add_theme_color_override("font_hover_color", _cream)
-	btn.add_theme_color_override("font_pressed_color", _ink)
-
-
-# --- Palette load -----------------------------------------------------------
-
-## Pull the warm colours from ConquestTheme (a verified class_name; resolves at
-## author time). The hardcoded defaults above stand in if the class is removed.
-func _load_palette() -> void:
-	_ink = ConquestTheme.INK
-	_cream = ConquestTheme.CREAM
-	_cream_dim = ConquestTheme.CREAM_DIM
-	_amber = ConquestTheme.AMBER
-	_amber_lite = ConquestTheme.AMBER_LITE
-	_amber_dk = ConquestTheme.AMBER_DK
-	_brown = ConquestTheme.BROWN
-	_brown_dk = ConquestTheme.BROWN_DK
-	_gold = ConquestTheme.EL_HOLY
-	_bg_top = ConquestTheme.INK.lerp(Color.BLACK, 0.15)
-	_bg_bottom = ConquestTheme.BROWN_DK.darkened(0.35)
+## A one-word battlefield role derived from base stats (display only).
+func _role_for(chr: CharacterResource) -> String:
+	if chr.attack_range >= 2:
+		return "Caster" if chr.base_magic > chr.base_attack else "Ranged"
+	if chr.base_magic > chr.base_attack:
+		return "Caster"
+	if chr.base_defense >= maxi(chr.base_attack, chr.base_speed):
+		return "Defender"
+	if chr.base_speed >= chr.base_attack:
+		return "Skirmisher"
+	return "Striker"
