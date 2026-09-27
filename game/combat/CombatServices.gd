@@ -133,6 +133,9 @@ func advance_weather(round_number: int) -> void:
 
 func _on_weather_changed(now, previous) -> void:
 	_douse_suppressed_tile_effects()
+	if DisplayServer.get_name() == "headless" and now != null:
+		# Server / bot logs: lets the multi-process net check show the weather moving.
+		print("[Weather] round %d -> %s" % [weather.round, now.id])
 	weather_changed.emit(now, previous)
 
 

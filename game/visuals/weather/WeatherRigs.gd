@@ -104,7 +104,7 @@ static func _sun() -> Node3D:
 static func _sand() -> Node3D:
 	var rig := _rig("SandRig")
 	# Fast horizontal sand streaks.
-	var grit := _layer(rig, "Grit", 1300, Vector2(0.55, 0.035), soft_dot_texture(), Color(0.93, 0.76, 0.5), 0.75, false)
+	var grit := _layer(rig, "Grit", 1600, Vector2(0.9, 0.055), soft_dot_texture(0.2), Color(1.0, 0.9, 0.72), 0.95, false)
 	grit.lifetime = 1.5
 	grit.direction = Vector3(1.0, -0.05, 0.25)
 	grit.spread = 6.0
@@ -113,7 +113,7 @@ static func _sand() -> Node3D:
 	grit.gravity = Vector3(0, -0.5, 0)
 	_set_box(rig, grit, Vector3(0.8, 4.0, 0.8), 3.5)
 	# Big soft dust sheets rolling across the field.
-	var sheets := _layer(rig, "DustSheets", 70, Vector2(11.0, 4.5), soft_dot_texture(), Color(0.86, 0.64, 0.4), 0.24, false)
+	var sheets := _layer(rig, "DustSheets", 80, Vector2(12.0, 5.0), soft_dot_texture(), Color(0.74, 0.52, 0.32), 0.42, false)
 	sheets.lifetime = 7.0
 	sheets.direction = Vector3(1.0, 0.0, 0.2)
 	sheets.spread = 8.0
@@ -142,7 +142,7 @@ static func _sand() -> Node3D:
 static func _bloom() -> Node3D:
 	var rig := _rig("BloomRig")
 	# Pollen motes drifting up and sideways.
-	var pollen := _layer(rig, "Pollen", 380, Vector2(0.1, 0.1), soft_dot_texture(), Color(1.0, 0.93, 0.45), 0.95, true)
+	var pollen := _layer(rig, "Pollen", 420, Vector2(0.14, 0.14), soft_dot_texture(0.2), Color(1.0, 0.9, 0.4), 1.0, true)
 	pollen.lifetime = 7.0
 	pollen.direction = Vector3(0.4, 0.5, 0.2)
 	pollen.spread = 120.0
@@ -154,7 +154,7 @@ static func _bloom() -> Node3D:
 	pollen.color_ramp = _pulse_ramp(Color(1, 1, 1, 1))
 	_set_box(rig, pollen, Vector3(0.6, 3.0, 0.6), 3.0)
 	# Tumbling petals.
-	var petals := _layer(rig, "Petals", 190, Vector2(0.26, 0.15), soft_dot_texture(0.35), Color(1, 1, 1), 0.95, false)
+	var petals := _layer(rig, "Petals", 280, Vector2(0.4, 0.24), soft_dot_texture(0.45), Color(1, 1, 1), 1.0, false)
 	petals.lifetime = 8.0
 	petals.direction = Vector3(0.6, -0.3, 0.2)
 	petals.spread = 40.0
@@ -168,7 +168,7 @@ static func _bloom() -> Node3D:
 	petals.color_initial_ramp = _palette([Color(1.0, 0.62, 0.82), Color(1.0, 0.86, 0.93), Color(0.86, 0.66, 1.0), Color(1.0, 0.74, 0.7)])
 	_set_box(rig, petals, Vector3(0.6, 2.5, 0.6), 6.0)
 	# Glowing flower specks twinkling on the ground.
-	var specks := _layer(rig, "Specks", 230, Vector2(0.16, 0.16), star_texture(), Color(1, 1, 1), 0.95, true)
+	var specks := _layer(rig, "Specks", 300, Vector2(0.26, 0.26), star_texture(), Color(1, 1, 1), 1.0, true)
 	specks.lifetime = 2.8
 	specks.initial_velocity_min = 0.0
 	specks.initial_velocity_max = 0.05

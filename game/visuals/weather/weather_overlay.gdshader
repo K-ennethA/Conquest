@@ -73,7 +73,8 @@ void fragment() {
 		float n = fbm(p);
 		float n2 = fbm(p * 2.3 + vec2(-TIME * 0.9, 0.0));
 		float band = mix(1.0, 0.55, uv.y);
-		float a = (0.18 + 0.30 * n * band + 0.12 * n2) * sand_amt;
+		float billow = smoothstep(0.32, 0.78, n);
+		float a = (0.09 + 0.5 * billow * band + 0.10 * smoothstep(0.4, 0.8, n2)) * sand_amt;
 		vec3 sand = mix(vec3(0.72, 0.48, 0.26), vec3(0.95, 0.75, 0.48), n2);
 		mix_col = vec4(mix(mix_col.rgb, sand, a / max(a + mix_col.a, 0.001)), clamp(mix_col.a + a, 0.0, 0.75));
 	}
@@ -85,8 +86,7 @@ void fragment() {
 		float edge = smoothstep(0.35, 1.2, length(c));
 		float shimmer = 0.5 + 0.5 * sin(TIME * 0.6 + uv.x * 3.0 + uv.y * 2.0);
 		vec3 pastel = mix(vec3(1.0, 0.62, 0.85), vec3(1.0, 0.9, 0.55), uv.y + 0.2 * shimmer);
-		add_rgb += pastel * edge * 0.22 * bloom_amt;
-		add_rgb += vec3(1.0, 0.85, 0.95) * 0.03 * bloom_amt;
+		add_rgb += pastel * edge * 0.16 * bloom_amt;
 	}
 
 	// Composite (premultiplied): out = rgb + dst * (1 - a). The haze/tint part is a

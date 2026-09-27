@@ -656,6 +656,19 @@ func get_weather_settings() -> Dictionary:
 	}
 
 
+## Short label for map lists ("Rain", "Dynamic weather", "Changing weather"); ""
+## for a permanently Clear map.
+func weather_summary() -> String:
+	match weather_mode:
+		"dynamic":
+			return "Dynamic weather"
+		"schedule":
+			return "Changing weather"
+	if weather == "" or weather == "clear":
+		return ""
+	return Weather.get_weather(weather).display_name
+
+
 ## Apply a settings dictionary (the inverse of [method get_weather_settings]).
 func set_weather_settings(settings: Dictionary) -> void:
 	var n := WeatherState.normalize_settings(settings)

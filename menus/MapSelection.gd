@@ -315,6 +315,8 @@ func _badges_for(res: MapResource) -> HBoxContainer:
 		row.add_child(MenuKit.badge("Boss", MenuTheme.DANGER))
 	if not res.is_active():
 		row.add_child(MenuKit.badge("Draft", MenuTheme.WARNING))
+	if res.has_method("weather_summary") and res.weather_summary() != "":
+		row.add_child(MenuKit.badge(res.weather_summary(), Weather.get_weather(res.weather).color))
 	return row
 
 
