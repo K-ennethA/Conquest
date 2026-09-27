@@ -9,7 +9,7 @@ class_name GameOverScreen
 # Code-built like TerrainInfoPanel / CombatForecastPanel: the .tscn is just a
 # full-rect Control shell with this script attached, and _ready() builds the
 # backdrop, result card, banner, and buttons, then themes them with the amber
-# battle HUD look (ConquestTheme). Hidden by default; GameWorldManager decides
+# out-of-battle menu look (MenuTheme). Hidden by default; GameWorldManager decides
 # the outcome and calls show_victory()/show_defeat() (or show_result()).
 #
 # Idempotent: once shown it ignores further calls (`_shown`), so multiple
@@ -133,21 +133,30 @@ func _create_ui() -> void:
 	_quit_button.pressed.connect(_on_quit_pressed)
 	_button_box.add_child(_quit_button)
 
-	# Amber HUD look. apply_to strips baked font_color overrides, so the banner
-	# outline / subtitle tint / per-outcome banner colour are all set AFTER it so
-	# they survive.
-	ConquestTheme.apply_to(self)
+	# Shared menu look (MenuTheme): a dark navy card with a gold frame so the gold
+	# VICTORY / red DEFEAT banner reads with strong contrast, and the same button
+	# states (gold focus ring, gold primary action) as the menus it leads back to.
+	theme = MenuTheme.build()
+	var card_sb := MenuTheme.card_box(MenuTheme.PANEL, MenuTheme.GOLD_DK)
+	card_sb.set_border_width_all(2)
+	card_sb.set_content_margin_all(28)
+	_card.add_theme_stylebox_override("panel", card_sb)
+	_rematch_button.theme_type_variation = &"PrimaryButton"
+	_quit_button.theme_type_variation = &"GhostButton"
+	for b in [_rematch_button, _menu_button, _quit_button]:
+		MenuNav.hover_focus(b)
 
-	# Punchy dark outline on the big banner, and a muted subtitle.
-	_banner_label.add_theme_constant_override("outline_size", 8)
-	_banner_label.add_theme_color_override("font_outline_color", ConquestTheme.BROWN_DK)
-	_subtitle_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
+	# Punchy dark outline on the big banner, and a softer subtitle.
+	_banner_label.add_theme_font_override("font", MenuTheme.bold_font(0.8, 6))
+	_banner_label.add_theme_constant_override("outline_size", 10)
+	_banner_label.add_theme_color_override("font_outline_color", Color("1a1206"))
+	_subtitle_label.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
 
 
 func _make_button(text: String) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(0, 44)
+	b.custom_minimum_size = Vector2(0, 50)
 	b.focus_mode = Control.FOCUS_ALL
 	return b
 

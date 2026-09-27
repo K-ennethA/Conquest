@@ -423,7 +423,7 @@ static func _build_lists_and_tabs(t: Theme) -> void:
 		t.set_color("font_hovered_color", type, CREAM)
 		t.set_font_size("font_size", type, FS_BODY)
 		t.set_constant("h_separation", type, 4)
-	var tab_panel := box(Color(PANEL.r, PANEL.g, PANEL.b, 0.9), BORDER_SOFT, 1, 0, 0, 0)
+	var tab_panel := box(Color(PANEL.r, PANEL.g, PANEL.b, 0.9), BORDER_SOFT, 1, 0, 16, 14)
 	tab_panel.corner_radius_bottom_left = 12
 	tab_panel.corner_radius_bottom_right = 12
 	tab_panel.corner_radius_top_right = 12

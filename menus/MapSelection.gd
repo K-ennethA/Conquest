@@ -28,6 +28,7 @@ var back_button: Button
 var _card_group := ButtonGroup.new()
 var _cards: Array[Button] = []
 var _count_label: Label
+var _scroll: ScrollContainer
 var _preview: MapPreview3D
 var _name_label: Label
 var _badges: HBoxContainer
@@ -69,7 +70,18 @@ func _ready() -> void:
 	_difficulty_row.visible = not versus
 	_load_available_maps()
 	if not _cards.is_empty():
-		MenuNav.focus_deferred(_cards[maxi(_selected_index, 0)])
+		_reveal_selected_card()
+
+
+## Focus the selected card and scroll it into view once layout has settled.
+func _reveal_selected_card() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if _cards.is_empty() or not is_inside_tree():
+		return
+	var card := _cards[clampi(_selected_index, 0, _cards.size() - 1)]
+	card.grab_focus()
+	_scroll.ensure_control_visible(card)
 
 
 func _build_body(body: VBoxContainer) -> void:
@@ -86,6 +98,7 @@ func _build_body(body: VBoxContainer) -> void:
 	_count_label = MenuKit.section("Maps")
 	left.add_child(_count_label)
 	var scroll := ScrollContainer.new()
+	_scroll = scroll
 	scroll.name = "MapScroll"
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED

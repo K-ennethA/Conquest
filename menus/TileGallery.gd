@@ -29,9 +29,14 @@ var tile_types = ["All", "NORMAL", "DIFFICULT_TERRAIN", "WATER", "WALL", "SPECIA
 var sort_options = ["Name", "Type", "Movement Cost", "Rarity", "Effect Count"]
 
 func _ready() -> void:
+	theme = MenuTheme.build()
 	_create_ui()
 	_load_all_tiles()
 	_setup_connections()
+	# Open on the first tile so the detail pane is never blank.
+	if tile_list != null and not filtered_tiles.is_empty():
+		tile_list.select(0)
+		_on_tile_selected(0)
 	print("Tile Gallery initialized with " + str(all_tiles.size()) + " tiles")
 
 func _create_ui() -> void:
@@ -41,13 +46,13 @@ func _create_ui() -> void:
 	
 	# Main container
 	var main_container = HBoxContainer.new()
+	main_container.add_theme_constant_override("separation", 20)
 	main_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(main_container)
 	
 	# Left panel - Tile list and controls
 	var left_panel = VBoxContainer.new()
-	left_panel.custom_minimum_size = Vector2(300, 0)
-	left_panel.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	left_panel.custom_minimum_size = Vector2(320, 0)
 	main_container.add_child(left_panel)
 	
 	# Title and back button
@@ -105,7 +110,7 @@ func _create_ui() -> void:
 	
 	tile_list = ItemList.new()
 	tile_list.set_v_size_flags(Control.SIZE_EXPAND_FILL)
-	tile_list.custom_minimum_size = Vector2(280, 400)
+	tile_list.custom_minimum_size = Vector2(280, 120)
 	controls_container.add_child(tile_list)
 	
 	# Right panel - Tile details
@@ -141,7 +146,7 @@ func _create_tile_display(parent: VBoxContainer) -> void:
 	# Description
 	var desc_label = Label.new()
 	desc_label.text = "Description:"
-	desc_label.add_theme_font_size_override("font_size", 14)
+	desc_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	tile_display_container.add_child(desc_label)
 	
 	tile_description = RichTextLabel.new()
@@ -152,7 +157,7 @@ func _create_tile_display(parent: VBoxContainer) -> void:
 	# 3D Tile preview
 	var preview_label = Label.new()
 	preview_label.text = "3D Preview:"
-	preview_label.add_theme_font_size_override("font_size", 14)
+	preview_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	tile_display_container.add_child(preview_label)
 	
 	var viewport_container = SubViewportContainer.new()
@@ -171,7 +176,7 @@ func _create_tile_display(parent: VBoxContainer) -> void:
 	# Properties section
 	var properties_label = Label.new()
 	properties_label.text = "Properties:"
-	properties_label.add_theme_font_size_override("font_size", 14)
+	properties_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	tile_display_container.add_child(properties_label)
 	
 	properties_container = VBoxContainer.new()
@@ -180,7 +185,7 @@ func _create_tile_display(parent: VBoxContainer) -> void:
 	# Effects section
 	var effects_label = Label.new()
 	effects_label.text = "Tile Effects:"
-	effects_label.add_theme_font_size_override("font_size", 14)
+	effects_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	tile_display_container.add_child(effects_label)
 	
 	effects_container = VBoxContainer.new()
@@ -473,11 +478,11 @@ func _display_tile(tile: TileResource) -> void:
 			"Common":
 				tile_type_label.modulate = Color.WHITE
 			"Uncommon":
-				tile_type_label.modulate = Color.GREEN
+				tile_type_label.modulate = MenuTheme.SUCCESS
 			"Rare":
-				tile_type_label.modulate = Color.BLUE
+				tile_type_label.modulate = MenuTheme.ACCENT
 			"Epic":
-				tile_type_label.modulate = Color.PURPLE
+				tile_type_label.modulate = Color("c49cff")
 			"Legendary":
 				tile_type_label.modulate = Color.GOLD
 	
@@ -571,7 +576,7 @@ func _update_tile_effects(tile: TileResource) -> void:
 	if not tile.has_default_effects:
 		var no_effects = Label.new()
 		no_effects.text = "This tile has no special effects"
-		no_effects.modulate = Color.GRAY
+		no_effects.modulate = MenuTheme.TEXT_MUTED
 		effects_container.add_child(no_effects)
 		return
 	
@@ -581,7 +586,7 @@ func _update_tile_effects(tile: TileResource) -> void:
 	if effects.is_empty():
 		var no_effects = Label.new()
 		no_effects.text = "No effects configured"
-		no_effects.modulate = Color.GRAY
+		no_effects.modulate = MenuTheme.TEXT_MUTED
 		effects_container.add_child(no_effects)
 	else:
 		for effect in effects:
@@ -594,7 +599,7 @@ func _update_tile_effects(tile: TileResource) -> void:
 			
 			var effect_name = Label.new()
 			effect_name.text = "• " + effect.effect_name
-			effect_name.add_theme_font_size_override("font_size", 14)
+			effect_name.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 			effect_header.add_child(effect_name)
 			
 			var effect_type = Label.new()
@@ -623,13 +628,13 @@ func _update_tile_effects(tile: TileResource) -> void:
 			var effect_props = Label.new()
 			effect_props.text = props_text
 			effect_props.modulate = Color.YELLOW
-			effect_props.add_theme_font_size_override("font_size", 12)
+			effect_props.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 			effect_container.add_child(effect_props)
 
 # Signal handlers
 func _on_back_pressed() -> void:
 	"""Handle back button press"""
-	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
+	MenuNav.change_scene(self, "res://menus/MainMenu.tscn")
 
 func _on_tile_selected(index: int) -> void:
 	"""Handle tile selection from list"""

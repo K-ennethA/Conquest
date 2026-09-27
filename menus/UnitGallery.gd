@@ -24,7 +24,7 @@ const CAT_MAGICAL := Color("a860e0")    # arcane violet
 const CAT_TRUE := Color("f0913c")       # piercing orange
 const ABILITY_ACCENT := Color("5fb84e") # passives read as "nature" green
 
-const MUTED := Color(0.72, 0.70, 0.78)
+const MUTED := MenuTheme.TEXT_MUTED
 
 # Turntable speed for the model preview (radians / second) - slow, like the old tween.
 const MODEL_SPIN_SPEED := 0.45
@@ -56,6 +56,7 @@ var all_characters: Array[CharacterResource] = []
 var filtered_characters: Array[CharacterResource] = []
 var current_character: CharacterResource
 var current_model_instance: Node3D
+var _portrait_slot: PanelContainer
 
 # THE source of truth for what is displayed: an index into filtered_characters.
 # -1 means "nothing shown" (empty filter result).
@@ -86,6 +87,7 @@ func _create_ui() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	var main_container := HBoxContainer.new()
+	main_container.add_theme_constant_override("separation", 20)
 	main_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(main_container)
 
@@ -140,7 +142,7 @@ func _create_ui() -> void:
 
 	unit_list = ItemList.new()
 	unit_list.set_v_size_flags(Control.SIZE_EXPAND_FILL)
-	unit_list.custom_minimum_size = Vector2(280, 320)
+	unit_list.custom_minimum_size = Vector2(280, 120)
 	left_panel.add_child(unit_list)
 
 	# --- Right panel: pager + scrolling detail ---
@@ -199,7 +201,9 @@ func _create_unit_display(parent: VBoxContainer) -> void:
 	var header_container := HBoxContainer.new()
 	unit_display_container.add_child(header_container)
 
-	var portrait_slot := PanelContainer.new()
+	header_container.add_theme_constant_override("separation", 16)
+	_portrait_slot = PanelContainer.new()
+	var portrait_slot := _portrait_slot
 	portrait_slot.custom_minimum_size = Vector2(120, 120)
 	header_container.add_child(portrait_slot)
 
@@ -226,7 +230,7 @@ func _create_unit_display(parent: VBoxContainer) -> void:
 	info_container.add_child(unit_name_label)
 
 	unit_type_label = Label.new()
-	unit_type_label.add_theme_font_size_override("font_size", 14)
+	unit_type_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	unit_type_label.modulate = MUTED
 	unit_type_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info_container.add_child(unit_type_label)
@@ -242,17 +246,14 @@ func _create_unit_display(parent: VBoxContainer) -> void:
 	# --- 3D model ---
 	unit_display_container.add_child(_section_header("Model"))
 
-	model_viewport_container = SubViewportContainer.new()
-	model_viewport_container.custom_minimum_size = Vector2(300, 200)
-	model_viewport_container.stretch = true
-	unit_display_container.add_child(model_viewport_container)
-
-	unit_model_viewport = SubViewport.new()
-	unit_model_viewport.size = Vector2i(300, 200)
-	unit_model_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	model_viewport_container.add_child(unit_model_viewport)
-
-	_setup_model_viewport()
+	# Auto-framed turntable render (shared UnitPreview3D component).
+	var preview := UnitPreview3D.new()
+	preview.background_color = Color(0.07, 0.08, 0.15, 1.0)
+	preview.custom_minimum_size = Vector2(300, 260)
+	model_viewport_container = preview
+	unit_display_container.add_child(preview)
+	preview._ensure()
+	unit_model_viewport = preview.viewport
 
 	# Most roster characters have no model_scene yet; they get this instead of an
 	# empty black viewport.
@@ -291,34 +292,9 @@ func _create_unit_display(parent: VBoxContainer) -> void:
 func _section_header(text: String) -> Label:
 	var label := Label.new()
 	label.text = text.to_upper()
-	label.add_theme_font_size_override("font_size", 14)
+	label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	label.modulate = MenuTheme.GOLD
 	return label
-
-
-func _setup_model_viewport() -> void:
-	"""Set up the 3D model viewport with camera and lighting"""
-	if not unit_model_viewport:
-		return
-
-	var camera := Camera3D.new()
-	# look_at_from_position orients without requiring the node be in the tree yet
-	# (plain look_at() errors here because it is called before add_child()).
-	camera.look_at_from_position(Vector3(0, 1.5, 3), Vector3(0, 1, 0), Vector3.UP)
-	unit_model_viewport.add_child(camera)
-
-	var light := DirectionalLight3D.new()
-	light.look_at_from_position(Vector3(2, 3, 2), Vector3(0, 0, 0), Vector3.UP)
-	light.light_energy = 1.1
-	unit_model_viewport.add_child(light)
-
-	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.09, 0.09, 0.13, 1.0)
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.45, 0.42, 0.52, 1.0)
-	env.ambient_light_energy = 0.4
-	camera.environment = env
 
 
 func _setup_connections() -> void:
@@ -616,9 +592,14 @@ func _update_portrait(character: CharacterResource) -> void:
 	unit_portrait.visible = texture != null
 	if portrait_placeholder:
 		portrait_placeholder.visible = texture == null
+	# No authored portrait: drop the empty frame (the 3D model below shows the unit).
+	if _portrait_slot:
+		_portrait_slot.visible = texture != null
 
 
 func _clear_model() -> void:
+	if model_viewport_container is UnitPreview3D:
+		(model_viewport_container as UnitPreview3D).clear()
 	if current_model_instance != null:
 		if is_instance_valid(current_model_instance):
 			var parent: Node = current_model_instance.get_parent()
@@ -639,27 +620,14 @@ func _update_model(character: CharacterResource) -> void:
 	if not unit_model_viewport:
 		return
 
-	var packed: PackedScene = character.model_scene
-	if packed == null:
+	var preview := model_viewport_container as UnitPreview3D
+	if preview == null or not preview.show_character(character):
 		_show_model_placeholder()
 		return
-
-	var instance: Node = packed.instantiate()
-	if instance is Node3D:
-		current_model_instance = instance as Node3D
-		unit_model_viewport.add_child(current_model_instance)
-		current_model_instance.position = Vector3.ZERO
-		current_model_instance.rotation = Vector3.ZERO
-		if model_viewport_container:
-			model_viewport_container.visible = true
-		if model_placeholder:
-			model_placeholder.visible = false
-		return
-
-	# Something non-spatial was authored there - drop it and show the placeholder.
-	if instance != null:
-		instance.free()
-	_show_model_placeholder()
+	if model_viewport_container:
+		model_viewport_container.visible = true
+	if model_placeholder:
+		model_placeholder.visible = false
 
 
 func _show_model_placeholder() -> void:
@@ -773,7 +741,7 @@ func _build_move_card(move: MoveResource) -> PanelContainer:
 
 	var tag := Label.new()
 	tag.text = _move_tag_text(move)
-	tag.add_theme_font_size_override("font_size", 12)
+	tag.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	tag.modulate = accent
 	header.add_child(tag)
 
@@ -786,7 +754,7 @@ func _build_move_card(move: MoveResource) -> PanelContainer:
 	# Key stats.
 	var stats := Label.new()
 	stats.text = _move_stats_text(move)
-	stats.add_theme_font_size_override("font_size", 12)
+	stats.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	stats.modulate = MUTED
 	stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stats.set_h_size_flags(Control.SIZE_EXPAND_FILL)
@@ -796,7 +764,7 @@ func _build_move_card(move: MoveResource) -> PanelContainer:
 	var effect_text: String = _join_effects(move.effects)
 	if not effect_text.is_empty():
 		var effects_label := _wrapped_label("Effect: " + effect_text)
-		effects_label.add_theme_font_size_override("font_size", 13)
+		effects_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 		body.add_child(effects_label)
 
 	return card
@@ -895,7 +863,7 @@ func _build_ability_card(ability: AbilityResource) -> PanelContainer:
 
 	var tag := Label.new()
 	tag.text = _trigger_label(ability.trigger)
-	tag.add_theme_font_size_override("font_size", 12)
+	tag.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	tag.modulate = ABILITY_ACCENT
 	header.add_child(tag)
 
@@ -906,7 +874,7 @@ func _build_ability_card(ability: AbilityResource) -> PanelContainer:
 
 	var stats := Label.new()
 	stats.text = _ability_stats_text(ability)
-	stats.add_theme_font_size_override("font_size", 12)
+	stats.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	stats.modulate = MUTED
 	stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stats.set_h_size_flags(Control.SIZE_EXPAND_FILL)
@@ -915,13 +883,13 @@ func _build_ability_card(ability: AbilityResource) -> PanelContainer:
 	var effect_text: String = _join_effects(ability.effects)
 	if not effect_text.is_empty():
 		var effects_label := _wrapped_label("Effect: " + effect_text)
-		effects_label.add_theme_font_size_override("font_size", 13)
+		effects_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 		body.add_child(effects_label)
 
 	var rules_text: String = _rule_modifiers_text(ability)
 	if not rules_text.is_empty():
 		var rules_label := _wrapped_label("Rules: " + rules_text)
-		rules_label.add_theme_font_size_override("font_size", 13)
+		rules_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 		body.add_child(rules_label)
 
 	return card
@@ -1110,7 +1078,7 @@ func _trigger_label(trigger: int) -> String:
 # ---------------------------------------------------------------------------
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
+	MenuNav.change_scene(self, "res://menus/MainMenu.tscn")
 
 
 func _on_unit_selected(index: int) -> void:
