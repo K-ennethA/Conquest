@@ -118,6 +118,9 @@ func _ready() -> void:
 	# map load's board_ready makes the cursor broadcast the initial view.
 	var cutaway := FloorCutaway.new()
 	add_child(cutaway)
+	# Unit facing (visual only): rest facing toward the nearest enemy, attacker /
+	# target facing on every move. Before the map load so it hears board_ready.
+	add_child(FacingController.new())
 
 	# Load the selected map or default map
 	await _load_selected_map()
