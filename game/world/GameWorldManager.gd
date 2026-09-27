@@ -772,6 +772,9 @@ func _input(event: InputEvent) -> void:
 
 func _test_unit_action() -> void:
 	"""Test unit action for debugging"""
+	# Never mutate a network match locally (it would desync this peer).
+	if GameModeManager and GameModeManager.is_multiplayer_active():
+		return
 	if not TurnSystemManager.has_active_turn_system():
 		return
 	
