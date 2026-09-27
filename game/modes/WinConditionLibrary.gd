@@ -96,7 +96,7 @@ static func build_one(name: String, faction: int, special_rules: Array = [], tur
 		if cell != null:
 			var ct := CaptureThrone.new()
 			ct.faction = faction
-			ct.target_cell = cell
+			ct.target_cell = cell if cell is Vector3i else Cells.lift(cell)
 			return ct
 		print("[WinConditionLibrary] '%s' has no objective cell -- falling back to Eliminate All Enemies." % name)
 		return _defeat_all(faction)

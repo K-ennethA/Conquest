@@ -32,6 +32,11 @@ class_name TileResource
 @export var base_movement_cost: int = 1
 @export var is_passable: bool = true
 @export var blocks_line_of_sight: bool = false
+## Multi-floor: when this tile is placed on an UPPER floor (f > 0) it is a ceiling
+## for the cell directly below and blocks line of sight through it (see
+## [LineOfSight]). Clear it for see-through decks (grates, rope bridges). Has no
+## effect on floor 0.
+@export var solid_ceiling: bool = true
 
 # Visual Properties
 

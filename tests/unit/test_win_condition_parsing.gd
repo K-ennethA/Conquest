@@ -13,9 +13,9 @@ class MockUnit:
 
 class MockBoard:
 	var placements: Array = []
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func units_at(cell: Vector2i) -> Array:
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -60,11 +60,11 @@ func test_seize_reads_throne_marker_from_special_rules():
 	var rules := ["some_other_rule", "objective:THRONE:-1:7:5"]
 	var c := WinConditionLibrary.build_one("Seize Throne", 0, rules)
 	assert_true(c is CaptureThrone, "Seize -> CaptureThrone")
-	assert_eq((c as CaptureThrone).target_cell, Vector2i(7, 5))
+	assert_eq((c as CaptureThrone).target_cell, Vector3i(7, 5, 0))
 
 func test_seize_inline_cell_wins_over_marker():
 	var c := WinConditionLibrary.build_one("Capture (2, 3)", 0, ["objective:THRONE:-1:7:5"])
-	assert_eq((c as CaptureThrone).target_cell, Vector2i(2, 3))
+	assert_eq((c as CaptureThrone).target_cell, Vector3i(2, 3, 0))
 
 func test_seize_without_any_cell_falls_back_to_defeat_all():
 	var c := WinConditionLibrary.build_one("Seize Throne", 0, [])
@@ -81,7 +81,7 @@ func test_build_rules_for_map_threads_marker_and_limit():
 	var rules := WinConditionLibrary.build_rules_for_map(map)
 	assert_eq(rules.win_conditions.size(), 1)
 	assert_true(rules.win_conditions[0] is CaptureThrone)
-	assert_eq((rules.win_conditions[0] as CaptureThrone).target_cell, Vector2i(4, 4))
+	assert_eq((rules.win_conditions[0] as CaptureThrone).target_cell, Vector3i(4, 4, 0))
 
 
 # --- Turn counter ----------------------------------------------------------------
@@ -122,9 +122,9 @@ func test_seize_rules_resolve_when_ally_stands_on_throne():
 	var ally := MockUnit.new(0)
 	var enemy := MockUnit.new(1)
 	var board := MockBoard.new()
-	board.place(ally, Vector2i(1, 1))
-	board.place(enemy, Vector2i(9, 9))
+	board.place(ally, Vector3i(1, 1, 0))
+	board.place(enemy, Vector3i(9, 9, 0))
 	var state := { "units": board.all_units(), "board": board, "turn": 0 }
 	assert_eq(rules.evaluate(state), GameModeRules.Outcome.ONGOING)
-	board.placements[0].cell = Vector2i(5, 5)
+	board.placements[0].cell = Vector3i(5, 5, 0)
 	assert_eq(rules.evaluate(state), GameModeRules.Outcome.VICTORY, "ally on the throne wins")

@@ -4,7 +4,7 @@ class_name CombatTypes
 ## Shared enums for the combat / move system.
 ##
 ## Neutral, game-agnostic vocabulary (no external-franchise terms). Board cells
-## are [Vector2i] in the combat module's own space; the live board adapter maps
+## are [Vector3i] in the combat module's own space; the live board adapter maps
 ## those to the game's Vector3 grid.
 
 ## Who a move is allowed to affect at a given cell.

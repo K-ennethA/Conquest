@@ -86,10 +86,10 @@ func run(unit, board) -> Array:
 	var events: Array = []
 	if unit == null or board == null:
 		return events
-	var cell: Vector2i = Vector2i.ZERO
+	var cell: Vector3i = Vector3i.ZERO
 	if board.has_method("cell_of"):
 		cell = board.cell_of(unit)
-	var ctx := MoveContext.new(unit, board, _self_move(), cell, [cell] as Array[Vector2i])
+	var ctx := MoveContext.new(unit, board, _self_move(), cell, [cell] as Array[Vector3i])
 	for effect in effects:
 		if effect:
 			effect.apply(ctx)

@@ -48,8 +48,8 @@ func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
 	# this gate is a no-op in unit tests.)
 	var fire_lane: bool = true
 	if _is_defensive(actor):
-		var origin: Vector2i = board.cell_of(actor) if (board != null and board.has_method("cell_of")) else Vector2i.ZERO
-		var home: Vector2i = _effective_home(actor, origin)
+		var origin: Vector3i = board.cell_of(actor) if (board != null and board.has_method("cell_of")) else Vector3i.ZERO
+		var home: Vector3i = _effective_home(actor, origin)
 		fire_lane = _hostile_within_aggro(actor, home, _list_hostiles(actor, board), board)
 	if fire_lane:
 		var lane := _hazard_lane_plan(actor, full, board)
@@ -86,7 +86,7 @@ func _advance_phase(actor) -> int:
 func _hazard_lane_plan(actor, moveset: Array, board) -> Dictionary:
 	if actor == null or board == null or not board.has_method("cell_of"):
 		return {}
-	var origin: Vector2i = board.cell_of(actor)
+	var origin: Vector3i = board.cell_of(actor)
 	var hostiles := _list_hostiles(actor, board)
 	if hostiles.is_empty():
 		return {}
@@ -102,7 +102,7 @@ func _hazard_lane_plan(actor, moveset: Array, board) -> Dictionary:
 		var best_target = null
 		var best_dist: int = 1 << 30
 		for h in hostiles:
-			var hc: Vector2i = board.cell_of(h)
+			var hc: Vector3i = board.cell_of(h)
 			if not _is_cardinally_aligned(origin, hc):
 				continue
 			var d := _manhattan(origin, hc)
@@ -119,7 +119,7 @@ func _hazard_lane_plan(actor, moveset: Array, board) -> Dictionary:
 				best_target = h
 		if best_target == null:
 			continue
-		var tcell: Vector2i = board.cell_of(best_target)
+		var tcell: Vector3i = board.cell_of(best_target)
 		return {
 			"action": ActionType.MOVE,
 			"move": move,
@@ -157,7 +157,7 @@ func _move_is_ready(actor, move) -> bool:
 
 ## Same row or column as [param a], and not the same cell -- the alignment under
 ## which a cardinal aim sweeps a lane through [param b].
-static func _is_cardinally_aligned(a: Vector2i, b: Vector2i) -> bool:
+static func _is_cardinally_aligned(a: Vector3i, b: Vector3i) -> bool:
 	if a == b:
 		return false
 	return a.x == b.x or a.y == b.y

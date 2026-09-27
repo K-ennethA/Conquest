@@ -129,11 +129,12 @@ func _ready() -> void:
 ## marks it as having already acted so it holds the summon turn and only acts next turn
 ## (the same "summoning sickness" [SpawnManager]'s runtime spawns use). Returns the new
 ## [Unit], or null if the summon could not be placed. Null-safe end to end.
-func summon_unit(character_id: StringName, cell: Vector2i, player_id: int, stance: String = "aggressive") -> Node:
+func summon_unit(character_id: StringName, cell: Vector3i, player_id: int, stance: String = "aggressive") -> Node:
 	if map_loader == null:
 		return null
 	var unit = map_loader.spawn_unit_now({
-		"position": cell,
+		"position": Cells.flat(cell),
+		"floor": cell.z,
 		"player_id": player_id,
 		"character_id": String(character_id),
 		"spawn_kind": "Reinforcement",
@@ -628,7 +629,7 @@ func _on_turn_system_activated_tile_effects(ts) -> void:
 	if ts != null and not ts.turn_started.is_connected(_on_player_turn_started_tile_effects):
 		ts.turn_started.connect(_on_player_turn_started_tile_effects)
 
-func _prime_tile_effects(cell: Vector2i):
+func _prime_tile_effects(cell: Vector3i):
 	"""Feed the system the effects on `cell` (base + runtime) through its injected
 	lookup, recomputed each event so tile transforms and runtime ignite/douse are
 	always reflected. Returns the live board, or null if it/the system is absent."""
@@ -641,11 +642,11 @@ func _prime_tile_effects(cell: Vector2i):
 	return board
 
 func _on_unit_moved_tile_effects(unit, from_position, to_position) -> void:
-	"""Terrain enter/exit hook. from/to are Vector3(col, 0, row) grid coords."""
+	"""Terrain enter/exit hook. from/to are Vector3(col, floor, row) grid coords."""
 	if unit == null or _tile_effect_system == null:
 		return
-	var from_cell := Vector2i(int(round(from_position.x)), int(round(from_position.z)))
-	var to_cell := Vector2i(int(round(to_position.x)), int(round(to_position.z)))
+	var from_cell := Cells.from_grid(from_position)
+	var to_cell := Cells.from_grid(to_position)
 	var board = _prime_tile_effects(from_cell)
 	if board != null:
 		_tile_effect_system.on_exit(unit, from_cell, board)
@@ -663,7 +664,7 @@ func _on_player_turn_started_tile_effects(player) -> void:
 	for unit in player.owned_units:
 		if unit == null:
 			continue
-		var cell: Vector2i = board.cell_of(unit)
+		var cell: Vector3i = board.cell_of(unit)
 		_prime_tile_effects(cell)
 		_tile_effect_system.on_turn_start(unit, board)
 

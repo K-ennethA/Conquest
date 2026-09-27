@@ -8,12 +8,12 @@ class_name MoveContext
 ## live game and against a mock board in tests.
 ##
 ## Expected [member board] interface (any object with these methods):
-##   cell_of(unit) -> Vector2i
-##   units_at(cell: Vector2i) -> Array
+##   cell_of(unit) -> Vector3i          (col, row, floor -- see [Cells])
+##   units_at(cell: Vector3i) -> Array
 ##   are_enemies(a, b) -> bool
 ##   are_allies(a, b) -> bool
-##   set_tile(cell: Vector2i, tile_id) -> void
-##   move_unit(unit, to_cell: Vector2i) -> void
+##   set_tile(cell: Vector3i, tile_id) -> void
+##   move_unit(unit, to_cell: Vector3i) -> void
 ##
 ## Expected unit interface: get_stat(name) -> int, take_damage(n), heal(n),
 ## add_stat_modifier(stat, amount, duration).
@@ -21,8 +21,8 @@ class_name MoveContext
 var caster                       ## the acting unit
 var board                        ## board query/mutation adapter (see above)
 var move: MoveResource
-var aim_cell: Vector2i
-var affected_cells: Array[Vector2i]
+var aim_cell: Vector3i
+var affected_cells: Array[Vector3i]
 var results: Array[Dictionary] = []
 
 ## Optional event-bus override for effects that announce themselves (see
@@ -38,7 +38,7 @@ var rng: RandomNumberGenerator = null
 var _hit_cache: Dictionary = {}
 
 
-func _init(p_caster, p_board, p_move: MoveResource, p_aim: Vector2i, p_cells: Array[Vector2i]) -> void:
+func _init(p_caster, p_board, p_move: MoveResource, p_aim: Vector3i, p_cells: Array[Vector3i]) -> void:
 	caster = p_caster
 	board = p_board
 	move = p_move
@@ -60,7 +60,9 @@ func hit_chance(target) -> float:
 	# Terrain avoid (FE model): the tile under the defender adds to its evasion,
 	# summed at combat time from the cell's passive tile effects.
 	var evasion := float(_stat(target, "evasion")) + float(TerrainStats.bonus_for(target, "evasion", board))
-	return clampf(move.accuracy * 100.0 - evasion, 0.0, 100.0)
+	# Height advantage (multi-floor): +/- a few points; exactly 0 on a shared floor.
+	var height := Elevation.hit_modifier_for(caster, target, board)
+	return clampf(move.accuracy * 100.0 - evasion + height, 0.0, 100.0)
 
 
 ## Percent chance (0..100) of a critical hit on [param target]: the move's base

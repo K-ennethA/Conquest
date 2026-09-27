@@ -2,6 +2,11 @@ extends Node
 
 # Centralized event bus for game-wide communication
 # This singleton manages all game events to reduce coupling between systems
+#
+# Cell-carrying signals below (unit_moved, cursor_moved, movement_range_calculated,
+# attack_range_calculated, aoe_preview_calculated, ...) pass GRID coords
+# Vector3(col, FLOOR, row) -- y is the floor index (0 = ground), not a world height.
+# Convert with Cells.from_grid() / Cells.to_grid() (game/board/Cells.gd).
 
 signal unit_selected(unit: Unit, position: Vector3)
 signal unit_deselected(unit: Unit)

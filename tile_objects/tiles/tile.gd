@@ -34,7 +34,7 @@ var effect_particles: GPUParticles3D
 var effect_overlay: MeshInstance3D
 
 # Tile coordinates
-var grid_position: Vector2i
+var grid_position: Vector3i  # board cell (col, row, floor) -- see Cells; set by MapLoader
 var world_position: Vector3
 
 enum TileType {
@@ -506,11 +506,11 @@ func get_world_position() -> Vector3:
 	"""Get the world position of this tile"""
 	return world_position
 
-func set_grid_position(pos: Vector2i):
+func set_grid_position(pos: Vector3i):
 	"""Set the grid position of this tile"""
 	grid_position = pos
 
-func get_grid_position() -> Vector2i:
+func get_grid_position() -> Vector3i:
 	"""Get the grid position of this tile"""
 	return grid_position
 

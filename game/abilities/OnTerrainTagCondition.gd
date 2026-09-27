@@ -43,7 +43,7 @@ func is_met(unit, board) -> bool:
 	if unit == null or board == null or tag == &"":
 		return false
 	for cell in _cells_of(unit, board):
-		var c: Vector2i = cell
+		var c: Vector3i = cell
 		if _tag_at(board, c):
 			return true  # ANY covered cell is enough — see the class docs.
 	return false
@@ -74,7 +74,7 @@ func _cells_of(unit, board) -> Array:
 ## property, so a volcano tile tagged ["volcano", "difficult"] would never match
 ## &"difficult" through it. The full-list accessors are therefore preferred, and
 ## the single-tag / id accessors remain as a floor so a minimal mock still works.
-func _tag_at(board, cell: Vector2i) -> bool:
+func _tag_at(board, cell: Vector3i) -> bool:
 	# 1. Full tag list straight from the board.
 	if board.has_method("tile_tags_at"):
 		if _contains(board.tile_tags_at(cell)):

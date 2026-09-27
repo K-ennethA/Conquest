@@ -19,14 +19,14 @@ class MockUnit:
 
 class MockBoard:
 	var placements: Array = []  # { unit, cell }
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -65,32 +65,32 @@ func test_defeat_all_ongoing_while_enemy_alive():
 func test_capture_throne_met_when_right_faction_on_cell():
 	var cond := CaptureThrone.new()
 	cond.faction = 0
-	cond.target_cell = Vector2i(5, 5)
+	cond.target_cell = Vector3i(5, 5, 0)
 	var ally := MockUnit.new(0, 100)
 	var board := MockBoard.new()
-	board.place(ally, Vector2i(5, 5))
+	board.place(ally, Vector3i(5, 5, 0))
 	var state := { "board": board, "units": board.all_units() }
 	assert_eq(cond.evaluate(state), WinCondition.Status.MET, "ally on throne -> MET")
 
 func test_capture_throne_ongoing_when_enemy_holds_cell():
 	var cond := CaptureThrone.new()
 	cond.faction = 0
-	cond.target_cell = Vector2i(5, 5)
+	cond.target_cell = Vector3i(5, 5, 0)
 	var enemy := MockUnit.new(1, 100)
 	var ally := MockUnit.new(0, 100)
 	var board := MockBoard.new()
-	board.place(enemy, Vector2i(5, 5))
-	board.place(ally, Vector2i(0, 0))
+	board.place(enemy, Vector3i(5, 5, 0))
+	board.place(ally, Vector3i(0, 0, 0))
 	var state := { "board": board, "units": board.all_units() }
 	assert_eq(cond.evaluate(state), WinCondition.Status.ONGOING, "enemy on throne -> ONGOING")
 
 func test_capture_throne_ignores_dead_holder():
 	var cond := CaptureThrone.new()
 	cond.faction = 0
-	cond.target_cell = Vector2i(2, 2)
+	cond.target_cell = Vector3i(2, 2, 0)
 	var dead_ally := MockUnit.new(0, 0)
 	var board := MockBoard.new()
-	board.place(dead_ally, Vector2i(2, 2))
+	board.place(dead_ally, Vector3i(2, 2, 0))
 	var state := { "board": board, "units": board.all_units() }
 	assert_eq(cond.evaluate(state), WinCondition.Status.ONGOING, "dead ally does not capture")
 
@@ -151,11 +151,11 @@ func test_rules_defeat_when_lose_condition_met():
 	# Enemy seizing our home cell is a losing condition.
 	var lose := CaptureThrone.new()
 	lose.faction = 1
-	lose.target_cell = Vector2i(0, 0)
+	lose.target_cell = Vector3i(0, 0, 0)
 	rules.lose_conditions = [lose]
 	var enemy := MockUnit.new(1, 100)
 	var board := MockBoard.new()
-	board.place(enemy, Vector2i(0, 0))
+	board.place(enemy, Vector3i(0, 0, 0))
 	var state := { "board": board, "units": board.all_units(), "turn": 1 }
 	assert_eq(rules.evaluate(state), GameModeRules.Outcome.DEFEAT, "enemy captured home -> DEFEAT")
 

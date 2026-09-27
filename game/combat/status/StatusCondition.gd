@@ -89,10 +89,10 @@ func tick(target, board) -> Array[Dictionary]:
 	var events: Array[Dictionary] = []
 	if target == null or board == null:
 		return events
-	var cell: Vector2i = Vector2i.ZERO
+	var cell: Vector3i = Vector3i.ZERO
 	if board.has_method("cell_of"):
 		cell = board.cell_of(target)
-	var ctx := MoveContext.new(target, board, _tick_move(), cell, [cell] as Array[Vector2i])
+	var ctx := MoveContext.new(target, board, _tick_move(), cell, [cell] as Array[Vector3i])
 	for effect in tick_effects:
 		if effect:
 			effect.apply(ctx)

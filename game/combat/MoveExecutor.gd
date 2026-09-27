@@ -9,8 +9,8 @@ class_name MoveExecutor
 ## called internally) so it is safe to run identically on every networked peer.
 
 ## Result dictionary keys: "success" (bool), "reason" (String, on failure),
-## "events" (Array[Dictionary] from the effects), "cells" (Array[Vector2i]).
-static func execute(move: MoveResource, caster, board, aim_cell: Vector2i, rng: RandomNumberGenerator = null) -> Dictionary:
+## "events" (Array[Dictionary] from the effects), "cells" (Array[Vector3i]).
+static func execute(move: MoveResource, caster, board, aim_cell: Vector3i, rng: RandomNumberGenerator = null) -> Dictionary:
 	if move == null or not move.is_valid():
 		return _fail("invalid_move")
 	if caster == null or board == null:
@@ -18,10 +18,11 @@ static func execute(move: MoveResource, caster, board, aim_cell: Vector2i, rng: 
 	if not board.has_method("cell_of"):
 		return _fail("board_missing_cell_of")
 
-	var origin: Vector2i = board.cell_of(caster)
+	var origin: Vector3i = board.cell_of(caster)
 	# Through can_aim_at (not targeting.in_range directly) so the caster's own
 	# range bonus is honoured -- the same helper the UI and the AI validate with.
-	if not move.can_aim_at(origin, aim_cell, caster):
+	# The board is passed so a melee move also reaches across a stair link.
+	if not move.can_aim_at(origin, aim_cell, caster, board):
 		return _fail("out_of_range")
 	# Then the pattern's BOARD-aware constraints (an empty landing cell for a leap,
 	# adjacency to an enemy, ...). Reported separately from range so the UI/AI can
@@ -70,7 +71,9 @@ static func preview_vs(move: MoveResource, caster, target, board = null) -> Dict
 	if move != null:
 		# Include terrain avoid so the forecast matches what resolve_hit will roll.
 		var evasion := float(_stat(target, "evasion")) + float(TerrainStats.bonus_for(target, "evasion"))
-		hit_pct = clampf(move.accuracy * 100.0 - evasion, 0.0, 100.0)
+		# Height advantage (0 on a shared floor), mirrored from MoveContext.hit_chance.
+		var height_hit := Elevation.hit_modifier_for(caster, target, board)
+		hit_pct = clampf(move.accuracy * 100.0 - evasion + height_hit, 0.0, 100.0)
 		crit_pct = clampf(move.crit_chance * 100.0 + float(_stat(caster, "crit")), 0.0, 100.0)
 		# Mode-aware, so the forecast previews the mode that would actually resolve.
 		for effect in move.effects_for(caster):
@@ -148,6 +151,11 @@ static func _preview_damage(effect: DamageEffect, move, caster, target, board = 
 	var element_scale: float = ElementChart.damage_scale_for(move, target, board)
 	if not is_equal_approx(element_scale, 1.0):
 		mitigated = maxi(1, roundi(float(mitigated) * element_scale))
+	# HEIGHT ADVANTAGE, same position as in DamageEffect.apply() (after the type
+	# matchup, before crit). 1.0 on a shared floor.
+	var height_scale: float = Elevation.damage_scale_for(caster, target, board)
+	if not is_equal_approx(height_scale, 1.0):
+		mitigated = maxi(1, roundi(float(mitigated) * height_scale))
 	return mitigated
 
 

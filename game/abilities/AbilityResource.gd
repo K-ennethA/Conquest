@@ -99,8 +99,8 @@ func run_effects(unit, board, other = null) -> Array:
 			return []  # nothing caused this trigger — nothing to affect
 		anchor = other
 	var origin := _cell_of(board, unit)
-	var aim: Vector2i = origin if anchor == unit else _cell_of(board, anchor)
-	var cells: Array[Vector2i] = [aim] as Array[Vector2i]
+	var aim: Vector3i = origin if anchor == unit else _cell_of(board, anchor)
+	var cells: Array[Vector3i] = [aim] as Array[Vector3i]
 	if targeting != null:
 		cells = targeting.resolve_cells(origin, aim)
 	var ctx := MoveContext.new(unit, board, _synthetic_move(), aim, cells)
@@ -135,9 +135,9 @@ func _synthetic_move() -> MoveResource:
 	return m
 
 
-## The board cell [param who] stands on, or [code]Vector2i.ZERO[/code] when the
+## The board cell [param who] stands on, or [code]Vector3i.ZERO[/code] when the
 ## board cannot report one (mock boards in tests may omit the accessor).
-func _cell_of(board, who) -> Vector2i:
+func _cell_of(board, who) -> Vector3i:
 	if board.has_method("cell_of"):
 		return board.cell_of(who)
-	return Vector2i.ZERO
+	return Vector3i.ZERO

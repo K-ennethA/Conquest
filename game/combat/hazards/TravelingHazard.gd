@@ -12,7 +12,7 @@ class_name TravelingHazard
 ##     TargetingPattern._cardinal_dir] (dominant axis; a diagonal collapses to the
 ##     nearer clean face).
 ##   * width comes from the SAME perpendicular flank ARC/LINE use --
-##     [code]flank = Vector2i(-facing.y, facing.x)[/code] -- so [member half_width]
+##     [code]flank = Vector3i(-facing.y, facing.x, 0)[/code] -- so [member half_width]
 ##     of 2 covers flank offsets -2..+2 (a 5-wide band).
 ## The band at forward depth d is every cell
 ## [code]origin + facing*d + flank*k[/code] for k in -half_width..half_width.
@@ -34,9 +34,9 @@ class_name TravelingHazard
 ## under every affiliation.
 
 ## The caster's cell -- the row just BEHIND the vine's first band (depth 0).
-var origin: Vector2i
+var origin: Vector3i
 ## Cardinal unit heading the lane travels along.
-var facing: Vector2i
+var facing: Vector3i
 ## Half the lane width in cells; the band spans flank offsets -half_width..+half_width.
 var half_width: int = 2
 ## Rows the front advances per tick.
@@ -59,7 +59,7 @@ var front: int = 0
 var _hit_units: Dictionary = {}
 
 
-func _init(p_origin: Vector2i, p_facing: Vector2i, p_half_width: int, p_speed: int,
+func _init(p_origin: Vector3i, p_facing: Vector3i, p_half_width: int, p_speed: int,
 		p_travel_range: int, p_damage: int, p_category: int, p_affiliation: int, p_source) -> void:
 	origin = p_origin
 	facing = p_facing
@@ -80,14 +80,14 @@ func is_expired() -> bool:
 
 ## The perpendicular used for width -- the SAME 90-degree rotation ARC/LINE derive
 ## their flank from, so the lane's diagonal behaviour matches those shapes.
-func _flank() -> Vector2i:
-	return Vector2i(-facing.y, facing.x)
+func _flank() -> Vector3i:
+	return Vector3i(-facing.y, facing.x, 0)
 
 
 ## Every cell in the band spanning forward depths [param from_depth]..[param to_depth]
 ## (inclusive) across the full width.
-func _band_cells(from_depth: int, to_depth: int) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
+func _band_cells(from_depth: int, to_depth: int) -> Array[Vector3i]:
+	var cells: Array[Vector3i] = []
 	var flank := _flank()
 	for d in range(from_depth, to_depth + 1):
 		for k in range(-half_width, half_width + 1):
@@ -97,22 +97,22 @@ func _band_cells(from_depth: int, to_depth: int) -> Array[Vector2i]:
 
 ## The band the NEXT [method advance] will enter (empty once expired). Emitted with
 ## every advance so the visual layer can telegraph where the vine is heading.
-func next_band_cells() -> Array[Vector2i]:
+func next_band_cells() -> Array[Vector3i]:
 	if remaining <= 0:
-		return [] as Array[Vector2i]
+		return [] as Array[Vector3i]
 	var step := mini(speed, remaining)
 	return _band_cells(front + 1, front + step)
 
 
 ## Move the front forward one tick and damage every matching unit in the rows newly
 ## entered. Returns event data:
-##   { "cells": Array[Vector2i], "damaged": Array[{unit, amount}],
-##     "next_cells": Array[Vector2i], "expired": bool }
+##   { "cells": Array[Vector3i], "damaged": Array[{unit, amount}],
+##     "next_cells": Array[Vector3i], "expired": bool }
 ## Damage is applied here (via [method DamageEffect.resolve_hazard_damage]); a null
 ## or query-less board simply enters the rows without hitting anything.
 func advance(board) -> Dictionary:
 	if remaining <= 0:
-		return { "cells": [] as Array[Vector2i], "damaged": [], "next_cells": [] as Array[Vector2i], "expired": true }
+		return { "cells": [] as Array[Vector3i], "damaged": [], "next_cells": [] as Array[Vector3i], "expired": true }
 
 	var step := mini(speed, remaining)
 	var from_depth := front + 1

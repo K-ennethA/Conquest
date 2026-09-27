@@ -131,9 +131,10 @@ func _register_point(spawn_data: Dictionary) -> void:
 	if not _map_resource.spawn_has_unit_reference(spawn_data):
 		return
 
-	var pos: Vector2i = norm["position"]
+	# A spawn point's cell is its 2D map position lifted onto its floor (see Cells).
+	var pos: Vector3i = Cells.lift(norm["position"], int(norm.get("floor", 0)))
 	var player_id: int = int(norm["player_id"])
-	var key: Vector3i = _point_key(pos, player_id)
+	var key: String = _point_key(pos, player_id)
 
 	# CRITICAL double-count guard: MapLoader already materialised the FIRST unit for
 	# every point is_initial_spawn() reports true (Start, Respawn/Endless seeds, and a
@@ -176,13 +177,13 @@ func _resolve_seed_units() -> void:
 			continue
 		if int(state["produced"]) <= 0 or state["current_unit"] != null:
 			continue
-		var cell: Vector2i = state["position"]
+		var cell: Vector3i = state["position"]
 		var seed = _find_unit_at(board, cell, int(state["player_id"]))
 		if seed != null:
 			_track_unit(state, seed)
 
 
-func _find_unit_at(board, cell: Vector2i, player_id: int):
+func _find_unit_at(board, cell: Vector3i, player_id: int):
 	"""First living unit standing on `cell` that belongs to `player_id` (ownership is
 	only checked when the unit exposes an owner, so mocks without one still match)."""
 	for u in board.units_at(cell):
@@ -294,10 +295,10 @@ func _try_spawn(state: Dictionary) -> bool:
 	produce again), we SPILL to the nearest free, in-bounds, passable cell in a small
 	ring around home (see _find_spill_cell). Only when the whole neighbourhood is full
 	do we defer to a later turn. Headless (no board) never blocks, exactly as before."""
-	var home: Vector2i = state["position"]
-	var spawn_cell: Vector2i = home
+	var home: Vector3i = state["position"]
+	var spawn_cell: Vector3i = home
 	if _cell_blocked(home):
-		var spill: Vector2i = _find_spill_cell(home)
+		var spill: Vector3i = _find_spill_cell(home)
 		if spill.x < 0:
 			return false
 		spawn_cell = spill
@@ -312,7 +313,8 @@ func _try_spawn(state: Dictionary) -> bool:
 	var spawn_data = state["spawn"]
 	if spawn_cell != home:
 		var override: Dictionary = (state["spawn"] as Dictionary).duplicate()
-		override["position"] = spawn_cell
+		override["position"] = Cells.flat(spawn_cell)
+		override["floor"] = spawn_cell.z
 		spawn_data = override
 
 	var new_unit = _map_loader.spawn_unit_now(spawn_data, int(state["produced"]))
@@ -332,7 +334,7 @@ func _try_spawn(state: Dictionary) -> bool:
 	return true
 
 
-func _find_spill_cell(home: Vector2i) -> Vector2i:
+func _find_spill_cell(home: Vector3i) -> Vector3i:
 	"""Nearest free, in-bounds, passable cell in a ring around `home` (Chebyshev rings
 	outward to SPILL_RADIUS), or (-1,-1) when the whole neighbourhood is blocked.
 
@@ -340,7 +342,7 @@ func _find_spill_cell(home: Vector2i) -> Vector2i:
 	also nothing blocking home, so this path is never reached in that case."""
 	var board = _board()
 	if board == null:
-		return Vector2i(-1, -1)
+		return Vector3i(-1, -1, 0)
 	for r in range(1, SPILL_RADIUS + 1):
 		for dx in range(-r, r + 1):
 			for dy in range(-r, r + 1):
@@ -348,19 +350,21 @@ func _find_spill_cell(home: Vector2i) -> Vector2i:
 				# were already tested by a smaller ring.
 				if maxi(absi(dx), absi(dy)) != r:
 					continue
-				var cell: Vector2i = Vector2i(home.x + dx, home.y + dy)
+				var cell: Vector3i = Vector3i(home.x + dx, home.y + dy, home.z)
 				if _cell_free_for_spawn(board, cell):
 					return cell
-	return Vector2i(-1, -1)
+	return Vector3i(-1, -1, 0)
 
 
-func _cell_free_for_spawn(board, cell: Vector2i) -> bool:
+func _cell_free_for_spawn(board, cell: Vector3i) -> bool:
 	"""True when `cell` can hold a freshly spawned unit: in bounds, passable terrain,
 	and not already occupied by a living unit. Each board query is feature-detected so
 	lightweight fakes need only provide what they exercise."""
 	if board.has_method("in_bounds") and not board.in_bounds(cell):
 		return false
 	if board.has_method("is_blocked") and board.is_blocked(cell):
+		return false
+	if board.has_method("has_tile") and not board.has_tile(cell):
 		return false
 	if board.has_method("is_occupied") and board.is_occupied(cell):
 		return false
@@ -369,12 +373,12 @@ func _cell_free_for_spawn(board, cell: Vector2i) -> bool:
 
 # --- Death tracking ---------------------------------------------------------
 
-func track_seed_unit(position: Vector2i, player_id: int, unit) -> bool:
+func track_seed_unit(position: Vector3i, player_id: int, unit) -> bool:
 	"""Adopt an already-existing unit (a load-time seed) as the current unit of the
 	point at (position, player_id), so its death is watched. This is the seam
 	_resolve_seed_units() uses live -- pulling the node off the board -- and that tests
 	use to inject a fake seed. Returns false when no scheduled point matches."""
-	var key: Vector3i = _point_key(position, player_id)
+	var key: String = _point_key(position, player_id)
 	if not _points.has(key):
 		return false
 	_track_unit(_points[key], unit)
@@ -421,7 +425,7 @@ func _point_has_live_unit(state: Dictionary) -> bool:
 
 # --- Occupancy guard --------------------------------------------------------
 
-func _cell_blocked(cell: Vector2i) -> bool:
+func _cell_blocked(cell: Vector3i) -> bool:
 	"""True when the live board reports a living unit on `cell`. Null-safe: before the
 	first board rebuild (or in headless tests) there is no board, so nothing blocks."""
 	var board = _board()
@@ -443,8 +447,9 @@ func _board():
 
 # --- Misc -------------------------------------------------------------------
 
-func _point_key(pos: Vector2i, player_id: int) -> Vector3i:
-	return Vector3i(pos.x, pos.y, player_id)
+## Unique key of a spawn point: its cell (col, row, floor) + owning player.
+func _point_key(pos: Vector3i, player_id: int) -> String:
+	return "%d,%d,%d:%d" % [pos.x, pos.y, pos.z, player_id]
 
 
 func _exit_tree() -> void:

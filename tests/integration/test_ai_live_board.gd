@@ -55,7 +55,7 @@ func after_each() -> void:
 ## Throwaway adapter used only for cell<->world math while placing units before
 ## the real board exists, built against the same GRID CombatServices.rebuild()
 ## uses -- mirrors the placement pattern in tests/unit/test_board_adapter.gd.
-func _cell_to_world(cell: Vector2i) -> Vector3:
+func _cell_to_world(cell: Vector3i) -> Vector3:
 	return BoardAdapter.new(GRID, []).cell_to_world(cell)
 
 
@@ -120,7 +120,7 @@ func _test_cleave() -> MoveResource:
 ## Spawns a character-backed Unit (CharacterUnit.tscn + CharacterLibrary) at
 ## [param cell] under [param map_root], owned by [param owner]. Returns null
 ## instead of crashing if the roster entry can't load, so callers can skip.
-func _spawn_character_unit(map_root: Node3D, character_id: StringName, cell: Vector2i, owner: Player) -> Unit:
+func _spawn_character_unit(map_root: Node3D, character_id: StringName, cell: Vector3i, owner: Player) -> Unit:
 	var character := CharacterLibrary.get_character(character_id)
 	if character == null:
 		return null
@@ -158,8 +158,8 @@ func _build_live_board(apart: int) -> Dictionary:
 	ai_player.is_ai = true
 	var human_player := Player.new(1, "Human")
 
-	var ai_unit := _spawn_character_unit(_map_root, ATTACKER_ID, Vector2i(0, 0), ai_player)
-	var human_unit := _spawn_character_unit(_map_root, TARGET_ID, Vector2i(0, apart), human_player)
+	var ai_unit := _spawn_character_unit(_map_root, ATTACKER_ID, Vector3i(0, 0, 0), ai_player)
+	var human_unit := _spawn_character_unit(_map_root, TARGET_ID, Vector3i(0, apart, 0), human_player)
 	if ai_unit == null or human_unit == null:
 		return {}
 
@@ -235,8 +235,8 @@ func test_ai_steps_toward_distant_enemy_within_reachable_cells() -> void:
 	var profile: MovementProfile = ai_unit.get_movement_profile()
 	assert_not_null(profile, "a character-backed unit should expose a movement profile")
 
-	var origin: Vector2i = board.cell_of(ai_unit)
-	var reachable: Array[Vector2i] = MovementResolver.new().reachable_cells(origin, profile, board)
+	var origin: Vector3i = board.cell_of(ai_unit)
+	var reachable: Array[Vector3i] = MovementResolver.new().reachable_cells(origin, profile, board)
 	assert_true(reachable.has(decision["step_to"]),
 		"the chosen step_to cell (%s) must be one MovementResolver actually considers reachable from %s"
 			% [decision["step_to"], origin])

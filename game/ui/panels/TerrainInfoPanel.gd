@@ -32,7 +32,7 @@ var _effects_header: Label
 var _effects_container: VBoxContainer
 
 # Sentinel so the very first _on_cursor_moved always does a fresh lookup.
-var _current_cell: Vector2i = Vector2i(-999999, -999999)
+var _current_cell: Vector3i = Vector3i(-999999, -999999, 0)
 
 
 func _ready() -> void:
@@ -151,7 +151,7 @@ func _create_ui() -> void:
 ## Populate and show the panel for a specific board cell. Hides itself (and
 ## returns) when the cell has no registered terrain -- e.g. off the loaded
 ## map, or no map/board loaded yet.
-func show_for_cell(cell: Vector2i) -> void:
+func show_for_cell(cell: Vector3i) -> void:
 	# NOTE: a null tile here means the cursor is on an IN-BOUNDS cell whose terrain
 	# isn't registered (a registry miss), NOT off-board -- _on_cursor_moved already
 	# rejected off-board cells. Blanking the whole panel in that case was the
@@ -200,12 +200,12 @@ func _on_unit_deselected(_unit) -> void:
 	_refresh_current_cell()
 
 func _refresh_current_cell() -> void:
-	if visible and _current_cell != Vector2i(-999999, -999999):
+	if visible and _current_cell != Vector3i(-999999, -999999, 0):
 		show_for_cell(_current_cell)
 
 ## The unit whose profile prices the hovered cell: the selected unit, else the unit
 ## standing on [param cell]; null when neither exists.
-func _cost_unit_for(cell: Vector2i, board):
+func _cost_unit_for(cell: Vector3i, board):
 	if _selected_unit != null and is_instance_valid(_selected_unit):
 		return _selected_unit
 	if board != null and board.has_method("units_at"):
@@ -216,7 +216,7 @@ func _cost_unit_for(cell: Vector2i, board):
 
 ## "Move Cost: N (Unit)" for the cost-unit's movement profile, or "" when there is no
 ## unit / profile to price with (the caller then shows the tile's base cost).
-func _unit_move_cost_text(cell: Vector2i) -> String:
+func _unit_move_cost_text(cell: Vector3i) -> String:
 	var board = CombatServices.board()
 	if board == null:
 		return ""
@@ -237,13 +237,13 @@ func _unit_move_cost_text(cell: Vector2i) -> String:
 ## Hide the panel and reset its tracked cell so the next show_for_cell always
 ## repopulates fresh.
 func hide_panel() -> void:
-	_current_cell = Vector2i(-999999, -999999)
+	_current_cell = Vector3i(-999999, -999999, 0)
 	hide()
 
 
 # --- Internals -----------------------------------------------------------------
 
-func _populate_effects(cell: Vector2i) -> void:
+func _populate_effects(cell: Vector3i) -> void:
 	for child in _effects_container.get_children():
 		child.queue_free()
 
@@ -336,7 +336,7 @@ func _build_effect_chip(te: TileEffectResource, is_temporary: bool) -> PanelCont
 ## of re-deriving it through BoardAdapter.world_to_cell (which expects a raw
 ## world-space position, not grid coordinates).
 func _on_cursor_moved(grid_pos: Vector3) -> void:
-	var cell := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var cell := Cells.from_grid(grid_pos)  # Vector3(col, floor, row) -> cell
 
 	# No live board yet (no map loaded / between rebuilds) -- nothing to show.
 	var board := CombatServices.board()

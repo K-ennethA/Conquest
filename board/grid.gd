@@ -22,8 +22,12 @@ func get_tile_position(grid_position: Vector3) -> Vector3:
 
 # Returns the position of a cell's center in pixels.
 # We'll place units and have them move through cells using this function.
+# Grid coords are Vector3(col, FLOOR, row): the y component is the floor index (see
+# Cells). The world Y of floor f is f * Cells.FLOOR_HEIGHT, so floor 0 stays at y = 0.
 func calculate_map_position(grid_position: Vector3) -> Vector3:
-	return grid_position * cell_size + _half_cell_size
+	var out := grid_position * cell_size + _half_cell_size
+	out.y = Cells.floor_y(int(round(grid_position.y)))
+	return out
 
 
 # Returns the coordinates of the cell on the grid given a position on the map.
@@ -32,9 +36,10 @@ func calculate_map_position(grid_position: Vector3) -> Vector3:
 # the grid coordinates they're placed on, and call `calculate_map_position()` to snap them to the
 # cell's center.
 func calculate_grid_coordinates(map_position: Vector3) -> Vector3:
-	var result = (map_position / cell_size).floor()
-	# Ensure Y coordinate is always 0 for 2D grid
-	result.y = 0
+	var result := Vector3(floor(map_position.x / cell_size.x), 0.0, floor(map_position.z / cell_size.z))
+	# Y is the FLOOR index derived from the world height (0 for anything near the
+	# ground plane, so single-floor maps behave exactly as before).
+	result.y = Cells.floor_from_world_y(map_position.y)
 	return result
 
 
@@ -63,7 +68,8 @@ func grid_clamp(grid_position: Vector3) -> Vector3:
 	var out := grid_position
 	out.x = clampf(out.x, 0.0, size.x - 1.0)
 	out.z = clampf(out.z, 0.0, size.z - 1.0)
-	out.y = 0.0
+	# y is the floor index: keep it (a cursor stays on its floor), never below ground.
+	out.y = maxf(0.0, roundf(out.y))
 	return out
 
 # Given Vector2 coordinates, calculates and returns the corresponding integer index. You can use

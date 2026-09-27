@@ -42,13 +42,14 @@ var tile_position := Vector3.ZERO:
 		var old_position = tile_position
 		tile_position = new_position
 		position = grid.calculate_map_position(tile_position)
+		# (Multi-floor: tile_position.y is the FLOOR; the bracket sits on that floor.)
 		# Sit the bracket just above the tile top so it reads as ON the tile. Under a
 		# tilted orthographic view any vertical offset shifts the cursor's SCREEN
 		# position off the ground cell (~offset*sin(tilt)); a large lift (the old 3.0)
 		# floated it well above the tile under the mouse. The bracket material uses
 		# no_depth_test, so this small lift only prevents z-fighting with the tile top
 		# and never causes occlusion.
-		position.y = 0.15
+		position.y = Cells.floor_y(int(tile_position.y)) + 0.15
 		
 		# Emit movement event
 		GameEvents.cursor_moved.emit(tile_position)
@@ -78,7 +79,7 @@ var is_mouse_enabled: bool = true
 func _ready() -> void:
 	_setup_cursor_visuals()
 	position = grid.calculate_map_position(tile_position)
-	position.y = 0.15  # Sit on the tile (see the tile_position setter for why)
+	position.y = Cells.floor_y(int(tile_position.y)) + 0.15  # Sit on the tile (see the tile_position setter for why)
 	GameEvents.cursor_moved.emit(tile_position)
 	_check_unit_at_cursor()
 	
@@ -361,7 +362,24 @@ func _cell_under_mouse(mouse_pos: Vector2):
 		return null
 
 	var point: Vector3 = origin + dir * t
-	return grid.calculate_grid_coordinates(point)
+	# MULTI-FLOOR: pick the TOP-MOST existing tile under the ray. March the floors
+	# from the top down, intersecting each floor's walking plane; the first floor
+	# that has a tile at the hit column wins. Floor 0 (the plane above) is the
+	# fallback, so single-floor maps behave exactly as before.
+	var board = CombatServices.board() if CombatServices else null
+	if board != null and board.has_method("floor_count") and board.floor_count() > 1:
+		for f in range(board.floor_count() - 1, 0, -1):
+			var plane_y: float = Cells.floor_y(f) + 0.1
+			var tf: float = (plane_y - origin.y) / dir.y
+			if tf < 0.0:
+				continue
+			var p: Vector3 = origin + dir * tf
+			var col := Vector3i(int(floor(p.x / grid.cell_size.x)), int(floor(p.z / grid.cell_size.z)), f)
+			if board.has_tile(col):
+				return Cells.to_grid(col)
+	var ground: Vector3 = grid.calculate_grid_coordinates(point)
+	ground.y = 0.0
+	return ground
 
 
 func _handle_mouse_click(mouse_pos: Vector2) -> void:
@@ -556,7 +574,9 @@ func _get_unit_at_position(grid_pos: Vector3) -> Unit:
 		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
 		
 		# Check if positions match (with some tolerance)
-		if abs(unit_grid_pos.x - grid_pos.x) < 0.1 and abs(unit_grid_pos.z - grid_pos.z) < 0.1:
+		# (y = floor: a unit on a bridge is not "at" the road cell beneath it)
+		if abs(unit_grid_pos.x - grid_pos.x) < 0.1 and abs(unit_grid_pos.z - grid_pos.z) < 0.1 \
+				and abs(unit_grid_pos.y - grid_pos.y) < 0.1:
 			return unit
 	
 	return null
