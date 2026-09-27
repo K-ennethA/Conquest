@@ -285,26 +285,76 @@ func clear_damage_previews() -> void:
 		if bar != null and is_instance_valid(bar) and bar.has_method("clear_damage_preview"):
 			bar.clear_damage_preview()
 
+## Name of the gold selection ring child added under a selected unit.
+const SELECTION_RING_NAME := "SelectionRing"
+
 func apply_selection_visual(unit: Unit, selected: bool) -> void:
-	"""Apply or remove selection visual effects"""
-	var mesh_instance = unit.get_node("MeshInstance3D")
-	if not mesh_instance:
+	"""Mark the SELECTED unit: a soft gold ring on the ground under its whole
+	footprint (pulsing gently), so it stays identifiable after the board cursor moves
+	off it to pick a destination / target. The ring lives on its own mesh, so it never
+	touches the model's materials, the friend/foe outline (material_overlay) or the
+	cursor's own brackets. Legacy capsule units (no character model) additionally get
+	a mild gold rim on their visible placeholder mesh."""
+	if not is_instance_valid(unit):
 		return
-	
+	_set_selection_ring(unit, selected)
+	var mesh_instance := unit.get_node_or_null("MeshInstance3D") as MeshInstance3D
+	if mesh_instance == null or not mesh_instance.visible:
+		return
 	if selected:
-		# Add selection glow with enhanced visibility
 		var base_material = mesh_instance.material_override
-		if base_material:
-			var selection_material = base_material.duplicate()
+		if base_material is BaseMaterial3D:
+			var selection_material: BaseMaterial3D = base_material.duplicate()
 			selection_material.emission_enabled = true
-			selection_material.emission = Color(1.0, 1.0, 0.5, 1.0)  # Bright yellow glow
+			selection_material.emission = Color(0.91, 0.71, 0.33)
+			selection_material.emission_energy_multiplier = 0.35
 			selection_material.rim_enabled = true
-			selection_material.rim = 0.5  # Float value, not Color
+			selection_material.rim = 0.5
 			selection_material.rim_tint = 0.5
 			mesh_instance.material_override = selection_material
 	else:
 		# Restore appropriate material based on unit's current state
 		_restore_unit_material(unit)
+
+
+func _set_selection_ring(unit: Unit, selected: bool) -> void:
+	var ring := unit.get_node_or_null(SELECTION_RING_NAME) as MeshInstance3D
+	if not selected:
+		if ring != null:
+			ring.queue_free()
+		return
+	if ring != null:
+		return
+	var fp: Vector2i = unit.get_footprint() if unit.has_method("get_footprint") else Vector2i.ONE
+	var cell: float = Unit.CELL_SIZE
+	var span: float = float(maxi(fp.x, fp.y)) * cell
+	ring = MeshInstance3D.new()
+	ring.name = SELECTION_RING_NAME
+	var torus := TorusMesh.new()
+	torus.outer_radius = span * 0.46
+	torus.inner_radius = span * 0.40
+	torus.rings = 48
+	torus.ring_segments = 8
+	ring.mesh = torus
+	ring.scale = Vector3(1.0, 0.08, 1.0)   # flatten into a ground ring
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = Color(0.97, 0.84, 0.54, 0.9)
+	mat.no_depth_test = false
+	ring.material_override = mat
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var offset: Vector3 = unit.get_footprint_offset() if unit.has_method("get_footprint_offset") else Vector3.ZERO
+	ring.position = offset + Vector3(0.0, 0.06, 0.0)
+	unit.add_child(ring)
+	# Gentle pulse (skipped when animations are off).
+	var anim_on := true
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings.has_method("animations_on"):
+		anim_on = GameSettings.animations_on()
+	if anim_on:
+		var tw := ring.create_tween().set_loops()
+		tw.tween_property(mat, "albedo_color:a", 0.45, 0.6).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(mat, "albedo_color:a", 0.9, 0.6).set_trans(Tween.TRANS_SINE)
 
 func _restore_unit_material(unit: Unit) -> void:
 	"""Restore unit material based on current state (acted or not acted)"""
@@ -374,6 +424,9 @@ func apply_acted_visual(unit: Unit, has_acted: bool) -> void:
 func refresh_unit_outline(unit: Unit) -> void:
 	if not is_instance_valid(unit):
 		return
+	var hb = _unit_health_bars.get(unit)
+	if hb != null and is_instance_valid(hb) and hb.has_method("_refresh_team_frame"):
+		hb._refresh_team_frame()
 	apply_acted_visual(unit, _unit_has_acted(unit))
 
 ## The unit's authoritative "already spent its turn" flag, defaulting to false for a
