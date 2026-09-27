@@ -2,7 +2,11 @@ extends Control
 
 class_name TurnIndicator
 
-# Prominent UI element showing whose turn it is and turn transitions
+# The persistent PHASE chip at the top-centre of the battle HUD (Fire Emblem's
+# "PLAYER PHASE / ENEMY PHASE"): the phase title in the acting side's team colour,
+# a team-coloured frame, and "Round N  ·  X units ready" underneath. In a network
+# match it reads YOUR TURN / OPPONENT'S TURN, in local versus PLAYER N PHASE (see
+# ConquestTheme.phase_title). The cinematic wipe lives in TurnTransition.
 
 @onready var player_name_label: Label = $CenterContainer/VBoxContainer/PlayerNameLabel
 @onready var turn_info_label: Label = $CenterContainer/VBoxContainer/TurnInfoLabel
@@ -28,6 +32,12 @@ var player_colors = {
 }
 
 func _ready() -> void:
+	custom_minimum_size = Vector2(320, 70)
+	if player_name_label:
+		player_name_label.add_theme_font_override("font", MenuTheme.bold_font(0.65, 2))
+		player_name_label.add_theme_font_size_override("font_size", ConquestTheme.FS_PHASE)
+	if turn_info_label:
+		turn_info_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
 	# Connect to turn system events
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
@@ -114,12 +124,9 @@ func _update_display() -> void:
 		visible = true
 
 func _turn_title(player: Player) -> String:
-	"""Ally/enemy framing for the chip -- reads better than "Player 1/2" in
-	single-player. Keyed off Player.is_ai; the player-colour tint (see
-	_update_background_color) still conveys which side subtly."""
-	if player != null and player.is_ai:
-		return "Enemy Turn"
-	return "Your Turn"
+	"""FE phase framing: PLAYER PHASE / ENEMY PHASE (single player), YOUR TURN /
+	OPPONENT'S TURN (network), PLAYER N PHASE (local versus)."""
+	return ConquestTheme.phase_title(player)
 
 func _update_traditional_display(turn_system: TraditionalTurnSystem, active_player: Player) -> void:
 	"""Update display for Traditional Turn System"""
@@ -127,9 +134,10 @@ func _update_traditional_display(turn_system: TraditionalTurnSystem, active_play
 	
 	var progress = turn_system.get_current_turn_progress()
 	if progress.has("units_can_act"):
-		turn_info_label.text = "Round " + str(turn_system.current_turn) + " - " + str(progress.units_can_act) + " units remaining"
+		var n := int(progress.units_can_act)
+		turn_info_label.text = "Round %d  ·  %d unit%s ready" % [turn_system.current_turn, n, "" if n == 1 else "s"]
 	else:
-		turn_info_label.text = "Round " + str(turn_system.current_turn) + " - calculating..."
+		turn_info_label.text = "Round %d" % turn_system.current_turn
 
 func _update_speed_first_display(turn_system: SpeedFirstTurnSystem, active_player: Player) -> void:
 	"""Update display for Speed First Turn System"""
@@ -149,7 +157,7 @@ func _update_speed_first_display(turn_system: SpeedFirstTurnSystem, active_playe
 		if progress.has("units_remaining"):
 			remaining_info = " - " + str(progress.units_remaining) + " units left"
 		
-		turn_info_label.text = "Round " + str(progress.get("round_number", 1)) + speed_info + remaining_info
+		turn_info_label.text = "Round " + str(progress.get("round_number", 1)) + speed_info + remaining_info.replace(" - ", "  ·  ")
 		
 		# Add queue preview info
 		var queue_preview = progress.get("turn_queue_preview", [])
@@ -171,37 +179,32 @@ func _update_fallback_display(active_player: Player) -> void:
 	player_name_label.text = _turn_title(active_player)
 	turn_info_label.text = "Turn in progress"
 
-func _chip_box() -> StyleBoxFlat:
-	"""A slimmed-down amber chip derived from ConquestTheme.panel_box(): same palette
-	and frame, but tight margins / smaller radius / no drop shadow so the persistent
-	indicator reads as a compact strip instead of a big card jutting from the top."""
-	var sb := ConquestTheme.panel_box()
-	sb.set_corner_radius_all(8)
-	sb.set_content_margin_all(6)
-	sb.content_margin_left = 12
-	sb.content_margin_right = 12
-	sb.shadow_size = 0
+func _chip_box(team: Color) -> StyleBoxFlat:
+	"""Navy HUD chip framed in the acting side's team colour (thicker left edge, like
+	a phase banner), so whose phase it is reads at a glance."""
+	var sb := ConquestTheme.chip_box(team, 0.95)
+	sb.set_border_width_all(2)
+	sb.border_width_left = 6
+	sb.border_width_right = 6
+	sb.content_margin_left = 22
+	sb.content_margin_right = 22
+	sb.content_margin_top = 4
+	sb.content_margin_bottom = 6
 	return sb
 
 
 func _update_background_color(player: Player) -> void:
-	"""Keep the amber ConquestTheme frame (compact chip variant) so the banner matches
-	every other HUD panel. Convey whose turn it is subtly, by tinting just the
-	player-name label text with that player's colour."""
+	"""Team-coloured frame + phase title in the team's (lightened, legible) colour."""
+	var team: Color = ConquestTheme.team_color(player) if player else ConquestTheme.BORDER
 	if background_panel:
-		# Compact amber chip -- no player-coloured border.
-		background_panel.add_theme_stylebox_override("panel", _chip_box())
-
-	# Subtle player cue: tint the name text with the player's colour (lightened a
-	# touch so it stays legible on the amber ground). Clear it when no player.
+		background_panel.add_theme_stylebox_override("panel", _chip_box(team))
 	if player_name_label:
-		if player and player.player_id in player_colors:
-			var c: Color = player_colors[player.player_id]
-			c.a = 1.0
-			c = c.lerp(Color.WHITE, 0.25)
-			player_name_label.add_theme_color_override("font_color", c)
+		if player:
+			player_name_label.add_theme_color_override("font_color", ConquestTheme.team_text_color(player))
 		else:
-			player_name_label.remove_theme_color_override("font_color")
+			player_name_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
+	if turn_info_label:
+		turn_info_label.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
 
 func show_turn_transition(_from_player: Player, _to_player: Player) -> void:
 	"""Deprecated: the cinematic turn announcement now lives in the full-screen

@@ -9,7 +9,7 @@ signal move_selected(move_index: int)
 signal move_cancelled
 
 const MAX_SLOTS := 4
-const CARD_WIDTH := 340.0
+const CARD_WIDTH := 460.0
 ## Never let the modal card exceed this fraction of the viewport width, so on a
 ## narrow window it shrinks instead of clipping past the screen edges.
 const CARD_MAX_FRAC := 0.92
@@ -52,7 +52,9 @@ func _ready() -> void:
 	# when laying out, so we can freely size and center ourselves as a real
 	# modal over the battlefield, entirely independent of the sidebar's rect.
 	top_level = true
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# top_level: anchors are ignored, so pin to the top-left and size to the
+	# viewport explicitly (see _apply_responsive_width).
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 	# Draw above sibling HUD panels regardless of where we sit in the tree
@@ -76,7 +78,7 @@ func _create_ui() -> void:
 	# battlefield/sidebar underneath while a move is being chosen.
 	var backdrop := ColorRect.new()
 	backdrop.name = "Backdrop"
-	backdrop.color = Color(0.0, 0.0, 0.0, 0.45)
+	backdrop.color = Color(0.02, 0.03, 0.08, 0.5)
 	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(backdrop)
@@ -100,23 +102,22 @@ func _create_ui() -> void:
 
 	# Main container
 	var main_container = VBoxContainer.new()
+	main_container.add_theme_constant_override("separation", 10)
 	card.add_child(main_container)
 
-	# Title
+	# Title + gold rule
 	var title = Label.new()
-	title.text = "SELECT MOVE"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 18)
+	title.text = "Choose a Skill"
+	title.add_theme_font_override("font", MenuTheme.bold_font(0.6, 2))
+	title.add_theme_font_size_override("font_size", 26)
 	main_container.add_child(title)
 	_title_label = title
-
-	# Separator
-	var separator = HSeparator.new()
-	main_container.add_child(separator)
+	main_container.add_child(ConquestTheme.accent_rule())
 
 	# Moves container
 	moves_container = VBoxContainer.new()
 	moves_container.name = "MovesContainer"
+	moves_container.add_theme_constant_override("separation", 4)
 	main_container.add_child(moves_container)
 
 	# Move info display
@@ -127,26 +128,59 @@ func _create_ui() -> void:
 	# Width 0: let the label take the card's width (capped by _apply_responsive_width)
 	# and wrap, rather than forcing a 300px floor that could widen the card past a
 	# narrow viewport. Only the height floor is kept so the info area never collapses.
-	move_info_label.custom_minimum_size = Vector2(0, 60)
-	move_info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	main_container.add_child(move_info_label)
+	move_info_label.custom_minimum_size = Vector2(0, 72)
+	move_info_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	var info_plate := PanelContainer.new()
+	info_plate.name = "InfoPlate"
+	info_plate.add_child(move_info_label)
+	main_container.add_child(info_plate)
 
-	# Back button
+	# Footer: key hints + Back
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 16)
+	main_container.add_child(footer)
+	footer.add_child(ConquestTheme.key_hint("1-4", "Quick pick"))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(spacer)
 	back_button = Button.new()
-	back_button.text = "BACK"
+	back_button.text = "Back"
+	back_button.theme_type_variation = &"GhostButton"
+	back_button.custom_minimum_size = Vector2(120, 40)
 	back_button.pressed.connect(_on_back_pressed)
-	main_container.add_child(back_button)
+	footer.add_child(back_button)
 
-	# Apply the amber HUD theme to the whole subtree: amber-izes the Card's
-	# background, dark-inks the labels, themes the buttons -- so the popup
-	# matches the rest of the HUD instead of the default grey Control theme.
+	# HUD theme for the whole subtree (navy card, cream text, themed buttons), then
+	# the deliberate local styles on top.
 	ConquestTheme.apply_to(self)
+	var card_sb := ConquestTheme.panel_box(0.97)
+	card_sb.border_color = ConquestTheme.GOLD_DK
+	card_sb.content_margin_left = 22
+	card_sb.content_margin_right = 22
+	card_sb.content_margin_top = 18
+	card_sb.content_margin_bottom = 16
+	card.add_theme_stylebox_override("panel", card_sb)
+	info_plate.add_theme_stylebox_override("panel", ConquestTheme.plate_box())
+	move_info_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+	move_info_label.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
+	var back_key := ConquestTheme.action_glyph(InputActions.CANCEL)
+	if back_key != "":
+		footer.add_child(ConquestTheme.key_hint(back_key, "Back"))
+		footer.move_child(footer.get_child(footer.get_child_count() - 1), 1)
 
 	_apply_responsive_width()
 
 ## Cap the modal card to a fraction of the viewport width so it never clips off a
 ## narrow window; falls back to the preferred CARD_WIDTH when there is no viewport.
 func _apply_responsive_width() -> void:
+	# top_level ignores anchors, so PRESET_FULL_RECT alone leaves this root 0x0 at
+	# the top-left (the card then hugged the corner and the dim backdrop vanished).
+	# Cover the viewport explicitly so the backdrop dims the board and the
+	# CenterContainer really centres the card.
+	var vpr := get_viewport()
+	if vpr != null:
+		position = Vector2.ZERO
+		size = vpr.get_visible_rect().size
 	if _card == null or not is_instance_valid(_card):
 		return
 	var w := CARD_WIDTH
@@ -177,14 +211,15 @@ func show_moves_for_unit(unit: Node, view_only_mode: bool = false) -> void:
 
 	# Title + hint reflect the mode so the read-only state is legible.
 	if _title_label:
-		_title_label.text = "VIEW MOVES" if view_only else "SELECT MOVE"
+		_title_label.text = "Skills (view only)" if view_only else "Choose a Skill"
 	if move_info_label:
 		if view_only:
-			move_info_label.text = "Hover or click a move to read its details"
+			move_info_label.text = "Hover or click a skill to read its details."
 		else:
-			move_info_label.text = "Hover over a move to see details"
+			move_info_label.text = "Hover a skill to read its details."
 
 	_populate_moves(moveset, controller)
+	_apply_responsive_width()
 	show()
 
 func _populate_moves(moveset: Array[MoveResource], controller: MovesetController) -> void:
@@ -218,7 +253,7 @@ func _populate_moves(moveset: Array[MoveResource], controller: MovesetController
 		row.add_theme_constant_override("separation", 6)
 		var swatch := ColorRect.new()
 		swatch.color = ConquestTheme.element_color(String(move.element))
-		swatch.custom_minimum_size = Vector2(7, 0)
+		swatch.custom_minimum_size = Vector2(6, 0)
 		swatch.size_flags_vertical = Control.SIZE_FILL
 		row.add_child(swatch)
 		move_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -241,7 +276,25 @@ func _create_move_button(move: MoveResource, slot: int, controller: MovesetContr
 			suffix = " (%d/%d uses)" % [controller.uses_left(move), move.max_uses]
 
 	var range_text := move.targeting.describe_range() if move.targeting else "no range"
-	button.text = "%s (%s)%s" % [move.display_name, range_text, suffix]
+	var caster = current_unit
+	var shown_name: String = move.display_name_for(caster) if caster != null else move.display_name
+	button.text = shown_name
+	button.theme_type_variation = &"HudCommand"
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.focus_mode = Control.FOCUS_NONE
+	# Right-hand note: range + cooldown / uses, readable at a glance.
+	var note := range_text.replace("range ", "Range ")
+	if suffix != "":
+		note += "  ·" + suffix.replace("(", "").replace(")", "")
+	ConquestTheme.set_button_hint(button, "", note,
+		ConquestTheme.TEXT_MUTED if (controller != null and not can_use and not view_only) else ConquestTheme.TEXT_DIM)
+	# Tooltip: the move's full description (flavour + every effect's describe()).
+	var tip := shown_name
+	var desc := move.full_description()
+	if desc != "":
+		tip += "\n" + desc
+	tip += "\nRange: %s  ·  Accuracy: %d%%" % [range_text, int(move.accuracy * 100)]
+	button.tooltip_text = tip
 	# In view-only mode every move stays clickable so clicking reliably reveals its
 	# details (a disabled button would swallow the click). Cooldown/uses are still shown
 	# in the label + details text. Commandable mode keeps the real can-use gating.
@@ -249,7 +302,7 @@ func _create_move_button(move: MoveResource, slot: int, controller: MovesetContr
 	# Height floor only; width 0 + EXPAND_FILL (set by the caller) lets the button
 	# fill the card, and clip_text ellipsizes a long move name instead of stretching
 	# the card past its responsive width.
-	button.custom_minimum_size = Vector2(0, 40)
+	button.custom_minimum_size = Vector2(0, 44)
 	button.clip_text = true
 
 	# Connect signals — slot is the index into the moveset (matches move_selected(slot)).
@@ -270,10 +323,10 @@ func _create_move_button(move: MoveResource, slot: int, controller: MovesetContr
 func _show_move_info(move: MoveResource, controller: MovesetController) -> void:
 	"""Display detailed move information"""
 	var info_text = ""
-	info_text += "Name: %s\n" % move.display_name
+	info_text += "%s" % move.display_name
 	if String(move.element) != "":
-		info_text += "Type: %s\n" % String(move.element).capitalize()
-	info_text += "Description: %s\n" % move.full_description()
+		info_text += "  ·  %s" % String(move.element).capitalize()
+	info_text += "\n%s\n" % move.full_description()
 	if move.energy_cost > 0:
 		info_text += "Energy Cost: %d\n" % move.energy_cost
 	if move.targeting:
@@ -295,9 +348,9 @@ func _show_move_info(move: MoveResource, controller: MovesetController) -> void:
 func _clear_move_info() -> void:
 	"""Clear move information display"""
 	if view_only:
-		move_info_label.text = "Hover or click a move to read its details"
+		move_info_label.text = "Hover or click a skill to read its details."
 	else:
-		move_info_label.text = "Hover over a move to see details"
+		move_info_label.text = "Hover a skill to read its details."
 
 func _on_move_selected(move_index: int) -> void:
 	"""Handle move selection. In view-only mode this is READ-ONLY: clicking a move (or

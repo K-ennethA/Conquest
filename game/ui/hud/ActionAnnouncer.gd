@@ -27,8 +27,8 @@ const OVERLAY_LAYER: int = 120
 # Pushed DOWN from the very top so it clears the top-centre turn chip / "YOUR TURN" banner.
 # Upper-centre, below the turn banner -- clear of the left SELECT-MOVE popup, the right
 # action panel, and the corners (battle log / terrain card / turn indicator).
-const TOP_OFFSET: float = 104.0
-const BANNER_MAX_WIDTH: float = 720.0
+const TOP_OFFSET: float = 132.0
+const BANNER_MAX_WIDTH: float = 640.0
 
 # --- Timing (seconds, base before Battle-Speed scaling) ---------------------
 const FADE_IN: float = 0.14
@@ -45,12 +45,12 @@ const DAMAGE_WINDOW: float = 1.5
 
 # --- Side tints (hardcoded warm/cool fallbacks; no ConquestTheme dependency) -
 # Matches the amber/cream theme and BattleLog's side scheme: enemy (AI) warm-red, ally cool.
-const ALLY_COLOR: Color = Color(0.76, 0.88, 1.0)     # cool blue-white
-const ENEMY_COLOR: Color = Color(1.0, 0.55, 0.42)    # warm red-orange
-const NEUTRAL_COLOR: Color = Color(0.988, 0.937, 0.839)  # cream (ConquestTheme.CREAM)
-const CREAM_DIM: Color = Color(0.906, 0.827, 0.678)  # subtitle (ConquestTheme.CREAM_DIM)
-const OUTLINE_COLOR: Color = Color(0.216, 0.133, 0.059)  # BROWN_DK, for text readability
-const PLATE_BG: Color = Color(0.06, 0.045, 0.03, 0.78)   # dark warm plate
+const ALLY_COLOR: Color = ConquestTheme.TEAM_BLUE_TEXT
+const ENEMY_COLOR: Color = ConquestTheme.TEAM_RED_TEXT
+const NEUTRAL_COLOR: Color = ConquestTheme.CREAM
+const CREAM_DIM: Color = ConquestTheme.TEXT_DIM
+const OUTLINE_COLOR: Color = ConquestTheme.BG_DEEP
+const PLATE_BG: Color = Color(0.09, 0.125, 0.26, 0.92)   # navy HUD plate (PANEL)
 
 var _root: Control = null
 var _plate: PanelContainer = null
@@ -111,7 +111,8 @@ func _build_ui() -> void:
 	_main_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_main_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_main_label.custom_minimum_size = Vector2(BANNER_MAX_WIDTH, 0.0)
-	_main_label.add_theme_font_size_override("font_size", 40)
+	_main_label.add_theme_font_override("font", MenuTheme.bold_font(0.5, 1))
+	_main_label.add_theme_font_size_override("font_size", 34)
 	_main_label.add_theme_color_override("font_color", NEUTRAL_COLOR)
 	_main_label.add_theme_color_override("font_outline_color", OUTLINE_COLOR)
 	_main_label.add_theme_constant_override("outline_size", 8)
@@ -122,7 +123,7 @@ func _build_ui() -> void:
 	_sub_label = Label.new()
 	_sub_label.name = "SubLabel"
 	_sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_sub_label.add_theme_font_size_override("font_size", 22)
+	_sub_label.add_theme_font_size_override("font_size", 20)
 	_sub_label.add_theme_color_override("font_color", CREAM_DIM)
 	_sub_label.add_theme_color_override("font_outline_color", OUTLINE_COLOR)
 	_sub_label.add_theme_constant_override("outline_size", 6)
@@ -137,7 +138,7 @@ func _build_ui() -> void:
 func _apply_plate_style(side: Color) -> void:
 	var box: StyleBoxFlat = StyleBoxFlat.new()
 	box.bg_color = PLATE_BG
-	box.set_corner_radius_all(10)
+	box.set_corner_radius_all(12)
 	box.set_content_margin_all(14)
 	box.content_margin_left = 26.0
 	box.content_margin_right = 26.0

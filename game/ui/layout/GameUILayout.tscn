@@ -102,7 +102,7 @@ size_flags_vertical = 3
 [node name="RightSidebar" type="VBoxContainer" parent="MarginContainer/MainContainer/MiddleArea"]
 layout_mode = 2
 mouse_filter = 2
-custom_minimum_size = Vector2(220, 0)
+custom_minimum_size = Vector2(290, 0)
 theme_override_constants/separation = 10
 
 [node name="UnitActionsPanel" parent="MarginContainer/MainContainer/MiddleArea/RightSidebar" instance=ExtResource("2")]

@@ -187,7 +187,7 @@ func _build_abilities_section() -> void:
 	_abilities_header.name = "AbilitiesLabel"
 	_abilities_header.text = "Abilities"
 	_abilities_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_abilities_header.add_theme_font_size_override("font_size", 14)
+	_abilities_header.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
 	vb.add_child(_abilities_header)
 
 	# Same containment as the effects list: descriptions are full sentences, so the
@@ -323,7 +323,7 @@ func _build_ability_chip(unit, ability) -> PanelContainer:
 
 	var name_label := Label.new()
 	name_label.text = title
-	name_label.add_theme_font_size_override("font_size", 12)
+	name_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
 	name_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# Wraps instead of widening the chip past the 300px card on a long name.
@@ -332,7 +332,7 @@ func _build_ability_chip(unit, ability) -> PanelContainer:
 
 	var trigger_badge := Label.new()
 	trigger_badge.text = trigger_label(int(ability.trigger))
-	trigger_badge.add_theme_font_size_override("font_size", 11)
+	trigger_badge.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
 	trigger_badge.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
 	trigger_badge.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	head.add_child(trigger_badge)
@@ -343,7 +343,7 @@ func _build_ability_chip(unit, ability) -> PanelContainer:
 	if description != "":
 		var desc_label := Label.new()
 		desc_label.text = description
-		desc_label.add_theme_font_size_override("font_size", 11)
+		desc_label.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
 		desc_label.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
 		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rows.add_child(desc_label)
@@ -353,7 +353,7 @@ func _build_ability_chip(unit, ability) -> PanelContainer:
 	if state != "":
 		var state_label := Label.new()
 		state_label.text = state
-		state_label.add_theme_font_size_override("font_size", 11)
+		state_label.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
 		state_label.add_theme_color_override("font_color", ConquestTheme.AMBER_LITE)
 		state_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rows.add_child(state_label)
@@ -379,7 +379,7 @@ func _build_effects_section() -> void:
 	_effects_header.name = "EffectsLabel"
 	_effects_header.text = "Active Effects"
 	_effects_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_effects_header.add_theme_font_size_override("font_size", 14)
+	_effects_header.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
 	vb.add_child(_effects_header)
 
 	# The chip list lives inside a ScrollContainer so a unit with many statuses
@@ -418,7 +418,7 @@ func _update_effects(unit) -> void:
 	if conditions.is_empty():
 		var none_label := Label.new()
 		none_label.text = "No active effects"
-		none_label.add_theme_font_size_override("font_size", 12)
+		none_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
 		# Muted so "nothing here" reads as secondary, not as a real effect --
 		# mirrors TerrainInfoPanel's "No special effects" row.
 		none_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
@@ -475,7 +475,7 @@ func _build_status_chip(condition) -> PanelContainer:
 
 	var name_label := Label.new()
 	name_label.text = status_name
-	name_label.add_theme_font_size_override("font_size", 12)
+	name_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
 	# CREAM reads on the dim chip fill; the theme's default INK is tuned for the
 	# light amber panel background instead.
 	name_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
@@ -484,7 +484,7 @@ func _build_status_chip(condition) -> PanelContainer:
 
 	var turns_label := Label.new()
 	turns_label.text = StatusVisuals.turns_label(StatusVisuals.turns_left_of(condition))
-	turns_label.add_theme_font_size_override("font_size", 11)
+	turns_label.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
 	turns_label.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
 	head.add_child(turns_label)
 
@@ -495,7 +495,7 @@ func _build_status_chip(condition) -> PanelContainer:
 	if detail != "":
 		var detail_label := Label.new()
 		detail_label.text = detail
-		detail_label.add_theme_font_size_override("font_size", 11)
+		detail_label.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
 		detail_label.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
 		detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rows.add_child(detail_label)

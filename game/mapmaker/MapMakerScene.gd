@@ -23,6 +23,8 @@ class_name MapMakerScene
 const TILE_RESOURCE_DIR := "res://game/tiles/resources"
 ## Directory maps are saved to / loaded from.
 const MAP_RESOURCE_DIR := "res://game/maps/resources"
+## Where Back returns to (the Map Maker is opened from the Compendium).
+const BACK_SCENE := "res://menus/Compendium.tscn"
 
 ## Editing tools available on the grid.
 enum Tool { PAINT, ERASE, SPAWN, OBJECTIVE, STAIRS, LINK }
@@ -85,9 +87,12 @@ func _ready() -> void:
 
 func _build_ui() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Same navy + gold look as the rest of the menus, in a compact size (this is a
+	# dense editor: every toolbar must fit a 1280-wide window).
+	theme = _compact_theme()
 
 	var bg := ColorRect.new()
-	bg.color = Color(0.13, 0.11, 0.1)
+	bg.color = MenuTheme.BG_DEEP
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
@@ -102,9 +107,26 @@ func _build_ui() -> void:
 	root.add_theme_constant_override("separation", 6)
 	margin.add_child(root)
 
-	# --- Top toolbar: name + dimensions ---------------------------------
+	# --- Top toolbar: back + name + dimensions ----------------------------
 	var top := HBoxContainer.new()
 	root.add_child(top)
+
+	# Back to the menu first, so it is always on screen (Esc too, when no text
+	# field is being edited).
+	var back_btn := Button.new()
+	back_btn.name = "BackButton"
+	back_btn.text = "< Back"
+	back_btn.theme_type_variation = &"GhostButton"
+	back_btn.tooltip_text = "Return to the Compendium (Esc)"
+	back_btn.pressed.connect(go_back)
+	top.add_child(back_btn)
+	var title := Label.new()
+	title.text = "Map Maker"
+	title.add_theme_font_override("font", MenuTheme.bold_font(0.5))
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
+	top.add_child(title)
+	top.add_child(_make_label("   "))
 
 	top.add_child(_make_label("Name:"))
 	_name_edit = LineEdit.new()
@@ -395,7 +417,55 @@ func set_floor(f: int) -> void:
 	_set_status("Editing floor %d" % current_floor)
 
 
+## MenuTheme, shrunk for a dense editor: 15px text and tighter button padding.
+func _compact_theme() -> Theme:
+	var t := MenuTheme.build()
+	t.default_font_size = 15
+	for type in ["Label", "Button", "LineEdit", "OptionButton", "SpinBox", "CheckBox", "PopupMenu"]:
+		t.set_font_size("font_size", type, 15)
+	for variation in ["GhostButton", "PrimaryButton"]:
+		t.set_font_size("font_size", variation, 15)
+	for type in ["Button", "OptionButton"]:
+		for state in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+			var sb := t.get_stylebox(state, type)
+			if sb is StyleBoxFlat:
+				var c := (sb as StyleBoxFlat).duplicate()
+				c.content_margin_left = 10
+				c.content_margin_right = 10
+				c.content_margin_top = 4
+				c.content_margin_bottom = 4
+				t.set_stylebox(state, type, c)
+	for state in ["normal", "hover", "pressed"]:
+		var gsb := t.get_stylebox(state, "GhostButton")
+		if gsb is StyleBoxFlat:
+			var g := (gsb as StyleBoxFlat).duplicate()
+			g.content_margin_left = 10
+			g.content_margin_right = 12
+			g.content_margin_top = 4
+			g.content_margin_bottom = 4
+			t.set_stylebox(state, "GhostButton", g)
+	var field := t.get_stylebox("normal", "LineEdit")
+	if field is StyleBoxFlat:
+		var f := (field as StyleBoxFlat).duplicate()
+		f.content_margin_top = 4
+		f.content_margin_bottom = 4
+		t.set_stylebox("normal", "LineEdit", f)
+	return t
+
+
+## Leave the Map Maker for the menu it was opened from.
+func go_back() -> void:
+	if is_inside_tree():
+		MenuNav.change_scene(self, BACK_SCENE)
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed(&"ui_cancel"):
+		var focus := get_viewport().gui_get_focus_owner()
+		if not (focus is LineEdit or focus is SpinBox):
+			accept_event()
+			go_back()
+			return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_PAGEUP:
 			set_floor(current_floor + 1)

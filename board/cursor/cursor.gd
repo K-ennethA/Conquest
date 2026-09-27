@@ -835,8 +835,17 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 
 func _on_unit_deselected(unit: Unit) -> void:
 	"""Handle unit deselection event"""
-	# Visual feedback is handled in _deselect_unit
-	pass
+	# Visual feedback is handled in _deselect_unit. A deselect can also come from
+	# ELSEWHERE (the command menu's Cancel / Esc emits unit_deselected directly):
+	# drop our stale reference too, otherwise the next Confirm on the same unit
+	# would "toggle" it off instead of selecting it again.
+	if unit != null and unit == selected_unit:
+		selected_unit = null
+		_update_view_state()
+		if mesh_instance:
+			mesh_instance.material_override = base_material
+		if base_mesh:
+			base_mesh.material_override = base_ring_material
 
 # Public interface
 func get_selected_unit() -> Unit:

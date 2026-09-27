@@ -2,7 +2,8 @@ extends Control
 
 ## Between-round reward step: after clearing a round you pick one power-up (augment)
 ## to stack onto your build, then the next round loads. This is the real "pick 1 of N"
-## draft screen -- a centered row of rarity-framed cards over a warm amber backdrop.
+## draft screen -- a centered row of rarity-framed cards on the shared menu page
+## (MenuTheme navy + gold, MenuKit header / footer), keyboard / pad navigable.
 ##
 ## Flow: _ready reads ArenaController (autoload), shows the cleared round number, rolls
 ## the draft options, and renders one clickable card per Augment. Clicking a card calls
@@ -10,7 +11,7 @@ extends Control
 ## round. If the pool is empty (not wired yet) a single "Continue" -> choose_augment(null)
 ## keeps the loop moving. Never crashes when the controller is null or options are empty.
 
-const CARD_SIZE := Vector2(236.0, 316.0)
+const CARD_SIZE := Vector2(250.0, 330.0)
 
 # Warm palette. Pulled from ConquestTheme when present, else tasteful hardcoded
 # fallbacks so a missing constant can never crash this screen.
@@ -26,40 +27,23 @@ var _amber_lite: Color = Color("f0c072")
 var _brown_dk: Color = Color("37220f")
 
 
+var _cards: Array[Button] = []
+
+
 func _ready() -> void:
 	_load_palette()
 
 	var arena: Node = get_node_or_null("/root/ArenaController")
-
-	_build_background()
-
-	var page: VBoxContainer = VBoxContainer.new()
-	page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	page.alignment = BoxContainer.ALIGNMENT_CENTER
-	page.add_theme_constant_override("separation", 28)
-	add_child(page)
-
-	# --- Title ---------------------------------------------------------------
 	var round_num: int = 0
 	if arena != null and arena.has_method("current_round"):
 		round_num = int(arena.current_round())
 
-	var title: Label = Label.new()
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 36)
-	title.add_theme_color_override("font_color", _cream)
-	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
-	title.add_theme_constant_override("shadow_offset_y", 2)
-	title.add_theme_constant_override("shadow_offset_x", 1)
-	title.text = "Round %d cleared — choose a power-up" % round_num
-	page.add_child(title)
-
-	var subtitle: Label = Label.new()
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_font_size_override("font_size", 16)
-	subtitle.add_theme_color_override("font_color", _cream_dim)
-	subtitle.text = "Pick one augment to carry into the next round."
-	page.add_child(subtitle)
+	var page := MenuKit.build_page(self, ["Arena"],
+		"Round %d Cleared" % round_num, "Choose one power-up to carry into the next round.")
+	var body: VBoxContainer = page["body"]
+	body.alignment = BoxContainer.ALIGNMENT_CENTER
+	# Only "Choose" applies here (there is no going back from a cleared round).
+	(page["hints"] as HBoxContainer).add_child(MenuKit.key_hint("Enter", "A", "Choose"))
 
 	# --- Options -------------------------------------------------------------
 	var options: Array = []
@@ -69,49 +53,22 @@ func _ready() -> void:
 			options = rolled
 
 	if options.is_empty():
-		_build_continue(page, arena)
+		_build_continue(body, arena)
 	else:
-		_build_card_row(page, options, arena)
-
-
-# --- Background -------------------------------------------------------------
-
-func _build_background() -> void:
-	# Warm dark backdrop with a subtle top->bottom darkening via two rects.
-	var bg: ColorRect = ColorRect.new()
-	bg.color = _bg_top
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bg)
-
-	var vignette: ColorRect = ColorRect.new()
-	vignette.color = Color(_bg_bottom.r, _bg_bottom.g, _bg_bottom.b, 0.55)
-	vignette.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	vignette.anchor_top = 0.45
-	vignette.offset_top = 0.0
-	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(vignette)
+		_build_card_row(body, options, arena)
+		if not _cards.is_empty():
+			MenuNav.focus_deferred(_cards[0])
 
 
 # --- Continue (empty pool) --------------------------------------------------
 
 func _build_continue(page: VBoxContainer, arena: Node) -> void:
-	var note: Label = Label.new()
+	var note: Label = MenuKit.label("No augments available yet.", &"DimLabel")
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	note.add_theme_font_size_override("font_size", 15)
-	note.add_theme_color_override("font_color", _cream_dim)
-	note.text = "No augments available yet."
 	page.add_child(note)
 
-	var cont: Button = Button.new()
-	cont.text = "Continue"
-	cont.custom_minimum_size = Vector2(240.0, 52.0)
-	cont.add_theme_font_size_override("font_size", 20)
-	cont.add_theme_stylebox_override("normal", _button_box(_amber_lite))
-	cont.add_theme_stylebox_override("hover", _button_box(_amber_lite.lightened(0.10)))
-	cont.add_theme_stylebox_override("pressed", _button_box(_amber))
-	cont.add_theme_color_override("font_color", _ink)
-	cont.add_theme_color_override("font_hover_color", _brown_dk)
+	var cont: Button = MenuKit.button("Continue", MenuKit.PRIMARY, 240.0, 52.0)
+	MenuNav.focus_deferred(cont)
 
 	# Center the fixed-width button within the full-width page column.
 	var wrap: HBoxContainer = HBoxContainer.new()
@@ -142,8 +99,12 @@ func _build_card(opt: Object, arena: Node) -> Control:
 
 	var card: PanelContainer = PanelContainer.new()
 	card.custom_minimum_size = CARD_SIZE
-	var normal_box: StyleBoxFlat = _card_box(_card_fill, accent, 3)
+	var normal_box: StyleBoxFlat = _card_box(_card_fill, accent.darkened(0.15), 2)
 	var hover_box: StyleBoxFlat = _card_box(_card_fill_hover, accent, 4)
+	# Focus / hover glows gold (the menus' focus colour) around the rarity frame.
+	hover_box.shadow_color = Color(MenuTheme.GOLD.r, MenuTheme.GOLD.g, MenuTheme.GOLD.b, 0.35)
+	hover_box.shadow_size = 16
+	hover_box.shadow_offset = Vector2.ZERO
 	card.add_theme_stylebox_override("panel", normal_box)
 
 	var margin: MarginContainer = MarginContainer.new()
@@ -162,8 +123,9 @@ func _build_card(opt: Object, arena: Node) -> Control:
 	# Rarity ribbon.
 	var rarity_label: Label = Label.new()
 	rarity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rarity_label.add_theme_font_size_override("font_size", 14)
-	rarity_label.add_theme_color_override("font_color", accent)
+	rarity_label.add_theme_font_override("font", MenuTheme.bold_font(0.45, 2))
+	rarity_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	rarity_label.add_theme_color_override("font_color", accent.lightened(0.25))
 	rarity_label.text = rarity_text.to_upper()
 	rarity_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(rarity_label)
@@ -172,7 +134,8 @@ func _build_card(opt: Object, arena: Node) -> Control:
 	var name_label: Label = Label.new()
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name_label.add_theme_font_size_override("font_size", 22)
+	name_label.add_theme_font_override("font", MenuTheme.bold_font(0.5))
+	name_label.add_theme_font_size_override("font_size", 24)
 	name_label.add_theme_color_override("font_color", _cream)
 	name_label.text = _augment_name(opt)
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -191,7 +154,7 @@ func _build_card(opt: Object, arena: Node) -> Control:
 	var desc_label: Label = Label.new()
 	desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc_label.add_theme_font_size_override("font_size", 14)
+	desc_label.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	desc_label.add_theme_color_override("font_color", _cream_dim)
 	desc_label.text = _augment_description(opt)
 	desc_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -207,8 +170,8 @@ func _build_card(opt: Object, arena: Node) -> Control:
 		for line in stats:
 			var s_label: Label = Label.new()
 			s_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			s_label.add_theme_font_size_override("font_size", 15)
-			s_label.add_theme_color_override("font_color", _amber_lite)
+			s_label.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
+			s_label.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
 			s_label.text = String(line)
 			s_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			stat_box.add_child(s_label)
@@ -218,7 +181,8 @@ func _build_card(opt: Object, arena: Node) -> Control:
 	var hit: Button = Button.new()
 	hit.flat = true
 	hit.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	hit.focus_mode = Control.FOCUS_NONE
+	hit.focus_mode = Control.FOCUS_ALL
+	hit.tooltip_text = _augment_description(opt)
 	var transparent: StyleBoxEmpty = StyleBoxEmpty.new()
 	hit.add_theme_stylebox_override("normal", transparent)
 	hit.add_theme_stylebox_override("hover", transparent)
@@ -226,12 +190,15 @@ func _build_card(opt: Object, arena: Node) -> Control:
 	hit.add_theme_stylebox_override("focus", transparent)
 	card.add_child(hit)
 
-	hit.mouse_entered.connect(func() -> void:
+	# Mouse hover moves focus; focus (mouse, keys or pad) lifts the card.
+	MenuNav.hover_focus(hit)
+	hit.focus_entered.connect(func() -> void:
 		card.add_theme_stylebox_override("panel", hover_box)
 		card.scale = Vector2(1.03, 1.03))
-	hit.mouse_exited.connect(func() -> void:
+	hit.focus_exited.connect(func() -> void:
 		card.add_theme_stylebox_override("panel", normal_box)
 		card.scale = Vector2(1.0, 1.0))
+	_cards.append(hit)
 	hit.pressed.connect(func() -> void:
 		if arena != null and arena.has_method("choose_augment"):
 			arena.choose_augment(opt))
@@ -296,11 +263,11 @@ func _rarity_index(opt: Object) -> int:
 
 func _rarity_color(opt: Object) -> Color:
 	match _rarity_index(opt):
-		0: return Color("9aa0a6")  # COMMON  - grey
+		0: return Color("aab3cf")  # COMMON  - cool grey
 		1: return Color("4a90e2")  # RARE    - blue
 		2: return Color("a860e0")  # EPIC    - purple
 		3: return Color("f0c040")  # LEGENDARY - gold
-	return Color("9aa0a6")
+	return Color("aab3cf")
 
 
 func _rarity_name(opt: Object) -> String:
@@ -350,13 +317,13 @@ func _stat_display_name(key: String) -> String:
 ## hardcoded defaults above stand in if the class is ever removed. Each assignment
 ## is a plain constant read -- none can fail at runtime once the script parses.
 func _load_palette() -> void:
-	_card_fill = ConquestTheme.PLATE_BG
-	_card_fill_hover = ConquestTheme.PLATE_BG.lightened(0.10)
-	_ink = ConquestTheme.INK
-	_cream = ConquestTheme.CREAM
-	_cream_dim = ConquestTheme.CREAM_DIM
-	_amber = ConquestTheme.AMBER
-	_amber_lite = ConquestTheme.AMBER_LITE
-	_brown_dk = ConquestTheme.BROWN_DK
-	_bg_top = ConquestTheme.INK.lerp(Color.BLACK, 0.15)
-	_bg_bottom = ConquestTheme.BROWN_DK.darkened(0.35)
+	_card_fill = MenuTheme.PANEL
+	_card_fill_hover = MenuTheme.PANEL_HI
+	_ink = MenuTheme.INK
+	_cream = MenuTheme.CREAM
+	_cream_dim = MenuTheme.TEXT_DIM
+	_amber = MenuTheme.GOLD
+	_amber_lite = MenuTheme.GOLD_LITE
+	_brown_dk = MenuTheme.BG_DEEP
+	_bg_top = MenuTheme.BG
+	_bg_bottom = MenuTheme.BG_DEEP

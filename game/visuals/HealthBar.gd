@@ -17,9 +17,15 @@ const FILL_HEIGHT := 0.26
 const HP_THRESHOLD_HIGH := 0.5
 const HP_THRESHOLD_MID := 0.25
 
-const COLOR_HIGH := Color(0.30, 0.72, 0.28, 1.0)   # Green - healthy
-const COLOR_MID := Color(0.92, 0.62, 0.13, 1.0)    # Amber - matches the fantasy UI vibe
-const COLOR_LOW := Color(0.82, 0.18, 0.16, 1.0)    # Red - critical
+# Same HP tiers as the HUD bars (ConquestTheme.HP_*), so a unit reads the same on
+# the map and in its card.
+const COLOR_HIGH := ConquestTheme.HP_HIGH   # Green - healthy
+const COLOR_MID := ConquestTheme.HP_MID     # Amber - wounded
+const COLOR_LOW := ConquestTheme.HP_LOW     # Red - critical
+
+# Team frame: a thin rim in the owner's team colour (blue / red ...) behind the bar,
+# so which side a unit is on reads at a glance even when the model is small.
+const FRAME_PAD := Vector2(0.10, 0.10)
 
 # --- Status pips -------------------------------------------------------------
 # A small row of billboarded coloured pips floating just ABOVE the bar, one per
@@ -54,6 +60,8 @@ const TERRAIN_LEAF_GREEN := Color("5fb84e")  # == ConquestTheme.EL_NATURE
 
 var _background_material: StandardMaterial3D
 var _health_material: StandardMaterial3D
+var _frame_material: StandardMaterial3D
+var _frame: MeshInstance3D = null
 
 # --- Incoming-damage preview band --------------------------------------------
 # A blinking red band laid over the slice of the fill a pending move would remove,
@@ -124,6 +132,7 @@ func _refresh_from_unit() -> void:
 	# Guard: unit freed, or _ready hasn't built the materials/meshes yet.
 	if not is_instance_valid(_bound_unit) or _health_material == null:
 		return
+	_refresh_team_frame()
 	var mx: int = _bound_unit.max_health
 	if mx <= 0:
 		return
@@ -137,13 +146,21 @@ func _setup_materials():
 	# bar never bleed through the empty portion (the "shows the map colour when it's
 	# clear" report). A dark crimson also reads as lost health, so a low bar is
 	# clearly a health bar (green fill over red track) rather than a stray sliver.
-	_background_material.albedo_color = Color(0.16, 0.04, 0.05, 1.0)
+	_background_material.albedo_color = Color(0.13, 0.05, 0.08, 1.0)
 	_background_material.flags_transparent = false
 	_background_material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 	_background_material.flags_unshaded = true
 	_background_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	_background_material.billboard_keep_scale = true
 	_background_material.render_priority = 1
+
+	# Team rim material (recoloured per owner in _refresh_team_frame).
+	_frame_material = StandardMaterial3D.new()
+	_frame_material.albedo_color = Color(0.04, 0.06, 0.14, 1.0)
+	_frame_material.flags_unshaded = true
+	_frame_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	_frame_material.billboard_keep_scale = true
+	_frame_material.render_priority = 0
 
 	# Health fill material (classic RPG style, recolored per current HP)
 	_health_material = StandardMaterial3D.new()
@@ -162,6 +179,18 @@ func _setup_meshes():
 	# A UI overlay bar must never cast shadows onto the map (it billboards + is
 	# unshaded, so a cast shadow is just a floating dark rectangle artifact).
 	background.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+	# Team-colour rim just behind (and a little larger than) the track.
+	_frame = MeshInstance3D.new()
+	_frame.name = "TeamFrame"
+	var frame_mesh := QuadMesh.new()
+	frame_mesh.size = BG_SIZE + FRAME_PAD
+	_frame.mesh = frame_mesh
+	_frame.material_override = _frame_material
+	_frame.position.z = -0.01
+	_frame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_frame)
+	move_child(_frame, 0)
 
 	# Create health fill quad (fits inside background, leaving a thin border visible)
 	var health_mesh = QuadMesh.new()
@@ -202,6 +231,18 @@ func update_health(percentage: float, current: int, maximum: int):
 	# No numeric text on the map bar (Fire Emblem style) - current/maximum are
 	# intentionally unused here; the bar's fill/color is the only readout.
 	# Numeric HP is shown in the unit info panel and combat forecast instead.
+
+## Tint the rim with the bound unit's team colour (dark navy when it has no owner).
+func _refresh_team_frame() -> void:
+	if _frame_material == null:
+		return
+	var col := Color(0.04, 0.06, 0.14, 1.0)
+	if is_instance_valid(_bound_unit) and _bound_unit.has_method("get_owner_player"):
+		var owner = _bound_unit.get_owner_player()
+		if owner != null:
+			col = ConquestTheme.team_color(owner)
+	_frame_material.albedo_color = col
+
 
 func set_visible_state(visible: bool):
 	"""Show or hide the health bar"""
@@ -285,6 +326,7 @@ func _status_signature_for(conditions: Array) -> String:
 ## the list actually changed. No statuses (or no StatusController at all) leaves
 ## the row empty, which is exactly today's appearance.
 func _refresh_status_pips() -> void:
+	_refresh_team_frame()
 	if _status_root == null or not is_instance_valid(_status_root):
 		return
 

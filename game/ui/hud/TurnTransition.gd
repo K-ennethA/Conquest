@@ -4,9 +4,10 @@ class_name TurnTransition
 
 ## Full-screen cinematic turn-transition wipe.
 ##
-## A brief fade-to-black with the incoming player's name centred, framed in the
-## Conquest amber theme (a thin amber rule + the player's colour accent under the
-## text) so it reads as part of the game rather than a generic black screen.
+## A brief Fire-Emblem "PHASE" banner: the board dims to navy and a full-width
+## band sweeps in with the phase title ("PLAYER PHASE" / "ENEMY PHASE", or YOUR /
+## OPPONENT'S TURN online) in the acting side's team colour, framed by team-colour
+## rules, with the round number underneath.
 ##
 ## Lives on a high CanvasLayer so it draws above every HUD panel. Starts hidden
 ## and never blocks board input while idle -- the covering Control only switches
@@ -44,6 +45,10 @@ var _overlay: Control = null
 var _fade: ColorRect = null
 var _turn_label: Label = null
 var _accent: ColorRect = null
+var _band: ColorRect = null
+var _rule_top: ColorRect = null
+var _rule_bottom: ColorRect = null
+var _sub_label: Label = null
 var _tween: Tween = null
 # The turn system we're currently listening to for turn_started (re-wired on switch).
 var _watched_ts = null
@@ -100,13 +105,28 @@ func _build_ui() -> void:
 	_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_overlay)
 
-	# Black fade ground.
+	# Navy dim over the whole board.
 	_fade = ColorRect.new()
 	_fade.name = "Fade"
-	_fade.color = Color(0.02, 0.015, 0.01, 1.0)  # near-black, faintly warm
+	_fade.color = Color(ConquestTheme.BG_DEEP.r, ConquestTheme.BG_DEEP.g, ConquestTheme.BG_DEEP.b, 0.72)
 	_fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_overlay.add_child(_fade)
+
+	# Full-width phase band across the middle, framed by team-colour rules.
+	_band = ColorRect.new()
+	_band.name = "Band"
+	_band.color = Color(ConquestTheme.PANEL.r, ConquestTheme.PANEL.g, ConquestTheme.PANEL.b, 0.96)
+	_band.anchor_left = 0.0
+	_band.anchor_right = 1.0
+	_band.anchor_top = 0.5
+	_band.anchor_bottom = 0.5
+	_band.offset_top = -78.0
+	_band.offset_bottom = 78.0
+	_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_overlay.add_child(_band)
+	_rule_top = _make_rule(-78.0)
+	_rule_bottom = _make_rule(74.0)
 
 	# Centred content column.
 	var center := CenterContainer.new()
@@ -116,30 +136,53 @@ func _build_ui() -> void:
 
 	var vbox := VBoxContainer.new()
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_theme_constant_override("separation", 14)
+	vbox.add_theme_constant_override("separation", 6)
 	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	center.add_child(vbox)
 
-	# Big turn label.
+	# Big phase title.
 	_turn_label = Label.new()
 	_turn_label.name = "TurnLabel"
-	_turn_label.text = "YOUR TURN"
+	_turn_label.text = "PLAYER PHASE"
 	_turn_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_turn_label.add_theme_font_size_override("font_size", 54)
+	_turn_label.add_theme_font_override("font", MenuTheme.bold_font(0.8, 8))
+	_turn_label.add_theme_font_size_override("font_size", 60)
 	_turn_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
-	_turn_label.add_theme_color_override("font_outline_color", ConquestTheme.BROWN_DK)
+	_turn_label.add_theme_color_override("font_outline_color", ConquestTheme.BG_DEEP)
 	_turn_label.add_theme_constant_override("outline_size", 8)
 	_turn_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(_turn_label)
 
-	# Thin amber rule / player-colour accent under the text.
+	# Short gold rule / team accent under the title.
 	_accent = ColorRect.new()
 	_accent.name = "Accent"
-	_accent.color = ConquestTheme.AMBER
-	_accent.custom_minimum_size = Vector2(220, 3)
+	_accent.color = ConquestTheme.GOLD
+	_accent.custom_minimum_size = Vector2(160, 3)
 	_accent.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(_accent)
+
+	_sub_label = Label.new()
+	_sub_label.name = "SubLabel"
+	_sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_sub_label.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
+	_sub_label.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
+	_sub_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(_sub_label)
+
+
+func _make_rule(offset_top: float) -> ColorRect:
+	var r := ColorRect.new()
+	r.color = ConquestTheme.GOLD
+	r.anchor_left = 0.0
+	r.anchor_right = 1.0
+	r.anchor_top = 0.5
+	r.anchor_bottom = 0.5
+	r.offset_top = offset_top
+	r.offset_bottom = offset_top + 4.0
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_overlay.add_child(r)
+	return r
 
 
 # --- Idle / visibility helpers ---------------------------------------------
@@ -258,18 +301,25 @@ func play(player: Player) -> void:
 
 
 func _apply_player(player: Player) -> void:
+	var team: Color = ConquestTheme.GOLD
 	if player != null:
-		# Ally/enemy framing reads better than "Player 1/2" in single-player.
-		_turn_label.text = "ENEMY TURN" if player.is_ai else "YOUR TURN"
-		# Accent picks up the player's team colour (kept legible), falling back to
-		# amber when there isn't one.
-		var col: Color = player.get_team_color()
-		if col.a <= 0.0:
-			col = ConquestTheme.AMBER
-		else:
-			col = col.lerp(ConquestTheme.CREAM, 0.15)
-			col.a = 1.0
-		_accent.color = col
+		_turn_label.text = ConquestTheme.phase_title(player)
+		team = ConquestTheme.team_color(player)
+		_turn_label.add_theme_color_override("font_color", ConquestTheme.team_text_color(player).lerp(ConquestTheme.CREAM, 0.25))
 	else:
 		_turn_label.text = "NEXT TURN"
-		_accent.color = ConquestTheme.AMBER
+		_turn_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
+	_accent.color = ConquestTheme.GOLD
+	if _rule_top:
+		_rule_top.color = team
+		_rule_bottom.color = team
+	if _sub_label:
+		var round_no := _round_number()
+		_sub_label.text = "Round %d" % round_no if round_no > 0 else ""
+		_sub_label.visible = round_no > 0
+
+
+func _round_number() -> int:
+	if _watched_ts != null and is_instance_valid(_watched_ts) and "current_turn" in _watched_ts:
+		return int(_watched_ts.current_turn)
+	return 0
