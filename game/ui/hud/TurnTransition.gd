@@ -63,6 +63,10 @@ func _ready() -> void:
 	# (PlayerManager.player_turn_started only fires on game start + the human's End-Turn
 	# button, never for AI-driven advances, so the wipe barely ran off it.) Mirrors how
 	# TurnIndicator wires to the turn system, incl. picking up an already-active one.
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings.has_signal("fast_forward_changed") \
+			and not GameSettings.fast_forward_changed.is_connected(_on_fast_forward_changed):
+		GameSettings.fast_forward_changed.connect(_on_fast_forward_changed)
+
 	if TurnSystemManager != null:
 		if not TurnSystemManager.turn_system_activated.is_connected(_on_turn_system_activated):
 			TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
@@ -163,6 +167,21 @@ func is_blocking_input() -> bool:
 
 # --- Duration scaling (null-safe GameSettings) ------------------------------
 
+# Fast-forward factor in force when the current wipe started (its durations already
+# include it via scaled_time); a mid-wipe press/release rescales the running tween.
+var _ff_at_start: float = 1.0
+
+func _ff_factor() -> float:
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings.has_method("fast_forward_factor"):
+		return maxf(1.0, float(GameSettings.fast_forward_factor()))
+	return 1.0
+
+
+func _on_fast_forward_changed(_active: bool) -> void:
+	if _tween != null and _tween.is_valid():
+		_tween.set_speed_scale(_ff_factor() / maxf(1.0, _ff_at_start))
+
+
 func _animations_on() -> bool:
 	if typeof(GameSettings) == TYPE_OBJECT:
 		return GameSettings.animations_on()
@@ -230,6 +249,7 @@ func play(player: Player) -> void:
 	_overlay.modulate.a = 0.0
 	_set_blocking(true)
 
+	_ff_at_start = _ff_factor()
 	_tween = create_tween()
 	_tween.tween_property(_overlay, "modulate:a", 1.0, _scaled(fade_in))
 	_tween.tween_interval(_scaled(hold))

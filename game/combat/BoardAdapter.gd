@@ -682,8 +682,15 @@ func _all_units() -> Array:
 	return []
 
 
+## Collect every [Unit] under [param node]. Hot path (every units_at / is_occupied
+## query walks it), so it skips subtrees that can never hold a unit: the map's
+## "Tiles" container (hundreds of tile nodes + their meshes) and a unit's own model
+## subtree -- which cut a units_at call on a 20x20 map from ~3 ms to a fraction.
 func _gather_units_recursive(node: Node, out: Array) -> void:
 	for child in node.get_children():
 		if child is Unit:
 			out.append(child)
+			continue
+		if child.name == &"Tiles":
+			continue
 		_gather_units_recursive(child, out)

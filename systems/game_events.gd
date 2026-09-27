@@ -94,6 +94,20 @@ signal unit_acted_under_control(unit, victim)
 ## damaging ones. Carries the caster and the MoveResource. See UnitAnimator.
 signal move_performed(caster, move)
 
+# Fire-Emblem board readouts. APPENDED, never reordered. Cells are grid coords
+# Vector3(col, floor, row) like the other overlay signals.
+#
+# attack_fringe_calculated : red cells a selected/inspected unit could ATTACK but
+#                            not move to, drawn around its blue movement range.
+#                            Cleared with movement_range_cleared / a recalculation.
+# path_preview_updated     : the route [origin .. hovered cell] the selected unit
+#                            would walk; [] hides the path arrow.
+# danger_zone_changed      : the combined enemy threat overlay was toggled/refreshed
+#                            (active, number of cells) -- for HUD hints.
+signal attack_fringe_calculated(cells: Array)
+signal path_preview_updated(cells: Array)
+signal danger_zone_changed(active: bool, cell_count: int)
+
 func _ready() -> void:
 	# Make this a singleton
 	name = "GameEvents"

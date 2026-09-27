@@ -49,14 +49,22 @@ class_name MovementResolver
 ##
 ## [b]Per-kind rules[/b] ([enum CombatTypes.MovementKind]):
 ## [ul]
-## GROUND  — cannot path through or end on blocked (walls), occupied or air cells.
-## FLYING  — ignores walls (`is_blocked`) entirely; blocked by units in its path
-##           and may not end on an occupied or air cell.
+## GROUND  — cannot path through or end on blocked (walls) or air cells, nor end on
+##           an occupied cell. May path THROUGH a cell held only by ALLIES of the
+##           mover (Fire Emblem style) but never through an enemy.
+## FLYING  — ignores walls (`is_blocked`) entirely; may pass allies like GROUND but
+##           is blocked by enemy units in its path and may not end on an occupied or
+##           air cell.
 ## PHASING — ignores walls and units while pathing (never air); may not end on an
 ##           occupied cell.
 ## [/ul]
 ## TELEPORT reachability ignores everything for pathing but still may not land on
 ## an occupied cell (respecting the profile's kind for the destination).
+##
+## [b]Allies:[/b] "ally" is answered by the board's [code]are_allies(mover, other)[/code]
+## (plus [code]units_at[/code]); with no mover, or a board lacking either query, every
+## occupant blocks exactly as before. A pass-through cell is recorded in the search
+## (so [method path_to] routes through it) but is never returned as a destination.
 
 const ORTHOGONAL_OFFSETS: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, -1, 0),
@@ -320,17 +328,35 @@ static func _structure_allows(board, cell: Vector3i, kind: CombatTypes.MovementK
 
 
 ## Whether the pathfinder may move [i]through[/i] (or into) a cell for a kind.
-static func _can_traverse(cell: Vector3i, kind: CombatTypes.MovementKind, board) -> bool:
+## [param mover] (optional) lets the mover pass through cells held only by its allies.
+static func _can_traverse(cell: Vector3i, kind: CombatTypes.MovementKind, board, mover = null) -> bool:
 	if not _structure_allows(board, cell, kind, false):
 		return false
 	match kind:
 		CombatTypes.MovementKind.GROUND:
-			return not _is_blocked(board, cell) and not _is_occupied(board, cell)
+			return not _is_blocked(board, cell) and not _blocks_passage(board, mover, cell)
 		CombatTypes.MovementKind.FLYING:
-			return not _is_occupied(board, cell)
+			return not _blocks_passage(board, mover, cell)
 		CombatTypes.MovementKind.PHASING:
 			return true
 	return true
+
+
+## True when [param cell] holds a living unit that [param mover] may NOT walk
+## through: anyone who is not the mover itself and not the mover's ally. With no
+## mover, or a board that cannot answer allegiance, any occupant blocks (the
+## original rule).
+static func _blocks_passage(board, mover, cell: Vector3i) -> bool:
+	if board == null:
+		return false
+	if mover == null or not board.has_method("units_at") or not board.has_method("are_allies"):
+		return _is_occupied(board, cell)
+	for u in board.units_at(cell):
+		if u == null or u == mover or not _unit_alive(u):
+			continue
+		if not bool(board.are_allies(mover, u)):
+			return true
+	return false
 
 
 ## Whether a unit of the given kind may end its movement on a cell. No kind may
@@ -353,7 +379,7 @@ static func _can_stop(cell: Vector3i, kind: CombatTypes.MovementKind, board) -> 
 static func _can_enter(unit, cell: Vector3i, kind: CombatTypes.MovementKind, board) -> bool:
 	var fp := _footprint_of(unit)
 	if fp == Vector2i.ONE:
-		return _can_traverse(cell, kind, board)
+		return _can_traverse(cell, kind, board, unit)
 	return _span_allows(unit, cell, fp, kind, board, false)
 
 
@@ -381,12 +407,14 @@ static func _span_allows(unit, anchor: Vector3i, fp: Vector2i, kind: CombatTypes
 				return false
 			if not _structure_allows(board, c, kind, stopping):
 				return false
+			# Stopping needs the cell free of everyone else; passing only of non-allies.
+			var occupied: bool = _occupied_by_other(board, unit, c) if stopping else _blocks_passage(board, unit, c)
 			match kind:
 				CombatTypes.MovementKind.GROUND:
-					if _is_blocked(board, c) or _occupied_by_other(board, unit, c):
+					if _is_blocked(board, c) or occupied:
 						return false
 				CombatTypes.MovementKind.FLYING:
-					if _occupied_by_other(board, unit, c):
+					if occupied:
 						return false
 				CombatTypes.MovementKind.PHASING:
 					# Phases through everything while pathing; still cannot land on a unit.

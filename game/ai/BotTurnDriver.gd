@@ -98,6 +98,9 @@ func _ready() -> void:
 		if GameSettings.has_signal("settings_changed") \
 				and not GameSettings.settings_changed.is_connected(_on_settings_changed):
 			GameSettings.settings_changed.connect(_on_settings_changed)
+		if GameSettings.has_signal("fast_forward_changed") \
+				and not GameSettings.fast_forward_changed.is_connected(_on_fast_forward_changed):
+			GameSettings.fast_forward_changed.connect(_on_fast_forward_changed)
 
 
 ## Effective Timer wait: the base interval scaled DOWN by battle speed (so faster
@@ -109,7 +112,28 @@ func _effective_wait() -> float:
 	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and "battle_speed" in GameSettings:
 		var speed: float = clampf(float(GameSettings.battle_speed), 0.5, 3.0)
 		scaled = action_interval / speed
-	return maxf(0.05, scaled)
+	return maxf(0.05, scaled) / _fast_forward_factor()
+
+
+## FAST-FORWARD (held `fast_forward` action, see GameSettings): every AI beat --
+## the base interval and both post-action dwells, floors included -- is divided by
+## this factor (4x while held, 1x otherwise). Null-safe for headless tests.
+func _fast_forward_factor() -> float:
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and GameSettings.has_method("fast_forward_factor"):
+		return maxf(1.0, float(GameSettings.fast_forward_factor()))
+	return 1.0
+
+
+## Fast-forward pressed mid-beat: shorten the beat already in flight by the same
+## factor so the speed-up is felt immediately, not only from the next action.
+## Releasing leaves the (short) remaining wait alone; the next beat is normal.
+func _on_fast_forward_changed(active: bool) -> void:
+	if not active or _timer == null or _timer.is_stopped():
+		return
+	var left: float = _timer.time_left
+	var ff := _fast_forward_factor()
+	if left > 0.05 and ff > 1.0:
+		_timer.start(maxf(0.02, left / ff))
 
 
 ## Recompute and apply the Timer's wait. Call whenever the interval or battle speed
@@ -179,7 +203,7 @@ func _effective_dwell() -> float:
 	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and "battle_speed" in GameSettings:
 		var speed: float = clampf(float(GameSettings.battle_speed), 0.5, 3.0)
 		scaled = attack_dwell / speed
-	return maxf(min_attack_dwell, scaled)
+	return maxf(min_attack_dwell, scaled) / _fast_forward_factor()
 
 
 ## Effective post-move dwell: move_dwell scaled DOWN by battle speed, then floored at
@@ -190,7 +214,7 @@ func _effective_move_dwell() -> float:
 	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null and "battle_speed" in GameSettings:
 		var speed: float = clampf(float(GameSettings.battle_speed), 0.5, 3.0)
 		scaled = move_dwell / speed
-	return maxf(min_move_dwell, scaled)
+	return maxf(min_move_dwell, scaled) / _fast_forward_factor()
 
 
 ## Perform ONE AI action for the currently-active turn system (the Timer's entry

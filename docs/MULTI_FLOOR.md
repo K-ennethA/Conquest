@@ -151,7 +151,9 @@ the historical Manhattan behaviour byte-for-byte. Leash / aggro / threat radii u
 - No floor cycling: a cell *under* a bridge can only be picked by keyboard (mouse picks the deck).
 - No cutaway/fade: units under a bridge are visually hidden by the deck.
 - Map Maker / map_creator addon still edit floor 0 only; showcase maps not built.
-- Units teleport+glide to the destination; walk the `path_to()` route for stairs animation.
+- ~~Units teleport+glide~~ Done: the player's path arrow and the unit walk (player + AI)
+  follow `path_to()` cell by cell, stairs included (`PathArrow`, `UnitAnimator.walk_path`).
+  Move range / fringe / danger-zone overlays sit on each cell's floor.
 - AI stand-cell tie-break uses `Cells.distance`, not exact path cost.
 - Traveling hazards and knockback stay on their floor; knockback never pushes into air.
 - `NetProtocol` still documents `to: Vector2i` — serialize cells with `Cells.to_array` /

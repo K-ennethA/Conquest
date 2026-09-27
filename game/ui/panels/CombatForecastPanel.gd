@@ -48,6 +48,13 @@ var _lethal_label: Label
 ## that would be lost (remaining -> current HP), pulsing so it flashes.
 var _dmg_preview: ColorRect
 var _flash_tween: Tween
+## Modifier chips under the title: type matchup (ElementChart) and height (Elevation).
+var _chip_row: HBoxContainer
+var _type_chip: Label
+var _height_chip: Label
+
+const CHIP_GOOD := Color("7be07a")
+const CHIP_BAD := Color("ff8a78")
 
 func _ready() -> void:
 	name = "CombatForecastPanel"
@@ -113,6 +120,18 @@ func _create_ui() -> void:
 	title.add_theme_font_size_override("font_size", 16)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_vb.add_child(title)
+
+	# Matchup chips ("▲ Effective" / "▼ Resisted", "▲ High ground" / "▼ Low ground"),
+	# shown only when they apply.
+	_chip_row = HBoxContainer.new()
+	_chip_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_chip_row.add_theme_constant_override("separation", 8)
+	_chip_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root_vb.add_child(_chip_row)
+	_type_chip = _make_chip()
+	_chip_row.add_child(_type_chip)
+	_height_chip = _make_chip()
+	_chip_row.add_child(_height_chip)
 
 	# Attacker | vs | Defender row.
 	var sides := HBoxContainer.new()
@@ -204,6 +223,55 @@ func _create_ui() -> void:
 	_result_value.add_theme_color_override("font_color", ConquestTheme.HP_CYAN)
 	_lethal_label.add_theme_color_override("font_color", ConquestTheme.HIT_ORANGE)
 
+func _make_chip() -> Label:
+	# Bright text on a small dark plate so it reads on the amber card.
+	var l := Label.new()
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.visible = false
+	return l
+
+## Matchup chip texts for [param attacker] using [param move] on [param defender]:
+## { "type": "" | "▲ Effective" | "▼ Resisted", "type_good": bool,
+##   "height": "" | "▲ High ground" | "▼ Low ground", "height_good": bool }.
+## Static + pure so it is unit-testable without building the panel.
+static func matchup_chips(attacker, defender, move, board) -> Dictionary:
+	var out := { "type": "", "type_good": true, "height": "", "height_good": true }
+	var mult: float = ElementChart.type_scale_for(move, defender)
+	if mult > 1.001:
+		out["type"] = "▲ Effective"
+		out["type_good"] = true
+	elif mult < 0.999:
+		out["type"] = "▼ Resisted"
+		out["type_good"] = false
+	if board != null and board.has_method("cell_of") and attacker != null and defender != null:
+		var adv := Elevation.advantage(board.cell_of(attacker), board.cell_of(defender))
+		if adv > 0:
+			out["height"] = "▲ High ground"
+			out["height_good"] = true
+		elif adv < 0:
+			out["height"] = "▼ Low ground"
+			out["height_good"] = false
+	return out
+
+func _apply_chips(attacker, defender, move, board) -> void:
+	var chips := matchup_chips(attacker, defender, move, board)
+	_set_chip(_type_chip, chips["type"], chips["type_good"])
+	_set_chip(_height_chip, chips["height"], chips["height_good"])
+	_chip_row.visible = _type_chip.visible or _height_chip.visible
+
+func _set_chip(chip: Label, text: String, good: bool) -> void:
+	# (Styled here, after ConquestTheme.apply_to has swept the card's overrides.)
+	if not chip.has_theme_stylebox_override("normal"):
+		var sb := ConquestTheme.plate_box()
+		sb.set_content_margin_all(3)
+		sb.content_margin_left = 8
+		sb.content_margin_right = 8
+		chip.add_theme_stylebox_override("normal", sb)
+		chip.add_theme_font_size_override("font_size", 13)
+	chip.text = text
+	chip.visible = text != ""
+	chip.add_theme_color_override("font_color", CHIP_GOOD if good else CHIP_BAD)
+
 func _build_side() -> Dictionary:
 	"""One combatant column: name label + cyan HP bar + 'current/max' label."""
 	var vb := VBoxContainer.new()
@@ -258,10 +326,11 @@ func _add_stat_row(parent: VBoxContainer, label_text: String) -> Label:
 
 # --- Public API -------------------------------------------------------------
 
-func show_forecast(attacker, defender, move: MoveResource) -> void:
+func show_forecast(attacker, defender, move: MoveResource, board = null) -> void:
 	"""Populate the forecast for `attacker` using `move` against `defender`, then
 	show it. Non-mutating: reads MoveExecutor.preview_vs() only. No-op (hides) on
-	missing arguments."""
+	missing arguments. Pass the live `board` so terrain / height / board-gated
+	passives match resolution (null falls back to CombatServices' board)."""
 	if attacker == null or defender == null or move == null:
 		hide_forecast()
 		return
@@ -277,7 +346,10 @@ func show_forecast(attacker, defender, move: MoveResource) -> void:
 	# Element accent stripe.
 	_element_stripe.color = ConquestTheme.element_color(String(move.element))
 
-	var preview: Dictionary = MoveExecutor.preview_vs(move, attacker, defender)
+	if board == null:
+		board = MoveExecutor._live_board()
+	var preview: Dictionary = MoveExecutor.preview_vs(move, attacker, defender, board)
+	_apply_chips(attacker, defender, move, board)
 
 	# Defender column.
 	var target_hp: int = int(preview.get("target_hp", _hp_of(defender)))

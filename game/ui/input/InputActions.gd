@@ -20,12 +20,12 @@ class_name InputActions
 ##  wait              E  (end the unit's action)    Y / Triangle
 ##  unit_info         I  (Unit Summary)             X / Square
 ##  end_turn          P                             Back / Select
-##  map_menu          Esc (only when nothing is     Start       [reserved]
-##                    selected / nothing to cancel)
+##  map_menu          Esc (only when nothing is     Start       (MapMenu; Cancel
+##                    selected / nothing to cancel)             also opens it then)
 ##  cycle_next        Tab, R                        RB / R1     [reserved]
 ##  cycle_prev        Shift+Tab, Q                  LB / L1     [reserved]
-##  danger_zone       Z                             L3          [reserved]
-##  fast_forward      Shift (hold)                  R3 (hold)   [reserved]
+##  danger_zone       Z  (toggle enemy threat)      L3          (DangerZoneOverlay)
+##  fast_forward      Shift (hold: 4x AI/anims)     R3 (hold)   (GameSettings)
 ##  camera_pan_*      W / A / S / D                 right stick
 ##  floor_up/down     Page Up / Page Down           RT / LT     [reserved: multi-floor]
 ##
