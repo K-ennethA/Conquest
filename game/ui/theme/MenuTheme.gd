@@ -2,10 +2,12 @@ class_name MenuTheme
 extends RefCounted
 
 ## The ONE theme for every out-of-battle screen (main menu, mode / turn-system /
-## map / squad pickers, network lobby, Compendium, Arena setup). Deep navy panels,
-## warm gold accents and cream text -- the "royal war-table" register of modern
-## tactics menus -- tying back to the amber battle HUD ([ConquestTheme]) through
-## the shared gold.
+## map / squad pickers, network lobby, Compendium, Arena setup), and the token +
+## frame source the battle HUD ([ConquestTheme]) builds on. The look is
+## "illuminated grove heraldry": deep navy cards drawn by [OrnateStyleBox] (notched
+## corners, fine grain, inset gold filigree, gold clasps, crests on hero cards),
+## Cinzel capitals for titles / headings / buttons, heraldic unit crests and
+## element gems. See docs/UI_STYLE.md.
 ##
 ## Apply with [code]control.theme = MenuTheme.build()[/code] on a screen root; the
 ## subtree inherits it. Everything a screen needs beyond plain controls is exposed
@@ -14,11 +16,13 @@ extends RefCounted
 ##
 ##   Buttons    "PrimaryButton"  gold call-to-action (Start / Confirm)
 ##              "GhostButton"    quiet secondary action (Back, Leave)
-##              "MenuItem"       main-menu list entry (left aligned, gold bar on focus)
+##              "MenuItem"       main-menu row (gold ribbon wash + leaf marker on focus)
 ##              "OptionCard"     big selectable card whose content is child labels
-##   Panels     "Card"           raised panel (default PanelContainer look)
-##              "InsetPanel"     sunken well (previews, lists, fields)
-##              "Pill"           small rounded chip background (badges, key glyphs)
+##   Panels     "Card"           grove-frame card (default PanelContainer look)
+##              "CrestCard"      the same with the gold crest on its top edge
+##              "InsetPanel"     sunken notched well (previews, lists, fields)
+##              "Pill"           pointed tag chip (badges)
+##              "Ribbon"         swallow-tailed title ribbon
 ##   Labels     "DisplayLabel"   game-title size   "TitleLabel"  screen title
 ##              "HeadingLabel"   pane heading      "SectionLabel" gold small caps
 ##              "DimLabel"       secondary text    "MutedLabel"   tertiary / hints
