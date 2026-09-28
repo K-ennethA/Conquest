@@ -237,6 +237,26 @@ static func holder_of(item_id) -> String:
 	return ""
 
 
+## Move the UNIT item worn by [param from_character] onto [param to_character] -- the
+## EVOLUTION carry-over ([method RosterLedger.evolve]). Moves only when [param from_character]
+## wears something AND [param to_character] wears nothing, so an item the player deliberately
+## put on the evolved form is never overwritten. Returns true when an item moved. Does not
+## save; the caller commits.
+static func rekey_character(from_character, to_character) -> bool:
+	var from_key: String = String(from_character)
+	var to_key: String = String(to_character)
+	if from_key.is_empty() or to_key.is_empty() or from_key == to_key:
+		return false
+	ensure_loaded()
+	var equipped: Dictionary = _data["equipped"]
+	var item_id: String = String(equipped.get(from_key, ""))
+	if item_id.is_empty() or not String(equipped.get(to_key, "")).is_empty():
+		return false
+	equipped.erase(from_key)
+	equipped[to_key] = item_id
+	return true
+
+
 ## A copy of the whole character -> item map (safe for UI to iterate and mutate).
 static func equipped_map() -> Dictionary:
 	ensure_loaded()
