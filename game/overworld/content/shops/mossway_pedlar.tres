@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="ShopResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/ShopResource.gd" id="1_scgv1"]
+[ext_resource type="Script" path="res://game/overworld/data/ShopStockEntry.gd" id="2_vinug"]
+
+[sub_resource type="Resource" id="Resource_2daa5"]
+script = ExtResource("2_vinug")
+item_id = &"mossleaf_tonic"
+price = 45
+
+[sub_resource type="Resource" id="Resource_2wvhf"]
+script = ExtResource("2_vinug")
+item_id = &"bitterroot_salve"
+price = 35
+
+[sub_resource type="Resource" id="Resource_ck2ia"]
+script = ExtResource("2_vinug")
+item_id = &"dawnpetal_draught"
+price = 275
+stock_limit = 1
+
+[sub_resource type="Resource" id="Resource_qikg4"]
+script = ExtResource("2_vinug")
+item_id = &"windwhisper_pendant"
+stock_limit = 1
+
+[resource]
+script = ExtResource("1_scgv1")
+id = &"mossway_pedlar"
+display_name = "Jory's Travelling Cart"
+greeting = "\"Road prices, friend -- dearer than the city, but the city's a long walk with a limping partner.\""
+stock = Array[ExtResource("2_vinug")]([SubResource("Resource_2daa5"), SubResource("Resource_2wvhf"), SubResource("Resource_ck2ia"), SubResource("Resource_qikg4")])
+restock = 2
+restock_steps = 150
+sell_ratio = 0.4

@@ -230,6 +230,9 @@ func _run() -> void:
 		if slot == DuelHUD.FLEE_SLOT:
 			await _flee(actor)
 			continue
+		if slot == DuelHUD.ITEM_SLOT:
+			await _use_item(actor, hud.chosen_item_id)
+			continue
 		await _cast(actor, slot, decision)
 	_driving = false
 
@@ -246,6 +249,45 @@ func _flee(actor) -> void:
 		hud.narrate("%s couldn't get away!" % actor.get_display_name())
 		hud.refresh()
 		await _beat(BEAT_AFTER)
+
+
+## The player uses a battle item (DuelBattle.use_item: the recorded USE_ITEM command, which spends
+## the turn), then the result is narrated. A refused use spends nothing and the turn stays open.
+func _use_item(actor, item_id: String) -> void:
+	var item: ItemResource = ItemLibrary.get_item(item_id)
+	var item_name: String = item.display_name if item != null else item_id
+	var who: String = actor.get_display_name()
+	var rec: Dictionary = battle.use_item(item_id)
+	if not bool(rec.get("ok", false)):
+		hud.narrate(ConsumableEffect.reason_text(String(rec.get("reason", "")), who))
+		await _beat(BEAT_AFTER)
+		return
+	hud.narrate("You used a %s on %s!" % [item_name, who])
+	hud.refresh()
+	await _settle()
+	var line := _item_line(rec, who)
+	if line != "":
+		hud.narrate(line)
+		await _beat(BEAT_AFTER)
+
+
+## "Barkling recovered 25 HP." / "Barkling was cured of Poisoned." -- read off the USE_ITEM event.
+static func _item_line(rec: Dictionary, who: String) -> String:
+	var res: Dictionary = rec.get("result", {})
+	for e in res.get("events", []):
+		if not (e is Dictionary) or String(e.get("effect", "")) != "use_item":
+			continue
+		var bits: Array[String] = []
+		var cured: Array = e.get("cured", [])
+		if not cured.is_empty():
+			var names: Array[String] = []
+			for id in cured:
+				names.append(ConsumableEffect.status_label(StringName(String(id))))
+			bits.append("%s was cured of %s." % [who, ", ".join(names)])
+		if int(e.get("healed", 0)) > 0:
+			bits.append("%s recovered %d HP." % [who, int(e.get("healed", 0))])
+		return " ".join(bits)
+	return ""
 
 
 ## Play one action: cut-in for an ultimate, the command, then wait for the show to settle.

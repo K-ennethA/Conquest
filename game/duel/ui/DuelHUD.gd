@@ -6,7 +6,11 @@ class_name DuelHUD
 ##   top-centre   round ribbon, turn-order strip, weather chip
 ##   top-right    Log toggle + the BattleLog drawer
 ##   bottom       command panel: the 2x2 move grid ([DuelMoveRow], live forecast chips)
-##                + Party / Items / Flee / Info; collapses to "Foe is thinking..." off-turn
+##                + Party / Items / Flee / Info; collapses to "Foe is thinking..." off-turn.
+##                Items swaps the grid for the ITEM PICKER (the side's battle consumables; an
+##                item that would be wasted is shown disabled with the reason) -- picking one
+##                hands the stage [constant ITEM_SLOT] with [member chosen_item_id]; Back / Esc
+##                returns to the moves.
 ##   above it     narration ribbon (left) and the player card (right)
 ##   centre       intro ribbon, results card
 ##
@@ -26,6 +30,8 @@ signal continue_requested
 
 ## [signal slot_chosen]'s value for the Flee button (never a move slot).
 const FLEE_SLOT := -2
+## [signal slot_chosen]'s value for an item pick ([member chosen_item_id] says which).
+const ITEM_SLOT := -3
 
 const MARGIN := 16.0
 const PANEL_H := 226.0
@@ -54,6 +60,11 @@ var _log_holder: VBoxContainer
 var _log: BattleLog
 var _actor = null
 var _accepting: bool = false
+## The item picker (replaces the move grid while open) and its rows.
+var _items_box: VBoxContainer = null
+var _items_grid: GridContainer = null
+## The item the last [constant ITEM_SLOT] pick chose.
+var chosen_item_id: String = ""
 
 
 func _ready() -> void:
@@ -182,6 +193,7 @@ func _build_command_panel() -> void:
 	_waiting.add_theme_font_size_override("font_size", ConquestTheme.FS_HUD_TITLE)
 	_waiting.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
 	left.add_child(_waiting)
+	_build_item_picker(left)
 
 	var right := VBoxContainer.new()
 	right.name = "SideColumn"
@@ -189,7 +201,7 @@ func _build_command_panel() -> void:
 	right.add_theme_constant_override("separation", 6)
 	row.add_child(right)
 	for spec in [["Party", "Switching arrives with party duels (M2)."],
-			["Items", "Battle items are not in the game yet."],
+			["Items", "Use a battle item from your bag (it costs the turn)."],
 			["Flee", "Run from a wild encounter (it may fail and cost the turn)."],
 			["Info", "Details for the focused move (%s)." % ConquestTheme.action_glyph(InputActions.UNIT_INFO)]]:
 		var b := Button.new()
@@ -203,7 +215,41 @@ func _build_command_panel() -> void:
 		_side_buttons[spec[0]] = b
 	(_side_buttons["Info"] as Button).pressed.connect(_toggle_info)
 	(_side_buttons["Flee"] as Button).pressed.connect(choose_flee)
+	(_side_buttons["Items"] as Button).pressed.connect(open_items)
 	_wire_focus()
+
+
+## The item picker: a caption, a 2-column grid of item rows, and Back. Hidden until Items.
+func _build_item_picker(left: VBoxContainer) -> void:
+	_items_box = VBoxContainer.new()
+	_items_box.name = "ItemPicker"
+	_items_box.visible = false
+	_items_box.add_theme_constant_override("separation", 6)
+	left.add_child(_items_box)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	_items_box.add_child(head)
+	var cap := Label.new()
+	cap.name = "Caption"
+	cap.text = "ITEMS  ·  using one costs the turn"
+	cap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cap.add_theme_font_override("font", MenuTheme.heading_font(1))
+	cap.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+	cap.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
+	head.add_child(cap)
+	var back := Button.new()
+	back.name = "ItemsBack"
+	back.text = "Back"
+	back.theme_type_variation = MenuKit.GHOST
+	back.custom_minimum_size = Vector2(96, 30)
+	back.pressed.connect(close_items)
+	head.add_child(back)
+	_items_grid = GridContainer.new()
+	_items_grid.name = "ItemGrid"
+	_items_grid.columns = 2
+	_items_grid.add_theme_constant_override("h_separation", 10)
+	_items_grid.add_theme_constant_override("v_separation", 6)
+	_items_box.add_child(_items_grid)
 
 
 func _build_narration() -> void:
@@ -305,6 +351,7 @@ func refresh() -> void:
 		r.refresh(_accepting and r.slot in legal)
 	_struggle.visible = _accepting and DuelCharacter.STRUGGLE_SLOT in legal
 	(_side_buttons["Flee"] as Button).disabled = not (_accepting and battle.can_flee())
+	(_side_buttons["Items"] as Button).disabled = not (_accepting and battle.can_use_items())
 	_refresh_order()
 
 
@@ -341,6 +388,7 @@ func _refresh_order() -> void:
 func show_commands(actor) -> void:
 	_actor = actor
 	_accepting = true
+	_items_box.visible = false
 	_grid.visible = true
 	_waiting.visible = false
 	_detail.visible = true
@@ -362,6 +410,7 @@ func show_commands(actor) -> void:
 func show_waiting(text: String) -> void:
 	_actor = null
 	_accepting = false
+	_items_box.visible = false
 	_grid.visible = false
 	_detail.visible = false
 	_struggle.visible = false
@@ -530,6 +579,83 @@ func _choose(slot: int) -> void:
 	slot_chosen.emit(slot)
 
 
+## The Items button: swap the move grid for the item picker (the acting unit's options).
+func open_items() -> void:
+	if not _accepting or battle == null or _actor == null or not battle.can_use_items():
+		return
+	for c in _items_grid.get_children():
+		_items_grid.remove_child(c)
+		c.queue_free()
+	var who: String = _actor.get_display_name() if _actor.has_method("get_display_name") else ""
+	var first: Button = null
+	for opt in battle.item_options(_actor):
+		var item: ItemResource = opt["item"]
+		var b := Button.new()
+		b.name = "Item_" + String(opt["item_id"])
+		b.text = "%s  %s  ×%d" % [item.icon_hint, item.display_name, int(opt["count"])]
+		b.theme_type_variation = &"HudCommand"
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.custom_minimum_size = Vector2(0, 40)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.focus_mode = Control.FOCUS_ALL
+		b.disabled = not bool(opt["ok"])
+		var line: String = "%s -- %s" % [item.display_name, item.effect_summary()]
+		if b.disabled:
+			line = "%s -- %s" % [item.display_name, ConsumableEffect.reason_text(String(opt["reason"]), who)]
+		b.tooltip_text = line
+		b.pressed.connect(choose_item.bind(String(opt["item_id"])))
+		b.focus_entered.connect(_on_item_focused.bind(line))
+		b.mouse_entered.connect(_on_item_focused.bind(line))
+		_items_grid.add_child(b)
+		if first == null and not b.disabled:
+			first = b
+	_grid.visible = false
+	_struggle.visible = false
+	_items_box.visible = true
+	_detail.visible = true
+	_detail.text = "Pick an item for %s." % (who if who != "" else "your partner")
+	if first != null:
+		first.grab_focus()
+	else:
+		(_items_box.find_child("ItemsBack", true, false) as Button).grab_focus()
+
+
+## True while the item picker is up.
+func items_open() -> bool:
+	return _items_box != null and _items_box.visible
+
+
+## Back from the item picker to the move grid.
+func close_items() -> void:
+	if not items_open():
+		return
+	_items_box.visible = false
+	if _accepting and _actor != null:
+		show_commands(_actor)
+
+
+## Pick [param item_id] from the picker: hand the director [constant ITEM_SLOT]. An item that
+## would be wasted is refused here (its row is disabled anyway).
+func choose_item(item_id: String) -> void:
+	if not _accepting or battle == null or _actor == null:
+		return
+	var ok: bool = false
+	for opt in battle.item_options(_actor):
+		if String(opt["item_id"]) == item_id and bool(opt["ok"]):
+			ok = true
+	if not ok:
+		return
+	chosen_item_id = item_id
+	_accepting = false
+	_items_box.visible = false
+	slot_chosen.emit(ITEM_SLOT)
+
+
+func _on_item_focused(text: String) -> void:
+	_detail.visible = true
+	_detail.text = text
+
+
 ## The Flee button: hand the director [constant FLEE_SLOT] (it rolls the escape).
 func choose_flee() -> void:
 	if not _accepting or battle == null or _actor == null or not battle.can_flee():
@@ -549,6 +675,10 @@ func _on_row_focused(slot: int) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if items_open() and MenuNav.is_back_event(event):
+		get_viewport().set_input_as_handled()
+		close_items()
+		return
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		if event.is_action_pressed(InputActions.UNIT_INFO):
 			_toggle_info()

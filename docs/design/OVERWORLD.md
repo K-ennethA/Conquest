@@ -422,8 +422,9 @@ duel = the lead healthy member (switching per DUEL.md). New members join via `Jo
   of `ItemInventory`. The post-battle random drop (`ItemSystem.roll_drop` → `ItemInventory`) is
   suppressed in story battles; story loot is authored rewards.
 - **Shops:** `ShopScreen` (grove two-column: stock option cards with rarity gem + price, your
-  bag on the right; buy/sell, confirm dialog). Consumables do not exist yet; if wanted, a
-  `Scope.CONSUMABLE` on `ItemResource` (use from the Bag: heal a member) is an M4 add.
+  bag on the right; buy/sell, confirm dialog). **Built** (DECISIONS.md #28): consumables are an
+  `ItemResource.consumable` (`ConsumableEffect`), shops a `ShopResource` + `ShopEntity` +
+  `ShopScreen` -- see docs/STORY_MODE.md "Shops, consumables and gold".
 - **Healing:** Wayshrine (fountain tile + shrine prop): full heal, clear `wounded`, save, set
   respawn. Healer NPCs = `HealParty` in a script.
 - Story wins also call `PlayerProfile.notify_mode_win("story", {...})` so ranks/achievements

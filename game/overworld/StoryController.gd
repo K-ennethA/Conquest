@@ -483,10 +483,17 @@ func evolve_from_menu(member_id: String) -> Dictionary:
 	return {"success": true, "reason": "", "evolved": evolved}
 
 
-## USE an item from the bag on a member (Journey -> Bag -> Use, DECISIONS.md #26): when the item
-## makes one of the member's evolutions available ([UseItemTrigger]) its Evolution screen is
-## offered (Hold does not apply: the player asked); a confirmed evolution SPENDS the item, Not now
-## keeps it. {success, reason, evolved}; reason "no_item" / "no_member" / "no_effect".
+## USE an item from the bag on a member (Journey -> Bag -> Use) -- THE one "use an item on a party
+## member" flow (DECISIONS.md #26, #28):
+##   * a CONSUMABLE (heal / cure / revive, [ConsumableEffect]) applies at once by
+##     [method StoryState.use_consumable]: a use that helps spends one and saves the journey; a
+##     use that would be wasted (full HP, a healthy member for a revive...) is refused and spends
+##     nothing -- reason = the [ConsumableEffect] refusal ("full_hp", "not_knocked_out", ...).
+##     The result also carries {used, healed, revived}.
+##   * an EVOLUTION item: when it makes one of the member's evolutions available ([UseItemTrigger])
+##     its Evolution screen is offered (Hold does not apply: the player asked); a confirmed
+##     evolution SPENDS the item, Not now keeps it.
+## {success, reason, evolved}; reason "no_item" / "no_member" / "no_effect" (or a consumable's).
 func use_item_on_member(item_id: String, member_id: String) -> Dictionary:
 	if _state == null:
 		return {"success": false, "reason": "no_session", "evolved": false}
@@ -495,6 +502,14 @@ func use_item_on_member(item_id: String, member_id: String) -> Dictionary:
 	var m: StoryPartyMember = _state.member(member_id)
 	if m == null:
 		return {"success": false, "reason": "no_member", "evolved": false}
+	var item: ItemResource = ItemLibrary.get_item(item_id)
+	if item != null and item.is_consumable():
+		var used: Dictionary = _state.use_consumable(item_id, member_id)
+		var ok: bool = bool(used.get("ok", false))
+		if ok:
+			save_game()
+		return {"success": ok, "reason": String(used.get("reason", "")), "evolved": false, "used": ok,
+			"healed": int(used.get("healed", 0)), "revived": bool(used.get("revived", false))}
 	var ctx: Dictionary = StoryGrowth.evolution_context(_state, {"trigger": "use_item", "used_item": item_id})
 	var edges: Array[EvolutionResource] = StoryGrowth.edges_for_item(m, item_id, ctx)
 	if edges.is_empty():
@@ -592,6 +607,9 @@ func begin_battle(request: BattleRequest, launch: bool = true) -> Dictionary:
 			return {"success": false, "reason": "no_battle_map"}
 
 	request.party = StoryBattleBridge.party_snapshot(members)
+	# The duel's Items action draws on the story bag's battle consumables (tactical battles have no
+	# item action yet).
+	request.items = battle_items() if request.is_duel() else {}
 	request.seed = _fresh_seed()
 	request.return_to = {
 		"area_id": _state.location_area(),
@@ -652,6 +670,20 @@ func _stage_tactical(request: BattleRequest) -> void:
 	GameSettings.set_player_count(_team_count(map))
 	GameSettings.set_selected_squad(request.party_character_ids())
 	GameSettings.set_selected_map(request.map_path)
+
+
+## The story bag's BATTLE ITEMS ({item_id: count}: consumables usable in battle) -- what a duel's
+## Items action may use.
+func battle_items() -> Dictionary:
+	var out: Dictionary = {}
+	if _state == null:
+		return out
+	for id in _state.bag.keys():
+		var item: ItemResource = ItemLibrary.get_item(String(id))
+		if item != null and item.consumable != null and item.consumable.usable_in_battle \
+				and _state.item_count(String(id)) > 0:
+			out[String(id)] = _state.item_count(String(id))
+	return out
 
 
 func _disarm_battle() -> void:

@@ -95,6 +95,17 @@ const VALID_STATS: Array[String] = [
 ## [method ItemLibrary.items_with_scope] leave it out; [method ItemLibrary.catalysts] lists them).
 @export var catalyst: bool = false
 
+## A CONSUMABLE (docs/design/DECISIONS.md #28): what USING it does -- heal, cure, revive
+## ([ConsumableEffect]); null = not a consumable. Like a catalyst, a consumable is spent from the
+## story bag, never worn: it carries no equipment channels, never drops after a battle and never
+## appears in an equip picker ([method ItemLibrary.consumables] lists them).
+@export var consumable: ConsumableEffect = null
+
+## Base value in story GOLD: what a shop charges unless its stock entry names its own price, and
+## what selling it back is a fraction of ([ShopResource] sell ratio). 0 = no value (key items,
+## evolution catalysts): never sold by default and never bought back.
+@export var price: int = 0
+
 
 ## Human-readable rarity ("Common" / "Rare" / "Epic").
 func rarity_name() -> String:
@@ -111,9 +122,30 @@ func is_team_item() -> bool:
 	return scope == Scope.TEAM
 
 
+## True for a consumable (used up, never worn).
+func is_consumable() -> bool:
+	return consumable != null
+
+
+## True for an item that can be WORN (equipment: not a catalyst, not a consumable).
+func is_equipment() -> bool:
+	return not catalyst and consumable == null
+
+
+## "Consumable" / "Evolution item" / "Unit equipment" / "Team equipment" -- the shop / bag tag.
+func category_name() -> String:
+	if consumable != null:
+		return "Consumable"
+	if catalyst:
+		return "Evolution item"
+	return "%s equipment" % scope_name()
+
+
 ## The item's effect as one compact line, e.g. "+5 Max HP" or "Heal 5 / turn". Built from
 ## the data alone so list UIs never need to duplicate the formatting rules.
 func effect_summary() -> String:
+	if consumable != null:
+		return consumable.summary()
 	var parts: Array[String] = []
 	for raw_key in stat_modifiers.keys():
 		var amount: int = int(stat_modifiers[raw_key])

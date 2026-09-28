@@ -54,6 +54,10 @@ var player_ai_difficulty: int = -1
 ## duel may be fled and its beaten foe may offer to join; any other duel neither. A
 ## story-critical recruit ALWAYS offers on a win (DECISIONS.md: never missable).
 var rules: Dictionary = {}
+## The player side's BATTLE ITEMS ({item_id: count}) for the Items action -- the story bag's
+## consumables usable in battle (a standalone duel has none). Only known battle consumables survive
+## the importer.
+var items: Dictionary = {}
 
 
 ## A standalone 1v1 of two roster ids.
@@ -145,6 +149,7 @@ func to_dict() -> Dictionary:
 		"ai_difficulty": ai_difficulty,
 		"player_ai_difficulty": player_ai_difficulty,
 		"rules": rules.duplicate(),
+		"items": items.duplicate(),
 	}
 
 
@@ -194,10 +199,29 @@ static func from_dict(d) -> Dictionary:
 			if typeof(v) != TYPE_BOOL:
 				return _fail("bad_rules")
 			r.rules[key] = v
+	var raw_items = d.get("items", {})
+	if not (raw_items is Dictionary):
+		return _fail("bad_items")
+	r.items = battle_item_counts(raw_items)
 	var check := r.validate()
 	if not bool(check["success"]):
 		return _fail(String(check["reason"]))
 	return {"success": true, "reason": "", "request": r}
+
+
+## {item_id: count} kept only for known consumables usable in battle with a positive count
+## (untrusted input: ids resolved through [ItemLibrary], never paths).
+static func battle_item_counts(raw) -> Dictionary:
+	var out: Dictionary = {}
+	if not (raw is Dictionary):
+		return out
+	for k in raw.keys():
+		var v = raw[k]
+		var n: int = int(v) if (typeof(v) == TYPE_INT or typeof(v) == TYPE_FLOAT) else 0
+		var item: ItemResource = ItemLibrary.get_item(String(k))
+		if n > 0 and item != null and item.consumable != null and item.consumable.usable_in_battle:
+			out[String(k)] = mini(n, 999)
+	return out
 
 
 ## Adapt OVERWORLD's BattleRequest (as its to_dict() shape) into a duel request: party ->
@@ -253,6 +277,7 @@ static func from_battle_request(br) -> Dictionary:
 		"seed": br.get("seed", 0),
 		"encounter_id": _str(br.get("encounter_id", "")),
 		"rules": story_rules,
+		"items": br.get("items", {}) if br.get("items", {}) is Dictionary else {},
 	}
 	return from_dict(d)
 

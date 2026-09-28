@@ -14,21 +14,32 @@ extends RefCounted
 ##     fought earn Growth by the shared rules and gates -- before a whiteout heals the party,
 ##     so a loss awards exactly what growth_on_loss says -- and, under the same gates, the
 ##     members' BATTLE FEAT counters (wins, KOs, KOs by element, clutch wins);
-##   * every outcome: a few grace steps before the grass may roll again.
+##   * every outcome: the BATTLE ITEMS used ([member BattleResult.items_used]) leave the bag, and a
+##     few grace steps pass before the grass may roll again;
+##   * VICTORY gold = the authored purse (rewards.gold) + per defeated foe the ruleset's
+##     [member StoryRuleset.wild_gold_per_foe] (a wild encounter) or
+##     [member StoryRuleset.battle_gold_per_foe] (any other battle).
 ## Befriending is NOT applied here -- the offer is the story prompt's decision
 ## ([BefriendPromptCommand]). Nor is evolving: StoryController offers the Evolution screen once
 ## the overworld is back.
 ##
 ## Returns {whiteout: bool, rewarded: bool, gold: int, items: Array, flags: Array,
-## growth: Array (the end-screen rows), feats: Dictionary ({member_id: feat deltas})}.
+## growth: Array (the end-screen rows), feats: Dictionary ({member_id: feat deltas}),
+## items_used: Dictionary}.
 
 
 static func apply(state: StoryState, request: BattleRequest, result: BattleResult,
 		ruleset: StoryRuleset = null, growth_ctx: Dictionary = {}) -> Dictionary:
 	var out: Dictionary = {"whiteout": false, "rewarded": false, "gold": 0, "items": [], "flags": [],
-		"growth": [], "feats": {}}
+		"growth": [], "feats": {}, "items_used": {}}
 	if state == null or result == null:
 		return out
+
+	for item_id in result.items_used.keys():
+		var n: int = mini(int(result.items_used[item_id]), state.item_count(String(item_id)))
+		if n > 0:
+			state.take_item(String(item_id), n)
+			out["items_used"][String(item_id)] = n
 
 	if not growth_ctx.is_empty():
 		var awards: Dictionary = StoryGrowth.awards_for(result, EvolutionRules.current(), growth_ctx)
@@ -54,7 +65,7 @@ static func apply(state: StoryState, request: BattleRequest, result: BattleResul
 
 	if result.is_victory() and request != null:
 		var rw: Dictionary = request.rewards
-		var gold: int = int(rw.get("gold", 0))
+		var gold: int = maxi(0, int(rw.get("gold", 0))) + gold_for_foes(request, result, ruleset)
 		if gold > 0:
 			state.add_gold(gold)
 			out["gold"] = gold
@@ -85,3 +96,12 @@ static func apply(state: StoryState, request: BattleRequest, result: BattleResul
 
 	state.grace_steps = ruleset.grace_steps if ruleset != null else 3
 	return out
+
+
+## The per-foe gold a won battle pays on top of its purse (0 without a ruleset).
+static func gold_for_foes(request: BattleRequest, result: BattleResult, ruleset: StoryRuleset) -> int:
+	if ruleset == null or result == null:
+		return 0
+	var wild: bool = request != null and request.source == BattleRequest.SOURCE_WILD
+	var per: int = ruleset.wild_gold_per_foe if wild else ruleset.battle_gold_per_foe
+	return maxi(0, per) * result.defeated.size()

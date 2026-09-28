@@ -33,6 +33,19 @@ const DEFAULT_PATH := "res://game/overworld/content/story_ruleset.tres"
 ## Added when the wild unit was subdued (left at 1 HP / KO'd by a subdue move -- DUEL M2).
 @export_range(0.0, 1.0) var subdue_join_bonus: float = 0.35
 
+@export_group("Economy")
+## Gold for each foe defeated in a WILD encounter (a won grass duel: one foe). Trainers and scripted
+## battles pay their authored purse ([member BattleSpec.reward_gold]) instead.
+@export var wild_gold_per_foe: int = 15
+## Gold for each foe defeated in any NON-wild story battle, on top of its authored purse (0 = the
+## purse only).
+@export var battle_gold_per_foe: int = 0
+## Fraction of an item's price a merchant pays when you sell it back (a [ShopResource] may name
+## its own).
+@export_range(0.0, 1.0, 0.01) var sell_ratio: float = 0.5
+## Most of one item the story bag holds (a purchase past it is refused: "bag full").
+@export_range(1, 999) var bag_stack_cap: int = 99
+
 @export_group("Stakes")
 ## Gold lost on a whiteout (0 = Q2 default: lose nothing but position).
 @export var whiteout_gold_penalty: int = 0

@@ -27,6 +27,8 @@ var player: OverworldActor = null
 var camera: OverworldCamera = null
 var hud: OverworldHUD = null
 var journey: JourneyMenu = null
+## The merchant screen while one is open ([method open_shop]), else null.
+var shop_screen: ShopScreen = null
 var map_loader: MapLoader = null
 
 var _state: StoryState = null
@@ -755,6 +757,26 @@ func play_clash(request) -> void:
 	await intro.finished
 	if is_instance_valid(intro):
 		intro.queue_free()
+
+
+## A merchant's shop screen ([OpenShopCommand]): opens it over the overworld and waits until the
+## player leaves. The running script already holds the hero still; the screen is also a modal
+## overlay ([constant InputActions.OVERLAY_GROUP]) like the Journey menu.
+func open_shop(shop: ShopResource) -> void:
+	if shop == null or not is_inside_tree():
+		return
+	if hud != null:
+		hud.set_prompt("")
+	var screen := ShopScreen.new()
+	screen.name = "ShopScreen"
+	add_child(screen)
+	shop_screen = screen
+	screen.open(shop, _state, story)
+	await screen.closed
+	shop_screen = null
+	if is_instance_valid(screen):
+		screen.queue_free()
+	_update_prompt.call_deferred()
 
 
 func refresh_world() -> void:

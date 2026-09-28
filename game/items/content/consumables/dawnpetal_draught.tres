@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="ItemResource" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://game/items/ItemResource.gd" id="1_item"]
+[ext_resource type="Script" path="res://game/items/ConsumableEffect.gd" id="2_use"]
+
+[sub_resource type="Resource" id="Resource_use"]
+script = ExtResource("2_use")
+revive = true
+revive_percent = 50
+
+[resource]
+script = ExtResource("1_item")
+id = &"dawnpetal_draught"
+display_name = "Dawnpetal Draught"
+description = "Petals that open only at first light, steeped overnight. It brings a knocked-out partner back to its feet."
+rarity = 1
+scope = 0
+stat_modifiers = {}
+regen_per_turn = 0
+damage_reduction_percent = 0
+icon_hint = "🌸"
+consumable = SubResource("Resource_use")
+price = 250
