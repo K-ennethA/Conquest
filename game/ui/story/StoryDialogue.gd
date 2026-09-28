@@ -84,6 +84,9 @@ const PORTRAIT_ACTIVE_MODULATE := Color(1.0, 1.0, 1.0, 1.0)
 const PORTRAIT_DIM_MODULATE := Color(0.46, 0.42, 0.40, 0.92)
 
 signal finished(skipped: bool)
+## CHOICES (story mode, see [method play_choice]): the index of the option the player picked.
+## Emitted once per choice, just before [signal finished].
+signal choice_made(index: int)
 
 # --- Clock injection ----------------------------------------------------------
 
@@ -123,6 +126,14 @@ var _body_label: Label = null
 ## binding (keyboard key, or the pad button once a gamepad is connected).
 var _advance_hint: HBoxContainer = null
 var _skip_button: Button = null
+
+# --- Choice state (see play_choice) -------------------------------------------
+## True from play_choice() until the pick: the prompt types, THEN the options appear.
+var _choice_pending: bool = false
+var _choice_labels: PackedStringArray = PackedStringArray()
+var _choice_cancel: int = -1
+var _choice_box: VBoxContainer = null
+var _choice_buttons: Array[Button] = []
 
 
 func _ready() -> void:
@@ -411,14 +422,81 @@ func sequencer() -> StorySequencer:
 	return _sequencer
 
 
+## ASK A QUESTION (story mode): type [param prompt] out like any beat, then offer
+## [param options] (2-4) as grove command rows above the text box -- gold leaf on the focused
+## row, arrows / d-pad move, Confirm / a tap / the number keys pick. [param cancel_index] (>= 0)
+## is the option Cancel (Esc / B, or SKIP) picks; -1 = Cancel does nothing while the options
+## are up. Emits [signal choice_made] with the picked index, then [signal finished] (false).
+##
+## The existing single-beat contract is untouched: the first press completes the typewriter,
+## but a press while the options are up never advances past them -- only a PICK ends the
+## prompt. Returns false (showing nothing) for an empty prompt or fewer than one option.
+func play_choice(prompt: StoryBeat, options: PackedStringArray, cancel_index: int = -1) -> bool:
+	if prompt == null or options.is_empty():
+		return false
+	var scene := StoryScene.new()
+	scene.scene_id = &"choice"
+	var beats: Array[Resource] = [prompt]
+	scene.beats = beats
+	_choice_labels = options
+	_choice_cancel = cancel_index if cancel_index >= 0 and cancel_index < options.size() else -1
+	_choice_pending = true
+	_clear_choice_rows()
+	if not play(scene):
+		_choice_pending = false
+		return false
+	# An empty prompt text is "revealed" the moment it opens -- show the rows right away.
+	if _sequencer.is_holding():
+		_show_choices()
+	return true
+
+
+## True while a choice prompt is open (typing or waiting for a pick).
+func is_choosing() -> bool:
+	return _choice_pending
+
+
+## True once the option rows are on screen.
+func choices_visible() -> bool:
+	return _choice_box != null and _choice_box.visible and not _choice_buttons.is_empty()
+
+
+## The option row buttons, in order (tests / tooling).
+func choice_buttons() -> Array[Button]:
+	return _choice_buttons
+
+
+## Pick option [param index]. Ignored unless the rows are up and the index is valid.
+func choose(index: int) -> void:
+	if not _choice_pending or not choices_visible():
+		return
+	if index < 0 or index >= _choice_labels.size():
+		return
+	_choice_pending = false
+	_clear_choice_rows()
+	choice_made.emit(index)
+	# The prompt is the scene's only beat and it is holding, so this finishes it (not skipped).
+	_sequencer.advance()
+
+
 ## The one input entry point (see the class doc): completes the typewriter, else advances.
 func advance() -> void:
+	# A choice prompt never advances past its options -- only a pick ends it.
+	if _choice_pending and not _sequencer.is_revealing():
+		return
 	_sequencer.advance()
 	_refresh_text()
 
 
-## Abandon the scene. No confirmation by design.
+## Abandon the scene. No confirmation by design. On a choice prompt, "skip" means the cancel
+## option (when there is one) -- a question is never silently dismissed.
 func skip() -> void:
+	if _choice_pending:
+		if _sequencer.is_revealing():
+			advance()
+		if choices_visible() and _choice_cancel >= 0:
+			choose(_choice_cancel)
+		return
 	_sequencer.skip()
 
 
@@ -537,7 +615,9 @@ func _on_beat_changed(index: int) -> void:
 func _on_reveal_completed(_index: int) -> void:
 	_refresh_text()
 	_refresh_hints()
-	_advance_hint.visible = true
+	_advance_hint.visible = not _choice_pending
+	if _choice_pending:
+		_show_choices()
 
 
 func _on_sequencer_finished(skipped: bool) -> void:
@@ -549,6 +629,8 @@ func _on_sequencer_finished(skipped: bool) -> void:
 ## every finish (read-through OR skip). Does NOT free this node -- see the class doc.
 func _teardown() -> void:
 	_kill_tween()
+	_choice_pending = false
+	_clear_choice_rows()
 	_clear_portraits()
 	_active_side = &""
 	_esc_down = false
@@ -562,6 +644,104 @@ func _teardown() -> void:
 
 func _refresh_text() -> void:
 	_body_label.text = _sequencer.visible_text()
+
+
+# =============================================================================
+#  Choice rows
+# =============================================================================
+
+## Width of the option card; it sits above the text box, inset past a right-side portrait.
+const CHOICE_WIDTH: float = 300.0
+const CHOICE_ROW_HEIGHT: float = 40.0
+
+
+## Build the option rows for the pending choice and focus the first one.
+func _show_choices() -> void:
+	if not _choice_pending or _choice_labels.is_empty():
+		return
+	_clear_choice_rows()
+	if _choice_box == null:
+		_build_choice_box()
+	var list: VBoxContainer = _choice_box.get_node("ChoiceCard/ChoiceRows")
+	for i in range(_choice_labels.size()):
+		var b := Button.new()
+		b.name = "ChoiceRow%d" % i
+		b.text = "%d  %s" % [i + 1, _choice_labels[i]]
+		b.theme_type_variation = &"HudCommand"
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.custom_minimum_size = Vector2(0, CHOICE_ROW_HEIGHT)
+		b.focus_mode = Control.FOCUS_ALL
+		b.pressed.connect(choose.bind(i))
+		b.mouse_entered.connect(func() -> void:
+			if is_instance_valid(b):
+				b.grab_focus())
+		list.add_child(b)
+		_choice_buttons.append(b)
+	for i in range(_choice_buttons.size()):
+		var prev: Button = _choice_buttons[(i - 1 + _choice_buttons.size()) % _choice_buttons.size()]
+		var next: Button = _choice_buttons[(i + 1) % _choice_buttons.size()]
+		_choice_buttons[i].focus_neighbor_top = _choice_buttons[i].get_path_to(prev)
+		_choice_buttons[i].focus_neighbor_bottom = _choice_buttons[i].get_path_to(next)
+	_choice_box.visible = true
+	# Added last among the root's children so a tap on a row is a press, not an advance.
+	_root.move_child(_choice_box, _root.get_child_count() - 1)
+	if _choice_buttons[0].is_inside_tree():
+		_choice_buttons[0].grab_focus()
+
+
+func _build_choice_box() -> void:
+	_choice_box = VBoxContainer.new()
+	_choice_box.name = "StoryChoiceBox"
+	_choice_box.anchor_left = 1.0
+	_choice_box.anchor_right = 1.0
+	_choice_box.anchor_top = 1.0
+	_choice_box.anchor_bottom = 1.0
+	var right: float = -(EDGE_MARGIN * 2.0 + PORTRAIT_WIDTH)
+	_choice_box.offset_right = right
+	_choice_box.offset_left = right - CHOICE_WIDTH
+	_choice_box.offset_bottom = -(TEXTBOX_HEIGHT + EDGE_MARGIN + 10.0)
+	_choice_box.offset_top = _choice_box.offset_bottom - 10.0
+	_choice_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_choice_box.alignment = BoxContainer.ALIGNMENT_END
+	_choice_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_choice_box.visible = false
+	_root.add_child(_choice_box)
+
+	var card := PanelContainer.new()
+	card.name = "ChoiceCard"
+	var sb := ConquestTheme.panel_box(0.97)
+	sb.border_color = ConquestTheme.GOLD_DK
+	sb.content_margin_left = 10
+	sb.content_margin_right = 10
+	sb.content_margin_top = 10
+	sb.content_margin_bottom = 10
+	card.add_theme_stylebox_override("panel", sb)
+	ConquestTheme.keep_style(card)
+	_choice_box.add_child(card)
+
+	var rows := VBoxContainer.new()
+	rows.name = "ChoiceRows"
+	rows.add_theme_constant_override("separation", 2)
+	card.add_child(rows)
+
+
+func _clear_choice_rows() -> void:
+	for b in _choice_buttons:
+		if is_instance_valid(b):
+			if b.get_parent() != null:
+				b.get_parent().remove_child(b)
+			b.queue_free()
+	_choice_buttons.clear()
+	if _choice_box != null:
+		_choice_box.visible = false
+
+
+## The focused option row's index, or 0.
+func _focused_choice() -> int:
+	for i in range(_choice_buttons.size()):
+		if _choice_buttons[i].has_focus():
+			return i
+	return 0
 
 
 # =============================================================================
@@ -751,6 +931,35 @@ func _on_root_gui_input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _sequencer.is_finished() or not _root.visible:
 		return
+
+	# CHOICE ROWS: number keys pick, up/down move, confirm picks the focused row, cancel picks
+	# the cancel option. Everything consumed so nothing reaches the world underneath.
+	if choices_visible():
+		if event is InputEventKey and event.pressed and not event.echo:
+			var n: int = (event as InputEventKey).keycode - KEY_1
+			if n >= 0 and n < _choice_buttons.size():
+				get_viewport().set_input_as_handled()
+				choose(n)
+				return
+		if _is_pressed(event, InputActions.CONFIRM, &"ui_accept"):
+			get_viewport().set_input_as_handled()
+			choose(_focused_choice())
+			return
+		if _is_pressed(event, InputActions.CANCEL, &"ui_cancel"):
+			get_viewport().set_input_as_handled()
+			if _choice_cancel >= 0:
+				choose(_choice_cancel)
+			return
+		var step: int = 0
+		if _is_pressed(event, InputActions.CURSOR_UP, &"ui_up"):
+			step = -1
+		elif _is_pressed(event, InputActions.CURSOR_DOWN, &"ui_down"):
+			step = 1
+		if step != 0:
+			get_viewport().set_input_as_handled()
+			var i: int = (_focused_choice() + step + _choice_buttons.size()) % _choice_buttons.size()
+			_choice_buttons[i].grab_focus()
+			return
 
 	if _is_pressed(event, InputActions.CONFIRM, &"ui_accept"):
 		get_viewport().set_input_as_handled()
