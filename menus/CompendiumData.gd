@@ -551,7 +551,7 @@ static func status_entry(s: StatusCondition) -> Dictionary:
 	blocks.append({ "type": "text", "text": status_description(s) })
 	var fields: Array = [
 		["Kind", String(info.get("kind", "neutral")).capitalize()],
-		["Duration", "Permanent (never expires on its own)" if s.duration_turns <= 0 else ("%d turn%s" % [s.duration_turns, "" if s.duration_turns == 1 else "s"])],
+		["Duration", status_duration_text(s)],
 		["Stacking", _stacking_text(s)],
 	]
 	blocks.append({ "type": "fields", "rows": fields })
@@ -647,6 +647,37 @@ static func status_description(s) -> String:
 	if parts.is_empty():
 		return "No direct effect (a marker other rules read)."
 	return ". ".join(parts) + "."
+
+
+## The Compendium's "Duration" row: the authored turns AND which turns count them, since
+## a status runs on one of two clocks (CONQUEST.md rule 6a). An AUTO status reads both,
+## because who inflicts it decides; a status that pins its clock reads just that one.
+static func status_duration_text(s) -> String:
+	if s == null:
+		return ""
+	var n: int = int(s.get("duration_turns"))
+	if n <= 0:
+		return "Permanent (never expires on its own)"
+	var turns: String = "%d turn%s" % [n, "" if n == 1 else "s"]
+	var own: String = "the afflicted unit's next %s" % ("turn" if n == 1 else "%d turns" % n)
+	var until: String = "until the unit's %s turn begins" % ("next" if n == 1 else "%s next" % _ordinal(n))
+	var clock_value = s.get("clock")
+	var clock: int = int(clock_value) if clock_value != null else StatusCondition.Clock.AUTO
+	if clock == StatusCondition.Clock.AFFLICTION:
+		return "%s -- lasts %s" % [turns, own]
+	if clock == StatusCondition.Clock.PROTECTIVE:
+		return "%s -- lasts %s" % [turns, until]
+	return "%s -- from a foe or terrain: lasts %s; self or ally cast: lasts %s" % [turns, own, until]
+
+
+static func _ordinal(n: int) -> String:
+	var suffix := "th"
+	if n % 100 < 11 or n % 100 > 13:
+		match n % 10:
+			1: suffix = "st"
+			2: suffix = "nd"
+			3: suffix = "rd"
+	return "%d%s" % [n, suffix]
 
 
 ## Tooltip for a status chip / pip -- the Compendium's wording.

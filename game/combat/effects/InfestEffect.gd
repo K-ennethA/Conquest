@@ -45,7 +45,8 @@ class_name InfestEffect
 ## instant the count reaches [member control_threshold].
 @export var infested: StatusCondition
 ## The control status granted when the threshold is crossed (Enthralled -- carries the
-## "controlled" rule flag). Cleared automatically after one turn by the status tick.
+## "controlled" rule flag). Cleared automatically once the host has played its one hijacked
+## turn (the AFFLICTION clock, CONQUEST.md rule 6a).
 @export var enthralled: StatusCondition
 ## Stacks required to flip infection into control. 2 = two attacks on the same target.
 @export var control_threshold: int = 2

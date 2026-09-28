@@ -41,7 +41,7 @@ func apply(ctx: MoveContext) -> void:
 		if ctx.caster != null:
 			var self_applied := false
 			if ctx.roll(chance):
-				self_applied = _inflict(ctx.caster, ctx.caster)
+				self_applied = _inflict(ctx.caster, ctx.caster, ctx.environmental)
 			ctx.log_event({
 				"effect": "apply_status",
 				"target": ctx.caster,
@@ -59,7 +59,7 @@ func apply(ctx: MoveContext) -> void:
 				"chance": chance,
 			})
 			continue
-		var applied := _inflict(target, ctx.caster)
+		var applied := _inflict(target, ctx.caster, ctx.environmental)
 		ctx.log_event({
 			"effect": "apply_status",
 			"target": target,
@@ -76,24 +76,31 @@ func apply(ctx: MoveContext) -> void:
 ## duplicate (never on the shared authoring resource), so when the condition's ticks
 ## deal damage the kill goes to whoever applied it rather than to the victim. Null is
 ## legal and means "nobody is credited".
-func _inflict(unit, source = null) -> bool:
+##
+## [param environmental] marks a tile's resolution ([member MoveContext.environmental]):
+## the ground, not [param source], is inflicting it, which puts it on the AFFLICTION
+## clock (CONQUEST.md rule 6a). Attribution is untouched -- a tile's source is its own
+## occupant, which [method DamageEffect.credited_source] already credits to nobody.
+func _inflict(unit, source = null, environmental: bool = false) -> bool:
 	if unit == null:
 		return false
 	if unit.has_method("add_status"):
-		unit.add_status(_stamped(source))
+		unit.add_status(_stamped(source, environmental))
 		return true
 	if unit.has_method("get_status_controller"):
 		var controller = unit.get_status_controller()
 		if controller != null and controller.has_method("add_status"):
-			controller.add_status(_stamped(source))
+			controller.add_status(_stamped(source, environmental))
 			return true
 	return false
 
 
-## A fresh duplicate of [member condition] carrying [param source] as its applier.
-func _stamped(source) -> StatusCondition:
+## A fresh duplicate of [member condition] carrying [param source] as its applier (and
+## the environment stamp, when a tile inflicted it).
+func _stamped(source, environmental: bool = false) -> StatusCondition:
 	var instance: StatusCondition = condition.duplicate(true)
 	instance.set_source(source)
+	instance.inflicted_by_environment = environmental
 	return instance
 
 

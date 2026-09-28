@@ -210,7 +210,15 @@ static func capture_statuses(unit) -> Array:
 		var id: String = String(condition.id)
 		if id.is_empty():
 			continue
-		out.append({ "id": id, "turns_left": int(condition.turns_left) })
+		# The CLOCK too (CONQUEST.md rule 6a): who inflicted it is gone by resume time, so
+		# an affliction restored without it would silently fall back to the protective
+		# clock and lapse a turn early. Older saves simply lack both keys -> protective.
+		out.append({
+			"id": id,
+			"turns_left": int(condition.turns_left),
+			"own_turns": bool(condition.counts_own_turns),
+			"turn_open": bool(condition.own_turn_open),
+		})
 	return out
 
 
@@ -301,7 +309,13 @@ static func apply_unit_statuses(unit, entry: Dictionary) -> int:
 			continue  # code-built or removed condition -- see the doc comment above
 		var instance: StatusCondition = authored.duplicate(true)
 		instance.duration_turns = int((item as Dictionary).get("turns_left", instance.duration_turns))
-		controller.add_status(instance)
+		var live = controller.add_status(instance)
+		# Re-state the saved clock onto the live instance (add_status resolved it from an
+		# applier the save no longer has). A save that predates the keys keeps whatever
+		# add_status resolved -- the protective clock, as it always was.
+		if live != null and (item as Dictionary).has("own_turns"):
+			live.counts_own_turns = bool((item as Dictionary).get("own_turns", false))
+			live.own_turn_open = bool((item as Dictionary).get("turn_open", false))
 		restored += 1
 	return restored
 

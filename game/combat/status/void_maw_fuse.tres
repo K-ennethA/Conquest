@@ -11,3 +11,4 @@ stacking = 0
 max_stacks = -1
 rule_flags = {}
 damage_taken_scale = 1.0
+clock = 1

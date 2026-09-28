@@ -341,6 +341,10 @@ func run(unit, board) -> Array:
 	var ctx := MoveContext.new(unit, board, _self_move(), cell, [cell] as Array[Vector3i])
 	# Floating combat text / battle log: tag the hit with the tile's name ("Fire").
 	ctx.source = CombatText.make_source(CombatText.SRC_TILE, display_name if display_name != "" else String(id), id)
+	# The ground is inflicting this, not the occupant it resolves on: a trap's Ensnared or
+	# a rubble slow must cost the victim its next turn(s) -- the AFFLICTION clock
+	# (CONQUEST.md rule 6a) -- rather than read as self-applied and lapse as that turn opens.
+	ctx.environmental = true
 	# THE GROUND IS NOT A SWING YOU CAN DODGE. Exactly the rule a STATUS TICK follows
 	# ([method StatusCondition.tick]) and for exactly the same reason: routed through the
 	# ordinary pipeline, a tile effect rolled [method MoveContext.hit_chance] against the
