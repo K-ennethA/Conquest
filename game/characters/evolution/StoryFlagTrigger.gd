@@ -5,13 +5,15 @@ class_name StoryFlagTrigger
 ## opens after a quest beat ("the shrine has been cleansed"). Reads ctx key
 ## [code]story_flags[/code], which only the overworld supplies (StoryState.story_flags() via
 ## [StoryGrowth]) -- a Dictionary {flag: bool/int} or an Array of set flag names. Outside story
-## the key is absent and the trigger is never met, so a story-only edge never unlocks in open
-## modes by accident.
+## the key is absent and the requirement is never met (a story requirement, see
+## [EvolutionTrigger]), so a story-only edge never unlocks in open modes by accident.
 
 ## The flag that must be set.
 @export var flag: String = ""
 ## Minimum numeric value (a quest stage: "quest.blight_road >= 2"); true counts as 1.
 @export var min_value: int = 1
+## Player-facing checklist text ("Cleanse the Heartwood shrine"); "" = "Story: <flag>".
+@export var label: String = ""
 
 
 func is_met(ctx: Dictionary) -> bool:
@@ -32,4 +34,24 @@ func is_met(ctx: Dictionary) -> bool:
 
 
 func describe() -> String:
+	if not label.strip_edges().is_empty():
+		return label
 	return "Story: %s" % flag
+
+
+func needs_story() -> bool:
+	return true
+
+
+## A flag event: any flag change when the event names none, else only this flag.
+func responds_to(event: Dictionary) -> bool:
+	if not event_has(event, "flag"):
+		return false
+	var flags = event.get("flags", [])
+	if not (flags is Array) or (flags as Array).is_empty():
+		return true
+	return (flags as Array).has(flag)
+
+
+func problem() -> String:
+	return "a StoryFlag requirement names no flag" if flag.strip_edges().is_empty() else ""

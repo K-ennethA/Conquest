@@ -156,6 +156,10 @@ func validate(lookup: Callable, max_budget_growth: float) -> Array[String]:
 		for t in e.triggers:
 			if t == null:
 				problems.append("edge '%s' has an empty trigger slot." % eid)
+			elif not t.problem().is_empty():
+				problems.append("edge '%s': %s." % [eid, t.problem()])
+		if e.kind_label != "Evolve" and e.kind_label != "Promote":
+			problems.append("edge '%s' has kind_label '%s' (Evolve or Promote)." % [eid, e.kind_label])
 
 		if from_c == null or to_c == null:
 			continue

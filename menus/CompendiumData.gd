@@ -741,9 +741,10 @@ static func unit_entry(c: CharacterResource) -> Dictionary:
 
 
 ## The EVOLUTION block of a unit page (docs/design/EVOLUTION.md §4.5): the whole line as a
-## cross-linked strip, then where this form comes from and what it becomes. [] for a unit in
-## no line, so every other page is unchanged. Read off [EvolutionLibrary], so new lines appear
-## without code.
+## cross-linked strip, then where this form comes from and what it becomes -- with every
+## REQUIREMENT of each edge (all must be met, DECISIONS.md #26), story-only ones marked. [] for a
+## unit in no line, so every other page is unchanged. Read off [EvolutionLibrary], so new lines
+## appear without code.
 static func evolution_blocks(c: CharacterResource) -> Array:
 	if c == null or not EvolutionLibrary.in_any_line(c.character_id):
 		return []
@@ -758,17 +759,32 @@ static func evolution_blocks(c: CharacterResource) -> Array:
 	var parent := EvolutionLibrary.parent_of(c.character_id)
 	if parent != &"":
 		var from_edge := EvolutionLibrary.edge_between(parent, c.character_id)
-		items.append("Evolves from %s at %s. Stage %d." % [_unit_link(parent),
-			from_edge.describe_triggers() if from_edge.describe_triggers() != "" else "a story event",
-			EvolutionLibrary.stage_of(c.character_id)])
+		items.append("%s from %s. Stage %d. %s" % ["Promoted" if from_edge.is_promotion() else "Evolves",
+			_unit_link(parent), EvolutionLibrary.stage_of(c.character_id), requirement_text(from_edge)])
 	for e in EvolutionLibrary.edges_from(c.character_id):
-		items.append("Evolves into %s at %s." % [_unit_link(e.to_id),
-			e.describe_triggers() if e.describe_triggers() != "" else "a story event"])
+		items.append("%s %s. %s" % ["Promotes to" if e.is_promotion() else "Evolves into",
+			_unit_link(e.to_id), requirement_text(e)])
 	return [
 		{ "type": "heading", "text": "Evolution" },
 		{ "type": "text", "text": "  »  ".join(strip) },
 		{ "type": "bullets", "items": items },
 	]
+
+
+## "Requires all of: Growth 3 · Win 2 battles with it." -- every requirement of [param edge], the
+## story-only ones marked; "At a story event." for an edge with none.
+static func requirement_text(edge: EvolutionResource) -> String:
+	var parts: PackedStringArray = []
+	if edge != null:
+		for t in edge.triggers:
+			if t == null or t.describe().is_empty():
+				continue
+			parts.append("%s%s" % [t.describe(), " [color=#9ba5c8](story only)[/color]" if t.needs_story() else ""])
+	if parts.is_empty():
+		return "At a story event."
+	if parts.size() == 1:
+		return "Requires %s." % parts[0]
+	return "Requires all of: %s." % " · ".join(parts)
 
 
 ## "[url=units:oakheart]Oakheart[/url]" -- a cross-link to a unit page.
@@ -1069,7 +1085,10 @@ static func _rules_evolution() -> Dictionary:
 			rules.growth_per_win,
 			(", +%d per enemy KO (up to %d)" % [rules.growth_per_ko, rules.growth_ko_cap]) if rules.growth_per_ko > 0 else ""],
 		"Growth is earned in: %s. Arena runs, versus matches and replays never award it." % ", ".join(modes),
-		"When a unit's Growth reaches its evolution's goal, press Evolve on its card in Character Select. You can always say Not now; the offer stays open.",
+		"Each evolution (or a human's class promotion) lists REQUIREMENTS, and all of them must be met: Growth, battle feats (wins, KOs, KOs of an element, a win at low HP), a held or used item, a place, the weather, a known move, a story event, a companion in the party.",
+		"Place, weather, story, companion and used-item requirements need story mode; in Skirmish they stay unmet unless the evolution says otherwise.",
+		"When every requirement is met, the offer appears on its own (story: after a battle, on reaching a place, on using an item). You can always say Not now: evolve later from Journey > Party in story, or with Evolve on the unit's card in Character Select, where a checklist shows what is still missing.",
+		"Hold (on the party card / the unit's card) stops the automatic offers for that unit until you turn it off; Evolve from the menu still works.",
 		"Evolving unlocks the new form: both forms stay in your roster. Its equipped item moves to the new form when that form wears none.",
 		"An evolved form is a full unit of its own: stats, moves, abilities and element.",
 	]

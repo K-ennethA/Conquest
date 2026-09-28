@@ -88,6 +88,13 @@ const VALID_STATS: Array[String] = [
 ## test can assert on it.
 @export var icon_hint: String = "*"
 
+## An EVOLUTION CATALYST (docs/design/DECISIONS.md #26 "use an item"): a story-bag item that is
+## USED on a unit ([UseItemTrigger] -- an evolution stone, a promotion crest) rather than worn.
+## A catalyst is never equipment: it carries no effect channels, never drops after a battle and
+## never appears in an equip picker ([method ItemLibrary.items_of_rarity] /
+## [method ItemLibrary.items_with_scope] leave it out; [method ItemLibrary.catalysts] lists them).
+@export var catalyst: bool = false
+
 
 ## Human-readable rarity ("Common" / "Rare" / "Epic").
 func rarity_name() -> String:

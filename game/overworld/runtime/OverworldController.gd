@@ -157,6 +157,7 @@ func _build_world() -> void:
 
 	journey = JourneyMenu.new()
 	journey.name = "JourneyMenu"
+	journey.session = story
 	add_child(journey)
 	journey.save_requested.connect(_on_journey_save)
 	journey.title_requested.connect(_on_journey_title)
@@ -239,6 +240,8 @@ func _on_script_finished(_stopped: bool, _reason: String) -> void:
 	_update_prompt()
 	# A trainer who was blocked by a cutscene can still spot you once it ends.
 	_check_trainers.call_deferred()
+	# Flags the script set / a member it added may have met an evolution requirement.
+	_flush_evolution_events.call_deferred()
 
 
 func _on_area_entered() -> void:
@@ -250,6 +253,14 @@ func _on_area_entered() -> void:
 	if not scripts.is_empty() and story.run_script(scripts, ""):
 		return
 	_check_trainers()
+	# Arriving in a new area may meet a Location / Weather requirement (StoryController's events).
+	_flush_evolution_events()
+
+
+## Offer the evolutions the pending story events made due ([method StoryController.flush_evolution_events]).
+func _flush_evolution_events() -> void:
+	if story != null and is_inside_tree() and story.has_method(&"flush_evolution_events"):
+		story.flush_evolution_events()
 
 
 # =====================================================================================

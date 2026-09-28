@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="EvolutionResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/evolution/EvolutionResource.gd" id="1_evo"]
+[ext_resource type="Script" path="res://game/characters/evolution/EvolutionTrigger.gd" id="2_trig"]
+[ext_resource type="Script" path="res://game/characters/evolution/UseItemTrigger.gd" id="3_use"]
+
+[sub_resource type="Resource" id="Resource_sunstone"]
+script = ExtResource("3_use")
+item_id = "sunstone"
+consume = true
+
+[resource]
+script = ExtResource("1_evo")
+id = &"example__vineweave_sunstone"
+from_id = &"vineweave"
+to_id = &"petalfang"
+flavor = "EXAMPLE edge (tests only): the Sunstone wakes a change Growth alone cannot."
+triggers = Array[ExtResource("2_trig")]([SubResource("Resource_sunstone")])

@@ -94,6 +94,8 @@ func test_a_won_battle_grows_the_survivor_only() -> void:
 	await _fight_a_small_battle()
 	assert_eq(RosterLedger.growth_of("tree_grunt"), 1, "Barkling fought and survived a win: +1 Growth")
 	assert_eq(RosterLedger.growth_of("vineweave"), 0, "Vineweave fell: no Growth")
+	assert_eq(int(RosterLedger.feats_of("tree_grunt")["wins"]), 1, "the win is a battle feat (EVOLUTION.md 3.2a)")
+	assert_eq(int(RosterLedger.feats_of("vineweave")["wins"]), 1, "a fallen unit still fought in the win")
 	var rows := GrowthTracker.growth_this_battle()
 	assert_eq(rows.size(), 1, "the end screen gets exactly one growth row")
 	assert_eq(String(rows[0]["uid"]), "tree_grunt", "for Barkling")

@@ -141,8 +141,8 @@ class_name EvolutionResource extends Resource
 @export var to_id: StringName               # roster character_id (new form OR an existing unit)
 @export_multiline var flavor: String = ""   # "The sapling finally takes root."
 @export_group("Triggers")
-## ANY listed trigger being satisfied makes the evolution AVAILABLE (OR). Compose AND with
-## an AllTrigger, mirroring AllCondition. Empty = never available out of battle.
+## REQUIREMENTS: the evolution is AVAILABLE only when EVERY listed one is met (ALL / AND --
+## DECISIONS.md #26; see §3.2a). Empty = never available out of battle.
 @export var triggers: Array[EvolutionTrigger] = []
 ## Out-of-battle evolutions wait for the player to confirm (Pokémon style). false = automatic
 ## (for example, story beats).
@@ -187,6 +187,65 @@ Evolution screen shows a choice.
 - The power budget stays in bounds: `to.power_budget()` ≥ `from.power_budget()` and
   ≤ `from × EvolutionRules.max_budget_growth`.
 
+### 3.2a Requirements, auto-offers and Hold (DECISIONS.md #26, #27 — as built)
+
+The owner decided evolution is **not just XP**: each edge lists **requirements** and **all** of
+them must be met (`EvolutionResource.is_available` is ALL / AND; an empty list is never
+available; an empty slot fails closed). The edge property keeps its historical name
+`triggers`, so older content loads unchanged. Every requirement is an `EvolutionTrigger`
+subclass with `is_met(ctx)`, `describe()` (checklist text), `progress(ctx)` ("2/3"),
+`needs_story()`, `responds_to(event)` (auto-offer relevance) and `problem()` (validator).
+
+| Requirement | Fields | ctx keys | Modes | Offered on |
+|---|---|---|---|---|
+| `GrowthTrigger` | `growth_required` | `growth` | all | battle |
+| `BattleFeatTrigger` | `feat` (WINS / KOS / ELEMENT_KOS / CLUTCH_WINS), `count`, `element` | `feats` | all | battle |
+| `HeldItemTrigger` | `item_id` | `held_item` (story member's item / open-mode ItemInventory equip) | all | item |
+| `KnowsMoveTrigger` | `move_id` | `form` (its roster moveset) | all | — |
+| `UseItemTrigger` | `item_id`, `consume` | `used_item` (+ `bag` for progress) | story | the bag's Use |
+| `LocationTrigger` | `area_ids`, `region_id`, `place_label` | `area_id`, `region_id` | story | area |
+| `WeatherTrigger` | `weathers` | `weather` (the area terrain's weather) | story | area, battle |
+| `StoryFlagTrigger` | `flag`, `min_value`, `label` | `story_flags` | story | flag (that key) |
+| `PartyHasTrigger` | `character_id` (a form or a line) | `party_members` (others only) | story | party |
+
+**Battle feats** are counters on the member record (`feats: {wins, kos, clutch_wins,
+element_kos: {element: n}}`), recorded **after** a battle from what the Growth path already sees
+(`GrowthTracker.compute_feats`: open modes from the tracker's roll call, story from the
+`BattleResult` rows via `StoryGrowth.feats_for`; the duel credits its `defeated` foes to its
+single fighter), under the same gates as Growth. Wins count a won battle the member fought in
+(fallen or not); a clutch win is a won battle it finished alive at or under
+`EvolutionRules.clutch_hp_ratio` (0.25). Never read by the simulation.
+
+**Open modes** have no story context. A story requirement (`needs_story()`: UseItem, Location,
+Weather, StoryFlag, PartyHas) is simply **unmet** there, so a story-gated promotion cannot be
+farmed in Skirmish. An edge may opt out with `skip_story_requirements_outside_story = true`:
+those requirements are then **ignored** outside story (the checklist shows them as "story only").
+
+**Promotions** (DECISIONS.md #8, #16): `kind_label = "Evolve" | "Promote"` only changes the
+words — the EVOLVE / PROMOTE button, "is being promoted…", "was promoted to", the checklist's
+"Promote to X", the Compendium's "Promotes to". A human class edge is Growth + a HeldItem /
+UseItem (crest, insignia) or a Location (a trainer's order).
+
+**Auto-offer and Hold** (story; `StoryController`): after every battle all available edges are
+offered (members on **Hold** skipped). Entering a new area (`warp_to` → "area"), a flag set or a
+member joining (`StoryState.drain_changes` → "flag" / "party", flushed when the script that did
+it ends) offer only the edges that event could have changed (`EvolutionResource.responds_to`),
+so "Not now" is never re-asked on every step — it returns at the next NEW relevant event.
+Using a bag item (Journey → Bag → Use, `StoryController.use_item_on_member`) offers the edges
+that item makes available; a confirmed evolution spends it, Not now keeps it. **Evolve later**:
+Journey → Party shows every member's checklist per next form (branches listed separately), an
+EVOLVE / PROMOTE button while an evolution is due (now, or by using an item the bag holds) and a
+**Hold** toggle (`StoryPartyMember.hold`, saved as `"hold"` — an older v2 save loads it off; no
+save-version bump). Open modes: Character Select's detail block shows the same checklist and a
+Hold toggle (`RosterLedger` `"hold"`), which silences the standalone duel's results-card offer.
+
+**Examples.** The shipped Barkling → Oakheart edge is **Growth 3 + Win 2 battles with it**.
+`game/items/content/sunstone.tres` is the example evolution **catalyst**
+(`ItemResource.catalyst`: never dropped, never equipped). Test-only example edges in
+`tests/helpers/evolution_examples/` (served with `EvolutionLibrary.add_extra_edges`): Vineweave →
+Petalfang by **UseItem Sunstone**, and Blightcap → Mycothrall as a **Promote** edge needing
+**Growth 1 + Location Crownhaven**.
+
 ### 3.3 `EvolutionLibrary` (static index, mirrors `ItemLibrary`)
 
 `all()`, `get_edge(id)`, `edges_from(char_id)`, `edge_between(from, to)`, `parent_of(id)`,
@@ -226,7 +285,8 @@ for tests. File: `user://roster.json`.
   "members": {
     "tree_grunt": { "line": "tree_grunt", "form": "oakheart", "growth": 3,
                     "evolved": [{"edge": "tree_grunt__oakheart", "at": "2026-09-27T20:01:00"}],
-                    "nickname": "" }
+                    "nickname": "", "hold": false,
+                    "feats": {"wins": 3, "kos": 1, "clutch_wins": 0, "element_kos": {"dark": 1}} }
   },
   "unlocked_forms": ["oakheart"]
 }

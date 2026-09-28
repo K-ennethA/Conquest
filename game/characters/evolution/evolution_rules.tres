@@ -11,3 +11,4 @@ growth_on_loss = 0
 growth_modes = PackedStringArray("skirmish", "campaign", "challenge", "story")
 max_budget_growth = 1.75
 hide_locked_forms = true
+clutch_hp_ratio = 0.25

@@ -15,7 +15,9 @@ extends RefCounted
 ##   line                        line       -- the evolution line's root character id
 ##   form                        character_id -- the CURRENT form (what spawns / fights)
 ##   nickname                    nickname
-##   growth, evolved             growth     -- {"growth": int, "evolved": [{edge, at}]}
+##   growth, evolved, feats      growth     -- {"growth": int, "evolved": [{edge, at}],
+##                                             "feats": {wins, kos, clutch_wins, element_kos}}
+##   hold                        hold       -- no automatic evolve prompts (DECISIONS.md #27)
 ##   (story only)                current_hp, wounded, item_id
 ##
 ## [method ledger_record] hands EVOLUTION the exact RosterLedger record and
@@ -30,6 +32,7 @@ const HP_FULL: int = -1
 ## Keys of the RosterLedger payload inside [member growth].
 const GROWTH_KEY := "growth"
 const EVOLVED_KEY := "evolved"
+const FEATS_KEY := "feats"
 
 var member_id: String = ""
 var character_id: String = ""
@@ -39,6 +42,9 @@ var current_hp: int = HP_FULL
 ## KO'd in the last battle: cannot be fielded until healed (a Wayshrine).
 var wounded: bool = false
 var item_id: String = ""
+## HOLD (DECISIONS.md #27): no automatic evolution prompts for this member while true; a manual
+## EVOLVE from Journey -> Party still works. Saved as "hold"; an older save loads it as false.
+var hold: bool = false
 ## EVOLUTION-owned growth payload ({"growth": int, "evolved": [...]}, RosterLedger's). Opaque to
 ## the overworld; read and written only through the ledger-record helpers below.
 var growth: Dictionary = {}
@@ -72,6 +78,8 @@ func ledger_record() -> Dictionary:
 		"growth": growth_points(),
 		"evolved": evolution_history(),
 		"nickname": nickname,
+		"hold": hold,
+		"feats": feats(),
 	}
 
 
@@ -88,6 +96,8 @@ func apply_ledger_record(rec: Dictionary) -> void:
 	growth[GROWTH_KEY] = maxi(0, int(rec.get("growth", 0)))
 	var ev = rec.get("evolved", [])
 	growth[EVOLVED_KEY] = (ev as Array).duplicate(true) if ev is Array else []
+	if rec.has("feats"):
+		growth[FEATS_KEY] = RosterLedger.normalize_feats(rec["feats"])
 
 
 ## Cumulative Growth (RosterLedger's "growth"; 0 for a member that never earned any).
@@ -100,6 +110,18 @@ func add_growth(n: int) -> int:
 	if n > 0:
 		growth[GROWTH_KEY] = growth_points() + n
 	return growth_points()
+
+
+## The battle-feat counters ([BattleFeatTrigger]; RosterLedger's "feats" shape, a copy).
+func feats() -> Dictionary:
+	return RosterLedger.normalize_feats(growth.get(FEATS_KEY, {}))
+
+
+## Add the feat deltas [param delta] ([method GrowthTracker.compute_feats] shape).
+func add_feats(delta: Dictionary) -> void:
+	var rec: Dictionary = {"feats": feats()}
+	RosterLedger.apply_feats(rec, delta)
+	growth[FEATS_KEY] = rec["feats"]
 
 
 ## RosterLedger's evolution history [{edge, at}], oldest first (a copy).
@@ -173,6 +195,7 @@ func to_dict() -> Dictionary:
 		"current_hp": current_hp,
 		"wounded": wounded,
 		"item_id": item_id,
+		"hold": hold,
 		"growth": growth.duplicate(true),
 	}
 
@@ -198,11 +221,13 @@ static func from_dict(d) -> StoryPartyMember:
 		m.current_hp = HP_FULL
 	m.wounded = bool(d.get("wounded", false))
 	m.item_id = String(d.get("item_id", ""))
+	m.hold = bool(d.get("hold", false))
 	var g = d.get("growth", {})
 	m.growth = (g as Dictionary).duplicate(true) if g is Dictionary else {}
 	return m
 
 
 func _to_string() -> String:
-	return "Member %s (%s, hp %s%s)" % [member_id, character_id,
-		"full" if current_hp == HP_FULL else str(current_hp), ", wounded" if wounded else ""]
+	return "Member %s (%s, hp %s%s%s)" % [member_id, character_id,
+		"full" if current_hp == HP_FULL else str(current_hp), ", wounded" if wounded else "",
+		", hold" if hold else ""]

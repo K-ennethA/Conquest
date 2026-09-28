@@ -35,10 +35,14 @@ class_name RosterLedger
 ##     "members": {
 ##       "<uid>": { "line": "<root id>", "form": "<character id>", "growth": <int>,
 ##                  "evolved": [ { "edge": "<edge id>", "at": "<ISO datetime>" } ],
-##                  "nickname": "" }
+##                  "nickname": "",
+##                  "hold": false,        # HOLD: no automatic evolve prompts (DECISIONS #27)
+##                  "feats": { "wins": 0, "kos": 0, "clutch_wins": 0,
+##                             "element_kos": { "<element>": <int> } } }   # BattleFeatTrigger
 ##     },
 ##     "unlocked_forms": ["<character id>", ...]
 ##   }
+## "hold" / "feats" are additive (the version stays 1): an older file loads them as off / zero.
 
 const DEFAULT_SAVE_PATH: String = "user://roster.json"
 const VERSION: int = 1
@@ -176,6 +180,68 @@ static func set_nickname(uid, nickname: String) -> void:
 		rec["nickname"] = nickname
 
 
+# --- Hold (DECISIONS.md #27) --------------------------------------------------
+
+## True when [param uid] is on HOLD: no automatic evolution prompts (a manual EVOLVE from a menu
+## still works). Off for an unknown / implicit member.
+static func is_held(uid) -> bool:
+	return bool(_record(String(uid), false).get("hold", false))
+
+
+## Put [param uid] on / off HOLD (creating the implicit record). Does not save.
+static func set_hold(uid, on: bool) -> void:
+	var rec: Dictionary = _record(String(uid), true)
+	if not rec.is_empty():
+		rec["hold"] = on
+
+
+# --- Battle feats ([BattleFeatTrigger]) ----------------------------------------
+
+## A zeroed feat-counter block.
+static func blank_feats() -> Dictionary:
+	return { "wins": 0, "kos": 0, "clutch_wins": 0, "element_kos": {} }
+
+
+## [param raw] coerced into a feat block (missing / wrong-typed fields read as zero).
+static func normalize_feats(raw) -> Dictionary:
+	var out: Dictionary = blank_feats()
+	if not (raw is Dictionary):
+		return out
+	for k in ["wins", "kos", "clutch_wins"]:
+		out[k] = maxi(0, int(raw.get(k, 0)))
+	var by = raw.get("element_kos", {})
+	if by is Dictionary:
+		for el in by.keys():
+			var n: int = maxi(0, int(by[el]))
+			if not String(el).is_empty() and n > 0:
+				out["element_kos"][String(el)] = n
+	return out
+
+
+## Add the feat deltas [param delta] ({wins, kos, clutch_wins, element_kos}) into the record
+## [param rec] in place (also a record held outside this store -- the story's member).
+static func apply_feats(rec: Dictionary, delta: Dictionary) -> void:
+	var f: Dictionary = normalize_feats(rec.get("feats", {}))
+	var d: Dictionary = normalize_feats(delta)
+	for k in ["wins", "kos", "clutch_wins"]:
+		f[k] = int(f[k]) + int(d[k])
+	for el in (d["element_kos"] as Dictionary).keys():
+		f["element_kos"][el] = int((f["element_kos"] as Dictionary).get(el, 0)) + int(d["element_kos"][el])
+	rec["feats"] = f
+
+
+## The feat counters of [param uid] (a copy; zeros when unknown).
+static func feats_of(uid) -> Dictionary:
+	return normalize_feats(_record(String(uid), false).get("feats", {}))
+
+
+## Add [param delta] to [param uid]'s feat counters (creating the implicit record). Does not save.
+static func add_feats(uid, delta: Dictionary) -> void:
+	var rec: Dictionary = _record(String(uid), true)
+	if not rec.is_empty():
+		apply_feats(rec, delta)
+
+
 # --- Growth -----------------------------------------------------------------
 
 ## Cumulative Growth of [param uid] (0 when unknown).
@@ -242,7 +308,19 @@ static func unlocked_forms() -> Array[String]:
 ## The trigger context for [param uid] (see [EvolutionTrigger]) merged with
 ## [param extra] (catalysts, story flags...). Built here, outside any battle.
 static func context_for(uid, extra: Dictionary = {}) -> Dictionary:
-	return record_context(_record(String(uid), false), String(uid), extra)
+	var rec: Dictionary = _record(String(uid), false)
+	return record_context(rec, String(uid), open_extra(rec, extra))
+
+
+## OPEN-MODE context extras for the record [param rec]: what its current form wears in
+## ItemInventory ([HeldItemTrigger]), unless [param extra] already says. No story keys -- story
+## requirements are unmet (or skipped) here ([EvolutionTrigger]).
+static func open_extra(rec: Dictionary, extra: Dictionary = {}) -> Dictionary:
+	var out: Dictionary = extra.duplicate()
+	if not out.has("held_item"):
+		var form: String = String(rec.get("form", ""))
+		out["held_item"] = ItemInventory.equipped_item(form) if not form.is_empty() else ""
+	return out
 
 
 ## The evolutions [param uid] can take RIGHT NOW from its current form, in edge-id order.
@@ -251,14 +329,24 @@ static func available_evolutions(uid, extra: Dictionary = {}) -> Array[Evolution
 	if key.is_empty():
 		var none: Array[EvolutionResource] = []
 		return none
-	return record_evolutions(_record(key, false), key, extra)
+	var rec: Dictionary = _record(key, false)
+	return record_evolutions(rec, key, open_extra(rec, extra))
 
 
-## STORY hook: of [param uids] (the party), the ones with at least one evolution available,
-## in the order given. The overworld chains an [EvolutionScreen] per id after a battle.
-static func pending_evolutions(uids: Array, extra: Dictionary = {}) -> Array[String]:
+## The CHECKLIST of [param uid]'s next forms (open modes): one entry per edge leaving its current
+## form, {edge, available, rows} (rows: [method EvolutionResource.requirement_rows]).
+static func checklists(uid, extra: Dictionary = {}) -> Array[Dictionary]:
+	var rec: Dictionary = _record(String(uid), false)
+	return record_checklists(rec, String(uid), open_extra(rec, extra))
+
+
+## Of [param uids], the ones with at least one evolution available, in the order given. With
+## [param respect_hold] a member on HOLD is left out (the automatic-prompt question).
+static func pending_evolutions(uids: Array, extra: Dictionary = {}, respect_hold: bool = false) -> Array[String]:
 	var out: Array[String] = []
 	for uid in uids:
+		if respect_hold and is_held(uid):
+			continue
 		if not available_evolutions(uid, extra).is_empty():
 			out.append(String(uid))
 	return out
@@ -281,7 +369,8 @@ static func evolve_member(uid, edge_id, scripted: bool = false) -> Dictionary:
 
 
 static func _evolve(uid: String, edge: EvolutionResource, extra: Dictionary, scripted: bool) -> Dictionary:
-	var result: Dictionary = _check_evolve(_record(uid, false), uid, edge, extra, scripted)
+	var rec: Dictionary = _record(uid, false)
+	var result: Dictionary = _check_evolve(rec, uid, edge, open_extra(rec, extra), scripted)
 	if not String(result["reason"]).is_empty():
 		return result
 	_commit_step(_record(uid, true), edge)
@@ -319,6 +408,7 @@ static func record_context(rec: Dictionary, uid: String, extra: Dictionary = {})
 		"uid": uid,
 		"form": StringName(String(rec.get("form", ""))),
 		"growth": int(rec.get("growth", 0)),
+		"feats": normalize_feats(rec.get("feats", {})),
 	}
 	for k in extra.keys():
 		ctx[k] = extra[k]
@@ -334,6 +424,17 @@ static func record_evolutions(rec: Dictionary, uid: String, extra: Dictionary = 
 	for e in EvolutionLibrary.edges_from(ctx["form"]):
 		if e.is_available(ctx):
 			out.append(e)
+	return out
+
+
+## The checklist of the record [param rec]: {edge, available, rows} per edge leaving its form.
+static func record_checklists(rec: Dictionary, uid: String, extra: Dictionary = {}) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if rec.is_empty():
+		return out
+	var ctx: Dictionary = record_context(rec, uid, extra)
+	for e in EvolutionLibrary.edges_from(ctx["form"]):
+		out.append({ "edge": e, "available": e.is_available(ctx), "rows": e.requirement_rows(ctx) })
 	return out
 
 
@@ -393,7 +494,8 @@ static func _blank() -> Dictionary:
 
 
 static func _default_record(line: String) -> Dictionary:
-	return { "line": line, "form": line, "growth": 0, "evolved": [], "nickname": "" }
+	return { "line": line, "form": line, "growth": 0, "evolved": [], "nickname": "", "hold": false,
+		"feats": blank_feats() }
 
 
 ## The line a uid belongs to: the part before "#", resolved to its root.
@@ -441,6 +543,8 @@ static func _normalize(raw: Dictionary) -> Dictionary:
 				rec["form"] = String(src["form"])
 			rec["growth"] = maxi(0, int(src.get("growth", 0)))
 			rec["nickname"] = String(src.get("nickname", ""))
+			rec["hold"] = bool(src.get("hold", false))
+			rec["feats"] = normalize_feats(src.get("feats", {}))
 			var evolved_raw: Variant = src.get("evolved", [])
 			if evolved_raw is Array:
 				for step in evolved_raw:

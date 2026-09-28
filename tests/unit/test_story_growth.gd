@@ -92,6 +92,7 @@ func test_apply_awards_writes_the_member_and_reports_the_end_screen_rows() -> vo
 	var s := StoryState.new()
 	var bark := s.add_member("tree_grunt")
 	bark.add_growth(2)
+	bark.add_feats({"wins": 2})   # Barkling -> Oakheart: Growth 3 + 2 wins (EVOLUTION.md §3.2a)
 	s.add_member("vineweave")
 	var preview: Array = StoryGrowth.preview_rows(s, {"tree_grunt": 1})
 	assert_eq(bark.growth_points(), 2, "a preview writes nothing")
@@ -103,6 +104,79 @@ func test_apply_awards_writes_the_member_and_reports_the_end_screen_rows() -> vo
 	assert_true(bool(rows[0]["ready"]), "ready to evolve")
 	assert_eq(preview[0], rows[0], "the preview matched what Continue applied")
 	assert_eq(StoryGrowth.pending(s), ["tree_grunt"], "the Barkling now has an evolution pending")
+
+
+# --- Battle feats --------------------------------------------------------------------
+
+func test_story_battles_record_battle_feats() -> void:
+	var s := StoryState.new()
+	var bark := s.add_member("tree_grunt")
+	s.add_member("vineweave")
+	var low: int = maxi(1, int(bark.max_hp() * 0.2))
+	var r := _win([
+		{"member_id": "tree_grunt", "current_hp": low, "wounded": false, "kos": 2, "ko_elements": {"dark": 2}},
+		{"member_id": "vineweave", "current_hp": 0, "wounded": true, "kos": 0},
+	])
+	var feats: Dictionary = StoryGrowth.feats_for(s, r, _rules(), StoryGrowth.gate_context())
+	assert_eq(int(feats["tree_grunt"]["wins"]), 1, "a win for the survivor")
+	assert_eq(int(feats["tree_grunt"]["clutch_wins"]), 1, "at 20% HP: a clutch win")
+	assert_eq(feats["tree_grunt"]["element_kos"], {"dark": 2}, "its KOs by element")
+	assert_eq(int(feats["vineweave"]["wins"]), 1, "a fallen member fought in the win too")
+	assert_eq(StoryGrowth.feats_for(s, r, _rules(["skirmish"]), StoryGrowth.gate_context()), {},
+		"the same gates as Growth")
+	StoryGrowth.apply_feats(s, feats)
+	assert_eq(int(bark.feats()["wins"]), 1, "written into the member's record")
+
+
+func test_a_duel_result_credits_its_defeated_foes_to_its_single_fighter() -> void:
+	var s := StoryState.new()
+	s.add_member("vineweave")
+	s.add_member("blightcap")
+	var r := _win([
+		{"member_id": "vineweave", "current_hp": -1, "wounded": false, "fought": true, "kos": 1},
+		{"member_id": "blightcap", "current_hp": -1, "wounded": false, "fought": false},
+	])
+	r.defeated = ["petalfang"]
+	var rows: Array = StoryGrowth.feat_rows_for(s, r)
+	assert_eq(rows.size(), 1, "only the fighter")
+	var el: String = String(CharacterLibrary.get_character(&"petalfang").element)
+	assert_eq(rows[0]["element_kos"], {el: 1}, "the KO'd wild foe's element")
+
+
+func test_the_story_context_describes_where_the_party_stands() -> void:
+	var s := StoryState.new()
+	s.add_member("tree_grunt")
+	s.add_member("petalfang")
+	s.add_item("sunstone", 2)
+	s.set_location("crownhaven", Vector3i.ZERO, "south")
+	var ctx: Dictionary = StoryGrowth.evolution_context(s, {"trigger": "x"})
+	var area := OverworldAreaResource.load_by_id("crownhaven")
+	assert_eq(ctx["mode"], "story", "a story context")
+	assert_eq(ctx["area_id"], "crownhaven", "the area")
+	assert_eq(ctx["region_id"], String(area.region_id), "its region")
+	assert_eq(ctx["weather"], area.weather_id(), "its weather")
+	assert_eq((ctx["party_members"] as Array).size(), 2, "the party")
+	assert_eq(int(ctx["bag"]["sunstone"]), 2, "the bag")
+	assert_eq(ctx["trigger"], "x", "and the caller's extras")
+	var m := s.member("tree_grunt")
+	m.item_id = "heartwood_charm"
+	assert_eq(StoryGrowth.member_context(m, ctx)["held_item"], "heartwood_charm", "the member adds what it wears")
+
+
+func test_hold_and_events_filter_the_automatic_offers() -> void:
+	var s := StoryState.new()
+	var bark := s.add_member("tree_grunt")
+	bark.add_growth(3)
+	bark.add_feats({"wins": 2})
+	var ctx: Dictionary = StoryGrowth.evolution_context(s)
+	assert_eq(StoryGrowth.pending(s, ctx), ["tree_grunt"], "ready")
+	assert_eq(StoryGrowth.pending(s, ctx, true, {"kinds": ["battle"]}), ["tree_grunt"], "a battle offers it")
+	assert_eq(StoryGrowth.pending(s, ctx, true, {"kinds": ["area"]}), [], "an area change does not re-ask a Growth edge")
+	bark.hold = true
+	assert_eq(StoryGrowth.pending(s, ctx, true), [], "Hold: no automatic offer")
+	assert_eq(StoryGrowth.offerable_for(bark, ctx).size(), 0, "none for a held member")
+	assert_eq(StoryGrowth.pending(s, ctx), ["tree_grunt"], "but it is still pending for the menu")
+	assert_eq((StoryGrowth.menu_edges(bark, ctx)["edges"] as Array).size(), 1, "and the menu's EVOLVE offers it")
 
 
 # --- Story flags ---------------------------------------------------------------------

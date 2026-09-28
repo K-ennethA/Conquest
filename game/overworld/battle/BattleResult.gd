@@ -20,9 +20,10 @@ const OUTCOMES: Array[String] = [OUTCOME_VICTORY, OUTCOME_DEFEAT, OUTCOME_FLED,
 
 var encounter_id: String = ""
 var outcome: String = OUTCOME_ABORTED
-## [{member_id, current_hp, wounded, fought, kos}] -- `fought` (default true) is false for a
-## duel's bench member who never took the field; `kos` = enemy KOs it scored (EVOLUTION growth
-## input, [StoryGrowth]).
+## [{member_id, current_hp, wounded, fought, kos, ko_elements}] -- `fought` (default true) is
+## false for a duel's bench member who never took the field; `kos` = enemy KOs it scored
+## (EVOLUTION growth input, [StoryGrowth]); `ko_elements` (optional) = {element: KOs} of the foes
+## it felled (battle feats, [BattleFeatTrigger]).
 var party_after: Array = []
 ## Character ids of defeated foes (growth / evolution input).
 var defeated: Array = []
@@ -84,6 +85,7 @@ static func from_dict(d) -> BattleResult:
 					"wounded": bool(e.get("wounded", false)),
 					"fought": bool(e.get("fought", true)),
 					"kos": maxi(0, int(e.get("kos", 0))),
+					"ko_elements": _count_map(e.get("ko_elements", {})),
 				})
 	var df = d.get("defeated", [])
 	if df is Array:
@@ -98,6 +100,17 @@ static func from_dict(d) -> BattleResult:
 		}
 	r.turns = maxi(0, int(d.get("turns", 0)))
 	return r
+
+
+## {String: int > 0} from a JSON-parsed map (CONQUEST.md rule 3); {} for anything else.
+static func _count_map(raw) -> Dictionary:
+	var out: Dictionary = {}
+	if raw is Dictionary:
+		for k in raw.keys():
+			var n: int = int(raw[k]) if (raw[k] is int or raw[k] is float) else 0
+			if not String(k).is_empty() and n > 0:
+				out[String(k)] = n
+	return out
 
 
 func _to_string() -> String:

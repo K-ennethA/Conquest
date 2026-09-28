@@ -129,19 +129,40 @@ recruit joins as `tree_grunt`/`tree_grunt#2`).
   the global ledger for a story battle (`detect_mode` → `"story"` via
   `StoryController.is_capturing()`); StoryController seeds its end-screen rows with the preview
   of what Continue will award.
+- Evolutions have REQUIREMENTS, all of which must be met (DECISIONS.md #26; EVOLUTION.md §3.2a):
+  Growth, battle feats, held / used item, location, weather, known move, story flag, party
+  member. The story context (`StoryGrowth.evolution_context`, `mode = "story"`) carries the flags,
+  the area / region / weather the party stands in, the party and the bag; the member adds its held
+  item. After every story battle the members that fought also record their BATTLE FEAT counters
+  (wins, KOs, KOs by element, clutch wins) in their record (`growth.feats`), same gates as Growth.
 - Once the overworld is back (`overworld_ready`), before the paused script resumes,
   `StoryController.offer_pending_evolutions()` chains an `EvolutionScreen` per party member with
-  an evolution available (Evolve / Not now; never after a whiteout). The screen's story `commit`
+  an evolution available (Evolve / Not now; never after a whiteout; members on **Hold** skipped).
+- **Other auto-offer events** (DECISIONS.md #27): entering a new area (`warp_to`), a flag set or a
+  member joining (flushed when the script ends — `OverworldController` calls
+  `StoryController.flush_evolution_events`), and using an item from the bag. A non-battle event
+  offers only the edges it could have changed, so a declined offer is not re-asked on every step.
+- **Evolve later / Hold** — Journey → **Party**: each member card shows its requirements
+  checklist per next form (✓ met / ○ unmet with progress; branches listed separately), an
+  **EVOLVE** (or **PROMOTE**) button while an evolution is due (now, or by using an item the bag
+  holds), and a **Hold** toggle (no automatic prompts; the button still works). Journey →
+  **Bag**: an item some evolution uses lists "Use on" buttons per member
+  (`StoryController.use_item_on_member`: a confirmed evolution spends it, Not now keeps it).
+  Hold is saved per member as `"hold"` (format_version stays 2; an older save loads it off). The screen's story `commit`
   runs `StoryGrowth.evolve`: the member **becomes** the form (member id, nickname and item kept,
   HP mapped by the edge's `hp_policy`, KEEP_RATIO by default) and the form is unlocked for open
-  modes. Not now writes nothing; the offer returns after the next battle.
+  modes. Not now writes nothing; the offer returns at the next relevant event (the next battle for
+  a Growth / feat edge) and the member's EVOLVE button in Journey → Party stays.
 - `StoryState.story_flags()` is passed as `story_flags` in every story evolution context, and the
   new `StoryFlagTrigger` (evolution data layer) reads it — a story-only edge never unlocks in
   open modes.
 - `EvolveMemberCommand` (script): a story beat evolves a member past its triggers
   (EVOLUTION.md §6 `evolve_member(uid_or_line, edge_id)`), through the same screen.
 - Content: the Elder / Sprig quest was replaced by the opening; the starter joins at Growth 0,
-  so its evolution offer comes after a few won battles (Bram's, the grass).
+  so its evolution offer comes after a few won battles (Bram's, the grass). Barkling → Oakheart
+  now needs **Growth 3 + Win 2 battles with it**; Growth only comes from surviving won battles,
+  so the third win that brings Growth 3 has always brought the two wins too — the opening's first
+  offer arrives exactly when it did (no starter-growth change was needed).
 
 ### Standalone duels and Growth
 Choice: standalone duels (Solo → Duel) award Growth only if `evolution_rules.tres` lists
@@ -172,5 +193,5 @@ change. Story duels always follow `"story"`.
 - The Story card is appended as card 7 after Duel (existing number keys unchanged).
 - The Wayshrine stands on a sacred-ground basin (the plain fountain tile has no geometry).
 - Placeholder houses get procedural roofs (`PropEntity`), people are procedural figures.
-- Journey menu ships Resume / Party / Save / Title only; `pending` script resume across an app
+- Journey menu ships Resume / Party (with evolution checklists, EVOLVE, Hold) / Bag / Save / Title; `pending` script resume across an app
   restart is M3 (the pre-battle autosave puts you in front of the trainer instead).

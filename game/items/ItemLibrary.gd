@@ -71,21 +71,31 @@ static func has_item(id) -> bool:
 	return get_item(id) != null
 
 
-## Every item whose [member ItemResource.scope] is [param scope], in display order.
+## Every EQUIPMENT item whose [member ItemResource.scope] is [param scope], in display order
+## (catalysts are never equipped, so they are left out).
 static func items_with_scope(scope: int) -> Array[ItemResource]:
 	var out: Array[ItemResource] = []
 	for item in all_items():
-		if int(item.scope) == scope:
+		if int(item.scope) == scope and not item.catalyst:
 			out.append(item)
 	return out
 
 
-## Every item of [param rarity], in display order. This is the pool a drop roll draws from
-## once the rarity tier has been decided.
+## Every EQUIPMENT item of [param rarity], in display order. This is the pool a drop roll draws
+## from once the rarity tier has been decided (catalysts never drop).
 static func items_of_rarity(rarity: int) -> Array[ItemResource]:
 	var out: Array[ItemResource] = []
 	for item in all_items():
-		if int(item.rarity) == rarity:
+		if int(item.rarity) == rarity and not item.catalyst:
+			out.append(item)
+	return out
+
+
+## Every evolution CATALYST ([member ItemResource.catalyst]) -- used on a unit, never worn.
+static func catalysts() -> Array[ItemResource]:
+	var out: Array[ItemResource] = []
+	for item in all_items():
+		if item.catalyst:
 			out.append(item)
 	return out
 

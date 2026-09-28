@@ -29,6 +29,9 @@ const RULES_PATH: String = "res://game/characters/evolution/evolution_rules.tres
 @export var max_budget_growth: float = 1.75
 ## Character Select hides evolved forms the player has not unlocked yet.
 @export var hide_locked_forms: bool = true
+## BATTLE FEATS ([BattleFeatTrigger] CLUTCH_WINS): a won battle counts as a clutch win for a
+## member that finished it alive at or under this fraction of its max HP.
+@export_range(0.0, 1.0, 0.01) var clutch_hp_ratio: float = 0.25
 
 static var _current: EvolutionRules = null
 
