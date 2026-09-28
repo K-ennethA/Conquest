@@ -37,6 +37,10 @@ var backdrop: Dictionary = {}
 var rules: Dictionary = {}
 ## Applied by StoryController, never by the battle: {gold, items: [...], points, flags: [...]}.
 var rewards: Dictionary = {}
+## The BATTLE ITEMS the player may use ({item_id: count}): the story bag's consumables that work in
+## battle (StoryController fills it for a duel -- the Items action). What was used comes back as
+## [member BattleResult.items_used] and is taken from the bag then.
+var items: Dictionary = {}
 var intro_scene: String = ""
 var outro_scene: String = ""
 # --- tactical only ---
@@ -110,6 +114,7 @@ func to_dict() -> Dictionary:
 		"backdrop": backdrop.duplicate(true),
 		"rules": rules.duplicate(true),
 		"rewards": rewards.duplicate(true),
+		"items": items.duplicate(true),
 		"intro_scene": intro_scene,
 		"outro_scene": outro_scene,
 		"map_path": map_path,
@@ -144,6 +149,7 @@ static func from_dict(d) -> BattleRequest:
 	r.rewards = _dict(d.get("rewards", {}))
 	if r.rewards.has("gold"):
 		r.rewards["gold"] = int(r.rewards["gold"])
+	r.items = BattleResult._count_map(d.get("items", {}))
 	r.intro_scene = String(d.get("intro_scene", ""))
 	r.outro_scene = String(d.get("outro_scene", ""))
 	r.map_path = String(d.get("map_path", ""))

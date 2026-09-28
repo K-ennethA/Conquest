@@ -58,7 +58,7 @@ class_name ReplayLog
 ##
 ## COMMANDS ARE STORED IN THE NETPROTOCOL VOCABULARY, JSON-flattened. A cell ([Vector3i] col, row, floor) becomes
 ## [code][col, row, floor][/code] (exactly as [method BattleSnapshot.cell_to_array] does) because JSON
-## has no vector type; [method decode_command] puts it back. Only the four command types the
+## has no vector type; [method decode_command] puts it back. Only the command types the
 ## applier can actually APPLY are accepted ([constant APPLIABLE_TYPES]) -- ATTACK_UNIT exists
 ## in [enum NetProtocol.Action] but has no apply branch, so a replay carrying one could never
 ## be re-simulated and is rejected at the gate rather than mid-playback.
@@ -123,6 +123,7 @@ const APPLIABLE_TYPES: Array[int] = [
 	NetProtocol.Action.WAIT_UNIT,
 	NetProtocol.Action.END_TURN,
 	NetProtocol.Action.CAST_MOVE,
+	NetProtocol.Action.USE_ITEM,
 ]
 
 # --- Caps (the untrusted-input ceilings) -------------------------------------
@@ -302,6 +303,10 @@ static func encode_command(cmd: Variant) -> Dictionary:
 			out_data[NetProtocol.KEY_UNIT_ID] = unit_id_of(data.get(NetProtocol.KEY_UNIT_ID, ""))
 		NetProtocol.Action.END_TURN:
 			out_data[NetProtocol.KEY_PLAYER_ID] = int(data.get(NetProtocol.KEY_PLAYER_ID, 0))
+		NetProtocol.Action.USE_ITEM:
+			out_data[NetProtocol.KEY_UNIT_ID] = unit_id_of(data.get(NetProtocol.KEY_UNIT_ID, ""))
+			out_data[NetProtocol.K_ITEM] = _clip(String(data.get(NetProtocol.K_ITEM, "")), MAX_STRING)
+			out_data[NetProtocol.K_TARGET] = unit_id_of(data.get(NetProtocol.K_TARGET, ""))
 	return {
 		NetProtocol.KEY_TYPE: type,
 		NetProtocol.KEY_DATA: out_data,
@@ -349,6 +354,13 @@ static func decode_command(raw: Variant) -> Dictionary:
 			if not _has_number(data, NetProtocol.KEY_PLAYER_ID):
 				return {}
 			out_data[NetProtocol.KEY_PLAYER_ID] = int(data[NetProtocol.KEY_PLAYER_ID])
+		NetProtocol.Action.USE_ITEM:
+			if not _has_unit_id(data) or typeof(data.get(NetProtocol.K_ITEM)) != TYPE_STRING \
+					or typeof(data.get(NetProtocol.K_TARGET)) != TYPE_STRING:
+				return {}
+			out_data[NetProtocol.KEY_UNIT_ID] = unit_id_of(data[NetProtocol.KEY_UNIT_ID])
+			out_data[NetProtocol.K_ITEM] = _clip(String(data[NetProtocol.K_ITEM]), MAX_STRING)
+			out_data[NetProtocol.K_TARGET] = unit_id_of(data[NetProtocol.K_TARGET])
 	var out: Dictionary = {
 		NetProtocol.KEY_TYPE: type,
 		NetProtocol.KEY_DATA: out_data,

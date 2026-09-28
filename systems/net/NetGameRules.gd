@@ -156,6 +156,8 @@ func validate_intent(action: Dictionary, actor_slot: int) -> String:
 			if ts.has_method("can_unit_act") and not ts.can_unit_act(unit):
 				return NetProtocol.INTENT_UNIT_CANNOT_ACT
 			return NetProtocol.INTENT_OK
+		NetProtocol.Action.USE_ITEM:
+			return _validate_use_item(unit, d, ts, b)
 	return NetProtocol.INTENT_UNKNOWN_ACTION
 
 
@@ -173,6 +175,25 @@ func _validate_move(unit, to: Vector3i, ts, b) -> String:
 	var reachable: Array[Vector3i] = MovementResolver.new().reachable_cells(origin, profile, b, unit)
 	if not reachable.has(to):
 		return NetProtocol.INTENT_ILLEGAL_DESTINATION
+	return NetProtocol.INTENT_OK
+
+
+## USE_ITEM: the user may act, the item is a battle consumable, the target is a living ally (or
+## the user) the item would actually help. How MANY the user holds is the owning mode's ledger
+## (the duel's bag, [DuelBattle.use_item]) -- the rules only know what an item does.
+func _validate_use_item(unit, d: Dictionary, ts, b) -> String:
+	if ts.has_method("can_unit_act") and not ts.can_unit_act(unit):
+		return NetProtocol.INTENT_UNIT_CANNOT_ACT
+	var item: ItemResource = ItemLibrary.get_item(String(d.get(NetProtocol.K_ITEM, "")))
+	if item == null or item.consumable == null or not item.consumable.usable_in_battle:
+		return NetProtocol.INTENT_ILLEGAL_TARGET
+	var target = find_unit(String(d.get(NetProtocol.K_TARGET, "")))
+	if target == null:
+		return NetProtocol.INTENT_UNKNOWN_UNIT
+	if target != unit and not (b.has_method("are_allies") and b.are_allies(unit, target)):
+		return NetProtocol.INTENT_ILLEGAL_TARGET
+	if not bool(item.consumable.check_unit(target)["ok"]):
+		return NetProtocol.INTENT_ILLEGAL_TARGET
 	return NetProtocol.INTENT_OK
 
 
@@ -359,7 +380,49 @@ func _apply(action: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 			if GameEvents and unit is Node and is_instance_valid(unit):
 				GameEvents.unit_action_completed.emit(unit, "end_turn")
 			return {"ok": true, "events": [{"effect": "wait", "unit_id": NetUnitIds.id_of(unit)}]}
+		NetProtocol.Action.USE_ITEM:
+			return _apply_use_item(unit, d, ts, b)
 	return {"ok": false, "reason": NetProtocol.INTENT_UNKNOWN_ACTION}
+
+
+## USE_ITEM, apply-side (every peer / every replay identically): the consumable's effect on the
+## target ([method ConsumableEffect.apply_to_unit] -- cure, then a clamped heal; no RNG), the
+## heal annotated for the floating text like any heal, then the user's turn is SPENT exactly as
+## a WAIT spends it. A use that would do nothing is refused (ok false) and spends nothing.
+func _apply_use_item(unit, d: Dictionary, ts, b) -> Dictionary:
+	var item_id: String = String(d.get(NetProtocol.K_ITEM, ""))
+	var item: ItemResource = ItemLibrary.get_item(item_id)
+	if item == null or item.consumable == null:
+		return {"ok": false, "reason": "unknown_item"}
+	var target = find_unit(String(d.get(NetProtocol.K_TARGET, "")))
+	if target == null:
+		target = unit
+	var check: Dictionary = item.consumable.check_unit(target)
+	if not bool(check.get("ok", false)):
+		return {"ok": false, "reason": String(check.get("reason", "no_effect"))}
+	var before: int = int(target.get_stat("health")) if target.has_method("get_stat") else 0
+	var max_hp: int = int(target.get_base_stat("health")) if target.has_method("get_base_stat") else before
+	var heal: int = mini(item.consumable.heal_for(max_hp), maxi(0, max_hp - before))
+	if item.consumable.heals() and heal > 0 and target is Object:
+		CombatText.annotate(target, {"kind": CombatText.KIND_HEAL, "amount": heal,
+			"source": item.display_name, "source_kind": &"item", "source_id": StringName(item_id)})
+	var res: Dictionary = item.consumable.apply_to_unit(target, b)
+	if not bool(res.get("ok", false)):
+		return {"ok": false, "reason": String(res.get("reason", "no_effect"))}
+	var healed: int = int(res.get("healed", 0))
+	if healed > 0 and typeof(GameEvents) == TYPE_OBJECT and GameEvents != null \
+			and GameEvents.has_signal(&"unit_healed") and target is Node:
+		GameEvents.unit_healed.emit(target, healed)
+	# Spend the turn exactly like WAIT (a unit owing a canto step gives it up).
+	if unit.has_method("finish_canto") and "canto_pending" in unit and bool(unit.canto_pending):
+		unit.finish_canto("wait")
+	if ts != null and ts.has_method("mark_unit_acted"):
+		ts.mark_unit_acted(unit)
+	if GameEvents and unit is Node and is_instance_valid(unit):
+		GameEvents.unit_action_completed.emit(unit, "end_turn")
+	return {"ok": true, "events": [{"effect": "use_item", "unit_id": NetUnitIds.id_of(unit),
+		"item_id": item_id, "target": target, "target_id": NetUnitIds.id_of(target),
+		"healed": healed, "hp_before": before, "cured": res.get("cured", [])}]}
 
 
 ## Fire GameEvents.ultimate_casting when the applied cast is an ULTIMATE (the 4th

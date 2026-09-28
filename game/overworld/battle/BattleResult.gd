@@ -31,6 +31,9 @@ var befriended: String = ""
 ## {character_id, accepted} or {} when no offer.
 var befriend_offer: Dictionary = {}
 var turns: int = 0
+## Battle items the player USED ({item_id: count}) -- taken from the story bag by
+## [StoryResultApplier], whatever the outcome.
+var items_used: Dictionary = {}
 
 
 func is_victory() -> bool:
@@ -63,6 +66,7 @@ func to_dict() -> Dictionary:
 		"befriended": befriended,
 		"befriend_offer": befriend_offer.duplicate(true),
 		"turns": turns,
+		"items_used": items_used.duplicate(),
 	}
 
 
@@ -99,6 +103,7 @@ static func from_dict(d) -> BattleResult:
 			"accepted": bool(off.get("accepted", false)),
 		}
 	r.turns = maxi(0, int(d.get("turns", 0)))
+	r.items_used = _count_map(d.get("items_used", {}))
 	return r
 
 

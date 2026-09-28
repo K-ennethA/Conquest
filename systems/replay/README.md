@@ -102,7 +102,7 @@ Stored in the **NetProtocol vocabulary**, JSON-flattened: a `Vector2i` becomes `
 (exactly as `BattleSnapshot.cell_to_array` does), and `decode_command` puts it back.
 
 Only the four types `CommandApplier.apply_command` has an apply branch for are accepted
-(`ReplayLog.APPLIABLE_TYPES`): `MOVE_UNIT`, `WAIT_UNIT`, `END_TURN`, `CAST_MOVE`.
+(`ReplayLog.APPLIABLE_TYPES`): `MOVE_UNIT`, `WAIT_UNIT`, `END_TURN`, `CAST_MOVE`, `USE_ITEM` (protocol 3: battle consumables).
 `ATTACK_UNIT` exists in `NetProtocol.Action` but has **no** apply branch, so a replay carrying
 one could never be re-simulated — it is rejected at the gate rather than mid-playback.
 

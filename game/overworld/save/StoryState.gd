@@ -38,6 +38,11 @@ var actor_positions: Dictionary = {}
 ## trip, cleared when the player changes area. Never saved.
 var transient_positions: Dictionary = {}
 var play_seconds: float = 0.0
+## Per-merchant stock bookkeeping ([ShopLedger]): shop_id -> {"sold": {item_id: n}, "epoch": int}.
+## Saved as "shops" (an older save loads it empty: every merchant fully stocked).
+var shops: Dictionary = {}
+## Rests taken (Wayshrine / healer / whiteout heals): the clock an ON_REST restock reads. Saved.
+var rests: int = 0
 ## What changed since the last [method drain_changes] -- the EVOLUTION auto-offer events
 ## (StoryController: a flag set / a member joining may have met a requirement). Never saved.
 var _changed_flags: Array[String] = []
@@ -171,9 +176,12 @@ func healthy_members() -> Array[StoryPartyMember]:
 	return out
 
 
+## A full rest (a Wayshrine, a healer, waking after a whiteout): every member healed and
+## un-wounded, and the rest counter advanced (merchants that restock ON_REST read it).
 func heal_party() -> void:
 	for m in party:
 		m.heal_full()
+	rests += 1
 
 
 # --- Bag / gold ------------------------------------------------------------------
@@ -198,6 +206,29 @@ func take_item(item_id: String, count: int = 1) -> bool:
 	else:
 		bag[item_id] = left
 	return true
+
+
+## USE a consumable from the bag on [param member_id] OUT OF BATTLE (Journey -> Bag): the rules are
+## [method ConsumableEffect.check_member]; a use that helps spends ONE from the bag, a refused one
+## spends nothing. {ok, reason, healed, revived, hp_before, hp_after}; reasons: "no_item",
+## "not_consumable", "no_member" or a [ConsumableEffect] refusal ("full_hp", "knocked_out", ...).
+func use_consumable(item_id: String, member_id: String) -> Dictionary:
+	var out: Dictionary = {"ok": false, "reason": "", "healed": 0, "revived": false, "hp_before": 0, "hp_after": 0}
+	if item_count(item_id) <= 0:
+		out["reason"] = "no_item"
+		return out
+	var item: ItemResource = ItemLibrary.get_item(item_id)
+	if item == null or item.consumable == null:
+		out["reason"] = "not_consumable"
+		return out
+	var m: StoryPartyMember = member(member_id)
+	if m == null:
+		out["reason"] = "no_member"
+		return out
+	var r: Dictionary = item.consumable.apply_to_member(m)
+	if bool(r.get("ok", false)):
+		take_item(item_id, 1)
+	return r
 
 
 func add_gold(amount: int) -> void:

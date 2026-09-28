@@ -13,3 +13,4 @@ stat_modifiers = {}
 regen_per_turn = 0
 damage_reduction_percent = 15
 icon_hint = "🪶"
+price = 450

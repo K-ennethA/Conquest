@@ -41,6 +41,8 @@ var replay_path: String = ""
 ## results card. Empty in story (the story party's growth is StoryController's) and whenever
 ## "duel" is not in EvolutionRules.growth_modes.
 var growth: Array = []
+## Battle items the player used ({item_id: count}); the story takes them from the bag.
+var items_used: Dictionary = {}
 
 
 func player_won() -> bool:
@@ -63,6 +65,7 @@ func to_battle_result() -> Dictionary:
 		"befriended": befriended,
 		"turns": turns,
 		"befriend_offer": offer,
+		"items_used": items_used.duplicate(),
 	}
 
 

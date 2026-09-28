@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="ItemResource" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://game/items/ItemResource.gd" id="1_item"]
+[ext_resource type="Script" path="res://game/items/ConsumableEffect.gd" id="2_use"]
+
+[sub_resource type="Resource" id="Resource_use"]
+script = ExtResource("2_use")
+heal_percent = 60
+
+[resource]
+script = ExtResource("1_item")
+id = &"heartwood_tonic"
+display_name = "Heartwood Tonic"
+description = "Sap of an old heartwood, thick as honey. It restores most of a creature's strength."
+rarity = 1
+scope = 0
+stat_modifiers = {}
+regen_per_turn = 0
+damage_reduction_percent = 0
+icon_hint = "🍯"
+consumable = SubResource("Resource_use")
+price = 120

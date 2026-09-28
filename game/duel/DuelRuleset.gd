@@ -35,6 +35,8 @@ const POLICY_DISABLE := "disable"                    ## abilities: removed from 
 ## Running is allowed at all (the encounter must also allow it: DuelRequest.can_flee -- wild
 ## duels). Rolled per attempt by [method flee_chance] (DuelBattle.attempt_flee).
 @export var allow_flee: bool = false
+## The Items action: battle consumables from the player side's bag ([member DuelRequest.items]),
+## a recorded USE_ITEM command that costs the turn (DECISIONS.md #28).
 @export var allow_items: bool = false
 ## Cells between the two stations. 4 guarantees no authored AoE aimed at the foe (largest:
 ## SQUARE 2) also covers the caster's own station.

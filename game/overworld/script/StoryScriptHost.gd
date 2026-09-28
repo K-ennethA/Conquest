@@ -15,6 +15,7 @@ extends RefCounted
 ##   wait(seconds: float)                                        -> void (await)
 ##   toast(text: String, kind: String)                           -> void
 ##   play_clash(request: BattleRequest)                          -> void (await; VS intro)
+##   open_shop(shop: ShopResource)                               -> void (await; the shop screen)
 ##   refresh_world()                                             -> void
 ##
 ## Battles, saves and warps are NOT host calls: they outlive the scene, so they go through the
@@ -50,6 +51,10 @@ func toast(_text: String, _kind: String = "") -> void:
 
 
 func play_clash(_request) -> void:
+	pass
+
+
+func open_shop(_shop) -> void:
 	pass
 
 

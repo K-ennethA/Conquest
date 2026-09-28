@@ -11,6 +11,7 @@ extends SceneTree
 ##   game/overworld/content/battles/ow_mossway_clearing.tres -- Bram's board (post-opening)
 ##   game/overworld/content/hero.tres                        -- the avatar (placeholder model)
 ##   game/overworld/content/story_ruleset.tres               -- story tuning
+##   game/overworld/content/shops/*.tres                     -- the merchants' shops (DECISIONS.md #28)
 ##
 ## Run with:
 ##   godot --headless --path . -s res://game/overworld/build/build_story_content.gd
@@ -74,7 +75,15 @@ const NAMES := {
 	"KIT": "Kit",
 	"BAKER": "Baker Gilly",
 	"MAUD": "old Maud",
+	"MERCHANT": "Merchant Oda",             # Crownhaven's general-goods stall
+	"SHOP_CROWNHAVEN": "Oda's General Goods",
+	"PEDLAR": "Pedlar Jory",                # the travelling merchant on the Mossway (after the opening)
+	"SHOP_PEDLAR": "Jory's Travelling Cart",
 }
+
+## Shop ids (the save keys of their stock -- never rename once shipped; the NAMES above are free).
+const SHOP_CROWNHAVEN := "crownhaven_general"
+const SHOP_PEDLAR := "mossway_pedlar"
 
 ## The STARTER creature the ceremony gives (a CharacterLibrary id) -- change it here and rebuild.
 const STARTER_ID := &"tree_grunt"
@@ -129,10 +138,11 @@ var _ok: bool = true
 
 
 func _initialize() -> void:
-	for d in ["areas/oakvale", "areas/oakvale_ruins", "areas/mossway", "areas/crownhaven", "battles"]:
+	for d in ["areas/oakvale", "areas/oakvale_ruins", "areas/mossway", "areas/crownhaven", "battles", "shops"]:
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CONTENT + d))
 	_build_hero()
 	_build_ruleset()
+	_build_shops()
 	_build_battle_map()
 	_build_first_fight_map()
 	_build_oakvale(false)
@@ -208,7 +218,79 @@ func _build_ruleset() -> void:
 	var party: Array[StringName] = []
 	rs.starting_party = party
 	rs.starting_gold = 100
+	# The economy (DECISIONS.md #28): wild wins pay per foe, trainers pay their authored purse,
+	# merchants buy back at half price, a bag stack holds 99.
+	rs.wild_gold_per_foe = 15
+	rs.battle_gold_per_foe = 0
+	rs.sell_ratio = 0.5
+	rs.bag_stack_cap = 99
 	_save(rs, CONTENT + "story_ruleset.tres")
+
+
+# =====================================================================================
+#  Shops (DECISIONS.md #28 + revision: healing, cures, revives and existing equipment only --
+#  no bonding shards or evolution items yet; those are later stock lines gated by flags)
+# =====================================================================================
+
+func _stock(item_id: String, price: int = 0, limit: int = -1, condition: String = "") -> ShopStockEntry:
+	return ShopStockEntry.make(StringName(item_id), price, limit, condition)
+
+
+func _build_shops() -> void:
+	var after_opening: String = "has(\"%s\")" % F_COMPLETE
+	var general := ShopResource.new()
+	general.id = StringName(SHOP_CROWNHAVEN)
+	general.display_name = _t("{SHOP_CROWNHAVEN}")
+	general.greeting = _t("\"Tonics, salves, a charm or two -- everything a tester needs on the road. Take your time, love.\"")
+	var gs: Array[ShopStockEntry] = [
+		_stock("mossleaf_tonic"),
+		_stock("heartwood_tonic", 0, 5),
+		_stock("bitterroot_salve"),
+		_stock("clearwater_draught", 0, 3),
+		_stock("dawnpetal_draught", 0, 2),
+		_stock("heartwood_charm", 0, 1),
+		_stock("ironbark_sigil", 0, 1),
+		# The better gear once the opening is over (a story-flag gate).
+		_stock("swiftspore_boots", 0, 1, after_opening),
+		_stock("sagebloom_poultice", 0, 1, after_opening),
+	]
+	general.stock = gs
+	general.restock = ShopResource.Restock.ON_REST
+	general.sell_ratio = -1.0
+	_save(general, ShopResource.path_for(SHOP_CROWNHAVEN))
+
+	var pedlar := ShopResource.new()
+	pedlar.id = StringName(SHOP_PEDLAR)
+	pedlar.display_name = _t("{SHOP_PEDLAR}")
+	pedlar.greeting = _t("\"Road prices, friend -- dearer than the city, but the city's a long walk with a limping partner.\"")
+	var ps: Array[ShopStockEntry] = [
+		_stock("mossleaf_tonic", 45),
+		_stock("bitterroot_salve", 35),
+		_stock("dawnpetal_draught", 275, 1),
+		_stock("windwhisper_pendant", 0, 1),
+	]
+	pedlar.stock = ps
+	pedlar.restock = ShopResource.Restock.EVERY_N_STEPS
+	pedlar.restock_steps = 150
+	pedlar.sell_ratio = 0.4
+	_save(pedlar, ShopResource.path_for(SHOP_PEDLAR))
+
+
+## A merchant NPC standing at [param cell] selling [param shop_id].
+func _merchant(id: String, cell: Vector2i, facing: String, name_key: String, tint: Color, shop_id: String,
+		figure: String = "villager") -> ShopEntity:
+	var m := ShopEntity.new()
+	m.id = StringName(id)
+	m.cell = Vector3i(cell.x, cell.y, 0)
+	m.facing = facing
+	var nm: String = _t(String(NAMES.get(name_key, name_key)))
+	m.display_name = nm
+	m.speaker_name = nm
+	m.speaker_id = StringName("npc_" + id)
+	m.tint = tint
+	m.figure = figure
+	m.shop = load(ShopResource.path_for(shop_id)) as ShopResource
+	return m
 
 
 # =====================================================================================
@@ -1032,6 +1114,13 @@ func _build_mossway() -> void:
 	])
 	ents.append(recruit)
 
+	# A TRAVELLING MERCHANT camps by the road once the opening is over (his cart beside him).
+	var pedlar := _merchant("pedlar", Vector2i(13, 4), "south", "PEDLAR", Color(0.55, 0.42, 0.25), SHOP_PEDLAR)
+	pedlar.visible_if = after_opening
+	pedlar.dialogue = _scene("moss_pedlar", [_line("pedlar", "PEDLAR", "Mind the grass, traveller. Need anything for the road?")])
+	ents.append(pedlar)
+	ents.append(_prop("pedlar_cart", "cart", Vector2i(12, 4), Vector2i.ONE, Color(0.55, 0.42, 0.25), true, after_opening))
+
 	# The west edge leads home -- to Oakvale as it was, or (once the raid began) to its ruins.
 	ents.append(_warp("west_exit", Rect2i(0, 6, 1, 1), &"oakvale", &"east_gate",
 		"not has(\"%s\")" % F_ATTACK))
@@ -1265,6 +1354,10 @@ func _ch_people() -> Array:
 		_say([_line("dalla", "DALLA", "Everyone wants to talk shards today. Nobody wants to buy turnips. You'd think a bit of glowing rock was worth more than supper.")]),
 	])])
 	out.append(dalla)
+	# THE MERCHANT (DECISIONS.md #28): at the end of the green-awning stall, between it and the well.
+	var oda := _merchant("merchant", Vector2i(20, 12), "south", "MERCHANT", Color(0.3, 0.5, 0.36), SHOP_CROWNHAVEN)
+	oda.dialogue = _scene("ch_merchant", [_line("merchant", "MERCHANT", "Welcome to the market! Tonics for the road, salves for the stings -- have a look.")])
+	out.append(oda)
 	var fenwick := _npc("fenwick", Vector2i(17, 14), "west", "FENWICK", Color(0.4, 0.42, 0.48), "elder")
 	fenwick.dialogue = _scene("ch_fenwick", [
 		_line("fenwick", "FENWICK", "In my father's day, the lords bound their creatures in chains -- {STONE} chains, forged hot. The beasts obeyed. They never loved anyone for it."),

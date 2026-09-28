@@ -17,8 +17,13 @@ class_name DuelBattle
 ## shift a combat roll.
 ##
 ## Flow: [method setup] -> [method start] -> per turn either [method submit_slot] (human),
-## [method play_ai_turn] (AI) or [method pass_turn] (a stunned / controlled unit), until
-## [signal finished]. [method run_to_end] drives AI-only duels synchronously.
+## [method use_item] (human: a battle consumable, costs the turn), [method play_ai_turn] (AI) or
+## [method pass_turn] (a stunned / controlled unit), until [signal finished].
+##
+## ITEMS (DECISIONS.md #28): the player side carries [member DuelRequest.items] (the story bag's
+## battle consumables). Using one is the recorded USE_ITEM command through the same apply path
+## as a move -- deterministic (no roll) and replayed byte-for-byte; what was used comes back as
+## [member DuelResult.items_used] for the story to take from the bag. The AI never uses items. [method run_to_end] drives AI-only duels synchronously.
 
 ## A new combatant's turn opened (after its turn-start ticks). [param unit] may need to pass.
 signal turn_opened(unit)
@@ -60,6 +65,8 @@ var _subdued: Array[bool] = [false, false]
 var _ko: Array[bool] = [false, false]
 var _final_hp: Array[int] = [0, 0]
 var _flee_attempts: int = 0
+## The player side's battle items left ({item_id: count}), from the request.
+var _items_left: Dictionary = {}
 
 
 # --- Setup ---------------------------------------------------------------------------
@@ -142,6 +149,7 @@ func setup(p_request: DuelRequest, p_map_root: Node3D = null, use_turn_manager: 
 	result.seed = match_rng.match_seed
 	result.encounter_id = request.encounter_id
 	result.stats = [_blank_stats(), _blank_stats()]
+	_items_left = request.items.duplicate()
 	if GameEvents != null and not GameEvents.damage_dealt.is_connected(_on_damage_dealt):
 		GameEvents.damage_dealt.connect(_on_damage_dealt)
 	ModeTuning.register(self)
@@ -383,6 +391,11 @@ func apply_command(cmd: Dictionary) -> Dictionary:
 	if bool(res.get("ok", false)) and move != null and side >= 0:
 		var used: Dictionary = result.stats[side]["moves_used"]
 		used[String(move.move_id)] = int(used.get(String(move.move_id), 0)) + 1
+	if bool(res.get("ok", false)) and int(c.get(NetProtocol.KEY_TYPE, -1)) == NetProtocol.Action.USE_ITEM and side == 0:
+		# The item leaves the side's bag here -- live and in a replay alike.
+		var item_id: String = String((c[NetProtocol.KEY_DATA] as Dictionary).get(NetProtocol.K_ITEM, ""))
+		_items_left[item_id] = maxi(0, int(_items_left.get(item_id, 0)) - 1)
+		result.items_used[item_id] = int(result.items_used.get(item_id, 0)) + 1
 	_note_subdue(res, side)
 
 	# The state hash is taken HERE, before any end-of-duel teardown, so a live run and its
@@ -467,6 +480,67 @@ func attempt_flee() -> Dictionary:
 		return {"ok": true, "reason": "", "fled": true, "chance": chance, "roll": roll}
 	pass_turn()
 	return {"ok": true, "reason": "", "fled": false, "chance": chance, "roll": roll}
+
+
+# --- Items ------------------------------------------------------------------------------
+
+## Battle items the player side still holds ({item_id: count}, a copy).
+func items_left() -> Dictionary:
+	return _items_left.duplicate()
+
+
+## May the acting human use an item right now? The ruleset must allow items
+## ([member DuelRuleset.allow_items]) and the side must hold at least one.
+func can_use_items() -> bool:
+	if is_over or rules == null or not rules.allow_items:
+		return false
+	for id in _items_left:
+		if int(_items_left[id]) > 0:
+			return true
+	return false
+
+
+## The item picker rows for [param actor] (sorted by name): [{item_id, item, count, ok, reason}]
+## -- ok false (with the [ConsumableEffect] reason) when using it now would be wasted. The target
+## is the actor itself (a strict 1v1: the lead is the only ally on the field).
+func item_options(actor) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for id in _items_left:
+		var n: int = int(_items_left[id])
+		var item: ItemResource = ItemLibrary.get_item(String(id))
+		if n <= 0 or item == null or item.consumable == null:
+			continue
+		var check: Dictionary = item.consumable.check_unit(actor)
+		out.append({"item_id": String(id), "item": item, "count": n, "ok": bool(check["ok"]),
+			"reason": String(check["reason"])})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return (a["item"] as ItemResource).display_name.naturalnocasecmp_to((b["item"] as ItemResource).display_name) < 0)
+	return out
+
+
+## The human uses [param item_id] on its own combatant: the USE_ITEM command (costs the turn).
+## Returns the applied record, or {ok: false, reason} (nothing spent) when it is not the
+## player's turn, items are off, none is left, or it would be wasted ("full_hp", ...).
+func use_item(item_id: String) -> Dictionary:
+	var actor = current_actor()
+	if actor == null:
+		return {"ok": false, "reason": "no_actor"}
+	if side_of(actor) != 0 or is_ai_unit(actor):
+		return {"ok": false, "reason": "not_player_turn"}
+	if must_pass(actor):
+		return {"ok": false, "reason": "must_pass"}
+	if rules == null or not rules.allow_items:
+		return {"ok": false, "reason": "items_disabled"}
+	if int(_items_left.get(item_id, 0)) <= 0:
+		return {"ok": false, "reason": "no_item"}
+	var item: ItemResource = ItemLibrary.get_item(item_id)
+	if item == null or item.consumable == null:
+		return {"ok": false, "reason": "not_consumable"}
+	var check: Dictionary = item.consumable.check_unit(actor)
+	if not bool(check["ok"]):
+		return {"ok": false, "reason": String(check["reason"])}
+	var id: String = NetUnitIds.id_of(actor)
+	return apply_command(NetProtocol.use_item(id, item_id, id))
 
 
 ## Forfeit / quit: the duel ends as ABORTED (no winner, no befriend).

@@ -72,21 +72,21 @@ static func has_item(id) -> bool:
 
 
 ## Every EQUIPMENT item whose [member ItemResource.scope] is [param scope], in display order
-## (catalysts are never equipped, so they are left out).
+## (catalysts and consumables are never equipped, so they are left out).
 static func items_with_scope(scope: int) -> Array[ItemResource]:
 	var out: Array[ItemResource] = []
 	for item in all_items():
-		if int(item.scope) == scope and not item.catalyst:
+		if int(item.scope) == scope and item.is_equipment():
 			out.append(item)
 	return out
 
 
 ## Every EQUIPMENT item of [param rarity], in display order. This is the pool a drop roll draws
-## from once the rarity tier has been decided (catalysts never drop).
+## from once the rarity tier has been decided (catalysts and consumables never drop).
 static func items_of_rarity(rarity: int) -> Array[ItemResource]:
 	var out: Array[ItemResource] = []
 	for item in all_items():
-		if int(item.rarity) == rarity and not item.catalyst:
+		if int(item.rarity) == rarity and item.is_equipment():
 			out.append(item)
 	return out
 
@@ -96,6 +96,15 @@ static func catalysts() -> Array[ItemResource]:
 	var out: Array[ItemResource] = []
 	for item in all_items():
 		if item.catalyst:
+			out.append(item)
+	return out
+
+
+## Every CONSUMABLE ([member ItemResource.consumable]) -- heal / cure / revive, used up.
+static func consumables() -> Array[ItemResource]:
+	var out: Array[ItemResource] = []
+	for item in all_items():
+		if item.consumable != null:
 			out.append(item)
 	return out
 
@@ -133,6 +142,16 @@ static func validate() -> Array[String]:
 			var stat_name: String = String(raw_stat)
 			if stat_name not in ItemResource.VALID_STATS:
 				problems.append("item '%s' (%s) modifies unknown stat '%s'." % [String(key), path, stat_name])
+		if item.price < 0:
+			problems.append("item '%s' (%s) has a negative price." % [String(key), path])
+		if item.consumable != null:
+			if not item.consumable.has_effect():
+				problems.append("consumable '%s' (%s) does nothing." % [String(key), path])
+			if item.catalyst:
+				problems.append("item '%s' (%s) is both a consumable and a catalyst." % [String(key), path])
+			for sid in item.consumable.cure_status_ids:
+				if ConsumableEffect.find_status(sid) == null:
+					problems.append("consumable '%s' (%s) cures unknown status '%s'." % [String(key), path, String(sid)])
 	return problems
 
 

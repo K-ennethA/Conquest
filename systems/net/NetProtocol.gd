@@ -19,7 +19,7 @@ class_name NetProtocol
 ## arrivals "<slot>:s<k>") -- the same id on every peer, derived from the board.
 ##
 ## ONE VOCABULARY. The network actions and the replay / command-log commands are the
-## same thing: MOVE, USE_MOVE, WAIT, END_TURN. The older command names (MOVE_UNIT,
+## same thing: MOVE, USE_MOVE, WAIT, END_TURN, USE_ITEM. The older command names (MOVE_UNIT,
 ## CAST_MOVE, WAIT_UNIT) and payload-key constants (KEY_UNIT_ID, KEY_DEST_CELL,
 ## KEY_MOVE_SLOT, KEY_AIM_CELL, KEY_RNG_SEED) are ALIASES of the canonical ones, kept so
 ## the replay system and the battle UI read unchanged -- they build and match the very
@@ -39,11 +39,16 @@ enum Action {
 	## Reserved legacy id with NO apply branch (an attack is a USE_MOVE). Never well-formed;
 	## kept so older command-log code and tests can name "a type nothing applies".
 	ATTACK_UNIT = 4,
+	## data: { unit_id:String, item:String, target:String }  -- use a consumable from the
+	## user's bag on [target] (a unit id; the user itself in a 1v1 duel). Spends the unit's turn.
+	## Duels only today (DECISIONS.md #28): the bag lives on the duel ([DuelBattle]), the
+	## effect is the item's [ConsumableEffect] -- deterministic, no RNG.
+	USE_ITEM = 5,
 }
 
 ## Highest canonical action value (the enum carries aliases and a reserved id, so
-## Action.size() is not the range).
-const ACTION_MAX := 3
+## Action.size() is not the range; the reserved ATTACK_UNIT inside it is never well-formed).
+const ACTION_MAX := 5
 
 ## Wire/format version. Bump whenever the envelope or any action's data shape changes
 ## so peers on mismatched builds refuse each other at join time rather than silently
@@ -53,7 +58,8 @@ const ACTION_MAX := 3
 ##   1: local command vocabulary (int unit ids, Vector2i cells, one match seed)
 ##   2: merged core -- NetUnitIds string ids, [col,row,floor] cells, per-action
 ##      commit-reveal RNG, host-seated handshake
-const PROTOCOL_VERSION := 2
+##   3: USE_ITEM (battle consumables -- the duel's Items action)
+const PROTOCOL_VERSION := 3
 
 ## Standard keys used on every action dictionary.
 const KEY_TYPE := "type"        ## int, one of [enum Action]
@@ -73,6 +79,8 @@ const K_TO := "to"
 const K_SLOT := "slot"
 const K_AIM := "aim"
 const K_PLAYER := "player_id"
+const K_ITEM := "item"
+const K_TARGET := "target"
 
 ## Command-log aliases of the keys above (same strings -- one payload shape).
 const KEY_UNIT_ID := K_UNIT
@@ -104,6 +112,12 @@ static func use_move(unit_id: String, slot: int, aim_cell) -> Dictionary:
 
 static func wait(unit_id: String) -> Dictionary:
 	return make_action(Action.WAIT, {K_UNIT: unit_id})
+
+
+## Use consumable [param item_id] on the unit [param target_id] ("" = the user itself).
+static func use_item(unit_id: String, item_id: String, target_id: String = "") -> Dictionary:
+	return make_action(Action.USE_ITEM, {K_UNIT: unit_id, K_ITEM: item_id,
+		K_TARGET: target_id if target_id != "" else unit_id})
 
 
 ## End the active turn. [param player_id] (optional) is informational -- recorded in
@@ -203,6 +217,9 @@ static func is_well_formed(action: Variant) -> bool:
 			return _has_unit(d)
 		Action.END_TURN:
 			return not d.has(K_PLAYER) or typeof(d[K_PLAYER]) == TYPE_INT
+		Action.USE_ITEM:
+			return _has_unit(d) and typeof(d.get(K_ITEM)) == TYPE_STRING and String(d[K_ITEM]) != "" \
+				and typeof(d.get(K_TARGET)) == TYPE_STRING and String(d[K_TARGET]) != ""
 	return false
 
 
@@ -246,6 +263,8 @@ static func type_name(t: int) -> String:
 			return "WAIT"
 		Action.END_TURN:
 			return "END_TURN"
+		Action.USE_ITEM:
+			return "USE_ITEM"
 	return "UNKNOWN(%d)" % t
 
 
@@ -407,6 +426,8 @@ static func describe_action(action: Variant) -> String:
 			return "Wait"
 		Action.END_TURN:
 			return "End turn"
+		Action.USE_ITEM:
+			return "Item"
 	return "Command"
 
 

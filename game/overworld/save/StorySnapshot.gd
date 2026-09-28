@@ -55,6 +55,8 @@ static func to_dict(state: StoryState) -> Dictionary:
 		"lit_wayshrines": state.lit_wayshrines.duplicate(),
 		"rng": {"seed": state.rng_seed, "steps": state.steps, "grace": state.grace_steps},
 		"actor_positions": positions,
+		"shops": state.shops.duplicate(true),
+		"rests": state.rests,
 		"pending": {},
 	}
 
@@ -131,6 +133,10 @@ static func from_dict(data) -> Dictionary:
 			if c == Cells.INVALID:
 				continue
 			state.actor_positions[String(key)] = {"cell": c, "facing": String(rec.get("facing", "south"))}
+
+	# Merchants (added in format 2 -- an older save has none: every shop fully stocked).
+	state.shops = ShopLedger.sanitize_saved(data.get("shops", {}))
+	state.rests = maxi(0, int(data.get("rests", 0)))
 
 	return {"success": true, "state": state, "reason": ""}
 

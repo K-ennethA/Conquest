@@ -9,8 +9,10 @@ extends CanvasLayer
 ## member in an evolution line its REQUIREMENTS CHECKLIST per next form ([RequirementChecklist],
 ## branching shows every edge), an EVOLVE / PROMOTE button while an evolution is due (now, or by
 ## using an item the bag holds) and the HOLD toggle (no automatic prompts; the button still works).
-## BAG (#26 "use an item"): the story bag; an item some evolution USES ([UseItemTrigger]) lists
-## "Use on" buttons, one per member.
+## BAG (#26 "use an item", #28 consumables): the story bag; an item some evolution USES
+## ([UseItemTrigger]) and every CONSUMABLE (heal / cure / revive) lists "Use on" buttons, one per
+## member -- a consumable's button shows the member's HP and is DISABLED (with the reason) when it
+## would be wasted (full HP, a healthy member for a revive, nothing to cure out of battle).
 ##
 ## The actions go through [member session] (the StoryController autoload: evolve_from_menu,
 ## set_member_hold, use_item_on_member); without one (tools) Hold is written straight onto the
@@ -395,7 +397,7 @@ func refresh_bag() -> void:
 		var item: ItemResource = ItemLibrary.get_item(String(id))
 		if item == null or _state.item_count(String(id)) <= 0:
 			continue
-		_bag.add_child(_item_card(item, _state.item_count(String(id)), usable.has(String(id))))
+		_bag.add_child(_item_card(item, _state.item_count(String(id)), usable.has(String(id)) or item.is_consumable()))
 		shown += 1
 	if shown == 0:
 		var empty := MenuKit.label("Your bag is empty.", &"DimLabel")
@@ -420,6 +422,12 @@ func _item_card(item: ItemResource, count: int, usable: bool) -> PanelContainer:
 		var d := MenuKit.label(item.description, &"DimLabel", true)
 		d.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 		col.add_child(d)
+	if item.is_consumable():
+		var fx := MenuKit.label(item.effect_summary(), &"DimLabel", true)
+		fx.name = "Effect"
+		fx.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+		fx.add_theme_color_override("font_color", MenuTheme.SUCCESS)
+		col.add_child(fx)
 	if not usable or _state.party.is_empty():
 		return card
 	var use_row := HFlowContainer.new()
@@ -431,9 +439,16 @@ func _item_card(item: ItemResource, count: int, usable: bool) -> PanelContainer:
 	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	use_row.add_child(cap)
 	for m in _state.party:
-		var b := MenuKit.button(m.display_name(), MenuKit.GHOST, 0, 34)
+		var text: String = m.display_name()
+		if item.is_consumable():
+			text += "  %s" % ("KO" if ConsumableEffect.member_is_down(m) else "%d/%d" % [m.hp_value(), m.max_hp()])
+		var b := MenuKit.button(text, MenuKit.GHOST, 0, 34)
 		b.name = "Use_" + m.member_id.replace("#", "_")
 		b.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+		if item.is_consumable():
+			var check: Dictionary = item.consumable.check_member(m)
+			b.disabled = not bool(check["ok"])
+			b.tooltip_text = ConsumableEffect.reason_text(String(check["reason"]), m.display_name()) 				if b.disabled else "Use the %s on %s." % [item.display_name, m.display_name()]
 		b.pressed.connect(_on_use_pressed.bind(String(item.id), m.member_id))
 		use_row.add_child(b)
 	return card
@@ -449,16 +464,24 @@ func _on_use_pressed(item_id: String, member_id: String) -> void:
 		return
 	var item: ItemResource = ItemLibrary.get_item(item_id)
 	var item_name: String = item.display_name if item != null else item_id
-	match String(r.get("reason", "")):
+	var reason: String = String(r.get("reason", ""))
+	match reason:
 		"no_effect":
 			set_status("The %s has no effect on %s." % [item_name, _member_name(member_id)])
 		"no_item":
 			set_status("No %s left." % item_name)
 		"":
-			if bool(r.get("evolved", false)):
+			if bool(r.get("used", false)):
+				if bool(r.get("revived", false)):
+					set_status("%s is back on its feet!" % _member_name(member_id))
+				else:
+					set_status("%s recovered %d HP." % [_member_name(member_id), int(r.get("healed", 0))])
+			elif bool(r.get("evolved", false)):
 				set_status("The %s was used on %s." % [item_name, _member_name(member_id)])
 			else:
 				set_status("Not now -- the %s stays in your bag." % item_name)
+		_:
+			set_status(ConsumableEffect.reason_text(reason, _member_name(member_id)))
 	refresh_bag()
 	var card: Node = _bag.find_child("Item_" + item_id, true, false)
 	var focus: Node = card.find_child("Use_" + member_id.replace("#", "_"), true, false) if card != null else null

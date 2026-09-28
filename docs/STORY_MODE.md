@@ -172,9 +172,70 @@ wired (`DuelController.award_standalone_growth`, same gates; the results card sh
 opens the Evolution screen for a member that became ready), so turning it on is a one-line data
 change. Story duels always follow `"story"`.
 
+## Shops, consumables and gold (DECISIONS.md #28 + its revision)
+
+Scope now: healing items, status cures, revives and the existing equipment. Bonding shards and
+evolution / promotion items are **not** sold yet — a shop is generic data, so they are later
+stock lines (gated by story flags), not code.
+
+- **Consumables** — an `ItemResource` whose `consumable` holds a `ConsumableEffect` (heal N HP
+  and / or N% of max HP, cure named statuses or every AFFLICTION — the rule-6a classification,
+  revive a knocked-out member at N% HP; `usable_in_field` / `usable_in_battle`). Never worn,
+  never dropped (`ItemLibrary.consumables()`; `items_of_rarity` / `items_with_scope` leave them
+  out). Every item has a base `price` in gold (0 = not sold / not bought back: catalysts, key
+  items). Content: `game/items/content/consumables/` — names are the `.tres` `display_name`
+  (rename freely; the ids are the save keys).
+
+  | id | name | effect | price |
+  |---|---|---|---|
+  | `mossleaf_tonic` | Mossleaf Tonic | +25 HP | 40 |
+  | `heartwood_tonic` | Heartwood Tonic | +60% max HP | 120 |
+  | `bitterroot_salve` | Bitterroot Salve | cures Poisoned (battle only) | 30 |
+  | `clearwater_draught` | Clearwater Draught | cures every ailment (battle only) | 70 |
+  | `dawnpetal_draught` | Dawnpetal Draught | revives a knocked-out member at 50% HP | 250 |
+
+  Equipment prices: commons 150–180, rares 420–500, epics 1400–1500.
+- **Using them** — out of battle: Journey → Bag → "Use on" (the ONE use-an-item flow,
+  `StoryController.use_item_on_member` → `StoryState.use_consumable`). Each member's button
+  shows its HP and is disabled with the reason when the item would be wasted (full HP, a healthy
+  member for a revive, a battle-only cure); a use saves the journey. A heal never raises a
+  knocked-out member; a revive only clears the knocked-out / wounded state. In a duel: the
+  **Items** action (`DuelRuleset.allow_items`, on in `default_duel.tres`) opens a picker of the
+  side's battle items (`BattleRequest.items` ← the bag's battle consumables); a pick is the
+  recorded **USE_ITEM** command (`NetProtocol` action 5, **PROTOCOL_VERSION 3**), applied by
+  `NetGameRules` like any command — deterministic (no roll), replayed by
+  `DuelBattle.replay_commands`, in `ReplayLog`'s appliable vocabulary — and it costs the turn.
+  In a strict 1v1 the target is the lead (a revive cannot be used mid-duel: a KO ends it).
+  `DuelResult.items_used` → `BattleResult.items_used` → `StoryResultApplier` takes them from the
+  bag whatever the outcome. The AI never uses items. **Tactical battles have no item action yet.**
+- **Gold** — story gold (`StoryState.gold`). Knobs on `story_ruleset.tres`: `wild_gold_per_foe`
+  (15: a won wild duel), `battle_gold_per_foe` (0: trainers pay their authored
+  `BattleSpec.reward_gold` purse), `sell_ratio` (0.5), `bag_stack_cap` (99). Chests give gold
+  (`ChestEntity.loot_gold`).
+- **Merchants** — `ShopEntity` (an NPC with a `ShopResource`): talking plays its greeting then
+  `OpenShopCommand` → the host's `open_shop` → `ShopScreen`; the script (and the overworld)
+  waits until you leave. `ShopResource` (`game/overworld/content/shops/<id>.tres`, built by the
+  content builder): stock lines `{item_id, price (0 = the item's), stock_limit (-1 = unlimited),
+  condition (a story-flag gate)}`, `restock` (NEVER / ON_REST — a Wayshrine / healer / whiteout
+  rest, `StoryState.rests` / EVERY_N_STEPS), `sell_ratio` (-1 = the ruleset's), `buys_items`.
+  The rules are `ShopLedger` (pure). Shipped: **Merchant Oda** at the green-awning stall in
+  Crownhaven's market (`crownhaven_general`: tonics, salves, draughts, revives, a few charms; boots
+  and the poultice after the opening) and **Pedlar Jory** by the Mossway road after the opening
+  (`mossway_pedlar`: road prices, restocks every 150 steps, buys at 40%). Names in the builder's
+  `NAMES`.
+- **Shop screen** — grove card: Buy / Sell tabs (Q / E, LB / RB), gold pill, item list (owned,
+  stock, price), detail (effect, a **party preview** of what it does to each member), quantity
+  picker (← / →, − / +), confirm; messages for not enough gold, sold out, bag full, not bought
+  here. Modal overlay (`InputActions.OVERLAY_GROUP`); leaving saves the journey when anything
+  changed. Screenshots: `docs/screenshots/shops/`.
+- **Saves** — `"shops": {shop_id: {sold: {item_id: n}, epoch}}` and `"rests"`; format_version
+  stays 2 (an older save loads with every merchant fully stocked).
+- **Compendium** — `CompendiumData` has no items section yet, so consumables have no entry.
+
 ### Remaining gaps (M2)
-- Party duels (bench switching / KO-replacement) — the duel is strict 1v1; the bench never fights.
-- Duel `USE_ITEM` / battle consumables; the duel's Party / Items buttons stay disabled.
+- Party duels (bench switching / KO-replacement) — the duel is strict 1v1; the bench never fights
+  (and an item cannot target a bench member).
+- Tactical battle items (no Items action on the tactical HUD); the duel AI never uses items.
 - Flee is not a net command (the duel is offline-only); a replay of a fled duel ends at the last
   command. Duel replays (`ReplayLog.MODE_DUEL`) and mid-duel suspend are not built yet.
 - `DuelScaling` treats `strength` as a stat scale; levels (EVOLUTION Q2) are undecided.
@@ -193,5 +254,6 @@ change. Story duels always follow `"story"`.
 - The Story card is appended as card 7 after Duel (existing number keys unchanged).
 - The Wayshrine stands on a sacred-ground basin (the plain fountain tile has no geometry).
 - Placeholder houses get procedural roofs (`PropEntity`), people are procedural figures.
-- Journey menu ships Resume / Party (with evolution checklists, EVOLVE, Hold) / Bag / Save / Title; `pending` script resume across an app
+- Journey menu ships Resume / Party (with evolution checklists, EVOLVE, Hold) / Bag (evolution items
+  and consumables: Use on) / Save / Title; `pending` script resume across an app
   restart is M3 (the pre-battle autosave puts you in front of the trainer instead).
