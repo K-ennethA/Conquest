@@ -5,35 +5,40 @@ class_name SoloModeSelect
 ## Solo mode picker, reached from MainMenu's "Solo" button. Offers the single-player
 ## registers as large mode cards -- Campaign (the story battles ending at the Eldroot
 ## boss, via [CampaignScreen]), Skirmish (pick a map, fight the AI), Siege (push the lanes
-## and take their base), Arena Run (draft augments across a gauntlet) and Challenges --
-## then hands off to the matching screen. This is also the Arena entry point (Arena is no
-## longer a title-screen command): Arena Run opens [MatchSetup] in its arena variant.
+## and take their base), Arena Run (draft augments across a gauntlet), Challenges and Duel
+## (a 1v1 turn battle, via [DuelSetup]) -- then hands off to the matching screen. This is
+## also the Arena entry point (Arena is no longer a title-screen command): Arena Run opens
+## [MatchSetup] in its arena variant.
 ##
 ## Look: the shared illuminated-grove page ([MenuKit.build_page]: breadcrumb, Cinzel title,
 ## key hints, Back in the footer); each mode is an [method MenuKit.option_card] with an
 ## accent edge, a Cinzel heading, a tagline and its number key.
 ##
 ## Keyboard: 1 = Campaign, 2 = Skirmish, 3 = Siege, 4 = Arena Run, 5 = Challenges,
-## Esc / pad B = back. Mouse hover and keyboard / pad focus are one highlight (MenuNav).
+## 6 = Duel, Esc / pad B = back. Mouse hover and keyboard / pad focus are one highlight
+## (MenuNav).
 
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 const MATCH_SETUP_SCENE := "res://menus/MatchSetup.tscn"
 const CHALLENGE_BROWSE_SCENE := "res://menus/ChallengeBrowse.tscn"
 const CAMPAIGN_SCREEN_SCENE := "res://menus/CampaignScreen.tscn"
+const DUEL_SETUP_SCENE := "res://menus/DuelSetup.tscn"
 
 # --- Card row geometry (1280x720) --------------------------------------------
 #
 # The cards are EXPAND_FILL inside one HBox, so the row's MINIMUM width is what has to fit
 # -- a card narrower than its custom_minimum is not something a container will give you.
 #
-#   5 cards x CARD_WIDTH + 4 x CARD_SEPARATION  =  5 x 220 + 4 x 20  =  1180
+#   6 cards x CARD_WIDTH + 5 x CARD_SEPARATION  =  6 x 185 + 5 x 14  =  1180
 #
 # ...which is exactly the page width, inside the 1280 viewport. CARD_HEIGHT is the row's
 # height floor; the card content (rule, heading, tagline, wrapped blurb) fits inside it,
 # so the row never grows taller.
-const CARD_WIDTH: float = 220.0
-const CARD_HEIGHT: float = 180.0
-const CARD_SEPARATION: int = 20
+const CARD_WIDTH: float = 185.0
+## 200 (was 180 with five cards): six narrower cards wrap the longest tagline (Siege) onto
+## a second line, so the row trades a little height for the sixth card's width.
+const CARD_HEIGHT: float = 200.0
+const CARD_SEPARATION: int = 14
 const PAGE_WIDTH: float = 1180.0
 
 var _cards: Array[Button] = []
@@ -79,6 +84,8 @@ func _build_ui(page: Dictionary) -> void:
 	_add_card(cards, _make_action_card(5, "Challenges", "Community",
 		"Beat maps other players built -- or share your own gauntlet.", MenuTheme.ACCENT,
 		_on_challenges_chosen))
+	_add_card(cards, _make_action_card(6, "Duel", "One on one",
+		"Two units, no movement -- just the moves.", MenuTheme.EL_EARTH, _on_duel_chosen))
 	# Wrap horizontal focus across the row.
 	_cards[0].focus_neighbor_left = _cards[0].get_path_to(_cards[-1])
 	_cards[-1].focus_neighbor_right = _cards[-1].get_path_to(_cards[0])
@@ -90,7 +97,7 @@ func _build_ui(page: Dictionary) -> void:
 
 	MenuKit.add_standard_hints(page.hints, "Select")
 	var hint := MenuKit.label(
-		"1 Campaign  •  2 Skirmish  •  3 Siege  •  4 Arena Run  •  5 Challenges", &"MutedLabel")
+		"1 Campaign  •  2 Skirmish  •  3 Siege  •  4 Arena Run  •  5 Challenges  •  6 Duel", &"MutedLabel")
 	hint.name = "KeyHint"
 	hint.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -151,6 +158,8 @@ func _make_card(number: int, heading: String, tagline: String, blurb: String,
 	var tl := MenuKit.label(tagline.to_upper(), &"SectionLabel")
 	tl.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	tl.add_theme_color_override("font_color", accent.lightened(0.2))
+	# Six cards share the row: a long tagline wraps rather than spilling past the frame.
+	tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(tl)
 	var desc := MenuKit.label(blurb, &"DimLabel", true)
 	desc.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
@@ -186,6 +195,10 @@ func _on_mode_chosen(mode: String) -> void:
 
 func _on_challenges_chosen() -> void:
 	MenuNav.change_scene(self, CHALLENGE_BROWSE_SCENE)
+
+
+func _on_duel_chosen() -> void:
+	MenuNav.change_scene(self, DUEL_SETUP_SCENE)
 
 
 func _on_campaign_chosen() -> void:

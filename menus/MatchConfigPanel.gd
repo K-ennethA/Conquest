@@ -44,6 +44,8 @@ const MODE_VERSUS := "versus"
 const MODE_LOCAL := "local"
 const MODE_SIEGE := "siege"
 const MODE_SIEGE_LOCAL := "siege_local"
+## The 1v1 duel (docs/design/DUEL_BATTLE.md): the Solo card goes to its own DuelSetup screen.
+const MODE_DUEL := "duel"
 
 ## Every mode that is a SIEGE match, whichever side of the solo/versus split it came from.
 ## Consumers ask this instead of comparing against the two strings, so a third siege
