@@ -107,6 +107,11 @@ var _hazard_manager: HazardManager = null
 ## state in [ItemInventory] and outlives this node.
 var _item_system: ItemSystem = null
 
+## Per-battle EVOLUTION growth tracker (see [GrowthTracker]): after a solo battle is decided it
+## awards Growth to the surviving squad in the persistent [RosterLedger]. Created fresh per
+## battle beside the item runtime; post-simulation only.
+var _growth_tracker: GrowthTracker = null
+
 ## Code-built impact particles (see [ImpactFX]): an additive Node3D presentation layer
 ## mounted in the 3D scene root beside [TileEffectOverlay]. Created fresh per battle in
 ## _setup_impact_fx() -- the same free-then-recreate discipline as the spawn/hazard/item
@@ -425,6 +430,9 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# onto their units at the first turn boundary (see [ItemSystem] for why not here) and
 	# rolls the post-battle drop that grows the collection.
 	_setup_item_system()
+
+	# ...and the evolution growth tracker, which pays out Growth once the battle is decided.
+	_setup_growth_tracker()
 
 	# Stand up the networked command seam for THIS battle: a fresh CommandApplier +
 	# UnitRegistry bound to the units just spawned on the rebuilt board, handed to
@@ -1337,6 +1345,17 @@ func _setup_item_system() -> void:
 	_item_system.name = "ItemSystem"
 	add_child(_item_system)
 	_item_system.setup()
+
+func _setup_growth_tracker() -> void:
+	"""Create (or recreate) the per-battle GrowthTracker, mirroring _setup_item_system: a fresh
+	node per battle so its once-per-battle latch resets. The ledger it writes is the static
+	RosterLedger, which outlives it."""
+	if _growth_tracker != null and is_instance_valid(_growth_tracker):
+		_growth_tracker.queue_free()
+	_growth_tracker = GrowthTracker.new()
+	_growth_tracker.name = "GrowthTracker"
+	add_child(_growth_tracker)
+	_growth_tracker.setup()
 
 func _setup_hazard_manager() -> void:
 	"""Create (or recreate) the per-battle HazardManager, mirroring _setup_spawn_manager.
