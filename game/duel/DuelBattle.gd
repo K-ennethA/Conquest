@@ -155,6 +155,11 @@ func start() -> void:
 	# from the setup stream, exactly like a solo tactical battle.
 	NetGameRules.install_setup_rng(match_rng.seed_for(NetSessionNode.LOCAL_SETUP_SEQ))
 	if _use_turn_manager and TurnSystemManager != null:
+		# A previous battle's players / systems must not leak into this one: the manager
+		# registers every PlayerManager player into the system it activates.
+		if PlayerManager != null:
+			PlayerManager.reset_for_new_game()
+		TurnSystemManager.reset_for_new_game()
 		TurnSystemManager.switch_to_turn_system(turn_system)
 	else:
 		turn_system.is_active = true
@@ -261,6 +266,8 @@ func legal_slots(unit) -> Array[int]:
 
 
 func round_number() -> int:
+	if is_over and result != null:
+		return result.rounds
 	return turn_system.round_number if turn_system != null else 0
 
 
@@ -320,9 +327,22 @@ func play_ai_turn() -> Dictionary:
 		return {"ok": false, "reason": "no_actor"}
 	if must_pass(actor):
 		return pass_turn()
+	return apply_decision(actor, decide_for(actor))
+
+
+## What the brain would do for [param actor] right now (pure: the stage asks first so it
+## can play an ultimate's cut-in BEFORE the command resolves). Its EASY stream is keyed to
+## the next command's seq, so asking early changes nothing.
+func decide_for(actor) -> Dictionary:
 	var side := side_of(actor)
-	var decision := DuelBrain.decide(actor, foe_of(actor), board, rules, difficulty_for(side), ai_rng(side))
-	var slot: int = int(decision["slot"])
+	return DuelBrain.decide(actor, foe_of(actor), board, rules, difficulty_for(side), ai_rng(side))
+
+
+## Apply a [method decide_for] decision as the acting unit's command.
+func apply_decision(actor, decision: Dictionary) -> Dictionary:
+	var slot: int = int(decision.get("slot", DuelBrain.NO_SLOT))
+	if actor == null or actor != current_actor():
+		return {"ok": false, "reason": "no_actor"}
 	if slot == DuelBrain.NO_SLOT:
 		return pass_turn()
 	return apply_command(NetProtocol.use_move(NetUnitIds.id_of(actor), slot, decision["aim_cell"]))
@@ -453,7 +473,7 @@ func _finish(aborted: bool = false) -> void:
 		var u = unit_of(side)
 		if u != null and u.is_alive():
 			_final_hp[side] = int(u.get_hp())
-	result.rounds = round_number()
+	result.rounds = turn_system.round_number if turn_system != null else 0
 	if not aborted:
 		var a_alive := not _ko[0]
 		var b_alive := not _ko[1]
