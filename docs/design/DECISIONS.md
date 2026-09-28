@@ -128,3 +128,20 @@ doc's default differs from this file, THIS FILE WINS. Anything not listed: use t
     open modes: squad select) — pending evolutions stay listed there. A per-unit "Hold"
     toggle stops the automatic prompts entirely (Everstone-style) until turned off.
     Unmet requirements are shown as a checklist so players know what's missing.
+
+## Shops and merchants (owner, 2026-09-28)
+28. **Stores / merchants** sell healing items and special items. Defaults (lead's proposal,
+    owner may revise):
+    - **Currency:** story gold (StoryState / GiveGold already exist), earned from battles,
+      chests and selling; separate from profile points.
+    - **Merchants:** an NPC entity type with a stock list (ShopResource: items, prices, stock
+      limits, restock rule), placed in towns (Crownhaven's market stalls first) plus the odd
+      travelling merchant on routes. Stock can be gated by story flags / progress.
+    - **Buy and sell:** sell at a fraction of price; a grove-look shop screen (buy/sell tabs,
+      quantity, party preview of what an item does to each member).
+    - **Item categories:** HEALING consumables (restore HP out of battle; usable in duels via the
+      Items action, costing the turn), STATUS cures, REVIVES (knocked-out members, instead of a
+      Wayshrine trip), BONDING SHARDS in tiers (the catch items, scarce and gated), EVOLUTION /
+      PROMOTION items (stones, crests — decision 16/26), and the existing EQUIPMENT (held items).
+    - Uses the one "use an item on a party member" flow from the bag (built with evolution
+      requirements), not a second one.
