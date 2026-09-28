@@ -14,9 +14,16 @@ class_name BattleLog
 ## top-left panel when mounted under a non-Container parent (tests, other scenes).
 
 const MAX_LINES: int = 60
-const PANEL_WIDTH: float = 330.0
+## Width when FREE-FLOATING (docked in the HUD's left column, the column owns the width).
+const PANEL_WIDTH: float = 360.0
+## Full expanded height. Pinned by the left-column budget (UILayoutManager
+## _rebudget_left_column / test_turn_banner_and_hud_budget): 81 column top + 158 + 10
+## separation puts the unit card at y249, clear of the terrain card's band at 720p.
 const PANEL_HEIGHT: float = 158.0
-const MARGIN: float = 12.0
+## Width of the collapsed header chip when free-floating, so it never runs under the
+## phase banner at the top-centre.
+const COLLAPSED_WIDTH: float = 250.0
+const MARGIN: float = 16.0
 ## The log lives in the TOP-LEFT corner, not the bottom-left. The bottom-left corner is
 ## already shared by the TerrainInfoPanel (hover) and TurnSystemIndicator, and the log
 ## kept overlapping / rendering behind the terrain card there (different CanvasLayers, so
@@ -24,13 +31,15 @@ const MARGIN: float = 12.0
 ## persistent panel -- only the CombatForecastPanel appears there, and only briefly while
 ## aiming a move -- so parking the log here keeps it clear of the inspection cluster. It
 ## grows DOWNWARD from TOP_MARGIN.
-const TOP_MARGIN: float = 8.0
+const TOP_MARGIN: float = 12.0
 ## Height when collapsed to just its clickable header (default). Click the header
 ## to expand to PANEL_HEIGHT; click again to collapse. Starts collapsed so the log
 ## stays out of the way (a tiny header) until the player wants to read it.
-const COLLAPSED_HEIGHT: float = 30.0
-## Vertical space the header + panel margins take, i.e. everything that is NOT scrollback.
-const HEADER_ALLOWANCE: float = 34.0
+## 38px: the Cinzel header at FS_CAPTION plus the plate's 4/6px content margins.
+const COLLAPSED_HEIGHT: float = 38.0
+## Vertical space the header + panel margins + the VBox separation take, i.e. everything
+## that is NOT scrollback.
+const HEADER_ALLOWANCE: float = 42.0
 ## Shortest an EXPANDED log is still worth the rows it costs the unit card (header + ~5
 ## lines of scrollback). While a unit is selected the left column can only spare ~95px
 ## (463 usable - the card's 358px of fixed rows - 10px separation), which is under this, so
@@ -41,10 +50,10 @@ const MIN_EXPANDED_HEIGHT: float = 120.0
 
 # Side tints (bbcode): the local/ally side reads cool, the AI/enemy side warm-red, so
 # you can scan who did what at a glance. Neutral events use cream.
-const ALLY_COLOR: String = "#cfe8ff"
-const ENEMY_COLOR: String = "#ffb3a0"
-const NEUTRAL_COLOR: String = "#efe2c4"
-const DIM_COLOR: String = "#b9a97f"
+const ALLY_COLOR: String = "#8cc4ff"
+const ENEMY_COLOR: String = "#ff8f80"
+const NEUTRAL_COLOR: String = "#f5eedc"
+const DIM_COLOR: String = "#9ba5c8"
 
 var _log: RichTextLabel
 var _lines: Array[String] = []
@@ -57,6 +66,13 @@ var _header: Button
 ## Lines logged while collapsed, shown as a "(N)" badge on the header so the player
 ## knows something happened without expanding. Reset when expanded.
 var _unread: int = 0
+## Annotation context waiting for the matching damage_dealt / unit_healed line.
+var _last_crit: Dictionary = {}
+var _heal_source: Dictionary = {}
+## Units whose NON-attack damage was just logged WITH its source by
+## _on_combat_text_annotated, so the self-attributed damage_dealt that follows is not
+## logged a second time. A self-hit nobody annotated still gets a plain line.
+var _sourced_damage: Dictionary = {}
 
 ## True while the player is aiming a move. The CombatForecastPanel shows in THIS
 ## same top-left corner (~y70) while aiming, which the expanded log (grows to ~166px)
@@ -80,6 +96,9 @@ var _height_budget: float = INF
 
 func _ready() -> void:
 	name = "BattleLog"
+	add_to_group("battle_log")
+	# The combat forecast stacks below every "hud_top_left" panel (CombatForecastPanel).
+	add_to_group("hud_top_left")
 	_docked = get_parent() is Container
 	_build_ui()
 	if _docked:
@@ -101,9 +120,9 @@ func _ready() -> void:
 ## The height an [param expanded] log actually renders at inside [param budget].
 ##
 ## Pure, and the whole left-column contract in one place: a collapsed log is always its
-## 30px chip; an expanded one takes PANEL_HEIGHT unless the column cannot spare it, and
-## anything under MIN_EXPANDED_HEIGHT is not a readable log -- it falls back to the chip
-## rather than stealing rows from the UnitInfoPanel underneath.
+## header chip (COLLAPSED_HEIGHT); an expanded one takes PANEL_HEIGHT unless the column
+## cannot spare it, and anything under MIN_EXPANDED_HEIGHT is not a readable log -- it
+## falls back to the chip rather than stealing rows from the UnitInfoPanel underneath.
 static func resolved_height(expanded: bool, budget: float) -> float:
 	if not expanded:
 		return COLLAPSED_HEIGHT
@@ -137,6 +156,9 @@ func _apply_layout() -> void:
 	else:
 		offset_top = TOP_MARGIN
 		offset_bottom = TOP_MARGIN + h
+		# Collapsed, the floating log is a compact chip so it never runs under the phase
+		# banner.
+		offset_right = MARGIN + (PANEL_WIDTH if showing else COLLAPSED_WIDTH)
 	if _log:
 		_log.visible = showing
 		# The scrollback is the elastic part; the header + panel margins are not.
@@ -194,17 +216,15 @@ func _on_aim_ended() -> void:
 
 
 func _build_ui() -> void:
-	# Dark, semi-transparent plate so log text reads over the 3D board.
-	var box := StyleBoxFlat.new()
-	box.bg_color = Color(0.10, 0.075, 0.05, 0.72)
-	box.set_corner_radius_all(8)
-	box.set_content_margin_all(8)
-	box.border_width_left = 1
-	box.border_width_top = 1
-	box.border_width_right = 1
-	box.border_width_bottom = 1
-	box.border_color = Color(0.85, 0.62, 0.30, 0.5)  # faint amber edge
+	# Dark, semi-transparent plate so log text reads over the 3D board:
+	# the navy HUD plate (same tokens as every other panel), a touch more translucent.
+	var box := ConquestTheme.chip_box(ConquestTheme.BORDER_SOFT, 0.86)
+	box.content_margin_left = 12
+	box.content_margin_right = 12
+	box.content_margin_top = 4
+	box.content_margin_bottom = 6
 	add_theme_stylebox_override("panel", box)
+	ConquestTheme.keep_style(self)
 
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 3)
@@ -218,9 +238,12 @@ func _build_ui() -> void:
 	_header.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_header.focus_mode = Control.FOCUS_NONE
 	_header.mouse_filter = Control.MOUSE_FILTER_STOP  # capture clicks even though the panel is IGNORE
-	_header.add_theme_font_size_override("font_size", 12)
-	_header.add_theme_color_override("font_color", Color(0.85, 0.62, 0.30))
-	_header.add_theme_color_override("font_hover_color", Color(1.0, 0.82, 0.45))
+	_header.add_theme_font_override("font", MenuTheme.heading_font(2))
+	_header.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
+	_header.add_theme_color_override("font_color", ConquestTheme.GOLD)
+	_header.add_theme_color_override("font_hover_color", ConquestTheme.GOLD_LITE)
+	_header.add_theme_color_override("font_pressed_color", ConquestTheme.GOLD_LITE)
+	_header.add_theme_color_override("font_focus_color", ConquestTheme.GOLD_LITE)
 	# Flat button still draws hover/pressed plates; blank them so it reads as a label.
 	var clear_sb := StyleBoxEmpty.new()
 	_header.add_theme_stylebox_override("normal", clear_sb)
@@ -238,9 +261,10 @@ func _build_ui() -> void:
 	_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_log.size_flags_horizontal = Control.SIZE_FILL
 	# Docked, the COLUMN sets the width -- declaring one here would widen the whole left
-	# column to 330px and eat 70px of board. Height is set by _apply_layout.
-	_log.custom_minimum_size = Vector2(0.0 if _docked else PANEL_WIDTH - 16.0, 0.0)
-	_log.add_theme_font_size_override("normal_font_size", 12)
+	# column and eat board. Floating, PANEL_WIDTH less the plate's 12px side margins.
+	# Height is set by _apply_layout.
+	_log.custom_minimum_size = Vector2(0.0 if _docked else PANEL_WIDTH - 24.0, 0.0)
+	_log.add_theme_font_size_override("normal_font_size", ConquestTheme.FS_SMALL)
 	_log.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(_log)
 
@@ -257,6 +281,8 @@ func _connect_events() -> void:
 	_safe(bus, &"unit_healed", _on_unit_healed)
 	_safe(bus, &"unit_spawned", _on_unit_spawned)
 	_safe(bus, &"unit_eliminated", _on_unit_eliminated)
+	# Crits, misses and non-attack damage sources (tiles, statuses, weather, hazards).
+	_safe(bus, &"combat_text_annotated", _on_combat_text_annotated)
 	# Auto-collapse while a move is being aimed (forecast shares this corner).
 	_safe(bus, &"attack_range_calculated", _on_aim_started)
 	_safe(bus, &"aoe_preview_calculated", _on_aim_started)
@@ -295,23 +321,109 @@ func _on_move_performed(caster = null, move = null) -> void:
 
 
 func _on_damage_dealt(attacker = null, defender = null, damage = null) -> void:
+	var dmg: int = int(damage) if damage != null else 0
+	# A tile / status tick resolves with the unit as its own "caster"; those are logged
+	# with their SOURCE by _on_combat_text_annotated instead ("Barkling burned for 15").
+	# A self-hit nobody annotated still gets a plain line rather than "X hit X".
+	if attacker != null and attacker == defender:
+		_last_crit.erase(defender)
+		if _sourced_damage.has(defender):
+			_sourced_damage.erase(defender)
+			return
+		if _unseen(defender) or dmg <= 0:
+			return
+		_append("%s took %d damage" % [_named(defender), dmg], _tint(defender))
+		return
+	# A sourced line that was raised with a real attacker (e.g. a hazard's owner) has now
+	# been matched; do not let its flag swallow a later self-hit.
+	_sourced_damage.erase(defender)
 	# FOG: this is the ONE line that survives with a mask, and it must. Your unit taking a
 	# hit from nowhere is information you are entitled to -- you can see your own soldier
 	# bleed -- so it reads "??? hit Vineweave for 12". Only a blow struck entirely out of
 	# sight (both parties unseen) is dropped: you would have no way of knowing it happened.
 	if _unseen(attacker) and _unseen(defender):
+		_last_crit.erase(defender)
 		return
-	var dmg: int = int(damage) if damage != null else 0
-	_append("%s hit %s for %d" % [_named(attacker), _named(defender), dmg], _tint(attacker))
+	var crit: bool = bool(_last_crit.get(defender, false))
+	_last_crit.erase(defender)
+	_append("%s hit %s for %d%s" % [_named(attacker), _named(defender), dmg,
+		" (critical!)" if crit else ""], _tint(attacker))
 
 
 func _on_unit_healed(unit = null, amount = null) -> void:
 	if _unseen(unit):
 		return
 	var amt: int = int(amount) if amount != null else 0
+	var src: String = String(_heal_source.get(unit, ""))
+	_heal_source.erase(unit)
 	if amt <= 0:
 		return
-	_append("%s healed %d" % [_named(unit), amt], ALLY_COLOR)
+	if src != "":
+		_append("%s restored %d from %s" % [_named(unit), amt, src], ALLY_COLOR)
+	else:
+		_append("%s healed %d" % [_named(unit), amt], ALLY_COLOR)
+
+
+## Context for the next damage / heal line: crits, misses, and every NON-attack damage
+## source (tiles, status ticks, weather, hazards), which never raise damage_dealt with
+## a real attacker. Emitted just before the HP change (see CombatText).
+func _on_combat_text_annotated(unit = null, info = null) -> void:
+	if not (info is Dictionary):
+		return
+	var kind := StringName(info.get("kind", &""))
+	var src_kind := StringName(info.get("source_kind", CombatText.SRC_ATTACK))
+	var amount: int = int(info.get("amount", 0))
+	var source := source_text(info)
+	# FOG: the same two rules as every other line (see FOG_MASK) -- a line whose every
+	# named unit is unseen is dropped; the context stashes below are harmless either way
+	# (the damage / heal line they feed applies its own fog check).
+	match kind:
+		CombatText.KIND_MISS:
+			var attacker = info.get("attacker")
+			if src_kind == CombatText.SRC_ATTACK and attacker != null and attacker != unit:
+				if not (_unseen(attacker) and _unseen(unit)):
+					_append("%s missed %s" % [_named(attacker), _named(unit)], DIM_COLOR)
+			elif source != "" and not _unseen(unit):
+				_append("%s avoided %s" % [_named(unit), source], DIM_COLOR)
+		CombatText.KIND_NEGATED:
+			if not _unseen(unit):
+				_append("%s is unharmed (immune)" % _named(unit), DIM_COLOR)
+		CombatText.KIND_HEAL:
+			if src_kind == CombatText.SRC_LIFESTEAL:
+				# Lifesteal heals the caster directly (no unit_healed): log it here.
+				if not _unseen(unit):
+					_append("%s drained %d HP" % [_named(unit), amount], _tint(unit))
+			else:
+				_heal_source[unit] = source  # "" clears a stale source
+		CombatText.KIND_DAMAGE:
+			if src_kind == CombatText.SRC_ATTACK:
+				_last_crit[unit] = bool(info.get("crit", false))
+			elif src_kind in [CombatText.SRC_TILE, CombatText.SRC_STATUS,
+					CombatText.SRC_WEATHER, CombatText.SRC_HAZARD]:
+				# The self-attributed damage_dealt that follows must not log it again.
+				_sourced_damage[unit] = true
+				if not _unseen(unit):
+					_append(damage_line(_named(unit), amount, info), _tint(unit))
+
+
+## "Vineweave took 7 from Scouring Sand (Desert Storm)", "Barkling burned for 15".
+## Static so the wording is unit-testable.
+static func damage_line(who: String, amount: int, info: Dictionary) -> String:
+	var id := StringName(info.get("source_id", &""))
+	if id in [&"fire", &"scorching_vent", &"burn"]:
+		return "%s burned for %d" % [who, amount]
+	if StringName(info.get("source_kind", &"")) == CombatText.SRC_HAZARD:
+		return "%s was struck by %s for %d" % [who, source_text(info), amount]
+	return "%s took %d from %s" % [who, amount, source_text(info)]
+
+
+## The player-facing source name, with the weather in brackets for a weather rule.
+static func source_text(info: Dictionary) -> String:
+	var src := String(info.get("source", ""))
+	var weather := String(info.get("weather", ""))
+	if weather != "" and src != "" and src != weather:
+		return "%s (%s)" % [src, weather]
+	return src if src != "" else weather
 
 
 func _on_unit_spawned(unit = null, runtime = null) -> void:

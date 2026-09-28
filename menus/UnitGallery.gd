@@ -25,7 +25,17 @@ class_name UnitGallery
 # surfaces cannot drift. The accents and the small text helpers live there too.
 const Content := preload("res://game/ui/screens/UnitPageContent.gd")
 
-const MUTED := Color(0.72, 0.70, 0.78)
+# --- Look ---------------------------------------------------------------------
+#
+# Hosted in a Compendium tab, so it wears the illuminated-grove kit (docs/UI_STYLE.md):
+# a heraldic crest (element shield + initial) beside the name, the real portrait (the
+# authored one, else a PortraitCache capture of the unit's own 3D model) when there is
+# one, and the auto-framed UnitPreview3D turntable for the model.
+
+const MUTED := MenuTheme.TEXT_MUTED
+
+## Breathing room inside the host (the Compendium's tab panel already pads the page).
+const PAGE_MARGIN: int = MenuTheme.SP_S
 
 # Turntable speed for the model preview (radians / second) - slow, like the old tween.
 const MODEL_SPIN_SPEED := 0.45
@@ -35,6 +45,10 @@ const MODEL_SPIN_SPEED := 0.45
 @onready var unit_list: ItemList
 @onready var unit_display_container: VBoxContainer
 @onready var unit_name_label: Label
+## Heraldic crest: the unit's element on a shield, its initial in Cinzel.
+var _crest: PanelContainer = null
+## Frame around the portrait; hidden while there is no portrait to show.
+var _portrait_slot: PanelContainer = null
 @onready var unit_type_label: Label
 @onready var unit_description: RichTextLabel
 @onready var unit_portrait: TextureRect
@@ -70,7 +84,7 @@ var sort_options: Array[String] = ["Name", "Health", "Attack", "Defense", "Speed
 
 
 func _ready() -> void:
-	theme = MenuTheme.build()  # dark Legends-style menu look
+	theme = MenuTheme.build()  # the illuminated-grove menu theme
 	_create_ui()
 	_load_all_characters()
 	_setup_connections()
@@ -85,38 +99,37 @@ func _create_ui() -> void:
 	"""Create the complete UI for the unit gallery"""
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-	# Outer 24px breathing room; 16px between the list and detail panels.
 	var outer := MarginContainer.new()
 	outer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	outer.add_theme_constant_override("margin_left", 24)
-	outer.add_theme_constant_override("margin_right", 24)
-	outer.add_theme_constant_override("margin_top", 24)
-	outer.add_theme_constant_override("margin_bottom", 24)
+	outer.add_theme_constant_override("margin_left", PAGE_MARGIN)
+	outer.add_theme_constant_override("margin_right", PAGE_MARGIN)
+	outer.add_theme_constant_override("margin_top", PAGE_MARGIN)
+	outer.add_theme_constant_override("margin_bottom", PAGE_MARGIN)
 	add_child(outer)
 
 	var main_container := HBoxContainer.new()
-	main_container.add_theme_constant_override("separation", 16)
+	main_container.add_theme_constant_override("separation", MenuTheme.SP_XL)
 	outer.add_child(main_container)
 
 	# --- Left panel: list + controls ---
 	var left_panel := VBoxContainer.new()
 	left_panel.custom_minimum_size = Vector2(300, 0)
-	left_panel.add_theme_constant_override("separation", 6)
+	left_panel.add_theme_constant_override("separation", MenuTheme.SP_XS)
 	main_container.add_child(left_panel)
 
+	# Title + back (the Compendium hides this whole row when it hosts the gallery).
 	var header_container := HBoxContainer.new()
+	# A real gap between the title and Back (the default ~4px let a long title touch it).
+	header_container.add_theme_constant_override("separation", MenuTheme.SP_M)
 	left_panel.add_child(header_container)
 
 	var title := Label.new()
-	title.text = "UNIT GALLERY"
-	title.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	title.add_theme_color_override("font_color", MenuTheme.GOLD)
+	title.text = "Unit Gallery"
+	title.theme_type_variation = &"HeadingLabel"
 	title.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	header_container.add_child(title)
 
-	back_button = Button.new()
-	back_button.text = "BACK"
-	back_button.custom_minimum_size = Vector2(80, 40)
+	back_button = MenuKit.button("Back", MenuKit.GHOST, 120, 44)
 	header_container.add_child(back_button)
 
 	left_panel.add_child(_form_label("Search"))
@@ -143,14 +156,14 @@ func _create_ui() -> void:
 
 	unit_list = ItemList.new()
 	unit_list.set_v_size_flags(Control.SIZE_EXPAND_FILL)
-	unit_list.custom_minimum_size = Vector2(280, 320)
+	unit_list.custom_minimum_size = Vector2(280, 120)
 	left_panel.add_child(unit_list)
 
 	# --- Right panel: pager + scrolling detail ---
 	var right_panel := VBoxContainer.new()
 	right_panel.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	right_panel.custom_minimum_size = Vector2(500, 0)
-	right_panel.add_theme_constant_override("separation", 8)
+	right_panel.add_theme_constant_override("separation", MenuTheme.SP_S)
 	main_container.add_child(right_panel)
 
 	_create_pager(right_panel)
@@ -184,7 +197,8 @@ func _create_pager(parent: VBoxContainer) -> void:
 	index_label.text = "0 / 0"
 	index_label.custom_minimum_size = Vector2(110, 0)
 	index_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	index_label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	index_label.add_theme_font_override("font", MenuTheme.heading_font())
+	index_label.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
 	pager.add_child(index_label)
 
 	next_button = Button.new()
@@ -197,16 +211,21 @@ func _create_unit_display(parent: VBoxContainer) -> void:
 	"""Create the unit detail area"""
 	unit_display_container = VBoxContainer.new()
 	unit_display_container.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	unit_display_container.add_theme_constant_override("separation", 10)
+	unit_display_container.add_theme_constant_override("separation", MenuTheme.SP_S)
 	parent.add_child(unit_display_container)
 
-	# --- Header: portrait + name/identity ---
+	# --- Header: portrait + crest + name/identity ---
 	var header_container := HBoxContainer.new()
+	header_container.add_theme_constant_override("separation", MenuTheme.SP_L)
 	unit_display_container.add_child(header_container)
 
-	var portrait_slot := PanelContainer.new()
-	portrait_slot.custom_minimum_size = Vector2(120, 120)
-	header_container.add_child(portrait_slot)
+	_portrait_slot = PanelContainer.new()
+	_portrait_slot.name = "PortraitSlot"
+	_portrait_slot.add_theme_stylebox_override("panel", MenuTheme.inset_box())
+	_portrait_slot.custom_minimum_size = Vector2(120, 120)
+	_portrait_slot.visible = false
+	header_container.add_child(_portrait_slot)
+	var portrait_slot := _portrait_slot
 
 	unit_portrait = TextureRect.new()
 	unit_portrait.custom_minimum_size = Vector2(104, 104)
@@ -222,17 +241,22 @@ func _create_unit_display(parent: VBoxContainer) -> void:
 	portrait_placeholder.modulate = MUTED
 	portrait_slot.add_child(portrait_placeholder)
 
+	_crest = MenuKit.crest("?", MenuTheme.GOLD, MenuTheme.GOLD_DK, 56.0)
+	_crest.name = "UnitCrest"
+	_crest.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	header_container.add_child(_crest)
+
 	var info_container := VBoxContainer.new()
 	info_container.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	info_container.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	header_container.add_child(info_container)
 
 	unit_name_label = Label.new()
-	unit_name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	unit_name_label.add_theme_color_override("font_color", MenuTheme.GOLD)
+	unit_name_label.theme_type_variation = &"HeadingLabel"
 	info_container.add_child(unit_name_label)
 
 	unit_type_label = Label.new()
-	unit_type_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	unit_type_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	unit_type_label.modulate = MUTED
 	unit_type_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info_container.add_child(unit_type_label)
@@ -248,17 +272,17 @@ func _create_unit_display(parent: VBoxContainer) -> void:
 	# --- 3D model ---
 	unit_display_container.add_child(_section_header("Model"))
 
-	model_viewport_container = SubViewportContainer.new()
-	model_viewport_container.custom_minimum_size = Vector2(300, 200)
-	model_viewport_container.stretch = true
-	unit_display_container.add_child(model_viewport_container)
-
-	unit_model_viewport = SubViewport.new()
-	unit_model_viewport.size = Vector2i(300, 200)
-	unit_model_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	model_viewport_container.add_child(unit_model_viewport)
-
-	_setup_model_viewport()
+	# Auto-framed turntable render (shared UnitPreview3D component): any model size
+	# fits, the authored yaw / scale are applied, and it spins on its own.
+	var preview := UnitPreview3D.new()
+	preview.name = "ModelPreview"
+	preview.spin_speed = MODEL_SPIN_SPEED
+	preview.background_color = Color(0.07, 0.08, 0.15, 1.0)
+	preview.custom_minimum_size = Vector2(300, 260)
+	model_viewport_container = preview
+	unit_display_container.add_child(preview)
+	preview._ensure()
+	unit_model_viewport = preview.viewport
 
 	# Most roster characters have no model_scene yet; they get this instead of an
 	# empty black viewport.
@@ -297,7 +321,7 @@ func _create_unit_display(parent: VBoxContainer) -> void:
 func _section_header(text: String) -> Label:
 	var label := Label.new()
 	label.text = text.to_upper()
-	label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	label.theme_type_variation = &"SectionLabel"
 	label.add_theme_color_override("font_color", MenuTheme.GOLD)
 	return label
 
@@ -306,34 +330,9 @@ func _section_header(text: String) -> Label:
 func _form_label(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	label.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	label.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
 	return label
-
-
-func _setup_model_viewport() -> void:
-	"""Set up the 3D model viewport with camera and lighting"""
-	if not unit_model_viewport:
-		return
-
-	var camera := Camera3D.new()
-	# look_at_from_position orients without requiring the node be in the tree yet
-	# (plain look_at() errors here because it is called before add_child()).
-	camera.look_at_from_position(Vector3(0, 1.5, 3), Vector3(0, 1, 0), Vector3.UP)
-	unit_model_viewport.add_child(camera)
-
-	var light := DirectionalLight3D.new()
-	light.look_at_from_position(Vector3(2, 3, 2), Vector3(0, 0, 0), Vector3.UP)
-	light.light_energy = 1.1
-	unit_model_viewport.add_child(light)
-
-	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.09, 0.09, 0.13, 1.0)
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.45, 0.42, 0.52, 1.0)
-	env.ambient_light_energy = 0.4
-	camera.environment = env
 
 
 func _setup_connections() -> void:
@@ -594,6 +593,8 @@ func _display_character(character: CharacterResource) -> void:
 		if shown_name.is_empty():
 			shown_name = String(character.character_id)
 		unit_name_label.text = shown_name
+		if _crest != null:
+			MenuKit.set_crest(_crest, shown_name, MenuKit.element_color(String(character.element)))
 
 	if unit_type_label:
 		var tags: Array[String] = []
@@ -601,6 +602,10 @@ func _display_character(character: CharacterResource) -> void:
 		if not id_text.is_empty():
 			tags.append(id_text)
 		tags.append("Boss" if character.is_boss else "Standard")
+		if character.element != &"":
+			tags.append(String(character.element).capitalize())
+		for t in character.tags:
+			tags.append(String(t))
 		var footprint: Vector2i = character.get_footprint()
 		if footprint != Vector2i.ONE:
 			tags.append("%dx%d" % [footprint.x, footprint.y])
@@ -622,18 +627,42 @@ func _display_character(character: CharacterResource) -> void:
 
 
 func _update_portrait(character: CharacterResource) -> void:
-	"""Show the authored portrait, or a muted placeholder when there is none."""
+	"""Show the unit's portrait: the authored one, else a real capture of its 3D model
+	(PortraitCache -- resolved asynchronously, never in headless runs). With neither,
+	the portrait frame is dropped and the crest beside the name stands in."""
 	if not unit_portrait:
 		return
 
 	var texture: Texture2D = character.portrait
+	if texture == null:
+		var id_str: String = String(character.character_id)
+		texture = PortraitCache.get_cached(id_str)
+		if texture == null and character.model_scene != null:
+			PortraitCache.get_portrait(id_str, _on_portrait_resolved.bind(id_str))
+	_set_portrait(texture)
+
+
+func _set_portrait(texture: Texture2D) -> void:
 	unit_portrait.texture = texture
 	unit_portrait.visible = texture != null
 	if portrait_placeholder:
-		portrait_placeholder.visible = texture == null
+		portrait_placeholder.visible = false
+	if _portrait_slot:
+		_portrait_slot.visible = texture != null
+
+
+## PortraitCache callback: applied only if that unit is still the one on screen.
+func _on_portrait_resolved(texture: Texture2D, id_str: String) -> void:
+	if texture == null or not is_inside_tree() or current_character == null:
+		return
+	if String(current_character.character_id) != id_str or current_character.portrait != null:
+		return
+	_set_portrait(texture)
 
 
 func _clear_model() -> void:
+	if model_viewport_container is UnitPreview3D:
+		(model_viewport_container as UnitPreview3D).clear()
 	if current_model_instance != null:
 		if is_instance_valid(current_model_instance):
 			var parent: Node = current_model_instance.get_parent()
@@ -644,37 +673,24 @@ func _clear_model() -> void:
 
 
 func _update_model(character: CharacterResource) -> void:
-	"""Instance the character's REAL model_scene into the preview viewport.
+	"""Show the character's REAL model_scene on the auto-framed turntable
+	(UnitPreview3D applies the authored yaw / scale and fits the camera to the mesh).
 
-	Most roster entries have no model yet (only tree_grunt does today), so the
-	viewport is hidden and a muted note takes its place rather than showing an
-	empty black rectangle."""
+	A character without a usable model gets a muted note instead of an empty black
+	rectangle."""
 	_clear_model()
 
 	if not unit_model_viewport:
 		return
 
-	var packed: PackedScene = character.model_scene
-	if packed == null:
+	var preview := model_viewport_container as UnitPreview3D
+	if preview == null or not preview.show_character(character):
 		_show_model_placeholder()
 		return
-
-	var instance: Node = packed.instantiate()
-	if instance is Node3D:
-		current_model_instance = instance as Node3D
-		unit_model_viewport.add_child(current_model_instance)
-		current_model_instance.position = Vector3.ZERO
-		current_model_instance.rotation = Vector3.ZERO
-		if model_viewport_container:
-			model_viewport_container.visible = true
-		if model_placeholder:
-			model_placeholder.visible = false
-		return
-
-	# Something non-spatial was authored there - drop it and show the placeholder.
-	if instance != null:
-		instance.free()
-	_show_model_placeholder()
+	if model_viewport_container:
+		model_viewport_container.visible = true
+	if model_placeholder:
+		model_placeholder.visible = false
 
 
 func _show_model_placeholder() -> void:
@@ -682,13 +698,6 @@ func _show_model_placeholder() -> void:
 		model_viewport_container.visible = false
 	if model_placeholder:
 		model_placeholder.visible = true
-
-
-func _process(delta: float) -> void:
-	# Slow turntable on the model preview (replaces the old per-selection tween,
-	# which stacked a new looping tween every time a unit was picked).
-	if current_model_instance != null and is_instance_valid(current_model_instance):
-		current_model_instance.rotate_y(MODEL_SPIN_SPEED * delta)
 
 
 func _update_stats(character: CharacterResource) -> void:
@@ -755,7 +764,7 @@ func _update_abilities(character: CharacterResource) -> void:
 # ---------------------------------------------------------------------------
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
+	MenuNav.change_scene(self, "res://menus/MainMenu.tscn")
 
 
 func _on_unit_selected(index: int) -> void:
@@ -812,7 +821,9 @@ func _input(event: InputEvent) -> void:
 
 	match key_event.keycode:
 		KEY_ESCAPE:
-			_on_back_pressed()
+			# Hosted in the Compendium the shell owns Back (it hid our button).
+			if back_button != null and back_button.visible:
+				_on_back_pressed()
 		KEY_F5:
 			_load_all_characters()
 			_apply_filters()

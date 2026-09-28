@@ -107,9 +107,10 @@ const LABEL_NAME: String = "RespawnLabel"
 
 # --- Colours (explicit, like every other self-styled HUD layer) --------------
 
-const TEXT_COLOR: Color = ConquestTheme.CREAM_DIM
-const FRAME_COLOR: Color = ConquestTheme.AMBER_DK
-const PLATE_COLOR: Color = ConquestTheme.PLATE_BG
+const TEXT_COLOR: Color = ConquestTheme.TEXT_DIM
+const FRAME_COLOR: Color = ConquestTheme.BORDER_SOFT
+## The fallen row's edge stripe: the local side's team colour (team = edge).
+const EDGE_COLOR: Color = ConquestTheme.TEAM_BLUE
 ## The announcer plate's tint for each alarm, reusing the announcer's own side scheme.
 const ENEMY_TINT: Color = ActionAnnouncer.ENEMY_COLOR
 const ALLY_TINT: Color = ActionAnnouncer.ALLY_COLOR
@@ -224,6 +225,9 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
+	# Self-styled: keep the HUD-wide ConquestTheme.apply_to() sweep from swapping this
+	# slim row for the full card frame.
+	ConquestTheme.keep_style(self)
 	add_theme_stylebox_override("panel", _row_box())
 
 	_label = Label.new()
@@ -240,16 +244,16 @@ func _build_ui() -> void:
 	add_child(_label)
 
 
-## A slim dark plate with an amber edge -- the [ObjectiveBanner] register, so the two read
-## as the same class of persistent one-line readout.
-func _row_box() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = PLATE_COLOR
-	sb.set_corner_radius_all(6)
-	sb.set_border_width_all(2)
-	sb.border_color = FRAME_COLOR
-	sb.content_margin_left = 8
-	sb.content_margin_right = 8
+## A slim grove chip (notched navy plate, gold filigree) with the local side's team colour
+## down its left edge -- the [ObjectiveBanner] register, so the two read as the same class
+## of persistent one-line readout. Tight vertical margins keep [constant ROW_HEIGHT].
+func _row_box() -> OrnateStyleBox:
+	var sb := ConquestTheme.chip_box(FRAME_COLOR, 0.9)
+	sb.accent_color = Color(EDGE_COLOR, 0.9)
+	sb.accent_side = SIDE_LEFT
+	sb.accent_width = 3.0
+	sb.content_margin_left = 12
+	sb.content_margin_right = 10
 	sb.content_margin_top = 1
 	sb.content_margin_bottom = 1
 	return sb

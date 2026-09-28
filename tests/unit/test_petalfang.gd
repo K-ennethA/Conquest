@@ -56,14 +56,14 @@ class MockUnit:
 
 class MockBoard:
 	var placements: Array = []  # { unit, cell }
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -73,9 +73,9 @@ class MockBoard:
 		return a.team != b.team
 	func are_allies(a, b) -> bool:
 		return a.team == b.team
-	func set_tile(_cell: Vector2i, _tile_id) -> void:
+	func set_tile(_cell: Vector3i, _tile_id) -> void:
 		pass
-	func move_unit(unit, to_cell: Vector2i) -> void:
+	func move_unit(unit, to_cell: Vector3i) -> void:
 		for p in placements:
 			if p.unit == unit:
 				p.cell = to_cell
@@ -125,7 +125,7 @@ func _ability_system_with(unit, ability: AbilityResource) -> AbilitySystem:
 
 ## Resolve a single DamageEffect from [param caster] onto [param target].
 func _hit(effect: DamageEffect, board, caster, target) -> int:
-	var cell: Vector2i = board.cell_of(target)
+	var cell: Vector3i = board.cell_of(target)
 	var move := MoveResource.new()
 	var pattern := TargetingPattern.new()
 	pattern.target_kind = CombatTypes.TargetKind.ENEMY
@@ -135,7 +135,7 @@ func _hit(effect: DamageEffect, board, caster, target) -> int:
 	move.move_id = &"test_hit"
 	move.targeting = pattern
 	var before: int = target.hp
-	var ctx := MoveContext.new(caster, board, move, cell, [cell] as Array[Vector2i])
+	var ctx := MoveContext.new(caster, board, move, cell, [cell] as Array[Vector3i])
 	effect.apply(ctx)
 	return before - target.hp
 
@@ -151,7 +151,7 @@ func _damage_effect(power: int, category: CombatTypes.DamageCategory) -> DamageE
 func test_immobilized_status_blocks_movement_then_releases_on_expiry():
 	var u := _unit_with_status_controller("Quarry")
 	var board := MockBoard.new()
-	board.place(u, Vector2i(0, 0))
+	board.place(u, Vector3i(0, 0, 0))
 	assert_true(u.can_move(), "a free unit can move")
 
 	var controller := u.get_status_controller() as StatusController
@@ -193,7 +193,7 @@ func test_range_bonus_extends_effective_range():
 	var archer := MockUnit.new(0, { "range_bonus": 2 })
 	assert_eq(move.targeting.max_range, 3, "thorn_spit is authored at range 3")
 	assert_eq(move.effective_max_range(archer), 5, "a +2 bonus reaches 5")
-	assert_true(move.can_aim_at(Vector2i(0, 0), Vector2i(5, 0), archer),
+	assert_true(move.can_aim_at(Vector3i(0, 0, 0), Vector3i(5, 0, 0), archer),
 		"a cell 5 away is legal with the bonus")
 
 func test_zero_bonus_resolves_exactly_as_before():
@@ -201,19 +201,19 @@ func test_zero_bonus_resolves_exactly_as_before():
 	var plain := MockUnit.new(0, {})
 	assert_eq(move.effective_max_range(plain), 3, "no bonus leaves the authored reach")
 	assert_eq(move.effective_max_range(null), 3, "a null caster resolves the same")
-	assert_true(move.can_aim_at(Vector2i(0, 0), Vector2i(3, 0), plain), "3 away is in range")
-	assert_false(move.can_aim_at(Vector2i(0, 0), Vector2i(4, 0), plain), "4 away is not")
+	assert_true(move.can_aim_at(Vector3i(0, 0, 0), Vector3i(3, 0, 0), plain), "3 away is in range")
+	assert_false(move.can_aim_at(Vector3i(0, 0, 0), Vector3i(4, 0, 0), plain), "4 away is not")
 	# The no-caster overload is what every pre-existing call site used.
-	assert_true(move.can_aim_at(Vector2i(0, 0), Vector2i(3, 0)), "legacy call is unchanged")
-	assert_false(move.can_aim_at(Vector2i(0, 0), Vector2i(4, 0)), "legacy call still rejects 4")
+	assert_true(move.can_aim_at(Vector3i(0, 0, 0), Vector3i(3, 0, 0)), "legacy call is unchanged")
+	assert_false(move.can_aim_at(Vector3i(0, 0, 0), Vector3i(4, 0, 0)), "legacy call still rejects 4")
 
 func test_range_bonus_does_not_open_the_min_range_dead_zone():
 	var pattern := TargetingPattern.new()
 	pattern.min_range = 2
 	pattern.max_range = 3
-	assert_false(pattern.in_range(Vector2i(0, 0), Vector2i(1, 0), 2),
+	assert_false(pattern.in_range(Vector3i(0, 0, 0), Vector3i(1, 0, 0), 2),
 		"a bonus extends the far edge, never the near one")
-	assert_true(pattern.in_range(Vector2i(0, 0), Vector2i(5, 0), 2), "the far edge does extend")
+	assert_true(pattern.in_range(Vector3i(0, 0, 0), Vector3i(5, 0, 0), 2), "the far edge does extend")
 
 func test_negative_range_bonus_cannot_shrink_a_move():
 	var move := _thorn_spit()
@@ -233,9 +233,9 @@ func test_shared_move_resource_does_not_leak_range_bonus_between_units():
 	assert_eq(move.effective_max_range(normal), 3, "and stays 3 on a repeat read")
 	assert_eq(move.targeting.max_range, 3, "the shared TargetingPattern is never mutated")
 
-	assert_true(move.can_aim_at(Vector2i(0, 0), Vector2i(5, 0), rooted),
+	assert_true(move.can_aim_at(Vector3i(0, 0, 0), Vector3i(5, 0, 0), rooted),
 		"the buffed unit may aim 5 cells out")
-	assert_false(move.can_aim_at(Vector2i(0, 0), Vector2i(5, 0), normal),
+	assert_false(move.can_aim_at(Vector3i(0, 0, 0), Vector3i(5, 0, 0), normal),
 		"its squadmate may not")
 
 func test_range_bonus_is_a_real_stat_on_a_live_unit():
@@ -249,9 +249,9 @@ func test_move_executor_honours_the_range_bonus():
 	var caster := MockUnit.new(0, { "attack": 10, "range_bonus": 2 })
 	var victim := MockUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(victim, Vector2i(5, 0))  # 5 away: out of thorn_spit's authored 3
-	var result: Dictionary = MoveExecutor.execute(_thorn_spit(), caster, board, Vector2i(5, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(5, 0, 0))  # 5 away: out of thorn_spit's authored 3
+	var result: Dictionary = MoveExecutor.execute(_thorn_spit(), caster, board, Vector3i(5, 0, 0))
 	assert_true(bool(result.get("success", false)),
 		"the executor accepts an aim the caster's bonus brings into reach")
 
@@ -259,9 +259,9 @@ func test_move_executor_still_rejects_out_of_range_without_a_bonus():
 	var caster := MockUnit.new(0, { "attack": 10 })
 	var victim := MockUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(victim, Vector2i(5, 0))
-	var result: Dictionary = MoveExecutor.execute(_thorn_spit(), caster, board, Vector2i(5, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(5, 0, 0))
+	var result: Dictionary = MoveExecutor.execute(_thorn_spit(), caster, board, Vector3i(5, 0, 0))
 	assert_false(bool(result.get("success", true)), "an unbuffed caster is still out of range")
 	assert_eq(result.get("reason", ""), "out_of_range", "and fails for the documented reason")
 
@@ -273,8 +273,8 @@ func test_bonus_damage_applies_to_an_immobilized_target():
 	target.restricted = true
 	caster.ability_system = _ability_system_with(caster, _thornlust())
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 	var dealt := _hit(_damage_effect(20, CombatTypes.DamageCategory.PHYSICAL), board, caster, target)
 	assert_eq(dealt, 30, "thornlust's +50% turns 20 into 30 against a held target")
 
@@ -288,8 +288,8 @@ func test_forecast_shows_the_bonus_and_matches_what_is_dealt():
 	target.restricted = true
 	caster.ability_system = _ability_system_with(caster, _thornlust())
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 
 	var effect := _damage_effect(20, CombatTypes.DamageCategory.PHYSICAL)
 	var move := MoveResource.new()
@@ -337,8 +337,8 @@ func test_no_bonus_damage_against_an_unrestricted_target():
 	target.restricted = false
 	caster.ability_system = _ability_system_with(caster, _thornlust())
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 	var dealt := _hit(_damage_effect(20, CombatTypes.DamageCategory.PHYSICAL), board, caster, target)
 	assert_eq(dealt, 20, "a mobile target takes the plain 20")
 
@@ -348,8 +348,8 @@ func test_no_bonus_damage_when_the_caster_lacks_the_modifier():
 	target.restricted = true
 	caster.ability_system = _ability_system_with(caster, null)  # no passives at all
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 	var dealt := _hit(_damage_effect(20, CombatTypes.DamageCategory.PHYSICAL), board, caster, target)
 	assert_eq(dealt, 20, "a held target is only worth more to a caster that hunts them")
 
@@ -358,8 +358,8 @@ func test_damage_is_unchanged_with_no_ability_system_at_all():
 	var target := MockUnit.new(1, { "health": 100, "defense": 0 })
 	target.restricted = true
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 	var dealt := _hit(_damage_effect(20, CombatTypes.DamageCategory.PHYSICAL), board, caster, target)
 	assert_eq(dealt, 20, "no ability system -> plain damage, no errors")
 
@@ -369,8 +369,8 @@ func test_a_slowed_target_counts_as_movement_restricted():
 	var target := MockUnit.new(1, { "health": 100, "defense": 0, "movement": 4 })
 	caster.ability_system = _ability_system_with(caster, _thornlust())
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 
 	var full := _hit(_damage_effect(20, CombatTypes.DamageCategory.PHYSICAL), board, caster, target)
 	assert_eq(full, 20, "at full movement the target is not restricted")
@@ -384,8 +384,8 @@ func test_low_base_movement_alone_is_not_restricted():
 	var target := MockUnit.new(1, { "health": 100, "defense": 0, "movement": 1 })
 	caster.ability_system = _ability_system_with(caster, _thornlust())
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 	var dealt := _hit(_damage_effect(20, CombatTypes.DamageCategory.PHYSICAL), board, caster, target)
 	assert_eq(dealt, 20, "a naturally slow unit is not a restricted one")
 
@@ -402,11 +402,11 @@ func test_stepping_onto_a_trapped_cell_damages_and_holds():
 
 	var victim := MockUnit.new(1, { "health": 100, "magic_defense": 0, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(victim, Vector2i(4, 4))
+	board.place(victim, Vector3i(4, 4, 0))
 
 	var system: TileEffectSystem = autofree(TileEffectSystem.new())
-	system.tile_effects[Vector2i(4, 4)] = [trap]
-	var events: Array = system.on_enter(victim, Vector2i(4, 4), board)
+	system.tile_effects[Vector3i(4, 4, 0)] = [trap]
+	var events: Array = system.on_enter(victim, Vector3i(4, 4, 0), board)
 
 	assert_lt(victim.hp, 100, "entering the trapped cell deals damage to an enemy")
 	assert_eq(victim.statuses.size(), 1, "and applies exactly one status")
@@ -422,11 +422,11 @@ func test_a_trap_spares_the_placers_own_ally():
 	trap.owner_player = 0
 	var ally := MockUnit.new(0, { "health": 100, "magic_defense": 0, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(ally, Vector2i(4, 4))
+	board.place(ally, Vector3i(4, 4, 0))
 
 	var system: TileEffectSystem = autofree(TileEffectSystem.new())
-	system.tile_effects[Vector2i(4, 4)] = [trap]
-	system.on_enter(ally, Vector2i(4, 4), board)
+	system.tile_effects[Vector3i(4, 4, 0)] = [trap]
+	system.on_enter(ally, Vector3i(4, 4, 0), board)
 
 	assert_eq(ally.hp, 100, "a friendly unit does not trigger its own side's trap")
 	assert_eq(ally.statuses.size(), 0, "and is not ensnared")
@@ -469,7 +469,7 @@ func test_entangled_slows_the_next_turn_then_wears_off():
 	# that silently never expires is the failure mode this test exists to catch.
 	var u := _unit_with_status_controller("Quarry", 4)
 	var board := MockBoard.new()
-	board.place(u, Vector2i(0, 0))
+	board.place(u, Vector3i(0, 0, 0))
 	var controller := u.get_status_controller() as StatusController
 
 	controller.add_status(_entangled())
@@ -492,7 +492,7 @@ func test_entangled_slows_the_next_turn_then_wears_off():
 func test_entangled_cannot_stack_into_a_permanent_slow():
 	var u := _unit_with_status_controller("Quarry", 4)
 	var board := MockBoard.new()
-	board.place(u, Vector2i(0, 0))
+	board.place(u, Vector3i(0, 0, 0))
 	var controller := u.get_status_controller() as StatusController
 
 	# Hit twice before it ever ticks: REFRESH means one instance, not two.
@@ -547,12 +547,12 @@ func test_gathering_vines_entangles_a_real_target_through_the_executor():
 	var caster := MockUnit.new(0, { "magic": 10 })
 	var victim := MockUnit.new(1, { "health": 100, "magic_defense": 0, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(victim, Vector2i(2, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(2, 0, 0))
 	# Deterministic without touching the shared authored resource: ApplyStatusEffect
 	# does not gate on the hit roll, so the status lands regardless of accuracy.
 	var move := load("res://game/combat/moves/gathering_vines.tres") as MoveResource
-	var result: Dictionary = MoveExecutor.execute(move, caster, board, Vector2i(2, 0))
+	var result: Dictionary = MoveExecutor.execute(move, caster, board, Vector3i(2, 0, 0))
 	assert_true(bool(result.get("success", false)), "the move resolves")
 	assert_eq(victim.statuses.size(), 1, "the target is left with one status")
 	assert_eq(victim.statuses[0].id, &"entangled", "which is entangled")
@@ -583,12 +583,12 @@ func test_ingrained_roots_the_caster_and_extends_every_move():
 func test_ingrained_cast_on_a_live_unit_roots_it_and_lengthens_thorn_spit():
 	var u := _unit_with_status_controller("Petalfang", 3)
 	var board := MockBoard.new()
-	board.place(u, Vector2i(2, 2))
+	board.place(u, Vector3i(2, 2, 0))
 	assert_true(u.can_move(), "free before the cast")
 	assert_eq(_thorn_spit().effective_max_range(u), 3, "and at its authored reach")
 
 	var move := load("res://game/combat/moves/ingrained.tres") as MoveResource
-	var result: Dictionary = MoveExecutor.execute(move, u, board, Vector2i(2, 2))
+	var result: Dictionary = MoveExecutor.execute(move, u, board, Vector3i(2, 2, 0))
 	assert_true(bool(result.get("success", false)), "ingrained resolves on the caster's own cell")
 
 	assert_true(u.is_immobilized(), "the caster is rooted")
@@ -614,7 +614,7 @@ func test_thornlust_surfaces_through_passive_modifiers():
 	var unit := MockUnit.new(0, {})
 	var sys := _ability_system_with(unit, _thornlust())
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var mods: Dictionary = sys.passive_modifiers(unit, board)
 	assert_almost_eq(float(mods.get("damage_vs_restricted", 0.0)), 0.5, 0.001,
 		"the merged passives expose the +50% bonus")
@@ -627,7 +627,7 @@ func test_petalfang_loads_with_four_moves_and_one_ability():
 	assert_eq(petal.character_id, &"petalfang", "character_id is petalfang")
 	assert_eq(petal.display_name, "Petalfang", "display name is Petalfang")
 	assert_eq(petal.move_count(), 4, "Petalfang carries exactly 4 moves")
-	assert_eq(petal.ability_count(), 1, "and exactly 1 ability")
+	assert_eq(petal.ability_count(), 2, "Thornlust + Sunlit")
 	assert_eq(petal.get_move(0).move_id, &"thorn_spit", "slot 0 is thorn_spit")
 	assert_eq(petal.get_move(1).move_id, &"vine_trap", "slot 1 is vine_trap")
 	assert_eq(petal.get_move(2).move_id, &"gathering_vines", "slot 2 is gathering_vines")

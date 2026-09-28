@@ -67,7 +67,7 @@ func apply(ctx: MoveContext) -> void:
 	if not board.has_method("cell_of") or not board.has_method("units_at"):
 		return
 
-	var origin: Vector2i = board.cell_of(ctx.caster)
+	var origin: Vector3i = board.cell_of(ctx.caster)
 	# Same heading rule as LINE / ARC / the vine lane, so a diagonal aim collapses to the
 	# nearer clean face rather than producing a staircase.
 	var dir := TargetingPattern._cardinal_dir(origin, ctx.aim_cell)
@@ -85,7 +85,7 @@ func apply(ctx: MoveContext) -> void:
 		})
 		return
 
-	var landing: Vector2i = plan["landing"]
+	var landing: Vector3i = plan["landing"]
 	var pierced: Array = plan["pierced"]
 
 	if board.has_method("move_unit"):
@@ -104,15 +104,15 @@ func apply(ctx: MoveContext) -> void:
 
 
 ## Walk the lane and decide the outcome. Returns
-## { found: bool, landing: Vector2i, pierced: Array, reason: String }.
+## { found: bool, landing: Vector3i, pierced: Array, reason: String }.
 ## [param reason] names the refusal ("blocked_line" / "no_free_cell") so a caller and a
 ## test can tell the two edge cases apart.
-func _walk(ctx: MoveContext, origin: Vector2i, dir: Vector2i) -> Dictionary:
+func _walk(ctx: MoveContext, origin: Vector3i, dir: Vector3i) -> Dictionary:
 	var board = ctx.board
 	var pierced: Array = []
 	var reason: String = "no_free_cell"
 	for step in range(1, maxi(1, max_distance) + 1):
-		var cell: Vector2i = origin + dir * step
+		var cell: Vector3i = origin + dir * step
 		if not _can_enter(ctx, cell):
 			# Terrain closed the lane. If we had already pierced someone there was simply
 			# no room to land; if we had not, the dash never got going at all.
@@ -188,11 +188,14 @@ func bonus_power_for(_caster) -> int:
 ## only. Deliberately says nothing about occupancy -- the walk handles units itself,
 ## because a dash passes through some of them. Anything a board cannot answer is
 ## permissive, exactly as the rest of the pipeline treats it.
-func _can_enter(ctx: MoveContext, cell: Vector2i) -> bool:
+func _can_enter(ctx: MoveContext, cell: Vector3i) -> bool:
 	var board = ctx.board
 	if board.has_method("in_bounds") and not bool(board.in_bounds(cell)):
 		return false
 	if board.has_method("is_blocked") and bool(board.is_blocked(cell)):
+		return false
+	# Multi-floor: the dash stays on its floor and never runs off a deck into the AIR.
+	if board.has_method("has_tile") and not bool(board.has_tile(cell)):
 		return false
 	return true
 
@@ -203,7 +206,7 @@ func _can_enter(ctx: MoveContext, cell: Vector2i) -> bool:
 ## primitive [method LeapEffect._can_land] prefers. Boards without it have already been
 ## asked everything they can answer by [method _can_enter] plus the walk's own occupancy
 ## check, so they pass.
-func _can_land(ctx: MoveContext, cell: Vector2i) -> bool:
+func _can_land(ctx: MoveContext, cell: Vector3i) -> bool:
 	var board = ctx.board
 	if board.has_method("can_fit"):
 		return bool(board.can_fit(ctx.caster, cell))

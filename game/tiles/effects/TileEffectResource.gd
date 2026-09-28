@@ -335,10 +335,12 @@ func run(unit, board) -> Array:
 	var events: Array = []
 	if unit == null or board == null:
 		return events
-	var cell: Vector2i = Vector2i.ZERO
+	var cell: Vector3i = Vector3i.ZERO
 	if board.has_method("cell_of"):
 		cell = board.cell_of(unit)
-	var ctx := MoveContext.new(unit, board, _self_move(), cell, [cell] as Array[Vector2i])
+	var ctx := MoveContext.new(unit, board, _self_move(), cell, [cell] as Array[Vector3i])
+	# Floating combat text / battle log: tag the hit with the tile's name ("Fire").
+	ctx.source = CombatText.make_source(CombatText.SRC_TILE, display_name if display_name != "" else String(id), id)
 	# THE GROUND IS NOT A SWING YOU CAN DODGE. Exactly the rule a STATUS TICK follows
 	# ([method StatusCondition.tick]) and for exactly the same reason: routed through the
 	# ordinary pipeline, a tile effect rolled [method MoveContext.hit_chance] against the

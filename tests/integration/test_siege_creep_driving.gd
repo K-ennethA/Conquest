@@ -94,11 +94,11 @@ func _strike() -> MoveResource:
 	return m
 
 
-func _cell_to_world(cell: Vector2i) -> Vector3:
+func _cell_to_world(cell: Vector3i) -> Vector3:
 	return BoardAdapter.new(GRID, []).cell_to_world(cell)
 
 
-func _spawn(character_id: StringName, cell: Vector2i, owner: Player) -> Unit:
+func _spawn(character_id: StringName, cell: Vector3i, owner: Player) -> Unit:
 	var character := CharacterLibrary.get_character(character_id)
 	if character == null:
 		return null
@@ -121,9 +121,9 @@ func _build() -> Dictionary:
 	var ai := Player.new(1, "AI")
 	ai.is_ai = true
 
-	var hero := _spawn(HERO_ID, Vector2i(0, 0), human)
-	var creep := _spawn(CREEP_ID, Vector2i(1, 0), human)
-	var enemy := _spawn(HERO_ID, Vector2i(0, 4), ai)
+	var hero := _spawn(HERO_ID, Vector3i(0, 0, 0), human)
+	var creep := _spawn(CREEP_ID, Vector3i(1, 0, 0), human)
+	var enemy := _spawn(HERO_ID, Vector3i(0, 4, 0), ai)
 	if hero == null or creep == null or enemy == null:
 		return {}
 
@@ -154,7 +154,7 @@ func test_traditional_the_driver_acts_a_human_owned_creep_and_nothing_else() -> 
 
 	var creep: Unit = scene["creep"]
 	var hero: Unit = scene["hero"]
-	SiegeController.stamp_creep(creep, [Vector2i(1, 0), Vector2i(1, 6)], 3)
+	SiegeController.stamp_creep(creep, [Vector3i(1, 0, 0), Vector3i(1, 6, 0)], 3)
 
 	var ts := TraditionalTurnSystem.new()
 	add_child_autofree(ts)
@@ -167,8 +167,8 @@ func test_traditional_the_driver_acts_a_human_owned_creep_and_nothing_else() -> 
 	assert_false(ts.get_current_active_player().is_ai, "the HUMAN opens the battle")
 
 	var board = scene["board"]
-	var hero_cell: Vector2i = board.cell_of(hero)
-	var creep_cell: Vector2i = board.cell_of(creep)
+	var hero_cell: Vector3i = board.cell_of(hero)
+	var creep_cell: Vector3i = board.cell_of(creep)
 
 	var driver := _make_driver()
 	var acted: bool = await driver.act_for_turn_system(ts)
@@ -191,7 +191,7 @@ func test_speed_first_the_driver_acts_a_human_owned_creep_when_the_queue_reaches
 		return
 
 	var creep: Unit = scene["creep"]
-	SiegeController.stamp_creep(creep, [Vector2i(1, 0), Vector2i(1, 6)], 3)
+	SiegeController.stamp_creep(creep, [Vector3i(1, 0, 0), Vector3i(1, 6, 0)], 3)
 
 	var ts := SpeedFirstTurnSystem.new()
 	add_child_autofree(ts)
@@ -207,7 +207,7 @@ func test_speed_first_the_driver_acts_a_human_owned_creep_when_the_queue_reaches
 
 	# Step the queue until the creep's own turn comes up (bounded, never wall-clock).
 	var acted_for_creep: bool = false
-	var creep_cell: Vector2i = board.cell_of(creep)
+	var creep_cell: Vector3i = board.cell_of(creep)
 	for _i in range(8):
 		if ts.current_acting_unit == creep:
 			acted_for_creep = await driver.act_for_turn_system(ts)
@@ -233,7 +233,7 @@ func test_a_marching_creep_walks_its_lane_rather_than_at_the_nearest_enemy() -> 
 
 	# Lane runs along +x from the creep; the only enemy is 4 cells away along +y, outside a
 	# radius of 1 -- so an ordinary aggressive unit would charge it and a marcher must not.
-	SiegeController.stamp_creep(creep, [Vector2i(1, 0), Vector2i(4, 0)], 1)
+	SiegeController.stamp_creep(creep, [Vector3i(1, 0, 0), Vector3i(4, 0, 0)], 1)
 
 	var ts := TraditionalTurnSystem.new()
 	add_child_autofree(ts)
@@ -244,12 +244,12 @@ func test_a_marching_creep_walks_its_lane_rather_than_at_the_nearest_enemy() -> 
 	ts.register_unit(enemy)
 	ts.start_turn_system()
 
-	var enemy_cell: Vector2i = board.cell_of(enemy)
-	var start: Vector2i = board.cell_of(creep)
+	var enemy_cell: Vector3i = board.cell_of(enemy)
+	var start: Vector3i = board.cell_of(creep)
 	var driver := _make_driver()
 	assert_true(await driver.act_for_turn_system(ts), "the creep acts")
 
-	var landed: Vector2i = board.cell_of(creep)
+	var landed: Vector3i = board.cell_of(creep)
 	assert_gt(landed.x, start.x, "it pushed DOWN THE LANE (+x toward the waypoint)")
 	assert_eq(landed.y, start.y,
 		"and never stepped toward the enemy on +y -- an out-of-aggro enemy is not its problem")
@@ -288,13 +288,14 @@ func test_spawn_and_adopt_gives_a_runtime_unit_an_owner_and_a_place_in_the_turn_
 
 	var fresh: Unit = CHARACTER_UNIT_SCENE.instantiate()
 	fresh.character_resource = CharacterLibrary.get_character(HERO_ID)
-	fresh.position = _cell_to_world(Vector2i(3, 3))
+	fresh.position = _cell_to_world(Vector3i(3, 3, 0))
 	_map_root.add_child(fresh)
 
 	var spawner := SpawnManager.new()
 	add_child_autofree(spawner)
 	spawner._map_loader = _StubLoader.new(fresh)
 
+	# A spawn entry is MAP data: a Vector2i "position" plus an optional "floor" (0 here).
 	var produced = spawner.spawn_and_adopt(
 		{"position": Vector2i(3, 3), "player_id": 0, "character_id": String(HERO_ID)}, 0)
 
@@ -318,5 +319,5 @@ class _StubLoader extends RefCounted:
 		return unit
 
 
-static func _manhattan(a: Vector2i, b: Vector2i) -> int:
+static func _manhattan(a: Vector3i, b: Vector3i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)

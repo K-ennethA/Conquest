@@ -67,7 +67,7 @@ Consequences:
 > **Migration status: DONE** (live gameplay path) — `CombatServices` wires cell → terrain →
 > `TileEffectResource` (`game/tiles/effects/resources/*.tres`) through `TileEffectSystem`;
 > movement, attacks, and enemy AI all resolve tile effects through this data-driven pipeline.
-> **Not yet retired**: `game/tiles/TileEffect.gd` / `TileEffectManager.gd` (the old classes)
+> **Not yet retired**: `game/tiles/TileEffect.gd` (the old class; the dead `TileEffectManager.gd` has been deleted)
 > are still hard-referenced by live code — `tile_objects/tiles/tile.gd` (the tile scene used
 > by every map) and `game/tiles/resources/TileResource.gd` both type against `TileEffect` and
 > constructs it directly, and `game/tiles/resources/molten_lava.tres` embeds a `TileEffect`
@@ -132,7 +132,7 @@ Built: `NetSession` (server-authoritative, N-player), `GameModeRules`, map maker
 | Modes / win conditions | `game/modes/`: `WinCondition`, `DefeatAllEnemies`, `CaptureThrone`, `SurviveTurns`, `ProtectUnit`, `GameModeRules` |
 | Bots / bosses | `game/ai/`: `BotController`, `BossController` |
 | Maps | `game/maps/` + `game/mapmaker/`: `MapResource`, `MapLoader`, `MapMakerModel`, `TileTextureImporter`, `skirmish_arena.tres` |
-| Tiles | `game/tiles/`: `TileResource`; data-driven effects **DONE** via `game/tiles/effects/`: `TileEffectResource`/`TileEffectSystem`/`TileEffectLibrary`, wired through `CombatServices`. `TileEffect`/`TileEffectManager` (old) still present — still referenced by `tile_objects/tiles/tile.gd` and `TileResource.gd`; not yet retirable (see §3.1 note) |
+| Tiles | `game/tiles/`: `TileResource`; data-driven effects **DONE** via `game/tiles/effects/`: `TileEffectResource`/`TileEffectSystem`/`TileEffectLibrary`, wired through `CombatServices`. legacy `TileEffect` (old, visual/authoring only) still referenced by `tile_objects/tiles/tile.gd` and `TileResource.gd`; the unreachable `TileEffectManager` was deleted (it called UnitStats methods that never existed) |
 | Networking | `systems/net/`: `NetSession`, `NetProtocol` (server-authoritative, N-player) |
 | Turns / board | `board/`, `turns/`, `systems/` turn systems, `PlayerManager` |
 
@@ -141,7 +141,7 @@ Test coverage: ~158 passing unit tests across combat, characters, modes, AI, map
 > **Migration status: DONE** — movement, attacks, and enemy AI all run on the data-driven
 > stack above (`MoveResource`/`MoveExecutor`/`BoardAdapter` + `BotController`/`BossController`);
 > the old move/unit systems they replaced have been retired. Tiles are DONE for gameplay
-> resolution (see the Tiles row); the old `TileEffect`/`TileEffectManager` scripts remain only
+> resolution (see the Tiles row); the old `TileEffect` script remains only (`TileEffectManager` was deleted as dead code)
 > as an unretired residual dependency, tracked in §3.1.
 
 ---

@@ -181,9 +181,9 @@ func _start_player_turn(player: Player) -> void:
 	# turn-start call unwinds rather than re-entering it.
 	call_deferred("_drive_controlled_units", get_units_for_player(player))
 
-	# Emit turn started signal. This is also the network sync point: NetSession's turn
-	# bridge (NetSession._activate_turn_bridge) subscribes to turn_started directly and
-	# derives the authoritative turn slot from it -- no separate push is needed.
+	# Emit turn started signal. This is also the network sync point: the net layer
+	# (NetSession) observes turn_started directly and derives the authoritative turn
+	# slot from it -- no separate push is needed.
 	turn_started.emit(player)
 
 func _end_player_turn(player: Player) -> void:

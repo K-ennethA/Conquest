@@ -80,11 +80,11 @@ func _make_fodder() -> CharacterResource:
 	return c
 
 
-func _cell_to_world(cell: Vector2i) -> Vector3:
+func _cell_to_world(cell: Vector3i) -> Vector3:
 	return BoardAdapter.new(_grid(), []).cell_to_world(cell)
 
 
-func _spawn(character_id: StringName, cell: Vector2i, owner: Player) -> Unit:
+func _spawn(character_id: StringName, cell: Vector3i, owner: Player) -> Unit:
 	var character := CharacterLibrary.get_character(character_id)
 	if character == null:
 		return null
@@ -104,10 +104,10 @@ func _paint_terrain() -> void:
 	var tree: TileResource = load(TREE)
 	for x in range(10):
 		for y in range(10):
-			CombatServices.register_tile(Vector2i(x, y), grass)
-	for cell in [Vector2i(6, 3), Vector2i(6, 4), Vector2i(6, 5), Vector2i(7, 4)]:
+			CombatServices.register_tile(Vector3i(x, y, 0), grass)
+	for cell in [Vector3i(6, 3, 0), Vector3i(6, 4, 0), Vector3i(6, 5, 0), Vector3i(7, 4, 0)]:
 		CombatServices.register_tile(cell, tall)
-	for cell in [Vector2i(3, 6), Vector2i(4, 6), Vector2i(2, 2)]:
+	for cell in [Vector3i(3, 6, 0), Vector3i(4, 6, 0), Vector3i(2, 2, 0)]:
 		CombatServices.register_tile(cell, tree)
 
 
@@ -123,10 +123,10 @@ func _boot() -> Dictionary:
 	var ai := Player.new(1, "AI")
 	ai.is_ai = true
 
-	var duskmaw := _spawn(&"monster", Vector2i(4, 4), human)
-	var ally := _spawn(FODDER_ID, Vector2i(4, 3), human)
-	var near := _spawn(FODDER_ID, Vector2i(5, 4), ai)
-	var far := _spawn(FODDER_ID, Vector2i(6, 4), ai)
+	var duskmaw := _spawn(&"monster", Vector3i(4, 4, 0), human)
+	var ally := _spawn(FODDER_ID, Vector3i(4, 3, 0), human)
+	var near := _spawn(FODDER_ID, Vector3i(5, 4, 0), ai)
+	var far := _spawn(FODDER_ID, Vector3i(6, 4, 0), ai)
 	if duskmaw == null or ally == null or near == null or far == null:
 		return {}
 
@@ -156,7 +156,7 @@ func _boot() -> Dictionary:
 	}
 
 
-func _reachable(unit: Unit, board) -> Array[Vector2i]:
+func _reachable(unit: Unit, board) -> Array[Vector3i]:
 	return MovementResolver.new().reachable_cells(
 		board.cell_of(unit), unit.get_movement_profile(), board, unit)
 
@@ -181,8 +181,8 @@ func test_every_cell_the_resolver_offers_is_a_cell_the_board_accepts() -> void:
 	var board = s["board"]
 
 	await _select(panel, duskmaw)
-	var origin: Vector2i = board.cell_of(duskmaw)
-	var cells: Array[Vector2i] = _reachable(duskmaw, board)
+	var origin: Vector3i = board.cell_of(duskmaw)
+	var cells: Array[Vector3i] = _reachable(duskmaw, board)
 	assert_gt(cells.size(), 8,
 		"the fixture is worth sweeping (movement 5 on open ground reaches plenty)")
 
@@ -191,7 +191,7 @@ func test_every_cell_the_resolver_offers_is_a_cell_the_board_accepts() -> void:
 	var refused: Array = []
 	var misplaced: Array = []
 	for cell in cells:
-		var tile := Vector3(cell.x, 0, cell.y)
+		var tile := Cells.to_grid(cell)
 		assert_true(panel._is_grid_pos_in_range(tile),
 			"the panel published %s as reachable" % str(cell))
 		panel.handle_movement_destination_selected(tile)
@@ -220,18 +220,18 @@ func test_the_sweep_covers_terrain_that_actually_varies() -> void:
 		pending("Could not build the live board / roster; skipping.")
 		return
 	var board = s["board"]
-	assert_eq(board.move_cost(Vector2i(6, 4)), 2, "tall grass costs two to enter")
-	assert_eq(board.move_cost(Vector2i(4, 5)), 1, "open grass costs one")
-	assert_true(board.is_blocked(Vector2i(3, 6)), "the tree stand is impassable")
-	assert_true(board.is_occupied(Vector2i(5, 4)), "and an enemy is standing in the way")
+	assert_eq(board.move_cost(Vector3i(6, 4, 0)), 2, "tall grass costs two to enter")
+	assert_eq(board.move_cost(Vector3i(4, 5, 0)), 1, "open grass costs one")
+	assert_true(board.is_blocked(Vector3i(3, 6, 0)), "the tree stand is impassable")
+	assert_true(board.is_occupied(Vector3i(5, 4, 0)), "and an enemy is standing in the way")
 
-	var cells: Array[Vector2i] = _reachable(s["duskmaw"], board)
-	assert_false(Vector2i(3, 6) in cells, "an impassable tree is never offered")
-	assert_false(Vector2i(5, 4) in cells, "nor a cell an enemy is standing on")
-	assert_false(Vector2i(4, 3) in cells,
+	var cells: Array[Vector3i] = _reachable(s["duskmaw"], board)
+	assert_false(Vector3i(3, 6, 0) in cells, "an impassable tree is never offered")
+	assert_false(Vector3i(5, 4, 0) in cells, "nor a cell an enemy is standing on")
+	assert_false(Vector3i(4, 3, 0) in cells,
 		"nor the ALLY's own cell -- FE pass-through lets you walk through a friend, " +
 		"never stop on one")
-	assert_true(Vector2i(4, 2) in cells,
+	assert_true(Vector3i(4, 2, 0) in cells,
 		"but the cell BEYOND that ally is offered, so the sweep really does path through one")
 
 
@@ -304,7 +304,7 @@ func test_the_board_reads_duskmaws_cell_from_where_it_is_actually_standing() -> 
 	var duskmaw: Unit = s["duskmaw"]
 	var board = s["board"]
 	var mismatched: Array = []
-	for cell in [Vector2i(0, 0), Vector2i(4, 4), Vector2i(9, 9), Vector2i(7, 2)]:
+	for cell in [Vector3i(0, 0, 0), Vector3i(4, 4, 0), Vector3i(9, 9, 0), Vector3i(7, 2, 0)]:
 		board.move_unit(duskmaw, cell)
 		if board.cell_of(duskmaw) != cell:
 			mismatched.append("%s -> %s" % [str(cell), str(board.cell_of(duskmaw))])
@@ -349,12 +349,12 @@ func test_move_then_dash_then_canto_move_is_accepted_at_every_step() -> void:
 	panel.handle_move_target_selected(Vector3(4, 0, 4))
 	for _i in range(2):
 		await get_tree().process_frame
-	assert_eq(board.cell_of(duskmaw), Vector2i(3, 4),
+	assert_eq(board.cell_of(duskmaw), Vector3i(3, 4, 0),
 		"step two: placing an anchor does not move the caster")
 	var services = board if board.has_method("tile_effects_at") else null
 	if services != null:
 		var ids: Array = []
-		for te in services.tile_effects_at(Vector2i(4, 4)):
+		for te in services.tile_effects_at(Vector3i(4, 4, 0)):
 			ids.append(String(te.id))
 		assert_true(ids.has("void_spot"), "the anchor was planted on the aimed cell")
 
@@ -366,8 +366,8 @@ func test_move_then_dash_then_canto_move_is_accepted_at_every_step() -> void:
 	assert_false(ts.can_unit_act(duskmaw), "the turn system has written the unit off")
 
 
-func _grid_to_cell(tile: Vector3) -> Vector2i:
-	return Vector2i(int(round(tile.x)), int(round(tile.z)))
+func _grid_to_cell(tile: Vector3) -> Vector3i:
+	return Cells.from_grid(tile)
 
 
 func test_tall_grass_at_the_last_movement_point_is_offered_only_when_it_is_paid_for() -> void:
@@ -389,19 +389,19 @@ func test_tall_grass_at_the_last_movement_point_is_offered_only_when_it_is_paid_
 	# Row 3 runs west from the tall grass at (6,3) over open grass, through the ally at
 	# (4,3) (pass-through: passable, still costs 1), with no wall in between.
 	var mov: int = duskmaw.get_stat("movement")
-	var edge := Vector2i(5, 3)     # the open cell that touches the grass
-	var grass := Vector2i(6, 3)    # costs 2 to enter
+	var edge := Vector3i(5, 3, 0)     # the open cell that touches the grass
+	var grass := Vector3i(6, 3, 0)    # costs 2 to enter
 	# Stand `mov - 1` cells west of the edge: arriving there spends all but ONE point.
-	var one_short := Vector2i(edge.x - (mov - 1), edge.y)
+	var one_short := Vector3i(edge.x - (mov - 1), edge.y, 0)
 	# One cell nearer: 2 points left on the edge, exactly what the grass costs.
-	var can_afford := Vector2i(one_short.x + 1, edge.y)
+	var can_afford := Vector3i(one_short.x + 1, edge.y, 0)
 	if one_short.x < 0:
 		pending("The boundary fixture needs a stride that fits on row 3; this one is %d." % mov)
 		return
 
 	board.move_unit(duskmaw, one_short)
 	await _select(panel, duskmaw)
-	var cells: Array[Vector2i] = _reachable(duskmaw, board)
+	var cells: Array[Vector3i] = _reachable(duskmaw, board)
 	assert_true(edge in cells,
 		"the open cell beside the grass is reachable -- %d of the %d points, through the ally"
 			% [mov - 1, mov])
@@ -414,7 +414,7 @@ func test_tall_grass_at_the_last_movement_point_is_offered_only_when_it_is_paid_
 	await _select(panel, duskmaw)
 	assert_true(grass in _reachable(duskmaw, board),
 		"%d steps to the edge plus 2 for the grass is exactly the budget" % (mov - 2))
-	panel.handle_movement_destination_selected(Vector3(grass.x, 0, grass.y))
+	panel.handle_movement_destination_selected(Cells.to_grid(grass))
 	await get_tree().process_frame
 	assert_true(panel.is_tentative_move_active(), "and the board accepts the move into it")
 	assert_eq(board.cell_of(duskmaw), grass, "landing in the grass")
@@ -501,14 +501,14 @@ func test_the_movement_stat_and_the_flood_budget_agree() -> void:
 	if mov < 1 or mov > 8:
 		pending("The clear-row measurement needs a stride of 1..8; this one is %d." % mov)
 		return
-	var origin := Vector2i(1, 8)
+	var origin := Vector3i(1, 8, 0)
 	board.move_unit(duskmaw, origin)
-	var cells: Array[Vector2i] = _reachable(duskmaw, board)
+	var cells: Array[Vector3i] = _reachable(duskmaw, board)
 
-	assert_true(Vector2i(origin.x + mov, origin.y) in cells,
+	assert_true(Vector3i(origin.x + mov, origin.y, 0) in cells,
 		"the cell a full %d steps out IS offered -- the board hands over the whole " % mov +
 		"printed stride")
-	assert_false(Vector2i(origin.x + mov + 1, origin.y) in cells,
+	assert_false(Vector3i(origin.x + mov + 1, origin.y, 0) in cells,
 		"and the cell one beyond it is not -- the stat is a budget, not a suggestion")
 
 	# Stated as the invariant rather than as two numbers: the farthest cell reachable in a

@@ -55,15 +55,20 @@ const COLOR_BAND_HEIGHT: float = 26.0
 const COLOR_BAND_OFFSET: float = 96.0   # accent stripe sits below the ink band's centre
 const CHROMA_SHIFT: float = 7.0         # px the red/cyan copies split at peak
 
+const GOLD_RULE_HEIGHT: float = 3.0     # gold filigree hairlines framing the ink band
+
 # --- Palette ----------------------------------------------------------------
-# Text/accent colours come straight from ConquestTheme (like TurnTransition). Only the dark
-# band plate is local, since it wants a slightly translucent near-black the theme lacks.
-const INK: Color = Color(0.043, 0.035, 0.027, 0.94)  # dark band plate
+# Text/accent colours come straight from ConquestTheme (like TurnTransition): the band is the
+# grove's deep navy, framed by gold hairlines, the move name in gold Cinzel capitals, the
+# accent stripe in the move's element colour.
+const INK: Color = Color(ConquestTheme.BG_DEEP, 0.94)  # dark band plate (deep navy)
 
 var _root: Control = null
 var _sweep: Control = null
 var _ink_band: ColorRect = null
 var _color_band: ColorRect = null
+var _rule_top: ColorRect = null      # gold hairline along the band's top edge
+var _rule_bottom: ColorRect = null   # ... and its bottom edge
 var _flash_warm: ColorRect = null   # red-ish chromatic copy
 var _flash_cool: ColorRect = null   # cyan-ish chromatic copy
 var _name_label: Label = null
@@ -127,14 +132,18 @@ func _build_ui() -> void:
 	_ink_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_sweep.add_child(_ink_band)
 
+	# Gold filigree hairlines along both long edges of the plate (the grove frame's inset line).
+	_rule_top = _make_rule("RuleTop")
+	_rule_bottom = _make_rule("RuleBottom")
+
 	# Thin element-colour accent stripe under the plate.
 	_color_band = ColorRect.new()
 	_color_band.name = "ColorBand"
-	_color_band.color = ConquestTheme.AMBER_LITE
+	_color_band.color = ConquestTheme.GOLD_LITE
 	_color_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_sweep.add_child(_color_band)
 
-	# Centred caster name (small) + MOVE NAME (huge), gold on dark.
+	# Centred caster name (small) + MOVE NAME (huge), gold Cinzel on navy.
 	var center: CenterContainer = CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -149,9 +158,10 @@ func _build_ui() -> void:
 	_name_label = Label.new()
 	_name_label.name = "CasterName"
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_name_label.add_theme_font_override("font", MenuTheme.heading_font(3))
 	_name_label.add_theme_font_size_override("font_size", 26)
 	_name_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
-	_name_label.add_theme_color_override("font_outline_color", ConquestTheme.BROWN_DK)
+	_name_label.add_theme_color_override("font_outline_color", ConquestTheme.BG_DEEP)
 	_name_label.add_theme_constant_override("outline_size", 6)
 	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(_name_label)
@@ -159,12 +169,24 @@ func _build_ui() -> void:
 	_move_label = Label.new()
 	_move_label.name = "MoveName"
 	_move_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_move_label.add_theme_font_override("font", MenuTheme.display_font(6))
 	_move_label.add_theme_font_size_override("font_size", 66)
-	_move_label.add_theme_color_override("font_color", ConquestTheme.AMBER_LITE)
-	_move_label.add_theme_color_override("font_outline_color", ConquestTheme.BROWN_DK)
+	_move_label.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
+	_move_label.add_theme_color_override("font_outline_color", Color("2a1804"))
 	_move_label.add_theme_constant_override("outline_size", 10)
+	_move_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	_move_label.add_theme_constant_override("shadow_offset_y", 5)
 	_move_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(_move_label)
+
+
+func _make_rule(rule_name: String) -> ColorRect:
+	var r := ColorRect.new()
+	r.name = rule_name
+	r.color = Color(ConquestTheme.GOLD, 0.85)
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sweep.add_child(r)
+	return r
 
 
 func _make_flash(tint: Color) -> ColorRect:
@@ -221,7 +243,7 @@ func _apply_content(unit, move) -> void:
 		_move_label.text = move_name.to_upper()
 
 	# Tint the accent stripe by the move's element, so a fire ult reads warm, a frost ult cool.
-	var accent: Color = ConquestTheme.AMBER_LITE
+	var accent: Color = ConquestTheme.GOLD_LITE
 	if move != null and ("element" in move):
 		accent = ConquestTheme.element_color(String(move.element))
 	if _color_band != null:
@@ -248,6 +270,16 @@ func _layout_bands() -> void:
 		_color_band.pivot_offset = _color_band.size * 0.5
 		_color_band.position = Vector2(cx - band_w * 0.5, cy + COLOR_BAND_OFFSET - COLOR_BAND_HEIGHT * 0.5)
 		_color_band.rotation = angle
+
+	# Gold hairlines on the ink band's two long edges.
+	for pair in [[_rule_top, -INK_BAND_HEIGHT * 0.5], [_rule_bottom, INK_BAND_HEIGHT * 0.5]]:
+		var rule: ColorRect = pair[0]
+		if rule == null:
+			continue
+		rule.size = Vector2(band_w, GOLD_RULE_HEIGHT)
+		rule.pivot_offset = rule.size * 0.5
+		rule.position = Vector2(cx - band_w * 0.5, cy + float(pair[1]) - GOLD_RULE_HEIGHT * 0.5)
+		rule.rotation = angle
 
 
 # --- Sweep playback ---------------------------------------------------------

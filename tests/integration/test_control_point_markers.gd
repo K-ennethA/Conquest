@@ -214,6 +214,15 @@ func _raw_points(map) -> Array:
 	return raw if raw is Array else []
 
 
+## Any cell list (the map's authored Vector2i positions, or the markers' own cells), normalised
+## to [Vector3i] board cells, so a comparison does not depend on which type the producer keeps.
+static func _cells(raw: Array) -> Array:
+	var out: Array = []
+	for c in raw:
+		out.append(Cells.from_variant(c))
+	return out
+
+
 func _markers_node() -> ObjectiveMarkers:
 	if _map_node == null or not is_instance_valid(_map_node):
 		return null
@@ -245,11 +254,11 @@ class StubMode extends Node:
 	var contested: Dictionary = {}
 	var announces: bool = false
 
-	func control_point_owner(cell: Vector2i) -> int:
-		return int(owners.get(cell, -1))
+	func control_point_owner(cell) -> int:
+		return int(owners.get(Cells.from_variant(cell), -1))
 
-	func control_point_contested(cell: Vector2i) -> bool:
-		return bool(contested.get(cell, false))
+	func control_point_contested(cell) -> bool:
+		return bool(contested.get(Cells.from_variant(cell), false))
 
 	func announces_control_points() -> bool:
 		return announces
@@ -261,11 +270,11 @@ class SiegeShapedMode extends Node:
 	var owners: Dictionary = {}
 	var claimers: Dictionary = {}
 
-	func control_point_owner(cell: Vector2i) -> int:
-		return int(owners.get(cell, -1))
+	func control_point_owner(cell) -> int:
+		return int(owners.get(Cells.from_variant(cell), -1))
 
-	func control_point_claimer(cell: Vector2i) -> int:
-		return int(claimers.get(cell, -1))
+	func control_point_claimer(cell) -> int:
+		return int(claimers.get(Cells.from_variant(cell), -1))
 
 	func _announce_control_point(_previous_owner: int) -> void:
 		pass
@@ -319,8 +328,8 @@ func test_every_declared_control_point_gets_its_own_marker() -> void:
 		assert_not_null(marker, "control point %d carries a marker" % index)
 		if marker == null:
 			continue
-		var cell: Vector2i = marker.get_meta("cell")
-		assert_true(declared.has(cell),
+		var cell: Vector3i = Cells.from_variant(marker.get_meta("cell"))
+		assert_true(_cells(declared).has(cell),
 			"marker %d stands on a cell the MAP declared (%s)" % [index, str(cell)])
 		assert_almost_eq(marker.position.x, float(cell.x) * 2.0 + 1.0, 0.001,
 			"and on that cell's centre in X")
@@ -333,7 +342,7 @@ func test_the_marker_order_is_the_authored_order_on_every_peer() -> void:
 	if markers == null:
 		pending("no markers mounted")
 		return
-	var cells: Array[Vector2i] = markers.control_point_cells()
+	var cells: Array = _cells(markers.control_point_cells())
 	var names: Array[String] = []
 	for child in markers.get_children():
 		if String(child.name).begins_with("ControlPoint"):
@@ -343,7 +352,7 @@ func test_the_marker_order_is_the_authored_order_on_every_peer() -> void:
 	for index in range(cells.size()):
 		assert_eq(names[index], "ControlPoint%d" % index,
 			"node %d is named for its authored index -- two peers build the same tree" % index)
-		assert_eq(markers.control_point_marker(index).get_meta("cell"), cells[index],
+		assert_eq(Cells.from_variant(markers.control_point_marker(index).get_meta("cell")), cells[index],
 			"and holds the cell the plan put at that index")
 
 
@@ -361,8 +370,8 @@ func test_planning_is_pure_data_and_drops_junk_duplicates_and_strays() -> void:
 	]
 	var plan: Array[Dictionary] = MARKERS.plan_control_points(fake)
 	assert_eq(plan.size(), 2, "only the two usable cells survive -- junk is skipped, not fatal")
-	assert_eq(plan[0]["cell"], Vector2i(1, 1), "the first authored cell keeps the first slot")
-	assert_eq(plan[1]["cell"], Vector2i(4, 5), "and the second the second")
+	assert_eq(Cells.from_variant(plan[0]["cell"]), Vector3i(1, 1, 0), "the first authored cell keeps the first slot")
+	assert_eq(Cells.from_variant(plan[1]["cell"]), Vector3i(4, 5, 0), "and the second the second")
 	assert_eq(plan[0]["index"], 0, "indices are the marker's own, packed, 0-based")
 	assert_eq(plan[1]["index"], 1, "and consecutive")
 
@@ -469,7 +478,7 @@ func test_a_change_of_hands_retints_that_point_and_only_that_point() -> void:
 		pending("need two control point markers")
 		return
 
-	var cells: Array[Vector2i] = markers.control_point_cells()
+	var cells: Array = _cells(markers.control_point_cells())
 	var stub: StubMode = _inject(StubMode.new(), markers) as StubMode
 	stub.name = "StubMode"
 	markers.mode_controller_path = NodePath("StubMode")
@@ -506,7 +515,7 @@ func test_the_mast_is_tinted_with_the_pennant_but_darker() -> void:
 	if markers == null or markers.control_point_count() == 0:
 		pending("no control point markers mounted")
 		return
-	var cells: Array[Vector2i] = markers.control_point_cells()
+	var cells: Array = _cells(markers.control_point_cells())
 	var stub: StubMode = _inject(StubMode.new(), markers) as StubMode
 	stub.name = "StubMode"
 	markers.mode_controller_path = NodePath("StubMode")
@@ -534,7 +543,7 @@ func test_a_claim_in_progress_pulses_faster_and_brighter() -> void:
 		pending("need two control point markers")
 		return
 
-	var cells: Array[Vector2i] = markers.control_point_cells()
+	var cells: Array = _cells(markers.control_point_cells())
 	var stub: StubMode = _inject(StubMode.new(), markers) as StubMode
 	stub.name = "StubMode"
 	markers.mode_controller_path = NodePath("StubMode")
@@ -567,7 +576,7 @@ func test_the_real_siege_shaped_controller_drives_the_markers_as_it_is() -> void
 		pending("need two control point markers")
 		return
 
-	var cells: Array[Vector2i] = markers.control_point_cells()
+	var cells: Array = _cells(markers.control_point_cells())
 	var siege: SiegeShapedMode = _inject(SiegeShapedMode.new(), markers) as SiegeShapedMode
 	siege.name = "SiegeShaped"
 	markers.mode_controller_path = NodePath("SiegeShaped")
@@ -595,7 +604,7 @@ func test_the_line_belongs_to_the_mode_when_the_mode_has_one() -> void:
 		pending("no control point markers mounted")
 		return
 
-	var cells: Array[Vector2i] = markers.control_point_cells()
+	var cells: Array = _cells(markers.control_point_cells())
 	var siege: SiegeShapedMode = _inject(SiegeShapedMode.new(), markers) as SiegeShapedMode
 	siege.name = "SiegeShaped"
 	markers.mode_controller_path = NodePath("SiegeShaped")
@@ -692,7 +701,7 @@ func test_a_change_of_hands_announces_once_through_the_battles_own_announcer() -
 		pending("no control point markers mounted")
 		return
 
-	var cells: Array[Vector2i] = markers.control_point_cells()
+	var cells: Array = _cells(markers.control_point_cells())
 	var stub: StubMode = _inject(StubMode.new(), markers) as StubMode
 	stub.name = "StubMode"
 	markers.mode_controller_path = NodePath("StubMode")
@@ -727,7 +736,7 @@ func test_a_point_that_opens_already_owned_never_announces_a_claim() -> void:
 		pending("no control point markers mounted")
 		return
 
-	var cells: Array[Vector2i] = markers.control_point_cells()
+	var cells: Array = _cells(markers.control_point_cells())
 	var stub: StubMode = _inject(StubMode.new(), markers) as StubMode
 	stub.name = "StubMode"
 	stub.owners[cells[0]] = 1
@@ -750,7 +759,7 @@ func test_the_marker_layer_stays_quiet_when_the_mode_announces_claims_itself() -
 		pending("no control point markers mounted")
 		return
 
-	var cells: Array[Vector2i] = markers.control_point_cells()
+	var cells: Array = _cells(markers.control_point_cells())
 	var stub: StubMode = _inject(StubMode.new(), markers) as StubMode
 	stub.name = "StubMode"
 	stub.announces = true
@@ -777,7 +786,8 @@ func test_the_control_points_add_no_board_cells() -> void:
 	if _map_res == null:
 		pending("no fixture map")
 		return
-	var tiles := _map_node.get_node("Tiles")
+	# Multi-floor loader layout: ground tiles live under Tiles/Floor_0 (Tile_x_y_0).
+	var tiles := _map_node.get_node("Tiles/Floor_0")
 	assert_eq(tiles.get_child_count(), _map_res.width * _map_res.height,
 		"the board is still width x height tiles -- the control point markers contributed none")
 
@@ -799,7 +809,7 @@ func test_a_control_point_cell_is_still_exactly_the_terrain_the_map_authored() -
 	if markers == null or markers.control_point_count() == 0 or not CombatServices:
 		pending("no control point markers, or no CombatServices autoload")
 		return
-	var cell: Vector2i = markers.control_point_cells()[0]
+	var cell: Vector3i = Cells.from_variant(markers.control_point_cells()[0])
 	assert_not_null(CombatServices.tile_at(cell),
 		"the control point cell is still registered terrain, exactly as before")
 	assert_eq(CombatServices.tile_effects_at(cell).size(), 0,

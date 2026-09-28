@@ -9,6 +9,7 @@
 [ext_resource type="Resource" path="res://game/combat/moves/ingrained.tres" id="7_ingrained"]
 [ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="8_abres"]
 [ext_resource type="Resource" path="res://game/abilities/thornlust.tres" id="9_thornlust"]
+[ext_resource type="Resource" path="res://game/abilities/sunlit.tres" id="20_sunlit"]
 
 [resource]
 script = ExtResource("1_char")
@@ -24,6 +25,5 @@ base_magic = 17
 base_magic_defense = 9
 base_speed = 10
 attack_range = 3
-model_yaw_deg = 180.0
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_thorn"), ExtResource("5_trap"), ExtResource("6_vines"), ExtResource("7_ingrained")])
-abilities = Array[ExtResource("8_abres")]([ExtResource("9_thornlust")])
+abilities = Array[ExtResource("8_abres")]([ExtResource("9_thornlust"), ExtResource("20_sunlit")])

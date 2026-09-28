@@ -78,16 +78,16 @@ class _BurningGrassBoard:
 	func _init(p_effects: Array) -> void:
 		effects = p_effects
 
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
 
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
+		return Vector3i(-999, -999, 0)
 
-	func units_at(cell: Vector2i) -> Array:
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -100,7 +100,7 @@ class _BurningGrassBoard:
 	func are_allies(_a, _b) -> bool:
 		return false
 
-	func tile_effects_at(_cell: Vector2i) -> Array:
+	func tile_effects_at(_cell: Vector3i) -> Array:
 		return effects
 
 
@@ -119,7 +119,7 @@ func _burning_grass() -> Dictionary:
 	var fire := _fire()
 	var board := _BurningGrassBoard.new([_grass(), fire])
 	var unit := _EvasiveUnit.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	return { "board": board, "unit": unit, "fire": fire }
 
 
@@ -151,8 +151,8 @@ func test_the_fixture_really_grants_terrain_avoid() -> void:
 	var fx: Dictionary = _burning_grass()
 	assert_gt(TerrainStats.bonus_for(fx["unit"], "evasion", fx["board"]), 0,
 		"tall grass under the occupant contributes real terrain avoid")
-	var ctx := MoveContext.new(fx["unit"], fx["board"], _a_move(), Vector2i.ZERO,
-		[Vector2i.ZERO] as Array[Vector2i])
+	var ctx := MoveContext.new(fx["unit"], fx["board"], _a_move(), Vector3i.ZERO,
+		[Vector3i.ZERO] as Array[Vector3i])
 	assert_lt(ctx.hit_chance(fx["unit"]), 100.0,
 		"and an ORDINARY move against this occupant really would have to roll")
 
@@ -246,10 +246,10 @@ func test_the_guarantee_is_not_an_accident_of_a_low_evasion_stat() -> void:
 	var fire := _fire()
 	var board := _BurningGrassBoard.new([_grass(), fire])
 	var unit := _MassivelyEvasiveUnit.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var system: TileEffectSystem = autofree(TileEffectSystem.new())
 
-	var ctx := MoveContext.new(unit, board, _a_move(), Vector2i.ZERO, [Vector2i.ZERO] as Array[Vector2i])
+	var ctx := MoveContext.new(unit, board, _a_move(), Vector3i.ZERO, [Vector3i.ZERO] as Array[Vector3i])
 	assert_eq(ctx.hit_chance(unit), 0.0, "an ordinary move against this occupant could never land")
 
 	for _i in range(20):
@@ -277,8 +277,8 @@ func test_a_guaranteed_context_never_touches_its_generator() -> void:
 	var fx: Dictionary = _burning_grass()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242
-	var ctx := MoveContext.new(fx["unit"], fx["board"], _a_move(), Vector2i.ZERO,
-		[Vector2i.ZERO] as Array[Vector2i])
+	var ctx := MoveContext.new(fx["unit"], fx["board"], _a_move(), Vector3i.ZERO,
+		[Vector3i.ZERO] as Array[Vector3i])
 	ctx.rng = rng
 	ctx.guaranteed_hit = true
 
@@ -298,8 +298,8 @@ func test_a_rolling_context_does_advance_the_generator() -> void:
 	var fx: Dictionary = _burning_grass()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242
-	var ctx := MoveContext.new(fx["unit"], fx["board"], _a_move(), Vector2i.ZERO,
-		[Vector2i.ZERO] as Array[Vector2i])
+	var ctx := MoveContext.new(fx["unit"], fx["board"], _a_move(), Vector3i.ZERO,
+		[Vector3i.ZERO] as Array[Vector3i])
 	ctx.rng = rng
 
 	var state_before: int = rng.state
@@ -387,7 +387,7 @@ func test_a_traveling_hazard_band_is_never_dodged() -> void:
 		var fx: Dictionary = _burning_grass()
 		var unit = fx["unit"]
 		var hazard := TravelingHazard.new(
-			Vector2i(0, -1), Vector2i(0, 1), 0, 1, 3, 20,
+			Vector3i(0, -1, 0), Vector3i(0, 1, 0), 0, 1, 3, 20,
 			CombatTypes.DamageCategory.TRUE, CombatTypes.TargetKind.ANY_UNIT, null)
 		var before: int = unit.hp
 		var result: Dictionary = hazard.advance(fx["board"])
@@ -408,7 +408,7 @@ func test_a_hazard_advance_is_deterministic() -> void:
 func _hazard_damage_log() -> Array:
 	var fx: Dictionary = _burning_grass()
 	var hazard := TravelingHazard.new(
-		Vector2i(0, -1), Vector2i(0, 1), 0, 1, 3, 20,
+		Vector3i(0, -1, 0), Vector3i(0, 1, 0), 0, 1, 3, 20,
 		CombatTypes.DamageCategory.TRUE, CombatTypes.TargetKind.ANY_UNIT, null)
 	var out: Array = []
 	for entry in (hazard.advance(fx["board"])["damaged"] as Array):

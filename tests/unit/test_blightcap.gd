@@ -46,16 +46,16 @@ class MockUnit:
 ## targeting constraints ask: bounds, blocking terrain, occupancy, footprint fit.
 class MockBoard:
 	var placements: Array = []      # { unit, cell }
-	var blocked: Array = []         # Array[Vector2i] of impassable cells
+	var blocked: Array = []         # Array[Vector3i] of impassable cells
 	var bounds: Rect2i = Rect2i(0, 0, 10, 10)
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -65,19 +65,19 @@ class MockBoard:
 		return a.team != b.team
 	func are_allies(a, b) -> bool:
 		return a.team == b.team
-	func set_tile(_cell: Vector2i, _tile_id) -> void:
+	func set_tile(_cell: Vector3i, _tile_id) -> void:
 		pass
-	func move_unit(unit, to_cell: Vector2i) -> void:
+	func move_unit(unit, to_cell: Vector3i) -> void:
 		for p in placements:
 			if p.unit == unit:
 				p.cell = to_cell
-	func in_bounds(cell: Vector2i) -> bool:
-		return bounds.has_point(cell)
-	func is_blocked(cell: Vector2i) -> bool:
+	func in_bounds(cell: Vector3i) -> bool:
+		return cell.z == 0 and bounds.has_point(Vector2i(cell.x, cell.y))
+	func is_blocked(cell: Vector3i) -> bool:
 		return cell in blocked
-	func is_occupied(cell: Vector2i) -> bool:
+	func is_occupied(cell: Vector3i) -> bool:
 		return not units_at(cell).is_empty()
-	func can_fit(unit, anchor: Vector2i) -> bool:
+	func can_fit(unit, anchor: Vector3i) -> bool:
 		if not in_bounds(anchor) or is_blocked(anchor):
 			return false
 		for other in units_at(anchor):
@@ -93,7 +93,7 @@ class DeathWatcher extends AbilitySystem:
 	var kill_calls: int = 0
 	var saw_valid: bool = false
 	var saw_in_tree: bool = false
-	var saw_cell: Vector2i = Vector2i(-999, -999)
+	var saw_cell: Vector3i = Vector3i(-999, -999, 0)
 	var saw_on_board: bool = false
 
 	func trigger(event: AbilityTrigger.Trigger, unit = null, board = null, other = null) -> Array:
@@ -150,7 +150,7 @@ func _rng(seed_value: int) -> RandomNumberGenerator:
 ## Resolve [param effect] alone against [param target], through the shared
 ## pipeline, with an optional injected RNG.
 func _resolve(effect: MoveEffect, board, caster, target, rng: RandomNumberGenerator = null) -> MoveContext:
-	var cell: Vector2i = board.cell_of(target)
+	var cell: Vector3i = board.cell_of(target)
 	var move := MoveResource.new()
 	var pattern := TargetingPattern.new()
 	pattern.target_kind = CombatTypes.TargetKind.ENEMY
@@ -159,7 +159,7 @@ func _resolve(effect: MoveEffect, board, caster, target, rng: RandomNumberGenera
 	pattern.area_shape = CombatTypes.AreaShape.SINGLE
 	move.move_id = &"test_resolve"
 	move.targeting = pattern
-	var ctx := MoveContext.new(caster, board, move, cell, [cell] as Array[Vector2i])
+	var ctx := MoveContext.new(caster, board, move, cell, [cell] as Array[Vector3i])
 	ctx.rng = rng
 	effect.apply(ctx)
 	return ctx
@@ -178,9 +178,9 @@ func _leap_move(max_range: int = 4) -> MoveResource:
 	return move
 
 ## Run a leap move from [param caster] at [param aim] and report where it ended up.
-func _leap_to(board, caster, aim: Vector2i) -> Vector2i:
+func _leap_to(board, caster, aim: Vector3i) -> Vector3i:
 	var move := _leap_move()
-	var ctx := MoveContext.new(caster, board, move, aim, [aim] as Array[Vector2i])
+	var ctx := MoveContext.new(caster, board, move, aim, [aim] as Array[Vector3i])
 	(move.effects[0] as LeapEffect).apply(ctx)
 	return board.cell_of(caster)
 
@@ -199,12 +199,12 @@ func after_each() -> void:
 	_map_root = null
 
 ## Cell -> world, via the same GRID CombatServices.rebuild() uses.
-func _cell_to_world(cell: Vector2i) -> Vector3:
+func _cell_to_world(cell: Vector3i) -> Vector3:
 	return BoardAdapter.new(GRID, []).cell_to_world(cell)
 
 ## A bare live [Unit] at [param cell] with real stat bookkeeping and a
 ## [DeathWatcher] standing in for its AbilitySystem.
-func _spawn_unit(unit_name: String, cell: Vector2i, owner: Player, ability: AbilityResource) -> Unit:
+func _spawn_unit(unit_name: String, cell: Vector3i, owner: Player, ability: AbilityResource) -> Unit:
 	var unit := Unit.new()
 	unit.name = unit_name
 	var res := UnitStatsResource.new()
@@ -244,7 +244,7 @@ func _finish_live_board() -> void:
 
 func test_on_death_fires_exactly_once_while_the_dying_unit_is_still_placed():
 	_begin_live_board()
-	var victim := _spawn_unit("Victim", Vector2i(3, 3), Player.new(0, "A"), null)
+	var victim := _spawn_unit("Victim", Vector3i(3, 3, 0), Player.new(0, "A"), null)
 	_finish_live_board()
 
 	var watcher := _watcher_of(victim)
@@ -256,13 +256,13 @@ func test_on_death_fires_exactly_once_while_the_dying_unit_is_still_placed():
 	assert_eq(watcher.death_calls, 1, "ON_DEATH fires exactly once, however many times HP hits 0")
 	assert_true(watcher.saw_valid, "the dying unit is still a valid instance when ON_DEATH resolves")
 	assert_true(watcher.saw_in_tree, "and is still inside the scene tree")
-	assert_eq(watcher.saw_cell, Vector2i(3, 3), "and still reports its own cell -- an origin to explode from")
+	assert_eq(watcher.saw_cell, Vector3i(3, 3, 0), "and still reports its own cell -- an origin to explode from")
 	assert_true(watcher.saw_on_board, "and the board still finds it standing there")
 
 func test_on_death_does_not_fire_for_the_killer():
 	_begin_live_board()
-	var victim := _spawn_unit("Victim", Vector2i(2, 2), Player.new(0, "A"), null)
-	var killer := _spawn_unit("Killer", Vector2i(2, 3), Player.new(1, "B"), null)
+	var victim := _spawn_unit("Victim", Vector3i(2, 2, 0), Player.new(0, "A"), null)
+	var killer := _spawn_unit("Killer", Vector3i(2, 3, 0), Player.new(1, "B"), null)
 	_finish_live_board()
 
 	# Captured before the kill: the victim's node is freed on the way out.
@@ -278,8 +278,8 @@ func test_on_kill_still_routes_to_the_killer():
 	var board := MockBoard.new()
 	var killer := MockUnit.new(0, { "health": 100, "attack": 10 })
 	var victim := MockUnit.new(1, { "health": 1 })
-	board.place(killer, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(killer, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 
 	var sys: AbilitySystem = autofree(AbilitySystem.new())
 	sys.owner_unit = killer
@@ -299,9 +299,9 @@ func test_deathbloom_bursts_over_adjacent_enemies_when_it_dies():
 	assert_not_null(ability.targeting, "its radius comes from an authored targeting pattern")
 
 	_begin_live_board()
-	var bomb := _spawn_unit("Blightcap", Vector2i(2, 2), Player.new(0, "A"), ability)
-	var adjacent := _spawn_unit("Adjacent", Vector2i(2, 3), Player.new(1, "B"), null)
-	var distant := _spawn_unit("Distant", Vector2i(0, 0), Player.new(1, "B"), null)
+	var bomb := _spawn_unit("Blightcap", Vector3i(2, 2, 0), Player.new(0, "A"), ability)
+	var adjacent := _spawn_unit("Adjacent", Vector3i(2, 3, 0), Player.new(1, "B"), null)
+	var distant := _spawn_unit("Distant", Vector3i(0, 0, 0), Player.new(1, "B"), null)
 	_finish_live_board()
 
 	var adjacent_before: int = adjacent.current_health
@@ -317,8 +317,8 @@ func test_deathbloom_bursts_over_adjacent_enemies_when_it_dies():
 func test_deathbloom_spares_the_dying_units_own_side():
 	_begin_live_board()
 	var side := Player.new(0, "A")
-	var bomb := _spawn_unit("Blightcap", Vector2i(2, 2), side, _deathbloom())
-	var ally := _spawn_unit("Ally", Vector2i(2, 3), side, null)
+	var bomb := _spawn_unit("Blightcap", Vector3i(2, 2, 0), side, _deathbloom())
+	var ally := _spawn_unit("Ally", Vector3i(2, 3, 0), side, null)
 	_finish_live_board()
 
 	var ally_before: int = ally.current_health
@@ -330,63 +330,63 @@ func test_deathbloom_spares_the_dying_units_own_side():
 func test_leap_relocates_the_caster_to_a_valid_cell():
 	var board := MockBoard.new()
 	var caster := MockUnit.new(0, { "health": 100 })
-	board.place(caster, Vector2i(1, 1))
+	board.place(caster, Vector3i(1, 1, 0))
 
-	assert_eq(_leap_to(board, caster, Vector2i(4, 1)), Vector2i(4, 1), "the caster lands on the aim cell")
+	assert_eq(_leap_to(board, caster, Vector3i(4, 1, 0)), Vector3i(4, 1, 0), "the caster lands on the aim cell")
 
 func test_leap_logs_the_relocation():
 	var board := MockBoard.new()
 	var caster := MockUnit.new(0, { "health": 100 })
-	board.place(caster, Vector2i(1, 1))
+	board.place(caster, Vector3i(1, 1, 0))
 
 	var move := _leap_move()
-	var aim := Vector2i(3, 1)
-	var ctx := MoveContext.new(caster, board, move, aim, [aim] as Array[Vector2i])
+	var aim := Vector3i(3, 1, 0)
+	var ctx := MoveContext.new(caster, board, move, aim, [aim] as Array[Vector3i])
 	(move.effects[0] as LeapEffect).apply(ctx)
 
 	assert_eq(ctx.results.size(), 1, "the leap logs exactly one event")
 	var event: Dictionary = ctx.results[0]
 	assert_eq(event.get("effect", ""), "leap", "tagged as a leap")
-	assert_eq(event.get("from", Vector2i.ZERO), Vector2i(1, 1), "records where it left")
-	assert_eq(event.get("to", Vector2i.ZERO), aim, "records where it landed")
+	assert_eq(event.get("from", Vector3i.ZERO), Vector3i(1, 1, 0), "records where it left")
+	assert_eq(event.get("to", Vector3i.ZERO), aim, "records where it landed")
 	assert_true(bool(event.get("moved", false)), "and that it actually moved")
 
 func test_leap_refuses_an_occupied_cell():
 	var board := MockBoard.new()
 	var caster := MockUnit.new(0, { "health": 100 })
 	var squatter := MockUnit.new(1, { "health": 100 })
-	board.place(caster, Vector2i(1, 1))
-	board.place(squatter, Vector2i(3, 1))
+	board.place(caster, Vector3i(1, 1, 0))
+	board.place(squatter, Vector3i(3, 1, 0))
 
-	assert_eq(_leap_to(board, caster, Vector2i(3, 1)), Vector2i(1, 1),
+	assert_eq(_leap_to(board, caster, Vector3i(3, 1, 0)), Vector3i(1, 1, 0),
 		"an occupied destination leaves the caster where it was")
 
 func test_leap_refuses_a_blocked_cell():
 	var board := MockBoard.new()
 	var caster := MockUnit.new(0, { "health": 100 })
-	board.place(caster, Vector2i(1, 1))
-	board.blocked.append(Vector2i(3, 1))
+	board.place(caster, Vector3i(1, 1, 0))
+	board.blocked.append(Vector3i(3, 1, 0))
 
-	assert_eq(_leap_to(board, caster, Vector2i(3, 1)), Vector2i(1, 1),
+	assert_eq(_leap_to(board, caster, Vector3i(3, 1, 0)), Vector3i(1, 1, 0),
 		"impassable terrain leaves the caster where it was")
 
 func test_leap_refuses_an_out_of_bounds_cell():
 	var board := MockBoard.new()
 	var caster := MockUnit.new(0, { "health": 100 })
-	board.place(caster, Vector2i(1, 1))
+	board.place(caster, Vector3i(1, 1, 0))
 
-	assert_eq(_leap_to(board, caster, Vector2i(-4, 1)), Vector2i(1, 1),
+	assert_eq(_leap_to(board, caster, Vector3i(-4, 1, 0)), Vector3i(1, 1, 0),
 		"a cell off the board leaves the caster where it was")
 
 func test_leap_records_a_refusal_rather_than_erroring():
 	var board := MockBoard.new()
 	var caster := MockUnit.new(0, { "health": 100 })
-	board.place(caster, Vector2i(1, 1))
-	board.blocked.append(Vector2i(2, 1))
+	board.place(caster, Vector3i(1, 1, 0))
+	board.blocked.append(Vector3i(2, 1, 0))
 
 	var move := _leap_move()
-	var aim := Vector2i(2, 1)
-	var ctx := MoveContext.new(caster, board, move, aim, [aim] as Array[Vector2i])
+	var aim := Vector3i(2, 1, 0)
+	var ctx := MoveContext.new(caster, board, move, aim, [aim] as Array[Vector3i])
 	(move.effects[0] as LeapEffect).apply(ctx)
 
 	assert_eq(ctx.results.size(), 1, "an invalid leap is a logged no-op, not an error")
@@ -404,17 +404,17 @@ func test_leap_targeting_only_accepts_cells_beside_an_enemy():
 	var board := MockBoard.new()
 	var caster := MockUnit.new(0, { "health": 100, "attack": 10 })
 	var enemy := MockUnit.new(1, { "health": 100 })
-	board.place(caster, Vector2i(1, 5))
-	board.place(enemy, Vector2i(4, 5))
-	var origin := Vector2i(1, 5)
+	board.place(caster, Vector3i(1, 5, 0))
+	board.place(enemy, Vector3i(4, 5, 0))
+	var origin := Vector3i(1, 5, 0)
 
-	assert_true(move.can_target(origin, Vector2i(3, 5), caster, board),
+	assert_true(move.can_target(origin, Vector3i(3, 5, 0), caster, board),
 		"the free cell west of the enemy is a legal landing")
-	assert_true(move.can_target(origin, Vector2i(4, 4), caster, board),
+	assert_true(move.can_target(origin, Vector3i(4, 4, 0), caster, board),
 		"so is the free cell north of it -- THAT choice is the choice of side")
-	assert_false(move.can_target(origin, Vector2i(2, 5), caster, board),
+	assert_false(move.can_target(origin, Vector3i(2, 5, 0), caster, board),
 		"a free cell that touches nothing hostile is not")
-	assert_false(move.can_target(origin, Vector2i(4, 5), caster, board),
+	assert_false(move.can_target(origin, Vector3i(4, 5, 0), caster, board),
 		"and the enemy's own cell is not free to land on")
 
 func test_leap_targeting_yields_nothing_when_the_enemy_is_boxed_in():
@@ -422,19 +422,19 @@ func test_leap_targeting_yields_nothing_when_the_enemy_is_boxed_in():
 	var board := MockBoard.new()
 	var caster := MockUnit.new(0, { "health": 100, "attack": 10 })
 	var enemy := MockUnit.new(1, { "health": 100 })
-	board.place(caster, Vector2i(1, 5))
-	board.place(enemy, Vector2i(5, 5))
+	board.place(caster, Vector3i(1, 5, 0))
+	board.place(enemy, Vector3i(5, 5, 0))
 	# Wall the target in on all four sides: the "move cannot be used" case falls
 	# out of the targeting itself -- there is nothing left to aim at.
 	for step in TargetingPattern.ORTHOGONAL_STEPS:
-		board.blocked.append(Vector2i(5, 5) + step)
+		board.blocked.append(Vector3i(5, 5, 0) + step)
 
-	var legal: Array[Vector2i] = []
-	var origin := Vector2i(1, 5)
+	var legal: Array[Vector3i] = []
+	var origin := Vector3i(1, 5, 0)
 	var reach: int = move.effective_max_range(caster)
 	for dx in range(-reach, reach + 1):
 		for dy in range(-reach, reach + 1):
-			var aim := origin + Vector2i(dx, dy)
+			var aim := origin + Vector3i(dx, dy, 0)
 			if move.can_target(origin, aim, caster, board):
 				legal.append(aim)
 
@@ -450,12 +450,12 @@ func test_constraints_default_off_so_existing_patterns_are_unchanged():
 	var board := MockBoard.new()
 	var caster := MockUnit.new(0, { "health": 100 })
 	var occupant := MockUnit.new(1, { "health": 100 })
-	board.place(caster, Vector2i(0, 0))
-	board.place(occupant, Vector2i(2, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(occupant, Vector3i(2, 0, 0))
 
-	assert_true(pattern.is_aim_allowed(Vector2i(0, 0), Vector2i(2, 0), caster, board),
+	assert_true(pattern.is_aim_allowed(Vector3i(0, 0, 0), Vector3i(2, 0, 0), caster, board),
 		"with neither constraint set, the board never narrows an in-range aim")
-	assert_false(pattern.is_aim_allowed(Vector2i(0, 0), Vector2i(9, 0), caster, board),
+	assert_false(pattern.is_aim_allowed(Vector3i(0, 0, 0), Vector3i(9, 0, 0), caster, board),
 		"range still decides")
 
 func test_executor_rejects_an_illegal_landing_and_resolves_a_legal_one():
@@ -463,18 +463,18 @@ func test_executor_rejects_an_illegal_landing_and_resolves_a_legal_one():
 	var board := MockBoard.new()
 	var caster := MockUnit.new(0, { "health": 100, "attack": 12 })
 	var enemy := MockUnit.new(1, { "health": 100, "defense": 2 })
-	board.place(caster, Vector2i(1, 5))
-	board.place(enemy, Vector2i(4, 5))
+	board.place(caster, Vector3i(1, 5, 0))
+	board.place(enemy, Vector3i(4, 5, 0))
 
-	var rejected: Dictionary = MoveExecutor.execute(move, caster, board, Vector2i(2, 5), _rng(1))
+	var rejected: Dictionary = MoveExecutor.execute(move, caster, board, Vector3i(2, 5, 0), _rng(1))
 	assert_false(bool(rejected.get("success", true)), "a cell not beside an enemy is refused")
 	assert_eq(rejected.get("reason", ""), "invalid_target_cell", "and refused for that reason, not range")
-	assert_eq(board.cell_of(caster), Vector2i(1, 5), "the caster did not budge")
+	assert_eq(board.cell_of(caster), Vector3i(1, 5, 0), "the caster did not budge")
 
 	var hp_before: int = enemy.hp
-	var accepted: Dictionary = MoveExecutor.execute(move, caster, board, Vector2i(3, 5), _rng(1))
+	var accepted: Dictionary = MoveExecutor.execute(move, caster, board, Vector3i(3, 5, 0), _rng(1))
 	assert_true(bool(accepted.get("success", false)), "the free cell beside the enemy is accepted")
-	assert_eq(board.cell_of(caster), Vector2i(3, 5), "the caster leapt to its chosen side")
+	assert_eq(board.cell_of(caster), Vector3i(3, 5, 0), "the caster leapt to its chosen side")
 	assert_lt(enemy.hp, hp_before, "and the strike then resolved from there")
 
 # --- GAP 3: bounded stacking -----------------------------------------------
@@ -513,7 +513,7 @@ func test_stacking_stops_at_the_cap():
 func test_reapplying_at_the_cap_refreshes_instead_of_deepening():
 	var unit := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var sc := _controller_for(unit)
 	sc.add_status(_stacking_burn(2))
 	sc.add_status(_stacking_burn(2))
@@ -529,14 +529,14 @@ func test_tick_damage_scales_with_stack_count():
 	var board := MockBoard.new()
 
 	var one := MockUnit.new(0, { "health": 100 })
-	board.place(one, Vector2i(0, 0))
+	board.place(one, Vector3i(0, 0, 0))
 	var sc_one := _controller_for(one)
 	sc_one.add_status(_stacking_burn(3))
 	sc_one.tick_all(board)
 	assert_eq(one.hp, 90, "one stack ticks for 10")
 
 	var three := MockUnit.new(0, { "health": 100 })
-	board.place(three, Vector2i(1, 0))
+	board.place(three, Vector3i(1, 0, 0))
 	var sc_three := _controller_for(three)
 	for _i in range(3):
 		sc_three.add_status(_stacking_burn(3))
@@ -587,8 +587,8 @@ func test_status_chance_of_one_always_applies():
 	var board := MockBoard.new()
 	var caster := MockUnit.new(0, { "health": 100 })
 	var target := MockUnit.new(1, { "health": 100 })
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 
 	var effect := _apply_status(_poisoned(), 1.0)
 	for i in range(20):
@@ -599,8 +599,8 @@ func test_status_chance_of_zero_never_applies():
 	var board := MockBoard.new()
 	var caster := MockUnit.new(0, { "health": 100 })
 	var target := MockUnit.new(1, { "health": 100 })
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 
 	var effect := _apply_status(_poisoned(), 0.0)
 	for i in range(20):
@@ -611,8 +611,8 @@ func test_status_chance_rolls_through_the_injected_rng():
 	var board := MockBoard.new()
 	var caster := MockUnit.new(0, { "health": 100 })
 	var target := MockUnit.new(1, { "health": 100 })
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 
 	# The same seed must produce the same outcome twice -- that is what makes a
 	# chance-to-poison safe for replays and networked peers.
@@ -628,8 +628,8 @@ func test_status_chance_rolls_through_the_injected_rng():
 	for i in range(40):
 		var scratch := MockBoard.new()
 		var fresh := MockUnit.new(1, { "health": 100 })
-		scratch.place(caster, Vector2i(0, 0))
-		scratch.place(fresh, Vector2i(2, 0))
+		scratch.place(caster, Vector3i(0, 0, 0))
+		scratch.place(fresh, Vector3i(2, 0, 0))
 		_resolve(effect, scratch, caster, fresh, _rng(i))
 		landed += fresh.statuses.size()
 	assert_gt(landed, 0, "a 50% chance sometimes lands")
@@ -640,7 +640,7 @@ func test_a_certain_application_consumes_no_roll():
 	# silently reshuffled every hit/crit resolved after it in existing moves.
 	var shared := _rng(999)
 	var expected: float = _rng(999).randf()
-	var ctx := MoveContext.new(null, MockBoard.new(), MoveResource.new(), Vector2i.ZERO, [] as Array[Vector2i])
+	var ctx := MoveContext.new(null, MockBoard.new(), MoveResource.new(), Vector3i.ZERO, [] as Array[Vector3i])
 	ctx.rng = shared
 	assert_true(ctx.roll(1.0), "a certainty passes")
 	assert_false(ctx.roll(0.0), "an impossibility fails")
@@ -660,7 +660,7 @@ func test_poisoned_status_values():
 func test_poisoned_stacks_are_capped_end_to_end():
 	var unit := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	var sc := _controller_for(unit)
 	for _i in range(6):
 		sc.add_status(_poisoned())
@@ -672,7 +672,7 @@ func test_poisoned_stacks_are_capped_end_to_end():
 	assert_gt(per_tick, 0, "a maxed poison hurts every turn")
 
 	var lighter := MockUnit.new(0, { "health": 100 })
-	board.place(lighter, Vector2i(1, 0))
+	board.place(lighter, Vector3i(1, 0, 0))
 	var sc_light := _controller_for(lighter)
 	sc_light.add_status(_poisoned())
 	var light_before: int = lighter.hp

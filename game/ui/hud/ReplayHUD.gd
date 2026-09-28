@@ -4,7 +4,7 @@ class_name ReplayHUD
 
 ## The REPLAY TRANSPORT BAR: the only piece of UI a replay adds to the battle screen.
 ##
-## A single amber strip along the bottom -- play/pause, speed, step, "Turn 4/12", exit -- and
+## A single grove-frame strip along the bottom -- play/pause, speed, step, "Turn 4/12", exit -- and
 ## a status line above it for the two things playback has to be able to say: "this replay
 ## diverged" and "here is how the recorded battle ended". Everything else on screen is the
 ## ordinary battle HUD, because a replay IS the ordinary battle, watched.
@@ -12,7 +12,8 @@ class_name ReplayHUD
 ## INVISIBLE OUTSIDE PLAYBACK. [UILayoutManager] mounts this in every battle, exactly as it
 ## mounts [NetToast], and it self-hides unless [method ReplayPlayback.is_playing] -- so a
 ## normal battle pays one hidden CanvasLayer and nothing else. Styling is [ConquestTheme]
-## (warm amber plate, cream text) like the toast, so it reads as part of the same HUD.
+## (the navy grove card with gold filigree, HUD button plates, cream text) like the toast, so
+## it reads as part of the same HUD.
 ##
 ## IT OWNS NO PLAYBACK STATE. Every button forwards to the [ReplayDriver] and every label is
 ## redrawn from the driver's own read-outs on [signal ReplayDriver.state_changed]. The two
@@ -39,8 +40,8 @@ const LABEL_PAUSE := "||"
 const LABEL_STEP := ">|"
 const LABEL_EXIT := "EXIT"
 
-## Slightly translucent plate, like [NetToast]: the bar floats over the board.
-const PLATE_BG: Color = Color(0.173, 0.129, 0.078, 0.94)
+## Slightly translucent card, like [NetToast]: the bar floats over the board.
+const PLATE_ALPHA: float = 0.94
 
 var _root: Control = null
 var _bar: PanelContainer = null
@@ -54,8 +55,8 @@ var _exit_button: Button = null
 
 ## The two banner looks, built once. _refresh runs on EVERY applied command, so it must not
 ## allocate a StyleBox per redraw.
-var _box_normal: StyleBoxFlat = null
-var _box_alert: StyleBoxFlat = null
+var _box_normal: StyleBox = null
+var _box_alert: StyleBox = null
 
 var _driver: ReplayDriver = null
 
@@ -128,6 +129,9 @@ func _build_ui() -> void:
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	# The bar's own buttons take clicks; everywhere else the board and the camera keep theirs.
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Its own CanvasLayer, so it does not inherit the battle HUD's theme: take it directly
+	# (HUD button plates, Cinzel labels, gold focus).
+	_root.theme = ConquestTheme.build()
 	add_child(_root)
 
 	var column := VBoxContainer.new()
@@ -141,8 +145,8 @@ func _build_ui() -> void:
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(column)
 
-	_box_normal = _plate_box(ConquestTheme.AMBER)
-	_box_alert = _plate_box(ConquestTheme.AMBER_DK)
+	_box_normal = _plate_box(ConquestTheme.GOLD_DK)
+	_box_alert = _plate_box(ConquestTheme.DANGER)
 
 	# Status line (divergence banner / recorded outcome). Hidden while there is nothing to say.
 	_status_plate = PanelContainer.new()
@@ -155,9 +159,10 @@ func _build_ui() -> void:
 	_status_label = Label.new()
 	_status_label.name = "ReplayStatusLabel"
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_status_label.add_theme_font_size_override("font_size", 18)
+	_status_label.add_theme_font_override("font", MenuTheme.heading_font(1))
+	_status_label.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
 	_status_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
-	_status_label.add_theme_color_override("font_outline_color", ConquestTheme.BROWN_DK)
+	_status_label.add_theme_color_override("font_outline_color", ConquestTheme.BG_DEEP)
 	_status_label.add_theme_constant_override("outline_size", 4)
 	_status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_status_plate.add_child(_status_label)
@@ -168,13 +173,23 @@ func _build_ui() -> void:
 	_bar.custom_minimum_size = Vector2(0, BAR_HEIGHT)
 	_bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_bar.mouse_filter = Control.MOUSE_FILTER_STOP
-	_bar.add_theme_stylebox_override("panel", _box_normal)
+	_bar.add_theme_stylebox_override("panel", _bar_box())
 	column.add_child(_bar)
 
 	var row := HBoxContainer.new()
 	row.name = "ReplayControls"
 	row.add_theme_constant_override("separation", 10)
 	_bar.add_child(row)
+
+	var tag := Label.new()
+	tag.name = "ReplayTag"
+	tag.text = "REPLAY"
+	tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	tag.add_theme_font_override("font", MenuTheme.heading_font(2))
+	tag.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
+	tag.add_theme_color_override("font_color", ConquestTheme.GOLD)
+	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(tag)
 
 	_play_button = _make_button(LABEL_PAUSE, "Play / pause", _on_play_pressed)
 	row.add_child(_play_button)
@@ -191,44 +206,54 @@ func _build_ui() -> void:
 	_turn_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_turn_label.custom_minimum_size = Vector2(112, 0)
 	_turn_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_turn_label.add_theme_font_size_override("font_size", 18)
+	_turn_label.add_theme_font_override("font", MenuTheme.heading_font(1))
+	_turn_label.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
 	_turn_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	_turn_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(_turn_label)
 
 	_exit_button = _make_button(LABEL_EXIT, "Leave the replay", _on_exit_pressed)
 	_exit_button.custom_minimum_size = Vector2(80, BUTTON_SIZE.y)
+	# Leaving is the quiet action on the bar.
+	_exit_button.set_meta("style_role", "secondary")
+	ConquestTheme.apply_button_role(_exit_button)
 	row.add_child(_exit_button)
 
 
+## A HUD button plate (from the theme on [member _root]): cream Cinzel, gold on hover /
+## focus. Only the size is set here -- the look is the theme's.
 func _make_button(text: String, tooltip: String, handler: Callable) -> Button:
 	var button := Button.new()
 	button.text = text
 	button.tooltip_text = tooltip
 	button.custom_minimum_size = BUTTON_SIZE
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
-	button.add_theme_font_size_override("font_size", 18)
-	button.add_theme_color_override("font_color", ConquestTheme.CREAM)
-	button.add_theme_color_override("font_hover_color", ConquestTheme.AMBER_LITE)
+	button.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
 	button.pressed.connect(handler)
 	return button
 
 
-func _plate_box(border: Color) -> StyleBoxFlat:
-	var box := StyleBoxFlat.new()
-	box.bg_color = PLATE_BG
-	box.set_corner_radius_all(8)
-	box.set_content_margin_all(10)
-	box.content_margin_left = 16.0
-	box.content_margin_right = 16.0
-	box.border_width_left = 2
-	box.border_width_top = 2
-	box.border_width_right = 2
-	box.border_width_bottom = 2
-	box.border_color = border
-	box.shadow_color = Color(0.0, 0.0, 0.0, 0.5)
-	box.shadow_size = 6
-	return box
+## The transport bar: the HUD's grove card (navy, fine grain, gold filigree + clasps).
+func _bar_box() -> StyleBox:
+	var sb := ConquestTheme.panel_box(PLATE_ALPHA)
+	sb.border_color = ConquestTheme.GOLD_DK
+	sb.content_margin_left = 18
+	sb.content_margin_right = 16
+	sb.content_margin_top = 8
+	sb.content_margin_bottom = 8
+	return sb
+
+
+## The status banner: a grove chip with a coloured edge ([param border] -- gold for news,
+## the danger salmon for a divergence).
+func _plate_box(border: Color) -> StyleBox:
+	var sb := ConquestTheme.chip_box(border, PLATE_ALPHA)
+	sb.border_width = 2.0
+	sb.content_margin_left = 18
+	sb.content_margin_right = 18
+	sb.content_margin_top = 8
+	sb.content_margin_bottom = 8
+	return sb
 
 
 # --- Handlers -----------------------------------------------------------------
@@ -288,7 +313,7 @@ func _refresh_status() -> void:
 	var alert: bool = _driver != null and is_instance_valid(_driver) and _driver.is_diverged()
 	_status_plate.add_theme_stylebox_override("panel", _box_alert if alert else _box_normal)
 	_status_label.add_theme_color_override("font_color",
-		ConquestTheme.AMBER_LITE if alert else ConquestTheme.CREAM)
+		ConquestTheme.DANGER if alert else ConquestTheme.CREAM)
 
 
 ## The line currently on the banner ("" when it is hidden) -- the readable state, for tests.

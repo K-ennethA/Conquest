@@ -309,8 +309,9 @@ func test_the_element_stripe_and_recharge_bar_survived_the_relayout() -> void:
 	var bars: int = 0
 	for row in _rows().get_children():
 		for child in row.get_children():
-			if child is ColorRect:
-				stripes.append((child as ColorRect).color)
+			# The element marker is the grove GroveGem (it was a flat ColorRect stripe).
+			if child is ColorRect or child is GroveGem:
+				stripes.append(child.color)
 		var bar := row.find_child("RechargeBar", true, false)
 		if bar != null:
 			bars += 1

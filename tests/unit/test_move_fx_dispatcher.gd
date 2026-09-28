@@ -44,10 +44,10 @@ func _move(pattern: TargetingPattern, element: StringName = &"") -> MoveResource
 	return m
 
 
-func _cells(list: Array) -> Array[Vector2i]:
-	var out: Array[Vector2i] = []
+func _cells(list: Array) -> Array[Vector3i]:
+	var out: Array[Vector3i] = []
 	for c in list:
-		out.append(c)
+		out.append(Cells.from_variant(c))
 	return out
 
 
@@ -57,13 +57,13 @@ func test_an_area_move_erupts_on_every_cell_it_covers_not_only_on_victims() -> v
 	# The bug this layer exists for. A 3x3 that caught ONE unit must still light all nine
 	# cells -- otherwise a wide blast is indistinguishable from a single-target poke.
 	var move := _move(_pattern(CombatTypes.AreaShape.SQUARE, 1, CombatTypes.TargetKind.ENEMY, 10))
-	var area: Array[Vector2i] = _fx._derive_area(move, null, Vector2i(0, 0), _cells([Vector2i(4, 4)]))
+	var area: Array[Vector3i] = _fx._derive_area(move, null, Vector3i(0, 0, 0), _cells([Vector3i(4, 4, 0)]))
 
 	assert_eq(area.size(), 9,
 		"a 3x3 blast draws nine cells, however many units were standing in it")
 	for dx in [-1, 0, 1]:
 		for dy in [-1, 0, 1]:
-			assert_true(area.has(Vector2i(4 + dx, 4 + dy)),
+			assert_true(area.has(Vector3i(4 + dx, 4 + dy, 0)),
 				"cell (%d,%d) of the blast erupts even with nobody on it" % [4 + dx, 4 + dy])
 
 
@@ -71,20 +71,20 @@ func test_the_inferred_aim_is_the_one_that_best_explains_the_hits() -> void:
 	# Two victims two cells apart can only both sit in one 3x3 if it is centred between
 	# them, so the derivation has exactly one legal answer and must find it.
 	var move := _move(_pattern(CombatTypes.AreaShape.SQUARE, 1, CombatTypes.TargetKind.ENEMY, 10))
-	var area: Array[Vector2i] = _fx._derive_area(
-		move, null, Vector2i(0, 0), _cells([Vector2i(3, 3), Vector2i(3, 5)]))
+	var area: Array[Vector3i] = _fx._derive_area(
+		move, null, Vector3i(0, 0, 0), _cells([Vector3i(3, 3, 0), Vector3i(3, 5, 0)]))
 
 	assert_eq(area.size(), 9, "the blast is still a 3x3")
-	assert_true(area.has(Vector2i(3, 4)),
+	assert_true(area.has(Vector3i(3, 4, 0)),
 		"the only 3x3 covering both victims is centred at (3,4), so that is where it draws")
-	assert_true(area.has(Vector2i(2, 3)) and area.has(Vector2i(4, 5)),
+	assert_true(area.has(Vector3i(2, 3, 0)) and area.has(Vector3i(4, 5, 0)),
 		"and its empty corners erupt with it")
 
 
 func test_a_single_target_move_lights_exactly_what_it_hit() -> void:
 	var move := _move(_pattern(CombatTypes.AreaShape.SINGLE, 0))
-	var area: Array[Vector2i] = _fx._derive_area(move, null, Vector2i(0, 0), _cells([Vector2i(0, 1)]))
-	assert_eq(area, _cells([Vector2i(0, 1)]),
+	var area: Array[Vector3i] = _fx._derive_area(move, null, Vector3i(0, 0, 0), _cells([Vector3i(0, 1, 0)]))
+	assert_eq(area, _cells([Vector3i(0, 1, 0)]),
 		"a single-cell move has no area to expand -- it lights the struck cell and nothing else")
 
 
@@ -92,8 +92,8 @@ func test_a_self_cast_lights_the_caster_even_when_it_announced_nothing() -> void
 	# A pure buff deals no damage and heals nobody, so there is no hit to derive from. A
 	# SELF pattern needs no inference: the caster's cell IS the area.
 	var move := _move(_pattern(CombatTypes.AreaShape.SINGLE, 0, CombatTypes.TargetKind.SELF, 0))
-	var area: Array[Vector2i] = _fx._derive_area(move, null, Vector2i(2, 2), _cells([]))
-	assert_eq(area, _cells([Vector2i(2, 2)]),
+	var area: Array[Vector3i] = _fx._derive_area(move, null, Vector3i(2, 2, 0), _cells([]))
+	assert_eq(area, _cells([Vector3i(2, 2, 0)]),
 		"a self-buff flashes the caster's own cell rather than producing no feedback at all")
 
 
@@ -103,7 +103,7 @@ func test_an_area_move_that_hit_nothing_draws_no_impact() -> void:
 	# Nothing landed, so there is no evidence of WHERE the move was aimed. Drawing the
 	# caster's own surroundings would be a lie; drawing nothing is a cosmetic gap.
 	var move := _move(_pattern(CombatTypes.AreaShape.SQUARE, 1, CombatTypes.TargetKind.ENEMY, 10))
-	var area: Array[Vector2i] = _fx._derive_area(move, null, Vector2i(0, 0), _cells([]))
+	var area: Array[Vector3i] = _fx._derive_area(move, null, Vector3i(0, 0, 0), _cells([]))
 	assert_eq(area.size(), 0,
 		"an area cast with no landed cell renders the cast accent only, never a guessed blast")
 
@@ -112,17 +112,17 @@ func test_hits_outside_every_reachable_area_fall_back_to_the_hits_themselves() -
 	# A hit no aim can explain (a knock-back victim, a chained effect, a mock board) must
 	# not silently discard the feedback -- it degrades to lighting exactly what was hit.
 	var move := _move(_pattern(CombatTypes.AreaShape.SQUARE, 1, CombatTypes.TargetKind.ENEMY, 2))
-	var far := _cells([Vector2i(40, 40)])
-	assert_eq(_fx._derive_area(move, null, Vector2i(0, 0), far), far,
+	var far := _cells([Vector3i(40, 40, 0)])
+	assert_eq(_fx._derive_area(move, null, Vector3i(0, 0, 0), far), far,
 		"an unexplainable hit still gets its own cell lit, just not an expanded area")
 
 
 func test_a_move_with_no_targeting_pattern_is_survivable() -> void:
 	var move := MoveResource.new()  # deliberately no targeting at all
-	var hits := _cells([Vector2i(1, 1)])
-	assert_eq(_fx._derive_area(move, null, Vector2i(0, 0), hits), hits,
+	var hits := _cells([Vector3i(1, 1, 0)])
+	assert_eq(_fx._derive_area(move, null, Vector3i(0, 0, 0), hits), hits,
 		"an unauthored/half-built move degrades to the hit cells rather than erroring")
-	assert_eq(_fx._derive_area(null, null, Vector2i(0, 0), hits), hits,
+	assert_eq(_fx._derive_area(null, null, Vector3i(0, 0, 0), hits), hits,
 		"and so does no move at all")
 
 
@@ -130,7 +130,7 @@ func test_an_unknown_origin_degrades_to_the_hits() -> void:
 	# No board (or a caster that is not on it) means no origin -- and every area shape is
 	# defined relative to one.
 	var move := _move(_pattern(CombatTypes.AreaShape.SQUARE, 1))
-	var hits := _cells([Vector2i(2, 2)])
+	var hits := _cells([Vector3i(2, 2, 0)])
 	assert_eq(_fx._derive_area(move, null, null, hits), hits,
 		"with no caster cell there is nothing to expand from, so only the hits light up")
 
@@ -236,14 +236,14 @@ func test_abyssal_maw_carries_the_worked_override() -> void:
 func test_a_hazard_draws_once_per_frame_however_often_it_announces() -> void:
 	# The double-fire guard. A maw announces its eruption AND its expiry in one beat, and a
 	# replay driver can re-enter the same signal; the ground must open once.
-	var hazard := DelayedBurstHazard.new([Vector2i(1, 1)] as Array[Vector2i], 10,
+	var hazard := DelayedBurstHazard.new([Vector3i(1, 1, 0)] as Array[Vector3i], 10,
 		CombatTypes.DamageCategory.MAGICAL, CombatTypes.TargetKind.ENEMY, null)
 	assert_true(_fx._claim_hazard(hazard), "the first announcement in a frame draws")
 	assert_false(_fx._claim_hazard(hazard), "a second announcement in the SAME frame does not")
 
 
 func test_a_detonation_gets_a_bigger_burst_and_a_kick_than_a_sweep() -> void:
-	var maw := DelayedBurstHazard.new([Vector2i(0, 0)] as Array[Vector2i], 10,
+	var maw := DelayedBurstHazard.new([Vector3i(0, 0, 0)] as Array[Vector3i], 10,
 		CombatTypes.DamageCategory.MAGICAL, CombatTypes.TargetKind.ENEMY, null)
 	var erupt: Dictionary = _fx._hazard_spec(maw, true)
 	var sweep: Dictionary = _fx._hazard_spec(maw, false)
@@ -255,7 +255,7 @@ func test_a_detonation_gets_a_bigger_burst_and_a_kick_than_a_sweep() -> void:
 
 
 func test_a_hazard_is_tinted_by_the_element_it_was_cast_with() -> void:
-	var maw := DelayedBurstHazard.new([Vector2i(0, 0)] as Array[Vector2i], 10,
+	var maw := DelayedBurstHazard.new([Vector3i(0, 0, 0)] as Array[Vector3i], 10,
 		CombatTypes.DamageCategory.MAGICAL, CombatTypes.TargetKind.ENEMY, null)
 	maw.element = &"dark"
 	assert_eq(_fx._hazard_spec(maw, true)["color"], ConquestTheme.element_color("dark"),
@@ -288,7 +288,7 @@ func test_the_impact_cue_is_suppressed_when_the_audio_layer_already_sounded_the_
 func test_the_shard_scatter_seed_is_a_pure_function_of_the_cell() -> void:
 	# Property 3 of the class doc: the visual jitter is seeded from the CELL, so nothing
 	# here can read (or move) a shared generator, and two peers scatter identically.
-	assert_eq(_fx._seed_for(Vector2i(3, 4)), _fx._seed_for(Vector2i(3, 4)),
+	assert_eq(_fx._seed_for(Vector3i(3, 4, 0)), _fx._seed_for(Vector3i(3, 4, 0)),
 		"the same cell always seeds the same scatter -- byte-identical on every machine")
-	assert_ne(_fx._seed_for(Vector2i(3, 4)), _fx._seed_for(Vector2i(4, 3)),
+	assert_ne(_fx._seed_for(Vector3i(3, 4, 0)), _fx._seed_for(Vector3i(4, 3, 0)),
 		"and neighbouring cells do not throw the same chunks in the same directions")

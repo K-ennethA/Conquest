@@ -27,7 +27,8 @@ class_name SkipEnemyTurnButton
 ##
 ## Mounted by [UILayoutManager] on its own CanvasLayer, exactly as [NetToast] and [ReplayHUD]
 ## are: coordinate-free, self-building, self-wiring, self-hiding. Styling is [ConquestTheme]
-## (warm amber plate + cream text) so it reads as part of the same HUD. Null-safe headless (no
+## (the grove chip plate -- navy, gold filigree, gold edge -- with a cream Cinzel label, gold
+## on hover / while running) so it reads as part of the same HUD. Null-safe headless (no
 ## GameSettings, no TurnSystemManager) -- every hook is guarded, so a test can mount it bare.
 
 ## Emitted whenever the latch flips, carrying its new state. Tests assert on this rather than
@@ -55,19 +56,21 @@ const OVERLAY_LAYER: int = 121
 ## keep it from firing while the player is typing.
 const HOTKEY: Key = KEY_F
 
-## Clear of the top bar (pause + gear live there), hugging the right edge.
-const TOP_OFFSET: float = 76.0
+## Clear of the HUD's top strip (phase banner, pause + gear live there), hugging the right edge.
+const TOP_OFFSET: float = HudSafeArea.TOP_RESERVE
 const RIGHT_MARGIN: float = 18.0
 ## The project's touch-target floor -- this has to be pressable on a phone too.
 const MIN_SIZE: Vector2 = Vector2(216, 44)
 
-const LABEL_IDLE := "▶▶  SKIP ENEMY TURN  (F)"
-const LABEL_ACTIVE := "▶▶  FAST-FORWARDING…  (F)"
+# ASCII ">>" rather than a media glyph: Godot's default font (and Cinzel) has no Geometric
+# Shapes coverage, so "▶▶" drew as tofu boxes (probe table in tests/unit/test_status_feedback.gd).
+const LABEL_IDLE := ">>  SKIP ENEMY TURN  (F)"
+const LABEL_ACTIVE := ">>  FAST-FORWARDING...  (F)"
 const TOOLTIP := ("Fast-forward the enemy turn (F). The AI still takes every action -- "
 	+ "it is just not drawn out. Read it back in the battle log.")
 
 ## Slightly translucent plate, like [NetToast]: the control floats over the board.
-const PLATE_BG: Color = Color(0.173, 0.129, 0.078, 0.92)
+const PLATE_ALPHA: float = 0.92
 
 var _root: Control = null
 var _button: Button = null
@@ -107,6 +110,9 @@ func _build_ui() -> void:
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	# Only the button itself takes clicks; everywhere else the board and camera keep theirs.
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Its own CanvasLayer, so it does not inherit the battle HUD's theme: take it directly
+	# (Cinzel button face, gold focus ring).
+	_root.theme = ConquestTheme.build()
 	add_child(_root)
 
 	_button = Button.new()
@@ -121,30 +127,32 @@ func _build_ui() -> void:
 	_button.offset_right = -RIGHT_MARGIN
 	_button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_button.grow_vertical = Control.GROW_DIRECTION_END
-	_button.add_theme_font_size_override("font_size", 18)
+	_button.add_theme_font_override("font", MenuTheme.heading_font(1))
+	_button.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
 	_button.add_theme_color_override("font_color", ConquestTheme.CREAM)
-	_button.add_theme_color_override("font_hover_color", ConquestTheme.AMBER_LITE)
-	_button.add_theme_stylebox_override("normal", _plate_box(ConquestTheme.AMBER))
-	_button.add_theme_stylebox_override("hover", _plate_box(ConquestTheme.AMBER_LITE))
-	_button.add_theme_stylebox_override("pressed", _plate_box(ConquestTheme.AMBER_DK))
+	_button.add_theme_color_override("font_hover_color", ConquestTheme.GOLD_LITE)
+	_button.add_theme_color_override("font_focus_color", ConquestTheme.GOLD_LITE)
+	_button.add_theme_color_override("font_pressed_color", ConquestTheme.GOLD_LITE)
+	_button.add_theme_stylebox_override("normal", _plate_box(ConquestTheme.GOLD_DK, ConquestTheme.PANEL))
+	_button.add_theme_stylebox_override("hover", _plate_box(ConquestTheme.GOLD, ConquestTheme.PANEL_HI))
+	_button.add_theme_stylebox_override("pressed", _plate_box(ConquestTheme.GOLD_LITE, ConquestTheme.PANEL_HI))
+	_button.add_theme_stylebox_override("focus", MenuTheme.focus_box(8))
 	_button.pressed.connect(_on_pressed)
 	_root.add_child(_button)
 
 
-func _plate_box(border: Color) -> StyleBoxFlat:
-	var box := StyleBoxFlat.new()
-	box.bg_color = PLATE_BG
-	box.set_corner_radius_all(8)
-	box.set_content_margin_all(8)
+## The grove chip plate: notched navy, fine grain, gold filigree, [param border] edge.
+func _plate_box(border: Color, fill: Color) -> StyleBox:
+	var box := ConquestTheme.chip_box(border, PLATE_ALPHA)
+	box.bg_color = Color(fill.lightened(0.05), PLATE_ALPHA)
+	box.bg_color_end = Color(fill.darkened(0.2), PLATE_ALPHA)
+	box.border_width = 2.0
 	box.content_margin_left = 16.0
 	box.content_margin_right = 16.0
-	box.border_width_left = 2
-	box.border_width_top = 2
-	box.border_width_right = 2
-	box.border_width_bottom = 2
-	box.border_color = border
+	box.content_margin_top = 8.0
+	box.content_margin_bottom = 8.0
 	box.shadow_color = Color(0.0, 0.0, 0.0, 0.5)
-	box.shadow_size = 6
+	box.shadow_size = 8.0
 	return box
 
 

@@ -173,8 +173,9 @@ func snapshot_state(index_of_unit: Callable) -> Dictionary:
 		if hazard.source != null and index_of_unit.is_valid():
 			source_index = int(index_of_unit.call(hazard.source))
 		out.append({
-			"origin": [hazard.origin.x, hazard.origin.y],
-			"facing": [hazard.facing.x, hazard.facing.y],
+			# [col, row, floor] (Cells.to_array); restore also reads the pre-multi-floor [x, y].
+			"origin": Cells.to_array(hazard.origin),
+			"facing": Cells.to_array(hazard.facing),
 			"half_width": int(hazard.half_width),
 			"speed": int(hazard.speed),
 			"remaining": int(hazard.remaining),
@@ -200,8 +201,8 @@ func restore_state(state: Dictionary, unit_at_index: Callable) -> void:
 		if not (item is Dictionary):
 			continue
 		var d: Dictionary = item
-		var origin: Vector2i = _to_cell(d.get("origin", []))
-		var facing: Vector2i = _to_cell(d.get("facing", []))
+		var origin: Vector3i = _to_cell(d.get("origin", []))
+		var facing: Vector3i = _to_cell(d.get("facing", []))
 		var source = null
 		var source_index: int = int(d.get("source_index", -1))
 		if source_index >= 0 and unit_at_index.is_valid():
@@ -223,10 +224,11 @@ func restore_state(state: Dictionary, unit_at_index: Callable) -> void:
 			_hazards.append(hazard)
 
 
-func _to_cell(value: Variant) -> Vector2i:
-	if value is Array and (value as Array).size() >= 2:
-		return Vector2i(int((value as Array)[0]), int((value as Array)[1]))
-	return Vector2i.ZERO
+## A saved cell / direction back as a [Vector3i]: [c, r, f] (current) or the legacy [c, r]
+## (ground floor). ZERO when unreadable.
+func _to_cell(value: Variant) -> Vector3i:
+	var c: Vector3i = Cells.from_variant(value)
+	return Vector3i.ZERO if c == Cells.INVALID else c
 
 
 # --- Teardown ---------------------------------------------------------------

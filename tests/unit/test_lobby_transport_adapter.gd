@@ -15,6 +15,8 @@ extends GutTest
 ## Stand-in for the NetSession autoload. `live` drives the branch under test.
 class MockNetSession extends Node:
 	signal lobby_message(message_type: String, data: Dictionary, from_slot: int)
+	## The lobby retries a parked start_match on the next roster change.
+	signal roster_changed(roster: Dictionary)
 	var live: bool = true
 	var sent: Array = []
 	## Roster size. Left at 1 (host only) so the host's connection POLL never fires during a
@@ -22,18 +24,25 @@ class MockNetSession extends Node:
 	## keeps every assertion synchronous.
 	var players: int = 1
 	var server: bool = true
-	var rng_handshakes: int = 0
+	## What start_match answers (false = "a ready flag has not landed yet").
+	var start_ok: bool = true
+	var start_calls: Array = []
 
 	func is_connected_session() -> bool:
 		return live
+	func is_host() -> bool:
+		return server
 	func is_server() -> bool:
 		return server
+	func is_dedicated_server() -> bool:
+		return false
 	func player_count() -> int:
 		return players
 	func send_lobby_message(message_type: String, data: Dictionary) -> void:
 		sent.append({ "type": message_type, "data": data })
-	func begin_match_rng_handshake() -> void:
-		rng_handshakes += 1
+	func start_match(final_config: Dictionary = {}) -> bool:
+		start_calls.append(final_config)
+		return start_ok
 	## Deliver a message as if it arrived from the other participant.
 	func deliver(message_type: String, data: Dictionary) -> void:
 		lobby_message.emit(message_type, data, 1)
@@ -49,11 +58,18 @@ class MockGameModeManager extends Node:
 
 const MAP_A := "res://game/maps/resources/default_skirmish.tres"
 
+const Guard := preload("res://tests/helpers/global_state_guard.gd")
+
 var lobby: Control
 var net: MockNetSession
 var gmm: MockGameModeManager
+## Untyped on purpose (see test_lobby_loadout_exchange.gd): the finalize tests write the
+## selected map, an autoload field, so it is snapshotted and restored.
+var _guard
 
 func before_each():
+	_guard = Guard.new()
+	_guard.watch_setting("selected_map_path")
 	net = MockNetSession.new()
 	add_child_autofree(net)
 	gmm = MockGameModeManager.new()
@@ -69,6 +85,7 @@ func before_each():
 	lobby.game_mode_manager = gmm
 
 func after_each():
+	_guard.restore()
 	lobby = null
 	net = null
 	gmm = null
@@ -191,19 +208,60 @@ func test_rebinding_the_session_drops_the_old_subscription():
 
 	assert_eq(lobby.remote_map_vote, "", "the replaced session no longer feeds this lobby")
 
-# --- the match-RNG handshake gate --------------------------------------------
+# --- starting the match: the host hands the agreed map to NetSession.start_match ---
+#
+# (Replaces the old match-RNG handshake gate: the merged NetSession has no separate
+# begin_match_rng_handshake -- the commit-reveal round runs inside start_match -- so what the
+# lobby must get right is WHO calls start_match, with WHAT, and that it never starts twice.)
 
-func test_match_rng_handshake_runs_only_for_a_live_server_session():
+func test_start_match_runs_only_for_a_live_host_session():
 	net.live = true
 	net.server = true
-	lobby._begin_net_match_rng()
-	assert_eq(net.rng_handshakes, 1, "the host kicks the commit-reveal handshake")
+	lobby._begin_net_match(MAP_A)
+	assert_eq(net.start_calls.size(), 1, "the host asks the live session to start the match")
+	assert_eq(str(net.start_calls[0].get("map_path", "")), MAP_A, "on the agreed map")
 
 	net.server = false
-	lobby._begin_net_match_rng()
-	assert_eq(net.rng_handshakes, 1, "a client never starts the handshake")
+	lobby._begin_net_match(MAP_A)
+	assert_eq(net.start_calls.size(), 1, "a client never starts the match")
 
 	net.server = true
 	net.live = false
-	lobby._begin_net_match_rng()
-	assert_eq(net.rng_handshakes, 1, "and neither does a host with no live session")
+	lobby._begin_net_match(MAP_A)
+	assert_eq(net.start_calls.size(), 1, "and neither does a host with no live session")
+
+func test_the_hosts_finalize_hands_the_agreed_match_to_start_match():
+	# The panel would write the turn system / best-of into GameSettings; not what this is about.
+	lobby.versus_config_panel = null
+	lobby.is_host = true
+	lobby.local_map_vote = MAP_A
+	lobby.remote_map_vote = MAP_A
+
+	lobby._finalize_map_selection()
+
+	var starts: Array = net.sent.filter(func(m): return m["type"] == "game_start")
+	assert_eq(starts.size(), 1, "the client is still told which map won (its 'Starting game with' line)")
+	assert_eq(net.start_calls.size(), 1, "and the session is asked to start the match")
+	var cfg: Dictionary = net.start_calls[0]
+	assert_eq(str(cfg.get("map_path", "")), MAP_A, "on the agreed map")
+	for key in ["turn_system", "auto_end_turn", "versus_rounds", "host_squad", "map_json"]:
+		assert_true(cfg.has(key), "the start config carries '%s' for GameModeManager" % key)
+	assert_false(cfg.has("map_payload"), "a builtin ships no content")
+
+func test_a_start_refused_for_a_missing_ready_flag_is_retried_once_and_never_twice():
+	lobby.versus_config_panel = null
+	lobby.is_host = true
+	lobby.local_map_vote = MAP_A
+	lobby.remote_map_vote = MAP_A
+	net.start_ok = false
+
+	lobby._finalize_map_selection()
+	assert_eq(net.start_calls.size(), 1, "the host tried to start")
+
+	net.start_ok = true
+	net.roster_changed.emit({})
+	assert_eq(net.start_calls.size(), 2, "and tried again once the roster (a ready flag) moved")
+
+	net.roster_changed.emit({})
+	lobby._finalize_map_selection()
+	assert_eq(net.start_calls.size(), 2, "a started match is never started a second time")

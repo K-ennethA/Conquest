@@ -5,7 +5,7 @@ extends GutTest
 ##
 ## The three things pinned here each fail silently if they break:
 ##   1. The snapshot survives a JSON round trip. Every value in it is a JSON primitive
-##      ([Vector2i] -> [x, y], [StringName] -> String); a Godot type sneaking in would come
+##      (a [Vector3i] cell -> [col, row, floor], [StringName] -> String); a Godot type sneaking in would come
 ##      back as a String and quietly break the restore rather than raising.
 ##   2. The runtime clocks -- [MovesetController] cooldowns, [SpawnManager]'s per-point
 ##      schedule, [HazardManager]'s in-flight vines -- round-trip EXACTLY. None of them is
@@ -33,18 +33,32 @@ func after_each() -> void:
 # --- JSON safety ------------------------------------------------------------
 
 func test_a_cell_round_trips_through_json() -> void:
-	var encoded: Array = BattleSnapshot.cell_to_array(Vector2i(3, 7))
-	assert_eq(encoded, [3, 7], "a cell is stored as a plain [x, y] pair -- JSON has no vectors")
+	var encoded: Array = BattleSnapshot.cell_to_array(Vector3i(3, 7, 1))
+	assert_eq(encoded, [3, 7, 1], "a cell is stored as a plain [col, row, floor] -- JSON has no vectors")
 	var text: String = JSON.stringify(encoded)
-	assert_eq(BattleSnapshot.array_to_cell(JSON.parse_string(text)), Vector2i(3, 7),
+	assert_eq(BattleSnapshot.array_to_cell(JSON.parse_string(text)), Vector3i(3, 7, 1),
 		"and comes back as the same cell after a JSON round trip")
 
 
+func test_a_pre_multi_floor_cell_still_loads() -> void:
+	# Saves written before multi-floor maps stored cells as [x, y]; they resume on floor 0.
+	assert_eq(BattleSnapshot.array_to_cell([3, 7]), Vector3i(3, 7, 0),
+		"a legacy [x, y] pair reads as the ground floor")
+	assert_eq(BattleSnapshot.array_to_cell(JSON.parse_string("[3, 7]")), Vector3i(3, 7, 0),
+		"including after JSON turned its ints into floats")
+	assert_eq(BattleSnapshot.array_to_cell("(3, 7)"), Vector3i(3, 7, 0),
+		"and so does a stringified Vector2i")
+	assert_eq(BattleSnapshot.cell_to_array(Vector2i(3, 7)), [3, 7, 0],
+		"a legacy Vector2i handed in is written in the new form, on floor 0")
+
+
 func test_a_malformed_cell_falls_back_instead_of_raising() -> void:
-	assert_eq(BattleSnapshot.array_to_cell("nonsense", Vector2i(1, 1)), Vector2i(1, 1),
+	assert_eq(BattleSnapshot.array_to_cell("nonsense", Vector3i(1, 1, 0)), Vector3i(1, 1, 0),
 		"a truncated save degrades to the fallback cell, it never raises")
-	assert_eq(BattleSnapshot.array_to_cell([4], Vector2i(2, 2)), Vector2i(2, 2),
+	assert_eq(BattleSnapshot.array_to_cell([4], Vector3i(2, 2, 0)), Vector3i(2, 2, 0),
 		"a half-written pair is treated the same way")
+	assert_eq(BattleSnapshot.array_to_cell(["a", "b"], Vector3i(2, 2, 0)), Vector3i(2, 2, 0),
+		"and so is a pair of non-numbers")
 
 
 func test_a_whole_snapshot_survives_a_json_round_trip() -> void:
@@ -56,7 +70,7 @@ func test_a_whole_snapshot_survives_a_json_round_trip() -> void:
 	assert_eq(String(restored.get("saved_at_utc_date", "")), "2026-08-02")
 	var units: Array = restored.get("units", [])
 	assert_eq(units.size(), 1, "the unit list survives")
-	assert_eq(BattleSnapshot.array_to_cell((units[0] as Dictionary).get("cell", [])), Vector2i(2, 3),
+	assert_eq(BattleSnapshot.array_to_cell((units[0] as Dictionary).get("cell", [])), Vector3i(2, 3, 0),
 		"a unit's cell comes back as the cell it was standing on")
 	assert_eq(int((units[0] as Dictionary).get("hp", -1)), 11,
 		"current HP is the one stat stored, and it comes back unchanged")
@@ -125,7 +139,7 @@ func test_the_spawn_schedule_clock_round_trips() -> void:
 
 func test_a_travelling_hazard_resumes_where_it_stopped() -> void:
 	var manager: HazardManager = autofree(HazardManager.new())
-	var hazard := TravelingHazard.new(Vector2i(2, 2), Vector2i(0, 1), 1, 2, 6, 7,
+	var hazard := TravelingHazard.new(Vector3i(2, 2, 0), Vector3i(0, 1, 0), 1, 2, 6, 7,
 		CombatTypes.DamageCategory.PHYSICAL, CombatTypes.TargetKind.ENEMY, null)
 	manager.register(hazard)
 	manager.process_turn()  # crawls two rows forward
@@ -146,7 +160,7 @@ func test_a_travelling_hazard_resumes_where_it_stopped() -> void:
 
 func test_an_expired_hazard_is_not_saved() -> void:
 	var manager: HazardManager = autofree(HazardManager.new())
-	manager.register(TravelingHazard.new(Vector2i.ZERO, Vector2i(1, 0), 0, 2, 0, 5,
+	manager.register(TravelingHazard.new(Vector3i.ZERO, Vector3i(1, 0, 0), 0, 2, 0, 5,
 		CombatTypes.DamageCategory.PHYSICAL, CombatTypes.TargetKind.ENEMY, null))
 	var state: Dictionary = manager.snapshot_state(func(_u): return -1)
 	assert_eq((state.get("hazards", []) as Array).size(), 0,
@@ -228,7 +242,7 @@ func _fake_snapshot(date: String, mode: String) -> Dictionary:
 			"index": 0,
 			"character_id": "vineweave",
 			"player_id": 0,
-			"cell": BattleSnapshot.cell_to_array(Vector2i(2, 3)),
+			"cell": BattleSnapshot.cell_to_array(Vector3i(2, 3, 0)),
 			"hp": 11,
 			"shield": 0,
 			"facing_yaw": 0.0,
@@ -237,7 +251,7 @@ func _fake_snapshot(date: String, mode: String) -> Dictionary:
 			"provoked": false,
 			"extra_actions": 0,
 			"ai_stance": "defensive",
-			"home_cell": BattleSnapshot.cell_to_array(Vector2i(2, 3)),
+			"home_cell": BattleSnapshot.cell_to_array(Vector3i(2, 3, 0)),
 			"aggro_range": -1,
 			"leash_radius": -1,
 			"statuses": [{"id": "rubble_slowed", "turns_left": 1}],

@@ -69,7 +69,7 @@ func _make_strike() -> MoveResource:
 	return move
 
 
-func _place(adapter: BoardAdapter, unit: MockUnit, cell: Vector2i) -> void:
+func _place(adapter: BoardAdapter, unit: MockUnit, cell: Vector3i) -> void:
 	unit.position = adapter.cell_to_world(cell)
 
 
@@ -84,10 +84,10 @@ func test_move_executor_deals_damage_through_adapter():
 	enemy.hp = 100
 
 	var adapter := BoardAdapter.new(grid, [caster, enemy])
-	_place(adapter, caster, Vector2i(1, 1))
-	_place(adapter, enemy, Vector2i(2, 1))
+	_place(adapter, caster, Vector3i(1, 1, 0))
+	_place(adapter, enemy, Vector3i(2, 1, 0))
 
-	var result := MoveExecutor.execute(_make_strike(), caster, adapter, Vector2i(2, 1))
+	var result := MoveExecutor.execute(_make_strike(), caster, adapter, Vector3i(2, 1, 0))
 
 	assert_true(result.success, "Move should resolve successfully")
 	# raw = power(20) + attack(10)*1 = 30; physical mitigation -defense(5) = 25.
@@ -105,10 +105,10 @@ func test_move_out_of_range_fails():
 	enemy.owner_player = owner_b
 
 	var adapter := BoardAdapter.new(grid, [caster, enemy])
-	_place(adapter, caster, Vector2i(1, 1))
-	_place(adapter, enemy, Vector2i(4, 1))
+	_place(adapter, caster, Vector3i(1, 1, 0))
+	_place(adapter, enemy, Vector3i(4, 1, 0))
 
-	var result := MoveExecutor.execute(_make_strike(), caster, adapter, Vector2i(4, 1))
+	var result := MoveExecutor.execute(_make_strike(), caster, adapter, Vector3i(4, 1, 0))
 
 	assert_false(result.success, "A move aimed beyond max range should fail")
 	assert_eq(result.reason, "out_of_range", "Failure reason should be out_of_range")
@@ -126,10 +126,10 @@ func test_ally_not_hit_by_enemy_targeted_move():
 	ally.hp = 100
 
 	var adapter := BoardAdapter.new(grid, [caster, ally])
-	_place(adapter, caster, Vector2i(1, 1))
-	_place(adapter, ally, Vector2i(2, 1))
+	_place(adapter, caster, Vector3i(1, 1, 0))
+	_place(adapter, ally, Vector3i(2, 1, 0))
 
-	var result := MoveExecutor.execute(_make_strike(), caster, adapter, Vector2i(2, 1))
+	var result := MoveExecutor.execute(_make_strike(), caster, adapter, Vector3i(2, 1, 0))
 
 	assert_true(result.success, "Move still resolves even with no valid targets")
 	assert_eq(ally.hp, 100, "An ally must not be damaged by an enemy-targeted move")
@@ -151,7 +151,7 @@ func test_unit_perform_move_routes_to_executor():
 	assert_eq(unit.get_move(0), move, "get_move(0) should return the first move")
 
 	# Empty slot routes to a clean failure without touching the executor.
-	var miss := unit.perform_move(3, Vector2i.ZERO, null)
+	var miss := unit.perform_move(3, Vector3i.ZERO, null)
 	assert_false(miss.success, "Performing an empty slot should fail cleanly")
 	assert_eq(miss.reason, "no_move_in_slot", "Empty-slot failure reason should be no_move_in_slot")
 

@@ -2,7 +2,7 @@ extends GutTest
 
 ## COOLDOWNS AND CHARGES ARE BOOKED ON THE APPLY SEAM, or a networked match has none.
 ##
-## [method CommandApplier._apply_cast_move] performed the cast and consumed the caster's
+## (Pre-merge) [code]CommandApplier._apply_cast_move[/code] performed the cast and consumed the caster's
 ## action but never called [method MovesetController.on_used], so in a NETWORKED match no
 ## move's cooldown started and no `max_uses` charge was spent -- on EITHER peer. Every
 ## cooldown move was spammable and every limited move was unlimited. Solo/hotseat booked
@@ -26,6 +26,10 @@ extends GutTest
 ##
 ## Integration rather than unit because the booking reads a REAL [MovesetController] child
 ## off a REAL [Unit] -- the very hook a mock would paper over.
+##
+## MERGED CORE: the booking now lives in THE apply path, [method NetGameRules.apply_action]
+## (CommandApplier -- the battle / replay seam -- extends it), so the network match and replay
+## playback book through the very same code. Units are named by NetUnitIds strings.
 
 const Doubles := preload("res://tests/helpers/test_doubles.gd")
 
@@ -90,29 +94,45 @@ func _caster(move: MoveResource) -> Unit:
 	var u := Unit.new()
 	u.character_resource = c
 	add_child_autofree(u)
+	_caster_probe = u
 	return u
 
 
-## A whole one-caster battle plus the net seam that drives it: board, registry (the caster is
-## net_id 1) and applier. Built fresh per peer/run so two of them are genuinely independent.
+## A CombatBoard that can enumerate its units -- the hook NetUnitIds names them through.
+class NetBoard extends Doubles.CombatBoard:
+	func all_units() -> Array:
+		var out: Array = []
+		for p in placements:
+			out.append(p.unit)
+		return out
+
+
+## A whole one-caster battle plus the seam that drives it: board and applier (the caster is
+## named from the board). Built fresh per peer/run so two of them are genuinely independent.
 func _battle(move: MoveResource) -> Dictionary:
 	var caster := _caster(move)
-	var board := Doubles.CombatBoard.new()
-	board.place(caster, Vector2i(1, 1))
-	var reg := CommandApplier.UnitRegistry.new()
-	reg.assign_map_units([caster])
+	var board := NetBoard.new()
+	board.place(caster, Vector3i(1, 1, 0))
+	var applier := CommandApplier.new(null, null, func(): return board, func(): return null)
+	applier.assign_initial_ids()
 	return {
 		"caster": caster,
 		"board": board,
-		"reg": reg,
-		"applier": CommandApplier.new(reg, null),
+		"applier": applier,
 	}
 
 
-## A resolved CAST_MOVE exactly as the authority stamps one before broadcasting it.
-func _cast_cmd(seq: int = 1, aim: Vector2i = Vector2i(2, 1), slot: int = 0) -> Dictionary:
+## The caster's stable id (identical on every peer / run: same board, same rule).
+func _caster_id() -> String:
+	return "%d:0" % NetUnitIds.owner_slot(_caster_probe)
+
+var _caster_probe = null
+
+
+## A resolved CAST_MOVE exactly as a peer holds one right before applying it.
+func _cast_cmd(seq: int = 1, aim: Vector3i = Vector3i(2, 1, 0), slot: int = 0) -> Dictionary:
 	return NetProtocol.stamp_resolution(
-		NetProtocol.make_cast_move(1, slot, aim, 0), seq, RNG_SEED)
+		NetProtocol.make_cast_move(_caster_id(), slot, aim, 0), seq, RNG_SEED)
 
 
 func _controller(battle: Dictionary) -> MovesetController:
@@ -121,6 +141,12 @@ func _controller(battle: Dictionary) -> MovesetController:
 
 func _apply(battle: Dictionary, cmd: Dictionary) -> Dictionary:
 	return (battle["applier"] as CommandApplier).apply_command(cmd, battle["board"])
+
+
+func after_each() -> void:
+	# The apply path installs each action's generator as CombatServices.match_rng.
+	if CombatServices != null:
+		CombatServices.match_rng = null
 
 
 # ===========================================================================
@@ -164,7 +190,7 @@ func test_a_refused_cast_books_nothing() -> void:
 	var battle := _battle(move)
 	var mc := _controller(battle)
 
-	var res := _apply(battle, _cast_cmd(1, Vector2i(11, 11)))
+	var res := _apply(battle, _cast_cmd(1, Vector3i(11, 11, 0)))
 
 	assert_false(bool(res["ok"]), "an out-of-range aim is refused")
 	assert_eq(mc.remaining(move), 0, "no cooldown was started")
@@ -290,7 +316,7 @@ func test_the_desync_checksum_is_sensitive_to_the_cooldown_it_now_books() -> voi
 
 
 func test_a_recorded_cast_replays_to_the_same_cooldown_state() -> void:
-	# ReplayDriver steps its log back through CommandApplier, so playback books cooldowns
+	# ReplayDriver steps its log back through CommandApplier (= the one apply path), so playback books cooldowns
 	# exactly as the live battle did. Driven through the replay CODEC (encode -> decode) so
 	# this is the real file round trip a .cqrep makes, not a hand-passed dictionary.
 	var live := _battle(_move(MarkerEffect.new(), 3, 2))

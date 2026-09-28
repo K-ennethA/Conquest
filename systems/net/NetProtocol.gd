@@ -3,46 +3,88 @@ class_name NetProtocol
 
 ## Wire protocol for [NetSession].
 ##
-## Central place for action-type identifiers and helpers so client and server
-## never disagree on message shape. Kept tiny and dependency-free on purpose:
-## everything that crosses the wire is a plain [Dictionary] with these keys.
+## Central place for action-type identifiers, payload shapes, the cell
+## (de)serialisation helper, the join handshake (build gate) and the rejection
+## vocabulary, so client and host never disagree on message shape. Kept tiny and
+## dependency-free on purpose: everything that crosses the wire is a plain
+## [Dictionary] of ints / Strings / Arrays.
+##
+## CELLS: board cells are Vector3i (col, row, floor) -- see docs/MULTI_FLOOR.md --
+## and are ALWAYS serialised through [method cell_to_wire] / [method cell_from_wire]
+## as a plain int Array [col, row, floor] (built on Cells.to_array / from_variant).
+## In-process producers (replay decoding, tests) may also hand a Vector3i / Vector2i
+## cell straight to the validators; [method is_cell] accepts those too.
+##
+## UNIT IDS: a unit is named by its [NetUnitIds] string ("<slot>:<n>", mid-match
+## arrivals "<slot>:s<k>") -- the same id on every peer, derived from the board.
+##
+## ONE VOCABULARY. The network actions and the replay / command-log commands are the
+## same thing: MOVE, USE_MOVE, WAIT, END_TURN. The older command names (MOVE_UNIT,
+## CAST_MOVE, WAIT_UNIT) and payload-key constants (KEY_UNIT_ID, KEY_DEST_CELL,
+## KEY_MOVE_SLOT, KEY_AIM_CELL, KEY_RNG_SEED) are ALIASES of the canonical ones, kept so
+## the replay system and the battle UI read unchanged -- they build and match the very
+## same dictionaries.
 
-## Action types a client may request. Extend this enum as gameplay grows;
-## the server's validator ([member NetSession.action_validator]) decides which
-## are legal for a given player/turn.
+## Action types a client may request (an INTENT); the host validates and, if
+## legal, broadcasts the same dictionary back as an ACCEPTED action (stamped
+## with actor + seq). The last three members are aliases (same values).
 enum Action {
-	MOVE_UNIT,      ## data: { unit_id:int, dest_cell:Vector2i }
-	ATTACK_UNIT,    ## data: { attacker_id:int, target_id:int }
-	WAIT_UNIT,      ## data: { unit_id:int }
-	END_TURN,       ## data: { player_id:int }
-	## Cast a move from a unit's slot at an aim cell. Appended (value 4) so the
-	## existing on-the-wire values above never shift. data: { unit_id:int,
-	## move_slot:int, aim_cell:Vector2i }.
-	CAST_MOVE,
+	MOVE = 0,       ## data: { unit_id:String, to:cell }
+	USE_MOVE = 1,   ## data: { unit_id:String, slot:int, aim:cell }  (attack / ability / ultimate)
+	WAIT = 2,       ## data: { unit_id:String }   (end this unit's turn without acting)
+	END_TURN = 3,   ## data: { [player_id:int] }  (end the active player's / unit's turn)
+	MOVE_UNIT = 0,  ## alias of MOVE (command-log name)
+	CAST_MOVE = 1,  ## alias of USE_MOVE (command-log name)
+	WAIT_UNIT = 2,  ## alias of WAIT (command-log name)
+	## Reserved legacy id with NO apply branch (an attack is a USE_MOVE). Never well-formed;
+	## kept so older command-log code and tests can name "a type nothing applies".
+	ATTACK_UNIT = 4,
 }
 
-## Wire/format version. Bump when the envelope or any command's data shape changes
-## so peers on mismatched builds can refuse rather than silently desync. Deliberately
-## NOT wall-clock time — nothing gameplay-affecting may depend on real time.
-const PROTOCOL_VERSION := 1
+## Highest canonical action value (the enum carries aliases and a reserved id, so
+## Action.size() is not the range).
+const ACTION_MAX := 3
+
+## Wire/format version. Bump whenever the envelope or any action's data shape changes
+## so peers on mismatched builds refuse each other at join time rather than silently
+## desyncing (see [method validate_hello]). Also stamped into replay headers: a replay
+## recorded under another version is refused by its own gate. Deliberately NOT
+## wall-clock time -- nothing gameplay-affecting may depend on real time.
+##   1: local command vocabulary (int unit ids, Vector2i cells, one match seed)
+##   2: merged core -- NetUnitIds string ids, [col,row,floor] cells, per-action
+##      commit-reveal RNG, host-seated handshake
+const PROTOCOL_VERSION := 2
 
 ## Standard keys used on every action dictionary.
 const KEY_TYPE := "type"        ## int, one of [enum Action]
 const KEY_DATA := "data"        ## Dictionary payload
-const KEY_ACTOR := "actor"      ## int, player slot that issued the action
-const KEY_SEQ := "seq"          ## int, server-assigned order (0 on the wire from client)
-const KEY_RNG_SEED := "rng_seed"   ## int, server-stamped per-command RNG seed (0 until resolved)
-const KEY_PV := "pv"               ## int, PROTOCOL_VERSION stamped on a resolved command
+const KEY_ACTOR := "actor"      ## int, player slot that issued the action (host-stamped)
+const KEY_SEQ := "seq"          ## int, host-assigned order (0 on the wire from a client)
+## int, the action's 64-bit RNG seed. NEVER read from the wire: every peer stamps
+## it locally from the VERIFIED commit-reveal shares (see NetCommitReveal) just
+## before applying; senders strip it. Recorded commands (replays) keep it so a
+## playback rolls exactly what the match rolled.
+const KEY_RNG := "rng"
+const KEY_PV := "pv"            ## int, PROTOCOL_VERSION stamped on a resolved (recorded) command
 
-## Data-payload keys for the command vocabulary.
-const KEY_UNIT_ID := "unit_id"
-const KEY_MOVE_SLOT := "move_slot"
-const KEY_AIM_CELL := "aim_cell"
-const KEY_DEST_CELL := "dest_cell"
-const KEY_PLAYER_ID := "player_id"
+## Payload keys.
+const K_UNIT := "unit_id"
+const K_TO := "to"
+const K_SLOT := "slot"
+const K_AIM := "aim"
+const K_PLAYER := "player_id"
 
-## Build a well-formed action dictionary. Slot/seq are stamped by the server on
-## apply, so clients can leave [param actor] as their own slot and seq as 0.
+## Command-log aliases of the keys above (same strings -- one payload shape).
+const KEY_UNIT_ID := K_UNIT
+const KEY_DEST_CELL := K_TO
+const KEY_MOVE_SLOT := K_SLOT
+const KEY_AIM_CELL := K_AIM
+const KEY_PLAYER_ID := K_PLAYER
+const KEY_RNG_SEED := KEY_RNG
+
+
+## Build a well-formed action dictionary. Actor/seq are stamped by the host when
+## it accepts the intent, so clients leave them at their defaults.
 static func make_action(type: Action, data: Dictionary = {}, actor: int = -1) -> Dictionary:
 	return {
 		KEY_TYPE: type,
@@ -51,110 +93,173 @@ static func make_action(type: Action, data: Dictionary = {}, actor: int = -1) ->
 		KEY_SEQ: 0,
 	}
 
-## True if [param action] carries the required keys with the right types.
-## The server calls this before trusting anything a peer sent.
+
+static func move(unit_id: String, to_cell) -> Dictionary:
+	return make_action(Action.MOVE, {K_UNIT: unit_id, K_TO: cell_to_wire(to_cell)})
+
+
+static func use_move(unit_id: String, slot: int, aim_cell) -> Dictionary:
+	return make_action(Action.USE_MOVE, {K_UNIT: unit_id, K_SLOT: slot, K_AIM: cell_to_wire(aim_cell)})
+
+
+static func wait(unit_id: String) -> Dictionary:
+	return make_action(Action.WAIT, {K_UNIT: unit_id})
+
+
+## End the active turn. [param player_id] (optional) is informational -- recorded in
+## command logs; the host always ends the SENDER's turn.
+static func end_turn(player_id: int = -1) -> Dictionary:
+	var data := {}
+	if player_id >= 0:
+		data[K_PLAYER] = player_id
+	return make_action(Action.END_TURN, data)
+
+
+# --- Command-log builders (same actions, command-log names) ------------------
+# Used by the replay recorder and the battle UI. [param actor] is informational for a
+# recorded command; on the network the host always derives the actor from the seat.
+
+static func make_move_unit(unit_id: String, dest_cell, actor: int = -1) -> Dictionary:
+	var a := move(unit_id, dest_cell)
+	a[KEY_ACTOR] = actor
+	return a
+
+
+static func make_cast_move(unit_id: String, move_slot: int, aim_cell, actor: int = -1) -> Dictionary:
+	var a := use_move(unit_id, move_slot, aim_cell)
+	a[KEY_ACTOR] = actor
+	return a
+
+
+static func make_wait_unit(unit_id: String, actor: int = -1) -> Dictionary:
+	var a := wait(unit_id)
+	a[KEY_ACTOR] = actor
+	return a
+
+
+static func make_end_turn(player_id: int, actor: int = -1) -> Dictionary:
+	var a := end_turn(player_id)
+	a[KEY_ACTOR] = actor
+	return a
+
+
+# --- Cells -------------------------------------------------------------------
+
+## THE single cell serialiser: any cell (Vector3i (col, row, floor), or a legacy
+## Vector2i lifted to floor 0) -> [col, row, floor] via [Cells]. Anything
+## unreadable yields an empty array (never well-formed).
+static func cell_to_wire(cell) -> Array:
+	var c: Vector3i = Cells.from_variant(cell)
+	if c == Cells.INVALID:
+		return []
+	return Cells.to_array(c)
+
+
+## THE single cell deserialiser: [col, row(, floor)] (or an in-process Vector3i /
+## Vector2i) -> Vector3i (a missing floor reads as 0). Returns [param fallback] on a
+## malformed value.
+static func cell_from_wire(wire, fallback: Vector3i = Cells.INVALID) -> Vector3i:
+	if not is_cell(wire):
+		return fallback
+	return Cells.from_variant(wire)
+
+
+## True when [param wire] is an array of 2..3 ints, or an in-process Vector3i / Vector2i.
+static func is_cell(wire) -> bool:
+	if wire is Vector3i or wire is Vector2i:
+		return true
+	if not (wire is Array):
+		return false
+	if wire.size() < 2 or wire.size() > 3:
+		return false
+	for v in wire:
+		if typeof(v) != TYPE_INT:
+			return false
+	return true
+
+
+# --- Validation (shape only; game rules live in NetGameRules) ---------------
+
+## True if [param action] carries the required keys with the right types AND the
+## payload for its type is well-formed. The host calls this before trusting
+## anything a peer sent.
 static func is_well_formed(action: Variant) -> bool:
 	if action is not Dictionary:
 		return false
-	if not action.has(KEY_TYPE) or action[KEY_TYPE] is not int:
+	if not action.has(KEY_TYPE) or typeof(action[KEY_TYPE]) != TYPE_INT:
 		return false
 	if not action.has(KEY_DATA) or action[KEY_DATA] is not Dictionary:
 		return false
-	return action[KEY_TYPE] >= 0 and action[KEY_TYPE] < Action.size()
-
-
-# ---------------------------------------------------------------------------
-# Command vocabulary — typed builders
-# ---------------------------------------------------------------------------
-# Each returns an unresolved envelope (seq/rng_seed 0, pv unset). The authority
-# stamps ordering + seed via [method stamp_resolution] before broadcasting.
-
-## Cast the move in [param move_slot] of [param unit_id], aimed at [param aim_cell].
-static func make_cast_move(unit_id: int, move_slot: int, aim_cell: Vector2i, actor: int = -1) -> Dictionary:
-	return make_action(Action.CAST_MOVE, {
-		KEY_UNIT_ID: unit_id,
-		KEY_MOVE_SLOT: move_slot,
-		KEY_AIM_CELL: aim_cell,
-	}, actor)
-
-## Reposition [param unit_id] to [param dest_cell] (a plain board move, no attack).
-static func make_move_unit(unit_id: int, dest_cell: Vector2i, actor: int = -1) -> Dictionary:
-	return make_action(Action.MOVE_UNIT, {
-		KEY_UNIT_ID: unit_id,
-		KEY_DEST_CELL: dest_cell,
-	}, actor)
-
-## End [param unit_id]'s turn without moving or acting.
-static func make_wait_unit(unit_id: int, actor: int = -1) -> Dictionary:
-	return make_action(Action.WAIT_UNIT, {
-		KEY_UNIT_ID: unit_id,
-	}, actor)
-
-## End [param player_id]'s whole turn.
-static func make_end_turn(player_id: int, actor: int = -1) -> Dictionary:
-	return make_action(Action.END_TURN, {
-		KEY_PLAYER_ID: player_id,
-	}, actor)
-
-
-# ---------------------------------------------------------------------------
-# Command vocabulary — validation
-# ---------------------------------------------------------------------------
-
-## True if [param action] is a well-formed action AND its data payload carries the
-## keys and types its command type requires. Stricter than [method is_well_formed]:
-## the authority uses this before handing a command to the applier.
-static func is_command_well_formed(action: Variant) -> bool:
-	if not is_well_formed(action):
+	var t: int = action[KEY_TYPE]
+	if t < 0 or t > ACTION_MAX:
 		return false
-	var data: Dictionary = action[KEY_DATA]
-	match int(action[KEY_TYPE]):
-		Action.CAST_MOVE:
-			return _has_int(data, KEY_UNIT_ID) \
-				and _has_int(data, KEY_MOVE_SLOT) \
-				and _has_vec2i(data, KEY_AIM_CELL)
-		Action.MOVE_UNIT:
-			return _has_int(data, KEY_UNIT_ID) and _has_vec2i(data, KEY_DEST_CELL)
-		Action.WAIT_UNIT:
-			return _has_int(data, KEY_UNIT_ID)
+	var d: Dictionary = action[KEY_DATA]
+	match t:
+		Action.MOVE:
+			return _has_unit(d) and is_cell(d.get(K_TO))
+		Action.USE_MOVE:
+			return _has_unit(d) and typeof(d.get(K_SLOT)) == TYPE_INT and is_cell(d.get(K_AIM))
+		Action.WAIT:
+			return _has_unit(d)
 		Action.END_TURN:
-			return _has_int(data, KEY_PLAYER_ID)
-		Action.ATTACK_UNIT:
-			return _has_int(data, "attacker_id") and _has_int(data, "target_id")
+			return not d.has(K_PLAYER) or typeof(d[K_PLAYER]) == TYPE_INT
 	return false
 
 
-## True once the authority has stamped ordering, seed, and protocol version onto
-## [param action] (i.e. it is a resolved command safe to apply).
+## Command-log name of [method is_well_formed] (one shape, one check).
+static func is_command_well_formed(action: Variant) -> bool:
+	return is_well_formed(action)
+
+
+static func _has_unit(d: Dictionary) -> bool:
+	return typeof(d.get(K_UNIT)) == TYPE_STRING and String(d[K_UNIT]) != ""
+
+
+## True once ordering, the RNG seed and [constant PROTOCOL_VERSION] are stamped onto
+## [param action] (a resolved / recorded command, safe to re-apply offline).
 static func is_resolved(action: Variant) -> bool:
-	if not is_command_well_formed(action):
+	if not is_well_formed(action):
 		return false
-	return action.has(KEY_SEQ) and action[KEY_SEQ] is int and int(action[KEY_SEQ]) > 0 \
-		and action.has(KEY_RNG_SEED) and action[KEY_RNG_SEED] is int \
-		and action.has(KEY_PV) and int(action.get(KEY_PV, 0)) == PROTOCOL_VERSION
+	return action.has(KEY_SEQ) and typeof(action[KEY_SEQ]) == TYPE_INT and int(action[KEY_SEQ]) > 0 \
+		and action.has(KEY_RNG) and typeof(action[KEY_RNG]) == TYPE_INT \
+		and int(action.get(KEY_PV, 0)) == PROTOCOL_VERSION
 
 
-## Authority-only: stamp monotonic [param seq], the per-command [param rng_seed],
-## and [constant PROTOCOL_VERSION] onto [param action] in place. Mutates and returns
-## the same dictionary for convenience.
+## Stamp [param seq], the per-action [param rng_seed] and [constant PROTOCOL_VERSION]
+## onto [param action] in place (returns it). NetSession stamps seq / rng itself when
+## it applies; this is for offline producers (replays, tests) that build resolved
+## commands without a session.
 static func stamp_resolution(action: Dictionary, seq: int, rng_seed: int) -> Dictionary:
 	action[KEY_SEQ] = seq
-	action[KEY_RNG_SEED] = rng_seed
+	action[KEY_RNG] = rng_seed
 	action[KEY_PV] = PROTOCOL_VERSION
 	return action
 
 
+static func type_name(t: int) -> String:
+	match t:
+		Action.MOVE:
+			return "MOVE"
+		Action.USE_MOVE:
+			return "USE_MOVE"
+		Action.WAIT:
+			return "WAIT"
+		Action.END_TURN:
+			return "END_TURN"
+	return "UNKNOWN(%d)" % t
+
+
 # ---------------------------------------------------------------------------
-# Join handshake — the build/version gate
+# Join handshake -- the build/version gate
 # ---------------------------------------------------------------------------
 # Two machines running mismatched builds must refuse each other AT CONNECT TIME,
-# not silently desync on the first command. A joining client's FIRST message is a
-# hello carrying its display name plus both version stamps; the server validates it
+# not silently desync on the first action. A joining client's FIRST message is a
+# hello carrying its display name plus both version stamps; the host validates it
 # with [method validate_hello] before it is given a roster slot.
 #
 # [constant PROTOCOL_VERSION] is the hard gate: a difference means the two peers do
 # not agree on the wire format, so the join is refused. The game version string is
-# advisory — an editor run ("dev") joining an exported build is a normal and useful
+# advisory -- an editor run ("dev") joining an exported build is a normal and useful
 # testing setup, so a difference is reported, never fatal.
 
 ## Keys on the hello payload.
@@ -162,11 +267,12 @@ const KEY_HELLO_NAME := "name"   ## String, the joiner's display name
 const KEY_HELLO_PV := "pv"       ## int, the joiner's PROTOCOL_VERSION
 const KEY_HELLO_GAME := "game"   ## String, the joiner's application/config/version
 
-## Rejection reasons. Empty string means "accepted" everywhere in this API.
+## Join rejection reasons. Empty string means "accepted" everywhere in this API.
 const REJECT_NONE := ""
 const REJECT_MALFORMED_HELLO := "malformed_hello"
 const REJECT_VERSION_MISMATCH := "version_mismatch"
 const REJECT_LOBBY_FULL := "lobby_full"
+const REJECT_MATCH_IN_PROGRESS := "match_in_progress"
 
 ## Reported as the game version when the project declares no
 ## [code]application/config/version[/code] (an editor / unversioned run).
@@ -179,7 +285,7 @@ static func local_game_version() -> String:
 	var version := String(raw).strip_edges()
 	return version if version != "" else GAME_VERSION_FALLBACK
 
-## Build the hello a joining client sends to the server. [param game_version] defaults
+## Build the hello a joining client sends to the host. [param game_version] defaults
 ## to this build's own version.
 static func make_hello(player_name: String, game_version: String = "") -> Dictionary:
 	return {
@@ -188,7 +294,7 @@ static func make_hello(player_name: String, game_version: String = "") -> Dictio
 		KEY_HELLO_GAME: game_version if game_version != "" else local_game_version(),
 	}
 
-## Server-side gate: decide whether [param hello] may be seated. PURE — pass
+## Host-side gate: decide whether [param hello] may be seated. PURE -- pass
 ## [param host_pv] / [param host_game] explicitly and this function touches nothing
 ## outside its arguments (that is how the unit test drives it). [param host_game]
 ## left empty means "this build's version".
@@ -236,7 +342,7 @@ static func validate_hello(hello: Variant, host_pv: int = PROTOCOL_VERSION, host
 	return result
 
 ## Human-readable one-liner for a refused join, for the client's status label.
-## [param info] is the dictionary [method validate_hello] produced on the server.
+## [param info] is the dictionary [method validate_hello] produced on the host.
 static func describe_rejection(reason: String, info: Dictionary = {}) -> String:
 	match reason:
 		REJECT_VERSION_MISMATCH:
@@ -248,24 +354,43 @@ static func describe_rejection(reason: String, info: Dictionary = {}) -> String:
 			]
 		REJECT_LOBBY_FULL:
 			return "The host's lobby is full."
+		REJECT_MATCH_IN_PROGRESS:
+			return "A match is already in progress on that host."
 		REJECT_MALFORMED_HELLO:
 			return "The host did not understand this build's join request (incompatible version)."
 	return "Join refused by the host (%s)." % reason
 
 
 # ---------------------------------------------------------------------------
-# Intent rejection — the vocabulary the server answers a refused command with
+# Intent rejection -- the vocabulary the host answers a refused action with
 # ---------------------------------------------------------------------------
-# [method NetSession._validate_intent] returns one of these (empty = accepted) and the
-# origin peer receives it on [signal NetSession.intent_rejected]. They are WIRE STRINGS:
-# changing one is a protocol change, so they live here next to the join-gate reasons
-# rather than as literals inside the session.
+# [method NetGameRules.validate_intent] (via NetSession) returns one of these (empty =
+# accepted) and the origin peer receives it on [signal NetSession.intent_rejected]. They
+# are WIRE STRINGS: changing one is a protocol change, so they live here next to the
+# join-gate reasons rather than as literals inside the session / rules.
 
 const INTENT_OK := ""
 const INTENT_MALFORMED := "malformed"
 const INTENT_UNKNOWN_ACTOR := "unknown_actor"
 const INTENT_NOT_YOUR_TURN := "not_your_turn"
+## Generic "the rules said no" (kept for older callers; the rules now answer with the
+## specific reasons below).
 const INTENT_REJECTED_BY_GAME := "rejected_by_game"
+const INTENT_NO_GAME := "no_game"
+const INTENT_NO_ACTIVE_TURN := "no_active_turn"
+const INTENT_CANNOT_END_TURN := "cannot_end_turn"
+const INTENT_UNKNOWN_UNIT := "unknown_unit"
+const INTENT_NOT_YOUR_UNIT := "not_your_unit"
+const INTENT_UNIT_DEAD := "unit_dead"
+const INTENT_UNIT_CANNOT_MOVE := "unit_cannot_move"
+const INTENT_UNIT_CANNOT_ACT := "unit_cannot_act"
+const INTENT_ILLEGAL_DESTINATION := "illegal_destination"
+const INTENT_NO_MOVEMENT_PROFILE := "no_movement_profile"
+const INTENT_NO_MOVE_IN_SLOT := "no_move_in_slot"
+const INTENT_MOVE_UNAVAILABLE := "move_unavailable"
+const INTENT_ILLEGAL_TARGET := "illegal_target"
+const INTENT_UNKNOWN_ACTION := "unknown_action"
+const INTENT_ACTION_LIMIT := "action_limit"
 
 ## Short label for the command an action carries, for a player-facing line ("Move rejected").
 ## [param action] may be anything at all -- a malformed payload off the wire, or null -- so an
@@ -274,16 +399,14 @@ static func describe_action(action: Variant) -> String:
 	if action is not Dictionary or not (action as Dictionary).has(KEY_TYPE):
 		return "Command"
 	match int((action as Dictionary)[KEY_TYPE]):
-		Action.MOVE_UNIT:
+		Action.MOVE:
 			return "Move"
-		Action.ATTACK_UNIT:
+		Action.USE_MOVE, Action.ATTACK_UNIT:
 			return "Attack"
-		Action.WAIT_UNIT:
+		Action.WAIT:
 			return "Wait"
 		Action.END_TURN:
 			return "End turn"
-		Action.CAST_MOVE:
-			return "Attack"
 	return "Command"
 
 
@@ -304,15 +427,26 @@ static func describe_intent_rejection(reason: String, action: Variant = null) ->
 			why = "the host did not understand it"
 		INTENT_REJECTED_BY_GAME:
 			why = "the rules do not allow it"
+		INTENT_NOT_YOUR_UNIT:
+			why = "that unit is not yours"
+		INTENT_ILLEGAL_DESTINATION:
+			why = "that unit cannot move there"
+		INTENT_ILLEGAL_TARGET:
+			why = "that target is not valid"
+		INTENT_UNIT_CANNOT_MOVE:
+			why = "that unit has already moved"
+		INTENT_UNIT_CANNOT_ACT:
+			why = "that unit has already acted"
+		INTENT_MOVE_UNAVAILABLE:
+			why = "that move is not ready yet"
+		INTENT_UNKNOWN_UNIT, INTENT_UNIT_DEAD:
+			why = "that unit is no longer on the board"
+		INTENT_CANNOT_END_TURN:
+			why = "the turn cannot be ended right now"
+		INTENT_NO_MOVE_IN_SLOT:
+			why = "that unit has no such move"
 		_:
 			why = String(reason).strip_edges().replace("_", " ")
 			if why.is_empty():
 				why = "refused by the host"
 	return "%s rejected — %s" % [what, why]
-
-
-static func _has_int(data: Dictionary, key: String) -> bool:
-	return data.has(key) and data[key] is int
-
-static func _has_vec2i(data: Dictionary, key: String) -> bool:
-	return data.has(key) and data[key] is Vector2i

@@ -12,7 +12,7 @@ class_name FogOfWarOverlay
 ##   1. WHOSE EYES.       [method local_perspective] is the ONE definition of "the player
 ##                        this screen belongs to". Every hook below asks it; nothing else
 ##                        in the codebase re-derives it.
-##   2. CELL SHROUD.      A warm-dark translucent quad over every cell the perspective
+##   2. CELL SHROUD.      A night-navy translucent quad over every cell the perspective
 ##                        cannot see. ONE [MultiMeshInstance3D] -- one node, one draw call,
 ##                        one instance per hidden cell -- following [MapSurround]'s merged
 ##                        -mesh economy. Never per-cell nodes.
@@ -54,16 +54,17 @@ const SPECTATOR: int = -1
 
 # --- Shroud look -------------------------------------------------------------
 
-## WARM-DARK, not black, and translucent: "you know the ground, not what stands on it".
+## WARM dark, not black, and translucent: "you know the ground, not what stands on it".
 ## The terrain has to stay readable underneath -- a player must still be able to plan a
-## route through fog -- so this is a dim warm veil over the tiles, sitting with the amber
-## HUD rather than punching a hole in the board.
+## route through fog -- so this is a dim umber veil over the painterly ground (it reads as
+## dusk over the grove rather than a hole punched in the board; the fog test pins warm).
 const SHROUD_COLOR: Color = Color(0.11, 0.075, 0.055)
 const SHROUD_ALPHA: float = 0.72
 
 ## Cell size in world units (one board cell is 2x2 -- see MapLoader._create_tile_at_position)
-## and the height the veil floats at: just over LowPolyTileBuilder's 0.10 cap top, and under
-## TileEffectOverlay's 0.55 pips, so effect pips still read through the fog.
+## and the height the veil floats at ABOVE ITS CELL'S FLOOR ([method Cells.floor_y]): just
+## over LowPolyTileBuilder's 0.10 cap top, and under TileEffectOverlay's 0.55 pips, so effect
+## pips still read through the fog.
 const CELL: float = 2.0
 const SHROUD_Y: float = 0.14
 
@@ -111,7 +112,7 @@ var _fade_tween: Tween = null
 var _hidden_units: Array = []
 
 ## The hidden set most recently painted, so an identical vision_changed repaints nothing.
-var _hidden_cells: Array[Vector2i] = []
+var _hidden_cells: Array[Vector3i] = []
 
 ## One announcement per battle (see [method announce_fog_intro]), re-armed on board_ready.
 var _announced: bool = false
@@ -236,7 +237,10 @@ static func fog_active() -> bool:
 
 ## True when [param cell] lies outside this screen's vision. Used by the FX / damage-float
 ## suppression: a blow landing in fog draws nothing, because you cannot see where it landed.
-static func cell_hidden(cell: Vector2i) -> bool:
+##
+## Cells are multi-floor [code]Vector3i(col, row, floor)[/code] ([Cells]); the vision core
+## answers in the same convention.
+static func cell_hidden(cell: Vector3i) -> bool:
 	if not fog_active():
 		return false
 	var vision = _vision()
@@ -260,11 +264,18 @@ static func unit_hidden(unit) -> bool:
 
 
 ## True when the cell [param world] sits over is hidden. The world->cell fold every FX layer
-## needs, kept here so there is one of it.
+## needs, kept here so there is one of it. The floor comes from the point's height, lowered
+## to the nearest floor that actually has a tile in that column -- an FX point floats ABOVE
+## its cell (a popup over a head, a burst mid-air), and on a flat map any height is floor 0.
 static func world_hidden(world: Vector3) -> bool:
 	if not fog_active():
 		return false
-	return cell_hidden(Vector2i(int(floor(world.x / CELL)), int(floor(world.z / CELL))))
+	var cell: Vector3i = Cells.world_to_cell(world)
+	var board = CombatServices.board() if CombatServices != null else null
+	if board != null and board.has_method("has_tile"):
+		while cell.z > 0 and not bool(board.has_tile(cell)):
+			cell.z -= 1
+	return cell_hidden(cell)
 
 
 # --- Vision resolution -------------------------------------------------------
@@ -466,35 +477,35 @@ func refresh(fade: bool = false) -> void:
 	if was_hidden != _hidden_units:
 		_repaint_masked_hud()
 
-	var hidden: Array[Vector2i] = _compute_hidden_cells(perspective)
+	var hidden: Array[Vector3i] = _compute_hidden_cells(perspective)
 	if hidden == _hidden_cells and not fade:
 		return  # identical set, nothing to redraw
 	_hidden_cells = hidden
 	_paint_shroud(hidden, fade)
 
 
-## Every in-bounds cell the perspective cannot see, in a fixed scan order (so an unchanged
-## set compares equal and repaints nothing).
+## Every board cell the perspective cannot see, in a fixed scan order (so an unchanged
+## set compares equal and repaints nothing). Cells are [code]Vector3i(col, row, floor)[/code]
+## ([Cells]): floor 0 is the whole grid (col outer, row inner -- the order the fog has always
+## scanned in), then each upper floor's actual tiles ([method BoardAdapter.cells_on_floor]).
 ##
 ## Prefers the core's own [code]visible_cells[/code] -- one call, then a set membership test
 ## per cell -- and falls back to per-cell [code]is_cell_visible[/code] when the core does not
 ## offer it.
-func _compute_hidden_cells(perspective: int) -> Array[Vector2i]:
-	var out: Array[Vector2i] = []
-	if CombatServices == null:
-		return out
-	var cols: int = int(CombatServices.GRID.size.x)
-	var rows: int = int(CombatServices.GRID.size.z)
-	if cols <= 0 or rows <= 0:
+func _compute_hidden_cells(perspective: int) -> Array[Vector3i]:
+	var out: Array[Vector3i] = []
+	var scan: Array[Vector3i] = _scan_cells()
+	if scan.is_empty():
 		return out
 
 	var vision = _vision()
 	if vision == null:
 		return out
 
-	# [method VisionSystem.visible_cells] hands back its LIVE cache as a { Vector2i: true }
+	# [method VisionSystem.visible_cells] hands back its LIVE cache as a { Vector3i: true }
 	# set -- never copied, never mutated here. An Array is accepted too, so a stub (or a
-	# future core) that returns a plain list works unchanged.
+	# future core) that returns a plain list works unchanged; a legacy Vector2i entry reads
+	# as floor 0 ([method Cells.from_variant]).
 	var visible_set: Dictionary = {}
 	var have_set: bool = false
 	if vision.has_method("visible_cells"):
@@ -505,23 +516,41 @@ func _compute_hidden_cells(perspective: int) -> Array[Vector2i]:
 		elif cells is Array:
 			have_set = true
 			for cell in cells:
-				if cell is Vector2i:
-					visible_set[cell] = true
+				if cell is Vector3i or cell is Vector2i:
+					visible_set[Cells.from_variant(cell)] = true
 
 	var can_probe: bool = vision.has_method("is_cell_visible")
 	if not have_set and not can_probe:
 		return out
 
+	for cell in scan:
+		var seen: bool
+		if have_set:
+			seen = visible_set.has(cell)
+		else:
+			seen = bool(vision.is_cell_visible(perspective, cell))
+		if not seen:
+			out.append(cell)
+	return out
+
+
+## The cells the fog considers, in scan order: every floor-0 grid cell (col outer, row
+## inner), then the tiles of each upper floor on a multi-floor board.
+func _scan_cells() -> Array[Vector3i]:
+	var out: Array[Vector3i] = []
+	if CombatServices == null or CombatServices.GRID == null:
+		return out
+	var cols: int = int(CombatServices.GRID.size.x)
+	var rows: int = int(CombatServices.GRID.size.z)
+	if cols <= 0 or rows <= 0:
+		return out
 	for col in range(cols):
 		for row in range(rows):
-			var cell := Vector2i(col, row)
-			var seen: bool
-			if have_set:
-				seen = visible_set.has(cell)
-			else:
-				seen = bool(vision.is_cell_visible(perspective, cell))
-			if not seen:
-				out.append(cell)
+			out.append(Vector3i(col, row, 0))
+	var board = CombatServices.board()
+	if board != null and board.has_method("floor_count") and board.has_method("cells_on_floor"):
+		for f in range(1, int(board.floor_count())):
+			out.append_array(board.cells_on_floor(f))
 	return out
 
 
@@ -530,7 +559,7 @@ func _compute_hidden_cells(perspective: int) -> Array[Vector2i]:
 ## Draw the veil over exactly [param cells]. ONE [MultiMeshInstance3D], one instance per
 ## hidden cell -- the node count is 1 for a fully-fogged 40x40 board and 0 for a board with
 ## nothing hidden, which is [MapSurround]'s economy applied to a set that changes every turn.
-func _paint_shroud(cells: Array[Vector2i], fade: bool) -> void:
+func _paint_shroud(cells: Array[Vector3i], fade: bool) -> void:
 	if cells.is_empty():
 		_clear_shroud()
 		return
@@ -541,10 +570,10 @@ func _paint_shroud(cells: Array[Vector2i], fade: bool) -> void:
 	# Flat: the quad's default +Z face rotated to look straight up at the camera-side sky.
 	var flat := Basis(Vector3.RIGHT, -PI * 0.5)
 	for i in range(cells.size()):
-		var cell: Vector2i = cells[i]
+		var cell: Vector3i = cells[i]
 		mm.set_instance_transform(i, Transform3D(flat, Vector3(
 			float(cell.x) * CELL + CELL * 0.5,
-			SHROUD_Y,
+			Cells.floor_y(cell.z) + SHROUD_Y,
 			float(cell.y) * CELL + CELL * 0.5)))
 	_shroud.visible = true
 
@@ -564,7 +593,7 @@ func _ensure_shroud() -> void:
 	_shroud_material = StandardMaterial3D.new()
 	_shroud_material.albedo_color = Color(
 		SHROUD_COLOR.r, SHROUD_COLOR.g, SHROUD_COLOR.b, SHROUD_ALPHA)
-	# Unshaded so the veil is the same warm dark wherever the sun is not, and transparent so
+	# Unshaded so the veil is the same cool dark wherever the sun is not, and transparent so
 	# the terrain underneath keeps its shape.
 	_shroud_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_shroud_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -673,7 +702,7 @@ func _reveal_all() -> void:
 ## It exists because [method MultiMesh.get_instance_transform] is backed by the
 ## RenderingServer: under the headless dummy renderer it reads back identity for every
 ## instance, so the transforms themselves cannot be measured on a CI runner.
-func shrouded_cells() -> Array[Vector2i]:
+func shrouded_cells() -> Array[Vector3i]:
 	return _hidden_cells.duplicate()
 
 

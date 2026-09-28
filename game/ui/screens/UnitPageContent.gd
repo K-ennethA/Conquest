@@ -22,8 +22,10 @@ class_name UnitPageContent
 ##     `base → effective` through [MoveStatVisuals] -- the same helper pair gameplay reads
 ##     -- so a buffed unit's page can never disagree with the combat forecast.
 ##
-## Dark [MenuTheme] register throughout: both callers are full-screen pages that step out
-## of the amber battle HUD, exactly as [PauseMenu] does.
+## The grove [MenuTheme] register throughout (docs/UI_STYLE.md): each card is a compact
+## grove frame ([method MenuTheme.content_card]) with its category / status colour down the
+## left edge, names in Cinzel, gold small-caps section tags, cream body text and muted
+## secondary lines -- both callers are full-screen pages, exactly as [PauseMenu] is.
 
 # --- Card accents -------------------------------------------------------------
 # Move cards are colour-coded by damage category so a moveset is scannable at a glance;
@@ -33,7 +35,8 @@ const CAT_MAGICAL := Color("a860e0")    # arcane violet
 const CAT_TRUE := Color("f0913c")       # piercing orange
 const ABILITY_ACCENT := Color("5fb84e") # passives read as "nature" green
 
-const MUTED := Color(0.72, 0.70, 0.78)
+## Secondary text (stat keys, stat lines, "No moves."): the grove's TEXT_MUTED.
+const MUTED := MenuTheme.TEXT_MUTED
 
 # --- The `live` dictionary -----------------------------------------------------
 #
@@ -233,7 +236,7 @@ static func build_stat_table(character, unit = null) -> Control:
 		if profile != null:
 			var profile_row := Label.new()
 			profile_row.text = "Movement profile: %s" % profile.display_name
-			profile_row.modulate = MUTED
+			profile_row.add_theme_color_override("font_color", MUTED)
 			profile_row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			box.add_child(profile_row)
 
@@ -243,7 +246,7 @@ static func build_stat_table(character, unit = null) -> Control:
 static func _stat_pair(grid: GridContainer, key: String, value: String, color: Color) -> void:
 	var key_label := Label.new()
 	key_label.text = key + ":"
-	key_label.modulate = MUTED
+	key_label.add_theme_color_override("font_color", MUTED)
 	grid.add_child(key_label)
 
 	var value_label := Label.new()
@@ -270,7 +273,7 @@ static func build_move_card(move: MoveResource, live: Dictionary = {}) -> PanelC
 	# quietly return one card per section instead of all of them.
 	card.name = _card_name("MoveCard", move.move_id)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.add_theme_stylebox_override("panel", MenuTheme.card_box(accent))
+	card.add_theme_stylebox_override("panel", MenuTheme.content_card(accent))
 
 	var body := VBoxContainer.new()
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -288,7 +291,9 @@ static func build_move_card(move: MoveResource, live: Dictionary = {}) -> PanelC
 
 	var name_label := Label.new()
 	name_label.text = move_name
+	name_label.add_theme_font_override("font", MenuTheme.heading_font(1))
 	name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	name_label.add_theme_color_override("font_color", MenuTheme.CREAM)
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(name_label)
 
@@ -302,7 +307,7 @@ static func build_move_card(move: MoveResource, live: Dictionary = {}) -> PanelC
 	var stats := Label.new()
 	stats.text = move_stats_text(move)
 	stats.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	stats.modulate = MUTED
+	stats.add_theme_color_override("font_color", MUTED)
 	stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_child(stats)
@@ -397,7 +402,7 @@ static func build_ability_card(ability: AbilityResource, live: Dictionary = {}) 
 	var card := PanelContainer.new()
 	card.name = _card_name("AbilityCard", ability.id)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.add_theme_stylebox_override("panel", MenuTheme.card_box(ABILITY_ACCENT))
+	card.add_theme_stylebox_override("panel", MenuTheme.content_card(ABILITY_ACCENT))
 
 	var body := VBoxContainer.new()
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -415,7 +420,9 @@ static func build_ability_card(ability: AbilityResource, live: Dictionary = {}) 
 
 	var name_label := Label.new()
 	name_label.text = ability_name
+	name_label.add_theme_font_override("font", MenuTheme.heading_font(1))
 	name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	name_label.add_theme_color_override("font_color", MenuTheme.CREAM)
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(name_label)
 
@@ -429,7 +436,7 @@ static func build_ability_card(ability: AbilityResource, live: Dictionary = {}) 
 	var stats := Label.new()
 	stats.text = ability_stats_text(ability)
 	stats.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	stats.modulate = MUTED
+	stats.add_theme_color_override("font_color", MUTED)
 	stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_child(stats)
@@ -538,7 +545,7 @@ static func _build_status_card(condition, count: int, turns_left: int) -> PanelC
 	var card := PanelContainer.new()
 	card.name = _card_name("StatusCard", condition.id if "id" in condition else &"")
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.add_theme_stylebox_override("panel", MenuTheme.card_box(accent))
+	card.add_theme_stylebox_override("panel", MenuTheme.content_card(accent))
 
 	var body := VBoxContainer.new()
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -605,19 +612,19 @@ static func wrapped_label(text: String) -> Label:
 static func muted_label(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.modulate = MUTED
+	label.add_theme_color_override("font_color", MUTED)
 	return label
 
 
+## A gold Cinzel small-caps section tag ("MOVES"), the grove's section-header treatment.
 static func section_header(text: String) -> Label:
 	var label := Label.new()
 	label.text = text.to_upper()
-	label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
-	label.add_theme_color_override("font_color", MenuTheme.GOLD)
+	MenuTheme.style_section_header(label)
 	return label
 
 
-## The amber "this is happening right now" line on a card. Named so both card builders
+## The gold "this is happening right now" line on a card. Named so both card builders
 ## produce an identically-styled live readout.
 static func _live_label(text: String) -> Label:
 	var label := Label.new()

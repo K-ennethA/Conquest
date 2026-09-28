@@ -29,17 +29,17 @@ const MAP_PATH := "res://game/maps/resources/riftwood.tres"
 const BASE_ID := "bastion"
 const NEUTRAL_SLOT: int = 2
 ## The deepest cell of player 0's fountain sanctum.
-const FOUNTAIN_CELL := Vector2i(0, 0)
+const FOUNTAIN_CELL := Vector3i(0, 0, 0)
 ## The middle lane's control point, and one of the meadow cells ringing its stone circle.
-const MID_POINT_CELL := Vector2i(17, 17)
-const MEADOW_CELL := Vector2i(16, 16)
+const MID_POINT_CELL := Vector3i(17, 17, 0)
+const MEADOW_CELL := Vector3i(16, 16, 0)
 ## The Canopy sneak tunnel's two ends and one cell in the middle of it.
-const TUNNEL_MOUTH_CELL := Vector2i(26, 17)
-const TUNNEL_MID_CELL := Vector2i(30, 19)
-const TUNNEL_EXIT_CELL := Vector2i(31, 22)
+const TUNNEL_MOUTH_CELL := Vector3i(26, 17, 0)
+const TUNNEL_MID_CELL := Vector3i(30, 19, 0)
+const TUNNEL_EXIT_CELL := Vector3i(31, 22, 0)
 ## The two camp tiers on the north-east side.
-const OUTER_CAMP_CELL := Vector2i(24, 10)
-const INNER_CAMP_CELL := Vector2i(24, 17)
+const OUTER_CAMP_CELL := Vector3i(24, 10, 0)
+const INNER_CAMP_CELL := Vector3i(24, 17, 0)
 const INNER_CAMP_ID := "blightcap"
 
 var _map_res: MapResource = null
@@ -113,11 +113,12 @@ func _units_by_slot() -> Dictionary:
 
 ## The cell a spawned unit stands on. MapLoader places units at
 ## (x * 2 + 1, _, y * 2 + 1), so this is that mapping read backwards.
-func _cell_of(unit) -> Vector2i:
-	return Vector2i(int((unit.transform.origin.x - 1) / 2), int((unit.transform.origin.z - 1) / 2))
+func _cell_of(unit) -> Vector3i:
+	return Vector3i(int((unit.transform.origin.x - 1) / 2), int((unit.transform.origin.z - 1) / 2),
+		Cells.floor_from_world_y(unit.transform.origin.y))
 
 
-func _effect_ids_at(cell: Vector2i) -> Array:
+func _effect_ids_at(cell: Vector3i) -> Array:
 	var ids: Array = []
 	for te in CombatServices.tile_effects_at(cell):
 		ids.append(String(te.id))
@@ -139,7 +140,7 @@ func test_the_authored_terrain_registers_on_the_live_board() -> void:
 		"the sanctum cell behind player 0's base carries the fountain effect")
 	assert_has(_effect_ids_at(MEADOW_CELL), "sacred_meadow",
 		"the meadow ringing the middle control point carries the heal")
-	assert_eq(_effect_ids_at(_map_res.get_base_cell(0)), [],
+	assert_eq(_effect_ids_at(Cells.lift(_map_res.get_base_cell(0))), [],
 		"and the plain grass under the base carries nothing")
 
 
@@ -149,12 +150,14 @@ func test_the_control_points_are_bare_ground_on_the_live_board() -> void:
 	# tile effect baked into the map -- and the heal is a step away, on the meadow beside it.
 	var board := CombatServices.board()
 	assert_not_null(board, "a board was built over the loaded map")
-	for point in _map_res.get_control_points():
+	# Control points are MAP data (flat Vector2i); the board is asked about the ground cell.
+	for map_point in _map_res.get_control_points():
+		var point: Vector3i = Cells.lift(map_point)
 		assert_false(board.is_blocked(point),
 			"control point %s can be stood on to be claimed" % str(point))
 		assert_eq(_effect_ids_at(point), [],
 			"and carries no authored tile effect of its own (%s)" % str(point))
-	assert_true(_map_res.has_control_point(MID_POINT_CELL),
+	assert_true(_map_res.has_control_point(Cells.flat(MID_POINT_CELL)),
 		"the middle of the board is one of them")
 
 
@@ -168,8 +171,8 @@ func test_the_sneak_tunnel_is_walkable_and_walled_on_the_live_board() -> void:
 		assert_has(_effect_ids_at(cell), "tall_grass",
 			"and carries the ambush-grass effect (%s)" % str(cell))
 	# The flanks of the tunnel's long east-west leg.
-	assert_true(board.is_blocked(TUNNEL_MOUTH_CELL + Vector2i(0, -1)), "wood above the tunnel")
-	assert_true(board.is_blocked(TUNNEL_MOUTH_CELL + Vector2i(0, 1)), "and wood below it")
+	assert_true(board.is_blocked(TUNNEL_MOUTH_CELL + Vector3i(0, -1, 0)), "wood above the tunnel")
+	assert_true(board.is_blocked(TUNNEL_MOUTH_CELL + Vector3i(0, 1, 0)), "and wood below it")
 
 
 func test_the_jungle_is_impassable_and_the_pocket_is_not() -> void:
@@ -177,8 +180,8 @@ func test_the_jungle_is_impassable_and_the_pocket_is_not() -> void:
 	assert_not_null(board, "a board was built over the loaded map")
 	# (5, 5) is inside player 0's pocket; (7, 3) is the wood just south of the Canopy Run's
 	# mouth. If the wood were walkable, the three lanes would not be lanes.
-	assert_false(board.is_blocked(Vector2i(5, 5)), "the base pocket is walkable")
-	assert_true(board.is_blocked(Vector2i(7, 3)), "the jungle beside the lane mouth is not")
+	assert_false(board.is_blocked(Vector3i(5, 5, 0)), "the base pocket is walkable")
+	assert_true(board.is_blocked(Vector3i(7, 3, 0)), "the jungle beside the lane mouth is not")
 
 
 # --- The actors stand where the map says --------------------------------------
@@ -191,7 +194,7 @@ func test_both_bases_spawn_on_their_declared_base_cells() -> void:
 			if String(unit.name).begins_with(BASE_ID):
 				bases.append(unit)
 		assert_eq(bases.size(), 1, "player %d's base was spawned exactly once" % player_id)
-		assert_eq(_cell_of(bases[0]), _map_res.get_base_cell(player_id),
+		assert_eq(_cell_of(bases[0]), Cells.lift(_map_res.get_base_cell(player_id)),
 			"player %d's base stands on its declared base cell" % player_id)
 
 

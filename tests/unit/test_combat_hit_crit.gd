@@ -22,14 +22,14 @@ func _duel(target_stats: Dictionary, caster_stats: Dictionary = { "attack": 0 })
 	var caster := Doubles.HpUnit.new(0, caster_stats)
 	var target := Doubles.HpUnit.new(1, target_stats)
 	var board := Doubles.MinimalBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 	return [caster, target, board]
 
 
 func test_default_accuracy_always_hits_for_full_damage():
 	var d := _duel({ "health": 100, "defense": 0 })
-	var res: Dictionary = MoveExecutor.execute(_strike(1.0, 0.0), d[0], d[2], Vector2i(1, 0))
+	var res: Dictionary = MoveExecutor.execute(_strike(1.0, 0.0), d[0], d[2], Vector3i(1, 0, 0))
 	assert_true(res.success, "move resolved")
 	assert_eq(d[1].hp, 76, "target took the full 24 (100% hit, no crit)")
 	var ev: Dictionary = res.events[0]
@@ -40,7 +40,7 @@ func test_default_accuracy_always_hits_for_full_damage():
 func test_high_evasion_forces_a_miss():
 	# hit% = 100 - 999 -> clamped 0 -> always miss, deterministically.
 	var d := _duel({ "health": 100, "defense": 0, "evasion": 999 })
-	var res: Dictionary = MoveExecutor.execute(_strike(1.0, 0.0), d[0], d[2], Vector2i(1, 0))
+	var res: Dictionary = MoveExecutor.execute(_strike(1.0, 0.0), d[0], d[2], Vector3i(1, 0, 0))
 	assert_eq(d[1].hp, 100, "an evaded attack deals no damage")
 	assert_true(res.events[0].get("missed", false), "logged as a miss")
 	assert_eq(res.events[0].amount, 0, "miss deals 0")
@@ -48,7 +48,7 @@ func test_high_evasion_forces_a_miss():
 func test_guaranteed_crit_from_move_multiplies_damage():
 	# crit% = 100 -> every hit crits: round(24 * 1.5) = 36.
 	var d := _duel({ "health": 100, "defense": 0 })
-	var res: Dictionary = MoveExecutor.execute(_strike(1.0, 1.0), d[0], d[2], Vector2i(1, 0))
+	var res: Dictionary = MoveExecutor.execute(_strike(1.0, 1.0), d[0], d[2], Vector3i(1, 0, 0))
 	assert_eq(d[1].hp, 64, "crit dealt 36")
 	assert_true(res.events[0].get("crit", false), "logged as a crit")
 	assert_eq(res.events[0].amount, 36, "crit amount is base x1.5")
@@ -56,7 +56,7 @@ func test_guaranteed_crit_from_move_multiplies_damage():
 func test_crit_stat_on_caster_can_guarantee_a_crit():
 	# move has 0 base crit, but the caster's crit stat pushes crit% to 100.
 	var d := _duel({ "health": 100, "defense": 0 }, { "attack": 0, "crit": 100 })
-	var res: Dictionary = MoveExecutor.execute(_strike(1.0, 0.0), d[0], d[2], Vector2i(1, 0))
+	var res: Dictionary = MoveExecutor.execute(_strike(1.0, 0.0), d[0], d[2], Vector3i(1, 0, 0))
 	assert_true(res.events[0].get("crit", false), "caster crit stat produced a crit")
 	assert_eq(d[1].hp, 64, "crit dealt 36")
 

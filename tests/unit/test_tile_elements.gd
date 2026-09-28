@@ -67,7 +67,7 @@ func _tile(path: String) -> TileEffectResource:
 ## An occupant of [param element] standing alone on [param cell] of a fresh board that
 ## ANSWERS tile_effects_at -- so nothing in this suite falls back to the live
 ## CombatServices autoload and inherits whatever the previous suite left there.
-func _stand(element: StringName, effects: Array, cell: Vector2i = Vector2i(2, 2)) -> Dictionary:
+func _stand(element: StringName, effects: Array, cell: Vector3i = Vector3i(2, 2, 0)) -> Dictionary:
 	var unit := _ElementUnit.new(element, 100)
 	var board := Doubles.TileEffectBoard.new()
 	board.place(unit, cell)
@@ -240,7 +240,7 @@ func test_an_elementless_hazard_is_exactly_what_it_always_was() -> void:
 
 func test_a_restored_hazard_keeps_its_element_and_an_old_save_stays_neutral() -> void:
 	var manager = autofree(HazardManager.new())
-	var vine := TravelingHazard.new(Vector2i.ZERO, Vector2i(1, 0), 1, 2, 6, 20,
+	var vine := TravelingHazard.new(Vector3i.ZERO, Vector3i(1, 0, 0), 1, 2, 6, 20,
 		CombatTypes.DamageCategory.TRUE, CombatTypes.TargetKind.ANY_UNIT, null)
 	vine.element = &"nature"
 	manager.register(vine)
@@ -452,8 +452,8 @@ func _authored_burn(element: StringName, power: int) -> TileEffectResource:
 func _vine_loss(vine_element: StringName, victim_element: StringName) -> int:
 	var victim := _ElementUnit.new(victim_element, 100)
 	var board := _VineBoard.new()
-	board.place(victim, Vector2i(1, 0))
-	var vine := TravelingHazard.new(Vector2i(0, 0), Vector2i(1, 0), 0, 1, 4, 20,
+	board.place(victim, Vector3i(1, 0, 0))
+	var vine := TravelingHazard.new(Vector3i(0, 0, 0), Vector3i(1, 0, 0), 0, 1, 4, 20,
 		CombatTypes.DamageCategory.TRUE, CombatTypes.TargetKind.ANY_UNIT, null)
 	vine.element = vine_element
 	vine.advance(board)
@@ -499,21 +499,21 @@ class _ElementUnit:
 class _VineBoard:
 	var placements: Array = []
 
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
 
-	func units_at(cell: Vector2i) -> Array:
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
 				out.append(p.unit)
 		return out
 
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
+		return Vector3i(-999, -999, 0)
 
 	func are_enemies(_a, _b) -> bool:
 		return true

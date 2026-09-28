@@ -100,8 +100,8 @@ func apply(ctx: MoveContext) -> void:
 		return
 	if not ctx.board.has_method("cell_of"):
 		return
-	var origin: Vector2i = ctx.board.cell_of(ctx.caster)
-	var aim: Vector2i = ctx.aim_cell
+	var origin: Vector3i = ctx.board.cell_of(ctx.caster)
+	var aim: Vector3i = ctx.aim_cell
 	# THE BRANCH, and the only one. Standing on one of your own anchors is the teleport;
 	# everything else the aim rule let through is a placement.
 	if is_own_spot_cell(ctx.caster, aim, ctx.board):
@@ -133,7 +133,7 @@ func describe() -> String:
 ##     -- the placement.
 ## The move's own [member TargetingPattern.max_range] has already bounded the distance by
 ## the time this is called, so this only ever narrows.
-func allows_aim(origin: Vector2i, aim: Vector2i, caster, board) -> bool:
+func allows_aim(origin: Vector3i, aim: Vector3i, caster, board) -> bool:
 	if caster == null or board == null:
 		return false
 	if is_own_spot_cell(caster, aim, board):
@@ -145,7 +145,7 @@ func allows_aim(origin: Vector2i, aim: Vector2i, caster, board) -> bool:
 
 # --- Resolution ---------------------------------------------------------------
 
-func _place(ctx: MoveContext, origin: Vector2i, cell: Vector2i) -> void:
+func _place(ctx: MoveContext, origin: Vector3i, cell: Vector3i) -> void:
 	if _manhattan(origin, cell) > place_range or not _free_cell(cell, ctx.caster, ctx.board):
 		ctx.log_event({ "effect": "voidstep", "mode": "place", "cell": cell,
 			"placed": false, "reason": "invalid_cell" })
@@ -187,7 +187,7 @@ func _place(ctx: MoveContext, origin: Vector2i, cell: Vector2i) -> void:
 	})
 
 
-func _teleport(ctx: MoveContext, from: Vector2i, to: Vector2i) -> void:
+func _teleport(ctx: MoveContext, from: Vector3i, to: Vector3i) -> void:
 	if from == to or not _free_cell(to, ctx.caster, ctx.board) \
 			or not ctx.board.has_method("move_unit"):
 		ctx.log_event({ "effect": "voidstep", "mode": "teleport", "from": from, "to": to,
@@ -219,7 +219,7 @@ func _teleport(ctx: MoveContext, from: Vector2i, to: Vector2i) -> void:
 ## [method CombatServices.remove_tile_effect] path an eviction, an expiry and a stomp all
 ## use -- so a spent anchor leaves identically and the overlay pulls its pip for the same
 ## reason. Returns the removed placement, or null when there was nothing to spend.
-func _consume_spot(ctx: MoveContext, cell: Vector2i):
+func _consume_spot(ctx: MoveContext, cell: Vector3i):
 	var services = _combat_services()
 	if services == null or not services.has_method("remove_tile_effect"):
 		return null
@@ -244,18 +244,19 @@ func _start_teleport_cooldown(caster, move) -> void:
 
 
 ## Announce the relocation on [signal GameEvents.unit_moved], in the GRID space that
-## signal's listeners assume -- Vector3(col, 0, row), never metres (CONQUEST.md rule 5).
+## signal's listeners assume -- Vector3(col, floor, row) ([method Cells.to_grid]), never
+## metres (CONQUEST.md rule 5).
 ##
 ## Only a real [Unit] is announced: the signal is TYPED (Unit, Vector3, Vector3) and a
 ## duck-typed mock would be rejected by the engine, so a unit-test board relocates through
 ## `move_unit` alone exactly as a leap does. Mirrors
 ## [method CommandApplier._emit_unit_moved].
-static func _announce_move(unit, from: Vector2i, to: Vector2i) -> void:
+static func _announce_move(unit, from: Vector3i, to: Vector3i) -> void:
 	if not (unit is Unit):
 		return
 	if typeof(GameEvents) != TYPE_OBJECT or GameEvents == null:
 		return
-	GameEvents.unit_moved.emit(unit, Vector3(from.x, 0, from.y), Vector3(to.x, 0, to.y))
+	GameEvents.unit_moved.emit(unit, Cells.to_grid(from), Cells.to_grid(to))
 
 
 # --- The caster's own spots ---------------------------------------------------
@@ -267,8 +268,8 @@ static func _announce_move(unit, from: Vector2i, to: Vector2i) -> void:
 ## and is never enumerated -- so this can never mistake ground for an anchor. The order is
 ## stated rather than inherited so every caller (the eviction, the tests, a future UI)
 ## sees the same list on every machine.
-static func own_spot_cells(caster, _board = null) -> Array[Vector2i]:
-	var out: Array[Vector2i] = []
+static func own_spot_cells(caster, _board = null) -> Array[Vector3i]:
+	var out: Array[Vector3i] = []
 	if caster == null:
 		return out
 	var services = _combat_services()
@@ -283,7 +284,7 @@ static func own_spot_cells(caster, _board = null) -> Array[Vector2i]:
 
 
 ## True when [param cell] holds one of [param caster]'s own void spots.
-static func is_own_spot_cell(caster, cell: Vector2i, _board = null) -> bool:
+static func is_own_spot_cell(caster, cell: Vector3i, _board = null) -> bool:
 	if caster == null:
 		return false
 	var services = _combat_services()
@@ -296,7 +297,7 @@ static func is_own_spot_cell(caster, cell: Vector2i, _board = null) -> bool:
 ## decides which one wins when a cell somehow carries two (it cannot today: a placement
 ## refuses a cell that already holds one of this caster's spots, because that cell is the
 ## TELEPORT branch).
-static func _spot_on(services, cell: Vector2i, caster):
+static func _spot_on(services, cell: Vector3i, caster):
 	var owner_id: int = caster.get_instance_id()
 	for te in services.applied_tile_effects_at(cell):
 		if te == null or not (te is Object):
@@ -317,7 +318,7 @@ static func _spot_on(services, cell: Vector2i, caster):
 ## [method own_spot_cells] already walks in. Pure arithmetic on frozen stamps: no RNG, no
 ## clock, so every peer evicts the same anchor.
 func _evict_oldest_if_full(ctx: MoveContext, services):
-	var cells: Array[Vector2i] = own_spot_cells(ctx.caster)
+	var cells: Array[Vector3i] = own_spot_cells(ctx.caster)
 	if cells.size() < maxi(1, max_spots):
 		return null
 	var oldest_cell = null
@@ -359,7 +360,7 @@ static func _next_seq(caster) -> int:
 ## [code]can_fit[/code] (bounds + blocking terrain + other living units + footprint) and
 ## falls back to whichever individual queries a lighter board exposes -- the same ladder
 ## [LeapEffect] and [TargetingPattern] climb, so all three agree about a legal landing.
-static func _free_cell(cell: Vector2i, caster, board) -> bool:
+static func _free_cell(cell: Vector3i, caster, board) -> bool:
 	if board == null:
 		return false
 	if board.has_method("can_fit"):
@@ -384,11 +385,10 @@ static func _combat_services():
 
 ## Row-major cell order, spelled out where it is depended on (the twin of
 ## [method TileEffectSystem._cell_before]).
-static func _cell_before(a: Vector2i, b: Vector2i) -> bool:
-	if a.x != b.x:
-		return a.x < b.x
-	return a.y < b.y
+static func _cell_before(a: Vector3i, b: Vector3i) -> bool:
+	return Cells.less(a, b)
 
 
-static func _manhattan(a: Vector2i, b: Vector2i) -> int:
-	return absi(a.x - b.x) + absi(a.y - b.y)
+## THE range metric ([method Cells.distance]: Manhattan + floor difference).
+static func _manhattan(a: Vector3i, b: Vector3i) -> int:
+	return Cells.distance(a, b)

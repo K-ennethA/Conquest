@@ -86,8 +86,8 @@ func test_revert_lands_the_unit_back_on_its_origin_cell():
 	# tentative preview), then move back to the origin cell (the revert). cell_of must
 	# report the origin again so a re-shown movement range is computed from the right spot.
 	var grid := Grid.new()
-	var origin := Vector2i(1, 1)
-	var dest := Vector2i(3, 2)
+	var origin := Vector3i(1, 1, 0)
+	var dest := Vector3i(3, 2, 0)
 
 	var unit := MockBoardUnit.new()
 	var adapter := BoardAdapter.new(grid, [unit])

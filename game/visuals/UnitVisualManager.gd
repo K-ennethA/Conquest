@@ -94,15 +94,9 @@ func _ready():
 			and not GameEvents.unit_action_completed.is_connected(_on_unit_action_completed):
 		GameEvents.unit_action_completed.connect(_on_unit_action_completed)
 
-	# "Face where you act": turn a unit's model toward what it just did -- along its final
-	# movement direction on a move, toward the unit it struck on a hit. Guarded/no-op in a
-	# headless or minimal scene without these signals.
-	if GameEvents and GameEvents.has_signal("unit_moved") \
-			and not GameEvents.unit_moved.is_connected(_on_unit_moved_face):
-		GameEvents.unit_moved.connect(_on_unit_moved_face)
-	if GameEvents and GameEvents.has_signal("damage_dealt") \
-			and not GameEvents.damage_dealt.is_connected(_on_damage_dealt_face):
-		GameEvents.damage_dealt.connect(_on_damage_dealt_face)
+	# Unit FACING is not driven from here: the single facing system is [FacingController]
+	# (rest facing toward the nearest enemy, attack facing on move_aimed) plus
+	# [UnitAnimator] (per-step walk facing), both applying [method Unit.set_facing].
 
 func setup_unit_visuals(unit: Unit, player_assignment: PlayerMaterials.PlayerTeam) -> void:
 	"""Set up all visual elements for a unit"""
@@ -300,32 +294,82 @@ func clear_damage_previews() -> void:
 		if bar != null and is_instance_valid(bar) and bar.has_method("clear_damage_preview"):
 			bar.clear_damage_preview()
 
+## Name of the gold selection ring child added under a selected unit.
+const SELECTION_RING_NAME := "SelectionRing"
+
 func apply_selection_visual(unit: Unit, selected: bool) -> void:
-	"""Apply or remove selection visual effects"""
-	# Signal-driven (selection / deselection), so `unit` can already be freed -- and a
-	# unit whose model is a .glb has no "MeshInstance3D" child at all. get_node() logs an
-	# engine error in BOTH cases before the `if not mesh_instance` below can help; the
-	# _or_null form makes the existing null branch actually reachable.
+	"""Mark the SELECTED unit: a soft gold ring on the ground under its whole
+	footprint (pulsing gently), so it stays identifiable after the board cursor moves
+	off it to pick a destination / target. The ring lives on its own mesh, so it never
+	touches the model's materials, the friend/foe outline (material_overlay) or the
+	cursor's own brackets. Legacy capsule units (no character model) additionally get
+	a mild gold rim on their visible placeholder mesh.
+	Signal-driven (selection / deselection), so `unit` can already be freed -- and a
+	unit whose model is a .glb has no "MeshInstance3D" child at all: both are expected,
+	silent no-ops (get_node_or_null, never get_node)."""
 	if not is_instance_valid(unit):
 		return
-	var mesh_instance = unit.get_node_or_null("MeshInstance3D")
-	if not mesh_instance:
+	_set_selection_ring(unit, selected)
+	var mesh_instance := unit.get_node_or_null("MeshInstance3D") as MeshInstance3D
+	if mesh_instance == null or not mesh_instance.visible:
 		return
-	
 	if selected:
-		# Add selection glow with enhanced visibility
 		var base_material = mesh_instance.material_override
-		if base_material:
-			var selection_material = base_material.duplicate()
+		if base_material is BaseMaterial3D:
+			var selection_material: BaseMaterial3D = base_material.duplicate()
 			selection_material.emission_enabled = true
-			selection_material.emission = Color(1.0, 1.0, 0.5, 1.0)  # Bright yellow glow
+			selection_material.emission = Color(0.91, 0.71, 0.33)
+			selection_material.emission_energy_multiplier = 0.35
 			selection_material.rim_enabled = true
-			selection_material.rim = 0.5  # Float value, not Color
+			selection_material.rim = 0.5
 			selection_material.rim_tint = 0.5
 			mesh_instance.material_override = selection_material
 	else:
 		# Restore appropriate material based on unit's current state
 		_restore_unit_material(unit)
+
+
+func _set_selection_ring(unit: Unit, selected: bool) -> void:
+	var ring := unit.get_node_or_null(SELECTION_RING_NAME) as MeshInstance3D
+	if not selected:
+		if ring != null:
+			# Detach first so a re-select in the same frame builds a fresh ring instead of
+			# finding this one (still named SelectionRing until the queued free runs).
+			unit.remove_child(ring)
+			ring.queue_free()
+		return
+	if ring != null:
+		return
+	var fp: Vector2i = unit.get_footprint() if unit.has_method("get_footprint") else Vector2i.ONE
+	var cell: float = Unit.CELL_SIZE
+	var span: float = float(maxi(fp.x, fp.y)) * cell
+	ring = MeshInstance3D.new()
+	ring.name = SELECTION_RING_NAME
+	var torus := TorusMesh.new()
+	torus.outer_radius = span * 0.46
+	torus.inner_radius = span * 0.40
+	torus.rings = 48
+	torus.ring_segments = 8
+	ring.mesh = torus
+	ring.scale = Vector3(1.0, 0.08, 1.0)   # flatten into a ground ring
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = Color(0.97, 0.84, 0.54, 0.9)
+	mat.no_depth_test = false
+	ring.material_override = mat
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var offset: Vector3 = unit.get_footprint_offset() if unit.has_method("get_footprint_offset") else Vector3.ZERO
+	ring.position = offset + Vector3(0.0, 0.06, 0.0)
+	unit.add_child(ring)
+	# Gentle pulse (skipped when animations are off).
+	var anim_on := true
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings.has_method("animations_on"):
+		anim_on = GameSettings.animations_on()
+	if anim_on:
+		var tw := ring.create_tween().set_loops()
+		tw.tween_property(mat, "albedo_color:a", 0.45, 0.6).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(mat, "albedo_color:a", 0.9, 0.6).set_trans(Tween.TRANS_SINE)
 
 func _restore_unit_material(unit: Unit) -> void:
 	"""Restore unit material based on current state (acted or not acted)"""
@@ -395,6 +439,9 @@ func apply_acted_visual(unit: Unit, has_acted: bool) -> void:
 func refresh_unit_outline(unit: Unit) -> void:
 	if not is_instance_valid(unit):
 		return
+	var hb = _unit_health_bars.get(unit)
+	if hb != null and is_instance_valid(hb) and hb.has_method("_refresh_team_frame"):
+		hb._refresh_team_frame()
 	apply_acted_visual(unit, _unit_has_acted(unit))
 
 ## The unit's authoritative "already spent its turn" flag, defaulting to false for a
@@ -477,8 +524,8 @@ static func is_fog_hidden(unit) -> bool:
 ##
 ## Friend/foe is decided exactly the way the rest of the game decides who the human
 ## may command (see PlayerManager.can_current_player_select_unit): the local human is
-## `GameModeManager.get_local_player_id()` (0 in single-player / hotseat, the real
-## slot in multiplayer), and any unit owned by an `is_ai` player -- or by any other
+## [method _perspective_player_id] (the human whose turn it is in single-player /
+## hotseat, the real slot in multiplayer), and any unit owned by an `is_ai` player -- or by any other
 ## player id -- is hostile and gets the RED outline. A unit with no owner, or one
 ## owned by a dormant NEUTRAL faction (jungle-camp style, hostile to nobody until
 ## provoked), gets no outline at all so it reads as a third party rather than as
@@ -501,10 +548,35 @@ func _outline_side_for_unit(unit: Unit) -> OutlineSide:
 	if owner_player.is_ai:
 		return OutlineSide.ENEMY
 
-	var local_id: int = 0
-	if GameModeManager and GameModeManager.has_method("get_local_player_id"):
-		local_id = int(GameModeManager.get_local_player_id())
+	var local_id: int = _perspective_player_id()
 	return OutlineSide.ALLY if owner_player.player_id == local_id else OutlineSide.ENEMY
+
+
+## Last human player whose turn it was in LOCAL play (hotseat / VERSUS). Outlines keep
+## this perspective through an AI phase so they don't flip to the AI's point of view.
+var _hotseat_perspective_id: int = 0
+
+## Whose point of view friend/foe outlines are drawn from.
+##   MULTIPLAYER : the local client's slot (GameModeManager.get_local_player_id()) --
+##                 the other side is always "enemy" on this screen.
+##   local play  : the HUMAN whose turn it currently is. In a two-human hotseat game
+##                 both players share one screen, so Player 2's units must read as
+##                 friendly (blue) on Player 2's turn. Single-player has only one human
+##                 (slot 0), so this is identical to the old fixed-0 behaviour there.
+## Refreshed on every turn change via _on_turn_started -> update_all_unit_visuals.
+func _perspective_player_id() -> int:
+	if GameSettings and GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
+		if GameModeManager and GameModeManager.has_method("get_local_player_id"):
+			return int(GameModeManager.get_local_player_id())
+		return 0
+	var current: Player = null
+	if TurnSystemManager and TurnSystemManager.has_active_turn_system():
+		current = TurnSystemManager.get_active_turn_system().get_current_active_player()
+	if current == null and PlayerManager:
+		current = PlayerManager.get_current_player()
+	if current != null and not current.is_ai and not current.is_neutral:
+		_hotseat_perspective_id = int(current.player_id)
+	return _hotseat_perspective_id
 
 # --- Shared overlay materials ------------------------------------------------
 
@@ -763,29 +835,6 @@ func _on_unit_action_completed(unit: Unit, action_type: String) -> void:
 func _on_turn_system_unit_action(unit: Unit, action_type: String) -> void:
 	"""Handle unit action completion from turn system"""
 	update_all_unit_visuals()
-
-# --- Face where you act ------------------------------------------------------
-# Turn a unit's model toward what it just did so facing reads as alive. Both delegate to
-# the unit, which composes the turn with its authored model_yaw_deg correction and no-ops
-# for multi-tile bosses. Null-safe: any freed / non-facing unit is simply skipped.
-
-func _on_unit_moved_face(unit, from_position: Vector3, to_position: Vector3) -> void:
-	"""Face the moved unit along its net movement direction (grid- or world-space deltas
-	both work -- only the direction sign matters)."""
-	if not is_instance_valid(unit) or not unit.has_method("face_direction"):
-		return
-	unit.face_direction(to_position.x - from_position.x, to_position.z - from_position.z)
-
-func _on_damage_dealt_face(attacker, defender, _damage) -> void:
-	"""Face the attacker toward the unit it struck (the defender's anchor cell)."""
-	if not is_instance_valid(attacker) or not is_instance_valid(defender):
-		return
-	if not attacker.has_method("face_cell") or not (defender is Node3D):
-		return
-	# Unit origins sit at their cell centers, so floor(world / CELL_SIZE) is the anchor cell.
-	var dp: Vector3 = (defender as Node3D).global_position
-	var cell := Vector2i(int(floor(dp.x / Unit.CELL_SIZE)), int(floor(dp.z / Unit.CELL_SIZE)))
-	attacker.face_cell(cell)
 
 # Public interface for manual updates
 func refresh_unit_visuals() -> void:

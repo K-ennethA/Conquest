@@ -31,7 +31,8 @@ What it does, in order:
      centre, so a hip-centred origin makes them float or sink.
   8. Applies all transforms and exports .glb with +Y up (Blender is Z-up, Godot is
      Y-up; the exporter converts, and a model facing -Y in Blender ends up facing
-     Godot's -Z forward).
+     Godot's +Z -- toward the battle camera, the game's facing convention, so
+     model_yaw_deg stays 0; see CONQUEST.md "Unit facing").
 
 Everything is reported so a bad asset is caught here rather than in game.
 """
@@ -390,7 +391,7 @@ def main() -> None:
             size.x, size.y, CELL))
 
     # 9. Export. +Y up converts Blender's Z-up to Godot's Y-up; a model facing -Y
-    #    here therefore faces Godot's -Z (forward).
+    #    here therefore faces Godot's +Z (the game's model-forward convention).
     select_only(ob)
     bpy.ops.export_scene.gltf(
         filepath=opts["output"],

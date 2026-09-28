@@ -25,7 +25,7 @@ class_name TerrainInfoPanel
 #
 # Code-built (no .tscn) exactly like MoveSelectionPanel / CombatForecastPanel:
 # it is top_level, anchors itself over the battlefield, and calls
-# ConquestTheme.apply_to(self) for the amber HUD look. Like CombatForecastPanel
+# ConquestTheme.apply_to(self) for the navy + gold HUD look. Like CombatForecastPanel
 # it is non-modal: mouse_filter = IGNORE everywhere, so it never blocks clicks
 # on the board or sibling panels.
 #
@@ -38,8 +38,8 @@ class_name TerrainInfoPanel
 # GameWorldManager._setup_terrain_info_panel) only need to instantiate it and
 # add it to the "UI" CanvasLayer -- nothing else to wire up.
 
-const PANEL_WIDTH := 260.0
-const MARGIN := 16.0
+const PANEL_WIDTH := HudSafeArea.CORNER_CARD_WIDTH
+const MARGIN := ConquestTheme.MARGIN
 
 ## Hard cap on the card's height. The HUD's whole left column is budgeted against this:
 ## UnitInfoPanel.BOTTOM_RESERVE (176) = MARGIN (16) + MAX_HEIGHT (152) + an 8px gap, and
@@ -48,9 +48,12 @@ const MARGIN := 16.0
 ## the unit card (and, before the explicit offsets below, off the bottom of the screen).
 const MAX_HEIGHT := 152.0
 
-## Width the card's rows are measured at: PANEL_WIDTH minus the amber card's 14px content
-## margins each side, minus a couple of px of frame.
-const CONTENT_WIDTH := 228.0
+## Width the card's rows are measured at: PANEL_WIDTH minus the grove card's 18px content
+## margins each side (ConquestTheme.panel_box), minus a couple of px of frame.
+const CONTENT_WIDTH := PANEL_WIDTH - 40.0
+
+## Gap between the terrain card and the floor badge beside it.
+const FLOOR_BADGE_GAP := 8.0
 
 var _card: PanelContainer
 var _name_label: Label
@@ -86,7 +89,50 @@ var _trap_label: Label
 var _selected_unit = null
 
 # Sentinel so the very first _on_cursor_moved always does a fresh lookup.
-var _current_cell: Vector2i = Vector2i(-999999, -999999)
+var _current_cell: Vector3i = Vector3i(-999999, -999999, 0)
+
+# --- Multi-floor readout -------------------------------------------------------
+var _floor_label: Label
+var _floor_badge: PanelContainer
+var _floor_badge_label: Label
+var _floor_hint_label: Label
+var _floor_pips: FloorPips
+var _view_floor: int = 0
+var _cut_floor: int = 0
+var _floor_count: int = 1
+
+
+## Tiny vertical stack of floor pips for the floor badge: one bar per floor
+## (bottom = ground), the view floor filled, cut-away floors hollow.
+class FloorPips extends Control:
+	var count: int = 1
+	var view: int = 0
+	var cut: int = 0
+	var cursor_floor: int = 0
+
+	func set_state(c: int, v: int, k: int, cf: int) -> void:
+		count = maxi(1, c)
+		view = v
+		cut = k
+		cursor_floor = cf
+		custom_minimum_size = Vector2(18, maxf(22.0, count * 9.0))
+		queue_redraw()
+
+	func _draw() -> void:
+		var h := size.y
+		var bar_h := minf(7.0, (h - 2.0) / count - 2.0)
+		for f in count:
+			var y := h - (f + 1) * (bar_h + 2.0)
+			var r := Rect2(Vector2(1, y), Vector2(size.x - 2, bar_h))
+			if f == cursor_floor:
+				draw_rect(r, ConquestTheme.GOLD)
+				draw_rect(r, ConquestTheme.GOLD_LITE, false, 1.5)
+			elif f == view:
+				draw_rect(r, ConquestTheme.TEXT_DIM)
+			elif f <= cut:
+				draw_rect(r, ConquestTheme.BORDER)
+			else:
+				draw_rect(r, ConquestTheme.BORDER, false, 1.0)
 
 
 func _ready() -> void:
@@ -122,14 +168,18 @@ func _ready() -> void:
 
 	if GameEvents and not GameEvents.cursor_moved.is_connected(_on_cursor_moved):
 		GameEvents.cursor_moved.connect(_on_cursor_moved)
-	# WHO "you" IS. The matchup line is relative to the selected unit, so this panel
-	# tracks the selection itself rather than reaching into UnitActionsPanel -- the two
-	# are siblings on the HUD and neither should own the other's state.
+	# WHO "you" IS. The matchup line and the Move Cost row are both relative to the
+	# selected unit (its element; its movement profile), so this panel tracks the
+	# selection itself rather than reaching into UnitActionsPanel -- the two are siblings
+	# on the HUD and neither should own the other's state.
 	if GameEvents:
 		if not GameEvents.unit_selected.is_connected(_on_unit_selected):
 			GameEvents.unit_selected.connect(_on_unit_selected)
 		if not GameEvents.unit_deselected.is_connected(_on_unit_deselected):
 			GameEvents.unit_deselected.connect(_on_unit_deselected)
+		if GameEvents.has_signal("view_floor_changed") \
+				and not GameEvents.view_floor_changed.is_connected(_on_view_floor_changed):
+			GameEvents.view_floor_changed.connect(_on_view_floor_changed)
 
 
 ## Pin our rect to the whole viewport so the bottom-left-anchored card lands on
@@ -188,11 +238,11 @@ func _create_ui() -> void:
 	_name_label = Label.new()
 	_name_label.name = "TerrainNameLabel"
 	_name_label.text = "Terrain"
-	_name_label.add_theme_font_size_override("font_size", 18)
+	_name_label.theme_type_variation = &"SubheadingLabel"
 	# NOT autowrapped, now that it shares a row. discipline_label gives an AUTOWRAP label
-	# a minimum WIDTH of the full content width (228) -- which, next to a badge, would
-	# demand more than the 260px card can give and overflow its frame. Clipped instead:
-	# a long terrain name ellipsizes rather than widening or wrapping the card.
+	# a minimum WIDTH of the full content width -- which, next to a badge, would demand
+	# more than the card can give and overflow its frame. Clipped instead: a long terrain
+	# name ellipsizes rather than widening or wrapping the card.
 	_name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_name_label.clip_text = true
 	_name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -206,14 +256,27 @@ func _create_ui() -> void:
 	_element_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	name_row.add_child(_element_badge)
 
+	# Multi-floor: which floor the cell is on + where its stairs/ladders lead.
+	# Hidden on single-floor maps (so it costs single-floor maps -- every local map --
+	# nothing). Wraps at the pinned content width; on a multi-floor map the extra line
+	# is absorbed by the chip list's scroll like the matchup / trap rows.
+	_floor_label = Label.new()
+	_floor_label.name = "FloorLabel"
+	_floor_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_floor_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+	_floor_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_floor_label.visible = false
+	root_vb.add_child(_floor_label)
+
 	var sep := HSeparator.new()
 	sep.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_vb.add_child(sep)
 
 	_move_label = Label.new()
 	_move_label.name = "MoveCostLabel"
+	_move_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_move_label.text = "Move Cost: --"
-	_move_label.add_theme_font_size_override("font_size", 14)
+	_move_label.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
 	_move_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_vb.add_child(_move_label)
 
@@ -244,8 +307,8 @@ func _create_ui() -> void:
 
 	_effects_header = Label.new()
 	_effects_header.name = "EffectsHeader"
-	_effects_header.text = "Effects:"
-	_effects_header.add_theme_font_size_override("font_size", 13)
+	_effects_header.text = "TERRAIN EFFECTS"
+	_effects_header.theme_type_variation = &"SectionLabel"
 	_effects_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_vb.add_child(_effects_header)
 
@@ -258,21 +321,78 @@ func _create_ui() -> void:
 
 	_effects_container = VBoxContainer.new()
 	_effects_container.name = "EffectsContainer"
-	_effects_container.add_theme_constant_override("separation", 2)
+	_effects_container.add_theme_constant_override("separation", 4)
 	_effects_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_effects_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_effects_scroll.add_child(_effects_container)
 
-	# Amber HUD look, applied last (see CombatForecastPanel._create_ui) so it
-	# doesn't get stripped by any later local overrides.
-	ConquestTheme.apply_to(self)
+	# Floor badge: a small separate card beside the terrain card, bottom-aligned with it
+	# (multi-floor maps only) -- see _layout_floor_badge / FloorLabels. Beside, not above:
+	# the band above the terrain card is the left column's unit card (UnitInfoPanel's
+	# BOTTOM_RESERVE is exactly this card's MARGIN + MAX_HEIGHT + gap).
+	_floor_badge = PanelContainer.new()
+	_floor_badge.name = "FloorBadge"
+	_floor_badge.anchor_left = 0.0
+	_floor_badge.anchor_right = 0.0
+	_floor_badge.anchor_top = 1.0
+	_floor_badge.anchor_bottom = 1.0
+	_floor_badge.grow_horizontal = Control.GROW_DIRECTION_END
+	_floor_badge.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_floor_badge.offset_left = MARGIN + PANEL_WIDTH + FLOOR_BADGE_GAP
+	_floor_badge.offset_bottom = -MARGIN
+	_floor_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_floor_badge.visible = false
+	add_child(_floor_badge)
+	var badge_hb := HBoxContainer.new()
+	badge_hb.add_theme_constant_override("separation", 12)
+	badge_hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_floor_badge.add_child(badge_hb)
+	_floor_pips = FloorPips.new()
+	_floor_pips.custom_minimum_size = Vector2(18, 30)
+	_floor_pips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_hb.add_child(_floor_pips)
+	var badge_vb := VBoxContainer.new()
+	badge_vb.add_theme_constant_override("separation", 0)
+	badge_vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_hb.add_child(badge_vb)
+	_floor_badge_label = Label.new()
+	_floor_badge_label.name = "FloorBadgeLabel"
+	_floor_badge_label.add_theme_font_override("font", MenuTheme.bold_font(0.4))
+	_floor_badge_label.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
+	_floor_badge_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_vb.add_child(_floor_badge_label)
+	_floor_hint_label = Label.new()
+	_floor_hint_label.name = "FloorHintLabel"
+	_floor_hint_label.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
+	_floor_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_vb.add_child(_floor_hint_label)
+	_card.resized.connect(_layout_floor_badge)
+	_card.visibility_changed.connect(_layout_floor_badge)
 
-	# Bound every row's contribution to the card's minimum size. _name_label AUTOWRAPS, and
-	# a Godot autowrap Label reports its minimum HEIGHT for whatever width it was last laid
-	# out at -- measured, this card's VBox was demanding 287px for four short rows, which
-	# blew the 152px the HUD reserves for this corner. Pinning a floor width pins the line
-	# count with it. See UnitInfoPanel.discipline_label for the full note.
-	UnitInfoPanel.discipline_subtree(self, CONTENT_WIDTH)
+	# HUD look first, then the deliberate local colours on top.
+	ConquestTheme.apply_to(self)
+	# The grove HUD card with tighter vertical padding: this corner is height-capped at
+	# MAX_HEIGHT (the HUD reserves exactly that band), and the default 14px top / bottom
+	# would spend the room the chip list needs before a single chip is drawn.
+	var card_sb := ConquestTheme.panel_box(0.94)
+	card_sb.content_margin_top = 9
+	card_sb.content_margin_bottom = 9
+	_card.add_theme_stylebox_override("panel", card_sb)
+	_floor_label.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
+	_floor_hint_label.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
+	_floor_badge_label.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
+	var badge_sb := ConquestTheme.chip_box(ConquestTheme.GOLD_DK, 0.94)
+	badge_sb.content_margin_top = 8
+	badge_sb.content_margin_bottom = 8
+	_floor_badge.add_theme_stylebox_override("panel", badge_sb)
+
+	# Bound every row's contribution to the card's minimum size. An autowrap Label (the
+	# move-cost and floor rows) reports its minimum HEIGHT for whatever width it was last
+	# laid out at -- measured, this card's VBox was demanding 287px for four short rows,
+	# which blew the 152px the HUD reserves for this corner. Pinning a floor width pins the
+	# line count with it. See UnitInfoPanel.discipline_label for the full note. Only the
+	# CARD's subtree: the floor badge is not height-budgeted and sizes to its own text.
+	UnitInfoPanel.discipline_subtree(_card, CONTENT_WIDTH)
 
 
 # --- Public API --------------------------------------------------------------
@@ -280,7 +400,7 @@ func _create_ui() -> void:
 ## Populate and show the panel for a specific board cell. Hides itself (and
 ## returns) when the cell has no registered terrain -- e.g. off the loaded
 ## map, or no map/board loaded yet.
-func show_for_cell(cell: Vector2i) -> void:
+func show_for_cell(cell: Vector3i) -> void:
 	# NOTE: a null tile here means the cursor is on an IN-BOUNDS cell whose terrain
 	# isn't registered (a registry miss), NOT off-board -- _on_cursor_moved already
 	# rejected off-board cells. Blanking the whole panel in that case was the
@@ -291,15 +411,20 @@ func show_for_cell(cell: Vector2i) -> void:
 
 	_current_cell = cell
 
+	var unit_cost := _unit_move_cost_text(cell)
 	if tile != null:
 		_name_label.text = tile.tile_name if tile.tile_name != "" else "Unknown Terrain"
-		if tile.is_tile_passable():
-			_move_label.text = "Move Cost: %d" % maxi(1, tile.base_movement_cost)
+		if not unit_cost.is_empty():
+			_move_label.text = unit_cost
+		elif tile.is_tile_passable():
+			_move_label.text = "Move cost  %d" % maxi(1, tile.base_movement_cost)
 		else:
-			_move_label.text = "Move Cost: -- (Impassable)"
+			_move_label.text = "Impassable"
 	else:
 		_name_label.text = "Unknown Terrain"
-		_move_label.text = "Move Cost: 1"
+		_move_label.text = unit_cost if not unit_cost.is_empty() else "Move cost  1"
+
+	_refresh_floor_info(cell)
 
 	# Reveal BEFORE populating effects: the name/move rows are already valid, so
 	# even if effect population ever failed we still surface the terrain instead of
@@ -310,10 +435,126 @@ func show_for_cell(cell: Vector2i) -> void:
 	_populate_effects(cell)
 
 
+# --- Per-unit move cost ----------------------------------------------------------
+# MovementResolver prices a step with the MOVER's profile (per-terrain overrides,
+# and flying/phasing kinds ignore blocking terrain), so the tile's base cost can be
+# wrong for the unit the player cares about. When a unit is selected -- or, with
+# nothing selected, a unit stands on the hovered cell -- show the cost for THAT
+# unit's profile via the resolver's own (read-only) cost/blocking helpers.
+# (The selection itself is tracked in the element-rows section below:
+# selected_unit / set_selected_unit / _on_unit_selected / _on_unit_deselected.)
+
+func _refresh_current_cell() -> void:
+	if visible and _current_cell != Vector3i(-999999, -999999, 0):
+		show_for_cell(_current_cell)
+
+## The unit whose profile prices the hovered cell: the selected unit, else the unit
+## standing on [param cell]; null when neither exists. FOG: a unit this screen cannot
+## see is never used -- "Move cost 2 (Duskmaw)" on a fogged cell would name exactly the
+## unit fog of war is hiding.
+func _cost_unit_for(cell: Vector3i, board):
+	var sel = selected_unit()
+	if sel != null:
+		return sel
+	if board != null and board.has_method("units_at"):
+		for u in board.units_at(cell):
+			if u != null and is_instance_valid(u) and not FogOfWarOverlay.unit_hidden(u):
+				return u
+	return null
+
+## "Move Cost: N (Unit)" for the cost-unit's movement profile, or "" when there is no
+## unit / profile to price with (the caller then shows the tile's base cost).
+func _unit_move_cost_text(cell: Vector3i) -> String:
+	var board = CombatServices.board()
+	if board == null:
+		return ""
+	var unit = _cost_unit_for(cell, board)
+	if unit == null or not unit.has_method("get_movement_profile"):
+		return ""
+	var profile = unit.get_movement_profile()
+	if not (profile is MovementProfile):
+		return ""
+	var who: String = unit.get_display_name() if unit.has_method("get_display_name") else ""
+	var suffix := "  (%s)" % who if not who.is_empty() else ""
+	# Only GROUND movers are stopped by blocking terrain (see MovementResolver._can_traverse).
+	if profile.kind == CombatTypes.MovementKind.GROUND and MovementResolver._is_blocked(board, cell):
+		return "Impassable" + suffix
+	return "Move cost  %d" % MovementResolver._enter_cost(cell, profile, board, unit) + suffix
+
+
+# --- Multi-floor readout ---------------------------------------------------------
+
+func _on_view_floor_changed(view_floor: int, cut_floor: int, floor_count: int) -> void:
+	_view_floor = view_floor
+	_cut_floor = cut_floor
+	_floor_count = maxi(1, floor_count)
+	if _current_cell != Vector3i(-999999, -999999, 0):
+		_refresh_floor_info(_current_cell)
+	else:
+		_refresh_floor_badge(0)
+
+
+## Floor line ("Upper floor · Stairs ▼ Ground") in the terrain card, and the floor
+## badge beside it. Both hidden on single-floor maps.
+func _refresh_floor_info(cell: Vector3i) -> void:
+	if _floor_label == null:
+		return
+	var board = CombatServices.board() if CombatServices else null
+	if board != null and board.has_method("floor_count"):
+		_floor_count = maxi(_floor_count, int(board.floor_count()))
+	if _floor_count <= 1:
+		_floor_label.visible = false
+		_refresh_floor_badge(cell.z)
+		return
+	var parts := PackedStringArray(["%s floor" % FloorNav.floor_name(cell.z, _floor_count)])
+	parts.append_array(FloorNav.describe_links(board, cell))
+	if FloorNav.is_covered(board, cell):
+		parts.append("Under cover")
+	# One wrapped line rather than a line per part: the card is height-capped (MAX_HEIGHT).
+	_floor_label.text = "  ·  ".join(parts)
+	_floor_label.visible = true
+	_refresh_floor_badge(cell.z)
+	call_deferred("_reflow_card")
+
+
+func _refresh_floor_badge(cursor_floor: int) -> void:
+	if _floor_badge == null:
+		return
+	if _floor_count <= 1:
+		_floor_badge.visible = false
+		return
+	_floor_badge_label.text = "Floor %d / %d  ·  %s" % [
+		_view_floor + 1, _floor_count, FloorNav.floor_name(_view_floor, _floor_count)]
+	var up := ConquestTheme.action_glyph(InputActions.FLOOR_UP)
+	var down := ConquestTheme.action_glyph(InputActions.FLOOR_DOWN)
+	var hint := "%s / %s  change floor" % [up, down]
+	if _cut_floor < _view_floor:
+		hint = "Cutaway to %s  ·  %s" % [FloorNav.floor_name(_cut_floor, _floor_count), hint]
+	_floor_hint_label.text = hint
+	_floor_pips.set_state(_floor_count, _view_floor, _cut_floor, cursor_floor)
+	_floor_badge.visible = true
+	_layout_floor_badge()
+
+
+## Seat the floor badge beside the terrain card, bottom edges aligned (the band above the
+## card belongs to the left column's unit card -- see the note in _create_ui).
+func _layout_floor_badge() -> void:
+	if _floor_badge == null or _card == null:
+		return
+	_floor_badge.offset_left = MARGIN + maxf(_card.size.x, PANEL_WIDTH) + FLOOR_BADGE_GAP
+	_floor_badge.offset_bottom = -MARGIN
+
+
+## Dim while a modal overlay (map menu, settings) is open so it reads as behind it.
+func _process(_delta: float) -> void:
+	if visible:
+		modulate = Color(0.5, 0.5, 0.55) if InputActions.gameplay_input_blocked(get_tree()) else Color.WHITE
+
+
 ## Hide the panel and reset its tracked cell so the next show_for_cell always
 ## repopulates fresh.
 func hide_panel() -> void:
-	_current_cell = Vector2i(-999999, -999999)
+	_current_cell = Vector3i(-999999, -999999, 0)
 	hide()
 
 
@@ -326,16 +567,15 @@ func selected_unit():
 	return _selected_unit if _selected_unit != null and is_instance_valid(_selected_unit) else null
 
 
-## Point the panel at [param unit] as the selection, repainting the matchup line in place.
-## Public so a test can set the selection without a live cursor or turn system; the live
-## game reaches it through GameEvents.
+## Point the panel at [param unit] as the selection, repainting the matchup line AND the
+## per-unit Move Cost row in place. Public so a test can set the selection without a live
+## cursor or turn system; the live game reaches it through GameEvents.
 func set_selected_unit(unit) -> void:
 	_selected_unit = unit
-	if visible:
-		_refresh_element_rows(_current_cell)
+	_refresh_current_cell()
 
 
-func _on_unit_selected(unit, _position: Vector3) -> void:
+func _on_unit_selected(unit, _position = null) -> void:
 	set_selected_unit(unit)
 
 
@@ -353,7 +593,7 @@ func _on_unit_deselected(unit) -> void:
 ## [method TileEffectResource.home_summary_for], which scales through the SAME
 ## [method ElementChart.home_effect_amount] the effect's own run does. Nothing on this row
 ## is re-derived here (CONQUEST.md rule 9).
-func _refresh_element_rows(cell: Vector2i) -> void:
+func _refresh_element_rows(cell: Vector3i) -> void:
 	if _element_badge == null or not is_instance_valid(_element_badge):
 		return
 	var effects: Array = CombatServices.tile_effects_at(cell)
@@ -452,7 +692,7 @@ func _matchup_line(te, unit) -> Dictionary:
 ## Deliberately NOT filtered by the selected unit: a trap is a property of the tile the
 ## player is inspecting, and hiding it because the currently-selected unit happens to be on
 ## the side that placed it would make the card lie about the board.
-func _refresh_trap_row(cell: Vector2i) -> void:
+func _refresh_trap_row(cell: Vector3i) -> void:
 	if _trap_label == null or not is_instance_valid(_trap_label):
 		return
 	_trap_label.text = ""
@@ -511,7 +751,7 @@ func _reflow_card() -> void:
 	_card.offset_bottom = -MARGIN
 
 
-func _populate_effects(cell: Vector2i) -> void:
+func _populate_effects(cell: Vector3i) -> void:
 	# remove_child BEFORE queue_free: a queued-but-still-parented chip keeps contributing
 	# to get_combined_minimum_size(), so _reflow_card() below would size the card against
 	# the PREVIOUS tile's chips as well as this one's.
@@ -527,10 +767,10 @@ func _populate_effects(cell: Vector2i) -> void:
 
 	if effects.is_empty():
 		var none_label := Label.new()
-		none_label.text = "No special effects"
-		none_label.add_theme_font_size_override("font_size", 13)
+		none_label.text = "None"
+		none_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
 		# Muted so the "nothing here" state reads as secondary, not a real effect.
-		none_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
+		none_label.add_theme_color_override("font_color", ConquestTheme.TEXT_MUTED)
 		none_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		UnitInfoPanel.discipline_label(none_label, CONTENT_WIDTH)
 		_effects_container.add_child(none_label)
@@ -566,26 +806,25 @@ func _build_effect_chip(te: TileEffectResource, is_temporary: bool) -> PanelCont
 		label_text += " · temp"
 
 	var chip := PanelContainer.new()
-	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	# Dim fill + effect-colour frame, rounded to match the amber HUD's soft corners.
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = color.darkened(0.35)
-	sb.set_corner_radius_all(6)
-	sb.set_border_width_all(1)
-	sb.border_color = color
-	sb.content_margin_left = 6
-	sb.content_margin_right = 6
+	# PASS (not STOP): the Compendium-worded tooltip shows without eating board clicks.
+	chip.mouse_filter = Control.MOUSE_FILTER_PASS
+	chip.tooltip_text = CompendiumData.tile_effect_tooltip(te)
+	chip.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	ConquestTheme.keep_style(chip)
+	var sb := ConquestTheme.chip_style(color)
+	sb.set_corner_radius_all(8)
+	sb.content_margin_left = 8
+	sb.content_margin_right = 10
 	sb.content_margin_top = 3
 	sb.content_margin_bottom = 3
 	chip.add_theme_stylebox_override("panel", sb)
 
 	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 5)
+	hb.add_theme_constant_override("separation", 6)
 	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chip.add_child(hb)
 
-	# Tiny colour swatch echoing the effect colour (and the 3D overlay pip).
+	# Colour swatch echoing the effect colour (and the 3D overlay pip).
 	var swatch := ColorRect.new()
 	swatch.color = color
 	swatch.custom_minimum_size = Vector2(10, 10)
@@ -595,10 +834,8 @@ func _build_effect_chip(te: TileEffectResource, is_temporary: bool) -> PanelCont
 
 	var label := Label.new()
 	label.text = label_text
-	label.add_theme_font_size_override("font_size", 13)
-	# CREAM reads clearly on the dim (darkened) chip fill, unlike the theme's
-	# default INK which is tuned for the light amber panel background.
-	label.add_theme_color_override("font_color", ConquestTheme.CREAM)
+	label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+	label.add_theme_color_override("font_color", color.lightened(0.5))
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hb.add_child(label)
 
@@ -613,7 +850,7 @@ func _build_effect_chip(te: TileEffectResource, is_temporary: bool) -> PanelCont
 ## of re-deriving it through BoardAdapter.world_to_cell (which expects a raw
 ## world-space position, not grid coordinates).
 func _on_cursor_moved(grid_pos: Vector3) -> void:
-	var cell := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var cell := Cells.from_grid(grid_pos)  # Vector3(col, floor, row) -> cell
 
 	# TOUCH-READY STICKINESS: once shown for a cell, this panel stays up until the
 	# cursor genuinely reports a DIFFERENT cell -- never merely because cursor_moved

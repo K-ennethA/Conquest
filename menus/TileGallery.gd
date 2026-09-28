@@ -19,6 +19,14 @@ class_name TileGallery
 # obsidian, the `stealth` flag) deliberately neutral because it has nothing to apply, and
 # a badge there would promise a matchup the board never resolves. Absence is the authored
 # answer -- never invent one.
+#
+# LOOK. Hosted in a Compendium tab, so it uses the illuminated-grove kit (docs/UI_STYLE.md):
+# theme label variations, the FS_* type scale, element-edged grove cards for effects and
+# tag badges (MenuKit.badge). The detail pane scrolls, so the whole page fits 1280x720.
+
+## Breathing room inside the host (the Compendium's tab panel already pads the page).
+const PAGE_MARGIN: int = MenuTheme.SP_S
+const MUTED := MenuTheme.TEXT_MUTED
 
 # UI Elements
 @onready var back_button: Button
@@ -179,56 +187,58 @@ static func _element_name_list(elements: Array) -> String:
 
 
 func _ready() -> void:
-	theme = MenuTheme.build()  # dark Legends-style menu look (matches Unit/Map galleries)
+	theme = MenuTheme.build()  # the illuminated-grove menu theme (matches Unit/Map galleries)
 	_create_ui()
 	_load_all_tiles()
 	_setup_connections()
+	# Open on the first tile so the detail pane is never blank.
+	if tile_list != null and not filtered_tiles.is_empty():
+		tile_list.select(0)
+		_on_tile_selected(0)
 
 func _create_ui() -> void:
 	"""Create the complete UI for the tile gallery"""
 	# Set up main layout
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-	# Outer 24px breathing room; 16px between the list and detail panels.
 	var outer = MarginContainer.new()
 	outer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	outer.add_theme_constant_override("margin_left", 24)
-	outer.add_theme_constant_override("margin_right", 24)
-	outer.add_theme_constant_override("margin_top", 24)
-	outer.add_theme_constant_override("margin_bottom", 24)
+	outer.add_theme_constant_override("margin_left", PAGE_MARGIN)
+	outer.add_theme_constant_override("margin_right", PAGE_MARGIN)
+	outer.add_theme_constant_override("margin_top", PAGE_MARGIN)
+	outer.add_theme_constant_override("margin_bottom", PAGE_MARGIN)
 	add_child(outer)
 
-	# Main container
+	# Main container: a fixed-width list column, the detail pane takes the rest.
 	var main_container = HBoxContainer.new()
-	main_container.add_theme_constant_override("separation", 16)
+	main_container.add_theme_constant_override("separation", MenuTheme.SP_XL)
 	outer.add_child(main_container)
 
 	# Left panel - Tile list and controls
 	var left_panel = VBoxContainer.new()
-	left_panel.custom_minimum_size = Vector2(300, 0)
-	left_panel.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	left_panel.add_theme_constant_override("separation", 6)
+	left_panel.custom_minimum_size = Vector2(320, 0)
+	left_panel.add_theme_constant_override("separation", MenuTheme.SP_XS)
 	main_container.add_child(left_panel)
 
-	# Title and back button
+	# Title and back button (the Compendium hides this whole row when hosting).
 	var header_container = HBoxContainer.new()
+	# A real gap between the title and Back (the default ~4px let a long title touch it).
+	header_container.add_theme_constant_override("separation", MenuTheme.SP_M)
 	left_panel.add_child(header_container)
 
 	var title = Label.new()
-	title.text = "TILE GALLERY"
-	title.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	title.add_theme_color_override("font_color", MenuTheme.GOLD)
+	title.text = "Tile Gallery"
+	title.theme_type_variation = &"HeadingLabel"
 	title.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	header_container.add_child(title)
 
-	back_button = Button.new()
-	back_button.text = "BACK"
-	back_button.custom_minimum_size = Vector2(80, 40)
+	back_button = MenuKit.button("Back", MenuKit.GHOST, 120, 44)
 	header_container.add_child(back_button)
 
 	# Search and filter controls
 	var controls_container = VBoxContainer.new()
-	controls_container.add_theme_constant_override("separation", 6)
+	controls_container.add_theme_constant_override("separation", MenuTheme.SP_XS)
+	controls_container.set_v_size_flags(Control.SIZE_EXPAND_FILL)
 	left_panel.add_child(controls_container)
 
 	# Search
@@ -259,22 +269,31 @@ func _create_ui() -> void:
 
 	tile_list = ItemList.new()
 	tile_list.set_v_size_flags(Control.SIZE_EXPAND_FILL)
-	tile_list.custom_minimum_size = Vector2(280, 400)
+	tile_list.custom_minimum_size = Vector2(280, 120)
 	controls_container.add_child(tile_list)
 
-	# Right panel - Tile details
+	# Right panel - Tile details. Scrolls: description + 3D preview + properties +
+	# effect cards are taller than a 720p Compendium tab.
+	var right_scroll = ScrollContainer.new()
+	right_scroll.name = "DetailScroll"
+	right_scroll.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	right_scroll.set_v_size_flags(Control.SIZE_EXPAND_FILL)
+	right_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	right_scroll.custom_minimum_size = Vector2(500, 0)
+	main_container.add_child(right_scroll)
+
 	var right_panel = VBoxContainer.new()
 	right_panel.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	right_panel.custom_minimum_size = Vector2(500, 0)
-	right_panel.add_theme_constant_override("separation", 8)
-	main_container.add_child(right_panel)
-	
+	right_panel.add_theme_constant_override("separation", MenuTheme.SP_S)
+	right_scroll.add_child(right_panel)
+
 	_create_tile_display(right_panel)
 
 func _create_tile_display(parent: VBoxContainer) -> void:
 	"""Create the tile display area"""
 	tile_display_container = VBoxContainer.new()
-	tile_display_container.add_theme_constant_override("separation", 10)
+	tile_display_container.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	tile_display_container.add_theme_constant_override("separation", MenuTheme.SP_S)
 	parent.add_child(tile_display_container)
 
 	# Tile header
@@ -287,12 +306,13 @@ func _create_tile_display(parent: VBoxContainer) -> void:
 	header_container.add_child(info_container)
 
 	tile_name_label = Label.new()
-	tile_name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	tile_name_label.add_theme_color_override("font_color", MenuTheme.GOLD)
+	tile_name_label.add_theme_font_override("font", MenuTheme.display_font(2))
+	tile_name_label.add_theme_font_size_override("font_size", MenuTheme.FS_HEADING + 4)
+	tile_name_label.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
 	info_container.add_child(tile_name_label)
 
 	tile_type_label = Label.new()
-	tile_type_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	tile_type_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	info_container.add_child(tile_type_label)
 
 	# Element badge + matchup hint. ONE row, built once and re-pointed per selection
@@ -303,7 +323,7 @@ func _create_tile_display(parent: VBoxContainer) -> void:
 	tile_element_row.add_theme_constant_override("separation", 8)
 	info_container.add_child(tile_element_row)
 
-	tile_element_badge = ElementVisuals.make_badge(&"", MenuTheme.FONT_CAPTION, BADGE_CAP)
+	tile_element_badge = ElementVisuals.make_badge(&"", MenuTheme.FS_CAPTION, BADGE_CAP)
 	tile_element_badge.name = TILE_BADGE_NAME
 	# SHRINK_BEGIN, not the badge default SHRINK_END: this row is left-aligned under the
 	# tile's name, so the chip must hug the left edge rather than the far side of the panel.
@@ -312,7 +332,7 @@ func _create_tile_display(parent: VBoxContainer) -> void:
 
 	tile_matchup_label = Label.new()
 	tile_matchup_label.name = TILE_MATCHUP_NAME
-	tile_matchup_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	tile_matchup_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	tile_matchup_label.modulate = MenuTheme.CREAM_DIM
 	tile_matchup_label.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	tile_element_row.add_child(tile_matchup_label)
@@ -363,7 +383,7 @@ func _create_tile_display(parent: VBoxContainer) -> void:
 func _section_header(text: String) -> Label:
 	var label = Label.new()
 	label.text = text.to_upper()
-	label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	label.theme_type_variation = &"SectionLabel"
 	label.add_theme_color_override("font_color", MenuTheme.GOLD)
 	return label
 
@@ -372,7 +392,7 @@ func _section_header(text: String) -> Label:
 func _form_label(text: String) -> Label:
 	var label = Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	label.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
 	return label
 
@@ -394,7 +414,7 @@ func _setup_preview_viewport() -> void:
 	# Add environment
 	var env = Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.2, 0.2, 0.3, 1.0)
+	env.background_color = Color(0.07, 0.08, 0.15, 1.0)  # the grove's sunken navy
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.4, 0.4, 0.5, 1.0)
 	env.ambient_light_energy = 0.3
@@ -650,11 +670,11 @@ func _display_tile(tile: TileResource) -> void:
 			"Common":
 				tile_type_label.modulate = MenuTheme.CREAM_DIM
 			"Uncommon":
-				tile_type_label.modulate = Color("6fae5a")
+				tile_type_label.modulate = MenuTheme.SUCCESS
 			"Rare":
-				tile_type_label.modulate = Color("5a9bd6")
+				tile_type_label.modulate = MenuTheme.ACCENT
 			"Epic":
-				tile_type_label.modulate = Color("a86fd0")
+				tile_type_label.modulate = Color("c49cff")
 			"Legendary":
 				tile_type_label.modulate = MenuTheme.GOLD
 	
@@ -757,8 +777,8 @@ func _update_tile_properties(tile: TileResource) -> void:
 	for prop in properties:
 		var label = Label.new()
 		label.text = prop[0] + ":"
-		label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-		label.modulate = Color(0.72, 0.70, 0.78)
+		label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+		label.modulate = MUTED
 		properties_grid.add_child(label)
 
 		var value = Label.new()
@@ -800,11 +820,11 @@ func _update_tile_effects(tile: TileResource) -> void:
 
 	# Accent tile effects in the piercing-orange used for hazards elsewhere, so
 	# each effect reads as a left-accented card matching the unit move cards.
-	var accent = Color("f0913c")
+	var accent: Color = Color("f0913c")
 	for effect in effects:
 		var card = PanelContainer.new()
 		card.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-		card.add_theme_stylebox_override("panel", MenuTheme.card_box(accent))
+		card.add_theme_stylebox_override("panel", ElementChartGallery.card_box_for(accent))
 		effects_container.add_child(card)
 
 		var effect_container = VBoxContainer.new()
@@ -818,14 +838,15 @@ func _update_tile_effects(tile: TileResource) -> void:
 
 		var effect_name = Label.new()
 		effect_name.text = effect.effect_name
-		effect_name.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+		effect_name.add_theme_font_override("font", MenuTheme.heading_font())
+		effect_name.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
 		effect_name.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 		effect_header.add_child(effect_name)
 
 		_add_effect_element_badge(effect_header, effect, tile)
 
-		effect_header.add_child(MenuTheme.make_chip(
-			TileEffect.EffectType.keys()[effect.effect_type], accent))
+		effect_header.add_child(MenuKit.badge(
+			String(TileEffect.EffectType.keys()[effect.effect_type]).capitalize(), accent))
 
 		# Effect description
 		var effect_desc = Label.new()
@@ -846,8 +867,8 @@ func _update_tile_effects(tile: TileResource) -> void:
 
 		var effect_props = Label.new()
 		effect_props.text = props_text
-		effect_props.modulate = Color(0.72, 0.70, 0.78)
-		effect_props.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+		effect_props.modulate = MUTED
+		effect_props.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 		effect_container.add_child(effect_props)
 
 		_add_effect_matchup_hint(effect_container, effect, tile)
@@ -878,9 +899,12 @@ func _authored_effect_resources(tile: TileResource) -> Array:
 ## this section gets the slack that is left, so a card here states what the effect IS and
 ## sends the rest to the effect's own place in the game.
 func _add_effect_resource_card(effect: TileEffectResource, tile: TileResource, accent: Color) -> void:
+	# Edged in the effect's own colour (the one the battle HUD and the Compendium's Tile
+	# Effects page use for it), falling back to the hazard orange.
+	var card_accent: Color = TileEffectVisuals.info_for_id(effect.id).get("color", accent)
 	var card := PanelContainer.new()
 	card.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	card.add_theme_stylebox_override("panel", MenuTheme.card_box(accent))
+	card.add_theme_stylebox_override("panel", ElementChartGallery.card_box_for(card_accent))
 	effects_container.add_child(card)
 
 	var body := VBoxContainer.new()
@@ -896,14 +920,15 @@ func _add_effect_resource_card(effect: TileEffectResource, tile: TileResource, a
 	if shown == "":
 		shown = String(effect.id).capitalize()
 	name_label.text = shown
-	name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	name_label.add_theme_font_override("font", MenuTheme.heading_font())
+	name_label.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
 	name_label.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	header.add_child(name_label)
 
 	_add_effect_element_badge(header, effect, tile)
 
-	header.add_child(MenuTheme.make_chip(
-			TileEffectResource.Trigger.keys()[effect.trigger], accent))
+	header.add_child(MenuKit.badge(
+			String(TileEffectResource.Trigger.keys()[effect.trigger]).capitalize(), card_accent))
 
 	_add_effect_matchup_hint(body, effect, tile)
 
@@ -914,7 +939,7 @@ func _add_effect_resource_card(effect: TileEffectResource, tile: TileResource, a
 		var trap_label := Label.new()
 		trap_label.name = "TrapDescriptor"
 		trap_label.text = trap_line
-		trap_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+		trap_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 		trap_label.add_theme_color_override("font_color", MenuTheme.GOLD)
 		body.add_child(trap_label)
 
@@ -925,7 +950,7 @@ func _add_effect_element_badge(row: HBoxContainer, effect, tile: TileResource) -
 	var element: StringName = effect_element_of(effect, tile)
 	if element == &"":
 		return
-	var badge := ElementVisuals.make_badge(element, MenuTheme.FONT_CAPTION, BADGE_CAP)
+	var badge := ElementVisuals.make_badge(element, MenuTheme.FS_CAPTION, BADGE_CAP)
 	badge.name = EFFECT_BADGE_NAME
 	row.add_child(badge)
 
@@ -945,7 +970,7 @@ func _add_effect_matchup_hint(body: VBoxContainer, effect, tile: TileResource) -
 	var label := Label.new()
 	label.text = hint
 	label.modulate = MenuTheme.CREAM_DIM
-	label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	body.add_child(label)
@@ -953,7 +978,7 @@ func _add_effect_matchup_hint(body: VBoxContainer, effect, tile: TileResource) -
 # Signal handlers
 func _on_back_pressed() -> void:
 	"""Handle back button press"""
-	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
+	MenuNav.change_scene(self, "res://menus/MainMenu.tscn")
 
 func _on_tile_selected(index: int) -> void:
 	"""Handle tile selection from list"""
@@ -984,7 +1009,9 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		match event.keycode:
 			KEY_ESCAPE:
-				_on_back_pressed()
+				# Hosted in the Compendium the shell owns Back (it hid our button).
+				if back_button != null and back_button.visible:
+					_on_back_pressed()
 			KEY_F5:
 				# Refresh tile list
 				_load_all_tiles()

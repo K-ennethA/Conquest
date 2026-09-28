@@ -32,6 +32,11 @@ class_name TileResource
 @export var base_movement_cost: int = 1
 @export var is_passable: bool = true
 @export var blocks_line_of_sight: bool = false
+## Multi-floor: when this tile is placed on an UPPER floor (f > 0) it is a ceiling
+## for the cell directly below and blocks line of sight through it (see
+## [LineOfSight]). Clear it for see-through decks (grates, rope bridges). Has no
+## effect on floor 0.
+@export var solid_ceiling: bool = true
 
 # Visual Properties
 
@@ -42,7 +47,10 @@ class_name TileResource
 ##         non-FLAT style shares ONE material instance, so they form a single
 ##         seamless, batched field. Add future stylized shaders (water, lava...)
 ##         to the enum and to MATERIAL_STYLE_SHADERS below.
-enum MaterialStyle { FLAT, GRASS, WATER, BURN }
+##         DIRT / SNOW / ICE / TUNDRA / ASH / OBSIDIAN / SACRED are the painterly
+##         world-space ground materials (see docs/WORLD_ART.md). APPEND new styles
+##         at the end: maps and .tres files store the enum by index.
+enum MaterialStyle { FLAT, GRASS, WATER, BURN, DIRT, SNOW, ICE, TUNDRA, ASH, OBSIDIAN, SACRED }
 @export var material_style: MaterialStyle = MaterialStyle.FLAT
 
 ## Maps a non-FLAT MaterialStyle to its ShaderMaterial resource.
@@ -50,6 +58,13 @@ const MATERIAL_STYLE_SHADERS := {
 	MaterialStyle.GRASS: "res://tile_objects/tiles/materials/stylized_grass_material.tres",
 	MaterialStyle.WATER: "res://tile_objects/tiles/materials/stylized_water_material.tres",
 	MaterialStyle.BURN: "res://tile_objects/tiles/materials/stylized_burn_material.tres",
+	MaterialStyle.DIRT: "res://tile_objects/tiles/materials/stylized_dirt_material.tres",
+	MaterialStyle.SNOW: "res://tile_objects/tiles/materials/stylized_snow_material.tres",
+	MaterialStyle.ICE: "res://tile_objects/tiles/materials/stylized_ice_material.tres",
+	MaterialStyle.TUNDRA: "res://tile_objects/tiles/materials/stylized_tundra_material.tres",
+	MaterialStyle.ASH: "res://tile_objects/tiles/materials/stylized_ash_material.tres",
+	MaterialStyle.OBSIDIAN: "res://tile_objects/tiles/materials/stylized_obsidian_material.tres",
+	MaterialStyle.SACRED: "res://tile_objects/tiles/materials/stylized_sacred_material.tres",
 }
 
 @export var base_color: Color = Color.WHITE

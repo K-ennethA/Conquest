@@ -127,7 +127,7 @@ func test_the_recorder_subscribes_to_the_command_seam() -> void:
 func test_note_command_flows_through_the_signal_into_the_body() -> void:
 	var rec := _make_recorder()
 	rec.begin(_a_header())
-	ReplayRecorder.note_command(NetProtocol.make_cast_move(5, 1, Vector2i(2, 2), 1), 1)
+	ReplayRecorder.note_command(NetProtocol.make_cast_move("1:5", 1, Vector3i(2, 2, 0), 1), 1)
 	var entries := _entries(rec)
 	assert_eq(entries.size(), 1, "the command reached the body through the signal")
 	assert_eq(_cmd_type(entries[0]), int(NetProtocol.Action.CAST_MOVE), "as a CAST_MOVE")
@@ -158,23 +158,23 @@ func test_unit_commands_need_a_net_id() -> void:
 	var rec := _make_recorder()
 	rec.begin(_a_header())
 	var nameless: Node3D = add_child_autofree(Node3D.new())
-	ReplayRecorder.note_move_unit(nameless, Vector2i(1, 1))
+	ReplayRecorder.note_move_unit(nameless, Vector3i(1, 1, 0))
 	ReplayRecorder.note_wait_unit(nameless)
-	ReplayRecorder.note_cast_move(nameless, 0, Vector2i(1, 1))
+	ReplayRecorder.note_cast_move(nameless, 0, Vector3i(1, 1, 0))
 	assert_eq(rec.entry_count(), 0,
 		"a unit the command seam never named cannot be addressed by a command, so nothing is recorded")
-	assert_eq(ReplayRecorder.net_id_of(nameless), -1, "and it reports no net id")
-	assert_eq(ReplayRecorder.net_id_of(null), -1, "null reports no net id")
+	assert_eq(ReplayRecorder.net_id_of(nameless), "", "and it reports no net id")
+	assert_eq(ReplayRecorder.net_id_of(null), "", "null reports no net id")
 
 
 func test_unit_commands_normalise_into_the_netprotocol_vocabulary() -> void:
 	var rec := _make_recorder()
 	rec.begin(_a_header())
 	var unit: Node3D = add_child_autofree(Node3D.new())
-	unit.set_meta("net_id", 11)
+	unit.set_meta("net_id", "0:11")
 
-	ReplayRecorder.note_move_unit(unit, Vector2i(4, 5))
-	ReplayRecorder.note_cast_move(unit, 2, Vector2i(6, 7))
+	ReplayRecorder.note_move_unit(unit, Vector3i(4, 5, 0))
+	ReplayRecorder.note_cast_move(unit, 2, Vector3i(6, 7, 0))
 	ReplayRecorder.note_wait_unit(unit)
 
 	var entries := _entries(rec)
@@ -182,14 +182,14 @@ func test_unit_commands_normalise_into_the_netprotocol_vocabulary() -> void:
 
 	assert_eq(_cmd_type(entries[0]), int(NetProtocol.Action.MOVE_UNIT), "first is MOVE_UNIT")
 	var move_data: Dictionary = (entries[0]["cmd"] as Dictionary)[NetProtocol.KEY_DATA]
-	assert_eq(int(move_data[NetProtocol.KEY_UNIT_ID]), 11, "with the unit's net id")
-	assert_eq(ReplayLog.decode_cell(move_data[NetProtocol.KEY_DEST_CELL]), Vector2i(4, 5),
+	assert_eq(move_data[NetProtocol.KEY_UNIT_ID], "0:11", "with the unit's net id")
+	assert_eq(ReplayLog.decode_cell(move_data[NetProtocol.KEY_DEST_CELL]), Vector3i(4, 5, 0),
 		"and its destination")
 
 	assert_eq(_cmd_type(entries[1]), int(NetProtocol.Action.CAST_MOVE), "second is CAST_MOVE")
 	var cast_data: Dictionary = (entries[1]["cmd"] as Dictionary)[NetProtocol.KEY_DATA]
 	assert_eq(int(cast_data[NetProtocol.KEY_MOVE_SLOT]), 2, "with the move slot")
-	assert_eq(ReplayLog.decode_cell(cast_data[NetProtocol.KEY_AIM_CELL]), Vector2i(6, 7),
+	assert_eq(ReplayLog.decode_cell(cast_data[NetProtocol.KEY_AIM_CELL]), Vector3i(6, 7, 0),
 		"and the aim cell")
 
 	assert_eq(_cmd_type(entries[2]), int(NetProtocol.Action.WAIT_UNIT), "third is WAIT_UNIT")
@@ -201,8 +201,8 @@ func test_recorded_entries_are_replayable_by_construction() -> void:
 	var rec := _make_recorder()
 	rec.begin(_a_header())
 	var unit: Node3D = add_child_autofree(Node3D.new())
-	unit.set_meta("net_id", 3)
-	ReplayRecorder.note_move_unit(unit, Vector2i(1, 2))
+	unit.set_meta("net_id", "0:3")
+	ReplayRecorder.note_move_unit(unit, Vector3i(1, 2, 0))
 	ReplayRecorder.note_end_turn(0)
 	for entry in _entries(rec):
 		var live := ReplayLog.decode_command((entry as Dictionary)["cmd"])
@@ -398,8 +398,8 @@ func test_finalize_produces_a_log_that_survives_the_strict_importer() -> void:
 	var rec := _make_recorder()
 	rec.begin(_a_header())
 	var unit: Node3D = add_child_autofree(Node3D.new())
-	unit.set_meta("net_id", 8)
-	ReplayRecorder.note_move_unit(unit, Vector2i(1, 1))
+	unit.set_meta("net_id", "0:8")
+	ReplayRecorder.note_move_unit(unit, Vector3i(1, 1, 0))
 	ReplayRecorder.note_wait_unit(unit)
 	ReplayRecorder.note_end_turn(0)
 	rec.finalize(ReplayLog.RESULT_DEFEAT, 1)

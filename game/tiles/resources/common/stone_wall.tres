@@ -19,3 +19,4 @@ provides_cover = true
 cover_bonus = 3
 elevation = 2
 generation_weight = 0.5
+model_path = "res://tile_objects/tiles/scenes/common/stone_wall_tile.tscn"

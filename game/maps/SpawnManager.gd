@@ -131,9 +131,10 @@ func _register_point(spawn_data: Dictionary) -> void:
 	if not _map_resource.spawn_has_unit_reference(spawn_data):
 		return
 
-	var pos: Vector2i = norm["position"]
+	# A spawn point's cell is its 2D map position lifted onto its floor (see Cells).
+	var pos: Vector3i = Cells.lift(norm["position"], int(norm.get("floor", 0)))
 	var player_id: int = int(norm["player_id"])
-	var key: Vector3i = _point_key(pos, player_id)
+	var key: String = _point_key(pos, player_id)
 
 	# CRITICAL double-count guard: MapLoader already materialised the FIRST unit for
 	# every point is_initial_spawn() reports true (Start, Respawn/Endless seeds, and a
@@ -176,13 +177,13 @@ func _resolve_seed_units() -> void:
 			continue
 		if int(state["produced"]) <= 0 or state["current_unit"] != null:
 			continue
-		var cell: Vector2i = state["position"]
+		var cell: Vector3i = state["position"]
 		var seed = _find_unit_at(board, cell, int(state["player_id"]))
 		if seed != null:
 			_track_unit(state, seed)
 
 
-func _find_unit_at(board, cell: Vector2i, player_id: int):
+func _find_unit_at(board, cell: Vector3i, player_id: int):
 	"""First living unit standing on `cell` that belongs to `player_id` (ownership is
 	only checked when the unit exposes an owner, so mocks without one still match)."""
 	for u in board.units_at(cell):
@@ -320,10 +321,15 @@ func spawn_and_adopt(spawn_data, player_id: int, count_hint: int = 0):
 	if _map_loader == null or not (spawn_data is Dictionary):
 		return null
 
-	var home: Vector2i = (spawn_data as Dictionary).get("position", Vector2i(-1, -1))
-	var spawn_cell: Vector2i = home
+	# A payload is MAP-SHAPED: a 2D "position" (Vector2i, or any serialized form) plus an
+	# optional "floor" -- exactly a MapResource spawn entry. A Vector3i position (a board
+	# cell) is accepted too and carries its own floor.
+	var home: Vector3i = payload_cell(spawn_data as Dictionary)
+	if home == Cells.INVALID:
+		return null
+	var spawn_cell: Vector3i = home
 	if _cell_blocked(home):
-		var spill: Vector2i = _find_spill_cell(home)
+		var spill: Vector3i = _find_spill_cell(home)
 		if spill.x < 0:
 			return null
 		spawn_cell = spill
@@ -332,10 +338,14 @@ func spawn_and_adopt(spawn_data, player_id: int, count_hint: int = 0):
 	# on the free cell rather than the blocked home. The raw spawn dict is copied so
 	# the authored point is never mutated; every other key (character, player, kind...)
 	# is preserved.
-	var payload: Dictionary = spawn_data as Dictionary
-	if spawn_cell != home:
-		payload = (spawn_data as Dictionary).duplicate()
-		payload["position"] = spawn_cell
+	# The loader reads map-shaped entries, so the payload is always handed over as
+	# position (Vector2i) + floor, whatever form it arrived in.
+	var payload: Dictionary = (spawn_data as Dictionary).duplicate()
+	payload["position"] = Cells.flat(spawn_cell)
+	if spawn_cell.z != 0:
+		payload["floor"] = spawn_cell.z
+	else:
+		payload.erase("floor")
 
 	var new_unit = _map_loader.spawn_unit_now(payload, count_hint)
 	if new_unit == null:
@@ -384,7 +394,20 @@ func _adopt_spawned_unit(unit, player_id: int) -> void:
 			ts.register_unit(unit)
 
 
-func _find_spill_cell(home: Vector2i) -> Vector2i:
+## The board cell a runtime spawn payload names: its "position" (2D map position in any
+## serialized form, or a Vector3i cell) lifted onto its "floor". [constant Cells.INVALID]
+## when the position is unreadable.
+static func payload_cell(spawn_data: Dictionary) -> Vector3i:
+	var raw = spawn_data.get("position", null)
+	if raw is Vector3i:
+		return raw
+	var pos: Vector2i = Cells.pos2_from_variant(raw)
+	if pos == Vector2i(-1, -1):
+		return Cells.INVALID
+	return Cells.lift(pos, int(spawn_data.get("floor", 0)))
+
+
+func _find_spill_cell(home: Vector3i) -> Vector3i:
 	"""Nearest free, in-bounds, passable cell in a ring around `home` (Chebyshev rings
 	outward to SPILL_RADIUS), or (-1,-1) when the whole neighbourhood is blocked.
 
@@ -392,7 +415,7 @@ func _find_spill_cell(home: Vector2i) -> Vector2i:
 	also nothing blocking home, so this path is never reached in that case."""
 	var board = _board()
 	if board == null:
-		return Vector2i(-1, -1)
+		return Vector3i(-1, -1, 0)
 	for r in range(1, SPILL_RADIUS + 1):
 		for dx in range(-r, r + 1):
 			for dy in range(-r, r + 1):
@@ -400,19 +423,21 @@ func _find_spill_cell(home: Vector2i) -> Vector2i:
 				# were already tested by a smaller ring.
 				if maxi(absi(dx), absi(dy)) != r:
 					continue
-				var cell: Vector2i = Vector2i(home.x + dx, home.y + dy)
+				var cell: Vector3i = Vector3i(home.x + dx, home.y + dy, home.z)
 				if _cell_free_for_spawn(board, cell):
 					return cell
-	return Vector2i(-1, -1)
+	return Vector3i(-1, -1, 0)
 
 
-func _cell_free_for_spawn(board, cell: Vector2i) -> bool:
+func _cell_free_for_spawn(board, cell: Vector3i) -> bool:
 	"""True when `cell` can hold a freshly spawned unit: in bounds, passable terrain,
 	and not already occupied by a living unit. Each board query is feature-detected so
 	lightweight fakes need only provide what they exercise."""
 	if board.has_method("in_bounds") and not board.in_bounds(cell):
 		return false
 	if board.has_method("is_blocked") and board.is_blocked(cell):
+		return false
+	if board.has_method("has_tile") and not board.has_tile(cell):
 		return false
 	if board.has_method("is_occupied") and board.is_occupied(cell):
 		return false
@@ -421,12 +446,12 @@ func _cell_free_for_spawn(board, cell: Vector2i) -> bool:
 
 # --- Death tracking ---------------------------------------------------------
 
-func track_seed_unit(position: Vector2i, player_id: int, unit) -> bool:
+func track_seed_unit(position: Vector3i, player_id: int, unit) -> bool:
 	"""Adopt an already-existing unit (a load-time seed) as the current unit of the
 	point at (position, player_id), so its death is watched. This is the seam
 	_resolve_seed_units() uses live -- pulling the node off the board -- and that tests
 	use to inject a fake seed. Returns false when no scheduled point matches."""
-	var key: Vector3i = _point_key(position, player_id)
+	var key: String = _point_key(position, player_id)
 	if not _points.has(key):
 		return false
 	_track_unit(_points[key], unit)
@@ -473,7 +498,7 @@ func _point_has_live_unit(state: Dictionary) -> bool:
 
 # --- Occupancy guard --------------------------------------------------------
 
-func _cell_blocked(cell: Vector2i) -> bool:
+func _cell_blocked(cell: Vector3i) -> bool:
 	"""True when the live board reports a living unit on `cell`. Null-safe: before the
 	first board rebuild (or in headless tests) there is no board, so nothing blocks."""
 	var board = _board()
@@ -502,13 +527,13 @@ func _board():
 # exactly what it emitted. Live node references (`current_unit`) are NOT stored -- those
 # units are re-spawned by the restore, so the seed adoption is simply re-run afterwards.
 
-## A JSON-safe copy of the schedule's runtime clock, keyed by "x,y,player_id".
+## A JSON-safe copy of the schedule's runtime clock, keyed by the point key
+## "col,row,floor:player_id" (see [method _point_key]) -- already a plain String.
 func snapshot_state() -> Dictionary:
 	var points: Dictionary = {}
 	for key in _points:
 		var state: Dictionary = _points[key]
-		var k: Vector3i = key
-		points["%d,%d,%d" % [k.x, k.y, k.z]] = {
+		points[String(key)] = {
 			"produced": int(state["produced"]),
 			"last_spawn_turn": int(state["last_spawn_turn"]),
 			"death_turn": int(state["death_turn"]),
@@ -524,11 +549,8 @@ func restore_state(state: Dictionary) -> void:
 	var points: Variant = state.get("points", {})
 	if points is Dictionary:
 		for raw_key in points as Dictionary:
-			var parts: PackedStringArray = String(raw_key).split(",")
-			if parts.size() != 3:
-				continue
-			var key: Vector3i = Vector3i(int(parts[0]), int(parts[1]), int(parts[2]))
-			if not _points.has(key):
+			var key: String = _restored_point_key(String(raw_key))
+			if key.is_empty() or not _points.has(key):
 				continue
 			var saved: Variant = (points as Dictionary)[raw_key]
 			if not (saved is Dictionary):
@@ -543,8 +565,25 @@ func restore_state(state: Dictionary) -> void:
 
 # --- Misc -------------------------------------------------------------------
 
-func _point_key(pos: Vector2i, player_id: int) -> Vector3i:
-	return Vector3i(pos.x, pos.y, player_id)
+## Unique key of a spawn point: its cell (col, row, floor) + owning player.
+func _point_key(pos: Vector3i, player_id: int) -> String:
+	return "%d,%d,%d:%d" % [pos.x, pos.y, pos.z, player_id]
+
+
+## A saved point key back in the current form. Accepts the current "col,row,floor:player"
+## and the pre-multi-floor "col,row,player" (older battle saves: ground floor). "" when
+## unreadable.
+static func _restored_point_key(raw: String) -> String:
+	if raw.contains(":"):
+		var halves: PackedStringArray = raw.split(":")
+		var cell: PackedStringArray = halves[0].split(",")
+		if halves.size() != 2 or cell.size() != 3:
+			return ""
+		return "%d,%d,%d:%d" % [int(cell[0]), int(cell[1]), int(cell[2]), int(halves[1])]
+	var parts: PackedStringArray = raw.split(",")
+	if parts.size() != 3:
+		return ""
+	return "%d,%d,0:%d" % [int(parts[0]), int(parts[1]), int(parts[2])]
 
 
 func _exit_tree() -> void:

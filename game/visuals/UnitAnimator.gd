@@ -22,6 +22,14 @@ extends Node
 ## Easing curve for the glide.
 @export var move_glide_trans: Tween.TransitionType = Tween.TRANS_SINE
 @export var move_glide_ease: Tween.EaseType = Tween.EASE_OUT
+## Fire-Emblem walk: when the route a unit took is known (its [MovementResolver]
+## path on the live board -- stairs included), the model walks it CELL BY CELL
+## instead of gliding in a straight line. Seconds per cell step (battle-speed /
+## fast-forward scaled; animations off = instant).
+@export_range(0.0, 0.5, 0.01) var walk_step_time: float = 0.09
+## Cap on a whole walk (before scaling), so a long march never stalls the turn; kept
+## under BotTurnDriver.min_move_dwell so an AI walk ends before its strike beat.
+@export_range(0.1, 3.0, 0.05) var walk_max_time: float = 0.55
 
 # --- Hit flash ------------------------------------------------------------
 @export_group("Hit Flash")
@@ -316,7 +324,13 @@ func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 	play_clip(unit, CLIP_WALK)
 
 	var dest: Vector3 = (unit as Node3D).global_position
-	var start: Vector3 = _last_world_pos.get(unit.get_instance_id(), dest)
+	var from_cell = _cell_from_event(_from)
+	# Never seen before (e.g. an AI unit's first move): start from the event's from-cell.
+	var fallback_start: Vector3 = dest
+	var live_board = _live_board()
+	if from_cell != null and live_board != null:
+		fallback_start = _world_of(from_cell, dest, live_board.cell_of(unit))
+	var start: Vector3 = _last_world_pos.get(unit.get_instance_id(), fallback_start)
 	_last_world_pos[unit.get_instance_id()] = dest
 
 	var offset := start - dest
@@ -324,7 +338,20 @@ func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 	if not _anims_on() or offset.length() < 0.001 or move_glide_time <= 0.0:
 		_kill_motion(unit)
 		node.position = base
+		# No walk to watch, but the unit still ends facing the way it went.
+		# (A negligible offset = an already-animated staged move being committed.)
+		if from_cell != null and offset.length() >= 0.001:
+			_face_last_step(unit, resolve_walk_path(unit, from_cell), -offset)
 		return
+
+	# Walk the actual route cell by cell when it is known and is not a straight hop.
+	if from_cell != null:
+		var route := resolve_walk_path(unit, from_cell)
+		if route.size() > 2 or (route.size() == 2 and route[0].z != route[1].z):
+			_walk_model(unit, node, base, dest, start, route)
+			return
+	# Straight hop (one step / no known route): face the travel direction.
+	_face(unit, _facing_of(-offset), -1.0)
 	var t: float = _scaled(move_glide_time)
 	if t <= 0.0:
 		_kill_motion(unit)
@@ -338,6 +365,176 @@ func _on_unit_moved(unit = null, _from = null, _to = null) -> void:
 	tw.set_trans(move_glide_trans).set_ease(move_glide_ease)
 	tw.tween_property(node, "position", base, t)
 	_track(tw, t)
+
+# --- Path walk (public: UnitActionsPanel's tentative move uses it too) ------
+
+## The route [param unit] took from [param from_cell] to the cell it now stands on,
+## as board cells [code][from .. dest][/code] ([MovementResolver.path_to] on the live
+## board with the unit's own movement profile, a little range slack for granted
+## moves). Empty when there is no board / profile or no route (teleports, pushes).
+func resolve_walk_path(unit, from_cell: Vector3i, board = null) -> Array[Vector3i]:
+	var none: Array[Vector3i] = []
+	if board == null:
+		board = _live_board()
+	if board == null or unit == null or not unit.has_method("get_movement_profile"):
+		return none
+	var profile = unit.get_movement_profile()
+	if profile == null or profile.shape == MovementProfile.Shape.TELEPORT:
+		return none
+	var dest: Vector3i = board.cell_of(unit)
+	if dest == from_cell:
+		return none
+	var prof: MovementProfile = profile.duplicate()
+	prof.range = maxi(profile.range, Cells.distance(from_cell, dest)) + 4
+	var resolver := MovementResolver.new()
+	resolver.reachable_cells(from_cell, prof, BoardSnapshot.of(board), unit)
+	return resolver.path_to(dest)
+
+
+## Walk [param unit]'s MODEL along [param route] (board cells, origin first) to the
+## unit's current (already final) position. The unit node itself never moves, so the
+## board / targeting read the destination immediately; only the visible model travels.
+## A stair step changes floor mid-walk, so Y is interpolated too.
+func walk_path(unit, route: Array) -> void:
+	if not (unit is Node3D) or not is_instance_valid(unit):
+		return
+	var node := _get_anim_root(unit)
+	# A detached node cannot host a Tween (see the glide path).
+	if node == null or not node.is_inside_tree():
+		_remember(unit)
+		return
+	var base: Vector3 = _base_pos(unit, node)
+	var dest: Vector3 = (unit as Node3D).global_position
+	_last_world_pos[unit.get_instance_id()] = dest
+	var cells: Array[Vector3i] = []
+	for c in route:
+		cells.append(c if c is Vector3i else Cells.from_grid(c))
+	if not _anims_on() or route.size() < 2:
+		_kill_motion(unit)
+		node.position = base
+		_face_last_step(unit, cells, Vector3.ZERO)
+		return
+	play_clip(unit, CLIP_WALK)
+	_walk_model(unit, node, base, dest, _world_of(cells[0], dest, cells[cells.size() - 1]), cells)
+
+
+## Stop any walk/glide on [param unit], snap its model home and record its position
+## (e.g. a tentative move was undone, or the next action must not wait on a walk).
+func stop_motion(unit) -> void:
+	if not (unit is Node3D) or not is_instance_valid(unit):
+		return
+	_kill_motion(unit)
+	var node := _get_anim_root(unit)
+	if node != null:
+		node.position = _base_pos(unit, node)
+	_remember(unit)
+
+
+## Record [param unit]'s current position as its last known one (so a following
+## unit_moved for a move that was already animated does not replay a glide).
+func sync_position(unit) -> void:
+	_remember(unit)
+
+
+## True while a walk/glide/shake tween is running on [param unit].
+func is_moving(unit) -> bool:
+	if unit == null:
+		return false
+	var tw = _motion_tween.get(unit.get_instance_id(), null)
+	return tw is Tween and tw.is_valid() and tw.is_running()
+
+
+func _walk_model(unit, node: Node3D, base: Vector3, dest: Vector3, start: Vector3, cells: Array[Vector3i]) -> void:
+	var steps := cells.size() - 1
+	var step_t: float = _scaled(walk_step_time)
+	var total_cap: float = _scaled(walk_max_time)
+	if steps > 0 and step_t * steps > total_cap:
+		step_t = total_cap / float(steps)
+	if step_t <= 0.0:
+		_kill_motion(unit)
+		node.position = base
+		_face_last_step(unit, cells, Vector3.ZERO)
+		return
+	var dest_cell: Vector3i = cells[steps]
+	var tw := _begin_motion(unit, node)
+	node.position = base + (start - dest)
+	# Turn at most as long as one step takes, so every step reads its own facing.
+	var turn_t: float = minf(_scaled(UnitFacing.TURN_TIME), step_t)
+	for i in range(1, cells.size()):
+		var p: Vector3 = _world_of(cells[i], dest, dest_cell)
+		# Face each step's direction as it starts (a vertical-only step keeps the
+		# current facing: step_dir is ZERO and set_facing ignores it).
+		var step_dir := Vector2i(cells[i].x - cells[i - 1].x, cells[i].y - cells[i - 1].y)
+		if step_dir != Vector2i.ZERO:
+			tw.tween_callback(_face.bind(unit, step_dir, turn_t))
+		var tweener := tw.tween_property(node, "position", base + (p - dest), step_t)
+		if i == cells.size() - 1:
+			tweener.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		else:
+			tweener.set_trans(Tween.TRANS_LINEAR)
+	tw.tween_callback(func():
+		if is_instance_valid(node):
+			node.position = base)
+	# The AI driver waits on the busy registry (see _track): a cell-by-cell walk is a
+	# gameplay-visible animation like the straight glide, so it registers too.
+	_track(tw, step_t * float(maxi(steps, 1)))
+
+
+## Turn [param unit] toward grid direction [param dir] (see [method Unit.set_facing]);
+## no-op for ZERO, for mocks without set_facing, or a freed unit.
+func _face(unit, dir: Vector2i, turn_time: float = -1.0) -> void:
+	if dir == Vector2i.ZERO or unit == null or not is_instance_valid(unit):
+		return
+	if unit.has_method("set_facing"):
+		unit.set_facing(dir, turn_time)
+
+
+## Grid facing of a world-space travel vector (x = +col, z = +row).
+func _facing_of(world_delta: Vector3) -> Vector2i:
+	return UnitFacing.cardinal(Vector2(world_delta.x, world_delta.z))
+
+
+## Snap [param unit] to the direction of the LAST horizontal step of [param cells]
+## (an un-animated walk still ends facing the way it went), else [param fallback]'s.
+func _face_last_step(unit, cells: Array, fallback: Vector3) -> void:
+	for i in range(cells.size() - 1, 0, -1):
+		var a: Vector3i = cells[i - 1]
+		var b: Vector3i = cells[i]
+		var d := Vector2i(b.x - a.x, b.y - a.y)
+		if d != Vector2i.ZERO:
+			_face(unit, UnitFacing.cardinal(Vector2(d)), 0.0)
+			return
+	_face(unit, _facing_of(fallback), 0.0)
+
+
+## World point of [param cell] at the same height above its floor as the unit stands
+## above [param dest_cell]'s floor (so stairs lift/lower by whole floors).
+func _world_of(cell: Vector3i, dest_world: Vector3, dest_cell: Vector3i) -> Vector3:
+	var w := Cells.cell_to_world(cell)
+	w.y = Cells.floor_y(cell.z) + (dest_world.y - Cells.floor_y(dest_cell.z))
+	# Keep the unit node's own x/z offset inside its cell (multi-cell anchors).
+	var dest_center := Cells.cell_to_world(dest_cell)
+	w.x += dest_world.x - dest_center.x
+	w.z += dest_world.z - dest_center.z
+	return w
+
+
+## The shared live BoardAdapter (CombatServices), or null (headless / no map).
+func _live_board():
+	var services := get_node_or_null("/root/CombatServices")
+	if services != null and services.has_method("board"):
+		return services.board()
+	return null
+
+
+## unit_moved's from-coordinate as a board cell (grid coord Vector3 or a Vector3i
+## cell), or null when it is neither.
+func _cell_from_event(v):
+	if v is Vector3:
+		return Cells.from_grid(v)
+	if v is Vector3i:
+		return v
+	return null
 
 # --- Hit flash ------------------------------------------------------------
 
@@ -386,13 +583,20 @@ func _shake(unit) -> void:
 	# lunge would start from the old cell and read as a slide-correction, not a strike.
 	# Starting every lunge from base makes the attack a clean, always-visible tell.
 	var seg: float = total / 4.0
+	# Lunge the way the unit FACES (it turned toward its aim just before this; see
+	# FacingController), then a sideways shudder perpendicular to it.
+	var f: Vector2i = unit.get_facing() if unit.has_method("get_facing") else Vector2i(0, -1)
+	var fwd := Vector3(f.x, 0.0, f.y).normalized()
+	if fwd == Vector3.ZERO:
+		fwd = Vector3(0.0, 0.0, -1.0)
+	var side := Vector3(-fwd.z, 0.0, fwd.x)
 	var tw := _begin_motion(unit, node)
 	node.position = base
 	tw.set_trans(Tween.TRANS_SINE)
-	tw.tween_property(node, "position", base + Vector3(0.0, 0.0, -d), seg)\
+	tw.tween_property(node, "position", base + fwd * d, seg)\
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_property(node, "position", base + Vector3(d * 0.5, 0.0, 0.0), seg)
-	tw.tween_property(node, "position", base + Vector3(-d * 0.35, 0.0, 0.0), seg)
+	tw.tween_property(node, "position", base + side * (d * 0.5), seg)
+	tw.tween_property(node, "position", base - side * (d * 0.35), seg)
 	tw.tween_property(node, "position", base, seg)\
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_track(tw, total)

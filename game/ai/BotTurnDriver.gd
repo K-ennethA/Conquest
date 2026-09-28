@@ -124,6 +124,9 @@ func _ready() -> void:
 		if GameSettings.has_signal("settings_changed") \
 				and not GameSettings.settings_changed.is_connected(_on_settings_changed):
 			GameSettings.settings_changed.connect(_on_settings_changed)
+		if GameSettings.has_signal("fast_forward_changed") \
+				and not GameSettings.fast_forward_changed.is_connected(_on_fast_forward_changed):
+			GameSettings.fast_forward_changed.connect(_on_fast_forward_changed)
 
 
 ## Effective Timer wait: the base interval scaled DOWN by battle speed (so faster
@@ -140,6 +143,26 @@ func _effective_wait() -> float:
 		var speed: float = clampf(float(GameSettings.battle_speed), 0.5, 3.0)
 		scaled = action_interval / speed
 	return FAST_FORWARD.scale_delay(maxf(0.05, scaled))
+
+
+## FAST-FORWARD (held `fast_forward` action, see GameSettings): the multiplier every AI beat is
+## divided by while held (4x, else 1x). The division itself happens in
+## [method TurnFastForward.scale_delay] -- ONE pacing pipeline for the held action and the
+## HUD's latched enemy-turn fast-forward. Null-safe for headless tests.
+func _fast_forward_factor() -> float:
+	return FAST_FORWARD.held_factor()
+
+
+## Fast-forward pressed mid-beat: shorten the beat already in flight by the same
+## factor so the speed-up is felt immediately, not only from the next action.
+## Releasing leaves the (short) remaining wait alone; the next beat is normal.
+func _on_fast_forward_changed(active: bool) -> void:
+	if not active or _timer == null or _timer.is_stopped():
+		return
+	var left: float = _timer.time_left
+	var ff := _fast_forward_factor()
+	if left > 0.05 and ff > 1.0:
+		_timer.start(maxf(0.02, left / ff))
 
 
 ## Recompute and apply the Timer's wait. Call whenever the interval or battle speed
@@ -437,8 +460,8 @@ func _has_stun_skipped_unit(ts: TurnSystemBase, player: Player) -> bool:
 ## about it -- enemy units walked over vine traps for free, their ON_MOVE abilities
 ## never fired, and terrain enter/exit never ran for them. Emitting HERE keeps the
 ## player and AI paths symmetric without touching the primitive. Grid coords match
-## the legacy contract: Vector3(col, 0, row).
-func _relocate(unit, board, from_cell: Vector2i, to_cell: Vector2i) -> void:
+## the grid-coord contract: Vector3(col, floor, row) (see Cells.to_grid).
+func _relocate(unit, board, from_cell: Vector3i, to_cell: Vector3i) -> void:
 	# board.move_unit snaps the unit's authoritative root to the destination cell (the
 	# board derives every unit's cell from its live world position, so the root MUST end
 	# up there -- do NOT rewind it). The visible SLIDE is UnitAnimator's job: it hears
@@ -448,8 +471,8 @@ func _relocate(unit, board, from_cell: Vector2i, to_cell: Vector2i) -> void:
 	if GameEvents:
 		GameEvents.unit_moved.emit(
 			unit,
-			Vector3(from_cell.x, 0, from_cell.y),
-			Vector3(to_cell.x, 0, to_cell.y))
+			Cells.to_grid(from_cell),
+			Cells.to_grid(to_cell))
 	# REPLAY: the AI's single relocation point (plan-attack, plan-advance and the legacy
 	# fallback all route through here), normalised into the SAME MOVE_UNIT command the human
 	# and networked paths record. No-op when no recorder is mounted.
@@ -503,8 +526,8 @@ func _unit_has_canto(unit) -> bool:
 ## rooted, the canto is given up and the turn closes; either way this ALWAYS makes
 ## progress, so the driver can never sit on a unit the turn system is waiting for.
 func _act_canto(unit: Unit, board) -> bool:
-	var origin: Vector2i = board.cell_of(unit)
-	var dest: Vector2i = origin
+	var origin: Vector3i = board.cell_of(unit)
+	var dest: Vector3i = origin
 	if not _is_immobilized(unit) and unit.has_method("get_moveset"):
 		var controller := BotController.new()
 		controller.difficulty = _ai_difficulty()
@@ -555,7 +578,7 @@ func _act_character(unit: Unit, board) -> bool:
 	var controller = BossController.new() if unit.is_boss() else BotController.new()
 	controller.difficulty = _ai_difficulty()
 
-	var origin: Vector2i = board.cell_of(unit)
+	var origin: Vector3i = board.cell_of(unit)
 	# Cells the unit can actually reach this turn (movement profile + terrain +
 	# blockers + occupancy), via the live board. The planner walks up to an enemy
 	# and strikes the same turn instead of creeping one cell.
@@ -580,7 +603,7 @@ func _act_character(unit: Unit, board) -> bool:
 ## Cells [param unit] can reach this turn under its movement profile, via the live
 ## board. Empty when the unit has no profile -- planning then considers only the
 ## origin cell (attack in place, or wait).
-func _reachable_cells(unit: Unit, origin: Vector2i, board) -> Array:
+func _reachable_cells(unit: Unit, origin: Vector3i, board) -> Array:
 	# A rooted unit reaches nothing. The AI movement path walks the unit with
 	# board.move_unit() directly and therefore never consults Unit.can_move(), so
 	# immobilisation has to be honoured HERE -- returning an empty reachable set
@@ -596,7 +619,7 @@ func _reachable_cells(unit: Unit, origin: Vector2i, board) -> Array:
 	# Pass the unit so a multi-cell unit (e.g. a 2x2 boss) only considers cells where
 	# its WHOLE footprint fits; omitting it would path the boss as if it were 1x1.
 	var resolver := MovementResolver.new()
-	var cells: Array[Vector2i] = resolver.reachable_cells(origin, profile, board, unit)
+	var cells: Array[Vector3i] = resolver.reachable_cells(origin, profile, board, unit)
 	return _avoid_traps(unit, origin, profile, board, resolver, cells)
 
 
@@ -613,7 +636,7 @@ func _reachable_cells(unit: Unit, origin: Vector2i, board) -> Array:
 ## FALLS BACK TO THE FULL SET when avoidance leaves nothing reachable -- a unit boxed in
 ## behind a trap still moves (through it) rather than freezing, which would be a worse tell
 ## than walking into the snare.
-func _avoid_traps(unit, origin: Vector2i, profile, board, resolver: MovementResolver, cells: Array[Vector2i]) -> Array:
+func _avoid_traps(unit, origin: Vector3i, profile, board, resolver: MovementResolver, cells: Array[Vector3i]) -> Array:
 	if cells.is_empty() or _ai_difficulty() < BotController.Difficulty.HARD:
 		return cells
 	var traps: Dictionary = {}
@@ -622,7 +645,7 @@ func _avoid_traps(unit, origin: Vector2i, profile, board, resolver: MovementReso
 			traps[cell] = true
 	if traps.is_empty():
 		return cells
-	var safe: Array[Vector2i] = resolver.reachable_cells(origin, profile, board, unit, traps)
+	var safe: Array[Vector3i] = resolver.reachable_cells(origin, profile, board, unit, traps)
 	return safe if not safe.is_empty() else cells
 
 
@@ -675,10 +698,10 @@ func _defender_certain_to_wait(unit: Unit, board) -> bool:
 	if not TurnSystemManager or not TurnSystemManager.has_active_turn_system():
 		return false
 
-	var ucell: Vector2i = board.cell_of(unit)
+	var ucell: Vector3i = board.cell_of(unit)
 	# Effective home: authored guard post if set, else the current cell (mirror
 	# BotController._effective_home so an unanchored guard reads home == origin).
-	var home: Vector2i = ucell
+	var home: Vector3i = ucell
 	if unit.has_method("has_home_cell") and unit.has_home_cell() and unit.has_method("get_home_cell"):
 		home = unit.get_home_cell()
 	var aggro: int = 0
@@ -699,7 +722,7 @@ func _defender_certain_to_wait(unit: Unit, board) -> bool:
 		if owner == null or owner == unit.get_owner_player() or owner.is_ai:
 			continue
 		saw_hostile = true
-		var hcell: Vector2i = board.cell_of(h)
+		var hcell: Vector3i = board.cell_of(h)
 		# WAKE (inclusive, home-referenced) -- would advance, so not certain to wait.
 		if _cell_manhattan(home, hcell) <= aggro:
 			return false
@@ -775,8 +798,8 @@ func _is_trap_move(move, actor = null) -> bool:
 ## from there. The destination came from the reachable set (already validated as a
 ## legal stopping cell) and the move was validated to hit the target FROM it.
 func _execute_plan_attack(unit: Unit, decision: Dictionary, board) -> bool:
-	var origin: Vector2i = board.cell_of(unit)
-	var dest: Vector2i = decision.get("dest_cell", origin)
+	var origin: Vector3i = board.cell_of(unit)
+	var dest: Vector3i = decision.get("dest_cell", origin)
 	# Second gate on the same rule _reachable_cells applies. The planner should
 	# never hand back a foreign dest_cell for a rooted unit (its reachable set was
 	# empty), but this is the line that actually relocates the unit, so it refuses
@@ -808,8 +831,8 @@ func _execute_plan_attack(unit: Unit, decision: Dictionary, board) -> bool:
 ## Move the unit its full advance toward the nearest enemy. The destination is a
 ## reachable cell the planner chose to minimize distance to that enemy.
 func _execute_plan_advance(unit: Unit, decision: Dictionary, board) -> bool:
-	var origin: Vector2i = board.cell_of(unit)
-	var dest: Vector2i = decision.get("dest_cell", origin)
+	var origin: Vector3i = board.cell_of(unit)
+	var dest: Vector3i = decision.get("dest_cell", origin)
 	if dest == origin or _is_immobilized(unit):
 		_finish(unit, "wait")
 		return false
@@ -829,7 +852,7 @@ func _execute_move_decision(unit: Unit, decision: Dictionary, board) -> bool:
 	var move = decision.get("move", null)
 	if move == null:
 		return false
-	var aim_cell: Vector2i = decision.get("aim_cell", board.cell_of(unit))
+	var aim_cell: Vector3i = decision.get("aim_cell", board.cell_of(unit))
 	# BotController hands back the MoveResource; perform_move wants its slot index.
 	var slot := _slot_of_move(unit, move)
 	if slot < 0:
@@ -932,8 +955,8 @@ func _act_fallback(unit: Unit, board) -> bool:
 		_finish(unit, "attack")
 		return true
 
-	var ucell: Vector2i = board.cell_of(unit)
-	var tcell: Vector2i = board.cell_of(target)
+	var ucell: Vector3i = board.cell_of(unit)
+	var tcell: Vector3i = board.cell_of(target)
 	var dist := _cell_manhattan(ucell, tcell)
 	var atk_range: int = maxi(1, _stat(unit, "range", 1))
 
@@ -1002,7 +1025,7 @@ func _nearest_hostile(unit: Unit) -> Unit:
 
 ## Step from [param from] toward [param to] up to [param steps] cells, stopping one
 ## cell short (so the unit ends adjacent, ready to attack next turn).
-func _step_toward_cell(from: Vector2i, to: Vector2i, steps: int) -> Vector2i:
+func _step_toward_cell(from: Vector3i, to: Vector3i, steps: int) -> Vector3i:
 	var cell := from
 	var budget: int = mini(steps, maxi(0, _cell_manhattan(from, to) - 1))
 	for _i in range(budget):
@@ -1013,8 +1036,9 @@ func _step_toward_cell(from: Vector2i, to: Vector2i, steps: int) -> Vector2i:
 	return cell
 
 
-func _cell_manhattan(a: Vector2i, b: Vector2i) -> int:
-	return absi(a.x - b.x) + absi(a.y - b.y)
+## Range-metric distance (Manhattan + floor difference, see Cells.distance).
+func _cell_manhattan(a: Vector3i, b: Vector3i) -> int:
+	return Cells.distance(a, b)
 
 
 func _stat(unit: Unit, stat_name: String, fallback: int) -> int:

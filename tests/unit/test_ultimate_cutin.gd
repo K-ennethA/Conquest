@@ -105,8 +105,8 @@ func test_overlay_registers_in_group() -> void:
 
 # --- Helpers -----------------------------------------------------------------
 
-func _mount_overlay():
-	var overlay = UltimateCutIn.new()
+func _mount_overlay() -> UltimateCutIn:
+	var overlay := UltimateCutIn.new()
 	add_child_autofree(overlay)
 	return overlay
 

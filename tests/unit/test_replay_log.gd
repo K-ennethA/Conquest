@@ -4,7 +4,8 @@ extends GutTest
 ##
 ## Coverage:
 ##  - Command encode/decode is a lossless round-trip in the NetProtocol vocabulary, and
-##    Vector2i cells survive the JSON flattening.
+##    Vector3i (col, row, floor) cells survive the JSON flattening, and a pre-multi-floor
+##    [x, y] cell still decodes (floor 0).
 ##  - The vocabulary gate: only APPLIABLE_TYPES pass; ATTACK_UNIT (no apply branch) does not.
 ##  - The strict importer refuses hostile / malformed input QUIETLY (garbage JSON, non-object
 ##    JSON, wrong format_version, wrong protocol_version, unknown command types, oversized
@@ -47,7 +48,7 @@ func _purge_temp_dir() -> void:
 # --- Helpers ----------------------------------------------------------------
 
 func _a_cast() -> Dictionary:
-	return NetProtocol.make_cast_move(7, 2, Vector2i(3, 4), 1)
+	return NetProtocol.make_cast_move("1:7", 2, Vector3i(3, 4, 0), 1)
 
 
 func _a_log(entry_count: int = 3) -> Dictionary:
@@ -66,7 +67,7 @@ func _a_log(entry_count: int = 3) -> Dictionary:
 		"challenge_id": "abcdef",
 	})
 	for i in entry_count:
-		log["entries"].append(ReplayLog.make_entry(i, i % 2, NetProtocol.make_move_unit(i, Vector2i(i, i + 1), i % 2)))
+		log["entries"].append(ReplayLog.make_entry(i, i % 2, NetProtocol.make_move_unit("%d:%d" % [i % 2, i], Vector3i(i, i + 1, 0), i % 2)))
 		log["checksums"].append(ReplayLog.make_checksum(i, ReplayLog.to_hex64(i * 977)))
 	log["outcome"] = ReplayLog.make_outcome(ReplayLog.RESULT_VICTORY, 0, entry_count)
 	return log
@@ -75,7 +76,7 @@ func _a_log(entry_count: int = 3) -> Dictionary:
 func _rows(ids: Array, hp: int = 10) -> Array:
 	var out: Array = []
 	for id in ids:
-		out.append({ "id": int(id), "cell": Vector2i(int(id), int(id) * 2), "hp": hp })
+		out.append({ "id": "0:%d" % int(id), "cell": Vector3i(int(id), int(id) * 2, 0), "hp": hp })
 	return out
 
 
@@ -88,17 +89,17 @@ func test_cast_command_round_trips_losslessly() -> void:
 	assert_eq(int(decoded[NetProtocol.KEY_TYPE]), int(NetProtocol.Action.CAST_MOVE), "type preserved")
 	assert_eq(int(decoded[NetProtocol.KEY_ACTOR]), 1, "actor preserved")
 	var data: Dictionary = decoded[NetProtocol.KEY_DATA]
-	assert_eq(int(data[NetProtocol.KEY_UNIT_ID]), 7, "unit id preserved")
+	assert_eq(data[NetProtocol.KEY_UNIT_ID], "1:7", "unit id preserved (a NetUnitIds String)")
 	assert_eq(int(data[NetProtocol.KEY_MOVE_SLOT]), 2, "move slot preserved")
-	assert_eq(data[NetProtocol.KEY_AIM_CELL], Vector2i(3, 4), "aim cell comes back a Vector2i")
+	assert_eq(data[NetProtocol.KEY_AIM_CELL], Vector3i(3, 4, 0), "aim cell comes back a Vector3i")
 
 
 func test_every_appliable_type_round_trips() -> void:
 	var commands: Array = [
-		NetProtocol.make_move_unit(1, Vector2i(5, 6), 0),
-		NetProtocol.make_wait_unit(2, 0),
+		NetProtocol.make_move_unit("0:1", Vector3i(5, 6, 0), 0),
+		NetProtocol.make_wait_unit("0:2", 0),
 		NetProtocol.make_end_turn(1, 1),
-		NetProtocol.make_cast_move(3, 0, Vector2i(-1, 9), 1),
+		NetProtocol.make_cast_move("1:3", 0, Vector3i(-1, 9, 0), 1),
 	]
 	for cmd in commands:
 		var decoded := ReplayLog.decode_command(ReplayLog.encode_command(cmd))
@@ -117,7 +118,7 @@ func test_encoded_command_is_json_safe() -> void:
 
 func test_attack_unit_is_outside_the_replayable_vocabulary() -> void:
 	# ATTACK_UNIT exists in the enum but has no apply branch, so it can never be re-simulated.
-	var cmd := NetProtocol.make_action(NetProtocol.Action.ATTACK_UNIT, { NetProtocol.KEY_UNIT_ID: 1 }, 0)
+	var cmd := NetProtocol.make_action(NetProtocol.Action.ATTACK_UNIT, { NetProtocol.KEY_UNIT_ID: "0:1" }, 0)
 	assert_true(ReplayLog.encode_command(cmd).is_empty(), "ATTACK_UNIT is refused on encode")
 	assert_true(ReplayLog.decode_command(cmd).is_empty(), "and on decode")
 
@@ -133,16 +134,37 @@ func test_malformed_commands_decode_to_empty() -> void:
 	# MOVE_UNIT with no dest_cell: required field missing.
 	assert_true(ReplayLog.decode_command({
 		NetProtocol.KEY_TYPE: NetProtocol.Action.MOVE_UNIT,
-		NetProtocol.KEY_DATA: { NetProtocol.KEY_UNIT_ID: 1 },
+		NetProtocol.KEY_DATA: { NetProtocol.KEY_UNIT_ID: "0:1" },
 	}).is_empty(), "a MOVE_UNIT missing its dest_cell is refused")
 
 
 func test_decode_cell_tolerates_junk() -> void:
-	assert_eq(ReplayLog.decode_cell([2, 3]), Vector2i(2, 3), "the flattened form decodes")
-	assert_eq(ReplayLog.decode_cell(Vector2i(4, 5)), Vector2i(4, 5), "a live Vector2i passes through")
-	assert_eq(ReplayLog.decode_cell("nope", Vector2i(9, 9)), Vector2i(9, 9), "junk reads as the fallback")
-	assert_eq(ReplayLog.decode_cell([1], Vector2i(9, 9)), Vector2i(9, 9), "a short array reads as the fallback")
-	assert_eq(ReplayLog.decode_cell(["a", "b"], Vector2i(9, 9)), Vector2i(9, 9), "non-numbers read as the fallback")
+	assert_eq(ReplayLog.decode_cell([2, 3, 1]), Vector3i(2, 3, 1), "the flattened form decodes")
+	assert_eq(ReplayLog.decode_cell([2, 3]), Vector3i(2, 3, 0), "a pre-multi-floor [x, y] decodes onto floor 0")
+	assert_eq(ReplayLog.decode_cell(Vector3i(4, 5, 2)), Vector3i(4, 5, 2), "a live Vector3i passes through")
+	assert_eq(ReplayLog.decode_cell(Vector2i(4, 5)), Vector3i(4, 5, 0), "a legacy Vector2i lifts to floor 0")
+	assert_eq(ReplayLog.decode_cell("nope", Vector3i(9, 9, 0)), Vector3i(9, 9, 0), "junk reads as the fallback")
+	assert_eq(ReplayLog.decode_cell([1], Vector3i(9, 9, 0)), Vector3i(9, 9, 0), "a short array reads as the fallback")
+	assert_eq(ReplayLog.decode_cell(["a", "b"], Vector3i(9, 9, 0)), Vector3i(9, 9, 0), "non-numbers read as the fallback")
+	assert_eq(ReplayLog.decode_cell([1, 2, "x"], Vector3i(9, 9, 0)), Vector3i(9, 9, 0), "a non-number floor reads as the fallback")
+
+
+func test_encode_cell_writes_col_row_floor() -> void:
+	assert_eq(ReplayLog.encode_cell(Vector3i(2, 3, 1)), [2, 3, 1], "cells flatten to [col, row, floor]")
+	assert_eq(ReplayLog.encode_cell(Vector2i(2, 3)), [2, 3, 0], "a legacy Vector2i flattens onto floor 0")
+
+
+func test_pre_multi_floor_command_still_decodes() -> void:
+	# A replay recorded before multi-floor maps stored cells as [x, y]; it must still load.
+	var legacy: Dictionary = {
+		NetProtocol.KEY_TYPE: NetProtocol.Action.MOVE_UNIT,
+		NetProtocol.KEY_DATA: { NetProtocol.KEY_UNIT_ID: 4, NetProtocol.KEY_DEST_CELL: [5, 6] },
+		NetProtocol.KEY_ACTOR: 0,
+	}
+	var decoded := ReplayLog.decode_command(legacy)
+	assert_false(decoded.is_empty(), "a legacy [x, y] MOVE_UNIT decodes")
+	assert_eq((decoded[NetProtocol.KEY_DATA] as Dictionary)[NetProtocol.KEY_DEST_CELL], Vector3i(5, 6, 0),
+		"and lands on floor 0")
 
 
 # --- The strict importer ----------------------------------------------------
@@ -214,7 +236,7 @@ func test_validate_drops_unknown_top_level_keys() -> void:
 
 func test_validate_caps_oversized_input() -> void:
 	var log := _a_log(0)
-	var cmd := NetProtocol.make_wait_unit(1, 0)
+	var cmd := NetProtocol.make_wait_unit("0:1", 0)
 	for i in (ReplayLog.MAX_ENTRIES + 50):
 		log["entries"].append(ReplayLog.make_entry(0, 0, cmd))
 	var many_participants: Array = []
@@ -360,18 +382,25 @@ func test_checksum_is_permutation_invariant() -> void:
 
 
 func test_checksum_is_sensitive_to_every_field() -> void:
-	var base := ReplayLog.state_checksum([{ "id": 1, "cell": Vector2i(2, 3), "hp": 10 }])
-	assert_ne(base, ReplayLog.state_checksum([{ "id": 2, "cell": Vector2i(2, 3), "hp": 10 }]), "id matters")
-	assert_ne(base, ReplayLog.state_checksum([{ "id": 1, "cell": Vector2i(9, 3), "hp": 10 }]), "cell.x matters")
-	assert_ne(base, ReplayLog.state_checksum([{ "id": 1, "cell": Vector2i(2, 9), "hp": 10 }]), "cell.y matters")
-	assert_ne(base, ReplayLog.state_checksum([{ "id": 1, "cell": Vector2i(2, 3), "hp": 4 }]), "hp matters")
+	var base := ReplayLog.state_checksum([{ "id": "0:1", "cell": Vector3i(2, 3, 0), "hp": 10 }])
+	assert_ne(base, ReplayLog.state_checksum([{ "id": "0:2", "cell": Vector3i(2, 3, 0), "hp": 10 }]), "id matters")
+	assert_ne(base, ReplayLog.state_checksum([{ "id": "0:1", "cell": Vector3i(9, 3, 0), "hp": 10 }]), "cell.x matters")
+	assert_ne(base, ReplayLog.state_checksum([{ "id": "0:1", "cell": Vector3i(2, 9, 0), "hp": 10 }]), "cell.y matters")
+	assert_ne(base, ReplayLog.state_checksum([{ "id": "0:1", "cell": Vector3i(2, 3, 1), "hp": 10 }]), "the floor matters")
+	assert_ne(base, ReplayLog.state_checksum([{ "id": "0:1", "cell": Vector3i(2, 3, 0), "hp": 4 }]), "hp matters")
 	assert_ne(base, ReplayLog.state_checksum(_rows([1, 2])), "unit COUNT matters")
 
 
 func test_checksum_accepts_the_flattened_cell_form() -> void:
-	# Rows may arrive from a decoded file (arrays) or from the live board (Vector2i).
-	var live := ReplayLog.state_checksum([{ "id": 1, "cell": Vector2i(2, 3), "hp": 10 }])
-	var flat := ReplayLog.state_checksum([{ "id": 1, "cell": [2, 3], "hp": 10 }])
+	# Rows may arrive from a decoded file (arrays) or from the live board (Vector3i). A
+	# ground-floor cell hashes exactly as the pre-multi-floor [x, y] / Vector2i form did, so
+	# checksums in replays recorded before multi-floor maps still verify.
+	var live := ReplayLog.state_checksum([{ "id": "0:1", "cell": Vector3i(2, 3, 0), "hp": 10 }])
+	var flat := ReplayLog.state_checksum([{ "id": "0:1", "cell": [2, 3], "hp": 10 }])
+	assert_eq(live, ReplayLog.state_checksum([{ "id": "0:1", "cell": Vector2i(2, 3), "hp": 10 }]),
+		"a legacy Vector2i row hashes like its floor-0 Vector3i")
+	assert_eq(live, ReplayLog.state_checksum([{ "id": "0:1", "cell": [2, 3, 0], "hp": 10 }]),
+		"[x, y, 0] hashes like [x, y]")
 	assert_eq(live, flat, "both cell spellings hash the same")
 
 

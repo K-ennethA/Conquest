@@ -168,7 +168,7 @@ func test_preview_matches_reality_against_a_matching_target() -> void:
 		return
 	var caster := _unit(caster_res)
 	var target := _unit(target_res)
-	var board := _Board.new(caster, Vector2i(0, 0), target, Vector2i(0, 1))
+	var board := _Board.new(caster, Vector3i(0, 0, 0), target, Vector3i(0, 1, 0))
 
 	# Unelemented move, so the ONLY thing scaling this hit is Grass Cutter.
 	var forecast := _assert_preview_matches_reality(
@@ -196,7 +196,7 @@ func test_preview_matches_reality_against_a_non_matching_target() -> void:
 		return
 	var caster := _unit(caster_res)
 	var target := _unit(target_res)
-	var board := _Board.new(caster, Vector2i(0, 0), target, Vector2i(0, 1))
+	var board := _Board.new(caster, Vector3i(0, 0, 0), target, Vector3i(0, 1, 0))
 
 	var forecast := _assert_preview_matches_reality(
 		caster, target, board, _strike(&""), "Grass Cutter vs a non-nature target")
@@ -220,7 +220,7 @@ func test_preview_matches_reality_with_a_resisted_matchup() -> void:
 		return
 	var caster := _unit(caster_res)
 	var target := _unit(target_res)
-	var board := _Board.new(caster, Vector2i(0, 0), target, Vector2i(0, 1))
+	var board := _Board.new(caster, Vector3i(0, 0, 0), target, Vector3i(0, 1, 0))
 
 	# nature move into a nature unit: Grass Cutter's +50% AND the chart's self-resist.
 	var forecast := _assert_preview_matches_reality(
@@ -244,7 +244,7 @@ func test_preview_matches_reality_with_a_strong_matchup() -> void:
 		return
 	var caster := _unit(caster_res)
 	var target := _unit(target_res)
-	var board := _Board.new(caster, Vector2i(0, 0), target, Vector2i(0, 1))
+	var board := _Board.new(caster, Vector3i(0, 0, 0), target, Vector3i(0, 1, 0))
 
 	# water is earth's opposite: strong, and Grass Cutter does not apply to earth.
 	var forecast := _assert_preview_matches_reality(
@@ -265,14 +265,14 @@ func test_preview_matches_reality_with_a_strong_matchup() -> void:
 class _Board:
 	var _cells: Dictionary = {}
 
-	func _init(a, a_cell: Vector2i, b, b_cell: Vector2i) -> void:
+	func _init(a, a_cell: Vector3i, b, b_cell: Vector3i) -> void:
 		_cells[a] = a_cell
 		_cells[b] = b_cell
 
-	func cell_of(unit) -> Vector2i:
-		return _cells.get(unit, Vector2i(-999, -999))
+	func cell_of(unit) -> Vector3i:
+		return _cells.get(unit, Vector3i(-999, -999, 0))
 
-	func units_at(cell: Vector2i) -> Array:
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for unit in _cells:
 			if _cells[unit] == cell:
@@ -282,7 +282,7 @@ class _Board:
 	## Answered (with nothing) on purpose: a board that does NOT expose this sends
 	## [ElementChart] to the live CombatServices autoload for its terrain, and this suite
 	## would then depend on whatever map the previous suite left loaded.
-	func tile_effects_at(_cell: Vector2i) -> Array:
+	func tile_effects_at(_cell: Vector3i) -> Array:
 		return []
 
 	func all_units() -> Array:

@@ -64,7 +64,7 @@ func test_map_passes_its_own_validator() -> void:
 
 
 func test_map_is_offered_in_the_single_player_picker() -> void:
-	# The solo map picker (MapSelection) lists get_available_maps(true), which includes
+	# The solo map picker (MatchSetup) lists get_available_maps(true), which includes
 	# drafts -- so the map is selectable whether it is still a draft or published. (We
 	# don't assert the draft-only "hidden from the shared list" behaviour here because
 	# the map's status is author-editable; that filtering is covered by spawn-point

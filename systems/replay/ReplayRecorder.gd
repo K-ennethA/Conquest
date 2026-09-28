@@ -65,22 +65,22 @@ static func note_command(cmd: Dictionary, actor_slot: int = -1) -> void:
 
 
 ## Record a committed board move for [param unit] onto [param dest_cell] (MOVE_UNIT).
-static func note_move_unit(unit, dest_cell: Vector2i) -> void:
+static func note_move_unit(unit, dest_cell: Vector3i) -> void:
 	if not is_active():
 		return
-	var nid: int = net_id_of(unit)
-	if nid < 0:
+	var nid: String = net_id_of(unit)
+	if nid == "":
 		return
 	_emit(NetProtocol.make_move_unit(nid, dest_cell, slot_of_unit(unit)), slot_of_unit(unit))
 
 
 ## Record a resolved cast: [param unit]'s [param move_slot] aimed at [param aim_cell]
 ## (CAST_MOVE). Called AFTER the cast succeeded, so a refused/aborted aim is never recorded.
-static func note_cast_move(unit, move_slot: int, aim_cell: Vector2i) -> void:
+static func note_cast_move(unit, move_slot: int, aim_cell: Vector3i) -> void:
 	if not is_active():
 		return
-	var nid: int = net_id_of(unit)
-	if nid < 0:
+	var nid: String = net_id_of(unit)
+	if nid == "":
 		return
 	_emit(NetProtocol.make_cast_move(nid, move_slot, aim_cell, slot_of_unit(unit)), slot_of_unit(unit))
 
@@ -89,8 +89,8 @@ static func note_cast_move(unit, move_slot: int, aim_cell: Vector2i) -> void:
 static func note_wait_unit(unit) -> void:
 	if not is_active():
 		return
-	var nid: int = net_id_of(unit)
-	if nid < 0:
+	var nid: String = net_id_of(unit)
+	if nid == "":
 		return
 	_emit(NetProtocol.make_wait_unit(nid, slot_of_unit(unit)), slot_of_unit(unit))
 
@@ -102,19 +102,20 @@ static func note_end_turn(player_id: int) -> void:
 	_emit(NetProtocol.make_end_turn(player_id, player_id), player_id)
 
 
-## The deterministic id naming [param unit] across peers -- the [code]net_id[/code] metadata
-## [method CommandApplier.UnitRegistry.register] stamps on every unit when the battle's
-## command seam is built. Read from METADATA rather than through NetSession on purpose: it
-## keeps this file free of any dependency on the net layer (which itself depends on the
-## applier that calls us). -1 means "unnameable" -- the caller must not record.
-static func net_id_of(unit) -> int:
+## The deterministic id naming [param unit] on every peer -- the [NetUnitIds] string
+## ("<slot>:<n>", mid-match arrivals "<slot>:s<k>") stored in the unit's [code]net_id[/code]
+## metadata when the battle's command seam names the board. Read from METADATA rather than
+## through NetSession on purpose: it keeps this file free of any dependency on the net layer
+## (which itself depends on the apply path that calls us). "" means "unnameable" -- the
+## caller must not record.
+static func net_id_of(unit) -> String:
 	if unit == null or not (unit is Object):
-		return -1
+		return ""
 	if not is_instance_valid(unit):
-		return -1
+		return ""
 	if not (unit as Object).has_meta("net_id"):
-		return -1
-	return int((unit as Object).get_meta("net_id"))
+		return ""
+	return String((unit as Object).get_meta("net_id"))
 
 
 ## The player slot that owns [param unit], or -1 when unknown. Slot == player_id, the same
@@ -309,12 +310,12 @@ static func board_state_rows() -> Array:
 	for unit in board.all_units():
 		if unit == null or not is_instance_valid(unit):
 			continue
-		var nid: int = net_id_of(unit)
-		if nid < 0:
+		var nid: String = net_id_of(unit)
+		if nid == "":
 			continue
 		rows.append({
 			"id": nid,
-			"cell": board.cell_of(unit) if board.has_method("cell_of") else Vector2i.ZERO,
+			"cell": board.cell_of(unit) if board.has_method("cell_of") else Vector3i.ZERO,
 			"hp": int(unit.get_hp()) if unit.has_method("get_hp") else 0,
 		})
 	return rows

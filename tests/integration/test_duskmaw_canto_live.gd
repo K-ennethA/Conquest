@@ -112,11 +112,11 @@ func _make_dasher() -> CharacterResource:
 	return c
 
 
-func _cell_to_world(cell: Vector2i) -> Vector3:
+func _cell_to_world(cell: Vector3i) -> Vector3:
 	return BoardAdapter.new(_grid(), []).cell_to_world(cell)
 
 
-func _spawn(character_id: StringName, cell: Vector2i, owner: Player) -> Unit:
+func _spawn(character_id: StringName, cell: Vector3i, owner: Player) -> Unit:
 	var character := CharacterLibrary.get_character(character_id)
 	if character == null:
 		return null
@@ -141,9 +141,9 @@ func _boot(duskmaw_is_ai: bool = false) -> Dictionary:
 	var ai := Player.new(1, "AI")
 	ai.is_ai = true
 
-	var duskmaw := _spawn(DASHER_ID, Vector2i(1, 1), ai if duskmaw_is_ai else human)
-	var near := _spawn(FODDER_ID, Vector2i(2, 1), human if duskmaw_is_ai else ai)
-	var far := _spawn(FODDER_ID, Vector2i(3, 1), human if duskmaw_is_ai else ai)
+	var duskmaw := _spawn(DASHER_ID, Vector3i(1, 1, 0), ai if duskmaw_is_ai else human)
+	var near := _spawn(FODDER_ID, Vector3i(2, 1, 0), human if duskmaw_is_ai else ai)
+	var far := _spawn(FODDER_ID, Vector3i(3, 1, 0), human if duskmaw_is_ai else ai)
 	if duskmaw == null or near == null or far == null:
 		return {}
 
@@ -210,13 +210,13 @@ func _collect_buttons(node: Node, out: Array) -> void:
 
 
 ## The cells MovementResolver says [param unit] can reach right now, as the
-## Vector3(col, 0, row) grid coords the panel publishes.
+## Vector3(col, floor, row) grid coords the panel publishes.
 func _reachable_tiles(unit: Unit, board) -> Array[Vector3]:
-	var cells: Array[Vector2i] = MovementResolver.new().reachable_cells(
+	var cells: Array[Vector3i] = MovementResolver.new().reachable_cells(
 		board.cell_of(unit), unit.get_movement_profile(), board, unit)
 	var out: Array[Vector3] = []
 	for c in cells:
-		out.append(Vector3(c.x, 0, c.y))
+		out.append(Cells.to_grid(c))
 	return out
 
 
@@ -233,7 +233,7 @@ func test_the_dash_lands_and_leaves_the_unit_under_canto() -> void:
 
 	await _dash_through_the_panel(s["panel"], duskmaw)
 
-	assert_eq(s["board"].cell_of(duskmaw), Vector2i(4, 1),
+	assert_eq(s["board"].cell_of(duskmaw), Vector3i(4, 1, 0),
 		"the dash ran through both bodies and landed on the free cell beyond")
 	assert_true(duskmaw.has_canto(), "and left the unit owing exactly one movement")
 	assert_false(duskmaw.can_act(), "it has spent its action -- no second strike")
@@ -283,10 +283,10 @@ func test_the_canto_range_is_the_shortened_two_cell_leash() -> void:
 	# leash. Measured as a distance off the landing cell rather than as a cell count, so it
 	# says what the leash IS rather than merely that it shrank.
 	var board = s["board"]
-	var landing: Vector2i = board.cell_of(duskmaw)
+	var landing: Vector3i = board.cell_of(duskmaw)
 	var leash: int = 0
 	for tile in s["panel"].movement_range_tiles:
-		var cell := Vector2i(int(round(tile.x)), int(round(tile.z)))
+		var cell := Cells.from_grid(tile)
 		leash = maxi(leash, absi(cell.x - landing.x) + absi(cell.y - landing.y))
 	assert_eq(leash, base_movement - 2,
 		"the canto leash is the DEBUFFED STAT (%d), not the shared profile's range"
@@ -356,7 +356,7 @@ func test_completing_the_canto_step_truly_ends_the_units_turn() -> void:
 	# Asserted BEFORE yielding a frame: Duskmaw is this side's only unit here, so the
 	# deferred auto-end fires on the next idle frame and the next turn's
 	# reset_all_unit_actions() legitimately clears these per-turn flags again.
-	assert_eq(s["board"].cell_of(duskmaw), Vector2i(5, 1),
+	assert_eq(s["board"].cell_of(duskmaw), Vector3i(5, 1, 0),
 		"the unit is standing where the canto step took it")
 	assert_false(duskmaw.has_canto(), "with nothing owed")
 	assert_true(duskmaw.has_acted_this_turn, "and its turn is over")
@@ -373,7 +373,7 @@ func test_waiting_without_moving_also_ends_the_turn() -> void:
 	var ts: TraditionalTurnSystem = s["ts"]
 
 	await _dash_through_the_panel(panel, duskmaw)
-	var landing: Vector2i = s["board"].cell_of(duskmaw)
+	var landing: Vector3i = s["board"].cell_of(duskmaw)
 	panel._on_action_menu_wait_chosen()
 	await get_tree().process_frame
 
@@ -424,7 +424,7 @@ func test_an_ai_duskmaw_finishes_its_canto_and_hands_the_turn_on() -> void:
 	var ts: TraditionalTurnSystem = s["ts"]
 	var board = s["board"]
 
-	var cast: Dictionary = duskmaw.perform_move(DASH_SLOT, Vector2i(2, 1), board)
+	var cast: Dictionary = duskmaw.perform_move(DASH_SLOT, Vector3i(2, 1, 0), board)
 	assert_true(bool(cast.get("success", false)),
 		"the AI's dash resolved: %s" % str(cast.get("reason", "")))
 	duskmaw.mark_action_completed("move")
@@ -453,7 +453,7 @@ func test_the_ai_never_gets_a_second_strike_out_of_its_canto() -> void:
 	var board = s["board"]
 	var victims: Array = [s["near"], s["far"]]
 
-	duskmaw.perform_move(DASH_SLOT, Vector2i(2, 1), board)
+	duskmaw.perform_move(DASH_SLOT, Vector3i(2, 1, 0), board)
 	duskmaw.mark_action_completed("move")
 	var hp_after_dash: Array = []
 	for v in victims:

@@ -11,8 +11,8 @@ class_name BotController
 ## if there are no enemies at all, wait.
 ##
 ## Expected board-query interface (a superset of [MoveContext]'s board):
-##   cell_of(unit) -> Vector2i
-##   units_at(cell: Vector2i) -> Array
+##   cell_of(unit) -> Vector3i       (col, row, floor -- see [Cells])
+##   units_at(cell: Vector3i) -> Array
 ##   are_enemies(a, b) -> bool
 ##   are_allies(a, b) -> bool
 ##   all_units() -> Array          ## every unit in play (used to find targets)
@@ -70,7 +70,8 @@ var force_control: bool = false
 # to walk a path and defend it stamps these two keys. [SiegeController] is currently the only
 # stamper.
 
-## Metadata key holding the lane: an [Array] of [Vector2i] waypoints IN MARCH ORDER (first =
+## Metadata key holding the lane: an [Array] of board cells ([Vector3i]; a [Vector2i] map
+## position is read as that column on the ground floor) IN MARCH ORDER (first =
 ## where the unit starts from, last = the goal it pushes toward). Absent or empty = not
 ## marching.
 const MARCH_LANE_META: StringName = &"ai_march_lane"
@@ -99,7 +100,7 @@ func decide(actor, moveset: Array, board) -> Dictionary:
 	if actor == null or board == null or not board.has_method("cell_of"):
 		return _wait("no_actor_or_board")
 
-	var origin: Vector2i = board.cell_of(actor)
+	var origin: Vector3i = board.cell_of(actor)
 	var hostiles := _list_hostiles(actor, board)
 	if hostiles.is_empty():
 		return _wait("no_hostiles")
@@ -141,13 +142,13 @@ func decide(actor, moveset: Array, board) -> Dictionary:
 ##                  `aim_cell`.
 ##   action STEP -> walk to dest_cell (a full advance; no attack this turn).
 ##   action WAIT -> do nothing.
-## [param reachable] is an Array of [Vector2i] (empty is valid -- planning then only
+## [param reachable] is an Array of [Vector3i] (empty is valid -- planning then only
 ## considers the origin cell, matching a unit with no movement profile).
 func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
 	if actor == null or board == null or not board.has_method("cell_of"):
 		return _wait("no_actor_or_board")
 
-	var origin: Vector2i = board.cell_of(actor)
+	var origin: Vector3i = board.cell_of(actor)
 	var hostiles := _list_hostiles(actor, board)
 
 	# MARCH BRANCH (a pushing CREEP). Runs FIRST, and before the no-hostiles early-out,
@@ -176,7 +177,7 @@ func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
 	# map loader -- e.g. tests -- have no home). An untethered aggressive unit reads
 	# home == origin, an infinite leash, and an aggressive stance, so every branch
 	# below collapses to the historical attack-then-advance-full behaviour.
-	var home: Vector2i = _effective_home(actor, origin)
+	var home: Vector3i = _effective_home(actor, origin)
 
 	# LEASH FILTER on movement destinations: an anchored unit may only stop on cells
 	# within its leash radius of home. Untethered -> the reachable set is returned
@@ -242,7 +243,7 @@ func plan(actor, moveset: Array, board, reachable: Array) -> Dictionary:
 
 	# Advance the full distance toward the nearest hostile, but only onto leashed
 	# cells (unchanged from the historical advance when the unit is untethered).
-	return _advance_full(origin, hostiles, board, leashed_reachable)
+	return _advance_full(origin, hostiles, board, leashed_reachable, actor)
 
 
 ## Lazily-created RNG for EASY's stochastic behaviour.
@@ -346,7 +347,7 @@ func _actor_is_controlled(actor) -> bool:
 ## the greedy pick NORMAL has always made; higher difficulties may choose others.
 ## Ranking (matches the historical tie-break): most HP removed, then most raw
 ## damage, then the lower-HP target (so a kill is secured on ties).
-func _ranked_attacks(actor, origin: Vector2i, moveset: Array, hostiles: Array, board) -> Array:
+func _ranked_attacks(actor, origin: Vector3i, moveset: Array, hostiles: Array, board) -> Array:
 	var candidates: Array = []
 	for move in moveset:
 		# MODE-AWARE: read the pattern/effects in force for THIS caster, so a move
@@ -370,7 +371,7 @@ func _ranked_attacks(actor, origin: Vector2i, moveset: Array, hostiles: Array, b
 			var aim_res := _resolve_aim(move, actor, origin, target, board, origin)
 			if not bool(aim_res["found"]):
 				continue
-			var aim_cell: Vector2i = aim_res["aim"]
+			var aim_cell: Vector3i = aim_res["aim"]
 			var estimate := _estimate_damage(move, actor, target)
 			if estimate <= 0:
 				continue
@@ -407,7 +408,7 @@ func _attack_is_better(a: Dictionary, b: Dictionary) -> bool:
 ## cell coord) and records it as "dest_cell". Collapsing to one entry per move+target
 ## keeps the ranked list -- and therefore [method _choose_attack] / HARD / BRUTAL --
 ## behaving exactly as they do for the origin-only [method _ranked_attacks].
-func _ranked_attacks_from_cells(actor, origin: Vector2i, stand_cells: Array, moveset: Array, hostiles: Array, board, home: Vector2i) -> Array:
+func _ranked_attacks_from_cells(actor, origin: Vector3i, stand_cells: Array, moveset: Array, hostiles: Array, board, home: Vector3i) -> Array:
 	var best_by_key := {}  # "move_id:target_id" -> best candidate for that pairing
 	for move in moveset:
 		if move == null or move.targeting_for(actor) == null or not _move_has_damage(move, actor):
@@ -418,7 +419,7 @@ func _ranked_attacks_from_cells(actor, origin: Vector2i, stand_cells: Array, mov
 			continue
 		var positional: bool = _is_positional_move(move, actor)
 		for target in hostiles:
-			var tcell: Vector2i = board.cell_of(target)
+			var tcell: Vector3i = board.cell_of(target)
 			# Cheapest stand cell (least movement) that can legally hit this target,
 			# plus the AIM cell to use from there.
 			var dest_cell := origin
@@ -496,22 +497,30 @@ func _attack_from_cells_is_better(a: Dictionary, b: Dictionary) -> bool:
 ## Advance as far as possible toward the nearest hostile: choose the reachable cell
 ## that minimizes distance to that enemy (closing the unit's whole move range, not a
 ## single cell). Returns WAIT only when no reachable cell gets the unit closer.
-func _advance_full(origin: Vector2i, hostiles: Array, board, reachable: Array) -> Dictionary:
+##
+## PATH-AWARE on multi-floor boards: "nearest" and "closer" are measured in walking
+## steps ([method _travel_distance]), so a unit below a rampart heads for the STAIRS
+## instead of hugging the wall under its target. On a single-floor board this is the
+## historical Manhattan distance, byte for byte.
+func _advance_full(origin: Vector3i, hostiles: Array, board, reachable: Array, actor = null) -> Dictionary:
+	var kind := _movement_kind(actor)
+	var from_origin := _distance_field(origin, hostiles, board, kind)
 	var nearest = null
 	var best_dist := 1 << 30
 	for target in hostiles:
-		var d := _manhattan(origin, board.cell_of(target))
+		var d := _field_distance(from_origin, origin, board.cell_of(target))
 		if d < best_dist:
 			best_dist = d
 			nearest = target
 	if nearest == null:
 		return _wait("no_hostiles")
 
-	var goal: Vector2i = board.cell_of(nearest)
+	var goal: Vector3i = board.cell_of(nearest)
+	var to_goal := _distance_field(goal, [], board, kind, origin)
 	var dest := origin
-	var dest_dist := _manhattan(origin, goal)
+	var dest_dist := _field_distance(to_goal, goal, origin)
 	for c in reachable:
-		var d := _manhattan(c, goal)
+		var d := _field_distance(to_goal, goal, c)
 		if d < dest_dist:
 			dest_dist = d
 			dest = c
@@ -595,7 +604,7 @@ func _is_positional_move(move: MoveResource, actor = null) -> bool:
 
 
 ## The AIM cell [param move] should use against [param target] when cast from
-## [param cast_cell], plus whether any legal aim exists: { "found": bool, "aim": Vector2i }.
+## [param cast_cell], plus whether any legal aim exists: { "found": bool, "aim": Vector3i }.
 ##
 ## ORDINARY move -> aims at the target's OWN cell, gated by [method MoveResource.can_target]
 ## exactly as before (byte-for-byte: same call, same aim). A pattern with no board
@@ -609,17 +618,17 @@ func _is_positional_move(move: MoveResource, actor = null) -> bool:
 ## leashed actor additionally rejects any landing beyond its leash of [param home].
 ## Among the legal landings the best is the closest to the caster (fewest leap steps),
 ## tie-broken by deterministic cell order.
-func _resolve_aim(move: MoveResource, actor, cast_cell: Vector2i, target, board, home: Vector2i) -> Dictionary:
-	var tcell: Vector2i = board.cell_of(target)
+func _resolve_aim(move: MoveResource, actor, cast_cell: Vector3i, target, board, home: Vector3i) -> Dictionary:
+	var tcell: Vector3i = board.cell_of(target)
 	if not _is_positional_move(move, actor):
 		if move.can_target(cast_cell, tcell, actor, board):
 			return { "found": true, "aim": tcell }
 		return { "found": false, "aim": tcell }
-	var best := Vector2i.ZERO
+	var best := Vector3i.ZERO
 	var best_cost := 1 << 30
 	var found := false
 	for step in TargetingPattern.ORTHOGONAL_STEPS:
-		var landing: Vector2i = tcell + step
+		var landing: Vector3i = tcell + step
 		if not move.can_target(cast_cell, landing, actor, board):
 			continue
 		if not _within_leash(actor, home, landing):
@@ -637,7 +646,7 @@ func _resolve_aim(move: MoveResource, actor, cast_cell: Vector2i, target, board,
 ## a leashed actor only a cell within its leash radius of [param home]. Mirrors
 ## [method _leash_filter]'s rule for a single cell so a leap's landing obeys the same
 ## tether as an ordinary advance.
-func _within_leash(actor, home: Vector2i, cell: Vector2i) -> bool:
+func _within_leash(actor, home: Vector3i, cell: Vector3i) -> bool:
 	if not _has_leash(actor):
 		return true
 	return _manhattan(cell, home) <= _leash_radius(actor)
@@ -651,7 +660,7 @@ func _within_leash(actor, home: Vector2i, cell: Vector2i) -> bool:
 
 ## This actor's effective guard-post cell: its authored home if it has one, else
 ## the cell it currently stands on ([param origin]).
-func _effective_home(actor, origin: Vector2i) -> Vector2i:
+func _effective_home(actor, origin: Vector3i) -> Vector3i:
 	if actor != null and actor.has_method("has_home_cell") and actor.has_home_cell() \
 			and actor.has_method("get_home_cell"):
 		return actor.get_home_cell()
@@ -698,7 +707,7 @@ func _aggro_range(actor) -> int:
 ## Untethered actors get the SAME array back untouched (so the untethered path is
 ## unchanged). `origin` is not filtered here -- plan() always keeps it as a legal
 ## stand cell and as _advance_full's stay-put fallback.
-func _leash_filter(actor, home: Vector2i, cells: Array) -> Array:
+func _leash_filter(actor, home: Vector3i, cells: Array) -> Array:
 	if not _has_leash(actor):
 		return cells
 	var radius: int = _leash_radius(actor)
@@ -711,7 +720,7 @@ func _leash_filter(actor, home: Vector2i, cells: Array) -> Array:
 
 ## True when any hostile has come within the actor's aggro range of [param home]
 ## -- the wake condition for a defensive unit to leave its post and engage.
-func _hostile_within_aggro(actor, home: Vector2i, hostiles: Array, board) -> bool:
+func _hostile_within_aggro(actor, home: Vector3i, hostiles: Array, board) -> bool:
 	var radius: int = _aggro_range(actor)
 	for h in hostiles:
 		if _manhattan(home, board.cell_of(h)) <= radius:
@@ -729,8 +738,10 @@ func _is_marching(actor) -> bool:
 	return not march_lane(actor).is_empty()
 
 
-## The actor's lane, as an [Array] of [Vector2i] in march order. Empty when it has none (or
-## when the stamped value is not a usable array of cells).
+## The actor's lane, as an [Array] of [Vector3i] cells in march order. Empty when it has none
+## (or when the stamped value is not a usable array of cells). Waypoints stamped as [Vector2i]
+## map positions (or any [method Cells.from_variant] form) are lifted onto the ground floor;
+## unreadable entries are dropped.
 static func march_lane(actor) -> Array:
 	var out: Array = []
 	if actor == null or not is_instance_valid(actor):
@@ -741,8 +752,9 @@ static func march_lane(actor) -> Array:
 	if not (raw is Array):
 		return out
 	for cell in raw as Array:
-		if cell is Vector2i:
-			out.append(cell)
+		var c: Vector3i = Cells.from_variant(cell)
+		if c != Cells.INVALID:
+			out.append(c)
 	return out
 
 
@@ -756,7 +768,7 @@ func _march_aggro(actor) -> int:
 
 ## True when any of [param hostiles] is within [param radius] (Manhattan) of [param origin].
 ## A negative radius never triggers; radius 0 means "only something sharing my cell".
-func _hostile_within(origin: Vector2i, hostiles: Array, board, radius: int) -> bool:
+func _hostile_within(origin: Vector3i, hostiles: Array, board, radius: int) -> bool:
 	if radius < 0:
 		return false
 	for h in hostiles:
@@ -775,32 +787,32 @@ func _hostile_within(origin: Vector2i, hostiles: Array, board, radius: int) -> b
 ## standing on it, in which case it is the next one along. Standing on the final waypoint
 ## (the enemy base) returns that same cell, which reads as "no progress left" and drops the
 ## creep into a wait: creeps never capture, they only arrive and fight.
-static func march_target(lane: Array, origin: Vector2i) -> Vector2i:
+static func march_target(lane: Array, origin: Vector3i) -> Vector3i:
 	if lane.is_empty():
 		return origin
 	var best: int = 0
 	var best_dist: int = 1 << 30
 	for i in range(lane.size()):
-		var d: int = _manhattan(origin, lane[i])
+		var d: int = _manhattan(origin, Cells.from_variant(lane[i]))
 		# `<=` is the tie-break toward the later waypoint.
 		if d <= best_dist:
 			best_dist = d
 			best = i
 	if best_dist == 0 and best < lane.size() - 1:
 		best += 1
-	return lane[best]
+	return Cells.from_variant(lane[best])
 
 
 ## Advance along the lane: stand on whichever reachable cell gets closest to the current
 ## waypoint. Returns a STEP decision, or a WAIT when nothing available makes progress (the
 ## creep is boxed in, has no movement, or has arrived).
-func _march_plan(actor, origin: Vector2i, board, reachable: Array) -> Dictionary:
+func _march_plan(actor, origin: Vector3i, board, reachable: Array) -> Dictionary:
 	var lane: Array = march_lane(actor)
-	var goal: Vector2i = march_target(lane, origin)
+	var goal: Vector3i = march_target(lane, origin)
 	if goal == origin:
 		return _wait("march_arrived")
 
-	var dest: Vector2i = origin
+	var dest: Vector3i = origin
 	var dest_dist: int = _manhattan(origin, goal)
 	for c in reachable:
 		var d: int = _manhattan(c, goal)
@@ -848,7 +860,7 @@ const SUPPORT_DEBUFF_VALUE: int = 5
 ## as SELF-BUFF / HEAL / DEBUFF, and returns the highest-value TRIGGERED candidate as a
 ## MOVE decision cast in place (dest_cell == origin, so the executor walks the unit
 ## nowhere before it supports).
-func _best_support_play(actor, origin: Vector2i, moveset: Array, hostiles: Array, board) -> Dictionary:
+func _best_support_play(actor, origin: Vector3i, moveset: Array, hostiles: Array, board) -> Dictionary:
 	var best: Dictionary = {}
 	var best_value: int = -1
 	for move in moveset:
@@ -874,7 +886,7 @@ func _best_support_play(actor, origin: Vector2i, moveset: Array, hostiles: Array
 ## (carrying the internal "_triggered" / "_value" / "_category" keys plan() reads).
 ## HEAL is checked first so a move that both heals and buffs is driven by its heal
 ## target logic; a move fitting no category returns {}.
-func _classify_support(move: MoveResource, actor, origin: Vector2i, hostiles: Array, board) -> Dictionary:
+func _classify_support(move: MoveResource, actor, origin: Vector3i, hostiles: Array, board) -> Dictionary:
 	if _move_is_heal(move, actor):
 		return _heal_candidate(move, actor, origin, board)
 	if _move_is_self_buff(move, actor):
@@ -888,7 +900,7 @@ func _classify_support(move: MoveResource, actor, origin: Vector2i, hostiles: Ar
 ## is within [constant THREAT_RANGE] of the actor (it can be struck this turn). The
 ## cast aims at the actor's own cell. The damage-first gate in [method
 ## _support_beats_attack] supplies the "and no strong attack available" half.
-func _self_buff_candidate(move: MoveResource, actor, origin: Vector2i, hostiles: Array, board) -> Dictionary:
+func _self_buff_candidate(move: MoveResource, actor, origin: Vector3i, hostiles: Array, board) -> Dictionary:
 	var threatened: bool = _is_threatened(origin, hostiles, board)
 	return {
 		"action": ActionType.MOVE,
@@ -910,12 +922,12 @@ func _self_buff_candidate(move: MoveResource, actor, origin: Vector2i, hostiles:
 ## [constant HEAL_THRESHOLD] that the move can legally reach from the origin, and is
 ## triggered only when such a target exists. Value scales with the HP it would restore
 ## so a heal competes with the fixed buff/debuff scores by how badly it is needed.
-func _heal_candidate(move: MoveResource, actor, origin: Vector2i, board) -> Dictionary:
+func _heal_candidate(move: MoveResource, actor, origin: Vector3i, board) -> Dictionary:
 	var best_target = null
 	var best_ratio: float = 2.0
 	var best_missing: int = 0
 	for u in _heal_targets(actor, board):
-		var tcell: Vector2i = board.cell_of(u)
+		var tcell: Vector3i = board.cell_of(u)
 		if not move.can_target(origin, tcell, actor, board):
 			continue
 		var maxhp: int = _max_hp(u)
@@ -948,7 +960,7 @@ func _heal_candidate(move: MoveResource, actor, origin: Vector2i, board) -> Dict
 ## DEBUFF candidate -- an ENEMY-targeted status / stat-down with little or no damage.
 ## Debuffs the highest-attack hostile the move can reach from the origin, so the turn
 ## blunts the biggest threat when no strong attack is available.
-func _debuff_candidate(move: MoveResource, actor, origin: Vector2i, hostiles: Array, board) -> Dictionary:
+func _debuff_candidate(move: MoveResource, actor, origin: Vector3i, hostiles: Array, board) -> Dictionary:
 	var best_target = null
 	var best_threat: int = -1
 	for h in hostiles:
@@ -957,7 +969,7 @@ func _debuff_candidate(move: MoveResource, actor, origin: Vector2i, hostiles: Ar
 		# play the bot still made into the dark. Unconditional-true with fog off.
 		if not VisionSystem.gatherable(actor, h):
 			continue
-		var hcell: Vector2i = board.cell_of(h)
+		var hcell: Vector3i = board.cell_of(h)
 		if not move.can_target(origin, hcell, actor, board):
 			continue
 		var threat: int = _actor_stat(h, "attack")
@@ -1012,7 +1024,7 @@ func _has_lethal_attack(ranked: Array) -> bool:
 
 ## A hostile is within [constant THREAT_RANGE] of [param origin] -- close enough that
 ## the actor is worth shielding this turn.
-func _is_threatened(origin: Vector2i, hostiles: Array, board) -> bool:
+func _is_threatened(origin: Vector3i, hostiles: Array, board) -> bool:
 	for h in hostiles:
 		if _manhattan(origin, board.cell_of(h)) <= THREAT_RANGE:
 			return true
@@ -1163,7 +1175,7 @@ func _trap_plan(actor, moveset: Array, board) -> Dictionary:
 	if trap_move == null:
 		return {}
 
-	var origin: Vector2i = board.cell_of(actor)
+	var origin: Vector3i = board.cell_of(actor)
 	var trap_id: StringName = _trap_effect_id(trap_move, actor)
 	var max_r: int = trap_move.effective_max_range(actor)
 	var min_r: int = 1
@@ -1176,23 +1188,23 @@ func _trap_plan(actor, moveset: Array, board) -> Dictionary:
 	# Nearest hostile -> aim the trap onto its approach path.
 	var hostiles := _list_hostiles(actor, board)
 	var have_goal: bool = false
-	var goal: Vector2i = origin
+	var goal: Vector3i = origin
 	var goal_dist: int = 1 << 30
 	for h in hostiles:
-		var hc: Vector2i = board.cell_of(h)
+		var hc: Vector3i = board.cell_of(h)
 		var gd := _manhattan(origin, hc)
 		if gd < goal_dist:
 			goal_dist = gd
 			goal = hc
 			have_goal = true
 
-	var chosen: Vector2i = origin
+	var chosen: Vector3i = origin
 	var found: bool = false
 	var best_detour: int = 1 << 30  # d(origin,cell)+d(cell,goal): lower == more "between"
 	var best_forward: int = -1      # d(origin,cell): lay it toward the goal (nearest when idle)
 	for dx in range(-max_r, max_r + 1):
 		for dy in range(-max_r, max_r + 1):
-			var cell := origin + Vector2i(dx, dy)
+			var cell := origin + Vector3i(dx, dy, 0)
 			var d := _manhattan(origin, cell)
 			if d < min_r or d > max_r:
 				continue  # out of range (d >= min_r >= 1 excludes the actor's own cell)
@@ -1235,8 +1247,10 @@ func _trap_plan(actor, moveset: Array, board) -> Dictionary:
 ## [param origin]: in bounds, unoccupied, accepted by the move's own targeting rules,
 ## and not already carrying this trap. Board queries are duck-typed, so a mock lacking
 ## in_bounds / is_occupied simply treats the cell as open.
-func _trap_cell_ok(move: MoveResource, actor, origin: Vector2i, cell: Vector2i, board, trap_id: StringName) -> bool:
+func _trap_cell_ok(move: MoveResource, actor, origin: Vector3i, cell: Vector3i, board, trap_id: StringName) -> bool:
 	if board.has_method("in_bounds") and not bool(board.in_bounds(cell)):
+		return false
+	if board.has_method("has_tile") and not bool(board.has_tile(cell)):
 		return false
 	if _trap_cell_occupied(board, cell):
 		return false
@@ -1249,7 +1263,7 @@ func _trap_cell_ok(move: MoveResource, actor, origin: Vector2i, cell: Vector2i, 
 
 ## Is [param cell] occupied by a living unit? Prefers the board's is_occupied, else
 ## falls back to units_at; a board exposing neither reports the cell open.
-func _trap_cell_occupied(board, cell: Vector2i) -> bool:
+func _trap_cell_occupied(board, cell: Vector3i) -> bool:
 	if board.has_method("is_occupied"):
 		return bool(board.is_occupied(cell))
 	if board.has_method("units_at"):
@@ -1260,7 +1274,7 @@ func _trap_cell_occupied(board, cell: Vector2i) -> bool:
 ## True when [param cell] already carries a tile effect whose id is [param trap_id], so
 ## the AI does not waste its turn re-laying a trap that is already there. Reads the shared
 ## CombatServices tile-effect registry; null-safe when that autoload is unavailable.
-func _cell_has_trap(cell: Vector2i, trap_id: StringName) -> bool:
+func _cell_has_trap(cell: Vector3i, trap_id: StringName) -> bool:
 	if not CombatServices or not CombatServices.has_method("tile_effects_at"):
 		return false
 	for te in CombatServices.tile_effects_at(cell):
@@ -1271,7 +1285,7 @@ func _cell_has_trap(cell: Vector2i, trap_id: StringName) -> bool:
 
 # --- Movement --------------------------------------------------------------
 
-func _step_toward_nearest(origin: Vector2i, hostiles: Array, board) -> Dictionary:
+func _step_toward_nearest(origin: Vector3i, hostiles: Array, board) -> Dictionary:
 	var nearest = null
 	var best_dist := 1 << 30
 	for target in hostiles:
@@ -1301,9 +1315,9 @@ func _wait(reason: String) -> Dictionary:
 		"action": ActionType.WAIT,
 		"move": null,
 		"target": null,
-		"aim_cell": Vector2i.ZERO,
+		"aim_cell": Vector3i.ZERO,
 		"estimated_damage": 0,
-		"step_to": Vector2i.ZERO,
+		"step_to": Vector3i.ZERO,
 		"reason": reason,
 	}
 
@@ -1362,25 +1376,77 @@ static func _unit_is_boss(unit) -> bool:
 	return v != null and bool(v)
 
 
-static func _manhattan(a: Vector2i, b: Vector2i) -> int:
-	return absi(a.x - b.x) + absi(a.y - b.y)
+## The planner's straight-line distance: [method Cells.distance] (Manhattan plus the
+## floor difference -- plain Manhattan on one floor). Used for leash / aggro / threat
+## radii and stand-cell tie-breaks; advancing uses [method _travel_distance].
+static func _manhattan(a: Vector3i, b: Vector3i) -> int:
+	return Cells.distance(a, b)
 
 
-## Total order over cells (column, then row) -- a deterministic tie-break so the
-## movement-aware planner picks the same cell every run on NORMAL.
-static func _cell_less(a: Vector2i, b: Vector2i) -> bool:
-	if a.x != b.x:
-		return a.x < b.x
-	return a.y < b.y
+# --- Path-aware distance (multi-floor) ----------------------------------------
+
+## True when the board has more than one floor. Path-aware distances are only used
+## there, so every single-floor board keeps the historical Manhattan behaviour.
+static func _is_multi_floor(board) -> bool:
+	return board != null and board.has_method("floor_count") and int(board.floor_count()) > 1
 
 
-## One-cell step from [param origin] toward [param goal] (dominant axis first).
-static func _step_dir(origin: Vector2i, goal: Vector2i) -> Vector2i:
-	var delta := goal - origin
-	if delta == Vector2i.ZERO:
-		return Vector2i.ZERO
+## The actor's movement kind (GROUND unless its profile says otherwise).
+static func _movement_kind(actor) -> CombatTypes.MovementKind:
+	if actor != null and actor.has_method("get_movement_profile"):
+		var p = actor.get_movement_profile()
+		if p != null and "kind" in p:
+			return p.kind
+	return CombatTypes.MovementKind.GROUND
+
+
+## Walking-step distance field from [param from] (see
+## [method MovementResolver.travel_distances]), or {} on a single-floor board. The
+## flood is capped a little past the farthest cell of interest ([param targets] units
+## or the [param also] cell) so it stays cheap on big maps.
+static func _distance_field(from: Vector3i, targets: Array, board, kind: CombatTypes.MovementKind, also = null) -> Dictionary:
+	if not _is_multi_floor(board):
+		return {}
+	var reach := 0
+	for t in targets:
+		reach = maxi(reach, Cells.distance(from, board.cell_of(t)))
+	if also is Vector3i:
+		reach = maxi(reach, Cells.distance(from, also))
+	return MovementResolver.new().travel_distances(from, board, kind, reach * 3 + 12)
+
+
+## Distance from the field's source [param src] to [param cell]: the walking steps
+## when the field reached it, else a straight-line estimate pushed behind every
+## reachable cell (so an unreachable route never beats a real one). With an empty
+## field (single-floor board) this is exactly [method _manhattan].
+static func _field_distance(field: Dictionary, src: Vector3i, cell: Vector3i) -> int:
+	if field.is_empty():
+		return _manhattan(src, cell)
+	if field.has(cell):
+		return int(field[cell])
+	return 100000 + _manhattan(src, cell)
+
+
+## Walking steps between [param a] and [param b] on [param board] (path-aware on a
+## multi-floor board, Manhattan otherwise). Public helper for planners/tests.
+static func _travel_distance(a: Vector3i, b: Vector3i, board, kind: CombatTypes.MovementKind = CombatTypes.MovementKind.GROUND) -> int:
+	return _field_distance(_distance_field(a, [], board, kind, b), a, b)
+
+
+## Total order over cells (column, then row, then floor) -- a deterministic
+## tie-break so the movement-aware planner picks the same cell every run on NORMAL.
+static func _cell_less(a: Vector3i, b: Vector3i) -> bool:
+	return Cells.less(a, b)
+
+
+## One-cell horizontal step from [param origin] toward [param goal] (dominant axis
+## first; floors are ignored -- changing floor needs a link, which [method plan] finds).
+static func _step_dir(origin: Vector3i, goal: Vector3i) -> Vector3i:
+	var delta := Vector3i(goal.x - origin.x, goal.y - origin.y, 0)
+	if delta == Vector3i.ZERO:
+		return Vector3i.ZERO
 	if absi(delta.x) >= absi(delta.y) and delta.x != 0:
-		return Vector2i(signi(delta.x), 0)
+		return Vector3i(signi(delta.x), 0, 0)
 	if delta.y != 0:
-		return Vector2i(0, signi(delta.y))
-	return Vector2i(signi(delta.x), 0)
+		return Vector3i(0, signi(delta.y), 0)
+	return Vector3i(signi(delta.x), 0, 0)

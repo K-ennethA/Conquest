@@ -36,9 +36,9 @@ class HealUnit:
 
 ## A minimal board: RegenStatus ignores it, but tick_all still hands one down.
 class TickBoard:
-	func cell_of(_unit) -> Vector2i:
-		return Vector2i.ZERO
-	func in_bounds(_cell: Vector2i) -> bool:
+	func cell_of(_unit) -> Vector3i:
+		return Vector3i.ZERO
+	func in_bounds(_cell: Vector3i) -> bool:
 		return true
 
 

@@ -47,6 +47,11 @@ const TOO_LARGE_TOOLTIP := "Too large to send to your opponent"
 ## authored against assets that are gone). Expected data, never an engine error.
 const UNREADABLE_TOOLTIP := "This map could not be read."
 
+## The short, always-visible tag a refused NETWORKED row carries in place of its size (the full
+## reason -- too large to send, an AI-controlled neutral faction, AI-driven Siege creeps -- is
+## the row's tooltip). Every such map is still offered offline, exactly as before.
+const OFFLINE_ONLY_NOTE := "Offline only"
+
 ## Ordering, PINNED: builtin first, then the player's own creations, then downloads --
 ## alphabetical (case-insensitive) inside each group. The shipped maps are the ones a new
 ## player recognises, and grouping keeps a big download library from burying them; plain
@@ -174,8 +179,8 @@ static func badge_color(source: String) -> Color:
 		SOURCE_CUSTOM:
 			return MenuTheme.GOLD
 		SOURCE_COMMUNITY:
-			return MenuTheme.CREAM_DIM
-	return MenuTheme.CREAM_DIM
+			return MenuTheme.TEXT_DIM
+	return MenuTheme.TEXT_DIM
 
 
 ## The prose form, for the preview card's detail block ("Source: Downloaded").
@@ -202,11 +207,14 @@ static func list_text(name: String, badge: String) -> String:
 ## already-loaded [code]resource[/code] and/or an explicit [code]loadable[/code] flag (see
 ## [method hydrate]). [param networked] gates the eligibility rule: a LOCAL match sends
 ## nothing to anybody, so an oversized map is perfectly playable hot-seat and is never
-## refused there. [param eligible] is the answer for this path (ignored when not networked).
+## refused there. [param eligible] is the answer for this path (ignored when not networked);
+## [param refusal] is the sentence saying WHY it is not (see [method network_refusal_text]),
+## empty for the legacy "too large" wording.
 ##
-## Returns { path, name, source, badge, badge_color, meta, disabled, tooltip, list_text,
-## resource }.
-static func make_row(entry: Dictionary, networked: bool, eligible: bool) -> Dictionary:
+## Returns { path, name, source, badge, badge_color, meta, note, disabled, tooltip, list_text,
+## resource }. [code]note[/code] is [constant OFFLINE_ONLY_NOTE] on a refused networked row
+## (renderers show it in place of the size), "" otherwise.
+static func make_row(entry: Dictionary, networked: bool, eligible: bool, refusal: String = "") -> Dictionary:
 	var path: String = String(entry.get("path", ""))
 	var name: String = String(entry.get("name", "")).strip_edges()
 	if name.is_empty():
@@ -220,6 +228,7 @@ static func make_row(entry: Dictionary, networked: bool, eligible: bool) -> Dict
 	var badge: String = badge_for(source)
 	var disabled: bool = false
 	var tooltip: String = ""
+	var note: String = ""
 
 	# Refusals, most specific first. Unreadable beats too-large: a map we cannot even read is
 	# not a size problem, and telling the player to shrink it would be a lie.
@@ -228,7 +237,8 @@ static func make_row(entry: Dictionary, networked: bool, eligible: bool) -> Dict
 		tooltip = UNREADABLE_TOOLTIP
 	elif networked and not eligible:
 		disabled = true
-		tooltip = TOO_LARGE_TOOLTIP
+		tooltip = refusal if not refusal.is_empty() else TOO_LARGE_TOOLTIP
+		note = OFFLINE_ONLY_NOTE
 	else:
 		tooltip = "%s  ·  %s" % [name, source_label(source)]
 
@@ -239,6 +249,7 @@ static func make_row(entry: Dictionary, networked: bool, eligible: bool) -> Dict
 		"badge": badge,
 		"badge_color": badge_color(source),
 		"meta": meta_for(resource),
+		"note": note,
 		"disabled": disabled,
 		"tooltip": tooltip,
 		"list_text": list_text(name, badge),
@@ -257,8 +268,10 @@ static func meta_for(resource) -> String:
 
 
 ## Rows for [param entries], refused + sorted. PURE given [param eligible_fn]: pass a
-## Callable taking a path and returning bool (an empty Callable means "everything is
-## eligible", which is also the right answer for a local match).
+## Callable taking a path and returning either a bool (eligible?) or a String -- "" for
+## eligible, otherwise the refusal sentence the row shows (see [method network_refusal_text]).
+## An empty Callable means "everything is eligible", which is also the right answer for a
+## local match.
 static func build_rows(entries: Array, networked: bool, eligible_fn: Callable = Callable()) -> Array:
 	var rows: Array = []
 	for entry in entries:
@@ -268,9 +281,15 @@ static func build_rows(entries: Array, networked: bool, eligible_fn: Callable = 
 		if path.is_empty():
 			continue
 		var eligible: bool = true
+		var refusal: String = ""
 		if networked and eligible_fn.is_valid():
-			eligible = bool(eligible_fn.call(path))
-		rows.append(make_row(entry as Dictionary, networked, eligible))
+			var answer = eligible_fn.call(path)
+			if answer is String:
+				refusal = answer
+				eligible = refusal.is_empty()
+			else:
+				eligible = bool(answer)
+		rows.append(make_row(entry as Dictionary, networked, eligible, refusal))
 	return sort_rows(rows)
 
 
@@ -325,14 +344,28 @@ static func versus_entries(include_drafts: bool = false) -> Array:
 	return out_fallback
 
 
-## Whether [param path] is small enough to hand to an opponent. True when the build ships no
-## catalog -- a picker that refused every map because the size oracle is missing would be
-## worse than one that lets the transport report the failure itself.
+## Whether [param path] may be played in a networked match: small enough to hand to an
+## opponent, and nothing on it that a two-seat, AI-free match cannot run (see
+## [code]MapCatalog.network_play_blocker[/code]). True when the build ships no catalog -- a
+## picker that refused every map because the oracle is missing would be worse than one that
+## lets the transport report the failure itself.
 static func network_eligible(path: String) -> bool:
 	var cat = catalog()
 	if cat != null and responds(cat, "network_eligible"):
 		return bool(cat.network_eligible(path))
 	return true
+
+
+## "" when [param path] may be played in a networked match, otherwise the ONE sentence its row
+## shows (the catalog's [code]describe_network_refusal(network_refusal(path))[/code]). A
+## catalog that only answers the older bool contract gets the "too large" sentence, which is
+## the only refusal that contract could express.
+static func network_refusal_text(path: String) -> String:
+	var cat = catalog()
+	if cat != null and responds(cat, "network_refusal") and responds(cat, "describe_network_refusal"):
+		var text: String = String(cat.describe_network_refusal(String(cat.network_refusal(path))))
+		return text
+	return "" if network_eligible(path) else TOO_LARGE_TOOLTIP
 
 
 ## Load a map by path, .tres or .json. Community + creator maps are inert JSON under
@@ -377,8 +410,8 @@ static func hydrate(entries: Array) -> Array:
 ## lobby, where a map that cannot be shipped to the opponent is refused; [param include_drafts]
 ## only in the local picker, which must be able to play-test a work in progress.
 static func versus_rows(networked: bool, include_drafts: bool = false) -> Array:
-	return build_rows(hydrate(versus_entries(include_drafts)), networked, func(path: String) -> bool:
-		return network_eligible(path)
+	return build_rows(hydrate(versus_entries(include_drafts)), networked, func(path: String) -> String:
+		return network_refusal_text(path)
 	)
 
 
@@ -386,8 +419,8 @@ static func versus_rows(networked: bool, include_drafts: bool = false) -> Array:
 
 ## Fill [param list] with [param rows]. An [ItemList] item is TEXT ONLY -- it cannot hold a
 ## chip Control -- so the badge rides in the item text (`Ridgeline   [CUSTOM]`) and is tinted
-## with the source colour; the screen's preview card carries the real
-## [method MenuTheme.make_chip]. Refused rows are set disabled with their sentence as the
+## with the source colour; the screen's preview card carries the real chip
+## ([method MenuKit.badge]). Refused rows are set disabled with their sentence as the
 ## item tooltip. Adds NO height: an ItemList row's height comes from the font, not the string.
 static func apply_to_item_list(list: ItemList, rows: Array, suffixes: Dictionary = {}) -> void:
 	if list == null:
@@ -454,33 +487,31 @@ static func build_list(networked: bool, on_selected: Callable, rows: Array = [])
 	scroll.add_child(box)
 
 	if used.is_empty():
-		var empty := Label.new()
-		empty.text = "No maps in your library yet."
+		var empty := MenuKit.label("No maps in your library yet.", &"MutedLabel")
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		MenuTheme.style_caption(empty)
 		box.add_child(empty)
 		return card
 
 	# Captured BY VALUE -- an Array is a reference, so every row's lambda sees the same list
 	# and the selection highlight can be cleared across all of them.
-	var buttons: Array = []
+	# One ButtonGroup: pressing a row toggles it on (the gold selected-card frame) and the
+	# previous one off -- the shared OptionCard look, no per-row style swapping.
+	var group := ButtonGroup.new()
 	for row in used:
 		if not (row is Dictionary):
 			continue
 		var button := build_row_button(row as Dictionary)
+		button.toggle_mode = true
+		button.button_group = group
 		var path: String = String((row as Dictionary).get("path", ""))
 		var resource = (row as Dictionary).get("resource", null)
 		button.pressed.connect(func() -> void:
-			for other in buttons:
-				other.theme_type_variation = &"Button"
-			button.theme_type_variation = &"SelectedButton"
 			var res: MapResource = resource if resource is MapResource else load_map_resource(path)
 			if res == null:
 				return  # a row whose map will not load is already disabled; belt and braces
 			if on_selected.is_valid():
 				on_selected.call(path, res)
 		)
-		buttons.append(button)
 		box.add_child(button)
 
 	return card
@@ -490,6 +521,9 @@ static func build_list(networked: bool, on_selected: Callable, rows: Array = [])
 ## disabled with their sentence as the tooltip.
 static func build_row_button(row: Dictionary) -> Button:
 	var button := Button.new()
+	button.theme_type_variation = MenuKit.CARD
+	button.focus_mode = Control.FOCUS_ALL
+	MenuNav.hover_focus(button)
 	button.custom_minimum_size = Vector2(0.0, ROW_HEIGHT)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.tooltip_text = String(row.get("tooltip", ""))
@@ -508,8 +542,8 @@ static func build_row_button(row: Dictionary) -> Button:
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(line)
 
-	var name_label := Label.new()
-	name_label.text = String(row.get("name", ""))
+	var name_label := MenuKit.label(String(row.get("name", "")), &"")
+	name_label.add_theme_font_override("font", MenuTheme.heading_font())
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	name_label.custom_minimum_size = Vector2(NAME_MIN_WIDTH, 0.0)
@@ -520,9 +554,11 @@ static func build_row_button(row: Dictionary) -> Button:
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	line.add_child(name_label)
 
-	var meta_label := Label.new()
-	meta_label.text = String(row.get("meta", ""))
-	MenuTheme.style_caption(meta_label)
+	# A refused networked row trades its size for the short "Offline only" tag, so the reason is
+	# visible without hovering (the full sentence is the tooltip).
+	var note: String = String(row.get("note", ""))
+	var meta_label := MenuKit.label(note if not note.is_empty() else String(row.get("meta", "")), &"MutedLabel")
+	meta_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	meta_label.custom_minimum_size = Vector2(META_MIN_WIDTH, 0.0)
 	meta_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	meta_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -540,10 +576,9 @@ static func build_row_button(row: Dictionary) -> Button:
 
 	var badge: String = String(row.get("badge", ""))
 	if not badge.is_empty():
-		var tint: Color = row.get("badge_color", MenuTheme.CREAM_DIM)
-		var chip: Label = MenuTheme.make_chip(badge, tint)
-		chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var tint: Color = row.get("badge_color", MenuTheme.TEXT_DIM)
+		var chip := MenuKit.badge(badge, tint)
+		chip.name = "SourceChip"
 		chip_slot.add_child(chip)
 
 	return button

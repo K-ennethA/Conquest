@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="WeatherResource" format=3]
+
+[ext_resource type="Script" path="res://game/weather/WeatherResource.gd" id="1_wres"]
+
+[resource]
+script = ExtResource("1_wres")
+id = &"rain"
+display_name = "Rain"
+icon = "☂"
+color = Color(0.45, 0.68, 1, 1)
+description = "Steady rain. Water moves deal x1.3 damage, Fire moves x0.7. Rain douses fire: burning tiles are extinguished and deal no damage."
+element_damage_scale = {
+&"fire": 0.7,
+&"water": 1.3
+}
+suppressed_tile_effects = Array[StringName]([&"fire", &"scorching_vent"])
+fx_kind = &"rain"
+sun_color = Color(0.72, 0.8, 0.95, 1)
+sun_energy_scale = 0.62
+ambient_scale = 0.95
+ambient_tint = Color(0.82, 0.88, 1, 1)
+fog_color = Color(0.36, 0.42, 0.5, 1)
+fog_density = 0.02
+glow_scale = 0.8
+saturation = 0.85
+brightness = 0.96
+contrast = 1.1
+sky_tint = Color(0.72, 0.77, 0.84, 1)
+shader_wetness = 1.0
+wind_strength = 1.6

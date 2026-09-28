@@ -65,8 +65,8 @@ func _fight(element: StringName) -> Dictionary:
 	# stops ElementChart falling back to the live CombatServices autoload. A unit test
 	# that reaches an autoload is at the mercy of whatever the previous suite left there.
 	var board := Doubles.TileEffectBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(0, 1))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(0, 1, 0))
 	return { "board": board, "caster": caster, "target": target }
 
 
@@ -75,7 +75,7 @@ func _hp_lost(fight: Dictionary, move: MoveResource) -> int:
 	var target = fight["target"]
 	var before: int = target.hp
 	var result: Dictionary = MoveExecutor.execute(
-		move, fight["caster"], fight["board"], Vector2i(0, 1), _rng)
+		move, fight["caster"], fight["board"], Vector3i(0, 1, 0), _rng)
 	assert_true(result.get("success", false),
 		"the test move resolves; a rejected cast would make the damage assert vacuous")
 	for event in result.get("events", []):

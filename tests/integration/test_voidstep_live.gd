@@ -86,11 +86,11 @@ func _make_fodder() -> CharacterResource:
 	return c
 
 
-func _cell_to_world(cell: Vector2i) -> Vector3:
+func _cell_to_world(cell: Vector3i) -> Vector3:
 	return BoardAdapter.new(_grid(), []).cell_to_world(cell)
 
 
-func _spawn(character_id: StringName, cell: Vector2i, owner: Player) -> Unit:
+func _spawn(character_id: StringName, cell: Vector3i, owner: Player) -> Unit:
 	var character := CharacterLibrary.get_character(character_id)
 	if character == null:
 		return null
@@ -114,8 +114,8 @@ func _boot() -> Dictionary:
 	var ai := Player.new(1, "AI")
 	ai.is_ai = true
 
-	var duskmaw := _spawn(&"monster", Vector2i(2, 2), human)
-	var fodder := _spawn(FODDER_ID, Vector2i(10, 10), ai)
+	var duskmaw := _spawn(&"monster", Vector3i(2, 2, 0), human)
+	var fodder := _spawn(FODDER_ID, Vector3i(10, 10, 0), ai)
 	if duskmaw == null or fodder == null:
 		return {}
 
@@ -153,7 +153,7 @@ func _boot() -> Dictionary:
 
 
 ## Select [param unit] and arm Voidstep, then hand back the cells the visualizer is
-## RENDERING a marker on (Vector2i(col, row), row-major).
+## RENDERING a marker on (Vector3i(col, row, floor), row-major).
 func _lit_cells(panel, viz, unit: Unit) -> Array:
 	# Drop any aim left armed by a previous read, so the visualizer is repopulated from
 	# scratch rather than asserted against a stale set.
@@ -168,7 +168,7 @@ func _lit_cells(panel, viz, unit: Unit) -> Array:
 		var mesh = viz.attack_range_meshes[key]
 		if mesh == null or not is_instance_valid(mesh):
 			continue
-		cells.append(Vector2i(int(round(key.x)), int(round(key.z))))
+		cells.append(Cells.from_grid(key))
 	cells.sort()
 	return cells
 
@@ -178,22 +178,22 @@ func _lit_cells(panel, viz, unit: Unit) -> Array:
 ## validates with, just without spending the unit's turn. Used by the highlight tests, which
 ## are about what is DRAWN once anchors exist rather than about the cast that made them (the
 ## panel-driven cast has its own test below).
-func _plant(unit: Unit, cell: Vector2i) -> void:
+func _plant(unit: Unit, cell: Vector3i) -> void:
 	var move: MoveResource = unit.get_move(VOIDSTEP_SLOT)
 	if move == null or move.effects.is_empty():
 		return
 	var ctx := MoveContext.new(
-		unit, CombatServices.board(), move, cell, [cell] as Array[Vector2i])
+		unit, CombatServices.board(), move, cell, [cell] as Array[Vector3i])
 	move.effects[0].apply(ctx)
 
 
 ## Plant an anchor at [param cell] through the panel's own command path -- pick the move,
 ## click the cell -- which is exactly what the player does.
-func _cast_at(panel, unit: Unit, cell: Vector2i) -> void:
+func _cast_at(panel, unit: Unit, cell: Vector3i) -> void:
 	panel._on_unit_selected(unit, unit.global_position)
 	await get_tree().process_frame
 	panel._on_move_selected(VOIDSTEP_SLOT)
-	panel.handle_move_target_selected(Vector3(cell.x, 0, cell.y))
+	panel.handle_move_target_selected(Cells.to_grid(cell))
 	for _i in range(2):
 		await get_tree().process_frame
 
@@ -211,11 +211,11 @@ func test_with_no_anchors_down_the_lit_range_is_the_planting_reach_alone() -> vo
 	var lit: Array = await _lit_cells(s["panel"], s["viz"], s["duskmaw"])
 
 	assert_gt(lit.size(), 0, "the screen lights SOMETHING -- the move is aimable")
-	assert_true(lit.has(Vector2i(6, 2)),
+	assert_true(lit.has(Vector3i(6, 2, 0)),
 		"free ground 4 cells east is lit: that is where an anchor may be planted")
-	assert_false(lit.has(Vector2i(7, 2)),
+	assert_false(lit.has(Vector3i(7, 2, 0)),
 		"and 5 cells east is dark -- planting is bounded at 4")
-	assert_false(lit.has(Vector2i(2, 2)),
+	assert_false(lit.has(Vector3i(2, 2, 0)),
 		"the caster's own cell is never a legal aim")
 	for cell in lit:
 		assert_lte(absi(cell.x - 2) + absi(cell.y - 2), 4,
@@ -233,21 +233,21 @@ func test_an_own_anchor_stays_lit_after_the_caster_walks_out_of_planting_reach()
 	var duskmaw: Unit = s["duskmaw"]
 	var board = s["board"]
 
-	var anchor := Vector2i(2, 6)
+	var anchor := Vector3i(2, 6, 0)
 	_plant(duskmaw, anchor)
 	assert_eq(CombatServices.applied_tile_effects_at(anchor).size(), 1,
 		"an anchor stands 4 cells south of where Duskmaw started")
 
 	# Walk away, far past the 4-cell planting reach.
-	board.move_unit(duskmaw, Vector2i(9, 2))
+	board.move_unit(duskmaw, Vector3i(9, 2, 0))
 
 	var lit: Array = await _lit_cells(panel, s["viz"], duskmaw)
 
 	assert_true(lit.has(anchor),
 		"the caster's own anchor is LIT from 11 cells away -- the long half of the move")
-	assert_false(lit.has(Vector2i(2, 7)),
+	assert_false(lit.has(Vector3i(2, 7, 0)),
 		"while the bare ground beside it is dark: only the anchor reaches that far")
-	assert_true(lit.has(Vector2i(9, 6)),
+	assert_true(lit.has(Vector3i(9, 6, 0)),
 		"and the planting reach is still lit around the caster's new cell")
 
 
@@ -260,7 +260,7 @@ func test_a_body_parked_on_an_anchor_puts_its_light_out() -> void:
 	var duskmaw: Unit = s["duskmaw"]
 	var board = s["board"]
 
-	var anchor := Vector2i(2, 6)
+	var anchor := Vector3i(2, 6, 0)
 	_plant(duskmaw, anchor)
 	var lit_free: Array = await _lit_cells(panel, s["viz"], duskmaw)
 	assert_true(lit_free.has(anchor), "an empty anchor is lit")
@@ -292,7 +292,7 @@ func test_the_planted_anchor_gets_its_own_visible_marker_on_the_board() -> void:
 	_map_root.add_child(overlay)
 	await get_tree().process_frame
 
-	var anchor := Vector2i(2, 6)
+	var anchor := Vector3i(2, 6, 0)
 	await _cast_at(s["panel"], s["duskmaw"], anchor)
 	await get_tree().process_frame
 
@@ -306,7 +306,7 @@ func test_the_planted_anchor_gets_its_own_visible_marker_on_the_board() -> void:
 	var duskmaw: Unit = s["duskmaw"]
 	var move: MoveResource = duskmaw.get_move(VOIDSTEP_SLOT)
 	var ctx := MoveContext.new(
-		duskmaw, CombatServices.board(), move, anchor, [anchor] as Array[Vector2i])
+		duskmaw, CombatServices.board(), move, anchor, [anchor] as Array[Vector3i])
 	move.effects[0].apply(ctx)
 	await get_tree().process_frame
 

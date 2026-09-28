@@ -16,7 +16,7 @@ extends Node
 ##       -> result captured off the elimination signals -> campaign.json
 ##
 ## RESULT CAPTURE without a GameWorldManager edit: this node scores the SAME win/lose rules
-## the battle itself uses -- [WinConditionLibrary].build_rules(map.victory_conditions),
+## the battle itself uses -- [WinConditionLibrary].build_rules_for_map(map),
 ## evaluated over the live board on every unit/player elimination. Scoring the map's real
 ## objectives (rather than re-deriving "no enemy left" from PlayerManager) is what makes the
 ## Eldroot finale work: forgotten_forest is a DEFEAT-BOSS map with endless spawns, so the
@@ -186,7 +186,7 @@ func begin() -> bool:
 	# needs the DefeatBoss rule, not a naive "no enemy left").
 	_active = chapter
 	_active_map_path = map_path
-	_active_rules = WinConditionLibrary.build_rules(map_resource.victory_conditions)
+	_active_rules = WinConditionLibrary.build_rules_for_map(map_resource)
 	_result_recorded = false
 	_turns = 0
 	# A previous chapter's intro that was staged and then abandoned (the player backed out of
@@ -405,7 +405,7 @@ func arm_for_resume(chapter: Dictionary, turns: int) -> bool:
 	_pending = {}
 	_active = chapter.duplicate(true)
 	_active_map_path = map_path
-	_active_rules = WinConditionLibrary.build_rules(map_resource.victory_conditions)
+	_active_rules = WinConditionLibrary.build_rules_for_map(map_resource)
 	_result_recorded = false
 	_turns = maxi(0, turns)
 	return true

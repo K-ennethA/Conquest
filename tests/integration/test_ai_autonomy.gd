@@ -65,7 +65,7 @@ func after_each() -> void:
 
 # --- Helpers -----------------------------------------------------------------
 
-func _cell_to_world(cell: Vector2i) -> Vector3:
+func _cell_to_world(cell: Vector3i) -> Vector3:
 	return BoardAdapter.new(GRID, []).cell_to_world(cell)
 
 
@@ -119,7 +119,7 @@ func _test_cleave() -> MoveResource:
 	return m
 
 
-func _spawn_character_unit(map_root: Node3D, character_id: StringName, cell: Vector2i, owner: Player) -> Unit:
+func _spawn_character_unit(map_root: Node3D, character_id: StringName, cell: Vector3i, owner: Player) -> Unit:
 	var character := CharacterLibrary.get_character(character_id)
 	if character == null:
 		return null
@@ -134,13 +134,13 @@ func _spawn_character_unit(map_root: Node3D, character_id: StringName, cell: Vec
 ## Build a live board with an AI-owned attacker and a human-owned target [param apart]
 ## cells apart along Z. Returns {} (skip signal) if a roster character fails to load.
 func _build_scene(apart: int) -> Dictionary:
-	return await _build_scene_cells(Vector2i(0, 0), Vector2i(0, apart))
+	return await _build_scene_cells(Vector3i(0, 0, 0), Vector3i(0, apart, 0))
 
 
 ## Build a live board with the AI attacker on [param ai_cell] and the human target
 ## on [param target_cell] (both must lie within the 5x5 grid). Returns {} if a
 ## roster character fails to load.
-func _build_scene_cells(ai_cell: Vector2i, target_cell: Vector2i) -> Dictionary:
+func _build_scene_cells(ai_cell: Vector3i, target_cell: Vector3i) -> Dictionary:
 	_map_root = Node3D.new()
 	_map_root.name = "Map"
 	add_child_autofree(_map_root)
@@ -227,14 +227,14 @@ func test_traditional_ai_advances_toward_distant_enemy() -> void:
 	var board = scene["board"]
 	var ai_unit: Unit = scene["ai_unit"]
 	var human_unit: Unit = scene["human_unit"]
-	var start_cell: Vector2i = board.cell_of(ai_unit)
+	var start_cell: Vector3i = board.cell_of(ai_unit)
 	var start_dist := _manhattan(start_cell, board.cell_of(human_unit))
 
 	var driver := _make_driver()
 	var acted: bool = await driver.act_for_turn_system(ts)
 
 	assert_true(acted, "the driver should act for the AI player (not sit inert)")
-	var end_cell: Vector2i = board.cell_of(ai_unit)
+	var end_cell: Vector3i = board.cell_of(ai_unit)
 	assert_ne(end_cell, start_cell, "AI with no enemy in range should move (its cell changes)")
 	assert_lt(_manhattan(end_cell, board.cell_of(human_unit)), start_dist,
 		"the AI's move should reduce the distance to the enemy (advance toward it)")
@@ -262,7 +262,7 @@ func test_traditional_ai_moves_into_range_and_attacks_same_turn() -> void:
 	var board = scene["board"]
 	var ai_unit: Unit = scene["ai_unit"]
 	var human_unit: Unit = scene["human_unit"]
-	var start_cell: Vector2i = board.cell_of(ai_unit)
+	var start_cell: Vector3i = board.cell_of(ai_unit)
 	var start_hp := human_unit.get_hp()
 
 	var driver := _make_driver()
@@ -289,7 +289,7 @@ func test_traditional_ai_moves_into_range_and_attacks_same_turn() -> void:
 func test_traditional_ai_advances_full_move_range_not_one_cell() -> void:
 	# Enemy at the far corner (Manhattan 8 away) on the 5x5 grid: movement range 3
 	# cannot bring it into any move's range (max reach 1), so this is a pure advance.
-	var scene: Dictionary = await _build_scene_cells(Vector2i(0, 0), Vector2i(4, 4))
+	var scene: Dictionary = await _build_scene_cells(Vector3i(0, 0, 0), Vector3i(4, 4, 0))
 	if scene.is_empty() or scene["board"] == null:
 		pending("Could not build live board (roster/board unavailable); skipping.")
 		return
@@ -305,14 +305,14 @@ func test_traditional_ai_advances_full_move_range_not_one_cell() -> void:
 	var board = scene["board"]
 	var ai_unit: Unit = scene["ai_unit"]
 	var human_unit: Unit = scene["human_unit"]
-	var start_cell: Vector2i = board.cell_of(ai_unit)
+	var start_cell: Vector3i = board.cell_of(ai_unit)
 	var start_dist := _manhattan(start_cell, board.cell_of(human_unit))
 
 	var driver := _make_driver()
 	var acted: bool = await driver.act_for_turn_system(ts)
 
 	assert_true(acted, "the driver should act for the AI player (not sit inert)")
-	var end_cell: Vector2i = board.cell_of(ai_unit)
+	var end_cell: Vector3i = board.cell_of(ai_unit)
 	assert_gt(_manhattan(start_cell, end_cell), 1,
 		"the AI must use its full movement range in one turn, not creep a single cell")
 	assert_lt(_manhattan(end_cell, board.cell_of(human_unit)), start_dist,
@@ -349,7 +349,7 @@ func test_speed_first_ai_acts_on_its_unit_turn() -> void:
 	var board = scene["board"]
 	var start_hp := human_unit.get_hp()
 	var ai_unit: Unit = scene["ai_unit"]
-	var start_cell: Vector2i = board.cell_of(ai_unit)
+	var start_cell: Vector3i = board.cell_of(ai_unit)
 
 	var driver := _make_driver()
 	var acted: bool = await driver.act_for_turn_system(ts)
@@ -364,5 +364,5 @@ func test_speed_first_ai_acts_on_its_unit_turn() -> void:
 
 # --- small helper ------------------------------------------------------------
 
-func _manhattan(a: Vector2i, b: Vector2i) -> int:
+func _manhattan(a: Vector3i, b: Vector3i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)

@@ -6,23 +6,47 @@ class_name MapMakerScene
 ##
 ## Two editing surfaces sit side by side:
 ##   * LEFT  - a 2D button grid (paint / rect fill / bucket fill / erase / spawn /
-##             objective), the tile palette, the spawn-point config and the map
-##             metadata + save/load controls.
+##             objective / stairs / link), the tile palette, the spawn-point config,
+##             the map metadata (name, author, description, weather, size), the
+##             validation list and the save / load / challenge-export controls.
 ##   * RIGHT - a LIVE 3D preview inside a SubViewport that renders the map with the
 ##             real tile model scenes (the same way the editor dock and MapGallery
-##             do), updating incrementally on every edit.
+##             do) and the actual character models on spawn points, updating
+##             incrementally on every edit.
+##
+## MULTI-FLOOR (docs/MULTI_FLOOR.md): a floor selector in the header ([ - ] Floor N
+## [ + ], or the floor_up / floor_down actions, PgUp / PgDn by default) picks the
+## floor being edited. In the 2D grid the floor below shows through ghosted so decks
+## line up with what they span; the 3D preview shows every floor up to the edited
+## one (like the battle cutaway). On any floor you can paint / erase tiles, place
+## spawns, mark STAIRS (a direction; they climb to the next floor) and add explicit
+## LINKS (click the from-cell, change floor if needed, click the to-cell; clicking an
+## existing link's ends again removes it). The validation list flags spawns on air,
+## links / stairs into missing cells and unreachable decks.
 ##
 ## All editing state lives in [MapMakerModel] (a pure, tested RefCounted); this class
 ## only builds the UI, translates input into model calls, and mirrors the result onto
 ## the two views. The 3D rendering logic is PORTED from addons/map_creator/
 ## map_creator_dock.gd but reads from the model rather than a MapResource, and uses no
 ## Editor-only APIs so it runs in the shipped game.
+##
+## OPENING / BACK: callers open the Map Maker with [method open_from], which records
+## where Back / Esc returns to (the main menu's Map Creator entry and the Compendium's
+## Map Maker button both use it). Opened any other way, Back goes to the main menu.
 
+## This scene, for [method open_from].
+const SCENE_PATH := "res://game/mapmaker/MapMakerScene.tscn"
+## Where Back returns when no caller recorded a [member return_scene].
+const DEFAULT_BACK_SCENE := "res://menus/MainMenu.tscn"
 ## Directory player-authored maps are saved to / loaded from, as inert JSON.
 const CUSTOM_MAPS_DIR := "user://maps/"
 
+## Scene Back / Esc returns to. Set by [method open_from]; cleared by [method go_back].
+## Empty = [constant DEFAULT_BACK_SCENE].
+static var return_scene: String = ""
+
 ## Editing tools available on the grid.
-enum Tool { PAINT, RECT_FILL, BUCKET_FILL, ERASE, SPAWN, OBJECTIVE }
+enum Tool { PAINT, RECT_FILL, BUCKET_FILL, ERASE, SPAWN, OBJECTIVE, STAIRS, LINK }
 
 ## Sentinel for "no cell".
 const NO_CELL := Vector2i(-1, -1)
@@ -53,6 +77,18 @@ const PLAYER_COLORS := {
 	6: Color(0.95, 0.60, 0.30),
 	7: Color(0.85, 0.85, 0.85),
 }
+
+## Objective marker colour (2D swatch + 3D pillar).
+const OBJECTIVE_COLOR := Color(0.95, 0.85, 0.35)
+
+const STAIR_GLYPHS := { "north": "▲", "south": "▼", "east": "▶", "west": "◀" }
+const STAIR_DIRS := ["north", "east", "south", "west"]
+const LINK_KINDS := ["stairs", "ladder", "ramp"]
+
+## 2D grid cell size. Touch-readiness compromise: 30 -> 38 (still short of the 44px
+## hit-target guideline, but a full zoomable canvas -- the real fix -- is a later task;
+## this keeps the grid readable on desktop while being less mis-tappable).
+const CELL_SIZE := 38
 
 # --- 3D world tuning (ported from the dock) ----------------------------------
 const TILE_STEP := 2.0
@@ -85,6 +121,9 @@ const SPAWN_LABEL_Y := 2.1
 
 var model: MapMakerModel
 
+## Floor being edited (0 = ground).
+var current_floor: int = 0
+
 # --- selection / tool state --------------------------------------------------
 var _current_tool: int = Tool.PAINT
 var _selected_tile_type: String = "NORMAL"
@@ -94,6 +133,11 @@ var _current_player_id: int = 0
 var _selected_spawn_kind: String = MapResource.SPAWN_KIND_START
 var _selected_character_id: String = ""
 var _brush_size: int = 1
+var _stair_dir: String = "east"
+var _link_kind: String = "stairs"
+var _link_cost: int = 1
+## First click of a link (Cells.INVALID when none pending).
+var _link_from: Vector3i = Cells.INVALID
 
 # One entry per palette button: {type_name, resource_path, tile_id, color, display_name}
 var _tile_palette_entries: Array[Dictionary] = []
@@ -101,10 +145,15 @@ var _tile_palette_entries: Array[Dictionary] = []
 # --- 2D grid state -----------------------------------------------------------
 var _grid_width: int = 0
 var _grid_height: int = 0
-var _cell_buttons: Dictionary = {}  # Vector2i -> Button
+var _cell_buttons: Dictionary = {}  # Vector2i -> Button (shows the edited floor)
 var _is_painting: bool = false
 var _rect_anchor: Vector2i = NO_CELL
 var _rect_hover: Vector2i = NO_CELL
+
+# --- deferred refresh flags (one validation / link rebuild per frame at most) --
+var _issues_dirty: bool = false
+var _links_dirty: bool = false
+var _flush_queued: bool = false
 
 # --- UI references ------------------------------------------------------------
 var _width_spin: SpinBox
@@ -112,10 +161,14 @@ var _height_spin: SpinBox
 var _player_spin: SpinBox
 var _brush_spin: SpinBox
 var _grid_container: GridContainer
+var _grid_title: Label
 var _status_label: Label
 var _name_edit: LineEdit
 var _author_edit: LineEdit
 var _desc_edit: TextEdit
+var _weather_opt: OptionButton
+var _floor_label: Label
+var _issues_label: RichTextLabel
 var _spawn_kind_option: OptionButton
 var _character_option: OptionButton
 var _tool_buttons: Dictionary = {}  # Tool -> Button
@@ -137,10 +190,12 @@ var _viewport_container: SubViewportContainer
 var _viewport: SubViewport
 var _world_root: Node3D
 var _camera: Camera3D
-var _tile_visuals: Dictionary = {}   # Vector2i -> Node3D
-var _spawn_visuals: Dictionary = {}      # Vector2i -> Node3D (holder: model+ring+label, or sphere)
-var _spawn_signatures: Dictionary = {}   # Vector2i -> String (skip rebuild when spawn unchanged)
-var _objective_meshes: Dictionary = {}  # Vector2i -> MeshInstance3D
+var _floor_roots: Dictionary = {}       # int floor -> Node3D ("Floor_<f>", raised to its height)
+var _links_root: Node3D                 # stair + link visuals (FloorDecor.make_link_visual)
+var _tile_visuals: Dictionary = {}      # Vector3i -> Node3D
+var _spawn_visuals: Dictionary = {}     # Vector3i -> Node3D (holder: model+ring+label, or sphere)
+var _spawn_signatures: Dictionary = {}  # Vector3i -> String (skip rebuild when spawn unchanged)
+var _objective_meshes: Dictionary = {}  # Vector2i -> MeshInstance3D (ground floor only)
 var _world_span: float = TILE_STEP
 
 # Camera orbit state.
@@ -159,25 +214,31 @@ var _type_model_paths_built: bool = false
 var _character_model_cache: Dictionary = {}
 
 
+## Open the Map Maker from [param from] (any node of the calling screen); Back / Esc
+## will return to [param back_scene] -- or, when that is empty, to the scene
+## [param from] belongs to.
+static func open_from(from: Node, back_scene: String = "") -> void:
+	var back := back_scene
+	if back.is_empty() and from != null:
+		back = from.scene_file_path
+		if back.is_empty() and from.is_inside_tree() and from.get_tree().current_scene != null:
+			back = from.get_tree().current_scene.scene_file_path
+	return_scene = back
+	MenuNav.change_scene(from, SCENE_PATH)
+
+
 func _ready() -> void:
 	if model == null:
 		model = MapMakerModel.new(8, 8)
-	theme = MenuTheme.build()
-	MenuTheme.apply_backdrop(self)
 	_load_tile_palette_entries()
 	_build_ui()
 	_rebuild_grid()
 	_build_world_3d()
 	_refresh_export_state()
+	_refresh_all()
 
 
 func _input(event: InputEvent) -> void:
-	# ESC returns to the menu (edits live in the model; saving is explicit).
-	if event.is_pressed() and event is InputEventKey and (event as InputEventKey).keycode == KEY_ESCAPE:
-		get_viewport().set_input_as_handled()
-		_go_back()
-		return
-
 	# A left-button RELEASE anywhere closes a paint stroke / commits a rect fill. A
 	# per-cell release is unreliable because the pointer is usually over a different
 	# cell by the time the button comes up.
@@ -190,17 +251,68 @@ func _input(event: InputEvent) -> void:
 				_is_painting = false
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	# Esc / pad B returns to the caller (edits live in the model; saving is explicit) --
+	# but not while a text field is being edited. Only ui_cancel (not every "cancel"
+	# binding) so a stray letter key can never throw away an unsaved map.
+	if event.is_action_pressed(&"ui_cancel") and not event.is_echo():
+		var focus := get_viewport().gui_get_focus_owner()
+		if not (focus is LineEdit or focus is TextEdit):
+			get_viewport().set_input_as_handled()
+			go_back()
+			return
+	if _is_floor_event(event, InputActions.FLOOR_UP, KEY_PAGEUP):
+		set_floor(current_floor + 1)
+		get_viewport().set_input_as_handled()
+	elif _is_floor_event(event, InputActions.FLOOR_DOWN, KEY_PAGEDOWN):
+		set_floor(current_floor - 1)
+		get_viewport().set_input_as_handled()
+
+
+## The floor_up / floor_down action (rebindable, gamepad triggers), falling back to
+## Page Up / Page Down when the action is not in the InputMap.
+func _is_floor_event(event: InputEvent, action: StringName, fallback_key: Key) -> bool:
+	if event == null or not event.is_pressed() or event.is_echo():
+		return false
+	if InputMap.has_action(action):
+		return event.is_action_pressed(action)
+	return event is InputEventKey and (event as InputEventKey).keycode == fallback_key
+
+
+## Leave the Map Maker for the screen it was opened from ([member return_scene], else
+## the main menu).
+func go_back() -> void:
+	var target := return_scene if not return_scene.is_empty() else DEFAULT_BACK_SCENE
+	return_scene = ""
+	if is_inside_tree():
+		MenuNav.change_scene(self, target)
+
+
 # =============================================================================
 #  UI construction
 # =============================================================================
 
 func _build_ui() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Same grove look as the rest of the menus, in a compact size (this is a dense
+	# editor: every toolbar must fit a 1280-wide window).
+	theme = _compact_theme()
+
+	var bg := ColorRect.new()
+	bg.color = MenuTheme.BG_DEEP
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(bg)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, MenuTheme.SP_M)
+	add_child(margin)
 
 	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 8)
-	add_child(root)
+	root.add_theme_constant_override("separation", MenuTheme.SP_S)
+	margin.add_child(root)
 
 	_build_header(root)
 
@@ -214,31 +326,77 @@ func _build_ui() -> void:
 	_build_left_column(body)
 	_build_preview_column(body)
 
+	_build_footer(root)
+
 
 func _build_header(root: VBoxContainer) -> void:
-	var header := PanelContainer.new()
+	var header := MenuKit.card()
 	root.add_child(header)
 
 	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 12)
+	bar.add_theme_constant_override("separation", MenuTheme.SP_M)
 	header.add_child(bar)
 
-	# Back button (top-left) - the missing "back button" the request called out.
+	# Back first, so it is always on screen (Esc too, when no text field is being edited).
 	var back_btn := Button.new()
+	back_btn.name = "BackButton"
 	back_btn.text = "< Back"
-	back_btn.pressed.connect(_go_back)
+	back_btn.theme_type_variation = MenuKit.GHOST
+	back_btn.tooltip_text = "Back (%s)" % _hint(&"ui_cancel", "Esc")
+	back_btn.pressed.connect(go_back)
 	bar.add_child(back_btn)
 
 	var title := Label.new()
-	title.text = "MAP CREATOR"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	MenuTheme.style_title(title, MenuTheme.FONT_DISPLAY)
+	title.text = "Map Maker"
+	title.add_theme_font_override("font", MenuTheme.heading_font(1))
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	bar.add_child(title)
 
-	# A spacer that mirrors the Back button's width keeps the title visually centred.
 	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(90, 0)
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(spacer)
+
+	# --- Floor selector -------------------------------------------------------
+	var floor_tag := MenuKit.section("Floor")
+	floor_tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	bar.add_child(floor_tag)
+	var down_btn := Button.new()
+	down_btn.name = "FloorDownButton"
+	down_btn.text = " - "
+	down_btn.tooltip_text = "Edit the floor below (%s)" % _hint(InputActions.FLOOR_DOWN, "PgDn")
+	down_btn.pressed.connect(func(): set_floor(current_floor - 1))
+	bar.add_child(down_btn)
+	_floor_label = _make_label("")
+	_floor_label.custom_minimum_size = Vector2(190, 0)
+	_floor_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_floor_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	bar.add_child(_floor_label)
+	var up_btn := Button.new()
+	up_btn.name = "FloorUpButton"
+	up_btn.text = " + "
+	up_btn.tooltip_text = "Edit the floor above (%s)" % _hint(InputActions.FLOOR_UP, "PgUp")
+	up_btn.pressed.connect(func(): set_floor(current_floor + 1))
+	bar.add_child(up_btn)
+
+
+## Status line (left) + key hints (right), always on screen.
+func _build_footer(root: VBoxContainer) -> void:
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", MenuTheme.SP_XL)
+	root.add_child(footer)
+
+	_status_label = MenuKit.label("Ready.", &"DimLabel", true)
+	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(_status_label)
+
+	footer.add_child(MenuKit.key_hint(
+		"%s / %s" % [_key_for(InputActions.FLOOR_UP, false, "PgUp"), _key_for(InputActions.FLOOR_DOWN, false, "PgDn")],
+		"%s / %s" % [_key_for(InputActions.FLOOR_UP, true, "RT"), _key_for(InputActions.FLOOR_DOWN, true, "LT")],
+		"Floor"))
+	footer.add_child(MenuKit.key_hint(
+		_key_for(&"ui_cancel", false, "Esc"), _key_for(&"ui_cancel", true, "B"), "Back"))
 
 
 func _build_left_column(body: HSplitContainer) -> void:
@@ -262,11 +420,13 @@ func _build_left_column(body: HSplitContainer) -> void:
 	col.add_child(HSeparator.new())
 	_build_grid_section(col)
 	col.add_child(HSeparator.new())
+	_build_validation_section(col)
+	col.add_child(HSeparator.new())
 	_build_save_load_section(col)
 
 
 func _build_metadata_section(col: VBoxContainer) -> void:
-	col.add_child(_section_label("MAP INFO"))
+	col.add_child(MenuKit.section("Map info"))
 
 	var name_row := HBoxContainer.new()
 	col.add_child(name_row)
@@ -293,6 +453,17 @@ func _build_metadata_section(col: VBoxContainer) -> void:
 	_desc_edit.text_changed.connect(func(): model.description = _desc_edit.text)
 	col.add_child(_desc_edit)
 
+	# Battle weather (docs/WEATHER.md): a fixed weather, a dynamic mix, or the map's
+	# own schedule/dynamic settings kept as-is.
+	var weather_row := HBoxContainer.new()
+	col.add_child(weather_row)
+	weather_row.add_child(_make_label("Weather:"))
+	_weather_opt = OptionButton.new()
+	_weather_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_weather_opt.item_selected.connect(_on_weather_selected)
+	weather_row.add_child(_weather_opt)
+	_sync_weather_option()
+
 	var size_row := HBoxContainer.new()
 	col.add_child(size_row)
 	size_row.add_child(_make_label("Width:"))
@@ -308,29 +479,56 @@ func _build_metadata_section(col: VBoxContainer) -> void:
 
 
 func _build_tools_section(col: VBoxContainer) -> void:
-	col.add_child(_section_label("TOOLS"))
+	col.add_child(MenuKit.section("Tools"))
+	var group := ButtonGroup.new()
 
 	var row := HBoxContainer.new()
 	col.add_child(row)
-	_add_tool_button(row, "Paint", Tool.PAINT)
-	_add_tool_button(row, "Rect", Tool.RECT_FILL)
-	_add_tool_button(row, "Bucket", Tool.BUCKET_FILL)
-	_add_tool_button(row, "Erase", Tool.ERASE)
+	_add_tool_button(row, "Paint", Tool.PAINT, group)
+	_add_tool_button(row, "Rect", Tool.RECT_FILL, group)
+	_add_tool_button(row, "Bucket", Tool.BUCKET_FILL, group)
+	_add_tool_button(row, "Erase", Tool.ERASE, group)
 
 	var row2 := HBoxContainer.new()
 	col.add_child(row2)
-	_add_tool_button(row2, "Spawn", Tool.SPAWN)
-	_add_tool_button(row2, "Objective", Tool.OBJECTIVE)
-	row2.add_child(_make_label("  Brush:"))
+	_add_tool_button(row2, "Spawn", Tool.SPAWN, group)
+	_add_tool_button(row2, "Objective", Tool.OBJECTIVE, group)
+	_add_tool_button(row2, "Stairs", Tool.STAIRS, group)
+	_add_tool_button(row2, "Link", Tool.LINK, group)
+
+	var row3 := HBoxContainer.new()
+	col.add_child(row3)
+	row3.add_child(_make_label("Brush:"))
 	_brush_spin = _make_spin(1, 3, _brush_size)
 	_brush_spin.value_changed.connect(func(v: float): _brush_size = int(v))
-	row2.add_child(_brush_spin)
+	row3.add_child(_brush_spin)
+
+	row3.add_child(_make_label("  Stairs climb:"))
+	var dir_opt := OptionButton.new()
+	for d in STAIR_DIRS:
+		dir_opt.add_item("%s %s" % [STAIR_GLYPHS[d], d.capitalize()])
+	dir_opt.select(STAIR_DIRS.find(_stair_dir))
+	dir_opt.item_selected.connect(func(i: int): _stair_dir = STAIR_DIRS[i])
+	row3.add_child(dir_opt)
+
+	var row4 := HBoxContainer.new()
+	col.add_child(row4)
+	row4.add_child(_make_label("Link:"))
+	var kind_opt := OptionButton.new()
+	for k in LINK_KINDS:
+		kind_opt.add_item(k.capitalize())
+	kind_opt.item_selected.connect(func(i: int): _link_kind = LINK_KINDS[i])
+	row4.add_child(kind_opt)
+	row4.add_child(_make_label("  cost"))
+	var cost_spin := _make_spin(1, 5, 1)
+	cost_spin.value_changed.connect(func(v: float): _link_cost = int(v))
+	row4.add_child(cost_spin)
 
 	_highlight_tool_buttons()
 
 
 func _build_palette_section(col: VBoxContainer) -> void:
-	col.add_child(_section_label("TILE PALETTE"))
+	col.add_child(MenuKit.section("Tile palette"))
 
 	var grid := GridContainer.new()
 	grid.columns = 3
@@ -349,7 +547,7 @@ func _build_palette_section(col: VBoxContainer) -> void:
 
 
 func _build_spawn_section(col: VBoxContainer) -> void:
-	col.add_child(_section_label("SPAWN / OBJECTIVE"))
+	col.add_child(MenuKit.section("Spawn / objective"))
 
 	var player_row := HBoxContainer.new()
 	col.add_child(player_row)
@@ -390,7 +588,12 @@ func _build_spawn_section(col: VBoxContainer) -> void:
 
 
 func _build_grid_section(col: VBoxContainer) -> void:
-	col.add_child(_section_label("MAP GRID  (drag to paint; Erase tool or right-click erases)"))
+	_grid_title = MenuKit.section("Map grid")
+	col.add_child(_grid_title)
+	col.add_child(MenuKit.label(
+		"Drag to paint; the Erase tool or right-click erases.\n"
+		+ "S/R/E/F + player: spawn   * objective   ▲▶▼◀ stairs (climb)\n"
+		+ "⇅ link end   · air (floor below ghosted)", &"MutedLabel", true))
 	var wrap := ScrollContainer.new()
 	wrap.custom_minimum_size = Vector2(0, 220)
 	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -404,13 +607,25 @@ func _build_grid_section(col: VBoxContainer) -> void:
 	wrap.add_child(_grid_container)
 
 
+func _build_validation_section(col: VBoxContainer) -> void:
+	col.add_child(MenuKit.section("Validation"))
+	_issues_label = RichTextLabel.new()
+	_issues_label.bbcode_enabled = true
+	_issues_label.fit_content = true
+	_issues_label.scroll_active = false
+	_issues_label.custom_minimum_size = Vector2(0, 24)
+	_issues_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(_issues_label)
+
+
 func _build_save_load_section(col: VBoxContainer) -> void:
-	col.add_child(_section_label("SAVE / LOAD"))
+	col.add_child(MenuKit.section("Save / load"))
 	var row := HBoxContainer.new()
 	col.add_child(row)
 
 	var save_btn := Button.new()
 	save_btn.text = "Save"
+	save_btn.theme_type_variation = MenuKit.PRIMARY
 	save_btn.pressed.connect(_on_save_pressed)
 	row.add_child(save_btn)
 
@@ -425,6 +640,7 @@ func _build_save_load_section(col: VBoxContainer) -> void:
 	# clipboard, so another player can import and beat it. Disabled until the map has
 	# at least one player-2+ defender spawn that names a character (there is nothing to
 	# defend otherwise); the status line explains why when it is.
+	col.add_child(MenuKit.section("Share as challenge"))
 	var squad_row := HBoxContainer.new()
 	col.add_child(squad_row)
 	squad_row.add_child(_make_label("Challenger squad size:"))
@@ -472,12 +688,6 @@ func _build_save_load_section(col: VBoxContainer) -> void:
 	_export_challenge_btn.pressed.connect(_on_export_challenge_pressed)
 	col.add_child(_export_challenge_btn)
 
-	_status_label = Label.new()
-	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_status_label.text = "Ready."
-	col.add_child(_status_label)
-
 
 func _build_preview_column(body: HSplitContainer) -> void:
 	var col := VBoxContainer.new()
@@ -485,14 +695,19 @@ func _build_preview_column(body: HSplitContainer) -> void:
 	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_child(col)
 
-	col.add_child(_section_label("3D PREVIEW  (drag to orbit, wheel to zoom)"))
+	col.add_child(MenuKit.section("3D preview  (drag to orbit, wheel to zoom)"))
+
+	var frame := MenuKit.card(&"InsetPanel")
+	frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(frame)
 
 	_viewport_container = SubViewportContainer.new()
 	_viewport_container.stretch = true
 	_viewport_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_viewport_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_viewport_container.mouse_filter = Control.MOUSE_FILTER_STOP
-	col.add_child(_viewport_container)
+	frame.add_child(_viewport_container)
 
 	_viewport = SubViewport.new()
 	_viewport.transparent_bg = false
@@ -505,14 +720,52 @@ func _build_preview_column(body: HSplitContainer) -> void:
 	_viewport_container.gui_input.connect(_on_preview_gui_input)
 
 
+## MenuTheme, shrunk for a dense editor: 15px text and tighter button padding.
+func _compact_theme() -> Theme:
+	var t := MenuTheme.build()
+	t.default_font_size = 15
+	for type in ["Label", "Button", "LineEdit", "TextEdit", "OptionButton", "SpinBox", "CheckBox", "PopupMenu"]:
+		t.set_font_size("font_size", type, 15)
+	t.set_font_size("normal_font_size", "RichTextLabel", 15)
+	for variation in ["GhostButton", "PrimaryButton"]:
+		t.set_font_size("font_size", variation, 15)
+	for type in ["Button", "OptionButton"]:
+		for state in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+			var sb := t.get_stylebox(state, type)
+			if sb != null:
+				var c := sb.duplicate() as StyleBox
+				c.content_margin_left = 10
+				c.content_margin_right = 10
+				c.content_margin_top = 4
+				c.content_margin_bottom = 4
+				t.set_stylebox(state, type, c)
+	for variation in ["GhostButton", "PrimaryButton"]:
+		for state in ["normal", "hover", "pressed"]:
+			var gsb := t.get_stylebox(state, variation)
+			if gsb != null:
+				var g := gsb.duplicate() as StyleBox
+				g.content_margin_left = 10
+				g.content_margin_right = 12
+				g.content_margin_top = 4
+				g.content_margin_bottom = 4
+				t.set_stylebox(state, variation, g)
+	var field := t.get_stylebox("normal", "LineEdit")
+	if field != null:
+		var f := field.duplicate() as StyleBox
+		f.content_margin_top = 4
+		f.content_margin_bottom = 4
+		t.set_stylebox("normal", "LineEdit", f)
+	return t
+
+
 # =============================================================================
 #  Tile palette
 # =============================================================================
 
 func _load_tile_palette_entries() -> void:
-	## Build the palette from the REAL TileResource files (via TileCatalog), so a
-	## painted cell records an actual stable tile_id. Falls back to the tile-type
-	## strings if no resources are found, so the palette is never empty.
+	## Build the palette from the REAL TileResource files (via TileCatalog, which walks
+	## the biome sub-folders), so a painted cell records an actual stable tile_id. Falls
+	## back to the tile-type strings if no resources are found, so it is never empty.
 	_tile_palette_entries.clear()
 	_type_model_paths.clear()
 	_type_model_paths_built = false
@@ -566,9 +819,31 @@ func _on_palette_selected(index: int) -> void:
 	_selected_tile_type = str(entry.get("type_name", "NORMAL"))
 	_selected_tile_path = str(entry.get("resource_path", ""))
 	_selected_tile_id = str(entry.get("tile_id", ""))
-	_current_tool = Tool.PAINT
-	_highlight_tool_buttons()
+	_select_tool(Tool.PAINT)
 	_set_status("Tile: " + str(entry.get("display_name", _selected_tile_type)))
+
+
+# =============================================================================
+#  Floors
+# =============================================================================
+
+## Switch the floor being edited (0 .. MapMakerModel.MAX_FLOOR).
+func set_floor(f: int) -> void:
+	current_floor = clampi(f, 0, MapMakerModel.MAX_FLOOR)
+	_rect_anchor = NO_CELL
+	_rect_hover = NO_CELL
+	_is_painting = false
+	_refresh_all()
+	_set_status("Editing floor %d" % current_floor)
+
+
+func _refresh_floor_label() -> void:
+	if _floor_label == null or model == null:
+		return
+	var count := model.get_floor_count()
+	_floor_label.text = "%d  (%s)  · %d in use" % [current_floor, FloorNav.floor_name(current_floor, maxi(count, current_floor + 1)), count]
+	if _grid_title != null:
+		_grid_title.text = ("Map grid  -  floor %d" % current_floor).to_upper()
 
 
 # =============================================================================
@@ -589,20 +864,30 @@ func _rebuild_grid() -> void:
 	_grid_height = model.height
 	_grid_container.columns = max(1, model.width)
 
+	# Row 0 at the TOP, like the battle camera (north / row 0 is the far side).
 	for y in range(model.height):
 		for x in range(model.width):
 			var pos := Vector2i(x, y)
 			var button := Button.new()
-			# Touch-readiness compromise: 30 -> 38 (still short of the 44px hit-target
-			# guideline, but a full zoomable canvas -- the real fix -- is a later task;
-			# this keeps the grid readable on desktop while being less mis-tappable).
-			button.custom_minimum_size = Vector2(38, 38)
+			button.custom_minimum_size = Vector2(CELL_SIZE, CELL_SIZE)
+			button.add_theme_font_size_override("font_size", 12)
 			button.focus_mode = Control.FOCUS_NONE
 			button.gui_input.connect(_on_cell_gui_input.bind(pos))
 			button.mouse_entered.connect(_on_cell_mouse_entered.bind(pos))
 			_grid_container.add_child(button)
 			_cell_buttons[pos] = button
 			_paint_cell_button(pos)
+
+
+## Repaint every 2D cell (the grid shows one floor), the validation list, the floor
+## label and the 3D floor visibility. Used on floor changes, loads and the tools that
+## touch several cells / floors (stairs, links).
+func _refresh_all() -> void:
+	for pos in _cell_buttons:
+		_paint_cell_button(pos)
+	_refresh_issues()
+	_refresh_floor_label()
+	_apply_floor_visibility()
 
 
 func _on_cell_gui_input(event: InputEvent, pos: Vector2i) -> void:
@@ -614,6 +899,7 @@ func _on_cell_gui_input(event: InputEvent, pos: Vector2i) -> void:
 
 	if mb.button_index == MOUSE_BUTTON_RIGHT:
 		_apply_brush(pos, _erase_at)
+		_refresh_export_state()
 		return
 
 	if mb.button_index != MOUSE_BUTTON_LEFT:
@@ -623,8 +909,7 @@ func _on_cell_gui_input(event: InputEvent, pos: Vector2i) -> void:
 	# (right-click erase, handled above, stays as a desktop-only shortcut -- touch
 	# has no right-click). Spelled out as its own branch rather than relying on the
 	# `_:` default falling through to _apply_tool_at so the left-click-erases
-	# contract is explicit and doesn't silently depend on Tool.ERASE not colliding
-	# with a future RECT_FILL/BUCKET_FILL-style special case.
+	# contract is explicit. STAIRS and LINK are single-click tools (no drag).
 	match _current_tool:
 		Tool.RECT_FILL:
 			_rect_anchor = pos
@@ -636,6 +921,10 @@ func _on_cell_gui_input(event: InputEvent, pos: Vector2i) -> void:
 			_is_painting = true
 			_apply_brush(pos, _erase_at)
 			_refresh_export_state()
+		Tool.STAIRS:
+			_stairs_at(pos)
+		Tool.LINK:
+			_link_click(Vector3i(pos.x, pos.y, current_floor))
 		_:
 			_is_painting = true
 			_apply_tool_at(pos)
@@ -677,32 +966,48 @@ func _apply_brush(pos: Vector2i, action: Callable) -> void:
 
 
 func _paint_at(pos: Vector2i) -> void:
-	model.paint_tile(pos, _selected_tile_type, _selected_tile_path, _selected_tile_id)
+	model.paint_tile(pos, _selected_tile_type, _selected_tile_path, current_floor, _selected_tile_id)
 	_enforce_terrain_over_placement(pos)
+	_queue_flush(true, false)
 
 
+## Erase on the edited floor: the tile (ground reverts to the default tile, an upper
+## floor becomes air), the spawn standing there, every link touching the cell and --
+## on the ground floor -- the objective marker.
 func _erase_at(pos: Vector2i) -> void:
-	model.erase_tile(pos)
-	model.remove_spawn(pos)
-	model.remove_objective(pos)
+	var f := current_floor
+	var cell := Vector3i(pos.x, pos.y, f)
+	var had_link := not model.get_stairs(pos, f).is_empty() or not model.get_links_at(cell).is_empty()
+	model.erase_tile(pos, f)
+	model.remove_spawn(pos, f)
+	model.remove_links_at(cell)
+	if f == 0:
+		model.remove_objective(pos)
+	_queue_flush(true, had_link)
 
 
 func _toggle_spawn_at(pos: Vector2i) -> void:
-	if model.get_spawn(pos).is_empty():
-		if not model.can_place_unit(pos):
+	var f := current_floor
+	if model.get_spawn(pos, f).is_empty():
+		if not _can_place_at(pos):
 			_deny_placement(pos, "a unit")
 			return
 		model.place_spawn_point(pos, _current_player_id, _selected_spawn_kind, {
 			"character_id": _selected_character_id,
-		})
+		}, f)
 	else:
-		model.remove_spawn(pos)
+		model.remove_spawn(pos, f)
 	_refresh_cell(pos)
+	_queue_flush(true, false)
 
 
+## Objectives live on the ground floor only.
 func _toggle_objective_at(pos: Vector2i) -> void:
+	if current_floor != 0:
+		_set_status("Objectives live on the ground floor")
+		return
 	if model.get_objective(pos).is_empty():
-		if not model.can_place_unit(pos):
+		if not _can_place_at(pos):
 			_deny_placement(pos, "an objective")
 			return
 		model.set_objective(pos, "THRONE", _current_player_id)
@@ -711,23 +1016,75 @@ func _toggle_objective_at(pos: Vector2i) -> void:
 	_refresh_cell(pos)
 
 
-## Refuses a SPAWN/OBJECTIVE placement on impassable terrain: a status message, a brief
-## red flash on the 2D cell button, and the denied UI cue. No model state changes -- the
-## caller returns right after this, so nothing needs undoing.
+## Stairs tool: toggle a stair on (pos, edited floor) climbing in the selected direction.
+func _stairs_at(pos: Vector2i) -> void:
+	var f := current_floor
+	var cur := model.get_stairs(pos, f)
+	var want := "" if cur == _stair_dir else _stair_dir
+	if model.set_stairs(pos, want, f):
+		_set_status("Stairs cleared" if want.is_empty() else "Stairs climb %s to floor %d" % [want, f + 1])
+	else:
+		_set_status("Paint a tile here before adding stairs")
+	_refresh_cell(pos)
+	_refresh_links_3d()
+	_refresh_all()
+
+
+## Two-click link authoring: first click picks the from-cell, the second (on any
+## floor) the to-cell. Re-linking the same pair removes the link.
+func _link_click(cell: Vector3i) -> void:
+	if _link_from == Cells.INVALID:
+		_link_from = cell
+		_set_status("Link from (%d, %d) floor %d -- now click the other end (change floor if needed)" % [cell.x, cell.y, cell.z])
+		_refresh_all()
+		return
+	var from := _link_from
+	_link_from = Cells.INVALID
+	if from == cell:
+		_set_status("Link cancelled")
+	elif model.remove_link(from, cell):
+		_set_status("Link removed")
+	elif model.add_link(from, cell, _link_cost, _link_kind):
+		_set_status("%s linked: %s -> %s" % [_link_kind.capitalize(), str(from), str(cell)])
+	else:
+		_set_status("Could not link those cells")
+	_refresh_links_3d()
+	_refresh_all()
+
+
+## True when a unit / objective may stand on (pos, edited floor): the ground floor uses
+## the model's terrain rule ([method MapMakerModel.can_place_unit]); an upper floor also
+## needs a tile there (air holds nothing) and runs the same passability rule on it.
+func _can_place_at(pos: Vector2i) -> bool:
+	var f := current_floor
+	if f == 0:
+		return model.can_place_unit(pos)
+	if not model.is_in_bounds(pos) or not model.has_tile(pos, f):
+		return false
+	return MapMakerModel.tile_dict_is_passable(model.get_tile(pos, f), model.tile_resolver)
+
+
+## Refuses a SPAWN/OBJECTIVE placement on impassable terrain (or air): a status
+## message, a brief red flash on the 2D cell button, and the denied UI cue. No model
+## state changes -- the caller returns right after this, so nothing needs undoing.
 func _deny_placement(pos: Vector2i, what: String) -> void:
-	_set_status("Can't place %s on %s — impassable terrain." % [what, _tile_label_at(pos)])
+	if current_floor > 0 and not model.has_tile(pos, current_floor):
+		_set_status("Can't place %s on air — paint a tile on floor %d first." % [what, current_floor])
+	else:
+		_set_status("Can't place %s on %s — impassable terrain." % [what, _tile_label_at(pos)])
 	_flash_cell_denied(pos)
 	if typeof(AudioManager) == TYPE_OBJECT and AudioManager != null and AudioManager.has_method("play_ui_back"):
 		AudioManager.play_ui_back()
 
 
-## Human-readable label for the tile at [param pos] (used in denial/removal status text):
-## the resolved TileResource's authored name when one resolves, else the raw tile_type.
+## Human-readable label for the tile at [param pos] on the edited floor (used in
+## denial/removal status text): the resolved TileResource's authored name when one
+## resolves, else the raw tile_type.
 func _tile_label_at(pos: Vector2i) -> String:
-	var resolved := _tile_resource_at(pos)
+	var resolved := _tile_resource_at(pos, current_floor)
 	if resolved != null and not resolved.tile_name.is_empty():
 		return resolved.tile_name
-	var tile: Dictionary = model.get_tile(pos)
+	var tile: Dictionary = model.get_tile(pos, current_floor)
 	return str(tile.get("tile_type", "NORMAL")).capitalize()
 
 
@@ -746,15 +1103,16 @@ func _flash_cell_denied(pos: Vector2i) -> void:
 ## marker with a status warning rather than blocking the paint stroke -- less annoying
 ## mid-sketch than refusing every wall/tree brush pass that happens to cross a marker,
 ## and the author can always re-place it once they see the warning. Called from every
-## paint path (single cell / brush, bucket fill, rect fill).
+## paint path (single cell / brush, bucket fill, rect fill), on the edited floor.
 func _enforce_terrain_over_placement(pos: Vector2i) -> void:
-	if model.can_place_unit(pos):
+	if _can_place_at(pos):
 		return
+	var f := current_floor
 	var removed_something := false
-	if not model.get_spawn(pos).is_empty():
-		model.remove_spawn(pos)
+	if not model.get_spawn(pos, f).is_empty():
+		model.remove_spawn(pos, f)
 		removed_something = true
-	if not model.get_objective(pos).is_empty():
+	if f == 0 and not model.get_objective(pos).is_empty():
 		model.remove_objective(pos)
 		removed_something = true
 	if removed_something:
@@ -762,10 +1120,17 @@ func _enforce_terrain_over_placement(pos: Vector2i) -> void:
 			str(pos), _tile_label_at(pos)])
 
 
+## Flood-fill key of (pos, edited floor): the tile type, or "" for air on an upper floor.
+func _fill_key(pos: Vector2i) -> String:
+	if current_floor > 0 and not model.has_tile(pos, current_floor):
+		return ""
+	return str(model.get_tile(pos, current_floor).get("tile_type", "NORMAL"))
+
+
 func _bucket_fill_at(pos: Vector2i) -> void:
 	if not model.is_in_bounds(pos):
 		return
-	var target_type: String = str(model.get_tile(pos).get("tile_type", "NORMAL"))
+	var target_type: String = _fill_key(pos)
 	if target_type == _selected_tile_type:
 		return
 	var visited: Dictionary = {}
@@ -773,9 +1138,9 @@ func _bucket_fill_at(pos: Vector2i) -> void:
 	visited[pos] = true
 	while stack.size() > 0:
 		var cell: Vector2i = stack.pop_back()
-		if str(model.get_tile(cell).get("tile_type", "NORMAL")) != target_type:
+		if _fill_key(cell) != target_type:
 			continue
-		model.paint_tile(cell, _selected_tile_type, _selected_tile_path, _selected_tile_id)
+		model.paint_tile(cell, _selected_tile_type, _selected_tile_path, current_floor, _selected_tile_id)
 		_enforce_terrain_over_placement(cell)
 		_refresh_cell(cell)
 		for neighbor in [Vector2i(cell.x + 1, cell.y), Vector2i(cell.x - 1, cell.y),
@@ -783,6 +1148,7 @@ func _bucket_fill_at(pos: Vector2i) -> void:
 			if model.is_in_bounds(neighbor) and not visited.has(neighbor):
 				visited[neighbor] = true
 				stack.append(neighbor)
+	_queue_flush(true, false)
 
 
 # --- rect fill ---------------------------------------------------------------
@@ -818,9 +1184,11 @@ func _commit_rect_fill(release_pos: Vector2i) -> void:
 	if not model.is_in_bounds(corner):
 		corner = anchor
 	for cell in _rect_cells(anchor, corner):
-		model.paint_tile(cell, _selected_tile_type, _selected_tile_path, _selected_tile_id)
+		model.paint_tile(cell, _selected_tile_type, _selected_tile_path, current_floor, _selected_tile_id)
 		_enforce_terrain_over_placement(cell)
 		_refresh_cell(cell)
+	_refresh_export_state()
+	_queue_flush(true, false)
 
 
 func _rect_cells(a: Vector2i, b: Vector2i) -> Array[Vector2i]:
@@ -840,48 +1208,122 @@ func _rect_cells(a: Vector2i, b: Vector2i) -> Array[Vector2i]:
 # --- 2D cell rendering -------------------------------------------------------
 
 func _refresh_cell(pos: Vector2i) -> void:
-	## The single sync point: repaint the 2D button AND the one 3D cell. Every edit
-	## path funnels through here, so the two views can never drift and a stroke never
-	## triggers a full 3D rebuild.
+	## The single sync point: repaint the 2D button AND the one 3D cell of the edited
+	## floor. Every edit path funnels through here, so the two views can never drift
+	## and a stroke never triggers a full 3D rebuild.
 	_paint_cell_button(pos)
-	_refresh_cell_3d(pos)
+	_refresh_cell_3d(pos, current_floor)
 
 
 func _paint_cell_button(pos: Vector2i) -> void:
 	var button: Button = _cell_buttons.get(pos)
 	if button == null:
 		return
-	var spawn: Dictionary = model.get_spawn(pos)
-	var objective: Dictionary = model.get_objective(pos)
+	var f := current_floor
+	var parts: PackedStringArray = []
+	var color: Color
+	var ghost := false
+	if model.has_tile(pos, f):
+		color = _tile_color_at(pos, f)
+		var st := model.get_stairs(pos, f)
+		if not st.is_empty():
+			parts.append(STAIR_GLYPHS.get(st, "S"))
+	else:
+		# Air: show the floor below, ghosted, so the deck can be lined up with it.
+		var below := f - 1
+		while below > 0 and not model.has_tile(pos, below):
+			below -= 1
+		color = _tile_color_at(pos, maxi(below, 0))
+		ghost = true
+		parts.append("·")
+	var spawn: Dictionary = model.get_spawn(pos, f)
 	if not spawn.is_empty():
 		var kind: String = str(spawn.get("spawn_kind", MapResource.SPAWN_KIND_START))
-		var badge: String = str(SPAWN_KIND_INITIALS.get(kind, "S"))
-		badge += str(int(spawn.get("player_id", 0)))
-		button.text = badge
-		_apply_swatch(button, _player_color(int(spawn.get("player_id", 0))))
-	elif not objective.is_empty():
-		button.text = "*"
-		_apply_swatch(button, Color(0.95, 0.85, 0.35))
-	else:
-		button.text = ""
-		_apply_swatch(button, _tile_color_at(pos))
+		var player_id := int(spawn.get("player_id", 0))
+		parts.append(str(SPAWN_KIND_INITIALS.get(kind, "S")) + str(player_id))
+		color = _player_color(player_id)
+		ghost = false
+	elif f == 0 and not model.get_objective(pos).is_empty():
+		parts.append("*")
+		color = OBJECTIVE_COLOR
+	var cell := Vector3i(pos.x, pos.y, f)
+	var links := model.get_links_at(cell)
+	if not links.is_empty():
+		parts.append("⇅")
+	if cell == _link_from:
+		parts.append("①")
+	button.text = " ".join(parts)
+	_apply_swatch(button, color, ghost)
+	var tip := "(%d, %d) floor %d" % [pos.x, pos.y, f]
+	for l in links:
+		var other: Vector3i = l["to"] if l["from"] == cell else l["from"]
+		tip += "\n%s to (%d, %d) floor %d, cost %d" % [str(l["kind"]).capitalize(), other.x, other.y, other.z, int(l["cost"])]
+	button.tooltip_text = tip
 
 
-func _apply_swatch(button: Button, color: Color) -> void:
-	## Paint the button as a solid colour swatch. modulate alone only tints the dark
-	## theme's stylebox, washing distinct tile colours into near-identical greys, so
-	## the styleboxes are overridden with the real colour plus a thin border.
+## Paint [param button] as a solid colour swatch. modulate alone only tints the dark
+## theme's stylebox, washing distinct tile colours into near-identical greys, so the
+## styleboxes are overridden with the real colour plus a thin border (gold on hover /
+## press, the grove focus colour). [param ghost] (air on an upper floor) shows the
+## floor below faded toward the page ground with a faint border. The text ink flips
+## for contrast on light swatches.
+func _apply_swatch(button: Button, color: Color, ghost: bool = false) -> void:
+	var fill := MenuTheme.BG_DEEP.lerp(color, 0.28) if ghost else color
 	button.modulate = Color.WHITE
-	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+	for state in ["normal", "hover", "pressed", "disabled"]:
 		var box := StyleBoxFlat.new()
-		box.bg_color = color
-		if state == "hover":
-			box.bg_color = color.lightened(0.15)
-		elif state == "pressed":
-			box.bg_color = color.darkened(0.15)
+		box.bg_color = fill
+		box.set_corner_radius_all(3)
 		box.set_border_width_all(1)
-		box.border_color = Color(0, 0, 0, 0.4)
+		box.border_color = Color(color, 0.35) if ghost else Color(0, 0, 0, 0.4)
+		if state == "hover":
+			box.bg_color = fill.lightened(0.15)
+			box.border_color = MenuTheme.GOLD
+			box.set_border_width_all(2)
+		elif state == "pressed":
+			box.bg_color = fill.darkened(0.15)
+			box.border_color = MenuTheme.GOLD_LITE
+			box.set_border_width_all(2)
 		button.add_theme_stylebox_override(state, box)
+	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	var ink := MenuTheme.INK if not ghost and fill.get_luminance() > 0.45 else MenuTheme.CREAM
+	for key in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		button.add_theme_color_override(key, ink)
+
+
+func _refresh_issues() -> void:
+	_issues_dirty = false
+	if _issues_label == null or model == null:
+		return
+	var issues := model.validate()
+	if issues.is_empty():
+		_issues_label.text = "[color=#%s]No problems found.[/color]" % MenuTheme.SUCCESS.to_html(false)
+		return
+	var lines: PackedStringArray = []
+	for i in issues:
+		var col: Color = MenuTheme.DANGER if i["level"] == "error" else MenuTheme.WARNING
+		lines.append("[color=#%s]%s[/color] %s" % [col.to_html(false), String(i["level"]).to_upper(), i["message"]])
+	_issues_label.text = "\n".join(lines)
+
+
+## Coalesce the validation list and the 3D link rebuild to once per frame during
+## drag strokes. Headless (never built / not in the tree) it does nothing.
+func _queue_flush(issues: bool, links: bool) -> void:
+	_issues_dirty = _issues_dirty or issues
+	_links_dirty = _links_dirty or links
+	if _flush_queued or not is_inside_tree():
+		return
+	_flush_queued = true
+	call_deferred(&"_flush_deferred")
+
+
+func _flush_deferred() -> void:
+	_flush_queued = false
+	if _links_dirty:
+		_refresh_links_3d()
+	if _issues_dirty:
+		_refresh_issues()
+		_refresh_floor_label()
 
 
 # =============================================================================
@@ -899,7 +1341,7 @@ func _setup_viewport_world() -> void:
 
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.09, 0.09, 0.12, 1.0)
+	env.background_color = MenuTheme.BG_DEEP
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.55, 0.5, 0.45, 1.0)
 	env.ambient_light_energy = 0.5
@@ -920,6 +1362,8 @@ func _build_world_3d() -> void:
 	for child in _world_root.get_children():
 		_world_root.remove_child(child)
 		child.queue_free()
+	_floor_roots.clear()
+	_links_root = null
 	_tile_visuals.clear()
 	_spawn_visuals.clear()
 	_spawn_signatures.clear()
@@ -931,84 +1375,159 @@ func _build_world_3d() -> void:
 	_cam_distance = _world_span * 1.15
 	_aim_camera()
 
-	for y in range(rows):
-		for x in range(cols):
-			var pos := Vector2i(x, y)
-			_create_tile_visual(pos)
-			_sync_spawn_marker(pos)
-			_sync_objective_marker(pos)
+	var floors := maxi(model.get_floor_count(), current_floor + 1)
+	for f in range(floors):
+		for y in range(rows):
+			for x in range(cols):
+				var pos := Vector2i(x, y)
+				if model.has_tile(pos, f):
+					_create_tile_visual(pos, f)
+				_sync_spawn_marker(pos, f)
+				if f == 0:
+					_sync_objective_marker(pos)
+	_refresh_links_3d()
 
 
-func _refresh_cell_3d(pos: Vector2i) -> void:
+## The per-floor container (created on demand), raised to the floor's height.
+func _floor_root(f: int) -> Node3D:
+	var existing = _floor_roots.get(f)
+	if existing != null and is_instance_valid(existing):
+		return existing
+	var root := Node3D.new()
+	root.name = "Floor_%d" % f
+	root.position = Vector3(0.0, Cells.floor_y(f), 0.0)
+	root.visible = f <= current_floor
+	_world_root.add_child(root)
+	_floor_roots[f] = root
+	return root
+
+
+## Show every floor up to the edited one (the battle cutaway rule), plus the links
+## whose upper end is visible.
+func _apply_floor_visibility() -> void:
+	for f in _floor_roots:
+		var root = _floor_roots[f]
+		if root != null and is_instance_valid(root):
+			root.visible = int(f) <= current_floor
+	if _links_root != null and is_instance_valid(_links_root):
+		for node in _links_root.get_children():
+			node.visible = int(node.get_meta(FloorDecor.META_FLOOR, 0)) <= current_floor
+
+
+func _refresh_cell_3d(pos: Vector2i, f: int) -> void:
 	if _world_root == null or not model.is_in_bounds(pos):
 		return
-	if _tile_visuals.has(pos):
-		var stale: Node3D = _tile_visuals[pos]
-		if is_instance_valid(stale):
-			var parent := stale.get_parent()
+	var cell := Vector3i(pos.x, pos.y, f)
+	if _tile_visuals.has(cell):
+		var stale = _tile_visuals[cell]
+		if stale != null and is_instance_valid(stale):
+			var parent: Node = stale.get_parent()
 			if parent:
 				parent.remove_child(stale)
 			stale.queue_free()
-		_tile_visuals.erase(pos)
-	_create_tile_visual(pos)
-	_sync_spawn_marker(pos)
-	_sync_objective_marker(pos)
+		_tile_visuals.erase(cell)
+	if model.has_tile(pos, f):
+		_create_tile_visual(pos, f)
+	_sync_spawn_marker(pos, f)
+	if f == 0:
+		_sync_objective_marker(pos)
 
 
-func _create_tile_visual(pos: Vector2i) -> void:
-	var visual: Node3D = _instantiate_tile_model(pos)
+func _create_tile_visual(pos: Vector2i, f: int) -> void:
+	var visual: Node3D = _instantiate_tile_model(pos, f)
 	if visual == null:
 		var mesh := BoxMesh.new()
 		mesh.size = TILE_MESH_SIZE
 		var mi := MeshInstance3D.new()
 		mi.mesh = mesh
-		mi.material_override = _solid_material(_tile_color_at(pos))
+		mi.material_override = _solid_material(_tile_color_at(pos, f))
 		visual = mi
-	_world_root.add_child(visual)
+	_floor_root(f).add_child(visual)
 	visual.position = _world_position_for(pos, 0.0)
-	_tile_visuals[pos] = visual
+	_tile_visuals[Vector3i(pos.x, pos.y, f)] = visual
 
 
-func _sync_spawn_marker(pos: Vector2i) -> void:
+## Rebuild the stair and link visuals (FloorDecor, the same meshes the battle map
+## uses): explicit links plus one per stair tile. Cheap (a handful of links) and only
+## run when stairs / links change.
+func _refresh_links_3d() -> void:
+	_links_dirty = false
+	if _world_root == null:
+		return
+	if _links_root != null and is_instance_valid(_links_root):
+		_world_root.remove_child(_links_root)
+		_links_root.queue_free()
+	_links_root = Node3D.new()
+	_links_root.name = "Links"
+	# FloorDecor works in battle-world space (a cell centre is col*2+1); the preview is
+	# centred on the origin.
+	var off := _world_offsets()
+	_links_root.position = Vector3(-TILE_STEP * 0.5 - off.x, 0.0, -TILE_STEP * 0.5 - off.y)
+	_world_root.add_child(_links_root)
+	for l in _preview_links():
+		var node := FloorDecor.make_link_visual(l)
+		if node != null:
+			_links_root.add_child(node)
+	_apply_floor_visibility()
+
+
+## Explicit links plus the link every stair tile generates.
+func _preview_links() -> Array[Dictionary]:
+	var out: Array[Dictionary] = model.get_links()
+	for f in range(model.get_floor_count()):
+		for y in range(model.height):
+			for x in range(model.width):
+				var pos := Vector2i(x, y)
+				if model.get_stairs(pos, f).is_empty():
+					continue
+				out.append({
+					"from": Vector3i(x, y, f), "to": model.stairs_target(pos, f),
+					"cost": 1, "kind": "stairs", "bidirectional": true,
+				})
+	return out
+
+
+func _sync_spawn_marker(pos: Vector2i, f: int) -> void:
 	## Render a spawn as the ACTUAL character model (when the spawn names one), sitting
 	## on a flat player-colour ring with a floating kind-initial label so player/kind
 	## info is never lost. Falls back to the original colour sphere when the spawn has no
 	## character or its model can't load. Rebuilds only when the spawn's player/kind/
 	## character actually change, so an unrelated tile edit on the same cell is a no-op.
-	var spawn: Dictionary = model.get_spawn(pos)
+	var cell := Vector3i(pos.x, pos.y, f)
+	var spawn: Dictionary = model.get_spawn(pos, f)
 	if spawn.is_empty():
-		_clear_spawn_visual(pos)
+		_clear_spawn_visual(cell)
 		return
 
 	var player_id: int = int(spawn.get("player_id", 0))
 	var kind: String = str(spawn.get("spawn_kind", MapResource.SPAWN_KIND_START))
 	var character_id: String = str(spawn.get("character_id", ""))
 	var signature: String = "%d|%s|%s" % [player_id, kind, character_id]
-	if _spawn_signatures.get(pos, "") == signature \
-			and _spawn_visuals.has(pos) and is_instance_valid(_spawn_visuals[pos]):
+	if _spawn_signatures.get(cell, "") == signature \
+			and _spawn_visuals.has(cell) and is_instance_valid(_spawn_visuals[cell]):
 		return  # nothing about the spawn changed; keep the existing visual
 
-	_clear_spawn_visual(pos)
+	_clear_spawn_visual(cell)
 	var holder: Node3D = _build_spawn_visual(player_id, kind, character_id)
-	holder.name = "Spawn_%d_%d" % [pos.x, pos.y]
-	_world_root.add_child(holder)
+	holder.name = "Spawn_%d_%d_%d" % [pos.x, pos.y, f]
+	_floor_root(f).add_child(holder)
 	holder.position = _world_position_for(pos, 0.0)
-	_spawn_visuals[pos] = holder
-	_spawn_signatures[pos] = signature
+	_spawn_visuals[cell] = holder
+	_spawn_signatures[cell] = signature
 
 
-## Free the spawn visual holder at [param pos] (model + ring + label, or the fallback
+## Free the spawn visual holder at [param cell] (model + ring + label, or the fallback
 ## sphere) and forget its signature. No-op when the cell has no spawn visual.
-func _clear_spawn_visual(pos: Vector2i) -> void:
-	if _spawn_visuals.has(pos):
-		var holder: Node3D = _spawn_visuals[pos]
-		if is_instance_valid(holder):
-			var parent := holder.get_parent()
+func _clear_spawn_visual(cell: Vector3i) -> void:
+	if _spawn_visuals.has(cell):
+		var holder = _spawn_visuals[cell]
+		if holder != null and is_instance_valid(holder):
+			var parent: Node = holder.get_parent()
 			if parent:
 				parent.remove_child(holder)
 			holder.queue_free()
-		_spawn_visuals.erase(pos)
-	_spawn_signatures.erase(pos)
+		_spawn_visuals.erase(cell)
+	_spawn_signatures.erase(cell)
 
 
 ## Build the spawn's 3D visual as a single holder Node3D positioned at the cell.
@@ -1124,31 +1643,32 @@ func _build_spawn_sphere(color: Color, scale_value: float) -> MeshInstance3D:
 	return marker
 
 
+## Objective markers live on the ground floor only.
 func _sync_objective_marker(pos: Vector2i) -> void:
 	var objective: Dictionary = model.get_objective(pos)
 	if objective.is_empty():
 		if _objective_meshes.has(pos):
-			var stale: MeshInstance3D = _objective_meshes[pos]
-			if is_instance_valid(stale):
+			var stale = _objective_meshes[pos]
+			if stale != null and is_instance_valid(stale):
 				stale.queue_free()
 			_objective_meshes.erase(pos)
 		return
-	if _objective_meshes.has(pos):
+	if _objective_meshes.has(pos) and is_instance_valid(_objective_meshes[pos]):
 		return
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(0.35, 0.7, 0.35)
 	var marker := MeshInstance3D.new()
 	marker.mesh = mesh
-	marker.material_override = _solid_material(Color(0.95, 0.85, 0.35))
+	marker.material_override = _solid_material(OBJECTIVE_COLOR)
 	marker.position = _world_position_for(pos, OBJECTIVE_Y)
-	_world_root.add_child(marker)
+	_floor_root(0).add_child(marker)
 	_objective_meshes[pos] = marker
 
 
 # --- 3D tile resolution (mirrors MapLoader / the dock) -----------------------
 
-func _tile_resource_at(pos: Vector2i) -> TileResource:
-	var tile: Dictionary = model.get_tile(pos)
+func _tile_resource_at(pos: Vector2i, f: int = 0) -> TileResource:
+	var tile: Dictionary = model.get_tile(pos, f)
 	var tile_id: String = str(tile.get("tile_id", ""))
 	if not tile_id.is_empty():
 		var by_id := TileCatalog.find_by_id(StringName(tile_id))
@@ -1162,12 +1682,12 @@ func _tile_resource_at(pos: Vector2i) -> TileResource:
 	return null
 
 
-func _tile_model_path_at(pos: Vector2i) -> String:
-	var resolved := _tile_resource_at(pos)
+func _tile_model_path_at(pos: Vector2i, f: int) -> String:
+	var resolved := _tile_resource_at(pos, f)
 	if resolved != null:
 		return resolved.model_path
 	_build_type_model_paths()
-	var tile: Dictionary = model.get_tile(pos)
+	var tile: Dictionary = model.get_tile(pos, f)
 	return str(_type_model_paths.get(str(tile.get("tile_type", "NORMAL")), ""))
 
 
@@ -1216,8 +1736,8 @@ func _load_tile_model(scene_path: String) -> PackedScene:
 	return packed
 
 
-func _instantiate_tile_model(pos: Vector2i) -> Node3D:
-	var packed := _load_tile_model(_tile_model_path_at(pos))
+func _instantiate_tile_model(pos: Vector2i, f: int) -> Node3D:
+	var packed := _load_tile_model(_tile_model_path_at(pos, f))
 	if packed == null:
 		return null
 	var instance = packed.instantiate()
@@ -1228,11 +1748,11 @@ func _instantiate_tile_model(pos: Vector2i) -> Node3D:
 	return null
 
 
-func _tile_color_at(pos: Vector2i) -> Color:
-	var resolved := _tile_resource_at(pos)
+func _tile_color_at(pos: Vector2i, f: int = 0) -> Color:
+	var resolved := _tile_resource_at(pos, f)
 	if resolved != null:
 		return resolved.base_color
-	var tile: Dictionary = model.get_tile(pos)
+	var tile: Dictionary = model.get_tile(pos, f)
 	return TILE_COLORS.get(str(tile.get("tile_type", "NORMAL")), Color.WHITE)
 
 
@@ -1252,6 +1772,7 @@ func _world_offsets() -> Vector2:
 		float(model.height - 1) * TILE_STEP * 0.5)
 
 
+## Floor-local position of [param pos] (the floor's container carries its height).
 func _world_position_for(pos: Vector2i, y: float) -> Vector3:
 	var offsets := _world_offsets()
 	return Vector3(
@@ -1296,15 +1817,13 @@ func _on_spawn_kind_selected(index: int) -> void:
 	if index < 0 or index >= MapResource.SPAWN_KINDS.size():
 		return
 	_selected_spawn_kind = str(MapResource.SPAWN_KINDS[index])
-	_current_tool = Tool.SPAWN
-	_highlight_tool_buttons()
+	_select_tool(Tool.SPAWN)
 
 
 func _on_character_selected(index: int) -> void:
 	var meta = _character_option.get_item_metadata(index)
 	_selected_character_id = str(meta) if meta != null else ""
-	_current_tool = Tool.SPAWN
-	_highlight_tool_buttons()
+	_select_tool(Tool.SPAWN)
 
 
 func _on_resize_pressed() -> void:
@@ -1312,7 +1831,51 @@ func _on_resize_pressed() -> void:
 	_rebuild_grid()
 	_build_world_3d()
 	_refresh_export_state()
+	_refresh_all()
 	_set_status("Resized to %dx%d" % [model.width, model.height])
+
+
+## Weather dropdown: one entry per authored weather (fixed), "Dynamic (all)", and a
+## "Custom" entry that keeps a loaded map's own schedule / dynamic settings.
+func _sync_weather_option() -> void:
+	if _weather_opt == null:
+		return
+	_weather_opt.clear()
+	var s := WeatherState.normalize_settings(model.weather_settings)
+	var selected := -1
+	for id in Weather.all_ids():
+		_weather_opt.add_item(Weather.get_weather(id).display_name)
+		_weather_opt.set_item_metadata(_weather_opt.item_count - 1, String(id))
+		if s["mode"] == WeatherState.MODE_FIXED and s["weather"] == id:
+			selected = _weather_opt.item_count - 1
+	_weather_opt.add_item("Dynamic (all)")
+	_weather_opt.set_item_metadata(_weather_opt.item_count - 1, "__dynamic")
+	if s["mode"] != WeatherState.MODE_FIXED:
+		_weather_opt.add_item("Custom (%s)" % s["mode"])
+		_weather_opt.set_item_metadata(_weather_opt.item_count - 1, "__custom")
+		selected = _weather_opt.item_count - 1
+	_weather_opt.select(maxi(selected, 0))
+
+
+func _on_weather_selected(index: int) -> void:
+	var key := String(_weather_opt.get_item_metadata(index))
+	if key == "__custom":
+		return
+	if key == "__dynamic":
+		var pool := {}
+		for id in Weather.all_ids():
+			pool[String(id)] = 1
+		model.weather_settings = {"mode": "dynamic", "weather": "clear", "pool": pool, "change_every": 3}
+	else:
+		model.weather_settings = {"mode": "fixed", "weather": key}
+
+
+## user://maps/<clean name>.json for the current map name.
+func _custom_map_path() -> String:
+	var clean := model.map_name.strip_edges().to_lower().replace(" ", "_")
+	if clean.is_empty():
+		clean = "custom_map"
+	return CUSTOM_MAPS_DIR + clean + ".json"
 
 
 func _on_save_pressed() -> void:
@@ -1322,35 +1885,41 @@ func _on_save_pressed() -> void:
 	if not validation.get("valid", false):
 		_set_status("Not saved - " + "; ".join(validation.get("issues", [])))
 		return
-	var clean := model.map_name.strip_edges().to_lower().replace(" ", "_")
-	if clean.is_empty():
-		clean = "custom_map"
-	var path := CUSTOM_MAPS_DIR + clean + ".json"
+	var path := _custom_map_path()
+	# Multi-floor problems the loader tolerates (warnings) or the author should fix.
+	var errors := model.validate().filter(func(i): return i["level"] == "error")
 	if model.save_to_json_file(path):
-		_set_status("Saved: " + path)
+		_set_status("Saved: " + path + ("" if errors.is_empty() else "  (%d validation errors!)" % errors.size()))
 	else:
 		_set_status("Save failed: " + path)
 
 
 func _on_load_pressed() -> void:
-	var clean := model.map_name.strip_edges().to_lower().replace(" ", "_")
-	if clean.is_empty():
-		clean = "custom_map"
-	var path := CUSTOM_MAPS_DIR + clean + ".json"
+	var path := _custom_map_path()
 	var loaded := MapMakerModel.load_from_json_file(path)
 	if loaded == null:
 		_set_status("Load failed (missing or invalid): " + path)
 		return
-	model = loaded
-	_name_edit.text = model.map_name
-	_author_edit.text = model.author
-	_desc_edit.text = model.description
-	_width_spin.value = model.width
-	_height_spin.value = model.height
+	load_model(loaded)
+	_set_status("Loaded: " + path)
+
+
+## Replace the edited model (used by Load, and handy for tools / screenshots).
+func load_model(m: MapMakerModel) -> void:
+	model = m
+	_link_from = Cells.INVALID
+	current_floor = clampi(current_floor, 0, MapMakerModel.MAX_FLOOR)
+	if _name_edit:
+		_name_edit.text = model.map_name
+		_author_edit.text = model.author
+		_desc_edit.text = model.description
+		_width_spin.value = model.width
+		_height_spin.value = model.height
+	_sync_weather_option()
 	_rebuild_grid()
 	_build_world_3d()
 	_refresh_export_state()
-	_set_status("Loaded: " + path)
+	_refresh_all()
 
 
 ## Package the current map into a validated challenge: write user://challenges/<name>.json
@@ -1443,8 +2012,9 @@ func _refresh_export_state() -> void:
 		"Place at least one of your units on a player 2+ slot to define the AI defense."
 
 
-## Count player-2+ spawns that name a character (the AI defenders of a challenge). Reads
-## the model's spawn store directly so it stays cheap during drag-painting.
+## Count player-2+ spawns that name a character (the AI defenders of a challenge), on
+## every floor. Reads the model's spawn store directly so it stays cheap during
+## drag-painting.
 func _challenge_defender_count() -> int:
 	var count := 0
 	for spawn in model._spawns.values():
@@ -1453,30 +2023,41 @@ func _challenge_defender_count() -> int:
 	return count
 
 
-func _go_back() -> void:
-	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
-
-
 # =============================================================================
 #  Small UI helpers
 # =============================================================================
 
-func _add_tool_button(container: Node, text: String, tool_id: int) -> void:
+func _add_tool_button(container: Node, text: String, tool_id: int, group: ButtonGroup) -> void:
 	var button := Button.new()
 	button.text = text
+	button.toggle_mode = true
+	button.button_group = group
 	button.pressed.connect(func():
-		_current_tool = tool_id
-		_highlight_tool_buttons()
+		_select_tool(tool_id)
 		_set_status("Tool: " + text))
 	container.add_child(button)
 	_tool_buttons[tool_id] = button
 
 
+## Make [param tool_id] the active tool. Leaving Link drops a half-made link; leaving
+## Rect drops a pending rectangle.
+func _select_tool(tool_id: int) -> void:
+	_current_tool = tool_id
+	if tool_id != Tool.RECT_FILL and _rect_anchor != NO_CELL:
+		_rect_anchor = NO_CELL
+		_rect_hover = NO_CELL
+	if tool_id != Tool.LINK and _link_from != Cells.INVALID:
+		_link_from = Cells.INVALID
+		_refresh_all()
+	_highlight_tool_buttons()
+
+
+## The active tool's toggle button reads pressed and every other one released.
 func _highlight_tool_buttons() -> void:
 	for tool_id in _tool_buttons.keys():
 		var button: Button = _tool_buttons[tool_id]
 		if button:
-			button.theme_type_variation = "SelectedButton" if tool_id == _current_tool else &""
+			button.set_pressed_no_signal(tool_id == _current_tool)
 
 
 func _entry_color(entry: Dictionary) -> Color:
@@ -1496,17 +2077,23 @@ func _player_color(player_id: int) -> Color:
 	return value if value is Color else Color.WHITE
 
 
+## The key / button to SHOW for [param action] right now (follows rebinding and the
+## active device, via [method InputActions.hint]); [param fallback] when unbound.
+func _hint(action: StringName, fallback: String) -> String:
+	var k := InputActions.hint(action)
+	return fallback if k.is_empty() else k
+
+
+## The keyboard ([param pad] false) or gamepad binding of [param action] for a
+## MenuKit.key_hint cap; [param fallback] when unbound.
+func _key_for(action: StringName, pad: bool, fallback: String) -> String:
+	var k := InputActions.describe(action, pad)
+	return fallback if k.is_empty() else k
+
+
 func _set_status(text: String) -> void:
 	if _status_label != null:
 		_status_label.text = text
-
-
-func _section_label(text: String) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
-	label.add_theme_color_override("font_color", MenuTheme.GOLD)
-	return label
 
 
 func _make_label(text: String) -> Label:

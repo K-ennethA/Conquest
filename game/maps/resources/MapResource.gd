@@ -27,7 +27,17 @@ class_name MapResource
 # "position" is optional and read through .get(), so maps authored before a key
 # existed keep loading unchanged:
 #
-#   position           Vector2i  the cell this entry occupies
+#   position           Vector2i  the (col, row) column this entry occupies
+#   floor              int       the floor it sits on (default 0 = ground). The KEY
+#                                of an entry is (position, floor): a bridge deck is a
+#                                floor-1 entry above the floor-0 river/road entry.
+#                                Floor 0 is implicitly FULL (a missing floor-0 entry
+#                                is a default tile); floors > 0 only exist where an
+#                                entry is placed -- a gap is air (broken bridge).
+#   stairs             String    OPTIONAL "north"/"south"/"east"/"west": this tile is
+#                                a stair climbing that way -- it auto-generates a link
+#                                from (position, floor) to the neighbouring column in
+#                                that direction on floor + 1 (see get_links()).
 #   tile_id            String    STABLE TileResource id (see TileResource.id) --
 #                                the PREFERRED reference and the durable one
 #   tile_resource_path String    res:// path to the .tres, LEGACY/fallback
@@ -45,7 +55,9 @@ class_name MapResource
 # "player_id" is optional and read through .get(), so maps authored before a key
 # existed keep loading unchanged - see [method normalize_spawn]):
 #
-#   position           Vector2i  the cell this point occupies
+#   position           Vector2i  the (col, row) column this point occupies
+#   floor              int       the floor it stands on (default 0). A floor > 0
+#                                point must sit on a floor-N tile entry.
 #   player_id          int       owning player slot (0-based)
 #   spawn_kind         String    "Start" / "Respawn" / "Endless" / "Reinforcement"
 #                                (default "Start" - i.e. exactly the old behaviour)
@@ -126,6 +138,24 @@ class_name MapResource
 ## never be captured.
 @export var control_points: Array = []
 
+@export var links: Array[Dictionary] = []  # Explicit cross-floor LINKS - see below
+# A links entry joins two cells (possibly on different floors) that units may step
+# between directly -- stairs, ladders, ramps, rope bridges between towers:
+#
+#   from           Vector3i  (col, row, floor) of one end
+#   to             Vector3i  (col, row, floor) of the other end
+#   cost           int       movement cost of the step (default 1)
+#   kind           String    "stairs" / "ladder" / "ramp" / ... (flavour + UI hint)
+#   bidirectional  bool      default true; false = one-way (a drop-down ledge)
+#
+# get_links() returns these PLUS the ones generated from "stairs" tile entries, all
+# normalized. Maps authored before links existed have none (and are all floor 0).
+
+## Direction names accepted by a tile entry's "stairs" key -> (dx, dy) column step.
+const STAIR_DIRECTIONS := {
+	"north": Vector2i(0, -1), "south": Vector2i(0, 1),
+	"east": Vector2i(1, 0), "west": Vector2i(-1, 0),
+}
 
 # --- Spawn kinds --------------------------------------------------------------
 const SPAWN_KIND_START := "Start"                  # places one unit at map load
@@ -177,6 +207,18 @@ const MAX_MAP_SIZE := 40
 @export var victory_conditions: Array[String] = ["Eliminate All Enemies"]
 @export var special_rules: Array[String] = []
 
+# Weather (see docs/WEATHER.md). Ids name game/weather/resources/<id>.tres.
+#   fixed    -- [member weather] all battle.
+#   schedule -- [member weather_schedule] entries {"weather": id, "rounds": n}, looping.
+#   dynamic  -- starts as [member weather]; every [member weather_change_every] rounds
+#               re-rolls from [member weather_pool] {id: weight}, seeded per match
+#               (deterministic + network-safe, see WeatherState.base_id_for_round).
+@export_enum("fixed", "schedule", "dynamic") var weather_mode: String = "fixed"
+@export var weather: String = "clear"
+@export var weather_schedule: Array[Dictionary] = []
+@export var weather_pool: Dictionary = {}
+@export var weather_change_every: int = 3
+
 # Metadata
 @export var creation_date: String = ""
 @export var last_modified: String = ""
@@ -192,12 +234,35 @@ func get_map_size() -> Vector2i:
 	"""Get map dimensions as Vector2i"""
 	return Vector2i(width, height)
 
-func get_tile_at_position(pos: Vector2i) -> Dictionary:
-	"""Get tile data at specific position"""
+# --- Entry key helpers (robust to JSON-imported / legacy entries) --------------
+
+## The (col, row) position of a tile or spawn entry, whatever form it was stored in.
+static func entry_position(entry: Dictionary) -> Vector2i:
+	return Cells.pos2_from_variant(entry.get("position", Vector2i(-1, -1)))
+
+
+## The floor of a tile or spawn entry (0 when absent -- every legacy entry).
+static func entry_floor(entry: Dictionary) -> int:
+	return int(entry.get("floor", 0))
+
+
+## The board cell (col, row, floor) of a tile or spawn entry.
+static func entry_cell(entry: Dictionary) -> Vector3i:
+	return Cells.lift(entry_position(entry), entry_floor(entry))
+
+
+func get_tile_at_position(pos: Vector2i, floor_index: int = 0) -> Dictionary:
+	"""Get tile data at a position on a floor (default: the ground floor).
+
+	Floor 0 is implicitly full: a position with no entry returns a default NORMAL
+	tile. On an upper floor a missing entry means AIR and returns {}.
+	"""
 	for tile_data in tile_layout:
-		if tile_data.get("position", Vector2i(-1, -1)) == pos:
+		if entry_position(tile_data) == pos and entry_floor(tile_data) == floor_index:
 			return tile_data
-	
+
+	if floor_index != 0:
+		return {}
 	# Return default tile if not found
 	return {
 		"position": pos,
@@ -206,7 +271,7 @@ func get_tile_at_position(pos: Vector2i) -> Dictionary:
 		"tile_id": ""
 	}
 
-func set_tile_at_position(pos: Vector2i, tile_type: String, tile_resource_path: String = "", tile_id = "") -> void:
+func set_tile_at_position(pos: Vector2i, tile_type: String, tile_resource_path: String = "", tile_id = "", floor_index: int = 0) -> void:
 	"""Set tile data at specific position.
 
 	[param tile_id] is the STABLE [member TileResource.id] and is what makes the
@@ -215,21 +280,161 @@ func set_tile_at_position(pos: Vector2i, tile_type: String, tile_resource_path: 
 	three-argument caller keeps working unchanged; those entries simply store an
 	empty tile_id and resolve through the legacy path (see the schema block above).
 	Accepts a String or a StringName.
+
+	[param floor_index] (trailing, default 0) places the tile on an upper floor; the
+	"floor" key is only written for floors > 0 so ground entries stay byte-identical
+	to the pre-multi-floor schema.
 	"""
-	# Remove existing tile at position
-	for i in range(tile_layout.size() - 1, -1, -1):
-		if tile_layout[i].get("position", Vector2i(-1, -1)) == pos:
-			tile_layout.remove_at(i)
-	
+	remove_tile_at_position(pos, floor_index)
+
 	# Add new tile data
-	tile_layout.append({
+	var entry := {
 		"position": pos,
 		"tile_type": tile_type,
 		"tile_resource_path": tile_resource_path,
 		"tile_id": String(tile_id)
+	}
+	if floor_index != 0:
+		entry["floor"] = floor_index
+	tile_layout.append(entry)
+
+
+func remove_tile_at_position(pos: Vector2i, floor_index: int = 0) -> void:
+	"""Remove the tile entry at (pos, floor). On floor 0 the cell then reverts to the
+	default tile; on an upper floor it becomes air."""
+	for i in range(tile_layout.size() - 1, -1, -1):
+		if entry_position(tile_layout[i]) == pos and entry_floor(tile_layout[i]) == floor_index:
+			tile_layout.remove_at(i)
+
+
+func has_tile_at(pos: Vector2i, floor_index: int = 0) -> bool:
+	"""True when (pos, floor) has a tile: any in-bounds floor-0 cell, or an upper-
+	floor cell with an entry."""
+	if pos.x < 0 or pos.y < 0 or pos.x >= width or pos.y >= height or floor_index < 0:
+		return false
+	if floor_index == 0:
+		return true
+	return not get_tile_at_position(pos, floor_index).is_empty()
+
+
+func set_stairs_at_position(pos: Vector2i, direction: String, floor_index: int = 0) -> void:
+	"""Mark the tile at (pos, floor) as a stair climbing toward [param direction]
+	("north"/"south"/"east"/"west", "" to clear). Creates a default tile entry first
+	if the cell has none."""
+	var entry: Dictionary = {}
+	for e in tile_layout:
+		if entry_position(e) == pos and entry_floor(e) == floor_index:
+			entry = e
+			break
+	if entry.is_empty():
+		set_tile_at_position(pos, "NORMAL", "", "", floor_index)
+		entry = tile_layout[tile_layout.size() - 1]
+	if direction.is_empty():
+		entry.erase("stairs")
+	else:
+		entry["stairs"] = direction.to_lower()
+
+
+# --- Floors & links -------------------------------------------------------------
+
+func get_floor_count() -> int:
+	"""Number of floors (1 for a classic flat map): highest floor used by any tile,
+	spawn or link endpoint, plus one."""
+	var top := 0
+	for e in tile_layout:
+		top = maxi(top, entry_floor(e))
+	for s in unit_spawns:
+		top = maxi(top, entry_floor(s))
+	for l in get_links():
+		top = maxi(top, maxi(l["from"].z, l["to"].z))
+	return top + 1
+
+
+func get_floors_at(pos: Vector2i) -> Array[int]:
+	"""Every floor with a tile in column [param pos], ascending (0 first)."""
+	var out: Array[int] = []
+	if pos.x < 0 or pos.y < 0 or pos.x >= width or pos.y >= height:
+		return out
+	out.append(0)
+	for e in tile_layout:
+		var f := entry_floor(e)
+		if f > 0 and entry_position(e) == pos and not out.has(f):
+			out.append(f)
+	out.sort()
+	return out
+
+
+func get_tiles_on_floor(floor_index: int) -> Array[Dictionary]:
+	"""The tile entries on one floor (floor 0: only EXPLICIT entries)."""
+	var out: Array[Dictionary] = []
+	for e in tile_layout:
+		if entry_floor(e) == floor_index:
+			out.append(e)
+	return out
+
+
+func add_link(from: Vector3i, to: Vector3i, cost: int = 1, kind: String = "stairs", bidirectional: bool = true) -> void:
+	"""Add an explicit link between two cells (replacing one with the same ends)."""
+	remove_link(from, to)
+	links.append({
+		"from": from,
+		"to": to,
+		"cost": maxi(1, cost),
+		"kind": kind,
+		"bidirectional": bidirectional,
 	})
 
-func get_unit_spawn_at_position(pos: Vector2i) -> Dictionary:
+
+func remove_link(a: Vector3i, b: Vector3i) -> void:
+	"""Remove any explicit link joining [param a] and [param b] (either direction)."""
+	for i in range(links.size() - 1, -1, -1):
+		var f := Cells.from_variant(links[i].get("from", null))
+		var t := Cells.from_variant(links[i].get("to", null))
+		if (f == a and t == b) or (f == b and t == a):
+			links.remove_at(i)
+
+
+static func normalize_link(raw: Dictionary) -> Dictionary:
+	"""Canonical link dict (Vector3i ends, int cost, String kind, bool
+	bidirectional), or {} when an end is unreadable."""
+	var a := Cells.from_variant(raw.get("from", null))
+	var b := Cells.from_variant(raw.get("to", null))
+	if a == Cells.INVALID or b == Cells.INVALID or a == b:
+		return {}
+	return {
+		"from": a,
+		"to": b,
+		"cost": maxi(1, int(raw.get("cost", 1))),
+		"kind": str(raw.get("kind", "stairs")),
+		"bidirectional": bool(raw.get("bidirectional", true)),
+	}
+
+
+func get_links() -> Array[Dictionary]:
+	"""Every link of the map, normalized: the explicit [member links] plus one per
+	"stairs" tile entry (from the stair tile up to the next floor's neighbouring
+	column). This is what MapLoader registers with the board."""
+	var out: Array[Dictionary] = []
+	for raw in links:
+		var l := normalize_link(raw)
+		if not l.is_empty():
+			out.append(l)
+	for e in tile_layout:
+		var dir_name := str(e.get("stairs", "")).to_lower()
+		if dir_name.is_empty() or not STAIR_DIRECTIONS.has(dir_name):
+			continue
+		var from := entry_cell(e)
+		var step: Vector2i = STAIR_DIRECTIONS[dir_name]
+		out.append({
+			"from": from,
+			"to": Vector3i(from.x + step.x, from.y + step.y, from.z + 1),
+			"cost": maxi(1, int(e.get("stairs_cost", 1))),
+			"kind": "stairs",
+			"bidirectional": true,
+		})
+	return out
+
+func get_unit_spawn_at_position(pos: Vector2i, floor_index: int = 0) -> Dictionary:
 	"""Get the RAW spawn point entry at a position, or {} when there is none.
 
 	Deliberately raw (not normalized): callers rely on the empty dictionary meaning
@@ -237,7 +442,7 @@ func get_unit_spawn_at_position(pos: Vector2i) -> Dictionary:
 	the optional keys filled in.
 	"""
 	for spawn_data in unit_spawns:
-		if spawn_data.get("position", Vector2i(-1, -1)) == pos:
+		if entry_position(spawn_data) == pos and entry_floor(spawn_data) == floor_index:
 			return spawn_data
 
 	return {}
@@ -262,7 +467,8 @@ func normalize_spawn(spawn_data: Dictionary) -> Dictionary:
 	"""
 	var kind: String = get_spawn_kind(spawn_data)
 	var normalized: Dictionary = {
-		"position": spawn_data.get("position", Vector2i(-1, -1)),
+		"position": entry_position(spawn_data),
+		"floor": entry_floor(spawn_data),
 		"player_id": int(spawn_data.get("player_id", 0)),
 		"unit_type": str(spawn_data.get("unit_type", "")),
 		"unit_resource_path": str(spawn_data.get("unit_resource_path", "")),
@@ -304,12 +510,12 @@ func set_spawn_point_at_position(pos: Vector2i, player_id: int, spawn_kind: Stri
 	A point is a position + owning player slot + kind. [param opts] optionally carries
 	[code]unit_type[/code], [code]character_id[/code], [code]unit_resource_path[/code],
 	[code]max_spawns[/code], [code]respawn_interval[/code] and [code]spawn_turn[/code];
-	anything omitted falls back to the schema defaults.
+	anything omitted falls back to the schema defaults. [code]opts.floor[/code] puts
+	the point on an upper floor (written only when > 0).
 	"""
+	var floor_index: int = int(opts.get("floor", 0))
 	# Remove existing spawn at position
-	for i in range(unit_spawns.size() - 1, -1, -1):
-		if unit_spawns[i].get("position", Vector2i(-1, -1)) == pos:
-			unit_spawns.remove_at(i)
+	remove_unit_spawn_at_position(pos, floor_index)
 
 	var kind: String = spawn_kind
 	if not SPAWN_KINDS.has(kind):
@@ -330,6 +536,8 @@ func set_spawn_point_at_position(pos: Vector2i, player_id: int, spawn_kind: Stri
 		"aggro_range": int(opts.get("aggro_range", -1)),
 		"leash_radius": int(opts.get("leash_radius", -1))
 	})
+	if floor_index != 0:
+		unit_spawns[unit_spawns.size() - 1]["floor"] = floor_index
 
 func set_unit_spawn_at_position(pos: Vector2i, player_id: int, unit_type: String, unit_resource_path: String = "", character_id: String = "") -> void:
 	"""Set a plain "Start" spawn point at a position.
@@ -360,10 +568,10 @@ func get_character_id_at_position(pos: Vector2i) -> String:
 	"""Get the character_id (if any) of the spawn at a specific position"""
 	return get_unit_spawn_at_position(pos).get("character_id", "")
 
-func remove_unit_spawn_at_position(pos: Vector2i) -> void:
-	"""Remove unit spawn at specific position"""
+func remove_unit_spawn_at_position(pos: Vector2i, floor_index: int = 0) -> void:
+	"""Remove unit spawn at specific position (on a floor, default ground)"""
 	for i in range(unit_spawns.size() - 1, -1, -1):
-		if unit_spawns[i].get("position", Vector2i(-1, -1)) == pos:
+		if entry_position(unit_spawns[i]) == pos and entry_floor(unit_spawns[i]) == floor_index:
 			unit_spawns.remove_at(i)
 
 func get_player_spawn_positions(player_id: int, spawn_kind: String = "") -> Array[Vector2i]:
@@ -378,8 +586,19 @@ func get_player_spawn_positions(player_id: int, spawn_kind: String = "") -> Arra
 			continue
 		if not spawn_kind.is_empty() and get_spawn_kind(spawn_data) != spawn_kind:
 			continue
-		positions.append(spawn_data.get("position", Vector2i(-1, -1)))
+		positions.append(entry_position(spawn_data))
 	return positions
+
+func get_player_spawn_cells(player_id: int, spawn_kind: String = "") -> Array[Vector3i]:
+	"""Like [method get_player_spawn_positions] but as board cells (col, row, floor)."""
+	var cells: Array[Vector3i] = []
+	for spawn_data in unit_spawns:
+		if spawn_data.get("player_id", -1) != player_id:
+			continue
+		if not spawn_kind.is_empty() and get_spawn_kind(spawn_data) != spawn_kind:
+			continue
+		cells.append(entry_cell(spawn_data))
+	return cells
 
 func get_spawn_kind_counts() -> Dictionary:
 	"""How many points of each kind this map defines, e.g. {"Start": 6, "Endless": 1}.
@@ -563,14 +782,32 @@ func validate_map(strict_catalog: bool = false) -> Dictionary:
 	
 	# Check for valid positions
 	for tile_data in tile_layout:
-		var pos = tile_data.get("position", Vector2i(-1, -1))
+		var pos := entry_position(tile_data)
 		if pos.x < 0 or pos.x >= width or pos.y < 0 or pos.y >= height:
 			issues.append("Tile position out of bounds: " + str(pos))
-	
+		if entry_floor(tile_data) < 0:
+			issues.append("Tile at %s has a negative floor" % str(pos))
+
 	for spawn_data in unit_spawns:
-		var pos = spawn_data.get("position", Vector2i(-1, -1))
+		var pos := entry_position(spawn_data)
 		if pos.x < 0 or pos.x >= width or pos.y < 0 or pos.y >= height:
 			issues.append("Unit spawn position out of bounds: " + str(pos))
+		elif not has_tile_at(pos, entry_floor(spawn_data)):
+			issues.append("Unit spawn at %s floor %d has no tile to stand on" % [str(pos), entry_floor(spawn_data)])
+
+	# Links must join two cells that exist.
+	for raw in links:
+		var l := normalize_link(raw)
+		if l.is_empty():
+			issues.append("Link has an unreadable endpoint: " + str(raw))
+			continue
+		for endpoint in [l["from"], l["to"]]:
+			if not has_tile_at(Cells.flat(endpoint), endpoint.z):
+				issues.append("Link endpoint %s has no tile" % str(endpoint))
+	for e in tile_layout:
+		var dir_name := str(e.get("stairs", "")).to_lower()
+		if not dir_name.is_empty() and not STAIR_DIRECTIONS.has(dir_name):
+			warnings.append("Tile at %s has an unknown stairs direction '%s'" % [str(entry_position(e)), dir_name])
 
 	# Spawn point sanity. Only genuinely broken configurations are issues: a bare
 	# "Start" point is FINE (it is an empty slot filled at match setup), but a
@@ -718,10 +955,15 @@ func _append_terrain_placement_issues(issues: Array[String]) -> void:
 	is reported once, there, not duplicated here.
 	"""
 	for spawn_data in unit_spawns:
-		var pos = spawn_data.get("position", Vector2i(-1, -1))
+		var pos := entry_position(spawn_data)
 		if pos.x < 0 or pos.x >= width or pos.y < 0 or pos.y >= height:
 			continue
-		if not MapMakerModel.tile_dict_is_passable(get_tile_at_position(pos)):
+		# The tile the spawn STANDS on: its own floor's entry (a bridge deck, not the
+		# river below it). A floor with no tile there is reported by validate_map itself.
+		var standing: Dictionary = get_tile_at_position(pos, entry_floor(spawn_data))
+		if standing.is_empty():
+			continue
+		if not MapMakerModel.tile_dict_is_passable(standing):
 			issues.append("Unit spawn at %s sits on impassable terrain" % str(pos))
 
 	for rule in special_rules:
@@ -774,6 +1016,47 @@ func _append_catalog_issues(issues: Array[String]) -> void:
 ## they save and load normally but are filtered out of map-selection lists.
 func is_active() -> bool:
 	return status != "Inactive"
+
+
+## The map's weather settings as the plain dictionary [WeatherState] consumes
+## ({mode, weather, schedule, pool, change_every}).
+func get_weather_settings() -> Dictionary:
+	return {
+		"mode": weather_mode,
+		"weather": weather,
+		"schedule": weather_schedule.duplicate(true),
+		"pool": weather_pool.duplicate(true),
+		"change_every": weather_change_every,
+	}
+
+
+## Short label for map lists ("Rain", "Dynamic weather", "Changing weather"); ""
+## for a permanently Clear map.
+func weather_summary() -> String:
+	match weather_mode:
+		"dynamic":
+			return "Dynamic weather"
+		"schedule":
+			return "Changing weather"
+	if weather == "" or weather == "clear":
+		return ""
+	return Weather.get_weather(weather).display_name
+
+
+## Apply a settings dictionary (the inverse of [method get_weather_settings]).
+func set_weather_settings(settings: Dictionary) -> void:
+	var n := WeatherState.normalize_settings(settings)
+	weather_mode = String(n["mode"])
+	weather = String(n["weather"])
+	var sched: Array[Dictionary] = []
+	for e in n["schedule"]:
+		sched.append({ "weather": String(e["weather"]), "rounds": int(e["rounds"]) })
+	weather_schedule = sched
+	var pool: Dictionary = {}
+	for k in n["pool"]:
+		pool[String(k)] = float(n["pool"][k])
+	weather_pool = pool
+	weather_change_every = int(n["change_every"])
 
 
 func get_display_info() -> Dictionary:
@@ -862,9 +1145,15 @@ func export_to_json() -> String:
 				"a": background_color.a
 			}
 		},
+		"weather": get_weather_settings(),
 		"layout": {
-			"tiles": _entries_with_encoded_positions(tile_layout),
-			"unit_spawns": _entries_with_encoded_positions(unit_spawns),
+			# Positions (tiles, spawns, lanes, base cells, control points) are written as
+			# {"x","y"} objects and link ends as [col, row, floor] arrays -- a raw
+			# Vector2i/Vector3i would be stringified by JSON. The importer reads every form
+			# ([method _decode_position]): {"x","y"}, [c, r], and the legacy "(x, y)" string.
+			"tiles": _entries_to_json(tile_layout),
+			"unit_spawns": _entries_to_json(unit_spawns),
+			"links": _links_to_json(),
 			# Written unconditionally (as [] / {} for the maps that declare neither) so the
 			# payload shape is the same for every map and the importer never has to guess
 			# whether a missing key means "no lanes" or "an older export".
@@ -888,7 +1177,43 @@ static func _to_string_array(raw) -> Array[String]:
 	var out: Array[String] = []
 	if raw is Array:
 		for v in raw:
-			out.append(String(v))
+			out.append(String(v) if v is String or v is StringName else str(v))
+	return out
+
+
+## Cloud-branch name for [method _to_string_array].
+static func _json_string_array(value) -> Array[String]:
+	return _to_string_array(value)
+
+
+## Deep-copy layout entries for JSON: each position becomes {"x","y"} (a raw Vector2i
+## would be stringified by JSON.stringify). The "floor" key rides along untouched.
+static func _entries_to_json(entries: Array) -> Array:
+	var out: Array = []
+	for e in entries:
+		if not (e is Dictionary):
+			continue
+		var d: Dictionary = (e as Dictionary).duplicate(true)
+		var p := entry_position(d)
+		d["position"] = {"x": p.x, "y": p.y}
+		out.append(d)
+	return out
+
+
+## Local-branch name for [method _entries_to_json].
+func _entries_with_encoded_positions(entries: Array) -> Array:
+	return _entries_to_json(entries)
+
+
+func _links_to_json() -> Array:
+	var out: Array = []
+	for raw in links:
+		var l := normalize_link(raw)
+		if l.is_empty():
+			continue
+		l["from"] = Cells.to_array(l["from"])
+		l["to"] = Cells.to_array(l["to"])
+		out.append(l)
 	return out
 
 
@@ -906,6 +1231,10 @@ static func import_from_json(json_string: String, quiet: bool = false) -> MapRes
 		return null
 	
 	var data = json.data
+	if not (data is Dictionary):
+		if not quiet:
+			push_error("MapResource: JSON root is not an object")
+		return null
 	var resource = MapResource.new()
 	
 	# Map info
@@ -919,16 +1248,16 @@ static func import_from_json(json_string: String, quiet: bool = false) -> MapRes
 	
 	# Dimensions
 	var dimensions = data.get("dimensions", {})
-	resource.width = dimensions.get("width", 5)
-	resource.height = dimensions.get("height", 5)
+	resource.width = int(dimensions.get("width", 5))
+	resource.height = int(dimensions.get("height", 5))
 	
 	# Gameplay
 	var gameplay = data.get("gameplay", {})
-	resource.max_players = gameplay.get("max_players", 2)
-	resource.recommended_players = gameplay.get("recommended_players", 2)
+	resource.max_players = int(gameplay.get("max_players", 2))
+	resource.recommended_players = int(gameplay.get("recommended_players", 2))
 	resource.difficulty = gameplay.get("difficulty", "Normal")
 	resource.map_type = gameplay.get("map_type", "Skirmish")
-	resource.turn_limit = gameplay.get("turn_limit", 0)
+	resource.turn_limit = int(gameplay.get("turn_limit", 0))
 	# Absent on every map exported before the field existed -- false is exactly what those
 	# maps mean, and is the value that keeps them behaving as they always have.
 	resource.fog_of_war = bool(gameplay.get("fog_of_war", false))
@@ -949,12 +1278,29 @@ static func import_from_json(json_string: String, quiet: bool = false) -> MapRes
 		bg_color.get("a", 1.0)
 	)
 	
-	# Layout. Positions are decoded back into Vector2i (JSON has no native vector type,
-	# so export writes them as {"x","y"} - see _entries_with_encoded_positions), and the
-	# legacy "(x, y)" string form is still accepted so older hand-written files load.
+	# Weather (absent in older exports -> fixed Clear)
+	var weather_data = data.get("weather", {})
+	if weather_data is Dictionary:
+		resource.set_weather_settings(weather_data)
+
+	# Layout. Positions are decoded back into Vector2i (JSON has no native vector type):
+	# [c, r] arrays (current), {"x","y"} objects (earlier local exports) and the legacy
+	# "(x, y)" string form are all accepted, so older hand-written files load. Integral
+	# floats (JSON has no int) come back as ints -- player_id, floor, counts.
 	var layout = data.get("layout", {})
+	if not (layout is Dictionary):
+		layout = {}
 	resource.tile_layout = _decode_layout_entries(layout.get("tiles", []))
 	resource.unit_spawns = _decode_layout_entries(layout.get("unit_spawns", []))
+	var parsed_links: Array[Dictionary] = []
+	var raw_links = layout.get("links", [])
+	if raw_links is Array:
+		for raw in raw_links:
+			if raw is Dictionary:
+				var l := normalize_link(raw)
+				if not l.is_empty():
+					parsed_links.append(l)
+	resource.links = parsed_links
 	# Absent on every map exported before these fields existed -- the defaults are the
 	# "declares neither" answer, which is exactly what those maps mean.
 	resource.lanes = _decode_lanes(layout.get("lanes", []))
@@ -963,8 +1309,10 @@ static func import_from_json(json_string: String, quiet: bool = false) -> MapRes
 
 	# Metadata
 	var metadata = data.get("metadata", {})
+	if not (metadata is Dictionary):
+		metadata = {}
 	resource.tags = _to_string_array(metadata.get("tags", []))
-	resource.preview_image_path = metadata.get("preview_image_path", "")
+	resource.preview_image_path = str(metadata.get("preview_image_path", ""))
 
 	# A map with no victory condition can never be won - default it rather than reject.
 	if resource.victory_conditions.is_empty():
@@ -986,35 +1334,42 @@ static func import_from_json(json_string: String, quiet: bool = false) -> MapRes
 
 
 # --- JSON position (de)serialization -----------------------------------------
-# JSON has no native vector type. Tile / spawn entries key their cell on a Vector2i
-# "position", which JSON.stringify would otherwise flatten to the lossy string
-# "(x, y)". These helpers write it as {"x","y"} on export and rebuild the Vector2i
-# on import, so a save/load round-trip is exact.
+# JSON has no native vector type and no int. Tile / spawn entries key their cell on a
+# Vector2i "position", which JSON.stringify would otherwise flatten to the lossy string
+# "(x, y)", and every number comes back as a float. These helpers restore the typed
+# values the rest of the game expects (MapLoader / MapMakerModel read "position" as
+# Vector2i and ids/counts as int), so a save/load round-trip is exact.
 
-func _entries_with_encoded_positions(entries: Array) -> Array:
-	"""Deep-copy layout entries, replacing each Vector2i position with {"x","y"}."""
-	var out: Array = []
+
+static func _decode_layout_entries(entries) -> Array[Dictionary]:
+	"""Rebuild layout entries from JSON: position back to a Vector2i, integral floats
+	to int."""
+	var out: Array[Dictionary] = []
+	if not (entries is Array):
+		return out
 	for entry in entries:
-		if not (entry is Dictionary):
-			continue
-		var copy: Dictionary = (entry as Dictionary).duplicate(true)
-		var pos_value: Variant = copy.get("position", null)
-		if pos_value is Vector2i:
-			var pos: Vector2i = pos_value
-			copy["position"] = {"x": pos.x, "y": pos.y}
-		out.append(copy)
+		if entry is Dictionary:
+			out.append(_json_entry(entry))
 	return out
 
 
-static func _decode_layout_entries(entries: Array) -> Array[Dictionary]:
-	"""Rebuild layout entries from JSON, restoring position to a Vector2i."""
-	var out: Array[Dictionary] = []
-	for entry in entries:
-		if not (entry is Dictionary):
-			continue
-		var copy: Dictionary = (entry as Dictionary).duplicate(true)
-		copy["position"] = _decode_position(copy.get("position", null))
-		out.append(copy)
+## Cloud-branch name for [method _decode_layout_entries].
+static func _json_entry_array(value) -> Array[Dictionary]:
+	return _decode_layout_entries(value)
+
+
+## One tile / spawn entry: "position" back to a Vector2i, integral floats to int.
+static func _json_entry(entry: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for key in entry.keys():
+		var v = entry[key]
+		if key == "position":
+			v = _decode_position(v)
+		elif v is float and is_equal_approx(v, roundf(v)):
+			v = int(roundf(v))
+		elif v is Dictionary or v is Array:
+			v = v.duplicate(true)
+		out[key] = v
 	return out
 
 
@@ -1108,19 +1463,44 @@ static func _decode_base_cells(raw) -> Dictionary:
 	return out
 
 
+## Best-effort parse of a 2D map position from any form a JSON file might carry it in
+## ([c, r] / [c, r, f] arrays, {"x","y"} objects, "(x, y)" strings, typed vectors).
+## Unparseable input yields Vector2i(-1, -1) (out of bounds, so validation rejects it).
 static func _decode_position(value) -> Vector2i:
-	"""Best-effort parse of a position from any form a JSON file might carry it in."""
-	if value is Vector2i:
-		return value
-	if value is Dictionary:
-		var d: Dictionary = value
-		return Vector2i(int(d.get("x", 0)), int(d.get("y", 0)))
-	if value is Array and (value as Array).size() >= 2:
-		var a: Array = value
-		return Vector2i(int(a[0]), int(a[1]))
-	if value is String:
-		var stripped: String = (value as String).replace("(", "").replace(")", "").replace(" ", "")
-		var parts: PackedStringArray = stripped.split(",")
-		if parts.size() >= 2:
-			return Vector2i(int(parts[0]), int(parts[1]))
+	var v = json_to_vector(value)
+	if v is Vector3i:
+		return Vector2i(v.x, v.y)
+	if v is Vector2i:
+		return v
+	return Vector2i(-1, -1)
+
+
+## Parse a JSON-encoded grid position back to a Vector2i (or a Vector3i when it has
+## three components). Accepts the "(x, y)" string JSON.stringify writes, an [x, y]
+## array, or an {"x":..,"y":..} object; passes an already-typed vector through.
+## Unparseable input yields Vector2i(-1, -1) (out of bounds, so loaders skip it).
+static func json_to_vector(v):
+	if v is Vector2i or v is Vector3i:
+		return v
+	if v is Vector2:
+		return Vector2i(int(v.x), int(v.y))
+	var parts: Array = []
+	if v is String:
+		for p in (v as String).strip_edges().trim_prefix("(").trim_suffix(")").split(","):
+			parts.append(p.strip_edges())
+	elif v is Array:
+		parts = v
+	elif v is Dictionary:
+		if not (v.has("x") and v.has("y")):
+			return Vector2i(-1, -1)
+		parts = [v.get("x", -1), v.get("y", -1)]
+		if v.has("z"):
+			parts.append(v["z"])
+	for p in parts:
+		if not (p is float or p is int or (p is String and (p as String).is_valid_float())):
+			return Vector2i(-1, -1)
+	if parts.size() == 3:
+		return Vector3i(int(float(parts[0])), int(float(parts[1])), int(float(parts[2])))
+	if parts.size() == 2:
+		return Vector2i(int(float(parts[0])), int(float(parts[1])))
 	return Vector2i(-1, -1)

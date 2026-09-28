@@ -175,8 +175,8 @@ func test_a_map_that_declares_bases_gets_a_banner_over_each_one() -> void:
 		assert_not_null(marker, "player %d's base carries a banner" % player_id)
 		if marker == null:
 			continue
-		var cell: Vector2i = _map_res.get_base_cell(player_id)
-		assert_eq(marker.get_meta("cell"), cell,
+		var cell: Vector3i = Cells.from_variant(_map_res.get_base_cell(player_id))
+		assert_eq(Cells.from_variant(marker.get_meta("cell")), cell,
 			"player %d's banner is bound to the cell the MAP declared" % player_id)
 		assert_almost_eq(marker.position.x, float(cell.x) * 2.0 + 1.0, 0.001,
 			"and stands on that cell's center in X")
@@ -234,7 +234,8 @@ func test_a_banner_is_tall_enough_to_find_from_full_zoom_out() -> void:
 # --- ...and it is decoration and nothing else --------------------------------
 
 func test_the_banners_add_no_board_cells() -> void:
-	var tiles := _map_node.get_node("Tiles")
+	# Multi-floor loader layout: ground tiles live under Tiles/Floor_0 (Tile_x_y_0).
+	var tiles := _map_node.get_node("Tiles/Floor_0")
 	assert_eq(tiles.get_child_count(), _map_res.width * _map_res.height,
 		"the board is still width x height tiles -- the banners contributed none of them")
 
@@ -243,7 +244,7 @@ func test_the_base_cell_is_still_exactly_the_terrain_the_map_authored() -> void:
 	if not CombatServices:
 		pending("no CombatServices autoload")
 		return
-	var cell: Vector2i = _map_res.get_base_cell(0)
+	var cell: Vector3i = Cells.from_variant(_map_res.get_base_cell(0))
 	assert_not_null(CombatServices.tile_at(cell),
 		"the base cell is still registered terrain, exactly as before")
 	var effects: Array = CombatServices.tile_effects_at(cell)
@@ -404,8 +405,8 @@ func test_any_map_that_authors_bases_gets_banners_with_no_mode_involved() -> voi
 		return
 	assert_eq(markers.layout.size(), 2, "both declared bases got a banner")
 	var cells: Dictionary = markers.marker_cells()
-	assert_eq(cells.get(0), Vector2i(2, 0), "slot 0's banner stands on the cell the map named")
-	assert_eq(cells.get(1), Vector2i(2, 4), "and slot 1's on its own")
+	assert_eq(Cells.from_variant(cells.get(0)), Vector3i(2, 0, 0), "slot 0's banner stands on the cell the map named")
+	assert_eq(Cells.from_variant(cells.get(1)), Vector3i(2, 4, 0), "and slot 1's on its own")
 
 
 func test_the_banners_are_freed_with_the_map() -> void:
@@ -443,7 +444,7 @@ func test_reloading_a_map_never_stacks_two_banner_sets() -> void:
 ## reference that class, they only ask whatever object exposes capturing_by().
 class StubMode extends Node:
 	var side: int = -1
-	var cell: Vector2i = Vector2i(-1, -1)
+	var cell: Vector3i = Vector3i(-1, -1, 0)
 
 	func capturing_by() -> int:
 		return side
@@ -473,7 +474,7 @@ func test_a_capture_in_flight_makes_that_base_pulse_faster_and_brighter() -> voi
 
 	# Player 0 is capturing player 1's base.
 	stub.side = 0
-	stub.cell = _map_res.get_base_cell(1)
+	stub.cell = Cells.from_variant(_map_res.get_base_cell(1))
 	markers.refresh_urgency()
 
 	assert_true(markers.is_urgent(1), "the CONTESTED base's banner escalates")

@@ -1,223 +1,246 @@
 class_name ConquestTheme
 extends RefCounted
 
-## Central visual theme for Conquest's UI -- the "Fire Emblem warm amber" look
-## (approved battle-HUD concept): amber panels with dark brown rounded frames,
-## crisp readable text, cyan HP bars, and refined command buttons.
+## The IN-BATTLE HUD theme. It shares every colour, type size and spacing token
+## with the out-of-battle menus -- [MenuTheme] is the single token source -- so the
+## battle screen reads as the same game: deep navy panels, warm gold accents and
+## focus, cream text, team blue / red for sides.
 ##
-## Built in code (rather than a hand-authored .tres) so the whole palette lives
-## in one reviewable place and panels can pull individual styleboxes to convert
-## incrementally. Apply the whole theme to a UI subtree with
-## [code]control.theme = ConquestTheme.build()[/code], and convert a panel's own
-## background with [method style_panel_background].
+## [method build] starts from [method MenuTheme.build] (buttons, tabs, sliders,
+## scrollbars, tooltips, popups, labels all come from there) and layers the HUD
+## specifics on top: slightly tighter, translucent panels that sit over the 3D
+## board, HP-green progress bars, and the "HudCommand" command-list button used by
+## the unit command menu and the map menu.
+##
+## Apply to a HUD subtree with [code]ConquestTheme.apply_to(control)[/code]; every
+## battle panel calls it on itself in _ready. Reusable pieces (portrait emblem,
+## chips, key caps, HP bars) are static factories below so panels never hand-roll
+## styleboxes.
+##
+## Sizes are 1280x720 base units (canvas_items stretch): body text is 18, nothing a
+## player must read is smaller than 16 (FS_SMALL); 15 is used only for gold
+## small-caps section tags.
 
-# --- Palette ---------------------------------------------------------------
-# INK / INK_SOFT are deliberately darker than a "brown" midtone -- deep
-# espresso, near-black -- so default and disabled text keep strong contrast
-# against the light AMBER / AMBER_LITE fills (see build()).
-const AMBER := Color("e6a64b")
-const AMBER_LITE := Color("f0c072")
-const AMBER_DK := Color("c6822f")
-const BROWN := Color("5a3a1e")
-const BROWN_DK := Color("37220f")
-const INK := Color("2a1608")
-const INK_SOFT := Color("5c4020")
-const CREAM := Color("fcefd6")
-const CREAM_DIM := Color("e7d3ad")
-const PLATE_BG := Color("2c2114")
-const HP_CYAN := Color("37cde6")
-const HP_TRACK := Color("241a10")
-const HIT_ORANGE := Color("f0913c")
+# --- Tokens (all from MenuTheme -- ONE source) -------------------------------
+const BG_DEEP := MenuTheme.BG_DEEP
+const PANEL := MenuTheme.PANEL
+const PANEL_HI := MenuTheme.PANEL_HI
+const PANEL_SUNK := MenuTheme.PANEL_SUNK
+const BORDER := MenuTheme.BORDER
+const BORDER_SOFT := MenuTheme.BORDER_SOFT
+const GOLD := MenuTheme.GOLD
+const GOLD_LITE := MenuTheme.GOLD_LITE
+const GOLD_DK := MenuTheme.GOLD_DK
+const CREAM := MenuTheme.CREAM
+const TEXT_DIM := MenuTheme.TEXT_DIM
+const TEXT_MUTED := MenuTheme.TEXT_MUTED
+const INK := MenuTheme.INK            ## text ON gold
+const ACCENT := MenuTheme.ACCENT
+const SUCCESS := MenuTheme.SUCCESS
+const DANGER := MenuTheme.DANGER
+const WARNING := MenuTheme.WARNING
+
+## Team colours: fills / rings / bars. The *_TEXT variants are lightened so they
+## keep >= 4.5:1 contrast as text on a navy panel.
+const TEAM_BLUE := MenuTheme.TEAM_BLUE
+const TEAM_RED := MenuTheme.TEAM_RED
+const TEAM_GREEN := Color("4fb56a")
+const TEAM_GOLD := Color("d9b24a")
+const TEAM_BLUE_TEXT := Color("8cc4ff")
+const TEAM_RED_TEXT := Color("ff8f80")
+
+## HP tiers (UI bars AND the 3D map bars share these).
+const HP_HIGH := Color("5fd07e")
+const HP_MID := Color("f0b440")
+const HP_LOW := Color("f05a4a")
+const HP_TRACK := Color("0a0e22")
+const HP_LOSS := Color(1.0, 0.25, 0.2, 0.95)   ## "about to be lost" band
+
+## Numbers in the combat forecast.
+const DMG_COLOR := Color("ffb070")
+const HIT_COLOR := CREAM
+const CRIT_COLOR := Color("ffd65a")
+
+# Type scale (MenuTheme's, plus HUD display sizes).
+const FS_HUD_TITLE := 22
+const FS_BODY := MenuTheme.FS_BODY          # 18
+const FS_SMALL := MenuTheme.FS_SMALL        # 16
+const FS_CAPTION := MenuTheme.FS_CAPTION    # 15 (gold section tags only)
+const FS_COMMAND := 20
+const FS_NAME := 22
+const FS_BIG_NUMBER := 34
+const FS_PHASE := 24
+
+## Nodes carrying this meta (portraits, chips, key caps -- anything with a deliberate
+## local style) are skipped, with their subtree, by [method apply_to]'s sweep.
+const KEEP_META := &"hud_keep_style"
+
+const MARGIN := 16.0          ## HUD safe margin from the screen edges (base units)
+const RADIUS := 12
+
+# --- Legacy aliases ---------------------------------------------------------------
+# The old amber battle palette's names, remapped onto the navy tokens so any code
+# still using them renders in the unified look. New code uses the tokens above.
+const AMBER := GOLD
+const AMBER_LITE := GOLD_LITE
+const AMBER_DK := GOLD_DK
+const BROWN := BORDER
+const BROWN_DK := BG_DEEP
+const INK_SOFT := TEXT_MUTED
+const CREAM_DIM := TEXT_DIM
+const PLATE_BG := PANEL_SUNK
+const HP_CYAN := HP_HIGH
+const HIT_ORANGE := DMG_COLOR
 
 # Element / move-type accents (Pokemon-style colour coding).
-const EL_EMBER := Color("e8623c")
-const EL_FROST := Color("3fa9e0")
-const EL_ARCANE := Color("a860e0")
-const EL_HOLY := Color("e8b93a")
-const EL_NATURE := Color("5fb84e")
-const EL_STEEL := Color("c9cbd6")
-# Distinct accents for elements the chart treats as their own types (they used
-# to collapse onto EL_NATURE / the amber fallback, which made a dark unit's
-# badge indistinguishable from an unelemented one).
-const EL_DARK := Color("6b4a8f")
-const EL_WIND := Color("8fd6c8")
-const EL_EARTH := Color("a5763e")
+const EL_EMBER := MenuTheme.EL_FIRE
+const EL_FROST := MenuTheme.EL_WATER
+const EL_ARCANE := MenuTheme.EL_ARCANE
+const EL_HOLY := MenuTheme.EL_HOLY
+const EL_NATURE := MenuTheme.EL_NATURE
+const EL_STEEL := MenuTheme.EL_STEEL
+# Distinct accents for elements the chart treats as their own types (so a dark
+# unit's badge never collapses onto the gold "unelemented" fallback).
+const EL_DARK := MenuTheme.EL_DARK
+const EL_WIND := MenuTheme.EL_WIND
+const EL_EARTH := MenuTheme.EL_EARTH
 
-# --- Command-button role fills ---------------------------------------------
-# Three button roles share the warm palette but carry different weight so the
-# "important vs secondary vs destructive" signal reads at a glance. A parallel
-# panel tags its buttons with set_meta("style_role", "secondary"|"destructive");
-# absent/unknown meta = primary. apply_button_role() reads that meta.
-const BTN_PRIMARY := AMBER_LITE            # default warm amber (highest weight)
-const BTN_SECONDARY := Color("a8946e")     # muted low-contrast amber-grey
-const BTN_DESTRUCTIVE := Color("b5522f")   # ember red-brown (still in-palette)
+# --- Command-button roles ----------------------------------------------------------
+# Three button weights so "important vs secondary vs destructive" reads at a glance.
+# A panel tags a plain Button with set_meta("style_role", "secondary"|"destructive");
+# absent / unknown = primary (the theme's default HUD plate). apply_button_role()
+# reads that meta during apply_to()'s sweep.
+const BTN_PRIMARY := GOLD
+const BTN_SECONDARY := TEXT_MUTED
+const BTN_DESTRUCTIVE := DANGER
 
-# --- Type scale ------------------------------------------------------------
-# One shared 720p-tuned scale so panels stop hand-setting per-widget font sizes.
-# Applied as the theme's Label/Button defaults in build(); panels reference the
-# constants for code-built widgets. Body is kept >= 13 for legibility at 720p.
+# --- Compact HUD type scale ---------------------------------------------------------
+# The DENSE register the local battle panels were laid out against (the pinned-height
+# compact battle card, the contextual action menu, chip rows): their row heights and
+# widths are budgeted on these exact sizes, so they stay. New HUD code uses the grove
+# FS_* scale above (nothing a player must read below FS_SMALL there).
 const FONT_TITLE := 18
 const FONT_HEADER := 15
 const FONT_BODY := 13
 const FONT_CAPTION := 11
 
 
-# --- Public stylebox factories (reusable per-panel) ------------------------
+# --- Stylebox factories ------------------------------------------------------------
 
-## The signature amber card/panel: warm fill, dark brown rounded frame, soft drop.
-static func panel_box() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = AMBER
-	sb.set_corner_radius_all(12)
-	sb.set_border_width_all(3)
-	sb.border_color = BROWN
-	sb.set_content_margin_all(14)
-	sb.shadow_color = Color(0, 0, 0, 0.38)
-	sb.shadow_size = 6
-	sb.shadow_offset = Vector2(0, 3)
-	sb.anti_aliasing = true
+## The HUD card: translucent navy over the board, soft edge, drop shadow.
+static func panel_box(alpha: float = 0.94) -> OrnateStyleBox:
+	var sb := MenuTheme.card_box(PANEL, BORDER, alpha)
+	sb.corner = 11.0
+	sb.vignette_width = 14.0
+	sb.shadow_size = 10.0
+	sb.shadow_offset = Vector2(0, 4)
+	sb.content_margin_left = 18
+	sb.content_margin_right = 18
+	sb.content_margin_top = 14
+	sb.content_margin_bottom = 14
+	return sb
+
+## A darker inset "plate" behind values (forecast numbers, stat grids).
+## A HUD unit card (command menu, hover card): the grove frame with the owning
+## side's team colour as its edge stripe and a team-tinted border. The unit's
+## element lives in its crest (see [method portrait]).
+static func unit_card_box(unit, alpha: float = 0.95) -> OrnateStyleBox:
+	var team := team_color(owner_of(unit))
+	var sb := panel_box(alpha)
+	sb.accent_color = Color(team, 0.95)
+	sb.accent_side = SIDE_LEFT
+	sb.accent_width = 4.0
+	sb.border_color = BORDER.lerp(team, 0.45)
 	return sb
 
 
-## A darker inset "plate" used behind values (HP number, forecast stats).
-static func plate_box() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = PLATE_BG
-	sb.set_corner_radius_all(7)
-	sb.set_border_width_all(2)
-	sb.border_color = BROWN_DK
-	sb.set_content_margin_all(8)
-	return sb
-
-
-static func _button_box(fill: Color, border: Color = BROWN) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = fill
-	sb.set_corner_radius_all(9)
-	sb.set_border_width_all(2)
-	sb.border_color = border
-	sb.content_margin_left = 12
-	sb.content_margin_right = 12
-	sb.content_margin_top = 7
+static func plate_box() -> OrnateStyleBox:
+	var sb := MenuTheme.inset_box()
+	sb.content_margin_top = 8
 	sb.content_margin_bottom = 8
-	sb.shadow_color = Color(0, 0, 0, 0.28)
-	sb.shadow_size = 3
-	sb.shadow_offset = Vector2(0, 2)
 	return sb
 
-
-static func _focus_box() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0, 0, 0, 0)
-	sb.set_corner_radius_all(9)
-	sb.set_border_width_all(2)
-	sb.border_color = CREAM
+## Compact strip (turn chip, objective chip): same card, tighter margins.
+static func chip_box(border: Color = BORDER, alpha: float = 0.94) -> OrnateStyleBox:
+	var sb := MenuTheme.plate_box(Color(PANEL, alpha), border, 8.0, 16, 6, 1.5)
+	sb.hatch_alpha = 0.03
+	sb.hatch_spacing = 5.0
+	sb.inner_line_color = Color(GOLD, 0.22)
+	sb.inner_inset = 4.0
+	sb.shadow_color = Color(0, 0, 0, 0.4)
+	sb.shadow_size = 7.0
+	sb.shadow_offset = Vector2(0, 3)
 	return sb
 
+static func _command_box(fill: Color, bar: Color) -> OrnateStyleBox:
+	return MenuTheme.row_box(fill, bar, Color(bar, bar.a * 0.4), 30, 12, 7)
 
-static func _progress_track() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = HP_TRACK
-	sb.set_corner_radius_all(6)
-	sb.set_border_width_all(1)
-	sb.border_color = BROWN_DK
-	return sb
-
-
-static func _progress_fill(color: Color) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = color
-	sb.set_corner_radius_all(6)
-	return sb
-
-
-## Tooltip background: near-opaque dark ink with a thin amber border -- deliberately
-## darker/smaller than panel_box() so a tooltip reads as a floating overlay, not
-## another card, and stays legible over both the amber HUD and the 3D board behind it.
-static func _tooltip_box() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(BROWN_DK.r, BROWN_DK.g, BROWN_DK.b, 0.96)
-	sb.set_corner_radius_all(6)
-	sb.set_border_width_all(1)
-	sb.border_color = AMBER_DK
-	sb.set_content_margin_all(8)
-	sb.shadow_color = Color(0, 0, 0, 0.35)
-	sb.shadow_size = 4
-	return sb
-
-
-# --- Assemble the Theme ----------------------------------------------------
+# --- Assemble the Theme --------------------------------------------------------------
 
 static func build() -> Theme:
-	var t := Theme.new()
+	var t := MenuTheme.build()
 
-	# Panels
+	# HUD panels: translucent navy card.
 	t.set_stylebox("panel", "Panel", panel_box())
 	t.set_stylebox("panel", "PanelContainer", panel_box())
 
-	# Shared type scale: default body size on the common text widgets so panels
-	# stop needing per-widget font-size overrides. Any authored per-widget
-	# override still wins over these defaults, so existing panels are unaffected.
-	t.set_font_size("font_size", "Label", FONT_BODY)
-	t.set_font_size("font_size", "Button", FONT_BODY)
-	t.set_font_size("font_size", "OptionButton", FONT_BODY)
+	# HP-style progress bars.
+	t.set_stylebox("background", "ProgressBar", MenuTheme.box(HP_TRACK, BORDER_SOFT, 1, 4, 0, 0))
+	t.set_stylebox("fill", "ProgressBar", MenuTheme.box(HP_HIGH, HP_HIGH, 0, 4, 0, 0))
 
-	# Labels default to dark ink (readable on the amber panels). Panels that
-	# render text over darker plates set CREAM locally.
-	t.set_color("font_color", "Label", INK)
+	# Tooltips: MenuTheme's gold-edged plate, but cream text at BODY size over the
+	# busy board (a caption-size tooltip is unreadable at a glance).
+	t.set_font_size("font_size", "TooltipLabel", FS_BODY)
 
-	# Buttons: amber, brighten on hover, sink on press, cream focus ring.
-	t.set_stylebox("normal", "Button", _button_box(AMBER_LITE))
-	t.set_stylebox("hover", "Button", _button_box(AMBER_LITE.lightened(0.08)))
-	t.set_stylebox("pressed", "Button", _button_box(AMBER_DK))
-	# Disabled fill is pulled further from AMBER (and desaturated toward BROWN)
-	# than before so the "greyed out" state is visually obvious, while
-	# font_disabled_color (INK_SOFT, darkened below) still reads clearly on it
-	# instead of washing out.
-	t.set_stylebox("disabled", "Button", _button_box(AMBER.darkened(0.24).lerp(BROWN, 0.15), BROWN_DK))
-	t.set_stylebox("focus", "Button", _focus_box())
-	t.set_color("font_color", "Button", INK)
-	t.set_color("font_hover_color", "Button", BROWN_DK)
-	t.set_color("font_pressed_color", "Button", CREAM)
-	t.set_color("font_disabled_color", "Button", INK_SOFT)
+	# A HUD button is a touch more compact than a menu button.
+	for type in ["Button", "OptionButton"]:
+		t.set_stylebox("normal", type, MenuTheme.plate_box(Color(PANEL_HI, 0.8), BORDER, 7.0, 16, 8))
+		var hov := MenuTheme.plate_box(PANEL_HI, GOLD_DK, 7.0, 16, 8)
+		hov.inner_line_color = Color(GOLD, 0.22)
+		hov.inner_inset = 4.0
+		t.set_stylebox("hover", type, hov)
+		t.set_stylebox("pressed", type, MenuTheme.plate_box(GOLD, GOLD_LITE, 7.0, 16, 8))
+		t.set_stylebox("disabled", type, MenuTheme.plate_box(Color(PANEL_SUNK, 0.7), BORDER_SOFT, 7.0, 16, 8))
+		t.set_stylebox("focus", type, MenuTheme.focus_box(7))
 
-	# OptionButton (difficulty dropdown, etc.) mirrors Button.
-	t.set_stylebox("normal", "OptionButton", _button_box(AMBER_LITE))
-	t.set_stylebox("hover", "OptionButton", _button_box(AMBER_LITE.lightened(0.08)))
-	t.set_stylebox("pressed", "OptionButton", _button_box(AMBER_DK))
-	t.set_stylebox("focus", "OptionButton", _focus_box())
-	t.set_color("font_color", "OptionButton", INK)
-
-	# ProgressBar -> cyan HP-bar look.
-	t.set_stylebox("background", "ProgressBar", _progress_track())
-	t.set_stylebox("fill", "ProgressBar", _progress_fill(HP_CYAN))
-	t.set_color("font_color", "ProgressBar", CREAM)
-
-	# Tooltips (Godot's built-in hover popup, rendered as a "TooltipPanel" containing a
-	# "TooltipLabel"). Previously unstyled here, so any panel with a tooltip_text fell
-	# back to the stock engine look -- small grey-on-grey text, unreadable over the
-	# amber HUD or the dark 3D board. Cream body text at body size (NOT the caption
-	# size) on the dark tooltip plate keeps it readable at a glance.
-	t.set_stylebox("panel", "TooltipPanel", _tooltip_box())
-	t.set_color("font_color", "TooltipLabel", CREAM)
-	t.set_font_size("font_size", "TooltipLabel", FONT_BODY)
-
+	# HudCommand: an FE command-list entry. Transparent at rest; hover / focus light
+	# a gold bar on the left with a navy wash. Text stays cream / gold on navy (never
+	# light-on-light).
+	t.set_type_variation("HudCommand", "Button")
+	t.set_stylebox("normal", "HudCommand", _command_box(Color(0, 0, 0, 0), Color(0, 0, 0, 0)))
+	t.set_stylebox("hover", "HudCommand", _command_box(Color(GOLD_DK, 0.22), Color(GOLD_DK, 0.9)))
+	t.set_stylebox("pressed", "HudCommand", _command_box(Color(GOLD, 0.36), GOLD_LITE))
+	t.set_stylebox("hover_pressed", "HudCommand", _command_box(Color(GOLD, 0.36), GOLD_LITE))
+	t.set_stylebox("disabled", "HudCommand", _command_box(Color(0, 0, 0, 0), Color(0, 0, 0, 0)))
+	t.set_stylebox("focus", "HudCommand", _command_box(Color(GOLD, 0.3), GOLD))
+	t.set_color("font_color", "HudCommand", CREAM)
+	t.set_color("font_hover_color", "HudCommand", GOLD_LITE)
+	t.set_color("font_focus_color", "HudCommand", GOLD_LITE)
+	t.set_color("font_pressed_color", "HudCommand", GOLD_LITE)
+	t.set_color("font_hover_pressed_color", "HudCommand", GOLD_LITE)
+	t.set_color("font_disabled_color", "HudCommand", Color(TEXT_MUTED.r, TEXT_MUTED.g, TEXT_MUTED.b, 0.75))
+	t.set_font("font", "HudCommand", MenuTheme.heading_font(1))
+	t.set_font_size("font_size", "HudCommand", FS_COMMAND)
+	t.set_constant("h_separation", "HudCommand", 10)
 	return t
 
 
-# --- Helpers ---------------------------------------------------------------
+# --- Helpers ----------------------------------------------------------------------
 
-## Give a background Panel/PanelContainer node the amber card look, overriding any
-## older (e.g. dark) stylebox it shipped with. Safe no-op on null.
+## Give a background Panel/PanelContainer node the HUD card look, overriding any
+## older stylebox it shipped with. Safe no-op on null.
 static func style_panel_background(node: Control) -> void:
 	if node != null and (node is Panel or node is PanelContainer):
+		# A panel that asked for a theme variation (Card / InsetPanel / Pill...) keeps it.
+		if node.theme_type_variation != &"":
+			return
 		node.add_theme_stylebox_override("panel", panel_box())
 
 
-## Apply the whole amber look to [param root] and its subtree: set the theme,
-## amber-ify every panel background, and strip baked-in font colours / per-button
-## colour styleboxes so everything shares the one look. Each HUD panel calls this
-## on itself in _ready, so it works no matter when/where the panel is added.
+## Apply the HUD theme to [param root] and its subtree: set the theme, restyle every
+## panel background, and strip baked-in font colours / per-button styleboxes so
+## everything shares the one look. Panels call this FIRST in their build step and
+## layer their deliberate local overrides afterwards.
 static func apply_to(root: Control) -> void:
 	if root == null:
 		return
@@ -227,6 +250,8 @@ static func apply_to(root: Control) -> void:
 
 static func _restyle(node: Node) -> void:
 	for child in node.get_children():
+		if child.has_meta(KEEP_META):
+			continue
 		if child is Panel or child is PanelContainer:
 			style_panel_background(child)
 		# Labels: drop any baked font colour so they inherit the panel default.
@@ -241,62 +266,375 @@ static func _restyle(node: Node) -> void:
 			for s in ["normal", "hover", "pressed", "disabled", "focus"]:
 				if child.has_theme_stylebox_override(s):
 					child.remove_theme_stylebox_override(s)
-		# Plain buttons: apply the role variant (primary/secondary/destructive) instead
-		# of stripping to a single flat amber -- preserves the command hierarchy.
+		# Plain buttons: strip baked looks back to the theme, then apply the declared
+		# role (primary / secondary / destructive) so the command hierarchy survives.
 		elif child is Button:
 			apply_button_role(child)
 		_restyle(child)
 
 
-## Apply the amber command-button look for [param button]'s declared role, read
-## from set_meta("style_role", ...). Three warm-palette weights:
-##   "" / unknown / "primary" -> bright amber (default, highest weight)
-##   "secondary"              -> muted amber-grey (low contrast, de-emphasised)
-##   "destructive"            -> ember red-brown (a warning, still in-palette)
-## Overrides normal/hover/pressed/disabled + the matching font colours, so a
-## panel can tag intent once and get a consistent, hierarchy-preserving button.
+## Style [param button] for its declared role, read from set_meta("style_role", ...):
+##   "" / unknown / "primary" -> the theme's HUD plate (gold on hover / focus)
+##   "secondary"              -> a quiet clear plate with dim text (de-emphasised)
+##   "destructive"            -> a danger-edged plate with salmon text (a warning)
+## Any baked font colour / stylebox overrides are stripped first; a button with a
+## theme type variation (HudCommand, PrimaryButton...) keeps its variation's look.
 static func apply_button_role(button: Button) -> void:
-	var role := String(button.get_meta("style_role", ""))
-	var fill: Color = BTN_PRIMARY
-	var border: Color = BROWN
-	var font: Color = INK
-	var font_hover: Color = BROWN_DK
-	var font_pressed: Color = CREAM
-	match role:
+	if button == null:
+		return
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_disabled_color"]:
+		if button.has_theme_color_override(c):
+			button.remove_theme_color_override(c)
+	for s in ["normal", "hover", "pressed", "disabled", "focus"]:
+		if button.has_theme_stylebox_override(s):
+			button.remove_theme_stylebox_override(s)
+	if button.theme_type_variation != &"":
+		return
+	match String(button.get_meta("style_role", "")):
 		"secondary":
-			fill = BTN_SECONDARY
-			border = BROWN
+			button.add_theme_stylebox_override("normal",
+					MenuTheme.plate_box(Color(0, 0, 0, 0.22), BORDER_SOFT, 7.0, 16, 8))
+			var hov := MenuTheme.plate_box(Color(PANEL_HI, 0.7), BORDER, 7.0, 16, 8)
+			button.add_theme_stylebox_override("hover", hov)
+			button.add_theme_color_override("font_color", TEXT_MUTED)
+			button.add_theme_color_override("font_hover_color", TEXT_DIM)
 		"destructive":
-			fill = BTN_DESTRUCTIVE
-			border = BROWN_DK
-			# The red-brown fill is dark, so cream text keeps contrast in every state.
-			font = CREAM
-			font_hover = CREAM
-			font_pressed = CREAM
+			var danger_dk := BTN_DESTRUCTIVE.darkened(0.55)
+			button.add_theme_stylebox_override("normal",
+					MenuTheme.plate_box(Color(danger_dk, 0.85), BTN_DESTRUCTIVE.darkened(0.2), 7.0, 16, 8))
+			var hov := MenuTheme.plate_box(danger_dk.lightened(0.12), BTN_DESTRUCTIVE, 7.0, 16, 8)
+			hov.inner_line_color = Color(BTN_DESTRUCTIVE, 0.3)
+			hov.inner_inset = 4.0
+			button.add_theme_stylebox_override("hover", hov)
+			button.add_theme_stylebox_override("pressed",
+					MenuTheme.plate_box(BTN_DESTRUCTIVE.darkened(0.2), BTN_DESTRUCTIVE, 7.0, 16, 8))
+			button.add_theme_color_override("font_color", BTN_DESTRUCTIVE.lightened(0.25))
+			button.add_theme_color_override("font_hover_color", CREAM)
+			button.add_theme_color_override("font_pressed_color", CREAM)
 		_:
-			fill = BTN_PRIMARY
-			border = BROWN
-	button.add_theme_stylebox_override("normal", _button_box(fill, border))
-	button.add_theme_stylebox_override("hover", _button_box(fill.lightened(0.08), border))
-	button.add_theme_stylebox_override("pressed", _button_box(fill.darkened(0.16), border))
-	button.add_theme_stylebox_override("disabled",
-			_button_box(fill.darkened(0.24).lerp(BROWN, 0.15), BROWN_DK))
-	button.add_theme_color_override("font_color", font)
-	button.add_theme_color_override("font_hover_color", font_hover)
-	button.add_theme_color_override("font_pressed_color", font_pressed)
-	button.add_theme_color_override("font_disabled_color", INK_SOFT)
+			pass
 
 
-## Colour for a move/ability element tag; falls back to amber for unknowns.
+## Colour for a move/ability element tag; falls back to gold for unknowns.
 static func element_color(element: String) -> Color:
 	match element.to_lower():
-		"ember", "fire": return EL_EMBER
-		"frost", "water", "ice": return EL_FROST
-		"arcane", "magic": return EL_ARCANE
-		"holy", "light": return EL_HOLY
-		"nature": return EL_NATURE
-		"steel", "metal", "physical": return EL_STEEL
-		"dark", "shadow": return EL_DARK
-		"wind", "air": return EL_WIND
-		"earth", "stone": return EL_EARTH
-		_: return AMBER
+		"ember", "fire": return MenuTheme.EL_FIRE
+		"frost", "water", "ice": return MenuTheme.EL_WATER
+		"arcane", "magic": return MenuTheme.EL_ARCANE
+		"holy", "light": return MenuTheme.EL_HOLY
+		"nature", "grass", "plant": return MenuTheme.EL_NATURE
+		"wind", "air": return MenuTheme.EL_WIND
+		"earth", "stone", "gem", "rock": return MenuTheme.EL_EARTH
+		"steel", "metal", "physical": return MenuTheme.EL_STEEL
+		"dark", "shadow", "blight": return MenuTheme.EL_DARK
+		_: return GOLD
+
+## HP colour tier for a 0..1 fraction (same thresholds as the 3D map bar).
+static func hp_color(frac: float) -> Color:
+	if frac > 0.5:
+		return HP_HIGH
+	if frac > 0.25:
+		return HP_MID
+	return HP_LOW
+
+
+## Recolour a ProgressBar's fill for [param frac] (idempotent).
+static func tint_hp_bar(bar: ProgressBar, frac: float) -> void:
+	if bar == null:
+		return
+	var c := hp_color(frac)
+	bar.add_theme_stylebox_override("fill", MenuTheme.box(c, c.lightened(0.15), 0, 4, 0, 0))
+
+
+## A slim HP bar (track + tier-coloured fill).
+static func hp_bar(height: float = 10.0) -> ProgressBar:
+	var bar := ProgressBar.new()
+	bar.show_percentage = false
+	bar.min_value = 0.0
+	bar.max_value = 1.0
+	bar.value = 1.0
+	bar.custom_minimum_size = Vector2(0, height)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_theme_stylebox_override("background", MenuTheme.box(HP_TRACK, BORDER_SOFT, 1, 4, 0, 0))
+	tint_hp_bar(bar, 1.0)
+	return bar
+
+
+## Team colour for a player: by seat (P1 blue, P2 red, P3 green, P4 gold).
+static func team_color(player) -> Color:
+	if player == null or not ("player_id" in player):
+		return TEXT_MUTED
+	match int(player.player_id):
+		0: return TEAM_BLUE
+		1: return TEAM_RED
+		2: return TEAM_GREEN
+		3: return TEAM_GOLD
+	return TEXT_MUTED
+
+
+## Team colour lightened for use as TEXT on a navy panel.
+static func team_text_color(player) -> Color:
+	if player == null or not ("player_id" in player):
+		return TEXT_DIM
+	match int(player.player_id):
+		0: return TEAM_BLUE_TEXT
+		1: return TEAM_RED_TEXT
+	return team_color(player).lightened(0.35)
+
+
+## The owning player of [param unit] (null-safe).
+static func owner_of(unit):
+	if unit != null and is_instance_valid(unit) and unit.has_method("get_owner_player"):
+		return unit.get_owner_player()
+	return null
+
+
+## Big phase title for [param player]: "PLAYER PHASE" / "ENEMY PHASE" in single
+## player, "YOUR TURN" / "OPPONENT'S TURN" in a network match, and the seat name
+## ("PLAYER 2 PHASE") in local versus.
+static func phase_title(player) -> String:
+	if player == null:
+		return "BATTLE"
+	var gs = _autoload("GameSettings")
+	var mode: int = int(gs.game_mode) if gs != null else 0
+	if gs != null and mode == GameSettings.GameMode.MULTIPLAYER:
+		return "YOUR TURN" if LocalPlayer.is_local_human(player) else "OPPONENT'S TURN"
+	if gs != null and mode == GameSettings.GameMode.VERSUS and not bool(player.is_ai):
+		# Spelled out: the Cinzel display face draws "1" almost like "I".
+		var n: int = int(player.player_id)
+		var words := ["ONE", "TWO", "THREE", "FOUR"]
+		return "PLAYER %s PHASE" % (words[n] if n >= 0 and n < words.size() else str(n + 1))
+	return "ENEMY PHASE" if bool(player.is_ai) else "PLAYER PHASE"
+
+
+## Short side tag for a unit's owner: "Ally" / "Enemy" (single player), "You" /
+## "Opponent" (network), "Player N" (local versus).
+static func side_label(player) -> String:
+	if player == null:
+		return "Neutral"
+	var gs = _autoload("GameSettings")
+	var mode: int = int(gs.game_mode) if gs != null else 0
+	if gs != null and mode == GameSettings.GameMode.MULTIPLAYER:
+		return "You" if LocalPlayer.is_local_human(player) else "Opponent"
+	if gs != null and mode == GameSettings.GameMode.VERSUS:
+		return "Player %d" % (int(player.player_id) + 1)
+	return "Enemy" if bool(player.is_ai) else "Ally"
+
+
+static func _autoload(node_name: String):
+	var loop := Engine.get_main_loop()
+	if loop is SceneTree:
+		return (loop as SceneTree).root.get_node_or_null(node_name)
+	return null
+
+
+# --- Widget factories ------------------------------------------------------------------
+
+## Circular portrait emblem: the unit's initial on its element colour, ringed in
+## its team colour (the same emblem the squad-select cards use).
+static func portrait(letter: String, fill: Color, ring: Color, px: float = 48.0) -> PanelContainer:
+	var p := PanelContainer.new()
+	p.name = "Portrait"
+	p.set_meta(KEEP_META, true)
+	p.add_theme_stylebox_override("panel", MenuTheme.crest_box(fill, ring, px))
+	p.custom_minimum_size = Vector2(px * 0.86, px)
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var l := Label.new()
+	l.name = "Initial"
+	l.text = letter.left(1).to_upper()
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.add_theme_font_override("font", MenuTheme.display_font(0))
+	l.add_theme_font_size_override("font_size", int(px * 0.42))
+	l.add_theme_color_override("font_color", fill.lightened(0.7))
+	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	l.add_theme_constant_override("shadow_offset_y", 2)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(l)
+	return p
+
+## Recolour / re-letter a [method portrait] in place.
+static func set_portrait(p: PanelContainer, letter: String, fill: Color, ring: Color) -> void:
+	if p == null:
+		return
+	var px := p.custom_minimum_size.y
+	p.add_theme_stylebox_override("panel", MenuTheme.crest_box(fill, ring, px))
+	var l := p.get_node_or_null("Initial") as Label
+	if l != null:
+		l.text = letter.left(1).to_upper()
+		l.add_theme_color_override("font_color", fill.lightened(0.7))
+
+## Portrait fill + ring for [param unit]: element colour inside, team colour ring.
+static func unit_portrait_colors(unit) -> Array:
+	var fill := GOLD
+	if unit != null and is_instance_valid(unit) and unit.has_method("get_element"):
+		fill = element_color(String(unit.get_element()))
+	return [fill, team_color(owner_of(unit))]
+
+
+## Small rounded chip: [param text] on a tinted pill; the border and text take
+## [param color] (text lightened for contrast).
+static func chip(text: String, color: Color, font_size: int = FS_SMALL) -> PanelContainer:
+	var p := PanelContainer.new()
+	p.set_meta(KEEP_META, true)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_theme_stylebox_override("panel", chip_style(color))
+	var l := Label.new()
+	l.name = "Text"
+	l.text = text
+	l.add_theme_font_size_override("font_size", font_size)
+	l.add_theme_color_override("font_color", color.lightened(0.45))
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(l)
+	return p
+
+
+static func chip_style(color: Color) -> OrnateStyleBox:
+	var sb := MenuTheme.pill_box(Color(color, 0.2), color)
+	sb.content_margin_left = 13
+	sb.content_margin_right = 13
+	sb.content_margin_top = 2
+	sb.content_margin_bottom = 2
+	return sb
+
+## Key-cap pill ("E", "Esc", "A") in gold on a raised navy cap.
+static func key_cap(text: String, font_size: int = FS_CAPTION) -> PanelContainer:
+	var cap := PanelContainer.new()
+	cap.name = "KeyCap"
+	cap.set_meta(KEEP_META, true)
+	var sb := MenuTheme.box(PANEL_HI, BORDER, 1, 5, 7, 1)
+	sb.border_width_bottom = 3
+	cap.add_theme_stylebox_override("panel", sb)
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var k := Label.new()
+	k.name = "Key"
+	k.text = text
+	k.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	k.add_theme_font_size_override("font_size", font_size)
+	k.add_theme_color_override("font_color", GOLD_LITE)
+	k.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cap.add_child(k)
+	return cap
+
+
+## Mark [param node] (and its subtree) as locally styled so [method apply_to]
+## leaves it alone. Returns the node for chaining.
+static func keep_style(node: Node) -> Node:
+	if node != null:
+		node.set_meta(KEEP_META, true)
+	return node
+
+
+## Short on-screen glyph for a key / button name ("Escape" -> "Esc").
+static func short_key(key: String) -> String:
+	match key:
+		"Escape": return "Esc"
+		"BackSpace", "Backspace": return "Bksp"
+		"PageUp": return "PgUp"
+		"PageDown": return "PgDn"
+		"Space": return "Space"
+	return key
+
+
+## The glyph to show for an input [param action] right now ("E", "Esc", or the pad
+## button when a gamepad is connected). "" for &"" / unbound.
+static func action_glyph(action: StringName) -> String:
+	if action == &"":
+		return ""
+	return short_key(InputActions.hint(action))
+
+
+## Put a right-aligned hint INSIDE [param button] (a command-list row): a key cap
+## showing [param key], or -- when [param note] is set -- a short muted note
+## ("Done", "108/108 HP"). Replaces any previous hint. The button keeps its own
+## left-aligned text.
+static func set_button_hint(button: Button, key: String, note: String = "",
+		note_color: Color = TEXT_MUTED) -> void:
+	if button == null:
+		return
+	var hint := button.get_node_or_null("Hint") as HBoxContainer
+	if hint == null:
+		hint = HBoxContainer.new()
+		hint.name = "Hint"
+		hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hint.alignment = BoxContainer.ALIGNMENT_END
+		hint.anchor_left = 1.0
+		hint.anchor_right = 1.0
+		hint.anchor_top = 0.0
+		hint.anchor_bottom = 1.0
+		hint.offset_left = -170.0
+		hint.offset_right = -10.0
+		hint.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		keep_style(hint)
+		button.add_child(hint)
+	for c in hint.get_children():
+		hint.remove_child(c)
+		c.queue_free()
+	if note != "":
+		var l := Label.new()
+		l.name = "Note"
+		l.text = note
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		l.size_flags_vertical = Control.SIZE_FILL
+		l.add_theme_font_size_override("font_size", FS_CAPTION)
+		l.add_theme_color_override("font_color", note_color)
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hint.add_child(l)
+	elif key != "":
+		hint.add_child(key_cap(key))
+
+
+## Footer hint: key cap + what it does ("[Esc] Close").
+static func key_hint(key: String, text: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	keep_style(row)
+	row.add_child(key_cap(key))
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", FS_CAPTION)
+	l.add_theme_color_override("font_color", TEXT_DIM)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(l)
+	return row
+
+
+## Gold small-caps section tag.
+static func section_label(text: String) -> Label:
+	var l := Label.new()
+	l.text = text.to_upper()
+	l.theme_type_variation = &"SectionLabel"
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return l
+
+
+## A thin gold accent rule.
+static func accent_rule(color: Color = GOLD, width: float = 96.0, height: float = 10.0) -> Control:
+	var r := GroveRule.new()
+	r.color = color
+	r.custom_minimum_size = Vector2(width, height)
+	r.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	return r
+
+
+## A card title strip: a swallow-tailed ribbon holding [param text] in Cinzel caps.
+## [param accent] tints the ribbon's edge (team / element colour).
+static func title_ribbon(text: String, accent: Color = GOLD_DK, font_size: int = FS_BODY) -> PanelContainer:
+	var p := PanelContainer.new()
+	p.name = "TitleRibbon"
+	p.set_meta(KEEP_META, true)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_theme_stylebox_override("panel", MenuTheme.ribbon_box(PANEL_HI, accent, 12.0))
+	var l := Label.new()
+	l.name = "Text"
+	l.text = text
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.add_theme_font_override("font", MenuTheme.heading_font(2))
+	l.add_theme_font_size_override("font_size", font_size)
+	l.add_theme_color_override("font_color", GOLD_LITE)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(l)
+	return p

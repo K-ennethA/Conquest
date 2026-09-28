@@ -80,7 +80,7 @@ func test_character_moveset_exposed():
 
 func test_perform_move_empty_slot_fails_cleanly():
 	unit = Unit.new()
-	var result := unit.perform_move(0, Vector2i.ZERO, null)
+	var result := unit.perform_move(0, Vector3i.ZERO, null)
 	assert_false(result.success, "Performing a move with no character should fail")
 	assert_eq(result.reason, "no_move_in_slot", "Failure reason should be no_move_in_slot")
 

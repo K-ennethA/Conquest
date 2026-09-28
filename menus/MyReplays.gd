@@ -27,6 +27,14 @@ class_name MyReplays
 ## Deleting is a two-step ARM on the row itself rather than a modal: the page's budget has no
 ## room for a dialog, and a confirm that lives on the button being confirmed is harder to
 ## mis-click than one that appears under the cursor.
+##
+## Built on the shared grove page ([MenuKit.build_page], [MenuTheme] -- docs/UI_STYLE.md).
+## 720p budget: MenuKit's header + footer leave the body ~466 of 720, and the body is ONE
+## EXPAND_FILL region (the recordings well, floor 180) -- the notice line lives in the
+## footer, beside the key hints -- so the footer is always on screen.
+##
+## Input: arrows / D-pad walk the Watch / Delete buttons; Cancel (Esc / B) disarms a pending
+## delete first, then goes back.
 
 const CHALLENGE_BROWSE_SCENE := "res://menus/ChallengeBrowse.tscn"
 const MY_BASES_SCENE := "res://menus/MyBases.tscn"
@@ -59,6 +67,7 @@ var _armed: int = -1
 # --- Node refs --------------------------------------------------------------
 var _list_box: VBoxContainer = null
 var _notice: Label = null
+var _back_btn: Button = null
 
 
 ## Inject the playback launcher (anything with
@@ -69,96 +78,72 @@ func set_replay_playback(playback) -> void:
 
 
 func _ready() -> void:
-	theme = MenuTheme.build()
-	MenuTheme.apply_backdrop(self)
 	_build_ui()
 	refresh()
+	if not _watch_buttons.is_empty() and not _watch_buttons[0].disabled:
+		_focus_later(_watch_buttons[0])
+	elif not _delete_buttons.is_empty():
+		_focus_later(_delete_buttons[0])
+	else:
+		_focus_later(_back_btn)
 
 
 # --- UI construction --------------------------------------------------------
 
 func _build_ui() -> void:
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
+	var page := MenuKit.build_page(self, ["Solo", "Challenges"], "My Replays",
+		"Battles this device recorded, newest first.")
 
-	# 720p budget for this page (separation 12, no MarginContainer -- this page IS the
-	# viewport, so the floor must sit clear of 720 by itself):
-	#   title 52 + subtitle 21 + notice 22
-	#   + list card (180 scroll floor + 24 panel padding = 204) + actions 48 + hint 16
-	#   = 363 fixed, plus 5 gaps * 12 = 60  ->  423
-	# against this 640 floor, which is 80px clear of 720. The 217px of slack flows into the
-	# ONE flexible region (the list scroll, below) via EXPAND_FILL, so it opens to ~397px and
-	# the footer stays pinned. Add a fixed row here and re-run this sum -- do not eyeball it.
-	#
-	# Width: 760 floor against the two widest rows --
-	#   footer   180 + 200 + 18 = 398
-	#   list row 220 title column (expands) + 110 Watch + 120 Delete + 2 * 12 = 474,
-	#            inside 760 - 20 (card padding) - 12 (scrollbar) - 20 (row padding) = 708
-	var page := VBoxContainer.new()
-	page.custom_minimum_size = Vector2(760.0, 640.0)
-	page.add_theme_constant_override("separation", 12)
-	center.add_child(page)
-
-	var title := Label.new()
-	title.text = "MY REPLAYS"
-	page.add_child(title)
-	MenuTheme.style_title(title, 32)
-
-	var subtitle := Label.new()
-	subtitle.text = "Battles this device recorded, newest first"
-	page.add_child(subtitle)
-	MenuTheme.style_subtitle(subtitle)
-
-	# Inline notice: every watch failure and every delete result lands here. Fixed height so
-	# the page never reflows when a message appears or clears.
-	_notice = Label.new()
-	_notice.text = ""
-	_notice.custom_minimum_size = Vector2(0.0, 22.0)
-	page.add_child(_notice)
-	MenuTheme.style_caption(_notice)
-	_notice.add_theme_color_override("font_color", MenuTheme.GOLD)
-
-	var list_card := PanelContainer.new()
-	list_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	page.add_child(list_card)
+	# The recordings, in a sunken well: the page's ONE EXPAND_FILL region.
+	var well := MenuKit.card(&"InsetPanel")
+	well.name = "ReplayList"
+	well.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.body.add_child(well)
 
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	# The page's ONLY EXPAND_FILL region, with a modest floor -- see the budget above.
+	scroll.follow_focus = true
+	# Modest floor -- see the class budget.
 	scroll.custom_minimum_size = Vector2(0.0, 180.0)
-	list_card.add_child(scroll)
+	well.add_child(scroll)
+
+	var pad := MarginContainer.new()
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for side in ["left", "top", "bottom"]:
+		pad.add_theme_constant_override("margin_" + side, 4)
+	pad.add_theme_constant_override("margin_right", 14)  # focus glow + scrollbar
+	scroll.add_child(pad)
 
 	_list_box = VBoxContainer.new()
 	_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_list_box.add_theme_constant_override("separation", 8)
-	scroll.add_child(_list_box)
+	_list_box.add_theme_constant_override("separation", MenuTheme.SP_S)
+	pad.add_child(_list_box)
 
-	var actions := HBoxContainer.new()
-	actions.alignment = BoxContainer.ALIGNMENT_CENTER
-	actions.add_theme_constant_override("separation", 18)
-	page.add_child(actions)
+	# Inline notice: every watch failure and every delete result lands here, in the footer
+	# beside the key hints, so the page never reflows when a message appears or clears.
+	page.hints.add_child(MenuKit.key_hint("Esc", "B", "Back"))
+	_notice = MenuKit.label("", &"DimLabel")
+	_notice.name = "NoticeLabel"
+	_notice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_notice.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_notice.clip_text = true
+	_notice.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_notice.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
+	page.hints.add_child(_notice)
 
-	var back := Button.new()
-	back.text = "Back"
-	back.custom_minimum_size = Vector2(180.0, 48.0)
-	back.pressed.connect(_on_back_pressed)
-	actions.add_child(back)
+	_back_btn = MenuKit.button("Back", MenuKit.GHOST, 140)
+	_back_btn.name = "BackButton"
+	_back_btn.pressed.connect(_on_back_pressed)
+	page.actions.add_child(_back_btn)
 
-	var bases := Button.new()
-	bases.text = "My Bases"
-	bases.custom_minimum_size = Vector2(200.0, 48.0)
+	var bases := MenuKit.button("My Bases", &"", 180)
+	bases.name = "MyBasesButton"
 	var bases_available: bool = ResourceLoader.exists(MY_BASES_SCENE)
 	bases.disabled = not bases_available
 	bases.tooltip_text = "Your published challenges and how their defenses are holding." \
 		if bases_available else "The base screen is not available in this build."
 	bases.pressed.connect(_on_my_bases_pressed)
-	actions.add_child(bases)
-
-	var hint := Label.new()
-	hint.text = "Watch a recording  •  Delete asks twice  •  ESC back"
-	page.add_child(hint)
-	MenuTheme.style_caption(hint)
+	page.actions.add_child(bases)
 
 
 # --- Loading ----------------------------------------------------------------
@@ -259,11 +244,8 @@ func _render() -> void:
 	_delete_buttons.clear()
 
 	if _rows.is_empty():
-		var empty := Label.new()
-		empty.text = ReplayWatch.NO_RECORDINGS
-		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var empty := MenuKit.label(ReplayWatch.NO_RECORDINGS, &"DimLabel", true)
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		MenuTheme.style_subtitle(empty)
 		_list_box.add_child(empty)
 		return
 
@@ -275,12 +257,24 @@ func _render() -> void:
 func _make_row(index: int, row: Dictionary) -> Control:
 	var watchable: bool = bool(row.get("watchable", false))
 
+	# A grove card per recording: a gold edge when it can be watched, the sunk frame when
+	# this build cannot read or re-simulate it.
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel",
-		MenuTheme.card_box(MenuTheme.GOLD if watchable else MenuTheme.BORDER))
+	var sb: OrnateStyleBox
+	if watchable:
+		sb = MenuTheme.accented_card(MenuTheme.GOLD)
+	else:
+		sb = MenuTheme.card_box(MenuTheme.PANEL_SUNK, MenuTheme.BORDER_SOFT)
+		sb.ornament_color = Color(MenuTheme.GOLD_DK, 0.4)
+		sb.inner_line_color = Color(MenuTheme.GOLD, 0.12)
+	sb.content_margin_left = 18.0
+	sb.content_margin_right = 16.0
+	sb.content_margin_top = 12.0
+	sb.content_margin_bottom = 12.0
+	panel.add_theme_stylebox_override("panel", sb)
 
 	var box := HBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
+	box.add_theme_constant_override("separation", MenuTheme.SP_M)
 	panel.add_child(box)
 
 	var col := VBoxContainer.new()
@@ -289,27 +283,22 @@ func _make_row(index: int, row: Dictionary) -> Control:
 	col.add_theme_constant_override("separation", 2)
 	box.add_child(col)
 
-	var head := Label.new()
-	head.text = String(row.get("filename", ""))
+	var head := MenuKit.label(String(row.get("filename", "")), &"SubheadingLabel")
+	head.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
 	# A filename is arbitrary length (it carries the map name); it ellipsises rather than
 	# pushing the two buttons off the right edge.
 	head.clip_text = true
 	head.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	head.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
 	col.add_child(head)
 
-	var meta := Label.new()
-	meta.text = String(row.get("text", ""))
+	var meta := MenuKit.label(String(row.get("text", "")), &"DimLabel" if watchable else &"MutedLabel")
 	meta.clip_text = true
 	meta.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	meta.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	meta.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	meta.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	col.add_child(meta)
 
-	var watch := Button.new()
-	watch.text = "Watch"
-	# Explicit minimum: a chip-sized button with no floor collapses to its text width.
-	watch.custom_minimum_size = Vector2(110.0, 36.0)
+	# Explicit minimums: a chip-sized button with no floor collapses to its text width.
+	var watch := MenuKit.button("Watch", &"", 130, 44)
 	watch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	watch.disabled = not watchable
 	watch.tooltip_text = "Re-watch this battle." if watchable else String(row.get("reason", ""))
@@ -317,9 +306,12 @@ func _make_row(index: int, row: Dictionary) -> Control:
 	box.add_child(watch)
 	_watch_buttons.append(watch)
 
-	var del := Button.new()
-	del.text = DELETE_ARMED_TEXT if _armed == index else "Delete"
-	del.custom_minimum_size = Vector2(120.0, 36.0)
+	# Delete is the quiet ghost action; once ARMED it reads in the danger colour.
+	var del := MenuKit.button(DELETE_ARMED_TEXT if _armed == index else "Delete", MenuKit.GHOST, 140, 44)
+	if _armed == index:
+		del.add_theme_color_override("font_color", MenuTheme.DANGER)
+		del.add_theme_color_override("font_hover_color", MenuTheme.DANGER)
+		del.add_theme_color_override("font_focus_color", MenuTheme.DANGER)
 	del.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	del.tooltip_text = "Press again to delete this recording for good." if _armed == index \
 		else "Delete this recording."
@@ -368,6 +360,9 @@ func row_delete(index: int) -> void:
 		_set_notice("Delete '%s'? Press Confirm to remove it for good." % String(
 			(_rows[index] as Dictionary).get("filename", "")))
 		_render()
+		# The repaint rebuilt the row under the cursor: keep keyboard / pad focus on the
+		# (now armed) button so the confirming press is one Confirm away.
+		_focus_delete(index)
 		return
 
 	var row: Dictionary = _rows[index]
@@ -378,11 +373,20 @@ func row_delete(index: int) -> void:
 	else:
 		_set_notice("'%s' could not be deleted." % filename)
 	refresh()
+	_focus_delete(index)
 
 
 func _set_notice(text: String) -> void:
 	if _notice != null:
 		_notice.text = text
+
+
+## Focus row [param index]'s Delete button (clamped), else Back -- after a repaint.
+func _focus_delete(index: int) -> void:
+	if _delete_buttons.is_empty():
+		_focus_later(_back_btn)
+		return
+	_focus_later(_delete_buttons[clampi(index, 0, _delete_buttons.size() - 1)])
 
 
 # --- Read-back seams --------------------------------------------------------
@@ -429,32 +433,38 @@ func _on_my_bases_pressed() -> void:
 	if not ResourceLoader.exists(MY_BASES_SCENE):
 		_set_notice("The base screen is not available in this build.")
 		return
-	get_tree().change_scene_to_file(MY_BASES_SCENE)
+	MenuNav.change_scene(self, MY_BASES_SCENE)
 
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file(CHALLENGE_BROWSE_SCENE)
+	MenuNav.change_scene(self, CHALLENGE_BROWSE_SCENE)
 
 
-func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
+## Up / Down between the buttons is the engine's focus navigation (arrows, D-pad, stick).
+func _unhandled_input(event: InputEvent) -> void:
+	if not MenuNav.is_back_event(event):
 		return
-	if event is InputEventKey:
-		match (event as InputEventKey).keycode:
-			KEY_ESCAPE:
-				# ESC disarms a pending delete first -- the same "dismiss before leave" rule
-				# the overlays on [MyBases] follow.
-				if _armed >= 0:
-					_armed = -1
-					_set_notice("")
-					_render()
-					return
-				_on_back_pressed()
-			KEY_DOWN:
-				var next := find_next_valid_focus()
-				if next != null:
-					next.grab_focus()
-			KEY_UP:
-				var prev := find_prev_valid_focus()
-				if prev != null:
-					prev.grab_focus()
+	get_viewport().set_input_as_handled()
+	# Cancel disarms a pending delete first -- the same "dismiss before leave" rule the
+	# overlays on [MyBases] follow.
+	if _armed >= 0:
+		var was: int = _armed
+		_armed = -1
+		_set_notice("")
+		_render()
+		_focus_delete(was)
+		return
+	_on_back_pressed()
+
+
+## [MenuNav.focus_deferred], but safe when the control leaves the tree first (a repaint
+## rebuilt it, or the screen closed) -- grab_focus() on a detached control is an engine error.
+func _focus_later(c: Control) -> void:
+	if c == null:
+		return
+	# Captured by instance id, not by reference: a freed capture is itself an engine error.
+	var id: int = c.get_instance_id()
+	(func() -> void:
+		var ctl := instance_from_id(id) as Control
+		if ctl != null and ctl.is_inside_tree() and ctl.is_visible_in_tree():
+			ctl.grab_focus()).call_deferred()

@@ -34,16 +34,19 @@ class MockNetSession extends Node:
 
 	func is_connected_session() -> bool:
 		return live
+	func is_host() -> bool:
+		return server
 	func is_server() -> bool:
 		return server
+	## A player-hosted session (the dedicated-server flow is covered by test_net_lobby_ui).
+	func is_dedicated_server() -> bool:
+		return false
 	func player_count() -> int:
 		return players
 	func local_slot() -> int:
 		return slot
 	func send_lobby_message(message_type: String, data: Dictionary) -> void:
 		sent.append({ "type": message_type, "data": data })
-	func begin_match_rng_handshake() -> void:
-		pass
 	## Deliver a message as if the server relayed it from the participant in [param from_slot].
 	func deliver(message_type: String, data: Dictionary, from_slot: int) -> void:
 		lobby_message.emit(message_type, data, from_slot)

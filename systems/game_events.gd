@@ -2,6 +2,11 @@ extends Node
 
 # Centralized event bus for game-wide communication
 # This singleton manages all game events to reduce coupling between systems
+#
+# Cell-carrying signals below (unit_moved, cursor_moved, movement_range_calculated,
+# attack_range_calculated, aoe_preview_calculated, ...) pass GRID coords
+# Vector3(col, FLOOR, row) -- y is the floor index (0 = ground), not a world height.
+# Convert with Cells.from_grid() / Cells.to_grid() (game/board/Cells.gd).
 
 signal unit_selected(unit: Unit, position: Vector3)
 signal unit_deselected(unit: Unit)
@@ -131,6 +136,43 @@ signal command_committed(cmd, actor_slot)
 signal status_applied(unit, condition)
 signal status_ticked(unit, condition, events)
 signal status_expired(unit, condition)
+# Fire-Emblem board readouts. APPENDED, never reordered. Cells are grid coords
+# Vector3(col, floor, row) like the other overlay signals.
+#
+# attack_fringe_calculated : red cells a selected/inspected unit could ATTACK but
+#                            not move to, drawn around its blue movement range.
+#                            Cleared with movement_range_cleared / a recalculation.
+# path_preview_updated     : the route [origin .. hovered cell] the selected unit
+#                            would walk; [] hides the path arrow.
+# danger_zone_changed      : the combined enemy threat overlay was toggled/refreshed
+#                            (active, number of cells) -- for HUD hints.
+signal attack_fringe_calculated(cells: Array)
+signal path_preview_updated(cells: Array)
+signal danger_zone_changed(active: bool, cell_count: int)
+
+## Multi-floor VIEW FLOOR (APPENDED). The board cursor owns it: floors above
+## `view_floor` are cut away (faded) so units under a bridge / inside a castle are
+## visible. `cut_floor` is the floor actually cut to (it can sit BELOW view_floor
+## when the cursor or the selected unit is under a deck -- the auto cutaway);
+## `floor_count` is the board's floor total (1 on a classic flat map).
+signal view_floor_changed(view_floor: int, cut_floor: int, floor_count: int)
+
+## A move RESOLVED from [param origin_cell] at [param aim_cell] (both Vector3i board
+## cells), hitting [param targets] (the units standing in its area when it was cast,
+## caster excluded). APPENDED. Fired by Unit.perform_move just before move_performed,
+## on every path (player, AI, network apply). Presentation only -- FacingController
+## turns the caster toward the aim and the targets toward the caster. Untyped for
+## the same reason as the hazard / control signals above.
+signal move_aimed(caster, move, origin_cell, aim_cell, targets)
+
+## FLOATING COMBAT TEXT annotation (APPENDED). Emitted by every HP-changing source
+## (DamageEffect, HealEffect, PercentHealthLossEffect, TravelingHazard, lifesteal)
+## JUST BEFORE it changes the unit's HP, describing why: crit, effectiveness, the
+## source name ("Fire", "Poisoned", a weather rule), or a miss. Presentation only
+## (FloatingCombatText pairs it with the unit's next health_changed; BattleLog names
+## non-attack sources). See game/combat/CombatText.gd for the info keys. Untyped
+## like the hazard/control signals so mocks can ride it.
+signal combat_text_annotated(unit, info)
 
 func _ready() -> void:
 	# Make this a singleton

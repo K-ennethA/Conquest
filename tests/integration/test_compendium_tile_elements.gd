@@ -55,7 +55,7 @@ func after_each() -> void:
 ## keeps the suite from spinning up the galleries it has no business exercising.
 func _open_tiles() -> TileGallery:
 	var screen: Compendium = COMPENDIUM.instantiate()
-	screen._current_section = Compendium.SECTION_TILES
+	screen.start_section = Compendium.SECTION_TILES
 	add_child_autofree(screen)
 	for i in range(10):
 		await get_tree().process_frame

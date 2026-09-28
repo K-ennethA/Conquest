@@ -23,14 +23,14 @@ class MockUnit:
 
 class MockBoard:
 	var placements: Array = []  # { unit, cell }
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -55,9 +55,9 @@ func test_bot_picks_higher_damage_target():
 	var enemy_soft := MockUnit.new(1, { "health": 100, "defense": 0 })
 	var enemy_tank := MockUnit.new(1, { "health": 100, "defense": 20 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy_soft, Vector2i(1, 0))   # range 1
-	board.place(enemy_tank, Vector2i(0, 1))   # range 1
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy_soft, Vector3i(1, 0, 0))   # range 1
+	board.place(enemy_tank, Vector3i(0, 1, 0))   # range 1
 	var bot := BotController.new()
 	var decision := bot.decide(actor, [MoveLibrary.basic_strike()], board)
 	assert_eq(decision["action"], BotController.ActionType.MOVE, "chooses to attack")
@@ -69,19 +69,19 @@ func test_bot_steps_toward_nearest_enemy_when_out_of_range():
 	var actor := MockUnit.new(0, { "attack": 10 })
 	var enemy := MockUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(5, 0))  # range 5, strike only reaches 1
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(5, 0, 0))  # range 5, strike only reaches 1
 	var bot := BotController.new()
 	var decision := bot.decide(actor, [MoveLibrary.basic_strike()], board)
 	assert_eq(decision["action"], BotController.ActionType.STEP, "advances when nothing in range")
-	assert_eq(decision["step_to"], Vector2i(1, 0), "steps one cell toward the enemy")
+	assert_eq(decision["step_to"], Vector3i(1, 0, 0), "steps one cell toward the enemy")
 
 func test_bot_waits_when_no_hostiles():
 	var actor := MockUnit.new(0, { "attack": 10 })
 	var ally := MockUnit.new(0, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(ally, Vector2i(1, 0))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(ally, Vector3i(1, 0, 0))
 	var bot := BotController.new()
 	var decision := bot.decide(actor, [MoveLibrary.basic_strike()], board)
 	assert_eq(decision["action"], BotController.ActionType.WAIT, "no enemies -> wait")
@@ -95,9 +95,9 @@ func test_boss_treats_both_factions_as_targets():
 	var same_team := MockUnit.new(0, { "health": 100, "defense": 0 })   # soft
 	var other_team := MockUnit.new(1, { "health": 100, "defense": 30 }) # tanky
 	var board := MockBoard.new()
-	board.place(boss, Vector2i(0, 0))
-	board.place(same_team, Vector2i(1, 0))
-	board.place(other_team, Vector2i(0, 1))
+	board.place(boss, Vector3i(0, 0, 0))
+	board.place(same_team, Vector3i(1, 0, 0))
+	board.place(other_team, Vector3i(0, 1, 0))
 
 	var boss_ai := BossController.new()
 	assert_eq(boss_ai._list_hostiles(boss, board).size(), 2, "boss sees both factions as hostile")
@@ -144,8 +144,8 @@ func test_boss_unlocks_special_move_in_later_phase():
 	boss.hp = 40  # 40% -> phase 1
 	var enemy := MockUnit.new(1, { "health": 100, "defense": 0 }, false)
 	var board := MockBoard.new()
-	board.place(boss, Vector2i(0, 0))
-	board.place(enemy, Vector2i(3, 0))  # out of strike range (1), in flame range (3)
+	board.place(boss, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(3, 0, 0))  # out of strike range (1), in flame range (3)
 
 	var decision := boss_ai.decide(boss, [MoveLibrary.basic_strike()], board)
 	assert_eq(boss_ai.current_phase, 1, "boss entered phase 1")
@@ -162,9 +162,9 @@ func test_hard_secures_a_kill_over_a_bigger_hit():
 	var full := MockUnit.new(1, { "health": 100, "defense": 0 })  # est 34, survives
 	var weak := MockUnit.new(1, { "health": 20, "defense": 0 })   # est 34 >= 20, lethal
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(full, Vector2i(1, 0))
-	board.place(weak, Vector2i(0, 1))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(full, Vector3i(1, 0, 0))
+	board.place(weak, Vector3i(0, 1, 0))
 	var strike = MoveLibrary.basic_strike()
 
 	var normal := BotController.new()  # default NORMAL
@@ -181,9 +181,9 @@ func test_brutal_focus_fires_the_weakest_enemy():
 	var tanky := MockUnit.new(1, { "health": 100, "defense": 0 })  # est 34, biggest hit
 	var weak := MockUnit.new(1, { "health": 50, "defense": 20 })   # est 14, lowest HP
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(tanky, Vector2i(1, 0))
-	board.place(weak, Vector2i(0, 1))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(tanky, Vector3i(1, 0, 0))
+	board.place(weak, Vector3i(0, 1, 0))
 	var strike = MoveLibrary.basic_strike()
 
 	var normal := BotController.new()
@@ -199,8 +199,8 @@ func test_easy_squanders_openings_that_normal_always_takes():
 	var actor := MockUnit.new(0, { "attack": 10 })
 	var enemy := MockUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(1, 0, 0))
 	var strike = MoveLibrary.basic_strike()
 
 	var normal_non_attacks := 0
@@ -224,8 +224,8 @@ func test_easy_is_reproducible_for_a_fixed_seed():
 	var actor := MockUnit.new(0, { "attack": 10 })
 	var enemy := MockUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(1, 0, 0))
 	var strike = MoveLibrary.basic_strike()
 
 	var a := BotController.new(); a.difficulty = BotController.Difficulty.EASY

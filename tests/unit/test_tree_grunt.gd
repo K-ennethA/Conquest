@@ -40,14 +40,14 @@ class _NoMaxUnit:
 
 class MockBoard:
 	var placements: Array = []  # { unit, cell }
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -57,9 +57,9 @@ class MockBoard:
 		return a.team != b.team
 	func are_allies(a, b) -> bool:
 		return a.team == b.team
-	func set_tile(_cell: Vector2i, _tile_id) -> void:
+	func set_tile(_cell: Vector3i, _tile_id) -> void:
 		pass
-	func move_unit(unit, to_cell: Vector2i) -> void:
+	func move_unit(unit, to_cell: Vector3i) -> void:
 		for p in placements:
 			if p.unit == unit:
 				p.cell = to_cell
@@ -81,7 +81,7 @@ func _any_unit_move() -> MoveResource:
 	return move
 
 ## Apply [param effect] to every unit standing on [param cells].
-func _apply_heal(effect: HealEffect, board, caster, cells: Array[Vector2i]) -> Array:
+func _apply_heal(effect: HealEffect, board, caster, cells: Array[Vector3i]) -> Array:
 	var ctx := MoveContext.new(caster, board, _any_unit_move(), cells[0], cells)
 	effect.apply(ctx)
 	return ctx.results
@@ -101,24 +101,24 @@ func test_percent_heals_ten_percent_of_target_max_health():
 	var unit := MockUnit.new(0, { "health": 100 })
 	unit.hp = 50
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
-	_apply_heal(_heal_effect(0, 0.10), board, unit, [Vector2i(0, 0)] as Array[Vector2i])
+	board.place(unit, Vector3i(0, 0, 0))
+	_apply_heal(_heal_effect(0, 0.10), board, unit, [Vector3i(0, 0, 0)] as Array[Vector3i])
 	assert_eq(unit.hp, 60, "10% of a 100 max-health target restores 10")
 
 func test_flat_amount_still_heals_on_its_own():
 	var unit := MockUnit.new(0, { "health": 100 })
 	unit.hp = 50
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
-	_apply_heal(_heal_effect(24, 0.0), board, unit, [Vector2i(0, 0)] as Array[Vector2i])
+	board.place(unit, Vector3i(0, 0, 0))
+	_apply_heal(_heal_effect(24, 0.0), board, unit, [Vector3i(0, 0, 0)] as Array[Vector3i])
 	assert_eq(unit.hp, 74, "a flat-only heal is unaffected by the new percent term")
 
 func test_flat_and_percent_combine():
 	var unit := MockUnit.new(0, { "health": 100 })
 	unit.hp = 40
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
-	var events := _apply_heal(_heal_effect(5, 0.10), board, unit, [Vector2i(0, 0)] as Array[Vector2i])
+	board.place(unit, Vector3i(0, 0, 0))
+	var events := _apply_heal(_heal_effect(5, 0.10), board, unit, [Vector3i(0, 0, 0)] as Array[Vector3i])
 	assert_eq(unit.hp, 55, "5 flat + 10% of 100 restores 15 in total")
 	assert_eq(events[0].get("amount"), 15, "the logged event reports the combined heal")
 
@@ -126,10 +126,10 @@ func test_zero_percent_leaves_existing_behaviour_unchanged():
 	var unit := MockUnit.new(0, { "health": 200 })
 	unit.hp = 100
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	# Default-constructed HealEffect: percent defaults to 0.0, amount to 20.
 	var plain := HealEffect.new()
-	_apply_heal(plain, board, unit, [Vector2i(0, 0)] as Array[Vector2i])
+	_apply_heal(plain, board, unit, [Vector3i(0, 0, 0)] as Array[Vector3i])
 	assert_eq(unit.hp, 120, "an authored-before-the-change heal restores exactly its flat amount")
 	assert_eq(plain.percent_of_max_health, 0.0, "percent_of_max_health defaults to 0.0")
 
@@ -139,9 +139,9 @@ func test_percent_is_resolved_per_target():
 	big.hp = 10
 	small.hp = 10
 	var board := MockBoard.new()
-	board.place(big, Vector2i(0, 0))
-	board.place(small, Vector2i(1, 0))
-	var cells: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 0)]
+	board.place(big, Vector3i(0, 0, 0))
+	board.place(small, Vector3i(1, 0, 0))
+	var cells: Array[Vector3i] = [Vector3i(0, 0, 0), Vector3i(1, 0, 0)]
 	_apply_heal(_heal_effect(0, 0.10), board, big, cells)
 	assert_eq(big.hp, 20, "the 100 max-health target heals its own 10")
 	assert_eq(small.hp, 16, "the 60 max-health target heals its own 6, not the caster's share")
@@ -150,9 +150,9 @@ func test_percent_skipped_when_target_exposes_no_max_health():
 	var caster := MockUnit.new(0, { "health": 100 })
 	var odd := _NoMaxUnit.new()
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(odd, Vector2i(1, 0))
-	_apply_heal(_heal_effect(3, 0.10), board, caster, [Vector2i(1, 0)] as Array[Vector2i])
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(odd, Vector3i(1, 0, 0))
+	_apply_heal(_heal_effect(3, 0.10), board, caster, [Vector3i(1, 0, 0)] as Array[Vector3i])
 	assert_eq(odd.hp, 13, "unreadable max health drops the percent term, keeping the flat heal")
 
 # --- Authored moves ---------------------------------------------------------
@@ -189,9 +189,9 @@ func test_rooted_buffs_and_heals_the_caster_once_per_cast():
 	var grunt := MockUnit.new(0, { "health": 100 })
 	grunt.hp = 50
 	var board := MockBoard.new()
-	board.place(grunt, Vector2i(2, 2))
+	board.place(grunt, Vector3i(2, 2, 0))
 	var rooted := load("res://game/combat/moves/rooted.tres") as MoveResource
-	var result := MoveExecutor.execute(rooted, grunt, board, Vector2i(2, 2))
+	var result := MoveExecutor.execute(rooted, grunt, board, Vector3i(2, 2, 0))
 	assert_true(result.success, "rooted resolves on the caster's own cell")
 	assert_eq(grunt.modifiers.size(), 2, "both defensive buffs are applied")
 	assert_eq(grunt.hp, 60, "one cast heals 10% of max health exactly once")
@@ -213,7 +213,7 @@ func test_ability_system_heals_its_unit_on_turn_start():
 	var grunt := MockUnit.new(0, { "health": 80 })
 	grunt.hp = 40
 	var board := MockBoard.new()
-	board.place(grunt, Vector2i(3, 1))
+	board.place(grunt, Vector3i(3, 1, 0))
 	var sys: AbilitySystem = autofree(AbilitySystem.new())
 	sys.owner_unit = grunt
 	sys.add_ability(load("res://game/abilities/natures_blessing.tres") as AbilityResource)
@@ -233,7 +233,7 @@ func test_tree_grunt_loads_with_two_moves_and_one_ability():
 	var grunt := _tree_grunt()
 	assert_not_null(grunt, "tree_grunt.tres loads")
 	assert_eq(grunt.character_id, &"tree_grunt", "character_id is preserved")
-	assert_eq(grunt.move_count(), 2, "the grunt carries exactly 2 moves")
+	assert_eq(grunt.move_count(), 3, "Tree Bash, Rooted, Verdant Call")
 	assert_eq(grunt.ability_count(), 1, "the grunt carries exactly 1 ability")
 	assert_eq(grunt.get_move(0).move_id, &"tree_bash", "slot 0 is tree_bash")
 	assert_eq(grunt.get_move(1).move_id, &"rooted", "slot 1 is rooted")

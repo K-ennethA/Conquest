@@ -2,161 +2,114 @@ extends Control
 
 class_name MultiplayerModeSelection
 
-## Multiplayer mode picker, reached from MainMenu's "Versus" button. Offers Local
-## (hot-seat), Local Siege (hot-seat on a lane/base map) and Network (online) as large mode
-## cards -- the same card pattern as [SoloModeSelect] -- then hands off to the matching
-## setup screen. Dark "Legends" menu look via [MenuTheme].
+## Versus mode picker, reached from MainMenu's "Versus" button: Hot-Seat (both players
+## on this device), Siege (hot-seat push mode on a lane/base map) and Network (each
+## player on their own machine). Grove menu look (MenuKit / MenuTheme choice cards);
+## built in code, the .tscn is only the root.
 ##
-## Keyboard: 1 = Local, 2 = Siege, 3 = Network, ESC = back.
+## Hot-Seat and Siege hand off to the unified MatchSetup (map + turn system + squads);
+## Network opens NetworkMultiplayerSetup (host / join, then the collaborative lobby).
 ##
-## 720p: three 300-wide cards + two 20px gaps = 940, inside the 1280 viewport (the page's
-## own 700 minimum is simply out-measured by the row, which is what a CenterContainer is
-## for). Card HEIGHT is untouched, so the page's vertical stack is the same it was.
+## Keyboard: 1 = Hot-Seat, 2 = Siege, 3 = Network, Esc / B = back.
+##
+## LOOK-DEPENDENT: only the page chrome and the three cards (MenuKit.choice_card) --
+## the handlers below are the content and stay as they are under any skin.
 
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 const MATCH_SETUP_SCENE := "res://menus/MatchSetup.tscn"
 const NETWORK_SETUP_SCENE := "res://menus/NetworkMultiplayerSetup.tscn"
 
+var local_multiplayer_button: Button
+var local_siege_button: Button
+var network_multiplayer_button: Button
+var back_button: Button
+
 
 func _ready() -> void:
-	theme = MenuTheme.build()
-	MenuTheme.apply_backdrop(self)
-	_build_ui()
+	var page := MenuKit.build_page(self, ["Versus"], "Play Against a Friend",
+		"Two human commanders. Choose where your opponent is sitting.")
 
-
-func _build_ui() -> void:
 	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.body.add_child(center)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", MenuTheme.SP_L)
+	center.add_child(row)
 
-	var page := VBoxContainer.new()
-	page.custom_minimum_size = Vector2(700.0, 0.0)
-	page.add_theme_constant_override("separation", 16)
-	center.add_child(page)
+	# 720p: three 360-wide cards + two SP_L gaps fit the page body with room to spare.
+	var card_size := Vector2(360, 320)
+	local_multiplayer_button = MenuKit.choice_card("Hot-Seat", "Same device",
+		"Both players share this computer and take turns at the controls. No setup needed -- just pass the keyboard or controller.",
+		["2 players, 1 device", "Pick map, turn system and squads next"],
+		MenuTheme.GOLD, null, card_size)
+	local_multiplayer_button.name = "LocalMultiplayerButton"
+	local_multiplayer_button.pressed.connect(_on_local_multiplayer_pressed)
+	row.add_child(local_multiplayer_button)
 
-	var title := Label.new()
-	title.text = "VERSUS"
-	page.add_child(title)
-	MenuTheme.style_title(title, 40)
+	local_siege_button = MenuKit.choice_card("Siege", "Same device, push mode",
+		"Hot-seat on a lane map: creeps march, towers hold, and each side tries to break the other's base.",
+		["2 players, 1 device", "Lane / base map preselected"],
+		MenuTheme.TEAM_RED, null, card_size)
+	local_siege_button.name = "LocalSiegeButton"
+	local_siege_button.pressed.connect(_on_local_siege_pressed)
+	row.add_child(local_siege_button)
 
-	var subtitle := Label.new()
-	subtitle.text = "Choose how you want to face an opponent"
-	page.add_child(subtitle)
-	MenuTheme.style_subtitle(subtitle)
+	network_multiplayer_button = MenuKit.choice_card("Network", "LAN or internet",
+		"Each player runs their own copy of Conquest. One player hosts a lobby (or both join a dedicated server); the other joins by address and port.",
+		["2 players, 2 devices", "Vote on the map, bring your squad"],
+		MenuTheme.ACCENT, null, card_size)
+	network_multiplayer_button.name = "NetworkMultiplayerButton"
+	network_multiplayer_button.pressed.connect(_on_network_multiplayer_pressed)
+	row.add_child(network_multiplayer_button)
 
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0.0, 20.0)
-	page.add_child(spacer)
+	back_button = MenuKit.button("Back", MenuKit.GHOST, 140)
+	back_button.name = "BackButton"
+	back_button.pressed.connect(_on_back_pressed)
+	page.actions.add_child(back_button)
 
-	var cards := HBoxContainer.new()
-	cards.alignment = BoxContainer.ALIGNMENT_CENTER
-	cards.add_theme_constant_override("separation", 20)
-	page.add_child(cards)
-
-	cards.add_child(_make_mode_card(
-		"1.  Local",
-		"Hot-seat on the same device --\nplayers take turns sharing a screen.",
-		_on_local_multiplayer_pressed))
-	cards.add_child(_make_mode_card(
-		"2.  Siege",
-		"Hot-seat push mode -- lanes,\ncreeps, and each other's base.",
-		_on_local_siege_pressed))
-	cards.add_child(_make_mode_card(
-		"3.  Network",
-		"Play online over the internet\nor a local network.",
-		_on_network_multiplayer_pressed))
-
-	var footspace := Control.new()
-	footspace.custom_minimum_size = Vector2(0.0, 10.0)
-	page.add_child(footspace)
-
-	var back := Button.new()
-	back.text = "Back"
-	back.custom_minimum_size = Vector2(0.0, 48.0)
-	back.pressed.connect(_on_back_pressed)
-	page.add_child(back)
-
-	var hint := Label.new()
+	MenuKit.add_standard_hints(page.hints, "Choose")
+	var hint := MenuKit.label("1 Hot-Seat  •  2 Siege  •  3 Network  •  Esc back", &"MutedLabel")
 	hint.name = "KeyHint"
-	hint.text = "1 Local  •  2 Siege  •  3 Network  •  ESC back"
-	page.add_child(hint)
-	MenuTheme.style_caption(hint)
+	page.hints.add_child(hint)
 
-
-## A tall, clickable mode card: a big gold heading over a dim description line
-## (same shape as [method SoloModeSelect._make_mode_card]).
-func _make_mode_card(heading: String, blurb: String, callback: Callable) -> Button:
-	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(300.0, 200.0)
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.pressed.connect(callback)
-
-	var col := VBoxContainer.new()
-	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_theme_constant_override("separation", 10)
-
-	var head := Label.new()
-	head.text = heading
-	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	head.add_theme_font_size_override("font_size", 26)
-	head.add_theme_color_override("font_color", MenuTheme.GOLD)
-	col.add_child(head)
-
-	var desc := Label.new()
-	desc.text = blurb
-	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	desc.add_theme_font_size_override("font_size", 15)
-	desc.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
-	col.add_child(desc)
-
-	btn.add_child(col)
-	return btn
+	MenuNav.focus_deferred(local_multiplayer_button)
 
 
 func _on_local_multiplayer_pressed() -> void:
-	"""Handle Local Multiplayer card press."""
 	GameSettings.set_game_mode(GameSettings.GameMode.VERSUS)
-	GameSettings.set_player_count(2)  # Default to 2 players for local
-
-	# Go to the unified Match Setup (local hot-seat variant: map + turn system).
+	GameSettings.set_player_count(2)  # hot-seat is always two players
+	# The unified Match Setup (local hot-seat variant: map + turn system + squads).
 	MatchSetup.requested_mode = MatchConfigPanel.MODE_LOCAL
-	get_tree().change_scene_to_file(MATCH_SETUP_SCENE)
+	MenuNav.change_scene(self, MATCH_SETUP_SCENE)
 
 
+## Local hot-seat SIEGE. Same plumbing as Hot-Seat -- two players on one box -- with the
+## siege variant of the setup screen, which preselects the lane/base map.
 func _on_local_siege_pressed() -> void:
-	"""Local hot-seat SIEGE. Identical plumbing to the Local card -- two players on one box,
-	map + turn system -- with the siege variant of the setup screen, which preselects the
-	lane/base map when the catalog lists one."""
 	GameSettings.set_game_mode(GameSettings.GameMode.VERSUS)
 	GameSettings.set_player_count(2)
-
 	MatchSetup.requested_mode = MatchConfigPanel.MODE_SIEGE_LOCAL
-	get_tree().change_scene_to_file(MATCH_SETUP_SCENE)
+	MenuNav.change_scene(self, MATCH_SETUP_SCENE)
 
 
 func _on_network_multiplayer_pressed() -> void:
-	"""Handle Network Multiplayer card press."""
-	get_tree().change_scene_to_file(NETWORK_SETUP_SCENE)
+	MenuNav.change_scene(self, NETWORK_SETUP_SCENE)
 
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+	MenuNav.change_scene(self, MAIN_MENU_SCENE)
 
 
-func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
+func _unhandled_input(event: InputEvent) -> void:
+	if MenuNav.is_back_event(event):
+		get_viewport().set_input_as_handled()
+		_on_back_pressed()
 		return
-	if event is InputEventKey:
-		match event.keycode:
+	if event is InputEventKey and event.pressed and not event.echo:
+		match (event as InputEventKey).keycode:
 			KEY_1:
 				_on_local_multiplayer_pressed()
 			KEY_2:
 				_on_local_siege_pressed()
 			KEY_3:
 				_on_network_multiplayer_pressed()
-			KEY_ESCAPE:
-				_on_back_pressed()

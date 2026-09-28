@@ -48,14 +48,15 @@ func after_each() -> void:
 
 ## Boot the real Compendium with the Elements section open.
 ##
-## The section index is pointed BEFORE _ready. That is not a shortcut around the nav:
-## the shell hosts its sections lazily and builds whichever one opens first, so this
-## is the shell's own code path -- and it means this suite does not spin up the three
-## 3D gallery SubViewports it has no business exercising. The nav BUTTON is driven for
-## real in `test_the_nav_button_switches_to_the_section`.
+## The section index is pointed BEFORE _ready (Compendium.start_section -- the same seam
+## the in-battle overlay opens through). That is not a shortcut around the nav: the
+## shell hosts its sections lazily and builds whichever one opens first, so this is the
+## shell's own code path -- and it means this suite does not spin up the three 3D
+## gallery SubViewports it has no business exercising. The TAB is driven for real in
+## `test_the_tab_switches_to_the_section`.
 func _open_compendium() -> Compendium:
 	var screen: Compendium = COMPENDIUM.instantiate()
-	screen._current_section = Compendium.SECTION_ELEMENTS
+	screen.start_section = Compendium.SECTION_ELEMENTS
 	add_child_autofree(screen)
 	for i in range(8):
 		await get_tree().process_frame
@@ -116,25 +117,29 @@ func _count_prefixed(parent: Node, prefix: String) -> int:
 
 
 # ==============================================================================
-# 1. Sidebar registration
+# 1. Tab registration
 # ==============================================================================
+#
+# The Compendium's navigation is the grove tab strip (the illuminated-grove MenuKit
+# page) -- the local sidebar rail's jobs moved onto it: one entry per section, a live
+# count for each (now the tab's tooltip), and a >=44px touch target.
 
-func test_the_sidebar_registers_an_elements_section() -> void:
+func test_the_tab_strip_registers_an_elements_section() -> void:
 	var screen: Compendium = await _open_compendium()
-
-	var nav := screen.find_child("Nav_Elements", true, false) as Button
-	assert_not_null(nav, "the nav rail carries an Elements entry, like every other section")
-	if nav == null:
+	var tabs: TabContainer = screen.tab_container
+	assert_not_null(tabs, "the Compendium navigates by its section tabs")
+	if tabs == null:
 		return
-	assert_eq(nav.text, "Elements", "named for what it browses")
-	assert_true(nav.size.y >= 44.0,
-			"and keeps the rail's >=44px touch target (%.0f)" % nav.size.y)
+	assert_eq(tabs.get_tab_title(Compendium.SECTION_ELEMENTS), "Elements",
+			"the tab strip carries an Elements entry, like every other section")
+	assert_eq(tabs.current_tab, Compendium.SECTION_ELEMENTS, "and it is the one on screen")
 
-	var badge := nav.get_node_or_null("Badge") as Label
-	assert_not_null(badge, "with a count badge, like the other entries")
-	if badge != null:
-		assert_eq(badge.text, str(ElementChartGallery.elements().size()),
-				"counting the elements the CHART authors -- not a number typed into the shell")
+	var bar: TabBar = tabs.get_tab_bar()
+	assert_true(bar.size.y >= 44.0,
+			"the tabs keep a >=44px touch target (%.0f)" % bar.size.y)
+	assert_eq(bar.get_tab_tooltip(Compendium.SECTION_ELEMENTS),
+			"%d elements" % ElementChartGallery.elements().size(),
+			"with a live count, read off the CHART -- not a number typed into the shell")
 
 
 func test_the_section_mounts_the_real_gallery_scene() -> void:
@@ -145,14 +150,14 @@ func test_the_section_mounts_the_real_gallery_scene() -> void:
 			+ "the way the Unit / Tile / Map galleries are")
 	if gallery == null:
 		return
-	assert_true(gallery.visible, "and it is the section on screen")
+	assert_true(gallery.is_visible_in_tree(), "and it is the section on screen")
 	assert_not_null(gallery.back_button, "it honours the hosted-gallery back_button contract")
 	if gallery.back_button != null:
 		assert_false(gallery.back_button.visible,
-				"which the shell hides, because the rail supplies the one back control")
+				"which the shell hides, because the page footer supplies the one back control")
 
 
-func test_the_nav_button_switches_to_the_section() -> void:
+func test_the_tab_switches_to_the_section() -> void:
 	var screen: Compendium = await _open_compendium()
 	var elements_host := screen.find_child("Elements", true, false) as Control
 	var statuses_host := screen.find_child("Statuses", true, false) as Control
@@ -161,15 +166,28 @@ func test_the_nav_button_switches_to_the_section() -> void:
 	if elements_host == null or statuses_host == null:
 		return
 
-	(screen.find_child("Nav_Statuses", true, false) as Button).pressed.emit()
+	screen.tab_container.current_tab = Compendium.SECTION_STATUSES
 	await get_tree().process_frame
-	assert_false(elements_host.visible, "pressing another entry hides the Elements page")
+	assert_false(elements_host.visible, "switching to another tab hides the Elements page")
 
-	(screen.find_child("Nav_Elements", true, false) as Button).pressed.emit()
+	screen.tab_container.current_tab = Compendium.SECTION_ELEMENTS
 	for i in range(4):
 		await get_tree().process_frame
-	assert_true(elements_host.visible, "and pressing Elements brings it back")
+	assert_true(elements_host.visible, "and switching back brings it back")
 	assert_false(statuses_host.visible, "with exactly one section on screen")
+
+
+func test_a_cross_link_opens_the_chart_on_that_element() -> void:
+	# The Rules tab and every unit / tile-effect entry link here with elements:<id>.
+	var screen: Compendium = await _open_compendium()
+	screen.tab_container.current_tab = Compendium.SECTION_RULES
+	await get_tree().process_frame
+	assert_true(screen.follow_link("elements:fire"), "an element link resolves")
+	assert_eq(screen.tab_container.current_tab, Compendium.SECTION_ELEMENTS,
+			"and lands on the Elements tab")
+	assert_true(screen.follow_link("elements:"), "a bare link just opens the chart")
+	assert_false(screen.follow_link("elements:nonesuch"),
+			"an element the chart does not know has no card to show")
 
 
 # ==============================================================================
@@ -216,10 +234,12 @@ func test_the_headers_are_element_badges_drawn_wide_enough_to_read() -> void:
 		assert_true(row_head.visible, "and it is on screen")
 		_assert_reads(row_head.get_node_or_null(ElementVisuals.BADGE_LABEL_NAME) as Label,
 				"the nature row header")
-		var box := row_head.get_theme_stylebox("panel") as StyleBoxFlat
+		# The chip is a grove plate (OrnateStyleBox) now, not a StyleBoxFlat -- both
+		# expose border_color, which is the property this pins.
+		var box := row_head.get_theme_stylebox("panel")
 		assert_not_null(box, "the badge is painted with its own chip stylebox")
 		if box != null:
-			assert_eq(box.border_color, ConquestTheme.element_color("nature"),
+			assert_eq(box.get("border_color"), ConquestTheme.element_color("nature"),
 					"framed in the ONE element palette, same hue a nature move's stripe uses")
 
 	# THE COLUMN header is deliberately capped to the cell width, so that a long

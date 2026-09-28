@@ -174,9 +174,12 @@ func effective_max_range(caster = null) -> int:
 ##
 ## [param caster] is optional and trailing: omitted, this resolves exactly as it
 ## always has (no bonus). Pass the acting unit to honour its range bonus.
-func can_aim_at(origin: Vector2i, aim: Vector2i, caster = null) -> bool:
+##
+## [param board] is optional too: with one, a MELEE move also reaches the far end of
+## a link (stairs) -- see [method TargetingPattern.in_reach]. Cells are Vector3i.
+func can_aim_at(origin: Vector3i, aim: Vector3i, caster = null, board = null) -> bool:
 	var pattern := targeting_for(caster)
-	return pattern != null and pattern.in_range(origin, aim, range_bonus_of(caster))
+	return pattern != null and pattern.in_reach(origin, aim, board, range_bonus_of(caster))
 
 
 ## The FULL legality test: [method can_aim_at]'s range answer PLUS the pattern's
@@ -188,7 +191,7 @@ func can_aim_at(origin: Vector2i, aim: Vector2i, caster = null) -> bool:
 ## reach?" is pure geometry and drives range previews, while THIS is "may the move
 ## actually be used here?" and is what [MoveExecutor] validates with. A null board,
 ## or a pattern declaring no board constraints, makes the two identical.
-func can_target(origin: Vector2i, aim: Vector2i, caster = null, board = null) -> bool:
+func can_target(origin: Vector3i, aim: Vector3i, caster = null, board = null) -> bool:
 	var pattern := targeting_for(caster)
 	if pattern == null:
 		return false

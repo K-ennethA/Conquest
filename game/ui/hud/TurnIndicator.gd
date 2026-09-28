@@ -2,7 +2,17 @@ extends Control
 
 class_name TurnIndicator
 
-# Prominent UI element showing whose turn it is and turn transitions
+# The persistent PHASE BANNER at the top-centre of the battle HUD (Fire Emblem's
+# "PLAYER PHASE / ENEMY PHASE"): a swallow-tailed heraldic ribbon edged in the acting
+# side's team colour with a gold crest, the phase title in Cinzel, and ONE compact
+# info row underneath -- "Round N - X of M units left to act" (live, see
+# count_act_progress) followed by any compact chips the HUD mounts inline via
+# [method attach_objective] (today the WeatherChip). The map objective itself is the
+# ObjectiveBanner row directly under this banner. Keeping the info on ONE row keeps the
+# banner a single ~64px strip (see HudSafeArea), so it never covers the back row of the
+# board.
+# In a network match it reads YOUR TURN / OPPONENT'S TURN, in local versus PLAYER N
+# PHASE (see ConquestTheme.phase_title). The cinematic wipe lives in TurnTransition.
 
 @onready var player_name_label: Label = $CenterContainer/VBoxContainer/PlayerNameLabel
 @onready var turn_info_label: Label = $CenterContainer/VBoxContainer/TurnInfoLabel
@@ -26,6 +36,17 @@ var player_colors = {
 	2: Color(0.2, 0.8, 0.2, 0.8),  # Green - Player 3
 	3: Color(0.8, 0.8, 0.2, 0.8),  # Yellow - Player 4
 }
+
+## Swallow-tail depth of the banner ends (base px).
+const BANNER_NOTCH := 20.0
+## Horizontal / vertical padding of the banner content.
+const BANNER_PAD := Vector2(BANNER_NOTCH + 26.0, 5.0)
+
+## Row under the title: round / units-left-to-act count, then any inline chips
+## ([method attach_objective]). (The "Danger zone" tag lives on the ObjectiveBanner row,
+## which shows under both turn systems.)
+var _info_row: HBoxContainer = null
+
 
 # --- Units-left-to-act counter -----------------------------------------------
 #
@@ -96,6 +117,29 @@ static func progress_text(round_number: int, progress: Dictionary) -> String:
 
 
 func _ready() -> void:
+	custom_minimum_size = Vector2(340, 62)
+	if player_name_label:
+		player_name_label.add_theme_font_override("font", MenuTheme.display_font(3))
+		player_name_label.add_theme_font_size_override("font_size", ConquestTheme.FS_PHASE)
+		player_name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
+		player_name_label.add_theme_constant_override("shadow_offset_y", 2)
+	if turn_info_label:
+		turn_info_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+		# One compact info row: the round label, then (attach_objective) any inline chips,
+		# then the "Danger zone" tag.
+		var vb := turn_info_label.get_parent()
+		_info_row = HBoxContainer.new()
+		_info_row.name = "InfoRow"
+		_info_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		_info_row.add_theme_constant_override("separation", 10)
+		_info_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_child(_info_row)
+		vb.move_child(_info_row, turn_info_label.get_index())
+		turn_info_label.reparent(_info_row)
+		ConquestTheme.keep_style(_info_row)
+	var vbox := get_node_or_null("CenterContainer/VBoxContainer") as Control
+	if vbox:
+		vbox.minimum_size_changed.connect(_refit)
 	# Connect to turn system events
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
@@ -193,16 +237,13 @@ func _update_display() -> void:
 		_update_background_color(null)
 		visible = true
 
-	# Both lines just changed; keep the amber frame around them.
+	# Both lines just changed; keep the ribbon around them.
 	_fit_chip_width()
 
 func _turn_title(player: Player) -> String:
-	"""Ally/enemy framing for the chip -- reads better than "Player 1/2" in
-	single-player. Keyed off Player.is_ai; the player-colour tint (see
-	_update_background_color) still conveys which side subtly."""
-	if player != null and player.is_ai:
-		return "Enemy Turn"
-	return "Your Turn"
+	"""FE phase framing: PLAYER PHASE / ENEMY PHASE (single player), YOUR TURN /
+	OPPONENT'S TURN (network), PLAYER N PHASE (local versus)."""
+	return ConquestTheme.phase_title(player)
 
 func _update_traditional_display(turn_system: TraditionalTurnSystem, active_player: Player) -> void:
 	"""Update display for Traditional Turn System"""
@@ -254,24 +295,17 @@ func _refresh_progress() -> void:
 	_fit_chip_width()
 
 
-## Widest the chip's amber frame has to be to hold its two lines.
-const CHIP_MIN_WIDTH: float = 240.0
-## _chip_box(): 12px content margin each side + the 3px frame each side, rounded up.
-const CHIP_PADDING: float = 32.0
-
-
-## Keep the amber frame wide enough for the longest line it currently shows.
+## Keep the ribbon wide enough for the longest line it currently shows.
 ##
 ## This root is a plain Control, so its children contribute NOTHING to its minimum size --
-## the 240px authored width was sized for "Round 1 - 3 units remaining" and the longer
-## "N of M units left to act" line would simply spill out past the frame.
+## the longer "N of M units left to act" line (plus the inline objective / weather chips)
+## would simply spill out past the frame. The measuring is [method _refit]'s (it also
+## runs on the VBox's minimum_size_changed); this explicit call covers the frame where
+## the text changed before that signal has been delivered.
 func _fit_chip_width() -> void:
 	if player_name_label == null or turn_info_label == null:
 		return
-	var widest: float = maxf(
-			player_name_label.get_minimum_size().x,
-			turn_info_label.get_minimum_size().x)
-	custom_minimum_size.x = maxf(CHIP_MIN_WIDTH, widest + CHIP_PADDING)
+	_refit()
 
 
 func _on_unit_acted(_unit = null, _action_type = "") -> void:
@@ -307,7 +341,7 @@ func _update_speed_first_display(turn_system: SpeedFirstTurnSystem, active_playe
 		if progress.has("units_remaining"):
 			remaining_info = " - " + str(progress.units_remaining) + " units left"
 		
-		turn_info_label.text = "Round " + str(progress.get("round_number", 1)) + speed_info + remaining_info
+		turn_info_label.text = "Round " + str(progress.get("round_number", 1)) + speed_info + remaining_info.replace(" - ", "  ·  ")
 		
 		# Add queue preview info
 		var queue_preview = progress.get("turn_queue_preview", [])
@@ -329,37 +363,59 @@ func _update_fallback_display(active_player: Player) -> void:
 	player_name_label.text = _turn_title(active_player)
 	turn_info_label.text = "Turn in progress"
 
-func _chip_box() -> StyleBoxFlat:
-	"""A slimmed-down amber chip derived from ConquestTheme.panel_box(): same palette
-	and frame, but tight margins / smaller radius / no drop shadow so the persistent
-	indicator reads as a compact strip instead of a big card jutting from the top."""
-	var sb := ConquestTheme.panel_box()
-	sb.set_corner_radius_all(8)
-	sb.set_content_margin_all(6)
-	sb.content_margin_left = 12
-	sb.content_margin_right = 12
-	sb.shadow_size = 0
+func _chip_box(team: Color) -> StyleBox:
+	"""The phase banner: a swallow-tailed navy ribbon edged in the acting side's team
+	colour, gold filigree inside and a gold crest on top, so whose phase it is reads
+	at a glance."""
+	var sb := MenuTheme.ribbon_box(ConquestTheme.PANEL, team, BANNER_NOTCH)
+	sb.bg_color = Color(ConquestTheme.PANEL.lightened(0.08), 0.96)
+	sb.bg_color_end = Color(ConquestTheme.PANEL.darkened(0.35), 0.96)
+	sb.border_width = 2.0
+	sb.inner_line_color = Color(ConquestTheme.GOLD, 0.42)
+	sb.crest = true
+	sb.ornament_color = ConquestTheme.GOLD
+	sb.ornament_size = 3.2
+	sb.accent_color = Color(team, 0.85)
+	sb.accent_side = SIDE_BOTTOM
+	sb.accent_width = 3.0
 	return sb
 
 
-func _update_background_color(player: Player) -> void:
-	"""Keep the amber ConquestTheme frame (compact chip variant) so the banner matches
-	every other HUD panel. Convey whose turn it is subtly, by tinting just the
-	player-name label text with that player's colour."""
-	if background_panel:
-		# Compact amber chip -- no player-coloured border.
-		background_panel.add_theme_stylebox_override("panel", _chip_box())
+## Mount a compact chip (any Control -- today the WeatherChip) inline in the info row,
+## after the round text (see UILayoutManager).
+func attach_objective(chip: Control) -> void:
+	if _info_row == null or chip == null:
+		return
+	if chip.get_parent() != null:
+		chip.reparent(_info_row)
+	else:
+		_info_row.add_child(chip)
 
-	# Subtle player cue: tint the name text with the player's colour (lightened a
-	# touch so it stays legible on the amber ground). Clear it when no player.
+
+## The banner is a plain Control (its min size does not follow its children), so size
+## it to the content: title / info row plus the ribbon's tails and padding.
+func _refit() -> void:
+	var vbox := get_node_or_null("CenterContainer/VBoxContainer") as Control
+	if vbox == null:
+		return
+	var need := vbox.get_combined_minimum_size() + BANNER_PAD * 2.0
+	var want := Vector2(maxf(340.0, ceilf(need.x)), maxf(58.0, ceilf(need.y)))
+	if not custom_minimum_size.is_equal_approx(want):
+		custom_minimum_size = want
+
+
+func _update_background_color(player: Player) -> void:
+	"""Team-coloured frame + phase title in the team's (lightened, legible) colour."""
+	var team: Color = ConquestTheme.team_color(player) if player else ConquestTheme.BORDER
+	if background_panel:
+		background_panel.add_theme_stylebox_override("panel", _chip_box(team))
 	if player_name_label:
-		if player and player.player_id in player_colors:
-			var c: Color = player_colors[player.player_id]
-			c.a = 1.0
-			c = c.lerp(Color.WHITE, 0.25)
-			player_name_label.add_theme_color_override("font_color", c)
+		if player:
+			player_name_label.add_theme_color_override("font_color", ConquestTheme.team_text_color(player))
 		else:
-			player_name_label.remove_theme_color_override("font_color")
+			player_name_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
+	if turn_info_label:
+		turn_info_label.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
 
 func show_turn_transition(_from_player: Player, _to_player: Player) -> void:
 	"""Deprecated: the cinematic turn announcement now lives in the full-screen

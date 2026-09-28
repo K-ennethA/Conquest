@@ -2,43 +2,50 @@ extends Control
 
 class_name ProfileScreen
 
-## The player's PROGRESSION screen: rank + points header, a Collection entry card, lifetime
-## stat cards, and the achievement grid. Reached from the main menu's top-right profile chip.
-## Read-only -- everything here is a view onto the [PlayerProfile] autoload; this screen
-## never grants or spends (the Collection card only navigates; SkinShop owns the spending).
+## The player's PROGRESSION screen: rank + points header, a Collection entry card, the
+## lifetime record, and the achievement grid. Reached from the main menu's top-right
+## profile chip. Read-only -- everything here is a view onto the [PlayerProfile] autoload;
+## this screen never grants or spends (the Collection card only navigates; SkinShop owns
+## the spending).
 ##
-## Layout follows the dark "Legends" register the other menus use ([MenuTheme]) on a 24 /
-## 16 rhythm: a 24px page margin, 16px between the major bands (header -> stats -> achievements
-## -> footer), and 8/12px inside a card. The whole page is built in code (like ChallengeBrowse
-## and SoloModeSelect) so the .tscn stays a one-node stub and the card layout can react to the
-## data rather than being frozen into the scene.
+## Built in code on the shared grove kit ([MenuKit.build_page], [MenuTheme] type
+## variations -- see docs/UI_STYLE.md), so the .tscn stays a one-node stub and the card
+## layout reacts to the data rather than being frozen into the scene.
+##
+## 720p budget. MenuKit's header + footer leave the body ~466 of 720. Body rows (16 apart):
+##   top row   rank crest-card | Collection card ............ 118
+##   record    section 20 + 6 + inset card of 2 x 4 stats .. 150
+##   achieve.  section 20 + 6 + the ONE EXPAND_FILL scroll (floor 120)
+## = 118 + 150 + 26 + 120 + 2 * 16 = 446, so the footer (Back) always fits and the
+## achievement scroll takes every spare pixel on a taller window.
 ##
 ## Every read is null-guarded: with the autoload missing (a stripped test scene, an editor
 ## preview) the screen still draws, showing a zeroed Recruit profile rather than crashing.
+##
+## Input: Cancel (Esc / B) goes back; Next page (Tab / R / RB) opens the Collection.
 
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
-# The cosmetic wardrobe now nests under Profile rather than sitting as its own main-menu
+# The cosmetic wardrobe nests under Profile rather than sitting as its own main-menu
 # entry. Guarded with ResourceLoader.exists the same way MainMenu used to guard it, since
 # the skin economy ships the scene separately from this screen.
 const COLLECTION_SCENE := "res://menus/CollectionScreen.tscn"
 
-# Achievement cards per row. Three fits the 860px page without the description wrapping to
-# more than two lines at FONT_CAPTION.
+# Achievement cards per row. Three fits the page without the description wrapping to more
+# than two lines at FS_CAPTION.
 const ACHIEVEMENT_COLUMNS := 3
-const PAGE_WIDTH := 860.0
 
-# Muted green / red / blue accents for the stat cards, so a column of numbers is scannable
-# by colour rather than being one undifferentiated block.
-const ACCENT_WIN := Color("6fbf73")
-const ACCENT_LOSS := Color("c46b6b")
-const ACCENT_NEUTRAL := Color("6b8fc4")
+# Accents for the record, so a band of numbers is scannable by colour rather than being
+# one undifferentiated block (grove state tokens: win / loss / neutral info).
+const ACCENT_WIN := MenuTheme.SUCCESS
+const ACCENT_LOSS := MenuTheme.DANGER
+const ACCENT_NEUTRAL := MenuTheme.ACCENT
 
 var _profile: Node = null
+var _collection_card: Button = null
+var _back_btn: Button = null
 
 
 func _ready() -> void:
-	theme = MenuTheme.build()
-	MenuTheme.apply_backdrop(self)
 	_profile = get_node_or_null("/root/PlayerProfile")
 	_build_ui()
 
@@ -48,169 +55,154 @@ func _ready() -> void:
 # =====================================================================================
 
 func _build_ui() -> void:
-	var margin := MarginContainer.new()
-	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_top", 24)
-	margin.add_theme_constant_override("margin_bottom", 24)
-	add_child(margin)
+	# Leaderboards are deliberately NOT here yet: this rank is the local cosmetic ladder,
+	# and a competitive standing only becomes meaningful with ranked multiplayer.
+	var page := MenuKit.build_page(self, [], "Profile",
+		"Leaderboards arrive with ranked multiplayer -- this rank is your solo progression.")
 
-	var center := CenterContainer.new()
-	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	margin.add_child(center)
+	var top := HBoxContainer.new()
+	top.name = "TopRow"
+	top.add_theme_constant_override("separation", MenuTheme.SP_L)
+	page.body.add_child(top)
+	top.add_child(_build_rank_header())
+	top.add_child(_build_collection_card())
 
-	var page := VBoxContainer.new()
-	page.custom_minimum_size = Vector2(PAGE_WIDTH, 0.0)
-	page.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	page.add_theme_constant_override("separation", 16)
-	center.add_child(page)
+	page.body.add_child(_build_stats_band())
+	page.body.add_child(_build_achievements_band())
 
-	var title := Label.new()
-	title.text = "PROFILE"
-	page.add_child(title)
-	# 32 not 40: the page's fixed minimums must sum under 720 - margins or the
-	# CenterContainer clips BOTH ends (the user literally could not see the Back
-	# button because the footer rendered below the screen edge).
-	MenuTheme.style_title(title, 32)
+	_back_btn = MenuKit.button("Back", MenuKit.GHOST, 140)
+	_back_btn.name = "BackButton"
+	_back_btn.pressed.connect(_on_back_pressed)
+	page.actions.add_child(_back_btn)
 
-	page.add_child(_build_rank_header())
-	page.add_child(_build_collection_card())
-	page.add_child(_build_stats_band())
-	page.add_child(_build_achievements_band())
-	page.add_child(_build_footer())
+	if InputMap.has_action(&"cycle_next") and not _collection_card.disabled:
+		page.hints.add_child(MenuKit.key_hint(
+			InputActions.describe(&"cycle_next", false), InputActions.describe(&"cycle_next", true),
+			"Collection"))
+	page.hints.add_child(MenuKit.key_hint("Esc", "B", "Back"))
+
+	_focus_later(_collection_card if not _collection_card.disabled else _back_btn)
 
 
-## The rank card: tier name, spendable balance, and a progress bar toward the next tier.
+## The rank card (a hero surface, so it wears the crest): tier name, spendable balance,
+## and a progress bar toward the next tier.
 func _build_rank_header() -> PanelContainer:
-	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", MenuTheme.card_box(MenuTheme.GOLD))
+	var card := MenuKit.card(&"CrestCard")
+	card.name = "RankCard"
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.custom_minimum_size = Vector2(0.0, 118.0)
 
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 8)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 6)
 	card.add_child(col)
 
 	var lifetime: int = _lifetime_points()
 
 	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 12)
+	top.add_theme_constant_override("separation", MenuTheme.SP_M)
 	col.add_child(top)
 
-	var rank := Label.new()
-	rank.text = RankLadder.rank_for(lifetime).to_upper()
-	rank.add_theme_font_size_override("font_size", 28)
-	rank.add_theme_color_override("font_color", MenuTheme.GOLD)
+	var rank := MenuKit.label(RankLadder.rank_for(lifetime).to_upper(), &"HeadingLabel")
+	rank.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
 	rank.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rank.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	top.add_child(rank)
 
-	var balance := Label.new()
-	balance.text = "%d pts" % _spendable_points()
-	balance.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	balance.add_theme_color_override("font_color", MenuTheme.CREAM)
+	var balance := MenuKit.label("%d pts" % _spendable_points(), &"SubheadingLabel")
 	balance.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	top.add_child(balance)
 
+	# The theme's ProgressBar is the grove's gold fill in a sunk well.
 	var bar := ProgressBar.new()
+	bar.name = "RankProgress"
 	bar.min_value = 0.0
 	bar.max_value = 1.0
 	bar.step = 0.001
 	bar.value = RankLadder.progress_in_rank(lifetime)
 	bar.show_percentage = false
 	bar.custom_minimum_size = Vector2(0.0, 10.0)
-	bar.add_theme_stylebox_override("background", _bar_box(Color(MenuTheme.DARK.r, MenuTheme.DARK.g, MenuTheme.DARK.b, 0.85)))
-	bar.add_theme_stylebox_override("fill", _bar_box(MenuTheme.GOLD))
 	col.add_child(bar)
 
-	var caption := Label.new()
+	var caption_text: String
 	var next_pts: int = RankLadder.next_threshold(lifetime)
 	if next_pts < 0:
-		caption.text = "%d lifetime points  •  top rank reached" % lifetime
+		caption_text = "%d lifetime points  •  top rank reached" % lifetime
 	else:
-		caption.text = "%d lifetime points  •  %d to %s" % [
+		caption_text = "%d lifetime points  •  %d to %s" % [
 			lifetime, RankLadder.points_to_next(lifetime), RankLadder.rank_for(next_pts)
 		]
-	caption.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	caption.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	var caption := MenuKit.label(caption_text, &"DimLabel")
+	caption.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	col.add_child(caption)
 
 	return card
 
 
 ## Collection is nested one level under Profile rather than living as its own main-menu
-## entry: a prominent gold-accent card, a single click target (the "content overlaid on a
-## plain Button" trick, like the rank/stat cards' visual register but clickable), routing
-## to CollectionScreen. Disabled with a "coming soon" tooltip when that scene is not yet in
-## the build, the same guard MainMenu used to apply before this card existed.
+## entry: a gold-edged selectable card routing to CollectionScreen. Disabled with a
+## "coming soon" tooltip when that scene is not yet in the build, the same guard MainMenu
+## used to apply before this card existed.
 func _build_collection_card() -> Button:
 	var available: bool = ResourceLoader.exists(COLLECTION_SCENE)
 
-	var card := Button.new()
+	var parts := MenuKit.option_card(Vector2(380.0, 118.0))
+	var card: Button = parts["button"]
 	card.name = "CollectionCard"
-	card.custom_minimum_size = Vector2(0.0, 64.0)
-	card.text = ""
 	card.disabled = not available
 	card.focus_mode = Control.FOCUS_ALL if available else Control.FOCUS_NONE
 	card.tooltip_text = ("Unit skins you own -- equip a look for each character."
 			if available else "Coming soon: your unit-skin wardrobe.")
 	card.pressed.connect(_on_collection_pressed)
-	card.add_theme_stylebox_override("normal", MenuTheme.card_box(MenuTheme.GOLD))
+	MenuKit.accent_card(card, MenuTheme.GOLD)
+	MenuNav.hover_focus(card)
+	_collection_card = card
 
-	var content := HBoxContainer.new()
-	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	content.offset_left = 14.0
-	content.offset_right = -14.0
-	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_theme_constant_override("separation", 12)
-	card.add_child(content)
+	var content: VBoxContainer = parts["content"]
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
+	content.add_theme_constant_override("separation", 2)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", MenuTheme.SP_M)
+	content.add_child(row)
 
 	var text_col := VBoxContainer.new()
 	text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_col.alignment = BoxContainer.ALIGNMENT_CENTER
 	text_col.add_theme_constant_override("separation", 2)
-	content.add_child(text_col)
+	row.add_child(text_col)
 
-	var title := Label.new()
-	title.text = "COLLECTION"
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
-	title.add_theme_color_override("font_color", MenuTheme.GOLD)
-	text_col.add_child(title)
-
-	var subtitle := Label.new()
-	subtitle.text = "Unit skins you own -- equip a look for each character."
-	subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	subtitle.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	subtitle.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	text_col.add_child(MenuKit.section("Collection"))
+	var subtitle := MenuKit.label("Unit skins you own -- equip a look for each character.",
+		&"DimLabel", true)
+	subtitle.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	text_col.add_child(subtitle)
 
-	var balance := Label.new()
-	balance.text = "%d pts" % _spendable_points()
-	balance.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var balance := MenuKit.label("%d pts" % _spendable_points(), &"SubheadingLabel")
+	balance.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
 	balance.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	balance.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	balance.add_theme_color_override("font_color", MenuTheme.CREAM)
-	content.add_child(balance)
+	row.add_child(balance)
 
+	MenuKit.ignore_mouse(card)
 	return card
 
 
-## The lifetime record: one small card per number, four to a row.
+## The lifetime record: eight stat blocks (gold caption over a tinted value), four to a
+## row, in one sunken well.
 func _build_stats_band() -> VBoxContainer:
 	var band := VBoxContainer.new()
-	band.add_theme_constant_override("separation", 8)
+	band.name = "RecordBand"
+	band.add_theme_constant_override("separation", 6)
+	band.add_child(MenuKit.section("Record"))
 
-	var header := Label.new()
-	header.text = "RECORD"
-	band.add_child(header)
-	MenuTheme.style_section_header(header)
+	var well := MenuKit.card(&"InsetPanel")
+	band.add_child(well)
 
 	var grid := GridContainer.new()
 	grid.columns = 4
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
-	band.add_child(grid)
+	grid.add_theme_constant_override("h_separation", MenuTheme.SP_XL)
+	grid.add_theme_constant_override("v_separation", MenuTheme.SP_S)
+	well.add_child(grid)
 
 	var won: int = _stat("battles_won")
 	var lost: int = _stat("battles_lost")
@@ -229,36 +221,24 @@ func _build_stats_band() -> VBoxContainer:
 	return band
 
 
-func _make_stat_card(caption: String, value: String, accent: Color) -> PanelContainer:
-	var card := PanelContainer.new()
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.add_theme_stylebox_override("panel", MenuTheme.card_box(accent))
-
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 2)
-	card.add_child(col)
-
-	var value_label := Label.new()
-	value_label.text = value
-	value_label.add_theme_font_size_override("font_size", 24)
-	value_label.add_theme_color_override("font_color", MenuTheme.CREAM)
-	col.add_child(value_label)
-
-	var caption_label := Label.new()
-	caption_label.text = caption
-	caption_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	caption_label.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
-	col.add_child(caption_label)
-
-	return card
+## One record entry: [MenuKit.stat_block] (gold small-caps caption over the value), the
+## value tinted by [param accent].
+func _make_stat_card(caption: String, value: String, accent: Color) -> Control:
+	var block := MenuKit.stat_block(caption, value)
+	block.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var value_label := block.get_child(block.get_child_count() - 1) as Label
+	if value_label != null:
+		value_label.add_theme_color_override("font_color", accent.lightened(0.25))
+	return block
 
 
 ## The achievement grid: unlocked cards read gold with their unlock date, locked ones sit
-## dimmed behind a lock glyph but still show the hint, so the grid doubles as a to-do list.
+## sunk behind a lock glyph but still show the hint, so the grid doubles as a to-do list.
 func _build_achievements_band() -> VBoxContainer:
 	var band := VBoxContainer.new()
+	band.name = "AchievementsBand"
 	band.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	band.add_theme_constant_override("separation", 8)
+	band.add_theme_constant_override("separation", 6)
 
 	var rows: Array = AchievementData.all()
 	var unlocked: int = 0
@@ -266,26 +246,29 @@ func _build_achievements_band() -> VBoxContainer:
 		if _has_achievement(String(row.get("id", ""))):
 			unlocked += 1
 
-	var header := Label.new()
-	header.text = "ACHIEVEMENTS  (%d / %d)" % [unlocked, rows.size()]
-	band.add_child(header)
-	MenuTheme.style_section_header(header)
+	band.add_child(MenuKit.section("Achievements  (%d / %d)" % [unlocked, rows.size()]))
 
 	var scroll := ScrollContainer.new()
+	scroll.name = "AchievementScroll"
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	# 120 minimum (not 240): this scroll is the page's ONLY flexible region - its
-	# minimum is what decides whether the footer (Back button) fits on a 720p
-	# screen. It EXPANDS to absorb all spare height on taller windows anyway.
+	# 120 floor: this scroll is the page's ONLY flexible region -- its floor is what decides
+	# whether the footer (Back) fits on a 720p screen (see the class budget). It EXPANDS to
+	# absorb all spare height on taller windows anyway.
 	scroll.custom_minimum_size = Vector2(0.0, 120.0)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	band.add_child(scroll)
 
+	var pad := MarginContainer.new()
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pad.add_theme_constant_override("margin_right", 14)  # clear of the scrollbar
+	scroll.add_child(pad)
+
 	var grid := GridContainer.new()
 	grid.columns = ACHIEVEMENT_COLUMNS
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
-	scroll.add_child(grid)
+	grid.add_theme_constant_override("h_separation", MenuTheme.SP_M)
+	grid.add_theme_constant_override("v_separation", MenuTheme.SP_M)
+	pad.add_child(grid)
 
 	for row in rows:
 		grid.add_child(_make_achievement_card(row))
@@ -300,10 +283,20 @@ func _make_achievement_card(row: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.custom_minimum_size = Vector2(0.0, 84.0)
-	card.add_theme_stylebox_override("panel", MenuTheme.card_box(MenuTheme.GOLD if is_unlocked else MenuTheme.BORDER))
+	# Unlocked: a grove frame with a gold edge. Locked: the sunk frame, dim ornaments.
+	var sb: OrnateStyleBox
+	if is_unlocked:
+		sb = MenuTheme.accented_card(MenuTheme.GOLD)
+	else:
+		sb = MenuTheme.card_box(MenuTheme.PANEL_SUNK, MenuTheme.BORDER_SOFT)
+		sb.ornament_color = Color(MenuTheme.GOLD_DK, 0.4)
+		sb.inner_line_color = Color(MenuTheme.GOLD, 0.12)
+	sb.content_margin_left = 16.0
+	sb.content_margin_right = 14.0
+	sb.content_margin_top = 12.0
+	sb.content_margin_bottom = 12.0
+	card.add_theme_stylebox_override("panel", sb)
 	card.tooltip_text = String(row.get("desc", ""))
-	if not is_unlocked:
-		card.modulate = Color(1.0, 1.0, 1.0, 0.55)
 
 	var line := HBoxContainer.new()
 	line.add_theme_constant_override("separation", 10)
@@ -312,6 +305,8 @@ func _make_achievement_card(row: Dictionary) -> PanelContainer:
 	var badge := Label.new()
 	badge.text = String(row.get("icon", "★")) if is_unlocked else "🔒"
 	badge.add_theme_font_size_override("font_size", 24)
+	badge.add_theme_color_override("font_color",
+		MenuTheme.GOLD_LITE if is_unlocked else MenuTheme.TEXT_MUTED)
 	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	line.add_child(badge)
 
@@ -320,55 +315,23 @@ func _make_achievement_card(row: Dictionary) -> PanelContainer:
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	line.add_child(col)
 
-	var name_label := Label.new()
-	name_label.text = String(row.get("name", id))
-	name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
-	name_label.add_theme_color_override("font_color", MenuTheme.GOLD if is_unlocked else MenuTheme.CREAM_DIM)
+	var name_label := MenuKit.label(String(row.get("name", id)), &"SubheadingLabel")
+	name_label.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
+	name_label.add_theme_color_override("font_color",
+		MenuTheme.GOLD_LITE if is_unlocked else MenuTheme.TEXT_MUTED)
 	col.add_child(name_label)
 
-	var desc := Label.new()
-	desc.text = String(row.get("desc", ""))
-	desc.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	desc.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var desc := MenuKit.label(String(row.get("desc", "")),
+		&"DimLabel" if is_unlocked else &"MutedLabel", true)
+	desc.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	desc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_child(desc)
 
 	if is_unlocked:
-		var date := Label.new()
-		date.text = _format_date(_achievement_date(id))
-		date.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-		date.add_theme_color_override("font_color", MenuTheme.GOLD_DK)
+		var date := MenuKit.label(_format_date(_achievement_date(id)), &"SectionLabel")
 		col.add_child(date)
 
 	return card
-
-
-func _build_footer() -> VBoxContainer:
-	var footer := VBoxContainer.new()
-	footer.add_theme_constant_override("separation", 8)
-
-	# Leaderboards are deliberately NOT here yet: this rank is the local cosmetic ladder,
-	# and a competitive standing only becomes meaningful with ranked multiplayer.
-	var note := Label.new()
-	note.text = "Leaderboards arrive with ranked multiplayer -- this rank is your solo progression."
-	note.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	note.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
-	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	footer.add_child(note)
-
-	var back := Button.new()
-	back.text = "Back"
-	back.custom_minimum_size = Vector2(0.0, 44.0)
-	back.pressed.connect(_on_back_pressed)
-	footer.add_child(back)
-
-	var hint := Label.new()
-	hint.text = "ESC back  •  C Collection"
-	footer.add_child(hint)
-	MenuTheme.style_caption(hint)
-
-	return footer
 
 
 # =====================================================================================
@@ -412,19 +375,12 @@ func _format_date(stamp: String) -> String:
 	return "Unlocked %s" % stamp.split("T")[0]
 
 
-func _bar_box(fill: Color) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = fill
-	sb.set_corner_radius_all(5)
-	return sb
-
-
 # =====================================================================================
 #  NAVIGATION
 # =====================================================================================
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+	MenuNav.change_scene(self, MAIN_MENU_SCENE)
 
 
 ## Guarded like the card's own disabled state: the wardrobe screen ships separately from
@@ -433,16 +389,32 @@ func _on_back_pressed() -> void:
 func _on_collection_pressed() -> void:
 	if not ResourceLoader.exists(COLLECTION_SCENE):
 		return
-	get_tree().change_scene_to_file(COLLECTION_SCENE)
+	MenuNav.change_scene(self, COLLECTION_SCENE)
 
 
+## The Collection shortcut is the shared "next page" input (Tab / R / RB). Caught in
+## _input, BEFORE focus navigation, because Tab would otherwise only move focus. (It used
+## to be C, which is now one of Cancel's keys.)
 func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
+	if MenuNav.is_next_event(event):
+		get_viewport().set_input_as_handled()
+		_on_collection_pressed()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if MenuNav.is_back_event(event):
+		get_viewport().set_input_as_handled()
+		_on_back_pressed()
+
+
+## [MenuNav.focus_deferred], but safe when the control leaves the tree first (a repaint
+## rebuilt it, or the screen closed) -- grab_focus() on a detached control is an engine error.
+func _focus_later(c: Control) -> void:
+	if c == null:
 		return
-	if not (event is InputEventKey):
-		return
-	match (event as InputEventKey).keycode:
-		KEY_ESCAPE:
-			_on_back_pressed()
-		KEY_C:
-			_on_collection_pressed()
+	# Captured by instance id, not by reference: a freed capture is itself an engine error.
+	var id: int = c.get_instance_id()
+	(func() -> void:
+		var ctl := instance_from_id(id) as Control
+		if ctl != null and ctl.is_inside_tree() and ctl.is_visible_in_tree():
+			ctl.grab_focus()).call_deferred()

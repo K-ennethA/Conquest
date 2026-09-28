@@ -107,6 +107,8 @@ class SoakRunner extends Node:
 	func _pm() -> Node: return get_node("/root/PlayerManager")
 	func _tsm() -> Node: return get_node("/root/TurnSystemManager")
 	func _ge() -> Node: return get_node("/root/GameEvents")
+	## Preloaded, not the global class name: see the autoload note above.
+	const _CELLS := preload("res://game/board/Cells.gd")
 
 	# --- configuration (set by configure()) ---
 	var map_path: String = MAPS_DIR + "proving_grounds.tres"
@@ -451,7 +453,9 @@ class SoakRunner extends Node:
 		var unit = units[_probe_cursor]
 		if unit == null or not is_instance_valid(unit):
 			return
-		var pos: Vector3 = unit.global_position
+		# GameEvents cell signals carry GRID coords -- Vector3(col, floor, row), see Cells --
+		# not a world position (a unit's world y would read as a floor index).
+		var pos: Vector3 = _grid_of(unit)
 		_ge().cursor_moved.emit(pos)
 		_ge().unit_hover_started.emit(unit)
 		_ge().unit_selected.emit(unit, pos)
@@ -461,6 +465,13 @@ class SoakRunner extends Node:
 		if _probe_cursor == 0:
 			_ge().unit_deselected.emit(unit)
 			_ge().unit_hover_ended.emit(unit)
+
+	func _grid_of(unit) -> Vector3:
+		var services: Node = get_node_or_null("/root/CombatServices")
+		var board = services.board() if services != null and services.has_method("board") else null
+		if board != null and board.has_method("cell_of"):
+			return _CELLS.to_grid(board.cell_of(unit))
+		return _CELLS.to_grid(_CELLS.world_to_cell(unit.global_position))
 
 	func _living_units() -> Array:
 		var out: Array = []

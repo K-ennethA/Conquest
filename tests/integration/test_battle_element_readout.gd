@@ -171,7 +171,8 @@ func test_the_cards_badge_is_the_colour_the_moves_stripe_with() -> void:
 	assert_not_null(badge, "the card badges a frost unit")
 	if badge == null:
 		return
-	var box := badge.get_theme_stylebox("panel") as StyleBoxFlat
+	# The badge is a notched grove plate (OrnateStyleBox), which keeps border_color.
+	var box := badge.get_theme_stylebox("panel") as OrnateStyleBox
 	assert_not_null(box, "the badge is painted with its own stylebox")
 	if box != null:
 		assert_eq(box.border_color, ConquestTheme.element_color("frost"),

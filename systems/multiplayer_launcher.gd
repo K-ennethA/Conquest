@@ -1,117 +1,90 @@
 extends Node
 
-# Multiplayer Launcher
-# Handles command line arguments for automatic multiplayer joining
+## MultiplayerLauncher (autoload) -- the two-instances-on-one-machine DEV auto-join.
+##
+## A second game instance started with
+##   godot --path . -- --multiplayer-auto-join [--multiplayer-address 127.0.0.1]
+##         [--multiplayer-port 8910] [--multiplayer-player-name "Client Player"]
+## skips the menus, opens the network setup screen and presses its Join for it
+## ([method NetworkMultiplayerSetup.begin_auto_join]) -- the SAME code path a human
+## takes (NetSession over localhost ENet, version handshake, collaborative lobby), so
+## the harness can never drift from what ships. [AutoClientDetector.launch_client]
+## spawns such an instance from the host's "Host + Auto Client" dev button.
+##
+## Only an EXPLICIT command-line flag turns this on. (It used to also react to a
+## leftover user://auto_client.flag file, which could turn a normal launch into a
+## client; that file is now deleted on sight and never acted on.)
+##
+## The headless roles (--server dedicated server, --net-bot scripted client) are booted
+## by GameModeManager; this is only the interactive dev affordance.
+
+const LEGACY_CLIENT_FLAG_FILE := "user://auto_client.flag"
+const SETUP_SCENE := "res://menus/NetworkMultiplayerSetup.tscn"
+const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
+## Seconds to give the host instance to open its socket before dialling.
+const HOST_GRACE_SEC := 2.0
 
 var auto_join_enabled: bool = false
 var auto_join_address: String = "127.0.0.1"
 var auto_join_port: int = 8910
 var auto_join_player_name: String = "Auto Client"
 
+
 func _ready() -> void:
 	name = "MultiplayerLauncher"
-
-	# Parse command line arguments immediately
+	# A stale flag file from an older build must never hijack a normal launch.
+	if FileAccess.file_exists(LEGACY_CLIENT_FLAG_FILE):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(LEGACY_CLIENT_FLAG_FILE))
 	_parse_command_line_args()
-
-	# If auto-join is enabled, start the process immediately
 	if auto_join_enabled:
-		print("[CLIENT] Auto-join enabled, will connect to %s:%d as %s" % [auto_join_address, auto_join_port, auto_join_player_name])
+		print("[CLIENT] Auto-join enabled: %s:%d as %s" % [auto_join_address, auto_join_port, auto_join_player_name])
+		call_deferred("_auto_join_multiplayer")
 
-		# Start auto-join process immediately, don't wait
-		_start_auto_join_process()
 
-func _start_auto_join_process() -> void:
-	"""Start the auto-join process immediately"""
-	print("[CLIENT] Starting auto-join process...")
-	
-	# Use call_deferred to ensure we're not blocking the _ready chain
-	call_deferred("_auto_join_multiplayer")
-
+## Parse the auto-join flags from the user args (after "--") and, for older launch
+## scripts, the engine args. Both "--flag value" and "--flag=value" forms work.
 func _parse_command_line_args() -> void:
-	"""Parse command line arguments for multiplayer auto-join"""
-	var args = OS.get_cmdline_args()
-
-	# Reset values
 	auto_join_enabled = false
 	auto_join_address = "127.0.0.1"
 	auto_join_port = 8910
 	auto_join_player_name = "Auto Client"
-	
+	var args: Array = []
+	args.append_array(Array(OS.get_cmdline_args()))
+	args.append_array(Array(OS.get_cmdline_user_args()))
 	for i in range(args.size()):
-		var arg = args[i]
-		
-		# Handle both separate and combined argument formats
+		var arg := String(args[i])
+		var next := String(args[i + 1]) if i + 1 < args.size() else ""
 		if arg == "--multiplayer-auto-join":
 			auto_join_enabled = true
-			print("[DEBUG] Auto-join enabled via command line")
-		
-		elif arg == "--multiplayer-address":
-			if i + 1 < args.size():
-				auto_join_address = args[i + 1]
-				print("[DEBUG] Auto-join address set to: " + auto_join_address)
+		elif arg == "--multiplayer-address" and next != "":
+			auto_join_address = next
 		elif arg.begins_with("--multiplayer-address="):
-			auto_join_address = arg.split("=")[1]
-			print("[DEBUG] Auto-join address (combined) set to: " + auto_join_address)
-		
-		elif arg == "--multiplayer-port":
-			if i + 1 < args.size():
-				auto_join_port = int(args[i + 1])
-				print("[DEBUG] Auto-join port set to: " + str(auto_join_port))
+			auto_join_address = arg.get_slice("=", 1)
+		elif arg == "--multiplayer-port" and next != "":
+			auto_join_port = int(next)
 		elif arg.begins_with("--multiplayer-port="):
-			auto_join_port = int(arg.split("=")[1])
-			print("[DEBUG] Auto-join port (combined) set to: " + str(auto_join_port))
-		
-		elif arg == "--multiplayer-player-name":
-			if i + 1 < args.size():
-				auto_join_player_name = args[i + 1]
-				print("[DEBUG] Auto-join player name set to: " + auto_join_player_name)
+			auto_join_port = int(arg.get_slice("=", 1))
+		elif arg == "--multiplayer-player-name" and next != "":
+			auto_join_player_name = next
 		elif arg.begins_with("--multiplayer-player-name="):
-			auto_join_player_name = arg.split("=")[1]
-			print("[DEBUG] Auto-join player name (combined) set to: " + auto_join_player_name)
-	
-	print("[DEBUG] Final auto-join settings:")
-	print("[DEBUG]   Enabled: " + str(auto_join_enabled))
-	print("[DEBUG]   Address: " + auto_join_address)
-	print("[DEBUG]   Port: " + str(auto_join_port))
-	print("[DEBUG]   Player name: " + auto_join_player_name)
+			auto_join_player_name = arg.get_slice("=", 1)
+	if auto_join_port <= 0 or auto_join_port > 65535:
+		auto_join_port = 8910
 
+
+## Manually force the auto-join (debugging).
 func force_auto_join() -> void:
-	"""Manually force auto-join process (for debugging)"""
-	print("[DEBUG] force_auto_join() called")
 	auto_join_enabled = true
-	_start_auto_join_process()
+	call_deferred("_auto_join_multiplayer")
+
 
 func _auto_join_multiplayer() -> void:
-	"""Automatically join a multiplayer game"""
-	print("[CLIENT] === AUTO-JOIN MULTIPLAYER START ===")
-	print("[CLIENT] Auto-joining multiplayer game...")
-	
-	# Skip the main menu and go directly to network setup
-	# Set game settings for multiplayer
-	GameSettings.set_game_mode(GameSettings.GameMode.MULTIPLAYER)
-	GameSettings.set_turn_system(TurnSystemBase.TurnSystemType.TRADITIONAL)
-	
-	print("[CLIENT] Game settings configured for multiplayer")
-	
-	# Wait for GameModeManager to be ready
-	await get_tree().process_frame
-	
-	print("[CLIENT] Attempting to join %s:%d as %s" % [auto_join_address, auto_join_port, auto_join_player_name])
-
-	# Wait a bit for the host process to finish opening its socket.
-	print("[CLIENT] Waiting for host to be ready...")
-	await get_tree().create_timer(2.0).timeout
-
-	# Drive the REAL join flow rather than a parallel one: open the network setup screen and
-	# press its Connect for it. That screen runs on NetSession (the transport the battle's
-	# command seam reads) and owns the connect state machine, the version handshake and the
-	# collaborative lobby -- all of which this harness used to bypass, which is exactly how it
-	# drifted from the shipping path.
-	get_tree().change_scene_to_file("res://menus/NetworkMultiplayerSetup.tscn")
-
-	# change_scene_to_file is deferred, so poll (bounded) for the new scene rather than
-	# guessing a frame count.
+	if get_window() != null:
+		get_window().title = "CONQUEST - CLIENT INSTANCE"
+	# Give the host process a moment to finish opening its socket.
+	await get_tree().create_timer(HOST_GRACE_SEC).timeout
+	get_tree().change_scene_to_file(SETUP_SCENE)
+	# change_scene_to_file is deferred, so poll (bounded) for the new scene.
 	var setup: Node = null
 	for _frame in range(60):
 		await get_tree().process_frame
@@ -119,24 +92,21 @@ func _auto_join_multiplayer() -> void:
 		if current != null and current.has_method("begin_auto_join"):
 			setup = current
 			break
-
 	if setup != null:
 		setup.begin_auto_join(auto_join_address, auto_join_port, auto_join_player_name)
 	else:
-		print("[CLIENT] ERROR: network setup screen never came up (no begin_auto_join)")
-		get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
+		push_warning("MultiplayerLauncher: the network setup screen never came up (no begin_auto_join)")
+		get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
-	print("[CLIENT] === AUTO-JOIN MULTIPLAYER END ===")
 
 func is_auto_join_enabled() -> bool:
-	"""Check if auto-join is enabled"""
 	return auto_join_enabled
 
+
 func get_auto_join_info() -> Dictionary:
-	"""Get auto-join connection info"""
 	return {
 		"enabled": auto_join_enabled,
 		"address": auto_join_address,
 		"port": auto_join_port,
-		"player_name": auto_join_player_name
+		"player_name": auto_join_player_name,
 	}

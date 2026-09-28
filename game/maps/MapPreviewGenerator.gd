@@ -47,7 +47,7 @@ static func generate_preview_for_map(map_resource: MapResource, size: Vector2i =
 	
 	# Draw unit spawns
 	for spawn_data in map_resource.unit_spawns:
-		var pos = spawn_data.get("position", Vector2i(-1, -1))
+		var pos: Vector2i = MapResource.entry_position(spawn_data)
 		if pos == Vector2i(-1, -1):
 			continue
 		

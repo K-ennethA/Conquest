@@ -27,7 +27,12 @@ class_name VersusIntro
 ## which is the same technique [GameOverScreen] uses -- a paused node receives no input at all,
 ## so the board cursor and every HUD panel are inert for the duration without this overlay
 ## having to out-race them for events. The pause is ALWAYS lifted in [method _end], including
-## on a skip and on an early tree exit.
+## on a skip and on an early tree exit. The root is also in [constant InputActions.OVERLAY_GROUP]
+## while visible, so any handler that runs through a pause still sees the board as blocked.
+##
+## LOOK: the illuminated-grove style -- each player's card is a grove frame with a crest and
+## that side's TEAM colour down its outer edge (team = edge), gold Cinzel names, a gold "VS"
+## in the display face and a gold divide.
 ##
 ## ELIGIBILITY is a pure static decision -- see [method should_show]. It plays for a local
 ## hotseat versus match and for a networked versus match, and for nothing else: solo /
@@ -85,15 +90,17 @@ const PORTRAIT_PX: float = 132.0
 
 # --- Type --------------------------------------------------------------------
 const NAME_FONT_SIZE: int = 24
-const CHIP_FONT_SIZE: int = 12
-const POINTS_FONT_SIZE: int = 12
+## Nothing a player must read goes below the grove type floor (FS_CAPTION 15 / FS_SMALL 16).
+const CHIP_FONT_SIZE: int = 15
+const POINTS_FONT_SIZE: int = 16
 const EMBLEM_FONT_SIZE: int = 96
 const MONOGRAM_FONT_SIZE: int = 56
 
 # --- Palette -----------------------------------------------------------------
 ## Backdrop behind the cards. Deliberately near-opaque: the reveal is the moment the board
-## comes out from BEHIND it, so the board must not be readable before then.
-const BACKDROP: Color = Color(0.043, 0.027, 0.012, 0.88)
+## comes out from BEHIND it, so the board must not be readable before then. The grove's deep
+## navy page ground.
+const BACKDROP: Color = Color(0.043, 0.059, 0.118, 0.88)
 
 # --- Mode discriminator ------------------------------------------------------
 ## Mirror of [code]GameSettings.GameMode.VERSUS[/code]. Spelled as a literal because a `const`
@@ -346,6 +353,9 @@ static func collect_sources() -> Dictionary:
 
 	var sources: Dictionary = {
 		"networked": networked,
+		# Presentation only (the card edges take each slot's team colour); assemble_cards
+		# ignores it.
+		"local_slot": local_slot,
 		"local_name": _name_for_slot(local_slot),
 		"local_rank": "",
 		"local_points": 0,
@@ -462,6 +472,8 @@ func _build_ui() -> void:
 	# Swallow clicks that reach the GUI layer. The tree pause is the primary block (see the
 	# class doc); this is the belt to those braces for anything that runs while paused.
 	_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	# ...and the overlay group, so InputActions.gameplay_input_blocked() says so while visible.
+	_root.add_to_group(InputActions.OVERLAY_GROUP)
 	add_child(_root)
 
 	_backdrop = ColorRect.new()
@@ -481,7 +493,7 @@ func _build_ui() -> void:
 
 	_divide = ColorRect.new()
 	_divide.name = "Divide"
-	_divide.color = ConquestTheme.AMBER_LITE
+	_divide.color = ConquestTheme.GOLD
 	_divide.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_shaker.add_child(_divide)
 
@@ -495,10 +507,13 @@ func _build_ui() -> void:
 	_emblem.text = "VS"
 	_emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_emblem.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_emblem.add_theme_font_override("font", MenuTheme.display_font(6))
 	_emblem.add_theme_font_size_override("font_size", EMBLEM_FONT_SIZE)
-	_emblem.add_theme_color_override("font_color", ConquestTheme.AMBER_LITE)
-	_emblem.add_theme_color_override("font_outline_color", ConquestTheme.BROWN_DK)
+	_emblem.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
+	_emblem.add_theme_color_override("font_outline_color", Color("2a1804"))
 	_emblem.add_theme_constant_override("outline_size", 12)
+	_emblem.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	_emblem.add_theme_constant_override("shadow_offset_y", 6)
 	_emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_shaker.add_child(_emblem)
 
@@ -525,7 +540,7 @@ func _build_card(card_name: String, side: int) -> PanelContainer:
 	card.name = card_name
 	card.size = Vector2(CARD_WIDTH, CARD_HEIGHT)
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.add_theme_stylebox_override("panel", ConquestTheme.plate_box())
+	card.add_theme_stylebox_override("panel", _card_box(side, _slot_color(side)))
 
 	var margin := MarginContainer.new()
 	margin.name = "Margin"
@@ -567,8 +582,11 @@ func _build_card(card_name: String, side: int) -> PanelContainer:
 	monogram.text = "?"
 	monogram.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	monogram.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	monogram.add_theme_font_override("font", MenuTheme.display_font(0))
 	monogram.add_theme_font_size_override("font_size", MONOGRAM_FONT_SIZE)
-	monogram.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
+	monogram.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
+	monogram.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	monogram.add_theme_constant_override("shadow_offset_y", 3)
 	monogram.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.add_child(monogram)
 
@@ -577,9 +595,10 @@ func _build_card(card_name: String, side: int) -> PanelContainer:
 	name_label.name = "NameLabel"
 	name_label.text = ""
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.add_theme_font_override("font", MenuTheme.heading_font(2))
 	name_label.add_theme_font_size_override("font_size", NAME_FONT_SIZE)
 	name_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
-	name_label.add_theme_color_override("font_outline_color", ConquestTheme.BROWN_DK)
+	name_label.add_theme_color_override("font_outline_color", ConquestTheme.BG_DEEP)
 	name_label.add_theme_constant_override("outline_size", 5)
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(name_label)
@@ -599,8 +618,9 @@ func _build_card(card_name: String, side: int) -> PanelContainer:
 	chip.text = ""
 	chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	chip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	chip.add_theme_font_override("font", MenuTheme.heading_font(2))
 	chip.add_theme_font_size_override("font_size", CHIP_FONT_SIZE)
-	chip.add_theme_color_override("font_color", ConquestTheme.EL_HOLY)
+	chip.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
 	chip.add_theme_stylebox_override("normal", _chip_box())
 	chip.visible = false
 	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -612,13 +632,14 @@ func _build_card(card_name: String, side: int) -> PanelContainer:
 	points.text = ""
 	points.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	points.add_theme_font_size_override("font_size", POINTS_FONT_SIZE)
-	points.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
+	points.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
 	points.visible = false
 	points.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(points)
 
 	_card_parts[side] = {
 		"card": card,
+		"frame": frame,
 		"name": name_label,
 		"chip": chip,
 		"points": points,
@@ -628,28 +649,73 @@ func _build_card(card_name: String, side: int) -> PanelContainer:
 	return card
 
 
-## The dark inset plate a portrait / monogram sits on.
-func _portrait_box() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = ConquestTheme.HP_TRACK
-	sb.set_corner_radius_all(8)
-	sb.set_border_width_all(2)
-	sb.border_color = ConquestTheme.BROWN
+## A player card: the grove frame (navy, fine grain, gold filigree + clasps) with the gold
+## crest on its top edge -- a hero surface -- and that side's TEAM colour as the stripe down
+## its OUTER edge (left card: left edge, right card: right edge), so the two meet at the
+## divide as mirror images.
+func _card_box(side: int, team: Color) -> StyleBox:
+	var outer: Side = SIDE_LEFT if side == SIDE_LOCAL else SIDE_RIGHT
+	var sb := MenuTheme.accented_card(team, outer, ConquestTheme.PANEL, 0.97, true)
+	sb.border_color = ConquestTheme.BORDER.lerp(team, 0.45)
+	sb.content_margin_left = 0
+	sb.content_margin_right = 0
+	sb.content_margin_top = 4
+	sb.content_margin_bottom = 0
 	return sb
 
 
-## The gold-bordered rank chip, same vocabulary as GameOverScreen's versus block.
-func _chip_box() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(ConquestTheme.PLATE_BG.r, ConquestTheme.PLATE_BG.g, ConquestTheme.PLATE_BG.b, 0.9)
-	sb.border_color = ConquestTheme.EL_HOLY
-	sb.set_border_width_all(1)
-	sb.set_corner_radius_all(4)
-	sb.content_margin_left = 8.0
-	sb.content_margin_right = 8.0
+## The sunken well a portrait / monogram sits in, rimmed in [param team].
+func _portrait_box(team: Color = ConquestTheme.BORDER) -> StyleBox:
+	var sb := MenuTheme.inset_box()
+	sb.border_color = team.darkened(0.1)
+	sb.border_width = 2.0
+	sb.inner_line_color = Color(ConquestTheme.GOLD_LITE, 0.35)
+	sb.inner_inset = 4.0
+	sb.content_margin_left = 4
+	sb.content_margin_right = 4
+	sb.content_margin_top = 4
+	sb.content_margin_bottom = 4
+	return sb
+
+
+## The gold rank chip: a pointed grove TAG (same vocabulary as the other rank / badge chips).
+func _chip_box() -> StyleBox:
+	var sb := MenuTheme.pill_box(Color(ConquestTheme.GOLD, 0.18), ConquestTheme.GOLD)
+	sb.content_margin_left = 14.0
+	sb.content_margin_right = 14.0
 	sb.content_margin_top = 2.0
 	sb.content_margin_bottom = 2.0
 	return sb
+
+
+## Team colour for roster [param slot]: P1 blue, P2 red, P3 green, P4 gold (the
+## [method ConquestTheme.team_color] seat order, without needing a live Player).
+static func _slot_color(slot: int) -> Color:
+	match slot:
+		0: return ConquestTheme.TEAM_BLUE
+		1: return ConquestTheme.TEAM_RED
+		2: return ConquestTheme.TEAM_GREEN
+		3: return ConquestTheme.TEAM_GOLD
+	return ConquestTheme.TEXT_MUTED
+
+
+## Re-tint both cards for the seats actually in play: the LOCAL card takes this machine's
+## slot colour, the opponent the other seat's (a networked player in slot 1 is red on the
+## left, and their opponent blue on the right).
+func _apply_team_colors(local_slot: int) -> void:
+	var opponent_slot: int = 1 if local_slot == 0 else 0
+	for pair in [[SIDE_LOCAL, local_slot], [SIDE_OPPONENT, opponent_slot]]:
+		var side: int = int(pair[0])
+		var team: Color = _slot_color(int(pair[1]))
+		var parts: Dictionary = _card_parts.get(side, {})
+		if parts.is_empty():
+			continue
+		var card: PanelContainer = parts.get("card", null)
+		if card != null and is_instance_valid(card):
+			card.add_theme_stylebox_override("panel", _card_box(side, team))
+		var frame: PanelContainer = parts.get("frame", null)
+		if frame != null and is_instance_valid(frame):
+			frame.add_theme_stylebox_override("panel", _portrait_box(team))
 
 
 # =====================================================================================
@@ -679,6 +745,7 @@ func play(sources: Dictionary = {}) -> void:
 	_finished_emitted = false
 
 	var cards: Dictionary = assemble_cards(sources)
+	_apply_team_colors(maxi(0, int(sources.get("local_slot", 0))))
 	_apply_card(SIDE_LOCAL, cards.get("local", {}))
 	_apply_card(SIDE_OPPONENT, cards.get("opponent", {}))
 	_cards = { SIDE_LOCAL: cards.get("local", {}), SIDE_OPPONENT: cards.get("opponent", {}) }

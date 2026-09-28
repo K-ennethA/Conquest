@@ -10,13 +10,16 @@ class_name KnockbackEffect
 func apply(ctx: MoveContext) -> void:
 	if not ctx.board.has_method("cell_of") or not ctx.board.has_method("move_unit"):
 		return
-	var origin: Vector2i = ctx.board.cell_of(ctx.caster)
+	var origin: Vector3i = ctx.board.cell_of(ctx.caster)
 	for target in ctx.gather_targets():
-		var from: Vector2i = ctx.board.cell_of(target)
+		var from: Vector3i = ctx.board.cell_of(target)
 		var dir := _push_dir(origin, from)
 		var dest := _clamped_dest(ctx.board, target, from, dir)
 		if dest == from:
-			continue  # blocked/edge right behind the target -- nowhere to shove it
+			# Blocked / edge / AIR right behind the target -- nowhere to shove it; it
+			# braces where it stands (logged so the combat log can say so).
+			ctx.log_event({ "effect": "knockback", "target": target, "from": from, "to": from })
+			continue
 		ctx.board.move_unit(target, dest)
 		ctx.log_event({ "effect": "knockback", "target": target, "from": from, "to": dest })
 
@@ -26,10 +29,14 @@ func apply(ctx: MoveContext) -> void:
 ## bounds/wall/occupancy validation must happen HERE -- otherwise a knock near an edge or
 ## wall shoves the unit off-grid or onto another unit (stacking two on one cell). Stops at
 ## the first cell the unit can't fit, so a knock never passes THROUGH a wall either.
-func _clamped_dest(board, unit, from: Vector2i, dir: Vector2i) -> Vector2i:
+## Multi-floor: never shoves a unit into the AIR (off a bridge edge / into a broken
+## bridge's gap) -- it braces at the edge instead. The push stays on the unit's floor.
+func _clamped_dest(board, unit, from: Vector3i, dir: Vector3i) -> Vector3i:
 	var last_ok := from
 	for step in range(1, distance + 1):
 		var c := from + dir * step
+		if board.has_method("has_tile") and not bool(board.has_tile(c)):
+			break
 		if board.has_method("can_fit"):
 			if not board.can_fit(unit, c):
 				break
@@ -50,10 +57,12 @@ func describe() -> String:
 	return "Knock target back %d" % distance
 
 
-static func _push_dir(origin: Vector2i, target_cell: Vector2i) -> Vector2i:
-	var delta := target_cell - origin
-	if delta == Vector2i.ZERO:
-		return Vector2i(1, 0)
+## Horizontal push direction (the floor never changes; a target directly above or
+## below the caster is pushed +X).
+static func _push_dir(origin: Vector3i, target_cell: Vector3i) -> Vector3i:
+	var delta := Vector3i(target_cell.x - origin.x, target_cell.y - origin.y, 0)
+	if delta == Vector3i.ZERO:
+		return Vector3i(1, 0, 0)
 	if absi(delta.x) >= absi(delta.y):
-		return Vector2i(signi(delta.x), 0)
-	return Vector2i(0, signi(delta.y))
+		return Vector3i(signi(delta.x), 0, 0)
+	return Vector3i(0, signi(delta.y), 0)

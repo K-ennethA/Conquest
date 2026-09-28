@@ -31,7 +31,6 @@ const CHARACTER_UNIT_SCENE: PackedScene = preload("res://game/characters/Charact
 const LAYOUT: PackedScene = preload("res://game/ui/layout/GameUILayout.tscn")
 const CURSOR_SCENE: PackedScene = preload("res://board/cursor/cursor.tscn")
 const FOG := preload("res://game/visuals/FogOfWarOverlay.gd")
-const DAMAGE_NUMBERS := preload("res://game/visuals/DamageNumbers.gd")
 const MOVE_FX := preload("res://game/visuals/MoveFXDispatcher.gd")
 
 const ALLY_ID: StringName = &"test_fog_ally"
@@ -48,8 +47,8 @@ const FOE_ID: StringName = &"test_fog_foe"
 const COLS: int = 5
 const ROWS: int = 5
 
-const ALLY_CELL := Vector2i(0, 0)
-const FOE_CELL := Vector2i(3, 3)
+const ALLY_CELL := Vector3i(0, 0, 0)
+const FOE_CELL := Vector3i(3, 3, 0)
 
 ## Untyped on purpose -- see tests/README.md, rule 3.
 var _guard
@@ -150,11 +149,11 @@ func _make_character(id: StringName, display: String) -> CharacterResource:
 	return c
 
 
-func _cell_to_world(cell: Vector2i) -> Vector3:
+func _cell_to_world(cell: Vector3i) -> Vector3:
 	return BoardAdapter.new(GRID, []).cell_to_world(cell)
 
 
-func _spawn(character_id: StringName, cell: Vector2i, owner: Player, container: Node3D) -> Unit:
+func _spawn(character_id: StringName, cell: Vector3i, owner: Player, container: Node3D) -> Unit:
 	var character := CharacterLibrary.get_character(character_id)
 	if character == null:
 		return null
@@ -239,11 +238,20 @@ func _shroud() -> MultiMeshInstance3D:
 ## a CI run. The two are tied together by [method _assert_instances_match]: the number of
 ## RENDERED instances is asserted against the size of this set in every geometry test, so
 ## "what was painted" can never drift from "what is drawn".
-func _shrouded_cells() -> Array[Vector2i]:
+func _shrouded_cells() -> Array[Vector3i]:
 	if _fog == null or not is_instance_valid(_fog):
-		return [] as Array[Vector2i]
-	var out: Array[Vector2i] = _fog.shrouded_cells()
+		return [] as Array[Vector3i]
+	var out: Array[Vector3i] = _as_cells(_fog.shrouded_cells())
 	out.sort()
+	return out
+
+
+## Normalise a cell list from the presentation layer to (col, row, floor) cells, so the
+## assertions compare like with like whatever array type the producer hands back.
+func _as_cells(cells: Array) -> Array[Vector3i]:
+	var out: Array[Vector3i] = []
+	for cell in cells:
+		out.append(Cells.from_variant(cell))
 	return out
 
 
@@ -292,7 +300,7 @@ func test_a_core_reporting_fog_off_leaves_the_board_identical() -> void:
 		pending("could not build the board; skipping")
 		return
 	var vision := _arm_vision()
-	vision.hide_cells(0, [Vector2i(2, 2), Vector2i(3, 3)])
+	vision.hide_cells(0, [Vector3i(2, 2, 0), Vector3i(3, 3, 0)])
 	vision.hide_unit(0, _foe)
 	vision.enabled = false  # MapResource.fog_of_war is off for this map
 	await _mount_fog()
@@ -312,7 +320,7 @@ func test_the_shroud_covers_exactly_the_hidden_cells() -> void:
 	if not await _build_board():
 		pending("could not build the board; skipping")
 		return
-	var hidden: Array = [Vector2i(3, 3), Vector2i(3, 4), Vector2i(4, 3), Vector2i(4, 4)]
+	var hidden: Array = [Vector3i(3, 3, 0), Vector3i(3, 4, 0), Vector3i(4, 3, 0), Vector3i(4, 4, 0)]
 	_arm_vision().hide_cells(0, hidden)
 	await _mount_fog()
 
@@ -323,8 +331,8 @@ func test_the_shroud_covers_exactly_the_hidden_cells() -> void:
 	assert_eq(node.multimesh.instance_count, 4,
 		"one quad per hidden cell -- exactly the hidden set, nothing rounded up")
 
-	var drawn: Array[Vector2i] = _shrouded_cells()
-	var expected: Array[Vector2i] = []
+	var drawn: Array[Vector3i] = _shrouded_cells()
+	var expected: Array[Vector3i] = []
 	for cell in hidden:
 		expected.append(cell)
 	expected.sort()
@@ -341,7 +349,7 @@ func test_the_shroud_is_one_batched_node_not_one_per_cell() -> void:
 	var all_cells: Array = []
 	for col in range(COLS):
 		for row in range(ROWS):
-			all_cells.append(Vector2i(col, row))
+			all_cells.append(Vector3i(col, row, 0))
 	_arm_vision().hide_cells(0, all_cells)
 	await _mount_fog()
 
@@ -359,7 +367,7 @@ func test_the_veil_is_warm_dark_and_translucent_so_terrain_stays_readable() -> v
 		pending("could not build the board; skipping")
 		return
 	_guard.set_setting("animations_enabled", false)  # no fade tween: read the settled value
-	_arm_vision().hide_cells(0, [Vector2i(1, 1)])
+	_arm_vision().hide_cells(0, [Vector3i(1, 1, 0)])
 	await _mount_fog()
 
 	var node := _shroud()
@@ -384,11 +392,11 @@ func test_a_core_without_the_batch_call_still_gets_a_shroud() -> void:
 		pending("could not build the board; skipping")
 		return
 	var probe = FogDoubles.ProbeOnlyVision.new()
-	probe.hide_cells([Vector2i(0, 4), Vector2i(1, 4)])
+	probe.hide_cells([Vector3i(0, 4, 0), Vector3i(1, 4, 0)])
 	FogOfWarOverlay.set_vision_override(probe)
 	await _mount_fog()
 
-	assert_eq(_shrouded_cells(), [Vector2i(0, 4), Vector2i(1, 4)] as Array[Vector2i],
+	assert_eq(_shrouded_cells(), [Vector3i(0, 4, 0), Vector3i(1, 4, 0)] as Array[Vector3i],
 		"the per-cell fallback shrouds the same set the batch call would have")
 	_assert_instances_match()
 
@@ -486,18 +494,18 @@ func test_the_hotseat_swap_flips_the_shroud_on_turn_change() -> void:
 	PlayerManager.current_player_index = 0
 
 	var vision := _arm_vision()
-	vision.hide_cells(0, [Vector2i(4, 4)])              # player 0 cannot see the far corner
-	vision.hide_cells(1, [Vector2i(0, 0), Vector2i(0, 1)])  # player 1 cannot see the near one
+	vision.hide_cells(0, [Vector3i(4, 4, 0)])              # player 0 cannot see the far corner
+	vision.hide_cells(1, [Vector3i(0, 0, 0), Vector3i(0, 1, 0)])  # player 1 cannot see the near one
 	await _mount_fog()
 
-	assert_eq(_shrouded_cells(), [Vector2i(4, 4)] as Array[Vector2i],
+	assert_eq(_shrouded_cells(), [Vector3i(4, 4, 0)] as Array[Vector3i],
 		"player 0's turn: player 0's blind spot is shrouded")
 
 	# The seat changes hands, exactly as the active turn system announces it.
 	PlayerManager.current_player_index = 1
 	_fog._on_turn_started(seat_b)
 
-	assert_eq(_shrouded_cells(), [Vector2i(0, 0), Vector2i(0, 1)] as Array[Vector2i],
+	assert_eq(_shrouded_cells(), [Vector3i(0, 0, 0), Vector3i(0, 1, 0)] as Array[Vector3i],
 		"player 1 takes the controls and the whole board flips to THEIR vision -- neither "
 		+ "human may keep the other's eyes")
 	_assert_instances_match()
@@ -508,7 +516,7 @@ func test_a_replay_shows_no_fog_at_all() -> void:
 		pending("could not build the board; skipping")
 		return
 	var vision := _arm_vision()
-	vision.hide_cells(0, [Vector2i(2, 2)])
+	vision.hide_cells(0, [Vector3i(2, 2, 0)])
 	vision.hide_unit(0, _foe)
 
 	ReplayPlayback.begin_playback()
@@ -756,46 +764,111 @@ func test_the_fog_intro_line_is_announced_once() -> void:
 # FX AND FLOATS
 # =============================================================================
 
-func test_damage_floats_are_suppressed_on_a_hidden_cell() -> void:
+## Mount the one floating-number layer ([FloatingCombatText]) over the live board.
+func _mount_floats() -> FloatingCombatText:
+	var numbers: FloatingCombatText = _mount(FloatingCombatText.new()) as FloatingCombatText
+	await get_tree().process_frame
+	return numbers
+
+
+## A real, current camera looking down at the board, so popups are actually projected on
+## screen (with no camera the layer parks every popup hidden, and a "hidden by fog"
+## assertion would prove nothing). Freed with the stand-in scene root.
+func _mount_camera() -> Camera3D:
+	var cam := Camera3D.new()
+	cam.name = "FogTestCamera"
+	_mount(cam)
+	var centre: Vector3 = (_cell_to_world(ALLY_CELL) + _cell_to_world(FOE_CELL)) * 0.5
+	cam.global_position = centre + Vector3(0.0, 14.0, 14.0)
+	cam.look_at(centre, Vector3.UP)
+	cam.current = true
+	return cam
+
+
+func test_damage_floats_are_suppressed_over_a_hidden_unit() -> void:
 	if not await _build_board():
 		pending("could not build the board; skipping")
 		return
-	_arm_vision().hide_cells(0, [FOE_CELL])
+	var vision := _arm_vision()
+	vision.hide_unit(0, _foe)
+	vision.hide_cells(0, [FOE_CELL])
 	await _mount_fog()
 
-	var numbers: Node3D = _mount(DAMAGE_NUMBERS.new()) as Node3D
-	await get_tree().process_frame
+	var numbers: FloatingCombatText = await _mount_floats()
 
-	numbers._spawn_popup(_cell_to_world(FOE_CELL), "-12", Color.RED, 1.0)
-	assert_eq(numbers.get_child_count(), 0,
-		"a '-12' rising out of the mist is a perfect marker for the unit you are not "
+	numbers.show_entry({ "unit": _foe, "kind": CombatTextPairer.ENTRY_DAMAGE, "amount": 12 })
+	assert_eq(numbers.live_popup_count(), 0,
+		"a '12' rising out of the mist is a perfect marker for the unit you are not "
 		+ "supposed to know is there")
 
-	numbers._spawn_popup(_cell_to_world(ALLY_CELL), "-12", Color.RED, 1.0)
-	assert_eq(numbers.get_child_count(), 1,
+	# The real path: an actual HP change on the hidden unit, heard through its UnitStats
+	# signal (track_unit is idempotent -- the layer normally tracks every unit on board_ready).
+	numbers.track_unit(_foe)
+	numbers.track_unit(_ally)
+	_foe.take_damage(3)
+	await get_tree().process_frame
+	assert_eq(numbers.live_popup_count(), 0,
+		"a real hit on a unit in the mist floats nothing either")
+	assert_eq(numbers.get_child_count(), 0, "not even an invisible popup node is built")
+
+	_ally.take_damage(3)
+	assert_eq(numbers.live_popup_count(), 1,
 		"and a hit you can see floats its number exactly as before")
+	numbers.clear_popups()
+
+
+func test_a_float_whose_unit_slips_into_the_mist_is_hidden_with_it() -> void:
+	if not await _build_board():
+		pending("could not build the board; skipping")
+		return
+	var vision := _arm_vision()
+	await _mount_fog()
+	_mount_camera()
+	var numbers: FloatingCombatText = await _mount_floats()
+
+	numbers.show_entry({ "unit": _foe, "kind": CombatTextPairer.ENTRY_DAMAGE, "amount": 6 })
+	assert_eq(numbers.live_popup_count(), 1, "in vision: the hit floats its number")
+	if numbers.get_child_count() != 1:
+		return
+	var popup := numbers.get_child(0) as Control
+	await get_tree().process_frame
+	assert_true(popup.visible, "and it is on screen while the unit is seen")
+
+	# The unit steps into the mist while its number is still rising.
+	vision.hide_unit(0, _foe)
+	await get_tree().process_frame
+	assert_eq(numbers.live_popup_count(), 1, "the popup is still mid-flight")
+	assert_false(popup.visible,
+		"but it vanishes WITH its unit -- a number hanging over an empty-looking tile "
+		+ "would mark exactly where the unit went")
+
+	vision.show_unit(0, _foe)
+	await get_tree().process_frame
+	assert_true(popup.visible,
+		"and the gate is read live: seen again before it fades, the number is back")
+	numbers.clear_popups()
 
 
 func test_move_fx_erupts_only_on_the_cells_you_can_see() -> void:
 	if not await _build_board():
 		pending("could not build the board; skipping")
 		return
-	_arm_vision().hide_cells(0, [Vector2i(3, 3), Vector2i(3, 4)])
+	_arm_vision().hide_cells(0, [Vector3i(3, 3, 0), Vector3i(3, 4, 0)])
 	await _mount_fog()
 
 	var fx: Node3D = _mount(MOVE_FX.new()) as Node3D
 	await get_tree().process_frame
 
 	var spec: Dictionary = fx._default_spec(Color.ORANGE)
-	for cell in [Vector2i(2, 3), Vector2i(3, 3), Vector2i(3, 4)]:
+	for cell in [Vector3i(2, 3, 0), Vector3i(3, 3, 0), Vector3i(3, 4, 0)]:
 		fx._spawn_impact(cell, spec)
 
-	var lit: Array[Vector2i] = fx.live_impact_cells()
-	assert_true(lit.has(Vector2i(2, 3)), "the cell in the open erupts")
-	assert_false(lit.has(Vector2i(3, 3)),
+	var lit: Array[Vector3i] = _as_cells(fx.live_impact_cells())
+	assert_true(lit.has(Vector3i(2, 3, 0)), "the cell in the open erupts")
+	assert_false(lit.has(Vector3i(3, 3, 0)),
 		"a blast reaching into the mist is CLIPPED per cell -- the genre answer to a hit "
 		+ "in fog is that you see nothing")
-	assert_false(lit.has(Vector2i(3, 4)), "every fogged cell of the area, not just one")
+	assert_false(lit.has(Vector3i(3, 4, 0)), "every fogged cell of the area, not just one")
 
 	fx.clear_effects()
 
@@ -823,8 +896,7 @@ func test_a_reveal_on_attack_is_rendered_not_suppressed() -> void:
 	if log_panel == null:
 		pending("BattleLog not present; skipping")
 		return
-	var numbers: Node3D = _mount(DAMAGE_NUMBERS.new()) as Node3D
-	await get_tree().process_frame
+	var numbers: FloatingCombatText = await _mount_floats()
 
 	assert_true(FogOfWarOverlay.unit_hidden(_foe), "before the attack it is unseen")
 
@@ -837,13 +909,17 @@ func test_a_reveal_on_attack_is_rendered_not_suppressed() -> void:
 		"the gate answers from the core, not from the last repaint's cached set")
 
 	GameEvents.damage_dealt.emit(_foe, _ally, 9)
-	numbers._spawn_popup(_cell_to_world(FOE_CELL), "-9", Color.RED, 1.0)
+	# The attacker's own number from the same strike (its lifesteal), arriving after the
+	# reveal exactly as the announcement did.
+	numbers.show_entry({ "unit": _foe, "kind": CombatTextPairer.ENTRY_HEAL, "amount": 3,
+		"source": "Lifesteal", "source_kind": CombatText.SRC_LIFESTEAL })
 
 	assert_true(log_panel._log.text.contains("Blightcap"),
 		"the attack that revealed the attacker NAMES it -- the reveal is in effect before "
 		+ "the announcement, so nothing is swallowed")
-	assert_eq(numbers.get_child_count(), 1,
-		"and its cell draws its damage float, because that cell is now in vision")
+	assert_eq(numbers.live_popup_count(), 1,
+		"and the revealed attacker draws its float, because it is now in vision")
+	numbers.clear_popups()
 
 
 # =============================================================================
@@ -853,7 +929,7 @@ func test_a_reveal_on_attack_is_rendered_not_suppressed() -> void:
 # Every test above runs on the stub, so a failure there is always a failure of the LOOK.
 # These two run the same layer against the REAL [VisionSystem], with no override installed,
 # and are the ones that catch an API drift between the two halves -- notably that
-# VisionSystem.visible_cells returns a { Vector2i: true } DICTIONARY, not an Array.
+# VisionSystem.visible_cells returns a { Vector3i: true } DICTIONARY, not an Array.
 
 ## Mount the real core over the live board, fed a map with [param fog] authored on it.
 func _mount_real_vision(fog: bool) -> VisionSystem:
@@ -885,10 +961,10 @@ func test_the_real_vision_core_drives_the_same_shroud() -> void:
 
 	var perspective: int = FogOfWarOverlay.local_perspective()
 	var lit: Dictionary = vision.visible_cells(perspective)
-	var shrouded: Array[Vector2i] = _shrouded_cells()
+	var shrouded: Array[Vector3i] = _shrouded_cells()
 	for col in range(COLS):
 		for row in range(ROWS):
-			var cell := Vector2i(col, row)
+			var cell := Vector3i(col, row, 0)
 			assert_eq(shrouded.has(cell), not lit.has(cell),
 				"cell (%d,%d): the veil is the exact complement of the core's lit set"
 					% [col, row])

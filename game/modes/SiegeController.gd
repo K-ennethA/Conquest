@@ -117,6 +117,10 @@ const ANNOUNCE_POINT_SUB := "Hold it for reinforcements and healing."
 ## log and any listener can tell a midpoint's sustain from a healing move somebody cast.
 const CONTROL_HEAL_MOVE_ID: StringName = &"siege_control_point_heal"
 
+## "No cell" sentinel for the cell-valued answers below (a side with no base, no board).
+## The pre-multi-floor (-1, -1) on the ground floor.
+const NO_CELL := Vector3i(-1, -1, 0)
+
 ## The single live instance, or null before the first Siege map.
 static var _instance: SiegeController = null
 
@@ -126,11 +130,12 @@ var _armed: bool = false
 ## Tuning. Never null once armed.
 var _ruleset: SiegeRuleset = null
 
-## Lane waypoints as authored: an Array of Arrays of [Vector2i], each ordered from player 0's
-## side toward player 1's. Empty on a non-Siege map.
+## Lane waypoints: an Array of Arrays of board cells ([Vector3i]; the map authors [Vector2i]
+## positions, lifted onto the ground floor), each ordered from player 0's side toward player
+## 1's. Empty on a non-Siege map.
 var _lanes: Array = []
 
-## player_id -> capture cell ([Vector2i]).
+## player_id -> capture cell ([Vector3i]).
 var _base_cells: Dictionary = {}
 
 ## Authored CONTROL POINT cells, deduplicated and held in SORTED order -- which is the order
@@ -138,11 +143,11 @@ var _base_cells: Dictionary = {}
 ## the array happened to be authored. Empty on a map that declares no midpoints.
 var _control_points: Array = []
 
-## Control point ownership: [Vector2i] cell -> player_id. A cell absent from this map is
+## Control point ownership: [Vector3i] cell -> player_id. A cell absent from this map is
 ## NEUTRAL; there is no "owned by -1" entry.
 var _control_owner: Dictionary = {}
 
-## Claims in flight: [Vector2i] cell -> { "player_id": int, "unit": Unit }. Exactly the shape
+## Claims in flight: [Vector3i] cell -> { "player_id": int, "unit": Unit }. Exactly the shape
 ## [member _capture] takes, because it is exactly the same state machine.
 var _control_claim: Dictionary = {}
 
@@ -161,7 +166,7 @@ var _creep_serial: Dictionary = {}
 ## Read through [method respawn_queue], which adds the live "rounds_remaining".
 var _respawn_queue: Array = []
 
-## The capture in flight: {} or { "player_id": int, "unit": Unit, "cell": Vector2i }.
+## The capture in flight: {} or { "player_id": int, "unit": Unit, "cell": Vector3i }.
 var _capture: Dictionary = {}
 
 ## Side that has COMPLETED a capture, or -1. Latched -- a battle is decided once.
@@ -335,7 +340,9 @@ static func load_ruleset() -> SiegeRuleset:
 
 ## Read the Siege schema off [param map_resource]: `lanes` (an Array of Arrays of
 ## [Vector2i], each ordered from player 0's side toward player 1's) and `base_cells` (int
-## player_id -> [Vector2i]).
+## player_id -> [Vector2i]). Map data is 2D (+ floor); every cell is LIFTED here to a board
+## cell ([Vector3i], via [method Cells.from_variant] -- ground floor for a 2D position), which
+## is what the board's [code]cell_of[/code] answers and what every comparison below uses.
 ##
 ## Coded against HAS-CHECKS on purpose. Both fields are OPTIONAL additions to [MapResource]
 ## owned by the map layer, and both default to empty meaning "not a Siege map", so this
@@ -364,23 +371,25 @@ func configure_from_map(map_resource) -> void:
 			else:
 				lane = _to_cells((raw_lanes as Array)[i])
 			if lane.size() >= 2:
-				# Copied into a plain Array: the accessor hands back a TYPED Array[Vector2i]
-				# and this one is reversed per side, which a typed array would refuse to
-				# hand back to an untyped caller.
+				# Copied into a plain Array of BOARD cells: the accessor hands back a TYPED
+				# Array[Vector2i] of map positions, and this one is reversed per side, which a
+				# typed array would refuse to hand back to an untyped caller.
 				var copy: Array = []
 				for cell in lane:
-					copy.append(cell)
+					var c: Vector3i = _to_cell(cell)
+					if c != NO_CELL:
+						copy.append(c)
 				_lanes.append(copy)
 
 	var raw_bases = map_resource.get("base_cells")
 	if raw_bases is Dictionary:
 		for key in (raw_bases as Dictionary):
-			var cell: Vector2i = Vector2i(-1, -1)
+			var cell: Vector3i = NO_CELL
 			if map_resource.has_method("get_base_cell"):
-				cell = map_resource.get_base_cell(key)
+				cell = _to_cell(map_resource.get_base_cell(key))
 			else:
 				cell = _to_cell((raw_bases as Dictionary)[key])
-			if cell.x >= 0 and cell.y >= 0:
+			if cell != NO_CELL:
 				_base_cells[int(key)] = cell
 
 	# CONTROL POINTS -- a third OPTIONAL field, read by exact name off whatever the map layer
@@ -407,26 +416,26 @@ func ruleset() -> SiegeRuleset:
 	return _ruleset
 
 
-## Every authored lane, as Arrays of [Vector2i] in player-0-to-player-1 order.
+## Every authored lane, as Arrays of board cells ([Vector3i]) in player-0-to-player-1 order.
 func lanes() -> Array:
 	return _lanes.duplicate(true)
 
 
-## The capture cell [param player_id] must DEFEND, or (-1, -1) when it has none.
-func base_cell_for(player_id: int) -> Vector2i:
-	return _base_cells.get(player_id, Vector2i(-1, -1))
+## The capture cell [param player_id] must DEFEND, or [constant NO_CELL] when it has none.
+func base_cell_for(player_id: int) -> Vector3i:
+	return _base_cells.get(player_id, NO_CELL)
 
 
 ## The capture cell [param player_id] must TAKE: the other side's base. With exactly two
 ## bases authored this is unambiguous; with more, the lowest other id wins (stable, and the
 ## shipped schema only ever carries two).
-func enemy_base_cell_for(player_id: int) -> Vector2i:
+func enemy_base_cell_for(player_id: int) -> Vector3i:
 	var ids: Array = _base_cells.keys()
 	ids.sort()
 	for id in ids:
 		if int(id) != player_id:
 			return _base_cells[id]
-	return Vector2i(-1, -1)
+	return NO_CELL
 
 
 # --- Bus wiring ---------------------------------------------------------------
@@ -693,7 +702,7 @@ func march_lane_for(player_id: int, lane_index: int) -> Array:
 ## off-lane: [method BotController.march_target] picks the nearest waypoint from wherever a
 ## marcher is standing, so a creep dropped beside a lane joins it on its first step with no
 ## special case anywhere in the AI.
-func _spawn_creep(player_id: int, lane: Array, at_cell: Vector2i):
+func _spawn_creep(player_id: int, lane: Array, at_cell: Vector3i):
 	var spawner = _spawn_manager()
 	if spawner == null or not spawner.has_method("spawn_and_adopt"):
 		return null
@@ -703,8 +712,10 @@ func _spawn_creep(player_id: int, lane: Array, at_cell: Vector2i):
 	if character_id.is_empty():
 		return null
 
+	# Map-shaped payload (a 2D position + floor), exactly a MapResource spawn entry.
 	var unit = spawner.spawn_and_adopt({
-		"position": at_cell,
+		"position": Cells.flat(at_cell),
+		"floor": at_cell.z,
 		"player_id": player_id,
 		"character_id": character_id,
 		"spawn_kind": CREEP_SPAWN_KIND,
@@ -806,7 +817,7 @@ func handle_unit_eliminated(unit, _eliminator = null) -> void:
 		return
 
 	var player_id: int = _player_id_of(unit)
-	if player_id < 0 or base_cell_for(player_id) == Vector2i(-1, -1):
+	if player_id < 0 or base_cell_for(player_id) == NO_CELL:
 		return
 	var character_id: String = _character_id_of(unit)
 	if character_id.is_empty():
@@ -850,12 +861,13 @@ func _return_unit(entry: Dictionary) -> bool:
 	if spawner == null or not spawner.has_method("spawn_and_adopt"):
 		return false
 	var player_id: int = int(entry["player_id"])
-	var cell: Vector2i = base_cell_for(player_id)
-	if cell == Vector2i(-1, -1):
+	var cell: Vector3i = base_cell_for(player_id)
+	if cell == NO_CELL:
 		return false
 
 	var unit = spawner.spawn_and_adopt({
-		"position": cell,
+		"position": Cells.flat(cell),
+		"floor": cell.z,
 		"player_id": player_id,
 		"character_id": String(entry["character_id"]),
 		"spawn_kind": MapResource.SPAWN_KIND_START,
@@ -957,8 +969,8 @@ func handle_turn_ended(player, ts = null) -> void:
 
 ## The base half of [method handle_turn_ended].
 func _sample_base_capture(side: int, acting, candidates: Array) -> void:
-	var target: Vector2i = enemy_base_cell_for(side)
-	if target == Vector2i(-1, -1):
+	var target: Vector3i = enemy_base_cell_for(side)
+	if target == NO_CELL:
 		return
 
 	for unit in candidates:
@@ -984,7 +996,7 @@ func _sample_base_capture(side: int, acting, candidates: Array) -> void:
 ## and displacement both show up as "the unit is not alive on that cell any more".
 func _resolve_capture() -> void:
 	var unit = _capture.get("unit")
-	var cell: Vector2i = _capture.get("cell", Vector2i(-1, -1))
+	var cell: Vector3i = _capture.get("cell", NO_CELL)
 	var side: int = int(_capture.get("player_id", -1))
 	_capture.clear()
 
@@ -1056,8 +1068,9 @@ func has_control_points() -> bool:
 ## Who owns the control point at [param cell]: a player id, or -1 for NEUTRAL (never claimed,
 ## or not a control point at all). THE accessor the visuals layer reads, behind a has_method
 ## guard -- so a build without this mode simply draws nothing.
-func control_point_owner(cell: Vector2i) -> int:
-	return int(_control_owner.get(cell, -1))
+## Accepts a board cell ([Vector3i]) or a 2D map position (ground floor).
+func control_point_owner(cell) -> int:
+	return int(_control_owner.get(_to_cell(cell), -1))
 
 
 ## Every control point [param player_id] currently owns, in sorted cell order. The second half
@@ -1072,8 +1085,8 @@ func control_points_owned(player_id: int) -> Array:
 
 ## Side with a claim IN FLIGHT on [param cell] (one turn from owning it), or -1. The midpoint
 ## mirror of [method capturing_by].
-func control_point_claimer(cell: Vector2i) -> int:
-	var claim = _control_claim.get(cell)
+func control_point_claimer(cell) -> int:
+	var claim = _control_claim.get(_to_cell(cell))
 	if claim == null:
 		return -1
 	return int((claim as Dictionary)["player_id"])
@@ -1211,10 +1224,10 @@ func _heal_unit(unit, amount: int) -> void:
 	var board = _board()
 	if board == null or not board.has_method("units_at"):
 		return
-	var cell: Vector2i = _cell_of(unit)
+	var cell: Vector3i = _cell_of(unit)
 	var effect := HealEffect.new()
 	effect.amount = amount
-	var ctx := MoveContext.new(unit, board, _control_heal_move(), cell, [cell] as Array[Vector2i])
+	var ctx := MoveContext.new(unit, board, _control_heal_move(), cell, [cell] as Array[Vector3i])
 	# A midpoint's sustain is not a swing: it always lands, and it must not draw on an RNG that
 	# a lockstep peer is not drawing on (the reason a status tick sets the same flag).
 	ctx.guaranteed_hit = true
@@ -1244,13 +1257,14 @@ static func _control_heal_move() -> MoveResource:
 ## Pure arithmetic over the authored map, so the reinforcements a midpoint sends walk the same
 ## lane on every peer and in every replay. Public because it is exactly the kind of derivation a
 ## test should be able to pin without spawning anything.
-func nearest_lane_index(cell: Vector2i) -> int:
+func nearest_lane_index(cell) -> int:
+	var c: Vector3i = _to_cell(cell)
 	var best: int = -1
 	var best_dist: int = 1 << 30
 	for lane_index in range(_lanes.size()):
 		var lane: Array = _lanes[lane_index]
 		for waypoint in lane:
-			var d: int = absi(waypoint.x - cell.x) + absi(waypoint.y - cell.y)
+			var d: int = Cells.distance(waypoint, c)
 			if d < best_dist:
 				best_dist = d
 				best = lane_index
@@ -1259,12 +1273,11 @@ func nearest_lane_index(cell: Vector2i) -> int:
 
 # --- Shared helpers -----------------------------------------------------------
 
-## Sort comparator putting cells in a canonical order (x, then y). The one definition of "sorted
-## cell order", used everywhere a multi-cell pass has to be reproducible.
-static func _cell_less(a: Vector2i, b: Vector2i) -> bool:
-	if a.x != b.x:
-		return a.x < b.x
-	return a.y < b.y
+## Sort comparator putting cells in a canonical order (x, then y, then floor -- [method
+## Cells.less]). The one definition of "sorted cell order", used everywhere a multi-cell pass
+## has to be reproducible.
+static func _cell_less(a: Vector3i, b: Vector3i) -> bool:
+	return Cells.less(a, b)
 
 
 ## The live board: the injected seam first, then [CombatServices]. Null outside a battle.
@@ -1350,12 +1363,12 @@ static func _character_id_of(unit) -> String:
 	return ""
 
 
-## The cell [param unit] stands on, via the shared live board. (-1,-1) with no board.
-func _cell_of(unit) -> Vector2i:
+## The cell [param unit] stands on, via the shared live board. [constant NO_CELL] with no board.
+func _cell_of(unit) -> Vector3i:
 	var board = _board()
 	if board == null or not board.has_method("cell_of"):
-		return Vector2i(-1, -1)
-	return board.cell_of(unit)
+		return NO_CELL
+	return Cells.from_variant(board.cell_of(unit))
 
 
 func set_board_override(board) -> void:
@@ -1406,28 +1419,24 @@ func _tree() -> SceneTree:
 	return get_tree()
 
 
-## Coerce an authored waypoint list into [Vector2i]s. A .tres map hands back Vector2i already;
-## a JSON map hands back plain Arrays of floats (CONQUEST.md rule 3), so both are accepted.
+## Coerce an authored waypoint list into board cells ([Vector3i]). A .tres map hands back
+## Vector2i map positions; a JSON map hands back plain Arrays of floats / {"x","y"} objects
+## (CONQUEST.md rule 3); a test may hand Vector3i cells directly -- all are accepted.
 static func _to_cells(raw) -> Array:
 	var out: Array = []
 	if not (raw is Array):
 		return out
 	for item in raw as Array:
-		var cell: Vector2i = _to_cell(item)
-		if cell.x >= 0 and cell.y >= 0:
+		var cell: Vector3i = _to_cell(item)
+		if cell != NO_CELL:
 			out.append(cell)
 	return out
 
 
-static func _to_cell(item) -> Vector2i:
-	if item is Vector2i:
-		return item
-	if item is Vector2:
-		return Vector2i(item)
-	if item is Array and (item as Array).size() >= 2:
-		return Vector2i(int((item as Array)[0]), int((item as Array)[1]))
-	if item is Dictionary:
-		var d: Dictionary = item as Dictionary
-		if d.has("x") and d.has("y"):
-			return Vector2i(int(d["x"]), int(d["y"]))
-	return Vector2i(-1, -1)
+## One authored cell as a board cell ([Vector3i]; a 2D position lands on the ground floor), or
+## [constant NO_CELL] when it is unreadable or off the board (a negative column / row).
+static func _to_cell(item) -> Vector3i:
+	var c: Vector3i = Cells.from_variant(item)
+	if c == Cells.INVALID or c.x < 0 or c.y < 0 or c.z < 0:
+		return NO_CELL
+	return c

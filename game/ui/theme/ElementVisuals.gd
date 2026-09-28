@@ -206,10 +206,11 @@ static func _join_notes(notes) -> String:
 
 # --- The badge widget ----------------------------------------------------------
 
-## A compact element chip: dim fill in the element's colour, a 1px frame in it, cream
-## text naming the element. The SAME recipe [UnitInfoPanel] and [UnitHoverPanel] build
-## their status chips with, so a unit's element badge and its condition chips read as one
-## family of pills rather than as two unrelated widgets.
+## A compact element chip: a small notched grove plate ([OrnateStyleBox]) with a dim fill
+## in the element's colour, a 1px frame in it, cream text naming the element. The SAME
+## recipe [UnitInfoPanel] and [UnitHoverPanel] build their status chips with, so a unit's
+## element badge and its condition chips read as one family of pills rather than as two
+## unrelated widgets.
 ##
 ## Built once and re-pointed with [method update_badge] rather than rebuilt per unit, so
 ## a caller can put it in a row at construction time and never touch the tree again.
@@ -276,22 +277,20 @@ static func update_badge(badge: PanelContainer, element, cap: float = BADGE_MAX_
 	badge.visible = true
 	badge.tooltip_text = "Element: %s" % text
 
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = color.darkened(0.35)
-	sb.set_corner_radius_all(5)
-	sb.set_border_width_all(1)
-	sb.border_color = color
-	sb.content_margin_left = 5
-	sb.content_margin_right = 5
+	# The grove chip: a small notched plate (OrnateStyleBox CHAMFER -- the same frame family
+	# as every other HUD chip) in the element's colour. Margins are the badge's historical
+	# ones, so the MEASURED heights / widths the class note promises are unchanged.
 	var v_padding: int = int(badge.get_meta("badge_v_padding", 1))
-	sb.content_margin_top = v_padding
-	sb.content_margin_bottom = v_padding
+	var sb := MenuTheme.plate_box(color.darkened(0.35), color, 4.0, 5.0, float(v_padding), 1.0)
+	sb.sheen = 0.12
 	badge.add_theme_stylebox_override("panel", sb)
+	# Self-styled: a HUD-wide ConquestTheme.apply_to() sweep must leave the chip alone.
+	ConquestTheme.keep_style(badge)
 
 	if label != null:
 		label.text = text
-		# CREAM reads on the dim chip fill; a theme cascade's default INK is tuned for the
-		# light amber panel background instead and would be near-invisible here.
+		# CREAM reads on the dim chip fill (explicit, so the badge never inherits INK -- the
+		# on-gold text colour -- from a cascade).
 		label.add_theme_color_override("font_color", ConquestTheme.CREAM)
 		label.clip_text = true
 		label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS

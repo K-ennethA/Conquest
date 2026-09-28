@@ -1,29 +1,59 @@
 extends GutTest
 
-## Floating combat numbers ([DamageNumbers]).
+## Floating combat numbers -- the GUARDS and status words of [FloatingCombatText].
 ##
-## This layer is driven entirely by signal handlers that fire during combat -- including
-## the frame a unit is being torn down on -- so almost everything worth pinning here is a
-## GUARD rather than a feature:
+## This suite used to pin the old DamageNumbers layer. That layer was folded into
+## [FloatingCombatText] (the ONE floating-number layer: a number for every HP change, paired
+## with its context by [CombatTextPairer]), and every guarantee below is the same promise
+## the old layer made, re-pinned against the merged layer. The pairing logic, the wording
+## ([method FloatingCombatText.texts_for]) and every source's annotation are covered by
+## `test_floating_combat_text.gd`; this file keeps the other half:
 ##
-##  * it must spawn NOTHING and log NOTHING when it has no scene to spawn into (a Tween
-##    cannot be created on a detached node, so an unguarded path would raise);
-##  * it must spawn NOTHING when the player has animations switched off;
+##  * it must survive -- spawn nothing, log nothing -- when it has no scene to draw into or
+##    a payload with no unit / no condition in it;
 ##  * it must never register in [UnitAnimator]'s busy registry, because that registry is
-##    what the AI driver waits on and a cosmetic number must never stall the enemy turn.
+##    what the AI driver waits on and a cosmetic number must never stall the enemy turn;
+##  * it must cap its live popups, stack a burst instead of overlapping it, and clear
+##    immediately on a scene reset;
+##  * a condition LANDING shouts its name, and one EXPIRING is reported quietly.
 ##
-## The handlers are called DIRECTLY rather than through the GameEvents autoload on purpose:
-## `damage_dealt` is a TYPED signal (`Unit, Unit, int`), so a plain Node3D mock cannot be
-## emitted through it -- which is exactly why DamageEffect guards its own announce.
+## The handlers are called DIRECTLY ([method FloatingCombatText._on_health_changed] is what
+## each unit's [signal UnitStats.health_changed] is bound to), so a plain Node3D stands in
+## for a unit. There is no camera in this suite, so popups are never on screen here -- the
+## assertions read the popup nodes and labels the layer built, not pixels.
+##
+## DROPPED ON PURPOSE (the behaviour changed in the merge, not the promise):
+##  * "animations off spawns nothing" -- the merged layer still shows the number, briefly
+##    ([method FloatingCombatText._speed_factor]); an HP change must never be invisible.
+##  * "a status tick is recoloured by the status_ticked announce that follows it" -- the
+##    attribution now arrives BEFORE the HP change as a [CombatText] annotation; the same
+##    player-facing promise is re-pinned below through that annotation instead.
+##  * "crit inferred from the in-flight cast" -- crits now arrive on the annotation too.
 
-const DAMAGE_NUMBERS := preload("res://game/visuals/DamageNumbers.gd")
 const ANIMATOR := preload("res://game/visuals/UnitAnimator.gd")
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
+
+
+## A vision core that hides EVERY unit from EVERY seat -- so the fog gate answers "hidden"
+## whatever [method FogOfWarOverlay.local_perspective] resolves to in a unit-test tree.
+## A RefCounted, so it can never orphan.
+class BlindVision:
+	extends RefCounted
+
+	func fog_enabled() -> bool:
+		return true
+
+	func is_unit_visible(_player_id: int, _unit) -> bool:
+		return false
+
+	func is_cell_visible(_player_id: int, _cell) -> bool:
+		return false
+
 
 ## Untyped on purpose -- see tests/README.md, rule 3.
 var _guard
 
-var _numbers: Node3D
+var _numbers: FloatingCombatText
 var _victim: Node3D
 
 
@@ -34,6 +64,8 @@ func before_each() -> void:
 	_guard.set_setting("animations_enabled", true)
 	_guard.set_setting("battle_speed", 1.0)
 	ANIMATOR._clear_anim_registry()
+	CombatServices.clear()
+	FogOfWarOverlay.reset_for_tests()
 	_victim = add_child_autofree(Node3D.new())
 	_victim.position = Vector3(4.0, 0.0, 6.0)
 
@@ -42,161 +74,22 @@ func after_each() -> void:
 	if _numbers != null and is_instance_valid(_numbers):
 		_numbers.clear_popups()
 	_numbers = null
+	FogOfWarOverlay.reset_for_tests()
+	CombatServices.clear()
 	ANIMATOR._clear_anim_registry()
 	_guard.restore()
 
 
 ## In the tree: the normal, mounted-in-a-battle case.
-func _mounted() -> Node3D:
-	_numbers = add_child_autofree(DAMAGE_NUMBERS.new())
+func _mounted() -> FloatingCombatText:
+	_numbers = add_child_autofree(FloatingCombatText.new())
 	return _numbers
 
 
 ## Detached: what a signal arriving mid-teardown looks like.
-func _detached() -> Node3D:
-	_numbers = autofree(DAMAGE_NUMBERS.new())
+func _detached() -> FloatingCombatText:
+	_numbers = autofree(FloatingCombatText.new())
 	return _numbers
-
-
-# --- No scene: spawn nothing, log nothing -------------------------------------
-
-func test_damage_without_a_scene_spawns_nothing() -> void:
-	var numbers := _detached()
-	numbers._on_damage_dealt(null, _victim, 12)
-	await get_tree().process_frame
-	assert_eq(numbers.get_child_count(), 0,
-		"a hit arriving while the layer is detached must produce no popup and no error")
-
-
-func test_heal_without_a_scene_spawns_nothing() -> void:
-	var numbers := _detached()
-	numbers._on_unit_healed(_victim, 7)
-	await get_tree().process_frame
-	assert_eq(numbers.get_child_count(), 0,
-		"a heal arriving while the layer is detached must produce no popup and no error")
-
-
-func test_fully_null_payloads_are_survivable() -> void:
-	var numbers := _mounted()
-	numbers._on_damage_dealt(null, null, null)
-	numbers._on_unit_healed(null, null)
-	numbers._on_move_performed(null, null)
-	await get_tree().process_frame
-	assert_eq(numbers.get_child_count(), 0,
-		"a payload with no unit in it is dropped, not guessed at")
-
-
-func test_non_positive_amounts_are_ignored() -> void:
-	var numbers := _mounted()
-	numbers._on_damage_dealt(null, _victim, 0)
-	numbers._on_unit_healed(_victim, 0)
-	await get_tree().process_frame
-	assert_eq(numbers.get_child_count(), 0,
-		"a zero-damage / zero-heal event has nothing to show")
-
-
-# --- Animations toggle --------------------------------------------------------
-
-func test_animations_off_spawns_nothing() -> void:
-	_guard.set_setting("animations_enabled", false)
-	var numbers := _mounted()
-	numbers._on_damage_dealt(null, _victim, 12)
-	numbers._on_unit_healed(_victim, 12)
-	await get_tree().process_frame
-	assert_eq(numbers.get_child_count(), 0,
-		"animations off means no floating numbers at all")
-	assert_true(numbers._pending.is_empty(),
-		"and nothing is even buffered, so turning animations back on cannot flush a backlog")
-
-
-# --- The happy path -----------------------------------------------------------
-
-func test_a_hit_spawns_one_popup_carrying_the_amount() -> void:
-	var numbers := _mounted()
-	numbers._on_damage_dealt(null, _victim, 12)
-	# The hit is buffered and flushed DEFERRED so the cast behind it is known by then.
-	assert_eq(numbers.get_child_count(), 0, "the hit is buffered, not spawned inline")
-	await get_tree().process_frame
-	assert_eq(numbers.get_child_count(), 1, "the deferred flush spawns exactly one popup")
-	var label := numbers.get_child(0) as Label3D
-	assert_not_null(label, "the popup is a billboarded Label3D")
-	assert_eq(label.text, "12", "the popup shows the damage that was dealt")
-	# Channel-wise, not whole-Color: the alpha is being tweened to 0 as we look at it.
-	assert_almost_eq(label.modulate.r, numbers.damage_color.r, 0.01,
-		"an ordinary hit is plain white, not the crit gold or the heal green")
-	assert_eq(label.font_size, numbers.font_size, "and it is drawn at the base size")
-
-
-func test_a_heal_spawns_a_signed_green_popup() -> void:
-	var numbers := _mounted()
-	numbers._on_unit_healed(_victim, 8)
-	# Heals ride the SAME deferred buffer hits do -- not because a heal can crit (it
-	# cannot), but because a regen tick has to be recolourable by the status announce
-	# that arrives after it. One path for both is what stops the two drifting.
-	await get_tree().process_frame
-	var label := numbers.get_child(0) as Label3D
-	assert_not_null(label, "the deferred flush spawns the heal popup")
-	assert_eq(label.text, "+8", "restored HP reads as a signed gain, not a bare number")
-	assert_almost_eq(label.modulate.r, numbers.heal_color.r, 0.01,
-		"and it is green, the opposite of damage")
-
-
-func test_the_popup_spawns_above_the_victim_it_was_captured_from() -> void:
-	var numbers := _mounted()
-	numbers._on_unit_healed(_victim, 3)
-	await get_tree().process_frame
-	var label := numbers.get_child(0) as Label3D
-	# A RANGE, not an exact height: the popup spawns at spawn_height and immediately
-	# begins drifting up by float_height, and the deferred flush means a frame of that
-	# drift has already elapsed by the time a test can look at it. What the placement
-	# rule actually promises is "starts clear of the health bar, ends no higher than one
-	# float_height above that" -- so that is what is asserted.
-	assert_between(label.global_position.y,
-		_victim.global_position.y + numbers.spawn_height - 0.001,
-		_victim.global_position.y + numbers.spawn_height + numbers.float_height,
-		"the number floats above the unit, clear of its health bar, and drifts up from there")
-	# Only the horizontal placement is jittered, and only within the authored band.
-	assert_almost_eq(label.global_position.x, _victim.global_position.x,
-		numbers.spawn_jitter + 0.001, "horizontal jitter stays inside its authored band")
-
-
-func test_a_burst_of_hits_shares_one_deferred_flush() -> void:
-	var numbers := _mounted()
-	numbers._on_damage_dealt(null, _victim, 4)
-	numbers._on_damage_dealt(null, _victim, 5)
-	numbers._on_damage_dealt(null, _victim, 6)
-	await get_tree().process_frame
-	assert_eq(numbers.get_child_count(), 3, "every target of an AoE gets its own number")
-
-
-func test_live_popups_are_capped() -> void:
-	var numbers := _mounted()
-	numbers.max_live_popups = 2
-	for i in range(6):
-		numbers._on_damage_dealt(null, _victim, i + 1)
-	await get_tree().process_frame
-	assert_eq(numbers.get_child_count(), 2,
-		"a board-clearing AoE cannot flood the scene with labels")
-
-
-# --- The load-bearing invariant: numbers never stall the AI --------------------
-
-func test_popups_never_register_as_a_playing_animation() -> void:
-	var numbers := _mounted()
-	numbers._on_damage_dealt(null, _victim, 12)
-	numbers._on_unit_healed(_victim, 12)
-	await get_tree().process_frame
-	assert_gt(numbers.get_child_count(), 0, "popups really are in flight for this assertion")
-	assert_false(ANIMATOR.is_any_animation_playing(),
-		"floating numbers are cosmetic: the AI must never wait on one")
-
-
-# --- Status feedback ----------------------------------------------------------
-#
-# Signal -> presentation wiring, driven with a stub emitter (the handlers are called
-# directly, exactly as the damage/heal ones above are). The report behind these: a player
-# could not tell whether poison was doing anything, because a poison tick drew the SAME
-# plain white number a sword hit does, from no visible source.
 
 
 ## A live poison instance -- a Resource, so it never orphans.
@@ -209,115 +102,319 @@ func _poison() -> StatusCondition:
 	return condition
 
 
-func test_a_status_tick_is_recoloured_and_marked() -> void:
-	var numbers := _mounted()
-	var poison := _poison()
-	# Exactly the live order: the tick's damage is announced first, then the status
-	# announce that attributes it.
-	numbers._on_damage_dealt(_victim, _victim, 4)
-	numbers._on_status_ticked(_victim, poison, [])
+## Every Label of popup [param i] (tag, main number, source line), in draw order.
+func _labels_of(numbers: FloatingCombatText, i: int) -> Array[Label]:
+	var out: Array[Label] = []
+	if i < 0 or i >= numbers.get_child_count():
+		return out  # no such popup: the caller's assertion reports it, without an engine error
+	_collect_labels(numbers.get_child(i), out)
+	return out
+
+
+func _collect_labels(node: Node, out: Array[Label]) -> void:
+	for child in node.get_children():
+		if child is Label:
+			out.append(child as Label)
+		else:
+			_collect_labels(child, out)
+
+
+## Popup [param i]'s label texts, in draw order.
+func _texts_of(numbers: FloatingCombatText, i: int) -> Array:
+	var out: Array = []
+	for label in _labels_of(numbers, i):
+		out.append(label.text)
+	return out
+
+
+## The label of popup [param i] that reads [param text], or null.
+func _label_reading(numbers: FloatingCombatText, i: int, text: String) -> Label:
+	for label in _labels_of(numbers, i):
+		if label.text == text:
+			return label
+	return null
+
+
+func _colour_of(label: Label) -> Color:
+	return label.get_theme_color(&"font_color")
+
+
+func _size_of(label: Label) -> int:
+	return label.get_theme_font_size(&"font_size")
+
+
+func _rgb_distance(a: Color, b: Color) -> float:
+	return Vector3(a.r - b.r, a.g - b.g, a.b - b.b).length()
+
+
+# --- No scene: spawn nothing, log nothing -------------------------------------
+
+func test_damage_without_a_scene_spawns_nothing() -> void:
+	var numbers := _detached()
+	numbers._on_health_changed(30, 18, _victim)
 	await get_tree().process_frame
-	var label := numbers.get_child(0) as Label3D
-	assert_not_null(label, "a poison tick still produces a floating number")
-	assert_eq(label.text, StatusVisuals.tick_text(poison, 4, false),
-		"but it carries the status' glyph, so the player can see WHERE the damage came from")
-	assert_almost_eq(label.modulate.g, Color(StatusVisuals.info_for(poison)["color"]).g, 0.01,
-		"and it is drawn in the status' own colour, not the plain damage white")
+	assert_eq(numbers.get_child_count(), 0,
+		"a hit arriving while the layer is detached must produce no popup and no error")
+	assert_eq(numbers.live_popup_count(), 0,
+		"and nothing is left in flight to count against the cap once it is mounted again")
+
+
+func test_heal_without_a_scene_spawns_nothing() -> void:
+	var numbers := _detached()
+	numbers._on_health_changed(10, 17, _victim)
+	await get_tree().process_frame
+	assert_eq(numbers.get_child_count(), 0,
+		"a heal arriving while the layer is detached must produce no popup and no error")
+
+
+func test_fully_null_payloads_are_survivable() -> void:
+	var numbers := _mounted()
+	numbers._on_health_changed(30, 18, null)
+	numbers._on_annotated(null, null)
+	numbers._on_annotated(_victim, null)
+	numbers.show_entry({})
+	numbers.track_unit(null)
+	await get_tree().process_frame
+	assert_eq(numbers.get_child_count(), 0,
+		"a payload with no unit (or no context) in it is dropped, not guessed at")
+
+
+func test_non_positive_amounts_are_ignored() -> void:
+	var numbers := _mounted()
+	numbers._on_health_changed(20, 20, _victim)
+	# An annotated hit / heal that never moved HP and was not a shield soak has nothing to
+	# show either: a zero hit, and a heal into full health.
+	numbers._on_annotated(_victim, { "kind": CombatText.KIND_DAMAGE, "amount": 0 })
+	numbers._on_annotated(_victim, { "kind": CombatText.KIND_HEAL, "amount": 6 })
+	await get_tree().process_frame
+	assert_eq(numbers.get_child_count(), 0,
+		"a zero-damage / zero-heal event has nothing to show")
+
+
+# --- The happy path -----------------------------------------------------------
+
+func test_a_hit_spawns_one_popup_carrying_the_amount() -> void:
+	var numbers := _mounted()
+	numbers._on_health_changed(30, 18, _victim)
+	# Unlike the old layer, nothing is buffered: the HP change IS the event.
+	assert_eq(numbers.live_popup_count(), 1, "one HP change, exactly one popup")
+	assert_eq(numbers.get_child_count(), 1, "and it is a child of the layer")
+	var label := _label_reading(numbers, 0, "12")
+	assert_not_null(label, "the popup shows the HP that was lost: %s" % [_texts_of(numbers, 0)])
+	if label == null:
+		return
+	assert_eq(_colour_of(label), FloatingCombatText.COL_DAMAGE,
+		"an ordinary hit is plain damage white, not the crit gold or the heal green")
+	assert_eq(_size_of(label), int(FloatingCombatText.texts_for(
+			{ "kind": CombatTextPairer.ENTRY_DAMAGE, "amount": 12 })["main_size"]),
+		"and it is drawn at the base damage size")
+
+
+func test_a_heal_spawns_a_signed_green_popup() -> void:
+	var numbers := _mounted()
+	numbers._on_health_changed(10, 18, _victim)
+	assert_eq(numbers.live_popup_count(), 1, "the heal spawns its popup")
+	var label := _label_reading(numbers, 0, "+8")
+	assert_not_null(label,
+		"restored HP reads as a signed gain, not a bare number: %s" % [_texts_of(numbers, 0)])
+	if label == null:
+		return
+	assert_eq(_colour_of(label), FloatingCombatText.COL_HEAL,
+		"and it is green, the opposite of damage")
+
+
+func test_the_popup_is_anchored_above_the_victim() -> void:
+	var numbers := _mounted()
+	numbers._on_health_changed(10, 13, _victim)
+	assert_eq(numbers.live_popup_count(), 1, "the popup exists for this assertion")
+	# The on-screen position is a projection (no camera headless); the WORLD anchor it is
+	# projected from is what the placement rule promises.
+	var anchor: Vector3 = numbers._popups[0]["anchor"]
+	assert_gt(anchor.y, _victim.global_position.y,
+		"the number floats above the unit, clear of its body")
+	assert_almost_eq(anchor.x, _victim.global_position.x, 0.001,
+		"directly over the unit it belongs to (x)")
+	assert_almost_eq(anchor.z, _victim.global_position.z, 0.001,
+		"directly over the unit it belongs to (z)")
+
+
+func test_a_burst_of_hits_stacks_instead_of_overlapping() -> void:
+	var numbers := _mounted()
+	numbers._on_health_changed(40, 36, _victim)
+	numbers._on_health_changed(36, 31, _victim)
+	numbers._on_health_changed(31, 25, _victim)
+	assert_eq(numbers.live_popup_count(), 3, "every hit of a multi-hit gets its own number")
+	var slots: Array = []
+	for p in numbers._popups:
+		slots.append(int(p["slot"]))
+	assert_eq(slots, [0, 1, 2], "and each stacks one row higher than the last")
+
+
+func test_live_popups_are_capped() -> void:
+	var numbers := _mounted()
+	var cap: int = FloatingCombatText.MAX_LIVE_POPUPS
+	for i in range(cap + 6):
+		numbers._on_health_changed(500, 499 - i, _victim)
+	assert_eq(numbers.live_popup_count(), cap,
+		"a board-clearing AoE cannot flood the screen with numbers")
+	assert_eq(numbers.get_child_count(), cap, "and no node is built past the cap")
+
+
+# --- The load-bearing invariant: numbers never stall the AI --------------------
+
+func test_popups_never_register_as_a_playing_animation() -> void:
+	var numbers := _mounted()
+	numbers._on_health_changed(30, 18, _victim)
+	numbers._on_health_changed(18, 30, _victim)
+	numbers._on_status_applied(_victim, _poison())
+	await get_tree().process_frame
+	assert_gt(numbers.live_popup_count(), 0, "popups really are in flight for this assertion")
+	assert_false(ANIMATOR.is_any_animation_playing(),
+		"floating numbers are cosmetic: the AI must never wait on one")
+
+
+# --- Status feedback ----------------------------------------------------------
+#
+# The report behind these: a player could not tell whether poison was doing anything,
+# because a poison tick drew the SAME plain white number a sword hit does, from no visible
+# source. The attribution now rides the [CombatText] annotation the tick emits BEFORE it
+# changes HP.
+
+func test_a_status_tick_is_recoloured_and_names_its_source() -> void:
+	var numbers := _mounted()
+	numbers._on_annotated(_victim, { "kind": CombatText.KIND_DAMAGE, "amount": 4,
+		"source": "Poisoned", "source_kind": CombatText.SRC_STATUS, "source_id": &"poisoned" })
+	numbers._on_health_changed(30, 26, _victim)
+	assert_eq(numbers.live_popup_count(), 1, "a poison tick still produces a floating number")
+	var number := _label_reading(numbers, 0, "4")
+	assert_not_null(number, "carrying the HP it cost: %s" % [_texts_of(numbers, 0)])
+	assert_not_null(_label_reading(numbers, 0, "Poisoned"),
+		"and NAMING the status, so the player can see where the damage came from")
+	if number != null:
+		assert_ne(_colour_of(number), FloatingCombatText.COL_DAMAGE,
+			"drawn in the environmental tint, not the plain sword-hit white")
 
 
 func test_an_ordinary_hit_in_the_same_frame_is_untouched() -> void:
 	var numbers := _mounted()
-	# A sword hit buffered BEFORE any tick ran must not be claimed by the tick: the
-	# attribution rule is "untagged entries at the moment the tick announces", which is
-	# only exact because tick_all announces per condition, immediately.
-	numbers._on_damage_dealt(null, _victim, 9)
-	await get_tree().process_frame
-	var label := numbers.get_child(0) as Label3D
-	assert_eq(label.text, "9", "an unattributed hit is still a bare number")
-	assert_almost_eq(label.modulate.r, numbers.damage_color.r, 0.01, "and still plain white")
+	numbers._on_health_changed(30, 21, _victim)
+	var label := _label_reading(numbers, 0, "9")
+	assert_not_null(label, "an unattributed hit is still a bare number")
+	assert_eq(_texts_of(numbers, 0).size(), 1, "with no source line under it")
+	if label != null:
+		assert_eq(_colour_of(label), FloatingCombatText.COL_DAMAGE, "and still plain white")
 
 
-func test_a_regen_tick_stays_signed_and_takes_the_status_colour() -> void:
+func test_a_regen_tick_stays_signed_and_names_its_source() -> void:
 	var numbers := _mounted()
-	var regen := StatusCondition.new()
-	regen.id = &"regen"
-	regen.display_name = "Regeneration"
-	regen.turns_left = 2
-	numbers._on_unit_healed(_victim, 5)
-	numbers._on_status_ticked(_victim, regen, [])
-	await get_tree().process_frame
-	var label := numbers.get_child(0) as Label3D
-	assert_eq(label.text, StatusVisuals.tick_text(regen, 5, true),
-		"a regen tick reads as a signed heal WITH its status marker")
+	numbers._on_annotated(_victim, { "kind": CombatText.KIND_HEAL, "amount": 5,
+		"source": "Regeneration", "source_kind": CombatText.SRC_STATUS, "source_id": &"regen" })
+	numbers._on_health_changed(20, 25, _victim)
+	assert_not_null(_label_reading(numbers, 0, "+5"),
+		"a regen tick reads as a signed heal: %s" % [_texts_of(numbers, 0)])
+	assert_not_null(_label_reading(numbers, 0, "Regeneration"), "WITH its status named")
 
 
 func test_a_tick_on_another_unit_does_not_claim_this_units_number() -> void:
 	var other: Node3D = add_child_autofree(Node3D.new())
 	other.position = Vector3(1.0, 0.0, 1.0)
 	var numbers := _mounted()
-	numbers._on_damage_dealt(null, _victim, 7)
-	numbers._on_status_ticked(other, _poison(), [])
+	numbers._on_annotated(other, { "kind": CombatText.KIND_DAMAGE, "amount": 7,
+		"source": "Poisoned", "source_kind": CombatText.SRC_STATUS, "source_id": &"poisoned" })
+	numbers._on_health_changed(30, 23, _victim)
+	assert_eq(_texts_of(numbers, 0), ["7"],
+		"a condition only annotates its OWN unit, so it can never label another unit's number")
 	await get_tree().process_frame
-	var label := numbers.get_child(0) as Label3D
-	assert_eq(label.text, "7",
-		"a condition only ticks its OWN unit, so it can never colour another unit's number")
+	assert_eq(numbers.live_popup_count(), 1,
+		"and the other unit's unclaimed annotation (no HP moved, no shield) draws nothing")
 
 
-func test_a_landing_status_shouts_its_name_above_the_numbers() -> void:
+func test_a_landing_status_shouts_its_name() -> void:
 	var numbers := _mounted()
-	var poison := _poison()
-	numbers._on_status_applied(_victim, poison)
-	var label := numbers.get_child(0) as Label3D
-	assert_not_null(label, "an applied status spawns inline -- there is nothing to correlate")
-	assert_eq(label.text, "POISONED", "the shout names the status the unit just picked up")
-	assert_gt(label.global_position.y, _victim.global_position.y + numbers.spawn_height,
-		"and sits ABOVE the tick number, so the two are legible at once")
-	assert_lt(label.font_size, numbers.font_size,
+	numbers._on_status_applied(_victim, _poison())
+	assert_eq(numbers.live_popup_count(), 1,
+		"an applied status spawns inline -- there is nothing to correlate")
+	var label := _label_reading(numbers, 0, "POISONED")
+	assert_not_null(label,
+		"the shout names the status the unit just picked up: %s" % [_texts_of(numbers, 0)])
+	if label == null:
+		return
+	var tick_size := int(FloatingCombatText.texts_for({ "kind": CombatTextPairer.ENTRY_DAMAGE,
+		"amount": 4, "source_kind": CombatText.SRC_STATUS })["main_size"])
+	assert_lt(_size_of(label), tick_size,
 		"a word must never out-shout the damage it is explaining")
+	# (The old "sits ABOVE the tick number" placement rule is not expressible any more:
+	# popups on one unit stack by arrival order, whatever their kind.)
 
 
 func test_an_expiring_status_reports_quietly() -> void:
 	var numbers := _mounted()
 	var poison := _poison()
 	numbers._on_status_expired(_victim, poison)
-	var label := numbers.get_child(0) as Label3D
-	assert_eq(label.text, "Poisoned faded", "an expiry is good news, reported in sentence case")
+	var label := _label_reading(numbers, 0, "Poisoned faded")
+	assert_not_null(label, "an expiry is good news, reported in sentence case")
+	if label == null:
+		return
 	var vivid: Color = StatusVisuals.info_for(poison)["color"]
-	assert_lt(label.modulate.g, vivid.g,
+	assert_lt(_rgb_distance(_colour_of(label), FloatingCombatText.STATUS_EXPIRED_GREY),
+		_rgb_distance(vivid, FloatingCombatText.STATUS_EXPIRED_GREY),
 		"and is faded toward grey -- the quietest thing this layer draws")
+	numbers._on_status_applied(_victim, poison)
+	var shout := _label_reading(numbers, 1, "POISONED")
+	if shout != null:
+		assert_lt(_size_of(label), _size_of(shout), "and smaller than the shout it answers")
 
 
 func test_status_labels_obey_every_existing_guard() -> void:
 	# Detached layer (a signal arriving mid-teardown).
-	var detached := _detached()
+	var detached: FloatingCombatText = autofree(FloatingCombatText.new())
 	detached._on_status_applied(_victim, _poison())
-	assert_eq(detached.get_child_count(), 0, "no scene to spawn into -> nothing, and no error")
+	detached._on_status_expired(_victim, _poison())
+	assert_eq(detached.get_child_count(), 0, "no scene to draw into -> nothing, and no error")
 
-	# Animations off.
-	_guard.set_setting("animations_enabled", false)
+	# Fog: a word rising over a unit you cannot see marks it as surely as a number would.
+	FogOfWarOverlay.set_vision_override(BlindVision.new())
 	var numbers := _mounted()
 	numbers._on_status_applied(_victim, _poison())
 	numbers._on_status_expired(_victim, _poison())
-	assert_eq(numbers.get_child_count(), 0, "animations off means no floating status words either")
+	numbers._on_health_changed(30, 18, _victim)
+	assert_eq(numbers.live_popup_count(), 0,
+		"nothing floats over a unit fog hides -- status words included")
+	# (The old animations-off guard is gone on purpose: the merged layer still shows its
+	# text, briefly, with animations off.)
 
 
 func test_null_status_payloads_are_survivable() -> void:
 	var numbers := _mounted()
 	numbers._on_status_applied(null, null)
+	numbers._on_status_applied(null, _poison())
 	numbers._on_status_expired(_victim, null)
-	numbers._on_status_ticked(null, null, null)
+	numbers._on_status_expired()
 	await get_tree().process_frame
 	assert_eq(numbers.get_child_count(), 0,
-		"a payload with no condition in it is dropped, not guessed at")
+		"a payload with no condition (or no unit) in it is dropped, not guessed at")
 
 
 # --- Teardown -----------------------------------------------------------------
 
 func test_clear_popups_empties_the_layer_immediately() -> void:
 	var numbers := _mounted()
-	numbers._on_unit_healed(_victim, 5)
+	numbers._on_health_changed(10, 15, _victim)
 	await get_tree().process_frame
-	assert_eq(numbers.get_child_count(), 1)
+	assert_eq(numbers.get_child_count(), 1, "the heal popup is in flight")
 	numbers.clear_popups()
 	assert_eq(numbers.get_child_count(), 0,
 		"a scene reset drops every in-flight popup in the same frame, not next frame")
+	assert_eq(numbers.live_popup_count(), 0, "and forgets it")
+
+
+func test_a_fresh_board_clears_the_previous_battles_popups() -> void:
+	var numbers := _mounted()
+	numbers._on_health_changed(30, 18, _victim)
+	numbers._on_annotated(_victim, { "kind": CombatText.KIND_MISS })
+	numbers._on_board_ready()
+	assert_eq(numbers.get_child_count(), 0,
+		"a map load / rematch leaves nothing floating from the last battle")
+	await get_tree().process_frame
+	assert_eq(numbers.live_popup_count(), 0,
+		"and a pending annotation from the old board cannot surface on the new one")

@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://tile_objects/tiles/shaders/stylized_ground.gdshader" id="1_ground"]
+
+[resource]
+resource_name = "StylizedTundra"
+shader = ExtResource("1_ground")
+shader_parameter/col_dark = Color(0.32, 0.31, 0.29, 1)
+shader_parameter/col_mid = Color(0.45, 0.44, 0.4, 1)
+shader_parameter/col_light = Color(0.66, 0.7, 0.74, 1)
+shader_parameter/speck_color = Color(0.86, 0.9, 0.95, 1)
+shader_parameter/speck_density = 0.25
+shader_parameter/dab_scale = 1.7
+shader_parameter/contrast = 1.5

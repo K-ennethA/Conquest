@@ -11,19 +11,21 @@ signal move_cancelled
 const MAX_SLOTS := 4
 ## The card's PREFERRED width: what it renders at whenever every label fits. It may
 ## GROW past this (see [method _fit_width]) but only as far as a real label needs.
-const CARD_WIDTH := 340.0
+## 460 is the grove card's authored width (HudCommand rows in the heading font are wider
+## than the old amber body-font rows the 340px card was sized for).
+const CARD_WIDTH := 460.0
 ## Hard ceiling on growth. Past this a centered modal starts hiding the battlefield the
 ## player is choosing a move FOR. A label that still does not fit at this width first
 ## demotes its "(range ...)" hint to a caption line, and only then ellipsizes the name.
-const CARD_MAX_WIDTH := 460.0
+const CARD_MAX_WIDTH := 580.0
 ## Never let the modal card exceed this fraction of the viewport width, so on a
 ## narrow window it shrinks instead of clipping past the screen edges.
 const CARD_MAX_FRAC := 0.92
 const CARD_MIN_WIDTH := 200.0
-## Element stripe width + the gap between it and the button column (kept as constants
+## Element gem width + the gap between it and the button column (kept as constants
 ## because [method _fit_width] has to account for both when it works out how much of
 ## the card's width is actually text space).
-const SWATCH_WIDTH := 7
+const SWATCH_WIDTH := 14
 const ROW_SEPARATION := 6
 
 @onready var moves_container: VBoxContainer
@@ -77,7 +79,9 @@ func _ready() -> void:
 	# when laying out, so we can freely size and center ourselves as a real
 	# modal over the battlefield, entirely independent of the sidebar's rect.
 	top_level = true
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# top_level: anchors are ignored, so pin to the top-left and size to the
+	# viewport explicitly (see _cover_viewport, run from _fit_width).
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 	# Draw above sibling HUD panels regardless of where we sit in the tree
@@ -101,7 +105,7 @@ func _create_ui() -> void:
 	# battlefield/sidebar underneath while a move is being chosen.
 	var backdrop := ColorRect.new()
 	backdrop.name = "Backdrop"
-	backdrop.color = Color(0.0, 0.0, 0.0, 0.45)
+	backdrop.color = Color(0.02, 0.03, 0.08, 0.5)
 	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(backdrop)
@@ -113,8 +117,8 @@ func _create_ui() -> void:
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(center)
 
-	# The card: an opaque amber panel (ConquestTheme.apply_to below turns this
-	# PanelContainer's background into the signature panel_box() look) so
+	# The card: an opaque navy grove panel (styled below with ConquestTheme.panel_box;
+	# a crested panel_box with a gold edge) so
 	# nothing behind it shows through.
 	var card := PanelContainer.new()
 	card.name = "Card"
@@ -125,23 +129,22 @@ func _create_ui() -> void:
 
 	# Main container
 	var main_container = VBoxContainer.new()
+	main_container.add_theme_constant_override("separation", 10)
 	card.add_child(main_container)
 
-	# Title
+	# Title + gold rule
 	var title = Label.new()
-	title.text = "SELECT MOVE"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 18)
+	title.text = "Choose a Skill"
+	title.add_theme_font_override("font", MenuTheme.display_font(2))
+	title.add_theme_font_size_override("font_size", 26)
 	main_container.add_child(title)
 	_title_label = title
-
-	# Separator
-	var separator = HSeparator.new()
-	main_container.add_child(separator)
+	main_container.add_child(ConquestTheme.accent_rule())
 
 	# Moves container
 	moves_container = VBoxContainer.new()
 	moves_container.name = "MovesContainer"
+	moves_container.add_theme_constant_override("separation", 4)
 	main_container.add_child(moves_container)
 
 	# Move info display
@@ -152,22 +155,63 @@ func _create_ui() -> void:
 	# Width 0: let the label take the card's width (capped by _fit_width) and wrap,
 	# rather than forcing a 300px floor that could widen the card past a narrow
 	# viewport. Only the height floor is kept so the info area never collapses.
-	move_info_label.custom_minimum_size = Vector2(0, 60)
-	move_info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	main_container.add_child(move_info_label)
+	move_info_label.custom_minimum_size = Vector2(0, 72)
+	move_info_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	var info_plate := PanelContainer.new()
+	info_plate.name = "InfoPlate"
+	info_plate.add_child(move_info_label)
+	main_container.add_child(info_plate)
 
-	# Back button
+	# Footer: key hints + Back
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 16)
+	main_container.add_child(footer)
+	footer.add_child(ConquestTheme.key_hint("1-4", "Quick pick"))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(spacer)
 	back_button = Button.new()
-	back_button.text = "BACK"
+	back_button.text = "Back"
+	back_button.theme_type_variation = &"GhostButton"
+	back_button.custom_minimum_size = Vector2(120, 40)
 	back_button.pressed.connect(_on_back_pressed)
-	main_container.add_child(back_button)
+	footer.add_child(back_button)
 
-	# Apply the amber HUD theme to the whole subtree: amber-izes the Card's
-	# background, dark-inks the labels, themes the buttons -- so the popup
-	# matches the rest of the HUD instead of the default grey Control theme.
+	# HUD theme for the whole subtree (navy card, cream text, themed buttons), then
+	# the deliberate local styles on top.
 	ConquestTheme.apply_to(self)
+	var card_sb := ConquestTheme.panel_box(0.97)
+	card_sb.border_color = ConquestTheme.GOLD_DK
+	card_sb.crest = true
+	card_sb.content_margin_left = 22
+	card_sb.content_margin_right = 22
+	card_sb.content_margin_top = 18
+	card_sb.content_margin_bottom = 16
+	card.add_theme_stylebox_override("panel", card_sb)
+	# Our subtree is already themed: keep a later HUD-wide sweep off the card.
+	ConquestTheme.keep_style(card)
+	info_plate.add_theme_stylebox_override("panel", ConquestTheme.plate_box())
+	if _title_label != null:
+		_title_label.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
+	move_info_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+	move_info_label.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
+	var back_key := ConquestTheme.action_glyph(InputActions.CANCEL)
+	if back_key != "":
+		footer.add_child(ConquestTheme.key_hint(back_key, "Back"))
+		footer.move_child(footer.get_child(footer.get_child_count() - 1), 1)
 
 	_fit_width()
+
+
+## top_level ignores anchors, so PRESET_FULL_RECT alone leaves this root 0x0 at the
+## top-left (the card then hugged the corner and the dim backdrop vanished). Cover the
+## viewport explicitly so the backdrop dims the board and the CenterContainer really
+## centres the card. Called from [method _fit_width], which runs on open and on resize.
+func _cover_viewport() -> void:
+	var vpr := get_viewport()
+	if vpr != null:
+		position = Vector2.ZERO
+		size = vpr.get_visible_rect().size
 
 func show_moves_for_unit(unit: Node, view_only_mode: bool = false) -> void:
 	"""Display the unit's real moveset (up to 4 MoveResource slots).
@@ -191,14 +235,15 @@ func show_moves_for_unit(unit: Node, view_only_mode: bool = false) -> void:
 
 	# Title + hint reflect the mode so the read-only state is legible.
 	if _title_label:
-		_title_label.text = "VIEW MOVES" if view_only else "SELECT MOVE"
+		_title_label.text = "Skills (view only)" if view_only else "Choose a Skill"
 	if move_info_label:
 		if view_only:
-			move_info_label.text = "Hover or click a move to read its details"
+			move_info_label.text = "Hover or click a skill to read its details."
 		else:
-			move_info_label.text = "Hover over a move to see details"
+			move_info_label.text = "Hover a skill to read its details."
 
 	_populate_moves(moveset, controller)
+	_fit_width()
 	show()
 
 func _populate_moves(moveset: Array[MoveResource], controller: MovesetController) -> void:
@@ -233,10 +278,12 @@ func _populate_moves(moveset: Array[MoveResource], controller: MovesetController
 		# move, keyed to the move's element (see ConquestTheme.element_color).
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", ROW_SEPARATION)
-		var swatch := ColorRect.new()
+		var swatch := GroveGem.new()
+		swatch.name = "ElementGem"
 		swatch.color = ConquestTheme.element_color(String(move.element))
-		swatch.custom_minimum_size = Vector2(SWATCH_WIDTH, 0)
-		swatch.size_flags_vertical = Control.SIZE_FILL
+		swatch.custom_minimum_size = Vector2(SWATCH_WIDTH, 18)
+		swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(swatch)
 
 		# The button plus its two optional readouts stack in one column, so the card's
@@ -254,6 +301,7 @@ func _populate_moves(moveset: Array[MoveResource], controller: MovesetController
 		hint_caption.name = "HintCaption"
 		hint_caption.text = String(move_button.get_meta("fit_hint", ""))
 		hint_caption.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
+		hint_caption.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
 		hint_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hint_caption.visible = false
 		column.add_child(hint_caption)
@@ -286,8 +334,10 @@ func _populate_moves(moveset: Array[MoveResource], controller: MovesetController
 		_note_cooldown(move, remaining, column)
 
 	# Widths are worked out AFTER the theme has reached the new rows: the button
-	# styleboxes (and therefore the padding around each label) come from it.
-	ConquestTheme.apply_to(_card)
+	# styleboxes (and therefore the padding around each label) come from it. The rows
+	# inherit the HUD theme apply_to(self) set on this root in _create_ui, so no
+	# re-sweep here -- a second apply_to(_card) would strip the deliberate overrides
+	# (title gold, info plate, caption colours) the card was built with.
 	_fit_width()
 
 func _create_move_button(move: MoveResource, slot: int, controller: MovesetController) -> Button:
@@ -312,20 +362,35 @@ func _create_move_button(move: MoveResource, slot: int, controller: MovesetContr
 	var range_text := MoveStatVisuals.range_phrase(move, current_unit)
 	if range_text == "":
 		range_text = "no range"
+	# Mode-aware name (a two-mode move reads the mode in force for this caster).
+	var caster = current_unit
+	var name_text: String = move.display_name_for(caster) if caster != null else str(move.display_name)
 	# Name and hint kept apart (as metadata) so _fit_width can demote the hint to its
-	# caption line when the inline form does not fit inside CARD_MAX_WIDTH.
-	var name_text := str(move.display_name)
+	# caption line when the inline form does not fit inside CARD_MAX_WIDTH. The hint
+	# carries range + cooldown ("CD 2/3") / uses, i.e. what the grove look's right-hand
+	# note said, kept inline so the width budget measures one string per row.
 	var hint_text := "(%s)%s" % [range_text, suffix]
 	button.text = "%s %s" % [name_text, hint_text]
 	button.set_meta("fit_name", name_text)
 	button.set_meta("fit_hint", hint_text)
+	# Grove command-list look: an FE-style HudCommand entry, left aligned.
+	button.theme_type_variation = &"HudCommand"
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.focus_mode = Control.FOCUS_NONE
+	# Tooltip: the move's full description (flavour + every effect's describe()).
+	var tip := name_text
+	var desc := move.full_description()
+	if desc != "":
+		tip += "\n" + desc
+	tip += "\nRange: %s  ·  Accuracy: %d%%" % [range_text, int(move.accuracy * 100)]
+	button.tooltip_text = tip
 	# In view-only mode every move stays clickable so clicking reliably reveals its
 	# details (a disabled button would swallow the click). Cooldown/uses are still shown
 	# in the label + details text. Commandable mode keeps the real can-use gating.
 	button.disabled = (not view_only) and controller != null and not can_use
 	# Height floor only; width 0 + EXPAND_FILL (set by the caller) lets the button
 	# fill the card.
-	button.custom_minimum_size = Vector2(0, 40)
+	button.custom_minimum_size = Vector2(0, 44)
 	# NOT clipped by default. clip_text makes a Button report a text width of just its
 	# stylebox padding from get_minimum_size(), so the card sat at CARD_WIDTH looking
 	# correctly sized while a long label quietly lost its tail. _fit_width() sizes the
@@ -416,6 +481,7 @@ func _move_deals_damage(move: MoveResource) -> bool:
 ## need to be?" while trimming is on always answers "not very" -- the trap that made
 ## this card look correctly sized while a long move name was cut mid-word.
 func _fit_width() -> void:
+	_cover_viewport()
 	if _card == null or not is_instance_valid(_card):
 		return
 	var cap := CARD_MAX_WIDTH
@@ -524,10 +590,10 @@ func _flash_row(row: Control) -> void:
 func _show_move_info(move: MoveResource, controller: MovesetController) -> void:
 	"""Display detailed move information"""
 	var info_text = ""
-	info_text += "Name: %s\n" % move.display_name
+	info_text += "%s" % (move.display_name_for(current_unit) if current_unit != null else move.display_name)
 	if String(move.element) != "":
-		info_text += "Type: %s\n" % String(move.element).capitalize()
-	info_text += "Description: %s\n" % move.full_description()
+		info_text += "  ·  %s" % String(move.element).capitalize()
+	info_text += "\n%s\n" % move.full_description()
 	if move.energy_cost > 0:
 		info_text += "Energy Cost: %d\n" % move.energy_cost
 	if move.targeting:
@@ -560,9 +626,9 @@ func _show_move_info(move: MoveResource, controller: MovesetController) -> void:
 func _clear_move_info() -> void:
 	"""Clear move information display"""
 	if view_only:
-		move_info_label.text = "Hover or click a move to read its details"
+		move_info_label.text = "Hover or click a skill to read its details."
 	else:
-		move_info_label.text = "Hover over a move to see details"
+		move_info_label.text = "Hover a skill to read its details."
 
 func _on_move_selected(move_index: int) -> void:
 	"""Handle move selection. In view-only mode this is READ-ONLY: clicking a move (or
@@ -593,10 +659,12 @@ func _input(event: InputEvent) -> void:
 	if not visible:
 		return
 
-	if event is InputEventKey and event.pressed:
+	# Back out on the named cancel action (Esc / Backspace / gamepad B; rebindable).
+	if event.is_action_pressed(InputActions.CANCEL):
+		_on_back_pressed()
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
-			KEY_ESCAPE:
-				_on_back_pressed()
 			KEY_1, KEY_2, KEY_3, KEY_4:
 				var move_index = event.keycode - KEY_1
 				if move_index < move_buttons.size() and move_buttons[move_index]:

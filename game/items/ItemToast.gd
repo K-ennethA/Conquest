@@ -4,10 +4,12 @@ class_name ItemToast
 ## A modest "item acquired" banner: a bottom-centre plate naming the item the player just
 ## won, its rarity, and what it does.
 ##
-## Self-contained and disposable. It draws its own look (no theme import), mounts itself on
-## its own CanvasLayer above the battle HUD, and frees itself when it is done -- so the only
-## thing a caller ever needs is [method present]. Modelled on the profile's achievement
-## banner, minus the queue: a battle pays out at most one drop, so there is nothing to queue.
+## Self-contained and disposable. It styles itself from the shared [MenuTheme] factories
+## (a grove card whose edge is the item's rarity colour -- docs/UI_STYLE.md; no scene theme
+## needed), mounts itself on its own CanvasLayer above the battle HUD, and frees itself when
+## it is done -- so the only thing a caller ever needs is [method present]. Modelled on the
+## profile's achievement banner, minus the queue: a battle pays out at most one drop, so
+## there is nothing to queue.
 ##
 ## DEFENSIVE ABOUT THE THINGS THAT BREAK BANNERS:
 ##   * HEADLESS -- a test / CI run has no viewport, so [method present] returns before
@@ -20,17 +22,14 @@ class_name ItemToast
 
 const HOLD_TIME: float = 3.0
 const SLIDE_TIME: float = 0.35
-const PLATE_WIDTH: float = 380.0
+const PLATE_WIDTH: float = 400.0
 const OVERLAY_LAYER: int = 126
 
-# Warm palette, kept local so this node has no import coupling (same choice AchievementToast
-# makes). Matches the amber-on-ink register the rest of the game uses.
-const AMBER: Color = Color("e6a64b")
-const CREAM: Color = Color("fcefd6")
-const CREAM_DIM: Color = Color("e7d3ad")
-const PANEL: Color = Color("2c2114")
-const RARE_BLUE: Color = Color("5aa9e6")
-const EPIC_PURPLE: Color = Color("b06ce0")
+# Rarity accents from the grove palette: gold for common, info blue for rare, blight violet
+# for epic.
+const AMBER: Color = MenuTheme.GOLD
+const RARE_BLUE: Color = MenuTheme.ACCENT
+const EPIC_PURPLE: Color = MenuTheme.EL_DARK
 
 var _root: Control = null
 
@@ -75,24 +74,22 @@ func show_item(item: ItemResource) -> void:
 	plate.custom_minimum_size = Vector2(PLATE_WIDTH, 0.0)
 	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	var box := StyleBoxFlat.new()
-	box.bg_color = Color(PANEL.r, PANEL.g, PANEL.b, 0.96)
-	box.set_corner_radius_all(10)
-	box.set_border_width_all(2)
-	box.border_color = accent
-	box.set_content_margin_all(12)
-	box.shadow_color = Color(0, 0, 0, 0.5)
-	box.shadow_size = 8
+	var box := MenuTheme.accented_card(accent, SIDE_LEFT, MenuTheme.PANEL, 0.97)
+	box.content_margin_left = 20.0
+	box.content_margin_right = 18.0
+	box.content_margin_top = 14.0
+	box.content_margin_bottom = 12.0
 	plate.add_theme_stylebox_override("panel", box)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
+	row.add_theme_constant_override("separation", MenuTheme.SP_M)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	plate.add_child(row)
 
 	var badge := Label.new()
 	badge.text = item.icon_hint if not item.icon_hint.strip_edges().is_empty() else "*"
 	badge.add_theme_font_size_override("font_size", 30)
+	badge.add_theme_color_override("font_color", accent.lightened(0.25))
 	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(badge)
 
@@ -104,21 +101,23 @@ func show_item(item: ItemResource) -> void:
 
 	var caption := Label.new()
 	caption.text = "%s ITEM FOUND" % item.rarity_name().to_upper()
-	caption.add_theme_font_size_override("font_size", 11)
-	caption.add_theme_color_override("font_color", accent)
+	caption.add_theme_font_override("font", MenuTheme.heading_font(2))
+	caption.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	caption.add_theme_color_override("font_color", accent.lightened(0.2))
 	col.add_child(caption)
 
 	var title := Label.new()
 	title.text = item.display_name
-	title.add_theme_font_size_override("font_size", 18)
-	title.add_theme_color_override("font_color", CREAM)
+	title.add_theme_font_override("font", MenuTheme.heading_font(1))
+	title.add_theme_font_size_override("font_size", MenuTheme.FS_SUBHEADING)
+	title.add_theme_color_override("font_color", MenuTheme.CREAM)
 	col.add_child(title)
 
 	var effect := Label.new()
 	effect.text = item.effect_summary()
 	effect.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	effect.add_theme_font_size_override("font_size", 12)
-	effect.add_theme_color_override("font_color", CREAM_DIM)
+	effect.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	effect.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
 	col.add_child(effect)
 
 	_root.add_child(plate)
@@ -156,7 +155,7 @@ func show_item(item: ItemResource) -> void:
 	tween.tween_callback(queue_free)
 
 
-## Accent colour per rarity: amber for common, blue for rare, violet for epic.
+## Accent colour per rarity: gold for common, blue for rare, violet for epic.
 func _rarity_color(rarity: int) -> Color:
 	match rarity:
 		ItemResource.Rarity.RARE:

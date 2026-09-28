@@ -375,6 +375,12 @@ func _tick_unit_turn_start(unit) -> void:
 		return
 	_last_tick_turn[unit] = current_turn
 
+	# WEATHER: roll the battle weather forward to the current round FIRST, so every
+	# condition below (and the unit's abilities) sees this round's weather. A pure
+	# function of the round number, which every peer derives identically.
+	if CombatServices and CombatServices.has_method("advance_weather"):
+		CombatServices.advance_weather(WinConditionLibrary.completed_rounds(self) + 1)
+
 	# Sample "stunned" FIRST, ahead of every tick below. The status ticks that
 	# follow are what EXPIRE the stun, so by the time they have run the flag is
 	# gone; latching it here is what makes the skip land on this turn while still
@@ -417,6 +423,11 @@ func _tick_unit_turn_start(unit) -> void:
 		var board = CombatServices.board() if CombatServices else null
 		if board != null:
 			status.tick_all(board)
+
+	# Weather turn-start rules (Desert Storm chip, Overbloom healing), after the status
+	# ticks and before the unit's own abilities (so Rain Bath heals after the sand).
+	if CombatServices and CombatServices.board() != null:
+		Weather.run_turn_start(unit, CombatServices.board())
 
 	# Character abilities: only present when the character declares some. This is
 	# the one per-unit turn-start hook BOTH turn systems share -- SpeedFirst calls
@@ -515,7 +526,7 @@ func _auto_resolve_control(unit, board) -> void:
 	# BotController._is_hostile).
 	controller.force_control = true
 
-	var origin: Vector2i = board.cell_of(unit)
+	var origin: Vector3i = board.cell_of(unit)
 	var reachable: Array = _control_reachable_cells(unit, origin, board)
 	var decision = controller.plan(unit, unit.get_moveset(), board, reachable)
 	if decision == null or decision.is_empty() \
@@ -528,17 +539,17 @@ func _auto_resolve_control(unit, board) -> void:
 		return
 
 	# Walk to the planned stand cell first (if any), then strike the ally from there.
-	var dest: Vector2i = decision.get("dest_cell", origin)
+	var dest: Vector3i = decision.get("dest_cell", origin)
 	if dest != origin and not (unit.has_method("is_immobilized") and unit.is_immobilized()):
 		board.move_unit(unit, dest)
 		if GameEvents:
 			GameEvents.unit_moved.emit(unit,
-				Vector3(origin.x, 0, origin.y), Vector3(dest.x, 0, dest.y))
+				Cells.to_grid(origin), Cells.to_grid(dest))
 		if unit.has_method("mark_moved"):
 			unit.mark_moved()
 
 	var move = decision.get("move", null)
-	var aim_cell: Vector2i = decision.get("aim_cell", board.cell_of(unit))
+	var aim_cell: Vector3i = decision.get("aim_cell", board.cell_of(unit))
 	var victim = decision.get("target", null)
 	var slot: int = _slot_of_move(unit, move)
 	if slot >= 0:
@@ -560,7 +571,7 @@ func _spend_forced_turn(unit) -> void:
 
 ## Cells a controlled unit can reach this turn, via its movement profile and the live
 ## board (empty when it has none -- the planner then only strikes from its own cell).
-func _control_reachable_cells(unit, origin: Vector2i, board) -> Array:
+func _control_reachable_cells(unit, origin: Vector3i, board) -> Array:
 	if unit.has_method("is_immobilized") and unit.is_immobilized():
 		return []
 	if not unit.has_method("get_movement_profile"):

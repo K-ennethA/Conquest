@@ -79,14 +79,14 @@ class MockBoard:
 	var placements: Array = []
 	var blocked: Array = []
 	var bounds: Rect2i = Rect2i(0, 0, 12, 12)
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -101,15 +101,15 @@ class MockBoard:
 		return a.team != b.team
 	func are_allies(a, b) -> bool:
 		return a.team == b.team
-	func move_unit(unit, to_cell: Vector2i) -> void:
+	func move_unit(unit, to_cell: Vector3i) -> void:
 		for p in placements:
 			if p.unit == unit:
 				p.cell = to_cell
-	func in_bounds(cell: Vector2i) -> bool:
-		return bounds.has_point(cell)
-	func is_blocked(cell: Vector2i) -> bool:
+	func in_bounds(cell: Vector3i) -> bool:
+		return cell.z == 0 and bounds.has_point(Vector2i(cell.x, cell.y))
+	func is_blocked(cell: Vector3i) -> bool:
 		return cell in blocked
-	func can_fit(unit, anchor: Vector2i) -> bool:
+	func can_fit(unit, anchor: Vector3i) -> bool:
 		if not in_bounds(anchor) or is_blocked(anchor):
 			return false
 		for other in units_at(anchor):
@@ -168,7 +168,7 @@ func _controller_for(unit) -> StatusController:
 ## Resolve one MoveEffect from [param caster] onto [param target] through the shared
 ## pipeline (ENEMY-targeted single cell). Returns the ctx for log inspection.
 func _resolve(effect: MoveEffect, board, caster, target) -> MoveContext:
-	var cell: Vector2i = board.cell_of(target)
+	var cell: Vector3i = board.cell_of(target)
 	var move := MoveResource.new()
 	var pattern := TargetingPattern.new()
 	pattern.target_kind = CombatTypes.TargetKind.ENEMY
@@ -177,7 +177,7 @@ func _resolve(effect: MoveEffect, board, caster, target) -> MoveContext:
 	pattern.area_shape = CombatTypes.AreaShape.SINGLE
 	move.move_id = &"test_resolve"
 	move.targeting = pattern
-	var ctx := MoveContext.new(caster, board, move, cell, [cell] as Array[Vector2i])
+	var ctx := MoveContext.new(caster, board, move, cell, [cell] as Array[Vector3i])
 	effect.apply(ctx)
 	return ctx
 
@@ -260,8 +260,8 @@ func test_braced_reduces_incoming_damage():
 	var board := MockBoard.new()
 	var caster := Thrall.new(0, {})
 	var target := Thrall.new(1, { "health": 100 })
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 
 	assert_eq(_hit(_true_damage(20), board, caster, target), 20, "baseline: 20 TRUE damage in full")
 
@@ -272,8 +272,8 @@ func test_braced_wears_off_after_one_turn():
 	var board := MockBoard.new()
 	var caster := Thrall.new(0, {})
 	var target := Thrall.new(1, { "health": 100 })
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 
 	var sc := target.get_status_controller()
 	sc.add_status(_braced())
@@ -290,9 +290,9 @@ func test_re_bracing_refreshes_but_never_deepens():
 	var caster := Thrall.new(0, {})
 	var once := Thrall.new(1, { "health": 100 })
 	var twice := Thrall.new(1, { "health": 100 })
-	board.place(caster, Vector2i(0, 0))
-	board.place(once, Vector2i(1, 0))
-	board.place(twice, Vector2i(2, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(once, Vector3i(1, 0, 0))
+	board.place(twice, Vector3i(2, 0, 0))
 
 	once.get_status_controller().add_status(_braced())
 
@@ -313,8 +313,8 @@ func test_status_reduction_multiplies_with_a_passive_reduction_not_sums():
 	var caster := Thrall.new(0, {})
 	var target := Thrall.new(1, { "health": 100 })
 	target.passive_scale = 0.5  # a defender-side passive damage_taken_scale
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 	target.get_status_controller().add_status(_braced())  # 0.6 status scale
 
 	# 20 * (0.5 * 0.6) = 20 * 0.3 = 6. A SUM (0.5 + 0.6 = 1.1) would AMPLIFY to 22.
@@ -343,8 +343,8 @@ func test_lifesteal_heals_the_caster_for_a_fraction_of_damage_dealt():
 	var caster := Thrall.new(0, { "health": 100 })
 	caster.hp = 50  # wounded, so the heal is visible and not capped
 	var target := Thrall.new(1, { "health": 100 })
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 
 	var dealt: int = _hit(_true_damage(20, 0.5), board, caster, target)
 	assert_eq(dealt, 20, "the bite deals 20")
@@ -355,8 +355,8 @@ func test_zero_lifesteal_is_a_no_op():
 	var caster := Thrall.new(0, { "health": 100 })
 	caster.hp = 50
 	var target := Thrall.new(1, { "health": 100 })
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 
 	_hit(_true_damage(20, 0.0), board, caster, target)
 	assert_eq(caster.hp, 50, "a 0-lifesteal DamageEffect never touches the caster (regression-safe)")
@@ -381,8 +381,8 @@ func test_two_attacks_infest_then_seize_control():
 	var board := MockBoard.new()
 	var myco := Thrall.new(0, { "attack": 12 })
 	var victim := Thrall.new(1, { "health": 100 })
-	board.place(myco, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(myco, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	var sc := victim.get_status_controller()
 
 	var effect := _infest_effect()
@@ -405,8 +405,8 @@ func test_parasitic_hold_seizes_control_over_two_attacks_end_to_end():
 	var board := MockBoard.new()
 	var myco := Thrall.new(0, { "attack": 12 })
 	var victim := Thrall.new(1, { "health": 100 })
-	board.place(myco, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(myco, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 
 	var sys: AbilitySystem = autofree(AbilitySystem.new())
 	sys.owner_unit = myco
@@ -425,8 +425,8 @@ func test_seizing_control_announces_the_betrayal():
 	var board := MockBoard.new()
 	var myco := Thrall.new(0, { "attack": 12 })
 	var victim := Thrall.new(1, { "health": 100 })
-	board.place(myco, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(myco, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 
 	var seen := { "count": 0, "unit": null, "source": null }
 	var on_controlled := func(u, s):
@@ -450,9 +450,9 @@ func test_a_controlled_unit_attacks_an_ally_not_an_enemy():
 	var actor := Thrall.new(0, { "attack": 12, "health": 100 })
 	var ally := Thrall.new(0, { "health": 100 })
 	var enemy := Thrall.new(1, { "health": 100 })
-	board.place(actor, Vector2i(5, 5))
-	board.place(ally, Vector2i(6, 5))    # adjacent friend
-	board.place(enemy, Vector2i(4, 5))   # adjacent foe
+	board.place(actor, Vector3i(5, 5, 0))
+	board.place(ally, Vector3i(6, 5, 0))    # adjacent friend
+	board.place(enemy, Vector3i(4, 5, 0))   # adjacent foe
 
 	var bot := BotController.new()
 
@@ -474,9 +474,9 @@ func test_a_controlled_casters_enemy_move_actually_lands_on_the_ally():
 	actor.controlled_override = true
 	var ally := Thrall.new(0, { "health": 100 })
 	var enemy := Thrall.new(1, { "health": 100 })
-	board.place(actor, Vector2i(0, 0))
-	board.place(ally, Vector2i(1, 0))
-	board.place(enemy, Vector2i(0, 1))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(ally, Vector3i(1, 0, 0))
+	board.place(enemy, Vector3i(0, 1, 0))
 
 	# Resolve an ENEMY-targeted damage effect aimed at the ally's cell.
 	var move := MoveResource.new()
@@ -487,8 +487,8 @@ func test_a_controlled_casters_enemy_move_actually_lands_on_the_ally():
 	pattern.area_shape = CombatTypes.AreaShape.SINGLE
 	move.move_id = &"test_enemy_move"
 	move.targeting = pattern
-	var acell: Vector2i = board.cell_of(ally)
-	var ctx := MoveContext.new(actor, board, move, acell, [acell] as Array[Vector2i])
+	var acell: Vector3i = board.cell_of(ally)
+	var ctx := MoveContext.new(actor, board, move, acell, [acell] as Array[Vector3i])
 	_true_damage(15).apply(ctx)
 
 	assert_eq(ally.hp, 85, "the controlled unit's ENEMY move struck its ally for 15")
@@ -542,7 +542,7 @@ func _wire_parasitic_hold(myco, board) -> MockBus:
 ## Resolve [param effect] from [param caster] onto [param target] with [param bus]
 ## injected, so the announce reaches the wired AbilitySystem.
 func _resolve_on_bus(effect: MoveEffect, board, caster, target, bus) -> MoveContext:
-	var cell: Vector2i = board.cell_of(target)
+	var cell: Vector3i = board.cell_of(target)
 	var move := MoveResource.new()
 	var pattern := TargetingPattern.new()
 	pattern.target_kind = CombatTypes.TargetKind.ENEMY
@@ -551,7 +551,7 @@ func _resolve_on_bus(effect: MoveEffect, board, caster, target, bus) -> MoveCont
 	pattern.area_shape = CombatTypes.AreaShape.SINGLE
 	move.move_id = &"test_resolve_bus"
 	move.targeting = pattern
-	var ctx := MoveContext.new(caster, board, move, cell, [cell] as Array[Vector2i])
+	var ctx := MoveContext.new(caster, board, move, cell, [cell] as Array[Vector3i])
 	ctx.event_bus = bus
 	effect.apply(ctx)
 	return ctx
@@ -562,8 +562,8 @@ func test_a_lethal_second_bite_raises_the_thrall_instead_of_killing_it():
 	var board := MockBoard.new()
 	var myco := Thrall.new(0, { "attack": 12 })
 	var victim := Thrall.new(1, { "health": 100 })
-	board.place(myco, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(myco, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	var sc := victim.get_status_controller()
 
 	# One bite in: infested once, still its own unit.
@@ -586,8 +586,8 @@ func test_the_raising_blow_announces_the_takeover_exactly_once():
 	var board := MockBoard.new()
 	var myco := Thrall.new(0, { "attack": 12 })
 	var victim := Thrall.new(1, { "health": 100 })
-	board.place(myco, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(myco, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 
 	# GUT lambdas capture BY VALUE -- an Array is the only counter that survives.
 	var takeovers: Array = []
@@ -611,8 +611,8 @@ func test_a_host_already_at_one_HP_survives_the_raising_blow_too():
 	var board := MockBoard.new()
 	var myco := Thrall.new(0, { "attack": 12 })
 	var victim := Thrall.new(1, { "health": 100 })
-	board.place(myco, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(myco, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 
 	_resolve(_infest_effect(), board, myco, victim)
 	victim.hp = 1
@@ -629,8 +629,8 @@ func test_a_lethal_FIRST_bite_still_just_kills():
 	var board := MockBoard.new()
 	var myco := Thrall.new(0, { "attack": 12 })
 	var victim := Thrall.new(1, { "health": 100 })
-	board.place(myco, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(myco, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	victim.hp = 8
 
 	var bus := _wire_parasitic_hold(myco, board)
@@ -647,8 +647,8 @@ func test_an_ALREADY_controlled_host_is_killable_by_the_next_blow():
 	var board := MockBoard.new()
 	var myco := Thrall.new(0, { "attack": 12 })
 	var victim := Thrall.new(1, { "health": 100 })
-	board.place(myco, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(myco, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 
 	_resolve(_infest_effect(), board, myco, victim)
 	_resolve(_infest_effect(), board, myco, victim)
@@ -664,8 +664,8 @@ func test_an_ordinary_lethal_hit_is_untouched_by_the_takeover_clamp():
 	var board := MockBoard.new()
 	var attacker := Thrall.new(0, { "attack": 12 })
 	var victim := Thrall.new(1, { "health": 100 })
-	board.place(attacker, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	victim.hp = 8
 
 	_resolve(_true_damage(40), board, attacker, victim)
@@ -680,8 +680,8 @@ func test_bites_during_control_plant_no_infestation():
 	var board := MockBoard.new()
 	var myco := Thrall.new(0, { "attack": 12 })
 	var victim := Thrall.new(1, { "health": 100 })
-	board.place(myco, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(myco, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	var sc := victim.get_status_controller()
 
 	_resolve(_infest_effect(), board, myco, victim)
@@ -704,7 +704,7 @@ func test_control_lapsing_wipes_leftover_infestation():
 	# infestation got there.
 	var board := MockBoard.new()
 	var victim := Thrall.new(1, { "health": 100 })
-	board.place(victim, Vector2i(1, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	var sc := victim.get_status_controller()
 
 	sc.add_status(_infested())
@@ -726,8 +726,8 @@ func test_after_control_lapses_two_fresh_bites_are_needed_again():
 	var board := MockBoard.new()
 	var myco := Thrall.new(0, { "attack": 12 })
 	var victim := Thrall.new(1, { "health": 100 })
-	board.place(myco, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(myco, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	var sc := victim.get_status_controller()
 
 	_resolve(_infest_effect(), board, myco, victim)
@@ -752,7 +752,7 @@ func test_clearing_a_units_statuses_also_clears_the_counter():
 	# than leaving a counter behind with nothing to spend it on.
 	var board := MockBoard.new()
 	var victim := Thrall.new(1, { "health": 100 })
-	board.place(victim, Vector2i(1, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	var sc := victim.get_status_controller()
 	sc.add_status(_infested())
 	sc.add_status(_enthralled())
@@ -770,7 +770,7 @@ func test_control_is_forced_then_expires_traditional():
 	var unit := _real_unit("Hollowed One")
 	var player := _register_one_unit(ts, unit)
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 
 	ts.is_active = true
 	ts.current_player = player
@@ -797,7 +797,7 @@ func test_control_is_forced_then_expires_speed_first():
 	var unit := _real_unit("Hollowed One")
 	_register_one_unit(ts, unit)
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 
 	ts.is_active = true
 	ts.is_turn_in_progress = true
@@ -824,7 +824,7 @@ func test_a_controlled_unit_stays_registered_so_its_status_can_tick():
 	var unit := _real_unit("Hollowed One")
 	var player := _register_one_unit(ts, unit)
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	ts.is_active = true
 	ts.current_player = player
 	ts.is_turn_in_progress = true
@@ -840,7 +840,7 @@ func test_control_latch_is_cleared_on_reset():
 	var unit := _real_unit("Hollowed One")
 	var player := _register_one_unit(ts, unit)
 	var board := MockBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 	ts.is_active = true
 	ts.current_player = player
 	ts.is_turn_in_progress = true
@@ -925,7 +925,7 @@ func test_infesting_lunge_actually_braces_the_caster():
 	# End to end: the self-application really lands Braced on the caster.
 	var board := MockBoard.new()
 	var caster := Thrall.new(0, { "health": 100 })
-	board.place(caster, Vector2i(0, 0))
+	board.place(caster, Vector3i(0, 0, 0))
 
 	var move := _infesting_lunge()
 	var brace: ApplyStatusEffect = null
@@ -934,7 +934,7 @@ func test_infesting_lunge_actually_braces_the_caster():
 			brace = e as ApplyStatusEffect
 	assert_not_null(brace, "the move has the brace effect")
 
-	var ctx := MoveContext.new(caster, board, move, Vector2i(0, 0), [Vector2i(0, 0)] as Array[Vector2i])
+	var ctx := MoveContext.new(caster, board, move, Vector3i(0, 0, 0), [Vector3i(0, 0, 0)] as Array[Vector3i])
 	brace.apply(ctx)
 	assert_true(caster.get_status_controller().has_status(&"braced"),
 		"the caster braced itself")
@@ -961,7 +961,7 @@ func test_mycothrall_character_sheet():
 	assert_true(&"infesting_lunge" in move_ids, "it knows Infesting Lunge")
 	assert_true(&"siphon_bite" in move_ids, "and Siphon Bite")
 
-	assert_eq(myco.abilities.size(), 1, "one ability")
+	assert_eq(myco.abilities.size(), 2, "Parasitic Hold + Rain Bath")
 	assert_eq(myco.abilities[0].id, &"parasitic_hold", "Parasitic Hold")
 
 	# A fast, fragile skirmisher relative to the tanky Blightcap.

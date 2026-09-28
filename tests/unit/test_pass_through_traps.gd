@@ -25,8 +25,8 @@ extends GutTest
 
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
 
-const ORIGIN := Vector2i(0, 0)
-const DEST := Vector2i(4, 0)
+const ORIGIN := Vector3i(0, 0, 0)
+const DEST := Vector3i(4, 0, 0)
 
 ## Untyped on purpose (tests/README rule 3).
 var _guard
@@ -86,16 +86,16 @@ class TrapBoard:
 	var placements: Array = []
 	var walls: Dictionary = {}
 
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
 
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
+		return Vector3i(-999, -999, 0)
 
-	func units_at(cell: Vector2i) -> Array:
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -108,15 +108,15 @@ class TrapBoard:
 	func are_allies(a, b) -> bool:
 		return a.team == b.team
 
-	func move_unit(unit, to_cell: Vector2i) -> void:
+	func move_unit(unit, to_cell: Vector3i) -> void:
 		for p in placements:
 			if p.unit == unit:
 				p.cell = to_cell
 
-	func is_blocked(cell: Vector2i) -> bool:
+	func is_blocked(cell: Vector3i) -> bool:
 		return walls.has(cell)
 
-	func tile_effects_at(cell: Vector2i) -> Array:
+	func tile_effects_at(cell: Vector3i) -> Array:
 		return CombatServices.tile_effects_at(cell)
 
 
@@ -135,7 +135,7 @@ func after_each() -> void:
 ## The authored Vine Trap, stamped as PLACED BY player 0 (so it springs on player 1) and
 ## laid on [param cell]. Duplicated first -- these resources are loaded once and handed to
 ## every cell (CONQUEST.md rule 7).
-func _lay_vine_trap(cell: Vector2i) -> TileEffectResource:
+func _lay_vine_trap(cell: Vector3i) -> TileEffectResource:
 	var trap: TileEffectResource = (load("res://game/tiles/effects/resources/vine_trap.tres") as TileEffectResource).duplicate()
 	trap.owner_player = 0
 	CombatServices.add_tile_effect(cell, trap)
@@ -144,7 +144,7 @@ func _lay_vine_trap(cell: Vector2i) -> TileEffectResource:
 
 ## A trap that SPRINGS ON PASS but does NOT halt: the second half of the design space, so
 ## the two flags are proven independent rather than one flag wearing two hats.
-func _lay_alarm(cell: Vector2i, power: int = 7) -> TileEffectResource:
+func _lay_alarm(cell: Vector3i, power: int = 7) -> TileEffectResource:
 	var te := TileEffectResource.new()
 	te.id = &"spore_alarm"
 	te.display_name = "Spore Alarm"
@@ -165,7 +165,7 @@ func _lay_alarm(cell: Vector2i, power: int = 7) -> TileEffectResource:
 
 ## An ordinary ON_ENTER effect that is NOT a trap -- the control case for every "pass-through
 ## is still free" assertion.
-func _lay_plain_hazard(cell: Vector2i, power: int = 9) -> TileEffectResource:
+func _lay_plain_hazard(cell: Vector3i, power: int = 9) -> TileEffectResource:
 	var te := TileEffectResource.new()
 	te.id = &"scorch_patch"
 	te.display_name = "Scorch Patch"
@@ -193,10 +193,10 @@ func _corridor(reach: int = 4) -> Dictionary:
 
 func test_the_derived_path_is_every_cell_the_move_steps_on() -> void:
 	var fx: Dictionary = _corridor()
-	var path: Array[Vector2i] = MovementResolver.new().path_cells(
+	var path: Array[Vector3i] = MovementResolver.new().path_cells(
 		ORIGIN, DEST, fx["unit"].profile, fx["board"], fx["unit"])
 	assert_eq(path.size(), 4, "a four-cell walk crosses four cells")
-	assert_eq(path[0], Vector2i(1, 0), "the origin is excluded -- the unit already stands there")
+	assert_eq(path[0], Vector3i(1, 0, 0), "the origin is excluded -- the unit already stands there")
 	assert_eq(path[path.size() - 1], DEST, "and the destination is the last cell walked onto")
 
 
@@ -205,15 +205,15 @@ func test_the_same_board_always_derives_the_same_path() -> void:
 	# the command, so two derivations over the same board MUST agree cell for cell.
 	var fx: Dictionary = _corridor()
 	var resolver := MovementResolver.new()
-	var first: Array[Vector2i] = resolver.path_cells(ORIGIN, DEST, fx["unit"].profile, fx["board"], fx["unit"])
-	var second: Array[Vector2i] = MovementResolver.new().path_cells(
+	var first: Array[Vector3i] = resolver.path_cells(ORIGIN, DEST, fx["unit"].profile, fx["board"], fx["unit"])
+	var second: Array[Vector3i] = MovementResolver.new().path_cells(
 		ORIGIN, DEST, fx["unit"].profile, fx["board"], fx["unit"])
 	assert_eq(first, second, "the derived route is a function of the board, not of run order")
 
 
 func test_an_unreachable_destination_derives_no_path() -> void:
 	var fx: Dictionary = _corridor(2)
-	var path: Array[Vector2i] = MovementResolver.new().path_cells(
+	var path: Array[Vector3i] = MovementResolver.new().path_cells(
 		ORIGIN, DEST, fx["unit"].profile, fx["board"], fx["unit"])
 	assert_true(path.is_empty(), "a destination outside the movement budget yields no route")
 
@@ -264,42 +264,42 @@ func test_springs_on_pass_only_counts_on_an_on_enter_effect() -> void:
 
 func test_a_pass_trap_springs_and_halts_the_move_on_its_own_cell() -> void:
 	var fx: Dictionary = _corridor()
-	_lay_vine_trap(Vector2i(2, 0))
+	_lay_vine_trap(Vector3i(2, 0, 0))
 
-	var landed: Vector2i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
+	var landed: Vector3i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
 
-	assert_eq(landed, Vector2i(2, 0), "the move ends ON the trap, not at the cell it aimed for")
-	assert_eq(fx["board"].cell_of(fx["unit"]), Vector2i(2, 0),
+	assert_eq(landed, Vector3i(2, 0, 0), "the move ends ON the trap, not at the cell it aimed for")
+	assert_eq(fx["board"].cell_of(fx["unit"]), Vector3i(2, 0, 0),
 		"and the unit is really standing there -- the board was corrected, not just the answer")
 	assert_eq(100 - fx["unit"].hp, 18, "the trap's damage lands in full (environmental damage never rolls)")
 	assert_eq(fx["unit"].statuses.size(), 1, "and it applies exactly one status")
 	assert_eq(fx["unit"].statuses[0].id, &"ensnared", "namely the hold")
-	assert_true(CombatServices.tile_effects_at(Vector2i(2, 0)).is_empty(),
+	assert_true(CombatServices.tile_effects_at(Vector3i(2, 0, 0)).is_empty(),
 		"a single-use trap is spent the instant it springs")
 
 
 func test_only_the_first_trap_on_a_route_ever_springs() -> void:
 	var fx: Dictionary = _corridor()
-	_lay_vine_trap(Vector2i(1, 0))
-	_lay_vine_trap(Vector2i(3, 0))
+	_lay_vine_trap(Vector3i(1, 0, 0))
+	_lay_vine_trap(Vector3i(3, 0, 0))
 
-	var landed: Vector2i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
+	var landed: Vector3i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
 
-	assert_eq(landed, Vector2i(1, 0), "the walk stops at the FIRST trap it steps on")
+	assert_eq(landed, Vector3i(1, 0, 0), "the walk stops at the FIRST trap it steps on")
 	assert_eq(100 - fx["unit"].hp, 18, "so exactly one trap's worth of damage lands")
-	assert_eq(CombatServices.tile_effects_at(Vector2i(3, 0)).size(), 1,
+	assert_eq(CombatServices.tile_effects_at(Vector3i(3, 0, 0)).size(), 1,
 		"the second trap is untouched -- the unit never reached it")
 
 
 func test_a_trap_that_does_not_halt_fires_and_the_move_carries_on() -> void:
 	var fx: Dictionary = _corridor()
-	_lay_alarm(Vector2i(2, 0))
+	_lay_alarm(Vector3i(2, 0, 0))
 
-	var landed: Vector2i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
+	var landed: Vector3i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
 
 	assert_eq(landed, DEST, "springs_on_pass without halts_movement does not stop the move")
 	assert_eq(100 - fx["unit"].hp, 7, "but the trap still fired as the unit crossed it")
-	assert_true(CombatServices.tile_effects_at(Vector2i(2, 0)).is_empty(),
+	assert_true(CombatServices.tile_effects_at(Vector3i(2, 0, 0)).is_empty(),
 		"and was spent doing so")
 
 
@@ -307,20 +307,20 @@ func test_walking_over_an_ordinary_hazard_is_still_free() -> void:
 	# The regression this whole design exists to avoid: making every ON_ENTER effect fire
 	# on pass-through would turn every hazard on the map into a trap.
 	var fx: Dictionary = _corridor()
-	_lay_plain_hazard(Vector2i(2, 0))
+	_lay_plain_hazard(Vector3i(2, 0, 0))
 
-	var landed: Vector2i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
+	var landed: Vector3i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
 
 	assert_eq(landed, DEST, "a tile nobody authored as a trap never truncates a move")
 	assert_eq(fx["unit"].hp, 100, "and hurts nobody who merely walks across it")
-	assert_eq(CombatServices.tile_effects_at(Vector2i(2, 0)).size(), 1, "so it is not spent either")
+	assert_eq(CombatServices.tile_effects_at(Vector3i(2, 0, 0)).size(), 1, "so it is not spent either")
 
 
 func test_landing_directly_on_a_trap_still_works() -> void:
 	var fx: Dictionary = _corridor()
 	_lay_vine_trap(DEST)
 
-	var landed: Vector2i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
+	var landed: Vector3i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
 
 	assert_eq(landed, DEST, "a trap on the destination is a landing, not a truncation")
 	assert_eq(100 - fx["unit"].hp, 18, "and springs exactly once")
@@ -329,13 +329,13 @@ func test_landing_directly_on_a_trap_still_works() -> void:
 
 func test_a_route_that_avoids_the_trap_costs_nothing() -> void:
 	var fx: Dictionary = _corridor()
-	_lay_vine_trap(Vector2i(2, 0))
+	_lay_vine_trap(Vector3i(2, 0, 0))
 
-	var landed: Vector2i = fx["system"].apply_move(fx["unit"], ORIGIN, Vector2i(0, 3), fx["board"])
+	var landed: Vector3i = fx["system"].apply_move(fx["unit"], ORIGIN, Vector3i(0, 3, 0), fx["board"])
 
-	assert_eq(landed, Vector2i(0, 3), "a route down the other column never meets the trap")
+	assert_eq(landed, Vector3i(0, 3, 0), "a route down the other column never meets the trap")
 	assert_eq(fx["unit"].hp, 100, "so nothing springs")
-	assert_eq(CombatServices.tile_effects_at(Vector2i(2, 0)).size(), 1, "and the trap is still armed")
+	assert_eq(CombatServices.tile_effects_at(Vector3i(2, 0, 0)).size(), 1, "and the trap is still armed")
 
 
 func test_a_trap_spares_the_side_that_laid_it_even_on_pass() -> void:
@@ -343,13 +343,13 @@ func test_a_trap_spares_the_side_that_laid_it_even_on_pass() -> void:
 	var board := TrapBoard.new()
 	board.place(unit, ORIGIN)
 	var system: TileEffectSystem = autofree(TileEffectSystem.new())
-	_lay_vine_trap(Vector2i(2, 0))
+	_lay_vine_trap(Vector3i(2, 0, 0))
 
-	var landed: Vector2i = system.apply_move(unit, ORIGIN, DEST, board)
+	var landed: Vector3i = system.apply_move(unit, ORIGIN, DEST, board)
 
 	assert_eq(landed, DEST, "the placer's own side walks over its own trap")
 	assert_eq(unit.hp, 100, "taking nothing")
-	assert_eq(CombatServices.tile_effects_at(Vector2i(2, 0)).size(), 1, "and leaving it armed for the enemy")
+	assert_eq(CombatServices.tile_effects_at(Vector3i(2, 0, 0)).size(), 1, "and leaving it armed for the enemy")
 
 
 # --- Determinism -------------------------------------------------------------
@@ -362,8 +362,8 @@ func test_the_same_move_over_the_same_board_truncates_identically_twice() -> voi
 	for _run in range(2):
 		CombatServices.clear()
 		var fx: Dictionary = _corridor()
-		_lay_vine_trap(Vector2i(2, 0))
-		var landed: Vector2i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
+		_lay_vine_trap(Vector3i(2, 0, 0))
+		var landed: Vector3i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
 		results.append({ "cell": landed, "hp": int(fx["unit"].hp) })
 	assert_eq(results[0], results[1],
 		"truncation is deterministic resolution -- no RNG, no clock, no scene order")
@@ -373,16 +373,16 @@ func test_the_same_move_over_the_same_board_truncates_identically_twice() -> voi
 
 func test_the_preview_reports_the_stop_cell_the_move_will_actually_use() -> void:
 	var fx: Dictionary = _corridor()
-	var trap := _lay_vine_trap(Vector2i(2, 0))
+	var trap := _lay_vine_trap(Vector3i(2, 0, 0))
 
 	var route: Dictionary = TileEffectSystem.preview_route(fx["unit"], ORIGIN, DEST, fx["board"])
 
-	assert_eq(route["stop"], Vector2i(2, 0), "the preview stops the ghost on the trap")
+	assert_eq(route["stop"], Vector3i(2, 0, 0), "the preview stops the ghost on the trap")
 	assert_eq(route["trap"], trap, "and names the trap it would spring")
 	assert_eq(fx["unit"].hp, 100, "a preview applies nothing")
-	assert_eq(CombatServices.tile_effects_at(Vector2i(2, 0)).size(), 1, "and consumes nothing")
+	assert_eq(CombatServices.tile_effects_at(Vector3i(2, 0, 0)).size(), 1, "and consumes nothing")
 
-	var landed: Vector2i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
+	var landed: Vector3i = fx["system"].apply_move(fx["unit"], ORIGIN, DEST, fx["board"])
 	assert_eq(landed, route["stop"], "what the preview promised is what the move resolved")
 
 
@@ -395,7 +395,7 @@ func test_a_clear_route_previews_no_trap_at_all() -> void:
 
 func test_a_non_halting_trap_is_still_worth_warning_about() -> void:
 	var fx: Dictionary = _corridor()
-	var alarm := _lay_alarm(Vector2i(2, 0))
+	var alarm := _lay_alarm(Vector3i(2, 0, 0))
 	var route: Dictionary = TileEffectSystem.preview_route(fx["unit"], ORIGIN, DEST, fx["board"])
 	assert_eq(route["stop"], DEST, "it does not truncate the move")
 	assert_eq(route["trap"], alarm, "but the player is still told it will go off")
@@ -415,9 +415,9 @@ func _driver() -> BotTurnDriver:
 func _reach_with_difficulty(difficulty: int) -> Array:
 	_guard.set_setting("ai_difficulty", difficulty)
 	var fx: Dictionary = _corridor()
-	_lay_vine_trap(Vector2i(2, 0))
+	_lay_vine_trap(Vector3i(2, 0, 0))
 	var resolver := MovementResolver.new()
-	var cells: Array[Vector2i] = resolver.reachable_cells(
+	var cells: Array[Vector3i] = resolver.reachable_cells(
 		ORIGIN, fx["unit"].profile, fx["board"], fx["unit"])
 	return _driver()._avoid_traps(
 		fx["unit"], ORIGIN, fx["unit"].profile, fx["board"], resolver, cells)
@@ -425,15 +425,15 @@ func _reach_with_difficulty(difficulty: int) -> Array:
 
 func test_hard_ai_refuses_to_plan_a_route_through_an_armed_trap() -> void:
 	var cells: Array = _reach_with_difficulty(BotController.Difficulty.HARD)
-	assert_false(cells.has(Vector2i(2, 0)), "Hard will not step on a trap it can see")
+	assert_false(cells.has(Vector3i(2, 0, 0)), "Hard will not step on a trap it can see")
 	assert_false(cells.has(DEST), "nor take a route that has to cross one")
-	assert_true(cells.has(Vector2i(0, 3)), "but every cell reachable without crossing it is still on the table")
+	assert_true(cells.has(Vector3i(0, 3, 0)), "but every cell reachable without crossing it is still on the table")
 
 
 func test_easy_and_normal_ai_blunder_straight_into_the_trap() -> void:
 	for difficulty in [BotController.Difficulty.EASY, BotController.Difficulty.NORMAL]:
 		var cells: Array = _reach_with_difficulty(int(difficulty))
-		assert_true(cells.has(Vector2i(2, 0)),
+		assert_true(cells.has(Vector3i(2, 0, 0)),
 			"%s reads the board no better than the tile looks" % BotController.difficulty_name(int(difficulty)))
 		CombatServices.clear()
 
@@ -445,15 +445,15 @@ func test_a_boxed_in_hard_unit_walks_the_trap_rather_than_freezing() -> void:
 	var fx: Dictionary = _corridor()
 	var board: TrapBoard = fx["board"]
 	# A one-cell doorway at (1,0); everything else around the origin is wall.
-	board.walls[Vector2i(0, 1)] = true
-	board.walls[Vector2i(0, -1)] = true
-	board.walls[Vector2i(-1, 0)] = true
-	board.walls[Vector2i(1, 1)] = true
-	board.walls[Vector2i(1, -1)] = true
-	_lay_vine_trap(Vector2i(1, 0))
+	board.walls[Vector3i(0, 1, 0)] = true
+	board.walls[Vector3i(0, -1, 0)] = true
+	board.walls[Vector3i(-1, 0, 0)] = true
+	board.walls[Vector3i(1, 1, 0)] = true
+	board.walls[Vector3i(1, -1, 0)] = true
+	_lay_vine_trap(Vector3i(1, 0, 0))
 
 	var resolver := MovementResolver.new()
-	var cells: Array[Vector2i] = resolver.reachable_cells(ORIGIN, fx["unit"].profile, board, fx["unit"])
+	var cells: Array[Vector3i] = resolver.reachable_cells(ORIGIN, fx["unit"].profile, board, fx["unit"])
 	var kept: Array = _driver()._avoid_traps(fx["unit"], ORIGIN, fx["unit"].profile, board, resolver, cells)
 
 	assert_eq(kept, cells, "with no alternative route the full reachable set is kept")
@@ -464,10 +464,10 @@ func test_hard_ai_ignores_a_trap_laid_by_its_own_side() -> void:
 	var unit := Walker.new(0, 4)  # same "player" as the trap's owner -- it cannot spring it
 	var board := TrapBoard.new()
 	board.place(unit, ORIGIN)
-	_lay_vine_trap(Vector2i(2, 0))
+	_lay_vine_trap(Vector3i(2, 0, 0))
 
 	var resolver := MovementResolver.new()
-	var cells: Array[Vector2i] = resolver.reachable_cells(ORIGIN, unit.profile, board, unit)
+	var cells: Array[Vector3i] = resolver.reachable_cells(ORIGIN, unit.profile, board, unit)
 	var kept: Array = _driver()._avoid_traps(unit, ORIGIN, unit.profile, board, resolver, cells)
 
 	assert_eq(kept, cells, "a trap that cannot spring on this unit is not an obstacle to it")
@@ -478,19 +478,19 @@ func test_hard_ai_ignores_a_trap_laid_by_its_own_side() -> void:
 func test_an_excluded_cell_can_be_neither_crossed_nor_stopped_on() -> void:
 	var fx: Dictionary = _corridor()
 	var board: TrapBoard = fx["board"]
-	board.walls[Vector2i(1, 1)] = true
-	board.walls[Vector2i(1, -1)] = true
-	var cells: Array[Vector2i] = MovementResolver.new().reachable_cells(
-		ORIGIN, fx["unit"].profile, board, fx["unit"], { Vector2i(1, 0): true })
-	assert_false(cells.has(Vector2i(1, 0)), "the excluded cell is not reachable")
-	assert_false(cells.has(Vector2i(2, 0)), "and nothing behind it is either -- exclusion blocks the path")
-	assert_true(cells.has(Vector2i(0, 1)), "cells reachable another way are unaffected")
+	board.walls[Vector3i(1, 1, 0)] = true
+	board.walls[Vector3i(1, -1, 0)] = true
+	var cells: Array[Vector3i] = MovementResolver.new().reachable_cells(
+		ORIGIN, fx["unit"].profile, board, fx["unit"], { Vector3i(1, 0, 0): true })
+	assert_false(cells.has(Vector3i(1, 0, 0)), "the excluded cell is not reachable")
+	assert_false(cells.has(Vector3i(2, 0, 0)), "and nothing behind it is either -- exclusion blocks the path")
+	assert_true(cells.has(Vector3i(0, 1, 0)), "cells reachable another way are unaffected")
 
 
 func test_an_empty_exclusion_set_changes_nothing() -> void:
 	var fx: Dictionary = _corridor()
 	var resolver := MovementResolver.new()
-	var plain: Array[Vector2i] = resolver.reachable_cells(ORIGIN, fx["unit"].profile, fx["board"], fx["unit"])
-	var empty: Array[Vector2i] = resolver.reachable_cells(
+	var plain: Array[Vector3i] = resolver.reachable_cells(ORIGIN, fx["unit"].profile, fx["board"], fx["unit"])
+	var empty: Array[Vector3i] = resolver.reachable_cells(
 		ORIGIN, fx["unit"].profile, fx["board"], fx["unit"], {})
 	assert_eq(plain, empty, "the default exclusion set is the identity")

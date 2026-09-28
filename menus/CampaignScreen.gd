@@ -3,18 +3,21 @@ extends Control
 class_name CampaignScreen
 
 ## The campaign chapter list, reached from SoloModeSelect's Campaign card. Renders the
-## ordered [CampaignData] chapters as a vertical column of cards in the dark "Legends"
-## menu register ([MenuTheme]). Each card shows its chapter number, title, story blurb,
-## map name, and a status line -- CLEARED (with the best turn count) for a beaten chapter,
-## or LOCKED (dimmed, non-interactive) for one whose predecessor is still standing.
+## ordered [CampaignData] chapters as a vertical column of grove cards ([MenuKit] /
+## [MenuTheme], see docs/UI_STYLE.md). Each card shows its chapter number as a heraldic
+## crest, the title, story blurb, map name and difficulty, and a status badge -- CLEARED
+## (with the best turn count) for a beaten chapter, READY for one still to play, or LOCKED
+## (sunk, non-interactive) for one whose predecessor is still standing.
 ##
 ## Progress + unlock state come from [b]CampaignController[/b] (the autoload that also
 ## persists them). Choosing a chapter stages it there and hands off to Character Select
 ## via CampaignController.begin(). The list opens focused on the first unlocked-and-
 ## uncleared chapter (where the player should resume); cleared chapters can be replayed.
 ##
-## Keyboard: Up / Down move the selection between PLAYABLE chapters, Enter plays the
-## selected one, ESC returns to SoloModeSelect.
+## Input: Up / Down (arrows, D-pad) move between PLAYABLE chapters -- locked cards take no
+## focus, so focus navigation skips them -- and focusing a card selects it. Confirm (Enter /
+## A) or a click on a card plays it, as does the "Play Chapter" button; Cancel (Esc / B)
+## returns to SoloModeSelect.
 
 const SOLO_MODE_SELECT_SCENE := "res://menus/SoloModeSelect.tscn"
 
@@ -25,68 +28,45 @@ var _playable: Array[bool] = []
 var _chapters: Array = []
 var _selected: int = -1
 
-var _hint_label: Label = null
+var _play_btn: Button = null
+var _back_btn: Button = null
+var _scroll: ScrollContainer = null
 
 
 func _ready() -> void:
-	theme = MenuTheme.build()
-	MenuTheme.apply_backdrop(self)
 	_chapters = CampaignData.chapters()
 	_build_ui()
 	_select_default()
 
 
 func _build_ui() -> void:
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
+	# Page chrome (backdrop, breadcrumb, title, rule, footer) from the shared kit. The body
+	# is ONE EXPAND_FILL scroll, so the footer stays pinned at 720p however many chapters
+	# ship: MenuKit's header + footer take ~255 of 720 and the scroll absorbs the rest.
+	var page := MenuKit.build_page(self, ["Solo"], "Campaign",
+		"Drive the blight from the Forgotten Forest, chapter by chapter.")
 
-	var page := VBoxContainer.new()
-	# Explicit 700 (not 0): a deliberate height BUDGET for a 720p screen (20px safety --
-	# there is no MarginContainer here, so this page IS the full viewport). As long as
-	# the fixed items below sum under 700, the scroll (the page's only EXPAND_FILL
-	# region) absorbs the difference; same pattern as ProfileScreen / ChallengeBrowse.
-	page.custom_minimum_size = Vector2(920.0, 700.0)
-	page.add_theme_constant_override("separation", 14)
-	center.add_child(page)
+	_scroll = ScrollContainer.new()
+	_scroll.name = "ChapterScroll"
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroll.follow_focus = true
+	page.body.add_child(_scroll)
 
-	var title := Label.new()
-	title.text = "CAMPAIGN"
-	page.add_child(title)
-	# 32 not 40: with the old fixed 470 scroll floor, title(52) + subtitle(21) + spacer(8)
-	# + scroll(470) + footspace(6) + back(44) + hint(16) + 6 gaps * 14 separation = 84
-	# summed to ~701 against a 720 budget -- only 19px of slack, easy to blow past with
-	# any font-metric rounding and clip the Back button. Trimming the title and the
-	# scroll floor (below) restores real margin.
-	MenuTheme.style_title(title, 32)
-
-	var subtitle := Label.new()
-	subtitle.text = "Drive the blight from the Forgotten Forest, chapter by chapter."
-	page.add_child(subtitle)
-	MenuTheme.style_subtitle(subtitle)
-
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0.0, 8.0)
-	page.add_child(spacer)
-
-	# Scrollable chapter column (fits any future chapter count without overflowing).
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	# 220 floor (not a fixed 470): this scroll is the page's ONLY flexible region --
-	# EXPAND_FILL lets it soak up whatever the 700 budget has left after the fixed rows
-	# below (title + subtitle + spacer + footspace + back + hint sum to ~137, plus 84 of
-	# separation = ~221), which comes out to roughly 479px of actual scroll height on a
-	# normal window -- comfortably more than a fixed 470 ever gave, while the FLOOR itself
-	# stays low enough that the footer never gets pushed off a 720p screen.
-	scroll.custom_minimum_size = Vector2(0.0, 220.0)
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	page.add_child(scroll)
+	# Room for the focus ring's glow + the scrollbar, like the other card columns.
+	var pad := MarginContainer.new()
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for side in ["left", "top", "bottom"]:
+		pad.add_theme_constant_override("margin_" + side, 6)
+	pad.add_theme_constant_override("margin_right", 14)
+	_scroll.add_child(pad)
 
 	var list := VBoxContainer.new()
+	list.name = "ChapterList"
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list.add_theme_constant_override("separation", 12)
-	scroll.add_child(list)
+	list.add_theme_constant_override("separation", MenuTheme.SP_M)
+	pad.add_child(list)
 
 	for i in range(_chapters.size()):
 		var unlocked: bool = _chapter_unlocked(_chapters[i])
@@ -95,113 +75,107 @@ func _build_ui() -> void:
 		_cards.append(card)
 		list.add_child(card)
 
-	var foot := Control.new()
-	foot.custom_minimum_size = Vector2(0.0, 6.0)
-	page.add_child(foot)
+	if _chapters.is_empty():
+		list.add_child(MenuKit.label("No chapters in this build yet.", &"DimLabel"))
 
-	var back := Button.new()
-	back.text = "Back"
-	back.custom_minimum_size = Vector2(0.0, 44.0)
-	back.pressed.connect(_on_back_pressed)
-	page.add_child(back)
+	_back_btn = MenuKit.button("Back", MenuKit.GHOST, 140)
+	_back_btn.name = "BackButton"
+	_back_btn.pressed.connect(_on_back_pressed)
+	page.actions.add_child(_back_btn)
 
-	_hint_label = Label.new()
-	_hint_label.text = "Up / Down select  •  Enter play  •  ESC back"
-	page.add_child(_hint_label)
-	MenuTheme.style_caption(_hint_label)
+	_play_btn = MenuKit.button("Play Chapter  >", MenuKit.PRIMARY, 240, 54)
+	_play_btn.name = "PlayButton"
+	_play_btn.disabled = true
+	_play_btn.pressed.connect(func() -> void: _play(_selected))
+	page.actions.add_child(_play_btn)
+
+	page.hints.add_child(MenuKit.key_hint("Up/Down", "D-Pad", "Choose"))
+	MenuKit.add_standard_hints(page.hints, "Play")
 
 
-## One chapter card: number badge + title on top, blurb + map name below, and a status
-## line (CLEARED + best turns, or LOCKED). Locked cards are disabled and dimmed.
+## One chapter card: crest (chapter number) + title, blurb, map / difficulty line, and a
+## status badge on the right (CLEARED + best turns, READY, or LOCKED). Locked cards are
+## disabled (the OptionCard's sunk look) and take no focus.
 func _make_chapter_card(index: int, chapter: Dictionary, unlocked: bool) -> Button:
 	var id: String = String(chapter.get("id", ""))
 	var cleared: bool = _chapter_cleared(id)
 
-	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(0.0, 96.0)
+	var parts := MenuKit.option_card(Vector2(0.0, 104.0), true)
+	var btn: Button = parts["button"]
+	btn.name = "Chapter%d" % index
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.toggle_mode = true
 	btn.disabled = not unlocked
+	# A cleared chapter wears the grove's "done" green down its edge; the others keep the
+	# plain frame (gold is reserved for focus / selection).
+	if unlocked and cleared:
+		MenuKit.accent_card(btn, MenuTheme.SUCCESS)
 	if unlocked:
 		btn.pressed.connect(_on_card_pressed.bind(index))
 		btn.focus_entered.connect(_on_card_focused.bind(index))
 	else:
 		btn.focus_mode = Control.FOCUS_NONE
-		btn.modulate = Color(1, 1, 1, 0.55)
+	var content: VBoxContainer = parts["content"]
 
-	# Content laid over the button; IGNORE mouse so clicks reach the button itself.
 	var row := HBoxContainer.new()
-	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	row.offset_left = 16.0
-	row.offset_right = -16.0
-	row.offset_top = 10.0
-	row.offset_bottom = -10.0
-	row.add_theme_constant_override("separation", 16)
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", MenuTheme.SP_L)
+	content.add_child(row)
 
-	# Chapter-number badge.
-	var num := Label.new()
-	num.text = str(int(chapter.get("number", index + 1)))
-	num.custom_minimum_size = Vector2(52.0, 0.0)
-	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	num.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	num.add_theme_font_size_override("font_size", 40)
-	num.add_theme_color_override("font_color", MenuTheme.GOLD if unlocked else MenuTheme.CREAM_DIM)
-	row.add_child(num)
+	# Chapter number as a heraldic crest: grove green for a playable chapter, sunk for a
+	# locked one; a gold rim once it is cleared.
+	var number: int = int(chapter.get("number", index + 1))
+	var field: Color = MenuTheme.EL_NATURE if unlocked else MenuTheme.BORDER
+	var ring: Color = MenuTheme.GOLD if cleared else MenuTheme.GOLD_DK
+	var crest := MenuKit.crest(str(number), field, ring, 56.0)
+	crest.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(crest)
 
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_theme_constant_override("separation", 3)
-
-	var head := Label.new()
-	head.text = String(chapter.get("title", "Chapter %d" % (index + 1)))
-	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	head.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	head.add_theme_color_override("font_color", MenuTheme.CREAM if unlocked else MenuTheme.CREAM_DIM)
-	col.add_child(head)
-
-	var blurb := Label.new()
-	blurb.text = String(chapter.get("blurb", ""))
-	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	blurb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	blurb.add_theme_font_size_override("font_size", MenuTheme.FONT_BODY)
-	blurb.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
-	col.add_child(blurb)
-
-	var meta := Label.new()
-	meta.text = "Map: %s      Difficulty: %s" % [
-		_map_name_for(chapter), _difficulty_label(int(chapter.get("ai_difficulty", 1)))]
-	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	meta.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	meta.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
-	col.add_child(meta)
-
 	row.add_child(col)
 
-	# Status column (right): CLEARED + best turns, or LOCKED.
-	var status := Label.new()
-	status.custom_minimum_size = Vector2(150.0, 0.0)
-	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	status.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	var head := MenuKit.label(String(chapter.get("title", "Chapter %d" % (index + 1))),
+		&"SubheadingLabel")
 	if not unlocked:
-		status.text = "LOCKED"
-		status.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
-	elif cleared:
-		var bt: int = _chapter_best_turns(id)
-		status.text = "CLEARED" + ("\nBest: %d turns" % bt if bt > 0 else "")
-		status.add_theme_color_override("font_color", MenuTheme.GOLD)
-	else:
-		status.text = "Ready"
-		status.add_theme_color_override("font_color", MenuTheme.GOLD_DK)
-	row.add_child(status)
+		head.add_theme_color_override("font_color", MenuTheme.TEXT_MUTED)
+	col.add_child(head)
 
-	btn.add_child(row)
+	var blurb := MenuKit.label(String(chapter.get("blurb", "")),
+		&"DimLabel" if unlocked else &"MutedLabel", true)
+	blurb.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	col.add_child(blurb)
+
+	var meta := MenuKit.label("Map: %s      Difficulty: %s" % [
+		_map_name_for(chapter), _difficulty_label(int(chapter.get("ai_difficulty", 1)))],
+		&"MutedLabel")
+	meta.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	col.add_child(meta)
+
+	# Status column (right): CLEARED + best turns, READY, or LOCKED.
+	var status := VBoxContainer.new()
+	status.custom_minimum_size = Vector2(150.0, 0.0)
+	status.alignment = BoxContainer.ALIGNMENT_CENTER
+	status.add_theme_constant_override("separation", 4)
+	row.add_child(status)
+	var badge: PanelContainer
+	if not unlocked:
+		badge = MenuKit.badge("LOCKED", MenuTheme.TEXT_MUTED)
+	elif cleared:
+		badge = MenuKit.badge("CLEARED", MenuTheme.SUCCESS)
+	else:
+		badge = MenuKit.badge("READY", MenuTheme.GOLD)
+	badge.size_flags_horizontal = Control.SIZE_SHRINK_END
+	status.add_child(badge)
+	if unlocked and cleared:
+		var bt: int = _chapter_best_turns(id)
+		if bt > 0:
+			var best := MenuKit.label("Best: %d turns" % bt, &"DimLabel")
+			best.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+			best.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			status.add_child(best)
+
+	MenuKit.ignore_mouse(btn)
 	return btn
 
 
@@ -220,29 +194,38 @@ func _select_default() -> void:
 			break
 	if target >= 0:
 		_focus_card(target)
+	elif _back_btn != null:
+		_focus_later(_back_btn)
 
 
 func _focus_card(index: int) -> void:
 	if index < 0 or index >= _cards.size():
 		return
-	_selected = index
-	for i in range(_cards.size()):
-		_cards[i].set_pressed_no_signal(i == index and _playable[i])
+	_mark_selected(index)
 	if _cards[index] != null and _playable[index]:
-		_cards[index].grab_focus()
+		_focus_later(_cards[index])
 
 
 func _on_card_focused(index: int) -> void:
+	_mark_selected(index)
+
+
+## Record [param index] as the selection and show it: the selected card wears the
+## OptionCard "pressed" frame (gold border + crest) and the Play button wakes up.
+func _mark_selected(index: int) -> void:
 	_selected = index
 	for i in range(_cards.size()):
 		_cards[i].set_pressed_no_signal(i == index and _playable[i])
+	if _play_btn != null:
+		_play_btn.disabled = index < 0 or index >= _playable.size() or not _playable[index]
 
 
 func _on_card_pressed(index: int) -> void:
 	_play(index)
 
 
-## Move the selection to the next/previous PLAYABLE chapter.
+## Move the selection to the next/previous PLAYABLE chapter (wrapping). Used when nothing
+## on the page holds focus, so a D-pad press still lands somewhere sensible.
 func _move_selection(step: int) -> void:
 	if _cards.is_empty():
 		return
@@ -266,27 +249,25 @@ func _play(index: int) -> void:
 
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file(SOLO_MODE_SELECT_SCENE)
+	MenuNav.change_scene(self, SOLO_MODE_SELECT_SCENE)
 
 
-func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
+func _unhandled_input(event: InputEvent) -> void:
+	if MenuNav.is_back_event(event):
+		get_viewport().set_input_as_handled()
+		_on_back_pressed()
 		return
-	if event is InputEventKey:
-		match event.keycode:
-			KEY_UP:
-				_move_selection(-1)
-				get_viewport().set_input_as_handled()
-			KEY_DOWN:
-				_move_selection(1)
-				get_viewport().set_input_as_handled()
-			KEY_ENTER, KEY_KP_ENTER:
-				if _selected >= 0:
-					_play(_selected)
-				get_viewport().set_input_as_handled()
-			KEY_ESCAPE:
-				_on_back_pressed()
-				get_viewport().set_input_as_handled()
+	# Focus navigation already consumed Up / Down when a control holds focus; this only
+	# catches the case where nothing does (e.g. the mouse clicked empty space).
+	if get_viewport().gui_get_focus_owner() != null:
+		return
+	if event.is_pressed() and not event.is_echo():
+		if event.is_action_pressed(&"ui_up"):
+			_move_selection(-1)
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed(&"ui_down"):
+			_move_selection(1)
+			get_viewport().set_input_as_handled()
 
 
 # --- Controller queries (null-guarded so the screen renders without the autoload) ----
@@ -331,3 +312,16 @@ func _difficulty_label(diff: int) -> String:
 		2: return "Hard"
 		3: return "Brutal"
 		_: return "Normal"
+
+
+## [MenuNav.focus_deferred], but safe when the control leaves the tree first (a repaint
+## rebuilt it, or the screen closed) -- grab_focus() on a detached control is an engine error.
+func _focus_later(c: Control) -> void:
+	if c == null:
+		return
+	# Captured by instance id, not by reference: a freed capture is itself an engine error.
+	var id: int = c.get_instance_id()
+	(func() -> void:
+		var ctl := instance_from_id(id) as Control
+		if ctl != null and ctl.is_inside_tree() and ctl.is_visible_in_tree():
+			ctl.grab_focus()).call_deferred()

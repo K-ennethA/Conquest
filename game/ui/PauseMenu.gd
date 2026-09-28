@@ -5,9 +5,17 @@ class_name PauseMenu
 ## The in-battle PAUSE menu -- the one surface that answers "how do I get out of this
 ## battle?".
 ##
-## Register: the sleeker DARK "Pokemon Legends" menu look ([MenuTheme]), deliberately
-## NOT the amber battle-HUD cascade -- pausing steps OUT of the battle frame, so it
-## should read like a menu rather than another HUD panel.
+## Register: the illuminated-grove look (docs/UI_STYLE.md) -- a crested grove-frame card
+## over a navy dim, a gold Cinzel title over a filigree rule, FE-style command rows (the
+## [code]HudCommand[/code] variation, as the Map Menu uses) with gold focus, and a key-cap
+## footer. Built on [method ConquestTheme.build], which is [method MenuTheme.build] plus the
+## HUD command rows, so it reads as the same game as the menus and the battle HUD.
+##
+## MODAL: while open, [member _root] is in [constant InputActions.OVERLAY_GROUP] (on top of
+## the tree pause, the full-rect MOUSE_FILTER_STOP root and the consumed key events), so
+## [method InputActions.gameplay_input_blocked] reports the board as blocked. Keys are the
+## named [InputActions] (CANCEL / MAP_MENU close, CURSOR_UP / CURSOR_DOWN move) plus the
+## engine's ui_* fallbacks; every row is a 44px touch target.
 ##
 ## Layering: its own CanvasLayer at [constant OVERLAY_LAYER] (above the turn wipe at
 ## 128 and the ultimate cut-in at 124), so nothing in the battle can draw over it.
@@ -93,6 +101,8 @@ var _backdrop: ColorRect = null
 var _card: PanelContainer = null
 var _rows_box: VBoxContainer = null
 var _status_label: Label = null
+## Key-cap footer ("[Enter] Select   [Esc] Resume"), rebuilt on open for the live bindings.
+var _footer: HBoxContainer = null
 
 ## Confirm sheet (a second card that covers the rows while a destructive row waits
 ## for a yes/no). Deliberately in-panel rather than an AcceptDialog: a native dialog
@@ -240,12 +250,13 @@ func _build_ui() -> void:
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	# STOP: swallow every click while the menu is up so nothing reaches the board.
 	_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	_root.theme = MenuTheme.build()
+	# The grove theme (MenuTheme) plus the HUD command-row variation the rows use.
+	_root.theme = ConquestTheme.build()
 	add_child(_root)
 
 	_backdrop = ColorRect.new()
 	_backdrop.name = "Backdrop"
-	_backdrop.color = Color(MenuTheme.DARK.r, MenuTheme.DARK.g, MenuTheme.DARK.b, 0.72)
+	_backdrop.color = Color(MenuTheme.BG_DEEP.r, MenuTheme.BG_DEEP.g, MenuTheme.BG_DEEP.b, 0.72)
 	_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	_root.add_child(_backdrop)
@@ -257,15 +268,16 @@ func _build_ui() -> void:
 
 	_card = PanelContainer.new()
 	_card.name = "PauseCard"
-	_card.custom_minimum_size = Vector2(340, 0)
+	_card.custom_minimum_size = Vector2(380, 0)
 	_card.mouse_filter = Control.MOUSE_FILTER_STOP
+	_card.add_theme_stylebox_override("panel", _card_box())
 	center.add_child(_card)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 20)
-	margin.add_theme_constant_override("margin_top", 18)
-	margin.add_theme_constant_override("margin_right", 20)
-	margin.add_theme_constant_override("margin_bottom", 18)
+	margin.add_theme_constant_override("margin_left", 4)
+	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_right", 4)
+	margin.add_theme_constant_override("margin_bottom", 2)
 	_card.add_child(margin)
 
 	var vbox := VBoxContainer.new()
@@ -273,20 +285,20 @@ func _build_ui() -> void:
 	margin.add_child(vbox)
 
 	var title := Label.new()
+	title.name = "Title"
 	title.text = "PAUSED"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	title.add_theme_color_override("font_color", MenuTheme.GOLD)
+	MenuTheme.style_title(title, MenuTheme.FS_HEADING + 4)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(title)
 
-	var sep := HSeparator.new()
-	sep.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(sep)
+	var rule := ConquestTheme.accent_rule(MenuTheme.GOLD, 220.0, 12.0)
+	(rule as GroveRule).centered = true
+	rule.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vbox.add_child(rule)
 
 	_rows_box = VBoxContainer.new()
 	_rows_box.name = "Rows"
-	_rows_box.add_theme_constant_override("separation", 8)
+	_rows_box.add_theme_constant_override("separation", 2)
 	_rows_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(_rows_box)
 
@@ -295,13 +307,62 @@ func _build_ui() -> void:
 	_status_label.name = "Status"
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_status_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	_status_label.add_theme_color_override("font_color", MenuTheme.GOLD)
+	_status_label.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	_status_label.add_theme_color_override("font_color", MenuTheme.WARNING)
 	_status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_status_label.visible = false
 	vbox.add_child(_status_label)
 
+	vbox.add_child(HSeparator.new())
+	_footer = HBoxContainer.new()
+	_footer.name = "Footer"
+	_footer.alignment = BoxContainer.ALIGNMENT_CENTER
+	_footer.add_theme_constant_override("separation", 18)
+	_footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(_footer)
+	_refresh_footer()
+
 	_build_confirm_sheet()
+
+
+## The pause / confirm card: the grove frame with its gold crest on top (a hero dialog, like
+## the Map Menu) and a gold-dark edge.
+static func _card_box() -> StyleBox:
+	var sb := ConquestTheme.panel_box(0.97)
+	sb.border_color = MenuTheme.GOLD_DK
+	sb.crest = true
+	sb.content_margin_left = 22
+	sb.content_margin_right = 22
+	sb.content_margin_top = 20
+	sb.content_margin_bottom = 14
+	return sb
+
+
+## The key glyph for [param action] right now ("Esc", or "B" with a pad), or [param fallback].
+static func _glyph(action: StringName, fallback: String) -> String:
+	var g: String = ConquestTheme.action_glyph(action)
+	return g if g != "" else fallback
+
+
+## Rebuild the key-cap footer for the live bindings.
+func _refresh_footer() -> void:
+	if _footer == null:
+		return
+	for c in _footer.get_children():
+		_footer.remove_child(c)
+		c.queue_free()
+	_footer.add_child(ConquestTheme.key_hint(_glyph(InputActions.CONFIRM, "Enter"), "Select"))
+	_footer.add_child(ConquestTheme.key_hint(_glyph(InputActions.CANCEL, "Esc"), "Resume"))
+
+
+## Join / leave the input-blocking overlay group (see the MODAL note in the class doc).
+func _set_blocking(on: bool) -> void:
+	if _root == null:
+		return
+	if on and not _root.is_in_group(InputActions.OVERLAY_GROUP):
+		_root.add_to_group(InputActions.OVERLAY_GROUP)
+	elif not on and _root.is_in_group(InputActions.OVERLAY_GROUP):
+		_root.remove_from_group(InputActions.OVERLAY_GROUP)
 
 
 ## The yes/no sheet shown over the rows for a destructive choice.
@@ -325,25 +386,38 @@ func _build_confirm_sheet() -> void:
 	_confirm_layer.add_child(center)
 
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(340, 0)
+	card.name = "ConfirmCard"
+	card.custom_minimum_size = Vector2(380, 0)
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
+	card.add_theme_stylebox_override("panel", _card_box())
 	center.add_child(card)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 20)
-	margin.add_theme_constant_override("margin_top", 18)
-	margin.add_theme_constant_override("margin_right", 20)
-	margin.add_theme_constant_override("margin_bottom", 18)
+	margin.add_theme_constant_override("margin_left", 4)
+	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_right", 4)
+	margin.add_theme_constant_override("margin_bottom", 4)
 	card.add_child(margin)
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 12)
 	margin.add_child(vbox)
 
+	var heading := Label.new()
+	heading.name = "ConfirmTitle"
+	heading.text = "ARE YOU SURE?"
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_theme_font_override("font", MenuTheme.heading_font(2))
+	heading.add_theme_font_size_override("font_size", MenuTheme.FS_SUBHEADING)
+	heading.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
+	heading.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(heading)
+
 	_confirm_label = Label.new()
 	_confirm_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_confirm_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_confirm_label.add_theme_font_size_override("font_size", MenuTheme.FONT_BODY)
+	_confirm_label.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
+	_confirm_label.add_theme_color_override("font_color", MenuTheme.CREAM)
 	_confirm_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(_confirm_label)
 
@@ -369,7 +443,10 @@ func _build_confirm_sheet() -> void:
 	_confirm_yes.custom_minimum_size = Vector2(0, 44)
 	_confirm_yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_confirm_yes.mouse_filter = Control.MOUSE_FILTER_STOP
-	_confirm_yes.add_theme_color_override("font_color", MenuTheme.GOLD)
+	# The destructive plate (danger edge, salmon text): every row that asks is one that
+	# ends or abandons something.
+	_confirm_yes.set_meta("style_role", "destructive")
+	ConquestTheme.apply_button_role(_confirm_yes)
 	_confirm_yes.pressed.connect(_on_confirm_yes)
 	buttons.add_child(_confirm_yes)
 
@@ -397,7 +474,9 @@ func open() -> void:
 	_close_confirm()
 	_set_status("")
 	_rebuild_rows()
+	_refresh_footer()
 	visible = true
+	_set_blocking(true)
 	_root.move_to_front()
 
 	var tree := get_tree()
@@ -417,6 +496,7 @@ func close() -> void:
 		_settings.close()
 	_kill_tween()
 	visible = false
+	_set_blocking(false)
 	_restore_audio()
 	var tree := get_tree()
 	if tree != null:
@@ -550,9 +630,18 @@ func _rebuild_rows() -> void:
 		var button := Button.new()
 		button.text = String(row.get("label", ""))
 		button.name = "Row%d" % int(row.get("id", -1))
+		# An FE command row (the Map Menu's look): clear at rest, gold wash + leaf marker on
+		# hover / focus, Cinzel caps.
+		button.theme_type_variation = &"HudCommand"
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		# 44px: the touch-target floor this project uses for phone-viable UI.
-		button.custom_minimum_size = Vector2(0, 44)
+		button.custom_minimum_size = Vector2(336, 44)
+		button.focus_mode = Control.FOCUS_ALL
 		button.mouse_filter = Control.MOUSE_FILTER_STOP
+		# Hover moves the gold focus with the pointer, so mouse and keyboard agree.
+		button.mouse_entered.connect(func():
+			if is_instance_valid(button) and not button.disabled:
+				button.grab_focus())
 		button.disabled = not bool(row.get("enabled", true))
 		button.tooltip_text = String(row.get("tooltip", ""))
 		button.set_meta("row_id", int(row.get("id", -1)))
@@ -567,8 +656,9 @@ func _rebuild_rows() -> void:
 			var lbl := Label.new()
 			lbl.text = caption
 			lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-			lbl.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+			lbl.custom_minimum_size = Vector2(336, 0)
+			lbl.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+			lbl.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
 			lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			_rows_box.add_child(lbl)
 
@@ -661,6 +751,7 @@ func _save_and_quit() -> void:
 	# than in a half-torn-down battle.
 	_set_status("Save failed. Use Quit to Menu to leave without saving.")
 	_open = true
+	_set_blocking(true)
 	_promote_audio()
 	var tree := get_tree()
 	if tree != null:
@@ -694,6 +785,7 @@ func _forfeit_challenge_attempt() -> void:
 ## menu we land on is frozen. (Same rule GameOverScreen's handlers follow.)
 func _unpause() -> void:
 	_open = false
+	_set_blocking(false)
 	_restore_audio()
 	var tree := get_tree()
 	if tree != null:
@@ -718,7 +810,9 @@ func _input(event: InputEvent) -> void:
 	if not _open:
 		return
 
-	# The Settings overlay is modal over this menu: ESC only closes it.
+	# The Settings overlay is modal over this menu: ESC only closes it. ui_cancel ONLY here
+	# (not the gameplay CANCEL action, which also binds letter keys such as X / C) -- this
+	# runs before the GUI, so a letter typed into a settings field must not close the panel.
 	if _settings != null and _settings.is_open():
 		if event.is_action_pressed("ui_cancel"):
 			_settings.close()
@@ -728,24 +822,36 @@ func _input(event: InputEvent) -> void:
 
 	# The confirm sheet is modal over the rows: ESC cancels it (never the whole menu).
 	if _pending_row != -1:
-		if event.is_action_pressed("ui_cancel"):
+		if _is_back(event):
 			_close_confirm()
 			_focus_first_enabled_row()
 			get_viewport().set_input_as_handled()
 		return
 
-	if event.is_action_pressed("ui_cancel"):
-		# ESC on the pause menu means RESUME -- the same key that opened it closes it.
+	if _is_back(event) or _is_pressed(event, InputActions.MAP_MENU):
+		# ESC (or the pad's B / Start) on the pause menu means RESUME -- the same key that
+		# opened it closes it.
 		close()
 		get_viewport().set_input_as_handled()
 		return
 
-	if event.is_action_pressed("ui_down"):
+	if event.is_action_pressed("ui_down") or _is_pressed(event, InputActions.CURSOR_DOWN):
 		_move_focus(1)
 		get_viewport().set_input_as_handled()
-	elif event.is_action_pressed("ui_up"):
+	elif event.is_action_pressed("ui_up") or _is_pressed(event, InputActions.CURSOR_UP):
 		_move_focus(-1)
 		get_viewport().set_input_as_handled()
+
+
+## "Back" for this menu: the engine's ui_cancel or the (rebindable) gameplay CANCEL action.
+static func _is_back(event: InputEvent) -> bool:
+	return event.is_action_pressed("ui_cancel") or _is_pressed(event, InputActions.CANCEL)
+
+
+## [param event] presses the named [param action] (skipped when the action is not in the
+## InputMap, e.g. a stripped test harness).
+static func _is_pressed(event: InputEvent, action: StringName) -> bool:
+	return InputMap.has_action(action) and event.is_action_pressed(action)
 
 
 ## Move the focused row by [param step], wrapping. Disabled rows are not in

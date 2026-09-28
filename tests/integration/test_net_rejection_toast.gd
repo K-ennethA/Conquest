@@ -42,7 +42,7 @@ func test_a_refused_command_appears_on_screen():
 	var toast := _mount_toast()
 	assert_false(toast.is_showing(), "a fresh battle HUD shows no notice")
 
-	if not _reject(NetProtocol.make_cast_move(7, 3, Vector2i(1, 1)), NetProtocol.INTENT_NOT_YOUR_TURN):
+	if not _reject(NetProtocol.make_cast_move("0:7", 3, Vector2i(1, 1)), NetProtocol.INTENT_NOT_YOUR_TURN):
 		pending("no NetSession autoload in this harness")
 		return
 
@@ -58,7 +58,7 @@ func test_the_shown_line_is_announced_for_listeners():
 	var shown: Array = []
 	toast.toast_shown.connect(func(text): shown.append(text))
 
-	if not _reject(NetProtocol.make_move_unit(3, Vector2i(4, 4)), NetProtocol.INTENT_REJECTED_BY_GAME):
+	if not _reject(NetProtocol.make_move_unit("0:3", Vector2i(4, 4)), NetProtocol.INTENT_REJECTED_BY_GAME):
 		pending("no NetSession autoload in this harness")
 		return
 
@@ -71,7 +71,7 @@ func test_a_second_rejection_replaces_the_first():
 	# A rejection is about what the player JUST did, so the newest one must win outright --
 	# queueing would leave a stale line explaining a command from several clicks ago.
 	var toast := _mount_toast()
-	if not _reject(NetProtocol.make_wait_unit(1), NetProtocol.INTENT_NOT_YOUR_TURN):
+	if not _reject(NetProtocol.make_wait_unit("0:1"), NetProtocol.INTENT_NOT_YOUR_TURN):
 		pending("no NetSession autoload in this harness")
 		return
 	_reject(NetProtocol.make_end_turn(0), NetProtocol.INTENT_REJECTED_BY_GAME)
@@ -95,7 +95,7 @@ func test_an_unmounted_toast_is_not_driven_by_the_session():
 
 	# The assertion IS that this does not error: an intent_rejected raised after the HUD is
 	# gone must reach no stale listener (GUT fails the test on any engine error).
-	net._rpc_intent_rejected(NetProtocol.make_wait_unit(1), NetProtocol.INTENT_NOT_YOUR_TURN)
+	net._rpc_intent_rejected(NetProtocol.make_wait_unit("0:1"), NetProtocol.INTENT_NOT_YOUR_TURN)
 	assert_true(true, "the session raises rejections harmlessly once the battle HUD is gone")
 
 

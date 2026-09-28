@@ -87,21 +87,32 @@ static func generate(map: MapResource, max_px: int = DEFAULT_MAX_PX, max_cell: i
 	# --- Terrain: one flat cell per tile entry ------------------------------
 	# Memoise resolved colours per tile_id/path within this pass so a map that reuses
 	# one tile hundreds of times only loads (and colour-derives) it once.
+	# Multi-floor maps (docs/MULTI_FLOOR.md): a column shows its TOP-most floor, drawn a
+	# little lighter than ground level so raised walkways / ramparts read as raised.
+	# Positions are read tolerantly (Vector2i, or the [c, r] / "(c, r)" forms a JSON map
+	# can carry) via Cells.pos2_from_variant; an unreadable one is skipped.
 	var color_cache: Dictionary = {}
+	var top_floor: Dictionary = {}
 	for entry in map.tile_layout:
 		if not (entry is Dictionary):
 			continue
-		var pos: Vector2i = entry.get("position", Vector2i(-1, -1))
+		var pos: Vector2i = Cells.pos2_from_variant(entry.get("position", Vector2i(-1, -1)))
 		if pos.x < 0 or pos.x >= cols or pos.y < 0 or pos.y >= rows:
 			continue
+		var fl: int = int(entry.get("floor", 0))
+		if top_floor.has(pos) and int(top_floor[pos]) > fl:
+			continue
+		top_floor[pos] = fl
 		var color: Color = _tile_color(entry, color_cache)
+		if fl > 0:
+			color = color.lightened(0.28)
 		_fill_cell(image, pos, cell, color)
 
 	# --- Spawns: small centred marker per spawn point -----------------------
 	for spawn in map.unit_spawns:
 		if not (spawn is Dictionary):
 			continue
-		var pos: Vector2i = spawn.get("position", Vector2i(-1, -1))
+		var pos: Vector2i = Cells.pos2_from_variant(spawn.get("position", Vector2i(-1, -1)))
 		if pos.x < 0 or pos.x >= cols or pos.y < 0 or pos.y >= rows:
 			continue
 		var player_id: int = int(spawn.get("player_id", 0))

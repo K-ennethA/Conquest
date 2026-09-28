@@ -59,7 +59,7 @@ func test_any_map_that_authors_bases_is_planned_generically() -> void:
 	assert_eq(int(plan[0]["player_id"]), 0,
 		"planned in ascending player-slot order, so two peers build the same nodes in the same order")
 	assert_eq(int(plan[1]["player_id"]), 1, "and slot 1 comes second")
-	assert_eq(plan[0]["cell"], Vector2i(1, 1), "slot 0's banner stands on the cell the map named")
+	assert_eq(Cells.from_variant(plan[0]["cell"]), Vector3i(1, 1, 0), "slot 0's banner stands on the cell the map named")
 
 
 func test_riftwood_asks_for_one_banner_per_declared_base() -> void:
@@ -71,7 +71,7 @@ func test_riftwood_asks_for_one_banner_per_declared_base() -> void:
 	assert_eq(plan.size(), map.base_cells.size(),
 		"one banner per base the map declares -- no more, no fewer")
 	for entry in plan:
-		assert_eq(entry["cell"], map.get_base_cell(int(entry["player_id"])),
+		assert_eq(Cells.from_variant(entry["cell"]), Cells.from_variant(map.get_base_cell(int(entry["player_id"]))),
 			"and each stands on that player's own declared base cell")
 
 
@@ -90,9 +90,9 @@ func test_a_junk_or_out_of_bounds_base_is_skipped_not_faulted() -> void:
 func test_a_banner_stands_at_the_center_of_its_cell() -> void:
 	# The same (x * 2 + 1, _, y * 2 + 1) mapping units, tiles and the cursor all use -- a
 	# banner half a cell off would point at the wrong tile.
-	assert_eq(MARKERS.world_position_for(Vector2i(0, 0)),
+	assert_eq(MARKERS.world_position_for(Vector3i(0, 0, 0)),
 		Vector3(1.0, MARKERS.GROUND_Y, 1.0), "cell (0,0) centers on (1, _, 1)")
-	assert_eq(MARKERS.world_position_for(Vector2i(3, 31)),
+	assert_eq(MARKERS.world_position_for(Vector3i(3, 31, 0)),
 		Vector3(7.0, MARKERS.GROUND_Y, 63.0), "and cell (3,31) on (7, _, 63)")
 
 

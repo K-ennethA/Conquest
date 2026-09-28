@@ -11,18 +11,22 @@ class_name TurnTimer
 ## [method SpeedFirstTurnSystem.expire_turn_timer] the instant it hits zero (which
 ## force-ends the turn exactly like the End Turn button).
 ##
-## Visual bands: calm amber (>10s) -> amber pulse (5-10s) -> red pulse + urgency with a
-## soft per-second tick (<=5s). Pulse honours GameSettings animations/battle-speed.
+## Drawn as a grove chip (notched navy plate, gold filigree) with the seconds in big Cinzel
+## numerals. Visual bands: calm gold (>10s) -> warning-gold pulse (5-10s) -> danger-red
+## pulse + urgency with a soft per-second tick (<=5s); the band colours the numerals and the
+## chip's edge. Pulse honours GameSettings animations/battle-speed.
 
 # Band thresholds (seconds remaining).
-const BAND_AMBER_AT := 10.0   # <= this: start the amber pulse
+const BAND_AMBER_AT := 10.0   # <= this: start the warning pulse
 const BAND_URGENT_AT := 5.0   # <= this: red pulse + per-second tick
 
-# Colours pulled from the warm ConquestTheme palette (+ a warm red for urgency).
-const COLOR_CALM_BG := Color(0.90, 0.65, 0.29)     # AMBER
-const COLOR_URGENT_BG := Color(0.85, 0.29, 0.18)   # warm ember red
-const COLOR_TEXT := Color(0.99, 0.94, 0.84)        # CREAM
-const COLOR_FRAME := Color(0.22, 0.13, 0.06)       # BROWN_DK
+# Colours from the navy + gold ConquestTheme tokens.
+const COLOR_CALM_BG := ConquestTheme.PANEL                 # chip fill, calm
+const COLOR_URGENT_BG := Color(0.36, 0.1, 0.12)            # chip fill, urgent (ember-dark)
+const COLOR_TEXT := ConquestTheme.GOLD_LITE                # numerals, calm
+const COLOR_FRAME := ConquestTheme.GOLD_DK                 # chip edge, calm
+const COLOR_WARN := ConquestTheme.WARNING                  # numerals / edge, 5-10s
+const COLOR_URGENT := ConquestTheme.DANGER                 # numerals / edge, <=5s
 
 ## Quiet per-second tick in the urgency band -- reuses the shared UI-click SFX at a low
 ## volume so no new audio asset is needed.
@@ -44,7 +48,10 @@ var _last_shown: int = -1
 # Built-in-code UI (kept out of a .tscn so mounting stays a pure code path).
 var _panel: Panel = null
 var _label: Label = null
-var _style: StyleBoxFlat = null
+var _style: OrnateStyleBox = null
+## The band last painted (0 calm, 1 warning, 2 urgent), so the chip is only restyled on a
+## band change rather than every frame.
+var _band: int = -1
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -66,12 +73,16 @@ func _build_ui() -> void:
 	_panel.name = "TimerPanel"
 	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_style = StyleBoxFlat.new()
-	_style.bg_color = COLOR_CALM_BG
-	_style.border_color = COLOR_FRAME
-	_style.set_border_width_all(2)
-	_style.set_corner_radius_all(8)
+	_style = ConquestTheme.chip_box(COLOR_FRAME, 0.95)
+	_style.border_width = 2.0
+	_style.corner = 10.0
+	_style.ornament = OrnateStyleBox.Ornament.CLASP
+	_style.ornament_color = Color(ConquestTheme.GOLD, 0.9)
+	_style.ornament_size = 3.0
 	_panel.add_theme_stylebox_override("panel", _style)
+	# Self-styled: the HUD-wide ConquestTheme.apply_to() sweep must not swap the band chip
+	# for the plain card frame.
+	ConquestTheme.keep_style(_panel)
 	add_child(_panel)
 
 	_label = Label.new()
@@ -80,11 +91,13 @@ func _build_ui() -> void:
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_label.add_theme_font_size_override("font_size", 28)
+	_label.add_theme_font_override("font", MenuTheme.display_font(2))
+	_label.add_theme_font_size_override("font_size", ConquestTheme.FS_BIG_NUMBER)
 	_label.add_theme_color_override("font_color", COLOR_TEXT)
 	_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
 	_label.add_theme_constant_override("shadow_offset_x", 1)
-	_label.add_theme_constant_override("shadow_offset_y", 1)
+	_label.add_theme_constant_override("shadow_offset_y", 2)
+	ConquestTheme.keep_style(_label)
 	add_child(_label)
 
 # --- Turn-system wiring -----------------------------------------------------
@@ -118,6 +131,7 @@ func _on_timer_armed(unit: Unit, seconds: float) -> void:
 	_pulse_t = 0.0
 	_last_tick_whole = int(ceil(_remaining))
 	_last_shown = -1
+	_band = -1
 	modulate = Color(1, 1, 1, 1)
 	visible = true
 	set_process(true)
@@ -171,8 +185,19 @@ func _refresh_visual() -> void:
 	var urgent: bool = _remaining <= BAND_URGENT_AT
 	var pulsing: bool = _remaining <= BAND_AMBER_AT
 
-	if _style:
-		_style.bg_color = COLOR_URGENT_BG if urgent else COLOR_CALM_BG
+	var band: int = 2 if urgent else (1 if pulsing else 0)
+	if _style and band != _band:
+		_band = band
+		var fill: Color = COLOR_URGENT_BG if urgent else COLOR_CALM_BG
+		var edge: Color = COLOR_URGENT if urgent else (COLOR_WARN if pulsing else COLOR_FRAME)
+		_style.bg_color = Color(fill.lightened(0.05), 0.95)
+		_style.bg_color_end = Color(fill.darkened(0.2), 0.95)
+		_style.border_color = edge
+		if _panel:
+			_panel.queue_redraw()
+		if _label:
+			_label.add_theme_color_override("font_color",
+					COLOR_URGENT if urgent else (COLOR_WARN if pulsing else COLOR_TEXT))
 
 	# Pulse via node alpha so the whole chip breathes. Gated on the animations setting
 	# (off -> solid, most readable). Urgency pulses deeper.

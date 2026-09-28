@@ -573,6 +573,34 @@ func _tree_prototype() -> Array[Dictionary]:
 		})
 
 	donor.free()
+	if parts.is_empty():
+		parts = _tree_prototype_from_builder()
+	return parts
+
+
+## The same prototype when the tree prop builds its meshes AT RUNTIME: the world-art pass
+## turned the tile scene's TreeVisual into a [TreeBuilder] that makes its trunk and canopy
+## in _ready, which a donor that never enters the tree never runs. Its STATIC mesh / material
+## API is asked directly instead (one fixed broadleaf variant -- the scatter's per-tree yaw
+## and scale already vary the silhouette), and the materials are muted duplicates exactly as
+## above.
+static func _tree_prototype_from_builder() -> Array[Dictionary]:
+	var parts: Array[Dictionary] = []
+	var sp: int = TreeBuilder.Species.BROADLEAF
+	var trunk: Mesh = TreeBuilder.trunk_mesh_for(sp, 0)
+	if trunk != null:
+		var bark: Material = TreeBuilder.decor_material()
+		bark = bark.duplicate() if bark != null else null
+		if bark != null:
+			_mute_material(bark, 0.72)
+		parts.append({ "mesh": trunk, "material": bark, "xform": Transform3D.IDENTITY })
+	var canopy: Mesh = TreeBuilder.canopy_mesh_for(sp, 0)
+	if canopy != null:
+		var leaves: Material = TreeBuilder.foliage_material(false)
+		leaves = leaves.duplicate() if leaves != null else null
+		if leaves != null:
+			_mute_material(leaves, 0.72)
+		parts.append({ "mesh": canopy, "material": leaves, "xform": Transform3D.IDENTITY })
 	return parts
 
 

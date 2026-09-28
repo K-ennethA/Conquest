@@ -14,11 +14,11 @@ func after_each() -> void:
 	CombatServices.clear()
 
 
-func _register(name: String, cell: Vector2i) -> void:
+func _register(name: String, cell: Vector3i) -> void:
 	CombatServices.register_tile(cell, load(TILE_DIR % name))
 
 
-func _effect_ids(cell: Vector2i) -> Array:
+func _effect_ids(cell: Vector3i) -> Array:
 	var ids: Array = []
 	for te in CombatServices.tile_effects_at(cell):
 		ids.append(String(te.id))
@@ -26,37 +26,37 @@ func _effect_ids(cell: Vector2i) -> Array:
 
 
 func test_sacred_meadow_heals_rather_than_fortifies() -> void:
-	_register("sacred_meadow", Vector2i(0, 0))
-	var ids := _effect_ids(Vector2i(0, 0))
+	_register("sacred_meadow", Vector3i(0, 0, 0))
+	var ids := _effect_ids(Vector3i(0, 0, 0))
 	assert_has(ids, "sacred_meadow", "meadow must use its OWN healing effect")
 	assert_does_not_have(ids, "fortify", "must not inherit the SACRED_GROUND type effect")
 
 
 func test_tall_grass_grants_its_evasion_effect() -> void:
-	_register("tall_grass", Vector2i(1, 0))
-	assert_has(_effect_ids(Vector2i(1, 0)), "tall_grass")
+	_register("tall_grass", Vector3i(1, 0, 0))
+	assert_has(_effect_ids(Vector3i(1, 0, 0)), "tall_grass")
 
 
 func test_trees_have_no_effect_despite_sharing_grass_type() -> void:
-	_register("tree", Vector2i(2, 0))
-	assert_eq(_effect_ids(Vector2i(2, 0)), [], "trees are cover/LOS only, no tile effect")
+	_register("tree", Vector3i(2, 0, 0))
+	assert_eq(_effect_ids(Vector3i(2, 0, 0)), [], "trees are cover/LOS only, no tile effect")
 
 
 func test_trees_and_tall_grass_share_a_type_but_not_effects() -> void:
 	var tree: TileResource = load(TILE_DIR % "tree")
 	var grass: TileResource = load(TILE_DIR % "tall_grass")
 	assert_eq(tree.tile_type, grass.tile_type, "both are DIFFICULT_TERRAIN")
-	_register("tree", Vector2i(0, 1))
-	_register("tall_grass", Vector2i(1, 1))
-	assert_eq(_effect_ids(Vector2i(0, 1)).size(), 0)
-	assert_eq(_effect_ids(Vector2i(1, 1)).size(), 1)
+	_register("tree", Vector3i(0, 1, 0))
+	_register("tall_grass", Vector3i(1, 1, 0))
+	assert_eq(_effect_ids(Vector3i(0, 1, 0)).size(), 0)
+	assert_eq(_effect_ids(Vector3i(1, 1, 0)).size(), 1)
 
 
 func test_plain_terrain_has_no_effects() -> void:
-	_register("grass_plains", Vector2i(3, 0))
-	_register("forest_dirt", Vector2i(4, 0))
-	assert_eq(_effect_ids(Vector2i(3, 0)), [], "standard grass is neutral")
-	assert_eq(_effect_ids(Vector2i(4, 0)), [], "standard dirt is neutral")
+	_register("grass_plains", Vector3i(3, 0, 0))
+	_register("forest_dirt", Vector3i(4, 0, 0))
+	assert_eq(_effect_ids(Vector3i(3, 0, 0)), [], "standard grass is neutral")
+	assert_eq(_effect_ids(Vector3i(4, 0, 0)), [], "standard dirt is neutral")
 
 
 func test_forest_movement_costs() -> void:
@@ -72,10 +72,10 @@ func test_trees_are_impassable_and_block_pathing() -> void:
 	assert_false(tree.is_tile_passable(), "a tree cannot be walked through")
 	assert_true(tree.blocks_line_of_sight, "and it blocks sight")
 	# The board's blocking check is what MovementResolver consults.
-	_register("tree", Vector2i(7, 7))
+	_register("tree", Vector3i(7, 7, 0))
 	var board = CombatServices.board()
 	if board != null:
-		assert_true(board.is_blocked(Vector2i(7, 7)), "board reports the tree cell blocked")
+		assert_true(board.is_blocked(Vector3i(7, 7, 0)), "board reports the tree cell blocked")
 
 
 func test_walkable_forest_tiles_stay_passable() -> void:
@@ -86,8 +86,8 @@ func test_walkable_forest_tiles_stay_passable() -> void:
 
 func test_runtime_effects_still_stack_on_forest_tiles() -> void:
 	# A move can ignite tall grass: the evasion stays AND the fire layers on top.
-	_register("tall_grass", Vector2i(5, 5))
-	CombatServices.add_tile_effect(Vector2i(5, 5), load("res://game/tiles/effects/resources/fire.tres"))
-	var ids := _effect_ids(Vector2i(5, 5))
+	_register("tall_grass", Vector3i(5, 5, 0))
+	CombatServices.add_tile_effect(Vector3i(5, 5, 0), load("res://game/tiles/effects/resources/fire.tres"))
+	var ids := _effect_ids(Vector3i(5, 5, 0))
 	assert_has(ids, "tall_grass", "base evasion survives")
 	assert_has(ids, "fire", "runtime fire layers on top")

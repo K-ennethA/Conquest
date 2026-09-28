@@ -23,11 +23,20 @@ class_name MatchConfigPanel
 ##       siege string would have to consult GameSettings.game_mode to know which rows to
 ##       draw -- a dependency this panel deliberately does not have.
 ##
+## Look: the shared illuminated-grove theme (it inherits its host's [MenuTheme]). The turn
+## system is picked on two compact toggle cards with a tiny turn-order diagram each (the
+## explanation the old stand-alone TurnSystemSelection screen gave, folded in here); every
+## other row is a Cinzel caption + a themed control.
+##
 ## Host reads back with [method get_turn_system] / [method get_ai_difficulty] /
 ## [method get_run_length] / [method get_versus_rounds], and can push the universal picks
 ## to GameSettings via [method apply_settings] (turn system always; AI difficulty in
 ## skirmish; versus rounds in versus). Arena run length is NOT written to GameSettings --
 ## the host stamps it onto the duplicated ruleset instead.
+
+## Emitted whenever the player changes any pick (turn system, difficulty, run length,
+## rounds) -- lets the host keep a live "what will launch" summary.
+signal changed
 
 const MODE_SKIRMISH := "skirmish"
 const MODE_ARENA := "arena"
@@ -57,8 +66,18 @@ const CUSTOM_MAX := 12
 
 var _mode: String = MODE_SKIRMISH
 
+## Lay the rows out for a NARROW host column: the two turn-system cards stack vertically
+## instead of side by side, and each captioned row puts its caption ABOVE its control
+## instead of beside it. A host whose column is narrow (MatchSetup's ~320px settings column
+## at 1280x720) sets this BEFORE [method configure]: two Cinzel card titles, or a caption
+## plus a dropdown, do not fit side by side in that width, and a row that does not fit
+## spills past the card edge.
+var narrow_layout: bool = false
+
 # --- Live control refs ------------------------------------------------------
-var _turn_option: OptionButton = null
+## Turn-system toggle cards keyed by TurnSystemBase.TurnSystemType id (one ButtonGroup).
+var _turn_cards: Dictionary = {}
+var _turn_group: ButtonGroup = null
 var _difficulty_option: OptionButton = null
 var _versus_option: OptionButton = null
 
@@ -75,27 +94,35 @@ var _custom_rounds: int = PRESET_STANDARD
 ## panel reflects the last chosen turn system / difficulty.
 func configure(mode: String) -> void:
 	_mode = mode
-	_turn_option = null
+	_turn_cards = {}
+	_turn_group = null
 	_difficulty_option = null
 	_versus_option = null
 	_preset_group = null
 	_rounds_spin = null
 	for child in get_children():
+		remove_child(child)
 		child.queue_free()
 
 	var col := VBoxContainer.new()
 	col.name = "ConfigRows"
 	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	col.add_theme_constant_override("separation", 10)
+	col.add_theme_constant_override("separation", MenuTheme.SP_S if narrow_layout else MenuTheme.SP_M)
 	add_child(col)
 
+	col.add_child(_section_heading("Turn System"))
 	col.add_child(_turn_system_row())
 
 	match _mode:
 		MODE_SKIRMISH, MODE_SIEGE:
 			col.add_child(_difficulty_row())
+			var note := MenuKit.label(
+				"Harder AI plays sharper -- and some maps field extra enemies on Hard and above.",
+				&"MutedLabel", true)
+			note.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+			col.add_child(note)
 		MODE_ARENA:
-			col.add_child(_section_heading("RUN LENGTH", true))
+			col.add_child(_section_heading("Run Length", true))
 			col.add_child(_run_length_row())
 			col.add_child(_custom_rounds_row())
 		MODE_VERSUS:
@@ -103,30 +130,84 @@ func configure(mode: String) -> void:
 		MODE_LOCAL, MODE_SIEGE_LOCAL:
 			pass  # Turn System only for local hot-seat.
 
+	# The rows are laid out full-rect inside this plain Control, which does not size to
+	# its children: grow the panel's minimum height to fit them (never below the floor
+	# the host asked for), so the turn cards can never overlap the rows beneath.
+	var floor_h: float = custom_minimum_size.y
+	col.minimum_size_changed.connect(func() -> void:
+		var need: float = maxf(floor_h, col.get_combined_minimum_size().y)
+		if absf(custom_minimum_size.y - need) > 0.5:
+			custom_minimum_size.y = need)
+
 
 # --- Row factories ----------------------------------------------------------
 
+## The turn system as two side-by-side toggle cards, each with a tiny turn-order diagram
+## (blue / red pips) -- the look of the old TurnSystemSelection screen, sized for a column.
 func _turn_system_row() -> Control:
-	var row := _labelled_row("Turn System")
-	_turn_option = OptionButton.new()
-	_turn_option.add_item("Traditional", TurnSystemBase.TurnSystemType.TRADITIONAL)
-	_turn_option.add_item("Speed First", TurnSystemBase.TurnSystemType.INITIATIVE)
-	_turn_option.tooltip_text = "Traditional: each side acts in full. Speed First: units act in speed order."
-	_select_option_by_id(_turn_option, GameSettings.selected_turn_system)
-	_turn_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_turn_option.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(_turn_option)
+	var row: BoxContainer = VBoxContainer.new() if narrow_layout else HBoxContainer.new()
+	row.name = "TurnSystemCards"
+	row.add_theme_constant_override("separation", MenuTheme.SP_M)
+	_turn_group = ButtonGroup.new()
+	row.add_child(_make_turn_card(TurnSystemBase.TurnSystemType.TRADITIONAL, "Traditional",
+		"Armies take turns", "BBB|RRR", MenuTheme.GOLD,
+		"You move every one of your units, then your opponent moves all of theirs."))
+	row.add_child(_make_turn_card(TurnSystemBase.TurnSystemType.INITIATIVE, "Speed First",
+		"Units act by speed", "BRBBRR", MenuTheme.ACCENT,
+		"Every unit acts once per round, fastest first -- whichever army it belongs to."))
+	var current: int = GameSettings.selected_turn_system if GameSettings != null \
+		else TurnSystemBase.TurnSystemType.TRADITIONAL
+	var pick: Button = _turn_cards.get(current, _turn_cards.get(TurnSystemBase.TurnSystemType.TRADITIONAL))
+	if pick != null:
+		pick.button_pressed = true
 	return row
+
+
+func _make_turn_card(id: int, title: String, tagline: String, pips: String, accent: Color,
+		tip: String) -> Button:
+	# Narrow (stacked) cards drop the fixed 96px floor and size to their three lines.
+	var parts := MenuKit.option_card(Vector2(0, 0 if narrow_layout else 96), true)
+	var b: Button = parts["button"]
+	b.name = title.replace(" ", "") + "Card"
+	b.button_group = _turn_group
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.tooltip_text = tip
+	MenuKit.accent_card(b, accent)
+	var m: MarginContainer = parts["margin"]
+	for side in ["left", "right"]:
+		m.add_theme_constant_override("margin_" + side, 14)
+	for side in ["top", "bottom"]:
+		m.add_theme_constant_override("margin_" + side, 8 if narrow_layout else 10)
+	var v: VBoxContainer = parts["content"]
+	v.add_theme_constant_override("separation", 2 if narrow_layout else 4)
+	var t := MenuKit.label(title, &"SubheadingLabel")
+	v.add_child(t)
+	var tl := MenuKit.label(tagline.to_upper(), &"SectionLabel")
+	tl.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	tl.add_theme_color_override("font_color", accent.lightened(0.2))
+	v.add_child(tl)
+	v.add_child(MenuKit.pip_row(pips))
+	MenuKit.ignore_mouse(b)
+	MenuNav.hover_focus(b)
+	b.toggled.connect(func(on: bool) -> void:
+		if on:
+			changed.emit())
+	_turn_cards[id] = b
+	return b
 
 
 func _difficulty_row() -> Control:
 	var row := _labelled_row("AI Difficulty")
 	_difficulty_option = OptionButton.new()
+	_difficulty_option.name = "DifficultyOption"
 	for i in range(4):  # BotController.Difficulty: EASY..BRUTAL
 		_difficulty_option.add_item(BotController.difficulty_name(i), i)
 	_select_option_by_id(_difficulty_option, clampi(GameSettings.ai_difficulty, 0, 3))
+	_difficulty_option.custom_minimum_size = Vector2(0.0, 44.0)
 	_difficulty_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_difficulty_option.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	MenuNav.hover_focus(_difficulty_option)
+	_difficulty_option.item_selected.connect(func(_i: int) -> void: changed.emit())
 	row.add_child(_difficulty_option)
 	return row
 
@@ -139,8 +220,11 @@ func _versus_rounds_row() -> Control:
 	_versus_option.add_item("Best of 5", 5)
 	_versus_option.tooltip_text = "How many games decide the match (applied locally by the host)."
 	_select_option_by_id(_versus_option, clampi(GameSettings.versus_rounds, 1, 5))
+	_versus_option.custom_minimum_size = Vector2(0.0, 44.0)
 	_versus_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_versus_option.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	MenuNav.hover_focus(_versus_option)
+	_versus_option.item_selected.connect(func(_i: int) -> void: changed.emit())
 	row.add_child(_versus_option)
 	return row
 
@@ -149,9 +233,9 @@ func _run_length_row() -> Control:
 	var presets := HBoxContainer.new()
 	presets.add_theme_constant_override("separation", 10)
 	_preset_group = ButtonGroup.new()
-	presets.add_child(_make_preset_button("Short", PRESET_SHORT))
-	presets.add_child(_make_preset_button("Standard", PRESET_STANDARD))
-	presets.add_child(_make_preset_button("Long", PRESET_LONG))
+	presets.add_child(_make_preset_button("Short", PRESET_SHORT, "A quick run"))
+	presets.add_child(_make_preset_button("Standard", PRESET_STANDARD, "The intended length"))
+	presets.add_child(_make_preset_button("Long", PRESET_LONG, "An endurance test"))
 	return presets
 
 
@@ -172,40 +256,67 @@ func _custom_rounds_row() -> Control:
 	return row
 
 
-func _make_preset_button(label: String, rounds: int) -> Button:
-	var btn := Button.new()
-	btn.text = "%s\n%d" % [label, rounds]
-	btn.toggle_mode = true
+func _make_preset_button(label: String, rounds: int, blurb: String = "") -> Button:
+	# A small toggle option card: preset name over its round count, gold frame when picked.
+	var parts := MenuKit.option_card(Vector2(0.0, 60.0), true)
+	var btn: Button = parts["button"]
+	btn.name = label + "Preset"
 	btn.button_group = _preset_group
-	btn.custom_minimum_size = Vector2(0.0, 52.0)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.tooltip_text = ("%s run: %d rounds. %s" % [label, rounds, blurb]).strip_edges()
+	var m: MarginContainer = parts["margin"]
+	for side in ["left", "right"]:
+		m.add_theme_constant_override("margin_" + side, 10)
+	for side in ["top", "bottom"]:
+		m.add_theme_constant_override("margin_" + side, 8)
+	var v: VBoxContainer = parts["content"]
+	v.add_theme_constant_override("separation", 0)
+	var t := MenuKit.label(label, &"SubheadingLabel")
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	var n := MenuKit.label("%d rounds" % rounds, &"")
+	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	n.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	n.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
+	v.add_child(n)
+	if not blurb.is_empty():
+		var d := MenuKit.label(blurb, &"MutedLabel")
+		d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		d.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+		d.clip_text = true
+		d.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		v.add_child(d)
+	MenuKit.ignore_mouse(btn)
+	MenuNav.hover_focus(btn)
 	if rounds == _preset_rounds:
 		btn.button_pressed = true
 	btn.pressed.connect(_on_preset_pressed.bind(rounds))
 	return btn
 
 
-## An HBox with a left-aligned cream label and space for a right-aligned control.
-## Fixed to a >=40px row height so every config row -- across skirmish, arena and
-## versus -- reads at the same scale.
-func _labelled_row(text: String) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.custom_minimum_size = Vector2(0.0, 40.0)
-	row.add_theme_constant_override("separation", 12)
-	var lbl := Label.new()
-	lbl.text = text
-	lbl.custom_minimum_size = Vector2(140.0, 0.0)
-	lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+## An HBox with a left-aligned caption and space for a right-aligned control.
+## Fixed to a >=44px row height (touch rule) so every config row -- across skirmish,
+## arena and versus -- reads at the same scale. In [member narrow_layout] it is a VBox
+## instead: caption on top, the control full-width beneath it.
+func _labelled_row(text: String) -> BoxContainer:
+	var row: BoxContainer = VBoxContainer.new() if narrow_layout else HBoxContainer.new()
+	row.custom_minimum_size = Vector2(0.0, 44.0)
+	row.add_theme_constant_override("separation", MenuTheme.SP_XS if narrow_layout else MenuTheme.SP_M)
+	var lbl := MenuKit.label(text, &"SubheadingLabel")
+	if not narrow_layout:
+		lbl.custom_minimum_size = Vector2(140.0, 0.0)
+		lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(lbl)
 	return row
 
 
-## A section heading; [param amber] tints it gold to flag arena-only rows, dim
-## cream otherwise (shared [method MenuTheme.style_section_header] register).
+## A Cinzel section caption; [param amber] tints it gold to flag arena-only rows (the
+## roguelite register), the theme's section colour otherwise.
 func _section_heading(text: String, amber: bool = false) -> Label:
-	var lbl := Label.new()
-	lbl.text = text
-	MenuTheme.style_section_header(lbl, amber)
+	# SectionLabel (Cinzel caps: its lowercase are small capitals), text kept as written.
+	var lbl := MenuKit.label(text, &"SectionLabel")
+	if amber:
+		lbl.add_theme_color_override("font_color", MenuTheme.GOLD)
 	return lbl
 
 
@@ -218,21 +329,44 @@ func _on_preset_pressed(rounds: int) -> void:
 	_custom_rounds_active = false
 	if _rounds_spin != null:
 		_rounds_spin.set_value_no_signal(float(rounds))
+	changed.emit()
 
 
 func _on_rounds_override_changed(value: float) -> void:
 	# The moment the player touches the spinbox, the override supersedes the preset.
 	_custom_rounds_active = true
 	_custom_rounds = clampi(int(round(value)), CUSTOM_MIN, CUSTOM_MAX)
+	changed.emit()
+
+
+## "6 rounds (preset)" / "9 rounds (custom)" -- the arena run length as it will launch.
+func run_length_text() -> String:
+	return "%d rounds (%s)" % [get_run_length(), "custom" if _custom_rounds_active else "preset"]
+
+
+## "Traditional" / "Speed First" -- the chosen turn system's display name.
+func turn_system_name() -> String:
+	if get_turn_system() == TurnSystemBase.TurnSystemType.INITIATIVE:
+		return "Speed First"
+	return "Traditional"
 
 
 # --- Read-back API ----------------------------------------------------------
 
 ## The chosen turn system (TurnSystemBase.TurnSystemType). Defaults to Traditional.
 func get_turn_system() -> int:
-	if _turn_option == null:
-		return TurnSystemBase.TurnSystemType.TRADITIONAL
-	return _turn_option.get_selected_id()
+	for id in _turn_cards:
+		var card: Button = _turn_cards[id]
+		if is_instance_valid(card) and card.button_pressed:
+			return int(id)
+	return TurnSystemBase.TurnSystemType.TRADITIONAL
+
+
+## Select the turn system card for [param turn_system] (a TurnSystemBase.TurnSystemType).
+func set_turn_system(turn_system: int) -> void:
+	var card: Button = _turn_cards.get(turn_system, null)
+	if card != null:
+		card.button_pressed = true
 
 
 ## The chosen AI difficulty (0..3). Meaningful only in skirmish; falls back to the

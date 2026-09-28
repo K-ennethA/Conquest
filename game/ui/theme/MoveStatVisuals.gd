@@ -27,9 +27,9 @@ class_name MoveStatVisuals
 const BUFF_COLOR := Color("6ddc63")
 ## A value currently BELOW its authored base.
 const NERF_COLOR := Color("e2604f")
-## The recharge bar's fill while a move is still charging (amber, so it belongs to the
-## HUD rather than reading as a health/damage bar).
-const RECHARGE_COLOR := Color("d9962f")
+## The recharge bar's fill while a move is still charging (the HUD's gold accent, so it
+## belongs to the HUD rather than reading as a health/damage bar).
+const RECHARGE_COLOR := Color("e8b454")  # MenuTheme.GOLD
 ## The recharge bar's fill on the frame a move comes back up.
 const READY_COLOR := Color("6ddc63")
 
@@ -203,6 +203,10 @@ static func make_recharge_bar() -> ProgressBar:
 	bar.value = 1.0
 	bar.custom_minimum_size = Vector2(0, 5)
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# The HUD bar track (the same one the HP bars sit in), so the recharge bar reads as
+	# one of the grove HUD's bars rather than an engine default.
+	bar.add_theme_stylebox_override("background",
+			MenuTheme.box(ConquestTheme.HP_TRACK, ConquestTheme.BORDER_SOFT, 1, 2, 0, 0))
 	return bar
 
 
@@ -217,10 +221,9 @@ static func update_recharge_bar(bar: ProgressBar, remaining: int, total: int) ->
 		return
 	bar.visible = true
 	bar.value = recharge_fraction(remaining, total)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = READY_COLOR if remaining <= 0 else RECHARGE_COLOR
-	fill.set_corner_radius_all(2)
-	bar.add_theme_stylebox_override("fill", fill)
+	# MenuTheme.box: the theme's quiet flat-box factory for bars (the HP bars use it too).
+	var c: Color = READY_COLOR if remaining <= 0 else RECHARGE_COLOR
+	bar.add_theme_stylebox_override("fill", MenuTheme.box(c, c.lightened(0.15), 0, 2, 0, 0))
 
 
 ## One-shot "it's back" pulse on a move row that just came off cooldown. Honours the

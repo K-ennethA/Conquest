@@ -165,10 +165,10 @@ func test_an_ordinary_apply_tile_effect_places_the_veil() -> void:
 	# lays a vine trap lays a smoke veil.
 	var caster := Doubles.CombatUnit.new(0, { "attack": 10 })
 	var board := Doubles.CombatBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	_lay_veil_at(Vector2i(2, 2), caster, board)
+	board.place(caster, Vector3i(0, 0, 0))
+	_lay_veil_at(Vector3i(2, 2, 0), caster, board)
 
-	var placed := _placed_veil_at(Vector2i(2, 2))
+	var placed := _placed_veil_at(Vector3i(2, 2, 0))
 	assert_not_null(placed, "the veil is on the cell")
 	assert_true(placed.conceals_occupants, "and it still conceals after being placed")
 
@@ -176,10 +176,10 @@ func test_an_ordinary_apply_tile_effect_places_the_veil() -> void:
 func test_a_placed_veil_expires_on_schedule() -> void:
 	var caster := Doubles.CombatUnit.new(0, { "attack": 10 })
 	var board := Doubles.CombatBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	_lay_veil_at(Vector2i(2, 2), caster, board)
+	board.place(caster, Vector3i(0, 0, 0))
+	_lay_veil_at(Vector3i(2, 2, 0), caster, board)
 
-	var placed := _placed_veil_at(Vector2i(2, 2))
+	var placed := _placed_veil_at(Vector3i(2, 2, 0))
 	assert_true(placed.expires(), "the placed copy carries a clock")
 	assert_false(placed.is_expired_on(2), "it is still hanging two rounds in")
 	assert_true(placed.is_expired_on(3), "and gone on the third")
@@ -189,7 +189,7 @@ func test_a_placed_veil_expires_on_schedule() -> void:
 		"the round-2 sweep finds nothing to take")
 	assert_eq(TileEffectSystem.expire_placed_effects(3).size(), 1,
 		"the round-3 sweep takes exactly the veil")
-	assert_null(_placed_veil_at(Vector2i(2, 2)), "and the cell is clear again")
+	assert_null(_placed_veil_at(Vector3i(2, 2, 0)), "and the cell is clear again")
 
 
 func test_placing_a_veil_never_stamps_the_authored_resource() -> void:
@@ -197,14 +197,14 @@ func test_placing_a_veil_never_stamps_the_authored_resource() -> void:
 	# record has to land on a per-cast copy or the next battle inherits this one's clock.
 	var caster := Doubles.CombatUnit.new(0, { "attack": 10 })
 	var board := Doubles.CombatBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	_lay_veil_at(Vector2i(2, 2), caster, board)
+	board.place(caster, Vector3i(0, 0, 0))
+	_lay_veil_at(Vector3i(2, 2, 0), caster, board)
 	assert_false(_veil().is_runtime_placement(),
 		"the shared authoring resource is never stamped as a placement")
 
 
 ## Cast a veil-placing move at [param cell] through the ordinary effect pipeline.
-func _lay_veil_at(cell: Vector2i, caster, board) -> void:
+func _lay_veil_at(cell: Vector3i, caster, board) -> void:
 	var move := MoveResource.new()
 	move.move_id = &"test_lay_veil"
 	var pattern := TargetingPattern.new()
@@ -213,12 +213,12 @@ func _lay_veil_at(cell: Vector2i, caster, board) -> void:
 	move.targeting = pattern
 	var lay := ApplyTileEffect.new()
 	lay.effect = _veil()
-	var ctx := MoveContext.new(caster, board, move, cell, [cell] as Array[Vector2i])
+	var ctx := MoveContext.new(caster, board, move, cell, [cell] as Array[Vector3i])
 	lay.apply(ctx)
 
 
 ## The runtime-placed smoke veil on [param cell], or null.
-func _placed_veil_at(cell: Vector2i) -> TileEffectResource:
+func _placed_veil_at(cell: Vector3i) -> TileEffectResource:
 	for te in CombatServices.applied_tile_effects_at(cell):
 		if te is TileEffectResource and (te as TileEffectResource).id == &"smoke_veil":
 			return te

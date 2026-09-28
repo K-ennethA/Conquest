@@ -21,7 +21,7 @@ class_name TileEffectSystem
 ## is a TRAP -- it springs on a unit walking over it, and may halt that unit on it
 ## (CONQUEST.md rule 10). Everything else stays landing-only, exactly as it always was.
 
-## Optional injected lookup: cell ([Vector2i]) -> [code]Array[TileEffectResource][/code].
+## Optional injected lookup: cell ([Vector3i]) -> [code]Array[TileEffectResource][/code].
 ## Used only when the board does not supply effects for that cell.
 var tile_effects: Dictionary = {}
 
@@ -38,7 +38,7 @@ var _expiry_turn_system = null
 ## the trap fires against a board that still contains the anchor, and the anchor then dies.
 ## Stomping first would let a placement disappear before an effect layered on the same cell
 ## had resolved against it.
-func on_enter(unit, cell: Vector2i, board) -> Array:
+func on_enter(unit, cell: Vector3i, board) -> Array:
 	var events: Array = _run_trigger(unit, cell, board, TileEffectResource.Trigger.ON_ENTER)
 	for te in stomp_hostile_placements(unit, cell, board):
 		events.append({ "effect": "tile_effect_stomped", "cell": cell, "tile_effect": te, "unit": unit })
@@ -46,7 +46,7 @@ func on_enter(unit, cell: Vector2i, board) -> Array:
 
 
 ## Run every ON_EXIT effect on the cell the unit is leaving.
-func on_exit(unit, cell: Vector2i, board) -> Array:
+func on_exit(unit, cell: Vector3i, board) -> Array:
 	return _run_trigger(unit, cell, board, TileEffectResource.Trigger.ON_EXIT)
 
 
@@ -67,6 +67,9 @@ static func armed_trap_in(effects: Array, unit, board):
 	for te in effects:
 		if te == null or not te.has_method("springs_on_pass_for"):
 			continue
+		# A trap the weather has made inert (see WeatherResource suppression) is not armed.
+		if Weather.suppresses_tile_effect(te):
+			continue
 		if te.springs_on_pass_for(unit, board):
 			return te
 	return null
@@ -74,7 +77,7 @@ static func armed_trap_in(effects: Array, unit, board):
 
 ## The first armed pass-trap on [param cell] for [param unit], or null. Same cell lookup
 ## every other trigger uses (the board first, then the injected dictionary).
-func armed_trap_at(unit, cell: Vector2i, board):
+func armed_trap_at(unit, cell: Vector3i, board):
 	return armed_trap_in(_effects_at(cell, board), unit, board)
 
 
@@ -85,7 +88,7 @@ func armed_trap_at(unit, cell: Vector2i, board):
 ## must NOT fire. Only the authored traps do, through the very same [method
 ## TileEffectResource.run] pipeline -- guaranteed-hit, elemented, single-use -- so a trap
 ## sprung in passing is identical to one sprung by landing on it.
-func on_pass(unit, cell: Vector2i, board) -> Array:
+func on_pass(unit, cell: Vector3i, board) -> Array:
 	return _run_trigger(unit, cell, board, TileEffectResource.Trigger.ON_ENTER, true)
 
 
@@ -122,8 +125,8 @@ func on_pass(unit, cell: Vector2i, board) -> Array:
 ## Pure: it reads the board and applies nothing. Null-safe end to end -- a unit with no
 ## movement profile, a board that cannot answer, or an unreachable destination all yield an
 ## empty path, [param dest] as the stop, and no trap.
-static func preview_route(unit, origin: Vector2i, dest: Vector2i, board) -> Dictionary:
-	var out: Dictionary = { "path": ([] as Array[Vector2i]), "stop": dest, "trap": null }
+static func preview_route(unit, origin: Vector3i, dest: Vector3i, board) -> Dictionary:
+	var out: Dictionary = { "path": ([] as Array[Vector3i]), "stop": dest, "trap": null }
 	if unit == null or board == null or origin == dest:
 		return out
 	if not unit.has_method("get_movement_profile"):
@@ -131,7 +134,7 @@ static func preview_route(unit, origin: Vector2i, dest: Vector2i, board) -> Dict
 	var profile = unit.get_movement_profile()
 	if profile == null:
 		return out
-	var path: Array[Vector2i] = MovementResolver.new().path_cells(origin, dest, profile, board, unit)
+	var path: Array[Vector3i] = MovementResolver.new().path_cells(origin, dest, profile, board, unit)
 	if path.is_empty():
 		return out
 	out["path"] = path
@@ -150,18 +153,18 @@ static func preview_route(unit, origin: Vector2i, dest: Vector2i, board) -> Dict
 ## The first armed pass-trap on [param cell] for [param unit], read straight off the board.
 ## The static twin of [method armed_trap_at], for the preview / AI callers that have no
 ## [TileEffectSystem] instance (and therefore no injected lookup) to ask.
-static func trap_on_cell(unit, cell: Vector2i, board):
+static func trap_on_cell(unit, cell: Vector3i, board):
 	if board == null or not board.has_method("tile_effects_at"):
 		return null
 	return armed_trap_in(board.tile_effects_at(cell), unit, board)
 
 
-func resolve_path(unit, path: Array, board, fallback: Vector2i = Vector2i.ZERO) -> Vector2i:
+func resolve_path(unit, path: Array, board, fallback: Vector3i = Vector3i.ZERO) -> Vector3i:
 	if path.is_empty():
 		return fallback
 	var last: int = path.size() - 1
 	for i in range(path.size()):
-		var cell: Vector2i = path[i]
+		var cell: Vector3i = path[i]
 		var trap = armed_trap_at(unit, cell, board)
 		if trap != null and bool(trap.get("halts_movement")):
 			# The walk ends here, so this cell is a LANDING: the caller's on_enter pass fires
@@ -193,7 +196,7 @@ func resolve_path(unit, path: Array, board, fallback: Vector2i = Vector2i.ZERO) 
 ## array order, with no RNG and no clock -- two lockstep peers break the same anchors.
 ## Removal happens AFTER the walk so the cell's effect list is never mutated mid-iteration,
 ## exactly as [method _run_trigger] extinguishes a spent snare.
-func stomp_hostile_placements(unit, cell: Vector2i, board) -> Array:
+func stomp_hostile_placements(unit, cell: Vector3i, board) -> Array:
 	var broken: Array = []
 	if unit == null:
 		return broken
@@ -220,7 +223,7 @@ func stomp_hostile_placements(unit, cell: Vector2i, board) -> Array:
 ## cell->effects source it owns before the walk touches a cell (GameWorldManager feeds the
 ## system's injected lookup through it). Never needed by a board that answers
 ## [code]tile_effects_at[/code] itself.
-func apply_move(unit, from_cell: Vector2i, to_cell: Vector2i, board, prime: Callable = Callable()) -> Vector2i:
+func apply_move(unit, from_cell: Vector3i, to_cell: Vector3i, board, prime: Callable = Callable()) -> Vector3i:
 	if unit == null or board == null:
 		return to_cell
 	on_exit(unit, from_cell, board)
@@ -229,7 +232,7 @@ func apply_move(unit, from_cell: Vector2i, to_cell: Vector2i, board, prime: Call
 		for cell in path:
 			prime.call(cell)
 		prime.call(to_cell)
-	var land_cell: Vector2i = resolve_path(unit, path, board, to_cell)
+	var land_cell: Vector3i = resolve_path(unit, path, board, to_cell)
 	# Snap the unit back onto the cell the walk actually stopped on. Deliberately through
 	# board.move_unit, which does NOT re-announce the move (see BoardAdapter): re-emitting
 	# unit_moved for the correction would re-run this whole hook, fire ON_EXIT for a cell
@@ -267,7 +270,7 @@ func passive_flags(unit, board) -> Dictionary:
 ## [param pass_traps_only] restricts the run to authored pass-through traps -- the
 ## crossing case (see [method on_pass]). Default false is every effect on the trigger,
 ## which is what landing on a cell means and is byte-for-byte the original behaviour.
-func _run_trigger(unit, cell: Vector2i, board, trigger: int, pass_traps_only: bool = false) -> Array:
+func _run_trigger(unit, cell: Vector3i, board, trigger: int, pass_traps_only: bool = false) -> Array:
 	var events: Array = []
 	if unit == null:
 		return events
@@ -278,6 +281,9 @@ func _run_trigger(unit, cell: Vector2i, board, trigger: int, pass_traps_only: bo
 		if pass_traps_only and not (te.has_method("is_pass_trap") and te.is_pass_trap()):
 			continue
 		if not te.applies_to(unit, board):
+			continue
+		# Weather can make a tile effect inert (Rain douses fire -- see WeatherResource).
+		if Weather.suppresses_tile_effect(te):
 			continue
 		for e in te.run(unit, board):
 			events.append(e)
@@ -308,7 +314,7 @@ func _run_trigger(unit, cell: Vector2i, board, trigger: int, pass_traps_only: bo
 
 
 ## Sweep every runtime-placed tile effect whose frozen expiry round has arrived on
-## [param round_index]. Returns the removals as [code]{ "cell": Vector2i, "effect": ... }[/code].
+## [param round_index]. Returns the removals as [code]{ "cell": Vector3i, "effect": ... }[/code].
 ##
 ## THE SAME REMOVAL PATH A SPRUNG TRAP TAKES -- [method CombatServices.remove_tile_effect],
 ## which is what [method _extinguish] calls when a single-use snare fires. So an expired trap
@@ -401,18 +407,17 @@ func _exit_tree() -> void:
 		TurnSystemManager.turn_system_activated.disconnect(_on_expiry_turn_system_activated)
 
 
-## Row-major cell order. Explicit rather than relying on [Vector2i]'s own comparison, so the
-## sweep order is stated where it is depended on.
-static func _cell_before(a: Vector2i, b: Vector2i) -> bool:
-	if a.x != b.x:
-		return a.x < b.x
-	return a.y < b.y
+## Column-major cell order (x, then y, then floor) -- [method Cells.less]. Explicit rather
+## than relying on [Vector3i]'s own comparison, so the sweep order is stated where it is
+## depended on.
+static func _cell_before(a: Vector3i, b: Vector3i) -> bool:
+	return Cells.less(a, b)
 
 
 ## Remove a spent runtime tile effect from the live board. Reaches the CombatServices
 ## autoload directly (the applied-effects owner); null-safe for headless/mocked tests
 ## where there is no live services node.
-func _extinguish(cell: Vector2i, te) -> void:
+func _extinguish(cell: Vector3i, te) -> void:
 	var svc = _combat_services()
 	if svc != null and svc.has_method("remove_tile_effect"):
 		svc.remove_tile_effect(cell, te)
@@ -426,7 +431,7 @@ static func _combat_services():
 
 
 ## Prefer the board's own authoring source; fall back to the injected dictionary.
-func _effects_at(cell: Vector2i, board) -> Array:
+func _effects_at(cell: Vector3i, board) -> Array:
 	if board and board.has_method("tile_effects_at"):
 		var arr = board.tile_effects_at(cell)
 		if arr is Array and not arr.is_empty():
@@ -438,7 +443,7 @@ func _effects_at(cell: Vector2i, board) -> Array:
 	return []
 
 
-static func _cell_of(unit, board) -> Vector2i:
+static func _cell_of(unit, board) -> Vector3i:
 	if board and board.has_method("cell_of"):
 		return board.cell_of(unit)
-	return Vector2i.ZERO
+	return Vector3i.ZERO

@@ -24,7 +24,7 @@ const LAYOUT := preload("res://game/ui/layout/GameUILayout.tscn")
 
 const DESIGN := Vector2i(1280, 720)
 const BASE_MOVEMENT := 3
-const TRAP_CELL := Vector2i(4, 4)
+const TRAP_CELL := Vector3i(4, 4, 0)
 
 var _prev_window_size: Vector2i
 
@@ -61,11 +61,11 @@ func after_each() -> void:
 class FakeBoard extends RefCounted:
 	var cells: Dictionary = {}
 
-	func place(unit, cell: Vector2i) -> void:
-		cells[unit] = cell
+	func place(unit, cell) -> void:
+		cells[unit] = Cells.from_variant(cell)
 
-	func cell_of(unit) -> Vector2i:
-		return cells.get(unit, Vector2i(-999, -999))
+	func cell_of(unit) -> Vector3i:
+		return cells.get(unit, Vector3i(-999, -999, 0))
 
 	func all_units() -> Array:
 		return cells.keys()
@@ -100,6 +100,7 @@ func _unit(player_id: int = 0) -> Unit:
 
 func _map() -> FakeMap:
 	var m := FakeMap.new()
+	# Map data: a MapResource authors lanes / bases as flat Vector2i (col, row) positions.
 	m.lanes = [[Vector2i(1, 1), Vector2i(5, 1), Vector2i(9, 1)]]
 	m.base_cells = {0: Vector2i(0, 0), 1: Vector2i(10, 10)}
 	return m
@@ -140,10 +141,10 @@ func _trap_resource() -> TileEffectResource:
 
 ## Plant a trap on [param cell] through the REAL placement path -- [ApplyTileEffect], which is
 ## what a move that lays one runs. Returns the placed copy now on the board.
-func _plant_trap(caster: Unit, cell: Vector2i = TRAP_CELL) -> TileEffectResource:
+func _plant_trap(caster: Unit, cell: Vector3i = TRAP_CELL) -> TileEffectResource:
 	var effect := ApplyTileEffect.new()
 	effect.effect = _trap_resource()
-	var cells: Array[Vector2i] = [cell]
+	var cells: Array[Vector3i] = [cell]
 	var ctx := MoveContext.new(caster, null, null, cell, cells)
 	effect.apply(ctx)
 	var applied: Array = CombatServices.applied_tile_effects_at(cell)
@@ -152,7 +153,7 @@ func _plant_trap(caster: Unit, cell: Vector2i = TRAP_CELL) -> TileEffectResource
 	return applied[0] as TileEffectResource
 
 
-func _placed_count(cell: Vector2i = TRAP_CELL) -> int:
+func _placed_count(cell: Vector3i = TRAP_CELL) -> int:
 	return CombatServices.applied_tile_effects_at(cell).size()
 
 
@@ -216,7 +217,7 @@ func test_a_traditional_turn_start_paces_the_board() -> void:
 	var board := FakeBoard.new()
 	siege.set_board_override(board)
 	var hero := _unit(0)
-	board.place(hero, Vector2i(2, 2))
+	board.place(hero, Vector3i(2, 2, 0))
 
 	var ts := TraditionalTurnSystem.new()
 	ts.name = "TradTS"
@@ -236,7 +237,7 @@ func test_a_speed_first_turn_start_paces_the_board() -> void:
 	var board := FakeBoard.new()
 	siege.set_board_override(board)
 	var hero := _unit(0)
-	board.place(hero, Vector2i(2, 2))
+	board.place(hero, Vector3i(2, 2, 0))
 
 	var ts := SpeedFirstTurnSystem.new()
 	ts.name = "SpeedTS"
@@ -296,7 +297,7 @@ func test_a_trap_expires_exactly_on_its_frozen_round_and_leaves_the_board() -> v
 	# Watch the signal the overlay restacks a cell on. An ARRAY, because a GUT lambda captures
 	# by VALUE -- an int counter incremented in here would never come back out.
 	var changed: Array = []
-	_effect_sink = func(cell: Vector2i) -> void: changed.append(cell)
+	_effect_sink = func(cell: Vector3i) -> void: changed.append(cell)
 	CombatServices.tile_effects_changed.connect(_effect_sink)
 
 	siege.observe_round(2)
@@ -363,12 +364,12 @@ func test_two_identical_runs_expire_their_traps_on_the_same_rounds() -> void:
 		for r in range(1, 13):
 			siege.observe_round(r)
 			if r == 1 or r == 3 or r == 6:
-				var placed := _plant_trap(caster, Vector2i(r, r))
+				var placed := _plant_trap(caster, Vector3i(r, r, 0))
 				sig.append("plant %d -> %d" % [r, placed.expires_on_round if placed != null else -99])
 			sig.append("%d:%d,%d,%d" % [r,
-				CombatServices.applied_tile_effects_at(Vector2i(1, 1)).size(),
-				CombatServices.applied_tile_effects_at(Vector2i(3, 3)).size(),
-				CombatServices.applied_tile_effects_at(Vector2i(6, 6)).size()])
+				CombatServices.applied_tile_effects_at(Vector3i(1, 1, 0)).size(),
+				CombatServices.applied_tile_effects_at(Vector3i(3, 3, 0)).size(),
+				CombatServices.applied_tile_effects_at(Vector3i(6, 6, 0)).size()])
 		runs.append(sig)
 
 	assert_gt((runs[0] as Array).size(), 0, "the run produced a timeline to compare")

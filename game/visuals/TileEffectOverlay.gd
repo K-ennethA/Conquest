@@ -24,6 +24,7 @@ class_name TileEffectOverlay
 const PIP_SIZE := 0.2
 const PIP_SPACING := 0.22   # world units between adjacent pip centers along X
 const PIP_Y := 0.55         # height above the cell center
+const GROUND_Y := 0.1       # tile top (MapLoader.UNIT_GROUND_Y): ground FX sit here
 
 # Hazard pulse: a slow sine varying alpha/emission so a "hazard" pip (Fire) reads
 # as active/dangerous while buffs sit calm. Kept subtle -- not a strobe.
@@ -31,7 +32,7 @@ const PULSE_SPEED := 3.0                       # radians/sec
 const PULSE_ALPHA := Vector2(0.55, 1.0)        # min..max albedo alpha
 const PULSE_EMISSION := Vector2(0.15, 0.75)    # min..max emission energy
 
-# cell (Vector2i) -> container Node3D holding that cell's pip row. Kept so a
+# cell (Vector3i) -> container Node3D holding that cell's pip row. Kept so a
 # single cell can be rebuilt cheaply (free its old container, build a new one).
 var _markers: Dictionary = {}
 
@@ -98,16 +99,24 @@ func _rebuild_all() -> void:
 	var rows: int = int(CombatServices.GRID.size.z)
 	for col in range(cols):
 		for row in range(rows):
-			var cell := Vector2i(col, row)
+			var cell := Vector3i(col, row, 0)
 			var effects: Array = CombatServices.tile_effects_at(cell)
 			if not effects.is_empty():
 				_build_cell_marker(cell, effects)
+	# Upper floors (multi-floor maps): only cells that have a tile there.
+	var board = CombatServices.board()
+	if board != null and board.has_method("floor_count"):
+		for f in range(1, board.floor_count()):
+			for up_cell in board.cells_on_floor(f):
+				var up_effects: Array = CombatServices.tile_effects_at(up_cell)
+				if not up_effects.is_empty():
+					_build_cell_marker(up_cell, up_effects)
 
 
 ## Rebuild ONLY [param cell]'s pips: free its old container (if any) and, if it
 ## still has effects, build a fresh row. Ensures no stale marker lingers on a cell
 ## whose effects were all removed (tile_effects_at now empty).
-func _rebuild_cell(cell: Vector2i) -> void:
+func _rebuild_cell(cell: Vector3i) -> void:
 	var existing = _markers.get(cell, null)
 	if existing != null and is_instance_valid(existing):
 		existing.queue_free()
@@ -125,14 +134,14 @@ func _rebuild_cell(cell: Vector2i) -> void:
 ## Build the pip row for one cell and register it in [member _markers]. One pip
 ## per effect, colored via [TileEffectVisuals]; the row is centered over the cell
 ## and spread along X so multiple effects stay visually distinct (stacking read).
-func _build_cell_marker(cell: Vector2i, effects: Array) -> void:
+func _build_cell_marker(cell: Vector3i, effects: Array) -> void:
 	var container := Node3D.new()
-	container.name = "TileEffectMarker_%d_%d" % [cell.x, cell.y]
+	container.name = "TileEffectMarker_%d_%d_%d" % [cell.x, cell.y, cell.z]
 
 	# World-space center of the cell (cells are 2x2; center = cell*2+1), lifted to
 	# PIP_Y so the row floats just over the tile top.
-	var center: Vector3 = CombatServices.GRID.calculate_map_position(Vector3(cell.x, 0, cell.y))
-	container.position = Vector3(center.x, PIP_Y, center.z)
+	var center: Vector3 = CombatServices.GRID.calculate_map_position(Cells.to_grid(cell))
+	container.position = Vector3(center.x, center.y + PIP_Y, center.z)
 
 	# Hazard materials pulse in _process; collect them on the container's meta so a
 	# single-cell rebuild automatically drops the stale ones with the old node.
@@ -163,6 +172,23 @@ func _build_cell_marker(cell: Vector2i, effects: Array) -> void:
 		container.add_child(pip)
 
 	container.set_meta("hazard_mats", hazard_mats)
+
+	# Painterly GROUND FX for effects applied this battle (a move ignited / froze /
+	# poisoned the cell): scorch + flames, bubbling mist, frost, healing runes...
+	# (see EffectFX). Inherent terrain effects are shown by the terrain itself.
+	if CombatServices != null and CombatServices.has_method("applied_tile_effects_at"):
+		var applied: Array = CombatServices.applied_tile_effects_at(cell)
+		var seed := cell.x * 131 + cell.y * 71 + cell.z * 17
+		for fx_effect in applied:
+			if fx_effect == null or not ("id" in fx_effect):
+				continue
+			var fx_info: Dictionary = TileEffectVisuals.info_for(fx_effect)
+			var fx := EffectFX.make(fx_effect.id, fx_info.get("color", Color.WHITE), seed)
+			if fx != null:
+				fx.position = Vector3(0.0, GROUND_Y - PIP_Y, 0.0)
+				container.add_child(fx)
+				seed += 7
+
 	add_child(container)
 	_markers[cell] = container
 
@@ -194,6 +220,6 @@ func _on_board_ready() -> void:
 	_rebuild_all()
 
 
-func _on_tile_effects_changed(cell: Vector2i) -> void:
+func _on_tile_effects_changed(cell: Vector3i) -> void:
 	# One cell's runtime effects changed: restack just that cell.
 	_rebuild_cell(cell)

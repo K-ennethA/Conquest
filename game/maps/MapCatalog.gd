@@ -54,6 +54,16 @@ const DEFAULT_COMMUNITY_INDEX_PATH := "user://community_maps.json"
 ## simply not offered for networked play ([method network_eligible]).
 const MAX_NETWORK_PAYLOAD_BYTES := 256 * 1024
 
+## Seats in a network versus match (slots 0 and 1). A map that fields units on any slot at or
+## above this has a faction nobody sits in -- see [method network_play_blocker].
+const NETWORK_SEATS: int = 2
+
+## [method network_refusal] codes. "" = playable online.
+const NET_REFUSAL_UNREADABLE := "unreadable"
+const NET_REFUSAL_TOO_LARGE := "too_large"
+const NET_REFUSAL_THIRD_FACTION := "third_faction"
+const NET_REFUSAL_AI_CREEPS := "ai_creeps"
+
 # --- Path injection seams (tests/README.md rule 4) ---------------------------
 # Tests point these at a temp directory so a listing test never reads -- or writes -- the
 # player's real library. Never set in production.
@@ -252,21 +262,89 @@ static func payload_size_bytes(payload: Dictionary) -> int:
 	return JSON.stringify(payload).to_utf8_buffer().size()
 
 
-## Whether [param path] may be offered for a NETWORKED match.
-##
-## A builtin always may: both peers have it, so nothing is transmitted. Anything else has to
-## ride inside the host's game_start message, so it must (a) still pass the strict gate and
-## (b) serialise within [constant MAX_NETWORK_PAYLOAD_BYTES]. This is a plain bool the picker
-## can read to grey a map out, and the host's last-line check before it broadcasts.
+## Whether [param path] may be offered for a NETWORKED match -- [method network_refusal]
+## has nothing against it. A plain bool the picker reads to grey a map out, the host's
+## last-line check before it broadcasts, and the dedicated server's map gate.
 static func network_eligible(path: String) -> bool:
+	return network_refusal(path) == ""
+
+
+## Why [param path] may NOT be played in a networked match, as one of the
+## [code]NET_REFUSAL_*[/code] codes, or "" when it may. Player-facing wording:
+## [method describe_network_refusal].
+##
+## Two families of reasons:
+##   * TRANSPORT. A builtin is on both machines, so nothing is transmitted. Anything else
+##     has to ride inside the host's game_start message, so it must still pass the strict
+##     gate ([constant NET_REFUSAL_UNREADABLE]) and serialise within
+##     [constant MAX_NETWORK_PAYLOAD_BYTES] ([constant NET_REFUSAL_TOO_LARGE]).
+##   * PLAYABILITY. Network versus seats exactly two humans and runs NO AI on any peer;
+##     a map that needs something else to take turns would stall mid-match. See
+##     [method network_play_blocker].
+static func network_refusal(path: String) -> String:
 	if path.is_empty():
-		return false
+		return NET_REFUSAL_UNREADABLE
+	var res: MapResource = null
 	if is_builtin(path):
-		return ResourceLoader.exists(path)
-	var payload: Dictionary = load_payload(path)
-	if payload.is_empty():
-		return false
-	return payload_size_bytes(payload) <= MAX_NETWORK_PAYLOAD_BYTES
+		if not ResourceLoader.exists(path):
+			return NET_REFUSAL_UNREADABLE
+		res = load(path) as MapResource
+		if res == null:
+			return NET_REFUSAL_UNREADABLE
+	else:
+		var payload: Dictionary = load_payload(path)
+		if payload.is_empty():
+			return NET_REFUSAL_UNREADABLE
+		if payload_size_bytes(payload) > MAX_NETWORK_PAYLOAD_BYTES:
+			return NET_REFUSAL_TOO_LARGE
+		res = _import_library_map(path)
+		if res == null:
+			return NET_REFUSAL_UNREADABLE
+	return network_play_blocker(res)
+
+
+## What in [param res] a two-seat, AI-free network match cannot run, or "" when nothing.
+## PURE (reads only the resource), so every peer -- and a test -- reaches the same answer.
+##
+##   * [constant NET_REFUSAL_THIRD_FACTION]: a unit authored on player slot 2 or above (the
+##     neutral jungle camps / guardians of Riftwood and King's Crossing). The mode layer
+##     ([BaseAssaultRuntime]) registers that faction as an AI player with its own turn, and
+##     no seat -- and no AI, which network play never runs -- would ever take it.
+##   * [constant NET_REFUSAL_AI_CREEPS]: authored Siege creep LANES. [SiegeController]
+##     pushes creep waves down them that only the AI driver moves ([BotTurnDriver]
+##     AI-driven marks); network play has no driver, so the creeps would stand still and
+##     every turn would wait on units no player can command.
+##
+## Neither branch supported these online (the local branch fed network matches through its
+## local setup with no AI driver; the cloud core seats two humans and runs no AI). They stay
+## offered offline (single player / hot-seat pickers) exactly as before.
+static func network_play_blocker(res) -> String:
+	if res == null:
+		return NET_REFUSAL_UNREADABLE
+	var spawns = res.get("unit_spawns")
+	if spawns is Array:
+		for spawn_data in (spawns as Array):
+			if spawn_data is Dictionary and int((spawn_data as Dictionary).get("player_id", 0)) >= NETWORK_SEATS:
+				return NET_REFUSAL_THIRD_FACTION
+	var lanes = res.get("lanes")
+	if lanes is Array and not (lanes as Array).is_empty():
+		return NET_REFUSAL_AI_CREEPS
+	return ""
+
+
+## The one sentence a picker row / a refused lobby pick / the dedicated server shows for a
+## [method network_refusal] code ("" for "" -- nothing to explain).
+static func describe_network_refusal(code: String) -> String:
+	match code:
+		"":
+			return ""
+		NET_REFUSAL_TOO_LARGE:
+			return "Too large to send to your opponent"
+		NET_REFUSAL_THIRD_FACTION:
+			return "Offline only: this map has an AI-controlled neutral faction, and online matches seat two players with no AI"
+		NET_REFUSAL_AI_CREEPS:
+			return "Offline only: Siege creep waves are AI-driven, and online matches run no AI"
+	return "This map could not be read."
 
 
 ## Materialise a map payload received from a networked HOST, returning the path the battle

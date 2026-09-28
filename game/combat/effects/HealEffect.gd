@@ -28,6 +28,7 @@ func apply(ctx: MoveContext) -> void:
 		# full unit should announce the sliver it actually recovered, or nothing.
 		var before: int = _current_health(target)
 		if target.has_method("heal"):
+			CombatText.annotate(target, CombatText.info_for(ctx, CombatText.KIND_HEAL, total), ctx.event_bus)
 			target.heal(total)
 		var healed_amount: int = _current_health(target) - before
 		if healed_amount < 0:

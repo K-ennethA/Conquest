@@ -40,7 +40,7 @@ var _ruleset: ArenaRuleset = null
 var _run: ArenaRun = null
 var _phase: int = Phase.IDLE
 
-## A ruleset staged by ArenaSetupScreen, held while the player picks a squad on the
+## A ruleset staged by MatchSetup (arena mode), held while the player picks a squad on the
 ## Character Select screen, then consumed by begin_pending_run(). Lets the Arena flow
 ## reuse the same squad-select screen the map modes use.
 var _pending_ruleset: ArenaRuleset = null
@@ -84,7 +84,7 @@ func start_run(p_ruleset: ArenaRuleset, starting_character_ids: Array = []) -> v
 	_begin_next_round()
 
 
-## Stage a ruleset (from ArenaSetupScreen) without starting yet, so the shared Character
+## Stage a ruleset (from MatchSetup in arena mode) without starting yet, so the shared Character
 ## Select screen can collect the squad first, then call begin_pending_run().
 func prepare_run(p_ruleset: ArenaRuleset) -> void:
 	_pending_ruleset = p_ruleset

@@ -21,6 +21,14 @@ class_name DamageMath
 ##      the tile amplifier and the target's own-element tile benefit. When the "move" is
 ##      an ENVIRONMENTAL source (a tile burning its occupant) this step is the matrix
 ##      alone — see [method ElementChart.damage_scale_for].
+##   5. WEATHER — the active weather's multiplier for the move's element (Bright Sun
+##      fire x1.3, Rain water x1.3 ...). Attacks only: an ENVIRONMENTAL source keeps the
+##      matchup-only rule above, exactly as before weather existed.
+##   6. HEIGHT ADVANTAGE — attacker above / below the target ([Elevation]); exactly 1.0
+##      on a shared floor.
+##
+## Category mitigation ([method mitigate]) also folds in the weather's combat-time
+## defense bonus (Desert Storm: earth units), for hits and environmental damage alike.
 ##
 ## Damage that never had a caster or a move at all — a crawling [TravelingHazard] —
 ## resolves through [method environment_damage], which is the same steps 3 and 4 in the
@@ -60,6 +68,8 @@ const NEUTRAL: float = 1.0
 ##   ability_notes          -- Array[String], one human-readable line per conditional
 ##                             bonus that actually applied, named where nameable
 ##   defender_scale         -- float, the defender's own damage_taken_scale
+##   weather_mult           -- float, the weather multiplier applied (1.0 = none)
+##   height_mult            -- float, the height-advantage multiplier (1.0 = same floor)
 static func apply_scales(mitigated: int, caster, target, move, board = null) -> Dictionary:
 	var dealt: int = mitigated
 	var notes: Array[String] = []
@@ -89,6 +99,19 @@ static func apply_scales(mitigated: int, caster, target, move, board = null) -> 
 	if not is_equal_approx(element_mult, NEUTRAL):
 		dealt = maxi(1, roundi(float(dealt) * element_mult))
 
+	# 5. Weather: the active weather's multiplier for the move's element. Not for an
+	#    environmental source (a tile's own burn keeps the matchup-only rule).
+	var weather_mult: float = NEUTRAL
+	if ElementChart.environment_element_of(move) == &"":
+		weather_mult = Weather.damage_scale_for(move)
+	if not is_equal_approx(weather_mult, NEUTRAL):
+		dealt = maxi(1, roundi(float(dealt) * weather_mult))
+
+	# 6. Height advantage (multi-floor): attacker above / below the target.
+	var height_mult: float = Elevation.damage_scale_for(caster, target, board)
+	if not is_equal_approx(height_mult, NEUTRAL):
+		dealt = maxi(1, roundi(float(dealt) * height_mult))
+
 	return {
 		"total": dealt,
 		"element_mult": element_mult,
@@ -96,6 +119,8 @@ static func apply_scales(mitigated: int, caster, target, move, board = null) -> 
 		"ability_bonus_percent": _as_percent(restricted * hunter),
 		"ability_notes": notes,
 		"defender_scale": taken,
+		"weather_mult": weather_mult,
+		"height_mult": height_mult,
 	}
 
 
@@ -166,6 +191,8 @@ static func preview(caster, target, move, board = null) -> Dictionary:
 		"element_label": ElementChart.LABEL_NEUTRAL,
 		"ability_bonus_percent": 0,
 		"ability_notes": no_notes,
+		"weather_mult": NEUTRAL,
+		"height_mult": NEUTRAL,
 	}
 	if move == null:
 		return out
@@ -188,6 +215,8 @@ static func preview(caster, target, move, board = null) -> Dictionary:
 		out["element_label"] = scaled["element_label"]
 		out["ability_bonus_percent"] = scaled["ability_bonus_percent"]
 		out["ability_notes"] = scaled["ability_notes"]
+		out["weather_mult"] = scaled["weather_mult"]
+		out["height_mult"] = scaled["height_mult"]
 	return out
 
 
@@ -209,15 +238,18 @@ static func raw_power(effect, caster) -> int:
 
 ## Category-aware mitigation: the defender's matching defense stat subtracted from
 ## [param raw], floored at 1. TRUE damage ignores defense entirely; MAGICAL uses
-## magic_defense (falling back to defense).
+## magic_defense (falling back to defense). Both add the active weather's combat-time
+## defense bonus for the target (Desert Storm: earth units); 0 on Clear.
 static func mitigate(raw: int, target, category_arg) -> int:
 	match category_arg:
 		CombatTypes.DamageCategory.TRUE:
 			return maxi(1, raw)
 		CombatTypes.DamageCategory.MAGICAL:
-			return maxi(1, raw - _stat_or(target, "magic_defense", _stat_or(target, "defense", 0)))
+			var res: int = _stat_or(target, "magic_defense", _stat_or(target, "defense", 0))
+			res += Weather.stat_bonus_for(target, "magic_defense")
+			return maxi(1, raw - res)
 		_:  # PHYSICAL
-			return maxi(1, raw - _stat_or(target, "defense", 0))
+			return maxi(1, raw - (_stat_or(target, "defense", 0) + Weather.stat_bonus_for(target, "defense")))
 
 
 ## Is [param effect] a damage effect? Duck-typed on [method DamageEffect.bonus_power_for]

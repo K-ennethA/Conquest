@@ -23,7 +23,7 @@ const FIRE_TILE := "res://game/tiles/effects/resources/fire.tres"
 const GRASS_TILE := "res://game/tiles/effects/resources/tall_grass.tres"
 const MEADOW_TILE := "res://game/tiles/effects/resources/sacred_meadow.tres"
 
-const CELL := Vector2i(3, 4)
+const CELL := Vector3i(3, 4, 0)
 
 var _prev_window_size: Vector2i
 var _panel: TerrainInfoPanel

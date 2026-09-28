@@ -10,10 +10,18 @@ extends Node
 ## players) are read at load time.
 signal settings_changed
 
+## Emitted after a keyboard binding is changed / reset (Settings > Controls), so
+## button hints and the controls list can refresh.
+signal controls_changed
+
+## Emitted when the held FAST-FORWARD modifier (action `fast_forward`, Shift / R3)
+## starts or stops. Runtime only, never persisted. See [method set_fast_forward].
+signal fast_forward_changed(active: bool)
+
 enum GameMode {
 	SINGLE_PLAYER,
 	VERSUS,
-	MULTIPLAYER  # For future expansion
+	MULTIPLAYER  # Network versus (a NetSession match); set/cleared by GameModeManager
 }
 
 ## How aggressively the camera chases live events (spawns, moves, attacks).
@@ -78,6 +86,25 @@ var ui_volume: float = 0.8
 ## redirect this with [method set_settings_path] rather than writing the
 ## player's real file -- see tests/README.md ("Temp paths").
 const DEFAULT_SETTINGS_PATH := "user://settings.cfg"
+
+## Weather VISUALS only (particles / screen overlay) -- gameplay is never affected.
+enum WeatherEffects { FULL, REDUCED, OFF }
+var weather_effects: int = WeatherEffects.FULL
+## Optional board grid overlay drawn by the tile shaders (the terrain itself is
+## seamless). 0 = Off (default), 1 = Subtle. Drives the `grid_lines` global shader
+## uniform (see docs/WORLD_ART.md).
+enum GridLines { OFF, SUBTLE }
+var grid_lines: int = GridLines.OFF
+
+## FAST-FORWARD (Fire Emblem's hold-to-speed-up): while the `fast_forward` action is
+## held, every scaled animation runs [constant FAST_FORWARD_MULTIPLIER]x faster and
+## the AI's between-action beats shrink by the same factor. Runtime only -- polled
+## each frame in _process, not saved.
+const FAST_FORWARD_MULTIPLIER := 4.0
+var fast_forward_active: bool = false
+
+## Legacy alias (cloud branch name) for [constant DEFAULT_SETTINGS_PATH].
+const _SETTINGS_PATH := DEFAULT_SETTINGS_PATH
 const BATTLE_SPEED_MIN := 0.5
 const BATTLE_SPEED_MAX := 3.0
 
@@ -144,6 +171,26 @@ var versus_rounds: int = 1
 func _ready() -> void:
 	name = "GameSettings"
 	_load_presentation_settings()
+	_apply_grid_lines()
+	load_key_bindings()
+
+func _process(_delta: float) -> void:
+	# Hold-to-fast-forward. Polled (not event-driven) so a release is never missed
+	# when focus changes mid-hold.
+	if InputMap.has_action(&"fast_forward"):
+		set_fast_forward(Input.is_action_pressed(&"fast_forward"))
+
+## Turn fast-forward on/off (normally driven by the held `fast_forward` action).
+func set_fast_forward(active: bool) -> void:
+	if fast_forward_active == active:
+		return
+	fast_forward_active = active
+	fast_forward_changed.emit(active)
+
+## Extra speed-up from the fast-forward modifier: FAST_FORWARD_MULTIPLIER while
+## held, else 1.0. Pacing code (AI beats, the turn wipe) divides its waits by this.
+func fast_forward_factor() -> float:
+	return FAST_FORWARD_MULTIPLIER if fast_forward_active else 1.0
 
 # --- Presentation helpers ---------------------------------------------------
 
@@ -158,7 +205,7 @@ func animations_on() -> bool:
 func anim_duration_scale() -> float:
 	if not animations_enabled:
 		return 0.0
-	return 1.0 / clampf(battle_speed, BATTLE_SPEED_MIN, BATTLE_SPEED_MAX)
+	return 1.0 / (clampf(battle_speed, BATTLE_SPEED_MIN, BATTLE_SPEED_MAX) * fast_forward_factor())
 
 ## Scale an authored duration by the current speed/enabled state. Convenience for
 ## animation code: `var t := GameSettings.scaled_time(base_time)`.
@@ -239,6 +286,25 @@ func _snap_speed_timer(seconds: int) -> int:
 			best_d = d
 			best = v
 	return best
+func set_weather_effects(mode: int) -> void:
+	var clamped := clampi(mode, 0, WeatherEffects.keys().size() - 1)
+	if weather_effects == clamped:
+		return
+	weather_effects = clamped
+	_save_presentation_settings()
+	settings_changed.emit()
+
+func set_grid_lines(mode: int) -> void:
+	var clamped := clampi(mode, 0, GridLines.keys().size() - 1)
+	if grid_lines == clamped:
+		return
+	grid_lines = clamped
+	_apply_grid_lines()
+	_save_presentation_settings()
+	settings_changed.emit()
+
+func _apply_grid_lines() -> void:
+	RenderingServer.global_shader_parameter_set(&"grid_lines", 1.0 if grid_lines == GridLines.SUBTLE else 0.0)
 
 # --- Persistence ------------------------------------------------------------
 
@@ -271,6 +337,8 @@ func _load_presentation_settings() -> void:
 	master_volume = clampf(float(cfg.get_value("presentation", "master_volume", master_volume)), VOLUME_MIN, VOLUME_MAX)
 	music_volume = clampf(float(cfg.get_value("presentation", "music_volume", music_volume)), VOLUME_MIN, VOLUME_MAX)
 	ui_volume = clampf(float(cfg.get_value("presentation", "ui_volume", ui_volume)), VOLUME_MIN, VOLUME_MAX)
+	weather_effects = clampi(int(cfg.get_value("presentation", "weather_effects", weather_effects)), 0, WeatherEffects.keys().size() - 1)
+	grid_lines = clampi(int(cfg.get_value("presentation", "grid_lines", grid_lines)), 0, GridLines.keys().size() - 1)
 
 func _save_presentation_settings() -> void:
 	var cfg := ConfigFile.new()
@@ -282,7 +350,89 @@ func _save_presentation_settings() -> void:
 	cfg.set_value("presentation", "master_volume", master_volume)
 	cfg.set_value("presentation", "music_volume", music_volume)
 	cfg.set_value("presentation", "ui_volume", ui_volume)
+	cfg.set_value("presentation", "weather_effects", weather_effects)
+	cfg.set_value("presentation", "grid_lines", grid_lines)
 	cfg.save(_settings_path)
+
+# --- Controls (keyboard rebinding) -----------------------------------------------
+# Player keyboard overrides for the named actions in InputActions.REBINDABLE,
+# stored in the [controls] section of the same ConfigFile as the presentation
+# settings: action name -> Array of keycode-with-modifiers ints. Only the KEYBOARD
+# side of an action is overridden; gamepad bindings always keep their defaults.
+# Actions without an entry use the project.godot defaults.
+
+const CONTROLS_SECTION := "controls"
+
+## action (String) -> Array[int] keycodes-with-modifiers. See the block comment above.
+var key_binding_overrides: Dictionary = {}
+
+## Bind [param action]'s keyboard side to the single key [param code]
+## (keycode-with-modifiers). If another rebindable action already uses that key it
+## is SWAPPED onto this action's previous primary key, so no two actions share a key.
+## Persists to [param path] and applies immediately.
+func set_key_binding(action: StringName, code: int, path: String = "") -> void:
+	path = _controls_path(path)
+	if not InputMap.has_action(action):
+		return
+	var previous: Array[int] = InputActions.key_codes(action)
+	var conflict := InputActions.find_conflict(code, action)
+	if conflict != &"":
+		var theirs: Array[int] = InputActions.key_codes(conflict)
+		theirs.erase(code)
+		if theirs.is_empty() and not previous.is_empty() and previous[0] != code:
+			theirs.append(previous[0])
+		key_binding_overrides[String(conflict)] = theirs
+	key_binding_overrides[String(action)] = [code]
+	apply_key_bindings()
+	save_key_bindings(path)
+	controls_changed.emit()
+
+## Drop every keyboard override (back to project.godot defaults), persist, apply.
+func reset_key_bindings(path: String = "") -> void:
+	path = _controls_path(path)
+	key_binding_overrides.clear()
+	InputActions.restore_all_defaults()
+	save_key_bindings(path)
+	controls_changed.emit()
+
+## Push [member key_binding_overrides] into the live InputMap.
+func apply_key_bindings() -> void:
+	for action in key_binding_overrides.keys():
+		var codes = key_binding_overrides[action]
+		if codes is Array and InputMap.has_action(StringName(action)):
+			InputActions.set_keyboard_bindings(StringName(action), codes)
+
+## Read the [controls] section from [param path] and apply it (defaults when absent).
+func load_key_bindings(path: String = "") -> void:
+	path = _controls_path(path)
+	key_binding_overrides.clear()
+	var cfg := ConfigFile.new()
+	if cfg.load(path) == OK and cfg.has_section(CONTROLS_SECTION):
+		for action in cfg.get_section_keys(CONTROLS_SECTION):
+			var codes = cfg.get_value(CONTROLS_SECTION, action, [])
+			if codes is Array and InputMap.has_action(StringName(action)):
+				var ints: Array[int] = []
+				for c in codes:
+					ints.append(int(c))
+				key_binding_overrides[action] = ints
+	apply_key_bindings()
+
+## Write [member key_binding_overrides] to the [controls] section of [param path],
+## preserving every other section of the file.
+func save_key_bindings(path: String = "") -> void:
+	path = _controls_path(path)
+	var cfg := ConfigFile.new()
+	cfg.load(path)  # Preserve other sections; ignore load failure.
+	if cfg.has_section(CONTROLS_SECTION):
+		cfg.erase_section(CONTROLS_SECTION)
+	for action in key_binding_overrides.keys():
+		cfg.set_value(CONTROLS_SECTION, action, key_binding_overrides[action])
+	cfg.save(path)
+
+## The file the [controls] section lives in: [param path] when given, else the same
+## (test-redirectable) file as the presentation block -- [method set_settings_path].
+func _controls_path(path: String) -> String:
+	return path if not path.is_empty() else _settings_path
 
 # Configuration methods
 func set_game_mode(mode: GameMode) -> void:

@@ -66,8 +66,8 @@ func test_geode_resolves_with_full_kit():
 	assert_eq(geode.element, &"earth", "Geode is an earth-element unit")
 	assert_eq(geode.moveset.size(), 4, "Geode has four moves")
 	var ab: Array = geode.get("abilities")
-	assert_eq(ab.size(), 3,
-		"Geode has three abilities (the opening Firstward, the earned Crystalline Ward, Reprisal)")
+	assert_eq(ab.size(), 4,
+		"Geode has four abilities (the opening Firstward, the earned Crystalline Ward, Reprisal, Sand Veil)")
 	var ids: Array = []
 	for a in ab:
 		if a != null:
@@ -76,6 +76,8 @@ func test_geode_resolves_with_full_kit():
 		"the roster entry carries the BATTLE-START half of the ward: %s" % [ids])
 	assert_true(ids.has("crystalline_ward"),
 		"alongside the re-earned half: %s" % [ids])
+	assert_true(ids.has("sand_veil"),
+		"and the weather-conditioned Sand Veil: %s" % [ids])
 
 func test_the_opening_ward_is_granted_at_battle_start_and_is_ungated():
 	# The half that changed: Geode used to open a battle unwarded. It no longer does.

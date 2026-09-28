@@ -12,8 +12,8 @@ class_name TargetingVisualizer
 
 # Overlay mesh settings
 var overlay_size: float = 2.0            # Matches tile size (2x2 units)
-var attack_range_height: float = 1.0     # Height above tiles for attack-range markers
-var aoe_preview_height: float = 1.05     # Slightly higher so AoE markers render on top
+var attack_range_height: float = 0.18    # Height above tiles for attack-range markers
+var aoe_preview_height: float = 0.2     # Slightly higher so AoE markers render on top
 
 # Visual state
 var attack_range_meshes: Dictionary = {}  # Vector3 cell -> MeshInstance3D
@@ -72,8 +72,9 @@ func _on_attack_range_calculated(cells: Array) -> void:
 	_clear_attack_range_markers()
 
 	for cell in cells:
-		if cell is Vector3:
-			_create_overlay_at_cell(cell, attack_range_material, attack_range_height, attack_range_meshes, "AttackRange")
+		var g = _grid_cell(cell)
+		if g != null:
+			_create_overlay_at_cell(g, attack_range_material, attack_range_height, attack_range_meshes, "AttackRange")
 
 
 func _on_aoe_preview_calculated(cells: Array) -> void:
@@ -81,8 +82,20 @@ func _on_aoe_preview_calculated(cells: Array) -> void:
 	_clear_aoe_preview_markers()
 
 	for cell in cells:
-		if cell is Vector3:
-			_create_overlay_at_cell(cell, aoe_preview_material, aoe_preview_height, aoe_preview_meshes, "AoEPreview")
+		var g = _grid_cell(cell)
+		if g != null:
+			_create_overlay_at_cell(g, aoe_preview_material, aoe_preview_height, aoe_preview_meshes, "AoEPreview")
+
+
+## A payload cell as a scene grid coord (Vector3(col, floor, row), the key the mesh
+## dictionaries use), or null. Emitters send grid Vector3s; a board cell (Vector3i
+## col,row,floor) or a legacy Vector2i is converted via [Cells].
+func _grid_cell(cell):
+	if cell is Vector3:
+		return cell
+	if cell is Vector3i or cell is Vector2i:
+		return Cells.to_grid(Cells.from_variant(cell))
+	return null
 
 
 func _on_targeting_cleared() -> void:
@@ -100,7 +113,7 @@ func _create_overlay_at_cell(cell: Vector3, material: StandardMaterial3D, height
 	world_pos.y += height
 
 	var mesh_instance := MeshInstance3D.new()
-	mesh_instance.name = "%s_%s_%s" % [name_prefix, str(cell.x), str(cell.z)]
+	mesh_instance.name = "%s_%s_%s_%s" % [name_prefix, str(int(cell.x)), str(int(cell.z)), str(int(cell.y))]
 
 	var plane_mesh := PlaneMesh.new()
 	plane_mesh.size = Vector2(overlay_size, overlay_size)

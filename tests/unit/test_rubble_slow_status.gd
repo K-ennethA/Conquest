@@ -46,20 +46,20 @@ class StatUnit:
 
 class TileBoard:
 	var placements: Array = []
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i.ZERO
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i.ZERO
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
 				out.append(p.unit)
 		return out
-	func in_bounds(_c: Vector2i) -> bool:
+	func in_bounds(_c: Vector3i) -> bool:
 		return true
 
 
@@ -134,7 +134,7 @@ func test_entering_rubble_tile_applies_slow():
 	var unit := StatUnit.new()
 	_controller_for(unit)
 	var board := TileBoard.new()
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 
 	# A rubble-like tile effect (ALL faction so no perspective is needed) that, ON_ENTER,
 	# inflicts the Slowed status -- the same wiring rock_rubble.tres carries.
@@ -149,8 +149,8 @@ func test_entering_rubble_tile_applies_slow():
 	te.effects = [apply]
 
 	var sys = autofree(TileEffectSystem.new())
-	sys.tile_effects[Vector2i(0, 0)] = [te]
-	sys.on_enter(unit, Vector2i(0, 0), board)
+	sys.tile_effects[Vector3i(0, 0, 0)] = [te]
+	sys.on_enter(unit, Vector3i(0, 0, 0), board)
 
 	assert_eq(unit.get_stat("movement"), 1, "stepping onto rubble slows the unit to movement 1")
 	var ctrl = unit.get_status_controller()

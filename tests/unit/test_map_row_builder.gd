@@ -161,6 +161,29 @@ func test_a_map_this_build_cannot_read_is_refused_before_the_size_rule():
 	assert_eq(String(rows[0]["tooltip"]), MapRowBuilder.UNREADABLE_TOOLTIP,
 		"and is not blamed on its size -- shrinking it would not help")
 
+func test_a_refusal_sentence_from_the_eligibility_rule_is_the_rows_tooltip():
+	# The catalog's richer answer: "" = eligible, otherwise WHY (e.g. an AI neutral faction).
+	var why := "Offline only: this map has an AI-controlled neutral faction"
+	var rows: Array = MapRowBuilder.build_rows(
+		[_entry("res://neutrals.tres", "Neutrals", MapRowBuilder.SOURCE_BUILTIN),
+			_entry("res://plain.tres", "Plain", MapRowBuilder.SOURCE_BUILTIN)],
+		true,
+		func(path: String) -> String: return why if path == "res://neutrals.tres" else "")
+
+	assert_true(bool(rows[0]["disabled"]), "a refused map cannot be voted for")
+	assert_eq(String(rows[0]["tooltip"]), why, "and the row says exactly why")
+	assert_eq(String(rows[0]["note"]), MapRowBuilder.OFFLINE_ONLY_NOTE, "with a visible short tag")
+	assert_false(bool(rows[1]["disabled"]), "an empty answer means eligible")
+	assert_eq(String(rows[1]["note"]), "", "and carries no tag")
+
+func test_a_legacy_bool_catalog_still_gets_the_too_large_sentence():
+	var stub := StubCatalog.new()
+	stub.ineligible = ["user://maps/huge.json"]
+	MapRowBuilder.set_catalog(stub)
+	assert_eq(MapRowBuilder.network_refusal_text("user://maps/huge.json"), MapRowBuilder.TOO_LARGE_TOOLTIP,
+		"a catalog without network_refusal can only say 'too large'")
+	assert_eq(MapRowBuilder.network_refusal_text("user://maps/small.json"), "", "and nothing for an eligible map")
+
 
 # --- metadata ----------------------------------------------------------------
 

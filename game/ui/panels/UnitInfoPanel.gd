@@ -175,8 +175,8 @@ func _ready() -> void:
 	# an AI turn (CONQUEST.md rule 2).
 	GameEvents.unit_moved.connect(_on_unit_moved)
 
-	# Append the code-built rows BEFORE theming, so they pick up the amber cascade along
-	# with the scene-authored ones.
+	# Append the code-built rows BEFORE theming, so they pick up the navy + gold HUD cascade
+	# along with the scene-authored ones.
 	_build_element_badge()
 	_build_shield_readout()
 	_build_stat_row()
@@ -417,6 +417,11 @@ func _update_unit_info(unit: Unit) -> void:
 
 	if health_label:
 		health_label.text = "%d/%d" % [unit.current_health, unit.max_health]
+	# The grove frame: the owning side's team colour down the edge (element in the crest).
+	var background := get_node_or_null("Background") as Panel
+	if background != null:
+		background.add_theme_stylebox_override("panel", ConquestTheme.unit_card_box(unit, 0.95))
+
 	if health_bar:
 		# The bar's scale is the SHARED one: max_value is max_health until a shield would
 		# overrun the bar, at which point HP and shield rescale together rather than the
@@ -425,6 +430,9 @@ func _update_unit_info(unit: Unit) -> void:
 				int(unit.current_health), int(unit.max_health),
 				ShieldVisuals.shield_of(unit))))
 		health_bar.value = clampf(float(unit.current_health), 0.0, health_bar.max_value)
+		# HP-tier colour (same thresholds as the 3D map bar).
+		ConquestTheme.tint_hp_bar(health_bar,
+				clampf(float(unit.current_health) / maxf(1.0, float(unit.max_health)), 0.0, 1.0))
 
 	_update_shield_readout(unit)
 	_update_element_badge(unit)
@@ -606,17 +614,13 @@ func _build_stat_chip(unit, label: String, stat_name: String) -> PanelContainer:
 	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chip.tooltip_text = MoveStatVisuals.stat_text(label, base, effective)
 
-	var sb := StyleBoxFlat.new()
 	# A modified chip is FILLED with its delta colour (dimmed); an unmodified one keeps the
-	# neutral plate, so "something changed here" reads before any glyph is legible.
-	sb.bg_color = color.darkened(0.62) if modified else ConquestTheme.PLATE_BG
-	sb.set_corner_radius_all(5)
-	sb.set_border_width_all(1)
-	sb.border_color = color if modified else ConquestTheme.BROWN
-	sb.content_margin_left = 4
-	sb.content_margin_right = 4
-	sb.content_margin_top = 1
-	sb.content_margin_bottom = 1
+	# neutral sunk plate, so "something changed here" reads before any glyph is legible. A
+	# small notched grove plate (compact margins -- five of these share a 240px row).
+	var sb := MenuTheme.plate_box(
+			color.darkened(0.62) if modified else ConquestTheme.PANEL_SUNK,
+			color if modified else ConquestTheme.BORDER_SOFT, 4.0, 4, 1, 1.0)
+	sb.sheen = 0.0
 	chip.add_theme_stylebox_override("panel", sb)
 
 	var text := Label.new()
@@ -708,7 +712,7 @@ func _update_status_strip(unit) -> void:
 		none_label.name = "NoStatuses"
 		none_label.text = "No active effects"
 		none_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
-		none_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
+		none_label.add_theme_color_override("font_color", ConquestTheme.TEXT_MUTED)
 		none_label.clip_text = true
 		none_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		# NOT discipline_label: this label is inside the flow, where a 1px minimum means it
@@ -826,15 +830,9 @@ func _build_terrain_chip(entry: Dictionary) -> PanelContainer:
 	chip.mouse_filter = Control.MOUSE_FILTER_PASS
 	chip.tooltip_text = TerrainVisuals.tooltip_for(entry)
 
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = color.darkened(0.72)
-	sb.set_corner_radius_all(2)
-	sb.set_border_width_all(2)
-	sb.border_color = color
-	sb.content_margin_left = 5
-	sb.content_margin_right = 5
-	sb.content_margin_top = 1
-	sb.content_margin_bottom = 1
+	# Square-shouldered notched plate with a 2px frame (the inverse of a status TAG chip).
+	var sb := MenuTheme.plate_box(color.darkened(0.72), color, 2.0, 5, 1, 2.0)
+	sb.sheen = 0.0
 	chip.add_theme_stylebox_override("panel", sb)
 
 	var label := Label.new()
@@ -866,13 +864,11 @@ func _build_status_chip(text: String, color: Color, tooltip: String = "") -> Pan
 	chip.mouse_filter = Control.MOUSE_FILTER_PASS
 	chip.tooltip_text = tooltip if tooltip != "" else text
 
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = color.darkened(0.35)
-	sb.set_corner_radius_all(5)
-	sb.set_border_width_all(1)
-	sb.border_color = color
-	sb.content_margin_left = 5
-	sb.content_margin_right = 5
+	# Pointed grove TAG chip (the shared status-chip shape).
+	var sb := MenuTheme.pill_box(color.darkened(0.35), color)
+	sb.corner = 6.0
+	sb.content_margin_left = 7
+	sb.content_margin_right = 7
 	sb.content_margin_top = 1
 	sb.content_margin_bottom = 1
 	chip.add_theme_stylebox_override("panel", sb)
@@ -881,8 +877,7 @@ func _build_status_chip(text: String, color: Color, tooltip: String = "") -> Pan
 	label.name = "ChipLabel"
 	label.text = text
 	label.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
-	# CREAM reads on the dim chip fill; the theme's default INK is tuned for the light
-	# amber panel background instead.
+	# CREAM reads on the dim chip fill.
 	label.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	label.clip_text = true
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -903,8 +898,9 @@ func _build_details_button() -> void:
 		return
 	_details_button = Button.new()
 	_details_button.name = "DetailsButton"
-	_details_button.text = "DETAILS (D)"
-	_details_button.tooltip_text = "Full stats, moves, abilities and statuses (D)"
+	_details_button.text = "Details"
+	_details_button.tooltip_text = InputActions.with_hint(
+			"Full stats, moves, abilities and statuses", InputActions.UNIT_INFO)
 	_details_button.custom_minimum_size.y = DETAILS_BUTTON_HEIGHT
 	_details_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_details_button.focus_mode = Control.FOCUS_NONE
@@ -915,8 +911,8 @@ func _build_details_button() -> void:
 	vb.add_child(_details_button)
 
 
-## Open [UnitDetailPage] on whatever unit the card is showing. Public so the D hotkey (in
-## [UnitActionsPanel]) and the right sidebar's DETAILS entry route through ONE opener --
+## Open [UnitDetailPage] on whatever unit the card is showing. Public so the unit_info
+## action / Info command (in [UnitActionsPanel]) and this card's Details button route through ONE opener --
 ## there is exactly one detail page per battle, and this is how it is asked for.
 func open_details() -> void:
 	if not is_instance_valid(current_unit):
@@ -955,18 +951,17 @@ func _update_portrait(unit: Unit) -> void:
 	var element: String = String(unit.get_element()) if unit.has_method("get_element") else ""
 	var base: Color = ConquestTheme.element_color(element)
 
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = base
-	sb.set_corner_radius_all(8)
-	sb.set_border_width_all(2)
-	sb.border_color = base.darkened(0.35)
-	unit_portrait.add_theme_stylebox_override("panel", sb)
+	# Heraldic crest: element-coloured field, the owning side's team colour as the rim.
+	var ring: Color = ConquestTheme.team_color(ConquestTheme.owner_of(unit))
+	var px: float = maxf(unit_portrait.custom_minimum_size.y, 40.0)
+	unit_portrait.add_theme_stylebox_override("panel", MenuTheme.crest_box(base, ring, px))
 
 	if portrait_monogram:
 		var display: String = unit.get_display_name().strip_edges()
 		portrait_monogram.text = display.substr(0, 1).to_upper() if display != "" else "?"
-		var text_color: Color = ConquestTheme.INK if base.get_luminance() > 0.55 else ConquestTheme.CREAM
-		portrait_monogram.add_theme_color_override("font_color", text_color)
+		# The crest darkens its field, so the initial is always a light tint of it (Cinzel).
+		portrait_monogram.add_theme_font_override("font", MenuTheme.display_font(0))
+		portrait_monogram.add_theme_color_override("font_color", base.lightened(0.7))
 
 	_refresh_portrait_texture(unit)
 

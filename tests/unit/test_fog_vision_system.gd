@@ -76,12 +76,12 @@ class FogBoard extends Doubles.CombatBoard:
 			out.append(p.unit)
 		return out
 
-	func tile_effects_at(cell: Vector2i) -> Array:
-		var arr = effects.get(cell, null)
+	func tile_effects_at(cell) -> Array:
+		var arr = effects.get(Cells.from_variant(cell), null)
 		return arr if arr is Array else []
 
-	func put_effect(cell: Vector2i, effect) -> void:
-		effects[cell] = [effect]
+	func put_effect(cell, effect) -> void:
+		effects[Cells.from_variant(cell)] = [effect]
 
 
 ## The board and the two sides are UNTYPED on purpose. GUT re-loads a suite script while
@@ -133,12 +133,12 @@ func test_with_fog_off_every_query_answers_visible() -> void:
 	_vs.set_map(_map(false))
 	var hero := Scout.new(_p0)
 	var enemy := Scout.new(_p1)
-	_board.place(hero, Vector2i(0, 0))
-	_board.place(enemy, Vector2i(15, 15))  # as far away as this map goes
+	_board.place(hero, Vector3i(0, 0, 0))
+	_board.place(enemy, Vector3i(15, 15, 0))  # as far away as this map goes
 
 	assert_false(_vs.fog_enabled(), "the map did not ask for fog")
 	assert_true(_vs.is_unit_visible(0, enemy), "an enemy across the board is visible without fog")
-	assert_true(_vs.is_cell_visible(0, Vector2i(15, 15)), "and so is the ground under it")
+	assert_true(_vs.is_cell_visible(0, Vector3i(15, 15, 0)), "and so is the ground under it")
 	assert_eq(_vs.visible_cells(0).size(), MAP_W * MAP_H,
 		"visible_cells is the WHOLE board when there is no fog")
 
@@ -147,9 +147,9 @@ func test_with_fog_off_even_concealing_ground_hides_nobody() -> void:
 	_vs.set_map(_map(false))
 	var hero := Scout.new(_p0)
 	var enemy := Scout.new(_p1)
-	_board.place(hero, Vector2i(5, 5))
-	_board.place(enemy, Vector2i(5, 6))
-	_board.put_effect(Vector2i(5, 6), _veil())
+	_board.place(hero, Vector3i(5, 5, 0))
+	_board.place(enemy, Vector3i(5, 6, 0))
+	_board.put_effect(Vector3i(5, 6, 0), _veil())
 	assert_true(_vs.is_unit_visible(0, enemy),
 		"a veil is inert on a map with no fog -- there is nothing to hide behind")
 
@@ -158,47 +158,47 @@ func test_with_fog_off_even_concealing_ground_hides_nobody() -> void:
 
 func test_a_unit_lights_a_chebyshev_square_of_its_sight_radius() -> void:
 	var hero := Scout.new(_p0)
-	_board.place(hero, Vector2i(6, 6))
+	_board.place(hero, Vector3i(6, 6, 0))
 	var lit: Dictionary = _vs.visible_cells(0)
 
-	assert_true(lit.has(Vector2i(10, 10)),
+	assert_true(lit.has(Vector3i(10, 10, 0)),
 		"the far CORNER at Chebyshev 4 is lit -- sight is a square, not a diamond")
-	assert_true(lit.has(Vector2i(10, 6)), "and so is the cardinal cell at 4")
-	assert_false(lit.has(Vector2i(11, 6)), "one cell past the radius is dark")
-	assert_false(lit.has(Vector2i(11, 11)), "and so is the corner past it")
+	assert_true(lit.has(Vector3i(10, 6, 0)), "and so is the cardinal cell at 4")
+	assert_false(lit.has(Vector3i(11, 6, 0)), "one cell past the radius is dark")
+	assert_false(lit.has(Vector3i(11, 11, 0)), "and so is the corner past it")
 	assert_eq(lit.size(), 81, "radius 4 lights the full 9x9 block around the unit")
 
 
 func test_the_lit_set_is_clipped_to_the_board() -> void:
 	var hero := Scout.new(_p0)
-	_board.place(hero, Vector2i(0, 0))
+	_board.place(hero, Vector3i(0, 0, 0))
 	var lit: Dictionary = _vs.visible_cells(0)
-	assert_false(lit.has(Vector2i(-1, 0)), "sight does not run off the edge of the map")
+	assert_false(lit.has(Vector3i(-1, 0, 0)), "sight does not run off the edge of the map")
 	assert_eq(lit.size(), 25, "a corner unit lights only the quarter of its square that exists")
 
 
 func test_a_team_sees_the_union_of_its_units_sight() -> void:
 	var west := Scout.new(_p0)
 	var east := Scout.new(_p0)
-	_board.place(west, Vector2i(2, 2))
-	_board.place(east, Vector2i(13, 13))
+	_board.place(west, Vector3i(2, 2, 0))
+	_board.place(east, Vector3i(13, 13, 0))
 	var lit: Dictionary = _vs.visible_cells(0)
-	assert_true(lit.has(Vector2i(2, 2)), "the west scout's own cell is lit")
-	assert_true(lit.has(Vector2i(13, 13)), "so is the east scout's")
-	assert_false(lit.has(Vector2i(8, 8)), "the gap between them is not")
+	assert_true(lit.has(Vector3i(2, 2, 0)), "the west scout's own cell is lit")
+	assert_true(lit.has(Vector3i(13, 13, 0)), "so is the east scout's")
+	assert_false(lit.has(Vector3i(8, 8, 0)), "the gap between them is not")
 
 
 func test_a_character_sight_range_overrides_the_default() -> void:
 	var myope := Scout.new(_p0, 1)
-	_board.place(myope, Vector2i(6, 6))
+	_board.place(myope, Vector3i(6, 6, 0))
 	var lit: Dictionary = _vs.visible_cells(0)
 	assert_eq(lit.size(), 9, "an authored sight of 1 lights only the 3x3 around the unit")
-	assert_false(lit.has(Vector2i(8, 6)), "the default radius of 4 does not apply to it")
+	assert_false(lit.has(Vector3i(8, 6, 0)), "the default radius of 4 does not apply to it")
 
 	var eagle := Scout.new(_p0, 6)
-	_board.place(eagle, Vector2i(6, 6))
+	_board.place(eagle, Vector3i(6, 6, 0))
 	_vs.invalidate()
-	assert_true(_vs.visible_cells(0).has(Vector2i(12, 12)),
+	assert_true(_vs.visible_cells(0).has(Vector3i(12, 12, 0)),
 		"and an authored sight of 6 reaches further than the default")
 
 
@@ -212,8 +212,8 @@ func test_sight_range_of_falls_back_to_the_default_when_nobody_declares_one() ->
 func test_an_enemy_outside_every_sight_radius_is_invisible() -> void:
 	var hero := Scout.new(_p0)
 	var enemy := Scout.new(_p1)
-	_board.place(hero, Vector2i(2, 2))
-	_board.place(enemy, Vector2i(12, 12))
+	_board.place(hero, Vector3i(2, 2, 0))
+	_board.place(enemy, Vector3i(12, 12, 0))
 	assert_false(_vs.is_unit_visible(0, enemy), "an enemy nobody is looking at is hidden")
 	assert_true(_vs.is_unit_visible(1, enemy), "though its own side sees it perfectly well")
 
@@ -221,8 +221,8 @@ func test_an_enemy_outside_every_sight_radius_is_invisible() -> void:
 func test_an_enemy_inside_the_radius_on_open_ground_is_visible() -> void:
 	var hero := Scout.new(_p0)
 	var enemy := Scout.new(_p1)
-	_board.place(hero, Vector2i(2, 2))
-	_board.place(enemy, Vector2i(5, 5))
+	_board.place(hero, Vector3i(2, 2, 0))
+	_board.place(enemy, Vector3i(5, 5, 0))
 	assert_true(_vs.is_unit_visible(0, enemy), "an enemy in the open inside sight is visible")
 
 
@@ -233,10 +233,10 @@ func test_own_units_are_always_visible_however_far_away() -> void:
 	var hero := Scout.new(_p0)
 	var stray := Scout.new(_p0, 1)
 	var enemy := Scout.new(_p1)
-	_board.place(hero, Vector2i(0, 0))
-	_board.place(stray, Vector2i(15, 15))
-	_board.place(enemy, Vector2i(10, 10))
-	assert_false(_vs.visible_cells(0).has(Vector2i(10, 10)),
+	_board.place(hero, Vector3i(0, 0, 0))
+	_board.place(stray, Vector3i(15, 15, 0))
+	_board.place(enemy, Vector3i(10, 10, 0))
+	assert_false(_vs.visible_cells(0).has(Vector3i(10, 10, 0)),
 		"nothing player 0 owns is looking at the enemy's cell")
 	assert_false(_vs.is_unit_visible(0, enemy), "so the enemy standing there is hidden")
 	assert_true(_vs.is_unit_visible(0, stray),
@@ -244,7 +244,7 @@ func test_own_units_are_always_visible_however_far_away() -> void:
 
 
 func test_a_side_with_no_units_sees_nothing() -> void:
-	_board.place(Scout.new(_p1), Vector2i(5, 5))
+	_board.place(Scout.new(_p1), Vector3i(5, 5, 0))
 	assert_eq(_vs.visible_cells(0).size(), 0, "no eyes on the board, no cells lit")
 
 
@@ -253,11 +253,11 @@ func test_a_side_with_no_units_sees_nothing() -> void:
 func test_a_smoke_veil_hides_its_occupant_from_across_the_field() -> void:
 	var hero := Scout.new(_p0)
 	var lurker := Scout.new(_p1)
-	_board.place(hero, Vector2i(5, 5))
-	_board.place(lurker, Vector2i(5, 8))  # Chebyshev 3: comfortably inside sight
-	_board.put_effect(Vector2i(5, 8), _veil())
+	_board.place(hero, Vector3i(5, 5, 0))
+	_board.place(lurker, Vector3i(5, 8, 0))  # Chebyshev 3: comfortably inside sight
+	_board.put_effect(Vector3i(5, 8, 0), _veil())
 
-	assert_true(_vs.is_cell_visible(0, Vector2i(5, 8)),
+	assert_true(_vs.is_cell_visible(0, Vector3i(5, 8, 0)),
 		"the GROUND is still seen -- fog hides units, not terrain")
 	assert_false(_vs.is_unit_visible(0, lurker),
 		"but the unit standing in the veil is not")
@@ -266,9 +266,9 @@ func test_a_smoke_veil_hides_its_occupant_from_across_the_field() -> void:
 func test_a_seer_beside_the_veil_sees_into_it() -> void:
 	var hero := Scout.new(_p0)
 	var lurker := Scout.new(_p1)
-	_board.place(hero, Vector2i(5, 7))  # adjacent to the veil cell
-	_board.place(lurker, Vector2i(5, 8))
-	_board.put_effect(Vector2i(5, 8), _veil())
+	_board.place(hero, Vector3i(5, 7, 0))  # adjacent to the veil cell
+	_board.place(lurker, Vector3i(5, 8, 0))
+	_board.put_effect(Vector3i(5, 8, 0), _veil())
 	assert_true(_vs.is_unit_visible(0, lurker),
 		"you cannot see into the smoke from across the field, but you can from its edge")
 
@@ -276,9 +276,9 @@ func test_a_seer_beside_the_veil_sees_into_it() -> void:
 func test_the_adjacency_that_reveals_a_veil_is_chebyshev() -> void:
 	var hero := Scout.new(_p0)
 	var lurker := Scout.new(_p1)
-	_board.place(hero, Vector2i(4, 7))  # DIAGONALLY adjacent
-	_board.place(lurker, Vector2i(5, 8))
-	_board.put_effect(Vector2i(5, 8), _veil())
+	_board.place(hero, Vector3i(4, 7, 0))  # DIAGONALLY adjacent
+	_board.place(lurker, Vector3i(5, 8, 0))
+	_board.put_effect(Vector3i(5, 8, 0), _veil())
 	assert_true(_vs.is_unit_visible(0, lurker),
 		"a diagonal neighbour is a neighbour -- the same metric sight uses")
 
@@ -290,10 +290,10 @@ func test_a_veil_conceals_its_occupant_from_the_placers_side_too() -> void:
 	var hero := Scout.new(_p0)
 	var ally_in_smoke := Scout.new(_p0)
 	var enemy := Scout.new(_p1)
-	_board.place(hero, Vector2i(5, 5))
-	_board.place(ally_in_smoke, Vector2i(5, 6))
-	_board.place(enemy, Vector2i(5, 4))
-	_board.put_effect(Vector2i(5, 6), _veil())
+	_board.place(hero, Vector3i(5, 5, 0))
+	_board.place(ally_in_smoke, Vector3i(5, 6, 0))
+	_board.place(enemy, Vector3i(5, 4, 0))
+	_board.put_effect(Vector3i(5, 6, 0), _veil())
 	assert_true(_vs.is_unit_visible(0, ally_in_smoke), "my own unit in the smoke is still mine")
 	assert_false(_vs.is_unit_visible(1, ally_in_smoke),
 		"but the other side, standing two cells off, cannot see it")
@@ -309,9 +309,9 @@ func test_tall_grass_does_not_conceal() -> void:
 
 	var hero := Scout.new(_p0)
 	var enemy := Scout.new(_p1)
-	_board.place(hero, Vector2i(5, 5))
-	_board.place(enemy, Vector2i(5, 7))
-	_board.put_effect(Vector2i(5, 7), grass)
+	_board.place(hero, Vector3i(5, 5, 0))
+	_board.place(enemy, Vector3i(5, 7, 0))
+	_board.put_effect(Vector3i(5, 7, 0), grass)
 	assert_true(_vs.is_unit_visible(0, enemy), "so a unit standing in it is plainly visible")
 
 
@@ -325,9 +325,9 @@ func test_concealment_is_a_flag_any_effect_may_carry() -> void:
 
 	var hero := Scout.new(_p0)
 	var enemy := Scout.new(_p1)
-	_board.place(hero, Vector2i(5, 5))
-	_board.place(enemy, Vector2i(5, 8))
-	_board.put_effect(Vector2i(5, 8), improvised)
+	_board.place(hero, Vector3i(5, 5, 0))
+	_board.place(enemy, Vector3i(5, 8, 0))
+	_board.put_effect(Vector3i(5, 8, 0), improvised)
 	assert_false(_vs.is_unit_visible(0, enemy),
 		"an effect nobody has ever heard of conceals, purely because it ticked the flag")
 
@@ -337,8 +337,8 @@ func test_concealment_is_a_flag_any_effect_may_carry() -> void:
 func test_a_hidden_attacker_gives_itself_away() -> void:
 	var hero := Scout.new(_p0)
 	var sniper := Scout.new(_p1)
-	_board.place(hero, Vector2i(2, 2))
-	_board.place(sniper, Vector2i(12, 12))  # far outside player 0's sight
+	_board.place(hero, Vector3i(2, 2, 0))
+	_board.place(sniper, Vector3i(12, 12, 0))  # far outside player 0's sight
 	assert_false(_vs.is_unit_visible(0, sniper), "unseen before it acts")
 
 	_vs.mark_revealed(sniper)
@@ -349,9 +349,9 @@ func test_a_hidden_attacker_gives_itself_away() -> void:
 func test_a_veiled_attacker_is_revealed_despite_standing_in_the_veil() -> void:
 	var hero := Scout.new(_p0)
 	var lurker := Scout.new(_p1)
-	_board.place(hero, Vector2i(5, 5))
-	_board.place(lurker, Vector2i(5, 8))
-	_board.put_effect(Vector2i(5, 8), _veil())
+	_board.place(hero, Vector3i(5, 5, 0))
+	_board.place(lurker, Vector3i(5, 8, 0))
+	_board.put_effect(Vector3i(5, 8, 0), _veil())
 	assert_false(_vs.is_unit_visible(0, lurker), "concealed to start with")
 
 	_vs.mark_revealed(lurker)
@@ -362,8 +362,8 @@ func test_a_veiled_attacker_is_revealed_despite_standing_in_the_veil() -> void:
 func test_a_reveal_expires_on_the_turn_boundaries() -> void:
 	var hero := Scout.new(_p0)
 	var sniper := Scout.new(_p1)
-	_board.place(hero, Vector2i(2, 2))
-	_board.place(sniper, Vector2i(12, 12))
+	_board.place(hero, Vector3i(2, 2, 0))
+	_board.place(sniper, Vector3i(12, 12, 0))
 
 	_vs.mark_revealed(sniper)
 	for i in range(VisionSystem.REVEAL_TURNS - 1):
@@ -380,8 +380,8 @@ func test_a_second_attack_refreshes_the_reveal_rather_than_stacking_one() -> voi
 	# instance, it never deepens or lengthens it beyond a fresh window.
 	var hero := Scout.new(_p0)
 	var sniper := Scout.new(_p1)
-	_board.place(hero, Vector2i(2, 2))
-	_board.place(sniper, Vector2i(12, 12))
+	_board.place(hero, Vector3i(2, 2, 0))
+	_board.place(sniper, Vector3i(12, 12, 0))
 
 	_vs.mark_revealed(sniper)
 	_vs.note_turn_started()
@@ -476,14 +476,14 @@ func _connected_to(sig: Signal) -> bool:
 
 func test_the_cache_is_dropped_when_the_board_changes() -> void:
 	var hero := Scout.new(_p0)
-	_board.place(hero, Vector2i(2, 2))
-	assert_true(_vs.visible_cells(0).has(Vector2i(4, 4)), "lit from the starting cell")
+	_board.place(hero, Vector3i(2, 2, 0))
+	assert_true(_vs.visible_cells(0).has(Vector3i(4, 4, 0)), "lit from the starting cell")
 
-	_board.move_unit(hero, Vector2i(12, 12))
+	_board.move_unit(hero, Vector3i(12, 12, 0))
 	_vs.invalidate()
 	var lit: Dictionary = _vs.visible_cells(0)
-	assert_false(lit.has(Vector2i(4, 4)), "the old ground went dark after the move")
-	assert_true(lit.has(Vector2i(12, 12)), "and the new ground is lit")
+	assert_false(lit.has(Vector3i(4, 4, 0)), "the old ground went dark after the move")
+	assert_true(lit.has(Vector3i(12, 12, 0)), "and the new ground is lit")
 
 
 # --- Determinism ----------------------------------------------------------------
@@ -506,17 +506,17 @@ func _run_sequence(reversed: bool) -> Array:
 	var b := Scout.new(_p0, 5)
 	var c := Scout.new(_p1)
 	if reversed:
-		board.place(c, Vector2i(9, 1))
-		board.place(b, Vector2i(4, 4))
-		board.place(a, Vector2i(1, 9))
+		board.place(c, Vector3i(9, 1, 0))
+		board.place(b, Vector3i(4, 4, 0))
+		board.place(a, Vector3i(1, 9, 0))
 	else:
-		board.place(a, Vector2i(1, 9))
-		board.place(b, Vector2i(4, 4))
-		board.place(c, Vector2i(9, 1))
+		board.place(a, Vector3i(1, 9, 0))
+		board.place(b, Vector3i(4, 4, 0))
+		board.place(c, Vector3i(9, 1, 0))
 	var vs: VisionSystem = add_child_autofree(VisionSystem.new())
 	vs.set_board(board)
 	vs.set_map(_map(true))
 	var out: Array = vs.visible_cells(0).keys()
-	out.sort_custom(func(x: Vector2i, y: Vector2i) -> bool:
-		return x.x < y.x if x.x != y.x else x.y < y.y)
+	out.sort_custom(func(x: Vector3i, y: Vector3i) -> bool:
+		return Cells.less(x, y))
 	return out

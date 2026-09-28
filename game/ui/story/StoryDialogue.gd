@@ -2,8 +2,9 @@
 extends CanvasLayer
 
 ## FIRE-EMBLEM-STYLE STORY OVERLAY: two portrait panels that slide in from their own side of
-## the screen, an amber text box across the bottom with a speaker name plate, and a
-## typewriter reveal you can tap through. Plays a [StoryScene] and emits [signal finished].
+## the screen, a grove-frame text box across the bottom (navy card, gold filigree, crest) with
+## a swallow-tailed speaker name ribbon, and a typewriter reveal you can tap through. Plays a
+## [StoryScene] and emits [signal finished].
 ##
 ## DELIBERATELY CONTEXT-FREE -- it does not care what is behind it. It is a [CanvasLayer] at
 ## [constant LAYER_INDEX] with a full-rect input-blocking root, so the same node plays a
@@ -23,12 +24,17 @@ extends CanvasLayer
 ## INTERACTION MODEL (all of it routed through [StorySequencer.advance], which owns the
 ## branch -- see that class):
 ## [codeblock]
-## click / tap / SPACE / ENTER / ui_accept  -> first press completes the typewriter,
-##                                             the next press advances to the next beat
-## SKIP button, or HOLD ESC for 0.6s        -> abandon the whole scene, no confirmation
+## click / tap / confirm (SPACE / ENTER / A)  -> first press completes the typewriter,
+##                                               the next press advances to the next beat
+## SKIP button, or HOLD cancel (ESC / B) 0.6s  -> abandon the whole scene, no confirmation
 ## [/codeblock]
-## A tap on the SKIP button is a button press, not an advance: the button is added last so
-## it sits in front of the click-catching root.
+## Keys are the named [InputActions] (CONFIRM / CANCEL, so rebinding follows) plus the
+## engine's ui_accept / ui_cancel. A tap on the SKIP button is a button press, not an
+## advance: the button is added last so it sits in front of the click-catching root.
+##
+## MODAL: while the root is visible it is in [constant InputActions.OVERLAY_GROUP], so the
+## board cursor, the map menu and the unit panels ignore input underneath (on top of the
+## root's MOUSE_FILTER_STOP and the consumed confirm / cancel events).
 ##
 ## THE CLOCK IS INJECTABLE. [method _process] only forwards its delta when [member auto_tick]
 ## is true; a test sets it false and calls [method advance_clock] at exact positions, so the
@@ -113,7 +119,9 @@ var _textbox: PanelContainer = null
 var _name_plate: PanelContainer = null
 var _name_label: Label = null
 var _body_label: Label = null
-var _advance_hint: Label = null
+## Footer key hint ("[Space] Continue"), rebuilt on each reveal so it shows the live
+## binding (keyboard key, or the pad button once a gamepad is connected).
+var _advance_hint: HBoxContainer = null
 var _skip_button: Button = null
 
 
@@ -143,11 +151,16 @@ func _build_ui() -> void:
 	_root.mouse_filter = Control.MOUSE_FILTER_STOP
 	_root.gui_input.connect(_on_root_gui_input)
 	_root.resized.connect(_layout_portraits)
+	# Its own CanvasLayer, so it inherits no theme from the screen behind it: take the grove
+	# HUD theme directly (Cinzel buttons, cream labels, gold focus).
+	_root.theme = ConquestTheme.build()
+	# Board / map-menu / unit-panel handlers skip gameplay input while this root is visible.
+	_root.add_to_group(InputActions.OVERLAY_GROUP)
 	add_child(_root)
 
 	_backdrop = ColorRect.new()
 	_backdrop.name = "StoryBackdrop"
-	_backdrop.color = Color(0.03, 0.02, 0.0, 0.55)
+	_backdrop.color = Color(ConquestTheme.BG_DEEP, 0.55)
 	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
 	# IGNORE, not STOP: the root above is the single click catcher, so the backdrop must
 	# not swallow the event before _gui_input sees it.
@@ -174,7 +187,8 @@ func _build_portrait(side: StringName, suffix: String) -> void:
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.custom_minimum_size = Vector2(PORTRAIT_WIDTH, PORTRAIT_HEIGHT)
 	panel.size = Vector2(PORTRAIT_WIDTH, PORTRAIT_HEIGHT)
-	panel.add_theme_stylebox_override("panel", ConquestTheme.panel_box())
+	panel.add_theme_stylebox_override("panel", _portrait_box())
+	ConquestTheme.keep_style(panel)
 	panel.visible = false
 	_root.add_child(panel)
 
@@ -202,8 +216,12 @@ func _build_portrait(side: StringName, suffix: String) -> void:
 	mono.set_anchors_preset(Control.PRESET_FULL_RECT)
 	mono.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	mono.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# The monogram is a crest initial: gold Cinzel capital, engraved shadow.
+	mono.add_theme_font_override("font", MenuTheme.display_font(0))
 	mono.add_theme_font_size_override("font_size", 64)
-	mono.add_theme_color_override("font_color", ConquestTheme.BROWN_DK)
+	mono.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
+	mono.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	mono.add_theme_constant_override("shadow_offset_y", 3)
 	mono.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mono.text = "?"
 	slot.add_child(mono)
@@ -213,7 +231,63 @@ func _build_portrait(side: StringName, suffix: String) -> void:
 	_monograms[side] = mono
 
 
-## The bottom text box: name plate over the body line, on the amber card.
+## A portrait frame: the grove card (navy, fine grain, gold filigree, clasps) with a gold
+## edge -- the speaker is the hero of the beat.
+func _portrait_box() -> StyleBox:
+	var sb := MenuTheme.card_box(ConquestTheme.PANEL, ConquestTheme.GOLD_DK, 0.97)
+	sb.corner = 11.0
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
+	sb.content_margin_top = 14
+	sb.content_margin_bottom = 14
+	return sb
+
+
+## The bottom text box: the grove card with its gold crest on the top edge (a hero dialog
+## surface) and a gold-dark edge.
+func _textbox_box() -> StyleBox:
+	var sb := ConquestTheme.panel_box(0.97)
+	sb.border_color = ConquestTheme.GOLD_DK
+	sb.crest = true
+	sb.content_margin_top = 12
+	sb.content_margin_bottom = 10
+	return sb
+
+
+## The speaker's name ribbon: swallow-tailed, gold-edged (the [method ConquestTheme.title_ribbon]
+## look, kept as a plate + label pair so the name can change per beat).
+func _name_ribbon_box() -> StyleBox:
+	var sb := MenuTheme.ribbon_box(ConquestTheme.PANEL_HI, ConquestTheme.GOLD_DK, 12.0)
+	sb.content_margin_top = 3.0
+	sb.content_margin_bottom = 4.0
+	return sb
+
+
+## Rebuild the footer key hints for the live bindings (the pad button once a gamepad is
+## connected): "[Space] Continue   [Esc] Hold to skip".
+func _refresh_hints() -> void:
+	if _advance_hint == null:
+		return
+	for c in _advance_hint.get_children():
+		_advance_hint.remove_child(c)
+		c.queue_free()
+	var confirm_key: String = ConquestTheme.action_glyph(InputActions.CONFIRM)
+	if confirm_key == "":
+		confirm_key = "Space"
+	var cancel_key: String = _cancel_glyph()
+	_advance_hint.add_child(ConquestTheme.key_hint(confirm_key, "Continue"))
+	_advance_hint.add_child(ConquestTheme.key_hint(cancel_key, "Hold to skip"))
+	if _skip_button != null:
+		_skip_button.tooltip_text = "Skip this scene (or hold %s)" % cancel_key
+
+
+## The glyph for the live cancel binding ("Esc", or "B" on a pad); "Esc" when unbound.
+func _cancel_glyph() -> String:
+	var key: String = ConquestTheme.action_glyph(InputActions.CANCEL)
+	return key if key != "" else "Esc"
+
+
+## The bottom text box: name ribbon over the body line, on the grove card.
 ##
 ## Anchored BOTTOM-WIDE with a FIXED height rather than sized to its content -- a box that
 ## grew and shrank between a one-line and a three-line beat would make the whole stage jump
@@ -231,7 +305,8 @@ func _build_textbox() -> void:
 	_textbox.offset_right = -EDGE_MARGIN
 	_textbox.offset_top = -(TEXTBOX_HEIGHT + EDGE_MARGIN)
 	_textbox.offset_bottom = -EDGE_MARGIN
-	_textbox.add_theme_stylebox_override("panel", ConquestTheme.panel_box())
+	_textbox.add_theme_stylebox_override("panel", _textbox_box())
+	ConquestTheme.keep_style(_textbox)
 	_root.add_child(_textbox)
 
 	var column := VBoxContainer.new()
@@ -240,19 +315,20 @@ func _build_textbox() -> void:
 	column.add_theme_constant_override("separation", 8)
 	_textbox.add_child(column)
 
-	# Name plate: a dark inset chip that hugs its text (SHRINK_BEGIN), so it is left-aligned
-	# and only as wide as the name -- not stretched across the box by the VBox.
+	# Name plate: a swallow-tailed ribbon that hugs its text (SHRINK_BEGIN), so it is
+	# left-aligned and only as wide as the name -- not stretched across the box by the VBox.
 	_name_plate = PanelContainer.new()
 	_name_plate.name = "StoryNamePlate"
 	_name_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_name_plate.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	_name_plate.add_theme_stylebox_override("panel", ConquestTheme.plate_box())
+	_name_plate.add_theme_stylebox_override("panel", _name_ribbon_box())
 	column.add_child(_name_plate)
 
 	_name_label = Label.new()
 	_name_label.name = "StoryNameLabel"
+	_name_label.add_theme_font_override("font", MenuTheme.heading_font(2))
 	_name_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_HEADER)
-	_name_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
+	_name_label.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
 	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_name_plate.add_child(_name_label)
 
@@ -265,19 +341,21 @@ func _build_textbox() -> void:
 	_body_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_body_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_HEADER)
-	_body_label.add_theme_color_override("font_color", ConquestTheme.INK)
+	# CREAM on the navy card (the old amber card's INK would be near-invisible here).
+	_body_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	_body_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(_body_label)
 
-	_advance_hint = Label.new()
+	# Key-cap footer, right-aligned: "[Space] Continue   [Esc] Hold to skip".
+	_advance_hint = HBoxContainer.new()
 	_advance_hint.name = "StoryAdvanceHint"
-	_advance_hint.text = "»  Click or press Space"
-	_advance_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_advance_hint.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
-	_advance_hint.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
+	_advance_hint.alignment = BoxContainer.ALIGNMENT_END
+	_advance_hint.add_theme_constant_override("separation", 16)
 	_advance_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ConquestTheme.keep_style(_advance_hint)
 	_advance_hint.visible = false
 	column.add_child(_advance_hint)
+	_refresh_hints()
 
 
 ## SKIP, top-right. Added LAST so it sits in front of the click-catching root and its press
@@ -286,7 +364,7 @@ func _build_skip_button() -> void:
 	_skip_button = Button.new()
 	_skip_button.name = "StorySkipButton"
 	_skip_button.text = "SKIP"
-	_skip_button.tooltip_text = "Skip this scene (or hold ESC)"
+	_skip_button.tooltip_text = "Skip this scene (or hold %s)" % _cancel_glyph()
 	_skip_button.set_meta("style_role", "secondary")
 	_skip_button.anchor_left = 1.0
 	_skip_button.anchor_right = 1.0
@@ -458,6 +536,7 @@ func _on_beat_changed(index: int) -> void:
 
 func _on_reveal_completed(_index: int) -> void:
 	_refresh_text()
+	_refresh_hints()
 	_advance_hint.visible = true
 
 
@@ -664,27 +743,42 @@ func _on_root_gui_input(event: InputEvent) -> void:
 		advance()
 
 
-## Keyboard/controller: ui_accept (Space/Enter/A) advances; ui_cancel (ESC) starts the
-## hold-to-skip timer, which [method advance_clock] runs down. Consuming the events keeps
-## them off the screen behind the overlay -- the input-blocking half that _gui_input's STOP
-## filter does not cover.
+## Keyboard/controller: confirm (InputActions.CONFIRM or ui_accept -- Space/Enter/A)
+## advances; cancel (InputActions.CANCEL or ui_cancel -- ESC/B) starts the hold-to-skip
+## timer, which [method advance_clock] runs down. Consuming the events keeps them off the
+## screen behind the overlay -- the input-blocking half that _gui_input's STOP filter does
+## not cover.
 func _unhandled_input(event: InputEvent) -> void:
 	if _sequencer.is_finished() or not _root.visible:
 		return
 
-	if event.is_action_pressed("ui_accept"):
+	if _is_pressed(event, InputActions.CONFIRM, &"ui_accept"):
 		get_viewport().set_input_as_handled()
 		advance()
 		return
 
-	if event.is_action_pressed("ui_cancel"):
+	if _is_pressed(event, InputActions.CANCEL, &"ui_cancel"):
 		get_viewport().set_input_as_handled()
 		set_cancel_held(true)
 		return
 
-	if event.is_action_released("ui_cancel"):
+	if _is_released(event, InputActions.CANCEL, &"ui_cancel"):
 		get_viewport().set_input_as_handled()
 		set_cancel_held(false)
+
+
+## True when [param event] presses the named gameplay [param action] (rebindable) or the
+## engine's [param ui_action] fallback. An unknown action is simply skipped.
+static func _is_pressed(event: InputEvent, action: StringName, ui_action: StringName) -> bool:
+	if InputMap.has_action(action) and event.is_action_pressed(action):
+		return true
+	return InputMap.has_action(ui_action) and event.is_action_pressed(ui_action)
+
+
+static func _is_released(event: InputEvent, action: StringName, ui_action: StringName) -> bool:
+	if InputMap.has_action(action) and event.is_action_released(action):
+		return true
+	return InputMap.has_action(ui_action) and event.is_action_released(ui_action)
 
 
 func _on_skip_pressed() -> void:

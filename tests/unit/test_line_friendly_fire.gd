@@ -24,16 +24,16 @@ func test_line_enemy_move_hits_enemies_not_allies():
 	var enemy := Doubles.SimpleUnit.new(1, {"health": 100})  # opposing team
 	var board := Doubles.MinimalBoard.new()
 	# A straight column: caster, then ally, then enemy, then another ally beyond.
-	board.place(caster, Vector2i(0, 0))
-	board.place(ally, Vector2i(0, 1))
-	board.place(enemy, Vector2i(0, 2))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(ally, Vector3i(0, 1, 0))
+	board.place(enemy, Vector3i(0, 2, 0))
 	var ally2 := Doubles.SimpleUnit.new(0, {"health": 100})
-	board.place(ally2, Vector2i(0, 3))
+	board.place(ally2, Vector3i(0, 3, 0))
 
 	# Resolve the line from the caster toward the aim and run every effect, exactly as
 	# a live cast does (MoveExecutor builds the same MoveContext).
-	var aim := Vector2i(0, 2)
-	var cells: Array[Vector2i] = move.targeting.resolve_cells(Vector2i(0, 0), aim)
+	var aim := Vector3i(0, 2, 0)
+	var cells: Array[Vector3i] = move.targeting.resolve_cells(Vector3i(0, 0, 0), aim)
 	var ctx := MoveContext.new(caster, board, move, aim, cells)
 	for e in move.effects:
 		e.apply(ctx)

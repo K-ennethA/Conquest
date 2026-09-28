@@ -27,7 +27,7 @@ class_name HazardVisualizer
 # expiry/removal so nothing leaks. Honors GameSettings.animations_on() -- when
 # animations are off the vine/trap still appear, only the grow/pulse is skipped.
 
-# Grid <-> world. A cell Vector2i(col,row) centers at
+# Grid <-> world. A cell Vector3i(col,row,floor) centers at
 # GRID.calculate_map_position(Vector3(col, 0, row)); cell_size is 2 so the center
 # is (col*2+1, 0, row*2+1). Meshes float just above the tile top (~y 0.1-0.2).
 const GRID := preload("res://board/Grid.tres")
@@ -41,7 +41,7 @@ const PULSE_SPEED := 2.4         # radians/sec for the idle telegraph/trap pulse
 # telegraph meshes. One entry per live hazard so simultaneous vines stay separate.
 var _hazard_visuals: Dictionary = {}
 
-# cell (Vector2i) -> trap marker Node3D. Persistent until the effect leaves.
+# cell (Vector3i) -> trap marker Node3D. Persistent until the effect leaves.
 var _trap_markers: Dictionary = {}
 
 var _time: float = 0.0
@@ -154,20 +154,26 @@ func _on_hazard_advanced(hazard, cells, next_cells, _damage) -> void:
 	# Solid vines on every current-band cell.
 	if cells is Array:
 		for cell in cells:
-			var c: Vector2i = cell
+			var c: Vector3i = Cells.from_variant(cell)  # legacy Vector2i reads as floor 0
+			if c == Cells.INVALID:
+				continue
 			var vine := _make_vine()
-			var center: Vector3 = GRID.calculate_map_position(Vector3(c.x, 0, c.y))
-			vine.position = Vector3(center.x, VINE_BASE_Y, center.z)
-			vine.rotation.y = randf() * TAU  # per-instance twist so they aren't clones
+			var center: Vector3 = GRID.calculate_map_position(Cells.to_grid(c))
+			vine.position = Vector3(center.x, center.y + VINE_BASE_Y, center.z)
+			# Per-instance twist so they aren't clones -- hashed from the cell so the
+			# same band always looks the same (no run-to-run randomness).
+			vine.rotation.y = ProcMesh.hash01(c.x, c.y, c.z + 5) * TAU
 			current.add_child(vine)
 
 	# Faint translucent telegraph on the band it will sweep next turn.
 	if next_cells is Array:
 		for cell2 in next_cells:
-			var nc: Vector2i = cell2
+			var nc: Vector3i = Cells.from_variant(cell2)
+			if nc == Cells.INVALID:
+				continue
 			var ghost := _make_telegraph()
-			var center2: Vector3 = GRID.calculate_map_position(Vector3(nc.x, 0, nc.y))
-			ghost.position = Vector3(center2.x, TELEGRAPH_Y, center2.z)
+			var center2: Vector3 = GRID.calculate_map_position(Cells.to_grid(nc))
+			ghost.position = Vector3(center2.x, center2.y + TELEGRAPH_Y, center2.z)
 			telegraph.add_child(ghost)
 
 	# Grow/uncoil the fresh current band from the ground so it reads as crawling in.
@@ -201,7 +207,7 @@ func _on_board_ready() -> void:
 	_rebuild_all_traps()
 
 
-func _on_tile_effects_changed(cell: Vector2i) -> void:
+func _on_tile_effects_changed(cell: Vector3i) -> void:
 	_rebuild_trap_cell(cell)
 
 
@@ -220,14 +226,21 @@ func _rebuild_all_traps() -> void:
 	var rows: int = int(GRID.size.z)
 	for col in range(cols):
 		for row in range(rows):
-			var cell := Vector2i(col, row)
+			var cell := Vector3i(col, row, 0)
 			if _cell_has_trap(cell):
 				_place_trap(cell)
+	# Upper floors (multi-floor maps): only cells that have a tile there.
+	var board = CombatServices.board()
+	if board != null and board.has_method("floor_count"):
+		for f in range(1, board.floor_count()):
+			for up_cell in board.cells_on_floor(f):
+				if _cell_has_trap(up_cell):
+					_place_trap(up_cell)
 
 
 ## Single-cell reconcile: add a marker if the trap just appeared, remove it if the
 ## trap is gone, otherwise leave the existing marker in place.
-func _rebuild_trap_cell(cell: Vector2i) -> void:
+func _rebuild_trap_cell(cell: Vector3i) -> void:
 	var has_trap: bool = _cell_has_trap(cell)
 	var existing = _trap_markers.get(cell, null)
 	var existing_valid: bool = existing != null and is_instance_valid(existing)
@@ -239,7 +252,7 @@ func _rebuild_trap_cell(cell: Vector2i) -> void:
 		_trap_markers.erase(cell)
 
 
-func _cell_has_trap(cell: Vector2i) -> bool:
+func _cell_has_trap(cell: Vector3i) -> bool:
 	if CombatServices == null:
 		return false
 	var effects: Array = CombatServices.tile_effects_at(cell)
@@ -249,10 +262,10 @@ func _cell_has_trap(cell: Vector2i) -> bool:
 	return false
 
 
-func _place_trap(cell: Vector2i) -> void:
-	var center: Vector3 = GRID.calculate_map_position(Vector3(cell.x, 0, cell.y))
+func _place_trap(cell: Vector3i) -> void:
+	var center: Vector3 = GRID.calculate_map_position(Cells.to_grid(cell))
 	var trap := _make_trap()
-	trap.position = Vector3(center.x, TRAP_Y, center.z)
+	trap.position = Vector3(center.x, center.y + TRAP_Y, center.z)
 	add_child(trap)
 	_trap_markers[cell] = trap
 
@@ -290,8 +303,8 @@ func _build_shared_resources() -> void:
 	_coil_mesh = TorusMesh.new()
 	_coil_mesh.inner_radius = 0.6
 	_coil_mesh.outer_radius = 0.92
-	_coil_mesh.rings = 4          # low poly -> chunky faceted ring
-	_coil_mesh.ring_segments = 14
+	_coil_mesh.rings = 18         # segments around the ring (round, still low-poly)
+	_coil_mesh.ring_segments = 5  # chunky faceted cross-section
 
 	# Mossy palette: a couple of greens, a dark base, a pale thorn accent.
 	_vine_mat = _lit_mat(Color(0.22, 0.5, 0.18))
@@ -304,7 +317,7 @@ func _build_shared_resources() -> void:
 	_trap_coil_mat = _lit_mat(Color(0.24, 0.68, 0.26))
 	_trap_coil_mat.emission_enabled = true
 	_trap_coil_mat.emission = Color(0.35, 0.95, 0.4)
-	_trap_coil_mat.emission_energy_multiplier = 1.1
+	_trap_coil_mat.emission_energy_multiplier = 0.6
 	_trap_thorn_mat = _lit_mat(Color(0.6, 0.6, 0.25))
 
 	# Telegraph: translucent, unshaded, glowing green -- clearly fainter/flatter than
@@ -321,12 +334,18 @@ func _build_shared_resources() -> void:
 	_telegraph_mat.render_priority = 2
 
 
-## Flat-ish lit material for the low-poly vine/trap look (rough, non-metallic).
+## Toon-lit material for the low-poly vine/trap look: the same cel diffuse + soft
+## warm rim as the world's painterly foliage, so hazards sit in the art style.
 func _lit_mat(color: Color) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.roughness = 1.0
 	mat.metallic = 0.0
+	mat.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mat.rim_enabled = true
+	mat.rim = 0.35
+	mat.rim_tint = 0.6
 	return mat
 
 
@@ -355,8 +374,9 @@ func _make_vine() -> Node3D:
 func _make_telegraph() -> Node3D:
 	var g := Node3D.new()
 
-	var footprint := _mi(_telegraph_quad_mesh, _telegraph_mat)
-	footprint.position = Vector3(0.0, 0.02, 0.0)
+	# Painterly pulsing danger ring (EffectFX decal) instead of a flat square.
+	var footprint := EffectFX.decal(EffectFX.Kind.TELEGRAPH, Color(0.45, 0.95, 0.4), 0.9)
+	footprint.position = Vector3(0.0, 0.0, 0.0)
 	g.add_child(footprint)
 
 	var ghost := _mi(_seg_mesh_1, _telegraph_mat)
@@ -374,6 +394,11 @@ func _make_trap() -> Node3D:
 	var coil := _mi(_coil_mesh, _trap_coil_mat)
 	coil.scale = Vector3(1.0, 0.55, 1.0)  # flatten into a low coil
 	t.add_child(coil)
+	# A mossy, pulsing snare patch under the ring so the trap reads as part of the
+	# ground rather than a floating torus.
+	var patch := EffectFX.decal(EffectFX.Kind.TELEGRAPH, Color(0.35, 0.8, 0.3), 0.7)
+	patch.position = Vector3(0.0, -0.05, 0.0)
+	t.add_child(patch)
 
 	# Spikes ride ON the big ring (radius ~0.76), not inside its hole.
 	var spikes: int = 8

@@ -9,8 +9,8 @@ class_name MoveExecutor
 ## called internally) so it is safe to run identically on every networked peer.
 
 ## Result dictionary keys: "success" (bool), "reason" (String, on failure),
-## "events" (Array[Dictionary] from the effects), "cells" (Array[Vector2i]).
-static func execute(move: MoveResource, caster, board, aim_cell: Vector2i, rng: RandomNumberGenerator = null) -> Dictionary:
+## "events" (Array[Dictionary] from the effects), "cells" (Array[Vector3i]).
+static func execute(move: MoveResource, caster, board, aim_cell: Vector3i, rng: RandomNumberGenerator = null) -> Dictionary:
 	if move == null or not move.is_valid():
 		return _fail("invalid_move")
 	if caster == null or board == null:
@@ -18,10 +18,11 @@ static func execute(move: MoveResource, caster, board, aim_cell: Vector2i, rng: 
 	if not board.has_method("cell_of"):
 		return _fail("board_missing_cell_of")
 
-	var origin: Vector2i = board.cell_of(caster)
+	var origin: Vector3i = board.cell_of(caster)
 	# Through can_aim_at (not targeting.in_range directly) so the caster's own
 	# range bonus is honoured -- the same helper the UI and the AI validate with.
-	if not move.can_aim_at(origin, aim_cell, caster):
+	# The board is passed so a melee move also reaches across a stair link.
+	if not move.can_aim_at(origin, aim_cell, caster, board):
 		return _fail("out_of_range")
 	# Then the pattern's BOARD-aware constraints (an empty landing cell for a leap,
 	# adjacency to an enemy, ...). Reported separately from range so the UI/AI can
@@ -93,7 +94,11 @@ static func preview_vs(move: MoveResource, caster, target, board = null) -> Dict
 	if move != null:
 		# Include terrain avoid so the forecast matches what resolve_hit will roll.
 		var evasion := float(_stat(target, "evasion")) + float(TerrainStats.bonus_for(target, "evasion"))
-		hit_pct = clampf(move.accuracy * 100.0 - evasion, 0.0, 100.0)
+		# Height advantage (0 on a shared floor), mirrored from MoveContext.hit_chance.
+		var height_hit := Elevation.hit_modifier_for(caster, target, board)
+		# Weather (ranged penalty, weather evasion), mirrored from MoveContext.hit_chance.
+		var weather_hit := Weather.hit_modifier_for(move, caster, target, board)
+		hit_pct = clampf(move.accuracy * 100.0 - evasion + height_hit + weather_hit, 0.0, 100.0)
 		crit_pct = clampf(move.crit_chance * 100.0 + float(_stat(caster, "crit")), 0.0, 100.0)
 	# Mode-aware (DamageMath reads move.effects_for(caster)), invulnerability-aware, and
 	# element-aware -- all of it the shared implementation, none of it restated here.

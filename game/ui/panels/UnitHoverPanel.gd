@@ -9,7 +9,7 @@ class_name UnitHoverPanel
 #
 # Deliberately built as a sibling of [TerrainInfoPanel]: same code-built (no
 # .tscn) structure, same top_level + _fit_to_viewport treatment, same
-# GameEvents.cursor_moved subscription, same ConquestTheme amber look, and the
+# GameEvents.cursor_moved subscription, same navy + gold ConquestTheme look, and the
 # same mouse_filter = IGNORE everywhere so it can never eat a board click.
 # Statuses are coloured through [StatusVisuals], the shared vocabulary the
 # world-space HealthBar pips and the UnitInfoPanel chips also use.
@@ -27,8 +27,8 @@ class_name UnitHoverPanel
 # Self-contained: builds its own UI and wires its own cursor handler in _ready().
 # See GameWorldManager._setup_unit_hover_panel(), which only instantiates it.
 
-const PANEL_WIDTH := 240.0
-const MARGIN := 16.0
+const PANEL_WIDTH := HudSafeArea.CORNER_CARD_WIDTH
+const MARGIN := ConquestTheme.MARGIN
 
 ## Status chips shown before the row collapses into a "+N" overflow marker.
 const MAX_CHIPS := 4
@@ -66,6 +66,12 @@ var _current_unit = null
 ## card suppresses itself for this unit -- its readout already lives on the compact
 ## battle card, and duplicating HP bottom-right is what the unit-info split removed.
 var _selected_unit = null
+## Header pieces (cloud grove card): the crest portrait (element field, team rim) and
+## the side / element subtitle under the name.
+var _portrait: PanelContainer
+var _sub_label: Label
+## Stat name -> value Label in the ATK / DEF / SPD / MOV strip.
+var _stat_values: Dictionary = {}
 
 
 func _ready() -> void:
@@ -149,21 +155,36 @@ func _create_ui() -> void:
 	add_child(_card)
 
 	var root_vb := VBoxContainer.new()
-	root_vb.add_theme_constant_override("separation", 4)
+	root_vb.add_theme_constant_override("separation", 8)
 	root_vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card.add_child(root_vb)
+
+	# Header: portrait emblem | name + side / element.
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 12)
+	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root_vb.add_child(header)
+	_portrait = ConquestTheme.portrait("?", ConquestTheme.GOLD, ConquestTheme.BORDER, 46.0)
+	header.add_child(_portrait)
+	var names := VBoxContainer.new()
+	names.add_theme_constant_override("separation", 0)
+	names.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	names.alignment = BoxContainer.ALIGNMENT_CENTER
+	names.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(names)
 
 	_name_label = Label.new()
 	_name_label.name = "UnitNameLabel"
 	_name_label.text = "Unit"
-	_name_label.add_theme_font_size_override("font_size", 17)
+	_name_label.theme_type_variation = &"SubheadingLabel"
 	_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root_vb.add_child(_name_label)
+	names.add_child(_name_label)
 
-	var sep := HSeparator.new()
-	sep.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root_vb.add_child(sep)
+	_sub_label = Label.new()
+	_sub_label.name = "SideLabel"
+	_sub_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	names.add_child(_sub_label)
 
 	# The HP row carries the element badge on its right, and that placement is the whole
 	# reason there IS a badge here. The card has no fixed height -- it grows up-and-left
@@ -194,6 +215,7 @@ func _create_ui() -> void:
 	_hp_label.name = "HPLabel"
 	_hp_label.text = "HP --/--"
 	_hp_label.add_theme_font_size_override("font_size", 13)
+	_hp_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	_hp_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hp_row.add_child(_hp_label)
@@ -213,13 +235,9 @@ func _create_ui() -> void:
 	_element_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hp_row.add_child(_element_badge)
 
-	_hp_bar = ProgressBar.new()
+	# The shared HUD HP bar (navy track, tier-coloured fill -- see ConquestTheme.hp_bar).
+	_hp_bar = ConquestTheme.hp_bar(10.0)
 	_hp_bar.name = "HPBar"
-	_hp_bar.custom_minimum_size = Vector2(0, 10)
-	_hp_bar.show_percentage = false
-	_hp_bar.min_value = 0.0
-	_hp_bar.max_value = 1.0
-	_hp_bar.value = 1.0
 	# CONTINUOUS, not stepped. A Range's default step is 0.01, so this 0..1 bar SNAPPED
 	# every fill to the nearest percent -- 25/40 drew as 0.63 rather than 0.625. That was
 	# invisible while the bar was the only thing on the track; with the shield tail anchored
@@ -227,6 +245,31 @@ func _create_ui() -> void:
 	_hp_bar.step = 0.0
 	_hp_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_vb.add_child(_hp_bar)
+
+	# Key stats strip: gold caption over a cream value (ATK / DEF / SPD / MOV).
+	var stats := HBoxContainer.new()
+	stats.name = "Stats"
+	stats.add_theme_constant_override("separation", 6)
+	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root_vb.add_child(stats)
+	for pair in [["ATK", "attack"], ["DEF", "defense"], ["SPD", "speed"], ["MOV", "movement"]]:
+		var cell := VBoxContainer.new()
+		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cell.add_theme_constant_override("separation", -2)
+		cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var cap := Label.new()
+		cap.text = pair[0]
+		cap.theme_type_variation = &"SectionLabel"
+		cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cell.add_child(cap)
+		var val := Label.new()
+		val.text = "-"
+		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		val.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cell.add_child(val)
+		_stat_values[pair[1]] = val
+		stats.add_child(cell)
 
 	# The shield tail: a child of the bar, so it draws over the fill and claims no layout
 	# slot. Anchored per forecast in _update_shield_readout.
@@ -247,13 +290,64 @@ func _create_ui() -> void:
 	# stretching the card past PANEL_WIDTH.
 	_effects_container = HFlowContainer.new()
 	_effects_container.name = "EffectsContainer"
-	_effects_container.add_theme_constant_override("h_separation", 3)
-	_effects_container.add_theme_constant_override("v_separation", 3)
+	_effects_container.add_theme_constant_override("h_separation", 4)
+	_effects_container.add_theme_constant_override("v_separation", 4)
 	_effects_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_vb.add_child(_effects_container)
 
-	# Amber HUD look, applied last so local overrides above are not stripped.
+	# HUD look, applied first; the deliberate colours / sizes go on after it.
 	ConquestTheme.apply_to(self)
+	_sub_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+	# Cinzel runs wide: a touch smaller so long names ("Eldroot, the Hollow Crown")
+	# wrap to two lines at most in the corner card.
+	_name_label.add_theme_font_size_override("font_size", 19)
+	# apply_to strips baked label colours: re-assert the HP line's cream.
+	_hp_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
+	for v in _stat_values.values():
+		(v as Label).add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
+		(v as Label).add_theme_color_override("font_color", ConquestTheme.CREAM)
+
+
+# --- Layout: stay clear of the command menu ------------------------------------
+
+## Keep the card out from under the unit command menu (right column): when the
+## menu is tall enough to reach the card (e.g. with Info expanded, or on a 720p
+## window), slide the card left of it. Also dims while a modal overlay (map menu,
+## settings) is up so it reads as "behind" it.
+func _process(_delta: float) -> void:
+	if not visible or _card == null:
+		return
+	modulate = Color(0.5, 0.5, 0.55) if InputActions.gameplay_input_blocked(get_tree()) else Color.WHITE
+	var want := -MARGIN
+	var panel := get_tree().get_first_node_in_group("unit_actions_panel") as Control
+	var duplicate := is_duplicate_of_hud(panel, _current_unit)
+	if panel != null and panel.is_visible_in_tree() and not duplicate:
+		var pr := panel.get_global_rect()
+		var card_h := _card.size.y
+		var card_top := size.y - MARGIN - card_h
+		if pr.end.y + 8.0 > card_top:
+			want = -(size.x - pr.position.x + 12.0)
+	if not is_equal_approx(_card.offset_right, want):
+		_card.offset_right = want
+	_card.visible = not duplicate
+
+
+## True when [param unit] is already on screen in another HUD card, so the hover card
+## would just repeat it: the command menu's header (the selected unit, while that
+## menu is up) or either side of the combat forecast. Hover for any OTHER unit is
+## unaffected.
+static func is_duplicate_of_hud(panel: Node, unit) -> bool:
+	if unit == null or not is_instance_valid(unit) or panel == null:
+		return false
+	var panel_up := panel is CanvasItem and (panel as CanvasItem).is_visible_in_tree()
+	if panel_up and "selected_unit" in panel and panel.selected_unit != null \
+			and panel.selected_unit == unit:
+		return true
+	var fc = panel.get("combat_forecast_panel")
+	if fc != null and is_instance_valid(fc) and fc is CanvasItem and (fc as CanvasItem).is_visible_in_tree() \
+			and fc.has_method("shows_unit") and fc.shows_unit(unit):
+		return true
+	return false
 
 
 # --- Public API --------------------------------------------------------------
@@ -271,9 +365,20 @@ func show_for_unit(unit) -> void:
 		return
 
 	_current_unit = unit
-	_name_label.text = _display_name_of(unit)
+	var display := _display_name_of(unit)
+	_name_label.text = display
 	ElementVisuals.update_badge(
 			_element_badge, ElementVisuals.of_unit(unit), ELEMENT_BADGE_MAX_WIDTH)
+	var owner = ConquestTheme.owner_of(unit)
+	var parts: PackedStringArray = [ConquestTheme.side_label(owner)]
+	if unit.has_method("is_boss") and unit.is_boss():
+		parts.append("Boss")
+	_sub_label.text = "  ·  ".join(parts)
+	_sub_label.add_theme_color_override("font_color", ConquestTheme.team_text_color(owner))
+	var cols := ConquestTheme.unit_portrait_colors(unit)
+	ConquestTheme.set_portrait(_portrait, display, cols[0], cols[1])
+	# Team-coloured edge stripe (the element lives in the crest and the badge).
+	_card.add_theme_stylebox_override("panel", ConquestTheme.unit_card_box(unit, 0.95))
 
 	# HP is read through `in` guards: a legacy/mock unit with no stats component
 	# simply shows a dashed readout instead of erroring.
@@ -291,6 +396,8 @@ func show_for_unit(unit) -> void:
 		_hp_label.text = "HP %d/%d" % [current, maximum]
 		var fractions: Dictionary = ShieldVisuals.bar_fractions(current, maximum, shield)
 		_hp_bar.value = clampf(float(fractions.get("hp", 0.0)), 0.0, 1.0)
+		# Tier colour off the plain HP fraction (the same thresholds as the map bar).
+		ConquestTheme.tint_hp_bar(_hp_bar, clampf(float(current) / float(maximum), 0.0, 1.0))
 		_hp_bar.visible = true
 		_update_shield_readout(shield, fractions)
 	else:
@@ -299,10 +406,16 @@ func show_for_unit(unit) -> void:
 		_hp_bar.visible = false
 		_update_shield_readout(0, {})
 
+	for stat_name in _stat_values.keys():
+		var lbl: Label = _stat_values[stat_name]
+		lbl.text = str(int(unit.get_stat(stat_name))) if unit.has_method("get_stat") else "-"
+
 	# Reveal BEFORE populating statuses: the name/HP rows are already valid, so
 	# even if status population ever failed we still surface the unit rather than
 	# leaving a wired-but-hidden panel (TerrainInfoPanel records the same lesson).
 	show()
+	var panel := get_tree().get_first_node_in_group("unit_actions_panel") if is_inside_tree() else null
+	_card.visible = not is_duplicate_of_hud(panel, unit)
 	_populate_effects(unit)
 
 
@@ -383,9 +496,9 @@ func _populate_effects(unit) -> void:
 		# otherwise the terrain chip stands on its own.
 		if terrain.is_empty():
 			var none_label := Label.new()
-			none_label.text = "No active effects"
-			none_label.add_theme_font_size_override("font_size", 12)
-			none_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
+			none_label.text = "No status effects"
+			none_label.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
+			none_label.add_theme_color_override("font_color", ConquestTheme.TEXT_MUTED)
 			none_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			_effects_container.add_child(none_label)
 		return
@@ -412,7 +525,9 @@ func _populate_effects(unit) -> void:
 			condition,
 			int(group.get("count", 1)),
 			int(group.get("turns_left", StatusVisuals.TURNS_FROM_CONDITION)))
-		_effects_container.add_child(_build_chip(text, color))
+		# Hover wording shared with the Compendium's Statuses entry.
+		var tip := CompendiumData.status_tooltip(condition, StatusVisuals.turns_left_of(condition))
+		_effects_container.add_child(_build_chip(text, color, tip))
 
 	if hidden > 0:
 		_effects_container.add_child(
@@ -467,15 +582,9 @@ func _build_terrain_chip(entry: Dictionary) -> PanelContainer:
 	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chip.tooltip_text = TerrainVisuals.tooltip_for(entry)
 
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = color.darkened(0.72)
-	sb.set_corner_radius_all(3)
-	sb.set_border_width_all(2)
-	sb.border_color = color
-	sb.content_margin_left = 6
-	sb.content_margin_right = 6
-	sb.content_margin_top = 2
-	sb.content_margin_bottom = 2
+	# Square-shouldered notched plate, 2px frame: the inverse of a status TAG chip.
+	var sb := MenuTheme.plate_box(color.darkened(0.72), color, 3.0, 6, 2, 2.0)
+	sb.sheen = 0.0
 	chip.add_theme_stylebox_override("panel", sb)
 
 	var label := Label.new()
@@ -492,35 +601,19 @@ func _build_terrain_chip(entry: Dictionary) -> PanelContainer:
 ## A compact colour-coded pill: dim fill, 1px frame in the status colour, cream
 ## text. Same recipe as TerrainInfoPanel's tile-effect chips, minus the swatch --
 ## at this size the fill colour IS the swatch.
-func _build_chip(text: String, color: Color) -> PanelContainer:
-	var chip := PanelContainer.new()
-	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = color.darkened(0.35)
-	sb.set_corner_radius_all(6)
-	sb.set_border_width_all(1)
-	sb.border_color = color
-	sb.content_margin_left = 6
-	sb.content_margin_right = 6
-	sb.content_margin_top = 2
-	sb.content_margin_bottom = 2
-	chip.add_theme_stylebox_override("panel", sb)
-
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_size_override("font_size", 12)
-	label.add_theme_color_override("font_color", ConquestTheme.CREAM)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	chip.add_child(label)
-
+func _build_chip(text: String, color: Color, tip: String = "") -> PanelContainer:
+	var chip := ConquestTheme.chip(text, color, ConquestTheme.FS_CAPTION)
+	if tip != "":
+		# PASS (not STOP) so the tooltip shows without eating board clicks.
+		chip.mouse_filter = Control.MOUSE_FILTER_PASS
+		chip.tooltip_text = tip
 	return chip
 
 
 ## The first living unit covering [param cell], or null. Goes through
 ## [code]BoardAdapter.units_at[/code], which is FOOTPRINT-aware -- so a 2x2 unit
 ## is found from any of the four cells it covers, not only its anchor.
-func _unit_at(cell: Vector2i):
+func _unit_at(cell: Vector3i):
 	if CombatServices == null:
 		return null
 	var board = CombatServices.board()
@@ -547,7 +640,7 @@ func _unit_at(cell: Vector2i):
 ## Vector3(col, 0, row) -- already grid-clamped by board/cursor/cursor.gd. No
 ## world->cell math needed; this mirrors TerrainInfoPanel._on_cursor_moved exactly.
 func _on_cursor_moved(grid_pos: Vector3) -> void:
-	var cell := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var cell := Cells.from_grid(grid_pos)  # Vector3(col, floor, row) -> cell
 
 	# No live board yet (no map loaded / mid-rebuild) -- nothing to inspect.
 	var board = CombatServices.board() if CombatServices else null

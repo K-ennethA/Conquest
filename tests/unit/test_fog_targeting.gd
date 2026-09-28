@@ -25,8 +25,8 @@ const Doubles := preload("res://tests/helpers/test_doubles.gd")
 
 const VEIL_PATH := "res://game/tiles/effects/resources/smoke_veil.tres"
 
-const HERO_CELL := Vector2i(5, 5)
-const VEIL_CELL := Vector2i(5, 8)
+const HERO_CELL := Vector3i(5, 5, 0)
+const VEIL_CELL := Vector3i(5, 8, 0)
 
 
 # --- Local doubles ---------------------------------------------------------------
@@ -84,12 +84,12 @@ class FogBoard extends Doubles.CombatBoard:
 			out.append(p.unit)
 		return out
 
-	func tile_effects_at(cell: Vector2i) -> Array:
-		var arr = effects.get(cell, null)
+	func tile_effects_at(cell) -> Array:
+		var arr = effects.get(Cells.from_variant(cell), null)
 		return arr if arr is Array else []
 
-	func put_effect(cell: Vector2i, effect) -> void:
-		effects[cell] = [effect]
+	func put_effect(cell, effect) -> void:
+		effects[Cells.from_variant(cell)] = [effect]
 
 
 ## Records what the vision system said about a watched unit AT THE MOMENT the move's effects
@@ -203,7 +203,7 @@ func test_the_aim_stays_legal_so_fog_cannot_be_probed() -> void:
 	var move := _strike()
 	assert_true(move.can_target(HERO_CELL, VEIL_CELL, _hero, _board),
 		"the cell a hidden unit stands on is still a legal aim")
-	assert_true(move.can_target(HERO_CELL, Vector2i(5, 7), _hero, _board),
+	assert_true(move.can_target(HERO_CELL, Vector3i(5, 7, 0), _hero, _board),
 		"and so is the genuinely empty cell beside it -- the two are indistinguishable")
 
 
@@ -224,11 +224,11 @@ func test_an_enemy_seen_in_the_open_is_hit_normally() -> void:
 func test_an_enemy_hidden_by_distance_alone_is_also_unhittable() -> void:
 	# The other way to be hidden: no veil, simply nobody looking. Same outcome, same seam.
 	_board.effects.clear()
-	_board.move_unit(_lurker, Vector2i(11, 11))
+	_board.move_unit(_lurker, Vector3i(11, 11, 0))
 	_vs.invalidate()
 	var far := _strike()
 	far.targeting.max_range = 20
-	MoveExecutor.execute(far, _hero, _board, Vector2i(11, 11))
+	MoveExecutor.execute(far, _hero, _board, Vector3i(11, 11, 0))
 	assert_eq(_lurker.hp, 100, "a unit nobody can see takes nothing, however long your reach")
 
 
@@ -237,10 +237,10 @@ func test_a_side_can_always_reach_its_own_units() -> void:
 	# not: a side always sees its own units, so a heal can never be blocked by fog.
 	var friend := Combatant.new(_p0)
 	friend.hp = 40
-	_board.place(friend, Vector2i(5, 4))
-	_board.put_effect(Vector2i(5, 4), load(VEIL_PATH))
+	_board.place(friend, Vector3i(5, 4, 0))
+	_board.put_effect(Vector3i(5, 4, 0), load(VEIL_PATH))
 	_vs.invalidate()
-	MoveExecutor.execute(MoveLibrary.mend(), _hero, _board, Vector2i(5, 4))
+	MoveExecutor.execute(MoveLibrary.mend(), _hero, _board, Vector3i(5, 4, 0))
 	assert_gt(friend.hp, 40, "an ally standing in smoke is still mine to heal")
 
 
@@ -355,13 +355,13 @@ func test_the_reveal_runs_out_and_the_lurker_is_hidden_again() -> void:
 func test_walking_does_not_reveal() -> void:
 	# Movement never touches MoveExecutor, so it cannot mark anything -- pinned so it stays
 	# true if a future mover ever grows a move-shaped path.
-	_board.move_unit(_lurker, Vector2i(5, 7))
+	_board.move_unit(_lurker, Vector3i(5, 7, 0))
 	_vs.invalidate()
 	assert_false(_vs.is_revealed(_lurker), "a unit that only walked has given nothing away")
 
 
 func test_placing_a_veil_does_not_reveal_the_placer() -> void:
-	MoveExecutor.execute(_lay_veil_move(), _lurker, _board, Vector2i(5, 7))
+	MoveExecutor.execute(_lay_veil_move(), _lurker, _board, Vector3i(5, 7, 0))
 	assert_false(_vs.is_revealed(_lurker),
 		"laying the cover you are about to hide in must not be the thing that lights you up")
 	assert_false(_vs.is_unit_visible(0, _lurker), "so it is still hidden afterwards")

@@ -67,12 +67,27 @@ const LABEL_NAME: String = "ObjectiveLabel"
 # --- Colours (explicit, like every other self-styled HUD layer) --------------
 
 const TEXT_COLOR: Color = ConquestTheme.CREAM
-const FRAME_COLOR: Color = ConquestTheme.AMBER_DK
-const PLATE_COLOR: Color = ConquestTheme.PLATE_BG
+const FRAME_COLOR: Color = ConquestTheme.BORDER_SOFT
+## The gold objective gem's colour (the grove HUD's "this is the thing to do" accent).
+const MARK_COLOR: Color = ConquestTheme.GOLD
+## The "Danger zone" tag's colour: the enemy-threat overlay's violet
+## (DangerZoneOverlay.ZONE_COLOR, opaque, lightened 0.4) so it reads as text on navy.
+const DANGER_COLOR: Color = Color(0.772, 0.472, 0.97)
+
+## Node names of the row's pieces (tests / screenshots look them up by name).
+const ROW_NAME: String = "Row"
+const TAG_NAME: String = "ObjectiveTag"
+const DANGER_NAME: String = "DangerTag"
 
 # --- State -------------------------------------------------------------------
 
 var _label: Label = null
+var _row: HBoxContainer = null
+var _tag: Label = null
+## The violet "Danger zone" tag, shown while the enemy-threat overlay is on
+## ([signal GameEvents.danger_zone_changed]). Folded in from the cloud ObjectiveChip.
+var _danger_chip: PanelContainer = null
+var _danger_on: bool = false
 
 ## The objectives currently on screen, as [WinCondition] resources.
 var _conditions: Array = []
@@ -153,34 +168,81 @@ func _ready() -> void:
 	refresh()
 
 
+## The row, in the grove HUD register (the look the cloud ObjectiveChip had):
+##   [gold gem] OBJECTIVE  » Defeat the boss   [Danger zone]
+## a gold cut gem (drawn, not a glyph -- the Geometric Shapes block is tofu in the engine
+## font), a gold Cinzel "OBJECTIVE" section tag, the cream objective line, and the violet
+## danger-zone tag while that overlay is on.
 func _build_ui() -> void:
+	# Self-styled: keep the HUD-wide ConquestTheme.apply_to() sweep from swapping this
+	# slim strip for the full card frame.
+	ConquestTheme.keep_style(self)
 	add_theme_stylebox_override("panel", _row_box())
+
+	_row = HBoxContainer.new()
+	_row.name = ROW_NAME
+	_row.add_theme_constant_override("separation", 8)
+	_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_row)
+
+	var gem := GroveGem.new()
+	gem.name = "ObjectiveGem"
+	gem.color = MARK_COLOR
+	gem.custom_minimum_size = Vector2(10, 14)
+	gem.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_row.add_child(gem)
+
+	_tag = Label.new()
+	_tag.name = TAG_NAME
+	_tag.text = "OBJECTIVE"
+	_tag.theme_type_variation = &"SectionLabel"
+	# Stated explicitly as well, so the tag reads right with or without the HUD theme.
+	_tag.add_theme_font_override("font", MenuTheme.heading_font(2))
+	_tag.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
+	_tag.add_theme_color_override("font_color", ConquestTheme.GOLD)
+	_tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_row.add_child(_tag)
 
 	_label = Label.new()
 	_label.name = LABEL_NAME
-	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.clip_text = true
 	_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_BODY)
+	_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
 	_label.add_theme_color_override("font_color", TEXT_COLOR)
-	add_child(_label)
+	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_row.add_child(_label)
+
+	_danger_chip = ConquestTheme.chip("Danger zone", DANGER_COLOR, ConquestTheme.FS_CAPTION)
+	_danger_chip.name = DANGER_NAME
+	_danger_chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var danger_box := ConquestTheme.chip_style(DANGER_COLOR)
+	danger_box.content_margin_top = 0
+	danger_box.content_margin_bottom = 0
+	_danger_chip.add_theme_stylebox_override("panel", danger_box)
+	_danger_chip.visible = false
+	_row.add_child(_danger_chip)
 
 
-## A slim dark plate with an amber edge: the same register as the [TurnIndicator] chip it
-## hangs under, but inset rather than raised so it reads as that chip's second line rather
-## than as a competing card.
-func _row_box() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = PLATE_COLOR
-	sb.set_corner_radius_all(6)
-	sb.set_border_width_all(2)
-	sb.border_color = FRAME_COLOR
-	sb.content_margin_left = 10
-	sb.content_margin_right = 10
+## A slim grove chip (notched navy plate, fine grain, gold filigree): the same register as
+## the [TurnIndicator] chip it hangs under, so it reads as that chip's second line rather
+## than as a competing card. The tight vertical margins keep the declared
+## [constant ROW_HEIGHT].
+func _row_box() -> OrnateStyleBox:
+	var sb := ConquestTheme.chip_box(FRAME_COLOR, 0.9)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
 	sb.content_margin_top = 2
 	sb.content_margin_bottom = 2
 	return sb
+
+
+## True while the violet "Danger zone" tag is showing.
+func is_danger_zone_shown() -> bool:
+	return _danger_on
 
 
 # ===========================================================================
@@ -246,17 +308,43 @@ func refresh() -> void:
 	var lines: Array = objective_lines()
 	_label.text = banner_text(lines)
 	tooltip_text = tooltip_text_for(lines)
+	if _danger_chip != null and is_instance_valid(_danger_chip):
+		_danger_chip.visible = _danger_on
 	_fit_width()
 
 
 ## Keep the plate wide enough for the line it currently draws, capped at
 ## [constant MAX_WIDTH]. Mirrors [code]TurnIndicator._fit_chip_width[/code]: a clipped
 ## Label reports a 1px minimum, so without this the row would be drawn as a stub.
+##
+## The row's other pieces (gem, tag, danger tag) and the frame's side margins come off the
+## cap first, so the whole strip -- not just its text -- stays inside MAX_WIDTH.
 func _fit_width() -> void:
 	if _label == null or not is_instance_valid(_label):
 		return
-	var needed: float = ElementVisuals.fit_label(_label, MAX_WIDTH)
-	custom_minimum_size = Vector2(minf(needed + 24.0, MAX_WIDTH), ROW_HEIGHT)
+	var chrome: float = _chrome_width()
+	var needed: float = ElementVisuals.fit_label(_label, maxf(48.0, MAX_WIDTH - chrome))
+	custom_minimum_size = Vector2(minf(needed + chrome, MAX_WIDTH), ROW_HEIGHT)
+
+
+## Width the strip spends on everything but the objective text: the frame's side margins
+## plus every other visible row piece and the gaps between them.
+func _chrome_width() -> float:
+	var w: float = 0.0
+	var box: StyleBox = get_theme_stylebox("panel")
+	if box != null:
+		w += box.get_margin(SIDE_LEFT) + box.get_margin(SIDE_RIGHT)
+	if _row == null or not is_instance_valid(_row):
+		return w + 24.0
+	var sep: int = _row.get_theme_constant("separation")
+	var shown: int = 0
+	for c in _row.get_children():
+		if not (c is Control) or not (c as Control).visible:
+			continue
+		shown += 1
+		if c != _label:
+			w += (c as Control).get_combined_minimum_size().x
+	return w + float(maxi(0, shown - 1) * sep)
 
 
 # ===========================================================================
@@ -388,6 +476,10 @@ func _wire_roster() -> void:
 	if GameEvents.has_signal("unit_spawned") \
 			and not GameEvents.unit_spawned.is_connected(_on_roster_changed):
 		GameEvents.unit_spawned.connect(_on_roster_changed)
+	# The enemy-threat overlay toggling on / off shows / hides the "Danger zone" tag.
+	if GameEvents.has_signal("danger_zone_changed") \
+			and not GameEvents.danger_zone_changed.is_connected(_on_danger_zone_changed):
+		GameEvents.danger_zone_changed.connect(_on_danger_zone_changed)
 
 
 ## (Re)subscribe to the ACTIVE turn system. The previous one is dropped first so a
@@ -422,6 +514,11 @@ func _on_turn_ended(_player = null) -> void:
 	refresh()
 
 
+func _on_danger_zone_changed(active: bool, _cell_count: int = 0) -> void:
+	_danger_on = active
+	refresh()
+
+
 func _on_roster_changed(_a = null, _b = null) -> void:
 	# A death unregisters the unit inside the same emission; read the board after it unwinds.
 	call_deferred("refresh")
@@ -446,3 +543,6 @@ func _exit_tree() -> void:
 		if GameEvents.has_signal("unit_spawned") \
 				and GameEvents.unit_spawned.is_connected(_on_roster_changed):
 			GameEvents.unit_spawned.disconnect(_on_roster_changed)
+		if GameEvents.has_signal("danger_zone_changed") \
+				and GameEvents.danger_zone_changed.is_connected(_on_danger_zone_changed):
+			GameEvents.danger_zone_changed.disconnect(_on_danger_zone_changed)

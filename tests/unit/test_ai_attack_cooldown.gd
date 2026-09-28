@@ -34,14 +34,14 @@ class MockUnit:
 
 class MockBoard:
 	var placements: Array = []  # { unit, cell }
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -84,8 +84,8 @@ func _adjacent_fight() -> Dictionary:
 	var actor := MockUnit.new(0, { "attack": 10 })
 	var enemy := MockUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))  # adjacent -> a range-1 strike reaches it
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(1, 0, 0))  # adjacent -> a range-1 strike reaches it
 	return { "actor": actor, "enemy": enemy, "board": board }
 
 

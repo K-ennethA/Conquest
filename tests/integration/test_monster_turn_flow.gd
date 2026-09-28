@@ -26,15 +26,15 @@ class TeamBoard:
 	extends RefCounted
 	var placements: Array = []
 	var teams: Dictionary = {}
-	func place(unit, cell: Vector2i, team: int) -> void:
+	func place(unit, cell: Vector3i, team: int) -> void:
 		placements.append({ "unit": unit, "cell": cell })
 		teams[unit] = team
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -49,7 +49,7 @@ class TeamBoard:
 		for p in placements:
 			out.append(p.unit)
 		return out
-	func move_unit(unit, to_cell: Vector2i) -> void:
+	func move_unit(unit, to_cell: Vector3i) -> void:
 		for p in placements:
 			if p.unit == unit:
 				p.cell = to_cell
@@ -132,9 +132,9 @@ func _void_surge() -> StatusCondition:
 
 
 ## Cast Abyssal Maw from [param caster] at [param aim] against [param board].
-func _cast_maw(caster, board, aim: Vector2i) -> void:
+func _cast_maw(caster, board, aim: Vector3i) -> void:
 	var move := _abyssal_maw()
-	var origin: Vector2i = board.cell_of(caster)
+	var origin: Vector3i = board.cell_of(caster)
 	var cells := move.targeting.resolve_cells(origin, aim)
 	var ctx := MoveContext.new(caster, board, move, aim, cells)
 	for effect in move.effects:
@@ -152,13 +152,13 @@ func test_the_maw_waits_through_the_enemy_turn_and_erupts_on_the_casters_next_tu
 	_register(ts, caster, 0)
 	_register(ts, victim, 1)
 	var board := TeamBoard.new()
-	board.place(caster, Vector2i(0, 0), 0)
-	board.place(victim, Vector2i(4, 0), 1)
+	board.place(caster, Vector3i(0, 0, 0), 0)
+	board.place(victim, Vector3i(4, 0, 0), 1)
 	ts.is_active = true
 	ts.is_turn_in_progress = true
 
 	var before: int = victim.get_hp()
-	_cast_maw(caster, board, Vector2i(4, 0))
+	_cast_maw(caster, board, Vector3i(4, 0, 0))
 	assert_true(caster.get_status_controller().has_status(&"void_maw_fuse"),
 		"the cast arms a fuse on the caster")
 	assert_eq(victim.get_hp(), before, "and deals nothing on the cast turn")
@@ -190,13 +190,13 @@ func test_the_maw_keeps_the_same_schedule_under_speed_first():
 	_register(ts, caster, 0)
 	_register(ts, victim, 1)
 	var board := TeamBoard.new()
-	board.place(caster, Vector2i(0, 0), 0)
-	board.place(victim, Vector2i(4, 0), 1)
+	board.place(caster, Vector3i(0, 0, 0), 0)
+	board.place(victim, Vector3i(4, 0, 0), 1)
 	ts.is_active = true
 	ts.is_turn_in_progress = true
 
 	var before: int = victim.get_hp()
-	_cast_maw(caster, board, Vector2i(4, 0))
+	_cast_maw(caster, board, Vector3i(4, 0, 0))
 
 	# An intervening unit takes its turn.
 	ts.current_turn += 1
@@ -217,13 +217,13 @@ func test_the_maw_erupts_only_once():
 	_register(ts, caster, 0)
 	_register(ts, victim, 1)
 	var board := TeamBoard.new()
-	board.place(caster, Vector2i(0, 0), 0)
-	board.place(victim, Vector2i(4, 0), 1)
+	board.place(caster, Vector3i(0, 0, 0), 0)
+	board.place(victim, Vector3i(4, 0, 0), 1)
 	ts.is_active = true
 	ts.is_turn_in_progress = true
 
 	var before: int = victim.get_hp()
-	_cast_maw(caster, board, Vector2i(4, 0))
+	_cast_maw(caster, board, Vector3i(4, 0, 0))
 
 	ts.current_turn += 1
 	_open_turn_for(ts, caster, board)
@@ -248,7 +248,7 @@ func test_voidwalk_covers_one_turn_and_then_lets_go():
 	var unit := _real_unit("Monster")
 	_register(ts, unit, 0)
 	var board := TeamBoard.new()
-	board.place(unit, Vector2i(0, 0), 0)
+	board.place(unit, Vector3i(0, 0, 0), 0)
 	ts.is_active = true
 	ts.is_turn_in_progress = true
 
@@ -267,8 +267,8 @@ func test_voidwalk_immunity_is_read_by_the_damage_layer_not_just_the_status():
 	var unit := _real_unit("Monster")
 	var attacker := _real_unit("Aggressor")
 	var board := TeamBoard.new()
-	board.place(unit, Vector2i(0, 0), 0)
-	board.place(attacker, Vector2i(1, 0), 1)
+	board.place(unit, Vector3i(0, 0, 0), 0)
+	board.place(attacker, Vector3i(1, 0, 0), 1)
 
 	assert_false(DamageMath.is_invulnerable(unit), "baseline: reachable")
 	unit.get_status_controller().add_status(_submerged())
@@ -307,7 +307,7 @@ func _resolve_dash(unit: Unit) -> void:
 func test_the_dash_leaves_the_unit_able_to_MOVE_but_never_to_act_again():
 	var unit := _real_unit("Duskmaw")
 	var board := TeamBoard.new()
-	board.place(unit, Vector2i(0, 0), 0)
+	board.place(unit, Vector3i(0, 0, 0), 0)
 	unit.reset_turn_actions()
 	unit.mark_moved()   # it walked before dashing, the ordinary FE opening
 
@@ -476,21 +476,21 @@ func test_the_command_layer_accepts_the_canto_move_as_an_ordinary_MOVE_UNIT():
 	ts.start_turn_system()
 
 	var board := TeamBoard.new()
-	board.place(unit, Vector2i(0, 0), 0)
+	board.place(unit, Vector3i(0, 0, 0), 0)
 
 	_resolve_dash(unit)
 	assert_true(ts.can_unit_act(unit), "the seam is asked while the canto is still owed")
 
 	var registry := CommandApplier.UnitRegistry.new()
-	registry.register(unit, 1)
+	registry.register(unit, "1")
 	var applier := CommandApplier.new(registry)
 	var cmd: Dictionary = NetProtocol.stamp_resolution(
-		NetProtocol.make_move_unit(1, Vector2i(2, 0)), 1, 0)
+		NetProtocol.make_move_unit("1", Vector3i(2, 0, 0)), 1, 0)
 	var res: Dictionary = applier.apply_command(cmd, board)
 
 	assert_true(bool(res.get("ok", false)),
 		"the applier accepts the move: %s" % str(res.get("reason", "")))
-	assert_eq(board.cell_of(unit), Vector2i(2, 0), "and the unit is standing on the destination")
+	assert_eq(board.cell_of(unit), Vector3i(2, 0, 0), "and the unit is standing on the destination")
 	assert_false(unit.has_canto(), "the applier's mark_moved() spent the canto")
 	assert_false(ts.can_unit_act(unit), "so the turn closed through the ordinary path")
 	assert_eq(ts.get_current_active_player(), player,
@@ -504,7 +504,7 @@ func test_the_void_surge_hands_the_stride_back_at_the_next_turn_start():
 	var unit := _real_unit("Duskmaw")
 	_register(ts, unit, 0)
 	var board := TeamBoard.new()
-	board.place(unit, Vector2i(0, 0), 0)
+	board.place(unit, Vector3i(0, 0, 0), 0)
 	ts.is_active = true
 	ts.is_turn_in_progress = true
 

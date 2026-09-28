@@ -58,10 +58,11 @@ static func build_round(map_loader, run: ArenaRun, ruleset: ArenaRuleset) -> voi
 	for unit_state in run.living_squad():
 		if placed >= p0_cells.size():
 			break
-		var cell: Vector2i = p0_cells[placed]
+		var cell: Vector3i = p0_cells[placed]
 		placed += 1
 		var unit = map_loader.spawn_unit_now({
-			"position": cell,
+			"position": Cells.flat(cell),
+			"floor": cell.z,
 			"player_id": 0,
 			"character_id": unit_state.character_id,
 			"spawn_kind": "Start",
@@ -74,8 +75,10 @@ static func build_round(map_loader, run: ArenaRun, ruleset: ArenaRuleset) -> voi
 	for i in range(wave.size()):
 		if i >= p1_cells.size():
 			break
+		var enemy_cell: Vector3i = p1_cells[i]
 		map_loader.spawn_unit_now({
-			"position": p1_cells[i],
+			"position": Cells.flat(enemy_cell),
+			"floor": enemy_cell.z,
 			"player_id": 1,
 			"character_id": wave[i],
 			"spawn_kind": "Reinforcement",  # waves CHARGE on arrival (see resolve_default_ai_stance)
@@ -128,7 +131,8 @@ static func _maybe_spawn_neutral_camp(map_loader, map, run: ArenaRun, ruleset: A
 
 
 ## Up to [param count] valid cells nearest the CENTRE of [param map], skipping any cell
-## in [param avoid] (the two start edges) and any that has no authored tile. Searched in
+## in [param avoid] (the two start edges -- board cells, [Vector3i]) and any that has no authored
+## tile. The camp is a GROUND-floor search: the result is map positions ([Vector2i], floor 0). Searched in
 ## expanding Chebyshev rings from the centre so the camp lands mid-map, away from both
 ## start edges and out of the direct crossfire lane.
 static func _camp_cells(map, avoid: Array, count: int) -> Array:
@@ -151,7 +155,7 @@ static func _camp_cells(map, avoid: Array, count: int) -> Array:
 				var cell: Vector2i = Vector2i(cx + dx, cy + dy)
 				if cell.x < 0 or cell.x >= w or cell.y < 0 or cell.y >= h:
 					continue
-				if cell in avoid or cell in out:
+				if Cells.lift(cell) in avoid or cell in out:
 					continue
 				# Require an authored tile so the camp never lands on a hole in the map.
 				if map.has_method("get_tile_at_position") and map.get_tile_at_position(cell).is_empty():
@@ -177,7 +181,9 @@ static func _wave_ids(round_index: int, ruleset: ArenaRuleset, cap: int) -> Arra
 	return out
 
 
-## Every initial (Start) spawn cell on [param map] belonging to [param player_id].
+## Every initial (Start) spawn cell on [param map] belonging to [param player_id], as board
+## cells ([Vector3i] col, row, floor -- the spawn entry's optional "floor" is kept, so a start
+## on a rampart spawns up there).
 static func _start_cells(map, player_id: int) -> Array:
 	var cells: Array = []
 	for spawn_data in map.unit_spawns:
@@ -186,9 +192,9 @@ static func _start_cells(map, player_id: int) -> Array:
 			continue
 		if map.has_method("is_initial_spawn") and not map.is_initial_spawn(spawn_data):
 			continue
-		var pos = spawn_data.get("position", Vector2i(-1, -1))
-		if pos is Vector2i and pos != Vector2i(-1, -1):
-			cells.append(pos)
+		var pos: Vector2i = Cells.pos2_from_variant(spawn_data.get("position", Vector2i(-1, -1)))
+		if pos != Vector2i(-1, -1):
+			cells.append(Cells.lift(pos, maxi(0, int(spawn_data.get("floor", 0)))))
 	return cells
 
 

@@ -2,7 +2,7 @@ extends GutTest
 
 ## Code-built impact particles ([ImpactFX]).
 ##
-## Like [DamageNumbers], this rides signals that fire during teardown as readily as during
+## Like [FloatingCombatText], this rides signals that fire during teardown as readily as during
 ## play -- `unit_eliminated` in particular is emitted while the unit is being freed -- so
 ## the guards are the behaviour worth pinning: no scene means no burst and no engine error,
 ## and animations off means no burst at all.

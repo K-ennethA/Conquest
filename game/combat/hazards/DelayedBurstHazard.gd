@@ -41,7 +41,7 @@ class_name DelayedBurstHazard
 ## stepping IN is a mistake the player is allowed to make.
 
 ## Every cell the marked patch covers, frozen at cast time (the move's resolved area).
-var cells: Array[Vector2i] = []
+var cells: Array[Vector3i] = []
 ## Raw damage per occupant, snapshotted from the caster at cast time.
 var damage: int = 0
 ## [enum CombatTypes.DamageCategory] the eruption resolves as.
@@ -63,7 +63,7 @@ var event_bus = null
 var _detonated: bool = false
 
 
-func _init(p_cells: Array[Vector2i], p_damage: int, p_category: int, p_affiliation: int,
+func _init(p_cells: Array[Vector3i], p_damage: int, p_category: int, p_affiliation: int,
 		p_source) -> void:
 	cells = p_cells.duplicate()
 	damage = p_damage
@@ -73,9 +73,9 @@ func _init(p_cells: Array[Vector2i], p_damage: int, p_category: int, p_affiliati
 
 
 ## The patch this maw will erupt on -- what a visual layer telegraphs. Empty once spent.
-func telegraph_cells() -> Array[Vector2i]:
+func telegraph_cells() -> Array[Vector3i]:
 	if _detonated:
-		return [] as Array[Vector2i]
+		return [] as Array[Vector3i]
 	return cells.duplicate()
 
 
@@ -88,8 +88,8 @@ func is_expired() -> bool:
 ## ERUPT. Damage every matching occupant of [member cells] once and mark the maw spent.
 ## Returns event data in the same shape [method TravelingHazard.advance] returns, so a
 ## caller (and a visual layer) can read either hazard identically:
-##   { "cells": Array[Vector2i], "damaged": Array[{unit, amount}],
-##     "next_cells": Array[Vector2i], "expired": bool }
+##   { "cells": Array[Vector3i], "damaged": Array[{unit, amount}],
+##     "next_cells": Array[Vector3i], "expired": bool }
 ##
 ## A null or query-less board simply spends the maw without hitting anything -- an
 ## eruption with nothing to ask about occupancy is a no-op, never an error.
@@ -97,9 +97,9 @@ func detonate(board) -> Dictionary:
 	var blast := cells.duplicate()
 	if _detonated:
 		return {
-			"cells": [] as Array[Vector2i],
+			"cells": [] as Array[Vector3i],
 			"damaged": [],
-			"next_cells": [] as Array[Vector2i],
+			"next_cells": [] as Array[Vector3i],
 			"expired": true,
 		}
 	_detonated = true
@@ -126,12 +126,19 @@ func detonate(board) -> Dictionary:
 					DamageEffect.announce_damage(
 						event_bus, DamageEffect.credited_source(source, unit, board), unit, dealt)
 					if unit.has_method("take_damage"):
+						# Floating combat text (presentation only), just before the HP change.
+						CombatText.annotate(unit, {
+							"kind": CombatText.KIND_DAMAGE, "amount": dealt,
+							"source_kind": CombatText.SRC_HAZARD,
+							"source": "Hazard",
+							"attacker": source,
+						}, event_bus)
 						unit.take_damage(dealt)
 				damaged.append({ "unit": unit, "amount": dealt })
 
 	return {
 		"cells": blast,
 		"damaged": damaged,
-		"next_cells": [] as Array[Vector2i],
+		"next_cells": [] as Array[Vector3i],
 		"expired": true,
 	}

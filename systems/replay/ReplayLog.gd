@@ -54,8 +54,8 @@ class_name ReplayLog
 ## }
 ## [/codeblock]
 ##
-## COMMANDS ARE STORED IN THE NETPROTOCOL VOCABULARY, JSON-flattened. A [Vector2i] becomes
-## [code][x, y][/code] (exactly as [method BattleSnapshot.cell_to_array] does) because JSON
+## COMMANDS ARE STORED IN THE NETPROTOCOL VOCABULARY, JSON-flattened. A cell ([Vector3i] col, row, floor) becomes
+## [code][col, row, floor][/code] (exactly as [method BattleSnapshot.cell_to_array] does) because JSON
 ## has no vector type; [method decode_command] puts it back. Only the four command types the
 ## applier can actually APPLY are accepted ([constant APPLIABLE_TYPES]) -- ATTACK_UNIT exists
 ## in [enum NetProtocol.Action] but has no apply branch, so a replay carrying one could never
@@ -206,7 +206,7 @@ static func make_outcome(result: String = RESULT_UNKNOWN, winner_slot: int = -1,
 	}
 
 
-## One body entry. [param cmd] is a LIVE NetProtocol command (Vector2i cells and all); it is
+## One body entry. [param cmd] is a LIVE NetProtocol command (Vector3i cells and all); it is
 ## encoded to its JSON-safe form here, so callers never have to think about the flattening.
 static func make_entry(turn: int, actor_slot: int, cmd: Dictionary) -> Dictionary:
 	return {
@@ -222,19 +222,30 @@ static func make_checksum(turn: int, hash_hex: String) -> Dictionary:
 
 # --- Command encoding --------------------------------------------------------
 
-## [Vector2i] -> [code][x, y][/code] (same convention as [method BattleSnapshot.cell_to_array]).
-static func encode_cell(cell: Vector2i) -> Array:
-	return [int(cell.x), int(cell.y)]
+## A cell -> [code][col, row, floor][/code] ([method Cells.to_array]; same convention as
+## [method BattleSnapshot.cell_to_array]). Accepts a [Vector3i] cell or a legacy [Vector2i]
+## (lifted to floor 0) -- anything [method decode_cell] reads.
+static func encode_cell(cell: Variant) -> Array:
+	return Cells.to_array(decode_cell(cell))
 
 
-## The inverse. Anything malformed reads as [param fallback] rather than raising.
-static func decode_cell(value: Variant, fallback: Vector2i = Vector2i.ZERO) -> Vector2i:
-	if value is Vector2i:
+## The inverse. Reads the current [code][col, row, floor][/code] form AND the pre-multi-floor
+## [code][x, y][/code] form (floor 0), so replays recorded before multi-floor maps still load.
+## Anything malformed reads as [param fallback] rather than raising.
+static func decode_cell(value: Variant, fallback: Vector3i = Vector3i.ZERO) -> Vector3i:
+	if value is Vector3i:
 		return value
+	if value is Vector2i:
+		return Cells.lift(value)
 	if value is Array and (value as Array).size() >= 2:
 		var a: Array = value
 		if _is_number(a[0]) and _is_number(a[1]):
-			return Vector2i(int(a[0]), int(a[1]))
+			var f: int = 0
+			if a.size() >= 3:
+				if not _is_number(a[2]):
+					return fallback
+				f = maxi(0, int(a[2]))
+			return Vector3i(int(a[0]), int(a[1]), f)
 	return fallback
 
 
@@ -254,14 +265,14 @@ static func encode_command(cmd: Variant) -> Dictionary:
 	var out_data: Dictionary = {}
 	match type:
 		NetProtocol.Action.CAST_MOVE:
-			out_data[NetProtocol.KEY_UNIT_ID] = int(data.get(NetProtocol.KEY_UNIT_ID, -1))
+			out_data[NetProtocol.KEY_UNIT_ID] = unit_id_of(data.get(NetProtocol.KEY_UNIT_ID, ""))
 			out_data[NetProtocol.KEY_MOVE_SLOT] = int(data.get(NetProtocol.KEY_MOVE_SLOT, -1))
 			out_data[NetProtocol.KEY_AIM_CELL] = encode_cell(decode_cell(data.get(NetProtocol.KEY_AIM_CELL, null)))
 		NetProtocol.Action.MOVE_UNIT:
-			out_data[NetProtocol.KEY_UNIT_ID] = int(data.get(NetProtocol.KEY_UNIT_ID, -1))
+			out_data[NetProtocol.KEY_UNIT_ID] = unit_id_of(data.get(NetProtocol.KEY_UNIT_ID, ""))
 			out_data[NetProtocol.KEY_DEST_CELL] = encode_cell(decode_cell(data.get(NetProtocol.KEY_DEST_CELL, null)))
 		NetProtocol.Action.WAIT_UNIT:
-			out_data[NetProtocol.KEY_UNIT_ID] = int(data.get(NetProtocol.KEY_UNIT_ID, -1))
+			out_data[NetProtocol.KEY_UNIT_ID] = unit_id_of(data.get(NetProtocol.KEY_UNIT_ID, ""))
 		NetProtocol.Action.END_TURN:
 			out_data[NetProtocol.KEY_PLAYER_ID] = int(data.get(NetProtocol.KEY_PLAYER_ID, 0))
 	return {
@@ -269,12 +280,13 @@ static func encode_command(cmd: Variant) -> Dictionary:
 		NetProtocol.KEY_DATA: out_data,
 		NetProtocol.KEY_ACTOR: int(src.get(NetProtocol.KEY_ACTOR, -1)),
 		NetProtocol.KEY_SEQ: int(src.get(NetProtocol.KEY_SEQ, 0)),
-		NetProtocol.KEY_RNG_SEED: int(src.get(NetProtocol.KEY_RNG_SEED, 0)),
+		# A 64-bit seed rides as a decimal STRING: JSON numbers are doubles and would round it.
+		NetProtocol.KEY_RNG_SEED: str(seed_of(src.get(NetProtocol.KEY_RNG_SEED, 0))),
 		NetProtocol.KEY_PV: int(src.get(NetProtocol.KEY_PV, NetProtocol.PROTOCOL_VERSION)),
 	}
 
 
-## The JSON-safe form -> a LIVE command the applier accepts (cells back to [Vector2i]).
+## The JSON-safe form -> a LIVE command the applier accepts (cells back to [Vector3i]; a legacy [x, y] reads as floor 0).
 ## Returns {} for anything outside the vocabulary or missing a required field -- the ONE
 ## gate playback needs before handing an entry to [method CommandApplier.apply_command].
 static func decode_command(raw: Variant) -> Dictionary:
@@ -290,22 +302,22 @@ static func decode_command(raw: Variant) -> Dictionary:
 	var out_data: Dictionary = {}
 	match type:
 		NetProtocol.Action.CAST_MOVE:
-			if not _has_number(data, NetProtocol.KEY_UNIT_ID) or not _has_number(data, NetProtocol.KEY_MOVE_SLOT):
+			if not _has_unit_id(data) or not _has_number(data, NetProtocol.KEY_MOVE_SLOT):
 				return {}
 			if not data.has(NetProtocol.KEY_AIM_CELL):
 				return {}
-			out_data[NetProtocol.KEY_UNIT_ID] = int(data[NetProtocol.KEY_UNIT_ID])
+			out_data[NetProtocol.KEY_UNIT_ID] = unit_id_of(data[NetProtocol.KEY_UNIT_ID])
 			out_data[NetProtocol.KEY_MOVE_SLOT] = int(data[NetProtocol.KEY_MOVE_SLOT])
-			out_data[NetProtocol.KEY_AIM_CELL] = decode_cell(data[NetProtocol.KEY_AIM_CELL], Vector2i(-1, -1))
+			out_data[NetProtocol.KEY_AIM_CELL] = decode_cell(data[NetProtocol.KEY_AIM_CELL], Vector3i(-1, -1, 0))
 		NetProtocol.Action.MOVE_UNIT:
-			if not _has_number(data, NetProtocol.KEY_UNIT_ID) or not data.has(NetProtocol.KEY_DEST_CELL):
+			if not _has_unit_id(data) or not data.has(NetProtocol.KEY_DEST_CELL):
 				return {}
-			out_data[NetProtocol.KEY_UNIT_ID] = int(data[NetProtocol.KEY_UNIT_ID])
-			out_data[NetProtocol.KEY_DEST_CELL] = decode_cell(data[NetProtocol.KEY_DEST_CELL], Vector2i(-1, -1))
+			out_data[NetProtocol.KEY_UNIT_ID] = unit_id_of(data[NetProtocol.KEY_UNIT_ID])
+			out_data[NetProtocol.KEY_DEST_CELL] = decode_cell(data[NetProtocol.KEY_DEST_CELL], Vector3i(-1, -1, 0))
 		NetProtocol.Action.WAIT_UNIT:
-			if not _has_number(data, NetProtocol.KEY_UNIT_ID):
+			if not _has_unit_id(data):
 				return {}
-			out_data[NetProtocol.KEY_UNIT_ID] = int(data[NetProtocol.KEY_UNIT_ID])
+			out_data[NetProtocol.KEY_UNIT_ID] = unit_id_of(data[NetProtocol.KEY_UNIT_ID])
 		NetProtocol.Action.END_TURN:
 			if not _has_number(data, NetProtocol.KEY_PLAYER_ID):
 				return {}
@@ -315,7 +327,7 @@ static func decode_command(raw: Variant) -> Dictionary:
 		NetProtocol.KEY_DATA: out_data,
 		NetProtocol.KEY_ACTOR: int(src.get(NetProtocol.KEY_ACTOR, -1)),
 		NetProtocol.KEY_SEQ: int(src.get(NetProtocol.KEY_SEQ, 0)),
-		NetProtocol.KEY_RNG_SEED: int(src.get(NetProtocol.KEY_RNG_SEED, 0)),
+		NetProtocol.KEY_RNG_SEED: seed_of(src.get(NetProtocol.KEY_RNG_SEED, 0)),
 		NetProtocol.KEY_PV: int(src.get(NetProtocol.KEY_PV, NetProtocol.PROTOCOL_VERSION)),
 	}
 	# Final gate: the live protocol validator agrees this is appliable.
@@ -331,7 +343,7 @@ static func decode_command(raw: Variant) -> Dictionary:
 ## PURE and ORDER-INDEPENDENT by construction: [param rows] is sorted by unit id before
 ## anything is mixed, so the same state hashes identically no matter what order the caller
 ## walked the board in (scene order is NOT stable across peers, which is exactly the bug
-## this guards). Each row is [code]{ "id": int, "cell": Vector2i|[x,y], "hp": int }[/code];
+## this guards). Each row is [code]{ "id": String (NetUnitIds), "cell": Vector3i|[x,y(,floor)], "hp": int }[/code];
 ## a row that is not a Dictionary is skipped rather than raising.
 ##
 ## Deliberately CHEAP -- ids, cells and HP only. It is a divergence TRIPWIRE for playback,
@@ -344,15 +356,19 @@ static func state_checksum(rows: Array) -> String:
 		if not (row is Dictionary):
 			continue
 		var r: Dictionary = row
-		var cell: Vector2i = decode_cell(r.get("cell", null), Vector2i.ZERO)
-		clean.append([int(r.get("id", -1)), int(cell.x), int(cell.y), int(r.get("hp", 0))])
-	clean.sort_custom(func(a, b): return int(a[0]) < int(b[0]))
+		var cell: Vector3i = decode_cell(r.get("cell", null), Vector3i.ZERO)
+		clean.append([unit_id_of(r.get("id", "")), int(cell.x), int(cell.y), int(r.get("hp", 0)), int(cell.z)])
+	clean.sort_custom(func(a, b): return String(a[0]) < String(b[0]))
 	var parts: Array = [_SALT_CHECKSUM, clean.size(), _SEP]
 	for r in clean:
-		parts.append(r[0])
+		parts.append(String(r[0]).hash())
 		parts.append(r[1])
 		parts.append(r[2])
 		parts.append(r[3])
+		# The floor is mixed in ONLY off the ground floor, so every single-floor board hashes
+		# exactly as it did before multi-floor cells -- replays recorded then still verify.
+		if int(r[4]) != 0:
+			parts.append(r[4])
 		parts.append(_SEP)
 	return to_hex64(MatchRng._mix(parts))
 
@@ -783,3 +799,29 @@ static func _is_number(value: Variant) -> bool:
 
 static func _has_number(data: Dictionary, key: String) -> bool:
 	return data.has(key) and _is_number(data[key])
+
+
+## A unit id as the command vocabulary carries it: the [NetUnitIds] String. A number (a
+## replay recorded before the merged net core, when ids were ints) reads as its decimal
+## string so the file still DECODES -- such a replay is refused at the protocol-version gate
+## anyway, since its int ids name units by a scheme the board no longer uses.
+static func unit_id_of(value: Variant) -> String:
+	if value is String or value is StringName:
+		return String(value).strip_edges().left(32)
+	if _is_number(value):
+		return str(int(value))
+	return ""
+
+
+## A per-action RNG seed read back exactly: the decimal string encode_command writes (full
+## 64-bit precision), or a plain number from an older file.
+static func seed_of(value: Variant) -> int:
+	if value is String or value is StringName:
+		return String(value).to_int()
+	if _is_number(value):
+		return int(value)
+	return 0
+
+
+static func _has_unit_id(data: Dictionary) -> bool:
+	return data.has(NetProtocol.KEY_UNIT_ID) and unit_id_of(data[NetProtocol.KEY_UNIT_ID]) != ""

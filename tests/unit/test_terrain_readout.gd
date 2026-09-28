@@ -19,7 +19,7 @@ const GRASS_TILE := "res://game/tiles/effects/resources/tall_grass.tres"
 const ICE_TILE := "res://game/tiles/effects/resources/slippery_ice.tres"
 const FORTIFY_TILE := "res://game/tiles/effects/resources/fortify.tres"
 
-const CELL := Vector2i(2, 2)
+const CELL := Vector3i(2, 2, 0)
 
 
 ## The chart is a STATIC cache, i.e. global state (tests/README.md rule 3).
@@ -85,7 +85,7 @@ func test_the_chip_number_is_what_the_hit_chance_has_to_beat() -> void:
 	var move := MoveResource.new()
 	move.accuracy = 1.0
 	var ctx := MoveContext.new(fixture["unit"], fixture["board"], move, CELL,
-		[CELL] as Array[Vector2i])
+		[CELL] as Array[Vector3i])
 	assert_eq(ctx.hit_chance(fixture["unit"]), 100.0 - float(int(entries[0]["amount"])),
 		"the forecast's avoid and the chip's avoid are the same number")
 

@@ -29,7 +29,7 @@ class StubUnit:
 	var stats: Dictionary
 	var hp: int
 	var stance: String = "aggressive"
-	var home: Vector2i = Vector2i(-1, -1)
+	var home: Vector3i = Vector3i(-1, -1, 0)
 	var aggro: int = 0
 	var leash: int = -1
 
@@ -53,7 +53,7 @@ class StubUnit:
 	func is_defensive() -> bool:
 		return stance == "defensive"
 
-	func get_home_cell() -> Vector2i:
+	func get_home_cell() -> Vector3i:
 		return home
 
 	func has_home_cell() -> bool:
@@ -72,16 +72,16 @@ class StubUnit:
 class MockBoard:
 	var placements: Array = []  # { unit, cell }
 
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
 
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
+		return Vector3i(-999, -999, 0)
 
-	func units_at(cell: Vector2i) -> Array:
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -103,7 +103,7 @@ class MockBoard:
 
 # --- Fixtures ---------------------------------------------------------------
 
-func _manhattan(a: Vector2i, b: Vector2i) -> int:
+func _manhattan(a: Vector3i, b: Vector3i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)
 
 
@@ -142,12 +142,12 @@ func test_ai_uses_leap_and_aims_at_empty_landing_beside_hostile() -> void:
 	var actor := StubUnit.new(0, { "attack": 10 })
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(4, 0))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(4, 0, 0))
 
 	# reachable is irrelevant to a leap (it is cast from the current cell), but pass a
 	# realistic set to prove the planner does not fold it into the leap.
-	var reachable := [Vector2i(1, 0), Vector2i(2, 0)]
+	var reachable := [Vector3i(1, 0, 0), Vector3i(2, 0, 0)]
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [_leap_move()], board, reachable)
 
@@ -155,14 +155,14 @@ func test_ai_uses_leap_and_aims_at_empty_landing_beside_hostile() -> void:
 	assert_eq(decision["move"].move_id, &"test_leap", "the chosen move is the leap")
 	assert_eq(decision["target"], enemy, "it leaps at the reachable hostile")
 
-	var aim: Vector2i = decision["aim_cell"]
-	assert_eq(aim, Vector2i(3, 0), "aims at the only empty in-range cell beside the hostile")
+	var aim: Vector3i = decision["aim_cell"]
+	assert_eq(aim, Vector3i(3, 0, 0), "aims at the only empty in-range cell beside the hostile")
 	assert_ne(aim, board.cell_of(enemy), "the aim is NOT the hostile's own occupied cell")
 	assert_eq(_manhattan(aim, board.cell_of(enemy)), 1, "the landing cell is orthogonally adjacent to the hostile")
 
 	# The leap is cast from the CURRENT cell: dest_cell == origin means the executor
 	# relocates nothing before the leap (no double-move) -- LeapEffect does the move.
-	assert_eq(decision["dest_cell"], Vector2i(0, 0), "the actor does not walk before leaping (no double-move)")
+	assert_eq(decision["dest_cell"], Vector3i(0, 0, 0), "the actor does not walk before leaping (no double-move)")
 
 
 # --- Positional: no valid landing -> does not pick the leap ------------------
@@ -174,15 +174,15 @@ func test_ai_skips_leap_when_hostile_is_boxed_in() -> void:
 	var actor := StubUnit.new(0, { "attack": 10 })
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(4, 0))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(4, 0, 0))
 	# Box the hostile in on all four sides (allies, so they are not extra targets).
-	board.place(StubUnit.new(0, {}), Vector2i(3, 0))
-	board.place(StubUnit.new(0, {}), Vector2i(5, 0))
-	board.place(StubUnit.new(0, {}), Vector2i(4, 1))
-	board.place(StubUnit.new(0, {}), Vector2i(4, -1))
+	board.place(StubUnit.new(0, {}), Vector3i(3, 0, 0))
+	board.place(StubUnit.new(0, {}), Vector3i(5, 0, 0))
+	board.place(StubUnit.new(0, {}), Vector3i(4, 1, 0))
+	board.place(StubUnit.new(0, {}), Vector3i(4, -1, 0))
 
-	var reachable := [Vector2i(1, 0)]
+	var reachable := [Vector3i(1, 0, 0)]
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [_leap_move()], board, reachable)
 
@@ -197,15 +197,15 @@ func test_ordinary_move_still_aims_at_target_cell() -> void:
 	var actor := StubUnit.new(0, { "attack": 10 })
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(1, 0, 0))
 
 	var bot := BotController.new()
 	var decision := bot.plan(actor, [MoveLibrary.basic_strike()], board, [])
 
 	assert_eq(decision["action"], BotController.ActionType.MOVE, "attacks the adjacent enemy")
 	assert_eq(decision["aim_cell"], board.cell_of(enemy), "aims at the target's own cell, exactly as before")
-	assert_eq(decision["dest_cell"], Vector2i(0, 0), "strikes in place from the origin")
+	assert_eq(decision["dest_cell"], Vector3i(0, 0, 0), "strikes in place from the origin")
 
 
 # --- Leash: a landing beyond the tether is rejected -------------------------
@@ -217,10 +217,10 @@ func test_leashed_actor_wont_leap_beyond_leash_radius() -> void:
 	var enemy := StubUnit.new(1, { "health": 100, "defense": 0 })
 	var board := MockBoard.new()
 	var actor := StubUnit.new(0, { "attack": 10 })
-	actor.home = Vector2i(0, 0)
-	board.place(actor, Vector2i(0, 0))
-	board.place(enemy, Vector2i(4, 0))
-	var reachable := [Vector2i(1, 0), Vector2i(2, 0)]
+	actor.home = Vector3i(0, 0, 0)
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(4, 0, 0))
+	var reachable := [Vector3i(1, 0, 0), Vector3i(2, 0, 0)]
 
 	# Leashed to radius 2: (3,0) is out of tether, so the leap is not selected.
 	actor.leash = 2
@@ -233,4 +233,4 @@ func test_leashed_actor_wont_leap_beyond_leash_radius() -> void:
 	actor.leash = -1
 	var free := bot.plan(actor, [_leap_move()], board, reachable)
 	assert_eq(free["action"], BotController.ActionType.MOVE, "without a leash the same leap is chosen")
-	assert_eq(free["aim_cell"], Vector2i(3, 0), "and it aims at the landing the leash had excluded")
+	assert_eq(free["aim_cell"], Vector3i(3, 0, 0), "and it aims at the landing the leash had excluded")

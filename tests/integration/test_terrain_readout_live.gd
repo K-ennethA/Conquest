@@ -32,8 +32,8 @@ const DESIGN := Vector2i(1280, 720)
 
 ## Cells on the 5x5 board in `board/Grid.tres`. GRASS_CELL carries the tall grass;
 ## BARE_CELL is plain ground, so stepping between them is the whole test.
-const GRASS_CELL := Vector2i(2, 2)
-const BARE_CELL := Vector2i(0, 0)
+const GRASS_CELL := Vector3i(2, 2, 0)
+const BARE_CELL := Vector3i(0, 0, 0)
 
 ## 15 authored x 1.25 (nature unit in nature grass) = 18.75 -> 19. Pinned as a constant so a
 ## content retune fails LOUDLY here rather than quietly weakening every assertion.
@@ -74,8 +74,8 @@ func after_each() -> void:
 ## World centre of [param cell] on the shared grid, so a unit placed there round-trips
 ## through [method BoardAdapter.cell_of] (and through CombatServices' own startup assertion,
 ## which would otherwise push a warning and fail the test).
-func _world_of(cell: Vector2i) -> Vector3:
-	return CombatServices.GRID.calculate_map_position(Vector3(cell.x, 0, cell.y))
+func _world_of(cell: Vector3i) -> Vector3:
+	return CombatServices.GRID.calculate_map_position(Cells.to_grid(cell))
 
 
 func _character(element: StringName) -> CharacterResource:
@@ -95,7 +95,7 @@ func _character(element: StringName) -> CharacterResource:
 ## [param cell], with tall grass applied to GRASS_CELL through the same
 ## [method CombatServices.add_tile_effect] a move that transformed terrain would use.
 ## Returns the unit.
-func _board_with_unit(element: StringName, cell: Vector2i) -> Unit:
+func _board_with_unit(element: StringName, cell: Vector3i) -> Unit:
 	_map_root = Node3D.new()
 	_map_root.name = "Map"
 	add_child_autofree(_map_root)
@@ -112,7 +112,7 @@ func _board_with_unit(element: StringName, cell: Vector2i) -> Unit:
 
 ## Walk [param unit] to [param cell] the way the game does: reposition it on the board, then
 ## announce it on [signal GameEvents.unit_moved] -- the beat every terrain readout rides.
-func _walk(unit: Unit, cell: Vector2i) -> void:
+func _walk(unit: Unit, cell: Vector3i) -> void:
 	var from: Vector3 = unit.position
 	unit.position = _world_of(cell)
 	GameEvents.unit_moved.emit(unit, from, unit.position)

@@ -35,8 +35,13 @@ extends RefCounted
 ## func test_something() -> void:
 ##     var caster := Doubles.CombatUnit.new(0, {"attack": 30, "health": 100})
 ##     var board := Doubles.CombatBoard.new()
-##     board.place(caster, Vector2i(0, 0))
+##     board.place(caster, Vector3i(0, 0, 0))
 ## [/codeblock]
+##
+## CELLS are [Vector3i] (col, row, floor) -- see [Cells] / docs/MULTI_FLOOR.md. The boards
+## below STORE and RETURN Vector3i (that is what the production pipeline types against), but
+## every cell they are HANDED goes through [method Cells.from_variant], so a legacy
+## [code]Vector2i(x, y)[/code] still places on floor 0.
 ##
 ## Every double here is a [RefCounted]: they are collected automatically and can never
 ## show up in GUT's orphan count. If you need a double that is a [Node], you own freeing
@@ -167,21 +172,22 @@ class MinimalBoard:
 	## `{ unit, cell }` records, in placement order.
 	var placements: Array = []
 
-	func place(unit, cell: Vector2i) -> void:
-		placements.append({"unit": unit, "cell": cell})
+	func place(unit, cell) -> void:
+		placements.append({"unit": unit, "cell": Cells.from_variant(cell)})
 
 	## The cell [param unit] stands on, or a far-off sentinel when it is not placed --
 	## never an error, so an "unplaced target" test asserts on a value instead of a crash.
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
+		return Vector3i(-999, -999, 0)
 
-	func units_at(cell: Vector2i) -> Array:
+	func units_at(cell) -> Array:
+		var key: Vector3i = Cells.from_variant(cell)
 		var out: Array = []
 		for p in placements:
-			if p.cell == cell:
+			if p.cell == key:
 				out.append(p.unit)
 		return out
 
@@ -198,13 +204,13 @@ class MinimalBoard:
 class CombatBoard extends MinimalBoard:
 	var tiles: Dictionary = {}
 
-	func set_tile(cell: Vector2i, tile_id) -> void:
-		tiles[cell] = tile_id
+	func set_tile(cell, tile_id) -> void:
+		tiles[Cells.from_variant(cell)] = tile_id
 
-	func move_unit(unit, to_cell: Vector2i) -> void:
+	func move_unit(unit, to_cell) -> void:
 		for p in placements:
 			if p.unit == unit:
-				p.cell = to_cell
+				p.cell = Cells.from_variant(to_cell)
 
 
 ## A [CombatBoard] that answers terrain TAG queries, which is what
@@ -212,11 +218,11 @@ class CombatBoard extends MinimalBoard:
 class TerrainBoard extends CombatBoard:
 	var tags: Dictionary = {}
 
-	func tag_tile(cell: Vector2i, tag: StringName) -> void:
-		tags[cell] = tag
+	func tag_tile(cell, tag: StringName) -> void:
+		tags[Cells.from_variant(cell)] = tag
 
-	func tile_tag_at(cell: Vector2i) -> StringName:
-		return tags.get(cell, &"")
+	func tile_tag_at(cell) -> StringName:
+		return tags.get(Cells.from_variant(cell), &"")
 
 
 ## A [CombatBoard] that serves TILE EFFECTS and a faction perspective, the two hooks
@@ -228,11 +234,11 @@ class TileEffectBoard extends CombatBoard:
 	## Reference unit for [TileEffectResource]'s faction filters.
 	var perspective = null
 
-	func tile_effects_at(cell: Vector2i) -> Array:
-		return tiles.get(cell, [])
+	func tile_effects_at(cell) -> Array:
+		return tiles.get(Cells.from_variant(cell), [])
 
-	func set_tile_effects(cell: Vector2i, effects: Array) -> void:
-		tiles[cell] = effects
+	func set_tile_effects(cell, effects: Array) -> void:
+		tiles[Cells.from_variant(cell)] = effects
 
 	func perspective_unit():
 		return perspective

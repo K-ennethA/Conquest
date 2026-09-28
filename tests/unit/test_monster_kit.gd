@@ -101,16 +101,16 @@ class MockBoard:
 	var placements: Array = []
 	var blocked: Dictionary = {}
 	var bounds: Rect2i = Rect2i(-20, -20, 40, 40)
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func block(cell: Vector2i) -> void:
+	func block(cell: Vector3i) -> void:
 		blocked[cell] = true
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -125,13 +125,13 @@ class MockBoard:
 		for p in placements:
 			out.append(p.unit)
 		return out
-	func move_unit(unit, to_cell: Vector2i) -> void:
+	func move_unit(unit, to_cell: Vector3i) -> void:
 		for p in placements:
 			if p.unit == unit:
 				p.cell = to_cell
-	func in_bounds(cell: Vector2i) -> bool:
-		return bounds.has_point(cell)
-	func is_blocked(cell: Vector2i) -> bool:
+	func in_bounds(cell: Vector3i) -> bool:
+		return bounds.has_point(Cells.flat(cell))
+	func is_blocked(cell: Vector3i) -> bool:
 		return blocked.has(cell)
 
 
@@ -197,8 +197,8 @@ func _flat_move(power: int) -> MoveResource:
 ## Resolve [param move] from [param attacker] at [param victim]'s cell, announcing on
 ## [param bus]. Returns the context so a test can read the event log.
 func _strike(attacker, victim, board, move: MoveResource, bus) -> MoveContext:
-	var aim: Vector2i = board.cell_of(victim)
-	var ctx := MoveContext.new(attacker, board, move, aim, [aim] as Array[Vector2i])
+	var aim: Vector3i = board.cell_of(victim)
+	var ctx := MoveContext.new(attacker, board, move, aim, [aim] as Array[Vector3i])
 	ctx.event_bus = bus
 	for effect in move.effects:
 		effect.apply(ctx)
@@ -210,7 +210,7 @@ func _strike(attacker, victim, board, move: MoveResource, bus) -> MoveContext:
 func _plant_brand(brander, victim, board, bus) -> void:
 	var effect := DreadBrandEffect.new()
 	effect.brand = _branded()
-	var aim: Vector2i = board.cell_of(victim)
+	var aim: Vector3i = board.cell_of(victim)
 	var move := MoveResource.new()
 	move.move_id = &"dread_brand"
 	var pattern := TargetingPattern.new()
@@ -220,7 +220,7 @@ func _plant_brand(brander, victim, board, bus) -> void:
 	pattern.area_shape = CombatTypes.AreaShape.SINGLE
 	pattern.affects_caster_tile = true
 	move.targeting = pattern
-	var ctx := MoveContext.new(brander, board, move, aim, [aim] as Array[Vector2i])
+	var ctx := MoveContext.new(brander, board, move, aim, [aim] as Array[Vector3i])
 	ctx.event_bus = bus
 	effect.apply(ctx)
 
@@ -244,8 +244,8 @@ func test_the_brand_lands_on_a_unit_this_one_damages():
 	var brander := StatusUnit.new(0, { "magic": 20 })
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(brander, Vector2i(0, 0))
-	board.place(victim, Vector2i(2, 0))
+	board.place(brander, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(2, 0, 0))
 	_controller_for(victim)
 	var bus := MockBus.new()
 
@@ -263,8 +263,8 @@ func test_the_ability_resource_plants_the_brand_through_its_own_pipeline():
 	var brander := StatusUnit.new(0, { "magic": 20 })
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(brander, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(brander, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	var controller := _controller_for(victim)
 
 	_dread_brand().run_effects(brander, board, victim)
@@ -280,8 +280,8 @@ func test_a_branded_target_takes_amplified_damage():
 	var attacker := StatusUnit.new(0, { "magic": 0 })
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	var controller := _controller_for(victim)
 	var bus := MockBus.new()
 
@@ -303,9 +303,9 @@ func test_the_brand_amplifies_a_DIFFERENT_attacker_too():
 	var other := StatusUnit.new(0, { "magic": 0 })
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(brander, Vector2i(0, 0))
-	board.place(other, Vector2i(0, 1))
-	board.place(victim, Vector2i(1, 0))
+	board.place(brander, Vector3i(0, 0, 0))
+	board.place(other, Vector3i(0, 1, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	var controller := _controller_for(victim)
 	var bus := MockBus.new()
 
@@ -320,8 +320,8 @@ func test_the_brand_amplifies_exactly_one_instance_and_no_more():
 	var attacker := StatusUnit.new(0, { "magic": 0 })
 	var victim := StatusUnit.new(1, { "health": 200 })
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	_controller_for(victim)
 	var bus := MockBus.new()
 
@@ -340,15 +340,15 @@ func test_hazard_damage_also_takes_the_amplification_and_spends_the_brand():
 	var brander := StatusUnit.new(0, { "magic": 0 })
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(brander, Vector2i(0, 0))
-	board.place(victim, Vector2i(3, 0))
+	board.place(brander, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(3, 0, 0))
 	var controller := _controller_for(victim)
 	var bus := MockBus.new()
 
 	_plant_brand(brander, victim, board, bus)
 
 	var hazard := TravelingHazard.new(
-		Vector2i(0, 0), Vector2i(1, 0), 0, 3, 6, 20,
+		Vector3i(0, 0, 0), Vector3i(1, 0, 0), 0, 3, 6, 20,
 		CombatTypes.DamageCategory.MAGICAL, CombatTypes.TargetKind.ENEMY, brander)
 	hazard.event_bus = bus
 	hazard.advance(board)
@@ -362,8 +362,8 @@ func test_rebranding_refreshes_and_never_stacks():
 	var brander := StatusUnit.new(0, { "magic": 0 })
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(brander, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(brander, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	var controller := _controller_for(victim)
 	var bus := MockBus.new()
 
@@ -388,8 +388,8 @@ func test_the_hit_that_plants_the_brand_is_not_itself_amplified():
 	var brander := StatusUnit.new(0, { "magic": 0 })
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(brander, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(brander, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	var controller := _controller_for(victim)
 	var bus := MockBus.new()
 
@@ -411,8 +411,8 @@ func test_a_negated_hit_does_not_spend_the_brand():
 	var attacker := StatusUnit.new(0, { "magic": 0 })
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	var controller := _controller_for(victim)
 	var bus := MockBus.new()
 
@@ -431,8 +431,8 @@ func test_the_forecast_shows_the_amplified_number_without_spending_it():
 	var attacker := StatusUnit.new(0, { "magic": 0 })
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	var controller := _controller_for(victim)
 	var bus := MockBus.new()
 	var move := _flat_move(20)
@@ -478,9 +478,9 @@ func test_a_reduction_and_a_brand_land_on_opposite_sides_of_neutral():
 # ===========================================================================
 
 ## Cast Abyssal Maw from [param caster] at [param aim], returning the context.
-func _cast_maw(caster, board, aim: Vector2i, bus) -> MoveContext:
+func _cast_maw(caster, board, aim: Vector3i, bus) -> MoveContext:
 	var move := _abyssal_maw()
-	var origin: Vector2i = board.cell_of(caster)
+	var origin: Vector3i = board.cell_of(caster)
 	var cells := move.targeting.resolve_cells(origin, aim)
 	var ctx := MoveContext.new(caster, board, move, aim, cells)
 	ctx.event_bus = bus
@@ -505,12 +505,12 @@ func test_casting_the_maw_telegraphs_the_patch_and_damages_nothing_yet():
 	var caster := StatusUnit.new(0, { "magic": 10 })
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(victim, Vector2i(4, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(4, 0, 0))
 	_controller_for(caster)
 	var bus := MockBus.new()
 
-	_cast_maw(caster, board, Vector2i(4, 0), bus)
+	_cast_maw(caster, board, Vector3i(4, 0, 0), bus)
 
 	assert_eq(victim.hp, 100, "the cast turn deals no damage at all -- the maw is only armed")
 	assert_eq(bus.advanced_calls.size(), 1, "one telegraph was announced")
@@ -519,7 +519,7 @@ func test_casting_the_maw_telegraphs_the_patch_and_damages_nothing_yet():
 		"nothing is erupting yet, so the CURRENT band is empty")
 	assert_eq((telegraph["next_cells"] as Array).size(), 9,
 		"and the 3x3 patch is telegraphed as the band that erupts next")
-	assert_true(Vector2i(4, 0) in (telegraph["next_cells"] as Array),
+	assert_true(Vector3i(4, 0, 0) in (telegraph["next_cells"] as Array),
 		"the aimed cell is in the marked patch")
 	assert_true(caster.controller.has_status(&"void_maw_fuse"),
 		"the caster carries the fuse that will set it off")
@@ -530,13 +530,13 @@ func test_the_fuse_expiring_erupts_the_maw_on_whoever_is_standing_in_it():
 	var inside := StatusUnit.new(1, { "health": 100 })
 	var outside := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(inside, Vector2i(4, 0))
-	board.place(outside, Vector2i(7, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(inside, Vector3i(4, 0, 0))
+	board.place(outside, Vector3i(7, 0, 0))
 	var controller := _controller_for(caster)
 	var bus := MockBus.new()
 
-	_cast_maw(caster, board, Vector2i(4, 0), bus)
+	_cast_maw(caster, board, Vector3i(4, 0, 0), bus)
 	# One tick of the caster's own turn-start status pass is the whole fuse.
 	controller.tick_all(board)
 
@@ -552,13 +552,13 @@ func test_the_maw_credits_its_caster_and_spares_its_own_side():
 	var ally := StatusUnit.new(0, { "health": 100 })
 	var enemy := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(ally, Vector2i(4, 1))
-	board.place(enemy, Vector2i(4, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(ally, Vector3i(4, 1, 0))
+	board.place(enemy, Vector3i(4, 0, 0))
 	var controller := _controller_for(caster)
 	var bus := MockBus.new()
 
-	_cast_maw(caster, board, Vector2i(4, 0), bus)
+	_cast_maw(caster, board, Vector3i(4, 0, 0), bus)
 	controller.tick_all(board)
 
 	assert_eq(ally.hp, 100, "the maw is ENEMY-affiliated: it never bites its caster's side")
@@ -575,15 +575,15 @@ func test_the_maw_bites_a_unit_that_walked_into_the_patch_after_the_cast():
 	var wanderer := StatusUnit.new(1, { "health": 100 })
 	var bolter := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(wanderer, Vector2i(8, 8))   # far outside at cast time
-	board.place(bolter, Vector2i(4, 0))     # inside at cast time
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(wanderer, Vector3i(8, 8, 0))   # far outside at cast time
+	board.place(bolter, Vector3i(4, 0, 0))     # inside at cast time
 	var controller := _controller_for(caster)
 	var bus := MockBus.new()
 
-	_cast_maw(caster, board, Vector2i(4, 0), bus)
-	board.move_unit(wanderer, Vector2i(3, 0))  # walks in
-	board.move_unit(bolter, Vector2i(9, 9))    # walks out
+	_cast_maw(caster, board, Vector3i(4, 0, 0), bus)
+	board.move_unit(wanderer, Vector3i(3, 0, 0))  # walks in
+	board.move_unit(bolter, Vector3i(9, 9, 0))    # walks out
 	controller.tick_all(board)
 
 	assert_eq(wanderer.hp, 66, "whoever is standing in it when it opens gets bitten")
@@ -594,12 +594,12 @@ func test_the_maw_number_is_frozen_at_cast_time():
 	var caster := StatusUnit.new(0, { "magic": 10 })
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(victim, Vector2i(4, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(4, 0, 0))
 	var controller := _controller_for(caster)
 	var bus := MockBus.new()
 
-	_cast_maw(caster, board, Vector2i(4, 0), bus)
+	_cast_maw(caster, board, Vector3i(4, 0, 0), bus)
 	caster.stats["magic"] = 100  # a buff lands while the fuse burns
 	controller.tick_all(board)
 
@@ -616,12 +616,12 @@ func test_the_maw_erupts_identically_when_the_whole_cast_is_replayed():
 		var a := StatusUnit.new(1, { "health": 100 })
 		var b := StatusUnit.new(1, { "health": 100, "magic_defense": 9 })
 		var board := MockBoard.new()
-		board.place(caster, Vector2i(0, 0))
-		board.place(a, Vector2i(4, 0))
-		board.place(b, Vector2i(5, 1))
+		board.place(caster, Vector3i(0, 0, 0))
+		board.place(a, Vector3i(4, 0, 0))
+		board.place(b, Vector3i(5, 1, 0))
 		var controller := _controller_for(caster)
 		var bus := MockBus.new()
-		_cast_maw(caster, board, Vector2i(4, 0), bus)
+		_cast_maw(caster, board, Vector3i(4, 0, 0), bus)
 		controller.tick_all(board)
 		runs.append([a.hp, b.hp, bus.damage_calls.size(), bus.expired_calls.size()])
 	assert_eq(runs[0], runs[1],
@@ -645,27 +645,27 @@ func test_umbral_claw_is_a_three_cell_line():
 
 func test_umbral_claw_covers_exactly_the_three_cells_ahead():
 	var move := _umbral_claw()
-	var cells := move.targeting.resolve_cells(Vector2i(0, 0), Vector2i(1, 0))
-	assert_eq(cells, [Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)] as Array[Vector2i],
+	var cells := move.targeting.resolve_cells(Vector3i(0, 0, 0), Vector3i(1, 0, 0))
+	assert_eq(cells, [Vector3i(1, 0, 0), Vector3i(2, 0, 0), Vector3i(3, 0, 0)] as Array[Vector3i],
 		"the swipe runs three cells straight out from the caster")
 
 
 func test_umbral_claw_hits_every_enemy_in_the_line_and_nothing_beside_it():
 	var caster := StatusUnit.new(0, { "magic": 32 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
+	board.place(caster, Vector3i(0, 0, 0))
 	var in_line: Array = []
 	for x in [1, 2, 3]:
 		var e := StatusUnit.new(1, { "health": 100 })
-		board.place(e, Vector2i(x, 0))
+		board.place(e, Vector3i(x, 0, 0))
 		in_line.append(e)
 	var flank := StatusUnit.new(1, { "health": 100 })
-	board.place(flank, Vector2i(2, 1))
+	board.place(flank, Vector3i(2, 1, 0))
 
 	var move := _umbral_claw()
-	var aim := Vector2i(1, 0)
+	var aim := Vector3i(1, 0, 0)
 	var ctx := MoveContext.new(caster, board, move, aim,
-		move.targeting.resolve_cells(Vector2i(0, 0), aim))
+		move.targeting.resolve_cells(Vector3i(0, 0, 0), aim))
 	var gathered: Array = ctx.gather_targets()
 
 	assert_eq(gathered.size(), 3, "all three enemies in the line are gathered")
@@ -679,18 +679,18 @@ func test_umbral_claw_caps_at_three_enemies():
 	# simply out of the swipe.
 	var caster := StatusUnit.new(0, { "magic": 32 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
+	board.place(caster, Vector3i(0, 0, 0))
 	var fourth: StatusUnit = null
 	for x in [1, 2, 3, 4]:
 		var e := StatusUnit.new(1, { "health": 100 })
-		board.place(e, Vector2i(x, 0))
+		board.place(e, Vector3i(x, 0, 0))
 		if x == 4:
 			fourth = e
 
 	var move := _umbral_claw()
-	var aim := Vector2i(1, 0)
+	var aim := Vector3i(1, 0, 0)
 	var ctx := MoveContext.new(caster, board, move, aim,
-		move.targeting.resolve_cells(Vector2i(0, 0), aim))
+		move.targeting.resolve_cells(Vector3i(0, 0, 0), aim))
 	var gathered: Array = ctx.gather_targets()
 
 	assert_eq(gathered.size(), 3, "never more than three")
@@ -702,14 +702,14 @@ func test_umbral_claw_spares_allies_standing_in_the_line():
 	var ally := StatusUnit.new(0, { "health": 100 })
 	var enemy := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(ally, Vector2i(1, 0))
-	board.place(enemy, Vector2i(2, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(ally, Vector3i(1, 0, 0))
+	board.place(enemy, Vector3i(2, 0, 0))
 
 	var move := _umbral_claw()
-	var aim := Vector2i(1, 0)
+	var aim := Vector3i(1, 0, 0)
 	var ctx := MoveContext.new(caster, board, move, aim,
-		move.targeting.resolve_cells(Vector2i(0, 0), aim))
+		move.targeting.resolve_cells(Vector3i(0, 0, 0), aim))
 	var gathered: Array = ctx.gather_targets()
 
 	assert_eq(gathered, [enemy], "an ENEMY-keyed line cuts past its own side")
@@ -722,12 +722,12 @@ func test_umbral_claw_spares_allies_standing_in_the_line():
 func test_voidwalk_applies_the_submerged_status_to_the_caster():
 	var caster := StatusUnit.new(0, { "magic": 32 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
+	board.place(caster, Vector3i(0, 0, 0))
 	var controller := _controller_for(caster)
 
 	var move := _voidwalk()
-	var ctx := MoveContext.new(caster, board, move, Vector2i(0, 0),
-		[Vector2i(0, 0)] as Array[Vector2i])
+	var ctx := MoveContext.new(caster, board, move, Vector3i(0, 0, 0),
+		[Vector3i(0, 0, 0)] as Array[Vector3i])
 	for effect in move.effects:
 		effect.apply(ctx)
 
@@ -741,8 +741,8 @@ func test_a_submerged_unit_takes_nothing_from_an_attack():
 	var attacker := StatusUnit.new(0, { "magic": 0 })
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	_controller_for(victim).add_status(_submerged())
 	var bus := MockBus.new()
 
@@ -759,7 +759,7 @@ func test_a_submerged_unit_takes_nothing_from_an_attack():
 func test_a_submerged_unit_takes_nothing_from_tile_or_hazard_damage():
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(victim, Vector2i(1, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	_controller_for(victim).add_status(_submerged())
 
 	# The environmental chain -- what a burning tile and a crawling vine both resolve
@@ -770,8 +770,8 @@ func test_a_submerged_unit_takes_nothing_from_tile_or_hazard_damage():
 
 	# ...and the maw's own eruption is that same chain.
 	var attacker := StatusUnit.new(0, { "magic": 0 })
-	board.place(attacker, Vector2i(0, 0))
-	var maw := DelayedBurstHazard.new([Vector2i(1, 0)] as Array[Vector2i], 40,
+	board.place(attacker, Vector3i(0, 0, 0))
+	var maw := DelayedBurstHazard.new([Vector3i(1, 0, 0)] as Array[Vector3i], 40,
 		CombatTypes.DamageCategory.MAGICAL, CombatTypes.TargetKind.ENEMY, attacker)
 	maw.event_bus = MockBus.new()
 	maw.detonate(board)
@@ -782,8 +782,8 @@ func test_the_forecast_reports_zero_against_a_submerged_unit():
 	var attacker := StatusUnit.new(0, { "magic": 0 })
 	var victim := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(attacker, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(attacker, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	_controller_for(victim).add_status(_submerged())
 
 	var forecast: Dictionary = MoveExecutor.preview_vs(_flat_move(40), attacker, victim, board)
@@ -799,8 +799,8 @@ func test_the_bot_never_spends_its_turn_swinging_at_a_submerged_unit():
 	var actor := StatusUnit.new(0, { "attack": 10 })
 	var submerged_enemy := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(actor, Vector2i(0, 0))
-	board.place(submerged_enemy, Vector2i(1, 0))
+	board.place(actor, Vector3i(0, 0, 0))
+	board.place(submerged_enemy, Vector3i(1, 0, 0))
 	_controller_for(submerged_enemy).add_status(_submerged())
 
 	var bot := BotController.new()

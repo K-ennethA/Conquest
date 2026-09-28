@@ -2,42 +2,52 @@ extends Control
 
 class_name Compendium
 
-# Compendium - the single in-game reference, replacing the three separate
-# gallery entry points on the main menu.
+# Compendium - the single in-game encyclopedia.
 #
-# SHELL, NOT A REWRITE. The Units / Tiles / Maps sections are the EXISTING
-# UnitGallery, TileGallery and MapGallery scenes instantiated into a host each.
-# They are full-rect Controls that build their own UI, so hosting them costs
-# nothing beyond an add_child() and keeps every bit of work already done on them
-# intact. Only the Statuses section is built here; Weather is a stub.
+# SECTIONS. Units / Tiles / Maps / Elements are EXISTING gallery scenes (UnitGallery,
+# TileGallery, MapGallery, ElementChartGallery) instantiated into a tab each (they build
+# their own UI; hosting them costs an add_child()). Weather / Tile Effects / Statuses /
+# Rules are ENTRY BROWSERS built here from [CompendiumData], the data model that derives
+# every entry from the authored resources -- so new weather, tile effects, statuses,
+# units, moves, abilities and elements appear on their own.
 #
-# SIDEBAR NAV, NOT STOCK TABS. The shell is a slim vertical nav rail (brand title,
-# a flat button per section with a live count badge, a Back button at the foot)
-# beside a content host. The stock TabContainer is gone -- it read as default
-# Godot, which is exactly the "clunky" the redesign is retiring.
+# ELEMENTS. The Elements tab is the full attacker x defender type chart plus a card per
+# element, drawn from element_chart.tres through [ElementChart] -- the same source the
+# damage pipeline reads. The Rules tab's "Elements & Matchups" entry explains the rules
+# around it and cross-links here ([url=elements:<id>]), so there is exactly one chart.
 #
-# LAZY HOSTING. Each section starts as an empty host Control and its scene is
-# instantiated the first time that section is shown (see _ensure_section). Three
-# galleries eagerly spinning up their 3D SubViewports at once is pure waste when
-# the player only ever looks at one at a time.
+# SEARCH. The search box on the title row looks through EVERY section's entries (units
+# and elements included) and jumps to the one you pick. Entries cross-link with
+# [url=<section>:<id>] BBCode (a weather named in an ability jumps to it).
 #
-# INPUT OWNERSHIP. The hosted galleries each handle _input themselves (ESC to
-# leave, arrows to page the dex, F5 to refresh). A hidden section is still in the
-# tree and would still react, so input processing is enabled ONLY on the section
-# currently on screen (see _sync_section_input).
+# NAVIGATION. Grove-styled tabs (MenuKit page): Q / R or LB / RB switch sections, the
+# number keys 1-8 jump straight to one, arrows browse, Esc / B goes back. Each tab's
+# tooltip carries a live count of what it holds (units, tiles, maps, ...).
+#
+# OVERLAY. [method open_overlay] shows the Compendium over a running battle (Map Menu
+# > Encyclopedia): it lives on its own CanvasLayer in [constant
+# InputActions.OVERLAY_GROUP] so the board ignores input, and Back / Esc closes it
+# instead of leaving the battle.
+#
+# LAZY HOSTING. Each tab starts as an empty host Control and is built the first time
+# it is shown (see _ensure_section). INPUT OWNERSHIP: _input is enabled only on the
+# section on screen (see _sync_section_input).
 
-## Section index -> nav title. Order here IS the nav order.
-const SECTION_TITLES: Array[String] = ["Units", "Tiles", "Maps", "Statuses", "Elements", "Weather"]
+signal closed
+
+## Section index -> tab title. Order here IS the tab order.
+const SECTION_TITLES: Array[String] = ["Units", "Tiles", "Maps", "Weather", "Tile Effects", "Statuses", "Elements", "Rules"]
 
 const SECTION_UNITS := 0
 const SECTION_TILES := 1
 const SECTION_MAPS := 2
-const SECTION_STATUSES := 3
-const SECTION_ELEMENTS := 4
-const SECTION_WEATHER := 5
+const SECTION_WEATHER := 3
+const SECTION_TILE_EFFECTS := 4
+const SECTION_STATUSES := 5
+const SECTION_ELEMENTS := 6
+const SECTION_RULES := 7
 
-## Hosted gallery scenes, by section index. Sections absent from this map are
-## built in code by this script (Statuses, Weather).
+## Hosted gallery scenes, by section index.
 const HOSTED_SCENES: Dictionary = {
 	SECTION_UNITS: "res://menus/UnitGallery.tscn",
 	SECTION_TILES: "res://menus/TileGallery.tscn",
@@ -45,38 +55,80 @@ const HOSTED_SCENES: Dictionary = {
 	SECTION_ELEMENTS: "res://menus/ElementChartGallery.tscn",
 }
 
-## Where map resources live, for the Maps count badge (MapGallery owns loading).
+## Browser sections: tab index -> CompendiumData section id.
+const BROWSER_SECTIONS: Dictionary = {
+	SECTION_WEATHER: CompendiumData.SECTION_WEATHER,
+	SECTION_TILE_EFFECTS: CompendiumData.SECTION_TILES,
+	SECTION_STATUSES: CompendiumData.SECTION_STATUSES,
+	SECTION_RULES: CompendiumData.SECTION_RULES,
+}
+
+## Where map resources live, for the Maps count (MapGallery owns loading).
 const MAPS_DIR := "res://game/maps/resources/"
 
-const MUTED := Color(0.72, 0.70, 0.78)
+const MUTED := MenuTheme.TEXT_MUTED
+const MAP_MAKER_SCENE := "res://game/mapmaker/MapMakerScene.tscn"
+const SCENE_PATH := "res://menus/Compendium.tscn"
+
+## True when shown over a battle (Back closes instead of changing scene).
+var overlay_mode: bool = false
+## Tab shown first (set before the node enters the tree; the overlay opens on
+## Weather so the 3D unit gallery is not spun up unless asked for).
+var start_section: int = SECTION_UNITS
 
 # --- Shell ---
-var content_host: Control
+var tab_container: TabContainer
 var back_button: Button
+var search_box: LineEdit
+var search_results: ItemList
+var _search_hits: Array = []
 
 ## Host Control per section index; the section's content is added under it.
 var _section_hosts: Dictionary = {}
-## Section indices already populated, so a section is only built once.
+## Section indices already populated, so a tab is only built once.
 var _built_sections: Dictionary = {}
-## Nav rail button + count badge per section index, for active-state restyling.
-var _nav_buttons: Dictionary = {}
-var _nav_badges: Dictionary = {}
-## Section currently on screen.
-var _current_section: int = SECTION_UNITS
 
-# --- Statuses section ---
+## Per browser section: { list, filter, detail, scroll, entries, shown }.
+var _browsers: Dictionary = {}
+
+## Kept for callers / tests that read the Statuses browser directly.
 var status_list: ItemList
 var status_search: LineEdit
 var status_detail: VBoxContainer
-var status_empty_label: Label
 
-var all_statuses: Array[StatusCondition] = []
-var filtered_statuses: Array[StatusCondition] = []
+
+## Show the Compendium over the current scene (the battle) and return it. Closes on
+## Back / Esc; board input is blocked while it is open.
+static func open_overlay(tree: SceneTree, start_section: int = SECTION_WEATHER) -> Compendium:
+	if tree == null:
+		return null
+	var layer := CanvasLayer.new()
+	layer.name = "CompendiumOverlay"
+	layer.layer = 50
+	var packed := load(SCENE_PATH) as PackedScene
+	var comp := packed.instantiate() as Compendium
+	comp.overlay_mode = true
+	comp.start_section = start_section
+	comp.add_to_group(InputActions.OVERLAY_GROUP)
+	layer.add_child(comp)
+	# Added AFTER the Compendium so its _input runs FIRST (reverse tree order): the
+	# hosted galleries' own Esc handlers would otherwise leave the battle.
+	var catcher := _BackCatcher.new()
+	catcher.target = comp
+	layer.add_child(catcher)
+	var host: Node = tree.current_scene if tree.current_scene != null else tree.root
+	host.add_child(layer)
+	comp.closed.connect(layer.queue_free)
+	return comp
 
 
 func _ready() -> void:
-	theme = MenuTheme.build()  # dark Legends-style menu look
+	theme = MenuTheme.build()
 	_build_shell()
+	if start_section != tab_container.current_tab:
+		tab_container.current_tab = clampi(start_section, 0, tab_container.get_tab_count() - 1)
+	_ensure_section(tab_container.current_tab)
+	_sync_section_input()
 
 
 # ---------------------------------------------------------------------------
@@ -84,196 +136,166 @@ func _ready() -> void:
 # ---------------------------------------------------------------------------
 
 func _build_shell() -> void:
-	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	MenuTheme.apply_backdrop(self)
+	var page := MenuKit.build_page(self, ["Battle"] if overlay_mode else [], "Compendium",
+		"Every unit, tile, map, weather, effect, element and rule in the game.")
+	(page.subtitle as Label).visible = false
 
-	var shell := HBoxContainer.new()
-	shell.name = "Shell"
-	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	shell.add_theme_constant_override("separation", 0)
-	add_child(shell)
+	# Global search: across every section, jump to the pick. Sits on the title row
+	# (right of "Compendium") so the browsers keep their height.
+	var search_row := HBoxContainer.new()
+	search_row.add_theme_constant_override("separation", MenuTheme.SP_M)
+	search_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	search_row.alignment = BoxContainer.ALIGNMENT_END
+	search_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var title_row := (page.title as Label).get_parent()
+	if title_row is HBoxContainer:
+		title_row.add_child(search_row)
+	else:
+		page.body.add_child(search_row)
+	search_box = LineEdit.new()
+	search_box.name = "GlobalSearch"
+	search_box.placeholder_text = "Search units, moves, weather, tiles, statuses, elements, rules..."
+	search_box.custom_minimum_size = Vector2(560, 0)
+	search_box.clear_button_enabled = true
+	search_box.text_changed.connect(_on_global_search)
+	search_box.text_submitted.connect(func(_t): _pick_search_result(0))
+	search_box.gui_input.connect(_on_search_box_input)
+	search_row.add_child(search_box)
 
-	shell.add_child(_build_nav_rail())
+	search_results = ItemList.new()
+	search_results.name = "SearchResults"
+	search_results.visible = false
+	search_results.custom_minimum_size = Vector2(0, 180)
+	search_results.item_activated.connect(_pick_search_result)
+	search_results.item_clicked.connect(func(i, _p, _b): _pick_search_result(i))
+	page.body.add_child(search_results)
 
-	# Content host: the galleries mount here full-rect and only the active one is
-	# shown. clip_contents keeps a stray oversized child from bleeding over the rail.
-	content_host = Control.new()
-	content_host.name = "ContentHost"
-	content_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content_host.clip_contents = true
-	shell.add_child(content_host)
+	tab_container = TabContainer.new()
+	tab_container.name = "Sections"
+	tab_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tab_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page.body.add_child(tab_container)
 
 	for i in SECTION_TITLES.size():
 		var host := Control.new()
-		host.name = SECTION_TITLES[i]
-		host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		host.visible = false
-		content_host.add_child(host)
+		host.name = SECTION_TITLES[i].replace(" ", "")
+		host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		host.clip_contents = true
+		tab_container.add_child(host)
+		tab_container.set_tab_title(i, SECTION_TITLES[i])
 		_section_hosts[i] = host
+	_refresh_tab_tooltips()
 
-	# Populate + show whichever section opens first; the rest wait until shown.
-	_show_section(_current_section)
+	tab_container.tab_changed.connect(_on_tab_changed)
 
+	if not overlay_mode:
+		# The in-game Map Maker lives here too: author your own battlefield.
+		var map_maker_button := MenuKit.button("Map Maker", &"", 180)
+		map_maker_button.name = "MapMakerButton"
+		map_maker_button.tooltip_text = "Build and save your own maps (multi-floor, spawns, stairs)."
+		map_maker_button.pressed.connect(_on_map_maker_pressed)
+		page.actions.add_child(map_maker_button)
 
-func _build_nav_rail() -> PanelContainer:
-	var rail := PanelContainer.new()
-	rail.name = "NavRail"
-	rail.custom_minimum_size = Vector2(216, 0)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_top", 20)
-	margin.add_theme_constant_override("margin_bottom", 16)
-	rail.add_child(margin)
-
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 6)
-	margin.add_child(col)
-
-	var brand := Label.new()
-	brand.text = "COMPENDIUM"
-	brand.add_theme_font_size_override("font_size", MenuTheme.FONT_DISPLAY)
-	brand.add_theme_color_override("font_color", MenuTheme.GOLD)
-	col.add_child(brand)
-
-	var subtitle := Label.new()
-	subtitle.text = "Field reference"
-	subtitle.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	subtitle.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
-	col.add_child(subtitle)
-
-	col.add_child(_rail_spacer(10))
-
-	for i in SECTION_TITLES.size():
-		col.add_child(_build_nav_entry(i))
-
-	# Push the Back button to the foot of the rail.
-	var grow := Control.new()
-	grow.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_child(grow)
-
-	back_button = Button.new()
+	back_button = MenuKit.button("Return to Battle" if overlay_mode else "Back", MenuKit.GHOST,
+		200 if overlay_mode else 140)
 	back_button.name = "BackButton"
-	back_button.text = "BACK"
-	# >=44px hit target (touch-readiness).
-	back_button.custom_minimum_size = Vector2(0, 44)
 	back_button.pressed.connect(_on_back_pressed)
-	col.add_child(back_button)
-
-	return rail
-
-
-func _rail_spacer(height: int) -> Control:
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, height)
-	return spacer
+	page.actions.add_child(back_button)
+	page.hints.add_child(MenuKit.key_hint("Q / R", "LB / RB", "Switch section"))
+	page.hints.add_child(MenuKit.key_hint("Arrows", "D-Pad", "Browse / scroll"))
+	page.hints.add_child(MenuKit.key_hint("Esc", "B", "Close" if overlay_mode else "Back"))
+	MenuNav.focus_deferred(tab_container.get_tab_bar())
 
 
-## One full-width nav entry: a flat button carrying the section name, with a small
-## right-aligned count badge overlaid inside it.
-func _build_nav_entry(index: int) -> Button:
-	var btn := Button.new()
-	btn.name = "Nav_" + SECTION_TITLES[index]
-	btn.text = SECTION_TITLES[index]
-	btn.theme_type_variation = "NavButton"
-	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	btn.focus_mode = Control.FOCUS_NONE
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# >=44px hit target (touch-readiness).
-	btn.custom_minimum_size = Vector2(0, 44)
-	btn.pressed.connect(_show_section.bind(index))
-
-	# Count badge, right-aligned, non-interactive so clicks fall through to the
-	# button. Full-rect with a right inset places the glyphs at the right edge; the
-	# button's own left-aligned label never collides with it.
-	var badge := Label.new()
-	badge.name = "Badge"
-	badge.text = _section_badge_text(index)
-	badge.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	badge.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
-	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	badge.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	badge.offset_right = -14
-	btn.add_child(badge)
-
-	_nav_buttons[index] = btn
-	_nav_badges[index] = badge
-	return btn
+## Live count per tab ("11 units"), shown as the tab's tooltip -- read off the content
+## itself, so a new unit / tile / map / element counts itself.
+func _refresh_tab_tooltips() -> void:
+	if tab_container == null:
+		return
+	var bar := tab_container.get_tab_bar()
+	for i in SECTION_TITLES.size():
+		var text := section_count_text(i)
+		if text != "":
+			bar.set_tab_tooltip(i, text)
 
 
-## Live count shown on a section's nav badge. Weather has nothing to browse yet,
-## so it reads "SOON" rather than "0".
-func _section_badge_text(index: int) -> String:
+## "11 units" / "18 tiles" / "7 elements" -- what a section holds, or "" when the
+## section is not a collection (Rules).
+func section_count_text(index: int) -> String:
+	var n := -1
+	var one := ""
+	var many := ""
 	match index:
 		SECTION_UNITS:
-			return str(CharacterLibrary.all_ids().size())
+			n = CharacterLibrary.all_ids().size()
+			one = "unit"
+			many = "units"
 		SECTION_TILES:
-			return str(TileCatalog.all_paths().size())
+			n = TileCatalog.all_paths().size()
+			one = "tile"
+			many = "tiles"
 		SECTION_MAPS:
-			return str(_count_maps())
-		SECTION_STATUSES:
-			return str(StatusCatalog.all_paths().size())
-		SECTION_ELEMENTS:
-			# Read live off the chart resource, like every other badge here -- an
-			# element authored during the content phase counts itself.
-			return str(ElementChartGallery.elements().size())
+			n = _count_maps()
+			one = "map"
+			many = "maps"
 		SECTION_WEATHER:
-			return "SOON"
-	return ""
+			n = Weather.all_ids().size()
+			one = "weather"
+			many = "weathers"
+		SECTION_TILE_EFFECTS:
+			n = CompendiumData.tile_effect_paths().size()
+			one = "tile effect"
+			many = "tile effects"
+		SECTION_STATUSES:
+			n = StatusCatalog.all_paths().size()
+			one = "status"
+			many = "statuses"
+		SECTION_ELEMENTS:
+			n = ElementChartGallery.elements().size()
+			one = "element"
+			many = "elements"
+	if n < 0:
+		return ""
+	return "%d %s" % [n, one if n == 1 else many]
 
 
-## Cheap count of map resources for the badge, without loading them all (that is
-## MapGallery's job when the section is actually opened).
+## Cheap count of map resources, without loading them all (that is MapGallery's job
+## when the section is actually opened).
 func _count_maps() -> int:
 	var count: int = 0
 	var dir := DirAccess.open(MAPS_DIR)
 	if dir == null:
 		return 0
-	dir.list_dir_begin()
-	var file_name := dir.get_next()
-	while file_name != "":
-		if not dir.current_is_dir() and file_name.ends_with(".tres"):
+	for f in dir.get_files():
+		if f.trim_suffix(".remap").ends_with(".tres"):
 			count += 1
-		file_name = dir.get_next()
-	dir.list_dir_end()
 	return count
 
 
-## Make [param index] the visible section: toggle host visibility, restyle the nav
-## rail (active button + brighter badge), build the section on first view, and move
-## input ownership to it.
-func _show_section(index: int) -> void:
-	if index < 0 or index >= SECTION_TITLES.size():
-		return
-	_current_section = index
+func _on_map_maker_pressed() -> void:
+	# The Map Maker returns to whichever screen opened it (here: the Compendium).
+	MapMakerScene.open_from(self, SCENE_PATH)
 
-	for key in _section_hosts:
-		var host: Control = _section_hosts[key] as Control
-		if host != null:
-			host.visible = (int(key) == index)
 
-	for key in _nav_buttons:
-		var btn: Button = _nav_buttons[key] as Button
-		if btn != null:
-			btn.theme_type_variation = "NavButtonActive" if int(key) == index else "NavButton"
-
-	for key in _nav_badges:
-		var badge: Label = _nav_badges[key] as Label
-		if badge != null:
-			var col: Color = MenuTheme.GOLD if int(key) == index else MenuTheme.CREAM_DIM
-			badge.add_theme_color_override("font_color", col)
-
-	_ensure_section(index)
+func _on_tab_changed(tab: int) -> void:
+	_ensure_section(tab)
 	_sync_section_input()
 
 
+## Switch to tab [param index] (built on demand).
+func select_tab(index: int) -> void:
+	if tab_container == null:
+		return
+	index = clampi(index, 0, tab_container.get_tab_count() - 1)
+	if tab_container.current_tab != index:
+		tab_container.current_tab = index
+	else:
+		_on_tab_changed(index)
+
+
 ## Build section [param index] if it has not been built yet. Every failure mode
-## degrades to a placeholder inside that one section -- a gallery scene that will
-## not load must never take the whole Compendium down with it.
+## degrades to a placeholder inside that one tab.
 func _ensure_section(index: int) -> void:
 	if _built_sections.has(index):
 		return
@@ -286,14 +308,10 @@ func _ensure_section(index: int) -> void:
 	if HOSTED_SCENES.has(index):
 		_build_hosted_section(host, String(HOSTED_SCENES[index]))
 		return
-
-	match index:
-		SECTION_STATUSES:
-			_build_statuses_section(host)
-		SECTION_WEATHER:
-			_build_weather_section(host)
-		_:
-			_add_placeholder(host, "This section is not available.")
+	if BROWSER_SECTIONS.has(index):
+		_build_browser(host, index, String(BROWSER_SECTIONS[index]))
+		return
+	_add_placeholder(host, "This section is not available.")
 
 
 ## Instantiate an existing gallery scene into [param host].
@@ -317,15 +335,24 @@ func _build_hosted_section(host: Control, scene_path: String) -> void:
 	var gallery: Control = inst as Control
 	gallery.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	host.add_child(gallery)
+	# The standalone scene's flat background would cover the tab panel.
+	var gallery_bg := gallery.get_node_or_null("Background")
+	if gallery_bg is CanvasItem:
+		(gallery_bg as CanvasItem).visible = false
 
-	# The gallery builds its UI (and its BACK button) in _ready, which has now
-	# run. Hide that button: the shell supplies the single back control. Guarded
-	# by a property check so a gallery that stops exposing back_button, or names
-	# it differently, simply keeps its own button rather than erroring.
+	# The gallery builds its UI (and its Back button) in _ready, which has now run. The
+	# shell supplies the single back control: hide the gallery's own -- and its header
+	# row with it when that row holds nothing but the title and the button. Guarded by
+	# a property check so a gallery that stops exposing back_button simply keeps its
+	# own button rather than erroring. (A hosted gallery's Esc defers to the shell
+	# once its button is hidden.)
 	if "back_button" in gallery:
 		var gallery_back = gallery.get("back_button")
 		if gallery_back is Button:
 			(gallery_back as Button).visible = false
+			var header := (gallery_back as Button).get_parent()
+			if header is HBoxContainer and header.get_child_count() <= 2:
+				(header as HBoxContainer).visible = false
 
 
 func _add_placeholder(host: Control, message: String) -> void:
@@ -337,414 +364,383 @@ func _add_placeholder(host: Control, message: String) -> void:
 	label.text = message
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.modulate = MUTED
+	label.theme_type_variation = &"MutedLabel"
 	center.add_child(label)
 
 
 ## Enable _input only on the section currently on screen. Hidden sections stay in
 ## the tree, and a hidden gallery still receiving key events would page a dex nobody
-## is looking at -- or fire a second ESC handler.
+## is looking at.
 func _sync_section_input() -> void:
+	if tab_container == null:
+		return
+	var current: int = tab_container.current_tab
 	for key in _section_hosts:
 		var index: int = int(key)
 		var host: Control = _section_hosts[key] as Control
 		if host == null:
 			continue
 		for child in host.get_children():
-			child.set_process_input(index == _current_section)
-			child.set_process_unhandled_input(index == _current_section)
+			child.set_process_input(index == current)
+			child.set_process_unhandled_input(index == current)
 
 
 # ---------------------------------------------------------------------------
-# Statuses section
+# Entry browsers (Weather / Tile Effects / Statuses / Rules)
 # ---------------------------------------------------------------------------
 
-func _build_statuses_section(host: Control) -> void:
-	var outer := MarginContainer.new()
-	outer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	outer.add_theme_constant_override("margin_left", 24)
-	outer.add_theme_constant_override("margin_right", 24)
-	outer.add_theme_constant_override("margin_top", 24)
-	outer.add_theme_constant_override("margin_bottom", 24)
-	host.add_child(outer)
-
+func _build_browser(host: Control, index: int, section: String) -> void:
 	var split := HBoxContainer.new()
-	split.add_theme_constant_override("separation", 16)
-	outer.add_child(split)
+	split.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	split.add_theme_constant_override("separation", MenuTheme.SP_XL)
+	host.add_child(split)
 
-	# Left: search + list.
 	var left := VBoxContainer.new()
-	left.custom_minimum_size = Vector2(280, 0)
-	left.add_theme_constant_override("separation", 8)
+	left.custom_minimum_size = Vector2(300, 0)
+	left.add_theme_constant_override("separation", MenuTheme.SP_S)
 	split.add_child(left)
 
-	var heading := Label.new()
-	heading.text = "STATUSES"
-	heading.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	heading.add_theme_color_override("font_color", MenuTheme.GOLD)
-	left.add_child(heading)
+	var filter := LineEdit.new()
+	filter.placeholder_text = "Filter %s..." % SECTION_TITLES[index].to_lower()
+	filter.clear_button_enabled = true
+	left.add_child(filter)
 
-	status_search = LineEdit.new()
-	status_search.placeholder_text = "Search statuses..."
-	status_search.text_changed.connect(_on_status_search_changed)
-	left.add_child(status_search)
-
-	status_list = ItemList.new()
-	status_list.custom_minimum_size = Vector2(260, 400)
-	status_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	status_list.item_selected.connect(_on_status_selected)
-	left.add_child(status_list)
-
-	# Right: detail pane inside a deep translucent panel, in a scroll so long tick
-	# lists stay reachable.
-	var detail_panel := PanelContainer.new()
-	detail_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	detail_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.add_child(detail_panel)
-
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	detail_panel.add_child(scroll)
-
-	status_detail = VBoxContainer.new()
-	status_detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	status_detail.add_theme_constant_override("separation", 8)
-	scroll.add_child(status_detail)
-
-	status_empty_label = Label.new()
-	status_empty_label.text = "Select a status to see what it does."
-	status_empty_label.modulate = MUTED
-	status_detail.add_child(status_empty_label)
-
-	_load_all_statuses()
-
-
-func _load_all_statuses() -> void:
-	all_statuses.clear()
-	for status in StatusCatalog.all_statuses():
-		if status != null:
-			all_statuses.append(status)
-	_apply_status_filter()
-
-
-func _apply_status_filter() -> void:
-	filtered_statuses.clear()
-
-	var search_text: String = ""
-	if status_search != null:
-		search_text = status_search.text.strip_edges().to_lower()
-
-	for status in all_statuses:
-		if status == null:
-			continue
-		if search_text.is_empty():
-			filtered_statuses.append(status)
-			continue
-		var haystack: String = "%s %s" % [status.display_name, String(status.id)]
-		if haystack.to_lower().contains(search_text):
-			filtered_statuses.append(status)
-
-	filtered_statuses.sort_custom(_compare_status_names)
-	_update_status_list()
-
-
-func _compare_status_names(a: StatusCondition, b: StatusCondition) -> bool:
-	return _status_title(a).naturalnocasecmp_to(_status_title(b)) < 0
-
-
-## Best available human label for a condition: authored name, else its id, else
-## a clear stand-in. Never returns an empty string, so no list row is blank.
-func _status_title(status: StatusCondition) -> String:
-	if status == null:
-		return "(unknown status)"
-	if not status.display_name.strip_edges().is_empty():
-		return status.display_name
-	if not String(status.id).is_empty():
-		return String(status.id)
-	return "(unnamed status)"
-
-
-func _update_status_list() -> void:
-	if status_list == null:
-		return
-	status_list.clear()
-
-	if filtered_statuses.is_empty():
-		var message: String = "No statuses found"
-		if all_statuses.is_empty():
-			message = "No statuses authored yet"
-		status_list.add_item(message)
-		status_list.set_item_disabled(0, true)
-		return
-
-	# Each row is tinted with the status's own StatusVisuals colour, so the list
-	# reads as buff/debuff at a glance without needing a separate swatch column.
-	for status in filtered_statuses:
-		var idx: int = status_list.add_item(_status_title(status))
-		var info: Dictionary = StatusVisuals.info_for(status)
-		var col: Color = info.get("color", MenuTheme.CREAM)
-		status_list.set_item_custom_fg_color(idx, col)
-
-
-func _on_status_search_changed(_new_text: String) -> void:
-	_apply_status_filter()
-
-
-func _on_status_selected(index: int) -> void:
-	if index < 0 or index >= filtered_statuses.size():
-		return
-	_display_status(filtered_statuses[index])
-
-
-func _display_status(status: StatusCondition) -> void:
-	if status_detail == null:
-		return
-
-	for child in status_detail.get_children():
-		child.queue_free()
-	status_empty_label = null
-
-	if status == null:
-		_add_muted(status_detail, "This status could not be read.")
-		return
-
-	var info: Dictionary = StatusVisuals.info_for(status)
-	var accent: Color = info.get("color", MenuTheme.GOLD)
-
-	# Name + kind chip.
-	var name_label := Label.new()
-	name_label.text = _status_title(status)
-	name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	name_label.add_theme_color_override("font_color", MenuTheme.GOLD)
-	status_detail.add_child(name_label)
-
-	var meta_row := HBoxContainer.new()
-	meta_row.add_theme_constant_override("separation", 8)
-	status_detail.add_child(meta_row)
-
-	meta_row.add_child(MenuTheme.make_chip(String(info.get("kind", "neutral")).capitalize(), accent))
-
-	var id_text: String = String(status.id) if not String(status.id).is_empty() else "(no id)"
-	var id_label := Label.new()
-	id_label.text = id_text
-	id_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	id_label.modulate = MUTED
-	id_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	meta_row.add_child(id_label)
-
-	# One-line summary of what it does.
-	var summary: String = StatusVisuals.describe_condition(status)
-	if not summary.is_empty():
-		var summary_label := Label.new()
-		summary_label.text = summary
-		summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		summary_label.add_theme_font_size_override("font_size", MenuTheme.FONT_BODY)
-		status_detail.add_child(summary_label)
-
-	# Duration + stacking.
-	_add_field(status_detail, "Duration", _duration_text(status))
-	_add_field(status_detail, "Stacking", _stacking_text(status.stacking))
-
-	# What it does each turn.
-	_add_heading(status_detail, "Each turn:")
-	var tick_lines: Array[String] = _tick_descriptions(status)
-	if tick_lines.is_empty():
-		_add_muted(status_detail, "No effects")
-	else:
-		for line in tick_lines:
-			var effect_label := Label.new()
-			effect_label.text = "- " + line
-			effect_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			status_detail.add_child(effect_label)
-
-	# Standing rules imposed while active.
-	_add_heading(status_detail, "While active:")
-	var flag_lines: Array[String] = _rule_flag_descriptions(status)
-	if flag_lines.is_empty():
-		_add_muted(status_detail, "No flags")
-	else:
-		for line in flag_lines:
-			var flag_label := Label.new()
-			flag_label.text = "- " + line
-			flag_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			status_detail.add_child(flag_label)
-
-
-## Player-readable duration. A condition authored as permanent (duration <= 0,
-## canonically -1) never expires on its own and must not read as "0 turns".
-func _duration_text(status: StatusCondition) -> String:
-	if status == null:
-		return "Unknown"
-	var turns: int = status.duration_turns
-	if turns <= 0:
-		return "Permanent (never expires on its own)"
-	if turns == 1:
-		return "1 turn"
-	return "%d turns" % turns
-
-
-## Readable label for the stacking enum. Written as an explicit match rather than
-## indexing Stacking.keys() so reordering or inserting an enum value cannot
-## silently relabel every status in the list.
-func _stacking_text(stacking: int) -> String:
-	match stacking:
-		StatusCondition.Stacking.REFRESH:
-			return "Refreshes - reapplying resets the timer"
-		StatusCondition.Stacking.STACK:
-			return "Stacks - reapplying adds a second instance"
-		StatusCondition.Stacking.IGNORE:
-			return "Ignored - reapplying does nothing while it is active"
-		_:
-			return "Unknown"
-
-
-## One description per tick effect, skipping nulls and effects with nothing to
-## say so the list never shows blank bullets.
-func _tick_descriptions(status: StatusCondition) -> Array[String]:
-	var lines: Array[String] = []
-	if status == null:
-		return lines
-	for effect in status.tick_effects:
-		if effect == null:
-			continue
-		if not effect.has_method("describe"):
-			continue
-		var text: String = String(effect.describe()).strip_edges()
-		if text.is_empty():
-			continue
-		lines.append(text)
-	return lines
-
-
-## Rule flags phrased for a player rather than dumped as a raw dictionary.
-## Only flags that are actually ON are listed -- a flag explicitly set false is
-## the same as absent, and saying "Cannot move: false" helps nobody.
-##
-## `rule_flags` is checked with `in` rather than assumed, so this keeps working
-## against a StatusCondition build that predates the property.
-func _rule_flag_descriptions(status: StatusCondition) -> Array[String]:
-	var lines: Array[String] = []
-	if status == null:
-		return lines
-	if not ("rule_flags" in status):
-		return lines
-	var flags = status.get("rule_flags")
-	if not (flags is Dictionary):
-		return lines
-	for key in (flags as Dictionary):
-		if not bool((flags as Dictionary)[key]):
-			continue
-		lines.append(_rule_flag_text(String(key)))
-	lines.sort()
-	return lines
-
-
-## Known flags get authored wording; anything new falls back to a humanised key
-## so a flag added by content authoring still reads as a sentence.
-func _rule_flag_text(flag: String) -> String:
-	match flag:
-		"immobilized":
-			return "Cannot move"
-		"untargetable":
-			return "Cannot be targeted by moves"
-		"fortified":
-			return "Takes reduced damage"
-		_:
-			return flag.replace("_", " ").capitalize()
-
-
-func _add_field(parent: VBoxContainer, label_text: String, value_text: String) -> void:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	parent.add_child(row)
-
-	var key_label := Label.new()
-	key_label.text = label_text + ":"
-	key_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	key_label.modulate = MUTED
-	row.add_child(key_label)
-
-	var value_label := Label.new()
-	value_label.text = value_text
-	value_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(value_label)
-
-
-func _add_heading(parent: VBoxContainer, text: String) -> void:
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 4)
-	parent.add_child(spacer)
-
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
-	label.add_theme_color_override("font_color", MenuTheme.GOLD)
-	parent.add_child(label)
-
-
-func _add_muted(parent: VBoxContainer, text: String) -> void:
-	var label := Label.new()
-	label.text = text
-	label.modulate = MUTED
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	parent.add_child(label)
-
-
-# ---------------------------------------------------------------------------
-# Weather section (placeholder)
-# ---------------------------------------------------------------------------
-
-## Weather is designed but not implemented, so this section exists to say so, as an
-## intentional "coming soon" card rather than a bare label.
-##
-## TO A FUTURE IMPLEMENTER: weather is a SECTION, not a restructure. Once weather
-## resources exist:
-##   1. Add a WeatherCatalog next to StatusCatalog (same recursive-scan +
-##      index-by-id shape) so discovery survives the assets being refiled.
-##   2. Replace the body of this function with the browser -- a search box, an
-##      ItemList and a detail pane, exactly like _build_statuses_section, which
-##      is the closest template.
-## Nothing outside this function needs to change: the nav entry, its badge, its
-## lazy instantiation and its input gating are all already wired.
-func _build_weather_section(host: Control) -> void:
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	host.add_child(center)
+	var list := ItemList.new()
+	list.name = "EntryList"
+	list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	list.custom_minimum_size = Vector2(290, 300)
+	list.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
+	left.add_child(list)
 
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(380, 0)
-	center.add_child(card)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	card.add_theme_stylebox_override("panel", MenuTheme.card_box())
+	split.add_child(card)
 
-	var pad := MarginContainer.new()
-	pad.add_theme_constant_override("margin_left", 28)
-	pad.add_theme_constant_override("margin_right", 28)
-	pad.add_theme_constant_override("margin_top", 28)
-	pad.add_theme_constant_override("margin_bottom", 28)
-	card.add_child(pad)
+	var scroll := ScrollContainer.new()
+	scroll.name = "DetailScroll"
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.focus_mode = Control.FOCUS_ALL
+	card.add_child(scroll)
 
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 10)
-	pad.add_child(box)
+	var detail := VBoxContainer.new()
+	detail.name = "Detail"
+	detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	detail.add_theme_constant_override("separation", MenuTheme.SP_S)
+	scroll.add_child(detail)
 
+	var b := { "list": list, "filter": filter, "detail": detail, "scroll": scroll,
+		"entries": CompendiumData.entries(section), "shown": [] }
+	_browsers[index] = b
+	if index == SECTION_STATUSES:
+		status_list = list
+		status_search = filter
+		status_detail = detail
+
+	filter.text_changed.connect(func(_t): _refresh_browser(index))
+	list.item_selected.connect(func(i): _show_entry(index, i))
+	list.gui_input.connect(func(e): _on_list_input(index, e))
+	scroll.gui_input.connect(func(e): _on_scroll_input(index, e))
+	_refresh_browser(index)
+	if list.item_count > 0:
+		list.select(0)
+		_show_entry(index, 0)
+
+
+func _refresh_browser(index: int) -> void:
+	var b: Dictionary = _browsers[index]
+	var list: ItemList = b["list"]
+	b["shown"] = CompendiumData.search(b["entries"], (b["filter"] as LineEdit).text)
+	list.clear()
+	for e in b["shown"]:
+		var i := list.add_item(String(e["title"]))
+		list.set_item_custom_fg_color(i, (e["color"] as Color).lightened(0.35))
+		list.set_item_tooltip(i, String(e.get("subtitle", "")))
+	if list.item_count == 0:
+		list.add_item("Nothing matches")
+		list.set_item_disabled(0, true)
+
+
+func _show_entry(index: int, i: int) -> void:
+	var b: Dictionary = _browsers[index]
+	var shown: Array = b["shown"]
+	if i < 0 or i >= shown.size():
+		return
+	render_entry(b["detail"], shown[i])
+	(b["scroll"] as ScrollContainer).scroll_vertical = 0
+
+
+## Select entry [param id] in browser tab [param index] (clearing its filter).
+func show_entry_by_id(index: int, id: String) -> bool:
+	select_tab(index)
+	if not _browsers.has(index):
+		return false
+	var b: Dictionary = _browsers[index]
+	(b["filter"] as LineEdit).text = ""
+	_refresh_browser(index)
+	var shown: Array = b["shown"]
+	for i in shown.size():
+		if String(shown[i]["id"]) == id:
+			(b["list"] as ItemList).select(i)
+			(b["list"] as ItemList).ensure_current_is_visible()
+			_show_entry(index, i)
+			return true
+	return false
+
+
+## Render one [CompendiumData] entry into [param detail].
+func render_entry(detail: VBoxContainer, e: Dictionary) -> void:
+	for c in detail.get_children():
+		c.free()
+	var accent: Color = e.get("color", MenuTheme.GOLD)
+
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", MenuTheme.SP_M)
+	detail.add_child(head)
+	if StringName(e.get("icon", &"")) != &"":
+		var icon := WeatherIcon.new(StringName(e["icon"]), accent, 40.0)
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		head.add_child(icon)
+	else:
+		var gem := GroveGem.new()
+		gem.color = accent
+		gem.custom_minimum_size = Vector2(22, 22)
+		gem.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		head.add_child(gem)
 	var title := Label.new()
-	title.text = "WEATHER"
-	title.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	title.add_theme_color_override("font_color", MenuTheme.GOLD)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
+	title.text = String(e["title"])
+	title.add_theme_font_override("font", MenuTheme.display_font(2))
+	title.add_theme_font_size_override("font_size", MenuTheme.FS_HEADING + 4)
+	title.add_theme_color_override("font_color", accent.lerp(MenuTheme.GOLD_LITE, 0.45))
+	head.add_child(title)
+	var rule := GroveRule.new()
+	rule.color = accent
+	rule.custom_minimum_size = Vector2(260, 10)
+	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	detail.add_child(rule)
 
-	var badge_row := CenterContainer.new()
-	box.add_child(badge_row)
-	badge_row.add_child(MenuTheme.make_chip("COMING SOON", MenuTheme.CREAM_DIM))
+	for block in e.get("blocks", []):
+		match String(block.get("type", "")):
+			"heading":
+				var h := Label.new()
+				h.text = String(block["text"]).to_upper()
+				h.theme_type_variation = &"SectionLabel"
+				h.add_theme_color_override("font_color", MenuTheme.GOLD)
+				var gap := Control.new()
+				gap.custom_minimum_size = Vector2(0, 4)
+				detail.add_child(gap)
+				detail.add_child(h)
+			"text":
+				detail.add_child(_rich(String(block["text"])))
+			"bullets":
+				var lines: Array[String] = []
+				for item in block.get("items", []):
+					lines.append("[color=#%s]◆[/color] %s" % [accent.lightened(0.2).to_html(false), String(item)])
+				detail.add_child(_rich("\n".join(lines), 6))
+			"fields":
+				var grid := GridContainer.new()
+				grid.columns = 2
+				grid.add_theme_constant_override("h_separation", MenuTheme.SP_L)
+				grid.add_theme_constant_override("v_separation", 4)
+				detail.add_child(grid)
+				for row in block.get("rows", []):
+					var k := Label.new()
+					k.text = String(row[0])
+					k.add_theme_color_override("font_color", MUTED)
+					k.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+					grid.add_child(k)
+					var v := _rich(String(row[1]))
+					v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+					grid.add_child(v)
+			"table":
+				detail.add_child(_table(block))
 
-	var body := Label.new()
-	body.text = "Weather is planned but not yet implemented.\nThere is nothing to browse here yet."
-	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.add_theme_font_size_override("font_size", MenuTheme.FONT_BODY)
-	body.modulate = MUTED
-	box.add_child(body)
+
+func _rich(bb: String, line_sep: int = 2) -> RichTextLabel:
+	var r := RichTextLabel.new()
+	r.bbcode_enabled = true
+	r.fit_content = true
+	r.scroll_active = false
+	r.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	r.focus_mode = Control.FOCUS_NONE
+	r.add_theme_constant_override("line_separation", line_sep)
+	r.add_theme_font_size_override("normal_font_size", MenuTheme.FS_BODY)
+	r.add_theme_font_size_override("bold_font_size", MenuTheme.FS_BODY)
+	r.add_theme_font_override("bold_font", MenuTheme.heading_font())
+	r.add_theme_color_override("default_color", MenuTheme.CREAM)
+	r.meta_underlined = true
+	r.text = bb.replace("[url=", "[color=#f7d68a][url=").replace("[/url]", "[/url][/color]")
+	r.meta_clicked.connect(_on_meta_clicked)
+	return r
+
+
+func _table(block: Dictionary) -> Control:
+	var cols: Array = block.get("columns", [])
+	var grid := GridContainer.new()
+	grid.columns = maxi(1, cols.size())
+	grid.add_theme_constant_override("h_separation", 2)
+	grid.add_theme_constant_override("v_separation", 2)
+	var colors: Array = block.get("colors", [])
+	var cells: Array = [cols]
+	cells.append_array(block.get("rows", []))
+	for r in cells.size():
+		var row: Array = cells[r]
+		for c in grid.columns:
+			var txt := String(row[c]) if c < row.size() else ""
+			var cell := PanelContainer.new()
+			cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL if c > 0 or grid.columns > 4 else Control.SIZE_FILL
+			var tint: Variant = null
+			if r > 0 and r - 1 < colors.size() and c < (colors[r - 1] as Array).size():
+				tint = colors[r - 1][c]
+			var fill := MenuTheme.PANEL_HI if r == 0 else (MenuTheme.PANEL_SUNK if r % 2 == 1 else MenuTheme.PANEL)
+			if tint is Color and c > 0:
+				fill = (tint as Color).darkened(0.55)
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = fill
+			sb.content_margin_left = 8
+			sb.content_margin_right = 8
+			sb.content_margin_top = 4
+			sb.content_margin_bottom = 4
+			cell.add_theme_stylebox_override("panel", sb)
+			var rt := _rich(txt)
+			rt.custom_minimum_size = Vector2(0 if grid.columns > 4 else 110, 0)
+			if r == 0 or c == 0:
+				rt.text = "[b]%s[/b]" % rt.text
+				if c == 0 and tint is Color and r > 0:
+					rt.add_theme_color_override("default_color", (tint as Color).lightened(0.25))
+				elif r == 0:
+					rt.add_theme_color_override("default_color", MenuTheme.GOLD_LITE)
+			if grid.columns > 4:
+				rt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			cell.add_child(rt)
+			grid.add_child(cell)
+	return grid
+
+
+func _on_list_input(index: int, e: InputEvent) -> void:
+	# Right from the list moves into the detail pane (scroll it with Up / Down).
+	if e.is_action_pressed(&"ui_right"):
+		(_browsers[index]["scroll"] as ScrollContainer).grab_focus()
+		accept_event()
+
+
+func _on_scroll_input(index: int, e: InputEvent) -> void:
+	var scroll: ScrollContainer = _browsers[index]["scroll"]
+	if e.is_action_pressed(&"ui_down", true):
+		scroll.scroll_vertical += 60
+		accept_event()
+	elif e.is_action_pressed(&"ui_up", true):
+		scroll.scroll_vertical -= 60
+		accept_event()
+	elif e.is_action_pressed(&"ui_left") or e.is_action_pressed(&"ui_accept"):
+		(_browsers[index]["list"] as ItemList).grab_focus()
+		accept_event()
+
+
+# ---------------------------------------------------------------------------
+# Cross-links + global search
+# ---------------------------------------------------------------------------
+
+func _on_meta_clicked(meta) -> void:
+	follow_link(String(meta))
+
+
+## Follow "<section>:<id>" (CompendiumData.SECTION_* : entry id).
+func follow_link(link: String) -> bool:
+	var parts := link.split(":", true, 1)
+	if parts.size() != 2:
+		return false
+	return show_section_entry(parts[0], parts[1])
+
+
+func show_section_entry(section: String, id: String) -> bool:
+	if section == CompendiumData.SECTION_UNITS:
+		return _show_unit(id)
+	if section == CompendiumData.SECTION_ELEMENTS:
+		return _show_element(id)
+	for index in BROWSER_SECTIONS:
+		if String(BROWSER_SECTIONS[index]) == section:
+			return show_entry_by_id(int(index), id)
+	return false
+
+
+## Point the hosted UnitGallery at the roster unit [param id].
+func _show_unit(id: String) -> bool:
+	select_tab(SECTION_UNITS)
+	var host: Control = _section_hosts.get(SECTION_UNITS)
+	if host == null or host.get_child_count() == 0:
+		return false
+	var gallery = host.get_child(0)
+	if not ("filtered_characters" in gallery) or not gallery.has_method("_select_index"):
+		return false
+	if "search_input" in gallery and gallery.search_input != null and gallery.search_input.text != "":
+		gallery.search_input.text = ""
+		if gallery.has_method("_apply_filters"):
+			gallery._apply_filters()
+	var list: Array = gallery.filtered_characters
+	for i in list.size():
+		if list[i] != null and String(list[i].character_id) == id:
+			gallery._select_index(i)
+			return true
+	return false
+
+
+## Open the Elements tab (the type chart) and bring element [param id]'s card into
+## view. An empty id just opens the chart.
+func _show_element(id: String) -> bool:
+	select_tab(SECTION_ELEMENTS)
+	if id == "":
+		return true
+	var host: Control = _section_hosts.get(SECTION_ELEMENTS)
+	if host == null or host.get_child_count() == 0:
+		return false
+	var gallery = host.get_child(0)
+	if not gallery.has_method("focus_element"):
+		return false
+	return bool(gallery.focus_element(StringName(id)))
+
+
+func _on_global_search(text: String) -> void:
+	_search_hits = CompendiumData.search(CompendiumData.all_entries(), text) if text.strip_edges() != "" else []
+	search_results.clear()
+	for e in _search_hits.slice(0, 40):
+		var i := search_results.add_item("%s  ·  %s" % [String(e["title"]), _section_label(String(e["section"]))])
+		search_results.set_item_custom_fg_color(i, (e["color"] as Color).lightened(0.35))
+	search_results.visible = text.strip_edges() != ""
+	if search_results.visible and search_results.item_count == 0:
+		search_results.add_item("Nothing matches")
+		search_results.set_item_disabled(0, true)
+
+
+func _on_search_box_input(e: InputEvent) -> void:
+	if e.is_action_pressed(&"ui_down") and search_results.visible and search_results.item_count > 0:
+		search_results.grab_focus()
+		search_results.select(0)
+		accept_event()
+
+
+func _pick_search_result(i: int) -> void:
+	if i < 0 or i >= _search_hits.size():
+		return
+	var e: Dictionary = _search_hits[i]
+	search_results.visible = false
+	show_section_entry(String(e["section"]), String(e["id"]))
+	tab_container.get_tab_bar().grab_focus()
+
+
+func _section_label(section: String) -> String:
+	match section:
+		CompendiumData.SECTION_UNITS: return "Unit"
+		CompendiumData.SECTION_WEATHER: return "Weather"
+		CompendiumData.SECTION_TILES: return "Tile Effect"
+		CompendiumData.SECTION_STATUSES: return "Status"
+		CompendiumData.SECTION_ELEMENTS: return "Element"
+		CompendiumData.SECTION_RULES: return "Rules"
+	return section
 
 
 # ---------------------------------------------------------------------------
@@ -752,57 +748,65 @@ func _build_weather_section(host: Control) -> void:
 # ---------------------------------------------------------------------------
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
-
-
-func _switch_section(step: int) -> void:
-	_show_section(posmod(_current_section + step, SECTION_TITLES.size()))
-
-
-func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
+	if overlay_mode:
+		close()
 		return
-	if not (event is InputEventKey):
-		return
-	var key_event := event as InputEventKey
-	if key_event.echo:
-		return
+	MenuNav.change_scene(self, "res://menus/MainMenu.tscn")
 
-	# While a text field (a gallery / status search box) is focused, digits and
-	# arrows belong to the field, not the nav -- otherwise typing "2" would jump
-	# sections. ESC still defocuses it first.
-	var focus_owner := get_viewport().gui_get_focus_owner()
-	var typing: bool = focus_owner is LineEdit
 
-	if key_event.keycode == KEY_ESCAPE:
-		if typing:
-			(focus_owner as LineEdit).release_focus()
-			get_viewport().set_input_as_handled()
+## Close the overlay (overlay mode only).
+func close() -> void:
+	if not is_inside_tree():
+		return
+	visible = false
+	closed.emit()
+
+
+## Back / Esc: leave a text field first, then close / go back.
+func handle_back() -> void:
+	var focus := get_viewport().gui_get_focus_owner()
+	if focus is LineEdit and is_ancestor_of(focus):
+		(focus as LineEdit).release_focus()
+		if focus == search_box:
+			search_results.visible = false
+		tab_container.get_tab_bar().grab_focus()
+		return
+	_on_back_pressed()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if MenuNav.is_next_event(event) or MenuNav.is_prev_event(event):
+		var step := 1 if MenuNav.is_next_event(event) else -1
+		var n := tab_container.get_tab_count()
+		tab_container.current_tab = posmod(tab_container.current_tab + step, n)
+		get_viewport().set_input_as_handled()
+		return
+	if MenuNav.is_back_event(event):
+		get_viewport().set_input_as_handled()
+		handle_back()
+		return
+	# 1-9 jump straight to a section. Unhandled input only: a focused text field has
+	# already consumed the digit, so typing "2" in a search box never switches tabs.
+	# The range is the DIGIT ROW, not the section count -- the bounds check is what
+	# keeps it honest, so adding a section never needs this line edited again.
+	if event is InputEventKey and event.pressed and not event.echo:
+		var key: Key = (event as InputEventKey).keycode
+		if key >= KEY_1 and key <= KEY_9:
+			var target: int = key - KEY_1
+			if target < tab_container.get_tab_count():
+				select_tab(target)
+				get_viewport().set_input_as_handled()
+
+
+## Overlay-only: consumes Back / Esc before the hosted galleries see it (their own
+## Esc handlers change scene to the main menu, which must never happen mid-battle).
+class _BackCatcher:
+	extends Node
+	var target: Compendium
+	func _input(event: InputEvent) -> void:
+		if target == null or not is_instance_valid(target) or not target.visible:
 			return
-		# The shell's single ESC leaves the Compendium. A hosted gallery on screen
-		# keeps its own ESC (which leaves too), and hidden ones have input disabled,
-		# so ESC always means exactly "leave".
-		_on_back_pressed()
-		return
-
-	if typing:
-		return
-
-	# 1-9 jump straight to a section; Up/Down cycle. Galleries use Left/Right for
-	# their pager, so these never collide. The range is the DIGIT ROW, not the
-	# section count -- the bounds check below is what keeps it honest, so adding a
-	# section never needs this line edited again.
-	if key_event.keycode >= KEY_1 and key_event.keycode <= KEY_9:
-		var target: int = key_event.keycode - KEY_1
-		if target < SECTION_TITLES.size():
-			_show_section(target)
+		if MenuNav.is_back_event(event) or (event is InputEventKey and event.pressed \
+				and not event.echo and (event as InputEventKey).keycode == KEY_ESCAPE):
 			get_viewport().set_input_as_handled()
-		return
-
-	match key_event.keycode:
-		KEY_UP:
-			_switch_section(-1)
-			get_viewport().set_input_as_handled()
-		KEY_DOWN:
-			_switch_section(1)
-			get_viewport().set_input_as_handled()
+			target.handle_back()

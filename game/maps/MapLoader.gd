@@ -25,6 +25,18 @@ var map_surround: Node3D = null
 ## Battles (including replays) leave it on, so every mode shows the same scenery.
 var surround_enabled: bool = true
 
+## ONE SURROUND, NOT TWO. Two branches each grew scenery around the board: [MapSurround]
+## (rings of decor + dirt skirt + backdrop, deterministic, headless-safe) and the world-art
+## pass's [WorldSkirt] (painterly landscape, skipped on the headless renderer). Mounting both
+## stacks two sets of trees on the same ring. With this true (the default) the WorldSkirt is
+## THE surround whenever it actually builds, and [MapSurround] only mounts when it did not
+## (headless runs, a map it declines); false always mounts [MapSurround] instead and skips the
+## WorldSkirt. Pending the user's per-screen look decision -- flip here, one place.
+var prefer_world_skirt: bool = true
+
+## True once [method _build_world_dressing] mounted a [WorldSkirt] for the current map.
+var _world_skirt_built: bool = false
+
 ## The map's OBJECTIVE BANNERS (see [ObjectiveMarkers]): one tall team-tinted pole-and-pennant
 ## standing over every cell [member MapResource.base_cells] declares, so the bases stay
 ## findable on a board too big to read at a glance. Purely cosmetic on exactly the same terms
@@ -60,6 +72,10 @@ const DEFAULT_CHARACTER_ID: StringName = &"vineweave"
 ## World Y a unit's origin sits at: the tile box top (tiles are 0.2 tall, centered on
 ## y=0). Models are feet-at-origin, so this rests their feet on the tile surface.
 const UNIT_GROUND_Y: float = 0.1
+
+## Name of the per-floor tile container under "Tiles" (Tiles/Floor_0, Floor_1...).
+## One node per floor so a later phase can hide / fade whole upper floors (cutaway).
+const FLOOR_CONTAINER_PREFIX := "Floor_"
 
 # Legacy "unit_type" string -> roster CharacterResource id. Used to resolve
 # spawns authored before the character system (no "character_id" set) to a
@@ -212,10 +228,18 @@ func _net_squad_context() -> Dictionary:
 			"local_slot": int(net_context_override.get("local_slot", -1)),
 		}
 	var net: Object = get_node_or_null("/root/NetSession")
-	if net == null or not net.has_method("is_networked_match"):
+	if net == null:
+		return { "networked": false, "local_slot": -1 }
+	# is_networked_match (local net layer) or is_in_match (cloud NetSession core).
+	var networked: bool = false
+	if net.has_method("is_networked_match"):
+		networked = bool(net.call("is_networked_match"))
+	elif net.has_method("is_in_match"):
+		networked = bool(net.call("is_in_match"))
+	else:
 		return { "networked": false, "local_slot": -1 }
 	return {
-		"networked": bool(net.call("is_networked_match")),
+		"networked": networked,
 		"local_slot": int(net.call("local_slot")) if net.has_method("local_slot") else -1,
 	}
 
@@ -259,6 +283,11 @@ func load_map(map_resource: MapResource, target_parent: Node3D) -> bool:
 		_emit_load_failed("Failed to load tiles")
 		return false
 	
+	# Purely visual world dressing (skipped on the headless renderer): publish the
+	# terrain-class mask the tile shaders read (shorelines, path fringes), then
+	# grow the non-interactive landscape around the board (see WorldSkirt).
+	_build_world_dressing()
+
 	# Load units
 	if not _load_units():
 		_emit_load_failed("Failed to load units")
@@ -282,6 +311,8 @@ func load_map(map_resource: MapResource, target_parent: Node3D) -> bool:
 func _build_map_surround() -> void:
 	if not surround_enabled or current_map == null or map_root == null:
 		return
+	if prefer_world_skirt and _world_skirt_built:
+		return  # the WorldSkirt already surrounds this board (see prefer_world_skirt)
 	map_surround = MapSurround.build(current_map, map_root)
 
 
@@ -297,6 +328,21 @@ func _build_objective_markers() -> void:
 	if not objective_markers_enabled or current_map == null or map_root == null:
 		return
 	objective_markers = ObjectiveMarkers.build(current_map, map_root)
+
+
+func _build_world_dressing() -> void:
+	_world_skirt_built = false
+	if DisplayServer.get_name() == "headless" or current_map == null or tiles_container == null:
+		return
+	TerrainMask.publish(current_map)
+	if not prefer_world_skirt or not surround_enabled:
+		return  # MapSurround is the surround (or there is none) -- see prefer_world_skirt
+	var skirt := WorldSkirt.build_for(current_map)
+	if skirt != null:
+		# Under Tiles so it is freed with the map; its name matches neither the
+		# "Floor_" nor "Tile" prefixes the camera / board adapters look for.
+		tiles_container.add_child(skirt)
+		_world_skirt_built = true
 
 func _sync_grid_size(map_resource) -> void:
 	"""Resize the shared board grid to match the loaded map (see load_map)."""
@@ -389,10 +435,16 @@ func _create_map_containers() -> bool:
 	return true
 
 func _load_tiles() -> bool:
-	"""Load all tiles from the map resource"""
+	"""Load all tiles from the map resource.
+
+	Floor 0 is FULL: every (x, y) gets a tile (a default one when the map has no
+	entry). Upper floors only get the tiles the map places there -- a missing cell
+	is air. Each floor's tiles live under Tiles/Floor_<f> at y = f * FLOOR_HEIGHT.
+	Links (explicit + stair-generated) are registered with CombatServices after.
+	"""
 	if not current_map or not tiles_container:
 		return false
-	
+
 	var map_size = current_map.get_map_size()
 
 	# Create tiles for each position
@@ -400,14 +452,73 @@ func _load_tiles() -> bool:
 		for y in range(map_size.y):
 			var pos = Vector2i(x, y)
 			var tile_data = current_map.get_tile_at_position(pos)
-			
+
 			if not _create_tile_at_position(pos, tile_data):
 				return false
 
+	# Upper floors: only the explicitly placed tiles.
+	for entry in current_map.tile_layout:
+		var f: int = MapResource.entry_floor(entry)
+		if f <= 0:
+			continue
+		if not _create_tile_at_position(MapResource.entry_position(entry), entry, f):
+			return false
+
+	_load_links()
 	return true
 
-func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary) -> bool:
-	"""Create a tile at the specified grid position"""
+
+func _floor_container(floor_index: int) -> Node3D:
+	"""The Tiles/Floor_<f> container, created on first use."""
+	var cname := FLOOR_CONTAINER_PREFIX + str(floor_index)
+	var node := tiles_container.get_node_or_null(cname) as Node3D
+	if node == null:
+		node = Node3D.new()
+		node.name = cname
+		tiles_container.add_child(node)
+	return node
+
+
+func _load_links() -> void:
+	"""Register every link with the board and give each a readable visual (stairs /
+	ladder / ramp -- see FloorDecor), then dress the upper floors (walls under
+	ramparts, parapets, broken-bridge edges). All of it is derived from the map data."""
+	FloorDecor.build_floor_decor(current_map, tiles_container)
+	var links: Array = current_map.get_links()
+	if links.is_empty():
+		return
+	var markers := Node3D.new()
+	markers.name = "Links"
+	tiles_container.add_child(markers)
+	for l in links:
+		if CombatServices:
+			CombatServices.register_link(l)
+		var visual := FloorDecor.make_link_visual(l)
+		if visual == null:
+			visual = _make_link_marker(l["from"], l["to"])
+		markers.add_child(visual)
+
+
+static func _make_link_marker(a: Vector3i, b: Vector3i) -> Node3D:
+	var pa := Cells.cell_to_world(a) + Vector3(0, UNIT_GROUND_Y + 0.02, 0)
+	var pb := Cells.cell_to_world(b) + Vector3(0, UNIT_GROUND_Y + 0.02, 0)
+	var mi := MeshInstance3D.new()
+	mi.name = "Link_%d_%d_%d__%d_%d_%d" % [a.x, a.y, a.z, b.x, b.y, b.z]
+	var mesh := BoxMesh.new()
+	var length := maxf(0.1, pa.distance_to(pb))
+	mesh.size = Vector3(0.7, 0.08, length)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.85, 0.7, 0.35)
+	mesh.material = mat
+	mi.mesh = mesh
+	var dir := (pb - pa).normalized()
+	var up := Vector3.UP if absf(dir.dot(Vector3.UP)) < 0.99 else Vector3.FORWARD
+	mi.transform = Transform3D(Basis.looking_at(dir, up), (pa + pb) * 0.5)
+	return mi
+
+
+func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary, floor_index: int = 0) -> bool:
+	"""Create a tile at the specified grid position on [param floor_index]"""
 	var tile_resource_path = tile_data.get("tile_resource_path", "")
 	var tile_type = tile_data.get("tile_type", "NORMAL")
 	var tile_id = tile_data.get("tile_id", "")
@@ -454,7 +565,11 @@ func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary) -> bool
 		return false
 	
 	# Set tile name and position
-	tile_instance.name = "Tile_" + str(grid_pos.x) + "_" + str(grid_pos.y)
+	# Tile_<x>_<y>_<floor> under Tiles/Floor_<floor> (BoardAdapter._tile_node_at).
+	tile_instance.name = "Tile_%d_%d_%d" % [grid_pos.x, grid_pos.y, floor_index]
+	var cell := Cells.lift(grid_pos, floor_index)
+	if tile_instance.has_method("set_grid_position"):
+		tile_instance.set_grid_position(cell)
 	
 	# Calculate world position. The tile's BoxMesh (and BoxShape collision) is
 	# centered on the node origin and scaled to span one 2x2 cell, so the origin
@@ -466,7 +581,7 @@ func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary) -> bool
 	# and mouse picking (calculate_grid_coordinates = floor(world/2)). The old
 	# origin grid*2 rendered the tile a half-cell off, which is why the mouse
 	# never lined up with the tile and terrain hover resolved to the wrong cell.
-	var world_pos = Vector3(grid_pos.x * 2 + 1, 0, grid_pos.y * 2 + 1)
+	var world_pos = Vector3(grid_pos.x * 2 + 1, Cells.floor_y(floor_index), grid_pos.y * 2 + 1)
 	tile_instance.transform.origin = world_pos
 	# default_tile_scene (and legacy custom scenes) use a UNIT 1x1x1 box, so they
 	# are stretched to span the 2x2 cell here. Authored geometry scenes already
@@ -487,11 +602,15 @@ func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary) -> bool
 		tile_instance.set_tile_resource(resolved_tile_resource)
 		# Guarded so headless/tool loads without the autoload don't crash.
 		if CombatServices:
-			CombatServices.register_tile(grid_pos, resolved_tile_resource)
-	elif tile_instance.has_method("set_tile_type"):
-		tile_instance.set_tile_type(tile_type)
+			CombatServices.register_tile(cell, resolved_tile_resource)
+	else:
+		if tile_instance.has_method("set_tile_type"):
+			tile_instance.set_tile_type(tile_type)
+		# An upper-floor tile must still EXIST for movement even without a resource.
+		if floor_index > 0 and CombatServices:
+			CombatServices.register_tile(cell, null)
 
-	tiles_container.add_child(tile_instance)
+	_floor_container(floor_index).add_child(tile_instance)
 	return true
 
 ## Tile.TileType enum name (plus friendly aliases) -> the STABLE
@@ -526,7 +645,13 @@ func _note_tile_model_fallback(model_path: String, reason: String) -> void:
 		% [model_path, reason])
 
 
-func _resolve_tile_resource(resource_path: String, tile_type: String, tile_id = "") -> TileResource:
+## The [TileResource] a map tile ENTRY resolves to (same rules MapLoader uses when
+## building the scene), or null. Static so headless tools / tests can build a
+## terrain registry without a scene (see [method BoardAdapter.configure_from_map]).
+static func resolve_tile_resource_for_entry(entry: Dictionary) -> TileResource:
+	return _resolve_tile_resource(str(entry.get("tile_resource_path", "")), str(entry.get("tile_type", "NORMAL")), entry.get("tile_id", ""))
+
+static func _resolve_tile_resource(resource_path: String, tile_type: String, tile_id = "") -> TileResource:
 	"""Resolve the TileResource for a tile from its map data.
 
 	Resolution order, most durable reference first:
@@ -663,7 +788,8 @@ func spawn_unit_now(spawn_data: Dictionary, count_hint: int = 0) -> Node:
 
 func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime: bool = false) -> Node:
 	"""Create a unit from spawn data. Returns the new unit node, or null on failure."""
-	var grid_pos = spawn_data.get("position", Vector2i(-1, -1))
+	var grid_pos: Vector2i = MapResource.entry_position(spawn_data)
+	var floor_index: int = MapResource.entry_floor(spawn_data)
 	var player_id_raw = spawn_data.get("player_id", 0)
 
 	# ALWAYS coerce. A .tres map carries an int here, but a JSON map (Map Creator save,
@@ -729,7 +855,7 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 	# models are exported feet-at-origin (see Unit._setup_character_model), so their
 	# feet rest on the tile. The old Y=1.5 left every unit floating above the ground,
 	# which only became visible once the camera went perspective.
-	var world_pos = Vector3(grid_pos.x * 2 + 1, UNIT_GROUND_Y, grid_pos.y * 2 + 1)
+	var world_pos = Vector3(grid_pos.x * 2 + 1, Cells.floor_y(floor_index) + UNIT_GROUND_Y, grid_pos.y * 2 + 1)
 	unit_instance.transform.origin = world_pos
 
 	# Face the opposing side based on board position: a unit in the TOP (north) half faces
@@ -765,7 +891,7 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 			String(norm.get("ai_stance", "")),
 			char_stance)
 		unit_instance.configure_ai_behavior(
-			grid_pos,
+			Cells.lift(grid_pos, floor_index),
 			resolved_stance,
 			int(norm.get("aggro_range", -1)),
 			int(norm.get("leash_radius", -1)))
@@ -792,8 +918,8 @@ func _compute_spawn_facing(grid_pos: Vector2i, player_id: int) -> float:
 			var pid: int = int(sp.get("player_id", 0))
 			if pid == player_id:
 				continue
-			var pos = sp.get("position", Vector2i(-1, -1))
-			if pos is Vector2i and pos.y >= 0:
+			var pos: Vector2i = MapResource.entry_position(sp)
+			if pos.y >= 0:
 				enemy_rows.append(pos.y)
 	return Unit.spawn_facing_yaw(grid_pos.y, map_h, enemy_rows)
 

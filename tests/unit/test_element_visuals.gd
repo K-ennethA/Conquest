@@ -207,7 +207,8 @@ func test_a_badge_for_an_element_carries_its_name_and_its_colour() -> void:
 	assert_true(badge.visible, "an elemented unit gets a visible badge")
 	var label := badge.get_node(ElementVisuals.BADGE_LABEL_NAME) as Label
 	assert_eq(label.text, "Nature", "naming the element")
-	var box := badge.get_theme_stylebox("panel") as StyleBoxFlat
+	# The badge is a notched grove plate (OrnateStyleBox), which keeps border_color.
+	var box := badge.get_theme_stylebox("panel") as OrnateStyleBox
 	assert_not_null(box, "and painted with its own stylebox")
 	if box != null:
 		assert_eq(box.border_color, ConquestTheme.element_color("nature"),

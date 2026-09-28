@@ -31,15 +31,15 @@ const MENU_MIN_WIDTH := 168.0
 ## is wide is board it covers -- past this it stops being a context menu and starts being
 ## a modal. A label that still does not fit at this width ellipsizes (see [method _fit_width]);
 ## no shipped move name comes close (the longest, "Heartwood Guard", needs 188px of card).
-const MENU_MAX_WIDTH := 300.0
+const MENU_MAX_WIDTH := 320.0
 ## Keep the menu fully on-screen: this much padding from every viewport edge.
 const SCREEN_MARGIN := 12.0
 
 ## MarginContainer inset around the rows (kept as a constant because [method _fit_width]
 ## has to account for it when it works out how much of the card is text space).
 const ROW_MARGIN := 6
-## Element stripe width + the gap between it and the button column, same reason.
-const SWATCH_WIDTH := 6
+## Element gem width + the gap between it and the button column, same reason.
+const SWATCH_WIDTH := 14
 const ROW_SEPARATION := 5
 
 var _card: PanelContainer
@@ -87,8 +87,28 @@ func _build_ui() -> void:
 	_rows.add_theme_constant_override("separation", 4)
 	margin.add_child(_rows)
 
-	# Amber HUD skin, matching the rest of the panels (same call MoveSelectionPanel uses).
+	# Navy + gold HUD skin, matching the rest of the panels (same call MoveSelectionPanel
+	# uses), then the command card's own grove frame (gold edge + crest: a hero surface).
 	ConquestTheme.apply_to(self)
+	_style_card()
+
+
+## The grove frame for the floating command card: the HUD card with a gold edge, the
+## crest on its top edge and the selected unit's team colour down the left.
+func _style_card(unit: Node = null) -> void:
+	if _card == null:
+		return
+	var sb: OrnateStyleBox = ConquestTheme.panel_box(0.97)
+	if unit != null:
+		sb = ConquestTheme.unit_card_box(unit, 0.97)
+	sb.border_color = ConquestTheme.GOLD_DK
+	sb.crest = true
+	sb.content_margin_left = 12
+	sb.content_margin_right = 12
+	sb.content_margin_top = 14
+	sb.content_margin_bottom = 10
+	_card.add_theme_stylebox_override("panel", sb)
+	ConquestTheme.keep_style(_card)
 
 ## Populate + show the menu for [param unit], positioned next to its screen location.
 ## [param can_command] gates whether the move/Wait rows are actionable (they always
@@ -139,6 +159,7 @@ func open_for_unit(unit: Node, can_command: bool = true) -> void:
 		canto_label.text = "Move only"
 		canto_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		canto_label.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
+		canto_label.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
 		canto_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_rows.add_child(canto_label)
 		_fit_texts.append(canto_label)
@@ -153,22 +174,25 @@ func open_for_unit(unit: Node, can_command: bool = true) -> void:
 			var none_label := Label.new()
 			none_label.text = "No moves"
 			none_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			none_label.add_theme_color_override("font_color", ConquestTheme.TEXT_MUTED)
 			_rows.add_child(none_label)
 
 	# Wait: commit where you stand and end the unit's turn (the missing finalize).
 	var wait_btn := _make_button("Wait", can_command)
-	wait_btn.tooltip_text = "Stay here and end this unit's turn"
+	wait_btn.name = "WaitButton"
+	wait_btn.tooltip_text = InputActions.with_hint("Stay here and end this unit's turn", InputActions.WAIT)
 	wait_btn.pressed.connect(func() -> void: wait_chosen.emit())
 	_rows.add_child(wait_btn)
 
 	# Cancel: back out one level (revert the tentative move), always available.
 	var cancel_btn := _make_button("Cancel", true)
-	cancel_btn.tooltip_text = "Undo this move and pick again (right-click / ESC)"
-	cancel_btn.set_meta("style_role", "secondary")
+	cancel_btn.name = "CancelButton"
+	cancel_btn.tooltip_text = InputActions.with_hint("Undo this move and pick again (right-click works too)", InputActions.CANCEL)
 	cancel_btn.pressed.connect(func() -> void: cancel_chosen.emit())
 	_rows.add_child(cancel_btn)
 
 	ConquestTheme.apply_to(_card)
+	_style_card(unit)
 	# Widths are worked out AFTER the theme lands: the button styleboxes (and therefore
 	# the padding around each label) come from it.
 	_fit_width()
@@ -201,13 +225,13 @@ func _add_move_row(move, slot: int, controller, actionable: bool) -> void:
 
 	var btn := _make_button(label_text, actionable and usable)
 	btn.tooltip_text = _move_tooltip(move)
-	# Element stripe down the left, Pokemon-menu style (guarded like above).
+	# Element gem at the left (the grove look's element marker beside every move name).
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", ROW_SEPARATION)
-	var swatch := ColorRect.new()
+	var swatch := GroveGem.new()
 	swatch.color = ConquestTheme.element_color(_move_element(move))
-	swatch.custom_minimum_size = Vector2(SWATCH_WIDTH, 0)
-	swatch.size_flags_vertical = Control.SIZE_FILL
+	swatch.custom_minimum_size = Vector2(SWATCH_WIDTH, 18)
+	swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(swatch)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var captured_slot := slot
@@ -225,6 +249,7 @@ func _add_move_row(move, slot: int, controller, actionable: bool) -> void:
 		caption.name = "Hint"
 		caption.text = hint
 		caption.add_theme_font_size_override("font_size", ConquestTheme.FONT_CAPTION)
+		caption.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
 		caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		column.add_child(caption)
 		_fit_texts.append(caption)
@@ -276,6 +301,12 @@ func _make_button(text: String, enabled: bool) -> Button:
 	var btn := Button.new()
 	btn.text = text
 	btn.disabled = not enabled
+	# A command row (gold ribbon wash + leaf marker on hover / focus, Cinzel caps).
+	btn.theme_type_variation = &"HudCommand"
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	# Body size rather than the command list's 20: the menu floats over the board, so it
+	# stays compact (Cinzel runs wide).
+	btn.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
 	# >=44px hit target (touch-readiness): was 30, kept dense by padding rather
 	# than growing the font.
 	btn.custom_minimum_size = Vector2(0, 44)

@@ -28,18 +28,18 @@ const OVERLAY_LAYER: int = 120
 # Upper-centre, below the turn banner -- clear of the left SELECT-MOVE popup, the right
 # action panel, and the corners (battle log / terrain card / turn indicator).
 #
-# This is a FLOOR, not the final position. The HUD's TopBar is 56px tall for the compact
-# Traditional turn chip but 180px for the Speed First turn QUEUE, and a fixed 104 put the
-# banner straight through the middle of the taller one -- the reported "toast renders half
-# under the top turn banner". _banner_top() measures the live top bar and parks the banner
-# BANNER_GAP below whichever it is, falling back to this constant when there is no HUD to
-# measure (tests, other scenes).
-const TOP_OFFSET: float = 104.0
+# This is a FLOOR, not the final position. The HUD's TopBar is a compact ~64px strip for the
+# Traditional phase banner (see HudSafeArea) but 180px for the Speed First turn QUEUE, and a
+# fixed offset put the banner straight through the middle of the taller one -- the reported
+# "toast renders half under the top turn banner". _banner_top() measures the live top bar
+# and parks the banner BANNER_GAP below whichever it is, falling back to this constant when
+# there is no HUD to measure (tests, other scenes).
+const TOP_OFFSET: float = 132.0
 ## Clear air between the bottom of the turn banner and the top of this plate.
 const BANNER_GAP: float = 16.0
 ## Where the HUD's top bar lives, relative to the current scene.
 const TOP_BAR_PATH: String = "UI/GameUILayout/MarginContainer/MainContainer/TopBar"
-const BANNER_MAX_WIDTH: float = 720.0
+const BANNER_MAX_WIDTH: float = 640.0
 
 # --- Timing (seconds, base before Battle-Speed scaling) ---------------------
 const FADE_IN: float = 0.14
@@ -54,16 +54,16 @@ const MIN_HOLD: float = 0.55
 # move_performed (MoveExecutor runs, then unit.perform_move emits), so a short window fits.
 const DAMAGE_WINDOW: float = 1.5
 
-# --- Side tints (hardcoded warm/cool fallbacks; no ConquestTheme dependency) -
-# Matches the amber/cream theme and BattleLog's side scheme: enemy (AI) warm-red, ally cool.
-const ALLY_COLOR: Color = Color(0.76, 0.88, 1.0)     # cool blue-white
-const ENEMY_COLOR: Color = Color(1.0, 0.55, 0.42)    # warm red-orange
-const NEUTRAL_COLOR: Color = Color(0.988, 0.937, 0.839)  # cream (ConquestTheme.CREAM)
-const CREAM_DIM: Color = Color(0.906, 0.827, 0.678)  # subtitle (ConquestTheme.CREAM_DIM)
-const OUTLINE_COLOR: Color = Color(0.216, 0.133, 0.059)  # BROWN_DK, for text readability
-# Near-opaque: at 0.78 the amber turn chip and the 3D board read straight through the
-# plate, which is what made the banner text look "semi-transparent and colliding".
-const PLATE_BG: Color = Color(0.06, 0.045, 0.03, 0.94)   # dark warm plate
+# --- Side tints (navy + gold HUD tokens) ------------------------------------
+# Matches BattleLog's side scheme: enemy (AI) red, ally blue, neutral cream.
+const ALLY_COLOR: Color = ConquestTheme.TEAM_BLUE_TEXT
+const ENEMY_COLOR: Color = ConquestTheme.TEAM_RED_TEXT
+const NEUTRAL_COLOR: Color = ConquestTheme.CREAM
+const CREAM_DIM: Color = ConquestTheme.TEXT_DIM
+const OUTLINE_COLOR: Color = ConquestTheme.BG_DEEP
+# Navy HUD plate (PANEL). Near-opaque: at 0.78 the turn chip and the 3D board read straight
+# through the plate, which is what made the banner text look "semi-transparent and colliding".
+const PLATE_BG: Color = Color(0.09, 0.125, 0.26, 0.94)
 
 var _root: Control = null
 var _plate: PanelContainer = null
@@ -84,6 +84,7 @@ var _damage_buffer: Array[Dictionary] = []
 
 func _ready() -> void:
 	layer = OVERLAY_LAYER
+	add_to_group("action_announcer")
 	_build_ui()
 	_connect_events()
 
@@ -124,7 +125,8 @@ func _build_ui() -> void:
 	_main_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_main_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_main_label.custom_minimum_size = Vector2(BANNER_MAX_WIDTH, 0.0)
-	_main_label.add_theme_font_size_override("font_size", 40)
+	_main_label.add_theme_font_override("font", MenuTheme.display_font(2))
+	_main_label.add_theme_font_size_override("font_size", 34)
 	_main_label.add_theme_color_override("font_color", NEUTRAL_COLOR)
 	_main_label.add_theme_color_override("font_outline_color", OUTLINE_COLOR)
 	_main_label.add_theme_constant_override("outline_size", 8)
@@ -135,7 +137,7 @@ func _build_ui() -> void:
 	_sub_label = Label.new()
 	_sub_label.name = "SubLabel"
 	_sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_sub_label.add_theme_font_size_override("font_size", 22)
+	_sub_label.add_theme_font_size_override("font_size", 20)
 	_sub_label.add_theme_color_override("font_color", CREAM_DIM)
 	_sub_label.add_theme_color_override("font_outline_color", OUTLINE_COLOR)
 	_sub_label.add_theme_constant_override("outline_size", 6)
@@ -182,22 +184,18 @@ func _reposition() -> void:
 
 
 func _apply_plate_style(side: Color) -> void:
-	var box: StyleBoxFlat = StyleBoxFlat.new()
-	box.bg_color = PLATE_BG
-	box.set_corner_radius_all(10)
-	box.set_content_margin_all(14)
-	box.content_margin_left = 26.0
-	box.content_margin_right = 26.0
-	box.border_width_left = 2
-	box.border_width_top = 2
-	box.border_width_right = 2
-	box.border_width_bottom = 2
-	var edge: Color = side
-	edge.a = 0.85
-	box.border_color = edge
-	# A soft shadow lifts the plate off the busy board.
+	# A swallow-tailed heraldic ribbon edged in the acting side's colour.
+	var box := MenuTheme.ribbon_box(ConquestTheme.PANEL, Color(side, 0.9), 22.0)
+	box.bg_color = Color(PLATE_BG.lightened(0.06), PLATE_BG.a)
+	box.bg_color_end = Color(PLATE_BG.darkened(0.3), PLATE_BG.a)
+	box.border_width = 2.0
+	box.inner_line_color = Color(ConquestTheme.GOLD, 0.4)
 	box.shadow_color = Color(0.0, 0.0, 0.0, 0.5)
-	box.shadow_size = 6
+	box.shadow_size = 10.0
+	box.content_margin_left = 48.0
+	box.content_margin_right = 48.0
+	box.content_margin_top = 12.0
+	box.content_margin_bottom = 14.0
 	_plate.add_theme_stylebox_override("panel", box)
 
 
@@ -222,7 +220,8 @@ func _safe(obj: Object, sig: StringName, cb: Callable) -> void:
 ## banner, exactly as a move would.
 ##
 ## The ENTRY POINT for the non-move events that are still worth the biggest text on screen
-## -- today, a Siege capture starting ([SiegeFeedback]). It exists so those events reuse the
+## -- a Siege capture starting ([SiegeFeedback]) or a weather change ([WeatherChip]: "Rain
+## begins to fall"). It exists so those events reuse the
 ## surface the player already reads every action on, instead of each growing its own toast
 ## layer with its own timings and its own place on screen.
 ##

@@ -66,12 +66,15 @@ func _fresh_netsession() -> Node:
 	add_child_autofree(n)
 	return n
 
-## A host with one seated opponent (slot 1) -- the minimum shape of a live match.
+## A host with one seated opponent (slot 1) in a LIVE match -- the minimum shape of one.
+## (Merged core: "live match" means the session reached IN_MATCH through start_match's
+## commit round; that round needs a real second socket, so the state is set directly.)
 func _host_with_opponent() -> Dictionary:
 	var session := _open_host()
 	if session.is_empty():
 		return {}
 	session["host"]._server_admit_peer(2, NetProtocol.make_hello("Client"))
+	session["host"].state = NetSessionNode.State.IN_MATCH
 	return session
 
 
@@ -229,9 +232,12 @@ func test_losing_the_other_end_mid_match_raises_opponent_left():
 	var left: Array = []
 	host.opponent_left.connect(func(): left.append(true))
 	var disconnects: Array = []
-	host.disconnected.connect(func(): disconnects.append(true))
+	host.disconnected.connect(func(_reason): disconnects.append(true))
 
 	host._on_server_disconnected()
+	# The merged core tears the session down on the next idle step (these callbacks fire
+	# inside the MultiplayerAPI poll), so let one frame pass.
+	await get_tree().process_frame
 
 	assert_eq(left.size(), 1, "losing the other end of a live match reports an opponent leaving")
 	assert_eq(disconnects.size(), 1, "and still reports the plain disconnect a menu listens for")
@@ -241,12 +247,17 @@ func test_losing_the_other_end_mid_match_raises_opponent_left():
 
 func test_a_disconnect_outside_a_match_reports_only_the_disconnect():
 	var net := _fresh_netsession()
+	# A client sitting in a lobby (a session with no role at all has nothing to lose and,
+	# in the merged core, nothing to report).
+	net.role = NetSessionNode.Role.CLIENT
+	net.state = NetSessionNode.State.LOBBY
 	var left: Array = []
 	net.opponent_left.connect(func(): left.append(true))
 	var disconnects: Array = []
-	net.disconnected.connect(func(): disconnects.append(true))
+	net.disconnected.connect(func(_reason): disconnects.append(true))
 
 	net._on_server_disconnected()
+	await get_tree().process_frame
 
 	assert_eq(left.size(), 0, "no live match -> nothing was lost")
 	assert_eq(disconnects.size(), 1, "the disconnect itself is still announced")

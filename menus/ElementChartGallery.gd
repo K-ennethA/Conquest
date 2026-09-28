@@ -32,40 +32,50 @@ class_name ElementChartGallery
 # with. Green means "better for the attacker" on this grid exactly as it means
 # "better for me" on the HUD.
 #
-# WIDTH BUDGET (measured at the 1280x720 design size, which is the floor).
-#   viewport 1280 - Compendium nav rail 216            = 1064 content host
-#   1064 - 24 left margin - 24 right margin            = 1016 usable
-#   1016 - 16 column separation                        = 1000 to split
+# WIDTH BUDGET (measured at the 1280x720 design size, which is the floor). The page is
+# hosted in a Compendium tab (MenuKit page: 48px side gutters, the tab panel's own 16px
+# content margins):
+#   viewport 1280 - 2 x 48 page gutter - 2 x 16 tab panel = 1152 content host
+#   1152 - 2 x PAGE_MARGIN                               = 1136 usable
+#   1136 - 16 column separation                          = 1120 to split
 #   chart column: HEADER_COL_W + n * (CELL_W + GRID_SEP)
-#                 = 112 + 7 * 62                       =  546  (<= CHART_WIDTH_BUDGET)
-#   cards column: 1000 - 546                           =  454
+#                 = 112 + 7 * 68                         =  588  (<= CHART_WIDTH_BUDGET)
+#   cards column: 1120 - 588                             =  532
 # The chart column claims its natural width up to CHART_WIDTH_BUDGET and no further,
-# so an authored 8th element (608px natural) starts scrolling the grid horizontally
+# so an authored 8th element (656px natural) starts scrolling the grid horizontally
 # instead of squeezing the cards. Height: (n + 1) * CELL_H + n * GRID_SEP = 268 for
-# seven, against ~570 of body height -- the grid does not scroll vertically today.
+# seven, against ~420 of tab body -- the grid does not scroll vertically today.
 # Both scroll regions are real ScrollContainers, so neither budget is a cliff.
+#
+# LOOK. The illuminated-grove kit (docs/UI_STYLE.md): section labels from the theme,
+# FS_* type scale, element-edged grove cards (MenuTheme.accented_card). The matchup
+# cells stay flat tinted plates -- they are data cells, like the Compendium's tables.
 
-const MUTED := Color(0.72, 0.70, 0.78)
+const MUTED := MenuTheme.TEXT_MUTED
+
+## Breathing room inside the host (the Compendium's tab panel already pads the page).
+const PAGE_MARGIN: int = MenuTheme.SP_S
 
 # --- Grid geometry ----------------------------------------------------------
 
 ## Width of the leftmost (attacker badge) column. Wide enough for a full element
-## name at FONT_CAPTION, unlike the compact column headers.
+## name at FS_CAPTION, unlike the compact column headers.
 const HEADER_COL_W: float = 112.0
 
-## One matchup cell. 58px carries "x1.25" at FONT_CAPTION (~30px) with room to spare
+## One matchup cell. 64px carries "x1.25" at FS_CAPTION (~38px) with room to spare
 ## and keeps an 8x8 grid inside the width budget above.
-const CELL_W: float = 58.0
+const CELL_W: float = 64.0
 const CELL_H: float = 30.0
 const GRID_SEP: int = 4
 
 ## The most horizontal space the chart column may claim before it starts scrolling
 ## rather than eating the cards column.
-const CHART_WIDTH_BUDGET: float = 560.0
+const CHART_WIDTH_BUDGET: float = 620.0
 
-## Column-header badges are capped to the cell width so a long authored element id
-## cannot widen every column; the ROW headers get the roomy cap and stay readable.
-const COL_BADGE_CAP: float = CELL_W - 8.0
+## Column-header badges are capped so the label plus the chip's own margins (5px a
+## side) stay inside one cell, and a long authored element id cannot widen every
+## column; the ROW headers get the roomy cap and stay readable.
+const COL_BADGE_CAP: float = CELL_W - 12.0
 const ROW_BADGE_CAP: float = HEADER_COL_W - 16.0
 
 # --- Node names (every test looks the page up by these) ---------------------
@@ -92,6 +102,7 @@ const CARD_SELF_RESIST := "SelfResist"
 const CARD_STRONG_ROW := "StrongRow"
 const CARD_WEAK_ROW := "WeakRow"
 const CARD_NO_MATCHUPS := "NoMatchups"
+const CARD_UNITS := "UnitsLine"
 
 ## The exact sentence an element with no authored pairing shows. Pinned as a constant
 ## because it is the "do not invent a matchup" promise, and a test asserts it.
@@ -223,14 +234,44 @@ static func has_no_matchups(element) -> bool:
 # ===========================================================================
 
 func _ready() -> void:
-	theme = MenuTheme.build()  # dark Legends-style menu look (matches the sibling galleries)
+	theme = MenuTheme.build()  # the illuminated-grove menu theme (matches the sibling galleries)
 	_build_ui()
 
 
 ## Tear the page down and rebuild it from the CURRENT chart. Called from _ready; also
 ## the seam a test uses after swapping the chart on an already-mounted page.
 func refresh() -> void:
+	# Keep the host's decision about the gallery-contract back button across a rebuild
+	# (the Compendium hides it; a fresh button would otherwise reappear).
+	var back_hidden: bool = back_button != null and is_instance_valid(back_button) and not back_button.visible
+	# Same for the standalone backdrop the Compendium hides (it would cover the tab panel).
+	var old_bg := get_node_or_null("Background") as CanvasItem
+	var bg_hidden: bool = old_bg != null and not old_bg.visible
 	_build_ui()
+	var new_bg := get_node_or_null("Background") as CanvasItem
+	if bg_hidden and new_bg != null:
+		new_bg.visible = false
+	if back_hidden and back_button != null:
+		back_button.visible = false
+		var header := back_button.get_parent()
+		if header is HBoxContainer:
+			(header as HBoxContainer).visible = false
+
+
+## Bring [param element]'s card into view (Compendium cross-links "elements:<id>").
+## Returns false when the element has no card on this page.
+func focus_element(element) -> bool:
+	var key: StringName = ElementChartResource.key_of(element)
+	if key == &"" or cards_box == null:
+		return false
+	var card := cards_box.get_node_or_null(CARD_PREFIX + String(key)) as Control
+	if card == null:
+		return false
+	var scroll := cards_box.get_parent() as ScrollContainer
+	if scroll != null:
+		# Deferred: a freshly shown tab has not laid its cards out yet.
+		scroll.call_deferred("ensure_control_visible", card)
+	return true
 
 
 func _build_ui() -> void:
@@ -239,20 +280,29 @@ func _build_ui() -> void:
 		child.free()
 
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	MenuTheme.apply_backdrop(self)  # standalone; harmless over the Compendium's own
+
+	# Standalone backdrop, the same flat night the sibling galleries' scenes carry (their
+	# "Background" ColorRect). Opened on its own this page otherwise showed the engine's
+	# grey clear colour; hosted in the Compendium, the shell hides it by this very name.
+	var bg := ColorRect.new()
+	bg.name = "Background"
+	bg.color = Color(0.0431373, 0.0588235, 0.117647, 1)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(bg)
 
 	var outer := MarginContainer.new()
 	outer.name = "Outer"
 	outer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	outer.add_theme_constant_override("margin_left", 24)
-	outer.add_theme_constant_override("margin_right", 24)
-	outer.add_theme_constant_override("margin_top", 24)
-	outer.add_theme_constant_override("margin_bottom", 24)
+	outer.add_theme_constant_override("margin_left", PAGE_MARGIN)
+	outer.add_theme_constant_override("margin_right", PAGE_MARGIN)
+	outer.add_theme_constant_override("margin_top", PAGE_MARGIN)
+	outer.add_theme_constant_override("margin_bottom", PAGE_MARGIN)
 	add_child(outer)
 
 	var page := VBoxContainer.new()
 	page.name = "Page"
-	page.add_theme_constant_override("separation", 10)
+	page.add_theme_constant_override("separation", MenuTheme.SP_S)
 	outer.add_child(page)
 
 	page.add_child(_build_header())
@@ -266,14 +316,14 @@ func _build_ui() -> void:
 		var notice := Label.new()
 		notice.name = EMPTY_NAME
 		notice.text = "No elements are authored in the element chart yet."
-		notice.modulate = MUTED
+		notice.theme_type_variation = &"MutedLabel"
 		notice.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		page.add_child(notice)
 		return
 
 	var body := HBoxContainer.new()
 	body.name = "Body"
-	body.add_theme_constant_override("separation", 16)
+	body.add_theme_constant_override("separation", MenuTheme.SP_L)
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	page.add_child(body)
 
@@ -284,23 +334,21 @@ func _build_ui() -> void:
 func _build_header() -> Control:
 	var row := HBoxContainer.new()
 	row.name = "Header"
-	row.add_theme_constant_override("separation", 12)
+	row.add_theme_constant_override("separation", MenuTheme.SP_M)
 
 	var title := Label.new()
 	title.name = "Title"
-	title.text = "ELEMENTS"
-	title.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	title.add_theme_color_override("font_color", MenuTheme.GOLD)
+	title.text = "Elements"
+	title.theme_type_variation = &"HeadingLabel"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(title)
 
 	# The gallery-contract BACK button. The Compendium shell hides it (it supplies the
-	# single back control); it exists so this scene is also usable on its own, exactly
-	# like the Unit / Tile / Map galleries it is hosted beside.
-	back_button = Button.new()
+	# single back control) -- and with it this whole header row, which then holds
+	# nothing else; it exists so this scene is also usable on its own, exactly like the
+	# Unit / Tile / Map galleries it is hosted beside.
+	back_button = MenuKit.button("Back", MenuKit.GHOST, 120, 44)
 	back_button.name = "BackButton"
-	back_button.text = "BACK"
-	back_button.custom_minimum_size = Vector2(80, 40)
 	back_button.pressed.connect(_on_back_pressed)
 	row.add_child(back_button)
 
@@ -313,7 +361,7 @@ func _build_header() -> Control:
 func _build_legend() -> Control:
 	var row := HBoxContainer.new()
 	row.name = LEGEND_NAME
-	row.add_theme_constant_override("separation", 14)
+	row.add_theme_constant_override("separation", MenuTheme.SP_L)
 
 	row.add_child(_legend_part("LegendStrong", "^ Strong  (above ×1)",
 			ElementVisuals.effectiveness_color(ElementVisuals.STRONG)))
@@ -328,7 +376,7 @@ func _legend_part(part_name: String, text: String, color: Color) -> Label:
 	var label := Label.new()
 	label.name = part_name
 	label.text = text
-	label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	label.add_theme_color_override("font_color", color)
 	return label
 
@@ -338,7 +386,7 @@ func _legend_part(part_name: String, text: String, color: Color) -> Label:
 func _build_chart_column(element_list: Array[StringName]) -> Control:
 	var col := VBoxContainer.new()
 	col.name = "ChartColumn"
-	col.add_theme_constant_override("separation", 6)
+	col.add_theme_constant_override("separation", MenuTheme.SP_XS)
 	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	col.add_child(_section_header("Type chart"))
@@ -346,7 +394,7 @@ func _build_chart_column(element_list: Array[StringName]) -> Control:
 	var caption := Label.new()
 	caption.name = "ChartCaption"
 	caption.text = "Rows attack, columns defend."
-	caption.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	caption.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	caption.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
 	col.add_child(caption)
 
@@ -378,20 +426,20 @@ func _populate_grid(element_list: Array[StringName]) -> void:
 	corner.name = CORNER_NAME
 	corner.text = "ATK \\ DEF"
 	corner.custom_minimum_size = Vector2(HEADER_COL_W, CELL_H)
-	corner.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	corner.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	corner.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
 	corner.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	chart_grid.add_child(corner)
 
 	for defender in element_list:
-		var head := ElementVisuals.make_badge(defender, MenuTheme.FONT_CAPTION, COL_BADGE_CAP)
+		var head := ElementVisuals.make_badge(defender, MenuTheme.FS_CAPTION, COL_BADGE_CAP)
 		head.name = COL_HEADER_PREFIX + String(defender)
 		head.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		chart_grid.add_child(head)
 
 	# One row per ATTACKER: its badge, then its multiplier against every defender.
 	for attacker in element_list:
-		var row_head := ElementVisuals.make_badge(attacker, MenuTheme.FONT_CAPTION, ROW_BADGE_CAP)
+		var row_head := ElementVisuals.make_badge(attacker, MenuTheme.FS_CAPTION, ROW_BADGE_CAP)
 		row_head.name = ROW_HEADER_PREFIX + String(attacker)
 		# SHRINK_END, and no minimum of its own: the corner label already claims
 		# HEADER_COL_W for column 0, so the pill hugs its text against the cells.
@@ -415,18 +463,22 @@ func _build_cell(attacker: StringName, defender: StringName) -> Label:
 	cell.custom_minimum_size = Vector2(CELL_W, CELL_H)
 	cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cell.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	cell.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	cell.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	cell.add_theme_color_override("font_color", color)
 	cell.tooltip_text = cell_tooltip(attacker, defender, mult)
 	cell.mouse_filter = Control.MOUSE_FILTER_PASS  # an IGNORE control shows no tooltip
 
+	# Decided cells are flat tinted plates (data cells, like the Compendium's tables);
+	# a neutral cell sits in the sunken well of the neutral plate below.
+	var sb := StyleBoxFlat.new()
+	sb.set_corner_radius_all(4)
 	if cell.text != "":
-		var sb := StyleBoxFlat.new()
 		sb.bg_color = Color(color.r, color.g, color.b, 0.18)
-		sb.set_corner_radius_all(5)
 		sb.set_border_width_all(1)
 		sb.border_color = Color(color.r, color.g, color.b, 0.55)
-		cell.add_theme_stylebox_override("normal", sb)
+	else:
+		sb.bg_color = Color(MenuTheme.PANEL_SUNK, 0.55)
+	cell.add_theme_stylebox_override("normal", sb)
 
 	return cell
 
@@ -436,7 +488,7 @@ func _build_cell(attacker: StringName, defender: StringName) -> Label:
 func _build_cards_column(element_list: Array[StringName]) -> Control:
 	var col := VBoxContainer.new()
 	col.name = "CardsColumn"
-	col.add_theme_constant_override("separation", 6)
+	col.add_theme_constant_override("separation", MenuTheme.SP_XS)
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
@@ -445,7 +497,7 @@ func _build_cards_column(element_list: Array[StringName]) -> Control:
 	var caption := Label.new()
 	caption.name = "CardsCaption"
 	caption.text = "Both directions, read straight off the chart."
-	caption.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	caption.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	caption.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
 	col.add_child(caption)
 
@@ -460,7 +512,7 @@ func _build_cards_column(element_list: Array[StringName]) -> Control:
 	cards_box = VBoxContainer.new()
 	cards_box.name = CARDS_NAME
 	cards_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cards_box.add_theme_constant_override("separation", 8)
+	cards_box.add_theme_constant_override("separation", MenuTheme.SP_S)
 	scroll.add_child(cards_box)
 
 	for element in element_list:
@@ -473,26 +525,26 @@ func _build_element_card(element: StringName) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.name = CARD_PREFIX + String(element)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# The shared left-accented card look, striped in the element's own hue.
-	card.add_theme_stylebox_override("panel", MenuTheme.card_box(ElementVisuals.color_for(element)))
+	# A compact grove card, striped down its left edge in the element's own hue.
+	card.add_theme_stylebox_override("panel", card_box_for(ElementVisuals.color_for(element)))
 
 	var box := VBoxContainer.new()
 	box.name = "Body"
-	box.add_theme_constant_override("separation", 5)
+	box.add_theme_constant_override("separation", MenuTheme.SP_XS)
 	card.add_child(box)
 
 	var title_row := HBoxContainer.new()
 	title_row.name = "TitleRow"
-	title_row.add_theme_constant_override("separation", 8)
+	title_row.add_theme_constant_override("separation", MenuTheme.SP_S)
 	box.add_child(title_row)
-	title_row.add_child(_badge(element, MenuTheme.FONT_BODY, ElementVisuals.BADGE_MAX_WIDTH * 2.0))
+	title_row.add_child(_badge(element, MenuTheme.FS_BODY, ElementVisuals.BADGE_MAX_WIDTH * 2.0))
 
 	var self_text: String = self_resist_text(element)
 	if self_text != "":
 		var self_label := Label.new()
 		self_label.name = CARD_SELF_RESIST
 		self_label.text = self_text
-		self_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+		self_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 		self_label.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
 		box.add_child(self_label)
 
@@ -508,13 +560,43 @@ func _build_element_card(element: StringName) -> PanelContainer:
 		var none_label := Label.new()
 		none_label.name = CARD_NO_MATCHUPS
 		none_label.text = NO_MATCHUPS_TEXT
-		none_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+		none_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 		none_label.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
 		none_label.tooltip_text = \
 				"The chart authors no pairing for this element yet, in either direction."
 		box.add_child(none_label)
 
+	# Who carries it: the roster units of this element -- the same list the element's
+	# Compendium search entry names.
+	var units: Array = CompendiumData.units_of_element(element)
+	if not units.is_empty():
+		var names: Array[String] = []
+		for c in units:
+			names.append(CompendiumData._char_name(c))
+		var units_label := Label.new()
+		units_label.name = CARD_UNITS
+		units_label.text = "Units: " + ", ".join(names)
+		units_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		units_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		units_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+		units_label.add_theme_color_override("font_color", MUTED)
+		box.add_child(units_label)
+
 	return card
+
+
+## Compact element-edged grove card -- the frame the unit move / ability cards use, in
+## the element's (or any accent's) hue. Shared by the Tile gallery's effect cards.
+static func card_box_for(accent: Color) -> StyleBox:
+	var sb := MenuTheme.accented_card(accent, SIDE_LEFT, MenuTheme.PANEL_HI, 0.85)
+	sb.border_color = Color(accent, 0.6)
+	sb.corner = 9.0
+	sb.shadow_size = 4.0
+	sb.vignette_width = 10.0
+	sb.ornament_size = 2.8
+	sb.set_content_margin_all(10)
+	sb.content_margin_left = 16
+	return sb
 
 
 ## A caption plus the badges it names, wrapping when the list is long. HFlowContainer
@@ -529,13 +611,13 @@ func _badge_row(row_name: String, caption: String, element_list: Array[StringNam
 	var label := Label.new()
 	label.name = "Caption"
 	label.text = caption
-	label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+	label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	label.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(label)
 
 	for element in element_list:
-		row.add_child(_badge(element, MenuTheme.FONT_CAPTION, ElementVisuals.BADGE_MAX_WIDTH))
+		row.add_child(_badge(element, MenuTheme.FS_CAPTION, ElementVisuals.BADGE_MAX_WIDTH))
 
 	return row
 
@@ -554,7 +636,7 @@ func _badge(element: StringName, font_size: int, cap: float) -> PanelContainer:
 func _section_header(text: String) -> Label:
 	var label := Label.new()
 	label.text = text.to_upper()
-	label.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	label.theme_type_variation = &"SectionLabel"
 	label.add_theme_color_override("font_color", MenuTheme.GOLD)
 	return label
 
@@ -564,4 +646,4 @@ func _section_header(text: String) -> Label:
 # ===========================================================================
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
+	MenuNav.change_scene(self, "res://menus/MainMenu.tscn")

@@ -9,9 +9,11 @@ class_name GameOverScreen
 #
 # Code-built like TerrainInfoPanel / CombatForecastPanel: the .tscn is just a full-rect
 # Control shell with this script attached, and _ready() builds the backdrop, result card,
-# banner, summary sections and buttons, then themes them with the amber battle HUD look
-# (ConquestTheme). Hidden by default; GameWorldManager decides the outcome and calls
-# show_victory()/show_defeat() (or show_result()).
+# banner, summary sections, buttons and key hints, then themes them with the shared grove
+# menu look (MenuTheme: navy card, gold frame + crest, Cinzel headings, the same button
+# states and MenuNav hover-focus as the menus it leads back to). Hidden by default;
+# GameWorldManager decides the outcome and calls show_victory()/show_defeat() (or
+# show_result()).
 #
 # Idempotent: once shown it ignores further calls (`_shown`), so multiple elimination
 # signals arriving in the same frame never restack the reveal.
@@ -73,9 +75,10 @@ class_name GameOverScreen
 # early-returns on a battle-start latch of ArenaController.is_active() -- see
 # _arena_suppressed() -- so a future caller that does not know the rule cannot break it.
 #
-# INPUT: ESC (ui_cancel) goes to the Main Menu while the screen is shown -- Enter/Space
-# already "press" the focused Rematch button via Godot's built-in ui_accept handling on a
-# focused Button, so no extra wiring is needed for that.
+# INPUT: ESC / gamepad B (MenuNav.is_back_event) goes to the Main Menu while the screen is
+# shown -- Enter/Space/A already "press" the focused button via Godot's built-in ui_accept
+# handling on a focused Button, so no extra wiring is needed for that. The footer key hints
+# say so, in the active device's glyphs (MenuKit.key_hint).
 
 # --- Tunables ---------------------------------------------------------------
 const CARD_WIDTH := 600.0
@@ -85,7 +88,7 @@ const REVEAL_SLIDE_PX := 26.0    # card starts this many px high and settles dow
 ## Type rhythm for the summary plate: 24px values under 16px gold headers.
 const HEADER_FONT_SIZE := 16
 const VALUE_FONT_SIZE := 24
-const ROW_FONT_SIZE := 14
+const ROW_FONT_SIZE := 15   # MenuTheme.FS_CAPTION, the grove type floor
 
 ## At most this many fallen-unit rows are listed; the rest collapse into "+N more", so a
 ## wipe on a big map can never grow the card taller than the viewport.
@@ -148,7 +151,7 @@ var _banner_label: Label
 var _mode_label: Label
 var _subtitle_label: Label
 var _summary_card: PanelContainer
-## Every gold section/stat header, recoloured after ConquestTheme.apply_to() strips overrides.
+## Every gold section/stat header, styled once by _style_summary_card().
 var _summary_headers: Array[Label] = []
 ## Every cream value label, same reason.
 var _summary_values: Array[Label] = []
@@ -184,6 +187,8 @@ var _button_box: VBoxContainer
 var _rematch_button: Button
 var _menu_button: Button
 var _quit_button: Button
+## Footer key hints (MenuKit.key_hint pills).
+var _hints_row: HBoxContainer
 var _reveal_tween: Tween
 
 # --- Results tally (latched off GameEvents all battle) ------------------------
@@ -255,7 +260,7 @@ func _create_ui() -> void:
 	# with mouse_filter STOP, catches any click outside the card.
 	_backdrop = ColorRect.new()
 	_backdrop.name = "Backdrop"
-	_backdrop.color = Color(0.04, 0.02, 0.0, 0.72)
+	_backdrop.color = Color(MenuTheme.BG_DEEP, 0.78)   # navy scrim (grove ground)
 	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(_backdrop)
@@ -288,7 +293,7 @@ func _create_ui() -> void:
 	_banner_label.add_theme_font_size_override("font_size", 56)
 	vb.add_child(_banner_label)
 
-	# The mode's own name, over the banner ("SIEGE" / "VICTORY"). Hidden unless a mode
+	# The mode's own name, with the banner ("SIEGE" / "VICTORY"). Hidden unless a mode
 	# controller names itself, so every existing battle's card is the card it always was --
 	# a hidden BoxContainer child costs neither height nor the VBox's separation.
 	_mode_label = Label.new()
@@ -298,6 +303,14 @@ func _create_ui() -> void:
 	_mode_label.visible = false
 	vb.add_child(_mode_label)
 
+	# Gold filigree rule under the banner (the grove menus' title divider).
+	var rule := GroveRule.new()
+	rule.name = "BannerRule"
+	rule.centered = true
+	rule.custom_minimum_size = Vector2(280, 12)
+	rule.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vb.add_child(rule)
+
 	_subtitle_label = Label.new()
 	_subtitle_label.name = "SubtitleLabel"
 	_subtitle_label.text = SUBTITLE_VICTORY
@@ -305,12 +318,10 @@ func _create_ui() -> void:
 	_subtitle_label.add_theme_font_size_override("font_size", 20)
 	vb.add_child(_subtitle_label)
 
-	# The summary PAGE: BATTLE / REWARDS / VERSUS sections on one dark plate.
-	# Structure only here -- colours and the dark plate stylebox are applied in
-	# _style_summary_card() AFTER ConquestTheme.apply_to() below, because apply_to's
-	# recursive _restyle() would otherwise strip a Label colour override set before it
-	# and repaint any PanelContainer back to the bright amber panel_box() (see that
-	# method's own banner/subtitle colours, set the same way, for precedent).
+	# The summary PAGE: BATTLE / REWARDS / VERSUS sections on one dark inset plate.
+	# Structure only here -- colours, fonts and the plate stylebox are applied in
+	# _style_summary_card() once the card theme is set below, so every override is set
+	# in one place (and after the theme, which is the precedence that matters).
 	_summary_card = _build_summary_card()
 	vb.add_child(_summary_card)
 
@@ -334,16 +345,43 @@ func _create_ui() -> void:
 	_quit_button.pressed.connect(_on_quit_pressed)
 	_button_box.add_child(_quit_button)
 
-	# Amber HUD look. apply_to strips baked font_color overrides, so the banner
-	# outline / subtitle tint / per-outcome banner colour are all set AFTER it so
-	# they survive.
-	ConquestTheme.apply_to(self)
+	# Footer key hints in the active device's glyphs (Enter / A selects, Esc / B leaves).
+	_hints_row = HBoxContainer.new()
+	_hints_row.name = "KeyHints"
+	_hints_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_hints_row.add_theme_constant_override("separation", MenuTheme.SP_L)
+	_hints_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	MenuKit.add_standard_hints(_hints_row, "Select", "Main Menu")
+	vb.add_child(_hints_row)
 
-	# Punchy dark outline on the big banner, and a muted subtitle.
-	_banner_label.add_theme_constant_override("outline_size", 8)
-	_banner_label.add_theme_color_override("font_outline_color", ConquestTheme.BROWN_DK)
-	_subtitle_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
-	_mode_label.add_theme_color_override("font_color", ConquestTheme.INK_SOFT)
+	# Shared menu look (MenuTheme): a dark navy card with a gold frame so the gold
+	# VICTORY / red DEFEAT banner reads with strong contrast, and the same button
+	# states (gold focus ring, gold primary action) as the menus it leads back to.
+	theme = MenuTheme.build()
+	var card_sb := MenuTheme.card_box(MenuTheme.PANEL, MenuTheme.GOLD_DK)
+	card_sb.set_border_width_all(2)
+	# 24px sides/bottom (the summary page is tall -- see _make_button), 28px top so the
+	# crest clears the banner.
+	card_sb.set_content_margin_all(24)
+	card_sb.content_margin_top = 28
+	card_sb.crest = true
+	card_sb.ornament = OrnateStyleBox.Ornament.LEAF
+	card_sb.ornament_size = 4.5
+	card_sb.inner_line_color = Color(MenuTheme.GOLD, 0.5)
+	_card.add_theme_stylebox_override("panel", card_sb)
+	_rematch_button.theme_type_variation = &"PrimaryButton"
+	_quit_button.theme_type_variation = &"GhostButton"
+	for b in [_rematch_button, _menu_button, _quit_button]:
+		MenuNav.hover_focus(b)
+
+	# Punchy dark outline on the big banner, and a softer subtitle.
+	_banner_label.add_theme_font_override("font", MenuTheme.display_font(6))
+	_banner_label.add_theme_constant_override("outline_size", 10)
+	_banner_label.add_theme_color_override("font_outline_color", Color("1a1206"))
+	_subtitle_label.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
+	# The mode name reads as a gold Cinzel kicker under the banner.
+	_mode_label.add_theme_font_override("font", MenuTheme.heading_font(4))
+	_mode_label.add_theme_color_override("font_color", MenuTheme.GOLD)
 
 	_style_summary_card()
 
@@ -353,8 +391,8 @@ func _create_ui() -> void:
 # =====================================================================================
 
 ## The whole dark plate: BATTLE, REWARDS and (conditionally) VERSUS sections stacked on one
-## ConquestTheme.plate_box() with a 16px inner margin. Values start blank/zero and are filled
-## in by [method _populate_summary] right before the reveal.
+## inset ConquestTheme.plate_box() with a 16px inner margin. Values start blank/zero and are
+## filled in by [method _populate_summary] right before the reveal.
 func _build_summary_card() -> PanelContainer:
 	var card := PanelContainer.new()
 	card.name = "SummaryCard"
@@ -520,7 +558,7 @@ func _section_header(text: String) -> Label:
 
 ## One stat block: a centred 16px header label over a centred 24px value label.
 ## Returns the value label (callers keep that reference; headers/values are collected for
-## the post-apply_to colour pass).
+## the one-time colour pass in _style_summary_card).
 func _add_stat_block(row: HBoxContainer, header_text: String) -> Label:
 	var block := VBoxContainer.new()
 	block.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -559,39 +597,35 @@ func _thin_rule() -> HSeparator:
 	return rule
 
 
-## Dark plate + gold headers / cream values / dim captions. Called AFTER
-## ConquestTheme.apply_to() -- see the comment where _summary_card is built in _create_ui().
+## Inset navy plate + gold Cinzel headers / cream values / dim captions, on the grove
+## tokens. Called once from _create_ui(), after the card theme is set -- see the comment
+## where _summary_card is built.
 func _style_summary_card() -> void:
 	if _summary_card == null:
 		return
 	_summary_card.add_theme_stylebox_override("panel", ConquestTheme.plate_box())
+	var heading := MenuTheme.heading_font(2)
 	for header in _summary_headers:
-		header.add_theme_color_override("font_color", ConquestTheme.EL_HOLY)
+		header.add_theme_font_override("font", heading)
+		header.add_theme_color_override("font_color", ConquestTheme.GOLD)
 	for value in _summary_values:
 		value.add_theme_color_override("font_color", ConquestTheme.CREAM)
 	for caption in _summary_captions:
-		caption.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
+		caption.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
 
 	if _perfect_badge != null:
-		_perfect_badge.add_theme_color_override("font_color", ConquestTheme.EL_HOLY)
+		_perfect_badge.add_theme_font_override("font", heading)
+		_perfect_badge.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
 
-	# Gold-bordered rank chip (the one bit of chrome in the versus row).
+	# Gold-edged rank pill (the one bit of chrome in the versus row).
 	if _rank_chip != null:
-		var chip := StyleBoxFlat.new()
-		chip.bg_color = Color(ConquestTheme.PLATE_BG.r, ConquestTheme.PLATE_BG.g, ConquestTheme.PLATE_BG.b, 0.9)
-		chip.border_color = ConquestTheme.EL_HOLY
-		chip.set_border_width_all(1)
-		chip.set_corner_radius_all(4)
-		chip.content_margin_left = 8.0
-		chip.content_margin_right = 8.0
-		chip.content_margin_top = 2.0
-		chip.content_margin_bottom = 2.0
-		_rank_chip.add_theme_stylebox_override("normal", chip)
-		_rank_chip.add_theme_color_override("font_color", ConquestTheme.EL_HOLY)
+		_rank_chip.add_theme_stylebox_override("normal", ConquestTheme.chip_style(ConquestTheme.GOLD))
+		_rank_chip.add_theme_font_override("font", heading)
+		_rank_chip.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
 
 	if _rank_bar != null:
 		_rank_bar.add_theme_stylebox_override("background", _bar_box(ConquestTheme.HP_TRACK))
-		_rank_bar.add_theme_stylebox_override("fill", _bar_box(ConquestTheme.EL_HOLY))
+		_rank_bar.add_theme_stylebox_override("fill", _bar_box(ConquestTheme.GOLD))
 
 
 func _bar_box(color: Color) -> StyleBoxFlat:
@@ -604,7 +638,9 @@ func _bar_box(color: Color) -> StyleBoxFlat:
 func _make_button(text: String) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(0, 40)
+	# 44px, not the grove menus' 50: the summary page above the buttons is tall, and three
+	# buttons + the hint row must still land on a 720p screen.
+	b.custom_minimum_size = Vector2(0, 44)
 	b.focus_mode = Control.FOCUS_ALL
 	return b
 
@@ -672,8 +708,21 @@ func show_result(outcome: StringName, title: String, subtitle: String) -> void:
 	_play_reveal_animation()
 	_play_sting(outcome)
 
+	# A network match cannot be restarted locally (reloading one peer's scene would
+	# desync it) -- offer only Main Menu / Quit, which also closes the session. The
+	# battle-start latch covers a forfeit / disconnect win, where the live query may
+	# already read false because the session is gone.
+	var networked: bool = _was_networked_match
+	if not networked and typeof(GameModeManager) == TYPE_OBJECT and GameModeManager != null \
+			and GameModeManager.has_method("is_multiplayer_active"):
+		networked = bool(GameModeManager.is_multiplayer_active())
+	_rematch_button.visible = not networked
+
 	# Give the primary action keyboard/controller focus.
-	_rematch_button.grab_focus()
+	if networked:
+		_menu_button.grab_focus()
+	else:
+		_rematch_button.grab_focus()
 
 
 # --- Which mode was this? ----------------------------------------------------
@@ -894,16 +943,16 @@ func _on_quit_pressed() -> void:
 
 # --- Input --------------------------------------------------------------------
 
-## ESC goes to the Main Menu while the screen is shown. Enter/Space already
-## "press" the focused Rematch button through Godot's own ui_accept handling on a
-## focused Button (see show_result -> grab_focus), so nothing else is needed for
-## that. Mirrors UILayoutManager's ui_cancel handling: consume the event so it
+## ESC / gamepad B (MenuNav.is_back_event: the "cancel" action or ui_cancel) goes to
+## the Main Menu while the screen is shown. Enter/Space/A already "press" the focused
+## button through Godot's own ui_accept handling on a focused Button (see show_result ->
+## grab_focus), so nothing else is needed for that. Mirrors UILayoutManager's ui_cancel handling: consume the event so it
 ## cannot also fall through to a board handler underneath (harmless here since
 ## gameplay is paused, but consuming it is the established pattern).
 func _unhandled_input(event: InputEvent) -> void:
 	if not _shown or not visible:
 		return
-	if event.is_action_pressed("ui_cancel"):
+	if MenuNav.is_back_event(event):
 		get_viewport().set_input_as_handled()
 		_on_main_menu_pressed()
 
@@ -952,12 +1001,12 @@ func _populate_lost_rows() -> void:
 	var remaining: int = _lost_units.size() - shown
 	if remaining > 0:
 		# Built inline, NOT through _caption_label: that helper registers the label for the
-		# one-time post-apply_to colour pass, and a runtime row would leave a freed pointer
-		# in that array. Runtime rows colour themselves.
+		# one-time colour pass (_style_summary_card), and a runtime row would leave a freed
+		# pointer in that array. Runtime rows colour themselves.
 		var more := Label.new()
 		more.text = "+%d more" % remaining
 		more.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
-		more.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
+		more.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
 		_lost_rows_box.add_child(more)
 
 
@@ -994,7 +1043,7 @@ func _build_lost_row(entry: Dictionary) -> HBoxContainer:
 		mono.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		mono.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		mono.add_theme_font_size_override("font_size", 13)
-		mono.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
+		mono.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
 		row.add_child(mono)
 
 	var label := Label.new()
@@ -1071,13 +1120,14 @@ func _populate_drop_rows() -> void:
 	_drop_rows_box.visible = true
 
 	# Built inline rather than through _section_header / _caption_label: those helpers
-	# register the label for the ONE-TIME post-apply_to colour pass, and a runtime row would
-	# leave a freed pointer in those arrays. Runtime rows colour themselves.
+	# register the label for the ONE-TIME colour pass (_style_summary_card), and a runtime
+	# row would leave a freed pointer in those arrays. Runtime rows style themselves.
 	var heading := Label.new()
 	heading.name = "DropsHeading"
 	heading.text = "ITEMS FOUND"
 	heading.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
-	heading.add_theme_color_override("font_color", ConquestTheme.EL_HOLY)
+	heading.add_theme_font_override("font", MenuTheme.heading_font(2))
+	heading.add_theme_color_override("font_color", ConquestTheme.GOLD)
 	_drop_rows_box.add_child(heading)
 
 	var shown: int = mini(drops.size(), MAX_DROP_ROWS)
@@ -1089,7 +1139,7 @@ func _populate_drop_rows() -> void:
 		var more := Label.new()
 		more.text = "+%d more" % remaining
 		more.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
-		more.add_theme_color_override("font_color", ConquestTheme.CREAM_DIM)
+		more.add_theme_color_override("font_color", ConquestTheme.TEXT_DIM)
 		_drop_rows_box.add_child(more)
 
 
@@ -1119,7 +1169,7 @@ func _build_drop_row(item_id: String) -> HBoxContainer:
 	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	badge.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
-	badge.add_theme_color_override("font_color", ConquestTheme.EL_HOLY)
+	badge.add_theme_color_override("font_color", ConquestTheme.GOLD)
 	row.add_child(badge)
 
 	var label := Label.new()

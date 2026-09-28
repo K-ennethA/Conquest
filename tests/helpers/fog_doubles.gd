@@ -29,13 +29,14 @@ class StubVision:
 	## nothing (and draws nothing) with fog authored off.
 	var enabled: bool = true
 
-	## player_id -> { Vector2i: true }.
+	## player_id -> { Vector3i: true }. Cells are (col, row, floor); anything handed in goes
+	## through [method Cells.from_variant], so a legacy Vector2i reads as floor 0.
 	var hidden_cells: Dictionary = {}
 	## player_id -> { Unit: true }.
 	var hidden_units: Dictionary = {}
 
 	## Every cell on the board, so [method visible_cells] can answer as a real core would.
-	var board_cells: Array[Vector2i] = []
+	var board_cells: Array[Vector3i] = []
 
 	## Counts calls, so a test can prove a gate is read LIVE at event time rather than from
 	## a set snapshotted at the last repaint (the reveal-on-attack contract).
@@ -45,18 +46,18 @@ class StubVision:
 		board_cells.clear()
 		for col in range(cols):
 			for row in range(rows):
-				board_cells.append(Vector2i(col, row))
+				board_cells.append(Cells.make(col, row))
 
 	func hide_cells(player_id: int, cells: Array) -> void:
 		var set: Dictionary = hidden_cells.get(player_id, {})
 		for cell in cells:
-			set[cell] = true
+			set[Cells.from_variant(cell)] = true
 		hidden_cells[player_id] = set
 
 	func show_cells(player_id: int, cells: Array) -> void:
 		var set: Dictionary = hidden_cells.get(player_id, {})
 		for cell in cells:
-			set.erase(cell)
+			set.erase(Cells.from_variant(cell))
 		hidden_cells[player_id] = set
 
 	func hide_unit(player_id: int, unit) -> void:
@@ -74,8 +75,8 @@ class StubVision:
 	func fog_enabled() -> bool:
 		return enabled
 
-	func is_cell_visible(player_id: int, cell: Vector2i) -> bool:
-		return not (hidden_cells.get(player_id, {}) as Dictionary).has(cell)
+	func is_cell_visible(player_id: int, cell) -> bool:
+		return not (hidden_cells.get(player_id, {}) as Dictionary).has(Cells.from_variant(cell))
 
 	func is_unit_visible(player_id: int, unit) -> bool:
 		unit_queries += 1
@@ -108,13 +109,13 @@ class ProbeOnlyVision:
 
 	func hide_cells(cells: Array) -> void:
 		for cell in cells:
-			hidden[cell] = true
+			hidden[Cells.from_variant(cell)] = true
 
 	func fog_enabled() -> bool:
 		return enabled
 
-	func is_cell_visible(_player_id: int, cell: Vector2i) -> bool:
-		return not hidden.has(cell)
+	func is_cell_visible(_player_id: int, cell) -> bool:
+		return not hidden.has(Cells.from_variant(cell))
 
 	func is_unit_visible(_player_id: int, _unit) -> bool:
 		return true

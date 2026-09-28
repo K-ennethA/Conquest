@@ -42,22 +42,39 @@ var tile_position := Vector3.ZERO:
 		var old_position = tile_position
 		tile_position = new_position
 		position = grid.calculate_map_position(tile_position)
+		# (Multi-floor: tile_position.y is the FLOOR; the bracket sits on that floor.)
 		# Sit the bracket just above the tile top so it reads as ON the tile. Under a
 		# tilted orthographic view any vertical offset shifts the cursor's SCREEN
 		# position off the ground cell (~offset*sin(tilt)); a large lift (the old 3.0)
 		# floated it well above the tile under the mouse. The bracket material uses
 		# no_depth_test, so this small lift only prevents z-fighting with the tile top
 		# and never causes occlusion.
-		position.y = 0.15
+		position.y = Cells.floor_y(int(tile_position.y)) + 0.15
 		
 		# Emit movement event
 		GameEvents.cursor_moved.emit(tile_position)
 		
 		# Check for unit at new position
 		_check_unit_at_cursor()
+		# Multi-floor: the auto cutaway depends on where the cursor stands.
+		_update_view_state()
 
 var selected_unit: Unit = null
 var hovered_unit: Unit = null
+
+# --- Multi-floor view state (see FloorNav / docs/MULTI_FLOOR.md) -------------------
+## The VIEW FLOOR: the highest floor the player is looking at. Keyboard steps land
+## on the top-most tile at or below it, mouse picking ignores floors above it, and
+## FloorCutaway fades every floor above the CUT floor. Defaults to the top floor
+## (everything visible) whenever a board loads.
+var view_floor: int = 0
+## Floor actually cut to: view_floor, lowered to the cursor's / selected unit's floor
+## while either stands UNDER a deck (auto cutaway).
+var cut_floor: int = 0
+var _floor_count: int = 1
+var _last_emitted_view: int = -1
+## Last unit each player selected (player_id -> Unit), for turn-start cursor memory.
+var _last_selected_by_player: Dictionary = {}
 
 # Visual components
 @onready var mesh_instance: MeshInstance3D = $MeshInstance3D
@@ -84,7 +101,7 @@ func _ready() -> void:
 
 	_setup_cursor_visuals()
 	position = grid.calculate_map_position(tile_position)
-	position.y = 0.15  # Sit on the tile (see the tile_position setter for why)
+	position.y = Cells.floor_y(int(tile_position.y)) + 0.15  # Sit on the tile (see the tile_position setter for why)
 	GameEvents.cursor_moved.emit(tile_position)
 	_check_unit_at_cursor()
 	
@@ -101,6 +118,12 @@ func _ready() -> void:
 	# Connect to turn system events for cursor positioning
 	if TurnSystemManager:
 		TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated)
+
+	# (Re)read the floor structure whenever a board is (re)built.
+	if CombatServices and not CombatServices.board_ready.is_connected(_on_board_ready):
+		CombatServices.board_ready.connect(_on_board_ready)
+	if CombatServices and CombatServices.board() != null:
+		_on_board_ready()
 
 func _setup_cursor_visuals() -> void:
 	"""Build the Fire-Emblem style corner-bracket tile selector: four warm
@@ -207,38 +230,262 @@ func _process(delta: float) -> void:
 	_pulse_time += delta
 	var pulse := 1.0 + sin(_pulse_time * PULSE_SPEED) * PULSE_AMPLITUDE
 	mesh_instance.scale = _bracket_base_scale * pulse
+	_update_joy_repeat(delta)
+
+# --- Gamepad held-direction repeat -----------------------------------------------
+# Keyboard repeat comes from OS echo events; a gamepad d-pad/stick has none, so a
+# held gamepad direction is re-stepped here: first repeat after JOY_REPEAT_DELAY,
+# then every JOY_REPEAT_INTERVAL while the action stays pressed.
+const JOY_REPEAT_DELAY := 0.3
+const JOY_REPEAT_INTERVAL := 0.08
+var _joy_held_action: StringName = &""
+var _joy_repeat_timer: float = 0.0
+
+func _update_joy_repeat(delta: float) -> void:
+	if _joy_held_action == &"":
+		return
+	if not Input.is_action_pressed(_joy_held_action) or InputActions.gameplay_input_blocked(get_tree()):
+		_joy_held_action = &""
+		return
+	_joy_repeat_timer -= delta
+	if _joy_repeat_timer <= 0.0:
+		_joy_repeat_timer = JOY_REPEAT_INTERVAL
+		_step_cursor(InputActions.CURSOR_STEPS[_joy_held_action])
+
+func _step_cursor(step: Vector3) -> void:
+	var new_position = tile_position + step
+	if not grid.is_within_bounds(new_position):
+		return
+	# Multi-floor: land on the top-most tile at or below the view floor (walks over
+	# bridges at the default view, drops off a bridge end onto the ground).
+	var board = _board()
+	if board != null and _floor_count > 1:
+		var cell := FloorNav.step(board, Cells.from_grid(tile_position),
+			Vector2i(int(step.x), int(step.z)), view_floor)
+		if cell == Cells.INVALID:
+			return
+		new_position = Cells.to_grid(cell)
+	self.tile_position = new_position
+	_camera_follow()
+
+
+# --- Multi-floor: view floor, floor cycling, cutaway state ------------------------
+
+func _board():
+	return CombatServices.board() if CombatServices else null
+
+
+func _on_board_ready() -> void:
+	var board = _board()
+	_floor_count = 1
+	if board != null and board.has_method("floor_count"):
+		_floor_count = maxi(1, int(board.floor_count()))
+	view_floor = _floor_count - 1
+	cut_floor = view_floor
+	# Re-seat the cursor on a real tile of the new board.
+	if board != null:
+		var cell := Cells.from_grid(tile_position)
+		var f := FloorNav.snap_floor(board, cell, view_floor)
+		if f >= 0 and f != cell.z:
+			self.tile_position = Cells.to_grid(Vector3i(cell.x, cell.y, f))
+	_update_view_state(true)
+
+
+## Number of floors on the current board (1 on a classic flat map).
+func get_floor_count() -> int:
+	return _floor_count
+
+
+## Set the view floor (clamped to the board's floors).
+func set_view_floor(f: int) -> void:
+	view_floor = clampi(f, 0, _floor_count - 1)
+	_update_view_state()
+
+
+## floor_up (+1) / floor_down (-1): cycle the floors of the cursor's column, moving
+## the view floor along (see FloorNav.cycle_floor).
+func cycle_floor(dir: int) -> void:
+	var board = _board()
+	if board == null or _floor_count <= 1:
+		return
+	var r := FloorNav.cycle_floor(board, Cells.from_grid(tile_position), view_floor, dir)
+	view_floor = int(r["view"])
+	var cell: Vector3i = r["cell"]
+	if Cells.to_grid(cell) != tile_position:
+		self.tile_position = Cells.to_grid(cell)  # the setter refreshes the view state
+	else:
+		_update_view_state()
+	_camera_follow()
+
+
+## Recompute the cut floor and broadcast the view state when it changed.
+func _update_view_state(force: bool = false) -> void:
+	var board = _board()
+	var cut := view_floor
+	if board != null and _floor_count > 1:
+		var here := Cells.from_grid(tile_position)
+		if FloorNav.is_covered(board, here):
+			cut = mini(cut, here.z)
+		if selected_unit != null and is_instance_valid(selected_unit):
+			var ucell := _unit_cell(selected_unit)
+			if FloorNav.is_covered(board, ucell):
+				cut = mini(cut, ucell.z)
+	if not force and cut == cut_floor and _last_emitted_view == view_floor:
+		return
+	cut_floor = cut
+	_last_emitted_view = view_floor
+	if GameEvents and GameEvents.has_signal("view_floor_changed"):
+		GameEvents.view_floor_changed.emit(view_floor, cut_floor, _floor_count)
+
+
+## The board cell a unit stands on (Vector3i(col, row, floor)).
+func _unit_cell(unit: Node3D) -> Vector3i:
+	return Cells.from_grid(grid.calculate_grid_coordinates(unit.global_position))
+
+
+## Move the cursor onto [param cell], adjusting the view floor so the cell is
+## visible: a covered cell (under a bridge) cuts the view down to it, a cell above
+## the view floor raises it. Used by unit cycling and turn-start positioning.
+## [param follow] = false (an AI turn) leaves both the camera and the view alone.
+func focus_cell(cell: Vector3i, follow: bool = true) -> void:
+	var board = _board()
+	if follow and board != null and _floor_count > 1:
+		if cell.z > view_floor or FloorNav.is_covered(board, cell):
+			view_floor = cell.z
+	var g := Cells.to_grid(cell)
+	if not g.is_equal_approx(tile_position):
+		self.tile_position = g
+	else:
+		_update_view_state()
+	if follow:
+		_camera_follow()
+
+
+## Ask the camera to keep the cursor on screen (edge-margin follow). Only used for
+## keyboard / gamepad / cycling moves -- never for mouse hover, which would chase
+## the mouse off the edge of the screen.
+func _camera_follow() -> void:
+	if not camera and get_viewport():
+		camera = get_viewport().get_camera_3d()
+	if camera and camera.has_method("follow_world_point"):
+		camera.follow_world_point(grid.calculate_map_position(tile_position))
+
+
+# --- Unit cycling (FE L/R) -------------------------------------------------------
+
+## The current HUMAN player's units that can still act, in stable reading order
+## (row, column, floor). Empty on an AI turn.
+func get_ready_units() -> Array:
+	var out: Array = []
+	if not PlayerManager:
+		return out
+	var player = PlayerManager.get_current_player()
+	if player == null or bool(player.is_ai):
+		return out
+	var candidates: Array = []
+	if TurnSystemManager and TurnSystemManager.has_active_turn_system():
+		var ts = TurnSystemManager.get_active_turn_system()
+		if ts is SpeedFirstTurnSystem:
+			var acting = (ts as SpeedFirstTurnSystem).get_current_acting_unit()
+			if acting != null:
+				candidates.append(acting)
+		elif ts.has_method("get_units_that_can_act"):
+			candidates = ts.get_units_that_can_act()
+	else:
+		candidates = player.get_units_that_can_act()
+	for u in candidates:
+		if u == null or not is_instance_valid(u) or not (u is Node3D):
+			continue
+		if u.has_method("is_alive") and not u.is_alive():
+			continue
+		out.append(u)
+	out.sort_custom(func(a, b): return FloorNav.cell_order_less(_unit_cell(a), _unit_cell(b)))
+	return out
+
+
+## Jump the cursor (and camera) to the next (+1) / previous (-1) ready unit. With a
+## unit selected (but no move staged) the selection follows; while a move is being
+## aimed or a tentative move is staged, cycling is ignored.
+func cycle_ready_unit(dir: int) -> Unit:
+	var panel := _get_unit_actions_panel()
+	if panel:
+		if panel.has_method("is_targeting_move") and panel.is_targeting_move():
+			return null
+		if "_tentative_active" in panel and bool(panel.get("_tentative_active")):
+			return null
+	var units := get_ready_units()
+	if units.is_empty():
+		return null
+	var cells: Array = []
+	for u in units:
+		cells.append(_unit_cell(u))
+	var here := Cells.from_grid(tile_position)
+	if selected_unit != null and is_instance_valid(selected_unit) and units.has(selected_unit):
+		here = _unit_cell(selected_unit)
+	var idx := FloorNav.cycle_index(cells, here, dir)
+	if idx < 0:
+		return null
+	var target: Unit = units[idx]
+	focus_cell(cells[idx])
+	if selected_unit != null and selected_unit != target:
+		_select_unit(target)
+	return target
 
 func _unhandled_input(event: InputEvent) -> void:
-	# Handle keyboard input first (always works)
-	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_F5:
-			_test_unit_selection_signal()
+	# A full-screen overlay (Settings, ...) owns input while it is open.
+	if InputActions.gameplay_input_blocked(get_tree()):
+		return
+
+	# Dev helper: Ctrl+Shift+F5 (debug builds only) fires a synthetic unit_selected.
+	if InputActions.is_debug_hotkey(event, KEY_F5):
+		_test_unit_selection_signal()
+		return
+
+	# Named actions (keyboard + gamepad, rebindable -- see InputActions).
+	if event.is_action_pressed(InputActions.FLOOR_UP):
+		cycle_floor(1)
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed(InputActions.FLOOR_DOWN):
+		cycle_floor(-1)
+		get_viewport().set_input_as_handled()
+		return
+	# Exact matching so Shift+Tab (cycle_prev) is not also read as Tab (cycle_next).
+	if event.is_action_pressed(InputActions.CYCLE_PREV, false, true):
+		cycle_ready_unit(-1)
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed(InputActions.CYCLE_NEXT, false, true):
+		cycle_ready_unit(1)
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed(InputActions.CONFIRM):
+		_handle_selection()
+		return
+	if event.is_action_pressed(InputActions.CANCEL):
+		_handle_deselection()
+		return
+
+	# Cursor movement. Keys step on press AND on OS key-repeat (echo), so holding a
+	# direction glides the cursor. Gamepad d-pad / stick send no echo, so a held
+	# gamepad direction repeats via _process (see _update_joy_repeat).
+	for action in InputActions.CURSOR_STEPS:
+		if not event.is_action(action):
+			continue
+		var is_joy := event is InputEventJoypadButton or event is InputEventJoypadMotion
+		if is_joy:
+			if event.is_action_pressed(action) and _joy_held_action != action:
+				_joy_held_action = action
+				_joy_repeat_timer = JOY_REPEAT_DELAY
+				_step_cursor(InputActions.CURSOR_STEPS[action])
+			elif not event.is_action_pressed(action) and _joy_held_action == action \
+					and not Input.is_action_pressed(action):
+				_joy_held_action = &""
 			return
-		elif event.is_action_pressed("ui_accept"):
-			_handle_selection()
+		if event.is_action_pressed(action, true):
+			_step_cursor(InputActions.CURSOR_STEPS[action])
 			return
-		elif event.is_action_pressed("ui_cancel"):
-			_handle_deselection()
-			return
-		
-		# Handle movement input
-		var input_vector = Vector3.ZERO
-		
-		if event.is_action_pressed("ui_right"):
-			input_vector.x += 1
-		elif event.is_action_pressed("ui_left"):
-			input_vector.x -= 1
-		elif event.is_action_pressed("ui_down"):
-			input_vector.z += 1
-		elif event.is_action_pressed("ui_up"):
-			input_vector.z -= 1
-		
-		if input_vector != Vector3.ZERO:
-			var new_position = tile_position + input_vector
-			if grid.is_within_bounds(new_position):
-				self.tile_position = new_position
-			return
-	
+
 	# Handle mouse input (only if not handled by UI)
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -337,7 +584,26 @@ func _cell_under_mouse(mouse_pos: Vector2):
 		return null
 
 	var point: Vector3 = origin + dir * t
-	return grid.calculate_grid_coordinates(point)
+	# MULTI-FLOOR: pick the TOP-MOST existing tile under the ray. March the floors
+	# from the top down, intersecting each floor's walking plane; the first floor
+	# that has a tile at the hit column wins. Floor 0 (the plane above) is the
+	# fallback, so single-floor maps behave exactly as before.
+	var board = CombatServices.board() if CombatServices else null
+	if board != null and board.has_method("floor_count") and board.floor_count() > 1:
+		# Only floors at or below the VIEW floor: floors above it are cut away, so a
+		# cell under a bridge is pickable while viewing the ground.
+		for f in range(mini(board.floor_count() - 1, view_floor), 0, -1):
+			var plane_y: float = Cells.floor_y(f) + 0.1
+			var tf: float = (plane_y - origin.y) / dir.y
+			if tf < 0.0:
+				continue
+			var p: Vector3 = origin + dir * tf
+			var col := Vector3i(int(floor(p.x / grid.cell_size.x)), int(floor(p.z / grid.cell_size.z)), f)
+			if board.has_tile(col):
+				return Cells.to_grid(col)
+	var ground: Vector3 = grid.calculate_grid_coordinates(point)
+	ground.y = 0.0
+	return ground
 
 
 func _handle_mouse_click(mouse_pos: Vector2) -> void:
@@ -487,8 +753,12 @@ func _select_unit(unit: Unit) -> void:
 		_deselect_unit()
 	
 	selected_unit = unit
+	# Remember it for this player's next turn start (cursor memory).
+	if "owner_player" in unit and unit.owner_player != null:
+		_last_selected_by_player[int(unit.owner_player.player_id)] = unit
 	var world_pos = grid.calculate_map_position(tile_position)
 	GameEvents.unit_selected.emit(unit, world_pos)
+	_update_view_state()
 
 	# Update cursor visuals
 	if mesh_instance:
@@ -507,7 +777,8 @@ func _deselect_unit() -> void:
 		var unit = selected_unit
 		selected_unit = null
 		GameEvents.unit_deselected.emit(unit)
-
+		_update_view_state()
+	
 	# Update cursor visuals
 	if mesh_instance:
 		mesh_instance.material_override = base_material
@@ -603,7 +874,9 @@ func _get_unit_at_position(grid_pos: Vector3) -> Unit:
 		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
 
 		# Check if positions match (with some tolerance)
-		if abs(unit_grid_pos.x - grid_pos.x) < 0.1 and abs(unit_grid_pos.z - grid_pos.z) < 0.1:
+		# (y = floor: a unit on a bridge is not "at" the road cell beneath it)
+		if abs(unit_grid_pos.x - grid_pos.x) < 0.1 and abs(unit_grid_pos.z - grid_pos.z) < 0.1 \
+				and abs(unit_grid_pos.y - grid_pos.y) < 0.1:
 			return unit
 
 	return null
@@ -618,15 +891,19 @@ func _find_all_units() -> Array[Unit]:
 	if scene_root == null:
 		return units
 
-	# Look for units in Player1 and Player2 nodes
-	var player_nodes = ["Map/Player1", "Map/Player2"]
-	
-	for player_path in player_nodes:
-		var player_node = scene_root.get_node_or_null(player_path)
-		if player_node:
+	# Units live under Map/Player<N> containers (any number of players, incl. the
+	# neutral / spawned ones), plus anything registered in the "units" group.
+	var map_node = scene_root.get_node_or_null("Map")
+	if map_node:
+		for player_node in map_node.get_children():
+			if not String(player_node.name).begins_with("Player"):
+				continue
 			for child in player_node.get_children():
-				if child is Unit:
+				if child is Unit and not units.has(child):
 					units.append(child)
+	for node in tree.get_nodes_in_group("units"):
+		if node is Unit and not units.has(node):
+			units.append(node)
 	
 	return units
 
@@ -638,8 +915,17 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 
 func _on_unit_deselected(unit: Unit) -> void:
 	"""Handle unit deselection event"""
-	# Visual feedback is handled in _deselect_unit
-	pass
+	# Visual feedback is handled in _deselect_unit. A deselect can also come from
+	# ELSEWHERE (the command menu's Cancel / Esc emits unit_deselected directly):
+	# drop our stale reference too, otherwise the next Confirm on the same unit
+	# would "toggle" it off instead of selecting it again.
+	if unit != null and unit == selected_unit:
+		selected_unit = null
+		_update_view_state()
+		if mesh_instance:
+			mesh_instance.material_override = base_material
+		if base_mesh:
+			base_mesh.material_override = base_ring_material
 
 # Public interface
 func get_selected_unit() -> Unit:
@@ -708,12 +994,11 @@ func _position_cursor_on_current_unit(speed_system: SpeedFirstTurnSystem, auto_s
 	unit without a re-click (the Speed First chain). AI actors are never auto-selected."""
 	var current_unit = speed_system.get_current_acting_unit()
 	if current_unit:
-		# Move cursor to unit's position
-		var unit_world_pos = current_unit.global_position
-		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
-
-		# Set cursor position (this will trigger position update)
-		self.tile_position = unit_grid_pos
+		# Move cursor to the unit's cell (and floor). The camera follows only for a
+		# human-controlled unit -- the AI's own actions drive the camera.
+		var owner = current_unit.owner_player if "owner_player" in current_unit else null
+		var human: bool = owner == null or not bool(owner.is_ai)
+		focus_cell(_unit_cell(current_unit), human)
 
 		# Auto-select ONLY a human-commandable next actor; an AI unit is positioned-to
 		# but left unselected so the player is not handed the enemy's controls.
@@ -745,19 +1030,22 @@ func _position_cursor_on_player_unit(trad_system: TraditionalTurnSystem) -> void
 	var available_units = current_player.get_units_that_can_act()
 	
 	var target_unit: Unit = null
-	if available_units.size() > 0:
-		# Pick the first unit that can still act
-		target_unit = available_units[0]
+	# Cursor memory: the unit this player last selected, if it can still act.
+	var remembered = _last_selected_by_player.get(int(current_player.player_id), null)
+	if remembered != null and is_instance_valid(remembered) and available_units.has(remembered):
+		target_unit = remembered
+	elif available_units.size() > 0:
+		# Otherwise the first unit that can still act, in stable reading order.
+		var sorted: Array = available_units.filter(func(u): return u != null and is_instance_valid(u))
+		sorted.sort_custom(func(a, b): return FloorNav.cell_order_less(_unit_cell(a), _unit_cell(b)))
+		if not sorted.is_empty():
+			target_unit = sorted[0]
 	elif current_player.owned_units.size() > 0:
 		# If no units can act, just pick the first unit for cursor positioning
 		target_unit = current_player.owned_units[0]
-	
-	if target_unit:
-		var unit_world_pos = target_unit.global_position
-		var unit_grid_pos = grid.calculate_grid_coordinates(unit_world_pos)
 
-		# Set cursor position
-		self.tile_position = unit_grid_pos
+	if target_unit and is_instance_valid(target_unit):
+		focus_cell(_unit_cell(target_unit), not bool(current_player.is_ai))
 
 func _test_unit_selection_signal() -> void:
 	"""Test GameEvents.unit_selected signal emission"""

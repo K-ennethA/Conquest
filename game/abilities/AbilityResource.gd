@@ -98,7 +98,10 @@ func is_condition_met(unit, board) -> bool:
 ##
 ## Returns the accumulated event log. Does not check [member condition]; callers
 ## gate first via [method is_condition_met] (as [AbilitySystem] does).
-func run_effects(unit, board, other = null) -> Array:
+## [param source] is an optional presentation-only [member MoveContext.source] block
+## (floating combat text / battle log); empty = this ability's own name. Weather
+## turn-start rules pass the weather's block so the text reads "Desert Storm".
+func run_effects(unit, board, other = null, source: Dictionary = {}) -> Array:
 	if unit == null or board == null or effects.is_empty():
 		return []
 	var anchor = unit
@@ -107,11 +110,13 @@ func run_effects(unit, board, other = null) -> Array:
 			return []  # nothing caused this trigger — nothing to affect
 		anchor = other
 	var origin := _cell_of(board, unit)
-	var aim: Vector2i = origin if anchor == unit else _cell_of(board, anchor)
-	var cells: Array[Vector2i] = [aim] as Array[Vector2i]
+	var aim: Vector3i = origin if anchor == unit else _cell_of(board, anchor)
+	var cells: Array[Vector3i] = [aim] as Array[Vector3i]
 	if targeting != null:
 		cells = targeting.resolve_cells(origin, aim)
 	var ctx := MoveContext.new(unit, board, _synthetic_move(), aim, cells)
+	ctx.source = source if not source.is_empty() \
+		else CombatText.make_source(CombatText.SRC_ABILITY, display_name, id)
 	for effect in effects:
 		if effect:
 			effect.apply(ctx)
@@ -143,9 +148,9 @@ func _synthetic_move() -> MoveResource:
 	return m
 
 
-## The board cell [param who] stands on, or [code]Vector2i.ZERO[/code] when the
+## The board cell [param who] stands on, or [code]Vector3i.ZERO[/code] when the
 ## board cannot report one (mock boards in tests may omit the accessor).
-func _cell_of(board, who) -> Vector2i:
+func _cell_of(board, who) -> Vector3i:
 	if board.has_method("cell_of"):
 		return board.cell_of(who)
-	return Vector2i.ZERO
+	return Vector3i.ZERO

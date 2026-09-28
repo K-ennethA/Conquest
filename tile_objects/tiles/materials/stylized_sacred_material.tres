@@ -1,0 +1,19 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://tile_objects/tiles/shaders/stylized_ground.gdshader" id="1_ground"]
+
+[resource]
+resource_name = "StylizedSacred"
+shader = ExtResource("1_ground")
+shader_parameter/col_dark = Color(0.5, 0.48, 0.4, 1)
+shader_parameter/col_mid = Color(0.64, 0.61, 0.52, 1)
+shader_parameter/col_light = Color(0.78, 0.75, 0.64, 1)
+shader_parameter/crack_color = Color(0.95, 0.8, 0.45, 1)
+shader_parameter/glow_color = Color(1, 0.82, 0.4, 1)
+shader_parameter/glow_strength = 0.8
+shader_parameter/crack_amount = 0.6
+shader_parameter/crack_scale = 0.75
+shader_parameter/speck_color = Color(1.0, 0.92, 0.6, 1)
+shader_parameter/speck_density = 0.05
+shader_parameter/contrast = 1.1
+shader_parameter/roughness_base = 0.9

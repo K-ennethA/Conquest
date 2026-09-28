@@ -3,12 +3,12 @@
 [ext_resource type="Script" path="res://game/ui/hud/TurnQueue.gd" id="1_turnqueue"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1"]
-bg_color = Color(0.1, 0.1, 0.1, 0.8)
+bg_color = Color(0.09, 0.125, 0.26, 0.94)
 border_width_left = 2
 border_width_top = 2
 border_width_right = 2
 border_width_bottom = 2
-border_color = Color(0.5, 0.5, 0.5, 1)
+border_color = Color(0.227, 0.294, 0.525, 1)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_left = 8
@@ -47,15 +47,15 @@ theme_override_constants/separation = 4
 layout_mode = 2
 text = "Archer Acting (Player 1)"
 horizontal_alignment = 1
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.96, 0.933, 0.863, 1)
+theme_override_font_sizes/font_size = 20
 
 [node name="RoundInfoLabel" type="Label" parent="MainContainer/CurrentUnitContainer"]
 layout_mode = 2
 text = "Round 1 • Speed: 12 • 5 units left"
 horizontal_alignment = 1
-theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.804, 0.82, 0.894, 1)
+theme_override_font_sizes/font_size = 16
 
 [node name="HSeparator" type="HSeparator" parent="MainContainer"]
 layout_mode = 2
@@ -69,8 +69,8 @@ theme_override_constants/separation = 6
 layout_mode = 2
 text = "Upcoming Turns (6 shown)"
 horizontal_alignment = 1
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.91, 0.706, 0.329, 1)
+theme_override_font_sizes/font_size = 15
 
 [node name="QueueControls" type="HBoxContainer" parent="MainContainer/QueueSection"]
 layout_mode = 2
@@ -81,7 +81,7 @@ alignment = 1
 layout_mode = 2
 custom_minimum_size = Vector2(32, 32)
 text = "◀"
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 18
 
 [node name="QueueContainer" type="HBoxContainer" parent="MainContainer/QueueSection/QueueControls"]
 layout_mode = 2
@@ -93,4 +93,4 @@ alignment = 1
 layout_mode = 2
 custom_minimum_size = Vector2(32, 32)
 text = "▶"
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 18

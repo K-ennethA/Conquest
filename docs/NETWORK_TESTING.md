@@ -49,29 +49,34 @@ which is out of scope for a feature test.
 
 ## 3. Host on machine A
 
-1. `Main Menu → Multiplayer → Network Multiplayer`.
-2. Press **Host Game**.
+1. `Main Menu → Versus → Network`.
+2. Set your name (and the port, default `8910`) and press **Host Game**.
 3. **Windows Firewall will pop up the first time.** Tick **Private networks** and click
    *Allow access*. If you miss it, machine B will never connect. To fix it afterwards:
    `Windows Security → Firewall & network protection → Allow an app through firewall` → find
    *Conquest* → tick **Private**.
-4. The screen now shows, in a banner that stays visible over the lobby:
+4. The lobby opens and shows, in a line that stays visible while you wait:
    `Players on your network join:  192.168.x.x:8910`
    Read that address out to machine B. If it says *"No private network address found"*, the
    machine is not on a normal LAN (VPN, mobile hotspot, disconnected adapter) — fix that first.
 
+(Or run a **dedicated server** on any machine — `godot --headless --path . -- --server --port 8910`
+— and have both players Join it; see `systems/net/README.md` → *Dedicated server*.)
+
 ## 4. Join from machine B
 
-1. `Main Menu → Multiplayer → Network Multiplayer → Join Game`.
-2. Type the address machine A displayed into **Address**, leave **Port** at `8910`, set a name.
-   The address, port and name are remembered in `user://net.cfg` — the next run pre-fills them.
-3. Press **Connect**. The status label walks through explicit states:
+1. `Main Menu → Versus → Network`.
+2. Type the address machine A displayed into **Host address**, keep the port at `8910`, set a
+   name. The address, port and name are remembered in `user://net.cfg` — the next run
+   pre-fills them.
+3. Press **Join Game**. The status line walks through explicit states:
    - `Connecting to 192.168.x.x:8910 ... (7s)` — a visible countdown, never a frozen spinner.
-   - `Connected to 192.168.x.x:8910. Waiting for the lobby...`
+   - the lobby opens once the host has seated you (after the version gate, §5).
    - `Could not reach 192.168.x.x:8910 - check the address, that the host clicked Host, and
      that Windows Firewall allowed Conquest on both machines.` after ~8s.
-   - `Version mismatch: host 0.1.0 (protocol 1), you 0.2.0 (protocol 2). Both machines must
+   - `Version mismatch: host 0.1.0 (protocol 2), you 0.2.0 (protocol 3). Both machines must
      run the same build.` — you are on different builds; rebuild and recopy.
+   - `The host's lobby is full.` / `A match is already in progress on that host.`
    Malformed input is caught before the socket is touched, so a typo'd address says so
    immediately instead of burning the timeout.
 
@@ -89,60 +94,47 @@ is a hello carrying its protocol version and its game version
   editor against an exported build is a legitimate test setup, so it is not fatal — but if you
   are chasing a desync, that log line is the first thing to check.
 
-Bump `PROTOCOL_VERSION` whenever the command envelope or any command's data shape changes.
+Bump `PROTOCOL_VERSION` whenever the action envelope or any action's data shape changes (it is
+also stamped into replay files, which refuse to play under another version).
 
 ## 6. What SHOULD happen, end to end
 
 | Stage | Expected on machine A (host) | Expected on machine B (client) |
 |---|---|---|
 | Lobby | Client appears in the player list | Lobby opens, both players listed |
-| Map vote | Both vote; matching votes win, differing votes coin-flip | same map resolved on both |
-| Battle load | `GameWorld` loads the agreed map | same map, same unit placement |
+| Squads / items / skins | each side's Character Select pick, equipped items and skins are exchanged (`match_loadout`) | same |
+| Map vote | Both vote; matching votes win, differing votes coin-flip; a custom map is shipped as content | same map resolved on both |
+| Ready | both mark ready; the host starts (a dedicated server starts on its own) | "Starting…" |
+| Battle load | `GameWorld` loads the agreed map | same map, same units, same squads |
 | Move a unit | unit slides to the cell | **the same move plays here** |
-| Cast a move | damage/heal numbers, status icons | **identical numbers** (per-command seeded RNG) |
+| Cast a move | damage/heal numbers, status icons, ultimate cut-in | **identical numbers**, the same cut-in |
+| Refused action | an amber toast names the action and why ("Move rejected — not your turn") | same, on whoever sent it |
 | End turn | turn passes | turn indicator flips in step |
+| Forfeit / disconnect | the one who stays wins (standard victory screen) | same |
 
-The seam that makes this work: the acting peer never mutates its own board. It calls
-`NetSession.submit_intent()`; the **host** validates, stamps a monotonic `seq` plus a
-per-command RNG seed derived from the commit-reveal match seed, and broadcasts the resolved
-command; **every** peer (host included) applies it through the one `CommandApplier`. So both
-machines roll the same crit off the same seed. If the two screens ever disagree, that is a
-desync bug and worth a report.
+The seam that makes this work: the acting peer never mutates its own board. It submits an
+intent; the **host** validates it (`NetGameRules.validate_intent`) and broadcasts it as
+accepted with a sequence number; each RNG contributor then reveals its commit-reveal share for
+that action, every peer verifies every share, derives the action's seed, re-validates the action
+on its own state, and applies it through the ONE apply path (`NetGameRules.apply_action`).
+After every action the host sends a checkpoint digest; a mismatch ends the match with a
+"went out of sync" message instead of letting the two screens drift. So both machines roll the
+same crit off the same seed — and nobody, the host included, can know or bias that roll before
+the action is locked in.
 
 ## 7. Known limitations — test around these, don't report them as new
 
-1. **Input is gated per slot, but a rejected action is silent.** Host/Join, the lobby and the
-   battle now all run on **one** transport (`NetSession`) — §6's table, battle rows included,
-   is what to expect, and a divergence between the two screens is a real bug worth reporting.
-   The host is roster slot 0 = player 0, the joiner is slot 1 = player 1, and the UI's
-   ownership/turn gates read that slot, so you can only command your own units on your own
-   turn. What is *missing* is feedback when the host refuses an action anyway (a race, a stale
-   selection): the intent is rejected server-side and simply does nothing, with no on-screen
-   message. Check the log for `intent_rejected` / `not_your_turn` before reporting "the button
-   did nothing".
-
-   Still cosmetic-only / local-only in a networked match:
-   - **Ultimate cut-in does not play network-side** (see #2 below).
-   - **Items and skins do nothing online** (see #3 below).
-   - The "your units" highlight tint on the joining machine still keys off the legacy local
-     id, so it can outline the wrong side. Purely a tint — ownership itself is correct.
-   - The legacy stack (`systems/multiplayer/`, `systems/networking/`,
-     `game_core/*NetworkHandler*`) is **gone** — deleted along with the Dictionary-based
-     state simulator it wrapped. `NetSession` is the only transport; `GameModeManager` is
-     kept purely for the local (solo / hot-seat) session and the lobby's fallback envelope.
-2. **Ultimate cut-in does not play network-side.** The full-screen ultimate flash fires only on
-   the local/single-player cast path; the networked cast returns before it. The apply-side hook
-   (in `CommandApplier`'s `CAST_MOVE` handler, so every peer flashes in sync) is designed but
-   not wired. Damage still resolves correctly — only the flourish is missing.
-3. **Items and skins are local-only cosmetics in MP.** `ItemSystem` excludes networked matches
-   outright (`_is_player_unit` returns false), because replicating each side's loadout needs a
-   MatchSettings channel that does not exist yet. Both peers therefore simulate identical base
-   stats — which is the safe behaviour, but it means your equipped items do nothing online.
-4. **Cast turn-consumption is apply-side.** A resolved `CAST_MOVE` spends the unit's *action*
-   (`mark_action_completed`); the movement half arrives as a separate `MOVE_UNIT` command that
-   spends the *move*. If a unit ever ends up able to act twice, that split is the place to look.
-5. **`Host + Auto Client (Testing)`** is a dev-only two-instance harness, hidden and disabled
-   (`ENABLE_HOST_AUTO_CLIENT = false`). It is not a substitute for a real two-machine test.
+1. **1v1 only**, humans only (no AI seats in network play), no reconnect.
+2. **Dedicated-server matches field the maps' authored rosters** — squads / items / skins are
+   replicated only in player-hosted lobbies (a seatless server has no lobby UI to receive the
+   cards). A dedicated server also only offers builtin maps.
+3. **Fog of war is presentation-only in network play.** Every peer holds the full state (it has
+   to, to re-validate and apply every action), so a modified client — or a player-host — can see
+   through fog. Only a dedicated server could keep secrets.
+4. **ENet is unencrypted.** Fine on a LAN; see `systems/net/README.md` for the production path.
+5. **`Host + Auto Client`** is a dev-only two-instance harness, hidden and disabled
+   (`ENABLE_HOST_AUTO_CLIENT = false`); a second instance can also be started with
+   `-- --multiplayer-auto-join`. Neither is a substitute for a real two-machine test.
 
 ## 8. Capturing logs for a bug report
 
@@ -163,8 +155,8 @@ For a useful report:
    with both halves.
 3. Note which machine hosted, both game versions (the host prints them when a peer joins on a
    different build), and the wall-clock time of the divergence.
-4. Useful greps: `[NET]` (join refusals and version notices), `[HOST]` / `[CLIENT]` (the setup
-   screen's flow), `Refusing peer`.
+4. Useful greps: `[NET]` (version notices), `NetSession:` (refusals, DESYNC, verification
+   failures), `[HOST]` / `[CLIENT]` (the setup screen's flow).
 
 To watch a run live instead, launch from a terminal — the same lines go to stdout:
 
@@ -176,7 +168,7 @@ Conquest.exe --verbose
 
 - [ ] Same commit on both machines, exe rebuilt after any code change
 - [ ] Both on the same router; host firewall prompt allowed for **Private** networks
-- [ ] Host clicked **Host Game** and is showing a `192.168.x.x:8910`-style address
+- [ ] Host clicked **Host Game** and the lobby shows a `192.168.x.x:8910`-style address
 - [ ] Client typed that exact address (not `127.0.0.1` — that only reaches its own machine)
-- [ ] Status reached *Connected*, both names in the lobby
+- [ ] The lobby opened on both, both names listed
 - [ ] Logs from **both** machines saved before filing anything

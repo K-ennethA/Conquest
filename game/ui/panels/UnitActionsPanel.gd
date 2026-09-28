@@ -15,18 +15,14 @@ class_name UnitActionsPanel
 @onready var unit_type_label: Label = $MarginContainer/ContentContainer/UnitHeaderContainer/UnitInfoContainer/UnitTypeLabel
 @onready var move_button: Button = $MarginContainer/ContentContainer/ActionsContainer/MoveButton
 @onready var end_unit_turn_button: Button = $MarginContainer/ContentContainer/ActionsContainer/EndUnitTurnButton
-## Holds only the two demoted legacy buttons above -- hidden as a whole so it (and its
-## VBox separation) takes zero sidebar space. See the hide in _ready().
+@onready var unit_summary_button: Button = $MarginContainer/ContentContainer/ActionsContainer/UnitSummaryButton
+## The FE command list (Move / Skills / Wait / Info / Cancel, HudCommand rows with key
+## hints). "Info" opens the full-screen [UnitDetailPage] -- the stat surfaces are exactly
+## three and do not overlap: the compact battle card ([UnitInfoPanel], live battle facts),
+## the detail page (everything general) and the combat forecast (damage maths).
 @onready var actions_container: VBoxContainer = $MarginContainer/ContentContainer/ActionsContainer
-## Opens the full-screen [UnitDetailPage]. REPLACED the old "Unit Summary ▼" dropdown and
-## the StatsContainer it toggled: that block re-printed the same six numbers the left-hand
-## [UnitInfoPanel] card was already showing, so the player had two surfaces for one fact
-## and neither of them had room for the abilities. The stat surfaces are now exactly three
-## and they do not overlap -- the compact card (live battle facts), the detail page
-## (everything general) and the combat forecast (damage maths).
-@onready var details_button: Button = $MarginContainer/ContentContainer/DetailsButton
 @onready var end_player_turn_button: Button = $MarginContainer/ContentContainer/EndPlayerTurnButton
-@onready var cancel_button: Button = $MarginContainer/ContentContainer/CancelButton
+@onready var cancel_button: Button = $MarginContainer/ContentContainer/ActionsContainer/CancelButton
 
 var selected_unit: Unit = null
 ## The in-flight movement slide (see [method _animate_unit_movement]). Held so a second
@@ -60,25 +56,18 @@ var _state: int = CommandState.IDLE
 # The contextual post-move action menu (created in _setup_move_system).
 var action_menu: UnitActionMenu
 
-# --- Enemy DANGER-ZONE overlays: two SEPARATE channels ----------------------
-# Both draw red threat quads through the MovementVisualizer's danger channel (keyed by
-# the enemy's instance id), but they differ in lifetime:
-#
-#   PERSISTENT (the T hotkey): every enemy's zone lit at once, stays up until T again.
-#     Tracked in _persistent_danger_enemies. Survives deselects and is NEVER cleared by
-#     a transient click below.
-#
-#   TRANSIENT (clicking / inspecting a single enemy): shows that one enemy's zone, and
-#     clears on the NEXT click -- selecting a different unit (a new enemy swaps the
-#     overlay to itself), clicking an empty tile, or deselecting. Tracked as the single
-#     _transient_danger_enemy. Because inspecting an enemy IS selecting it, the next
-#     selection change fires unit_deselected, which tears this overlay down.
-#
-# Both are computed on demand (toggle / inspect) and refreshed on turn start (positions
-# move), never per frame. When the same enemy is in BOTH channels, clearing the transient
-# leaves its overlay up (persistent still owns it) -- see _clear_transient_danger.
-var _persistent_danger_enemies: Array[Unit] = []
-var _transient_danger_enemy: Unit = null
+# --- Enemy threat: ONE implementation, two reads ------------------------------
+#   PERSISTENT: the DangerZoneOverlay (danger_zone action, default Z / pad L3, or the
+#     touch "Danger Zone" toggle below) paints every hostile unit's strike cells until
+#     toggled off. It recomputes itself on moves / deaths / turn starts, and skips units
+#     the fog of war hides (see _compute_enemy_threat_cells for the same rule).
+#   SINGLE ENEMY: selecting (inspecting) an enemy shows ITS blue movement range plus the
+#     red attack fringe it could strike from anywhere it can reach
+#     (_show_inspect_movement_range). It clears with the selection.
+
+# While a network MOVE intent for this unit is in flight: when the accepted move lands,
+# the contextual action menu opens on it (see _on_network_action_applied).
+var _awaiting_net_move_unit: Unit = null
 
 # Move system variables
 var move_selection_panel: MoveSelectionPanel
@@ -87,12 +76,14 @@ var move_mode: bool = false
 var selected_move_index: int = -1
 
 # --- Touch-readiness: on-screen equivalents for keyboard-only actions --------
-# Danger Zones mirrors the T hotkey (_toggle_all_enemy_danger); Next Unit mirrors
-# Tab/Q (_cycle_to_next_commandable_unit). Built in code and appended to the same
-# ActionsContainer the Move/MOVES/End Turn buttons live in (see _setup_touch_buttons),
-# so a touch player without a physical keyboard can still reach them.
+# Danger mirrors the danger_zone action (DangerZoneOverlay.toggle); Next mirrors
+# cycle_next (the board cursor's cycle_ready_unit); End Turn mirrors end_turn (the Map
+# Menu's confirm). Built in code under the command list (see _setup_touch_buttons), so a
+# touch player without a physical keyboard can still reach them.
 var danger_zones_button: Button
 var next_unit_button: Button
+## Touch / mouse End Turn (routes through the Map Menu's End Turn confirm).
+var end_turn_row_button: Button
 
 # FE-style combat forecast overlay (preview-only; never mutates state). Shown
 # while targeting an offensive move over an eligible enemy; updated live as the
@@ -122,9 +113,11 @@ var _last_cursor_tile: Vector3 = Vector3.ZERO
 # commit is the only place mark_moved() + GameEvents.unit_moved fire.
 var _tentative_active: bool = false
 var _tentative_unit: Unit = null
-var _tentative_origin_cell: Vector2i = Vector2i.ZERO
-var _tentative_dest_cell: Vector2i = Vector2i.ZERO
+var _tentative_origin_cell: Vector3i = Vector3i.ZERO
+var _tentative_dest_cell: Vector3i = Vector3i.ZERO
 var _tentative_origin_world: Vector3 = Vector3.ZERO
+## Facing before the staged walk, restored on undo (visual only; see UnitFacing).
+var _tentative_origin_facing: Vector2i = Vector2i.ZERO
 
 # Frame on which the SELECT MOVE popup closed itself in response to ESC/BACK
 # (MoveSelectionPanel emits move_cancelled -> _on_move_cancelled). Both that panel
@@ -134,7 +127,24 @@ var _tentative_origin_world: Vector3 = Vector3.ZERO
 # (a mouse BACK on an earlier frame never matches the current frame).
 var _popup_closed_frame: int = -1
 
+# Fire-Emblem path arrow: the resolver that produced the CURRENT blue range (kept so
+# path_to() can answer "how would I walk to the hovered cell" without re-flooding),
+# the cell it was flooded from, and whether an arrow is on the board right now.
+var _range_resolver: MovementResolver = null
+var _range_origin: Vector3i = Cells.INVALID
+var _path_shown: bool = false
+# The red fringe last published for the current range (grid coords), so it can be
+# hidden while aiming a move (the attack-range highlight takes over) and restored.
+var _fringe_grid: Array = []
+
+# Code-built header pieces (portrait emblem + HP row); see _setup_unit_header_styling.
+var _portrait: PanelContainer = null
+var _hp_row: HBoxContainer = null
+var _hp_bar: ProgressBar = null
+var _hp_text: Label = null
+
 func _ready() -> void:
+	add_to_group("unit_actions_panel")
 	# Ensure proper mouse handling
 	mouse_filter = Control.MOUSE_FILTER_STOP  # Make sure panel stops mouse events
 	
@@ -143,20 +153,15 @@ func _ready() -> void:
 		GameEvents.unit_selected.connect(_on_unit_selected)
 		GameEvents.unit_deselected.connect(_on_unit_deselected)
 		GameEvents.cursor_selected.connect(_on_cursor_selected)
-		# Enemy danger overlays expire when the enemy dies.
+		# A dead selected unit is dropped at the source (see _on_unit_eliminated_danger).
 		if not GameEvents.unit_eliminated.is_connected(_on_unit_eliminated_danger):
 			GameEvents.unit_eliminated.connect(_on_unit_eliminated_danger)
+		# The touch Danger Zone toggle mirrors the overlay, whoever toggled it (Z / L3 too).
+		if GameEvents.has_signal("danger_zone_changed") \
+				and not GameEvents.danger_zone_changed.is_connected(_on_danger_zone_changed):
+			GameEvents.danger_zone_changed.connect(_on_danger_zone_changed)
 	else:
 		push_error("GameEvents not found!")
-
-	# Ride the ACTIVE turn system's turn_started to recompute toggled enemy danger zones
-	# (their positions move each turn). Per the project's live-turn-signal rule, this uses
-	# the turn system's signal, NOT PlayerManager's (which never fires on AI turns).
-	if TurnSystemManager:
-		if not TurnSystemManager.turn_system_activated.is_connected(_on_turn_system_activated_danger):
-			TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated_danger)
-		if TurnSystemManager.has_active_turn_system():
-			_hook_turn_system_for_danger(TurnSystemManager.get_active_turn_system())
 
 	# Connect to player management events
 	if PlayerManager:
@@ -181,11 +186,11 @@ func _ready() -> void:
 	else:
 		push_error("End Unit Turn button not found!")
 
-	if details_button:
-		details_button.mouse_filter = Control.MOUSE_FILTER_STOP
-		details_button.pressed.connect(_on_details_pressed)
+	if unit_summary_button:
+		unit_summary_button.mouse_filter = Control.MOUSE_FILTER_STOP
+		unit_summary_button.pressed.connect(_on_unit_summary_pressed)
 	else:
-		push_error("Details button not found!")
+		push_error("Info button not found!")
 
 	if end_player_turn_button:
 		end_player_turn_button.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -199,17 +204,12 @@ func _ready() -> void:
 	else:
 		push_error("Cancel button not found!")
 
-	# Move (M) and End Turn (E) are DEMOTED legacy: the contextual UnitActionMenu
-	# (post-move popup) is the golden path now. Hide them -- and the ActionsContainer
-	# that only holds them -- so they take zero sidebar space; the M/E keyboard
-	# shortcuts (_input below) still call _on_move_pressed / _on_end_unit_turn_pressed
-	# directly and never check the button's visible/disabled state, so they keep working.
-	if move_button:
-		move_button.visible = false
-	if end_unit_turn_button:
-		end_unit_turn_button.visible = false
-	if actions_container:
-		actions_container.visible = false
+	# Network matches: refresh when an accepted action (ours or the opponent's) lands, and
+	# drop a pending "open the menu when my move lands" if the host refused the intent.
+	if GameModeManager and GameModeManager.has_signal("network_action_applied"):
+		GameModeManager.network_action_applied.connect(_on_network_action_applied)
+	if GameModeManager and GameModeManager.has_signal("network_intent_rejected"):
+		GameModeManager.network_intent_rejected.connect(_on_network_intent_rejected)
 
 	# Hide panel initially
 	_hide_panel()
@@ -220,7 +220,7 @@ func _ready() -> void:
 	# Initialize move system
 	_setup_move_system()
 
-	# On-screen buttons for the two keyboard-only actions (Danger Zones / Next Unit).
+	# On-screen buttons for the board-level actions (Danger Zone / Next Unit / End Turn).
 	_setup_touch_buttons()
 
 	# The one-line "this route springs a trap" warning (see _setup_trap_warning).
@@ -230,73 +230,87 @@ func _ready() -> void:
 	_setup_sidebar_tooltips_and_meta()
 
 func _setup_sidebar_tooltips_and_meta() -> void:
-	"""With the contextual action menu now carrying the per-unit commands, the sidebar is
-	a status + turn-control strip. Give every remaining button a tooltip, and tag the two
-	that a parallel ConquestTheme change reads via `style_role` (harmless if unread):
-	End Player Turn is destructive, Cancel is secondary. The per-unit Move / MOVES / End
-	Turn (E) buttons are DEMOTED from the golden path -- kept working for the keyboard /
-	legacy path, but tooltip'd as such."""
+	"""Tooltips for mouse users (the key caps on each command row cover keyboard / pad).
+	The command rows are HudCommand rows; the plain buttons below them carry a
+	`style_role` that ConquestTheme.apply_button_role reads (secondary / destructive)."""
 	if move_button:
-		move_button.tooltip_text = "Enter movement mode (M) -- legacy; click a reachable tile instead"
+		move_button.tooltip_text = "Move this unit: pick a blue tile (or click one straight away), then act or Wait."
 	if end_unit_turn_button:
-		end_unit_turn_button.tooltip_text = "End just this unit's turn (E) -- or pick Wait from the action menu"
+		end_unit_turn_button.tooltip_text = "Wait: end this unit's action for the turn (keeps any move)."
 	if moves_button:
-		moves_button.tooltip_text = "Open this unit's moves -- or pick one from the action menu after moving"
-	if details_button:
-		details_button.tooltip_text = "Open this unit's full page -- stats, moves, abilities, statuses (D)"
-		details_button.set_meta("style_role", "secondary")
+		moves_button.tooltip_text = "Attack or use a skill: pick one of this unit's moves, then a target."
+	if unit_summary_button:
+		unit_summary_button.tooltip_text = "Open this unit's full page -- stats, moves, abilities, statuses."
 	if end_player_turn_button:
-		end_player_turn_button.tooltip_text = "End the whole player turn (P). Confirms if units still have actions."
+		end_player_turn_button.tooltip_text = "End the whole player turn. Confirms if units still have actions."
 		end_player_turn_button.set_meta("style_role", "destructive")
 	if cancel_button:
-		cancel_button.tooltip_text = "Back out one step (C / ESC / right-click)"
-		cancel_button.set_meta("style_role", "secondary")
+		cancel_button.tooltip_text = "Back out one step (undo the move, then deselect). Right-click works too."
 
 	# Shared UI-click SFX on every sidebar button, including the dynamically built
 	# moves_button (idempotent -- guarded by a meta inside UIFeedback).
 	UIFeedback.attach_sfx(self)
 
 func _setup_touch_buttons() -> void:
-	"""On-screen equivalents for two keyboard-only actions -- Danger Zones (T) and Next
-	Unit (Tab/Q) -- laid out side-by-side in one half-width row (compact, per the
-	sidebar-length pass) and inserted into ContentContainer directly above the
-	EndPlayerTurn divider, so the turn-control block stays grouped at the bottom. Same
-	secondary style_role + tooltip-names-the-hotkey pattern as the rest of the sidebar;
-	wired for SFX by the attach_sfx call in _setup_sidebar_tooltips_and_meta, which runs
-	after this."""
+	"""On-screen equivalents for the board-level actions a touch / mouse player has no key
+	for -- Danger Zone (danger_zone), Next Unit (cycle_next) and End Turn (end_turn) --
+	laid out as one compact row under the command list, so the turn-control block stays
+	grouped at the bottom. Same secondary style_role + tooltip-names-the-key pattern as
+	the rest of the card; wired for SFX by the attach_sfx call in
+	_setup_sidebar_tooltips_and_meta, which runs after this."""
 	var content_container := get_node_or_null("MarginContainer/ContentContainer")
 	if content_container == null:
 		return
 
 	danger_zones_button = Button.new()
-	danger_zones_button.text = "Danger Zones"
+	danger_zones_button.name = "DangerZonesButton"
+	danger_zones_button.text = "Danger"
 	danger_zones_button.toggle_mode = true
 	danger_zones_button.custom_minimum_size = Vector2(0, 44)
 	danger_zones_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	danger_zones_button.tooltip_text = "Show/hide every enemy's threat range (T)"
+	danger_zones_button.tooltip_text = InputActions.with_hint("Show / hide every enemy's threat range", InputActions.DANGER_ZONE)
 	danger_zones_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	danger_zones_button.set_meta("style_role", "secondary")
 	danger_zones_button.pressed.connect(_on_danger_zones_button_pressed)
 
 	next_unit_button = Button.new()
-	next_unit_button.text = "Next Unit"
+	next_unit_button.name = "NextUnitButton"
+	next_unit_button.text = "Next"
 	next_unit_button.custom_minimum_size = Vector2(0, 44)
 	next_unit_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	next_unit_button.tooltip_text = "Select the next un-acted unit (Tab)"
+	next_unit_button.tooltip_text = InputActions.with_hint("Select the next unit that can still act", InputActions.CYCLE_NEXT)
 	next_unit_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	next_unit_button.set_meta("style_role", "secondary")
 	next_unit_button.pressed.connect(_on_next_unit_button_pressed)
 
-	var utility_row := HBoxContainer.new()
-	utility_row.name = "UtilityRow"
-	utility_row.add_theme_constant_override("separation", 8)
-	utility_row.add_child(danger_zones_button)
-	utility_row.add_child(next_unit_button)
-	content_container.add_child(utility_row)
+	end_turn_row_button = Button.new()
+	end_turn_row_button.name = "EndTurnRowButton"
+	end_turn_row_button.text = "End Turn"
+	end_turn_row_button.custom_minimum_size = Vector2(0, 44)
+	end_turn_row_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	end_turn_row_button.tooltip_text = InputActions.with_hint(
+		"End the whole player turn (asks first while units can still act)", InputActions.END_TURN)
+	end_turn_row_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	end_turn_row_button.set_meta("style_role", "destructive")
+	end_turn_row_button.pressed.connect(_on_end_player_turn_pressed)
 
-	var end_turn_separator := content_container.get_node_or_null("HSeparator3")
-	if end_turn_separator:
-		content_container.move_child(utility_row, end_turn_separator.get_index())
+	# Two short toggles side by side, End Turn full width under them (a 290px card cannot
+	# hold three Cinzel plates in one row).
+	var utility_row := VBoxContainer.new()
+	utility_row.name = "UtilityRow"
+	utility_row.add_theme_constant_override("separation", 6)
+	var toggles := HBoxContainer.new()
+	toggles.name = "Toggles"
+	toggles.add_theme_constant_override("separation", 6)
+	toggles.add_child(danger_zones_button)
+	toggles.add_child(next_unit_button)
+	utility_row.add_child(toggles)
+	utility_row.add_child(end_turn_row_button)
+	content_container.add_child(utility_row)
+	# Directly under the command list (ActionsContainer), above the hidden legacy
+	# End Player Turn button.
+	if actions_container != null and actions_container.get_parent() == content_container:
+		content_container.move_child(utility_row, actions_container.get_index() + 1)
 
 	_sync_danger_zones_button()
 
@@ -335,7 +349,9 @@ func _setup_trap_warning() -> void:
 	trap_warning_label = Label.new()
 	trap_warning_label.name = "TrapWarningLabel"
 	trap_warning_label.text = ""
-	trap_warning_label.add_theme_font_size_override("font_size", 13)
+	trap_warning_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+	# Its own colour on purpose: keep the HUD-wide theme sweep off it.
+	ConquestTheme.keep_style(trap_warning_label)
 	trap_warning_label.add_theme_color_override("font_color", MoveStatVisuals.NERF_COLOR)
 	trap_warning_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	trap_warning_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -385,7 +401,7 @@ func _set_trap_warning(trap) -> void:
 ## The cell a move to [param dest_cell] would actually END on for the selected unit -- the
 ## destination, or the armed halting trap that stops it short. Public so the ghost, the
 ## commit and a test all ask the ONE function (see TileEffectSystem.preview_route).
-func planned_stop_cell(unit, dest_cell: Vector2i) -> Vector2i:
+func planned_stop_cell(unit, dest_cell: Vector3i) -> Vector3i:
 	var board = CombatServices.board()
 	if board == null or unit == null:
 		return dest_cell
@@ -393,23 +409,25 @@ func planned_stop_cell(unit, dest_cell: Vector2i) -> Vector2i:
 
 
 func _on_danger_zones_button_pressed() -> void:
-	"""On-screen equivalent of the T hotkey: toggle every enemy's persistent danger
-	overlay. The button's pressed/toggled visual is synced from the resulting state
-	(see _sync_danger_zones_button), not driven by toggle_mode alone, so it stays
-	correct even when the T key or a unit death changes the underlying set."""
+	"""On-screen equivalent of the danger_zone action: toggle every enemy's threat. The
+	button's pressed look is synced from the overlay's own state (see
+	_sync_danger_zones_button), so it stays right whoever toggled it."""
 	_toggle_all_enemy_danger()
+	_sync_danger_zones_button()
 
 func _sync_danger_zones_button() -> void:
-	"""Keep the on-screen Danger Zones button's toggled-looking state in lockstep
-	with _persistent_danger_enemies (the T set), regardless of what changed it --
-	the T hotkey, this button, or an enemy dying. Called from every mutation point."""
+	"""Keep the on-screen Danger toggle in lockstep with the DangerZoneOverlay."""
 	if danger_zones_button:
-		danger_zones_button.set_pressed_no_signal(not _persistent_danger_enemies.is_empty())
+		var dz := _danger_zone_overlay()
+		danger_zones_button.set_pressed_no_signal(dz != null and bool(dz.active))
+
+func _on_danger_zone_changed(_active: bool = false, _count: int = 0) -> void:
+	_sync_danger_zones_button()
 
 func _on_next_unit_button_pressed() -> void:
-	"""On-screen equivalent of the Tab/Q hotkey. Same guard as the keyboard path:
-	skip while the contextual action menu / targeting is up so it cannot yank
-	selection mid-command."""
+	"""On-screen equivalent of cycle_next. Same guard as the keyboard path: skip while
+	the contextual action menu / targeting is up so it cannot yank selection
+	mid-command."""
 	if _state == CommandState.ACTION_MENU or _state == CommandState.TARGETING:
 		return
 	_cycle_to_next_commandable_unit()
@@ -424,20 +442,81 @@ func _notification(what: int) -> void:
 			pass
 
 func _setup_unit_header_styling() -> void:
-	"""Setup styling for the unit header background"""
-	if unit_header_background:
-		var style_box = StyleBoxFlat.new()
-		style_box.bg_color = Color(0.2, 0.2, 0.2, 0.8)
-		style_box.border_color = Color(0.4, 0.4, 0.4, 0.8)
-		style_box.border_width_left = 1
-		style_box.border_width_top = 1
-		style_box.border_width_right = 1
-		style_box.border_width_bottom = 1
-		style_box.corner_radius_top_left = 4
-		style_box.corner_radius_top_right = 4
-		style_box.corner_radius_bottom_left = 4
-		style_box.corner_radius_bottom_right = 4
-		unit_header_background.add_theme_stylebox_override("panel", style_box)
+	"""Build the FE-style unit header: a circular portrait emblem (initial on the
+	unit's element colour, ringed in its team colour), the full name (wraps -- never
+	truncated; tooltip carries it too), a side / element subtitle, and a slim HP bar
+	with numbers. The command rows below get key-hint caps (see _set_command)."""
+	if unit_header_container and _portrait == null:
+		_portrait = ConquestTheme.portrait("?", ConquestTheme.GOLD, ConquestTheme.BORDER, 52.0)
+		unit_header_container.add_child(_portrait)
+		unit_header_container.move_child(_portrait, unit_info_container.get_index() if unit_info_container else 0)
+	if unit_name_label:
+		unit_name_label.theme_type_variation = &"SubheadingLabel"
+		unit_name_label.clip_text = false
+		unit_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		unit_name_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	if unit_type_label:
+		unit_type_label.clip_text = false
+		unit_type_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	if unit_info_container and _hp_row == null:
+		_hp_row = HBoxContainer.new()
+		_hp_row.name = "HPRow"
+		_hp_row.add_theme_constant_override("separation", 8)
+		_hp_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ConquestTheme.keep_style(_hp_row)
+		unit_info_container.add_child(_hp_row)
+		_hp_bar = ConquestTheme.hp_bar(9.0)
+		_hp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_hp_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_hp_row.add_child(_hp_bar)
+		_hp_text = Label.new()
+		_hp_text.name = "HPText"
+		_hp_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_hp_text.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+		_hp_text.add_theme_color_override("font_color", ConquestTheme.CREAM)
+		_hp_row.add_child(_hp_text)
+	# Tooltips for the commands (mouse users; the key caps cover keyboard / pad).
+	if move_button:
+		move_button.tooltip_text = "Move this unit. Pick a blue tile, then act or Wait."
+	if end_unit_turn_button:
+		end_unit_turn_button.tooltip_text = "Wait: end this unit's action for the turn (keeps any move)."
+	if unit_summary_button:
+		unit_summary_button.tooltip_text = "Open this unit's full page."
+	if cancel_button:
+		cancel_button.tooltip_text = "Back out one step (undo the move, then deselect)."
+	for b in [move_button, end_unit_turn_button, unit_summary_button, cancel_button]:
+		if b:
+			b.theme_type_variation = &"HudCommand"
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			b.focus_mode = Control.FOCUS_NONE
+
+
+## Set a command row's label and its right-aligned hint: a key cap for [param action]
+## (from InputActions -- follows rebinding and shows the pad glyph when a gamepad is
+## connected), or a short [param note] ("Done", "4/4 ready") instead.
+func _set_command(button: Button, label: String, action: StringName = &"", note: String = "",
+		note_color: Color = ConquestTheme.TEXT_MUTED) -> void:
+	if button == null:
+		return
+	button.text = label
+	ConquestTheme.set_button_hint(button, ConquestTheme.action_glyph(action) if note == "" else "", note, note_color)
+
+
+## The key-hint text currently shown on a command row ("" when none) -- tests.
+func command_hint_text(button: Button) -> String:
+	var hint := button.get_node_or_null("Hint") if button else null
+	if hint == null:
+		return ""
+	for c in hint.get_children():
+		if c.is_queued_for_deletion():
+			continue
+		if c is Label:
+			return (c as Label).text
+		var k := c.get_node_or_null("Key") as Label
+		if k != null:
+			return k.text
+	return ""
+
 
 func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	"""Handle unit selection - show actions for selected unit"""
@@ -445,28 +524,9 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 	# its info (including enemy / AI-owned units). Commanding is gated separately via
 	# _human_may_command() -- _update_actions() renders disabled buttons for units the
 	# player cannot command. The single-player AI hard-gate, the PlayerManager gate and
-	# the Traditional can-act gate that used to REJECT selection here are gone. The
-	# multiplayer rejection branch is intentionally kept for this pass.
-	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
-		# Get local player ID and unit owner
-		var local_player_id_raw = GameModeManager.get_local_player_id()
-		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
-		var unit_owner = PlayerManager.get_player_owning_unit(unit)
-
-		if not unit_owner:
-			return
-
-		# Ensure player_id is int for comparison and arithmetic
-		var owner_player_id = int(unit_owner.player_id) if unit_owner.player_id is String else unit_owner.player_id
-
-		if owner_player_id != local_player_id:
-			# Could show a message to the player here
-			return
-	else:
-		# Local (single-player / hotseat): accept every selection for inspection.
-		# _update_actions() gates the actual commands via _human_may_command().
-		pass
-
+	# the Traditional can-act gate that used to REJECT selection here are gone -- in
+	# network matches too: _player_is_human() compares against the local network seat,
+	# so an opponent's unit is inspectable but never commandable.
 	selected_unit = unit
 
 	_update_unit_header()
@@ -479,8 +539,7 @@ func _on_unit_selected(unit: Unit, position: Vector3) -> void:
 
 	# Drive the state machine: a commandable unit enters the golden path at UNIT_SELECTED
 	# (range shown, awaiting a move / act-in-place click). An inspection-only enemy leaves
-	# the machine IDLE -- it is not part of the command loop -- and its danger toggle is
-	# handled above.
+	# the machine IDLE -- it is not part of the command loop.
 	if _human_may_command(selected_unit):
 		_set_state(CommandState.UNIT_SELECTED)
 	else:
@@ -491,56 +550,69 @@ func _show_movement_range_on_selection() -> void:
 	if not selected_unit:
 		return
 
-	# An enemy / AI unit is INSPECTION-only. Selecting it shows its TRANSIENT danger zone
-	# (a distinct HOSTILE-red overlay via the separate danger channel) so the player can
-	# see where the enemy could reach. This overlay is EPHEMERAL: it clears on the next
-	# click -- selecting a different unit (a new enemy swaps the overlay to itself),
-	# clicking an empty tile, or deselecting -- because inspecting an enemy IS selecting
-	# it, so the next selection change fires unit_deselected and tears the overlay down
-	# (see _on_unit_deselected). The PERSISTENT threat mode is the T hotkey
-	# (_toggle_all_enemy_danger), a separate channel these transient clicks never clear.
+	# An enemy / AI unit is INSPECTION-only. Still show WHERE IT COULD MOVE (its blue
+	# range) and the red fringe it could strike from there, so the player can read the
+	# danger -- via a display-only path that does NOT record those cells as a move
+	# destination, so clicking them never relocates a unit the player can't command. It
+	# clears with the selection (the next click).
 	if not _human_may_command(selected_unit):
-		_set_transient_danger_enemy(selected_unit)
+		_show_inspect_movement_range()
 		return
 
-	# Commanding your own unit: drop any transient enemy inspect overlay first (the prior
-	# enemy was already deselected, but clear defensively so starting a command never
-	# leaves a stale red band up), then show this unit's blue movement range.
-	_clear_transient_danger()
+	# Calculate and show movement range
 	_calculate_and_show_movement_range()
 
 func _update_unit_header() -> void:
-	"""Update the unit header with name, type, and icon"""
+	"""Update the unit header: portrait, full name (never truncated), side / element
+	subtitle in the team colour, and HP."""
 	if not selected_unit:
 		return
-	
-	# Update unit name with player info
+	var player = selected_unit.get_owner_player()
+	var display_name: String = selected_unit.get_display_name()
+
 	if unit_name_label:
-		var player = selected_unit.get_owner_player()
-		var player_info = ""
-		if player:
-			player_info = " (" + player.get_display_name() + ")"
-		unit_name_label.text = selected_unit.get_display_name() + player_info
-	
-	# Update unit type. Post-migration get_unit_type() returns a String (the
-	# character_id), not an object -- show a humanized form, and hide the label
-	# when it would just duplicate the unit's name.
+		unit_name_label.text = display_name
+		unit_name_label.tooltip_text = display_name
+
+	# Subtitle: "Ally · Nature · Vineweave" (the type only when it adds information).
 	if unit_type_label:
-		var unit_type: String = selected_unit.get_unit_type()
-		var type_text := _humanize_id(unit_type)
-		if type_text == "" or type_text == selected_unit.get_display_name():
-			unit_type_label.visible = false
-		else:
-			unit_type_label.visible = true
-			unit_type_label.text = type_text
-	
-	# Update unit icon
+		var parts: PackedStringArray = [ConquestTheme.side_label(player)]
+		var el := String(selected_unit.get_element()) if selected_unit.has_method("get_element") else ""
+		if el != "":
+			parts.append(el.capitalize())
+		if selected_unit.has_method("is_boss") and selected_unit.is_boss():
+			parts.append("Boss")
+		var type_text := _humanize_id(selected_unit.get_unit_type())
+		if type_text != "" and not display_name.to_lower().contains(type_text.to_lower()):
+			parts.append(type_text)
+		unit_type_label.text = "  ·  ".join(parts)
+		unit_type_label.visible = true
+		unit_type_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+		unit_type_label.add_theme_color_override("font_color", ConquestTheme.team_text_color(player))
+
+	if _portrait:
+		var cols := ConquestTheme.unit_portrait_colors(selected_unit)
+		ConquestTheme.set_portrait(_portrait, display_name, cols[0], cols[1])
+	# Team-coloured edge stripe on the command card (element lives in the crest).
+	add_theme_stylebox_override("panel", ConquestTheme.unit_card_box(selected_unit, 0.96))
+	_update_header_hp()
+
+	# Legacy icon texture (hidden node; kept so callers / tests stay valid).
 	if unit_icon:
 		_update_unit_icon()
-	
-	# Update header background color based on player
 	if unit_header_background:
 		_update_header_background_color()
+
+
+func _update_header_hp() -> void:
+	if not selected_unit or _hp_bar == null:
+		return
+	var cur: int = int(selected_unit.current_health)
+	var mx: int = maxi(1, int(selected_unit.max_health))
+	var frac := clampf(float(cur) / float(mx), 0.0, 1.0)
+	_hp_bar.value = frac
+	ConquestTheme.tint_hp_bar(_hp_bar, frac)
+	_hp_text.text = "%d/%d" % [cur, mx]
 
 ## Turn a snake_case id ("vineweave") into a display string
 ## ("Torvald Ironhide"). Empty in -> empty out.
@@ -608,55 +680,32 @@ func _update_unit_icon() -> void:
 	unit_icon.texture = texture
 
 func _update_header_background_color() -> void:
-	"""Update header background color based on player"""
+	"""Team colour now lives in the portrait ring + subtitle; the old header plate
+	is hidden. Kept as a no-op-safe hook for callers."""
 	if not selected_unit or not unit_header_background:
 		return
-	
-	var player = selected_unit.get_owner_player()
-	var style_box = StyleBoxFlat.new()
-	
-	# Base styling
-	style_box.border_width_left = 1
-	style_box.border_width_top = 1
-	style_box.border_width_right = 1
-	style_box.border_width_bottom = 1
-	style_box.corner_radius_top_left = 4
-	style_box.corner_radius_top_right = 4
-	style_box.corner_radius_bottom_left = 4
-	style_box.corner_radius_bottom_right = 4
-	
-	# Color based on player
-	if player:
-		if player.player_id == 0:
-			# Player 1 - blue theme
-			style_box.bg_color = Color(0.1, 0.2, 0.4, 0.8)
-			style_box.border_color = Color(0.2, 0.4, 0.8, 0.8)
-		elif player.player_id == 1:
-			# Player 2 - red theme
-			style_box.bg_color = Color(0.4, 0.1, 0.1, 0.8)
-			style_box.border_color = Color(0.8, 0.2, 0.2, 0.8)
-		else:
-			# Neutral - gray theme
-			style_box.bg_color = Color(0.2, 0.2, 0.2, 0.8)
-			style_box.border_color = Color(0.4, 0.4, 0.4, 0.8)
-	else:
-		# No player - default gray
-		style_box.bg_color = Color(0.2, 0.2, 0.2, 0.8)
-		style_box.border_color = Color(0.4, 0.4, 0.4, 0.8)
-	
-	unit_header_background.add_theme_stylebox_override("panel", style_box)
+	unit_header_background.visible = false
 
-func _on_details_pressed() -> void:
-	"""Open the full-screen [UnitDetailPage] on the selected unit.
-
-	The whole command surface for it: no toggling, no in-sidebar expansion. The page is a
-	single per-battle overlay ([method UnitDetailPage.open_for] finds or mounts it), and it
-	closes on ESC or its own Close button, returning the player to exactly this state --
-	same selection, same staged command. Works for an inspected ENEMY too, because the page
-	only ever reads."""
+func _on_unit_summary_pressed() -> void:
+	"""INFO (the unit_info action, default I): open the full-screen [UnitDetailPage] on the
+	selected unit. No toggling, no in-sidebar stat block: the page is a single per-battle
+	overlay ([method UnitDetailPage.open_for] finds or mounts it) and closes on Esc or its
+	own Close button, returning the player to exactly this state -- same selection, same
+	staged command. Works for an inspected ENEMY too, because the page only ever reads."""
 	if not is_instance_valid(selected_unit):
 		return
 	UnitDetailPage.open_for(self, selected_unit)
+
+
+## Old name for [method _on_unit_summary_pressed] (the local sidebar's DETAILS button).
+func _on_details_pressed() -> void:
+	_on_unit_summary_pressed()
+
+
+func _update_unit_stats() -> void:
+	"""Refresh the live numbers this card shows (the HP row). The full stat table lives
+	on the detail page and the compact battle card; kept as a hook for callers."""
+	_update_header_hp()
 
 func _on_unit_deselected(unit: Unit) -> void:
 	"""Handle unit deselection - hide actions"""
@@ -680,12 +729,6 @@ func _on_unit_deselected(unit: Unit) -> void:
 		# Clear movement range when unit is deselected
 		_clear_movement_range()
 
-		# Tear down the TRANSIENT enemy inspect overlay: deselecting (or selecting a
-		# different unit, which deselects the old one first) is exactly the "any other
-		# click" that ends a click-inspect. The PERSISTENT T overlays are untouched --
-		# _clear_transient_danger keeps an enemy's overlay up when the T set also holds it.
-		_clear_transient_danger()
-
 		_clear_unit_header()
 		_hide_panel()
 
@@ -695,6 +738,7 @@ func _on_unit_deselected(unit: Unit) -> void:
 func _clear_movement_range() -> void:
 	"""Clear movement range visualization"""
 	movement_range_tiles.clear()
+	_path_shown = false
 	GameEvents.movement_range_cleared.emit()
 	# No range means no route to warn about. A tentative move that is being staged right
 	# now re-asserts its own warning immediately after clearing the range.
@@ -708,6 +752,36 @@ func _clear_unit_header() -> void:
 		unit_type_label.text = ""
 	if unit_icon:
 		unit_icon.texture = null
+
+func _on_network_action_applied(_action: Dictionary, _result: Dictionary) -> void:
+	"""An accepted network action was applied to the board on this peer."""
+	if selected_unit != null and not is_instance_valid(selected_unit):
+		selected_unit = null
+		_awaiting_net_move_unit = null
+		_hide_panel()
+		return
+	if move_selection_panel and move_selection_panel.visible:
+		move_selection_panel.update_move_cooldowns()
+	_update_actions()
+	# Our MOVE landed: open the contextual action menu on the unit (the FE loop's
+	# post-move menu), exactly where local play opens it after a staged move.
+	var awaited := _awaiting_net_move_unit
+	if awaited != null and is_instance_valid(awaited) and awaited == selected_unit \
+			and awaited.has_method("can_move") and not awaited.can_move():
+		_awaiting_net_move_unit = null
+		if _human_may_command(awaited) and _state != CommandState.TARGETING:
+			_set_state(CommandState.ACTION_MENU)
+
+
+func _on_network_intent_rejected(_action: Dictionary, _reason: String) -> void:
+	"""The host refused one of our intents (NetToast tells the player why): forget any
+	pending post-move menu and redraw from the real state."""
+	_awaiting_net_move_unit = null
+	if is_instance_valid(selected_unit):
+		_update_actions()
+		if _human_may_command(selected_unit) and selected_unit.can_move() \
+				and _state == CommandState.UNIT_SELECTED:
+			_calculate_and_show_movement_range()
 
 func _on_player_turn_changed(player: Player) -> void:
 	"""Handle player turn changes"""
@@ -782,45 +856,34 @@ func _human_may_command(unit: Unit) -> bool:
 		return false
 	return _player_is_human(current_player)
 
-# --- Networked command routing (Phase 2) -------------------------------------
-# In a CONNECTED networked match every golden-path action is submitted to NetSession as a
-# NetProtocol command instead of executing locally; the real execution happens when the
-# resolved command comes back through the CommandApplier (host stamps seq + rng_seed; all
-# peers, host included, apply). Single-player / hotseat / local-versus (no live NetSession
-# peer) fall through UNCHANGED -- every routing branch is gated on _is_networked_match(),
-# which is false off the wire, so SP behaviour is byte-for-byte the existing direct path.
+# --- Networked command routing ------------------------------------------------
+# In a network match every golden-path action is an INTENT submitted through
+# GameModeManager (request_move / request_use_move / request_wait / request_end_turn ->
+# NetSession.submit_intent); the host validates it (NetGameRules) and the accepted action
+# is applied on every peer, host included, with the per-action commit-reveal RNG. Local
+# play (single player / hotseat / local versus) falls through UNCHANGED -- every routing
+# branch is gated on _is_networked_match(), which is false off the wire.
 #
-# TENTATIVE-MOVE RECONCILIATION (documented decision): when a staged tentative move is
-# finalized in a networked match we REVERT the local tentative visual first, then submit a
-# MOVE_UNIT for its destination. The resolved command then applies origin->dest on every
-# peer symmetrically (correct unit_moved from/to, correct tile ON_EXIT/ON_ENTER), and the
-# applier's board.move_unit is an ABSOLUTE set to the destination cell, so even if a slide
-# raced ahead the apply cannot double-move. (The applier is idempotent; the revert just
-# keeps the acting peer's event stream identical to every observer's.)
+# TENTATIVE-MOVE RECONCILIATION: when a staged tentative move is finalized in a network
+# match we REVERT the local tentative visual first, then submit a MOVE for its
+# destination. The accepted MOVE then applies origin->dest on every peer symmetrically
+# (correct unit_moved from/to, correct tile ON_EXIT/ON_ENTER), and the local board is
+# never left mutated outside an accepted action, so the host's digests stay identical.
 
 func _is_networked_match() -> bool:
-	"""True only in a live, connected networked match with >1 participant -- the single gate
-	for routing a command through NetSession instead of executing it locally."""
-	return typeof(NetSession) == TYPE_OBJECT and NetSession != null and NetSession.is_networked_match()
-
-func _net_id_of(unit) -> int:
-	"""The deterministic net_id NetSession/CommandApplier use to name [param unit] across
-	peers, or -1 if unknown (in which case the caller must NOT submit a command for it)."""
-	if typeof(NetSession) == TYPE_OBJECT and NetSession != null:
-		return NetSession.net_id_for(unit)
-	return -1
+	"""True only in a live network match -- the single gate for routing a command as an
+	intent instead of executing it locally."""
+	return GameModeManager != null and GameModeManager.is_multiplayer_active()
 
 func _net_submit_pending_move(unit) -> void:
-	"""If a tentative move is staged for [param unit], revert its local visual and submit the
-	destination as a MOVE_UNIT command (see the reconciliation note above). No-op when no
-	tentative move is staged or the unit has no net_id."""
+	"""If a tentative move is staged for [param unit], revert its local visual and submit
+	the destination as a MOVE intent (see the reconciliation note above). No-op when no
+	tentative move is staged."""
 	if not _tentative_active or _tentative_unit != unit:
 		return
-	var nid: int = _net_id_of(unit)
-	var dest: Vector2i = _tentative_dest_cell
+	var dest: Vector3i = _tentative_dest_cell
 	_revert_tentative_move()
-	if nid >= 0:
-		NetSession.submit_intent(NetProtocol.make_move_unit(nid, dest))
+	GameModeManager.request_move(unit, dest)
 
 func _update_actions() -> void:
 	"""Update available actions based on selected unit and game state"""
@@ -904,107 +967,71 @@ func _update_actions() -> void:
 	# while a tentative move is staged: the unit has already moved (pending confirm),
 	# so re-entering movement would let it move twice. It reverts to available if the
 	# tentative move is cancelled.
+	# FE command list: Move / Skills / Wait / Info / Cancel. Each row shows its key
+	# (or pad) glyph from InputActions; an unavailable command shows WHY instead.
+	var reason_note := "N/A"
+	if not can_control:
+		reason_note = "Not yours" if not (current_player and current_player.owns_unit(selected_unit)) else "Not your turn"
+	elif action_restriction_reason == "not this unit's turn":
+		reason_note = "Not its turn"
+	elif action_restriction_reason in ["already acted this round", "already acted this turn"]:
+		reason_note = "Done"
+
+	# Move is also disabled while a tentative move is staged: the unit has already
+	# moved (pending confirm), so re-entering movement would let it move twice. It
+	# reverts to available if the tentative move is cancelled.
 	if move_button:
 		var can_move = can_control and can_perform_unit_actions and selected_unit.can_move() and not _tentative_active
 		move_button.disabled = not can_move
-
 		if can_move:
-			move_button.text = "Move (M)"
-		elif not can_control:
-			move_button.text = "Move (M)\n[Not Yours]"
-		elif action_restriction_reason == "not this unit's turn":
-			move_button.text = "Move (M)\n[Not Turn]"
-		elif action_restriction_reason == "already acted this round":
-			move_button.text = "Move (M)\n[Used]"
-		elif action_restriction_reason == "already acted this turn":
-			move_button.text = "Move (M)\n[Used]"
+			_set_command(move_button, "Move", InputActions.UNIT_MOVE)
+		elif can_control and can_perform_unit_actions and (_tentative_active or not selected_unit.can_move()):
+			_set_command(move_button, "Move", &"", "Moved")
 		else:
-			move_button.text = "Move (M)\n[N/A]"
-	
+			_set_command(move_button, "Move", &"", reason_note)
+
 	# Update Moves (action) button - available if the unit still has its action.
 	if moves_button:
 		moves_button.disabled = not (can_control and can_perform_unit_actions and selected_unit.can_act())
 
-	# Update End Unit Turn button - only available if unit can perform actions
+	# WAIT: ends THIS unit's action (the old "End Turn (E)" label read like ending
+	# the whole phase -- that lives in the Map Menu now).
 	if end_unit_turn_button:
 		var can_end_unit_turn = can_control and can_perform_unit_actions and selected_unit.can_act()
 		end_unit_turn_button.disabled = not can_end_unit_turn
-		
 		if can_end_unit_turn:
-			end_unit_turn_button.text = "End Turn (E)"
-		elif not can_control:
-			end_unit_turn_button.text = "End Turn (E)\n[Not Yours]"
-		elif action_restriction_reason == "not this unit's turn":
-			end_unit_turn_button.text = "End Turn (E)\n[Not Turn]"
-		elif action_restriction_reason == "already acted this round":
-			end_unit_turn_button.text = "End Turn (E)\n[Used]"
-		elif action_restriction_reason == "already acted this turn":
-			end_unit_turn_button.text = "End Turn (E)\n[Used]"
+			_set_command(end_unit_turn_button, "Wait", InputActions.WAIT)
 		else:
-			end_unit_turn_button.text = "End Turn (E)\n[N/A]"
-	
-	# Update End Player Turn button - decoupled from the INSPECTED unit: it is about
-	# whose turn it is, not which unit is selected. Enabled only when the game is active
-	# AND the current turn player is human-controlled (so it stays disabled during the
-	# AI's turn / when it is not this client's turn).
+			_set_command(end_unit_turn_button, "Wait", &"", reason_note)
+
+	# End Player Turn is not part of the per-unit command list any more (Map Menu >
+	# End Turn, the end_turn action, or the touch End Turn row below). The hidden button
+	# keeps its state in sync for any caller that still reads it.
+	var can_end_player_turn: bool = game_active and _player_is_human(current_player)
 	if end_player_turn_button:
-		var current_is_human = _player_is_human(current_player)
-		var can_end_player_turn = game_active and current_is_human
 		end_player_turn_button.disabled = not can_end_player_turn
+		end_player_turn_button.visible = false
+	if end_turn_row_button:
+		end_turn_row_button.disabled = not can_end_player_turn
+	_sync_danger_zones_button()
 
-		if can_end_player_turn:
-			end_player_turn_button.text = "End Player Turn (P)"
-		elif not game_active:
-			end_player_turn_button.text = "End Player Turn (P)\n[N/A]"
-		elif GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
-			end_player_turn_button.text = "End Player Turn (P)\n[Not Your Turn]"
-		else:
-			end_player_turn_button.text = "End Player Turn (P)\n[AI Turn]"
-	
-	# DETAILS is always available while a unit is selected -- reading a unit's page is not
-	# a command, so it is never gated on whose turn it is or whether the unit can act.
-	if details_button:
-		details_button.disabled = false
-		details_button.text = "Details (D)"
+	# INFO is always available while a unit is selected -- reading a unit's page is not a
+	# command, so it is never gated on whose turn it is or whether the unit can act.
+	if unit_summary_button:
+		unit_summary_button.disabled = false
+		_set_command(unit_summary_button, "Info", InputActions.UNIT_INFO)
 
-
-	# Cancel button is always available when unit is selected
+	# Cancel is always available when a unit is selected.
 	if cancel_button:
 		cancel_button.disabled = false
-		cancel_button.text = "Cancel (C/ESC)"
-	
+		_set_command(cancel_button, "Cancel", InputActions.CANCEL)
+
 	# Update Moves button availability
 	_update_moves_button_availability()
 
 func _on_move_pressed() -> void:
 	"""Handle Move button press - enter movement mode"""
 	if not selected_unit:
-		return
-
-	# Check if we're in multiplayer mode and submit action through GameModeManager
-	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
-		# Validate that this is our unit and our turn
-		var local_player_id_raw = GameModeManager.get_local_player_id()
-		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
-		var unit_owner = PlayerManager.get_player_owning_unit(selected_unit)
-		
-		# Ensure player_id is int for comparison
-		var owner_player_id = int(unit_owner.player_id) if (unit_owner and unit_owner.player_id is String) else (unit_owner.player_id if unit_owner else -1)
-		
-		if not unit_owner or owner_player_id != local_player_id:
-			return
-
-		if not GameModeManager.is_my_turn():
-			return
-
-		# Submit move action through multiplayer system
-		var action_data = {
-			"unit_id": selected_unit.get_display_name(),
-			"player_id": local_player_id
-		}
-
-		if GameModeManager.submit_action("unit_move_start", action_data):
-			_enter_movement_mode()
 		return
 
 	# Handler-level command guard: keyboard shortcut (KEY_M) bypasses the disabled
@@ -1025,45 +1052,17 @@ func _on_end_unit_turn_pressed() -> void:
 	if not selected_unit:
 		return
 
-	# NETWORKED (Phase 2): Wait = commit any staged move (as MOVE_UNIT) then WAIT_UNIT. Both
-	# resolve through the CommandApplier on every peer; local UI just closes the command loop.
+	# Network match: WAIT is an intent (host-validated, applied on every peer through
+	# NetGameRules, which refreshes this panel). A staged move goes first as its own MOVE
+	# intent (see _net_submit_pending_move); the local UI just closes the command loop.
 	if _is_networked_match():
-		if not _human_may_command(selected_unit):
+		if not _human_may_command(selected_unit) or not GameModeManager.is_my_turn():
 			return
 		var unit := selected_unit
 		_cancel_move_targeting()
-		var nid: int = _net_id_of(unit)
-		if nid >= 0:
-			_net_submit_pending_move(unit)
-			NetSession.submit_intent(NetProtocol.make_wait_unit(nid))
+		_net_submit_pending_move(unit)
+		GameModeManager.request_wait(unit)
 		_finish_command(unit)
-		return
-
-	# Check if we're in multiplayer mode and submit action through GameModeManager
-	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
-		# Validate that this is our unit and our turn
-		var local_player_id_raw = GameModeManager.get_local_player_id()
-		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
-		var unit_owner = PlayerManager.get_player_owning_unit(selected_unit)
-		
-		# Ensure player_id is int for comparison
-		var owner_player_id = int(unit_owner.player_id) if (unit_owner and unit_owner.player_id is String) else (unit_owner.player_id if unit_owner else -1)
-		
-		if not unit_owner or owner_player_id != local_player_id:
-			return
-
-		if not GameModeManager.is_my_turn():
-			return
-
-		# Submit end unit turn action through multiplayer system
-		var action_data = {
-			"unit_id": selected_unit.get_display_name(),
-			"player_id": local_player_id
-		}
-
-		if GameModeManager.submit_action("end_unit_turn", action_data):
-			# The action will be processed when received back from network
-			pass
 		return
 
 	# Handler-level command guard: the KEY_E shortcut bypasses the disabled button and
@@ -1119,7 +1118,33 @@ func _on_end_unit_turn_pressed() -> void:
 	_finish_command(acted_unit)
 
 func _on_end_player_turn_pressed() -> void:
-	"""Handle End Player Turn button press - ends the entire player's turn"""
+	"""End Player Turn from a button (the touch End Turn row / the legacy hidden button):
+	ask through the Map Menu's End Turn confirm (the same one the end_turn action opens)
+	so there is exactly ONE confirm. Without a Map Menu (bare harness) fall back to the
+	local confirm dialog below."""
+	var mm := _map_menu()
+	if mm != null and mm.has_method("request_end_turn"):
+		mm.request_end_turn()
+		return
+	_end_player_turn(false)
+
+
+func _map_menu() -> Node:
+	"""The battle's MapMenu (owned by the UILayoutManager this panel lives under)."""
+	var n: Node = get_parent()
+	while n != null:
+		if "map_menu" in n:
+			var mm = n.get("map_menu")
+			if mm != null and is_instance_valid(mm):
+				return mm
+		n = n.get_parent()
+	return null
+
+
+func _end_player_turn(confirmed: bool) -> void:
+	"""The guarded end-player-turn path: local-human only (never the AI's / opponent's
+	turn), a network intent online, and -- unless [param confirmed] (the Map Menu already
+	asked) -- a confirm while units can still act."""
 	if not PlayerManager:
 		return
 
@@ -1127,41 +1152,13 @@ func _on_end_player_turn_pressed() -> void:
 	if not current_player:
 		return
 
-	# NETWORKED (Phase 2): route End Player Turn as an authoritative END_TURN command. The
-	# turn only advances when the resolved command applies (via the CommandApplier's turn
-	# hook) on every peer. Supersedes the legacy GameModeManager branch below when a live
-	# NetSession match is connected; leaves it compiling for the legacy transport.
+	# Network match: END_TURN is an intent (host-validated, applied on every peer). The
+	# turn only advances when the accepted action applies.
 	if _is_networked_match():
-		var turn_player := _current_turn_player()
-		if not _player_is_human(turn_player):
+		if not _player_is_human(_current_turn_player()) or not GameModeManager.is_my_turn():
 			return
-		var pid: int = int(current_player.player_id)
-		NetSession.submit_intent(NetProtocol.make_end_turn(pid))
-		return
-
-	# Check if we're in multiplayer mode and submit action through GameModeManager
-	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
-		# Validate that it's our turn
-		var local_player_id_raw = GameModeManager.get_local_player_id()
-		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
-
-		# Ensure player_id is int for comparison
-		var current_player_id = int(current_player.player_id) if current_player.player_id is String else current_player.player_id
-
-		if current_player_id != local_player_id:
-			return
-
-		if not GameModeManager.is_my_turn():
-			return
-
-		# Submit end turn action through multiplayer system
-		var action_data = {
-			"player_id": local_player_id
-		}
-
-		if GameModeManager.submit_action("end_turn", action_data):
-			# The action will be processed when received back from network
-			pass
+		_cancel_move_targeting()
+		GameModeManager.request_end_turn()
 		return
 
 	# Handler-level command guard: the KEY_P shortcut bypasses the disabled button.
@@ -1174,7 +1171,7 @@ func _on_end_player_turn_pressed() -> void:
 	# their turns. When everyone has already acted there is nothing to lose (the turn
 	# systems auto-end anyway), so end immediately with no prompt.
 	var unacted := _count_unacted_friendly_units()
-	if unacted > 0:
+	if unacted > 0 and not confirmed:
 		_prompt_end_player_turn(unacted)
 		return
 
@@ -1201,6 +1198,7 @@ func _ensure_end_turn_dialog() -> ConfirmationDialog:
 		return existing as ConfirmationDialog
 	var dialog := ConfirmationDialog.new()
 	dialog.name = "EndTurnConfirmDialog"
+	dialog.theme = MenuTheme.build()
 	dialog.title = "End Player Turn"
 	dialog.ok_button_text = "Confirm"
 	# ConfirmationDialog exposes its cancel button via get_cancel_button() (no
@@ -1230,7 +1228,7 @@ func _do_end_player_turn() -> void:
 		# fell back to PlayerManager.end_current_player_turn(), which advanced
 		# PlayerManager WITHOUT advancing the turn system -- leaving the two desynced and
 		# the turn system stuck on the current player (so the banner froze and the AI
-		# never got a turn). Match PlayerTurnPanel's working end-turn path.
+		# never got a turn). Same end-turn path MapMenu's End Turn uses.
 		# end_turn_manually() already reports through its RETURN VALUE, and "you cannot end
 		# the turn right now" (double-click, an action still resolving, the wrong phase) is
 		# an ordinary UI outcome -- not a fault. Ignoring the false is the correct handling;
@@ -1315,6 +1313,13 @@ func _on_cancel_pressed() -> void:
 		_exit_movement_mode()
 	elif selected_unit:
 		GameEvents.unit_deselected.emit(selected_unit)
+
+func request_end_player_turn() -> void:
+	"""Public End Turn entry (the Map Menu, AFTER its own confirm). Same guarded path as
+	the button -- local-human only, and a network match submits the END_TURN intent --
+	minus a second confirm."""
+	_end_player_turn(true)
+
 
 func request_cancel() -> void:
 	"""Public entry point for an external cancel request (the board cursor's
@@ -1438,13 +1443,16 @@ func is_showing_actions_for_unit(unit: Unit) -> bool:
 	"""Check if panel is showing actions for specific unit"""
 	return selected_unit == unit and visible
 
-# Debug method to test button functionality
+# Keyboard / gamepad shortcuts (named actions -- see InputActions).
 func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
+	# A full-screen overlay (Settings, ...) owns input while it is open.
+	if InputActions.gameplay_input_blocked(get_tree()):
 		return
-	
-	if event is InputEventKey:
-		match event.keycode:
+
+	# Developer helpers: debug builds only, Ctrl+Shift held (never a plain key --
+	# F1 used to end the selected unit's turn during normal play).
+	if InputActions.is_debug_hotkey(event):
+		match (event as InputEventKey).keycode:
 			KEY_F1:
 				_on_end_unit_turn_pressed()
 			KEY_F2:
@@ -1455,57 +1463,41 @@ func _input(event: InputEvent) -> void:
 				_test_manual_unit_selection()
 			KEY_F5:
 				_test_movement_range_calculation_direct()
+		return
 
-			# UNIT CYCLING: Tab (and Q as a fallback that never fights UI focus) selects the
-			# next un-acted commandable friendly unit. Skipped while the action menu /
-			# targeting is up so it can't yank focus mid-command. Consume the event so Tab
-			# does not also trigger the viewport's focus navigation.
-			KEY_TAB, KEY_Q:
-				if _state == CommandState.ACTION_MENU or _state == CommandState.TARGETING:
-					return
-				_cycle_to_next_commandable_unit()
-				get_viewport().set_input_as_handled()
+	# CANCEL (Esc / B / right-click via the cursor): the gate is has_active_interaction() --
+	# the SAME predicate UILayoutManager (pause menu) and MapMenu (map menu) read to decide
+	# whether Escape should instead open their overlay. Sharing one predicate makes the
+	# ordering airtight: while anything is staged we back out ONE stage here and consume;
+	# once the command state is IDLE this does nothing and the press falls through.
+	if event.is_action_pressed(InputActions.CANCEL):
+		if has_active_interaction():
+			_on_cancel_pressed()
+			# Consume cancel so the board cursor's own cancel handler does not ALSO fire
+			# and deselect the unit -- that would collapse the staged FE back-out (drop
+			# targeting -> revert tentative -> deselect) into a single press. This
+			# panel's _input runs before the cursor's _unhandled_input, so marking it
+			# handled keeps the staging intact.
+			get_viewport().set_input_as_handled()
+		return
 
-			# THREAT RANGES: T toggles ALL enemies' danger zones on/off at once -- the
-			# PERSISTENT mode (stays up until T again), separate from the transient
-			# single-enemy overlay a click/inspect shows.
-			KEY_T:
-				_toggle_all_enemy_danger()
-
-			# Keyboard shortcuts for actions (only when panel is visible and unit selected)
-			KEY_M:
-				if visible and selected_unit:
-					if movement_mode:
-						_exit_movement_mode()
-					else:
-						_on_move_pressed()
-			KEY_E:
-				if visible and selected_unit and not movement_mode:
-					_on_end_unit_turn_pressed()
-			KEY_P:
-				if visible and selected_unit and not movement_mode:
-					_on_end_player_turn_pressed()
-			# D opens the full unit page. It was S, toggling the "Unit Summary"
-			# dropdown -- both are gone along with the duplicated stat block.
-			KEY_D:
-				if visible and selected_unit and not movement_mode:
-					_on_details_pressed()
-			KEY_C, KEY_ESCAPE:
-				# The gate is has_active_interaction() -- the SAME predicate
-				# UILayoutManager reads to decide whether Escape should instead open the
-				# pause menu (see its _unhandled_input). Sharing one predicate is what
-				# makes the ordering airtight: exactly one of the two fires per press.
-				# While anything is staged we back out ONE stage here and consume; once
-				# the command state is IDLE this does nothing, the press falls through to
-				# _unhandled_input, and the pause menu opens.
-				if has_active_interaction():
-					_on_cancel_pressed()
-					# Consume ESC so the board cursor's own ui_cancel handler does not
-					# ALSO fire and deselect the unit -- that would collapse the staged
-					# FE back-out (drop targeting -> revert tentative -> deselect) into a
-					# single press. This panel's _input runs before the cursor's
-					# _unhandled_input, so marking it handled keeps the staging intact.
-					get_viewport().set_input_as_handled()
+	# Action shortcuts (named, rebindable actions -- see InputActions). Only while the
+	# panel is showing a selected unit. Elsewhere, ONE owner per action: end_turn is the
+	# MapMenu's (its End Turn confirm), cycle_next / cycle_prev the board cursor's, and
+	# danger_zone the DangerZoneOverlay's -- so one press can never fire twice.
+	if not (visible and selected_unit):
+		return
+	if event.is_action_pressed(InputActions.UNIT_MOVE):
+		if movement_mode:
+			_exit_movement_mode()
+		else:
+			_on_move_pressed()
+	elif event.is_action_pressed(InputActions.WAIT):
+		if not movement_mode:
+			_on_end_unit_turn_pressed()
+	elif event.is_action_pressed(InputActions.UNIT_INFO):
+		if not movement_mode:
+			_on_unit_summary_pressed()
 
 func _test_manual_unit_selection() -> void:
 	"""Test manual unit selection for debugging"""
@@ -1643,11 +1635,17 @@ func _show_inspect_movement_range() -> void:
 	if board == null or profile == null:
 		_clear_movement_range()
 		return
-	var origin: Vector2i = board.cell_of(selected_unit)
-	var cells: Array[Vector2i] = MovementResolver.new().reachable_cells(origin, profile, board, selected_unit)
+	var origin: Vector3i = board.cell_of(selected_unit)
+	var cells: Array[Vector3i] = MovementResolver.new().reachable_cells(origin, profile, BoardSnapshot.of(board), selected_unit)
 	# Visual only -- the move-target set stays empty so the enemy can never be commanded.
 	movement_range_tiles = []
-	GameEvents.movement_range_calculated.emit(_cells_to_grid_tiles(cells))
+	_range_resolver = null
+	# Include its own cell (FE shows the inspected unit standing in its blue range).
+	var shown: Array[Vector3i] = [origin]
+	shown.append_array(cells)
+	GameEvents.movement_range_calculated.emit(_cells_to_grid_tiles(shown))
+	# FE threat read: the red cells it could strike from anywhere it can reach.
+	_emit_attack_fringe(origin, cells, board)
 
 
 func _try_show_movement_range_via_resolver() -> bool:
@@ -1667,40 +1665,80 @@ func _try_show_movement_range_via_resolver() -> bool:
 		# Character present but no usable profile yet -> let the BFS fallback run.
 		return false
 
-	# origin cell (Vector2i(col, row)) straight from the board.
-	var origin: Vector2i = board.cell_of(selected_unit)
+	# origin cell (Vector3i(col, row, floor)) straight from the board.
+	var origin: Vector3i = board.cell_of(selected_unit)
 	# Pass the unit so a multi-cell unit (e.g. a 2x2 boss) only gets cells where its
-	# WHOLE footprint fits. Omitting it would resolve every unit as 1x1.
-	var cells: Array[Vector2i] = MovementResolver.new().reachable_cells(origin, profile, board, selected_unit)
+	# WHOLE footprint fits. Omitting it would resolve every unit as 1x1. The resolver is
+	# kept: its path_to() drives the path arrow and the walk animation.
+	_range_resolver = MovementResolver.new()
+	_range_origin = origin
+	# BoardSnapshot: occupancy indexed once instead of walking every unit per step.
+	var cells: Array[Vector3i] = _range_resolver.reachable_cells(origin, profile, BoardSnapshot.of(board), selected_unit)
 
-	# Convert each Vector2i(col, row) into the Vector3(col, 0, row) grid-coord form the
+	# Convert each cell into the Vector3(col, floor, row) grid-coord form the
 	# visualizer + GameEvents.movement_range_calculated + downstream validation expect.
 	movement_range_tiles = _cells_to_grid_tiles(cells)
 
 	# Keep the same highlight flow: emit the calculated range for the visualizer.
 	GameEvents.movement_range_calculated.emit(movement_range_tiles)
+	_path_shown = false
+	# FE red attack fringe around the blue range.
+	_emit_attack_fringe(origin, cells, board)
+	# The cursor may already rest on a reachable cell (e.g. re-shown after an undo).
+	_refresh_path_preview(_last_cursor_tile)
 	return true
 
 
-func _cells_to_grid_tiles(cells: Array[Vector2i]) -> Array[Vector3]:
-	"""Vector2i(col, row) cells -> Vector3(col, 0, row) grid coords used everywhere
-	downstream (movement_range_tiles, the visualizer, GameEvents)."""
+func _emit_attack_fringe(origin: Vector3i, reachable: Array[Vector3i], board) -> void:
+	"""Publish the red attack fringe for selected_unit: every cell its offensive moves
+	could hit from its own cell or any reachable one, minus those cells (ThreatResolver)."""
+	if selected_unit == null or board == null:
+		return
+	var stands: Array = [origin]
+	stands.append_array(reachable)
+	var fringe := ThreatResolver.fringe_from(stands, selected_unit, board)
+	_fringe_grid = _cells_to_grid_vec3(fringe)
+	GameEvents.attack_fringe_calculated.emit(_fringe_grid)
+
+
+func _refresh_path_preview(grid_pos: Vector3) -> void:
+	"""FE path arrow: while the selected (commandable) unit's blue range is up, draw
+	its route to the hovered cell (MovementResolver.path_to of the range's own flood).
+	Hidden off-range, on the unit itself, while aiming, or once a move is staged."""
+	var route: Array = []
+	if selected_unit != null and _range_resolver != null and not movement_range_tiles.is_empty() \
+			and not is_targeting_move() and not _tentative_active:
+		var board = CombatServices.board()
+		if board != null and board.cell_of(selected_unit) == _range_origin and _is_grid_pos_in_range(grid_pos):
+			route = _cells_to_grid_vec3(_range_resolver.path_to(Cells.from_grid(grid_pos)))
+	if route.size() < 2:
+		if _path_shown:
+			_path_shown = false
+			GameEvents.path_preview_updated.emit([])
+		return
+	_path_shown = true
+	GameEvents.path_preview_updated.emit(route)
+
+
+func _cells_to_grid_tiles(cells: Array[Vector3i]) -> Array[Vector3]:
+	"""Vector3i(col, row, floor) cells -> Vector3(col, floor, row) grid coords used
+	everywhere downstream (movement_range_tiles, the visualizer, GameEvents)."""
 	var out: Array[Vector3] = []
 	for cell in cells:
-		out.append(Vector3(cell.x, 0, cell.y))
+		out.append(Cells.to_grid(cell))
 	return out
 
 
-func _grid_tile_to_cell(grid_pos: Vector3) -> Vector2i:
-	"""Vector3(col, 0, row) grid coord -> Vector2i(col, row) board cell."""
-	return Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+func _grid_tile_to_cell(grid_pos: Vector3) -> Vector3i:
+	"""Vector3(col, floor, row) grid coord -> Vector3i(col, row, floor) board cell."""
+	return Cells.from_grid(grid_pos)
 
 
 func _is_grid_pos_in_range(grid_pos: Vector3) -> bool:
 	"""True when grid_pos matches a tile in the current reachable set (which, for
 	character-backed units, is the MovementResolver output)."""
 	for tile in movement_range_tiles:
-		if abs(tile.x - grid_pos.x) < 0.1 and abs(tile.z - grid_pos.z) < 0.1:
+		if abs(tile.x - grid_pos.x) < 0.1 and abs(tile.z - grid_pos.z) < 0.1 and abs(tile.y - grid_pos.y) < 0.1:
 			return true
 	return false
 
@@ -1717,27 +1755,21 @@ func _try_execute_move_via_board(destination: Vector3) -> bool:
 	if board == null:
 		return false
 
-	var dest_cell: Vector2i = _grid_tile_to_cell(destination)
+	var dest_cell: Vector3i = _grid_tile_to_cell(destination)
 
 	# Validate the destination is within the reachable set before moving.
 	if not _is_grid_pos_in_range(destination):
 		return true  # handled (rejected); do NOT fall back to BFS for a character unit
 
-	var old_world_pos: Vector3 = selected_unit.global_position
-	var old_cell: Vector2i = board.cell_of(selected_unit)
+	var old_cell: Vector3i = board.cell_of(selected_unit)
 
 	# Authoritative board move: snaps the unit onto the cell center (preserving its
-	# height). We then rewind the world position so the existing tween can animate
-	# from the old spot to the cell's world center.
+	# height, lifted/lowered by whole floors). The unit node stays there; UnitAnimator
+	# hears unit_moved below and walks the MODEL cell by cell along the route.
 	board.move_unit(selected_unit, dest_cell)
 
-	var new_world_pos: Vector3 = board.cell_to_world(dest_cell)
-	new_world_pos.y = old_world_pos.y
-	selected_unit.global_position = old_world_pos
-	_animate_unit_movement(selected_unit, old_world_pos, new_world_pos)
-
-	# Preserve the legacy unit_moved contract: Vector3(col, 0, row) grid coords.
-	var old_grid_pos := Vector3(old_cell.x, 0, old_cell.y)
+	# unit_moved contract: Vector3(col, floor, row) grid coords.
+	var old_grid_pos := Cells.to_grid(old_cell)
 	GameEvents.unit_moved.emit(selected_unit, old_grid_pos, destination)
 
 	# mark_moved() semantics: consumes the move but NOT the action.
@@ -1779,7 +1811,7 @@ func _is_tile_passable(grid_pos: Vector3) -> bool:
 	# Terrain first. A wall or a tree is impassable regardless of occupancy, and
 	# this legacy BFS previously only looked at units -- which made solid trees show
 	# up as reachable instead of forcing a path around them.
-	var cell := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var cell := Cells.from_grid(grid_pos)
 	var tile: TileResource = CombatServices.tile_at(cell)
 	if tile != null and not tile.is_tile_passable():
 		return false
@@ -1874,12 +1906,9 @@ func _execute_movement(destination: Vector3) -> void:
 		_clear_movement_range()
 		return
 
-	# NETWORKED (Phase 2): route the legacy movement-mode commit as an authoritative
-	# MOVE_UNIT too, so the keyboard/Move-button path stays in lockstep with the tactical path.
+	# Network match: never move locally -- submit the intent (see _move_to_destination).
 	if _is_networked_match():
-		var nid: int = _net_id_of(selected_unit)
-		if nid >= 0:
-			NetSession.submit_intent(NetProtocol.make_move_unit(nid, _grid_tile_to_cell(destination)))
+		_move_to_destination(destination)
 		_exit_movement_mode()
 		return
 
@@ -1940,29 +1969,6 @@ func _complete_movement_action() -> void:
 	if not selected_unit:
 		return
 
-	# Check if we're in multiplayer mode and submit action through GameModeManager
-	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER and GameModeManager:
-		# Validate that this is our unit
-		var local_player_id_raw = GameModeManager.get_local_player_id()
-		var local_player_id = int(local_player_id_raw) if local_player_id_raw is String else local_player_id_raw
-		var unit_owner = PlayerManager.get_player_owning_unit(selected_unit)
-		
-		# Ensure player_id is int for comparison
-		var owner_player_id = int(unit_owner.player_id) if (unit_owner and unit_owner.player_id is String) else (unit_owner.player_id if unit_owner else -1)
-		
-		if unit_owner and owner_player_id == local_player_id:
-			# Submit movement completion action through multiplayer system
-			var action_data = {
-				"unit_id": selected_unit.get_display_name(),
-				"player_id": local_player_id,
-				"from_position": selected_unit.global_position,
-				"to_position": selected_unit.global_position  # Current position after move
-			}
-			
-			GameModeManager.submit_action("unit_move_complete", action_data)
-
-		# Still do local processing for immediate feedback
-	
 	# Moving consumes only the unit's MOVE for this turn, not its action: the unit
 	# can still attack / use a move, or End Turn. Re-moving is blocked by can_move()
 	# until an ability or move effect grants extra movement.
@@ -2016,7 +2022,8 @@ func handle_movement_destination_selected(destination: Vector3) -> void:
 	# Check if destination is in movement range
 	var is_valid_destination = false
 	for tile in movement_range_tiles:
-		if abs(tile.x - destination.x) < 0.1 and abs(tile.z - destination.z) < 0.1:
+		if abs(tile.x - destination.x) < 0.1 and abs(tile.z - destination.z) < 0.1 \
+				and abs(tile.y - destination.y) < 0.1:
 			is_valid_destination = true
 			break
 
@@ -2034,46 +2041,46 @@ func handle_movement_destination_selected(destination: Vector3) -> void:
 
 
 func _is_unit_own_cell(destination: Vector3) -> bool:
-	"""True when [param destination] (a Vector3(col,0,row) grid coord) is the selected
+	"""True when [param destination] (a Vector3(col,floor,row) grid coord) is the selected
 	unit's current board cell -- i.e. the player clicked the unit's own tile."""
 	if selected_unit == null:
 		return false
 	var board = CombatServices.board()
 	if board == null:
 		return false
-	var own_cell: Vector2i = board.cell_of(selected_unit)
-	var clicked_cell: Vector2i = _grid_tile_to_cell(destination)
+	var own_cell: Vector3i = board.cell_of(selected_unit)
+	var clicked_cell: Vector3i = _grid_tile_to_cell(destination)
 	return own_cell == clicked_cell
 
 
 func _move_to_destination(destination: Vector3) -> void:
 	"""Route a validated destination click to either the Fire-Emblem TENTATIVE move
-	(character-backed unit, live board, single-player) or the legacy INSTANT-commit
-	move (non-character unit / no board / multiplayer, which keeps its existing
-	authoritative networked flow). The tentative path is the canonical FE loop:
-	the unit moves for preview only and does not commit until the player confirms
-	an action (attack or Wait)."""
-	# NETWORKED (Phase 2): submit the destination as an authoritative MOVE_UNIT and let every
-	# peer apply it through the CommandApplier. Supersedes BOTH the tentative preview and the
-	# legacy instant-commit MP branch. Submitted BEFORE any local slide, so apply drives the
-	# move origin->dest cleanly on this peer and every observer.
+	(character-backed unit, live board, local play), the legacy INSTANT-commit move
+	(non-character unit / no board), or -- in a network match -- a MOVE intent.
+	The tentative path is the canonical FE loop: the unit moves for preview only and
+	does not commit until the player confirms an action (attack or Wait).
+
+	Network matches commit immediately through the host instead of previewing: the
+	local board is never mutated outside an accepted action, so every peer's state
+	(and the host's desync checkpoints) stay identical. When the accepted MOVE lands,
+	the contextual action menu opens on the unit (see _on_network_action_applied)."""
 	if _is_networked_match():
-		var nid: int = _net_id_of(selected_unit)
-		if nid >= 0:
-			NetSession.submit_intent(NetProtocol.make_move_unit(nid, _grid_tile_to_cell(destination)))
+		if GameModeManager.is_my_turn() and selected_unit != null:
+			_awaiting_net_move_unit = selected_unit
+			GameModeManager.request_move(selected_unit, _grid_tile_to_cell(destination))
 		_clear_movement_range()
+		movement_mode = false
 		_update_actions()
 		return
 
 	var use_tentative := (
 		selected_unit.has_character()
 		and CombatServices.board() != null
-		and GameSettings.game_mode != GameSettings.GameMode.MULTIPLAYER
 	)
 	if use_tentative:
 		_begin_tentative_move(destination)
 	else:
-		# Legacy / multiplayer: commit immediately (unchanged behavior).
+		# Legacy (non-character unit / no board): commit immediately.
 		_execute_movement_to_destination(destination)
 
 func _execute_movement_to_destination(destination: Vector3) -> void:
@@ -2139,18 +2146,23 @@ func _begin_tentative_move(destination: Vector3) -> void:
 		_execute_movement_to_destination(destination)
 		return
 
-	var clicked_cell: Vector2i = _grid_tile_to_cell(destination)
+	var clicked_cell: Vector3i = _grid_tile_to_cell(destination)
 	# THE GHOST SHOWS WHERE THE UNIT ACTUALLY STOPS. A route across an armed halting trap
 	# ends ON the trap, so the tentative preview stages there rather than at the cell the
 	# player clicked -- the FE loop's ghost IS the unit at its pending position, and a ghost
 	# standing somewhere the move cannot reach would be a lie the confirm then corrects.
 	# preview_route is the same derivation the move-apply seam walks, so what the player
 	# confirms and what the board resolves are the same cell by construction.
-	var route: Dictionary = TileEffectSystem.preview_route(
+	var trap_route: Dictionary = TileEffectSystem.preview_route(
 		selected_unit, board.cell_of(selected_unit), clicked_cell, board)
-	var dest_cell: Vector2i = route.get("stop", clicked_cell)
+	var dest_cell: Vector3i = trap_route.get("stop", clicked_cell)
 	_tentative_origin_cell = board.cell_of(selected_unit)
 	_tentative_origin_world = selected_unit.global_position
+	_tentative_origin_facing = selected_unit.get_facing() if selected_unit.has_method("get_facing") else Vector2i.ZERO
+	# The route the range flood found (walks through allies, climbs stairs).
+	var route: Array[Vector3i] = []
+	if _range_resolver != null and _range_origin == _tentative_origin_cell:
+		route = _range_resolver.path_to(dest_cell)
 	_tentative_dest_cell = dest_cell
 	_tentative_unit = selected_unit
 	_tentative_active = true
@@ -2159,6 +2171,10 @@ func _begin_tentative_move(destination: Vector3) -> void:
 	# the visual position AND makes board.cell_of(unit) == dest immediately, with no
 	# tween race: every subsequent cell query reads the tentative position at once.
 	board.move_unit(selected_unit, dest_cell)
+	# Walk the MODEL along the route (visual only -- the unit node is already on the
+	# destination, so every cell query above stays exact). Speed / on-off follow the
+	# Battle Speed and Animations settings; fast-forward speeds it up.
+	_walk_unit(selected_unit, route)
 
 	# The post-move action menu replaces the movement-range highlight.
 	_clear_movement_range()
@@ -2167,7 +2183,7 @@ func _begin_tentative_move(destination: Vector3) -> void:
 	# The warning stands until the move is confirmed or cancelled (see _set_trap_warning).
 	# Asserted AFTER _clear_movement_range, which drops the cursor-sweep warning with the
 	# range it belonged to.
-	_set_trap_warning(route.get("trap", null))
+	_set_trap_warning(trap_route.get("trap", null))
 
 	# Refresh unit visuals (health bar etc. follow the moved node) and the action UI
 	# (Move now disabled; Moves / End Turn drive confirm-or-Wait).
@@ -2212,8 +2228,13 @@ func _commit_tentative_move() -> void:
 	if unit.has_method("mark_moved"):
 		unit.mark_moved()
 
-	var from_grid := Vector3(origin_cell.x, 0, origin_cell.y)
-	var to_grid := Vector3(dest_cell.x, 0, dest_cell.y)
+	var from_grid := Cells.to_grid(origin_cell)
+	var to_grid := Cells.to_grid(dest_cell)
+	# The walk already played when the move was staged; tell the animator the unit is
+	# home so unit_moved does not replay a glide from the origin.
+	var animator := _unit_animator()
+	if animator != null:
+		animator.sync_position(unit)
 	GameEvents.unit_moved.emit(unit, from_grid, to_grid)
 
 	# REPLAY: this is the ONE place a solo/hotseat move becomes committed board state, so it
@@ -2243,6 +2264,7 @@ func _revert_tentative_move() -> void:
 	var unit := _tentative_unit
 	var origin_cell := _tentative_origin_cell
 	var origin_world := _tentative_origin_world  # capture BEFORE clearing (which zeroes it)
+	var origin_facing := _tentative_origin_facing
 	_clear_tentative_state()
 
 	var board = CombatServices.board()
@@ -2254,6 +2276,13 @@ func _revert_tentative_move() -> void:
 		# No board (shouldn't happen for a staged tentative move): fall back to the
 		# remembered world position.
 		unit.global_position = origin_world
+	# Cut any walk still playing and put the model back on the (restored) unit.
+	var animator := _unit_animator()
+	if animator != null:
+		animator.stop_motion(unit)
+	# Undo also restores the facing the unit had before the staged walk.
+	if origin_facing != Vector2i.ZERO and unit.has_method("set_facing"):
+		unit.set_facing(origin_facing)
 
 	var tree = get_tree()
 	var visual_manager = null
@@ -2263,6 +2292,26 @@ func _revert_tentative_move() -> void:
 		visual_manager.update_all_unit_visuals()
 
 
+func _unit_animator() -> Node:
+	"""The UnitAnimator autoload (null in bare harnesses)."""
+	var tree := get_tree()
+	if tree == null or tree.root == null:
+		return null
+	var a := tree.root.get_node_or_null("UnitAnimator")
+	return a if a != null and a.has_method("walk_path") else null
+
+
+func _walk_unit(unit: Unit, route: Array[Vector3i]) -> void:
+	"""Animate [param unit]'s model along [param route] to where the unit now stands."""
+	var animator := _unit_animator()
+	if animator == null:
+		return
+	if route.size() >= 2:
+		animator.walk_path(unit, route)
+	else:
+		animator.stop_motion(unit)
+
+
 func _clear_tentative_state() -> void:
 	"""Drop all tentative-move bookkeeping (does NOT move the unit)."""
 	# The trap warning belonged to the staged move; it goes with it, on BOTH the commit and
@@ -2270,9 +2319,10 @@ func _clear_tentative_state() -> void:
 	_set_trap_warning(null)
 	_tentative_active = false
 	_tentative_unit = null
-	_tentative_origin_cell = Vector2i.ZERO
-	_tentative_dest_cell = Vector2i.ZERO
+	_tentative_origin_cell = Vector3i.ZERO
+	_tentative_dest_cell = Vector3i.ZERO
 	_tentative_origin_world = Vector3.ZERO
+	_tentative_origin_facing = Vector2i.ZERO
 
 
 func is_tentative_move_active() -> bool:
@@ -2309,21 +2359,22 @@ func _setup_move_system() -> void:
 	if GameEvents and not GameEvents.cursor_moved.is_connected(_on_cursor_moved_forecast):
 		GameEvents.cursor_moved.connect(_on_cursor_moved_forecast)
 
-	# Create the VIEW MOVES button. This is the golden-path entry to a unit's kit (the
-	# demoted per-unit Move/End Turn buttons live hidden in ActionsContainer -- see
-	# _ready) so it is promoted next to the header, not buried further down.
+	# The SKILLS command row: the entry to the unit's kit from the command list (the
+	# contextual action menu lists the same moves at the unit after a move).
 	moves_button = Button.new()
-	moves_button.text = "VIEW MOVES"
-	moves_button.custom_minimum_size = Vector2(0, 40)
+	moves_button.name = "MovesButton"
+	moves_button.text = "Skills"
+	moves_button.theme_type_variation = &"HudCommand"
+	moves_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	moves_button.focus_mode = Control.FOCUS_NONE
+	moves_button.tooltip_text = "Attack or use a skill: pick one of this unit's moves, then a target."
 	moves_button.pressed.connect(_on_moves_pressed)
 
-	var content_container := get_node_or_null("MarginContainer/ContentContainer")
-	if content_container:
-		content_container.add_child(moves_button)
-		# Right after the header's separator, i.e. as high as possible.
-		var header_separator := content_container.get_node_or_null("HSeparator")
-		if header_separator:
-			content_container.move_child(moves_button, header_separator.get_index() + 1)
+	# Into the command list, right after Move (Move / Skills / Wait / Info / Cancel).
+	if actions_container:
+		actions_container.add_child(moves_button)
+		if move_button and move_button.get_parent() == actions_container:
+			actions_container.move_child(moves_button, move_button.get_index() + 1)
 
 func _on_moves_pressed() -> void:
 	"""Handle Moves button press - list the selected unit's real moveset.
@@ -2388,6 +2439,10 @@ func _on_move_selected(slot: int) -> void:
 	# Compute every legal aim cell (within [min_range, max_range]) from the unit's
 	# current board cell and emit them as Vector3 grid coords for the visualizer.
 	var aim_cells := _compute_in_range_aim_cells(move)
+	# While aiming, the move's own red range replaces the threat fringe and path arrow.
+	GameEvents.attack_fringe_calculated.emit([])
+	_path_shown = false
+	GameEvents.path_preview_updated.emit([])
 	GameEvents.attack_range_calculated.emit(_cells_to_grid_vec3(aim_cells))
 
 	# Seed the forecast off the cursor's current tile, so if it already rests on an
@@ -2433,10 +2488,9 @@ func _on_action_menu_wait_chosen() -> void:
 	# NETWORKED (Phase 2): submit the staged move (if any) + WAIT_UNIT rather than committing
 	# locally; the applier finalizes both on every peer. See the reconciliation note above.
 	if _is_networked_match():
-		var nid: int = _net_id_of(unit)
-		if nid >= 0:
+		if GameModeManager.is_my_turn():
 			_net_submit_pending_move(unit)
-			NetSession.submit_intent(NetProtocol.make_wait_unit(nid))
+			GameModeManager.request_wait(unit)
 		_finish_command(unit)
 		return
 
@@ -2522,196 +2576,78 @@ func _flash_invalid_action() -> void:
 	if cursor and cursor.has_method("flash_invalid"):
 		cursor.flash_invalid()
 
-# --- Enemy danger-zone overlays (transient click channel + persistent T channel) ---
+# --- Enemy threat (danger zone) -----------------------------------------------
 
-func _set_transient_danger_enemy(enemy: Unit) -> void:
-	"""Show a TRANSIENT click-inspect danger overlay for [param enemy], replacing any
-	previous transient overlay. Cleared on the next click (see _clear_transient_danger).
-	Does NOT disturb the persistent T-toggled set. Computed only here (never per frame)."""
-	if enemy == null:
-		return
-	if _transient_danger_enemy == enemy:
-		return  # already the inspected enemy -- nothing to redraw
-	_clear_transient_danger()
-	var vis := _get_movement_visualizer()
-	if vis == null:
-		return
-	var cells: Array[Vector3] = _compute_enemy_threat_cells(enemy)
-	if cells.is_empty():
-		return
-	_transient_danger_enemy = enemy
-	if vis.has_method("set_danger_overlay"):
-		vis.set_danger_overlay(enemy.get_instance_id(), cells)
+func _danger_zone_overlay() -> Node:
+	"""The battle's DangerZoneOverlay (the ONE danger-zone implementation), or null."""
+	var tree := get_tree()
+	if tree == null:
+		return null
+	return tree.get_first_node_in_group(&"danger_zone_overlay")
 
-func _clear_transient_danger() -> void:
-	"""Erase the transient click-inspect overlay, if any. Idempotent. Leaves the enemy's
-	overlay UP when the persistent T set also holds it, so a transient click can never
-	clear a T overlay -- the two channels are independent."""
-	if _transient_danger_enemy == null:
-		return
-	var enemy := _transient_danger_enemy
-	_transient_danger_enemy = null
-	if enemy in _persistent_danger_enemies:
-		return  # persistent channel still owns this overlay -- keep it drawn
-	if not is_instance_valid(enemy):
-		return  # a freed enemy's overlay is cleared by _on_unit_eliminated_danger
-	var vis := _get_movement_visualizer()
-	if vis and vis.has_method("clear_danger_overlay"):
-		vis.clear_danger_overlay(enemy.get_instance_id())
+func _toggle_all_enemy_danger() -> void:
+	"""Toggle every hostile unit's danger zone (the danger_zone action's effect; used by
+	the touch Danger button)."""
+	var dz := _danger_zone_overlay()
+	if dz != null and dz.has_method("toggle"):
+		dz.toggle()
 
 func _compute_enemy_threat_cells(enemy: Unit) -> Array[Vector3]:
-	"""The reachable cells for an enemy (its danger zone), as Vector3(col,0,row) grid
-	coords -- the same MovementResolver flood a friendly unit uses, so the threat shown
-	is exactly where the enemy could actually go."""
-	if enemy == null or not enemy.has_character():
+	"""The cells [param enemy] threatens next turn -- everywhere it can move to plus every
+	cell its offensive moves could strike from there (ThreatResolver.unit_threat's "move"
+	and "attack" sets, the same flood the DangerZoneOverlay and the inspect fringe use) --
+	as Vector3(col, floor, row) grid coords.
+
+	FOG: threat is computed from VISIBLE enemies only. A danger zone drawn for a unit you
+	cannot see is a free map of where it is standing -- the overlay would out the ambush
+	the fog exists to hide -- so a hidden enemy yields an empty set (the overlay applies
+	the same rule)."""
+	if enemy == null or not is_instance_valid(enemy) or not enemy.has_character():
 		return []
-	# FOG: threat is computed from VISIBLE enemies only. A danger zone drawn for a unit you
-	# cannot see is a free map of where it is standing -- the overlay would out the ambush
-	# the fog exists to hide. Returning an empty set here covers BOTH channels at once (the
-	# T-key persistent sweep and the click-inspect transient), and _refresh_danger_overlays
-	# already treats an empty set as "clear this enemy's overlay", so a unit that walks into
-	# the mist loses its zone on the next turn boundary without any extra wiring.
 	if FogOfWarOverlay.unit_hidden(enemy):
 		return []
 	var board = CombatServices.board()
-	var profile = enemy.get_movement_profile()
-	if board == null or profile == null:
+	if board == null:
 		return []
-	var origin: Vector2i = board.cell_of(enemy)
-	var cells: Array[Vector2i] = MovementResolver.new().reachable_cells(origin, profile, board, enemy)
+	var threat: Dictionary = ThreatResolver.unit_threat(enemy, BoardSnapshot.of(board))
+	var seen := {}
+	var cells: Array[Vector3i] = []
+	for key in ["move", "attack"]:
+		for c in threat.get(key, []):
+			if not seen.has(c):
+				seen[c] = true
+				cells.append(c)
 	return _cells_to_grid_tiles(cells)
 
-func _toggle_all_enemy_danger() -> void:
-	"""The T hotkey (PERSISTENT mode): if the T set is up, clear it; otherwise light up
-	every living enemy's zone at once. The on/off decision reads ONLY the persistent set,
-	NOT the visualizer's has_any_danger_overlay -- a transient click-inspect overlay must
-	not make T think its own set is already shown (which would flip T to a clear)."""
-	var vis := _get_movement_visualizer()
-	if vis == null:
-		return
-	if not _persistent_danger_enemies.is_empty():
-		_clear_all_persistent_danger()
-		_sync_danger_zones_button()
-		return
-	for enemy in _all_enemy_units():
-		var cells: Array[Vector3] = _compute_enemy_threat_cells(enemy)
-		if cells.is_empty():
-			continue
-		if not (enemy in _persistent_danger_enemies):
-			_persistent_danger_enemies.append(enemy)
-		if vis.has_method("set_danger_overlay"):
-			vis.set_danger_overlay(enemy.get_instance_id(), cells)
-	_sync_danger_zones_button()
-
-func _clear_all_persistent_danger() -> void:
-	"""Turn off the T overlays. Clears each persistent enemy's overlay individually rather
-	than the visualizer's clear_all -- so a live TRANSIENT click-inspect overlay survives
-	T-off. If the inspected enemy is also in the T set, its overlay is kept (the transient
-	channel still owns it)."""
-	var vis := _get_movement_visualizer()
-	for enemy in _persistent_danger_enemies:
-		if enemy == null or not is_instance_valid(enemy):
-			continue
-		if enemy == _transient_danger_enemy:
-			continue  # keep -- the transient channel still wants this overlay
-		if vis and vis.has_method("clear_danger_overlay"):
-			vis.clear_danger_overlay(enemy.get_instance_id())
-	_persistent_danger_enemies.clear()
-
-func _refresh_danger_overlays() -> void:
-	"""Recompute both channels' overlays (positions changed on a turn boundary), dropping
-	any that died. Cheap: only the already-shown enemies, only on turn start."""
-	var vis := _get_movement_visualizer()
-	if vis == null:
-		return
-
-	# Persistent (T) set.
-	var still: Array[Unit] = []
-	for enemy in _persistent_danger_enemies:
-		if enemy == null or not is_instance_valid(enemy) or not enemy.is_alive():
-			if enemy != null and is_instance_valid(enemy) and vis.has_method("clear_danger_overlay"):
-				vis.clear_danger_overlay(enemy.get_instance_id())
-			continue
-		var cells: Array[Vector3] = _compute_enemy_threat_cells(enemy)
-		if cells.is_empty():
-			# Only clear if the transient channel isn't keeping this overlay alive.
-			if enemy != _transient_danger_enemy and vis.has_method("clear_danger_overlay"):
-				vis.clear_danger_overlay(enemy.get_instance_id())
-		else:
-			if vis.has_method("set_danger_overlay"):
-				vis.set_danger_overlay(enemy.get_instance_id(), cells)
-			still.append(enemy)
-	_persistent_danger_enemies = still
-	_sync_danger_zones_button()
-
-	# Transient (click-inspect) overlay: recompute the single inspected enemy, or drop it.
-	if _transient_danger_enemy != null:
-		var e := _transient_danger_enemy
-		if not is_instance_valid(e) or not e.is_alive():
-			_transient_danger_enemy = null
-		else:
-			var tcells: Array[Vector3] = _compute_enemy_threat_cells(e)
-			if tcells.is_empty():
-				_clear_transient_danger()
-			elif vis.has_method("set_danger_overlay"):
-				vis.set_danger_overlay(e.get_instance_id(), tcells)
-
 func _on_unit_eliminated_danger(unit: Unit, _eliminator: Unit) -> void:
-	"""A unit died: expire its danger overlay (both channels) so no stale threat band lingers."""
+	"""A unit died. Drop it as the SELECTION: selected_unit was previously only cleared on
+	an explicit deselect -- so killing the selected unit left the panel holding a
+	reference that is freed a frame later, and every subsequent _update_actions()
+	dereferenced it. Clearing at the source makes that whole class of error impossible
+	rather than merely guarded. (The danger zone itself refreshes on the death.)"""
 	if unit == null:
 		return
-	# ALSO drop it as the SELECTION. This is the only handler the panel has for a death, and
-	# selected_unit was previously only cleared on an explicit deselect -- so killing the
-	# selected unit left the panel holding a reference that is freed a frame later, and
-	# every subsequent _update_actions() dereferenced it. Clearing at the source is what
-	# makes that whole class of error impossible rather than merely guarded.
 	if unit == selected_unit:
 		selected_unit = null
-	if unit in _persistent_danger_enemies:
-		_persistent_danger_enemies.erase(unit)
-		_sync_danger_zones_button()
-	if unit == _transient_danger_enemy:
-		_transient_danger_enemy = null
-	var vis := _get_movement_visualizer()
-	if vis and vis.has_method("clear_danger_overlay"):
-		vis.clear_danger_overlay(unit.get_instance_id())
-
-func _on_turn_system_activated_danger(turn_system) -> void:
-	"""A new turn system became active -- hook its turn_started for danger refresh."""
-	_hook_turn_system_for_danger(turn_system)
-
-func _hook_turn_system_for_danger(turn_system) -> void:
-	if turn_system == null or not turn_system.has_signal("turn_started"):
-		return
-	if not turn_system.turn_started.is_connected(_on_turn_started_refresh_danger):
-		turn_system.turn_started.connect(_on_turn_started_refresh_danger)
-
-func _on_turn_started_refresh_danger(_who = null) -> void:
-	"""Turn boundary: recompute the toggled enemies' danger zones (they may have moved)."""
-	_refresh_danger_overlays()
-
-func _all_enemy_units() -> Array[Unit]:
-	"""Every living unit NOT owned by the current turn player -- the danger-zone set for
-	the T hotkey."""
-	var out: Array[Unit] = []
-	var me := _current_turn_player()
-	for u in _find_all_units_in_scene():
-		if u == null or not is_instance_valid(u) or not u.is_alive():
-			continue
-		var owner := u.get_owner_player()
-		if owner == null:
-			continue
-		if me != null and owner == me:
-			continue
-		out.append(u)
-	return out
+	if unit == _awaiting_net_move_unit:
+		_awaiting_net_move_unit = null
 
 # --- Unit cycling ------------------------------------------------------------
 
 func _cycle_to_next_commandable_unit() -> void:
-	"""Tab: select the NEXT un-acted, commandable friendly unit (wrap around), driving
-	the same cursor selection path a click uses so every downstream system just works.
+	"""Next Unit (touch): select the NEXT un-acted, commandable friendly unit (wrap
+	around), driving the same cursor selection path a click uses so every downstream
+	system just works. Prefers the board cursor's own cycle (the cycle_next action:
+	reading order, floor-aware, camera follow); falls back to the roster walk below.
 	Skipped while the action menu / targeting is up (handled by the caller)."""
+	var cursor_node := _get_board_cursor()
+	if cursor_node != null and cursor_node.has_method("cycle_ready_unit"):
+		var target = cursor_node.cycle_ready_unit(1)
+		if target != null and cursor_node.has_method("select_unit_external") \
+				and selected_unit != target:
+			cursor_node.select_unit_external(target)
+		if target != null:
+			return
 	var player := _current_turn_player()
 	if player == null or not _player_is_human(player):
 		return
@@ -2758,9 +2694,9 @@ func handle_move_target_selected(grid_pos: Vector3) -> void:
 		_cancel_move_targeting()
 		return
 
-	var origin: Vector2i = board.cell_of(selected_unit)
-	# Vector3(col, 0, row) grid coord -> Vector2i(col, row) board cell.
-	var aim := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var origin: Vector3i = board.cell_of(selected_unit)
+	# Vector3(col, floor, row) grid coord -> Vector3i(col, row, floor) board cell.
+	var aim := Cells.from_grid(grid_pos)
 
 	# Must be a legal aim point for this pattern (respects min/max range plus the
 	# unit's own range bonus -- see MoveResource.effective_max_range -- and the
@@ -2801,7 +2737,7 @@ func _await_ultimate_cutin(unit, move, slot: int) -> void:
 		await overlay.finished
 
 
-func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) -> void:
+func _execute_move_on_target(aim_cell: Vector3i, move: MoveResource, slot: int) -> void:
 	"""Resolve the selected move at aim_cell through the unit's perform_move
 	(-> MoveExecutor). On success: record the use for cooldown/charges, print the
 	resolved events, consume the unit's action, and clear targeting."""
@@ -2827,36 +2763,32 @@ func _execute_move_on_target(aim_cell: Vector2i, move: MoveResource, slot: int) 
 		_update_actions()
 		return
 
-	# NETWORKED (Phase 2): route the attack/cast as authoritative commands. First submit the
-	# staged move (if any) as MOVE_UNIT, then the cast as CAST_MOVE(unit, slot, aim_cell). Both
-	# resolve through the CommandApplier -> perform_move on every peer (host stamps the per-cast
-	# rng_seed so accuracy/crit rolls match). No local perform_move here -- apply is the ONE
-	# mutation point. Remote peers see the cast purely through apply + the effect-layer events.
+	# Network match: the attack / ability is an intent. A staged move goes first as its own
+	# MOVE intent, then USE_MOVE(unit, slot, aim_cell); the host validates both and every
+	# peer resolves them with the same seeded RNG when accepted. No local perform_move --
+	# the accepted action is the ONE mutation point.
 	#
-	# ULTIMATE CUT-IN (MP): deliberately NOT played on this submit path -- it plays where the
-	# cast APPLIES, so every peer (submitter included) flashes it in sync and nobody flashes a
-	# cast the server then refuses. That apply site is CommandApplier._announce_ultimate_cast
-	# (the CAST_MOVE handler), which emits GameEvents.ultimate_casting for the overlay. Playing
-	# it here TOO would double-flash for the local caster.
+	# ULTIMATE CUT-IN (network): deliberately NOT played on this submit path -- it plays
+	# where the cast APPLIES, so every peer (submitter included) flashes it in sync and
+	# nobody flashes a cast the host then refuses (GameEvents.ultimate_casting from the
+	# net apply path). Playing it here TOO would double-flash for the local caster.
 	if _is_networked_match():
 		var acting := selected_unit
-		var nid: int = _net_id_of(acting)
-		if nid >= 0:
+		var submitted := false
+		if GameModeManager.is_my_turn():
 			_net_submit_pending_move(acting)
-			NetSession.submit_intent(NetProtocol.make_cast_move(nid, slot, aim_cell))
+			submitted = GameModeManager.request_use_move(acting, slot, aim_cell)
 		_cancel_move_targeting()
 		_update_actions()
-		if nid >= 0:
+		if submitted:
 			_finish_command(acting)
 		return
 
 	# ULTIMATE CUT-IN: if this cast is an ultimate (the 4th moveset slot, or a move flagged
 	# is_ultimate -- see MoveResource.is_ultimate_move), sweep the full-screen flash across
 	# FIRST and hold until it finishes, so the drama precedes the hit. Local / single-player /
-	# hotseat path only: the networked branch above returned already, and in a networked match
-	# the cast resolves apply-side in CommandApplier._announce_ultimate_cast, which is where the
-	# emit lives so every peer sees the flash exactly once. Headless / no overlay -> the helper
-	# emits and returns without awaiting, so nothing hangs.
+	# hotseat path only (the networked branch above returned already). Headless / no overlay
+	# -> the helper emits and returns without awaiting, so nothing hangs.
 	var casting_unit: Unit = selected_unit
 	await _await_ultimate_cutin(casting_unit, move, slot)
 	# The brief await can be interrupted by a deselect / reselection (turn end, click-away,
@@ -2946,8 +2878,13 @@ func _cancel_move_targeting() -> void:
 
 	It intentionally does NOT touch selected_unit / the action panel; callers that
 	also want to refresh or drop selection do that around this call."""
+	var was_targeting := is_targeting_move()
 	move_mode = false
 	selected_move_index = -1
+	_aoe_preview_active = false
+	# Back out of aiming with the blue range still up: bring its fringe back.
+	if was_targeting and selected_unit != null and not movement_range_tiles.is_empty() and not _fringe_grid.is_empty():
+		GameEvents.attack_fringe_calculated.emit(_fringe_grid)
 	# Clears both the attack-range and AoE-preview overlay meshes (the visualizer's
 	# _on_targeting_cleared wipes both dictionaries). Covers cancel via BACK/ESC/
 	# right-click AND move resolution, since every path funnels through here.
@@ -2981,8 +2918,10 @@ func _on_cursor_moved_forecast(tile_position: Vector3) -> void:
 	feel as the player sweeps the cursor. Purely additive: reads only."""
 	_last_cursor_tile = tile_position
 	_refresh_move_forecast(tile_position)
-	# Same sweep, the movement half: warn when the route to this cell springs a trap.
+	# Same sweep, the movement half: warn when the route to this cell springs a trap, and
+	# draw the FE path arrow to it.
 	_refresh_trap_warning(tile_position)
+	_refresh_path_preview(tile_position)
 
 func _refresh_move_forecast(grid_pos: Vector3) -> void:
 	"""Show the forecast for the current move against an eligible ENEMY at grid_pos
@@ -3001,6 +2940,8 @@ func _refresh_move_forecast(grid_pos: Vector3) -> void:
 	# damage this aim would deal (the forecast card only covers the single enemy at
 	# the cursor). Self-clears when the aim is illegal or off any unit.
 	_refresh_overworld_damage_preview(grid_pos)
+	# Live AoE footprint while aiming (not only after committing the attack).
+	_refresh_aoe_preview(grid_pos)
 
 	if combat_forecast_panel == null:
 		return
@@ -3023,12 +2964,12 @@ func _refresh_move_forecast(grid_pos: Vector3) -> void:
 		combat_forecast_panel.hide_forecast()
 		return
 
-	var origin: Vector2i = board.cell_of(selected_unit)
-	# Vector3(col, 0, row) grid coord -> Vector2i(col, row) board cell.
-	var aim := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var origin: Vector3i = board.cell_of(selected_unit)
+	# Vector3(col, floor, row) grid coord -> Vector3i(col, row, floor) board cell.
+	var aim := Cells.from_grid(grid_pos)
 
 	# Forecast only a legal aim that lands on an enemy the caster may attack.
-	if not move.can_aim_at(origin, aim, selected_unit):
+	if not move.can_aim_at(origin, aim, selected_unit, board):
 		_forecast_target_enemy = null
 		combat_forecast_panel.hide_forecast()
 		return
@@ -3046,7 +2987,33 @@ func _refresh_move_forecast(grid_pos: Vector3) -> void:
 		return
 
 	_forecast_target_enemy = enemy
-	combat_forecast_panel.show_forecast(selected_unit, enemy, move)
+	combat_forecast_panel.show_forecast(selected_unit, enemy, move, board)
+
+# True while this panel has an AoE footprint on the board from the live aim preview,
+# so an illegal aim clears it exactly once instead of re-emitting every cursor step.
+var _aoe_preview_active: bool = false
+
+func _refresh_aoe_preview(grid_pos: Vector3) -> void:
+	"""While aiming, paint the full area the move would hit at the cursor cell
+	(GameEvents.aoe_preview_calculated) whenever that aim is LEGAL -- the same
+	can_target test the executor runs -- and clear it once the aim turns illegal.
+	Targeting exit clears it via _cancel_move_targeting (targeting_cleared)."""
+	var cells: Array = []
+	if is_targeting_move() and selected_unit:
+		var move: MoveResource = selected_unit.get_move(selected_move_index)
+		var board = CombatServices.board()
+		if move != null and move.targeting != null and board != null:
+			var origin: Vector3i = board.cell_of(selected_unit)
+			var aim := Cells.from_grid(grid_pos)
+			if move.can_target(origin, aim, selected_unit, board):
+				cells = _cells_to_grid_vec3(move.targeting_for(selected_unit).resolve_cells(origin, aim))
+	if cells.is_empty():
+		if _aoe_preview_active:
+			_aoe_preview_active = false
+			GameEvents.aoe_preview_calculated.emit([])
+		return
+	_aoe_preview_active = true
+	GameEvents.aoe_preview_calculated.emit(cells)
 
 func _refresh_overworld_damage_preview(grid_pos: Vector3) -> void:
 	"""Blink the world-space health bar of EVERY enemy this aim would hit with the
@@ -3073,8 +3040,8 @@ func _refresh_overworld_damage_preview(grid_pos: Vector3) -> void:
 		vm.clear_damage_previews()
 		return
 
-	var origin: Vector2i = board.cell_of(selected_unit)
-	var aim := Vector2i(int(round(grid_pos.x)), int(round(grid_pos.z)))
+	var origin: Vector3i = board.cell_of(selected_unit)
+	var aim := Cells.from_grid(grid_pos)
 	# Only preview a legal aim (respects range + pattern constraints, same test the
 	# executor runs), so bands never light up on a cell the move can't actually reach.
 	if not move.can_target(origin, aim, selected_unit, board):
@@ -3095,7 +3062,7 @@ func _refresh_overworld_damage_preview(grid_pos: Vector3) -> void:
 				previews[occupant] = dmg
 	vm.preview_damage(previews)
 
-func _first_enemy_at(board, cell: Vector2i):
+func _first_enemy_at(board, cell: Vector3i):
 	"""First occupant of `cell` that is an enemy of selected_unit (per the shared
 	BoardAdapter), else null. Matches how targeting resolves units at a cell."""
 	var occupants: Array = board.units_at(cell)
@@ -3108,7 +3075,7 @@ func _first_enemy_at(board, cell: Vector2i):
 
 # --- Move targeting helpers -------------------------------------------------
 
-func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector2i]:
+func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector3i]:
 	"""Every legal aim cell for [param move] from the unit's current board cell,
 	i.e. cells whose Manhattan distance is within [min_range, effective max range]
 	AND that satisfy the pattern's board constraints (an empty landing cell beside
@@ -3120,8 +3087,11 @@ func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector2i]:
 	a cell the executor then rejects, or hide one it would allow. can_target rather
 	than can_aim_at for the same reason: it is the check the executor runs, and the
 	live board is right here to answer it. A move with no board constraints is
-	unaffected -- the two agree cell for cell."""
-	var cells: Array[Vector2i] = []
+	unaffected -- the two agree cell for cell.
+
+	MULTI-FLOOR: sweeps every floor of the board (the reach shrinks by the floor
+	difference, and grows by the high-ground bonus when aiming down)."""
+	var cells: Array[Vector3i] = []
 	if not selected_unit or move == null or move.targeting == null:
 		return cells
 
@@ -3129,22 +3099,26 @@ func _compute_in_range_aim_cells(move: MoveResource) -> Array[Vector2i]:
 	if board == null:
 		return cells
 
-	var origin: Vector2i = board.cell_of(selected_unit)
-	var max_r: int = move.effective_max_range(selected_unit)
-	for dx in range(-max_r, max_r + 1):
-		for dy in range(-max_r, max_r + 1):
-			var aim := origin + Vector2i(dx, dy)
-			if move.can_target(origin, aim, selected_unit, board):
-				cells.append(aim)
+	var origin: Vector3i = board.cell_of(selected_unit)
+	var max_r: int = move.effective_max_range(selected_unit) + Elevation.HIGH_GROUND_RANGE_BONUS
+	var floors: int = board.floor_count() if board.has_method("floor_count") else 1
+	for f in range(floors):
+		for dx in range(-max_r, max_r + 1):
+			for dy in range(-max_r, max_r + 1):
+				var aim := Vector3i(origin.x + dx, origin.y + dy, f)
+				if f > 0 and board.has_method("has_tile") and not board.has_tile(aim):
+					continue  # never offer an aim in the air (upper floors are sparse)
+				if move.can_target(origin, aim, selected_unit, board):
+					cells.append(aim)
 	return cells
 
-func _cells_to_grid_vec3(cells: Array[Vector2i]) -> Array:
-	"""Vector2i(col, row) board cells -> Vector3(col, 0, row) grid coords, the form
-	GameEvents.attack_range_calculated / aoe_preview_calculated (and the
+func _cells_to_grid_vec3(cells: Array[Vector3i]) -> Array:
+	"""Vector3i(col, row, floor) board cells -> Vector3(col, floor, row) grid coords,
+	the form GameEvents.attack_range_calculated / aoe_preview_calculated (and the
 	TargetingVisualizer) expect."""
 	var out: Array = []
 	for c in cells:
-		out.append(Vector3(c.x, 0, c.y))
+		out.append(Cells.to_grid(c))
 	return out
 
 func _move_requires_unit_target(move: MoveResource) -> bool:
@@ -3163,7 +3137,7 @@ func _move_requires_unit_target(move: MoveResource) -> bool:
 		_:
 			return false
 
-func _has_eligible_unit_at(board, move: MoveResource, aim: Vector2i) -> bool:
+func _has_eligible_unit_at(board, move: MoveResource, aim: Vector3i) -> bool:
 	"""True when the aim cell holds a unit the move may legally target, per its
 	TargetKind (allegiance checked through the shared BoardAdapter)."""
 	var occupants: Array = board.units_at(aim)
@@ -3200,16 +3174,18 @@ func _update_moves_button_availability() -> void:
 	# Legacy (non-character) units have no authored MoveResource moveset.
 	if not selected_unit.has_character():
 		moves_button.disabled = true
-		moves_button.text = "MOVES (None)"
+		_set_command(moves_button, "Skills", &"", "None")
 		return
 
 	var moveset: Array[MoveResource] = selected_unit.get_moveset()
 	var controller = selected_unit.get_moveset_controller()
 
 	var usable := 0
+	var total := 0
 	for move in moveset:
 		if move == null:
 			continue
+		total += 1
 		if controller and controller.has_method("can_use"):
 			if controller.can_use(move):
 				usable += 1
@@ -3218,12 +3194,14 @@ func _update_moves_button_availability() -> void:
 
 	# READ-ONLY VIEW: a unit the local human may NOT command (enemy / AI / not-your-turn)
 	# can still open its move list to READ each move's details. Keep the button enabled
-	# whenever the unit HAS a moveset and relabel it VIEW MOVES; clicking opens the popup
-	# in view-only mode (no targeting, no execution). Cooldown/uses do not matter for
-	# reading, so availability here is purely "does it have moves to show".
+	# whenever the unit HAS a moveset; clicking opens the popup in view-only mode (no
+	# targeting, no execution). Cooldown/uses do not matter for reading.
 	if not _human_may_command(selected_unit):
 		moves_button.disabled = moveset.is_empty()
-		moves_button.text = "MOVES (None)" if moveset.is_empty() else "VIEW MOVES"
+		if moveset.is_empty():
+			_set_command(moves_button, "Skills", &"", "None")
+		else:
+			_set_command(moves_button, "Skills", &"", "View %d" % total, ConquestTheme.TEXT_DIM)
 		return
 
 	var has_action := true
@@ -3233,8 +3211,10 @@ func _update_moves_button_availability() -> void:
 	moves_button.disabled = usable == 0 or not has_action
 
 	if moveset.is_empty():
-		moves_button.text = "MOVES (None)"
+		_set_command(moves_button, "Skills", &"", "None")
+	elif not has_action:
+		_set_command(moves_button, "Skills", &"", "Done")
 	elif usable == 0:
-		moves_button.text = "MOVES (All on cooldown)"
+		_set_command(moves_button, "Skills", &"", "Cooldown")
 	else:
-		moves_button.text = "MOVES (" + str(usable) + " available)"
+		_set_command(moves_button, "Skills", &"", "%d/%d ready" % [usable, total], ConquestTheme.TEXT_DIM)

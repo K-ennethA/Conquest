@@ -101,6 +101,18 @@ func register_unit(unit: Unit) -> void:
 	call_deferred("_kickoff_if_idle")
 
 
+## A unit leaving the battle (death) must also leave the turn QUEUE: the base class
+## only drops it from registered_units, so a unit killed before its turn came up
+## stayed queued as a freed reference and the next queue read (the Turn Queue HUD's
+## preview, or advancing onto it) crashed the engine. Runs inside the unit's
+## unit_died emission, while the reference is still valid to compare.
+func unregister_unit(unit: Unit) -> void:
+	super.unregister_unit(unit)
+	if unit != current_acting_unit:
+		turn_queue.erase(unit)
+	units_acted_this_round.erase(unit)
+
+
 func _kickoff_if_idle() -> void:
 	_kickoff_queued = false
 	# Re-check: the system may have been ended, or something may have started a turn in

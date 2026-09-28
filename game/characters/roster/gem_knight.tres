@@ -12,6 +12,7 @@
 [ext_resource type="Resource" path="res://game/abilities/reprisal.tres" id="10_reprisal"]
 [ext_resource type="Resource" path="res://game/movement/profiles/ground_standard.tres" id="11_mvprof"]
 [ext_resource type="Resource" path="res://game/abilities/crystalline_ward_initial.tres" id="12_ward_open"]
+[ext_resource type="Resource" path="res://game/abilities/sand_veil.tres" id="20_sandveil"]
 
 [resource]
 script = ExtResource("1_char")
@@ -29,6 +30,5 @@ base_speed = 8
 base_movement = 4
 attack_range = 2
 movement_profile = ExtResource("11_mvprof")
-model_yaw_deg = 180.0
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_bulwark"), ExtResource("5_sling"), ExtResource("6_trap"), ExtResource("7_lance")])
-abilities = Array[ExtResource("8_abres")]([ExtResource("12_ward_open"), ExtResource("9_ward"), ExtResource("10_reprisal")])
+abilities = Array[ExtResource("8_abres")]([ExtResource("12_ward_open"), ExtResource("9_ward"), ExtResource("10_reprisal"), ExtResource("20_sandveil")])

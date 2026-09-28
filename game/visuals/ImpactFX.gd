@@ -8,10 +8,10 @@ class_name ImpactFX
 ## content pipeline.
 ##
 ## MOUNTING: a per-battle [Node3D] added to the 3D scene root by
-## [code]GameWorldManager._setup_impact_fx[/code], beside [DamageNumbers] and
+## [code]GameWorldManager._setup_impact_fx[/code], beside [FloatingCombatText] and
 ## [TileEffectOverlay]. Freed and recreated on the next map load.
 ##
-## Same three rules as [DamageNumbers], and for the same reasons:
+## Same three rules the floating-number layer ([FloatingCombatText]) keeps, for the same reasons:
 ##  1. NOTHING here registers with [UnitAnimator]'s busy registry. A cosmetic 0.4s spark
 ##     must never be able to stall the AI's next action.
 ##  2. The victim's position is captured IMMEDIATELY. `unit_eliminated` is emitted while
@@ -249,7 +249,7 @@ func _element_color_of(attacker) -> Color:
 
 # --- GameSettings bridge -----------------------------------------------------
 #
-# Mirrors UnitAnimator / DamageNumbers: optional autoload, absent one behaves as
+# Mirrors UnitAnimator: optional autoload, absent one behaves as
 # "animations ON at scale 1.0".
 
 func _game_settings() -> Node:

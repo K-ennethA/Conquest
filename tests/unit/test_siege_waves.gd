@@ -32,11 +32,11 @@ class FakeUnit extends RefCounted:
 class FakeBoard extends RefCounted:
 	var cells: Dictionary = {}
 
-	func place(unit, cell: Vector2i) -> void:
-		cells[unit] = cell
+	func place(unit, cell) -> void:
+		cells[unit] = Cells.from_variant(cell)
 
-	func cell_of(unit) -> Vector2i:
-		return cells.get(unit, Vector2i(-999, -999))
+	func cell_of(unit) -> Vector3i:
+		return cells.get(unit, Vector3i(-999, -999, 0))
 
 	func all_units() -> Array:
 		return cells.keys()
@@ -53,7 +53,10 @@ class FakeSpawner extends RefCounted:
 		board = p_board
 
 	func spawn_and_adopt(spawn_data, player_id, hint = 0):
-		var cell: Vector2i = spawn_data.get("position", Vector2i(-1, -1))
+		# The spawn payload may carry the cell as a Vector3i, or map-style as a Vector2i
+		# "position" plus a separate "floor": normalise either to a Vector3i cell.
+		var cell: Vector3i = Cells.from_variant(spawn_data.get("position", Vector2i(-1, -1)),
+			int(spawn_data.get("floor", 0)))
 		calls.append({
 			"cell": cell,
 			"player_id": player_id,
@@ -83,18 +86,36 @@ class FakeMap extends RefCounted:
 
 # --- Fixture -----------------------------------------------------------------
 
-const LANE_A: Array = [Vector2i(1, 1), Vector2i(5, 1), Vector2i(9, 1)]
-const LANE_B: Array = [Vector2i(1, 7), Vector2i(5, 7), Vector2i(9, 7)]
-const P0_BASE := Vector2i(0, 0)
-const P1_BASE := Vector2i(10, 10)
+const LANE_A: Array = [Vector3i(1, 1, 0), Vector3i(5, 1, 0), Vector3i(9, 1, 0)]
+const LANE_B: Array = [Vector3i(1, 7, 0), Vector3i(5, 7, 0), Vector3i(9, 7, 0)]
+const P0_BASE := Vector3i(0, 0, 0)
+const P1_BASE := Vector3i(10, 10, 0)
+
+
+## The fixture cells above are gameplay cells ([Vector3i]); what a MapResource AUTHORS is the
+## flat (col, row) map position ([Vector2i]). Convert on the way into the fake map.
+static func _authored(cells: Array) -> Array:
+	var out: Array = []
+	for c in cells:
+		out.append(Cells.flat(c))
+	return out
+
+
+## Any cell list the controller hands back, normalised to [Vector3i] so the assertion does not
+## depend on which cell type the controller stores.
+static func _cells(raw: Array) -> Array:
+	var out: Array = []
+	for c in raw:
+		out.append(Cells.from_variant(c))
+	return out
 
 
 func _make_map(two_lanes: bool = false) -> FakeMap:
 	var m := FakeMap.new()
-	m.lanes = [LANE_A.duplicate()]
+	m.lanes = [_authored(LANE_A)]
 	if two_lanes:
-		m.lanes.append(LANE_B.duplicate())
-	m.base_cells = {0: P0_BASE, 1: P1_BASE}
+		m.lanes.append(_authored(LANE_B))
+	m.base_cells = {0: Cells.flat(P0_BASE), 1: Cells.flat(P1_BASE)}
 	return m
 
 
@@ -262,11 +283,11 @@ func test_a_spawned_creep_carries_its_lane_its_aggro_and_both_marks() -> void:
 	assert_true(CaptureBase.is_creep(p0_creep), "a wave creep carries the creep mark")
 	assert_true(BotTurnDriver.is_ai_driven(p0_creep),
 		"and the AI-driven mark, which is what makes the driver act it on its owner's turn")
-	assert_eq(BotController.march_lane(p0_creep), LANE_A,
+	assert_eq(_cells(BotController.march_lane(p0_creep)), LANE_A,
 		"player 0's creep walks the lane as authored")
 	var reversed: Array = LANE_A.duplicate()
 	reversed.reverse()
-	assert_eq(BotController.march_lane(p1_creep), reversed,
+	assert_eq(_cells(BotController.march_lane(p1_creep)), reversed,
 		"player 1's walks it backwards, so both sides push toward the other's base")
 	assert_eq(int(p0_creep.get_meta(BotController.MARCH_AGGRO_META)), 3,
 		"the ruleset's aggro radius is stamped on the creep the planner reads")
@@ -450,7 +471,7 @@ func test_a_side_with_no_base_cell_never_queues_a_respawn() -> void:
 	var rs := _make_ruleset()
 	rs.creeps_per_lane = 0
 	var map := _make_map()
-	map.base_cells = {0: P0_BASE}   # player 1 has nowhere to come back to
+	map.base_cells = {0: Cells.flat(P0_BASE)}   # player 1 has nowhere to come back to
 	var c := _make_controller(map, rs, spawner, board)
 
 	c.observe_round(1)

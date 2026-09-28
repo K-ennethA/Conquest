@@ -80,16 +80,16 @@ class MockBoard:
 	var placements: Array = []
 	var blocked: Dictionary = {}
 	var bounds: Rect2i = Rect2i(-20, -20, 40, 40)
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func block(cell: Vector2i) -> void:
+	func block(cell: Vector3i) -> void:
 		blocked[cell] = true
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -104,13 +104,13 @@ class MockBoard:
 		for p in placements:
 			out.append(p.unit)
 		return out
-	func move_unit(unit, to_cell: Vector2i) -> void:
+	func move_unit(unit, to_cell: Vector3i) -> void:
 		for p in placements:
 			if p.unit == unit:
 				p.cell = to_cell
-	func in_bounds(cell: Vector2i) -> bool:
-		return bounds.has_point(cell)
-	func is_blocked(cell: Vector2i) -> bool:
+	func in_bounds(cell: Vector3i) -> bool:
+		return cell.z == 0 and bounds.has_point(Vector2i(cell.x, cell.y))
+	func is_blocked(cell: Vector3i) -> bool:
 		return blocked.has(cell)
 
 
@@ -133,9 +133,9 @@ func _controller_for(unit) -> StatusController:
 
 
 ## Cast the dash from [param caster] toward [param aim].
-func _cast_dash(caster, board, aim: Vector2i, bus) -> MoveContext:
+func _cast_dash(caster, board, aim: Vector3i, bus) -> MoveContext:
 	var move := _shadow_dash()
-	var ctx := MoveContext.new(caster, board, move, aim, [aim] as Array[Vector2i])
+	var ctx := MoveContext.new(caster, board, move, aim, [aim] as Array[Vector3i])
 	ctx.event_bus = bus
 	for effect in move.effects:
 		effect.apply(ctx)
@@ -149,18 +149,18 @@ func _cast_dash(caster, board, aim: Vector2i, bus) -> MoveContext:
 func test_a_dash_runs_through_enemies_and_lands_on_the_first_free_cell():
 	var caster := StatusUnit.new(0, { "magic": 10 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
+	board.place(caster, Vector3i(0, 0, 0))
 	var victims: Array = []
 	for x in [1, 2]:
 		var e := StatusUnit.new(1, { "health": 100 })
-		board.place(e, Vector2i(x, 0))
+		board.place(e, Vector3i(x, 0, 0))
 		victims.append(e)
 	_controller_for(caster)
 	var bus := MockBus.new()
 
-	_cast_dash(caster, board, Vector2i(3, 0), bus)
+	_cast_dash(caster, board, Vector3i(3, 0, 0), bus)
 
-	assert_eq(board.cell_of(caster), Vector2i(3, 0),
+	assert_eq(board.cell_of(caster), Vector3i(3, 0, 0),
 		"the caster comes to rest on the first free cell beyond the last enemy")
 	# power 10 + magic 10 = 20 raw, mitigated by 0 magic defense.
 	for v in victims:
@@ -170,18 +170,18 @@ func test_a_dash_runs_through_enemies_and_lands_on_the_first_free_cell():
 func test_a_dash_caps_at_the_authored_pierce_count():
 	var caster := StatusUnit.new(0, { "magic": 10 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
+	board.place(caster, Vector3i(0, 0, 0))
 	var line: Array = []
 	for x in [1, 2, 3, 4]:
 		var e := StatusUnit.new(1, { "health": 100 })
-		board.place(e, Vector2i(x, 0))
+		board.place(e, Vector3i(x, 0, 0))
 		line.append(e)
 	_controller_for(caster)
 	var bus := MockBus.new()
 
-	_cast_dash(caster, board, Vector2i(2, 0), bus)
+	_cast_dash(caster, board, Vector3i(2, 0, 0), bus)
 
-	assert_eq(board.cell_of(caster), Vector2i(0, 0),
+	assert_eq(board.cell_of(caster), Vector3i(0, 0, 0),
 		"a FOURTH body in the way stops the charge dead -- nobody moves")
 	for e in line:
 		assert_eq(e.hp, 100, "and a refused dash deals no damage at all")
@@ -191,15 +191,15 @@ func test_a_dash_refuses_cleanly_when_there_is_nowhere_to_land():
 	var caster := StatusUnit.new(0, { "magic": 10 })
 	var enemy := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))
-	board.block(Vector2i(2, 0))   # a wall right behind the enemy
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(1, 0, 0))
+	board.block(Vector3i(2, 0, 0))   # a wall right behind the enemy
 	_controller_for(caster)
 	var bus := MockBus.new()
 
-	var ctx := _cast_dash(caster, board, Vector2i(1, 0), bus)
+	var ctx := _cast_dash(caster, board, Vector3i(1, 0, 0), bus)
 
-	assert_eq(board.cell_of(caster), Vector2i(0, 0), "the caster does not move")
+	assert_eq(board.cell_of(caster), Vector3i(0, 0, 0), "the caster does not move")
 	assert_eq(enemy.hp, 100, "and nothing is damaged")
 	var refusal := {}
 	for e in ctx.results:
@@ -215,15 +215,15 @@ func test_a_dash_will_not_run_through_its_own_side():
 	var ally := StatusUnit.new(0, { "health": 100 })
 	var enemy := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(ally, Vector2i(1, 0))
-	board.place(enemy, Vector2i(2, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(ally, Vector3i(1, 0, 0))
+	board.place(enemy, Vector3i(2, 0, 0))
 	_controller_for(caster)
 	var bus := MockBus.new()
 
-	var ctx := _cast_dash(caster, board, Vector2i(2, 0), bus)
+	var ctx := _cast_dash(caster, board, Vector3i(2, 0, 0), bus)
 
-	assert_eq(board.cell_of(caster), Vector2i(0, 0), "an ally in the lane blocks the charge")
+	assert_eq(board.cell_of(caster), Vector3i(0, 0, 0), "an ally in the lane blocks the charge")
 	assert_eq(ally.hp, 100, "the ally is never damaged")
 	assert_eq(enemy.hp, 100, "and the enemy behind it is never reached")
 	var refusal := {}
@@ -239,14 +239,14 @@ func test_a_dash_crosses_open_ground_to_reach_the_first_enemy():
 	var caster := StatusUnit.new(0, { "magic": 10 })
 	var enemy := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(enemy, Vector2i(3, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(3, 0, 0))
 	_controller_for(caster)
 	var bus := MockBus.new()
 
-	_cast_dash(caster, board, Vector2i(2, 0), bus)
+	_cast_dash(caster, board, Vector3i(2, 0, 0), bus)
 
-	assert_eq(board.cell_of(caster), Vector2i(4, 0), "it lands past the enemy it found")
+	assert_eq(board.cell_of(caster), Vector3i(4, 0, 0), "it lands past the enemy it found")
 	assert_eq(enemy.hp, 80, "having run through it on the way")
 
 
@@ -257,15 +257,15 @@ func test_a_dash_resolves_identically_when_replayed():
 	for _i in range(2):
 		var caster := StatusUnit.new(0, { "magic": 10 })
 		var board := MockBoard.new()
-		board.place(caster, Vector2i(0, 0))
+		board.place(caster, Vector3i(0, 0, 0))
 		var hps: Array = []
 		var mobs: Array = []
 		for x in [1, 2]:
 			var e := StatusUnit.new(1, { "health": 100, "magic_defense": x })
-			board.place(e, Vector2i(x, 0))
+			board.place(e, Vector3i(x, 0, 0))
 			mobs.append(e)
 		_controller_for(caster)
-		_cast_dash(caster, board, Vector2i(3, 0), MockBus.new())
+		_cast_dash(caster, board, Vector3i(3, 0, 0), MockBus.new())
 		for m in mobs:
 			hps.append(m.hp)
 		runs.append([board.cell_of(caster), hps])
@@ -281,12 +281,12 @@ func test_the_dash_grants_canto_on_a_shortened_leash():
 	var caster := StatusUnit.new(0, { "magic": 10 })
 	var enemy := StatusUnit.new(1, { "health": 100 })
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
-	board.place(enemy, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(enemy, Vector3i(1, 0, 0))
 	var controller := _controller_for(caster)
 	var bus := MockBus.new()
 
-	_cast_dash(caster, board, Vector2i(1, 0), bus)
+	_cast_dash(caster, board, Vector3i(1, 0, 0), bus)
 
 	assert_true(controller.has_status(&"void_surge"), "the dash leaves the caster surging")
 	assert_eq(caster.canto_grants, 1,
@@ -302,7 +302,7 @@ func test_the_void_surge_never_touches_the_arena_action_budget():
 	# the canto grant must not reach for it -- if it did, the unit could strike again.
 	var caster := StatusUnit.new(0, {})
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
+	board.place(caster, Vector3i(0, 0, 0))
 	var controller := _controller_for(caster)
 
 	controller.add_status(_void_surge())
@@ -315,7 +315,7 @@ func test_the_void_surge_never_touches_the_arena_action_budget():
 func test_the_void_surge_hands_the_stride_back_when_it_expires():
 	var caster := StatusUnit.new(0, {})
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
+	board.place(caster, Vector3i(0, 0, 0))
 	var controller := _controller_for(caster)
 
 	controller.add_status(_void_surge())
@@ -333,7 +333,7 @@ func test_the_void_surge_refreshes_and_never_stacks():
 	# slow -- and expiry must then return exactly what was taken, once.
 	var caster := StatusUnit.new(0, {})
 	var board := MockBoard.new()
-	board.place(caster, Vector2i(0, 0))
+	board.place(caster, Vector3i(0, 0, 0))
 	var controller := _controller_for(caster)
 
 	controller.add_status(_void_surge())

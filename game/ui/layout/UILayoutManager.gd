@@ -107,7 +107,7 @@ var battle_log: BattleLog = null
 # Upper-centre action banner ("Eldroot used Forest Barrage!") that flashes when any unit
 # acts, so the enemy/AI turn is legible before per-move VFX exist. Its own high CanvasLayer.
 var action_announcer: ActionAnnouncer = null
-# Brief amber notice banner for NETWORK feedback the player would otherwise never see --
+# Brief notice banner for NETWORK feedback the player would otherwise never see --
 # today, a command the server refused (NetSession.intent_rejected). Its own CanvasLayer,
 # above the action banner; self-wires to the session and dismisses itself.
 var net_toast: NetToast = null
@@ -152,6 +152,13 @@ const SIEGE_FEEDBACK_SCRIPT = preload("res://game/ui/hud/SiegeFeedback.gd")
 # separation -- so every other mode's left column is untouched, to the pixel. Its 24px claim
 # and the arithmetic behind it are documented on the class.
 var siege_feedback: Control = null
+# Fire-Emblem MAP MENU (Units / Objective / Encyclopedia / Settings / End Turn / Quit),
+# the Esc menu on the local human's turn -- its Quit row hands over to the PauseMenu, which
+# owns every way of leaving a battle. The weather chip rides in the phase banner's info row
+# (traditional turns) or under the Speed-First queue. The objective line is the
+# ObjectiveBanner row above (the ONE objective widget).
+var map_menu: MapMenu = null
+var weather_chip: Control = null
 
 func _ready() -> void:
 	# CRITICAL: Set mouse filter to IGNORE so clicks pass through to game area
@@ -166,11 +173,11 @@ func _ready() -> void:
 	_update_layout_for_turn_system()
 
 	# Build the Settings button (top-right of the HUD) + the overlay panel before
-	# theming so both pick up the amber ConquestTheme cascade below.
+	# theming so both pick up the ConquestTheme cascade below.
 	_build_settings_ui()
 
-	# Apply the Conquest "Fire Emblem amber" theme to the whole HUD subtree, and
-	# give every panel background the amber card look so text reads on a single
+	# Apply the navy + gold ConquestTheme (MenuTheme tokens) to the whole HUD subtree, and
+	# give every panel background the grove card look so text reads on a single
 	# consistent ground (children have already run _ready, so this wins).
 	_apply_theme()
 
@@ -220,12 +227,16 @@ func _ready() -> void:
 
 	# The pause menu overlay. Mounted AFTER theming like the other self-styled
 	# CanvasLayers -- it carries the DARK MenuTheme on purpose and must not be swept
-	# into the amber HUD cascade.
+	# into the HUD cascade.
 	_build_pause_menu()
 
 	# The unit detail page. Same deal as the pause menu: a self-styled CanvasLayer in the
-	# DARK menu register, mounted AFTER theming so the amber sweep cannot claim it.
+	# DARK menu register, mounted AFTER theming so the HUD sweep cannot claim it.
 	_build_unit_detail_page()
+
+	# The FE map menu + the weather chip. Self-styled, so mounted after theming; AFTER the
+	# pause menu, which its Quit row hands over to.
+	_build_map_menu()
 
 	# A leaver/forfeiter has to LOSE, not just vanish. Wired here because this HUD is
 	# alive for exactly the lifetime of a battle.
@@ -252,6 +263,9 @@ func _wire_left_column_budget() -> void:
 			unit_info_panel.visibility_changed.connect(_on_left_column_changed)
 		if not unit_info_panel.minimum_size_changed.is_connected(_on_left_column_changed):
 			unit_info_panel.minimum_size_changed.connect(_on_left_column_changed)
+	# Siege's respawn row shows / hides mid-battle, and it is a claim on the same column.
+	if siege_feedback != null and is_instance_valid(siege_feedback) 			and not siege_feedback.visibility_changed.is_connected(_on_left_column_changed):
+		siege_feedback.visibility_changed.connect(_on_left_column_changed)
 	var vp := get_viewport()
 	if vp != null and not vp.size_changed.is_connected(_on_left_column_changed):
 		vp.size_changed.connect(_on_left_column_changed)
@@ -287,6 +301,13 @@ func _rebudget_left_column() -> void:
 			card_claim += float(unit_info_panel.call("fixed_content_height"))
 		else:
 			card_claim += unit_info_panel.get_combined_minimum_size().y
+
+	# Siege's respawn row, while it is up. The grove top strip (phase ribbon + objective
+	# row) is ~20px taller than the old amber chip, which spent the slack this row used to
+	# live in -- so it is now an explicit claim. Worst case (card + row) the log still gets
+	# ~148px, above BattleLog.MIN_EXPANDED_HEIGHT, so it stays an expanded, readable log.
+	if siege_feedback != null and is_instance_valid(siege_feedback) and siege_feedback.visible:
+		card_claim += COLUMN_SEPARATION + siege_feedback.get_combined_minimum_size().y
 
 	battle_log.set_height_budget(usable - card_claim)
 
@@ -433,8 +454,22 @@ func _build_skip_enemy_turn_button() -> void:
 	skip_enemy_turn_button.name = "SkipEnemyTurnButton"
 	add_child(skip_enemy_turn_button)
 
+func _build_map_menu() -> void:
+	"""Mount the weather chip (inline in the phase banner, or under the Speed-First turn
+	queue -- see _place_weather_chip) and the FE map menu overlay."""
+	if center_top_container:
+		weather_chip = WeatherChip.new()
+		center_top_container.add_child(weather_chip)
+		_place_weather_chip()
+	map_menu = MapMenu.new()
+	map_menu.unit_actions_panel = unit_actions_panel
+	map_menu.settings_panel = settings_panel
+	map_menu.turn_transition = turn_transition
+	map_menu.pause_menu = pause_menu
+	add_child(map_menu)
+
 func _apply_theme() -> void:
-	"""Apply the amber ConquestTheme to this HUD subtree (panels, buttons, text)."""
+	"""Apply the navy + gold ConquestTheme (MenuTheme tokens) to this HUD subtree."""
 	ConquestTheme.apply_to(self)
 
 func _apply_safe_area() -> void:
@@ -465,20 +500,20 @@ func _build_settings_ui() -> void:
 	# Pause button, immediately LEFT of the gear. Escape opens the same menu, but a
 	# touch/mouse player has no Escape key -- 44px is the project's touch-target floor.
 	#
-	# THE MARKS ON THESE TWO BUTTONS ARE PICKED FROM WHAT THE FONT CAN DRAW, NOT FROM
-	# TASTE. Godot's default font has no glyph for ⏸ (U+23F8) or ⚙ (U+2699): both drew as
-	# an empty tofu box, on every battle HUD in the game. The measured drawable set is the
-	# probe table in `tests/unit/test_status_feedback.gd`, and these two come out of it --
-	# "||" is plain ASCII (drawable by construction) and "¤" is Latin-1, probed drawable.
-	# Both are pinned on the MOUNTED HUD -- the font can draw every character, and the
-	# string still fits inside the 44px square at its font size -- by
+	# THE MARKS ON THESE TWO BUTTONS NEVER DEPEND ON A GLYPH THE FONT MAY LACK. Godot's
+	# default font has no glyph for ⏸ (U+23F8) or ⚙ (U+2699): both drew as an empty tofu
+	# box on every battle HUD in the game. The pause mark is "||" -- plain ASCII, drawable
+	# by construction (the probe table is in `tests/unit/test_status_feedback.gd`). The gear
+	# is not text at all: a [GearIcon] drawn with canvas primitives, so it is a real gear on
+	# every machine (the old Latin-1 stand-in "¤" read as a placeholder, not a gear). Both
+	# are pinned on the MOUNTED HUD -- drawable, and inside the 44px square -- by
 	# `tests/integration/test_battle_objective_banner.gd`.
 	#
 	# WHY NOT A WORD. "PAUSE" / "SETTINGS" at the button's 22px overflow a 44px square, and
 	# the size that would fit (~11px) puts HUD chrome at/below the smallest authored font
 	# in the theme (ConquestTheme.FONT_CAPTION). Two upright bars is the universal pause
-	# mark; the spoked ring is the nearest drawable thing to a gear, and both keep the
-	# paired 44px squares reading as one control group. The tooltips still say the words.
+	# mark and a gear the universal settings mark; the paired 44px squares read as one
+	# control group. The tooltips still say the words.
 	if top_bar:
 		pause_button = Button.new()
 		pause_button.name = "PauseButton"
@@ -495,7 +530,7 @@ func _build_settings_ui() -> void:
 	if top_bar:
 		settings_button = Button.new()
 		settings_button.name = "SettingsButton"
-		settings_button.text = "¤"  # spoked ring -- the drawable stand-in for a gear
+		settings_button.text = ""  # the mark is the drawn GearIcon attached below
 		settings_button.tooltip_text = "Settings"
 		settings_button.custom_minimum_size = Vector2(44, 44)
 		settings_button.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -503,6 +538,7 @@ func _build_settings_ui() -> void:
 		settings_button.add_theme_font_size_override("font_size", 22)
 		settings_button.pressed.connect(_toggle_settings)
 		top_bar.add_child(settings_button)
+		GearIcon.attach(settings_button)
 
 	# Overlay panel: full-screen, starts hidden, mounted on top of everything.
 	settings_panel = SettingsPanel.new()
@@ -559,6 +595,12 @@ func _can_open_pause_menu() -> bool:
 		return false
 	if settings_panel != null and settings_panel.is_open():
 		return false
+	# The FE map menu owns Escape while it is up (it backs out a page / closes itself). On
+	# the local human's idle turn Escape OPENS the map menu first (its _input runs before
+	# this _unhandled_input), so the pause menu only answers Escape when the map menu
+	# could not open: the enemy phase, a replay, a spectated turn.
+	if map_menu != null and is_instance_valid(map_menu) and map_menu.is_open():
+		return false
 	# The detail page consumes Escape in its own `_input` (so this branch is normally
 	# unreachable while it is up), but the guard is stated here as well: with a full-screen
 	# page open, Escape means "close the page", never "pause".
@@ -587,27 +629,28 @@ func _can_open_pause_menu() -> bool:
 # listener turns into the standard GameOverScreen victory for whoever is left standing.
 # No new hook in GameWorldManager, and no bespoke "you win because they left" screen.
 
+## The NetSession autoload, looked up by path and used dynamically (signals by name), so
+## this HUD keeps compiling whichever session surface is mounted.
+func _net_session():
+	return get_node_or_null("/root/NetSession") if is_inside_tree() else null
+
 func _wire_net_session() -> void:
-	if typeof(NetSession) != TYPE_OBJECT or NetSession == null:
+	var ns = _net_session()
+	if ns == null:
 		return
-	if NetSession.has_signal("opponent_forfeited") \
-			and not NetSession.opponent_forfeited.is_connected(_on_opponent_forfeited):
-		NetSession.opponent_forfeited.connect(_on_opponent_forfeited)
-	if NetSession.has_signal("opponent_left") \
-			and not NetSession.opponent_left.is_connected(_on_opponent_left):
-		NetSession.opponent_left.connect(_on_opponent_left)
+	for pair in [["opponent_forfeited", _on_opponent_forfeited], ["opponent_left", _on_opponent_left]]:
+		if ns.has_signal(pair[0]) and not ns.is_connected(pair[0], pair[1]):
+			ns.connect(pair[0], pair[1])
 
 func _exit_tree() -> void:
 	# The autoload outlives this battle HUD, so drop the hooks -- a stale instance must
 	# never be called after the battle scene is gone.
-	if typeof(NetSession) != TYPE_OBJECT or NetSession == null:
+	var ns = _net_session()
+	if ns == null:
 		return
-	if NetSession.has_signal("opponent_forfeited") \
-			and NetSession.opponent_forfeited.is_connected(_on_opponent_forfeited):
-		NetSession.opponent_forfeited.disconnect(_on_opponent_forfeited)
-	if NetSession.has_signal("opponent_left") \
-			and NetSession.opponent_left.is_connected(_on_opponent_left):
-		NetSession.opponent_left.disconnect(_on_opponent_left)
+	for pair in [["opponent_forfeited", _on_opponent_forfeited], ["opponent_left", _on_opponent_left]]:
+		if ns.has_signal(pair[0]) and ns.is_connected(pair[0], pair[1]):
+			ns.disconnect(pair[0], pair[1])
 
 func _on_opponent_forfeited(slot: int) -> void:
 	_eliminate_absent_players(slot)
@@ -628,8 +671,9 @@ func _eliminate_absent_players(slot: int) -> void:
 	if typeof(PlayerManager) != TYPE_OBJECT or PlayerManager == null:
 		return
 	var local_slot: int = -1
-	if typeof(NetSession) == TYPE_OBJECT and NetSession != null and NetSession.has_method("local_slot"):
-		local_slot = NetSession.local_slot()
+	var ns = _net_session()
+	if ns != null and ns.has_method("local_slot"):
+		local_slot = int(ns.local_slot())
 	for p in PlayerManager.players:
 		if p == null:
 			continue
@@ -691,7 +735,7 @@ func _initialize_layout() -> void:
 		unit_info_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	
 	if right_sidebar:
-		right_sidebar.custom_minimum_size = Vector2(220, 0)
+		right_sidebar.custom_minimum_size = Vector2(290, 0)
 		right_sidebar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	
 	# Game area should expand to fill remaining space
@@ -709,6 +753,21 @@ func _update_layout_for_turn_system() -> void:
 		# Traditional mode: Show TurnIndicator, hide TurnQueue
 		_show_traditional_layout()
 
+## Keep the top HUD compact: with the phase banner showing (traditional turns) the
+## weather chip rides INSIDE the banner's info row; under the Speed-First turn queue
+## (banner hidden) it stands on its own in the top-centre column. (The objective is the
+## ObjectiveBanner row, which is always a row of that column.)
+func _place_weather_chip() -> void:
+	if weather_chip == null or not is_instance_valid(weather_chip):
+		return
+	var banner_shown := turn_indicator != null \
+		and turn_indicator.has_method("attach_objective") \
+		and current_turn_system_type != TurnSystemBase.TurnSystemType.INITIATIVE
+	if banner_shown:
+		turn_indicator.attach_objective(weather_chip)
+	elif center_top_container != null and weather_chip.get_parent() != center_top_container:
+		weather_chip.reparent(center_top_container)
+
 func _show_speed_first_layout() -> void:
 	"""Configure layout for Speed First turn system"""
 	
@@ -723,6 +782,7 @@ func _show_speed_first_layout() -> void:
 	# Adjust top bar height for Speed First display
 	if top_bar:
 		top_bar.custom_minimum_size = Vector2(0, 180)  # Taller for queue with proper spacing
+	_place_weather_chip()
 
 func _show_traditional_layout() -> void:
 	"""Configure layout for Traditional turn system"""
@@ -741,6 +801,7 @@ func _show_traditional_layout() -> void:
 	# announcement is handled by the full-screen TurnTransition overlay).
 	if top_bar:
 		top_bar.custom_minimum_size = Vector2(0, 56)
+	_place_weather_chip()
 
 func _on_turn_system_activated(turn_system: TurnSystemBase) -> void:
 	"""Handle turn system activation and update layout accordingly"""
@@ -792,6 +853,8 @@ func is_mouse_over_ui(mouse_position: Vector2) -> bool:
 	# The Settings overlay covers the whole screen while open, so any position is
 	# "over UI" -- keep board/camera input from leaking through underneath it.
 	if settings_panel and settings_panel.is_open():
+		return true
+	if map_menu and map_menu.is_open():
 		return true
 
 	# Same for the pause menu: it is full-screen and modal while it is up.
@@ -866,11 +929,11 @@ func _on_viewport_size_changed() -> void:
 	if viewport_size.x < 1200:
 		# On smaller screens, make right sidebar slightly smaller
 		if right_sidebar:
-			right_sidebar.custom_minimum_size.x = 180  # Slightly smaller
+			right_sidebar.custom_minimum_size.x = 260  # Slightly smaller
 	else:
 		# On larger screens, use full sidebar width
 		if right_sidebar:
-			right_sidebar.custom_minimum_size.x = 220
+			right_sidebar.custom_minimum_size.x = 290
 
 func force_layout_update() -> void:
 	"""Force a complete layout update (useful for debugging)"""

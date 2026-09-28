@@ -3,9 +3,10 @@ extends Control
 class_name MatchSetup
 
 ## Unified pre-battle SETUP screen. Replaces the old TurnSystemSelection + MapSelection +
-## ArenaSetupScreen as three separate steps with one screen: a map list + preview on the
-## LEFT and a reusable [MatchConfigPanel] config column on the RIGHT. What the Start button
-## launches depends on [member requested_mode], set by the caller before it changes here:
+## ArenaSetupScreen as three separate steps with one screen: the map list on the LEFT, the
+## selected map's live 3D preview + facts in the MIDDLE, and a reusable [MatchConfigPanel]
+## config column on the RIGHT. What the Start button launches depends on
+## [member requested_mode], set by the caller before it changes here:
 ##
 ##   * [constant MatchConfigPanel.MODE_SKIRMISH] -- Solo vs AI. Map + Turn System + AI
 ##       Difficulty. Start stages the map and goes to Character Select (which loads the
@@ -23,9 +24,19 @@ class_name MatchSetup
 ##       on a small skirmish map is a legal, if short, match, and a picker that hid every
 ##       map but one would be a launcher wearing a list.
 ##
-## The mode is carried in a STATIC var so it survives the scene change AND a Back trip from
-## Character Select (which returns here without re-picking the mode). Every dependency is
-## null-guarded; a missing autoload or ruleset shows an inline message instead of crashing.
+## Look: the shared illuminated-grove page ([MenuKit.build_page]: breadcrumb, Cinzel title,
+## key hints, Back + gold Start in the footer). The map rows carry a top-down thumbnail; the
+## detail card shows the map turning in 3D ([MapPreview3D]; the flat [MapPreview] minimap
+## is the fallback when there is no renderer, e.g. headless) with its badges (source,
+## difficulty, multi-floor, boss, draft, weather) and key facts.
+##
+## The game mode register is re-asserted on Start from the requested mode (hot-seat ->
+## VERSUS, everything else -> SINGLE_PLAYER), so a local hot-seat match can never silently
+## turn into a single-player one on its way through setup (the bug the old turn-system
+## screen had). The mode is carried in a STATIC var so it survives the scene change AND a
+## Back trip from Character Select (which returns here without re-picking the mode). Every
+## dependency is null-guarded; a missing autoload or ruleset shows an inline message
+## instead of crashing.
 
 const BASE_RULESET_PATH := "res://game/arena/rulesets/arena_solo.tres"
 const CHARACTER_SELECT_SCENE := "res://menus/CharacterSelect.tscn"
@@ -66,6 +77,18 @@ const SIEGE_CONTROLLER_GROUP: StringName = &"siege_controller"
 const SIEGE_MAP_TYPE: String = "siege"
 const SIEGE_TAG: String = "siege"
 
+## Map-row thumbnail (ItemList icon) size, px.
+const THUMB_SIZE := Vector2i(72, 48)
+
+## Column widths at the 1280x720 design size. The page body is 1280 - 2 * SP_PAGE = 1184
+## wide; minus two SP_XL gaps that leaves 1136 for the three columns, so the detail card in
+## the middle gets ~516. Every row inside the detail card must therefore be able to shrink
+## (wrapping objective, badges in a flow row) -- one rigid row wider than its column pushes
+## the settings column and the Start button off the right edge.
+const LEFT_COLUMN_W := 300.0
+const RIGHT_COLUMN_W := 320.0
+const ARENA_RIGHT_COLUMN_W := 520.0
+
 ## The variant to build, set by the caller (SoloModeSelect / MultiplayerModeSelection)
 ## before change_scene. Static so it persists across the scene load and a Back trip from
 ## Character Select. Defaults to Skirmish so the screen is never left in an undefined mode.
@@ -86,32 +109,41 @@ var _current_selected_map: String = ""
 
 # --- Live node refs ---------------------------------------------------------
 var _map_list: ItemList = null
+var _count_label: Label = null
 var _map_name_label: Label = null
-## Holder for the preview card's source chip (CUSTOM / COMMUNITY). An ItemList row is text
+## Holder for the detail card's source chip (CUSTOM / COMMUNITY). An ItemList row is text
 ## only, so this is where the real themed chip lives; the row itself carries the bracketed
 ## text badge.
 var _map_source_slot: HBoxContainer = null
+## The detail card's other badges (difficulty, multi-floor, boss, draft, weather).
+var _map_badges: HFlowContainer = null
+var _preview_3d: MapPreview3D = null
 var _map_minimap: TextureRect = null
 var _minimap_placeholder: Label = null
 var _map_desc_label: Label = null
+var _map_facts: HBoxContainer = null
 var _map_details_label: Label = null
 
 ## Cache of rendered minimap textures keyed by map path, so re-selecting a map (or
 ## returning to it) never re-renders. Cheap to build, but the cache avoids redundant
-## tile-resource loads (see [MapPreview]).
+## tile-resource loads (see [MapPreview]). Also feeds the list-row thumbnails.
 var _minimap_cache: Dictionary = {}
 var _config_panel: MatchConfigPanel = null
 var _start_btn: Button = null
 var _message_label: Label = null
+var _summary_label: Label = null
 
 
 func _ready() -> void:
 	_mode = requested_mode
-	theme = MenuTheme.build()
-	MenuTheme.apply_backdrop(self)
 	_build_ui()
 	if _uses_map_list():
 		_load_available_maps()
+		MenuNav.focus_deferred(_map_list)
+	elif _config_panel != null:
+		var first := _first_focusable(_config_panel)
+		if first != null:
+			MenuNav.focus_deferred(first)
 	# The Get-more-maps round trip is a SCENE CHANGE, so coming back re-runs `_ready` above
 	# and the new download is already listed. This covers the other shape -- a build (or a
 	# test) that keeps one MatchSetup alive and hides it -- for the price of one connection.
@@ -141,6 +173,18 @@ func _title_text() -> String:
 			return "SKIRMISH"
 
 
+func _subtitle_text() -> String:
+	match _mode:
+		MatchConfigPanel.MODE_ARENA:
+			return "Battle through escalating waves of AI enemies. Between rounds you draft upgrades for your squad."
+		MatchConfigPanel.MODE_LOCAL, MatchConfigPanel.MODE_SIEGE_LOCAL:
+			return "Two commanders, one device. Choose a battlefield and how turns work, then pick your squads."
+		MatchConfigPanel.MODE_SIEGE:
+			return "Push the lanes, hold your base, take theirs. Choose a battlefield, then pick your squad."
+		_:
+			return "Choose a battlefield and the rules, then pick your squad."
+
+
 ## True when this screen is setting up a hot-seat match, i.e. Back goes to the VERSUS mode
 ## picker rather than the SOLO one.
 func _is_hotseat() -> bool:
@@ -149,180 +193,145 @@ func _is_hotseat() -> bool:
 
 # --- UI construction --------------------------------------------------------
 #
-# 720p BUDGET, and what the community-map work did to it: NOTHING. The three additions are
-# all height-neutral, so the floors below (list 168, minimap 150, details scroll 96) are the
-# same arithmetic they were:
-#   * the source CHIP shares the preview card's name line -- caption font (12) + 2/2 padding
-#     ~= 20px against the 20pt name label's ~27, and it is SHRINK_CENTER, so the row is still
-#     the label's height;
-#   * the row BADGE is text inside the existing ItemList -- an ItemList row's height comes
-#     from the font, not from the string, and the text is ellipsised, not wrapped;
-#   * "Source:" is one more line inside the details ScrollContainer, which scrolls in place;
-#   * "Get More Maps" (48 tall) joins a footer row whose height is already the 52 of Start.
-# The page keeps exactly ONE EXPAND_FILL region per column (main -> the map list on the left,
-# the config panel on the right), and the footer stays pinned as the page's last child.
+# 720p BUDGET: build_page's header (~120) + footer (~64) leave ~480px of body. The page
+# keeps exactly ONE EXPAND_FILL region per column (the map list on the left, the 3D preview
+# well in the middle, the config panel on the right) so nothing can push the footer (Back /
+# Get More Maps / Start) off the bottom of the screen; the description + details scroll in
+# place with a firm cap.
 
 func _build_ui() -> void:
-	var page := VBoxContainer.new()
-	page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	page.offset_left = 24.0
-	page.offset_right = -24.0
-	page.offset_top = 24.0
-	page.offset_bottom = -24.0
-	page.add_theme_constant_override("separation", 12)
-	add_child(page)
+	var crumbs: Array = ["Versus"] if _is_hotseat() else ["Solo"]
+	var page := MenuKit.build_page(self, crumbs, _title_text(), _subtitle_text())
 
-	var title := Label.new()
-	title.text = _title_text()
-	page.add_child(title)
-	MenuTheme.style_title(title, 34)
+	var row := HBoxContainer.new()
+	row.name = "Columns"
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", MenuTheme.SP_XL)
+	page.body.add_child(row)
 
-	var subtitle := Label.new()
-	subtitle.text = "Configure your match, then begin"
-	page.add_child(subtitle)
-	MenuTheme.style_subtitle(subtitle)
+	if _uses_map_list():
+		row.add_child(_build_left_pane())
+		row.add_child(_build_detail_pane())
+	else:
+		row.add_child(_build_arena_note())
+	row.add_child(_build_right_pane())
 
-	var main := HBoxContainer.new()
-	main.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	main.add_theme_constant_override("separation", 16)
-	page.add_child(main)
-
-	main.add_child(_build_left_pane())
-	main.add_child(_build_right_pane())
-
-	_message_label = Label.new()
-	_message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_message_label.add_theme_font_size_override("font_size", 16)
-	_message_label.add_theme_color_override("font_color", Color("d87a4a"))
-	_message_label.visible = false
-	page.add_child(_message_label)
-
-	page.add_child(_build_actions())
+	_build_actions(page)
 
 
-## LEFT: map list + preview for map modes; a read-only note for Arena.
+## LEFT: the map list (map modes).
 func _build_left_pane() -> Control:
 	var left := VBoxContainer.new()
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.size_flags_stretch_ratio = 0.58
-	left.add_theme_constant_override("separation", 8)
+	left.name = "MapColumn"
+	left.custom_minimum_size = Vector2(LEFT_COLUMN_W, 0.0)
+	left.size_flags_horizontal = Control.SIZE_FILL
+	left.add_theme_constant_override("separation", MenuTheme.SP_S)
 
-	if not _uses_map_list():
-		var note_panel := PanelContainer.new()
-		note_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		var note := Label.new()
-		note.text = "Arena picks its own compact maps\neach round.\n\nDraft augments between fights and\nsurvive as long as you can."
-		note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		note.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		note.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
-		note_panel.add_child(note)
-		left.add_child(note_panel)
-		return left
-
-	var list_label := Label.new()
-	list_label.text = "AVAILABLE MAPS"
-	MenuTheme.style_section_header(list_label)
-	left.add_child(list_label)
+	_count_label = MenuKit.section("Maps")
+	left.add_child(_count_label)
 
 	_map_list = ItemList.new()
-	# Guaranteed height so the list always shows several rows and scrolls within
-	# itself, no matter how tall the preview card below grows -- was crushed to
-	# near-zero because the preview card competed for the same 0.5 stretch share.
-	# 168 not 190: the pane's fixed minimums were arithmetic-tight at exactly 720p
-	# under conservative font metrics; ~4.5 visible rows still reads fine and the
-	# EXPAND_FILL ratio grows the list on any taller window.
+	_map_list.name = "MapList"
+	# Guaranteed height so the list always shows several rows and scrolls within itself.
 	_map_list.custom_minimum_size = Vector2(0.0, 168.0)
 	_map_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_map_list.size_flags_stretch_ratio = 1.0
-	# Padded, card-like rows: extra breathing room between items and a distinct
-	# left-accented selected/hover fill (theme overrides only -- the widget stays
-	# a stock ItemList per the no-rebuild rule).
-	_map_list.add_theme_constant_override("v_separation", 8)
-	_map_list.add_theme_constant_override("icon_margin", 8)
+	# Card-like rows with a top-down thumbnail (theme styles the rows, hover and the gold
+	# selected wash -- the widget stays a stock ItemList).
+	_map_list.fixed_icon_size = THUMB_SIZE
+	_map_list.icon_mode = ItemList.ICON_MODE_LEFT
+	_map_list.add_theme_constant_override("v_separation", 10)
+	_map_list.add_theme_constant_override("icon_margin", 12)
+	_map_list.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_map_list.focus_mode = Control.FOCUS_ALL
 	_map_list.item_selected.connect(_on_map_selected)
 	_map_list.item_activated.connect(_on_map_activated)
 	left.add_child(_map_list)
+	return left
 
-	# No EXPAND_FILL / stretch ratio here on purpose: the preview card is left at its
-	# natural (bounded) minimum size instead of competing with the map list for extra
-	# space, so a long description can never push it -- and the action row below it --
-	# taller than the screen. The description + details are scrolled internally instead
-	# (see below); only that inner ScrollContainer's min size feeds into this card's height.
-	var preview := PanelContainer.new()
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_top", 6)
-	margin.add_theme_constant_override("margin_bottom", 6)
-	preview.add_child(margin)
 
-	var pv := VBoxContainer.new()
-	pv.add_theme_constant_override("separation", 6)
-	margin.add_child(pv)
+## MIDDLE: the selected map -- 3D preview well, name + badges, description, facts.
+func _build_detail_pane() -> Control:
+	var detail := MenuKit.card()
+	detail.name = "MapDetail"
+	detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	detail.size_flags_stretch_ratio = 1.4
+	var dv := VBoxContainer.new()
+	dv.add_theme_constant_override("separation", MenuTheme.SP_S)
+	detail.add_child(dv)
 
-	# Name + source chip on ONE line. The chip is SHRINK_CENTER and its caption font (12 + 2/2
-	# padding = ~20px) is shorter than the 20pt name label it sits beside, so this row's height
-	# is still the name label's -- the left pane's vertical budget below is untouched.
+	dv.add_child(_build_minimap_holder())
+
+	# Name + chips on ONE line; the name clips (player-authored names are arbitrary length).
 	var name_row := HBoxContainer.new()
-	name_row.add_theme_constant_override("separation", 8)
-	pv.add_child(name_row)
-
-	_map_name_label = Label.new()
-	_map_name_label.text = "Select a map"
-	_map_name_label.add_theme_font_size_override("font_size", 20)
-	_map_name_label.add_theme_color_override("font_color", MenuTheme.GOLD)
-	# A player-authored map name is arbitrary length: clip + ellipsis so it can never push
-	# the chip off the right edge of the card.
+	name_row.add_theme_constant_override("separation", MenuTheme.SP_S)
+	dv.add_child(name_row)
+	_map_name_label = MenuKit.label("Select a map", &"HeadingLabel")
+	_map_name_label.name = "MapNameLabel"
 	_map_name_label.clip_text = true
 	_map_name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_map_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_map_name_label.custom_minimum_size = Vector2(120.0, 0.0)
 	name_row.add_child(_map_name_label)
-
-	# Explicit floor, like every other chip-sized control on these screens: without one it
-	# collapses to its text width the moment the pane is squeezed.
 	_map_source_slot = HBoxContainer.new()
 	_map_source_slot.name = "SourceChipSlot"
 	_map_source_slot.alignment = BoxContainer.ALIGNMENT_END
-	_map_source_slot.custom_minimum_size = Vector2(MapRowBuilder.CHIP_MIN_WIDTH, 0.0)
 	_map_source_slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	name_row.add_child(_map_source_slot)
+	# The other badges get their own FLOW row under the name: a map can carry up to six
+	# (difficulty, multi-floor, boss, siege, draft, weather) and one fixed row that long is
+	# wider than the card.
+	_map_badges = HFlowContainer.new()
+	_map_badges.name = "Badges"
+	_map_badges.add_theme_constant_override("h_separation", 6)
+	_map_badges.add_theme_constant_override("v_separation", 4)
+	dv.add_child(_map_badges)
 
-	pv.add_child(_build_minimap_holder())
-
-	# Description + details scroll internally with a firm cap, instead of pushing the
-	# preview card's (and therefore the whole pane's) height out arbitrarily. A long
-	# multi-line description now scrolls in place rather than shoving the action row
-	# off the bottom of the screen.
+	# Description + details scroll internally with a firm cap, so a long description never
+	# pushes the card (and the footer) past the screen.
 	var details_scroll := ScrollContainer.new()
-	details_scroll.custom_minimum_size = Vector2(0.0, 96.0)
+	details_scroll.custom_minimum_size = Vector2(0.0, 64.0)
 	details_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	details_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	pv.add_child(details_scroll)
-
+	dv.add_child(details_scroll)
 	var details_box := VBoxContainer.new()
-	details_box.add_theme_constant_override("separation", 6)
+	details_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	details_box.add_theme_constant_override("separation", 4)
 	details_scroll.add_child(details_box)
-
-	_map_desc_label = Label.new()
-	_map_desc_label.text = "Choose a map from the list to see its details."
-	_map_desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_map_desc_label = MenuKit.label("Choose a map from the list to see its details.", &"DimLabel", true)
+	_map_desc_label.name = "MapDescriptionLabel"
 	details_box.add_child(_map_desc_label)
-
-	_map_details_label = Label.new()
+	_map_details_label = MenuKit.label("", &"MutedLabel", true)
+	_map_details_label.name = "MapDetailsLabel"
+	_map_details_label.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	details_box.add_child(_map_details_label)
 
-	left.add_child(preview)
-	return left
+	_map_facts = HBoxContainer.new()
+	_map_facts.name = "MapFacts"
+	_map_facts.add_theme_constant_override("separation", MenuTheme.SP_L)
+	dv.add_child(_map_facts)
+	return detail
 
 
-## The minimap pane: a fixed-height panel holding the top-down map texture (NEAREST-
-## filtered, aspect kept so non-square maps letterbox) with a neutral placeholder
-## label shown until a map is selected or when a map has no drawable layout.
+## The preview well: the map turning in 3D, or -- with no renderer (headless) -- the flat
+## top-down minimap (NEAREST-filtered, aspect kept so non-square maps letterbox), with a
+## neutral placeholder until a map is selected or when a map has no drawable layout.
 func _build_minimap_holder() -> Control:
-	var holder := PanelContainer.new()
+	var holder := MenuKit.card(&"InsetPanel")
+	holder.name = "PreviewWell"
 	holder.custom_minimum_size = Vector2(0.0, 150.0)
-	holder.add_theme_stylebox_override("panel", MenuTheme.card_box(MenuTheme.GOLD_DK))
+	holder.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var well_sb := MenuTheme.inset_box()
+	well_sb.hatch_alpha = 0.0
+	well_sb.set_content_margin_all(3)
+	holder.add_theme_stylebox_override("panel", well_sb)
+
+	if DisplayServer.get_name() != "headless":
+		_preview_3d = MapPreview3D.new()
+		_preview_3d.name = "MapPreview"
+		_preview_3d.background_color = MenuTheme.PANEL_SUNK
+		_preview_3d.turntable_speed = 0.25
+		_preview_3d.visible = false
+		holder.add_child(_preview_3d)
 
 	_map_minimap = TextureRect.new()
 	_map_minimap.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -331,49 +340,55 @@ func _build_minimap_holder() -> Control:
 	_map_minimap.visible = false
 	holder.add_child(_map_minimap)
 
-	_minimap_placeholder = Label.new()
-	_minimap_placeholder.text = "No preview available"
+	_minimap_placeholder = MenuKit.label("No preview available", &"MutedLabel")
 	_minimap_placeholder.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_minimap_placeholder.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_minimap_placeholder.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
 	holder.add_child(_minimap_placeholder)
-
 	return holder
 
 
-## Render (or fetch from cache) the minimap for the map at [param index] and show it,
-## falling back to the neutral placeholder when there is nothing to draw.
+## The minimap texture for [param index] (rendered once, then cached by path), or null.
+func _minimap_for(index: int) -> Texture2D:
+	if index < 0 or index >= _map_resources.size() or _map_resources[index] == null:
+		return null
+	var map_path: String = _available_maps[index]
+	if _minimap_cache.has(map_path):
+		return _minimap_cache[map_path]
+	# Same generator for every source: a downloaded or player-built map is a MapResource
+	# like any other by the time it reaches here, so it gets a real minimap for free.
+	var tex: Texture2D = MapPreview.generate(_map_resources[index])
+	_minimap_cache[map_path] = tex  # cache null too, so an empty map isn't retried
+	return tex
+
+
+## Show the map at [param index] in the preview well: the 3D turntable when there is a
+## renderer, else the cached flat minimap, else the neutral placeholder.
 func _update_minimap(index: int) -> void:
 	if _map_minimap == null or _minimap_placeholder == null:
 		return
-	if index < 0 or index >= _map_resources.size():
+	if index < 0 or index >= _map_resources.size() or _map_resources[index] == null:
 		_show_minimap_placeholder("No preview available")
 		return
 
-	if _map_resources[index] == null:
-		_show_minimap_placeholder("No preview available")
+	if _preview_3d != null:
+		_preview_3d.show_map(_map_resources[index])
+		_preview_3d.visible = true
+		_map_minimap.visible = false
+		_minimap_placeholder.visible = false
 		return
 
-	var map_path: String = _available_maps[index]
-	var tex: Texture2D = null
-	if _minimap_cache.has(map_path):
-		tex = _minimap_cache[map_path]
-	else:
-		# Same generator for every source: a downloaded or player-built map is a MapResource
-		# like any other by the time it reaches here, so it gets a real minimap for free.
-		tex = MapPreview.generate(_map_resources[index])
-		_minimap_cache[map_path] = tex  # cache null too, so an empty map isn't retried
-
+	var tex: Texture2D = _minimap_for(index)
 	if tex == null:
 		_show_minimap_placeholder("No preview available")
 		return
-
 	_map_minimap.texture = tex
 	_map_minimap.visible = true
 	_minimap_placeholder.visible = false
 
 
 func _show_minimap_placeholder(text: String) -> void:
+	if _preview_3d != null:
+		_preview_3d.visible = false
 	if _map_minimap != null:
 		_map_minimap.visible = false
 	if _minimap_placeholder != null:
@@ -381,77 +396,128 @@ func _show_minimap_placeholder(text: String) -> void:
 		_minimap_placeholder.visible = true
 
 
+## LEFT (Arena): Arena picks its own compact maps each round, so instead of a map list the
+## page explains the run and shows a live summary of what Start will launch.
+func _build_arena_note() -> Control:
+	var card := MenuKit.card(&"CrestCard")
+	card.name = "ArenaNote"
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.size_flags_stretch_ratio = 1.2
+	var v := VBoxContainer.new()
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", MenuTheme.SP_M)
+	card.add_child(v)
+	var rule := GroveRule.new()
+	rule.color = MenuTheme.GOLD
+	rule.centered = true
+	rule.custom_minimum_size = Vector2(160, 12)
+	rule.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(rule)
+	var head := MenuKit.label("The Gauntlet", &"HeadingLabel")
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(head)
+	var note := MenuKit.label(
+		"Arena picks its own compact maps each round.\n\nDraft augments between fights and survive as long as you can.",
+		&"DimLabel", true)
+	note.name = "ArenaNoteText"
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(note)
+	_summary_label = MenuKit.label("", &"SubheadingLabel")
+	_summary_label.name = "Summary"
+	_summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_summary_label.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
+	v.add_child(_summary_label)
+	return card
+
+
 ## RIGHT: the reusable config column.
 func _build_right_pane() -> Control:
 	var right := VBoxContainer.new()
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.size_flags_stretch_ratio = 0.42
-	right.add_theme_constant_override("separation", 8)
+	right.name = "SettingsColumn"
+	# Arena has no map list or detail card, so its settings column can take the room the
+	# side-by-side turn cards and run-length presets need; the map modes use the narrow one.
+	right.custom_minimum_size = Vector2(RIGHT_COLUMN_W if _uses_map_list() else ARENA_RIGHT_COLUMN_W, 0.0)
+	right.size_flags_horizontal = Control.SIZE_FILL
+	right.add_theme_constant_override("separation", MenuTheme.SP_S)
+	right.add_child(MenuKit.section("Match Settings"))
 
-	var heading := Label.new()
-	heading.text = "MATCH SETTINGS"
-	MenuTheme.style_section_header(heading)
-	right.add_child(heading)
-
-	var panel := PanelContainer.new()
+	var panel := MenuKit.card()
+	panel.name = "SettingsCard"
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 16)
-	margin.add_theme_constant_override("margin_right", 16)
-	margin.add_theme_constant_override("margin_top", 14)
-	margin.add_theme_constant_override("margin_bottom", 14)
-	panel.add_child(margin)
+	right.add_child(panel)
+
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	panel.add_child(scroll)
 
 	_config_panel = MatchConfigPanel.new()
-	_config_panel.custom_minimum_size = Vector2(320.0, 220.0)
+	_config_panel.name = "MatchConfigPanel"
+	# No width floor: the column sets the width, and in the narrow (map-mode) column the rows
+	# stack so nothing inside asks for more than the column has.
+	_config_panel.custom_minimum_size = Vector2(0.0, 200.0)
 	_config_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_config_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	margin.add_child(_config_panel)
+	_config_panel.narrow_layout = _uses_map_list()
+	scroll.add_child(_config_panel)
 	_config_panel.configure(_mode)
-
-	right.add_child(panel)
+	_config_panel.changed.connect(_update_summary)
+	_update_summary()
 	return right
 
 
-func _build_actions() -> Control:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 24)
+## Footer: key hints + inline message on the left; Back / Get More Maps / Start on the right.
+func _build_actions(page: Dictionary) -> void:
+	MenuKit.add_standard_hints(page.hints, "Choose map" if _uses_map_list() else "Select")
+	_message_label = MenuKit.label("", &"")
+	_message_label.name = "Message"
+	_message_label.visible = false
+	page.hints.add_child(_message_label)
 
-	var back := Button.new()
-	back.text = "Back"
-	back.custom_minimum_size = Vector2(160.0, 48.0)
+	var back := MenuKit.button("Back", MenuKit.GHOST, 140)
+	back.name = "BackButton"
 	back.pressed.connect(_on_back_pressed)
-	row.add_child(back)
+	page.actions.add_child(back)
 
-	# "Get more maps" lands in the FOOTER, not the left pane: at 48 tall it is shorter than
-	# the 52 Start button already in this row, so the row's height -- and therefore the whole
-	# page's vertical budget -- is unchanged. Width: 160 + 200 + 240 + 2 gaps * 24 separation
-	# = 648, against the page's 1232 (1280 - 2*24 margins) at 720p. Arena has no map list, so
-	# it has nothing to browse for.
+	# "Get More Maps" opens the community browser pre-filtered to maps and pointed back here.
+	# Arena has no map list, so it has nothing to browse for.
 	if _uses_map_list():
-		var more := Button.new()
+		var more := MenuKit.button("Get More Maps", &"", 200)
 		more.name = "GetMoreMapsButton"
-		more.text = "Get More Maps"
-		more.custom_minimum_size = Vector2(200.0, 48.0)
 		var browse_available: bool = ResourceLoader.exists(COMMUNITY_BROWSE_SCENE)
 		more.disabled = not browse_available
 		more.tooltip_text = "Browse and download community maps." if browse_available \
 			else "The community browser is not available in this build."
 		more.pressed.connect(_on_more_maps_pressed)
-		row.add_child(more)
+		page.actions.add_child(more)
 
-	_start_btn = Button.new()
-	_start_btn.text = "Start Run" if _mode == MatchConfigPanel.MODE_ARENA else "Start Match"
-	_start_btn.theme_type_variation = &"SelectedButton"  # solid gold, prominent
-	_start_btn.custom_minimum_size = Vector2(240.0, 52.0)
-	_start_btn.add_theme_font_size_override("font_size", 20)
+	_start_btn = MenuKit.button("Choose Squad  >", MenuKit.PRIMARY, 240, 54)
+	_start_btn.name = "StartButton"
+	_start_btn.tooltip_text = "Start the run with these settings." if _mode == MatchConfigPanel.MODE_ARENA \
+		else "Stage this map and pick your squad."
 	_start_btn.pressed.connect(_on_start_pressed)
 	# Map modes need a selected map first; arena can start immediately.
 	_start_btn.disabled = _uses_map_list()
-	row.add_child(_start_btn)
+	page.actions.add_child(_start_btn)
 
-	return row
+
+## Live "what will launch" line for the Arena note.
+func _update_summary() -> void:
+	if _summary_label == null or _config_panel == null:
+		return
+	_summary_label.text = "%s  ·  %s turns" % [_config_panel.run_length_text(),
+		_config_panel.turn_system_name()]
+
+
+func _first_focusable(node: Node) -> Control:
+	for c in node.get_children():
+		if c is Control and (c as Control).focus_mode == Control.FOCUS_ALL \
+				and (c as Control).is_visible_in_tree():
+			return c
+		var deeper := _first_focusable(c)
+		if deeper != null:
+			return deeper
+	return null
 
 
 # --- Map listing (ported from MapSelection) ---------------------------------
@@ -497,6 +563,13 @@ func _load_available_maps() -> void:
 			suffixes[path] = "  (draft)"
 
 	MapRowBuilder.apply_to_item_list(_map_list, rows, suffixes)
+	# Top-down thumbnail beside each row (the same cached minimap the preview falls back to).
+	for i in _map_list.get_item_count():
+		var thumb: Texture2D = _minimap_for(i)
+		if thumb != null:
+			_map_list.set_item_icon(i, thumb)
+	if _count_label != null:
+		_count_label.text = "MAPS  (%d)" % _map_list.get_item_count()
 
 	var target: int = _available_maps.find(previous)
 	if target < 0:
@@ -612,6 +685,8 @@ func _on_map_selected(index: int) -> void:
 		if _map_name_label != null:
 			_map_name_label.text = String(row.get("name", "Unknown Map"))
 		_update_source_chip(String(row.get("source", MapRowBuilder.SOURCE_BUILTIN)))
+		_clear_children(_map_badges)
+		_clear_children(_map_facts)
 		if _map_desc_label != null:
 			_map_desc_label.text = MapRowBuilder.UNREADABLE_TOOLTIP
 		if _map_details_label != null:
@@ -632,7 +707,7 @@ func _on_map_activated(index: int) -> void:
 	_on_start_pressed()
 
 
-## The preview card for [param map_resource]. [param row] is that map's row model, whose only
+## The detail card for [param map_resource]. [param row] is that map's row model, whose only
 ## job here is the source chip + the "Source:" detail line -- the description, size, players
 ## and author still come from the map's OWN [method MapResource.get_display_info], so a
 ## downloaded or player-built map reads exactly like a shipped one with no second metadata
@@ -645,39 +720,107 @@ func _display_map_info(map_resource: MapResource, row: Dictionary = {}) -> void:
 	if _map_name_label != null:
 		_map_name_label.text = info.get("name", "Unknown Map")
 	_update_source_chip(source)
+	_update_badges(map_resource, String(info.get("difficulty", "Normal")))
 	if _map_desc_label != null:
-		_map_desc_label.text = info.get("description", "No description available")
+		var desc: String = String(info.get("description", ""))
+		_map_desc_label.text = desc if not desc.is_empty() else "No description available"
 	if _map_details_label != null:
 		var details: Array = []
 		details.append("Source: " + MapRowBuilder.source_label(source))
-		details.append("Size: " + info.get("size", "Unknown"))
-		details.append("Players: " + str(info.get("players", 0)) + "/" + str(info.get("max_players", 2)))
-		details.append("Difficulty: " + info.get("difficulty", "Normal"))
-		details.append("Type: " + info.get("map_type", "Skirmish"))
+		details.append("Size: " + String(info.get("size", "Unknown")))
+		details.append("Type: " + String(info.get("map_type", "Skirmish")))
 		if not String(info.get("author", "")).is_empty():
-			details.append("Author: " + info.get("author", ""))
+			details.append("Author: " + String(info.get("author", "")))
 		details.append("Units: " + str(info.get("total_spawns", 0)))
 		details.append("Tiles: " + str(info.get("total_tiles", 0)))
-		_map_details_label.text = "\n".join(details)
+		_map_details_label.text = "  ·  ".join(details)
+	_update_facts(map_resource, info)
 
 
-## Show (or clear) the preview card's source chip. Builtin is unbadged -- the slot keeps its
-## width either way, so the name label never reflows between selections.
+## Difficulty + map-shape badges beside the name: difficulty (colour-coded), Multi-floor
+## (n), Boss, Siege, Draft and the map's weather.
+func _update_badges(map_resource: MapResource, difficulty: String) -> void:
+	if _map_badges == null:
+		return
+	_clear_children(_map_badges)
+	var diff_color := MenuTheme.SUCCESS
+	match difficulty.to_lower():
+		"normal": diff_color = MenuTheme.ACCENT
+		"hard": diff_color = MenuTheme.WARNING
+		"expert", "brutal": diff_color = MenuTheme.DANGER
+	_map_badges.add_child(MenuKit.badge(difficulty, diff_color))
+	var floors: int = map_resource.get_floor_count() if map_resource.has_method("get_floor_count") else 1
+	if floors > 1:
+		_map_badges.add_child(MenuKit.badge("Multi-floor (%d)" % floors, MenuTheme.ACCENT))
+	if "Defeat Boss" in map_resource.victory_conditions:
+		_map_badges.add_child(MenuKit.badge("Boss", MenuTheme.DANGER))
+	if _is_siege_map(map_resource):
+		_map_badges.add_child(MenuKit.badge("Siege", MenuTheme.GOLD))
+	if not map_resource.is_active():
+		_map_badges.add_child(MenuKit.badge("Draft", MenuTheme.WARNING))
+	if map_resource.has_method("weather_summary"):
+		var summary: String = String(map_resource.weather_summary())
+		if not summary.is_empty():
+			var wcol: Color = MenuTheme.ACCENT
+			var w = Weather.get_weather(map_resource.weather)
+			if w != null:
+				wcol = w.color
+			_map_badges.add_child(MenuKit.badge(summary, wcol))
+
+
+## Key facts under the description (Cinzel caption over the value): players, your squad
+## size (START spawns only -- respawn / reinforcement points are not squad slots), floors
+## on a multi-floor map, and the objective.
+func _update_facts(map_resource: MapResource, info: Dictionary) -> void:
+	if _map_facts == null:
+		return
+	_clear_children(_map_facts)
+	var mine := 0
+	for s in map_resource.unit_spawns:
+		if int(s.get("player_id", -1)) != 0:
+			continue
+		var kind: String = String(s.get("spawn_kind", "Start"))
+		if kind.is_empty() or kind.to_lower() == "start":
+			mine += 1
+	_map_facts.add_child(MenuKit.stat_block("Players", str(maxi(int(info.get("max_players", 2)), 1))))
+	_map_facts.add_child(MenuKit.stat_block("Your squad", ("up to %d" % mine) if mine > 0 else "--"))
+	var floors: int = map_resource.get_floor_count() if map_resource.has_method("get_floor_count") else 1
+	if floors > 1:
+		_map_facts.add_child(MenuKit.stat_block("Floors", str(floors)))
+	var goal: String = ", ".join(map_resource.victory_conditions) \
+		if not map_resource.victory_conditions.is_empty() else "Eliminate all enemies"
+	var goal_block := MenuKit.stat_block("Objective", goal)
+	goal_block.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# The objective is the one open-ended value (several authored conditions join here): it
+	# wraps inside the card rather than widening it.
+	var goal_value := goal_block.get_child(goal_block.get_child_count() - 1) as Label
+	if goal_value != null:
+		goal_value.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_map_facts.add_child(goal_block)
+
+
+## Show (or clear) the detail card's source chip. Builtin is unbadged.
 func _update_source_chip(source: String) -> void:
 	if _map_source_slot == null:
 		return
-	for child in _map_source_slot.get_children():
-		# free(), not queue_free(): the old chip is ours alone and is gone from the tree on
-		# the line above, and a DEFERRED free would still be counted as a live node by the
-		# time a test that rebuilt this list finishes (tests/README.md rule 2).
-		_map_source_slot.remove_child(child)
-		child.free()
+	_clear_children(_map_source_slot)
 	var badge: String = MapRowBuilder.badge_for(source)
 	if badge.is_empty():
 		return
-	var chip: Label = MenuTheme.make_chip(badge, MapRowBuilder.badge_color(source))
-	chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var chip := MenuKit.badge(badge, MapRowBuilder.badge_color(source))
+	chip.name = "SourceChip"
 	_map_source_slot.add_child(chip)
+
+
+## free(), not queue_free(): the old chips are ours alone and leave the tree first, and a
+## DEFERRED free would still be counted as a live node by the time a test that rebuilt
+## this list finishes (tests/README.md rule 2).
+func _clear_children(holder: Node) -> void:
+	if holder == null:
+		return
+	for child in holder.get_children():
+		holder.remove_child(child)
+		child.free()
 
 
 # --- Community maps ---------------------------------------------------------
@@ -692,7 +835,7 @@ func _on_more_maps_pressed() -> void:
 	# The mode is a static on this class, so the Back trip lands on the same variant of this
 	# screen the player left -- exactly as the Character Select round trip already does.
 	CommunityBrowse.open_filtered(CommunityProvider.TYPE_MAP, MATCH_SETUP_SCENE)
-	get_tree().change_scene_to_file(COMMUNITY_BROWSE_SCENE)
+	MenuNav.change_scene(self, COMMUNITY_BROWSE_SCENE)
 
 
 # --- Start / Back -----------------------------------------------------------
@@ -701,11 +844,27 @@ func _on_start_pressed() -> void:
 	if _config_panel == null:
 		return
 	_config_panel.apply_settings()
+	_sync_game_mode()
 
 	if _mode == MatchConfigPanel.MODE_ARENA:
 		_start_arena()
 		return
 	_start_map_match()
+
+
+## Re-assert the match register from the requested mode: hot-seat modes are two-human
+## VERSUS matches, everything else here is single player vs the AI. (Ported fix: the old
+## turn-system screen forced SINGLE_PLAYER and silently turned local hot-seat into a
+## single-player match.)
+func _sync_game_mode() -> void:
+	if GameSettings == null or not GameSettings.has_method("set_game_mode"):
+		return
+	if _is_hotseat():
+		GameSettings.set_game_mode(GameSettings.GameMode.VERSUS)
+		if GameSettings.has_method("set_player_count"):
+			GameSettings.set_player_count(2)
+	else:
+		GameSettings.set_game_mode(GameSettings.GameMode.SINGLE_PLAYER)
 
 
 func _start_map_match() -> void:
@@ -717,7 +876,7 @@ func _start_map_match() -> void:
 	var arena := get_node_or_null("/root/ArenaController")
 	if arena != null and arena.has_method("abort_run"):
 		arena.abort_run()
-	get_tree().change_scene_to_file(CHARACTER_SELECT_SCENE)
+	MenuNav.change_scene(self, CHARACTER_SELECT_SCENE)
 
 
 func _start_arena() -> void:
@@ -739,7 +898,7 @@ func _start_arena() -> void:
 	# Stage the ruleset and go pick a squad; Character Select calls begin_pending_run(),
 	# which starts the run (and changes to the GameWorld scene) with the chosen units.
 	arena.prepare_run(rs)
-	get_tree().change_scene_to_file(CHARACTER_SELECT_SCENE)
+	MenuNav.change_scene(self, CHARACTER_SELECT_SCENE)
 
 
 func _on_back_pressed() -> void:
@@ -748,35 +907,41 @@ func _on_back_pressed() -> void:
 	if arena != null and arena.has_method("abort_run"):
 		arena.abort_run()
 	if _is_hotseat():
-		get_tree().change_scene_to_file(MP_MODE_SELECT_SCENE)
+		MenuNav.change_scene(self, MP_MODE_SELECT_SCENE)
 	else:
-		get_tree().change_scene_to_file(SOLO_MODE_SELECT_SCENE)
+		MenuNav.change_scene(self, SOLO_MODE_SELECT_SCENE)
 
 
 func _show_message(text: String) -> void:
 	if _message_label == null:
 		return
-	_message_label.text = text
+	MenuKit.set_status(_message_label, text, "error")
 	_message_label.visible = true
 
 
-# --- Keyboard ---------------------------------------------------------------
+# --- Keyboard / gamepad -------------------------------------------------------
+#
+# Focus drives everything (MenuNav): the map list takes Up/Down itself (selecting as it
+# moves) and Enter on a row starts; Tab / D-pad reach the settings column and the footer.
+# Back / Esc / pad B returns to the mode picker. F5 re-reads the map library.
 
-func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
+func _unhandled_input(event: InputEvent) -> void:
+	if MenuNav.is_back_event(event):
+		get_viewport().set_input_as_handled()
+		_on_back_pressed()
 		return
-	if not (event is InputEventKey):
+	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
-	match event.keycode:
-		KEY_ESCAPE:
-			_on_back_pressed()
+	match (event as InputEventKey).keycode:
+		KEY_F5:
+			if _uses_map_list():
+				get_viewport().set_input_as_handled()
+				refresh_map_list()
 		KEY_ENTER, KEY_KP_ENTER:
+			# Nothing focused consumed Enter: start with what is selected.
 			if _start_btn != null and not _start_btn.disabled:
+				get_viewport().set_input_as_handled()
 				_on_start_pressed()
-		KEY_UP:
-			_move_map_selection(-1)
-		KEY_DOWN:
-			_move_map_selection(1)
 
 
 func _move_map_selection(delta: int) -> void:
@@ -788,3 +953,4 @@ func _move_map_selection(delta: int) -> void:
 	if next != current:
 		_map_list.select(next)
 		_on_map_selected(next)
+		_map_list.ensure_current_is_visible()

@@ -14,8 +14,8 @@ const Doubles := preload("res://tests/helpers/test_doubles.gd")
 func test_fire_damages_occupant_on_turn_start():
 	var unit := Doubles.TaggedCombatUnit.new(1, { "health": 100, "defense": 50 })
 	var board := Doubles.TileEffectBoard.new()
-	board.place(unit, Vector2i(2, 2))
-	board.set_tile_effects(Vector2i(2, 2), [TileEffectLibrary.fire()])
+	board.place(unit, Vector3i(2, 2, 0))
+	board.set_tile_effects(Vector3i(2, 2, 0), [TileEffectLibrary.fire()])
 	var system = autofree(TileEffectSystem.new())
 	var events: Array = system.on_turn_start(unit, board)
 	assert_eq(unit.hp, 85, "fire deals 15 true damage (ignores the 50 defense)")
@@ -26,10 +26,10 @@ func test_fire_does_not_fire_on_enter():
 	# fire's trigger is ON_TURN_START_WHILE_OCCUPYING, so entering must not burn.
 	var unit := Doubles.TaggedCombatUnit.new(1, { "health": 100 })
 	var board := Doubles.TileEffectBoard.new()
-	board.place(unit, Vector2i(0, 0))
-	board.set_tile_effects(Vector2i(0, 0), [TileEffectLibrary.fire()])
+	board.place(unit, Vector3i(0, 0, 0))
+	board.set_tile_effects(Vector3i(0, 0, 0), [TileEffectLibrary.fire()])
 	var system = autofree(TileEffectSystem.new())
-	var events: Array = system.on_enter(unit, Vector2i(0, 0), board)
+	var events: Array = system.on_enter(unit, Vector3i(0, 0, 0), board)
 	assert_eq(unit.hp, 100, "entering a fire tile does not burn (wrong trigger)")
 	assert_eq(events.size(), 0, "no events for a non-matching trigger")
 
@@ -38,7 +38,7 @@ func test_fire_does_not_fire_on_enter():
 func test_empowering_water_affects_aquatic_unit():
 	var aquatic := Doubles.TaggedCombatUnit.new(0, { "attack": 10 }, ["aquatic"])
 	var board := Doubles.TileEffectBoard.new()
-	board.place(aquatic, Vector2i(1, 1))
+	board.place(aquatic, Vector3i(1, 1, 0))
 	var water := TileEffectLibrary.empowering_water()
 	assert_true(water.applies_to(aquatic, board), "aquatic unit matches required tag")
 	water.run(aquatic, board)
@@ -49,7 +49,7 @@ func test_empowering_water_affects_aquatic_unit():
 func test_empowering_water_ignores_non_aquatic_unit():
 	var lander := Doubles.TaggedCombatUnit.new(0, { "attack": 10 }, ["infantry"])
 	var board := Doubles.TileEffectBoard.new()
-	board.place(lander, Vector2i(1, 1))
+	board.place(lander, Vector3i(1, 1, 0))
 	var water := TileEffectLibrary.empowering_water()
 	assert_false(water.applies_to(lander, board), "unit without the aquatic tag is filtered out")
 
@@ -57,8 +57,8 @@ func test_untagged_unit_not_empowered_via_system():
 	# A unit that reports no tags at all must be unaffected by a tag-gated effect.
 	var untagged := Doubles.TaggedCombatUnit.new(0, { "attack": 10 })
 	var board := Doubles.TileEffectBoard.new()
-	board.place(untagged, Vector2i(4, 4))
-	board.set_tile_effects(Vector2i(4, 4), [TileEffectLibrary.empowering_water()])
+	board.place(untagged, Vector3i(4, 4, 0))
+	board.set_tile_effects(Vector3i(4, 4, 0), [TileEffectLibrary.empowering_water()])
 	var system = autofree(TileEffectSystem.new())
 	var untagged_flags: Dictionary = system.passive_flags(untagged, board)
 	assert_true(untagged_flags.is_empty(), "no passive flags for a filtered-out unit")
@@ -71,8 +71,8 @@ func test_untagged_unit_not_empowered_via_system():
 func test_stealth_reports_untargetable_flag():
 	var unit := Doubles.TaggedCombatUnit.new(0, {})
 	var board := Doubles.TileEffectBoard.new()
-	board.place(unit, Vector2i(3, 3))
-	board.set_tile_effects(Vector2i(3, 3), [TileEffectLibrary.stealth()])
+	board.place(unit, Vector3i(3, 3, 0))
+	board.set_tile_effects(Vector3i(3, 3, 0), [TileEffectLibrary.stealth()])
 	var system = autofree(TileEffectSystem.new())
 	var flags: Dictionary = system.passive_flags(unit, board)
 	assert_true(flags.get("untargetable", false), "stealth tile marks occupant untargetable")
@@ -80,8 +80,8 @@ func test_stealth_reports_untargetable_flag():
 func test_passive_flags_merge_across_effects():
 	var unit := Doubles.TaggedCombatUnit.new(0, {})
 	var board := Doubles.TileEffectBoard.new()
-	board.place(unit, Vector2i(5, 5))
-	board.set_tile_effects(Vector2i(5, 5), [TileEffectLibrary.stealth(), TileEffectLibrary.fortify()])
+	board.place(unit, Vector3i(5, 5, 0))
+	board.set_tile_effects(Vector3i(5, 5, 0), [TileEffectLibrary.stealth(), TileEffectLibrary.fortify()])
 	var system = autofree(TileEffectSystem.new())
 	var flags: Dictionary = system.passive_flags(unit, board)
 	assert_true(flags.get("untargetable", false), "stealth flag present")
@@ -97,8 +97,8 @@ func test_affected_factions_enemies_only():
 	var ally := Doubles.TaggedCombatUnit.new(0, { "health": 100 })
 	var board := Doubles.TileEffectBoard.new()
 	board.perspective = reference
-	board.place(enemy, Vector2i(6, 0))
-	board.place(ally, Vector2i(7, 0))
+	board.place(enemy, Vector3i(6, 0, 0))
+	board.place(ally, Vector3i(7, 0, 0))
 
 	var hazard := TileEffectResource.new()
 	hazard.id = &"enemy_hazard"
@@ -111,8 +111,8 @@ func test_affected_factions_enemies_only():
 	var fx: Array[MoveEffect] = [dmg]
 	hazard.effects = fx
 
-	board.set_tile_effects(Vector2i(6, 0), [hazard])
-	board.set_tile_effects(Vector2i(7, 0), [hazard])
+	board.set_tile_effects(Vector3i(6, 0, 0), [hazard])
+	board.set_tile_effects(Vector3i(7, 0, 0), [hazard])
 	var system = autofree(TileEffectSystem.new())
 
 	system.on_turn_start(enemy, board)
@@ -126,8 +126,8 @@ func test_injected_tile_effects_lookup():
 	# When the board exposes no effects for a cell, the system uses its own map.
 	var unit := Doubles.TaggedCombatUnit.new(1, { "health": 100 })
 	var board := Doubles.TileEffectBoard.new()
-	board.place(unit, Vector2i(9, 9))
+	board.place(unit, Vector3i(9, 9, 0))
 	var system = autofree(TileEffectSystem.new())
-	system.tile_effects[Vector2i(9, 9)] = [TileEffectLibrary.fire()]
+	system.tile_effects[Vector3i(9, 9, 0)] = [TileEffectLibrary.fire()]
 	system.on_turn_start(unit, board)
 	assert_eq(unit.hp, 85, "injected fire effect burns for 15")

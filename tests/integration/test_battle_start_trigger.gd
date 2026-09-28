@@ -74,7 +74,7 @@ func _geode_character(speed: int) -> CharacterResource:
 ## A live unit standing on [param cell] of the shared board. Parented to the map root that
 ## _map_root's autofree owns, so it is freed with it. [param speed] is set BEFORE the node
 ## enters the tree, because _ready is what builds UnitStats from the resource.
-func _geode(cell: Vector2i, speed: int = 8) -> Unit:
+func _geode(cell: Vector3i, speed: int = 8) -> Unit:
 	var u := Unit.new()
 	u.character_resource = _geode_character(speed)
 	_map_root.add_child(u)   # in-tree -> _ready builds UnitStats + the AbilitySystem
@@ -101,8 +101,8 @@ func _speed_first() -> SpeedFirstTurnSystem:
 # =====================================================================================
 
 func test_a_traditional_boot_hands_every_unit_its_battle_start_moment() -> void:
-	var mine := _geode(Vector2i(1, 1))
-	var theirs := _geode(Vector2i(5, 5))
+	var mine := _geode(Vector3i(1, 1, 0))
+	var theirs := _geode(Vector3i(5, 5, 0))
 	var me := _player(0)
 	var them := _player(1, true)
 	me.add_unit(mine)
@@ -127,8 +127,8 @@ func test_a_traditional_boot_hands_every_unit_its_battle_start_moment() -> void:
 func test_a_speed_first_boot_hands_every_unit_its_battle_start_moment() -> void:
 	# The other system, and the harder one: Speed First opens ONE unit's turn, so a pass wired
 	# to "the units of the side that just became active" would ward the fastest unit only.
-	var fast := _geode(Vector2i(1, 1), 20)
-	var slow := _geode(Vector2i(5, 5), 1)
+	var fast := _geode(Vector3i(1, 1, 0), 20)
+	var slow := _geode(Vector3i(5, 5, 0), 1)
 	var me := _player(0)
 	var them := _player(1, true)
 	me.add_unit(fast)
@@ -149,7 +149,7 @@ func test_the_opening_ward_lands_before_the_first_turn_tick() -> void:
 	# Ordering, stated as a rule rather than as a coincidence: ON_BATTLE_START resolves ahead
 	# of the opening ON_TURN_START, so a battle-start effect is already in force when the first
 	# turn's abilities read the unit.
-	var unit := _geode(Vector2i(2, 2))
+	var unit := _geode(Vector3i(2, 2, 0))
 	var me := _player(0)
 	me.add_unit(unit)
 	var ts := _traditional()
@@ -175,7 +175,7 @@ func test_a_unit_that_arrives_after_the_battle_began_is_never_warded() -> void:
 	# THE SCOPE LINE. ON_BATTLE_START is "the battle began", not "a unit exists": a summon or a
 	# reinforcement wave must not collect a free opening buff. If this ever needs to change it
 	# is a NEW trigger (ON_SPAWN), not a widening of this one.
-	var opener := _geode(Vector2i(1, 1))
+	var opener := _geode(Vector3i(1, 1, 0))
 	var me := _player(0)
 	me.add_unit(opener)
 	var ts := _traditional()
@@ -183,7 +183,7 @@ func test_a_unit_that_arrives_after_the_battle_began_is_never_warded() -> void:
 	ts.start_turn_system()
 	assert_eq(opener.get_shield(), WARD_AMOUNT, "precondition: the opener is warded")
 
-	var late := _geode(Vector2i(3, 3))
+	var late := _geode(Vector3i(3, 3, 0))
 	me.add_unit(late)            # adopted exactly as SpawnManager adopts a runtime spawn
 	ts.register_unit(late)
 
@@ -197,7 +197,7 @@ func test_a_unit_that_arrives_after_the_battle_began_is_never_warded() -> void:
 
 
 func test_the_pass_runs_once_however_many_turns_open() -> void:
-	var unit := _geode(Vector2i(1, 1))
+	var unit := _geode(Vector3i(1, 1, 0))
 	var me := _player(0)
 	me.add_unit(unit)
 	var ts := _traditional()
@@ -219,7 +219,7 @@ func test_a_geode_that_already_holds_a_full_ward_boots_to_the_same_fifteen() -> 
 	# REFRESH, NEVER STACK, at the boot boundary: the opening grant landing on a live 15 leaves
 	# 15. This is what makes the two-entry authoring (opening ward + earned ward) safe by
 	# construction rather than by scheduling.
-	var unit := _geode(Vector2i(1, 1))
+	var unit := _geode(Vector3i(1, 1, 0))
 	unit.grant_shield(WARD_AMOUNT)
 	var me := _player(0)
 	me.add_unit(unit)
@@ -239,7 +239,7 @@ func test_a_geode_that_already_holds_a_full_ward_boots_to_the_same_fifteen() -> 
 ## snapshot entry for the unit -- captured through the REAL serializer, so its shape can never
 ## drift from the one the restore path reads.
 func _capture_a_battle_with_a_broken_ward() -> Dictionary:
-	var saved := _geode(Vector2i(1, 1))
+	var saved := _geode(Vector3i(1, 1, 0))
 	var me := _player(0)
 	me.add_unit(saved)
 	var ts := _traditional()
@@ -252,7 +252,7 @@ func _capture_a_battle_with_a_broken_ward() -> Dictionary:
 	assert_eq(saved.get_shield(), 0, "and the ward was broken before the save")
 	assert_eq(saved.get_hp(), BASE_HEALTH - 10, "with the overrun costing real health")
 
-	var entry: Dictionary = BattleSnapshot.capture_unit(saved, 0, Vector2i(1, 1), 0)
+	var entry: Dictionary = BattleSnapshot.capture_unit(saved, 0, Vector3i(1, 1, 0), 0)
 	ts.end_turn_system()
 	# Through JSON, because that is how a real save reaches the restore.
 	return JSON.parse_string(JSON.stringify(entry)) as Dictionary
@@ -263,7 +263,7 @@ func _capture_a_battle_with_a_broken_ward() -> Dictionary:
 ## The saved unit is still standing on the board (nothing tears a map down here), so the
 ## respawn goes on its own cell -- a real restore rebuilds the map from scratch.
 func _restore_phase_one(entry: Dictionary) -> Unit:
-	var restored := _geode(Vector2i(6, 6))
+	var restored := _geode(Vector3i(6, 6, 0))
 	BattleSnapshot.apply_unit_core(restored, entry)
 	BattleSnapshot.apply_unit_statuses(restored, entry)
 	BattleSnapshot.apply_unit_moves(restored, entry)

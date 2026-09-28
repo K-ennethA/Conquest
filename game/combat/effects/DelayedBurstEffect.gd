@@ -55,7 +55,7 @@ func apply(ctx: MoveContext) -> void:
 		bonus = int(round(float(ctx.get_caster_stat(scaling_stat)) * scale))
 	var raw: int = power + bonus
 
-	var blast: Array[Vector2i] = ctx.affected_cells.duplicate()
+	var blast: Array[Vector3i] = ctx.affected_cells.duplicate()
 	var hazard := DelayedBurstHazard.new(blast, raw, category, affiliation, ctx.caster)
 	hazard.event_bus = ctx.event_bus
 	# The cast's ELEMENT, snapshotted like the damage -- a maw is an environmental
@@ -105,7 +105,7 @@ func _telegraph(ctx: MoveContext, hazard) -> void:
 	if bus == null or not is_instance_valid(bus) or not bus.has_signal(&"hazard_advanced"):
 		return
 	bus.emit_signal(&"hazard_advanced", hazard,
-		[] as Array[Vector2i], hazard.telegraph_cells(), 0)
+		[] as Array[Vector3i], hazard.telegraph_cells(), 0)
 
 
 func describe() -> String:

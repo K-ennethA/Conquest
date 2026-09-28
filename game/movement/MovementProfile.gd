@@ -7,7 +7,7 @@ class_name MovementProfile
 ## [enum CombatTypes.MovementKind]) with a [b]shape[/b] (the geometry of the
 ## steps/jumps it may take), a [b]range[/b] budget, and optional per-tile cost
 ## overrides. It is pure data: [MovementResolver] consumes it to compute which
-## cells are reachable. Cells are [Vector2i](col, row) in the combat module's
+## cells are reachable. Cells are [Vector3i](col, row, floor) in the combat module's
 ## own space (the live board adapter maps those onto the game's Vector3 grid).
 ##
 ## Author these as .tres resources for shipping content; [MovementLibrary]

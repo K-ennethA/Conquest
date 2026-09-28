@@ -76,7 +76,7 @@ func _infested() -> StatusCondition:
 
 # --- Live-board scaffolding -------------------------------------------------
 
-func _cell_to_world(cell: Vector2i) -> Vector3:
+func _cell_to_world(cell: Vector3i) -> Vector3:
 	return BoardAdapter.new(GRID, []).cell_to_world(cell)
 
 
@@ -143,7 +143,7 @@ func _begin_map() -> void:
 	add_child_autofree(_map_root)
 
 
-func _spawn(character_id: StringName, cell: Vector2i, owner: Player) -> Unit:
+func _spawn(character_id: StringName, cell: Vector3i, owner: Player) -> Unit:
 	var character := CharacterLibrary.get_character(character_id)
 	if character == null:
 		return null
@@ -203,8 +203,8 @@ func test_the_authored_blight_burst_really_poisons_a_live_unit() -> void:
 	_begin_map()
 	var side_a := Player.new(0, "A")
 	var side_b := Player.new(1, "B")
-	var poisoner := _spawn(POISONER_ID, Vector2i(2, 2), side_a)
-	var victim := _spawn(VICTIM_ID, Vector2i(2, 3), side_b)
+	var poisoner := _spawn(POISONER_ID, Vector3i(2, 2, 0), side_a)
+	var victim := _spawn(VICTIM_ID, Vector3i(2, 3, 0), side_b)
 	if poisoner == null or victim == null:
 		pending("Could not build the character-backed units; skipping.")
 		return
@@ -224,7 +224,7 @@ func test_the_authored_blight_burst_really_poisons_a_live_unit() -> void:
 	var landed := false
 	for seed_value in range(40):
 		victim.heal(999)
-		var result: Dictionary = poisoner.perform_move(slot, Vector2i(2, 3), board, _rng(seed_value))
+		var result: Dictionary = poisoner.perform_move(slot, Vector3i(2, 3, 0), board, _rng(seed_value))
 		assert_true(bool(result.get("success", false)),
 			"the cast resolves: %s" % str(result.get("reason", "")))
 		if controller.has_status(&"poisoned"):
@@ -238,7 +238,7 @@ func test_poison_ticks_every_turn_on_the_traditional_turn_system() -> void:
 	# expiry. This is the whole of Report 1's "does it hurt anything" claim.
 	_begin_map()
 	var side := Player.new(0, "Human")
-	var victim := _spawn(VICTIM_ID, Vector2i(1, 1), side)
+	var victim := _spawn(VICTIM_ID, Vector3i(1, 1, 0), side)
 	if victim == null:
 		pending("Could not build the character-backed unit; skipping.")
 		return
@@ -279,7 +279,7 @@ func test_poison_ticks_on_an_AI_OWNED_unit_too() -> void:
 	_begin_map()
 	var ai_side := Player.new(1, "AI")
 	ai_side.is_ai = true
-	var victim := _spawn(VICTIM_ID, Vector2i(4, 4), ai_side)
+	var victim := _spawn(VICTIM_ID, Vector3i(4, 4, 0), ai_side)
 	if victim == null:
 		pending("Could not build the character-backed unit; skipping.")
 		return
@@ -306,7 +306,7 @@ func test_poison_ticks_on_the_speed_first_turn_system_too() -> void:
 	# has to hang off the per-unit hook rather than the per-side one.
 	_begin_map()
 	var side := Player.new(0, "Human")
-	var victim := _spawn(VICTIM_ID, Vector2i(6, 6), side)
+	var victim := _spawn(VICTIM_ID, Vector3i(6, 6, 0), side)
 	if victim == null:
 		pending("Could not build the character-backed unit; skipping.")
 		return
@@ -333,9 +333,9 @@ func test_poison_severity_is_the_stack_count_and_stops_at_the_cap() -> void:
 	# "statuses refresh" -- severity IS the number of live instances, bounded at 3.
 	_begin_map()
 	var side := Player.new(0, "Human")
-	var single := _spawn(VICTIM_ID, Vector2i(1, 1), side)
-	var stacked := _spawn(VICTIM_ID, Vector2i(3, 1), side)
-	var overstacked := _spawn(VICTIM_ID, Vector2i(5, 1), side)
+	var single := _spawn(VICTIM_ID, Vector3i(1, 1, 0), side)
+	var stacked := _spawn(VICTIM_ID, Vector3i(3, 1, 0), side)
+	var overstacked := _spawn(VICTIM_ID, Vector3i(5, 1, 0), side)
 	if single == null or stacked == null or overstacked == null:
 		pending("Could not build the character-backed units; skipping.")
 		return
@@ -376,7 +376,7 @@ func test_a_poison_tick_can_kill_and_the_death_resolves() -> void:
 	# death path -- eliminated, no longer alive, off the board -- not linger at 0 HP.
 	_begin_map()
 	var side := Player.new(0, "Human")
-	var doomed := _spawn(FRAGILE_ID, Vector2i(7, 7), side)
+	var doomed := _spawn(FRAGILE_ID, Vector3i(7, 7, 0), side)
 	if doomed == null:
 		pending("Could not build the character-backed unit; skipping.")
 		return
@@ -414,7 +414,7 @@ func test_a_status_tick_is_never_dodged() -> void:
 	# seven, at random, on an unseeded generator. Poison is already inside you: it lands.
 	var board := _GrassBoard.new()
 	var unit := _EvasiveUnit.new(100000)
-	board.place(unit, Vector2i(0, 0))
+	board.place(unit, Vector3i(0, 0, 0))
 
 	assert_gt(TerrainStats.bonus_for(unit, "evasion", board), 0,
 		"the fixture really does grant terrain avoid, or this test proves nothing")
@@ -454,8 +454,8 @@ func test_a_killing_blow_still_fires_the_attackers_ON_ATTACK_ability() -> void:
 	_begin_map()
 	var parasite_side := Player.new(0, "Parasite")
 	var prey_side := Player.new(1, "Prey")
-	var parasite := _spawn(PARASITE_ID, Vector2i(2, 2), parasite_side)
-	var prey := _spawn(VICTIM_ID, Vector2i(2, 3), prey_side)
+	var parasite := _spawn(PARASITE_ID, Vector3i(2, 2, 0), parasite_side)
+	var prey := _spawn(VICTIM_ID, Vector3i(2, 3, 0), prey_side)
 	if parasite == null or prey == null:
 		pending("Could not build the character-backed units; skipping.")
 		return
@@ -471,7 +471,7 @@ func test_a_killing_blow_still_fires_the_attackers_ON_ATTACK_ability() -> void:
 	prey.take_damage(prey.get_hp() - 1)
 	assert_eq(prey.get_hp(), 1, "the prey is one hit from death")
 
-	var result: Dictionary = parasite.perform_move(slot, Vector2i(2, 3), board, _rng(7))
+	var result: Dictionary = parasite.perform_move(slot, Vector3i(2, 3, 0), board, _rng(7))
 	assert_true(bool(result.get("success", false)),
 		"the lethal bite resolves: %s" % str(result.get("reason", "")))
 	assert_false(prey.is_alive(), "and it killed the prey")
@@ -491,8 +491,8 @@ func test_the_ON_KILL_trigger_fires_when_an_AI_OWNED_unit_lands_the_kill() -> vo
 	var ai_side := Player.new(0, "AI")
 	ai_side.is_ai = true
 	var prey_side := Player.new(1, "Prey")
-	var reaper := _spawn(REAPER_ID, Vector2i(5, 5), ai_side)
-	var prey := _spawn(VICTIM_ID, Vector2i(5, 6), prey_side)
+	var reaper := _spawn(REAPER_ID, Vector3i(5, 5, 0), ai_side)
+	var prey := _spawn(VICTIM_ID, Vector3i(5, 6, 0), prey_side)
 	if reaper == null or prey == null:
 		pending("Could not build the character-backed units; skipping.")
 		return
@@ -507,7 +507,7 @@ func test_the_ON_KILL_trigger_fires_when_an_AI_OWNED_unit_lands_the_kill() -> vo
 	var wounded_hp: int = reaper.get_hp()
 	prey.take_damage(prey.get_hp() - 1)
 
-	var result: Dictionary = reaper.perform_move(slot, Vector2i(5, 6), board, _rng(3))
+	var result: Dictionary = reaper.perform_move(slot, Vector3i(5, 6, 0), board, _rng(3))
 	assert_true(bool(result.get("success", false)), "the AI's lethal bite resolves")
 	assert_false(prey.is_alive(), "the AI landed the kill")
 	await get_tree().process_frame
@@ -525,8 +525,8 @@ func test_two_bites_seize_control_of_a_living_host_on_the_live_board() -> void:
 	_begin_map()
 	var parasite_side := Player.new(0, "Parasite")
 	var prey_side := Player.new(1, "Prey")
-	var parasite := _spawn(PARASITE_ID, Vector2i(2, 2), parasite_side)
-	var host := _spawn(VICTIM_ID, Vector2i(2, 3), prey_side)
+	var parasite := _spawn(PARASITE_ID, Vector3i(2, 2, 0), parasite_side)
+	var host := _spawn(VICTIM_ID, Vector3i(2, 3, 0), prey_side)
 	if parasite == null or host == null:
 		pending("Could not build the character-backed units; skipping.")
 		return
@@ -542,13 +542,13 @@ func test_two_bites_seize_control_of_a_living_host_on_the_live_board() -> void:
 	var on_controlled := func(u, _src): takeovers.append(u)
 	GameEvents.unit_controlled.connect(on_controlled)
 
-	parasite.perform_move(slot, Vector2i(2, 3), board, _rng(11))
+	parasite.perform_move(slot, Vector3i(2, 3, 0), board, _rng(11))
 	assert_eq(status.stack_count(&"infested"), 1, "the first bite plants one infestation")
 	assert_eq(takeovers.size(), 0, "one is not yet a takeover")
 
 	host.reset_turn_actions()
 	parasite.reset_turn_actions()
-	parasite.perform_move(slot, Vector2i(2, 3), board, _rng(12))
+	parasite.perform_move(slot, Vector3i(2, 3, 0), board, _rng(12))
 
 	GameEvents.unit_controlled.disconnect(on_controlled)
 
@@ -600,7 +600,7 @@ func _self_poison(unit: Unit, board) -> void:
 
 ## A single-cell ENEMY-targeted context from [param caster] onto [param target]'s cell.
 func _cast_at(caster: Unit, target: Unit, board) -> MoveContext:
-	var cell: Vector2i = board.cell_of(target)
+	var cell: Vector3i = board.cell_of(target)
 	var move := MoveResource.new()
 	move.move_id = &"test_poison_cast"
 	var pattern := TargetingPattern.new()
@@ -609,7 +609,7 @@ func _cast_at(caster: Unit, target: Unit, board) -> MoveContext:
 	pattern.max_range = 12
 	pattern.area_shape = CombatTypes.AreaShape.SINGLE
 	move.targeting = pattern
-	return MoveContext.new(caster, board, move, cell, [cell] as Array[Vector2i])
+	return MoveContext.new(caster, board, move, cell, [cell] as Array[Vector3i])
 
 
 ## Record every damage_dealt attacker for the duration of [param body]. GUT lambdas
@@ -627,8 +627,8 @@ func test_a_poison_kill_fires_the_APPLIERS_on_kill_ability() -> void:
 	_begin_map()
 	var hunter_side := Player.new(0, "Hunter")
 	var prey_side := Player.new(1, "Prey")
-	var poisoner := _spawn(REAPER_ID, Vector2i(2, 2), hunter_side)
-	var doomed := _spawn(FRAGILE_ID, Vector2i(6, 6), prey_side)
+	var poisoner := _spawn(REAPER_ID, Vector3i(2, 2, 0), hunter_side)
+	var doomed := _spawn(FRAGILE_ID, Vector3i(6, 6, 0), prey_side)
 	if poisoner == null or doomed == null:
 		pending("Could not build the character-backed units; skipping.")
 		return
@@ -659,8 +659,8 @@ func test_a_poison_kill_credits_the_applier_on_the_speed_first_system_too() -> v
 	_begin_map()
 	var hunter_side := Player.new(0, "Hunter")
 	var prey_side := Player.new(1, "Prey")
-	var poisoner := _spawn(REAPER_ID, Vector2i(2, 2), hunter_side)
-	var doomed := _spawn(FRAGILE_ID, Vector2i(6, 6), prey_side)
+	var poisoner := _spawn(REAPER_ID, Vector3i(2, 2, 0), hunter_side)
+	var doomed := _spawn(FRAGILE_ID, Vector3i(6, 6, 0), prey_side)
 	if poisoner == null or doomed == null:
 		pending("Could not build the character-backed units; skipping.")
 		return
@@ -688,8 +688,8 @@ func test_a_poison_kill_credits_an_AI_OWNED_applier() -> void:
 	var ai_side := Player.new(0, "AI")
 	ai_side.is_ai = true
 	var prey_side := Player.new(1, "Prey")
-	var poisoner := _spawn(REAPER_ID, Vector2i(2, 2), ai_side)
-	var doomed := _spawn(FRAGILE_ID, Vector2i(6, 6), prey_side)
+	var poisoner := _spawn(REAPER_ID, Vector3i(2, 2, 0), ai_side)
+	var doomed := _spawn(FRAGILE_ID, Vector3i(6, 6, 0), prey_side)
 	if poisoner == null or doomed == null:
 		pending("Could not build the character-backed units; skipping.")
 		return
@@ -714,8 +714,8 @@ func test_a_poison_whose_applier_has_died_credits_nobody() -> void:
 	_begin_map()
 	var hunter_side := Player.new(0, "Hunter")
 	var prey_side := Player.new(1, "Prey")
-	var poisoner := _spawn(REAPER_ID, Vector2i(2, 2), hunter_side)
-	var doomed := _spawn(FRAGILE_ID, Vector2i(6, 6), prey_side)
+	var poisoner := _spawn(REAPER_ID, Vector3i(2, 2, 0), hunter_side)
+	var doomed := _spawn(FRAGILE_ID, Vector3i(6, 6, 0), prey_side)
 	if poisoner == null or doomed == null:
 		pending("Could not build the character-backed units; skipping.")
 		return
@@ -745,7 +745,7 @@ func test_a_unit_that_poisons_itself_to_death_is_credited_with_nothing() -> void
 	# this refuses.
 	_begin_map()
 	var side := Player.new(0, "Solo")
-	var doomed := _spawn(FRAGILE_REAPER_ID, Vector2i(6, 6), side)
+	var doomed := _spawn(FRAGILE_REAPER_ID, Vector3i(6, 6, 0), side)
 	if doomed == null:
 		pending("Could not build the character-backed unit; skipping.")
 		return
@@ -771,8 +771,8 @@ func test_a_direct_kill_still_credits_the_unit_that_swung() -> void:
 	_begin_map()
 	var hunter_side := Player.new(0, "Hunter")
 	var prey_side := Player.new(1, "Prey")
-	var reaper := _spawn(REAPER_ID, Vector2i(5, 5), hunter_side)
-	var prey := _spawn(VICTIM_ID, Vector2i(5, 6), prey_side)
+	var reaper := _spawn(REAPER_ID, Vector3i(5, 5, 0), hunter_side)
+	var prey := _spawn(VICTIM_ID, Vector3i(5, 6, 0), prey_side)
 	if reaper == null or prey == null:
 		pending("Could not build the character-backed units; skipping.")
 		return
@@ -786,7 +786,7 @@ func test_a_direct_kill_still_credits_the_unit_that_swung() -> void:
 	prey.take_damage(prey.get_hp() - 1)
 
 	var attackers: Array = _attackers_during(func():
-		reaper.perform_move(slot, Vector2i(5, 6), board, _rng(5)))
+		reaper.perform_move(slot, Vector3i(5, 6, 0), board, _rng(5)))
 
 	assert_true(reaper in attackers, "the swing is announced with the unit that swung")
 	assert_false(prey.is_alive(), "the bite killed")
@@ -805,14 +805,14 @@ func test_a_direct_kill_still_credits_the_unit_that_swung() -> void:
 class _GrassBoard:
 	var placements: Array = []
 	var _grass = load("res://game/tiles/effects/resources/tall_grass.tres")
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -822,7 +822,7 @@ class _GrassBoard:
 		return false
 	func are_allies(_a, _b) -> bool:
 		return true
-	func tile_effects_at(_cell: Vector2i) -> Array:
+	func tile_effects_at(_cell: Vector3i) -> Array:
 		return [_grass] if _grass != null else []
 
 ## A unit with its own evasion on top of the terrain's, so the dodge chance under test

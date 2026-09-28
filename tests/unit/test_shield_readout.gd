@@ -2,7 +2,8 @@ extends GutTest
 
 ## The damage-soak SHIELD as a READOUT: the shared arithmetic ([ShieldVisuals]), the
 ## absorption rule it borrows from combat ([method Unit.absorb_split]), the silver segment
-## on the world-space [HealthBar], and the soaked floating number in [DamageNumbers].
+## on the world-space [HealthBar], and the soaked floating number in [FloatingCombatText]
+## ("Blocked N", paired by [CombatTextPairer]).
 ##
 ## WHY THIS SUITE EXISTS. [signal Unit.shield_changed] said "Drives any shield HUD" and
 ## nothing anywhere was connected to it: a 15-point Crystalline Ward was completely
@@ -15,7 +16,6 @@ extends GutTest
 ## readout that can be on every HP surface in the game.
 
 const HEALTH_BAR := preload("res://game/visuals/HealthBar.tscn")
-const DAMAGE_NUMBERS := preload("res://game/visuals/DamageNumbers.gd")
 const ANIMATOR := preload("res://game/visuals/UnitAnimator.gd")
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
 
@@ -332,43 +332,63 @@ func test_depleting_the_shield_restores_exactly_the_pre_shield_bar() -> void:
 # 6. The floating number
 # ==============================================================================
 
-func _numbers() -> Node3D:
-	return add_child_autofree(DAMAGE_NUMBERS.new())
+func _numbers() -> FloatingCombatText:
+	return add_child_autofree(FloatingCombatText.new())
 
 
-## Every popup's text, in spawn order.
-func _popup_texts(numbers: Node3D) -> PackedStringArray:
-	var out: PackedStringArray = []
-	for child in numbers.get_children():
-		if child is Label3D:
-			out.append((child as Label3D).text)
-	return out
+## Announce an attack on [param victim] the way [DamageEffect] does: a [CombatText]
+## annotation BEFORE the damage is applied -- the order that lets the layer sample the
+## shield before the hit and report exactly what it soaked.
+func _announce_hit(numbers: FloatingCombatText, victim: Unit, amount: int) -> void:
+	numbers._on_annotated(victim, { "kind": CombatText.KIND_DAMAGE, "amount": amount,
+			"source_kind": CombatText.SRC_ATTACK })
 
 
-## Every popup's HUE, in spawn order. Alpha is deliberately dropped: each popup's fade
-## tween starts the frame it spawns, so by the time a test can look, `modulate.a` is
-## already ~0.9998 and an exact Color compare fails on a difference nobody can see.
-func _popup_hues(numbers: Node3D) -> Array:
+## Every popup's label texts (main number first, then any source line), in spawn order:
+## one inner Array per popup.
+func _popup_texts(numbers: FloatingCombatText) -> Array:
 	var out: Array = []
-	for child in numbers.get_children():
-		if child is Label3D:
-			var m: Color = (child as Label3D).modulate
-			out.append(Color(m.r, m.g, m.b))
+	for popup in numbers.get_children():
+		var texts: Array = []
+		for label in _labels_under(popup):
+			texts.append((label as Label).text)
+		out.append(texts)
 	return out
+
+
+func _labels_under(node: Node) -> Array:
+	var out: Array = []
+	for child in node.get_children():
+		if child is Label:
+			out.append(child)
+		else:
+			out.append_array(_labels_under(child))
+	return out
+
+
+## The font colour of the first popup label reading [param text] (Color(0,0,0,0) if none).
+## Read off the theme override, which is exact -- the popup's fade lives on the popup's own
+## modulate, never on the label colour.
+func _colour_of_label(numbers: FloatingCombatText, text: String) -> Color:
+	for popup in numbers.get_children():
+		for label in _labels_under(popup):
+			if (label as Label).text == text:
+				return (label as Label).get_theme_color(&"font_color")
+	return Color(0, 0, 0, 0)
 
 
 func test_an_unshielded_hit_still_floats_one_plain_white_number() -> void:
 	# The regression guard: the overwhelmingly common case must be untouched.
 	var numbers := _numbers()
 	var victim := _unit()
-	numbers._on_damage_dealt(null, victim, 12)
+	_announce_hit(numbers, victim, 12)
+	victim.take_damage(12)
 	await get_tree().process_frame
 
-	assert_eq(Array(_popup_texts(numbers)), ["12"],
-			"one hit, one number, exactly as before")
-	assert_true(_popup_hues(numbers)[0].is_equal_approx(
-			Color(numbers.damage_color.r, numbers.damage_color.g, numbers.damage_color.b)),
-			"in plain damage white (%s)" % _popup_hues(numbers)[0])
+	assert_eq(_popup_texts(numbers), [["12"]],
+			"one hit, one number, no 'Blocked' line -- exactly as before")
+	assert_eq(_colour_of_label(numbers, "12"), FloatingCombatText.COL_DAMAGE,
+			"in plain damage white")
 	numbers.clear_popups()
 
 
@@ -378,19 +398,19 @@ func test_a_fully_soaked_hit_floats_silver_instead_of_white() -> void:
 	var numbers := _numbers()
 	var victim := _unit()
 	victim.grant_shield(15)
-	# Announced BEFORE the damage is applied -- the order DamageEffect guarantees, and the
-	# reason the split can be sampled exactly.
-	numbers._on_damage_dealt(null, victim, 12)
+	_announce_hit(numbers, victim, 12)
 	victim.take_damage(12)
+	# No HP moved, so the annotation is still unclaimed: it resolves at the end of the frame
+	# into a "Blocked" entry ([constant CombatTextPairer.ENTRY_BLOCKED]).
 	await get_tree().process_frame
 
-	assert_eq(Array(_popup_texts(numbers)),
-			["%s 12" % ShieldVisuals.GLYPH],
-			"the whole hit floats as an ABSORBED number, and no damage number at all")
-	assert_true(_popup_hues(numbers)[0].is_equal_approx(
-			Color(numbers.shield_color.r, numbers.shield_color.g, numbers.shield_color.b)),
-			"in the shield's silver, matching the segment it came off (%s)"
-			% _popup_hues(numbers)[0])
+	assert_eq(victim.current_health, 40, "the ward ate the whole hit")
+	assert_eq(_popup_texts(numbers), [["Blocked 12"]],
+			"the whole hit floats as a BLOCKED number, and no damage number at all")
+	assert_eq(_colour_of_label(numbers, "Blocked 12"), ShieldVisuals.SILVER,
+			"in the shield's silver, matching the segment it came off")
+	assert_eq(FloatingCombatText.COL_SHIELD, ShieldVisuals.SILVER,
+			"(the layer's shield colour IS the HP-bar segment's colour, not a lookalike)")
 	numbers.clear_popups()
 
 
@@ -398,17 +418,22 @@ func test_a_partly_soaked_hit_floats_the_soak_and_the_health_it_still_cost() -> 
 	var numbers := _numbers()
 	var victim := _unit()
 	victim.grant_shield(5)
-	numbers._on_damage_dealt(null, victim, 12)
+	_announce_hit(numbers, victim, 12)
 	victim.take_damage(12)
 	await get_tree().process_frame
 
-	var texts: Array = Array(_popup_texts(numbers))
-	gut.p("popups      : %s" % [texts])
-	assert_eq(texts.size(), 2, "two numbers: what the ward ate and what HP paid")
-	assert_true(texts.has("%s 5" % ShieldVisuals.GLYPH),
-			"the ward's 5 floats silver: %s" % [texts])
-	assert_true(texts.has("7"),
-			"and the 7 that actually reached health floats as damage: %s" % [texts])
+	var popups: Array = _popup_texts(numbers)
+	gut.p("popups      : %s" % [popups])
+	assert_eq(popups.size(), 1,
+			"ONE popup: the HP the hit cost, with the ward's share on the line under it")
+	if popups.size() != 1:
+		numbers.clear_popups()
+		return
+	assert_eq(popups[0], ["7", "Blocked 5"],
+			"the 7 that actually reached health floats as damage, and the 5 the ward ate "
+			+ "rides its source line: %s" % [popups])
+	assert_eq(_colour_of_label(numbers, "7"), FloatingCombatText.COL_DAMAGE,
+			"the part that reached HP is ordinary damage")
 	assert_eq(victim.current_health, 40 - 7, "which is exactly the HP the board took")
 	numbers.clear_popups()
 
@@ -515,7 +540,7 @@ func _warded_unit() -> Unit:
 func test_geode_opens_the_battle_already_warded_and_the_silver_is_there_to_show_it() -> void:
 	var unit := _warded_unit()
 	var board = Doubles.MinimalBoard.new()
-	board.place(unit, Vector2i.ZERO)
+	board.place(unit, Vector3i.ZERO)
 	var system = unit.get_ability_system()
 	assert_not_null(system, "the authored kit gave the unit a live AbilitySystem")
 	if system == null:
@@ -543,7 +568,7 @@ func test_geode_opens_the_battle_already_warded_and_the_silver_is_there_to_show_
 func test_the_opening_grant_is_spent_once_and_never_re_fires() -> void:
 	var unit := _warded_unit()
 	var board = Doubles.MinimalBoard.new()
-	board.place(unit, Vector2i.ZERO)
+	board.place(unit, Vector3i.ZERO)
 	var system = unit.get_ability_system()
 	if system == null:
 		return
@@ -562,7 +587,7 @@ func test_the_opening_grant_is_spent_once_and_never_re_fires() -> void:
 func test_a_broken_ward_recrystallizes_on_the_third_untouched_turn() -> void:
 	var unit := _warded_unit()
 	var board = Doubles.MinimalBoard.new()
-	board.place(unit, Vector2i.ZERO)
+	board.place(unit, Vector3i.ZERO)
 	var system = unit.get_ability_system()
 	if system == null:
 		return
@@ -603,7 +628,7 @@ func test_taking_a_hit_mid_streak_sends_it_back_to_zero() -> void:
 	# never reaches three, which is the whole design.
 	var unit := _warded_unit()
 	var board = Doubles.MinimalBoard.new()
-	board.place(unit, Vector2i.ZERO)
+	board.place(unit, Vector3i.ZERO)
 	var system = unit.get_ability_system()
 	if system == null:
 		return
@@ -631,7 +656,7 @@ func test_the_two_ward_entries_refresh_each_other_and_never_stack() -> void:
 	# STRONGEST value. Fire both while a full ward is already up and it is still 15.
 	var unit := _warded_unit()
 	var board = Doubles.MinimalBoard.new()
-	board.place(unit, Vector2i.ZERO)
+	board.place(unit, Vector3i.ZERO)
 	var system = unit.get_ability_system()
 	if system == null:
 		return

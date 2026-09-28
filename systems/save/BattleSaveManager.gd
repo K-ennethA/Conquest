@@ -541,27 +541,34 @@ func _capture_board(index_of: Callable) -> Dictionary:
 
 	if CombatServices != null:
 		var size: Vector3 = GRID.size if GRID != null else Vector3.ZERO
+		# Every floor: a trap laid on a bridge deck is as much battle state as one on the
+		# ground. Cells are (col, row, floor) -- see Cells / docs/MULTI_FLOOR.md.
+		var live_board = CombatServices.board()
+		var floors: int = 1
+		if live_board != null and live_board.has_method("floor_count"):
+			floors = maxi(1, int(live_board.floor_count()))
 		for x in range(int(size.x)):
 			for y in range(int(size.z)):
-				var cell := Vector2i(x, y)
-				var ids: Array = []
-				# The PLACEMENT RECORD, parallel to `ids`. A placed trap can now carry a frozen
-				# expiry round (see TileEffectResource.stamp_placement) when the active mode
-				# declared a lifetime for it, and a resume that dropped it would hand the player
-				# back a permanent trap the battle had already put a clock on. -1 is "never",
-				# which is what every effect placed outside such a mode records and what a
-				# snapshot written before these keys existed reads back as.
-				var placed: Array = []
-				var expiry: Array = []
-				for effect in CombatServices.applied_tile_effects_at(cell):
-					if effect != null and not String(effect.id).is_empty():
-						ids.append(String(effect.id))
-						placed.append(int(effect.placed_round) if "placed_round" in effect else -1)
-						expiry.append(int(effect.expires_on_round) if "expires_on_round" in effect else -1)
-				if not ids.is_empty():
-					(out["applied_tile_effects"] as Array).append({
-						"cell": BattleSnapshot.cell_to_array(cell), "ids": ids,
-						"placed": placed, "expiry": expiry })
+				for f in range(floors):
+					var cell: Vector3i = Cells.make(x, y, f)
+					var ids: Array = []
+					# The PLACEMENT RECORD, parallel to `ids`. A placed trap can now carry a frozen
+					# expiry round (see TileEffectResource.stamp_placement) when the active mode
+					# declared a lifetime for it, and a resume that dropped it would hand the player
+					# back a permanent trap the battle had already put a clock on. -1 is "never",
+					# which is what every effect placed outside such a mode records and what a
+					# snapshot written before these keys existed reads back as.
+					var placed: Array = []
+					var expiry: Array = []
+					for effect in CombatServices.applied_tile_effects_at(cell):
+						if effect != null and not String(effect.id).is_empty():
+							ids.append(String(effect.id))
+							placed.append(int(effect.placed_round) if "placed_round" in effect else -1)
+							expiry.append(int(effect.expires_on_round) if "expires_on_round" in effect else -1)
+					if not ids.is_empty():
+						(out["applied_tile_effects"] as Array).append({
+							"cell": BattleSnapshot.cell_to_array(cell), "ids": ids,
+							"placed": placed, "expiry": expiry })
 
 	var world = _game_world_manager()
 	if world != null:
@@ -615,7 +622,10 @@ static func restore_units(map_loader, snapshot: Dictionary) -> Array:
 			spawned.append(null)
 			continue
 		var unit = map_loader.spawn_unit_now({
-			"position": BattleSnapshot.array_to_cell(entry.get("cell", [])),
+			# Map-data form: a 2D position plus its floor (MapResource.entry_position /
+			# entry_floor), which is what MapLoader's spawn path reads.
+			"position": Cells.flat(BattleSnapshot.array_to_cell(entry.get("cell", []))),
+			"floor": maxi(0, BattleSnapshot.array_to_cell(entry.get("cell", [])).z),
 			"player_id": int(entry.get("player_id", 0)),
 			"character_id": character_id,
 			"spawn_kind": MapResource.SPAWN_KIND_START,
@@ -655,7 +665,7 @@ static func restore_board(snapshot: Dictionary) -> void:
 	for item in applied as Array:
 		if not (item is Dictionary):
 			continue
-		var cell: Vector2i = BattleSnapshot.array_to_cell((item as Dictionary).get("cell", []))
+		var cell: Vector3i = BattleSnapshot.array_to_cell((item as Dictionary).get("cell", []))
 		var ids: Array = (item as Dictionary).get("ids", [])
 		var placed: Array = (item as Dictionary).get("placed", [])
 		var expiry: Array = (item as Dictionary).get("expiry", [])

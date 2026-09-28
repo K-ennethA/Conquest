@@ -105,7 +105,7 @@ static func active():
 ## [method fog_enabled]. Null until [method set_map] is called.
 var _map = null
 
-## player slot ([int]) -> Dictionary of lit cells ([Vector2i] -> true). Dropped wholesale by
+## player slot ([int]) -> Dictionary of lit cells ([Vector3i] -> true). Dropped wholesale by
 ## [method invalidate].
 var _cache: Dictionary = {}
 
@@ -232,7 +232,11 @@ func fog_enabled() -> bool:
 
 # --- The pinned queries -------------------------------------------------------
 
-## Every cell player [param player_id] can currently see: a SET, [Vector2i] -> true.
+## Every cell player [param player_id] can currently see: a SET, [Vector3i] -> true.
+##
+## MULTI-FLOOR: sight is COLUMN-based -- a lit (col, row) is lit on every floor of the board,
+## so a scout sees the unit on the bridge above the ground it watches. On a single-floor map
+## this is exactly the old 2D set, on floor 0.
 ##
 ## READ-ONLY -- this is the live cached dictionary, handed out rather than copied because
 ## presentation re-reads it on every [signal vision_changed] and a per-call duplicate of a
@@ -255,10 +259,10 @@ func visible_cells(player_id: int) -> Dictionary:
 ## Ground, deliberately, not "is there anything there": fog hides UNITS, not terrain, so a
 ## ground-targeted move ([ApplyTileEffect]'s empty-tile cast, Duskmaw's Abyssal Maw) stays
 ## castable anywhere in its range and this query never gates it.
-func is_cell_visible(player_id: int, cell: Vector2i) -> bool:
+func is_cell_visible(player_id: int, cell) -> bool:
 	if not fog_enabled():
 		return true
-	return visible_cells(player_id).has(cell)
+	return visible_cells(player_id).has(Cells.from_variant(cell))
 
 
 ## Can player [param player_id] see [param unit]? The full rule, in the order it resolves:
@@ -488,7 +492,7 @@ func _on_unit_eliminated(unit = null, _eliminator = null) -> void:
 	invalidate()
 
 
-func _on_tile_effects_changed(_cell: Vector2i = Vector2i.ZERO) -> void:
+func _on_tile_effects_changed(_cell = null) -> void:
 	invalidate()
 
 
@@ -543,18 +547,28 @@ func _compute_lit(player_id: int) -> Dictionary:
 	var board = _board()
 	if board == null:
 		return lit
+	var floors: int = _floor_count(board)
 	for unit in _sorted_units(board):
 		if player_id_of(unit) != player_id:
 			continue
 		var radius: int = maxi(0, sight_range_of(unit))
 		for anchor in _cells_of(unit, board):
+			var a: Vector3i = Cells.from_variant(anchor)
 			for dx in range(-radius, radius + 1):
 				for dy in range(-radius, radius + 1):
-					var cell: Vector2i = anchor + Vector2i(dx, dy)
-					if not _in_bounds(cell, board):
-						continue
-					lit[cell] = true
+					for f in range(floors):
+						var cell := Vector3i(a.x + dx, a.y + dy, f)
+						if not _in_bounds(cell, board):
+							continue
+						lit[cell] = true
 	return lit
+
+
+## Floors the board reports (1 on a classic flat map / a mock without the query).
+static func _floor_count(board) -> int:
+	if board != null and board.has_method("floor_count"):
+		return maxi(1, int(board.floor_count()))
+	return 1
 
 
 ## True when any of [param player_id]'s units stands within [param radius] (Chebyshev) of any
@@ -565,6 +579,7 @@ func _has_seer_within(player_id: int, cells: Array, board, radius: int) -> bool:
 			continue
 		for a in _cells_of(seer, board):
 			for b in cells:
+				# Chebyshev over the COLUMN (floors ignored, like sight itself).
 				if maxi(absi(a.x - b.x), absi(a.y - b.y)) <= radius:
 					return true
 	return false
@@ -580,9 +595,13 @@ func _whole_board() -> Dictionary:
 	if not _whole_board_cache.is_empty():
 		return _whole_board_cache
 	var size: Vector2i = _map_size()
-	for x in range(size.x):
-		for y in range(size.y):
-			_whole_board_cache[Vector2i(x, y)] = true
+	var floors: int = 1
+	if _map != null and _map.has_method("get_floor_count"):
+		floors = maxi(1, int(_map.get_floor_count()))
+	for f in range(floors):
+		for x in range(size.x):
+			for y in range(size.y):
+				_whole_board_cache[Vector3i(x, y, f)] = true
 	return _whole_board_cache
 
 
@@ -599,7 +618,9 @@ func _map_size() -> Vector2i:
 ## width/height are what the tiles were painted from -- and the board's own bounds only answer
 ## for a harness with no map. Neither present means "unbounded", which is what a mock board
 ## with no geometry means.
-func _in_bounds(cell: Vector2i, board) -> bool:
+func _in_bounds(cell: Vector3i, board) -> bool:
+	if cell.z < 0:
+		return false
 	var size: Vector2i = _map_size()
 	if size.x > 0 and size.y > 0:
 		return cell.x >= 0 and cell.x < size.x and cell.y >= 0 and cell.y < size.y
@@ -629,15 +650,13 @@ func _sorted_units(board) -> Array:
 	for u in board.all_units():
 		if u != null:
 			out.append(u)
-	var cell_of := func(unit) -> Vector2i:
-		return board.cell_of(unit) if board.has_method("cell_of") else Vector2i.ZERO
+	var cell_of := func(unit) -> Vector3i:
+		return Cells.from_variant(board.cell_of(unit)) if board.has_method("cell_of") else Vector3i.ZERO
 	out.sort_custom(func(a, b) -> bool:
-		var ca: Vector2i = cell_of.call(a)
-		var cb: Vector2i = cell_of.call(b)
-		if ca.x != cb.x:
-			return ca.x < cb.x
-		if ca.y != cb.y:
-			return ca.y < cb.y
+		var ca: Vector3i = cell_of.call(a)
+		var cb: Vector3i = cell_of.call(b)
+		if ca != cb:
+			return Cells.less(ca, cb)
 		return a.get_instance_id() < b.get_instance_id())
 	return out
 
@@ -648,13 +667,16 @@ static func _cells_of(unit, board) -> Array:
 	if board.has_method("cells_of"):
 		var spanned = board.cells_of(unit)
 		if spanned is Array and not (spanned as Array).is_empty():
-			return spanned
+			var lifted: Array = []
+			for c in spanned:
+				lifted.append(Cells.from_variant(c))
+			return lifted
 	if board.has_method("cell_of"):
-		return [board.cell_of(unit)]
+		return [Cells.from_variant(board.cell_of(unit))]
 	return []
 
 
-static func _tile_effects_at(cell: Vector2i, board) -> Array:
+static func _tile_effects_at(cell: Vector3i, board) -> Array:
 	if board != null and board.has_method("tile_effects_at"):
 		var arr = board.tile_effects_at(cell)
 		if arr is Array:

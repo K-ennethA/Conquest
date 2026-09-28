@@ -112,7 +112,12 @@ static func can_arm() -> bool:
 
 static func _is_networked() -> bool:
 	var net = _node("/root/NetSession")
-	return net != null and net.has_method("is_networked_match") and bool(net.is_networked_match())
+	if net == null:
+		return false
+	if net.has_method("is_networked_match"):
+		return bool(net.is_networked_match())
+	# The cloud NetSession core names the same question is_in_match().
+	return net.has_method("is_in_match") and bool(net.is_in_match())
 
 
 static func _is_replaying() -> bool:
@@ -135,10 +140,25 @@ static func _node(path: String):
 ## [BotTurnDriver]'s beats passes through here as its LAST step, so fast-forward overrides the
 ## driver's own watchability floors (min_attack_dwell / min_move_dwell) rather than being
 ## clamped back up by them.
+##
+## ONE PACING PIPELINE FOR BOTH SPEED CONTROLS. The HUD's latched skip (this class) and the
+## HELD `fast_forward` action (Fire-Emblem hold-to-speed-up, [method GameSettings.fast_forward_factor],
+## 4x while held) both land here: armed wins outright; otherwise the delay is divided by the
+## held factor (1.0 when nothing is held), so holding the button speeds up any enemy turn
+## without arming the latch.
 static func scale_delay(seconds: float) -> float:
-	if not _armed:
-		return seconds
-	return maxf(MIN_BEAT, seconds / SPEED_MULTIPLIER)
+	if _armed:
+		return maxf(MIN_BEAT, seconds / SPEED_MULTIPLIER)
+	return seconds / held_factor()
+
+
+## The HELD fast-forward multiplier ([method GameSettings.fast_forward_factor]: 4x while the
+## `fast_forward` action is held, else 1x). Null-safe for headless tests.
+static func held_factor() -> float:
+	var gs = _node("/root/GameSettings")
+	if gs != null and gs.has_method("fast_forward_factor"):
+		return maxf(1.0, float(gs.fast_forward_factor()))
+	return 1.0
 
 
 ## An authored animation-wait cap, scaled for the current state: unchanged when disarmed, 0.0

@@ -42,11 +42,11 @@ class FakeUnit extends RefCounted:
 class FakeBoard extends RefCounted:
 	var cells: Dictionary = {}
 
-	func place(unit, cell: Vector2i) -> void:
-		cells[unit] = cell
+	func place(unit, cell) -> void:
+		cells[unit] = Cells.from_variant(cell)
 
-	func cell_of(unit) -> Vector2i:
-		return cells.get(unit, Vector2i(-999, -999))
+	func cell_of(unit) -> Vector3i:
+		return cells.get(unit, Vector3i(-999, -999, 0))
 
 	func all_units() -> Array:
 		return cells.keys()
@@ -77,8 +77,8 @@ class NullSpawner extends RefCounted:
 
 # --- Fixture -----------------------------------------------------------------
 
-const P0_BASE := Vector2i(1, 1)
-const P1_BASE := Vector2i(9, 9)
+const P0_BASE := Vector3i(1, 1, 0)
+const P1_BASE := Vector3i(9, 9, 0)
 
 var _board: FakeBoard
 var _p0: FakePlayer
@@ -112,7 +112,7 @@ func after_each() -> void:
 func _make_map() -> FakeMap:
 	var m := FakeMap.new()
 	m.lanes = [[Vector2i(1, 1), Vector2i(5, 5), Vector2i(9, 9)]]
-	m.base_cells = {0: P0_BASE, 1: P1_BASE}
+	m.base_cells = {0: Cells.flat(P0_BASE), 1: Cells.flat(P1_BASE)}
 	return m
 
 
@@ -144,9 +144,9 @@ func test_a_map_without_lanes_or_bases_is_not_a_siege_map() -> void:
 func test_the_controller_reads_the_authored_lanes_and_base_cells() -> void:
 	var c := _make_controller()
 	assert_true(c.is_active(), "lanes + base cells + armed is what makes a battle a Siege")
-	assert_eq(c.base_cell_for(0), P0_BASE, "player 0 defends the cell the map gave it")
-	assert_eq(c.enemy_base_cell_for(0), P1_BASE, "and pushes toward the other side's cell")
-	assert_eq(c.enemy_base_cell_for(1), P0_BASE, "which is symmetric for the other side")
+	assert_eq(Cells.from_variant(c.base_cell_for(0)), P0_BASE, "player 0 defends the cell the map gave it")
+	assert_eq(Cells.from_variant(c.enemy_base_cell_for(0)), P1_BASE, "and pushes toward the other side's cell")
+	assert_eq(Cells.from_variant(c.enemy_base_cell_for(1)), P0_BASE, "which is symmetric for the other side")
 
 
 # --- Traditional: the full capture sequence -----------------------------------
@@ -223,7 +223,7 @@ func test_displacement_cancels_the_capture() -> void:
 	c.handle_turn_ended(_p0, ts)
 
 	# Knocked one cell off the base during the enemy's turn.
-	_board.place(hero, P1_BASE + Vector2i(1, 0))
+	_board.place(hero, P1_BASE + Vector3i(1, 0, 0))
 	ts.current_turn = 3
 	c.handle_turn_started(_p0, ts)
 	assert_eq(c.captured_by(), -1, "a holder that is no longer ON the cell captures nothing")
@@ -236,7 +236,7 @@ func test_walking_off_the_base_clears_the_pending_capture() -> void:
 	_board.place(hero, P1_BASE)
 	c.handle_turn_ended(_p0, ts)
 
-	_board.place(hero, Vector2i(4, 4))
+	_board.place(hero, Vector3i(4, 4, 0))
 	ts.current_turn = 3
 	c.handle_turn_started(_p0, ts)
 	c.handle_turn_ended(_p0, ts)
@@ -249,7 +249,7 @@ func test_a_creep_standing_on_the_enemy_base_never_captures() -> void:
 	var c := _make_controller()
 	var ts := FakeTraditionalTS.new()
 	var creep := FakeUnit.new(0)
-	SiegeController.stamp_creep(creep, [Vector2i(1, 1), Vector2i(9, 9)], 3)
+	SiegeController.stamp_creep(creep, [Vector3i(1, 1, 0), Vector3i(9, 9, 0)], 3)
 	_board.place(creep, P1_BASE)
 
 	c.handle_turn_ended(_p0, ts)
@@ -288,7 +288,7 @@ func test_speed_first_only_the_holder_s_own_turn_completes_the_capture() -> void
 	var holder := FakeUnit.new(0)
 	var other := FakeUnit.new(0)
 	_board.place(holder, P1_BASE)
-	_board.place(other, Vector2i(3, 3))
+	_board.place(other, Vector3i(3, 3, 0))
 
 	ts.current_acting_unit = holder
 	c.handle_turn_ended(_p0, ts)

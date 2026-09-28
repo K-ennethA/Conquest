@@ -27,11 +27,11 @@ func test_the_rejection_reasons_are_the_wire_strings():
 # --- The command half of the line --------------------------------------------
 
 func test_each_command_names_itself():
-	assert_eq(NetProtocol.describe_action(NetProtocol.make_move_unit(1, Vector2i.ZERO)), "Move",
+	assert_eq(NetProtocol.describe_action(NetProtocol.make_move_unit("0:1", Vector2i.ZERO)), "Move",
 		"a reposition reads as a Move")
-	assert_eq(NetProtocol.describe_action(NetProtocol.make_cast_move(1, 0, Vector2i.ZERO)), "Attack",
+	assert_eq(NetProtocol.describe_action(NetProtocol.make_cast_move("0:1", 0, Vector2i.ZERO)), "Attack",
 		"a cast reads as an Attack -- 'cast' is not the word the HUD uses anywhere else")
-	assert_eq(NetProtocol.describe_action(NetProtocol.make_wait_unit(1)), "Wait",
+	assert_eq(NetProtocol.describe_action(NetProtocol.make_wait_unit("0:1")), "Wait",
 		"waiting names itself")
 	assert_eq(NetProtocol.describe_action(NetProtocol.make_end_turn(0)), "End turn",
 		"ending the turn names itself")
@@ -50,7 +50,7 @@ func test_an_unnameable_action_degrades_to_a_generic_label():
 
 func test_out_of_turn_reads_as_the_thing_the_player_did():
 	var line := NetProtocol.describe_intent_rejection(
-		NetProtocol.INTENT_NOT_YOUR_TURN, NetProtocol.make_move_unit(4, Vector2i(2, 2)))
+		NetProtocol.INTENT_NOT_YOUR_TURN, NetProtocol.make_move_unit("0:4", Vector2i(2, 2)))
 	assert_eq(line, "Move rejected — not your turn",
 		"the toast names WHAT was refused and WHY, in the player's words")
 
@@ -59,11 +59,24 @@ func test_every_known_reason_has_plain_wording():
 	# No reason may leak its wire string (an underscore) into the player's face.
 	for reason in [NetProtocol.INTENT_MALFORMED, NetProtocol.INTENT_UNKNOWN_ACTOR,
 			NetProtocol.INTENT_NOT_YOUR_TURN, NetProtocol.INTENT_REJECTED_BY_GAME]:
-		var line: String = NetProtocol.describe_intent_rejection(reason, NetProtocol.make_wait_unit(1))
+		var line: String = NetProtocol.describe_intent_rejection(reason, NetProtocol.make_wait_unit("0:1"))
 		assert_true(line.begins_with("Wait rejected — "),
 			"'%s' produces the standard '<command> rejected — <why>' shape" % reason)
 		assert_false(line.contains("_"),
 			"'%s' is rendered as words, never as its wire string" % reason)
+
+
+func test_every_rules_reason_has_plain_wording():
+	# The merged core answers with the rules' SPECIFIC reason (NetGameRules.validate_intent),
+	# not only the generic rejected_by_game -- each must still read as words.
+	for reason in [NetProtocol.INTENT_NOT_YOUR_UNIT, NetProtocol.INTENT_ILLEGAL_DESTINATION,
+			NetProtocol.INTENT_ILLEGAL_TARGET, NetProtocol.INTENT_UNIT_CANNOT_MOVE,
+			NetProtocol.INTENT_UNIT_CANNOT_ACT, NetProtocol.INTENT_MOVE_UNAVAILABLE,
+			NetProtocol.INTENT_UNKNOWN_UNIT, NetProtocol.INTENT_UNIT_DEAD,
+			NetProtocol.INTENT_CANNOT_END_TURN, NetProtocol.INTENT_NO_MOVE_IN_SLOT]:
+		var line: String = NetProtocol.describe_intent_rejection(reason, NetProtocol.make_move_unit("0:1", Vector3i.ZERO))
+		assert_true(line.begins_with("Move rejected — "), "'%s' keeps the standard shape" % reason)
+		assert_false(line.contains("_"), "'%s' is rendered as words" % reason)
 
 
 func test_an_unknown_reason_is_shown_rather_than_swallowed():

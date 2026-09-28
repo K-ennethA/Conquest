@@ -6,7 +6,7 @@ class_name ShieldVisuals
 ## [StatusVisuals] is the shared vocabulary for conditions and [ElementVisuals] is for
 ## elements. Every HP surface in the game -- the world-space [HealthBar], the battle card
 ## ([UnitInfoPanel]), the hover card ([UnitHoverPanel]), the detail page
-## ([UnitPageContent]), the [CombatForecastPanel] and the floating [DamageNumbers] --
+## ([UnitPageContent]), the [CombatForecastPanel] and the [FloatingCombatText] --
 ## asks THIS file how a shield is drawn, so a shield reads the same everywhere.
 ##
 ## WHY IT EXISTS AT ALL. [signal Unit.shield_changed] documented itself as "drives any

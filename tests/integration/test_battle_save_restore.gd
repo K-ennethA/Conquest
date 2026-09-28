@@ -177,7 +177,7 @@ func test_every_saved_unit_field_comes_back() -> void:
 	var saved: Unit = _spawn()
 	saved.take_damage(13)
 	saved.grant_shield(6)
-	saved.configure_ai_behavior(Vector2i(4, 5), "aggressive", 3, 7)
+	saved.configure_ai_behavior(Vector3i(4, 5, 0), "aggressive", 3, 7)
 	saved.mark_moved()
 	var saved_moves = saved.get_moveset_controller()
 	saved_moves.on_used(saved.get_move(0))
@@ -189,7 +189,7 @@ func test_every_saved_unit_field_comes_back() -> void:
 
 	assert_eq(resumed.current_health, saved.current_health, "current HP round-trips")
 	assert_eq(resumed.get_shield(), 6, "a temporary shield round-trips")
-	assert_eq(resumed.get_home_cell(), Vector2i(4, 5), "the AI home cell round-trips")
+	assert_eq(resumed.get_home_cell(), Vector3i(4, 5, 0), "the AI home cell round-trips")
 	assert_eq(resumed.get_ai_stance(), "aggressive", "the resolved AI stance round-trips")
 	assert_eq(resumed.get_aggro_range(), 3, "the defensive wake distance round-trips")
 	assert_eq(resumed.get_leash_radius(), 7, "the leash round-trips")
@@ -228,7 +228,7 @@ func _slow(unit: Unit) -> void:
 
 
 func _capture(unit: Unit) -> Dictionary:
-	return BattleSnapshot.capture_unit(unit, 0, Vector2i(2, 2), 0)
+	return BattleSnapshot.capture_unit(unit, 0, Vector3i(2, 2, 0), 0)
 
 
 ## Replay [param entry] onto a FRESH unit in the exact order [BattleSaveManager] uses:

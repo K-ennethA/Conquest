@@ -34,10 +34,10 @@ class_name PortraitCache
 ## just-placed model and camera are fully committed before the pixels are read. The model is
 ## instantiated and oriented exactly like [code]MapMakerScene._instantiate_character_model[/code]
 ## / [code]Unit._orient_character_model[/code] (authored model_yaw_deg + model_scale, feet at
-## the origin), PLUS 180 degrees so the character faces the capture camera (see the facing_yaw
-## convention documented on tile_objects/units/unit.gd -- the authored correction alone leaves
-## a unit facing world -Z, away from the south-side camera) and a further +15 degrees so the
-## portrait reads as a flattering three-quarter turn rather than a flat mugshot. The camera
+## the origin) facing +Z -- the merged model convention (see [UnitFacing]: after its authored
+## model_yaw_deg a model faces +Z, toward the south-side camera, which is where the capture
+## camera sits too) -- plus a further +15 degrees so the portrait reads as a flattering
+## three-quarter turn rather than a flat mugshot. The camera
 ## frames the UPPER ~35% of the model's world-space AABB (its head and shoulders) so that
 ## band fills ~80% of the frame height, computed from the camera's FOV rather than a fixed
 ## distance so it works for a mushroom and a boss alike.
@@ -371,9 +371,8 @@ func _ensure_rig() -> bool:
 
 ## Instance + orient [param character]'s model exactly like the mapmaker spawn preview /
 ## live Unit (authored model_yaw_deg + model_scale, feet at the origin) -- see
-## MapMakerScene._instantiate_character_model and Unit._orient_character_model. Adds 180
-## degrees so the character faces the capture camera (the authored correction alone leaves
-## it facing world -Z -- see the facing_yaw convention on tile_objects/units/unit.gd) plus
+## MapMakerScene._instantiate_character_model and Unit._orient_character_model: the authored
+## correction faces the model +Z (toward the capture camera, see [UnitFacing]), plus
 ## CAPTURE_YAW_DEG for a three-quarter turn. Returns false when the scene doesn't instance
 ## to a Node3D (freeing the bad instance itself), never an engine error.
 func _spawn_model(character: CharacterResource) -> bool:
@@ -391,9 +390,11 @@ func _spawn_model(character: CharacterResource) -> bool:
 	var yaw: float = character.model_yaw_deg if "model_yaw_deg" in character else 0.0
 	var model_scale: float = character.model_scale if "model_scale" in character else 1.0
 	_model_root.position = Vector3.ZERO
+	# UnitFacing.model_yaw with the default (south, toward the camera) facing: exactly the
+	# yaw a unit standing at rest on the board is drawn with.
 	_model_root.rotation = Vector3(
 		0.0,
-		deg_to_rad(yaw) + PI + deg_to_rad(CAPTURE_YAW_DEG),
+		UnitFacing.model_yaw(yaw, UnitFacing.DEFAULT_FACING) + deg_to_rad(CAPTURE_YAW_DEG),
 		0.0)
 	_model_root.scale = Vector3.ONE * maxf(0.05, model_scale)
 	return true

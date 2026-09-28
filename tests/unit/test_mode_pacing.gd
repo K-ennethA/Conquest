@@ -25,11 +25,11 @@ extends GutTest
 class FakeBoard extends RefCounted:
 	var cells: Dictionary = {}
 
-	func place(unit, cell: Vector2i) -> void:
-		cells[unit] = cell
+	func place(unit, cell) -> void:
+		cells[unit] = Cells.from_variant(cell)
 
-	func cell_of(unit) -> Vector2i:
-		return cells.get(unit, Vector2i(-999, -999))
+	func cell_of(unit) -> Vector3i:
+		return cells.get(unit, Vector3i(-999, -999, 0))
 
 	func all_units() -> Array:
 		return cells.keys()
@@ -52,7 +52,10 @@ class FakeSpawner extends RefCounted:
 		builder = p_builder
 
 	func spawn_and_adopt(spawn_data, player_id, hint = 0):
-		var cell: Vector2i = spawn_data.get("position", Vector2i(-1, -1))
+		# The spawn payload may carry the cell as a Vector3i, or map-style as a Vector2i
+		# "position" plus a separate "floor": normalise either to a Vector3i cell.
+		var cell: Vector3i = Cells.from_variant(spawn_data.get("position", Vector2i(-1, -1)),
+			int(spawn_data.get("floor", 0)))
 		calls.append({ "cell": cell, "player_id": player_id, "hint": hint })
 		if not builder.is_valid():
 			return null
@@ -72,9 +75,9 @@ class FakeMap extends RefCounted:
 
 # --- Fixture -----------------------------------------------------------------
 
-const LANE: Array = [Vector2i(1, 1), Vector2i(5, 1), Vector2i(9, 1)]
-const P0_BASE := Vector2i(0, 0)
-const P1_BASE := Vector2i(10, 10)
+const LANE: Array = [Vector3i(1, 1, 0), Vector3i(5, 1, 0), Vector3i(9, 1, 0)]
+const P0_BASE := Vector3i(0, 0, 0)
+const P1_BASE := Vector3i(10, 10, 0)
 
 const BASE_MOVEMENT := 3
 
@@ -108,10 +111,19 @@ func _unit(player_id: int) -> Unit:
 	return u
 
 
+## The fixture cells above are gameplay cells ([Vector3i]); what a MapResource AUTHORS is the
+## flat (col, row) map position ([Vector2i]). Convert on the way into the fake map.
+static func _authored(cells: Array) -> Array:
+	var out: Array = []
+	for c in cells:
+		out.append(Cells.flat(c))
+	return out
+
+
 func _map() -> FakeMap:
 	var m := FakeMap.new()
-	m.lanes = [LANE.duplicate()]
-	m.base_cells = {0: P0_BASE, 1: P1_BASE}
+	m.lanes = [_authored(LANE)]
+	m.base_cells = {0: Cells.flat(P0_BASE), 1: Cells.flat(P1_BASE)}
 	return m
 
 
@@ -314,8 +326,8 @@ func test_a_round_boundary_boosts_every_squad_unit_on_both_sides() -> void:
 
 	var mine := _unit(0)
 	var theirs := _unit(1)
-	board.place(mine, Vector2i(2, 2))
-	board.place(theirs, Vector2i(8, 8))
+	board.place(mine, Vector3i(2, 2, 0))
+	board.place(theirs, Vector3i(8, 8, 0))
 
 	c.observe_round(1)
 	assert_eq(_movement(mine), BASE_MOVEMENT + 2, "the mode paces its own side")
@@ -385,7 +397,7 @@ func test_two_identical_runs_pace_the_board_identically() -> void:
 		rs.creep_move_bonus = 1
 		var c := _controller(_map(), rs, spawner, board)
 		var mine := _unit(0)
-		board.place(mine, Vector2i(2, 2))
+		board.place(mine, Vector3i(2, 2, 0))
 
 		var sig: Array = []
 		for r in range(1, 10):

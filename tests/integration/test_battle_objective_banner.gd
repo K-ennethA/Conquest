@@ -145,7 +145,8 @@ func _banner_of(layout: Control) -> ObjectiveBanner:
 
 
 func _label_of(banner: Control) -> Label:
-	return banner.get_node_or_null("ObjectiveLabel") as Label
+	# The label rides inside the banner's grove row (ObjectiveBanner/Row/ObjectiveLabel).
+	return banner.find_child("ObjectiveLabel", true, false) as Label
 
 
 func _rect_of(node: Control) -> Rect2:
@@ -441,13 +442,21 @@ func test_the_pause_and_settings_marks_fit_inside_their_44px_squares() -> void:
 		return
 
 	for button in [layout.pause_button, layout.settings_button]:
-		var size: int = button.get_theme_font_size("font_size")
-		var width: float = font.get_string_size(
-				button.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-		gut.p("%-14s: '%s' width@%dpx=%.1f  button=%s"
-				% [button.name, button.text, size, width, button.size])
+		# The settings mark is a DRAWN gear (GearIcon), not a glyph: measure the drawing.
+		var gear: GearIcon = button.get_node_or_null("GearIcon") as GearIcon
+		var width: float = 0.0
+		if gear != null:
+			width = gear.outer_radius() * 2.0
+			gut.p("%-14s: drawn gear diameter=%.1f  button=%s" % [button.name, width, button.size])
+		else:
+			var size: int = button.get_theme_font_size("font_size")
+			width = font.get_string_size(button.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+			gut.p("%-14s: '%s' width@%dpx=%.1f  button=%s"
+					% [button.name, button.text, size, width, button.size])
 		assert_gt(width, 0.0, "%s really draws something" % button.name)
 		assert_lt(width, button.size.x,
 				"%s's mark fits inside its own square" % button.name)
 		assert_false(button.tooltip_text.is_empty(),
 				"%s still says in words what it does" % button.name)
+	assert_not_null(layout.settings_button.get_node_or_null("GearIcon"),
+			"the settings button carries the drawn gear (no font has a gear glyph)")

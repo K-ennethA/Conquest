@@ -13,14 +13,14 @@ class_name MoveFXDispatcher
 ## layer draws the CELLS, so an empty cell erupts exactly as loudly as an occupied one.
 ##
 ## MOUNTING: a per-battle [Node3D] added to the 3D scene root by
-## [code]GameWorldManager._setup_move_fx[/code], beside [DamageNumbers] and [ImpactFX].
+## [code]GameWorldManager._setup_move_fx[/code], beside [FloatingCombatText] and [ImpactFX].
 ## Freed and recreated on the next map load, so no eruption outlives its battle.
 ##
 ## IT LISTENS. IT NEVER ASKS. Every input is an EXISTING [GameEvents] signal, so not one
 ## line of combat, AI or UI code knows this layer exists and deleting the mount call
 ## removes it completely:
 ##   * `move_performed(caster, move)` -- the cast. Buffered and flushed DEFERRED, exactly
-##     as [DamageNumbers] buffers, because the hits it produced were announced just BEFORE
+##     as a floating-number layer would, because the hits it produced were announced just BEFORE
 ##     it (see [method Unit.perform_move]) and the area derivation below needs them.
 ##   * `damage_dealt` / `unit_healed` -- this frame's landed cells, captured at signal
 ##     time (a killing blow frees the defender within the frame, so its cell must be read
@@ -65,8 +65,8 @@ class_name MoveFXDispatcher
 ## ANIMATIONS OFF: nothing visual is created at all -- but the SOUND still plays, which is
 ## the point of the setting (skip the motion, keep the feedback).
 
-## Grid <-> world. A cell Vector2i(col,row) centres at
-## GRID.calculate_map_position(Vector3(col, 0, row)) -- the same lookup [HazardVisualizer]
+## Grid <-> world. A cell Vector3i(col, row, floor) ([Cells]) centres at
+## GRID.calculate_map_position(Cells.to_grid(cell)) -- the same lookup [HazardVisualizer]
 ## and [TileEffectOverlay] place their per-cell meshes with, so every board overlay agrees
 ## about where a cell is.
 const GRID: Grid = preload("res://board/Grid.tres")
@@ -141,7 +141,7 @@ const _LIFETIME_MAX: float = 2.5
 const _MAX_AIM_CANDIDATES: int = 512
 
 ## This frame's landed cells, captured at signal time. Cleared by the flush.
-var _hit_cells: Array[Vector2i] = []
+var _hit_cells: Array[Vector3i] = []
 ## How many damage announcements landed this frame (the audio layer already sounded each
 ## one -- see [method _play_cue_for_impact]).
 var _hit_announcements: int = 0
@@ -228,8 +228,9 @@ func _on_hazard_advanced(hazard = null, cells = null, _next_cells = null, damage
 	if not _fx_enabled():
 		return
 	for cell in (cells as Array):
-		if cell is Vector2i:
-			_spawn_impact(cell, spec)
+		# Hazards announce multi-floor Vector3i cells; a legacy Vector2i reads as floor 0.
+		if cell is Vector3i or cell is Vector2i:
+			_spawn_impact(Cells.from_variant(cell), spec)
 	if detonation:
 		_kick_camera(float(spec["shake"]))
 
@@ -249,7 +250,7 @@ func _flush() -> void:
 	_flush_queued = false
 	var move = _cast_move
 	var caster = _cast_caster
-	var hits: Array[Vector2i] = _hit_cells.duplicate()
+	var hits: Array[Vector3i] = _hit_cells.duplicate()
 	var announcements: int = _hit_announcements
 	_cast_move = null
 	_cast_caster = null
@@ -263,7 +264,7 @@ func _flush() -> void:
 	var origin = _cell_of(caster)
 	# Derived BEFORE the animations gate: it is pure math over the move's own targeting
 	# pattern, and the SOUND below has to know whether anything actually erupted.
-	var area: Array[Vector2i] = _derive_area(move, caster, origin, hits)
+	var area: Array[Vector3i] = _derive_area(move, caster, origin, hits)
 
 	_play_cue(StringName(spec["cast_cue"]))
 	if not area.is_empty():
@@ -283,19 +284,19 @@ func _flush() -> void:
 
 ## The cells this cast should erupt on. See the class doc for the full rule; every branch
 ## fails toward drawing LESS rather than drawing somewhere wrong.
-func _derive_area(move, caster, origin, hits: Array[Vector2i]) -> Array[Vector2i]:
+func _derive_area(move, caster, origin, hits: Array[Vector3i]) -> Array[Vector3i]:
 	if move == null or not move.has_method("targeting_for"):
 		return hits
 	var pattern: TargetingPattern = move.targeting_for(caster)
 	if pattern == null or origin == null:
 		return hits
-	var from: Vector2i = origin
+	var from: Vector3i = origin
 
 	# A SELF-cast aims at the caster. No inference needed, and it is the one case where a
 	# move that announced nothing at all still has an area worth drawing -- a pure buff
 	# would otherwise be the one cast on the board with no impact beat at all.
 	if pattern.target_kind == CombatTypes.TargetKind.SELF:
-		var self_area: Array[Vector2i] = pattern.resolve_cells(from, from)
+		var self_area: Array[Vector3i] = pattern.resolve_cells(from, from)
 		# resolve_cells strips the caster's own cell unless affects_caster_tile is set, so
 		# the ordinary self-buff resolves to NOTHING. Draw the caster's cell anyway: for a
 		# SELF pattern that cell is unambiguously what the move acted on.
@@ -306,7 +307,7 @@ func _derive_area(move, caster, origin, hits: Array[Vector2i]) -> Array[Vector2i
 	if pattern.area_shape == CombatTypes.AreaShape.SINGLE:
 		return hits
 	if hits.is_empty():
-		return [] as Array[Vector2i]
+		return [] as Array[Vector3i]
 
 	var aim = _infer_aim(pattern, move, caster, from, hits)
 	if aim == null:
@@ -324,7 +325,7 @@ func _derive_area(move, caster, origin, hits: Array[Vector2i]) -> Array[Vector2i
 ##
 ## Returns null when nothing qualifies, which the caller reads as "draw only what was
 ## actually hit".
-func _infer_aim(pattern: TargetingPattern, move, caster, origin: Vector2i, hits: Array[Vector2i]):
+func _infer_aim(pattern: TargetingPattern, move, caster, origin: Vector3i, hits: Array[Vector3i]):
 	var reach: int = pattern.max_range
 	if move.has_method("effective_max_range"):
 		reach = int(move.effective_max_range(caster))
@@ -332,16 +333,20 @@ func _infer_aim(pattern: TargetingPattern, move, caster, origin: Vector2i, hits:
 	var span: int = 2 * reach + 1
 	if span * span > _MAX_AIM_CANDIDATES:
 		return null
+	# An area lies on its aim's floor, so the candidates sit on the floor the hits landed on
+	# (the caster's own floor when it hit its own level). Range is the multi-floor
+	# [method Cells.distance] (manhattan + floor difference), the rule targeting uses.
+	var aim_floor: int = hits[0].z if not hits.is_empty() else origin.z
 
 	var best = null
 	var best_score: int = 0
 	for dy in range(-reach, reach + 1):
 		for dx in range(-reach, reach + 1):
-			var candidate: Vector2i = origin + Vector2i(dx, dy)
-			var distance: int = absi(dx) + absi(dy)
+			var candidate := Vector3i(origin.x + dx, origin.y + dy, aim_floor)
+			var distance: int = Cells.distance(origin, candidate)
 			if distance < pattern.min_range or distance > reach:
 				continue
-			var area: Array[Vector2i] = pattern.resolve_cells(origin, candidate)
+			var area: Array[Vector3i] = pattern.resolve_cells(origin, candidate)
 			var score: int = 0
 			var covers: bool = true
 			for hit in hits:
@@ -446,7 +451,7 @@ func _apply_override(spec: Dictionary, fx) -> void:
 ## A brief element-tinted ring under the caster. The attack CLIP itself is [UnitAnimator]'s
 ## job and already plays -- this is the accent that says which ELEMENT is being spent, and
 ## it is what gives a purely-supportive cast (no damage, no target) any feedback at all.
-func _spawn_cast_accent(cell: Vector2i, spec: Dictionary) -> void:
+func _spawn_cast_accent(cell: Vector3i, spec: Dictionary) -> void:
 	if not is_inside_tree():
 		return
 	if get_child_count() >= max_live_impacts:
@@ -484,7 +489,7 @@ func _spawn_cast_accent(cell: Vector2i, spec: Dictionary) -> void:
 ## same element vocabulary, plus a reused [ImpactFX] particle spark and (optionally) an
 ## authored scene. A cell with nobody standing in it renders exactly this -- which is the
 ## whole point of the layer.
-func _spawn_impact(cell: Vector2i, spec: Dictionary) -> void:
+func _spawn_impact(cell: Vector3i, spec: Dictionary) -> void:
 	# create_tween() errors on a detached node, and these signals arrive during teardown as
 	# readily as during play.
 	if not is_inside_tree():
@@ -502,7 +507,7 @@ func _spawn_impact(cell: Vector2i, spec: Dictionary) -> void:
 	var life: float = _life(impact_time, float(spec["life_scale"]))
 
 	var container := Node3D.new()
-	container.name = "Impact_%d_%d" % [cell.x, cell.y]
+	container.name = "Impact_%d_%d_%d" % [cell.x, cell.y, cell.z]
 	container.set_meta(CELL_META, cell)
 	add_child(container)
 	container.global_position = _world_of(cell)
@@ -686,14 +691,14 @@ func _cell_of(unit):
 	var board = CombatServices.board()
 	if board == null or not board.has_method("cell_of"):
 		return null
-	var cell: Vector2i = board.cell_of(unit)
-	if cell == Vector2i(-1, -1):
+	var cell: Vector3i = Cells.from_variant(board.cell_of(unit))
+	if cell == Cells.INVALID or cell.x < 0 or cell.y < 0:
 		return null
 	return cell
 
 
-func _world_of(cell: Vector2i) -> Vector3:
-	return GRID.calculate_map_position(Vector3(cell.x, 0, cell.y))
+func _world_of(cell: Vector3i) -> Vector3:
+	return GRID.calculate_map_position(Cells.to_grid(cell))
 
 
 ## Claim [param hazard]'s draw for THIS frame. False when it already drew this frame, which
@@ -727,9 +732,12 @@ func _hazard_damaged(_hazard) -> bool:
 
 ## Deterministic per-cell seed (FNV-1a over the cell's coordinates), so the shard scatter is
 ## byte-identical on every machine and every replay without any generator being shared.
-func _seed_for(cell: Vector2i) -> int:
+func _seed_for(cell: Vector3i) -> int:
 	var hash_value: int = 2166136261
-	for component in [cell.x, cell.y]:
+	# The floor joins the hash only above ground, so every floor-0 cell keeps the exact
+	# scatter it always had.
+	var components: Array = [cell.x, cell.y] if cell.z == 0 else [cell.x, cell.y, cell.z]
+	for component in components:
 		hash_value = (hash_value ^ (int(component) & 0xFFFF)) * 16777619
 		hash_value = hash_value & 0x7FFFFFFF
 	return hash_value
@@ -750,8 +758,8 @@ func _kick_camera(strength: float) -> void:
 
 
 ## Every cell currently erupting -- what a test counts, and what a debug overlay would read.
-func live_impact_cells() -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
+func live_impact_cells() -> Array[Vector3i]:
+	var cells: Array[Vector3i] = []
 	for child in get_children():
 		if child != null and is_instance_valid(child) and child.has_meta(CELL_META):
 			cells.append(child.get_meta(CELL_META))
@@ -769,7 +777,7 @@ func clear_effects() -> void:
 
 # --- GameSettings bridge -----------------------------------------------------
 #
-# Mirrors ImpactFX / DamageNumbers exactly: the autoload is optional, and an absent one
+# Mirrors ImpactFX exactly: the autoload is optional, and an absent one
 # behaves as "animations ON at scale 1.0" so a minimal/headless scene is unaffected.
 
 func _game_settings() -> Node:

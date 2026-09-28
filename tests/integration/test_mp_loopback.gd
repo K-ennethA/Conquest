@@ -1,30 +1,32 @@
 extends GutTest
 
-# MP Phase 2 -- the two-peer lockstep deliverable.
+# MP -- the two-peer lockstep deliverable, on the merged network core.
 #
-# The guarantee this proves: two INDEPENDENT peers (each its own board + UnitRegistry +
-# CommandApplier) that receive the SAME authority-stamped command stream end up with
-# byte-identical state after EVERY command, and observe the commands in the SAME seq order.
-# That is exactly what makes NetSession's server-authoritative broadcast safe -- the host
-# stamps seq + per-command rng_seed once, and every peer (host included) resolves the command
-# through the same deterministic CommandApplier -> perform_move layer.
+# The guarantee this proves: two INDEPENDENT peers (each its own board + applier) that receive
+# the SAME accepted-action stream end up with byte-identical state after EVERY action, and
+# observe the actions in the SAME seq order. That is what makes NetSession's host-ordered
+# broadcast safe -- every peer (host included) resolves each accepted action through the ONE
+# deterministic apply path (NetGameRules.apply_action; CommandApplier is the battle / replay
+# seam that extends it) with the action's own seed.
 #
-# Two layers of coverage:
-#   1. DETERMINISTIC two-peer lockstep (always runs). Two applier+registry pairs are driven
-#      from the SAME command stream, stamped exactly the way NetSession's server stamps it
-#      (monotonic seq + MatchRng.seed_for(seq)). Asserts equal state hashes after every
-#      command and identical seq ordering. This is the heart of the deliverable and needs no
-#      sockets, so it can never flake or hang the suite.
-#   2. NetSession seam wiring (always runs). install_command_seam / clear_command_seam,
-#      net_id_for, is_networked_match, and the shared seed layer.
-#   3. LIVE in-process ENet loopback (OPT-IN via env CONQUEST_MP_LOOPBACK). Two NetSession
-#      instances under separate MultiplayerAPIs over a real 127.0.0.1 socket pair. Kept opt-in
-#      and hard-bounded so a headless CI run can never hang on socket establishment; when not
-#      opted in it reports pending() (an explicit, documented deferral -- NOT a silent skip),
-#      and dev_scripts/mp_loopback_runner.gd runs the same thing as two real processes.
+# Coverage here:
+#   1. DETERMINISTIC two-peer lockstep (no sockets, can never hang). Two appliers driven from
+#      the SAME resolved stream (monotonic seq + a per-action seed, via
+#      NetProtocol.stamp_resolution). Equal state hashes after every action, identical seq order.
+#   2. Validation on the same rules object: an out-of-turn / foreign-unit intent is refused
+#      (replaces the retired turn-ownership BRIDGE -- turns are now derived from the rules'
+#      turn system on every peer, so the validator reads the turn directly).
+#   3. NetSession battle-seam wiring (install / clear, net_id_for) and the lobby transport
+#      (the build-gated seating, the lobby-message relay).
+#
+# The LIVE two-socket loopback that used to be an opt-in test here (plus its two-process
+# runner, dev_scripts/mp_loopback_runner.gd) is superseded by the always-on real-ENet suites
+# of the merged core -- tests/integration/test_net_match.gd, test_net_rng.gd, test_net_dedicated.gd
+# (host + client(s) in one process, full commit-reveal) -- and the multi-process
+# dev_scripts/net_multiprocess_check.sh.
 #
 # Mock style mirrors tests/unit/test_command_determinism.gd (duck-typed board + units with a
-# seeded RNG injected into MoveExecutor via the command's stamped rng_seed).
+# seeded RNG injected into MoveExecutor via the action's stamped seed).
 
 const _SEED := 0x5EED1E
 
@@ -36,8 +38,8 @@ class MockUnit:
 	var max_health: int
 	var hp: int
 	var moveset: Dictionary
-	var has_moved: bool = false
-	var acted: bool = false
+	var has_moved_this_turn: bool = false
+	var has_acted_this_turn: bool = false
 
 	func _init(p_team: int, p_stats: Dictionary, p_moveset: Dictionary = {}) -> void:
 		team = p_team
@@ -46,6 +48,8 @@ class MockUnit:
 		hp = max_health
 		moveset = p_moveset
 
+	func get_team() -> int:
+		return team
 	func get_stat(n: String) -> int:
 		return stats.get(n, 0)
 	func get_base_stat(n: String) -> int:
@@ -57,10 +61,10 @@ class MockUnit:
 	func heal(n: int) -> void:
 		hp = mini(max_health, hp + n)
 	func mark_moved() -> void:
-		has_moved = true
+		has_moved_this_turn = true
 	func mark_action_completed(_action: String) -> void:
-		acted = true
-	func perform_move(slot: int, aim_cell: Vector2i, board, rng: RandomNumberGenerator = null) -> Dictionary:
+		has_acted_this_turn = true
+	func perform_move(slot: int, aim_cell: Vector3i, board, rng: RandomNumberGenerator = null) -> Dictionary:
 		var move = moveset.get(slot, null)
 		if move == null:
 			return { "success": false, "reason": "no_move_in_slot", "events": [], "cells": [] }
@@ -70,14 +74,14 @@ class MockBoard:
 	var placements: Array = []
 	var blocked: Array = []
 	var bounds: Rect2i = Rect2i(0, 0, 12, 12)
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -87,19 +91,19 @@ class MockBoard:
 		return a.team != b.team
 	func are_allies(a, b) -> bool:
 		return a.team == b.team
-	func set_tile(_cell: Vector2i, _tile_id) -> void:
+	func set_tile(_cell: Vector3i, _tile_id) -> void:
 		pass
-	func move_unit(unit, to_cell: Vector2i) -> void:
+	func move_unit(unit, to_cell: Vector3i) -> void:
 		for p in placements:
 			if p.unit == unit:
 				p.cell = to_cell
-	func in_bounds(cell: Vector2i) -> bool:
-		return bounds.has_point(cell)
-	func is_blocked(cell: Vector2i) -> bool:
+	func in_bounds(cell: Vector3i) -> bool:
+		return cell.z == 0 and bounds.has_point(Cells.flat(cell))
+	func is_blocked(cell: Vector3i) -> bool:
 		return cell in blocked
-	func is_occupied(cell: Vector2i) -> bool:
+	func is_occupied(cell: Vector3i) -> bool:
 		return not units_at(cell).is_empty()
-	func can_fit(unit, anchor: Vector2i) -> bool:
+	func can_fit(unit, anchor: Vector3i) -> bool:
 		if not in_bounds(anchor) or is_blocked(anchor):
 			return false
 		for other in units_at(anchor):
@@ -112,28 +116,29 @@ class MockBoard:
 			out.append(p.unit)
 		return out
 
-class MockTurn:
-	var calls: int = 0
-	func advance_turn() -> void:
-		calls += 1
-
-## A stand-in for a live TurnSystemBase: emits turn_started(player) on demand so the
-## NetSession turn-ownership bridge can be exercised without the full TurnSystemManager /
-## PlayerManager stack. Injected as install_command_seam's optional turn_source.
-class MockTurnSystem extends Node:
-	signal turn_started(player)
-	var _current = null
-	func get_current_active_player():
-		return _current
-	func begin_turn(player) -> void:
-		_current = player
-		turn_started.emit(player)
-
-## A minimal Player stand-in: only the player_id the bridge maps to a peer slot.
+## A minimal Player stand-in: only the player_id the rules map to a seat.
 class MockPlayer extends RefCounted:
 	var player_id: int
 	func _init(p_id: int) -> void:
 		player_id = p_id
+
+## The turn-system surface the apply / validate path reads: whose turn it is, End Turn, and
+## marking a waiting unit as acted.
+class MockTurn:
+	var calls: int = 0
+	var is_active: bool = true
+	var active_player = MockPlayer.new(0)
+	func end_turn_manually() -> bool:
+		calls += 1
+		return true
+	func can_end_turn_manually() -> bool:
+		return true
+	func mark_unit_acted(unit) -> void:
+		unit.has_acted_this_turn = true
+	func get_current_active_player():
+		return active_player
+	func can_unit_act(unit) -> bool:
+		return not unit.has_acted_this_turn
 
 # --- fixtures ----------------------------------------------------------------
 
@@ -155,26 +160,25 @@ func _strike() -> MoveResource:
 	move.effects = [dmg]
 	return move
 
-## One "peer": an identically-arranged battle plus its own registry + applier. net_ids are
-## assigned in a fixed order, so both peers name the same units the same way.
+## One "peer": an identically-arranged battle plus its own applier. Ids come from the board,
+## so both peers name the same units the same way: attacker "0:0", defender "1:0",
+## bystander "1:1".
 func _make_peer() -> Dictionary:
 	var board := MockBoard.new()
 	var attacker := MockUnit.new(0, { "health": 100, "crit": 0 }, { 0: _strike() })
 	var defender := MockUnit.new(1, { "health": 100, "defense": 0 })
 	var bystander := MockUnit.new(1, { "health": 80 })
-	board.place(attacker, Vector2i(1, 1))
-	board.place(defender, Vector2i(3, 1))
-	board.place(bystander, Vector2i(6, 6))
+	board.place(attacker, Vector3i(1, 1, 0))
+	board.place(defender, Vector3i(3, 1, 0))
+	board.place(bystander, Vector3i(6, 6, 0))
 
-	var reg := CommandApplier.UnitRegistry.new()
-	reg.assign_map_units([attacker, defender, bystander])   # ids 1, 2, 3
-	var applier := CommandApplier.new(reg, null)
-	return { "board": board, "applier": applier, "reg": reg, "turn": MockTurn.new() }
+	var turn := MockTurn.new()
+	var applier := CommandApplier.new(null, null, func(): return board, func(): return turn)
+	applier.assign_initial_ids()
+	return { "board": board, "applier": applier, "turn": turn }
 
-## The authority's stamped broadcast stream. Built ONCE, exactly the way NetSession's server
-## stamps an intent (monotonic seq starting at 1 + match_rng.seed_for(seq) + protocol
-## version, via NetProtocol.stamp_resolution) -- so feeding it to two peers reproduces what
-## the wire would carry.
+## The accepted-action stream, built ONCE with monotonic seqs from 1 and a per-action seed
+## -- exactly what every peer holds after NetSession's commit-reveal round for each action.
 func _authority_stream() -> Array:
 	var mr := MatchRng.new()
 	mr.begin_solo(_SEED)
@@ -182,20 +186,25 @@ func _authority_stream() -> Array:
 	var out: Array = []
 	# attacker casts at defender (rolls hit/crit through the seeded rng)
 	seq += 1
-	out.append(NetProtocol.stamp_resolution(NetProtocol.make_cast_move(1, 0, Vector2i(3, 1), 0), seq, mr.seed_for(seq)))
+	out.append(NetProtocol.stamp_resolution(NetProtocol.make_cast_move("0:0", 0, Vector3i(3, 1, 0), 0), seq, mr.seed_for(seq)))
 	# defender waits
 	seq += 1
-	out.append(NetProtocol.stamp_resolution(NetProtocol.make_wait_unit(2, 1), seq, mr.seed_for(seq)))
+	out.append(NetProtocol.stamp_resolution(NetProtocol.make_wait_unit("1:0", 1), seq, mr.seed_for(seq)))
 	# attacker steps up to (2,1)
 	seq += 1
-	out.append(NetProtocol.stamp_resolution(NetProtocol.make_move_unit(1, Vector2i(2, 1), 0), seq, mr.seed_for(seq)))
+	out.append(NetProtocol.stamp_resolution(NetProtocol.make_move_unit("0:0", Vector3i(2, 1, 0), 0), seq, mr.seed_for(seq)))
 	# player 0 ends turn
 	seq += 1
 	out.append(NetProtocol.stamp_resolution(NetProtocol.make_end_turn(0, 0), seq, mr.seed_for(seq)))
 	# attacker casts again from its new cell (rolls again)
 	seq += 1
-	out.append(NetProtocol.stamp_resolution(NetProtocol.make_cast_move(1, 0, Vector2i(3, 1), 0), seq, mr.seed_for(seq)))
+	out.append(NetProtocol.stamp_resolution(NetProtocol.make_cast_move("0:0", 0, Vector3i(3, 1, 0), 0), seq, mr.seed_for(seq)))
 	return out
+
+func after_each():
+	# The apply path installs each action's generator as CombatServices.match_rng.
+	if CombatServices != null:
+		CombatServices.match_rng = null
 
 # --- 1. Deterministic two-peer lockstep (the heart) --------------------------
 
@@ -216,17 +225,17 @@ func test_two_peer_appliers_stay_in_lockstep():
 	var seqs_a: Array = []
 	var seqs_b: Array = []
 	for cmd in stream:
-		var res_a: Dictionary = applier_a.apply_command(cmd, board_a, { "turn_system": peer_a["turn"] })
-		var res_b: Dictionary = applier_b.apply_command(cmd, board_b, { "turn_system": peer_b["turn"] })
+		var res_a: Dictionary = applier_a.apply_command(cmd.duplicate(true), board_a)
+		var res_b: Dictionary = applier_b.apply_command(cmd.duplicate(true), board_b)
 		seqs_a.append(int(res_a.get("seq", -1)))
 		seqs_b.append(int(res_b.get("seq", -1)))
-		# The invariant: after EVERY applied command, both peers' state hashes match.
+		# The invariant: after EVERY applied action, both peers' state hashes match.
 		assert_eq(applier_a.hash_match_state(board_a), applier_b.hash_match_state(board_b),
-			"peers stay in lockstep after command seq %d" % int(cmd.get(NetProtocol.KEY_SEQ, -1)))
+			"peers stay in lockstep after action seq %d" % int(cmd.get(NetProtocol.KEY_SEQ, -1)))
 
 	# seq ordering is identical and strictly the stamped order 1..N on both peers.
-	assert_eq(str(seqs_a), str(seqs_b), "both peers observed the commands in the identical seq order")
-	assert_eq(str(seqs_a), str([1, 2, 3, 4, 5]), "the applied seq order is the authority's monotonic stamp order")
+	assert_eq(str(seqs_a), str(seqs_b), "both peers observed the actions in the identical seq order")
+	assert_eq(str(seqs_a), str([1, 2, 3, 4, 5]), "the applied seq order is the host's monotonic order")
 
 func test_lockstep_actually_mutated_state():
 	# Guards against a vacuous pass where nothing changed and every hash trivially matched.
@@ -236,13 +245,13 @@ func test_lockstep_actually_mutated_state():
 	var board = peer["board"]
 	var start := applier.hash_match_state(board)
 	for cmd in stream:
-		applier.apply_command(cmd, board, { "turn_system": peer["turn"] })
+		applier.apply_command(cmd, board)
 	assert_ne(applier.hash_match_state(board), start, "the scripted stream changed board state")
 	assert_eq(peer["turn"].calls, 1, "END_TURN drove the turn system exactly once")
 
 func test_a_divergent_command_breaks_lockstep_detectably():
 	# The hash oracle must be able to SEE a divergence, else lockstep equality is meaningless.
-	# Feed peer B a different move destination on the step-up command and assert the hashes part.
+	# Feed peer B a different move destination on the step-up action and assert the hashes part.
 	var stream := _authority_stream()
 	var peer_a := _make_peer()
 	var peer_b := _make_peer()
@@ -251,16 +260,79 @@ func test_a_divergent_command_breaks_lockstep_detectably():
 	var board_a = peer_a["board"]
 	var board_b = peer_b["board"]
 
-	# Command index 2 is the MOVE_UNIT; give B a different destination.
+	# Action index 2 is the MOVE; give B a different destination.
 	var divergent: Dictionary = (stream[2] as Dictionary).duplicate(true)
-	divergent[NetProtocol.KEY_DATA] = { NetProtocol.KEY_UNIT_ID: 1, NetProtocol.KEY_DEST_CELL: Vector2i(5, 5) }
+	divergent[NetProtocol.KEY_DATA] = { NetProtocol.KEY_UNIT_ID: "0:0", NetProtocol.KEY_DEST_CELL: [5, 5, 0] }
 
-	applier_a.apply_command(stream[2], board_a, { "turn_system": peer_a["turn"] })
-	applier_b.apply_command(divergent, board_b, { "turn_system": peer_b["turn"] })
+	applier_a.apply_command(stream[2], board_a)
+	applier_b.apply_command(divergent, board_b)
 	assert_ne(applier_a.hash_match_state(board_a), applier_b.hash_match_state(board_b),
 		"a peer that applied a different destination hashes differently -- the oracle detects desync")
 
-# --- 2. NetSession seam wiring ----------------------------------------------
+func test_two_peers_consume_action_flags_identically():
+	# Apply-semantics lockstep: driven from the same stream, two independent peers end every
+	# action with IDENTICAL per-unit [acted, has_moved] flags -- so a networked cast greys the
+	# caster (and would advance Speed First) the same way on every box.
+	var stream := _authority_stream()
+	var peer_a := _make_peer()
+	var peer_b := _make_peer()
+	var applier_a: CommandApplier = peer_a["applier"]
+	var applier_b: CommandApplier = peer_b["applier"]
+	for cmd in stream:
+		applier_a.apply_command(cmd.duplicate(true), peer_a["board"])
+		applier_b.apply_command(cmd.duplicate(true), peer_b["board"])
+		assert_eq(str(_peer_flags(peer_a["board"])), str(_peer_flags(peer_b["board"])),
+			"both peers hold identical acted/has_moved flags after action seq %d"
+				% int(cmd.get(NetProtocol.KEY_SEQ, -1)))
+	# Deterministic consumption proof (independent of the seed-dependent cast hit/miss):
+	# the WAIT consumed the defender's action and the MOVE marked the caster moved --
+	# identically on both peers.
+	for peer in [peer_a, peer_b]:
+		assert_true(NetUnitIds.find(peer["board"], "1:0").has_acted_this_turn, "WAIT consumed the defender's action")
+		assert_true(NetUnitIds.find(peer["board"], "0:0").has_moved_this_turn, "MOVE marked the caster moved")
+
+func _peer_flags(board) -> Dictionary:
+	var out: Dictionary = {}
+	for id in ["0:0", "1:0", "1:1"]:
+		var u = NetUnitIds.find(board, id)
+		out[id] = null if u == null else [u.has_acted_this_turn, u.has_moved_this_turn]
+	return out
+
+func test_shared_seed_layer_is_reproducible_across_peers():
+	# The solo / replay stream: both peers derive the SAME per-action seed from the SAME match
+	# seed (in network play each accepted action carries its own commit-reveal seed instead).
+	var a := MatchRng.new()
+	a.begin_solo(_SEED)
+	var b := MatchRng.new()
+	b.begin_solo(_SEED)
+	assert_eq(a.match_seed, b.match_seed, "identical local seed -> identical match seed")
+	for seq in range(1, 8):
+		assert_eq(a.seed_for(seq), b.seed_for(seq), "per-action seed for seq %d matches across peers" % seq)
+
+# --- 2. Validation reads the turn from the rules' own turn system -------------
+
+func test_out_of_turn_intent_rejected_by_the_rules():
+	# Replaces the retired turn-ownership bridge: every peer derives whose turn it is from the
+	# same turn system the rules read, so the host's validator (re-run by every client) gates
+	# directly on it.
+	var peer := _make_peer()
+	var rules: CommandApplier = peer["applier"]
+	var turn: MockTurn = peer["turn"]
+
+	turn.active_player = MockPlayer.new(0)
+	assert_eq(rules.current_turn_slot(), 0, "player 0 is the active seat")
+	assert_eq(rules.validate_intent(NetProtocol.wait("1:0"), 1), NetProtocol.INTENT_NOT_YOUR_TURN,
+		"slot 1 acting during slot 0's turn is rejected")
+	assert_eq(rules.validate_intent(NetProtocol.wait("1:0"), 0), NetProtocol.INTENT_NOT_YOUR_UNIT,
+		"the active seat still cannot command the other seat's unit")
+
+	turn.active_player = MockPlayer.new(1)
+	assert_eq(rules.validate_intent(NetProtocol.wait("1:0"), 1), NetProtocol.INTENT_OK,
+		"once the turn passes to slot 1 its own unit may act")
+	assert_eq(rules.validate_intent(NetProtocol.end_turn(), 0), NetProtocol.INTENT_NOT_YOUR_TURN,
+		"and slot 0 is now out of turn")
+
+# --- 3. NetSession battle seam + lobby transport -------------------------------
 
 func test_netsession_seam_install_and_clear():
 	var net := _fresh_netsession()
@@ -275,17 +347,20 @@ func test_netsession_seam_install_and_clear():
 	assert_eq(net.command_applier, applier, "install_command_seam wired the applier")
 	assert_true(net.board_provider.is_valid(), "install_command_seam wired the board provider")
 
-	# net_id_for resolves through the registry (attacker was id 1).
-	assert_eq(net.net_id_for(peer["reg"].unit_for(1)), 1, "net_id_for reads the live registry")
-	assert_eq(net.net_id_for(null), -1, "net_id_for is null-safe")
+	# net_id_for reads the unit's NetUnitIds name (attacker is "0:0").
+	assert_eq(net.net_id_for(NetUnitIds.find(board, "0:0")), "0:0", "net_id_for names the unit")
+	assert_eq(net.net_id_for(null), "", "net_id_for is null-safe")
+
+	net.begin_solo_match_rng()
+	assert_eq(applier.match_rng, net.match_rng, "a solo stream is handed to the installed applier")
 
 	net.clear_command_seam()
 	assert_null(net.command_applier, "clear_command_seam drops the applier")
 	assert_false(net.board_provider.is_valid(), "clear_command_seam drops the board provider")
 
 func test_apply_through_installed_seam_mutates_the_provided_board():
-	# With the seam installed, _rpc_apply_action's guarded apply drives the provided board.
-	# We call the applier via the same path (applier + board provider) NetSession uses.
+	# Replay playback drives the installed seam exactly like this (ReplayDriver ->
+	# NetSession.command_applier.apply_command(cmd, board)).
 	var net := _fresh_netsession()
 	var peer := _make_peer()
 	var applier: CommandApplier = peer["applier"]
@@ -294,209 +369,54 @@ func test_apply_through_installed_seam_mutates_the_provided_board():
 
 	var mr := MatchRng.new()
 	mr.begin_solo(_SEED)
-	var cmd := NetProtocol.stamp_resolution(NetProtocol.make_move_unit(1, Vector2i(4, 4), 0), 1, mr.seed_for(1))
+	var cmd := NetProtocol.stamp_resolution(NetProtocol.make_move_unit("0:0", Vector3i(4, 4, 0), 0), 1, mr.seed_for(1))
 
-	var before: Vector2i = board.cell_of(peer["reg"].unit_for(1))
-	# Drive exactly what _rpc_apply_action does when a seam is installed.
-	applier.apply_command(cmd, net.board_provider.call(), null)
-	var after: Vector2i = board.cell_of(peer["reg"].unit_for(1))
-	assert_eq(before, Vector2i(1, 1), "unit started at its spawn cell")
-	assert_eq(after, Vector2i(4, 4), "the resolved MOVE_UNIT mutated the provider's board")
+	var unit = NetUnitIds.find(board, "0:0")
+	var before: Vector3i = board.cell_of(unit)
+	net.command_applier.apply_command(cmd, net.board_provider.call(), null)
+	var after: Vector3i = board.cell_of(unit)
+	assert_eq(before, Vector3i(1, 1, 0), "unit started at its spawn cell")
+	assert_eq(after, Vector3i(4, 4, 0), "the resolved MOVE mutated the provider's board")
 
-func test_two_peers_consume_action_flags_identically():
-	# Apply-semantics lockstep: driven from the same stamped stream, two independent peers end
-	# every command with IDENTICAL per-unit [acted, has_moved] flags -- so a networked cast
-	# greys the caster (and would advance Speed First) the same way on every box.
-	var stream := _authority_stream()
-	var peer_a := _make_peer()
-	var peer_b := _make_peer()
-	var applier_a: CommandApplier = peer_a["applier"]
-	var applier_b: CommandApplier = peer_b["applier"]
-	for cmd in stream:
-		applier_a.apply_command(cmd, peer_a["board"], { "turn_system": peer_a["turn"] })
-		applier_b.apply_command(cmd, peer_b["board"], { "turn_system": peer_b["turn"] })
-		assert_eq(str(_peer_flags(peer_a["reg"])), str(_peer_flags(peer_b["reg"])),
-			"both peers hold identical acted/has_moved flags after command seq %d"
-				% int(cmd.get(NetProtocol.KEY_SEQ, -1)))
-	# Deterministic consumption proof (independent of the seed-dependent cast hit/miss):
-	# the WAIT consumed the defender's action and the MOVE_UNIT marked the caster moved --
-	# identically on both peers.
-	assert_true(peer_a["reg"].unit_for(2).acted, "peer A: WAIT consumed the defender's action")
-	assert_true(peer_b["reg"].unit_for(2).acted, "peer B: WAIT consumed the defender's action")
-	assert_true(peer_a["reg"].unit_for(1).has_moved, "peer A: MOVE_UNIT marked the caster moved")
-	assert_true(peer_b["reg"].unit_for(1).has_moved, "peer B: MOVE_UNIT marked the caster moved")
+# What these pin: Host/Join run on NetSession, so the ROSTER (after the build gate) is what
+# seats a joiner; and the lobby channel delivers to the OTHER participants only. Only the host
+# half is exercised (a bound socket, no dialling), so nothing can hang.
 
-func _peer_flags(reg) -> Dictionary:
-	var out: Dictionary = {}
-	for id in [1, 2, 3]:
-		var u = reg.unit_for(id)
-		out[id] = null if u == null else [u.acted, u.has_moved]
-	return out
-
-func test_out_of_turn_intent_rejected_by_validator():
-	# Task 2: with the seam installed, the turn-ownership bridge drives NetSession's turn slot
-	# from the real turn system's turn_started, and the server-side validator rejects intents
-	# from any slot but the active one.
-	var net := _fresh_netsession()
-	var peer := _make_peer()
-	var sys := MockTurnSystem.new()
-	add_child_autofree(sys)
-	net.install_command_seam(peer["applier"], func(): return peer["board"], sys)
-	net.enforce_turn_ownership = true
-
-	# Player 0's turn begins -> bridge maps it to slot 0.
-	sys.begin_turn(MockPlayer.new(0))
-	assert_eq(net.current_turn_slot(), 0, "the bridge mapped player 0 -> slot 0")
-	assert_eq(net._validate_intent(1, NetProtocol.make_wait_unit(1)), "not_your_turn",
-		"an out-of-turn intent (slot 1 during slot 0's turn) is rejected server-side")
-	assert_eq(net._validate_intent(0, NetProtocol.make_wait_unit(1)), "",
-		"the active slot's intent passes the turn-ownership gate")
-
-	# The turn advances to player 1 -> the gate flips with it.
-	sys.begin_turn(MockPlayer.new(1))
-	assert_eq(net.current_turn_slot(), 1, "turn_started(player 1) moved the slot")
-	assert_eq(net._validate_intent(0, NetProtocol.make_wait_unit(1)), "not_your_turn",
-		"slot 0 is now out of turn")
-
-	# Dropping the seam disarms the bridge (slot back to -1, enforcement inert).
-	net.clear_command_seam()
-	assert_eq(net.current_turn_slot(), -1, "clearing the seam resets the driven turn slot")
-	assert_eq(net._validate_intent(0, NetProtocol.make_wait_unit(1)), "",
-		"with the seam cleared the turn gate is OFF again")
-
-func test_no_seam_means_no_turn_gating():
-	# Dev/legacy safety: with NO seam the bridge is inactive, so turn ownership is never
-	# enforced even with enforce_turn_ownership left ON and a stale-looking slot.
-	var net := _fresh_netsession()
-	net.enforce_turn_ownership = true
-	assert_eq(net._validate_intent(3, NetProtocol.make_wait_unit(1)), "",
-		"no seam installed -> out-of-turn gating is OFF (dev/legacy safety)")
-
-func test_shared_seed_layer_is_reproducible_across_peers():
-	# Both peers derive the SAME per-command seed from the SAME match seed -- the property the
-	# host relies on when it stamps rng_seed once and every peer resolves the roll identically.
-	var a := MatchRng.new()
-	a.begin_solo(_SEED)
-	var b := MatchRng.new()
-	b.begin_solo(_SEED)
-	assert_eq(a.match_seed, b.match_seed, "identical local seed -> identical match seed")
-	for seq in range(1, 8):
-		assert_eq(a.seed_for(seq), b.seed_for(seq), "per-command seed for seq %d matches across peers" % seq)
-
-# --- 3. Live in-process ENet loopback (opt-in, hard-bounded) ------------------
-
-func test_live_two_peer_enet_loopback():
-	if not OS.has_environment("CONQUEST_MP_LOOPBACK"):
-		pending("Live two-peer ENet loopback is OPT-IN (set env CONQUEST_MP_LOOPBACK=1). "
-			+ "Deterministic two-peer lockstep is fully covered by test_two_peer_appliers_stay_in_lockstep; "
-			+ "for a real dual-socket run use dev_scripts/mp_loopback_runner.gd (two processes). "
-			+ "Reason for opt-in: headless in-process dual-MultiplayerAPI ENet establishment is "
-			+ "environment-dependent and must never be allowed to hang the CI suite.")
-		return
-
-	# --- Two NetSession instances, each under its own subtree with its own MultiplayerAPI. ---
-	var host_branch := Node.new()
-	host_branch.name = "MPLoopbackHost"
-	var client_branch := Node.new()
-	client_branch.name = "MPLoopbackClient"
-	get_tree().root.add_child(host_branch)
-	get_tree().root.add_child(client_branch)
-	# Assign a distinct MultiplayerAPI to each branch BEFORE the NetSession nodes enter, so
-	# each node's `multiplayer` resolves to its own API rather than the shared default.
-	get_tree().set_multiplayer(MultiplayerAPI.create_default_interface(), host_branch.get_path())
-	get_tree().set_multiplayer(MultiplayerAPI.create_default_interface(), client_branch.get_path())
-
-	var host := _netsession_instance()
-	var client := _netsession_instance()
-	host_branch.add_child(host)
-	client_branch.add_child(client)
-
-	var port := 40000 + (Time.get_ticks_usec() % 20000)
-	assert_eq(host.host_game("Host", port, 2), OK, "host created the server")
-	assert_eq(client.join_game("127.0.0.1", "Client", port), OK, "client started connecting")
-
-	# Bounded wait for the roster to reach two participants on the host (auto-polled by the
-	# tree). Hard cap so a failed establishment degrades to a clear failure, never a hang.
-	var connected: bool = await _await_until(func(): return host.player_count() >= 2, 240)
-	if not connected:
-		_teardown_live(host, client, host_branch, client_branch)
-		pending("ENet loopback did not establish within the frame budget in this headless "
-			+ "environment; use the two-process dev_scripts/mp_loopback_runner.gd instead.")
-		return
-
-	# --- Install an independent applier+board seam on each peer. ---
-	var peer_h := _make_peer()
-	var peer_c := _make_peer()
-	host.install_command_seam(peer_h["applier"], func(): return peer_h["board"])
-	client.install_command_seam(peer_c["applier"], func(): return peer_c["board"])
-	host.enforce_turn_ownership = false
-	client.enforce_turn_ownership = false
-
-	# --- Commit-reveal match-RNG handshake; both peers must land on the same seed. ---
-	host.begin_match_rng_handshake()
-	var seeded: bool = await _await_until(
-		func(): return host.match_rng != null and host.match_rng.is_ready() \
-			and client.match_rng != null and client.match_rng.is_ready(), 240)
-	assert_true(seeded, "the match-RNG handshake completed on both peers")
-	if seeded:
-		assert_eq(host.match_rng.match_seed, client.match_rng.match_seed,
-			"host and client negotiated the identical match seed")
-
-	# --- Drive a scripted command from each side; assert both peers stay in lockstep. ---
-	var applied_h: Array = []
-	host.action_applied.connect(func(a): applied_h.append(a))
-	var applied_c: Array = []
-	client.action_applied.connect(func(a): applied_c.append(a))
-
-	host.submit_intent(NetProtocol.make_cast_move(1, 0, Vector2i(3, 1)))
-	await _await_until(func(): return applied_h.size() >= 1 and applied_c.size() >= 1, 120)
-	client.submit_intent(NetProtocol.make_move_unit(1, Vector2i(2, 1)))
-	await _await_until(func(): return applied_h.size() >= 2 and applied_c.size() >= 2, 120)
-
-	assert_eq(peer_h["applier"].hash_match_state(peer_h["board"]),
-		peer_c["applier"].hash_match_state(peer_c["board"]),
-		"after the live command exchange both peers hold identical state")
-
-	_teardown_live(host, client, host_branch, client_branch)
-
-# --- 4. Lobby transport: the roster gate + the lobby-message relay ------------
-#
-# What these pin: the menu's Host/Join now run on NetSession, so the ROSTER is what makes
-# is_networked_match() true in battle. Before that switch the roster stayed empty on a
-# connected pair and every peer resolved its own moves locally -- two machines, two games.
-# Only the server half is exercised here (a bound socket, no dialling), so there is no
-# connection to wait on and nothing that can hang.
-
-func test_host_plus_join_hello_makes_a_networked_match():
+func test_host_plus_join_hello_seats_the_joiner():
 	var session := _open_host()
 	if session.is_empty():
 		return  # _open_host already reported why.
 	var host = session["host"]
 
 	assert_eq(host.player_count(), 1, "the host occupies slot 0 the moment it hosts")
-	assert_false(host.is_networked_match(), "a lone host is not yet a networked match")
+	assert_false(host.is_networked_match(), "a lone host is not a networked match")
 
 	# A joining peer's FIRST message is the hello the build gate runs on; admitting it is
 	# what seats the peer. (The RPC wrapper only supplies the sender id.)
 	host._server_admit_peer(2, NetProtocol.make_hello("Client"))
 
 	assert_eq(host.player_count(), 2, "the admitted peer took a roster slot")
-	assert_eq(str(host._occupied_slots()), str([0, 1]), "slots are 0 (host) and 1 (joiner)")
+	var slots: Array = []
+	for pid in host.get_roster():
+		slots.append(int(host.get_roster()[pid]["slot"]))
+	slots.sort()
+	assert_eq(str(slots), str([0, 1]), "slots are 0 (host) and 1 (joiner)")
 	assert_eq(host.get_roster()[2]["name"], "Client", "the roster carries the joiner's name")
+	assert_false(host.is_networked_match(),
+		"a full LOBBY is not yet a match -- start_match's commit round makes it one")
+	host.state = NetSessionNode.State.IN_MATCH
 	assert_true(host.is_networked_match(),
-		"host + one seated peer IS a networked match -- the single gate the battle UI reads "
+		"host + one seated peer IN A MATCH is a networked match -- the gate the battle UI reads "
 		+ "to route commands through NetSession instead of resolving them locally")
 
 	_close_host(session)
 
 # NOTE: the REFUSAL half of the gate (a protocol-mismatched hello never taking a slot) is
-# pinned purely in tests/unit/test_net_handshake.gd against NetProtocol.validate_hello. It is
-# deliberately not driven through _server_admit_peer here: refusing a peer sends it an RPC and
-# then disconnect_peer()s it, and doing that to a peer id that was never really connected
-# raises engine errors -- which GUT (correctly) fails the run on.
+# pinned purely in tests/unit/test_net_handshake.gd against NetProtocol.validate_hello, and
+# over real sockets by the lobby-full / match-in-progress tests in test_net_lobby.gd.
 
 func test_lobby_message_relay_reaches_others_and_never_the_sender():
-	# The lobby's votes / ready flags / game-start settings ride this channel. It must
+	# The lobby's votes / ready flags / profile + loadout cards ride this channel. It must
 	# deliver to the OTHER participants and never echo the sender, so a lobby can broadcast
 	# unconditionally without filtering its own traffic back out.
 	var session := _open_host()
@@ -536,7 +456,7 @@ func _open_host() -> Dictionary:
 	var err: int = host.host_game("Host", port, 2)
 	if err != OK:
 		host.leave()
-		branch.queue_free()
+		branch.free()
 		pending("Could not bind a local ENet server socket in this environment (%s). "
 			% error_string(err)
 			+ "The roster/relay rules are transport-independent; this test only needs a bound "
@@ -550,7 +470,8 @@ func _close_host(session: Dictionary) -> void:
 		host.leave()
 	var branch = session.get("branch", null)
 	if branch != null and is_instance_valid(branch):
-		branch.queue_free()
+		get_tree().set_multiplayer(null, branch.get_path())
+		branch.free()
 
 # --- helpers -----------------------------------------------------------------
 
@@ -563,31 +484,10 @@ func _fresh_netsession() -> Node:
 	add_child_autofree(n)
 	return n
 
-## A NetSession instance for the live test (added under a branch so _ready binds it to that
-## branch's MultiplayerAPI).
+## A NetSession instance for a branch with its own MultiplayerAPI (added under the branch so
+## _ready binds it to that branch's API).
 func _netsession_instance() -> Node:
 	var script = load("res://systems/net/NetSession.gd")
 	var n := Node.new()
 	n.set_script(script)
 	return n
-
-## Await until [param cond] returns true or [param max_frames] elapse. Returns whether the
-## condition was met. Hard-bounded so no live await can hang the suite.
-func _await_until(cond: Callable, max_frames: int) -> bool:
-	var frames := 0
-	while frames < max_frames:
-		if bool(cond.call()):
-			return true
-		await get_tree().process_frame
-		frames += 1
-	return bool(cond.call())
-
-func _teardown_live(host, client, host_branch, client_branch) -> void:
-	if host != null and is_instance_valid(host):
-		host.leave()
-	if client != null and is_instance_valid(client):
-		client.leave()
-	if host_branch != null and is_instance_valid(host_branch):
-		host_branch.queue_free()
-	if client_branch != null and is_instance_valid(client_branch):
-		client_branch.queue_free()

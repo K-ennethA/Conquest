@@ -10,6 +10,24 @@ description = "A 13x9 point-symmetric combat testbed built to showcase terrain e
 author = "Map Maker (build_elemental_crossroads.gd)"
 width = 13
 height = 9
+weather_mode = "schedule"
+weather = "clear"
+weather_schedule = Array[Dictionary]([{
+"rounds": 2,
+"weather": "clear"
+}, {
+"rounds": 2,
+"weather": "bright_sun"
+}, {
+"rounds": 2,
+"weather": "rain"
+}, {
+"rounds": 2,
+"weather": "desert_storm"
+}, {
+"rounds": 2,
+"weather": "overbloom"
+}])
 tile_layout = Array[Dictionary]([{
 "position": Vector2i(0, 0),
 "tile_resource_path": "",

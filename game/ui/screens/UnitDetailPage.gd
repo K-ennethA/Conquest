@@ -38,6 +38,15 @@ class_name UnitDetailPage
 ## READ-ONLY BY CONSTRUCTION. It works for the player's OWN units and for an inspected
 ## ENEMY exactly the same way, because it only ever READS -- there is no control on the
 ## page that can act.
+##
+## LOOK (docs/UI_STYLE.md). A crested grove-frame card with the OWNER's team colour down
+## its left edge (team = edge), a heraldic crest portrait (element field, team rim --
+## element = crest), the unit's name in gold Cinzel, and a key-cap footer.
+##
+## INPUT. Modal while open: the root is in [constant InputActions.OVERLAY_GROUP] (so the
+## board cursor / map menu / unit panels ignore input underneath) and stops the mouse.
+## Cancel (ESC / B) or the CLOSE button closes it; the cursor keys / D-pad
+## / left stick scroll the sheet; touch drags the scroll region and taps CLOSE.
 
 ## Above TurnTransition (128) / UltimateCutIn (124) / ActionAnnouncer (120); below
 ## PauseMenu (140), which must always be able to draw over this.
@@ -48,7 +57,11 @@ const OVERLAY_LAYER: int = 130
 ## action panel both open it).
 const GROUP := "unit_detail_page"
 
-const MUTED := Color(0.72, 0.70, 0.78)
+## Secondary text on the page (the grove's TEXT_MUTED).
+const MUTED := MenuTheme.TEXT_MUTED
+
+## Pixels one cursor press scrolls the sheet.
+const SCROLL_STEP: int = 64
 
 ## The card never grows past this, however wide the window is -- a 1600px-wide wall of
 ## body text is unreadable, and the page is a document, not a dashboard.
@@ -77,6 +90,8 @@ var _element_badge: PanelContainer = null
 var _tags_label: Label = null
 var _owner_label: Label = null
 var _body: VBoxContainer = null
+var _scroll: ScrollContainer = null
+var _hints: HBoxContainer = null
 var _close_button: Button = null
 
 ## The unit currently on the page (never mutated -- see the READ-ONLY note above).
@@ -134,6 +149,9 @@ func open(unit) -> void:
 	_unit = unit
 	_fit_card_width()
 	_populate(unit)
+	_refresh_hints()
+	if _scroll != null:
+		_scroll.scroll_vertical = 0
 	_set_visible(true)
 	if _close_button != null:
 		_close_button.grab_focus()
@@ -182,13 +200,38 @@ func _input(event: InputEvent) -> void:
 	# `_input` (not `_unhandled_input`) and the event is CONSUMED, which is what keeps the
 	# ESC chain airtight: UILayoutManager opens the pause menu from `_unhandled_input` and
 	# UnitActionsPanel backs out a command stage from its own `_input`, so with the page up
-	# neither of them ever sees the press. Exactly one thing happens per Escape.
+	# neither of them ever sees the press. Exactly one thing happens per Escape. The named
+	# CANCEL action rides along (the pad's B, and any rebinding), and a raw Escape still
+	# works in a stripped harness with no InputMap. (Deliberately NOT unit_info: the press
+	# that opens the page is not consumed by its opener, and would close it again here.)
 	if event.is_action_pressed("ui_cancel") \
+			or _is_pressed(event, InputActions.CANCEL) \
 			or (event is InputEventKey and (event as InputEventKey).keycode == KEY_ESCAPE):
 		close()
-		var vp := get_viewport()
-		if vp != null:
-			vp.set_input_as_handled()
+		_consume()
+		return
+	# Keyboard / pad scrolling of the sheet (the mouse wheel and touch drag are the scroll
+	# container's own).
+	var step: int = 0
+	if _is_pressed(event, InputActions.CURSOR_DOWN) or event.is_action_pressed("ui_down"):
+		step = SCROLL_STEP
+	elif _is_pressed(event, InputActions.CURSOR_UP) or event.is_action_pressed("ui_up"):
+		step = -SCROLL_STEP
+	if step != 0 and _scroll != null:
+		_scroll.scroll_vertical += step
+		_consume()
+
+
+func _consume() -> void:
+	var vp := get_viewport()
+	if vp != null:
+		vp.set_input_as_handled()
+
+
+## [param event] presses the named [param action] (skipped when the action is not in the
+## InputMap, e.g. a stripped test harness).
+static func _is_pressed(event: InputEvent, action: StringName) -> bool:
+	return InputMap.has_action(action) and event.is_action_pressed(action)
 
 
 # ---------------------------------------------------------------------------
@@ -203,14 +246,16 @@ func _build() -> void:
 	# reached the board through a full-screen document would move a unit the player cannot
 	# even see.
 	_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	# The dark menu register, like PauseMenu -- reading a stat sheet steps out of the amber
-	# battle frame, and it is also the theme every UnitPageContent card is authored against.
+	# The grove menu theme, like PauseMenu -- reading a stat sheet steps out of the battle
+	# frame, and it is also the theme every UnitPageContent card is authored against.
 	_root.theme = MenuTheme.build()
+	# Board / map-menu / unit-panel handlers skip gameplay input while this root is visible.
+	_root.add_to_group(InputActions.OVERLAY_GROUP)
 	add_child(_root)
 
 	_backdrop = ColorRect.new()
 	_backdrop.name = "Backdrop"
-	_backdrop.color = Color(0.05, 0.04, 0.08, 0.82)
+	_backdrop.color = Color(MenuTheme.BG_DEEP, 0.82)
 	_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	_root.add_child(_backdrop)
@@ -237,11 +282,12 @@ func _build() -> void:
 	_card.name = "Card"
 	_card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_card.size_flags_vertical = Control.SIZE_FILL
+	_card.add_theme_stylebox_override("panel", _card_box(MenuTheme.GOLD_DK))
 	centre.add_child(_card)
 
 	var pad := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		pad.add_theme_constant_override("margin_" + side, 20)
+		pad.add_theme_constant_override("margin_" + side, 2)
 	_card.add_child(pad)
 
 	var column := VBoxContainer.new()
@@ -250,8 +296,12 @@ func _build() -> void:
 	pad.add_child(column)
 
 	column.add_child(_build_header())
+	var rule := ConquestTheme.accent_rule(MenuTheme.GOLD, 0.0, 12.0)
+	rule.size_flags_horizontal = Control.SIZE_FILL
+	column.add_child(rule)
 
 	var scroll := ScrollContainer.new()
+	_scroll = scroll
 	scroll.name = "Scroll"
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -265,8 +315,18 @@ func _build() -> void:
 	scroll.add_child(_body)
 
 	var footer := HBoxContainer.new()
+	footer.name = "Footer"
 	footer.alignment = BoxContainer.ALIGNMENT_END
+	footer.add_theme_constant_override("separation", 18)
 	column.add_child(footer)
+
+	# Key-cap hints for the live bindings ("[Up]/[Down] Scroll"), left of the button.
+	_hints = HBoxContainer.new()
+	_hints.name = "Hints"
+	_hints.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_hints.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_hints.add_theme_constant_override("separation", 18)
+	footer.add_child(_hints)
 
 	_close_button = Button.new()
 	_close_button.name = "CloseButton"
@@ -275,12 +335,48 @@ func _build() -> void:
 	_close_button.custom_minimum_size = Vector2(160, 44)
 	_close_button.pressed.connect(close)
 	footer.add_child(_close_button)
+	_refresh_hints()
 
 	# The card is SHRINK_CENTER horizontally, so its width IS its minimum width -- which
 	# therefore has to be restated whenever the window changes. Never wider than
 	# MAX_CARD_WIDTH, and never wider than the window (the phone build's case).
 	_root.resized.connect(_fit_card_width)
 	_fit_card_width()
+
+
+## The page card: the grove frame with its gold crest on top (a hero surface) and
+## [param edge] -- the owner's team colour once a unit is shown -- down its left side.
+static func _card_box(edge: Color) -> StyleBox:
+	var sb := MenuTheme.accented_card(edge, SIDE_LEFT, MenuTheme.PANEL, 0.97, true)
+	sb.border_color = MenuTheme.BORDER.lerp(edge, 0.4)
+	sb.content_margin_left = 24
+	sb.content_margin_right = 22
+	sb.content_margin_top = 20
+	sb.content_margin_bottom = 16
+	return sb
+
+
+## The glyph for [param action] right now ("Esc", or the pad button), or [param fallback].
+static func _glyph(action: StringName, fallback: String) -> String:
+	var g: String = ConquestTheme.action_glyph(action)
+	return g if g != "" else fallback
+
+
+## Rebuild the footer hints and the Close label for the live bindings (the pad's buttons
+## once a gamepad is connected).
+func _refresh_hints() -> void:
+	var cancel_key: String = _glyph(InputActions.CANCEL, "Esc")
+	if _close_button != null:
+		_close_button.text = "CLOSE (%s)" % cancel_key.to_upper()
+	if _hints == null:
+		return
+	for c in _hints.get_children():
+		_hints.remove_child(c)
+		c.queue_free()
+	var up: String = _glyph(InputActions.CURSOR_UP, "Up")
+	var down: String = _glyph(InputActions.CURSOR_DOWN, "Down")
+	_hints.add_child(ConquestTheme.key_hint("%s / %s" % [up, down], "Scroll"))
+	_hints.add_child(ConquestTheme.key_hint(cancel_key, "Close"))
 
 
 func _fit_card_width() -> void:
@@ -308,7 +404,11 @@ func _build_header() -> Control:
 	_portrait_monogram.text = "?"
 	_portrait_monogram.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_portrait_monogram.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# A crest initial: the Cinzel display face with an engraved shadow.
+	_portrait_monogram.add_theme_font_override("font", MenuTheme.display_font(0))
 	_portrait_monogram.add_theme_font_size_override("font_size", 44)
+	_portrait_monogram.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	_portrait_monogram.add_theme_constant_override("shadow_offset_y", 2)
 	_portrait_plate.add_child(_portrait_monogram)
 
 	_portrait_texture = TextureRect.new()
@@ -341,8 +441,9 @@ func _build_header() -> Control:
 
 	_name_label = Label.new()
 	_name_label.name = "NameLabel"
+	_name_label.add_theme_font_override("font", MenuTheme.heading_font(2))
 	_name_label.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	_name_label.add_theme_color_override("font_color", MenuTheme.GOLD)
+	_name_label.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
 	_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_row.add_child(_name_label)
 
@@ -354,13 +455,13 @@ func _build_header() -> Control:
 	_tags_label.name = "TagsLabel"
 	_tags_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
 	_tags_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_tags_label.modulate = MUTED
+	_tags_label.add_theme_color_override("font_color", MenuTheme.TEXT_DIM)
 	identity.add_child(_tags_label)
 
 	_owner_label = Label.new()
 	_owner_label.name = "OwnerLabel"
 	_owner_label.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	_owner_label.modulate = MUTED
+	_owner_label.add_theme_color_override("font_color", MUTED)
 	identity.add_child(_owner_label)
 
 	return header
@@ -497,18 +598,14 @@ func _paint_portrait(unit, character, display: String) -> void:
 
 	var element: String = String(unit.get_element()) if unit.has_method("get_element") else ""
 	var base: Color = ConquestTheme.element_color(element)
-
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = base
-	sb.set_corner_radius_all(12)
-	sb.set_border_width_all(2)
-	sb.border_color = base.darkened(0.35)
-	_portrait_plate.add_theme_stylebox_override("panel", sb)
+	# Team = edge: the owner's seat colour rims the crest and stripes the card's left side.
+	var team: Color = ConquestTheme.team_color(ConquestTheme.owner_of(unit))
+	if _card != null:
+		_card.add_theme_stylebox_override("panel", _card_box(team))
 
 	if _portrait_monogram != null:
 		_portrait_monogram.text = display.substr(0, 1).to_upper() if display != "" else "?"
-		_portrait_monogram.add_theme_color_override("font_color",
-				ConquestTheme.INK if base.get_luminance() > 0.55 else ConquestTheme.CREAM)
+		_portrait_monogram.add_theme_color_override("font_color", base.lightened(0.7))
 
 	var texture: Texture2D = null
 	if character != null and character.portrait != null:
@@ -526,3 +623,15 @@ func _paint_portrait(unit, character, display: String) -> void:
 		_portrait_texture.visible = texture != null
 	if _portrait_monogram != null:
 		_portrait_monogram.visible = texture == null
+
+	# Element = crest: the heraldic SHIELD (element field, team rim, gold inner line) behind
+	# the monogram; a captured portrait sits in a notched frame of the same colours instead,
+	# since a square image does not fit a shield's point.
+	if texture == null:
+		_portrait_plate.add_theme_stylebox_override("panel",
+				MenuTheme.crest_box(base, team, PORTRAIT_SIZE))
+	else:
+		var frame := MenuTheme.plate_box(base.darkened(0.45), team, 10.0, 4.0, 4.0, 2.5)
+		frame.inner_line_color = Color(MenuTheme.GOLD_LITE, 0.5)
+		frame.inner_inset = 4.0
+		_portrait_plate.add_theme_stylebox_override("panel", frame)

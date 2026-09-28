@@ -38,6 +38,13 @@ class_name MyBases
 ##     mode, while this page is about community bases, and this page's 720p budget has no
 ##     room for a second flexible region.
 ##
+## Built on the shared grove page ([MenuKit.build_page], [MenuTheme] -- docs/UI_STYLE.md):
+## slots are grove cards, the bench sits in a sunken well, and the overlays are crest cards
+## over a scrim that are modal for the mouse AND for keyboard / pad focus.
+##
+## Input: arrows / D-pad walk the buttons; Cancel (Esc / B) closes an open overlay first,
+## then goes back.
+##
 ## Talks only to [CommunityClient], through the same async {ok, data} / {ok:false, error}
 ## contract as the browse screen, and every callback re-checks the tree AND that the overlay
 ## it was launched from is still the one on screen: the local sandbox answers synchronously
@@ -72,11 +79,12 @@ const OVERLAY_CONFIRM := "confirm"
 const RESULT_DEFENDED := "DEFENDED"
 const RESULT_CLEARED := "CLEARED"
 
-## Warm sage / warm brick. Held inside this screen rather than in [MenuTheme] because they
-## are the only two semantic (good/bad) colours in the menus, and both are pulled toward the
-## amber palette so a green tick never reads as a different app.
-const DEFENDED_COLOR := Color("8bbf6e")
-const CLEARED_COLOR := Color("d4694f")
+## The grove's good / bad state tokens, named for what they mean on this screen.
+const DEFENDED_COLOR := MenuTheme.SUCCESS
+const CLEARED_COLOR := MenuTheme.DANGER
+
+## Height of the slot row (and every slot card in it). See the page budget in _build_ui.
+const SLOT_HEIGHT := 176.0
 
 ## Ceiling on rendered attempt rows, however many pages the player asks for. The list is a
 ## scroll, not a spreadsheet; past this the ledger is telling a story no one is reading.
@@ -138,6 +146,12 @@ var _slots_row: HBoxContainer = null
 var _bench_box: VBoxContainer = null
 var _notice: Label = null
 var _summary: Label = null
+var _back_btn: Button = null
+## The page's content root (MenuKit's "Page" margin), taken out of focus navigation while an
+## overlay is up.
+var _page_root: Control = null
+## What had focus when the overlay opened, handed focus back when it closes.
+var _focus_before_overlay: Control = null
 
 var _overlay: Control = null
 var _overlay_panel: PanelContainer = null
@@ -175,129 +189,129 @@ func set_challenge_source(source) -> void:
 
 
 func _ready() -> void:
-	theme = MenuTheme.build()
-	MenuTheme.apply_backdrop(self)
 	if _client == null:
 		_client = CommunityClient.new()
 	_build_ui()
 	refresh()
+	_focus_page()
 
 
 # --- UI construction --------------------------------------------------------
 
 func _build_ui() -> void:
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
-
-	# 720p budget for this page (separation 12, and no MarginContainer -- this page IS the
-	# viewport, so the floor must sit clear of 720 by itself):
-	#   title 52 + subtitle 21 + notice 22 + slots row 132 + section header 21
-	#   + bench card (120 scroll floor + 24 panel padding = 144) + actions 48 + hint 16
-	#   = 456 fixed, plus 7 gaps * 12 = 84  ->  540
-	# against this 660 floor, which is 60px clear of 720. The 120px of slack flows into the
-	# ONE flexible region (the bench scroll, below) via EXPAND_FILL, so it opens to ~240px
-	# and the footer stays pinned on screen. NOTHING below adds a fixed row: the attack log
-	# and publish flows are OVERLAYS with their own budgets (see _open_overlay), which is the
-	# reason they are overlays.
-	#
-	# Width: 780 floor against the two widest fixed rows --
-	#   slots row  3 * 248 + 2 * 14 = 772  (the slot card grew from 240 to fit its second
-	#                                       button; 8px spare)
-	#   footer     180 + 200 + 200 + 2 * 18 = 616  (Back / Community / My Replays)
-	var page := VBoxContainer.new()
-	page.custom_minimum_size = Vector2(780.0, 660.0)
-	page.add_theme_constant_override("separation", 12)
-	center.add_child(page)
-
-	var title := Label.new()
-	title.text = "MY BASES"
-	page.add_child(title)
-	MenuTheme.style_title(title, 32)
-
-	_summary = Label.new()
-	_summary.text = "Your published challenges, defending while you are away"
-	page.add_child(_summary)
-	MenuTheme.style_subtitle(_summary)
-
-	# The inline notice: base_limit, not_owner and every other refused action lands here.
-	# Fixed height so the page never reflows when a message appears or clears.
-	_notice = Label.new()
-	_notice.text = ""
-	_notice.custom_minimum_size = Vector2(0.0, 22.0)
-	page.add_child(_notice)
-	MenuTheme.style_caption(_notice)
-	_notice.add_theme_color_override("font_color", MenuTheme.GOLD)
+	# The shared grove page ([MenuKit.build_page], docs/UI_STYLE.md). 720p budget: MenuKit's
+	# header + footer leave the body ~466 of 720. Body rows (16 apart):
+	#   slots row 176 + section header 20 + bench well (the ONE EXPAND_FILL region, 120 floor)
+	#   = 316 fixed + 2 * 16 = 348, so the bench opens to ~238 at 720p and the footer stays
+	# pinned. The inline notice lives in the footer beside the key hints. NOTHING below adds
+	# a fixed row: the attack log and publish flows are OVERLAYS with their own budgets (see
+	# _open_overlay), which is the reason they are overlays.
+	var page := MenuKit.build_page(self, ["Solo", "Challenges"], "My Bases",
+		"Your published challenges, defending while you are away.")
+	_page_root = page.root
+	_summary = page.subtitle
 
 	# --- The three slots -----------------------------------------------------
 	_slots_row = HBoxContainer.new()
-	_slots_row.custom_minimum_size = Vector2(0.0, 132.0)
-	_slots_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	_slots_row.add_theme_constant_override("separation", 14)
-	page.add_child(_slots_row)
-
-	var bench_header := Label.new()
-	bench_header.text = "RETIRED BASES"
-	page.add_child(bench_header)
-	MenuTheme.style_section_header(bench_header)
+	_slots_row.name = "Slots"
+	_slots_row.custom_minimum_size = Vector2(0.0, SLOT_HEIGHT)
+	_slots_row.add_theme_constant_override("separation", MenuTheme.SP_L)
+	page.body.add_child(_slots_row)
 
 	# --- The bench -----------------------------------------------------------
-	var bench_card := PanelContainer.new()
-	bench_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	page.add_child(bench_card)
+	var bench := VBoxContainer.new()
+	bench.name = "Bench"
+	bench.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	bench.add_theme_constant_override("separation", 6)
+	page.body.add_child(bench)
+	bench.add_child(MenuKit.section("Retired bases"))
+
+	var bench_well := MenuKit.card(&"InsetPanel")
+	bench_well.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	bench.add_child(bench_well)
 
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
 	# The page's ONLY EXPAND_FILL region, with a modest floor -- see the budget above. Raise
 	# this and the footer is what pays for it.
 	scroll.custom_minimum_size = Vector2(0.0, 120.0)
-	bench_card.add_child(scroll)
+	bench_well.add_child(scroll)
+
+	var pad := MarginContainer.new()
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for side in ["left", "top", "bottom"]:
+		pad.add_theme_constant_override("margin_" + side, 4)
+	pad.add_theme_constant_override("margin_right", 14)  # focus glow + scrollbar
+	scroll.add_child(pad)
 
 	_bench_box = VBoxContainer.new()
 	_bench_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_bench_box.add_theme_constant_override("separation", 8)
-	scroll.add_child(_bench_box)
+	_bench_box.add_theme_constant_override("separation", MenuTheme.SP_S)
+	pad.add_child(_bench_box)
 
 	# --- Footer --------------------------------------------------------------
-	var actions := HBoxContainer.new()
-	actions.alignment = BoxContainer.ALIGNMENT_CENTER
-	actions.add_theme_constant_override("separation", 18)
-	page.add_child(actions)
+	# The inline notice: base_limit, not_owner and every other refused action lands here.
+	page.hints.add_child(MenuKit.key_hint("Esc", "B", "Back"))
+	_notice = MenuKit.label("", &"DimLabel")
+	_notice.name = "NoticeLabel"
+	_notice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_notice.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_notice.clip_text = true
+	_notice.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_notice.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
+	_notice.tooltip_text = "Up to %d bases defend at once -- retire one to free a slot." % MAX_SLOTS
+	page.hints.add_child(_notice)
 
-	var back := Button.new()
-	back.text = "Back"
-	back.custom_minimum_size = Vector2(180.0, 48.0)
-	back.pressed.connect(_on_back_pressed)
-	actions.add_child(back)
+	_back_btn = MenuKit.button("Back", MenuKit.GHOST, 140)
+	_back_btn.name = "BackButton"
+	_back_btn.pressed.connect(_on_back_pressed)
+	page.actions.add_child(_back_btn)
 
-	var community := Button.new()
-	community.text = "Community"
-	community.custom_minimum_size = Vector2(200.0, 48.0)
+	var community := MenuKit.button("Community", &"", 180)
+	community.name = "CommunityButton"
 	var community_available: bool = ResourceLoader.exists(COMMUNITY_SCENE)
 	community.disabled = not community_available
 	community.tooltip_text = "Attack the bases other players are defending." if community_available \
 		else "The community browser is not available in this build."
 	community.pressed.connect(_on_community_pressed)
-	actions.add_child(community)
+	page.actions.add_child(community)
 
 	# The sibling replay screen. Guarded like every other cross-screen hop.
-	var replays := Button.new()
-	replays.text = "My Replays"
-	replays.custom_minimum_size = Vector2(200.0, 48.0)
+	var replays := MenuKit.button("My Replays", &"", 190)
+	replays.name = "MyReplaysButton"
 	var replays_available: bool = ResourceLoader.exists(MY_REPLAYS_SCENE)
 	replays.disabled = not replays_available
 	replays.tooltip_text = "Battles this device recorded." if replays_available \
 		else "The replay screen is not available in this build."
 	replays.pressed.connect(_on_my_replays_pressed)
-	actions.add_child(replays)
-
-	var hint := Label.new()
-	hint.text = "Up to %d bases defend at once  •  retire one to free a slot  •  ESC back" % MAX_SLOTS
-	page.add_child(hint)
-	MenuTheme.style_caption(hint)
+	page.actions.add_child(replays)
 
 	# The overlay host, added LAST so it draws over the page. Hidden until a flow opens it.
 	_build_overlay_host()
+
+
+## Put keyboard / pad focus somewhere useful on the page: the first slot's action, else Back.
+func _focus_page() -> void:
+	if _overlay_mode != OVERLAY_NONE:
+		return
+	if _slots_row != null:
+		for card in _slots_row.get_children():
+			var btn := _first_enabled_button(card)
+			if btn != null:
+				_focus_later(btn)
+				return
+	_focus_later(_back_btn)
+
+
+func _first_enabled_button(node: Node) -> Button:
+	if node is Button and not (node as Button).disabled and (node as Button).focus_mode != Control.FOCUS_NONE:
+		return node as Button
+	for child in node.get_children():
+		var found := _first_enabled_button(child)
+		if found != null:
+			return found
+	return null
 
 
 # --- Loading ----------------------------------------------------------------
@@ -347,6 +361,9 @@ func _render() -> void:
 			_bench.append(base)
 	_render_slots()
 	_render_bench()
+	# A repaint frees the buttons under the cursor; put focus back on the page.
+	if is_inside_tree() and get_viewport().gui_get_focus_owner() == null:
+		_focus_page()
 
 
 func _render_slots() -> void:
@@ -367,53 +384,51 @@ func _render_slots() -> void:
 
 ## A defending base: title, the counters the service last reported, and the derived rate.
 func _make_filled_slot(index: int, base: Dictionary) -> Control:
+	# A defending base is a hero card: gold edge + crest. The three slots share the page
+	# width equally (EXPAND_FILL), so each is ~380 wide at 1280.
 	var card := PanelContainer.new()
-	# 248 not 240: the card carries TWO buttons now (Attack log 112 + Retire 96 + 8
-	# separation = 216) inside card_box's 10px content margins, so it needs 236 of width and
-	# 248 leaves 12px of slack. Three of them plus 2 * 14 separation = 772 <= the page's 780.
-	card.custom_minimum_size = Vector2(248.0, 132.0)
-	card.add_theme_stylebox_override("panel", MenuTheme.card_box(MenuTheme.GOLD))
+	card.custom_minimum_size = Vector2(0.0, SLOT_HEIGHT)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var sb := MenuTheme.accented_card(MenuTheme.GOLD, SIDE_LEFT, MenuTheme.PANEL, 0.96, true)
+	_tighten(sb)
+	card.add_theme_stylebox_override("panel", sb)
 
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 2)
+	col.add_theme_constant_override("separation", 4)
 	card.add_child(col)
 
 	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 6)
+	head.add_theme_constant_override("separation", MenuTheme.SP_S)
 	col.add_child(head)
 
-	var title_lbl := Label.new()
-	title_lbl.text = _base_title(base)
-	title_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
-	# The card is a fixed 248 wide; a player-authored title must ellipsis inside it rather
-	# than stretch the row and push the third slot off the page.
+	var title_lbl := MenuKit.label(_base_title(base), &"SubheadingLabel")
+	# The card has a fixed share of the row; a player-authored title must ellipsis inside it
+	# rather than stretch the row and push the third slot off the page.
 	title_lbl.clip_text = true
 	title_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_lbl.custom_minimum_size = Vector2(80.0, 0.0)
 	head.add_child(title_lbl)
-	head.add_child(MenuTheme.make_chip("ACTIVE", MenuTheme.GOLD))
+	var active_badge := MenuKit.badge("ACTIVE", MenuTheme.SUCCESS)
+	active_badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(active_badge)
 
 	var lines: PackedStringArray = _counter_lines(base)
-	for line in lines:
-		var lbl := Label.new()
-		lbl.text = line
-		lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-		lbl.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
-		col.add_child(lbl)
+	var counters := MenuKit.label("   ·   ".join(lines), &"DimLabel", true)
+	counters.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	counters.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(counters)
 
 	var id: String = String(base.get("id", ""))
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_END
-	buttons.add_theme_constant_override("separation", 8)
+	buttons.add_theme_constant_override("separation", MenuTheme.SP_S)
 	col.add_child(buttons)
-	buttons.add_child(_make_attack_log_button(id, _base_title(base), Vector2(112.0, 32.0)))
+	buttons.add_child(_make_attack_log_button(id, _base_title(base), Vector2(150.0, 44.0)))
 
-	var retire := Button.new()
-	retire.text = "Retire"
-	# Explicit minimum: a Button's full-rect children contribute nothing to its minimum size,
-	# and even a plain-text button in a fixed-width card needs a floor it cannot fall below.
-	retire.custom_minimum_size = Vector2(96.0, 32.0)
+	# Explicit minimum: even a plain-text button in a shared-width card needs a floor it
+	# cannot fall below.
+	var retire := MenuKit.button("Retire", MenuKit.GHOST, 120, 44)
 	retire.pressed.connect(func(): _set_active(id, false))
 	buttons.add_child(retire)
 
@@ -425,9 +440,7 @@ func _make_filled_slot(index: int, base: Dictionary) -> Control:
 ## explained) rather than absent when the client predates the ledger endpoints, so the
 ## screen still tells the truth on an old build.
 func _make_attack_log_button(id: String, title: String, size: Vector2) -> Button:
-	var btn := Button.new()
-	btn.text = "Attack log"
-	btn.custom_minimum_size = size
+	var btn := MenuKit.button("Attack log", &"", size.x, size.y)
 	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var available: bool = id != "" and _client != null and _client.has_method("attempt_log")
 	btn.disabled = not available
@@ -439,35 +452,33 @@ func _make_attack_log_button(id: String, title: String, size: Vector2) -> Button
 
 ## An empty slot reads as an invitation, not as a hole in the layout.
 func _make_empty_slot(index: int) -> Control:
+	# An unclaimed slot: the sunk well, so the eye reads it as a space waiting to be filled.
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(248.0, 132.0)
-	card.add_theme_stylebox_override("panel", MenuTheme.card_box(MenuTheme.BORDER))
+	card.custom_minimum_size = Vector2(0.0, SLOT_HEIGHT)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var sb := MenuTheme.card_box(MenuTheme.PANEL_SUNK, MenuTheme.BORDER_SOFT)
+	sb.ornament_color = Color(MenuTheme.GOLD_DK, 0.5)
+	sb.inner_line_color = Color(MenuTheme.GOLD, 0.14)
+	_tighten(sb)
+	card.add_theme_stylebox_override("panel", sb)
 
 	var col := VBoxContainer.new()
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_theme_constant_override("separation", 6)
 	card.add_child(col)
 
-	var head := Label.new()
-	head.text = "SLOT %d" % (index + 1)
+	var head := MenuKit.section("Slot %d" % (index + 1))
 	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	head.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	head.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
 	col.add_child(head)
 
-	var invite := Label.new()
-	invite.text = EMPTY_SLOT_INVITE
-	invite.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var invite := MenuKit.label(EMPTY_SLOT_INVITE, &"DimLabel", true)
 	invite.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	invite.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	invite.add_theme_color_override("font_color", MenuTheme.CREAM)
+	invite.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	col.add_child(invite)
 
 	# The real publishing flow (this was a link to the challenge screen; nothing in the game
 	# called CommunityClient.upload before it).
-	var publish := Button.new()
-	publish.text = "Publish"
-	publish.custom_minimum_size = Vector2(120.0, 32.0)
+	var publish := MenuKit.button("Publish", &"", 150, 44)
 	publish.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	publish.tooltip_text = "Put one of your challenges up for others to attack."
 	publish.pressed.connect(open_publish_picker)
@@ -487,11 +498,10 @@ func _render_bench() -> void:
 	_bench_buttons.clear()
 
 	if _bench.is_empty():
-		var empty := Label.new()
-		empty.text = "No retired bases. Anything you retire waits here until you field it again."
-		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var empty := MenuKit.label(
+			"No retired bases. Anything you retire waits here until you field it again.",
+			&"DimLabel", true)
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		MenuTheme.style_subtitle(empty)
 		_bench_box.add_child(empty)
 		return
 
@@ -506,10 +516,12 @@ func _render_bench() -> void:
 ## right. A retired base is still worth reading the log of -- that is often WHY it was retired.
 func _make_bench_row(base: Dictionary, slots_free: bool) -> Control:
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", MenuTheme.card_box(MenuTheme.BORDER))
+	var sb := MenuTheme.card_box()
+	_tighten(sb)
+	panel.add_theme_stylebox_override("panel", sb)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
+	row.add_theme_constant_override("separation", MenuTheme.SP_M)
 	panel.add_child(row)
 
 	var col := VBoxContainer.new()
@@ -517,29 +529,25 @@ func _make_bench_row(base: Dictionary, slots_free: bool) -> Control:
 	col.add_theme_constant_override("separation", 2)
 	row.add_child(col)
 
-	var title_lbl := Label.new()
-	title_lbl.text = _base_title(base)
-	title_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	var title_lbl := MenuKit.label(_base_title(base), &"SubheadingLabel")
+	title_lbl.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
 	title_lbl.clip_text = true
 	title_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_lbl.custom_minimum_size = Vector2(120.0, 0.0)
 	col.add_child(title_lbl)
 
-	var meta := Label.new()
-	meta.text = "   ·   ".join(_counter_lines(base))
-	meta.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	meta.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	var meta := MenuKit.label("   ·   ".join(_counter_lines(base)), &"DimLabel")
+	meta.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	col.add_child(meta)
 
 	var id: String = String(base.get("id", ""))
 	var is_active: bool = bool(base.get("active", false))
-	# Row width inside the bench scroll: title column (120 floor, expands) + 120 + 140 plus
-	# 2 * 12 separation = 404 against the page's 780 minus the card and scroll chrome.
-	row.add_child(_make_attack_log_button(id, _base_title(base), Vector2(120.0, 40.0)))
+	# Row width inside the bench scroll: title column (120 floor, expands) + 150 + 170 plus
+	# 2 * 12 separation = 464, far inside the page width minus the card and scroll chrome.
+	row.add_child(_make_attack_log_button(id, _base_title(base), Vector2(150.0, 44.0)))
 
-	var action := Button.new()
-	action.custom_minimum_size = Vector2(140.0, 40.0)
+	var action := MenuKit.button("", &"", 170, 44)
 	action.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	if is_active:
 		# Overflow: the service says this one is active but the three slots are already taken.
@@ -614,7 +622,7 @@ func _build_overlay_host() -> void:
 	# The scrim both dims the page and EATS clicks, so a card behind the panel cannot be
 	# pressed through it.
 	var scrim := ColorRect.new()
-	scrim.color = Color(MenuTheme.DARK.r, MenuTheme.DARK.g, MenuTheme.DARK.b, 0.78)
+	scrim.color = Color(MenuTheme.BG_DEEP, 0.8)
 	scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	scrim.mouse_filter = Control.MOUSE_FILTER_STOP
 	_overlay.add_child(scrim)
@@ -623,8 +631,9 @@ func _build_overlay_host() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_overlay.add_child(center)
 
-	_overlay_panel = PanelContainer.new()
-	_overlay_panel.add_theme_stylebox_override("panel", MenuTheme.card_box(MenuTheme.GOLD))
+	# A dialog is a hero surface: the grove frame with the gold crest.
+	_overlay_panel = MenuKit.card(&"CrestCard")
+	_overlay_panel.name = "OverlayPanel"
 	center.add_child(_overlay_panel)
 
 	_overlay_box = VBoxContainer.new()
@@ -648,18 +657,23 @@ func _open_overlay(mode: String, heading: String, subject: String, size: Vector2
 		_overlay_box.remove_child(child)
 		child.queue_free()
 	_overlay_panel.custom_minimum_size = size
+	if not _overlay.visible:
+		# Remember where the page's focus was, and take the page out of focus navigation so
+		# keyboard / pad focus cannot walk out from under the scrim.
+		var owner_now: Control = get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+		_focus_before_overlay = owner_now
+		_set_page_focusable(false)
 	_overlay.visible = true
 
-	# Header: what this is, whose it is, and the way out. 36 tall.
+	# Header: what this is, whose it is, and the way out. 44 tall.
 	var head := HBoxContainer.new()
-	head.custom_minimum_size = Vector2(0.0, 36.0)
-	head.add_theme_constant_override("separation", 10)
+	head.custom_minimum_size = Vector2(0.0, 44.0)
+	head.add_theme_constant_override("separation", MenuTheme.SP_M)
 	_overlay_box.add_child(head)
 
-	var heading_lbl := Label.new()
-	heading_lbl.text = heading if subject.is_empty() else "%s  ·  %s" % [heading, subject]
-	heading_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
-	heading_lbl.add_theme_color_override("font_color", MenuTheme.GOLD)
+	var heading_lbl := MenuKit.label(heading if subject.is_empty() else "%s  ·  %s" % [heading, subject],
+		&"SubheadingLabel")
+	heading_lbl.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
 	heading_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	# A player-authored base name is arbitrary length; it ellipsises rather than widening the
 	# panel past the budget below.
@@ -669,43 +683,56 @@ func _open_overlay(mode: String, heading: String, subject: String, size: Vector2
 	heading_lbl.custom_minimum_size = Vector2(160.0, 0.0)
 	head.add_child(heading_lbl)
 
-	var close := Button.new()
-	close.text = "Close"
-	close.custom_minimum_size = Vector2(96.0, 32.0)
+	var close := MenuKit.button("Close", MenuKit.GHOST, 120, 44)
+	close.name = "CloseButton"
 	close.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	close.pressed.connect(close_overlay)
 	head.add_child(close)
+	_focus_later(close)
+
+	var rule := GroveRule.new()
+	rule.color = MenuTheme.GOLD
+	rule.custom_minimum_size = Vector2(200.0, 10.0)
+	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_overlay_box.add_child(rule)
 
 
 ## The overlay's own inline notice: loading states, refusals, and every replay failure.
 ## Fixed height, so a message appearing never reflows the panel.
 func _add_overlay_notice() -> void:
-	_overlay_notice = Label.new()
-	_overlay_notice.text = ""
-	_overlay_notice.custom_minimum_size = Vector2(0.0, 20.0)
+	_overlay_notice = MenuKit.label("", &"DimLabel")
+	_overlay_notice.name = "OverlayNotice"
+	_overlay_notice.custom_minimum_size = Vector2(0.0, 22.0)
 	_overlay_notice.clip_text = true
 	_overlay_notice.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_overlay_notice.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	_overlay_notice.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
 	_overlay_box.add_child(_overlay_notice)
-	MenuTheme.style_caption(_overlay_notice)
-	_overlay_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_overlay_notice.add_theme_color_override("font_color", MenuTheme.GOLD)
 
 
 ## The overlay's ONE EXPAND_FILL region: a scrolling list card with an explicit floor.
 func _add_overlay_list(scroll_floor: float) -> void:
-	var card := PanelContainer.new()
+	var card := MenuKit.card(&"InsetPanel")
 	card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_overlay_box.add_child(card)
 
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
 	scroll.custom_minimum_size = Vector2(0.0, scroll_floor)
 	card.add_child(scroll)
+
+	var pad := MarginContainer.new()
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for side in ["left", "top", "bottom"]:
+		pad.add_theme_constant_override("margin_" + side, 4)
+	pad.add_theme_constant_override("margin_right", 14)  # focus glow + scrollbar
+	scroll.add_child(pad)
 
 	_overlay_list = VBoxContainer.new()
 	_overlay_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_overlay_list.add_theme_constant_override("separation", 6)
-	scroll.add_child(_overlay_list)
+	pad.add_child(_overlay_list)
 
 
 func _set_overlay_notice(text: String) -> void:
@@ -729,7 +756,46 @@ func close_overlay() -> void:
 	for child in _overlay_box.get_children():
 		_overlay_box.remove_child(child)
 		child.queue_free()
+	var was_open: bool = _overlay.visible
 	_overlay.visible = false
+	if was_open:
+		_set_page_focusable(true)
+		var back_to: Control = _focus_before_overlay
+		_focus_before_overlay = null
+		if back_to != null and is_instance_valid(back_to) and back_to.is_inside_tree():
+			_focus_later(back_to)
+		else:
+			_focus_page()
+
+
+## Take every focusable control on the page out of (or back into) focus navigation while an
+## overlay is up. Original focus modes are remembered per control.
+func _set_page_focusable(enabled: bool) -> void:
+	if _page_root != null and is_instance_valid(_page_root):
+		_walk_focus(_page_root, enabled)
+
+
+func _walk_focus(node: Node, enabled: bool) -> void:
+	if node is Control:
+		var c := node as Control
+		if enabled:
+			if c.has_meta(&"_modal_focus_mode"):
+				c.focus_mode = c.get_meta(&"_modal_focus_mode")
+				c.remove_meta(&"_modal_focus_mode")
+		elif c.focus_mode != Control.FOCUS_NONE:
+			c.set_meta(&"_modal_focus_mode", c.focus_mode)
+			c.focus_mode = Control.FOCUS_NONE
+	for child in node.get_children():
+		_walk_focus(child, enabled)
+
+
+## A grove card box with list-card margins (the default card margins suit a page panel, not a
+## row inside one).
+func _tighten(sb: StyleBox) -> void:
+	sb.content_margin_left = 18.0
+	sb.content_margin_right = 16.0
+	sb.content_margin_top = 14.0
+	sb.content_margin_bottom = 12.0
 
 
 # --- Attack log -------------------------------------------------------------
@@ -744,51 +810,48 @@ func open_attack_log(base_id: String, title: String) -> void:
 	_log_has_more = false
 	_watching = false
 
-	# 720p budget for this panel (VBox separation 10, inside card_box's 10px margins):
-	#   header 36 + subtitle 18 + notice 20 + column head 18
-	#   + list card (200 scroll floor + 20 card padding = 220) + footer 44
-	#   = 356 fixed, plus 5 gaps * 10 = 50  ->  406, plus the panel's own 20 of padding = 426
-	# against the 470 floor below -- 250px clear of a 720p viewport, with the 44px of slack
-	# flowing into the ONE EXPAND_FILL region (the list) so it opens to ~244px.
-	# Width 660: content 640, minus the list card's 20 and a ~12 scrollbar leaves 608 for a
-	# row, whose own card padding leaves 588 against the row's 530 + 4 * 10 = 570.
-	_open_overlay(OVERLAY_ATTACK_LOG, "ATTACK LOG", title, Vector2(660.0, 470.0))
+	# 720p budget for this panel (VBox separation 10, inside the crest card's 22 / 18 margins):
+	#   header 44 + rule 10 + subtitle 22 + notice 22 + column head 20
+	#   + list well (200 scroll floor + 20 well padding + 8 pad = 228) + footer 48
+	#   = 394 fixed, plus 6 gaps * 10 = 60  ->  454, plus the panel's own 36 of padding = 490
+	# against the 520 floor below -- 200px clear of a 720p viewport, with the slack flowing
+	# into the ONE EXPAND_FILL region (the list).
+	# Width 760: content 716, minus the well's 24, the pad's 18 and the row card's 34 leaves
+	# ~640 for a row's 590 + 4 * 10 = 630.
+	_open_overlay(OVERLAY_ATTACK_LOG, "ATTACK LOG", title, Vector2(760.0, 520.0))
 
-	var subtitle := Label.new()
-	subtitle.text = "Every attempt against this base, newest first"
-	subtitle.custom_minimum_size = Vector2(0.0, 18.0)
+	var subtitle := MenuKit.label("Every attempt against this base, newest first", &"DimLabel")
+	subtitle.custom_minimum_size = Vector2(0.0, 22.0)
+	subtitle.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	_overlay_box.add_child(subtitle)
-	MenuTheme.style_caption(subtitle)
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 	_add_overlay_notice()
 
+	# Column captions in the grove's gold small caps, aligned with the row columns below
+	# (the row card's 18px left margin + the list pad's 4 are matched by the indent).
 	var column_head := HBoxContainer.new()
-	column_head.custom_minimum_size = Vector2(0.0, 18.0)
+	column_head.custom_minimum_size = Vector2(0.0, 20.0)
 	column_head.add_theme_constant_override("separation", 10)
 	_overlay_box.add_child(column_head)
+	var indent := Control.new()
+	indent.custom_minimum_size = Vector2(26.0, 0.0)
+	column_head.add_child(indent)
 	for spec in [
-		{"text": "RESULT", "width": 90.0}, {"text": "SCORE", "width": 90.0},
-		{"text": "TURNS", "width": 80.0}, {"text": "WHEN", "width": 160.0},
-		{"text": "", "width": 110.0},
+		{"text": "RESULT", "width": 110.0}, {"text": "SCORE", "width": 90.0},
+		{"text": "TURNS", "width": 80.0}, {"text": "WHEN", "width": 180.0},
 	]:
-		var lbl := Label.new()
-		lbl.text = String(spec["text"])
+		var lbl := MenuKit.section(String(spec["text"]))
 		lbl.custom_minimum_size = Vector2(float(spec["width"]), 0.0)
-		lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-		lbl.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
 		column_head.add_child(lbl)
 
 	_add_overlay_list(200.0)
 
 	var footer := HBoxContainer.new()
-	footer.custom_minimum_size = Vector2(0.0, 44.0)
+	footer.custom_minimum_size = Vector2(0.0, 48.0)
 	footer.alignment = BoxContainer.ALIGNMENT_CENTER
 	_overlay_box.add_child(footer)
 
-	_log_more_btn = Button.new()
-	_log_more_btn.text = "Load more"
-	_log_more_btn.custom_minimum_size = Vector2(180.0, 40.0)
+	_log_more_btn = MenuKit.button("Load more", &"", 200, 44)
 	_log_more_btn.visible = false
 	_log_more_btn.pressed.connect(attack_log_load_more)
 	footer.add_child(_log_more_btn)
@@ -852,11 +915,9 @@ func _render_attempt_rows() -> void:
 	_log_watch_buttons.clear()
 
 	if _log_entries.is_empty():
-		var empty := Label.new()
-		empty.text = ReplayWatch.LOADING_LOG if _log_loading else ReplayWatch.NO_ATTACKS
-		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var empty := MenuKit.label(ReplayWatch.LOADING_LOG if _log_loading else ReplayWatch.NO_ATTACKS,
+			&"DimLabel", true)
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		MenuTheme.style_subtitle(empty)
 		_overlay_list.add_child(empty)
 	else:
 		for i in _log_entries.size():
@@ -877,9 +938,15 @@ func _make_attempt_row(index: int, entry: Dictionary) -> Control:
 	var when: String = format_when(entry.get("at", ""))
 	var has_replay: bool = bool(entry.get("has_replay", false))
 
+	# The attempt's outcome is the card's edge: green DEFENDED, red CLEARED.
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel",
-		MenuTheme.card_box(CLEARED_COLOR if cleared else DEFENDED_COLOR))
+	var sb := MenuTheme.accented_card(CLEARED_COLOR if cleared else DEFENDED_COLOR)
+	sb.shadow_size = 4.0
+	sb.content_margin_left = 18.0
+	sb.content_margin_right = 14.0
+	sb.content_margin_top = 8.0
+	sb.content_margin_bottom = 8.0
+	panel.add_theme_stylebox_override("panel", sb)
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
@@ -887,23 +954,24 @@ func _make_attempt_row(index: int, entry: Dictionary) -> Control:
 
 	var result_lbl := Label.new()
 	result_lbl.text = RESULT_CLEARED if cleared else RESULT_DEFENDED
-	result_lbl.custom_minimum_size = Vector2(90.0, 0.0)
-	result_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	result_lbl.add_theme_color_override("font_color", CLEARED_COLOR if cleared else DEFENDED_COLOR)
+	result_lbl.custom_minimum_size = Vector2(110.0, 0.0)
+	result_lbl.add_theme_font_override("font", MenuTheme.heading_font(1))
+	result_lbl.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	result_lbl.add_theme_color_override("font_color", (CLEARED_COLOR if cleared else DEFENDED_COLOR).lightened(0.15))
 	result_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(result_lbl)
 
 	for spec in [
 		{"text": "%d pts" % score, "width": 90.0},
 		{"text": "%d turns" % turns, "width": 80.0},
-		{"text": when, "width": 160.0},
+		{"text": when, "width": 180.0},
 	]:
 		var lbl := Label.new()
 		lbl.text = String(spec["text"])
 		lbl.custom_minimum_size = Vector2(float(spec["width"]), 0.0)
 		lbl.clip_text = true
 		lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
+		lbl.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 		lbl.add_theme_color_override("font_color", MenuTheme.CREAM)
 		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		row.add_child(lbl)
@@ -912,9 +980,7 @@ func _make_attempt_row(index: int, entry: Dictionary) -> Control:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
 
-	var watch := Button.new()
-	watch.text = "Watch"
-	watch.custom_minimum_size = Vector2(110.0, 32.0)
+	var watch := MenuKit.button("Watch", &"", 120, 40)
 	watch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	watch.disabled = not has_replay or _watching
 	watch.tooltip_text = "Watch this attack." if has_replay \
@@ -1028,33 +1094,29 @@ func open_publish_picker() -> void:
 	_publishing = false
 	_publish_entries = _local_challenges()
 
-	# 720p budget (VBox separation 10, inside card_box's 10px margins):
-	#   header 36 + subtitle 18 + notice 20 + list card (180 floor + 20 padding = 200)
-	#   + footer 44 = 318 fixed, plus 4 gaps * 10 = 40  ->  358, plus 20 panel padding = 378
-	# against the 430 floor below -- 290px clear of 720, the 52px of slack going to the ONE
-	# EXPAND_FILL region (the list) so it opens to ~232px.
-	# Width 660: the footer's single 220 button and a row's 200-floor title column both sit
-	# far inside the 640 of content.
-	_open_overlay(OVERLAY_PUBLISH, "PUBLISH A BASE", "", Vector2(660.0, 430.0))
+	# 720p budget (VBox separation 10, inside the crest card's 22 / 18 margins):
+	#   header 44 + rule 10 + subtitle 22 + notice 22 + list well (180 floor + 28 padding =
+	#   208) + footer 48 = 354 fixed, plus 5 gaps * 10 = 50  ->  404, plus 36 panel padding
+	#   = 440 against the 470 floor below -- 250px clear of 720, the slack going to the ONE
+	#   EXPAND_FILL region (the list).
+	# Width 700: the footer's single 240 button and a row's title column both sit far inside
+	# the ~656 of content.
+	_open_overlay(OVERLAY_PUBLISH, "PUBLISH A BASE", "", Vector2(700.0, 470.0))
 
-	var subtitle := Label.new()
-	subtitle.text = "Pick one of your challenges to put up for others to attack"
-	subtitle.custom_minimum_size = Vector2(0.0, 18.0)
+	var subtitle := MenuKit.label("Pick one of your challenges to put up for others to attack", &"DimLabel")
+	subtitle.custom_minimum_size = Vector2(0.0, 22.0)
+	subtitle.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	_overlay_box.add_child(subtitle)
-	MenuTheme.style_caption(subtitle)
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 	_add_overlay_notice()
 	_add_overlay_list(180.0)
 
 	var footer := HBoxContainer.new()
-	footer.custom_minimum_size = Vector2(0.0, 44.0)
+	footer.custom_minimum_size = Vector2(0.0, 48.0)
 	footer.alignment = BoxContainer.ALIGNMENT_CENTER
 	_overlay_box.add_child(footer)
 
-	var builder := Button.new()
-	builder.text = "Build a challenge"
-	builder.custom_minimum_size = Vector2(220.0, 40.0)
+	var builder := MenuKit.button("Build a challenge", &"", 240, 44)
 	var builder_available: bool = ResourceLoader.exists(CHALLENGE_BROWSE_SCENE)
 	builder.disabled = not builder_available
 	builder.tooltip_text = "Build or import a challenge first." if builder_available \
@@ -1085,11 +1147,9 @@ func _render_publish_rows() -> void:
 	if _publish_entries.is_empty():
 		# THE no-challenges route: say what is missing and where it is made. The footer
 		# button below is the way there.
-		var hint := Label.new()
-		hint.text = "You have not built a challenge yet.\nBuild one in the Map Maker (Export as Challenge) or import a share code, then publish it here."
-		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var hint := MenuKit.label("You have not built a challenge yet.\nBuild one in the Map Maker (Export as Challenge) or import a share code, then publish it here.",
+			&"DimLabel", true)
 		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		MenuTheme.style_subtitle(hint)
 		_overlay_list.add_child(hint)
 		return
 
@@ -1103,37 +1163,31 @@ func _render_publish_rows() -> void:
 
 
 func _make_publish_row(index: int, challenge: Dictionary) -> Control:
-	var btn := Button.new()
-	# A Button's full-rect children contribute nothing to its minimum size, so the two lines
-	# inside need an explicit floor or the row collapses to nothing.
-	btn.custom_minimum_size = Vector2(0.0, 56.0)
+	# A selectable grove card (MenuKit.option_card grows to fit its two lines).
+	var parts := MenuKit.option_card(Vector2(0.0, 72.0))
+	var btn: Button = parts["button"]
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.pressed.connect(func(): publish_select(index))
-
-	var col := VBoxContainer.new()
-	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	MenuNav.hover_focus(btn)
+	var col: VBoxContainer = parts["content"]
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_theme_constant_override("separation", 2)
 
-	var name_lbl := Label.new()
-	name_lbl.text = _challenge_title(challenge)
-	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var name_lbl := MenuKit.label(_challenge_title(challenge), &"SubheadingLabel")
+	name_lbl.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
 	name_lbl.clip_text = true
 	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	name_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
 	col.add_child(name_lbl)
 
-	var detail_lbl := Label.new()
-	detail_lbl.text = _challenge_detail(challenge)
-	detail_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var detail_lbl := MenuKit.label(_challenge_detail(challenge), &"DimLabel")
 	detail_lbl.clip_text = true
 	detail_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	detail_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	detail_lbl.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	detail_lbl.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	col.add_child(detail_lbl)
 
-	btn.add_child(col)
+	MenuKit.ignore_mouse(btn)
+	if index == 0:
+		_focus_later(btn)
 	return btn
 
 
@@ -1144,62 +1198,53 @@ func publish_select(index: int) -> void:
 	_publish_index = index
 	var challenge: Dictionary = _selected_challenge()
 
-	# 720p budget (VBox separation 10, inside card_box's 10px margins):
-	#   header 36 + name 22 + map 18 + rules 18 + author 18 + body 44 + notice 20 + footer 44
-	#   = 220 fixed, plus 7 gaps * 10 = 70  ->  290, plus 20 panel padding = 310
-	# against the 340 floor below -- 380px clear of 720. This sheet has NO flexible region on
+	# 720p budget (VBox separation 10, inside the crest card's 22 / 18 margins):
+	#   header 44 + rule 10 + name 30 + map 22 + rules 22 + author 22 + body 50 + notice 22
+	#   + footer 58 = 280 fixed, plus 8 gaps * 10 = 80  ->  360, plus 36 panel padding = 396
+	# against the 420 floor below -- 300px clear of 720. This sheet has NO flexible region on
 	# purpose: it is a question, and a question that grows with the window reads as a page.
-	# Width 560: footer 140 + 180 + 18 = 338 against 540 of content.
-	_open_overlay(OVERLAY_CONFIRM, "PUBLISH", "", Vector2(560.0, 340.0))
+	# Width 600: footer 150 + 200 + 16 = 366 against ~556 of content.
+	_open_overlay(OVERLAY_CONFIRM, "PUBLISH", "", Vector2(600.0, 420.0))
 
-	var name_lbl := Label.new()
-	name_lbl.text = _challenge_title(challenge)
-	name_lbl.custom_minimum_size = Vector2(0.0, 22.0)
+	var name_lbl := MenuKit.label(_challenge_title(challenge), &"HeadingLabel")
+	name_lbl.custom_minimum_size = Vector2(0.0, 30.0)
 	name_lbl.clip_text = true
 	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	name_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
-	name_lbl.add_theme_color_override("font_color", MenuTheme.CREAM)
 	_overlay_box.add_child(name_lbl)
 
 	for text in [_challenge_map_line(challenge), _challenge_detail(challenge),
 			"by %s" % _challenge_author(challenge)]:
-		var lbl := Label.new()
-		lbl.text = String(text)
-		lbl.custom_minimum_size = Vector2(0.0, 18.0)
+		var lbl := MenuKit.label(String(text), &"DimLabel")
+		lbl.custom_minimum_size = Vector2(0.0, 22.0)
 		lbl.clip_text = true
 		lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-		lbl.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+		lbl.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 		_overlay_box.add_child(lbl)
 
-	var body := Label.new()
-	body.text = "Published bases are playable by anyone and are attacked by other players. You can retire it again at any time."
-	body.custom_minimum_size = Vector2(0.0, 44.0)
-	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	body.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	var body := MenuKit.label("Published bases are playable by anyone and are attacked by other players. You can retire it again at any time.",
+		&"MutedLabel", true)
+	body.custom_minimum_size = Vector2(0.0, 50.0)
 	_overlay_box.add_child(body)
 
 	_add_overlay_notice()
 
 	var footer := HBoxContainer.new()
-	footer.custom_minimum_size = Vector2(0.0, 44.0)
+	footer.custom_minimum_size = Vector2(0.0, 58.0)
 	footer.alignment = BoxContainer.ALIGNMENT_CENTER
-	footer.add_theme_constant_override("separation", 18)
+	footer.add_theme_constant_override("separation", MenuTheme.SP_L)
 	_overlay_box.add_child(footer)
 
-	var cancel := Button.new()
-	cancel.text = "Cancel"
-	cancel.custom_minimum_size = Vector2(140.0, 40.0)
+	var cancel := MenuKit.button("Cancel", MenuKit.GHOST, 150, 50)
 	cancel.pressed.connect(open_publish_picker)
 	footer.add_child(cancel)
 
-	_confirm_btn = Button.new()
-	_confirm_btn.text = "Publish"
-	_confirm_btn.theme_type_variation = "SelectedButton"
-	_confirm_btn.custom_minimum_size = Vector2(180.0, 40.0)
+	# The gold call to action. "SelectedButton" was the pre-grove look; PrimaryButton is
+	# the grove's.
+	_confirm_btn = MenuKit.button("Publish", MenuKit.PRIMARY, 200, 54)
+	_confirm_btn.name = "ConfirmPublishButton"
 	_confirm_btn.pressed.connect(publish_confirm)
 	footer.add_child(_confirm_btn)
+	_focus_later(_confirm_btn)
 
 
 ## Send the selected challenge to the service. THE only call to
@@ -1431,44 +1476,48 @@ func _on_open_builder() -> void:
 	if not ResourceLoader.exists(CHALLENGE_BROWSE_SCENE):
 		_set_overlay_notice("The challenge screen is not available in this build.")
 		return
-	get_tree().change_scene_to_file(CHALLENGE_BROWSE_SCENE)
+	MenuNav.change_scene(self, CHALLENGE_BROWSE_SCENE)
 
 
 func _on_community_pressed() -> void:
 	if not ResourceLoader.exists(COMMUNITY_SCENE):
 		_set_notice("The community browser is not available in this build.")
 		return
-	get_tree().change_scene_to_file(COMMUNITY_SCENE)
+	MenuNav.change_scene(self, COMMUNITY_SCENE)
 
 
 func _on_my_replays_pressed() -> void:
 	if not ResourceLoader.exists(MY_REPLAYS_SCENE):
 		_set_notice("The replay screen is not available in this build.")
 		return
-	get_tree().change_scene_to_file(MY_REPLAYS_SCENE)
+	MenuNav.change_scene(self, MY_REPLAYS_SCENE)
 
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file(CHALLENGE_BROWSE_SCENE)
+	MenuNav.change_scene(self, CHALLENGE_BROWSE_SCENE)
 
 
-func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
+## Up / Down between the buttons is the engine's focus navigation (arrows, D-pad, stick).
+func _unhandled_input(event: InputEvent) -> void:
+	if not MenuNav.is_back_event(event):
 		return
-	if event is InputEventKey:
-		match (event as InputEventKey).keycode:
-			KEY_ESCAPE:
-				# ESC dismisses the panel first: leaving the screen because a player wanted
-				# to close a dialog is the classic overlay bug.
-				if _overlay_mode != OVERLAY_NONE:
-					close_overlay()
-					return
-				_on_back_pressed()
-			KEY_DOWN:
-				var next := find_next_valid_focus()
-				if next != null:
-					next.grab_focus()
-			KEY_UP:
-				var prev := find_prev_valid_focus()
-				if prev != null:
-					prev.grab_focus()
+	get_viewport().set_input_as_handled()
+	# Cancel dismisses the panel first: leaving the screen because a player wanted to close
+	# a dialog is the classic overlay bug.
+	if _overlay_mode != OVERLAY_NONE:
+		close_overlay()
+		return
+	_on_back_pressed()
+
+
+## [MenuNav.focus_deferred], but safe when the control leaves the tree first (a repaint
+## rebuilt it, or the screen closed) -- grab_focus() on a detached control is an engine error.
+func _focus_later(c: Control) -> void:
+	if c == null:
+		return
+	# Captured by instance id, not by reference: a freed capture is itself an engine error.
+	var id: int = c.get_instance_id()
+	(func() -> void:
+		var ctl := instance_from_id(id) as Control
+		if ctl != null and ctl.is_inside_tree() and ctl.is_visible_in_tree():
+			ctl.grab_focus()).call_deferred()

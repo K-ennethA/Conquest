@@ -7,7 +7,8 @@ class_name BattleSnapshot
 ## the round-trip be tested headlessly against a real Unit (or a double) with no map load.
 ##
 ## THE FORMAT. One versioned root dictionary; see [constant FORMAT_VERSION]. Everything is a
-## JSON primitive: a [Vector2i] is stored as [code][x, y][/code] (see [method cell_to_array]),
+## JSON primitive: a cell ([Vector3i] col, row, floor) is stored as [code][col, row, floor][/code]
+## (see [method cell_to_array]; a pre-multi-floor [code][x, y][/code] still reads as floor 0),
 ## a [StringName] as a String, and a resource as its STABLE id (never a res:// path -- ids
 ## survive an asset being moved, which is the same reason [TileCatalog] / [StatusCatalog]
 ## exist). Anything whose id cannot be resolved on the way back in is SKIPPED rather than
@@ -83,18 +84,28 @@ static var _tile_effects_scanned: bool = false
 
 # --- JSON-safe primitives ---------------------------------------------------
 
-## [Vector2i] -> [code][x, y][/code]. JSON has no vector type, and storing a stringified
-## "(3, 4)" would need a parser on the way back.
-static func cell_to_array(cell: Vector2i) -> Array:
-	return [int(cell.x), int(cell.y)]
+## Cell -> [code][col, row, floor][/code] ([method Cells.to_array]). JSON has no vector type,
+## and storing a stringified "(3, 4, 0)" would need a parser on the way back. Accepts a
+## [Vector3i] cell or a legacy [Vector2i] position (floor 0).
+static func cell_to_array(cell: Variant) -> Array:
+	return Cells.to_array(Cells.from_variant(cell))
 
 
-## The inverse of [method cell_to_array]. Anything malformed reads as [param fallback], so a
-## truncated file degrades to a sane cell instead of raising.
-static func array_to_cell(value: Variant, fallback: Vector2i = Vector2i(-1, -1)) -> Vector2i:
-	if value is Array and (value as Array).size() >= 2:
-		return Vector2i(int((value as Array)[0]), int((value as Array)[1]))
-	return fallback
+## The inverse of [method cell_to_array]. Reads the current [code][col, row, floor][/code]
+## form AND every older shape a save may hold ([code][x, y][/code] from before multi-floor
+## maps, a stringified "(x, y)") -- a pre-multi-floor save resumes on floor 0. Anything
+## malformed reads as [param fallback], so a truncated file degrades to a sane cell instead
+## of raising.
+static func array_to_cell(value: Variant, fallback: Vector3i = Vector3i(-1, -1, 0)) -> Vector3i:
+	if value is Array:
+		var a: Array = value
+		if a.size() < 2:
+			return fallback
+		for i in mini(a.size(), 3):
+			if not (a[i] is int or a[i] is float):
+				return fallback
+	var cell: Vector3i = Cells.from_variant(value)
+	return fallback if cell == Cells.INVALID else cell
 
 
 ## True when [param snapshot] is a dictionary this build knows how to restore.
@@ -137,7 +148,7 @@ static func from_json(text: String) -> Dictionary:
 ## [param index] is the unit's position in the snapshot's "units" array and is the id every
 ## other section refers to it by. Everything is read through duck-typed accessors so a test
 ## double exposing only part of the [Unit] surface still round-trips.
-static func capture_unit(unit, index: int, cell: Vector2i, player_id: int) -> Dictionary:
+static func capture_unit(unit, index: int, cell: Vector3i, player_id: int) -> Dictionary:
 	var entry: Dictionary = {
 		"index": index,
 		"character_id": character_id_of(unit),
@@ -147,6 +158,9 @@ static func capture_unit(unit, index: int, cell: Vector2i, player_id: int) -> Di
 		"hp": int(unit.get_hp()) if unit.has_method("get_hp") else 0,
 		"shield": int(unit.get_shield()) if unit.has_method("get_shield") else 0,
 		"facing_yaw": float(unit.facing_yaw) if "facing_yaw" in unit else 0.0,
+		# The grid FACING direction (unit-facing rules: backstab/flank), [dx, dy]. Written only
+		# when the unit exposes it; an older save without the key keeps the spawn facing.
+		"facing": _facing_to_array(unit),
 		"has_acted": bool(unit.has_acted_this_turn) if "has_acted_this_turn" in unit else false,
 		"has_moved": bool(unit.has_moved_this_turn) if "has_moved_this_turn" in unit else false,
 		"provoked": bool(unit.provoked) if "provoked" in unit else false,
@@ -159,6 +173,16 @@ static func capture_unit(unit, index: int, cell: Vector2i, player_id: int) -> Di
 		"moves": capture_moveset(unit),
 	}
 	return entry
+
+
+## [code][dx, dy][/code] of [param unit]'s grid facing, or [code][][/code] when it has none.
+static func _facing_to_array(unit) -> Array:
+	if unit == null or not unit.has_method("get_facing"):
+		return []
+	var dir: Variant = unit.get_facing()
+	if dir is Vector2i:
+		return [int(dir.x), int(dir.y)]
+	return []
 
 
 ## The backing roster id for [param unit] ("" for a legacy scene-authored unit with no
@@ -210,7 +234,7 @@ static func apply_unit_core(unit, entry: Dictionary) -> void:
 		return
 	if unit.has_method("configure_ai_behavior"):
 		unit.configure_ai_behavior(
-			array_to_cell(entry.get("home_cell", []), Vector2i(-1, -1)),
+			array_to_cell(entry.get("home_cell", []), Vector3i(-1, -1, 0)),
 			String(entry.get("ai_stance", "")),
 			int(entry.get("aggro_range", -1)),
 			int(entry.get("leash_radius", -1)))
@@ -220,6 +244,11 @@ static func apply_unit_core(unit, entry: Dictionary) -> void:
 		unit.arena_extra_actions = int(entry.get("extra_actions", 0))
 	if unit.has_method("set_facing_yaw"):
 		unit.set_facing_yaw(float(entry.get("facing_yaw", 0.0)))
+	var facing: Variant = entry.get("facing", null)
+	if unit.has_method("set_facing") and facing is Array and (facing as Array).size() >= 2:
+		var dir := Vector2i(int((facing as Array)[0]), int((facing as Array)[1]))
+		if dir != Vector2i.ZERO:
+			unit.set_facing(dir, 0.0)
 	apply_unit_turn_flags(unit, entry)
 
 

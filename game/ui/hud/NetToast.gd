@@ -20,8 +20,9 @@ class_name NetToast
 ## the ultimate cut-in (124) / turn wipe (128), which are cinematic and own the screen while
 ## they run.
 ##
-## Styling comes from [ConquestTheme] (warm amber plate + cream text), so it reads as part of
-## the same HUD as the panels rather than as a system error box.
+## Styling comes from [ConquestTheme] (the grove chip frame -- navy plate, gold filigree,
+## warning-gold edge -- with cream text), so it reads as part of the same HUD as the panels
+## rather than as a system error box.
 ##
 ## Honours GameSettings.animations_on / scaled_time when present; with animations OFF it snaps
 ## on and off and still holds the full readable beat. Null-safe headless (no GameSettings, no
@@ -48,10 +49,12 @@ const FADE_OUT: float = 0.3
 ## Floor on the hold so a fast Battle Speed can never blink a rejection away unread.
 const MIN_HOLD: float = 1.2
 
-# --- Palette (ConquestTheme, so the toast matches the amber HUD panels) -----
-## Slightly translucent version of the theme's panel plate -- the toast floats over the board,
+# --- Palette (ConquestTheme, so the toast matches the navy + gold HUD cards) --
+## Slightly translucent version of the theme's panel fill -- the toast floats over the board,
 ## so it wants to be a shade lighter than an opaque HUD card.
-const PLATE_BG: Color = Color(0.173, 0.129, 0.078, 0.92)  # ConquestTheme.PLATE_BG + alpha
+const PLATE_BG: Color = Color(ConquestTheme.PANEL, 0.92)
+## The toast's edge: the theme's WARNING gold -- a refusal is a caution, not an error.
+const PLATE_EDGE: Color = ConquestTheme.WARNING
 
 var _root: Control = null
 var _plate: PanelContainer = null
@@ -90,9 +93,9 @@ func _build_ui() -> void:
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_label.custom_minimum_size = Vector2(TOAST_MAX_WIDTH, 0.0)
-	_label.add_theme_font_size_override("font_size", 20)
+	_label.add_theme_font_size_override("font_size", ConquestTheme.FS_COMMAND)
 	_label.add_theme_color_override("font_color", ConquestTheme.CREAM)
-	_label.add_theme_color_override("font_outline_color", ConquestTheme.BROWN_DK)
+	_label.add_theme_color_override("font_outline_color", ConquestTheme.BG_DEEP)
 	_label.add_theme_constant_override("outline_size", 5)
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_plate.add_child(_label)
@@ -100,20 +103,19 @@ func _build_ui() -> void:
 	_set_idle()
 
 
-func _plate_box() -> StyleBoxFlat:
-	var box: StyleBoxFlat = StyleBoxFlat.new()
-	box.bg_color = PLATE_BG
-	box.set_corner_radius_all(8)
-	box.set_content_margin_all(12)
-	box.content_margin_left = 20.0
+## The grove chip frame (notched navy plate, gold filigree) with a warning-gold edge.
+func _plate_box() -> OrnateStyleBox:
+	var box: OrnateStyleBox = ConquestTheme.chip_box(PLATE_EDGE, PLATE_BG.a)
+	box.border_width = 2.0
+	box.accent_color = Color(PLATE_EDGE, 0.9)
+	box.accent_side = SIDE_LEFT
+	box.accent_width = 4.0
+	box.content_margin_left = 22.0
 	box.content_margin_right = 20.0
-	box.border_width_left = 2
-	box.border_width_top = 2
-	box.border_width_right = 2
-	box.border_width_bottom = 2
-	box.border_color = ConquestTheme.AMBER
+	box.content_margin_top = 12.0
+	box.content_margin_bottom = 12.0
 	box.shadow_color = Color(0.0, 0.0, 0.0, 0.5)
-	box.shadow_size = 6
+	box.shadow_size = 8.0
 	return box
 
 

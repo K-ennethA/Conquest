@@ -10,7 +10,9 @@ class_name TargetingPattern
 
 @export var target_kind: CombatTypes.TargetKind = CombatTypes.TargetKind.ENEMY
 
-## How far (Manhattan distance) the aim cell may be from the caster.
+## How far the aim cell may be from the caster, measured by [method Cells.distance]
+## (horizontal Manhattan distance + floor difference; plain Manhattan on one floor).
+## A pattern with max_range <= 1 is MELEE (see [method is_melee]).
 @export var min_range: int = 1
 @export var max_range: int = 1
 
@@ -69,10 +71,21 @@ class_name TargetingPattern
 ## contributes nothing.
 @export var aim_rule: Resource = null
 
+## --- Multi-floor (see docs/MULTI_FLOOR.md) --------------------------------------
+
+## When line of sight ([LineOfSight]) is checked for this pattern's aim.
+enum LosMode {
+	AUTO,    ## Only for CROSS-FLOOR aims (ceilings + walls). Same-floor aims ignore
+	         ## LOS entirely -- exactly the pre-multi-floor behaviour. The default.
+	ALWAYS,  ## Every aim, same floor too (walls / trees block shots).
+	NEVER,   ## Never (lobbed / magical moves that ignore cover).
+}
+@export var line_of_sight: LosMode = LosMode.AUTO
+
 ## The four orthogonal neighbours -- the sides a leap may land on. Diagonals are
 ## excluded to match the game's orthogonal movement.
-const ORTHOGONAL_STEPS: Array[Vector2i] = [
-	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+const ORTHOGONAL_STEPS: Array[Vector3i] = [
+	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, -1, 0),
 ]
 
 
@@ -92,9 +105,49 @@ func effective_max_range(range_bonus: int = 0) -> int:
 ## byte-identical to the behaviour before per-unit range bonuses existed).
 ## [member min_range] is deliberately NOT shifted: a bonus extends how FAR a move
 ## reaches, it does not open up the dead zone a long-range move has up close.
-func in_range(origin: Vector2i, aim: Vector2i, range_bonus: int = 0) -> bool:
-	var d := _manhattan(origin, aim)
-	return d >= min_range and d <= effective_max_range(range_bonus)
+##
+## MULTI-FLOOR: distance is [method Cells.distance]; a RANGED pattern aimed downward
+## gains [constant Elevation.HIGH_GROUND_RANGE_BONUS]; a MELEE pattern never reaches
+## another floor here (only across a link, which needs the board -- see [method in_reach]).
+func in_range(origin: Vector3i, aim: Vector3i, range_bonus: int = 0) -> bool:
+	if is_melee() and origin.z != aim.z:
+		return false
+	var d := Cells.distance(origin, aim)
+	var reach := effective_max_range(range_bonus) + Elevation.range_bonus(origin, aim, max_range)
+	return d >= min_range and d <= reach
+
+
+## True for a MELEE pattern (authored max_range <= 1). Melee only hits its own floor,
+## or the far end of a link (top/bottom of a stair) -- never a unit directly above.
+func is_melee() -> bool:
+	return max_range <= 1
+
+
+## [method in_range], plus the one board-dependent reach rule: a MELEE pattern may
+## aim at a cell on another floor when the board links it directly to [param origin]
+## (the unit at the other end of a stair). [param board] may be null.
+func in_reach(origin: Vector3i, aim: Vector3i, board = null, range_bonus: int = 0) -> bool:
+	if in_range(origin, aim, range_bonus):
+		return true
+	return _melee_link_ok(origin, aim, board)
+
+
+func _melee_link_ok(origin: Vector3i, aim: Vector3i, board) -> bool:
+	if not is_melee() or origin.z == aim.z or board == null or not board.has_method("are_linked"):
+		return false
+	return bool(board.are_linked(origin, aim))
+
+
+## Whether an aim from [param origin] at [param aim] must pass a line-of-sight test.
+func needs_line_of_sight(origin: Vector3i, aim: Vector3i) -> bool:
+	if origin == aim:
+		return false
+	match line_of_sight:
+		LosMode.NEVER:
+			return false
+		LosMode.ALWAYS:
+			return true
+	return origin.z != aim.z
 
 
 ## The FULL legality test for aiming at [param aim]: [method in_range] plus every
@@ -106,11 +159,21 @@ func in_range(origin: Vector2i, aim: Vector2i, range_bonus: int = 0) -> bool:
 ## is what every caller got before these constraints existed. A pattern that
 ## declares neither constraint resolves identically to [method in_range] whatever
 ## the board says, so this is safe to call everywhere in place of it.
-func is_aim_allowed(origin: Vector2i, aim: Vector2i, caster = null, board = null, range_bonus: int = 0) -> bool:
+##
+## MULTI-FLOOR: also admits a melee aim across a link ([method in_reach]) and, with a
+## board, requires [LineOfSight] per [member line_of_sight] (skipped for linked
+## melee -- the stair itself is the path).
+func is_aim_allowed(origin: Vector3i, aim: Vector3i, caster = null, board = null, range_bonus: int = 0) -> bool:
+	var linked_melee := false
 	if not in_range(origin, aim, range_bonus):
-		return false
+		if not _melee_link_ok(origin, aim, board):
+			return false
+		linked_melee = true
 	if board == null:
 		return true
+	if not linked_melee and needs_line_of_sight(origin, aim):
+		if not LineOfSight.has_line_of_sight(board, origin, aim, true):
+			return false
 	if requires_empty_cell and not _is_free_cell(aim, caster, board):
 		return false
 	if requires_adjacent_enemy and not _has_adjacent_enemy(aim, caster, board):
@@ -130,12 +193,14 @@ func is_aim_allowed(origin: Vector2i, aim: Vector2i, caster = null, board = null
 ## AND multi-cell footprints -- a 2x2 unit must not leap into a 1-cell gap.
 ## Boards without it (lightweight mocks) fall back to whichever of the individual
 ## queries they do expose, defaulting to "free" for the ones they don't.
-func _is_free_cell(cell: Vector2i, caster, board) -> bool:
+func _is_free_cell(cell: Vector3i, caster, board) -> bool:
 	if board.has_method("can_fit"):
 		return bool(board.can_fit(caster, cell))
 	if board.has_method("in_bounds") and not bool(board.in_bounds(cell)):
 		return false
 	if board.has_method("is_blocked") and bool(board.is_blocked(cell)):
+		return false
+	if board.has_method("has_tile") and not bool(board.has_tile(cell)):
 		return false
 	if board.has_method("is_occupied"):
 		return not bool(board.is_occupied(cell))
@@ -147,7 +212,7 @@ func _is_free_cell(cell: Vector2i, caster, board) -> bool:
 ## True when any of [param cell]'s four orthogonal neighbours holds a unit the
 ## board calls an enemy of [param caster]. False without a caster or without the
 ## allegiance query, so this can never invent hostility a board cannot confirm.
-func _has_adjacent_enemy(cell: Vector2i, caster, board) -> bool:
+func _has_adjacent_enemy(cell: Vector3i, caster, board) -> bool:
 	if caster == null or not board.has_method("units_at") or not board.has_method("are_enemies"):
 		return false
 	for step in ORTHOGONAL_STEPS:
@@ -158,27 +223,30 @@ func _has_adjacent_enemy(cell: Vector2i, caster, board) -> bool:
 
 
 ## Expand the aim point into every cell the move touches.
-func resolve_cells(origin: Vector2i, aim: Vector2i) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
+##
+## MULTI-FLOOR: every shape is laid out on the AIM's floor only (offsets never change
+## the floor), so a fireball on a bridge does not scorch the road below it.
+func resolve_cells(origin: Vector3i, aim: Vector3i) -> Array[Vector3i]:
+	var cells: Array[Vector3i] = []
 	match area_shape:
 		CombatTypes.AreaShape.SINGLE:
 			cells.append(aim)
 		CombatTypes.AreaShape.SQUARE:
 			for dx in range(-area_size, area_size + 1):
 				for dy in range(-area_size, area_size + 1):
-					cells.append(aim + Vector2i(dx, dy))
+					cells.append(aim + Vector3i(dx, dy, 0))
 		CombatTypes.AreaShape.DIAMOND:
 			for dx in range(-area_size, area_size + 1):
 				for dy in range(-area_size, area_size + 1):
 					if absi(dx) + absi(dy) <= area_size:
-						cells.append(aim + Vector2i(dx, dy))
+						cells.append(aim + Vector3i(dx, dy, 0))
 		CombatTypes.AreaShape.CROSS:
 			cells.append(aim)
 			for step in range(1, area_size + 1):
-				cells.append(aim + Vector2i(step, 0))
-				cells.append(aim + Vector2i(-step, 0))
-				cells.append(aim + Vector2i(0, step))
-				cells.append(aim + Vector2i(0, -step))
+				cells.append(aim + Vector3i(step, 0, 0))
+				cells.append(aim + Vector3i(-step, 0, 0))
+				cells.append(aim + Vector3i(0, step, 0))
+				cells.append(aim + Vector3i(0, -step, 0))
 		CombatTypes.AreaShape.LINE:
 			var dir := _cardinal_dir(origin, aim)
 			for step in range(0, maxi(area_size, 1)):
@@ -203,7 +271,7 @@ func resolve_cells(origin: Vector2i, aim: Vector2i) -> Array[Vector2i]:
 			# be indefensible to a player and a standing bug source. Note this is the
 			# heading only -- the arc is still centred on the cell actually aimed at.
 			var facing := _cardinal_dir(origin, aim)
-			var flank := Vector2i(-facing.y, facing.x)  # 90-degree rotation
+			var flank := Vector3i(-facing.y, facing.x, 0)  # 90-degree rotation
 			cells.append(aim)
 			cells.append(aim + flank)
 			cells.append(aim - flank)
@@ -218,16 +286,19 @@ func describe_range() -> String:
 	return "range %d-%d" % [min_range, max_range]
 
 
-static func _manhattan(a: Vector2i, b: Vector2i) -> int:
+## Horizontal Manhattan distance (floors ignored). Range checks use
+## [method Cells.distance] instead.
+static func _manhattan(a: Vector3i, b: Vector3i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)
 
 
-## Nearest cardinal direction from [param origin] toward [param aim]
-## (dominant axis wins; defaults to +X if origin == aim).
-static func _cardinal_dir(origin: Vector2i, aim: Vector2i) -> Vector2i:
-	var delta := aim - origin
-	if delta == Vector2i.ZERO:
-		return Vector2i(1, 0)
-	if absi(delta.x) >= absi(delta.y):
-		return Vector2i(signi(delta.x), 0)
-	return Vector2i(0, signi(delta.y))
+## Nearest cardinal direction (on the horizontal plane, z = 0) from [param origin]
+## toward [param aim] (dominant axis wins; defaults to +X if the columns coincide).
+static func _cardinal_dir(origin: Vector3i, aim: Vector3i) -> Vector3i:
+	var dx := aim.x - origin.x
+	var dy := aim.y - origin.y
+	if dx == 0 and dy == 0:
+		return Vector3i(1, 0, 0)
+	if absi(dx) >= absi(dy):
+		return Vector3i(signi(dx), 0, 0)
+	return Vector3i(0, signi(dy), 0)

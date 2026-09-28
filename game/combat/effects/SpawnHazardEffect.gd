@@ -40,7 +40,7 @@ func apply(ctx: MoveContext) -> void:
 	if ctx == null or ctx.board == null or not ctx.board.has_method("cell_of"):
 		return
 	var board = ctx.board
-	var origin: Vector2i = board.cell_of(ctx.caster)
+	var origin: Vector3i = board.cell_of(ctx.caster)
 	# Same heading rule as LINE/ARC so the lane's diagonal behaviour matches them.
 	var facing := TargetingPattern._cardinal_dir(origin, ctx.aim_cell)
 
@@ -62,6 +62,8 @@ func apply(ctx: MoveContext) -> void:
 	# victim's element through the same chart a direct hit would use. An unelemented move
 	# leaves the vine elementless, which resolves neutral.
 	hazard.element = ElementChart.move_element(ctx.move)
+	if ctx.move != null:
+		hazard.label = String(ctx.move.display_name)
 
 	# Resolve the FIRST segment immediately so the cast turn itself deals damage.
 	var first: Dictionary = hazard.advance(board)

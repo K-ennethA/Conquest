@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="TileResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/tiles/resources/TileResource.gd" id="1_tres"]
+
+[resource]
+resource_name = "TileResource"
+script = ExtResource("1_tres")
+id = &"wooden_planks"
+tile_name = "Wooden Planks"
+tile_type = 0
+description = "A timber walkway or bridge deck. Open footing; archers love the view."
+base_movement_cost = 1
+is_passable = true
+blocks_line_of_sight = false
+material_style = 4
+base_color = Color(0.2, 0.13, 0.08, 1)
+roughness = 1.0
+model_path = "res://tile_objects/tiles/scenes/structures/planks_tile.tscn"
+special_properties = Array[String](["wood", "built"])
+rarity = "Common"
+generation_weight = 0.3

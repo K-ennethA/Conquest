@@ -61,7 +61,7 @@ func _log(overrides: Dictionary = {}) -> Dictionary:
 	for key in overrides.keys():
 		fields[key] = overrides[key]
 	var log: Dictionary = ReplayLog.make_log(fields)
-	log["entries"] = [ReplayLog.make_entry(1, 0, NetProtocol.make_move_unit(1, Vector2i(2, 3), 0))]
+	log["entries"] = [ReplayLog.make_entry(1, 0, NetProtocol.make_move_unit("0:1", Vector3i(2, 3, 0), 0))]
 	log["checksums"] = [ReplayLog.make_checksum(1, "0011223344556677")]
 	log["outcome"] = ReplayLog.make_outcome(ReplayLog.RESULT_VICTORY, 0, 7)
 	return log

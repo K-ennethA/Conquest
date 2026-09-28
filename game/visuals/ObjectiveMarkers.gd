@@ -79,7 +79,7 @@ const GROUND_Y: float = 0.10
 
 ## "No cell" — what [method urgent_cell] returns when nothing is being captured. Never a
 ## valid board cell, so it can never accidentally match a marker.
-const NO_CELL := Vector2i(-1, -1)
+const NO_CELL := Vector3i(-1, -1, 0)
 
 
 # --- Tunables (data; every one of these is inspector-editable) ---------------
@@ -135,7 +135,7 @@ const NO_CELL := Vector2i(-1, -1)
 @export var control_point_scale: float = 0.6
 
 ## The colour an UNOWNED control point wears: a muted warm stone, desaturated out of the
-## amber/brown theme family so it never reads as a faded team tint (which a blue-grey would).
+## theme and team families so it never reads as a faded team tint (which a blue-grey would).
 @export var neutral_stone: Color = Color("8a8074")
 
 ## What an announcement calls the point when the map declares exactly ONE — the overwhelmingly
@@ -211,14 +211,16 @@ static func color_for_player(player_id: int) -> Color:
 
 
 ## World position of the CENTER of board cell [param cell], on the tile surface.
-static func world_position_for(cell: Vector2i) -> Vector3:
-	return Vector3(float(cell.x) * CELL + HALF, GROUND_Y, float(cell.y) * CELL + HALF)
+static func world_position_for(cell) -> Vector3:
+	var c: Vector3i = Cells.from_variant(cell)
+	return Vector3(float(c.x) * CELL + HALF, Cells.floor_y(c.z) + GROUND_Y, float(c.y) * CELL + HALF)
 
 
 ## Every banner [param map] asks for, in ASCENDING PLAYER SLOT order (deterministic, so two
 ## peers build the same node names in the same order).
 ##
-## Each entry: { player_id: int, cell: Vector2i, color: Color, world: Vector3 }.
+## Each entry: { player_id: int, cell: Vector3i (col, row, floor -- map data lifted via
+## [method Cells.from_variant]), color: Color, world: Vector3 }.
 ##
 ## Reads [member MapResource.base_cells] and NOTHING else — that dictionary is the whole
 ## contract, which is what makes this work on any map that authors bases and cost nothing on
@@ -239,9 +241,9 @@ static func plan(map) -> Array[Dictionary]:
 	keys.sort()
 	for key in keys:
 		var value = (bases as Dictionary)[key]
-		if not (value is Vector2i):
+		if not (value is Vector2i or value is Vector3i):
 			continue
-		var cell: Vector2i = value
+		var cell: Vector3i = Cells.from_variant(value)
 		if cell.x < 0 or cell.y < 0:
 			continue
 		if width > 0 and cell.x >= width:
@@ -261,7 +263,7 @@ static func plan(map) -> Array[Dictionary]:
 ## Every CONTROL POINT [param map] declares, in AUTHORED ORDER (which is deterministic — it is
 ## the order the array was written in, identical on every peer and in every replay).
 ##
-## Each entry: { index: int, cell: Vector2i, world: Vector3 }. No colour: a control point is
+## Each entry: { index: int, cell: Vector3i, world: Vector3 }. No colour: a control point is
 ## born neutral and only ever learns an owner from the live mode (see
 ## [method refresh_control_points]).
 ##
@@ -291,9 +293,9 @@ static func plan_control_points(map) -> Array[Dictionary]:
 
 	var seen: Dictionary = {}
 	for value in (raw as Array):
-		if not (value is Vector2i):
+		if not (value is Vector2i or value is Vector3i):
 			continue
-		var cell: Vector2i = value
+		var cell: Vector3i = Cells.from_variant(value)
 		if cell.x < 0 or cell.y < 0:
 			continue
 		if width > 0 and cell.x >= width:
@@ -394,7 +396,7 @@ static func _base_material() -> StandardMaterial3D:
 ## which is the chunky low-poly vibe the tiles are built in.
 func _build_marker(entry: Dictionary, base_mat: StandardMaterial3D) -> Node3D:
 	var player_id: int = int(entry["player_id"])
-	var cell: Vector2i = entry["cell"]
+	var cell: Vector3i = entry["cell"]
 	var color: Color = entry["color"]
 
 	var root := Node3D.new()
@@ -507,7 +509,7 @@ func control_point_top_height() -> float:
 ## map that authors them in a mode that does not score them.
 func _build_control_point_marker(entry: Dictionary, base_mat: StandardMaterial3D) -> Node3D:
 	var index: int = int(entry["index"])
-	var cell: Vector2i = entry["cell"]
+	var cell: Vector3i = entry["cell"]
 	var scale_factor: float = _cp_scale()
 	var mast_height: float = pole_height * scale_factor
 	var mast_thickness: float = pole_thickness * scale_factor
@@ -648,10 +650,10 @@ func _process(delta: float) -> void:
 ## Re-read the capture state and re-animate ONLY the banners whose urgency actually flipped,
 ## so a battle with no capture in flight never rebuilds a tween.
 func refresh_urgency() -> void:
-	var hot: Vector2i = urgent_cell()
+	var hot: Vector3i = urgent_cell()
 	for player_id in _state:
 		var state: Dictionary = _state[player_id]
-		var want: bool = hot != NO_CELL and (state["cell"] as Vector2i) == hot
+		var want: bool = hot != NO_CELL and (state["cell"] as Vector3i) == hot
 		if want == bool(state["urgent"]):
 			continue
 		state["urgent"] = want
@@ -665,7 +667,7 @@ func refresh_urgency() -> void:
 ## captured, the answer is NO_CELL and every banner stays calm. Prefers the controller's own
 ## reported capture cell (the precise answer) and falls back to "the base the capturing side
 ## is attacking", so a controller exposing only [code]capturing_by()[/code] still works.
-func urgent_cell() -> Vector2i:
+func urgent_cell() -> Vector3i:
 	var ctrl := _mode_controller()
 	if ctrl == null:
 		return NO_CELL
@@ -678,12 +680,12 @@ func urgent_cell() -> Vector2i:
 		var state = ctrl.call("capture_state")
 		if state is Dictionary and (state as Dictionary).has("cell"):
 			var cell = (state as Dictionary)["cell"]
-			if cell is Vector2i:
-				return cell
+			if cell is Vector2i or cell is Vector3i:
+				return Cells.from_variant(cell)
 	if ctrl.has_method("enemy_base_cell_for"):
 		var enemy = ctrl.call("enemy_base_cell_for", side)
-		if enemy is Vector2i:
-			return enemy
+		if enemy is Vector2i or enemy is Vector3i:
+			return Cells.from_variant(enemy)
 	return NO_CELL
 
 
@@ -810,8 +812,8 @@ func control_point_marker(index: int) -> Node3D:
 
 
 ## Every control point's cell, in the same order [method plan_control_points] produced them.
-func control_point_cells() -> Array[Vector2i]:
-	var out: Array[Vector2i] = []
+func control_point_cells() -> Array[Vector3i]:
+	var out: Array[Vector3i] = []
 	for entry in control_point_layout:
 		out.append(entry["cell"])
 	return out
@@ -865,7 +867,7 @@ func refresh_control_points() -> void:
 
 	for index in _cp_state:
 		var state: Dictionary = _cp_state[index]
-		var cell: Vector2i = state["cell"]
+		var cell: Vector3i = state["cell"]
 
 		var owner_id: int = -1
 		if can_own:

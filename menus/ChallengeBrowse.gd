@@ -3,7 +3,8 @@ extends Control
 class_name ChallengeBrowse
 
 ## Browse + import screen for player-built CHALLENGES (Challenge Maps, Phase A). Reached
-## from the Solo screen's "Challenges" card. Dark "Legends" menu look via [MenuTheme].
+## from the Solo screen's "Challenges" card. Built on the shared grove page
+## ([MenuKit.build_page], [MenuTheme] -- see docs/UI_STYLE.md).
 ##
 ## Two ways a challenge gets here:
 ##   * LOCAL   -- every challenge already saved under user://challenges/ (built here, or
@@ -21,6 +22,14 @@ class_name ChallengeBrowse
 ## materialises its map, points the game at it, and routes into the squad pick -> battle.
 ## Every dependency is null-guarded so a missing autoload or an unreadable file degrades
 ## gracefully rather than crashing the screen.
+##
+## Input: moving focus onto a challenge card selects it; Confirm (Enter / A) on the selected
+## card -- or the Play button -- plays it (with the mouse: click to select, click again to
+## play). Cancel (Esc / B) goes back, except while typing in the share-code field.
+##
+## 720p budget. MenuKit's header + footer leave the body ~466 of 720. Body rows (16 apart):
+##   daily hero 124 + import row 46 + import status 22 + the list (ONE EXPAND_FILL region)
+## = 192 fixed + 3 * 16 = 240, so the list gets ~226 at 720p and every spare pixel above.
 
 const SOLO_SELECT_SCENE := "res://menus/SoloModeSelect.tscn"
 
@@ -42,142 +51,124 @@ var _daily: Dictionary = {}
 # --- Live node refs ---------------------------------------------------------
 var _list_box: VBoxContainer = null
 var _row_group: ButtonGroup = null
+var _rows: Array[Button] = []
 var _code_edit: LineEdit = null
 var _import_status: Label = null
 var _play_btn: Button = null
+var _back_btn: Button = null
 var _daily_body: VBoxContainer = null
 var _daily_play_btn: Button = null
 
+## Whether the pressed row was ALREADY the selection when the press began, so the first
+## click on a card selects it and a second click plays it (the card-list rule).
+var _was_selected_before_press: bool = false
+
 
 func _ready() -> void:
-	theme = MenuTheme.build()
-	MenuTheme.apply_backdrop(self)
 	_row_group = ButtonGroup.new()
 	_build_ui()
 	_refresh_daily()
 	_refresh_list()
+	if _daily_play_btn != null and not _daily_play_btn.disabled:
+		_focus_later(_daily_play_btn)
+	elif not _rows.is_empty():
+		_focus_later(_rows[0])
+	else:
+		_focus_later(_code_edit)
 
 
 # --- UI construction --------------------------------------------------------
 
 func _build_ui() -> void:
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
-
-	var page := VBoxContainer.new()
-	page.custom_minimum_size = Vector2(760.0, 700.0)
-	page.add_theme_constant_override("separation", 14)
-	center.add_child(page)
-
-	var title := Label.new()
-	title.text = "CHALLENGES"
-	page.add_child(title)
-	# 32 not 40: the page's fixed minimums (this title + subtitle + daily card + import
-	# row + status + footer) plus the list's floor must sum under 720 at 1080p-scaled-down
-	# / 720p or the CenterContainer clips BOTH ends -- see the scroll floor below, the
-	# actual overflow driver (same bug class fixed on ProfileScreen and MatchSetup).
-	MenuTheme.style_title(title, 32)
-
-	var subtitle := Label.new()
-	subtitle.text = "Beat a map someone else built -- or import a share code"
-	page.add_child(subtitle)
-	MenuTheme.style_subtitle(subtitle)
+	var page := MenuKit.build_page(self, ["Solo"], "Challenges",
+		"Beat a map someone else built -- or import a share code.")
 
 	# --- Daily hero ----------------------------------------------------------
-	page.add_child(_build_daily_card())
+	page.body.add_child(_build_daily_card())
 
-	# --- Import row ----------------------------------------------------------
-	page.add_child(_build_import_row())
+	# --- Import row + its status line -----------------------------------------
+	page.body.add_child(_build_import_row())
 
-	_import_status = Label.new()
-	_import_status.text = ""
-	_import_status.custom_minimum_size = Vector2(0.0, 20.0)
-	page.add_child(_import_status)
-	MenuTheme.style_caption(_import_status)
+	_import_status = MenuKit.label("", &"DimLabel")
+	_import_status.name = "ImportStatus"
+	_import_status.custom_minimum_size = Vector2(0.0, 22.0)
+	_import_status.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	page.body.add_child(_import_status)
 
 	# --- Local challenge list ------------------------------------------------
-	var list_card := PanelContainer.new()
-	list_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	page.add_child(list_card)
+	var list_well := MenuKit.card(&"InsetPanel")
+	list_well.name = "ChallengeList"
+	list_well.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.body.add_child(list_well)
 
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	# 150 not 340: this scroll is the page's ONLY flexible region (list_card above is
-	# SIZE_EXPAND_FILL) -- its floor is what decides whether the footer (Back / Community
-	# / PLAY) fits on a 720p screen. At 340 the fixed items (title 52 + subtitle 21 +
-	# daily card ~106 + import row ~40 + status 20 + footer 48 + hint ~16 + 7 gaps * 14
-	# separation = 98) summed to ~765 against a 720 budget -- the footer rendered below
-	# the screen edge, which was the reported bug. At 150 the same sum is ~565, safely
-	# under the page's explicit 700 floor, and the leftover (700 - 565 = 135) is what
-	# the container hands back to this scroll via EXPAND_FILL, so the list still shows
-	# several rows on a normal window.
-	scroll.custom_minimum_size = Vector2(0.0, 150.0)
-	list_card.add_child(scroll)
+	scroll.follow_focus = true
+	# 120 floor: this scroll is the page's ONLY flexible region (see the class budget) --
+	# its floor is what decides whether the footer (Back / Community / My Bases / PLAY) fits
+	# on a 720p screen; EXPAND_FILL hands it everything the fixed rows leave.
+	scroll.custom_minimum_size = Vector2(0.0, 120.0)
+	list_well.add_child(scroll)
+
+	var pad := MarginContainer.new()
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for side in ["left", "top", "bottom"]:
+		pad.add_theme_constant_override("margin_" + side, 6)
+	pad.add_theme_constant_override("margin_right", 14)  # focus glow + scrollbar
+	scroll.add_child(pad)
 
 	_list_box = VBoxContainer.new()
 	_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_list_box.add_theme_constant_override("separation", 8)
-	scroll.add_child(_list_box)
+	_list_box.add_theme_constant_override("separation", MenuTheme.SP_S)
+	pad.add_child(_list_box)
 
 	# --- Actions -------------------------------------------------------------
-	var actions := HBoxContainer.new()
-	actions.alignment = BoxContainer.ALIGNMENT_CENTER
-	actions.add_theme_constant_override("separation", 18)
-	page.add_child(actions)
+	_back_btn = MenuKit.button("Back", MenuKit.GHOST, 130)
+	_back_btn.name = "BackButton"
+	_back_btn.pressed.connect(_on_back_pressed)
+	page.actions.add_child(_back_btn)
 
-	var back := Button.new()
-	back.text = "Back"
-	back.custom_minimum_size = Vector2(160.0, 48.0)
-	back.pressed.connect(_on_back_pressed)
-	actions.add_child(back)
-
-	var community := Button.new()
-	community.text = "Community"
-	community.custom_minimum_size = Vector2(180.0, 48.0)
+	var community := MenuKit.button("Community", &"", 170)
+	community.name = "CommunityButton"
 	var community_available: bool = ResourceLoader.exists(COMMUNITY_SCENE)
 	community.disabled = not community_available
 	community.tooltip_text = "Browse challenges shared by other players." if community_available \
 		else "The community browser is not available in this build."
 	community.pressed.connect(_on_community_pressed)
-	actions.add_child(community)
+	page.actions.add_child(community)
 
-	# Footer width check: Back 160 + Community 180 + My Bases 160 + PLAY 220, plus 3 gaps *
-	# 18 separation = 674, against this page's 760 floor -- the row still fits without the
-	# buttons being squeezed below their explicit minimums.
-	var bases := Button.new()
-	bases.text = "My Bases"
-	bases.custom_minimum_size = Vector2(160.0, 48.0)
+	var bases := MenuKit.button("My Bases", &"", 150)
+	bases.name = "MyBasesButton"
 	var bases_available: bool = ResourceLoader.exists(MY_BASES_SCENE)
 	bases.disabled = not bases_available
 	bases.tooltip_text = "Your published challenges and how their defenses are holding." \
 		if bases_available else "The base screen is not available in this build."
 	bases.pressed.connect(_on_my_bases_pressed)
-	actions.add_child(bases)
+	page.actions.add_child(bases)
 
-	_play_btn = Button.new()
-	_play_btn.text = "PLAY"
-	_play_btn.theme_type_variation = "SelectedButton"
-	_play_btn.custom_minimum_size = Vector2(220.0, 48.0)
+	_play_btn = MenuKit.button("Play  >", MenuKit.PRIMARY, 190, 54)
+	_play_btn.name = "PlayButton"
 	_play_btn.disabled = true
 	_play_btn.pressed.connect(_on_play_pressed)
-	actions.add_child(_play_btn)
+	page.actions.add_child(_play_btn)
 
-	var hint := Label.new()
-	hint.text = "Paste a code and Import  •  select a challenge  •  Enter to Play  •  ESC back"
-	page.add_child(hint)
-	MenuTheme.style_caption(hint)
+	MenuKit.add_standard_hints(page.hints, "Play")
 
 
-## The DAILY hero: a gold-accented card whose contents are rebuilt by [method _refresh_daily].
-## Built empty here so the card's frame + Play button are wired once and only the body is
-## torn down on refresh.
+## The DAILY hero: a gold-edged crest card whose contents are rebuilt by [method
+## _refresh_daily]. Built empty here so the card's frame + Play button are wired once and
+## only the body is torn down on refresh.
 func _build_daily_card() -> Control:
 	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", MenuTheme.card_box(MenuTheme.GOLD))
+	card.name = "DailyCard"
+	var sb := MenuTheme.accented_card(MenuTheme.GOLD, SIDE_LEFT, MenuTheme.PANEL, 0.96, true)
+	sb.content_margin_top = 14.0
+	sb.content_margin_bottom = 12.0
+	card.add_theme_stylebox_override("panel", sb)
+	card.custom_minimum_size = Vector2(0.0, 124.0)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
+	row.add_theme_constant_override("separation", MenuTheme.SP_L)
 	card.add_child(row)
 
 	_daily_body = VBoxContainer.new()
@@ -186,10 +177,8 @@ func _build_daily_card() -> Control:
 	_daily_body.add_theme_constant_override("separation", 3)
 	row.add_child(_daily_body)
 
-	_daily_play_btn = Button.new()
-	_daily_play_btn.text = "PLAY DAILY"
-	_daily_play_btn.theme_type_variation = "SelectedButton"
-	_daily_play_btn.custom_minimum_size = Vector2(180.0, 48.0)
+	_daily_play_btn = MenuKit.button("Play Daily", MenuKit.PRIMARY, 200, 54)
+	_daily_play_btn.name = "DailyPlayButton"
 	_daily_play_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_daily_play_btn.disabled = true
 	_daily_play_btn.pressed.connect(_on_daily_play_pressed)
@@ -213,58 +202,56 @@ func _refresh_daily() -> void:
 	var date_utc: String = DailyChallenge.today_utc()
 	_daily = DailyChallenge.pick_for_date(DailyChallenge.full_pool(), date_utc)
 
-	var heading := Label.new()
-	heading.text = "DAILY CHALLENGE   ·   %s UTC" % date_utc
-	heading.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	heading.add_theme_color_override("font_color", MenuTheme.GOLD)
-	_daily_body.add_child(heading)
+	_daily_body.add_child(MenuKit.section("Daily Challenge   ·   %s UTC" % date_utc))
 
 	if _daily.is_empty():
-		var none := Label.new()
-		none.text = "No challenges available yet -- build one in the Map Maker or import a code."
-		none.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		none.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-		none.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+		var none := MenuKit.label(
+			"No challenges available yet -- build one in the Map Maker or import a code.",
+			&"DimLabel", true)
+		none.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 		_daily_body.add_child(none)
 		if _daily_play_btn != null:
 			_daily_play_btn.disabled = true
 		return
 
-	# Name + mode chip on one line.
+	# Name + mode badge on one line.
 	var title_row := HBoxContainer.new()
-	title_row.add_theme_constant_override("separation", 10)
+	title_row.add_theme_constant_override("separation", MenuTheme.SP_M)
 	_daily_body.add_child(title_row)
 
-	var name_lbl := Label.new()
-	name_lbl.text = String(_daily.get("name", "Untitled"))
-	name_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
+	var name_lbl := MenuKit.label(String(_daily.get("name", "Untitled")), &"SubheadingLabel")
+	name_lbl.clip_text = true
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	# A clipping Label has no minimum width of its own: let it take the row, badge after it.
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_child(name_lbl)
 	title_row.add_child(_mode_chip(_daily))
 
-	var detail := Label.new()
-	detail.text = _detail_line(_daily)
-	detail.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	detail.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	var detail := MenuKit.label(_detail_line(_daily), &"DimLabel")
+	detail.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	_daily_body.add_child(detail)
 
-	var best := Label.new()
-	best.text = _daily_best_line(_daily)
-	best.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	best.add_theme_color_override("font_color", MenuTheme.GOLD)
+	var best := MenuKit.label(_daily_best_line(_daily), &"DimLabel")
+	best.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	best.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
 	_daily_body.add_child(best)
 
 	if _daily_play_btn != null:
 		_daily_play_btn.disabled = false
 
 
-## A chip naming the challenge's mode -- "BREACH", or "SURVIVE 10" with the round target
-## baked in (the number is the whole point of the mode, so it belongs on the chip).
-func _mode_chip(challenge: Dictionary) -> Label:
+## A badge naming the challenge's mode -- "BREACH", or "SURVIVE 10" with the round target
+## baked in (the number is the whole point of the mode, so it belongs on the badge).
+func _mode_chip(challenge: Dictionary) -> Control:
 	var mode: String = ChallengeCodec.rules_mode(challenge)
+	var chip: PanelContainer
 	if mode == ChallengeCodec.MODE_SURVIVE:
-		return MenuTheme.make_chip("SURVIVE %d" % ChallengeCodec.rules_survive_turns(challenge),
+		chip = MenuKit.badge("SURVIVE %d" % ChallengeCodec.rules_survive_turns(challenge),
 			MenuTheme.GOLD)
-	return MenuTheme.make_chip("BREACH", MenuTheme.CREAM_DIM)
+	else:
+		chip = MenuKit.badge("BREACH", MenuTheme.TEXT_DIM)
+	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return chip
 
 
 ## The player's standing on today's pick: their best score (with a perfect badge) or a nudge
@@ -281,17 +268,20 @@ func _daily_best_line(challenge: Dictionary) -> String:
 
 func _build_import_row() -> Control:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	row.name = "ImportRow"
+	row.add_theme_constant_override("separation", MenuTheme.SP_M)
 
 	_code_edit = LineEdit.new()
+	_code_edit.name = "CodeEdit"
 	_code_edit.placeholder_text = "Paste a challenge share code..."
 	_code_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_code_edit.custom_minimum_size = Vector2(0.0, 46.0)
 	_code_edit.text_submitted.connect(func(_t: String): _on_import_pressed())
+	MenuNav.hover_focus(_code_edit)
 	row.add_child(_code_edit)
 
-	var import_btn := Button.new()
-	import_btn.text = "Import"
-	import_btn.custom_minimum_size = Vector2(120.0, 0.0)
+	var import_btn := MenuKit.button("Import", &"", 140, 46)
+	import_btn.name = "ImportButton"
 	import_btn.pressed.connect(_on_import_pressed)
 	row.add_child(import_btn)
 
@@ -304,86 +294,83 @@ func _refresh_list() -> void:
 	if _list_box == null:
 		return
 	for child in _list_box.get_children():
+		_list_box.remove_child(child)
 		child.queue_free()
+	_rows.clear()
 	_selected = {}
 	if _play_btn != null:
 		_play_btn.disabled = true
 
 	_entries = ChallengeCodec.list_saved()
 	if _entries.is_empty():
-		var empty := Label.new()
-		empty.text = "No challenges yet. Build one in the Map Maker (Export as Challenge) or import a code above."
-		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var empty := MenuKit.label(
+			"No challenges yet. Build one in the Map Maker (Export as Challenge) or import a code above.",
+			&"DimLabel", true)
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		MenuTheme.style_subtitle(empty)
 		_list_box.add_child(empty)
 		return
 
 	for entry in _entries:
-		_list_box.add_child(_make_row(entry))
+		var row := _make_row(entry)
+		_rows.append(row)
+		_list_box.add_child(row)
 
 
-## One selectable challenge card: name + author heading over a details line, plus the
-## personal-best line when the player has a record. Toggling it selects the challenge.
+## One selectable challenge card: name + mode badge over a details line, plus the
+## personal-best and defense lines when the player has a record. Focusing (or first
+## clicking) it selects the challenge; pressing the selected card plays it.
 func _make_row(entry: Dictionary) -> Button:
 	var challenge: Dictionary = entry.get("challenge", {})
 
-	var btn := Button.new()
-	btn.toggle_mode = true
+	var parts := MenuKit.option_card(Vector2(0.0, 96.0), true)
+	var btn: Button = parts["button"]
 	btn.button_group = _row_group
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# Tall enough for the four lines a played challenge shows (name+chip, details,
-	# personal best, defense rating) without the text clipping the button's frame.
-	btn.custom_minimum_size = Vector2(0.0, 96.0)
-	btn.toggled.connect(func(pressed: bool): _on_row_toggled(pressed, entry))
-
-	var col := VBoxContainer.new()
-	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var col: VBoxContainer = parts["content"]
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_theme_constant_override("separation", 2)
 
 	var title_row := HBoxContainer.new()
-	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title_row.add_theme_constant_override("separation", 8)
+	title_row.add_theme_constant_override("separation", MenuTheme.SP_S)
 	col.add_child(title_row)
 
-	var name_lbl := Label.new()
-	name_lbl.text = String(challenge.get("name", "Untitled"))
-	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	name_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	var name_lbl := MenuKit.label(String(challenge.get("name", "Untitled")), &"SubheadingLabel")
+	name_lbl.clip_text = true
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	# A clipping Label has no minimum width of its own: let it take the row, badge after it.
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_child(name_lbl)
+	title_row.add_child(_mode_chip(challenge))
 
-	var chip: Label = _mode_chip(challenge)
-	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title_row.add_child(chip)
-
-	var detail_lbl := Label.new()
-	detail_lbl.text = _detail_line(challenge)
-	detail_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	detail_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	detail_lbl.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	var detail_lbl := MenuKit.label(_detail_line(challenge), &"DimLabel")
+	detail_lbl.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	col.add_child(detail_lbl)
 
 	var pb: String = _personal_best_line(challenge)
 	if not pb.is_empty():
-		var pb_lbl := Label.new()
-		pb_lbl.text = pb
-		pb_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		pb_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-		pb_lbl.add_theme_color_override("font_color", MenuTheme.GOLD)
+		var pb_lbl := MenuKit.label(pb, &"DimLabel")
+		pb_lbl.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+		pb_lbl.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
 		col.add_child(pb_lbl)
 
 	var rating: String = _defense_rating_line(challenge)
 	if not rating.is_empty():
-		var rating_lbl := Label.new()
-		rating_lbl.text = rating
-		rating_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		rating_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-		rating_lbl.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+		var rating_lbl := MenuKit.label(rating, &"MutedLabel")
+		rating_lbl.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 		col.add_child(rating_lbl)
 
-	btn.add_child(col)
+	MenuKit.ignore_mouse(btn)
+	btn.focus_entered.connect(func() -> void:
+		# A mouse press also focuses the card; let the click itself decide (select first).
+		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			_select_entry(entry, btn))
+	btn.button_down.connect(func() -> void:
+		_was_selected_before_press = not _selected.is_empty() and _selected == entry)
+	btn.pressed.connect(func() -> void:
+		if _was_selected_before_press:
+			_on_play_pressed()
+		else:
+			_select_entry(entry, btn))
 	return btn
 
 
@@ -449,12 +436,21 @@ func _defense_rating_line(challenge: Dictionary) -> String:
 	return "Defense held %d/%d (%d%%) of your runs" % [held, attempts, pct]
 
 
+## Make [param entry] the selection: its card shows the gold "selected" frame and Play
+## wakes up.
+func _select_entry(entry: Dictionary, btn: Button = null) -> void:
+	_selected = entry
+	if btn != null:
+		btn.set_pressed_no_signal(true)
+	if _play_btn != null:
+		_play_btn.disabled = false
+
+
+## Kept for callers that drive selection through a card's toggle (the pre-grove API).
 func _on_row_toggled(pressed: bool, entry: Dictionary) -> void:
 	if not pressed:
 		return
-	_selected = entry
-	if _play_btn != null:
-		_play_btn.disabled = false
+	_select_entry(entry)
 
 
 # --- Import -----------------------------------------------------------------
@@ -464,34 +460,34 @@ func _on_import_pressed() -> void:
 		return
 	var code: String = _code_edit.text.strip_edges()
 	if code.is_empty():
-		_set_import_status("Paste a share code first.")
+		_set_import_status("Paste a share code first.", "warn")
 		return
 
 	var challenge: Dictionary = ChallengeCodec.decode(code)
 	if challenge.is_empty():
-		_set_import_status("Could not read that code -- it may be incomplete or corrupted.")
+		_set_import_status("Could not read that code -- it may be incomplete or corrupted.", "error")
 		return
 
 	var errors: Array[String] = ChallengeCodec.validate(challenge)
 	if not errors.is_empty():
-		_set_import_status("Invalid challenge: " + errors[0])
+		_set_import_status("Invalid challenge: " + errors[0], "error")
 		return
 
 	var path: String = ChallengeCodec.save_to_file(challenge)
 	if path.is_empty():
-		_set_import_status("Could not save the imported challenge.")
+		_set_import_status("Could not save the imported challenge.", "error")
 		return
 
 	_code_edit.text = ""
-	_set_import_status("Imported '%s'." % String(challenge.get("name", "challenge")))
+	_set_import_status("Imported '%s'." % String(challenge.get("name", "challenge")), "ok")
 	# The import joins the daily POOL, so today's pick can change -- repaint the hero too.
 	_refresh_daily()
 	_refresh_list()
 
 
-func _set_import_status(text: String) -> void:
+func _set_import_status(text: String, tone: String = "") -> void:
 	if _import_status != null:
-		_import_status.text = text
+		MenuKit.set_status(_import_status, text, tone)
 
 
 # --- Play / Back ------------------------------------------------------------
@@ -516,11 +512,11 @@ func _start_challenge(challenge: Dictionary) -> void:
 		return
 	var controller := get_node_or_null("/root/ChallengeController")
 	if controller == null or not controller.has_method("prepare"):
-		_set_import_status("Challenge system unavailable.")
+		_set_import_status("Challenge system unavailable.", "error")
 		return
 	controller.prepare(challenge)
 	if not controller.begin():
-		_set_import_status("This challenge could not be started (map failed validation).")
+		_set_import_status("This challenge could not be started (map failed validation).", "error")
 		controller.cancel()
 
 
@@ -529,33 +525,40 @@ func _start_challenge(challenge: Dictionary) -> void:
 ## [constant COMMUNITY_SCENE]) rather than changing scene to a missing path.
 func _on_community_pressed() -> void:
 	if not ResourceLoader.exists(COMMUNITY_SCENE):
-		_set_import_status("The community browser is not available in this build.")
+		_set_import_status("The community browser is not available in this build.", "warn")
 		return
-	get_tree().change_scene_to_file(COMMUNITY_SCENE)
+	MenuNav.change_scene(self, COMMUNITY_SCENE)
 
 
 ## Open the player's own published bases.
 func _on_my_bases_pressed() -> void:
 	if not ResourceLoader.exists(MY_BASES_SCENE):
-		_set_import_status("The base screen is not available in this build.")
+		_set_import_status("The base screen is not available in this build.", "warn")
 		return
-	get_tree().change_scene_to_file(MY_BASES_SCENE)
+	MenuNav.change_scene(self, MY_BASES_SCENE)
 
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file(SOLO_SELECT_SCENE)
+	MenuNav.change_scene(self, SOLO_SELECT_SCENE)
 
 
-func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
+func _unhandled_input(event: InputEvent) -> void:
+	# Don't steal typing while the code field is focused (Cancel includes Backspace / X / C).
+	if _code_edit != null and _code_edit.has_focus():
 		return
-	if event is InputEventKey:
-		# Don't steal typing while the code field is focused.
-		if _code_edit != null and _code_edit.has_focus():
-			return
-		match (event as InputEventKey).keycode:
-			KEY_ENTER, KEY_KP_ENTER:
-				if _play_btn != null and not _play_btn.disabled:
-					_on_play_pressed()
-			KEY_ESCAPE:
-				_on_back_pressed()
+	if MenuNav.is_back_event(event):
+		get_viewport().set_input_as_handled()
+		_on_back_pressed()
+
+
+## [MenuNav.focus_deferred], but safe when the control leaves the tree first (a repaint
+## rebuilt it, or the screen closed) -- grab_focus() on a detached control is an engine error.
+func _focus_later(c: Control) -> void:
+	if c == null:
+		return
+	# Captured by instance id, not by reference: a freed capture is itself an engine error.
+	var id: int = c.get_instance_id()
+	(func() -> void:
+		var ctl := instance_from_id(id) as Control
+		if ctl != null and ctl.is_inside_tree() and ctl.is_visible_in_tree():
+			ctl.grab_focus()).call_deferred()

@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="AbilityResource" format=3]
+
+[ext_resource type="Script" path="res://game/combat/effects/MoveEffect.gd" id="1_mvefx"]
+[ext_resource type="Script" path="res://game/combat/effects/StatModifierEffect.gd" id="2_stat"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="3_abres"]
+[ext_resource type="Script" path="res://game/weather/WeatherCondition.gd" id="4_wcond"]
+
+[sub_resource type="Resource" id="Resource_sl_speed"]
+script = ExtResource("2_stat")
+stat_name = "speed"
+amount = 4
+duration = 1
+
+[sub_resource type="Resource" id="Resource_sl_move"]
+script = ExtResource("2_stat")
+stat_name = "movement"
+amount = 1
+duration = 1
+
+[sub_resource type="Resource" id="Resource_sl_cond"]
+script = ExtResource("4_wcond")
+weathers = Array[StringName]([&"bright_sun"])
+
+[resource]
+script = ExtResource("3_abres")
+id = &"sunlit"
+display_name = "Sunlit"
+description = "Petals open to the sun. In Bright Sun, gain +4 speed and +1 movement each turn."
+trigger = 1
+condition = SubResource("Resource_sl_cond")
+effects = Array[ExtResource("1_mvefx")]([SubResource("Resource_sl_speed"), SubResource("Resource_sl_move")])

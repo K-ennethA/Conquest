@@ -5,7 +5,8 @@ class_name CommunityBrowse
 ## Browse, rank and download COMMUNITY maps + challenges. The sibling of [ChallengeBrowse]
 ## (which handles the player's own local challenges + share codes); this screen is the
 ## public square where other players' creations surface, get voted on, and are pulled into
-## the local library. Dark "Legends" register via [MenuTheme].
+## the local library. Built on the shared grove page ([MenuKit.build_page], [MenuTheme] --
+## see docs/UI_STYLE.md).
 ##
 ## It talks only to [CommunityClient], which hides whether we are online (an [HttpProvider]
 ## against a configured service) or offline (the [LocalProvider] sandbox). When offline a
@@ -23,6 +24,16 @@ class_name CommunityBrowse
 ## way in), and emptying the field is just another query -- it debounces back to the plain
 ## browse feed. Debounce over submit because the sort tabs already reload on a single click;
 ## making search the one control that needs a second keystroke to commit would read as broken.
+##
+## Input: arrows / D-pad move focus between the tabs, the cards' vote + Download buttons and
+## the footer; Prev / Next page (Q / R, LB / RB) cycles the sort tab; Cancel (Esc / B) goes
+## back -- except while typing in the search field.
+##
+## 720p budget. MenuKit's header + footer leave the body ~466 of 720 (the search field sits
+## on the title row, like the Compendium's, so it costs no height). Body rows (16 apart):
+##   offline banner 22 (local sandbox only) + filter bar 44 + the list (ONE EXPAND_FILL
+##   region, floor 150) + Load more 44 (only while more pages remain)
+## worst case = 260 fixed + 3 * 16 = 308, leaving the list ~158; ~270 in the common case.
 
 const CHALLENGE_BROWSE_SCENE := "res://menus/ChallengeBrowse.tscn"
 const MY_BASES_SCENE := "res://menus/MyBases.tscn"
@@ -96,6 +107,7 @@ var _sort_btns: Dictionary = {}
 var _type_btns: Dictionary = {}
 var _search_edit: LineEdit = null
 var _search_timer: Timer = null
+var _back_btn: Button = null
 
 
 ## Inject the community client. Call BEFORE the node enters the tree (the script is live as
@@ -107,8 +119,6 @@ func set_community_client(client) -> void:
 
 func _ready() -> void:
 	_consume_entry_hint()
-	theme = MenuTheme.build()
-	MenuTheme.apply_backdrop(self)
 	if _client == null:
 		_client = CommunityClient.new()
 	_build_ui()
@@ -135,146 +145,128 @@ func _consume_entry_hint() -> void:
 # --- UI construction --------------------------------------------------------
 
 func _build_ui() -> void:
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
+	var page := MenuKit.build_page(self, _crumbs(), "Community",
+		"Discover, rank and download maps and challenges built by other players.")
 
-	var page := VBoxContainer.new()
-	# 700 not 660: raised alongside the scroll-floor trim below so the list (the page's
-	# only EXPAND_FILL region) still gets real height back, while staying a 20px-safe
-	# budget under the 720p viewport (no MarginContainer here -- this page IS the
-	# viewport). 660 was already too small to matter: the WORST case (offline banner +
-	# Load-more both visible) summed to ~785 on its own, well past even 720, so the
-	# explicit floor was never the binding constraint -- the fixed items were.
-	page.custom_minimum_size = Vector2(820.0, 700.0)
-	page.add_theme_constant_override("separation", 16)
-	center.add_child(page)
-
-	var title := Label.new()
-	title.text = "COMMUNITY"
-	page.add_child(title)
-	# 32 not 40: worst case (offline banner shown + Load-more visible) the fixed items --
-	# title(52) + subtitle(21) + banner(16) + filter bar(40) + list(380 scroll + 24 panel
-	# padding) + load-more(40) + status(20) + actions(48) + hint(16) -- plus 8 gaps * 16
-	# separation summed to ~785 against a 720 screen: the Back button rendered off the
-	# bottom edge even in the common case (~729 with banner/load-more hidden). Trimming
-	# the title and the scroll floor (below) is what actually fixes it.
-	MenuTheme.style_title(title, 32)
-
-	var subtitle := Label.new()
-	subtitle.text = "Discover, rank and download maps and challenges built by other players"
-	page.add_child(subtitle)
-	MenuTheme.style_subtitle(subtitle)
+	# Search on the title row (right of "Community"), the Compendium's placement, so the
+	# list keeps its height.
+	var title_row := (page.title as Control).get_parent()
+	var search_row := _build_search_row()
+	if title_row is HBoxContainer:
+		title_row.add_child(search_row)
+	else:
+		page.body.add_child(search_row)
 
 	# Offline banner (only shown in local mode; text set in _refresh_banner).
-	_banner = Label.new()
+	_banner = MenuKit.label("", &"DimLabel")
+	_banner.name = "OfflineBanner"
 	_banner.visible = false
-	MenuTheme.style_caption(_banner)
-	_banner.add_theme_color_override("font_color", MenuTheme.GOLD)
-	page.add_child(_banner)
+	_banner.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	_banner.add_theme_color_override("font_color", MenuTheme.WARNING)
+	page.body.add_child(_banner)
 
 	# Filter bar: sort tabs on the left, type filter on the right.
-	page.add_child(_build_filter_bar())
+	page.body.add_child(_build_filter_bar())
 
-	# Search row (one more 40px fixed item; see the scroll floor below for the budget).
-	page.add_child(_build_search_row())
-
-	# The scrolling card list.
-	var list_card := PanelContainer.new()
-	list_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	page.add_child(list_card)
+	# The scrolling card list, in a sunken well.
+	var list_well := MenuKit.card(&"InsetPanel")
+	list_well.name = "ItemList"
+	list_well.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.body.add_child(list_well)
 
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	# 150 not 380: list_card above is already SIZE_EXPAND_FILL, so this scroll is the
-	# page's ONLY flexible region and its floor is what decides whether the footer fits.
-	# Worst case (offline banner + Load-more both visible) the fixed items now sum to
-	#   title 52 + subtitle 21 + banner 16 + filter bar 40 + SEARCH ROW 40 + list card
-	#   (150 floor + 24 panel padding) + load-more 40 + status 20 + actions 48 + hint 16
-	#   = 467, plus 9 gaps * 16 separation = 144  ->  611
-	# against the page's 700 budget (itself 20px clear of a 720p viewport). The leftover
-	# 89px flows back into this scroll via EXPAND_FILL (~239px of rows). The search row
-	# cost 56 of the old ~145px of slack; there is still room, but the next fixed item
-	# added to this page must re-run this sum, not eyeball it.
+	scroll.follow_focus = true
+	# The page's ONLY flexible region; its floor is what decides whether the footer fits
+	# in the worst case (see the class budget). EXPAND_FILL hands it every spare pixel.
 	scroll.custom_minimum_size = Vector2(0.0, 150.0)
-	list_card.add_child(scroll)
+	list_well.add_child(scroll)
+
+	var pad := MarginContainer.new()
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for side in ["left", "top", "bottom"]:
+		pad.add_theme_constant_override("margin_" + side, 4)
+	pad.add_theme_constant_override("margin_right", 14)  # focus glow + scrollbar
+	scroll.add_child(pad)
 
 	_list_box = VBoxContainer.new()
 	_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_list_box.add_theme_constant_override("separation", 10)
-	scroll.add_child(_list_box)
+	_list_box.add_theme_constant_override("separation", MenuTheme.SP_M)
+	pad.add_child(_list_box)
 
 	# Load more.
-	_load_more_btn = Button.new()
-	_load_more_btn.text = "Load more"
-	_load_more_btn.custom_minimum_size = Vector2(0.0, 40.0)
+	_load_more_btn = MenuKit.button("Load more", &"", 0, 44)
+	_load_more_btn.name = "LoadMoreButton"
 	_load_more_btn.visible = false
 	_load_more_btn.pressed.connect(_on_load_more)
-	page.add_child(_load_more_btn)
+	page.body.add_child(_load_more_btn)
 
-	# Status line (download results / errors).
-	_status = Label.new()
-	_status.custom_minimum_size = Vector2(0.0, 20.0)
-	MenuTheme.style_caption(_status)
-	page.add_child(_status)
+	# Status line (download results / errors) lives in the footer, beside the key hints.
+	page.hints.add_child(MenuKit.key_hint("Q / R", "LB / RB", "Sort"))
+	page.hints.add_child(MenuKit.key_hint("Esc", "B", "Back"))
+	_status = MenuKit.label("", &"DimLabel")
+	_status.name = "StatusLabel"
+	_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_status.clip_text = true
+	_status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	page.hints.add_child(_status)
 
 	# Actions.
-	var actions := HBoxContainer.new()
-	actions.alignment = BoxContainer.ALIGNMENT_CENTER
-	actions.add_theme_constant_override("separation", 18)
-	page.add_child(actions)
-
-	var back := Button.new()
-	back.text = "Back"
-	back.custom_minimum_size = Vector2(200.0, 48.0)
-	back.pressed.connect(_on_back_pressed)
-	actions.add_child(back)
+	_back_btn = MenuKit.button("Back", MenuKit.GHOST, 140)
+	_back_btn.name = "BackButton"
+	_back_btn.pressed.connect(_on_back_pressed)
+	page.actions.add_child(_back_btn)
 
 	# My Bases lives beside Back rather than in the list: it is the OTHER half of the
 	# community loop (what you published and how it is holding up), not a browse filter.
-	var bases := Button.new()
-	bases.text = "My Bases"
-	bases.custom_minimum_size = Vector2(200.0, 48.0)
+	var bases := MenuKit.button("My Bases", &"", 170)
+	bases.name = "MyBasesButton"
 	var bases_available: bool = ResourceLoader.exists(MY_BASES_SCENE)
 	bases.disabled = not bases_available
 	bases.tooltip_text = "Your published challenges and how their defenses are holding." \
 		if bases_available else "The base screen is not available in this build."
 	bases.pressed.connect(_on_my_bases_pressed)
-	actions.add_child(bases)
+	page.actions.add_child(bases)
 
-	# Footer width check: Back 200 + My Bases 200 + My Replays 200, plus 2 gaps * 18
-	# separation = 636, against this page's 820 floor -- the row still fits without any of
-	# the three being squeezed below its explicit minimum. The row's HEIGHT is unchanged, so
-	# the vertical budget above is untouched.
-	var replays := Button.new()
-	replays.text = "My Replays"
-	replays.custom_minimum_size = Vector2(200.0, 48.0)
+	var replays := MenuKit.button("My Replays", &"", 190)
+	replays.name = "MyReplaysButton"
 	var replays_available: bool = ResourceLoader.exists(MY_REPLAYS_SCENE)
 	replays.disabled = not replays_available
 	replays.tooltip_text = "Battles this device recorded." if replays_available \
 		else "The replay screen is not available in this build."
 	replays.pressed.connect(_on_my_replays_pressed)
-	actions.add_child(replays)
+	page.actions.add_child(replays)
 
-	var hint := Label.new()
-	hint.text = "Search  •  Recommended / Top / New / Daily  •  vote and Download  •  ESC back"
-	page.add_child(hint)
-	MenuTheme.style_caption(hint)
+	_focus_later(_sort_btns.get(_sort, _back_btn))
+
+
+## The breadcrumb path BEFORE this screen: the challenge library by default, or whichever
+## screen sent the player here through the entry hint (e.g. Match Setup's "Get more maps").
+func _crumbs() -> Array:
+	if not _return_scene.is_empty():
+		return [_return_scene.get_file().get_basename().capitalize()]
+	return ["Solo", "Challenges"]
 
 
 ## The search field. Debounced (see the class docs): typing restarts [member _search_timer],
 ## Enter flushes immediately, and Clear empties the field which debounces back to the feed.
 func _build_search_row() -> Control:
 	var row := HBoxContainer.new()
-	row.custom_minimum_size = Vector2(0.0, 40.0)
-	row.add_theme_constant_override("separation", 10)
+	row.name = "SearchRow"
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.alignment = BoxContainer.ALIGNMENT_END
+	row.add_theme_constant_override("separation", MenuTheme.SP_M)
 
 	_search_edit = LineEdit.new()
+	_search_edit.name = "SearchEdit"
 	_search_edit.placeholder_text = "Search by title or author..."
-	_search_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_search_edit.custom_minimum_size = Vector2(420.0, 44.0)
 	_search_edit.clear_button_enabled = true
 	_search_edit.text_changed.connect(_on_search_text_changed)
 	_search_edit.text_submitted.connect(func(_t: String): _flush_search())
+	MenuNav.hover_focus(_search_edit)
 	row.add_child(_search_edit)
 
 	# The debounce clock. One-shot and RESTARTED per keystroke, so only the pause at the
@@ -285,11 +277,10 @@ func _build_search_row() -> Control:
 	_search_timer.timeout.connect(_flush_search)
 	row.add_child(_search_timer)
 
-	var clear := Button.new()
-	clear.text = "Clear"
 	# Explicit minimum: this button's label is its only content, and a chip-sized button
 	# with no explicit floor collapses to its text width on a narrow layout.
-	clear.custom_minimum_size = Vector2(96.0, 40.0)
+	var clear := MenuKit.button("Clear", MenuKit.GHOST, 110, 44)
+	clear.name = "ClearSearchButton"
 	clear.pressed.connect(_on_search_cleared)
 	row.add_child(clear)
 
@@ -321,28 +312,27 @@ func _on_search_cleared() -> void:
 	_flush_search()
 
 
+## Sort tabs (left) and type filter (right) as toggle buttons: the active one holds the
+## theme's gold pressed plate.
 func _build_filter_bar() -> Control:
 	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 10)
+	bar.name = "FilterBar"
+	bar.add_theme_constant_override("separation", MenuTheme.SP_M)
 
-	# Sort tabs.
+	# Sort tabs. Recommended leads AND is the default (see [member _sort]): the server-ranked
+	# feed is the one that surfaces a challenge a player has not seen, which is the point of
+	# the screen. Top/New/Daily stay, unchanged, one click away.
+	bar.add_child(MenuKit.section("Sort"))
 	var sort_row := HBoxContainer.new()
 	sort_row.add_theme_constant_override("separation", 6)
 	bar.add_child(sort_row)
-	# Recommended leads AND is the default (see [member _sort]): the server-ranked feed is the
-	# one that surfaces a challenge a player has not seen, which is the point of the screen.
-	# Top/New/Daily stay, unchanged, one click away. Widths: 136 + 3*88 + 3*6 gaps = 418,
-	# against the type row's 3*96 + 2*6 = 300 and the page's 820 floor -- the bar fits with
-	# ~80px to spare, so the spacer between them never collapses.
 	for spec in [
-		{"label": "Recommended", "value": SORT_RECOMMENDED, "width": 136.0},
-		{"label": "Top", "value": CommunityProvider.SORT_TOP, "width": 88.0},
-		{"label": "New", "value": CommunityProvider.SORT_NEW, "width": 88.0},
-		{"label": "Daily", "value": CommunityProvider.SORT_DAILY, "width": 88.0},
+		{"label": "Recommended", "value": SORT_RECOMMENDED},
+		{"label": "Top", "value": CommunityProvider.SORT_TOP},
+		{"label": "New", "value": CommunityProvider.SORT_NEW},
+		{"label": "Daily", "value": CommunityProvider.SORT_DAILY},
 	]:
-		var b := Button.new()
-		b.text = String(spec["label"])
-		b.custom_minimum_size = Vector2(float(spec["width"]), 40.0)
+		var b := _make_filter_button(String(spec["label"]))
 		var value: String = String(spec["value"])
 		b.pressed.connect(func(): _on_sort_selected(value))
 		sort_row.add_child(b)
@@ -353,6 +343,7 @@ func _build_filter_bar() -> Control:
 	bar.add_child(spacer)
 
 	# Type filter.
+	bar.add_child(MenuKit.section("Show"))
 	var type_row := HBoxContainer.new()
 	type_row.add_theme_constant_override("separation", 6)
 	bar.add_child(type_row)
@@ -361,24 +352,39 @@ func _build_filter_bar() -> Control:
 		{"label": "Challenges", "value": CommunityProvider.TYPE_CHALLENGE},
 		{"label": "All", "value": CommunityProvider.TYPE_ALL},
 	]:
-		var b := Button.new()
-		b.text = String(spec["label"])
-		b.custom_minimum_size = Vector2(96.0, 40.0)
+		var b := _make_filter_button(String(spec["label"]))
 		var value: String = String(spec["value"])
 		b.pressed.connect(func(): _on_type_selected(value))
 		type_row.add_child(b)
 		_type_btns[value] = b
 
+	for child in bar.get_children():
+		if child is Label:
+			(child as Label).vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			(child as Label).size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
 	_sync_filter_highlights()
 	return bar
 
 
-## Mark the active sort + type buttons with the gold "SelectedButton" chip look.
+func _make_filter_button(text: String) -> Button:
+	var b := MenuKit.button(text, &"", 0, 44)
+	b.toggle_mode = true
+	return b
+
+
+## Mark the active sort + type buttons: the toggle's gold pressed plate is the look; the
+## "SelectedButton" variation name is kept on the active one as the readable marker.
 func _sync_filter_highlights() -> void:
 	for value in _sort_btns:
-		_sort_btns[value].theme_type_variation = "SelectedButton" if value == _sort else &"Button"
+		_set_filter_active(_sort_btns[value], value == _sort)
 	for value in _type_btns:
-		_type_btns[value].theme_type_variation = "SelectedButton" if value == _type else &"Button"
+		_set_filter_active(_type_btns[value], value == _type)
+
+
+func _set_filter_active(b: Button, active: bool) -> void:
+	b.set_pressed_no_signal(active)
+	b.theme_type_variation = &"SelectedButton" if active else &""
 
 
 func _refresh_banner() -> void:
@@ -436,20 +442,17 @@ func _on_page_loaded(result: Dictionary) -> void:
 	if _load_more_btn != null:
 		_load_more_btn.disabled = false
 	if not bool(result.get("ok", false)):
-		_set_status("Could not load community items: %s" % String(result.get("error", "unknown error")))
+		_set_status("Could not load community items: %s" % String(result.get("error", "unknown error")), "error")
 		if _load_more_btn != null:
 			_load_more_btn.visible = false
 		return
 
 	var items: Array = result.get("data", []) if result.get("data", []) is Array else []
 	if _page == 0 and items.is_empty():
-		var empty := Label.new()
-		empty.text = "No results for \"%s\". Try a different title or author." % _query \
+		var empty := MenuKit.label("No results for \"%s\". Try a different title or author." % _query \
 			if not _query.is_empty() \
-			else "Nothing here yet. Be the first to share a map or challenge!"
-		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			else "Nothing here yet. Be the first to share a map or challenge!", &"DimLabel", true)
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		MenuTheme.style_subtitle(empty)
 		if _list_box != null:
 			_list_box.add_child(empty)
 
@@ -474,14 +477,22 @@ func _make_card(item: Dictionary) -> Control:
 	var item_type: String = String(item.get("type", ""))
 	var is_daily: bool = not _daily_id.is_empty() and id == _daily_id
 
+	# A grove card per item: challenges carry a gold edge, maps the plain frame, and
+	# today's DAILY pick is a hero surface (gold edge + crest).
 	var panel := PanelContainer.new()
-	var accent: Color = MenuTheme.GOLD if item_type == CommunityProvider.TYPE_CHALLENGE else MenuTheme.BORDER
-	if is_daily:
-		accent = MenuTheme.GOLD
-	panel.add_theme_stylebox_override("panel", MenuTheme.card_box(accent))
+	var sb: OrnateStyleBox
+	if item_type == CommunityProvider.TYPE_CHALLENGE or is_daily:
+		sb = MenuTheme.accented_card(MenuTheme.GOLD, SIDE_LEFT, MenuTheme.PANEL, 0.96, is_daily)
+	else:
+		sb = MenuTheme.card_box()
+	sb.content_margin_left = 18.0
+	sb.content_margin_right = 16.0
+	sb.content_margin_top = 18.0 if is_daily else 14.0
+	sb.content_margin_bottom = 12.0
+	panel.add_theme_stylebox_override("panel", sb)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
+	row.add_theme_constant_override("separation", MenuTheme.SP_L)
 	panel.add_child(row)
 
 	# --- Thumbnail (maps get a lazily-generated minimap; others a type glyph) ---
@@ -495,12 +506,10 @@ func _make_card(item: Dictionary) -> Control:
 	row.add_child(info)
 
 	var name_row := HBoxContainer.new()
-	name_row.add_theme_constant_override("separation", 8)
+	name_row.add_theme_constant_override("separation", MenuTheme.SP_S)
 	info.add_child(name_row)
 
-	var name_lbl := Label.new()
-	name_lbl.text = String(item.get("name", "Untitled"))
-	name_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
+	var name_lbl := MenuKit.label(String(item.get("name", "Untitled")), &"SubheadingLabel")
 	# A player-authored title is arbitrary length: clip + ellipsis so it can never push the
 	# chips, vote column and Download button off the right edge of the card.
 	name_lbl.clip_text = true
@@ -509,32 +518,31 @@ func _make_card(item: Dictionary) -> Control:
 	name_lbl.custom_minimum_size = Vector2(120.0, 0.0)
 	name_row.add_child(name_lbl)
 
-	name_row.add_child(MenuTheme.make_chip(
+	var type_badge := MenuKit.badge(
 		"CHALLENGE" if item_type == CommunityProvider.TYPE_CHALLENGE else "MAP",
-		MenuTheme.GOLD if item_type == CommunityProvider.TYPE_CHALLENGE else MenuTheme.CREAM_DIM))
+		MenuTheme.GOLD if item_type == CommunityProvider.TYPE_CHALLENGE else MenuTheme.ACCENT)
+	type_badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	name_row.add_child(type_badge)
 	if is_daily:
-		name_row.add_child(MenuTheme.make_chip("DAILY", MenuTheme.GOLD))
+		var daily_badge := MenuKit.badge("DAILY", MenuTheme.GOLD, true)
+		daily_badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		name_row.add_child(daily_badge)
 
-	var author_lbl := Label.new()
 	var author: String = String(item.get("author", "")).strip_edges()
-	author_lbl.text = "by %s" % author if not author.is_empty() else "by unknown"
-	author_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	author_lbl.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	var author_lbl := MenuKit.label("by %s" % author if not author.is_empty() else "by unknown",
+		&"DimLabel")
+	author_lbl.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	info.add_child(author_lbl)
 
-	var meta_lbl := Label.new()
-	meta_lbl.text = _meta_line(item)
-	meta_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_CAPTION)
-	meta_lbl.add_theme_color_override("font_color", MenuTheme.CREAM_DIM)
+	var meta_lbl := MenuKit.label(_meta_line(item), &"MutedLabel")
+	meta_lbl.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	info.add_child(meta_lbl)
 
 	# --- Vote controls ---
 	row.add_child(_make_vote_controls(id, item))
 
 	# --- Download ---
-	var download_btn := Button.new()
-	download_btn.text = "Download"
-	download_btn.custom_minimum_size = Vector2(120.0, 0.0)
+	var download_btn := MenuKit.button("Download", &"", 150, 46)
 	download_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	download_btn.pressed.connect(func(): _on_download(id, item, download_btn))
 	row.add_child(download_btn)
@@ -551,8 +559,14 @@ func _make_card(item: Dictionary) -> Control:
 ## A 64x64 thumbnail slot. For map items we lazily fetch the payload, validate it into a
 ## MapResource and render a MapPreview minimap (cached by id); other types get a glyph.
 func _make_thumb_slot(item: Dictionary) -> Control:
+	# The map thumbnail frame: a sunk well with a gold-dark edge.
 	var holder := PanelContainer.new()
-	holder.custom_minimum_size = Vector2(64.0, 64.0)
+	var frame := MenuTheme.inset_box()
+	frame.corner = 6.0
+	frame.border_color = MenuTheme.GOLD_DK
+	frame.set_content_margin_all(3)
+	holder.add_theme_stylebox_override("panel", frame)
+	holder.custom_minimum_size = Vector2(70.0, 70.0)
 	holder.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
 	var id: String = String(item.get("id", ""))
@@ -562,20 +576,16 @@ func _make_thumb_slot(item: Dictionary) -> Control:
 		if _thumb_cache.has(id):
 			holder.add_child(_texture_rect(_thumb_cache[id]))
 		else:
-			var placeholder := Label.new()
-			placeholder.text = "..."
+			var placeholder := MenuKit.label("...", &"MutedLabel")
 			placeholder.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			placeholder.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			MenuTheme.style_caption(placeholder)
 			holder.add_child(placeholder)
 			_generate_thumb_async(id, holder)
 	else:
-		var glyph := Label.new()
-		glyph.text = "@"  # simple non-map glyph for challenges
-		glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		glyph.add_theme_color_override("font_color", MenuTheme.GOLD)
-		glyph.add_theme_font_size_override("font_size", MenuTheme.FONT_TITLE)
+		# Non-map items (challenges) get a small heraldic crest instead of a minimap.
+		var glyph := MenuKit.crest("C", MenuTheme.GOLD_DK, MenuTheme.GOLD, 52.0)
+		glyph.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		glyph.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		holder.add_child(glyph)
 
 	return holder
@@ -678,25 +688,24 @@ func _fmt_size(bytes: int) -> String:
 # --- Voting -----------------------------------------------------------------
 
 func _make_vote_controls(id: String, item: Dictionary) -> Control:
+	# Up / score / Down. The two vote buttons are toggles: the player's current vote holds
+	# the theme's gold pressed plate (see _update_vote_ui).
 	var box := VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.custom_minimum_size = Vector2(88.0, 0.0)
+	box.custom_minimum_size = Vector2(96.0, 0.0)
 	box.add_theme_constant_override("separation", 2)
 
-	var up := Button.new()
-	up.text = "Up"
-	up.custom_minimum_size = Vector2(80.0, 30.0)
+	var up := MenuKit.button("Up", &"", 92, 34)
+	up.toggle_mode = true
 	up.pressed.connect(func(): _on_vote(id, 1))
 	box.add_child(up)
 
-	var votes_lbl := Label.new()
+	var votes_lbl := MenuKit.label("", &"SubheadingLabel")
 	votes_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	votes_lbl.add_theme_font_size_override("font_size", MenuTheme.FONT_HEADER)
 	box.add_child(votes_lbl)
 
-	var down := Button.new()
-	down.text = "Down"
-	down.custom_minimum_size = Vector2(80.0, 30.0)
+	var down := MenuKit.button("Down", &"", 92, 34)
+	down.toggle_mode = true
 	down.pressed.connect(func(): _on_vote(id, -1))
 	box.add_child(down)
 
@@ -729,9 +738,12 @@ func _update_vote_ui(id: String) -> void:
 	var up: Button = state.get("up_btn", null)
 	var down: Button = state.get("down_btn", null)
 	if up != null:
-		up.theme_type_variation = "SelectedButton" if my_vote == 1 else &"Button"
+		up.set_pressed_no_signal(my_vote == 1)
 	if down != null:
-		down.theme_type_variation = "SelectedButton" if my_vote == -1 else &"Button"
+		down.set_pressed_no_signal(my_vote == -1)
+	if lbl != null:
+		lbl.add_theme_color_override("font_color", MenuTheme.SUCCESS if my_vote == 1 \
+			else (MenuTheme.DANGER if my_vote == -1 else MenuTheme.CREAM))
 
 
 ## Optimistic vote: apply locally at once, then confirm with the service; revert on error.
@@ -766,7 +778,7 @@ func _on_vote(id: String, dir: int) -> void:
 			s["votes"] = prev_votes
 			_cards[id] = s
 			_update_vote_ui(id)
-			_set_status("Vote failed: %s" % String(result.get("error", "unknown error")))
+			_set_status("Vote failed: %s" % String(result.get("error", "unknown error")), "error")
 	)
 
 
@@ -785,10 +797,10 @@ func _on_download(id: String, item: Dictionary, btn: Button) -> void:
 			var status: String = String(data.get("status", "downloaded"))
 			if status == "already_owned":
 				btn.text = "Owned"
-				_set_status("'%s' is already in your library." % String(item.get("name", "item")))
+				_set_status("'%s' is already in your library." % String(item.get("name", "item")), "info")
 			else:
 				btn.text = "Downloaded"
-				_set_status("Downloaded '%s' to your library." % String(item.get("name", "item")))
+				_set_status("Downloaded '%s' to your library." % String(item.get("name", "item")), "ok")
 				# A fresh MAP install is recorded in MapCatalog's community index so the
 				# versus pickers badge it COMMUNITY instead of CUSTOM (the two are
 				# byte-identical on disk -- the index is the only record). Only fresh
@@ -800,7 +812,7 @@ func _on_download(id: String, item: Dictionary, btn: Button) -> void:
 		else:
 			btn.text = "Retry"
 			btn.disabled = false
-			_set_status("Download failed: %s" % String(result.get("error", "unknown error")))
+			_set_status("Download failed: %s" % String(result.get("error", "unknown error")), "error")
 	)
 
 
@@ -822,9 +834,24 @@ func _on_type_selected(type: String) -> void:
 	_reload()
 
 
-func _set_status(text: String) -> void:
+## The footer status line. [param tone] is MenuKit.set_status's: "", "info", "ok", "warn",
+## "error".
+func _set_status(text: String, tone: String = "") -> void:
 	if _status != null:
-		_status.text = text
+		MenuKit.set_status(_status, text, tone)
+
+
+## Step the sort tab by [param step] (Prev / Next page input), wrapping.
+func _cycle_sort(step: int) -> void:
+	var order: Array = _sort_btns.keys()
+	if order.is_empty():
+		return
+	var i: int = order.find(_sort)
+	var next: String = String(order[wrapi(i + step, 0, order.size())])
+	_on_sort_selected(next)
+	var btn: Button = _sort_btns.get(next, null)
+	if btn != null and is_instance_valid(btn):
+		btn.grab_focus()
 
 
 ## Back goes wherever the entry hint said, falling back to the challenge library. A screen
@@ -832,43 +859,53 @@ func _set_status(text: String) -> void:
 ## what makes a fresh download show up in the list it was fetched for.
 func _on_back_pressed() -> void:
 	if not _return_scene.is_empty() and ResourceLoader.exists(_return_scene):
-		get_tree().change_scene_to_file(_return_scene)
+		MenuNav.change_scene(self, _return_scene)
 		return
-	get_tree().change_scene_to_file(CHALLENGE_BROWSE_SCENE)
+	MenuNav.change_scene(self, CHALLENGE_BROWSE_SCENE)
 
 
 ## Open the player's own published bases. Guarded like the ChallengeBrowse -> Community hop:
 ## a build without the scene reports it rather than changing scene to a missing path.
 func _on_my_bases_pressed() -> void:
 	if not ResourceLoader.exists(MY_BASES_SCENE):
-		_set_status("The base screen is not available in this build.")
+		_set_status("The base screen is not available in this build.", "warn")
 		return
-	get_tree().change_scene_to_file(MY_BASES_SCENE)
+	MenuNav.change_scene(self, MY_BASES_SCENE)
 
 
 ## Open this device's own recordings. Same guard as the My Bases hop above.
 func _on_my_replays_pressed() -> void:
 	if not ResourceLoader.exists(MY_REPLAYS_SCENE):
-		_set_status("The replay screen is not available in this build.")
+		_set_status("The replay screen is not available in this build.", "warn")
 		return
-	get_tree().change_scene_to_file(MY_REPLAYS_SCENE)
+	MenuNav.change_scene(self, MY_REPLAYS_SCENE)
 
 
-func _input(event: InputEvent) -> void:
-	if not event.is_pressed():
+## Up / Down between controls is the engine's focus navigation (arrows, D-pad, stick).
+## Unhandled input only: a focused control -- and above all the search field, where Cancel's
+## Backspace / X / C are just typing -- always sees its keys first.
+func _unhandled_input(event: InputEvent) -> void:
+	if _search_edit != null and _search_edit.has_focus():
 		return
-	if event is InputEventKey:
-		# Don't steal typing (or ESC-to-dismiss) while the search field is focused.
-		if _search_edit != null and _search_edit.has_focus():
-			return
-		match (event as InputEventKey).keycode:
-			KEY_ESCAPE:
-				_on_back_pressed()
-			KEY_DOWN:
-				var next := find_next_valid_focus()
-				if next != null:
-					next.grab_focus()
-			KEY_UP:
-				var prev := find_prev_valid_focus()
-				if prev != null:
-					prev.grab_focus()
+	if MenuNav.is_back_event(event):
+		get_viewport().set_input_as_handled()
+		_on_back_pressed()
+	elif MenuNav.is_next_event(event):
+		get_viewport().set_input_as_handled()
+		_cycle_sort(1)
+	elif MenuNav.is_prev_event(event):
+		get_viewport().set_input_as_handled()
+		_cycle_sort(-1)
+
+
+## [MenuNav.focus_deferred], but safe when the control leaves the tree first (a repaint
+## rebuilt it, or the screen closed) -- grab_focus() on a detached control is an engine error.
+func _focus_later(c: Control) -> void:
+	if c == null:
+		return
+	# Captured by instance id, not by reference: a freed capture is itself an engine error.
+	var id: int = c.get_instance_id()
+	(func() -> void:
+		var ctl := instance_from_id(id) as Control
+		if ctl != null and ctl.is_inside_tree() and ctl.is_visible_in_tree():
+			ctl.grab_focus()).call_deferred()

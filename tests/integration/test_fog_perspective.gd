@@ -148,7 +148,7 @@ func test_a_replay_viewer_sees_everything() -> void:
 	_guard.set_setting("game_mode", GameSettings.GameMode.VERSUS)
 	_seat([{"id": 0, "ai": false}, {"id": 1, "ai": false}], 0)
 	var vision := _fog_on()
-	vision.hide_cells(0, [Vector2i(1, 1)])
+	vision.hide_cells(0, [Vector3i(1, 1, 0)])
 	assert_true(FogOfWarOverlay.fog_active(), "fog is on for a player")
 
 	ReplayPlayback.begin_playback()
@@ -157,7 +157,7 @@ func test_a_replay_viewer_sees_everything() -> void:
 		"a replay viewer has no seat -- the perspective is SPECTATOR")
 	assert_false(FogOfWarOverlay.fog_active(),
 		"nothing is hidden from someone who is not making decisions")
-	assert_false(FogOfWarOverlay.cell_hidden(Vector2i(1, 1)),
+	assert_false(FogOfWarOverlay.cell_hidden(Vector3i(1, 1, 0)),
 		"a cell the player could not see is fully visible to the spectator")
 
 
@@ -165,13 +165,13 @@ func test_leaving_the_replay_puts_the_fog_back() -> void:
 	_guard.set_setting("game_mode", GameSettings.GameMode.SINGLE_PLAYER)
 	_seat([{"id": 0, "ai": false}, {"id": 1, "ai": true}], 0)
 	var vision := _fog_on()
-	vision.hide_cells(0, [Vector2i(2, 2)])
+	vision.hide_cells(0, [Vector3i(2, 2, 0)])
 
 	ReplayPlayback.begin_playback()
-	assert_false(FogOfWarOverlay.cell_hidden(Vector2i(2, 2)), "spectating: no fog")
+	assert_false(FogOfWarOverlay.cell_hidden(Vector3i(2, 2, 0)), "spectating: no fog")
 	ReplayPlayback.end_playback()
 
-	assert_true(FogOfWarOverlay.cell_hidden(Vector2i(2, 2)),
+	assert_true(FogOfWarOverlay.cell_hidden(Vector3i(2, 2, 0)),
 		"back in a real battle, the mist is back -- spectator mode is not sticky")
 
 
@@ -185,7 +185,7 @@ func test_with_no_vision_core_mounted_every_gate_answers_false() -> void:
 	FogOfWarOverlay.set_vision_override(null)
 
 	assert_false(FogOfWarOverlay.fog_active(), "no vision core: fog is off")
-	assert_false(FogOfWarOverlay.cell_hidden(Vector2i(3, 3)), "no cell is hidden")
+	assert_false(FogOfWarOverlay.cell_hidden(Vector3i(3, 3, 0)), "no cell is hidden")
 	assert_false(FogOfWarOverlay.world_hidden(Vector3(6.0, 0.0, 6.0)), "no world point is hidden")
 
 
@@ -193,12 +193,12 @@ func test_a_core_reporting_fog_off_hides_nothing() -> void:
 	_guard.set_setting("game_mode", GameSettings.GameMode.SINGLE_PLAYER)
 	_seat([{"id": 0, "ai": false}], 0)
 	var vision := _fog_on()
-	vision.hide_cells(0, [Vector2i(0, 0), Vector2i(1, 0)])
+	vision.hide_cells(0, [Vector3i(0, 0, 0), Vector3i(1, 0, 0)])
 	vision.enabled = false
 
 	assert_false(FogOfWarOverlay.fog_active(),
 		"MapResource.fog_of_war is the toggle -- off means the layer is inert")
-	assert_false(FogOfWarOverlay.cell_hidden(Vector2i(0, 0)),
+	assert_false(FogOfWarOverlay.cell_hidden(Vector3i(0, 0, 0)),
 		"fog off = everything visible, whatever the core's hidden sets say")
 
 
@@ -206,7 +206,7 @@ func test_the_world_to_cell_fold_matches_the_board() -> void:
 	_guard.set_setting("game_mode", GameSettings.GameMode.SINGLE_PLAYER)
 	_seat([{"id": 0, "ai": false}], 0)
 	var vision := _fog_on()
-	vision.hide_cells(0, [Vector2i(2, 1)])
+	vision.hide_cells(0, [Vector3i(2, 1, 0)])
 
 	# Cells are 2x2 world units; cell (2,1) spans x 4..6, z 2..4.
 	assert_true(FogOfWarOverlay.world_hidden(Vector3(5.0, 0.0, 3.0)),

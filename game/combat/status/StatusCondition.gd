@@ -129,10 +129,12 @@ func tick(target, board) -> Array[Dictionary]:
 	var events: Array[Dictionary] = []
 	if target == null or board == null:
 		return events
-	var cell: Vector2i = Vector2i.ZERO
+	var cell: Vector3i = Vector3i.ZERO
 	if board.has_method("cell_of"):
 		cell = board.cell_of(target)
-	var ctx := MoveContext.new(target, board, _tick_move(), cell, [cell] as Array[Vector2i])
+	var ctx := MoveContext.new(target, board, _tick_move(), cell, [cell] as Array[Vector3i])
+	# Floating combat text / battle log: name the status as the source ("Poisoned").
+	ctx.source = CombatText.make_source(CombatText.SRC_STATUS, display_name if display_name != "" else String(id), id)
 	# A tick is not a swing: it ALWAYS lands. Without this the shared damage pipeline
 	# rolls the victim's evasion (terrain avoid included) against a poison it is already
 	# carrying, on an unseeded per-tick RNG -- so a poisoned unit standing in tall grass

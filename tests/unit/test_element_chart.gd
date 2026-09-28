@@ -246,8 +246,8 @@ func test_damage_scale_applies_the_matchup() -> void:
 func test_a_matching_tile_amplifies_and_a_home_tile_protects() -> void:
 	var board := Doubles.TileEffectBoard.new()
 	var target := _ElementUnit.new(&"nature")
-	board.place(target, Vector2i(1, 1))
-	board.set_tile_effects(Vector2i(1, 1), [_TileEffect.new(&"tall_grass")])
+	board.place(target, Vector3i(1, 1, 0))
+	board.set_tile_effects(Vector3i(1, 1, 0), [_TileEffect.new(&"tall_grass")])
 
 	var fire := MoveResource.new()
 	fire.element = &"fire"
@@ -266,12 +266,12 @@ func test_a_matching_tile_amplifies_and_a_home_tile_protects() -> void:
 func test_tile_elements_are_read_from_the_chart_resource() -> void:
 	var board := Doubles.TileEffectBoard.new()
 	var target := _ElementUnit.new(&"nature")
-	board.place(target, Vector2i(0, 0))
-	board.set_tile_effects(Vector2i(0, 0), [_TileEffect.new(&"molten_lava"), null])
+	board.place(target, Vector3i(0, 0, 0))
+	board.set_tile_effects(Vector3i(0, 0, 0), [_TileEffect.new(&"molten_lava"), null])
 	assert_eq(ElementChart.tile_elements_under(target, board), [&"fire"],
 		"a lava tile reads as fire, and a null effect in the list is skipped quietly")
 
-	board.set_tile_effects(Vector2i(0, 0), [_TileEffect.new(&"unmapped_terrain")])
+	board.set_tile_effects(Vector3i(0, 0, 0), [_TileEffect.new(&"unmapped_terrain")])
 	assert_eq(ElementChart.tile_elements_under(target, board), [],
 		"terrain with no authored element contributes none, rather than erroring")
 

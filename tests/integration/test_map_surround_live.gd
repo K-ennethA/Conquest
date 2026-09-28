@@ -149,7 +149,8 @@ func test_the_surround_can_be_switched_off_for_the_true_grid() -> void:
 func test_the_tile_container_holds_exactly_the_playable_cells() -> void:
 	var battle := _load_battle()
 	var res: MapResource = battle["res"]
-	var tiles: Node = (battle["map"] as Node3D).get_node("Tiles")
+	# Multi-floor loader: ground tiles live under Tiles/Floor_0 (upper floors get their own container).
+	var tiles: Node = (battle["map"] as Node3D).get_node("Tiles/Floor_0")
 	assert_eq(tiles.get_child_count(), res.width * res.height,
 		"the board is still width x height tiles -- the surround contributed none of them")
 
@@ -161,13 +162,13 @@ func test_no_decor_cell_is_registered_as_terrain() -> void:
 	var battle := _load_battle()
 	var res: MapResource = battle["res"]
 
-	assert_not_null(CombatServices.tile_at(Vector2i(0, 0)),
+	assert_not_null(CombatServices.tile_at(Vector3i(0, 0, 0)),
 		"the board's own corner cell IS registered terrain")
-	assert_null(CombatServices.tile_at(Vector2i(-1, -1)),
+	assert_null(CombatServices.tile_at(Vector3i(-1, -1, 0)),
 		"a ring cell diagonally off the corner is not terrain -- it is scenery")
-	assert_null(CombatServices.tile_at(Vector2i(-1, 0)),
+	assert_null(CombatServices.tile_at(Vector3i(-1, 0, 0)),
 		"a ring cell directly west of the board edge is not terrain")
-	assert_null(CombatServices.tile_at(Vector2i(res.width, res.height - 1)),
+	assert_null(CombatServices.tile_at(Vector3i(res.width, res.height - 1, 0)),
 		"a ring cell directly east of the far board edge is not terrain")
 
 

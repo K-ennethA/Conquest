@@ -58,19 +58,20 @@ class FakeUnit extends RefCounted:
 class FakeBoard extends RefCounted:
 	var cells: Dictionary = {}
 
-	func place(unit, cell: Vector2i) -> void:
-		cells[unit] = cell
+	func place(unit, cell) -> void:
+		cells[unit] = Cells.from_variant(cell)
 
-	func cell_of(unit) -> Vector2i:
-		return cells.get(unit, Vector2i(-999, -999))
+	func cell_of(unit) -> Vector3i:
+		return cells.get(unit, Vector3i(-999, -999, 0))
 
 	func all_units() -> Array:
 		return cells.keys()
 
-	func units_at(cell: Vector2i) -> Array:
+	func units_at(cell) -> Array:
+		var at: Vector3i = Cells.from_variant(cell)
 		var out: Array = []
 		for unit in cells:
-			if cells[unit] == cell:
+			if cells[unit] == at:
 				out.append(unit)
 		return out
 
@@ -86,7 +87,10 @@ class FakeSpawner extends RefCounted:
 		board = p_board
 
 	func spawn_and_adopt(spawn_data, player_id, hint = 0):
-		var cell: Vector2i = spawn_data.get("position", Vector2i(-1, -1))
+		# The spawn payload may carry the cell as a Vector3i, or map-style as a Vector2i
+		# "position" plus a separate "floor": normalise either to a Vector3i cell.
+		var cell: Vector3i = Cells.from_variant(spawn_data.get("position", Vector2i(-1, -1)),
+			int(spawn_data.get("floor", 0)))
 		calls.append({
 			"cell": cell,
 			"player_id": player_id,
@@ -137,15 +141,15 @@ class FakeSpeedTS extends RefCounted:
 # Fixture
 # ==============================================================================
 
-const LANE_A: Array = [Vector2i(1, 1), Vector2i(5, 1), Vector2i(9, 1)]
-const LANE_B: Array = [Vector2i(1, 7), Vector2i(5, 7), Vector2i(9, 7)]
-const P0_BASE := Vector2i(0, 0)
-const P1_BASE := Vector2i(10, 10)
+const LANE_A: Array = [Vector3i(1, 1, 0), Vector3i(5, 1, 0), Vector3i(9, 1, 0)]
+const LANE_B: Array = [Vector3i(1, 7, 0), Vector3i(5, 7, 0), Vector3i(9, 7, 0)]
+const P0_BASE := Vector3i(0, 0, 0)
+const P1_BASE := Vector3i(10, 10, 0)
 
 ## Two midpoints, authored OUT of sorted order on purpose: the controller is what canonicalises
 ## them, so the payout order is a property of the map rather than of the authoring.
-const POINT_NEAR_B := Vector2i(5, 6)
-const POINT_NEAR_A := Vector2i(4, 2)
+const POINT_NEAR_B := Vector3i(5, 6, 0)
+const POINT_NEAR_A := Vector3i(4, 2, 0)
 
 const BASE_MOVEMENT := 3
 const BASE_HEALTH := 40
@@ -167,13 +171,31 @@ func after_each() -> void:
 	ModeTuning.clear()
 
 
+## The fixture cells above are gameplay cells ([Vector3i]); what a MapResource AUTHORS is the
+## flat (col, row) map position ([Vector2i]). Convert on the way into the fake map.
+static func _authored(cells: Array) -> Array:
+	var out: Array = []
+	for c in cells:
+		out.append(Cells.flat(c))
+	return out
+
+
+## Any cell list the controller hands back, normalised to [Vector3i] so the assertion does not
+## depend on which cell type the controller stores.
+static func _cells(raw: Array) -> Array:
+	var out: Array = []
+	for c in raw:
+		out.append(Cells.from_variant(c))
+	return out
+
+
 func _map(points: Array = [POINT_NEAR_B, POINT_NEAR_A], two_lanes: bool = true) -> FakeMap:
 	var m := FakeMap.new()
-	m.lanes = [LANE_A.duplicate()]
+	m.lanes = [_authored(LANE_A)]
 	if two_lanes:
-		m.lanes.append(LANE_B.duplicate())
-	m.base_cells = {0: P0_BASE, 1: P1_BASE}
-	m.control_points = points.duplicate()
+		m.lanes.append(_authored(LANE_B))
+	m.base_cells = {0: Cells.flat(P0_BASE), 1: Cells.flat(P1_BASE)}
+	m.control_points = _authored(points)
 	return m
 
 
@@ -206,7 +228,7 @@ func _controller(map = null, rs: SiegeRuleset = null, spawner = null, board = nu
 
 ## Drive a full claim of [param cell] by [param side] under Traditional: the hero ends its turn
 ## on the cell, and the side's next turn start resolves it.
-func _claim(c: SiegeController, ts: FakeTraditionalTS, player: FakePlayer, unit, cell: Vector2i) -> void:
+func _claim(c: SiegeController, ts: FakeTraditionalTS, player: FakePlayer, unit, cell: Vector3i) -> void:
 	_board.place(unit, cell)
 	c.handle_turn_ended(player, ts)
 	ts.current_turn += 2
@@ -234,8 +256,8 @@ func test_a_map_resource_without_the_field_at_all_is_read_as_none() -> void:
 	# The map schema is owned by the map layer and lands separately: a build whose MapResource
 	# predates it must resolve to an inert midpoint machine, never to an error.
 	var legacy := LegacyMap.new()
-	legacy.lanes = [LANE_A.duplicate()]
-	legacy.base_cells = {0: P0_BASE, 1: P1_BASE}
+	legacy.lanes = [_authored(LANE_A)]
+	legacy.base_cells = {0: Cells.flat(P0_BASE), 1: Cells.flat(P1_BASE)}
 	var c := _controller(legacy)
 	assert_true(c.is_active(), "the mode still runs on a map without the new field")
 	assert_false(c.has_control_points(), "it simply has no midpoints")
@@ -243,7 +265,7 @@ func test_a_map_resource_without_the_field_at_all_is_read_as_none() -> void:
 
 func test_the_authored_points_are_deduplicated_and_sorted() -> void:
 	var c := _controller(_map([POINT_NEAR_B, POINT_NEAR_A, POINT_NEAR_B]))
-	assert_eq(c.control_points(), [POINT_NEAR_A, POINT_NEAR_B],
+	assert_eq(_cells(c.control_points()), [POINT_NEAR_A, POINT_NEAR_B],
 		"a duplicate cell is one point, and the order is canonical (x then y) rather than "
 		+ "however the map happened to list them -- that is what makes every payout pass "
 		+ "reproducible on both peers")
@@ -289,7 +311,7 @@ func test_surviving_to_the_next_turn_start_takes_the_point() -> void:
 	c.handle_turn_started(_p0, ts)
 	assert_eq(c.control_point_owner(POINT_NEAR_A), 0, "our own next turn start takes it")
 	assert_eq(c.control_point_claimer(POINT_NEAR_A), -1, "and consumes the pending claim")
-	assert_eq(c.control_points_owned(0), [POINT_NEAR_A], "it shows up in our owned list")
+	assert_eq(_cells(c.control_points_owned(0)), [POINT_NEAR_A], "it shows up in our owned list")
 	assert_eq(c.control_points_owned(1), [], "and not the enemy's")
 
 
@@ -300,7 +322,7 @@ func test_walking_off_before_the_claim_lands_interrupts_it() -> void:
 	_board.place(hero, POINT_NEAR_A)
 	c.handle_turn_ended(_p0, ts)
 
-	_board.place(hero, Vector2i(6, 6))
+	_board.place(hero, Vector3i(6, 6, 0))
 	ts.current_turn = 3
 	c.handle_turn_started(_p0, ts)
 	assert_eq(c.control_point_owner(POINT_NEAR_A), -1,
@@ -348,13 +370,13 @@ func test_the_enemy_flips_a_held_point_by_repeating_the_claim() -> void:
 	assert_eq(c.control_point_owner(POINT_NEAR_A), 0, "ours to begin with")
 
 	# Our holder is dislodged, and an enemy hero repeats the trick on the same cell.
-	_board.place(mine, Vector2i(2, 2))
+	_board.place(mine, Vector3i(2, 2, 0))
 	var theirs := FakeUnit.new(1)
 	_claim(c, ts, _p1, theirs, POINT_NEAR_A)
 
 	assert_eq(c.control_point_owner(POINT_NEAR_A), 1, "the same rule flips it, with no special case")
 	assert_eq(c.control_points_owned(0), [], "it leaves our owned list")
-	assert_eq(c.control_points_owned(1), [POINT_NEAR_A], "and joins theirs")
+	assert_eq(_cells(c.control_points_owned(1)), [POINT_NEAR_A], "and joins theirs")
 
 
 func test_standing_on_a_point_you_already_own_is_a_hold_not_a_claim() -> void:
@@ -379,8 +401,8 @@ func test_two_points_are_claimed_independently() -> void:
 
 	assert_eq(c.control_point_owner(POINT_NEAR_A), 0, "each side holds what it took")
 	assert_eq(c.control_point_owner(POINT_NEAR_B), 1, "and only that")
-	assert_eq(c.control_points_owned(0), [POINT_NEAR_A], "owned lists stay sorted per side")
-	assert_eq(c.control_points_owned(1), [POINT_NEAR_B], "on both sides")
+	assert_eq(_cells(c.control_points_owned(0)), [POINT_NEAR_A], "owned lists stay sorted per side")
+	assert_eq(_cells(c.control_points_owned(1)), [POINT_NEAR_B], "on both sides")
 
 
 # ==============================================================================
@@ -426,7 +448,7 @@ func test_speed_first_only_the_claimants_own_turn_completes_it() -> void:
 	var holder := FakeUnit.new(0)
 	var other := FakeUnit.new(0)
 	_board.place(holder, POINT_NEAR_A)
-	_board.place(other, Vector2i(3, 3))
+	_board.place(other, Vector3i(3, 3, 0))
 
 	ts.current_acting_unit = holder
 	c.handle_turn_ended(_p0, ts)
@@ -456,7 +478,7 @@ func test_speed_first_the_claimant_being_dislodged_still_interrupts() -> void:
 	ts.current_acting_unit = holder
 	c.handle_turn_ended(_p0, ts)
 
-	_board.place(holder, POINT_NEAR_A + Vector2i(1, 0))
+	_board.place(holder, POINT_NEAR_A + Vector3i(1, 0, 0))
 	ts.round_number = 2
 	c.handle_turn_started(_p0, ts)
 	assert_eq(c.control_point_owner(POINT_NEAR_A), -1,
@@ -472,7 +494,7 @@ func test_the_nearest_lane_is_pure_arithmetic_over_the_map() -> void:
 	assert_eq(c.nearest_lane_index(POINT_NEAR_A), 0,
 		"(4,2) is one cell off lane A, so lane A is the one its reinforcements join")
 	assert_eq(c.nearest_lane_index(POINT_NEAR_B), 1, "and (5,6) sits beside lane B")
-	assert_eq(c.nearest_lane_index(Vector2i(5, 4)), 0,
+	assert_eq(c.nearest_lane_index(Vector3i(5, 4, 0)), 0,
 		"a cell exactly between the two lanes breaks the tie on the LOWER index, so the answer "
 		+ "is fixed rather than whichever lane was visited first")
 
@@ -494,7 +516,7 @@ func test_an_owned_point_adds_exactly_the_knobs_creeps_at_its_own_cell() -> void
 		assert_eq(call["cell"], POINT_NEAR_B, "each one enters AT the point, not at a lane end")
 		assert_eq(int(call["player_id"]), 0, "for the side that holds it, and only that side")
 
-	assert_eq(BotController.march_lane(spawner.units[0]), LANE_B,
+	assert_eq(_cells(BotController.march_lane(spawner.units[0])), LANE_B,
 		"and marches the lane NEAREST the point -- lane B, in player 0's authored direction")
 	assert_true(CaptureBase.is_creep(spawner.units[0]),
 		"a midpoint reinforcement is a creep like any other: it can never claim anything")
@@ -648,7 +670,7 @@ func test_a_unit_standing_off_the_point_is_healed_by_nothing() -> void:
 
 	var elsewhere := _unit(0)
 	_wound(elsewhere, 10)
-	_board.place(elsewhere, Vector2i(7, 7))
+	_board.place(elsewhere, Vector3i(7, 7, 0))
 
 	c.observe_round(1)
 	assert_eq(elsewhere.current_health, 10,
@@ -708,7 +730,7 @@ func test_with_no_mode_armed_the_camp_kill_still_pays_the_permanent_bounty() -> 
 	var killer := FakeUnit.new(0)
 	var camp := FakeUnit.new(2)
 	camp.is_neutral = true
-	_board.place(killer, Vector2i(2, 2))
+	_board.place(killer, Vector3i(2, 2, 0))
 
 	runtime._on_damage_dealt(killer, camp, 40)
 	camp.hp = 0
@@ -726,7 +748,7 @@ func test_in_siege_the_camp_kill_pays_a_timed_buff_instead_of_the_ledger() -> vo
 	assert_eq(runtime.camp_buff_turns(), 5, "the mode's ruleset is where the timer comes from")
 
 	var killer := _unit(0)
-	_board.place(killer, Vector2i(2, 2))
+	_board.place(killer, Vector3i(2, 2, 0))
 	var camp := FakeUnit.new(2)
 	camp.is_neutral = true
 
@@ -748,7 +770,7 @@ func test_the_timed_buff_expires_after_exactly_the_knobs_turns() -> void:
 	var runtime := _runtime(_board)
 
 	var killer := _unit(0)
-	_board.place(killer, Vector2i(2, 2))
+	_board.place(killer, Vector3i(2, 2, 0))
 	var camp := FakeUnit.new(2)
 	camp.is_neutral = true
 	runtime._on_damage_dealt(killer, camp, 40)
@@ -773,7 +795,7 @@ func test_a_second_camp_kill_refreshes_the_buff_and_never_stacks_it() -> void:
 	var runtime := _runtime(_board)
 
 	var killer := _unit(0)
-	_board.place(killer, Vector2i(2, 2))
+	_board.place(killer, Vector3i(2, 2, 0))
 	var sc := killer.get_status_controller()
 
 	for kill in range(2):
@@ -801,9 +823,9 @@ func test_only_the_killers_side_is_paid() -> void:
 	var killer := _unit(0)
 	var bystander := _unit(0)
 	var enemy := _unit(1)
-	_board.place(killer, Vector2i(2, 2))
-	_board.place(bystander, Vector2i(3, 3))
-	_board.place(enemy, Vector2i(8, 8))
+	_board.place(killer, Vector3i(2, 2, 0))
+	_board.place(bystander, Vector3i(3, 3, 0))
+	_board.place(enemy, Vector3i(8, 8, 0))
 
 	var camp := FakeUnit.new(2)
 	camp.is_neutral = true

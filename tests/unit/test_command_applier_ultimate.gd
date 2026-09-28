@@ -4,7 +4,7 @@ extends GutTest
 #
 # The rule: the full-screen cut-in belongs where a cast APPLIES, not where it is submitted.
 # In a networked match every peer -- the caster's own client included -- runs the resolved
-# CAST_MOVE through CommandApplier, so emitting GameEvents.ultimate_casting there is what
+# CAST_MOVE through the ONE apply path (NetGameRules, which CommandApplier extends), so emitting GameEvents.ultimate_casting there is what
 # makes a REMOTE opponent's ultimate flash on this client, and makes it flash exactly ONCE
 # for the local caster (UnitActionsPanel's networked branch deliberately does not play it).
 #
@@ -34,7 +34,7 @@ class CastingUnit extends RefCounted:
 	func get_move(slot: int) -> MoveResource:
 		return moves.get(slot, null)
 
-	func perform_move(slot: int, _aim: Vector2i, _board, _rng = null) -> Dictionary:
+	func perform_move(slot: int, _aim: Vector3i, _board, _rng = null) -> Dictionary:
 		casts.append(slot)
 		return { "success": true, "reason": "", "events": [] }
 
@@ -47,7 +47,7 @@ class CastingUnit extends RefCounted:
 ## The shape of a unit that predates the moveset accessor (and of the loopback suite's mock):
 ## it can cast, but cannot be asked WHICH move a slot holds.
 class MoveslessUnit extends RefCounted:
-	func perform_move(_slot: int, _aim: Vector2i, _board, _rng = null) -> Dictionary:
+	func perform_move(_slot: int, _aim: Vector3i, _board, _rng = null) -> Dictionary:
 		return { "success": true, "reason": "", "events": [] }
 
 
@@ -59,16 +59,36 @@ func _move(display_name: String, ultimate: bool) -> MoveResource:
 	move.is_ultimate = ultimate
 	return move
 
-## An applier holding one registered unit (net_id 1) with the given slot -> move map.
-func _applier_with(unit) -> CommandApplier:
-	var reg := CommandApplier.UnitRegistry.new()
-	reg.register(unit, 1)
-	return CommandApplier.new(reg, null)
+## A one-unit board: the surface the merged apply path (NetGameRules) reads -- all_units()
+## to resolve NetUnitIds, cell_of() for the digest.
+class OneUnitBoard extends RefCounted:
+	var units: Array = []
+	func all_units() -> Array:
+		return units
+	func cell_of(_u) -> Vector3i:
+		return Vector3i(1, 1, 0)
+	func move_unit(_u, _to: Vector3i) -> void:
+		pass
 
-## A resolved CAST_MOVE the way the authority stamps one before broadcasting.
-func _cast(net_id: int, slot: int) -> Dictionary:
+## An applier over a board holding one unit named "0:0" with the given slot -> move map.
+## (Merged core: units are named by NetUnitIds strings on the board, not an int registry.)
+func _applier_with(unit) -> CommandApplier:
+	var board := OneUnitBoard.new()
+	if unit != null:
+		board.units.append(unit)
+		unit.set_meta(NetUnitIds.META, "0:0")
+	return CommandApplier.new(null, null, func(): return board, func(): return null)
+
+## A resolved CAST_MOVE the way a peer holds one right before applying it.
+func _cast(net_id: String, slot: int) -> Dictionary:
 	return NetProtocol.stamp_resolution(
-		NetProtocol.make_cast_move(net_id, slot, Vector2i(2, 2), 0), 1, 0)
+		NetProtocol.make_cast_move(net_id, slot, Vector3i(2, 2, 0), 0), 1, 0)
+
+func after_each():
+	# Applying installs the action's generator as CombatServices.match_rng (the merged apply
+	# path does, so secondary rolls share it); do not leak it into the next suite.
+	if CombatServices != null:
+		CombatServices.match_rng = null
 
 
 # --- 1. An ultimate announces itself on apply --------------------------------
@@ -79,7 +99,7 @@ func test_applying_an_ultimate_cast_raises_ultimate_casting():
 	var applier := _applier_with(unit)
 
 	watch_signals(GameEvents)
-	var res: Dictionary = applier.apply_command(_cast(1, 3), null, null)
+	var res: Dictionary = applier.apply_command(_cast("0:0", 3), null, null)
 
 	assert_true(bool(res["ok"]), "the cast still resolves normally")
 	assert_signal_emit_count(GameEvents, "ultimate_casting", 1,
@@ -95,7 +115,7 @@ func test_the_is_ultimate_flag_announces_from_an_earlier_slot():
 	var applier := _applier_with(unit)
 
 	watch_signals(GameEvents)
-	applier.apply_command(_cast(1, 1), null, null)
+	applier.apply_command(_cast("0:0", 1), null, null)
 
 	assert_signal_emit_count(GameEvents, "ultimate_casting", 1,
 		"a move flagged is_ultimate flashes from any slot, exactly as it does locally")
@@ -109,7 +129,7 @@ func test_an_ordinary_cast_does_not_flash():
 	var applier := _applier_with(unit)
 
 	watch_signals(GameEvents)
-	var res: Dictionary = applier.apply_command(_cast(1, 0), null, null)
+	var res: Dictionary = applier.apply_command(_cast("0:0", 0), null, null)
 
 	assert_true(bool(res["ok"]), "the ordinary cast resolves")
 	assert_signal_emit_count(GameEvents, "ultimate_casting", 0,
@@ -121,7 +141,7 @@ func test_an_empty_slot_does_not_flash():
 	var applier := _applier_with(unit)
 
 	watch_signals(GameEvents)
-	applier.apply_command(_cast(1, 3), null, null)
+	applier.apply_command(_cast("0:0", 3), null, null)
 
 	assert_signal_emit_count(GameEvents, "ultimate_casting", 0,
 		"a null move in the ultimate slot is not an ultimate")
@@ -130,12 +150,12 @@ func test_an_empty_slot_does_not_flash():
 # --- 3. A cast that cannot resolve never flashes ------------------------------
 
 func test_an_unknown_unit_never_flashes():
-	var applier := CommandApplier.new(CommandApplier.UnitRegistry.new(), null)
+	var applier := _applier_with(null)
 
 	watch_signals(GameEvents)
-	var res: Dictionary = applier.apply_command(_cast(99, 3), null, null)
+	var res: Dictionary = applier.apply_command(_cast("9:9", 3), null, null)
 
-	assert_false(bool(res["ok"]), "an unregistered net_id fails the apply")
+	assert_false(bool(res["ok"]), "an unknown unit id fails the apply")
 	assert_eq(String(res["reason"]), "unknown_unit", "and says why, as a returned value")
 	assert_signal_emit_count(GameEvents, "ultimate_casting", 0,
 		"no flash for a cast that never happened")
@@ -150,7 +170,7 @@ func test_a_unit_without_get_move_is_skipped_not_errored():
 	var applier := _applier_with(unit)
 
 	watch_signals(GameEvents)
-	var res: Dictionary = applier.apply_command(_cast(1, 3), null, null)
+	var res: Dictionary = applier.apply_command(_cast("0:0", 3), null, null)
 
 	assert_true(bool(res["ok"]), "the cast applies unchanged for a unit with no moveset accessor")
 	assert_signal_emit_count(GameEvents, "ultimate_casting", 0,

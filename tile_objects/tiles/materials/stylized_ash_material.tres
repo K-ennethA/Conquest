@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://tile_objects/tiles/shaders/stylized_ground.gdshader" id="1_ground"]
+
+[resource]
+resource_name = "StylizedAsh"
+shader = ExtResource("1_ground")
+shader_parameter/col_dark = Color(0.36, 0.34, 0.33, 1)
+shader_parameter/col_mid = Color(0.52, 0.5, 0.48, 1)
+shader_parameter/col_light = Color(0.68, 0.66, 0.62, 1)
+shader_parameter/speck_color = Color(0.95, 0.45, 0.15, 1)
+shader_parameter/speck_density = 0.05
+shader_parameter/dab_scale = 1.6
+shader_parameter/contrast = 1.3

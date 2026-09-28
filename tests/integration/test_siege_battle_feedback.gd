@@ -551,7 +551,7 @@ func test_the_objective_banner_carries_the_live_capture_progress_line() -> void:
 	layout.objective_banner.set_objectives([objective])
 	await _settle()
 
-	var label: Label = layout.objective_banner.get_node_or_null("ObjectiveLabel") as Label
+	var label: Label = layout.objective_banner.find_child("ObjectiveLabel", true, false) as Label
 	assert_not_null(label, "the banner draws a label")
 	if label == null:
 		return

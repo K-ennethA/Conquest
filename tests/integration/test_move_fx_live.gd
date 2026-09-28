@@ -54,7 +54,7 @@ func after_each() -> void:
 
 # --- Fixture ------------------------------------------------------------------
 
-func _cell_to_world(cell: Vector2i) -> Vector3:
+func _cell_to_world(cell: Vector3i) -> Vector3:
 	return BoardAdapter.new(GRID, []).cell_to_world(cell)
 
 
@@ -108,7 +108,7 @@ func _blast() -> MoveResource:
 	return m
 
 
-func _spawn(character_id: StringName, cell: Vector2i, owner: Player) -> Unit:
+func _spawn(character_id: StringName, cell: Vector3i, owner: Player) -> Unit:
 	var character := CharacterLibrary.get_character(character_id)
 	if character == null:
 		return null
@@ -131,8 +131,8 @@ func _build_battle() -> Dictionary:
 	var side_b := Player.new(1, "B")
 	# Three cells apart on the Manhattan diagonal the blast's max_range (3) exactly reaches,
 	# so a cast aimed at the target is legal and its 3x3 never covers the caster's own cell.
-	var caster := _spawn(CASTER_ID, Vector2i(0, 0), side_a)
-	var target := _spawn(TARGET_ID, Vector2i(2, 1), side_b)
+	var caster := _spawn(CASTER_ID, Vector3i(0, 0, 0), side_a)
+	var target := _spawn(TARGET_ID, Vector3i(2, 1, 0), side_b)
 	if caster == null or target == null:
 		return {}
 
@@ -157,8 +157,13 @@ func _await_until(predicate: Callable, max_frames: int) -> bool:
 	return bool(predicate.call())
 
 
-func _impact_cells() -> Array[Vector2i]:
-	return _fx.live_impact_cells()
+func _impact_cells() -> Array[Vector3i]:
+	# Normalised through Cells.from_variant so the assertions compare (col, row, floor)
+	# cells whatever array type the dispatcher hands back.
+	var out: Array[Vector3i] = []
+	for cell in _fx.live_impact_cells():
+		out.append(Cells.from_variant(cell))
+	return out
 
 
 # --- A real cast lights every cell of its area --------------------------------
@@ -173,19 +178,19 @@ func test_a_real_cast_erupts_on_every_cell_of_its_area() -> void:
 		pending("CombatServices.board() is null after rebuild(); skipping.")
 		return
 
-	var result: Dictionary = caster.perform_move(0, Vector2i(2, 1), battle["board"])
+	var result: Dictionary = caster.perform_move(0, Vector3i(2, 1, 0), battle["board"])
 	assert_true(bool(result.get("success", false)), "the test blast resolved on the live board")
 	await get_tree().process_frame  # the dispatcher flushes DEFERRED, like DamageNumbers
 
-	var cells: Array[Vector2i] = _impact_cells()
+	var cells: Array[Vector3i] = _impact_cells()
 	# 9 blast cells + the caster's own cast accent. The accent carries the caster's cell,
 	# which is outside the blast here, so the two never conflate.
-	assert_true(cells.has(Vector2i(0, 0)),
+	assert_true(cells.has(Vector3i(0, 0, 0)),
 		"the caster gets a cast accent on its own cell for every move it makes")
 	var blast: int = 0
 	for dx in [-1, 0, 1]:
 		for dy in [-1, 0, 1]:
-			var cell := Vector2i(2 + dx, 1 + dy)
+			var cell := Vector3i(2 + dx, 1 + dy, 0)
 			assert_true(cells.has(cell), "blast cell (%d,%d) erupted" % [cell.x, cell.y])
 			if cells.has(cell):
 				blast += 1
@@ -198,7 +203,7 @@ func test_the_burst_is_tinted_by_the_moves_element() -> void:
 	if battle.is_empty() or battle["board"] == null:
 		pending("no live board; skipping")
 		return
-	(battle["caster"] as Unit).perform_move(0, Vector2i(2, 1), battle["board"])
+	(battle["caster"] as Unit).perform_move(0, Vector3i(2, 1, 0), battle["board"])
 	await get_tree().process_frame
 
 	var ember: Color = ConquestTheme.element_color("ember")
@@ -218,7 +223,7 @@ func test_the_impacts_free_themselves() -> void:
 	if battle.is_empty() or battle["board"] == null:
 		pending("no live board; skipping")
 		return
-	(battle["caster"] as Unit).perform_move(0, Vector2i(2, 1), battle["board"])
+	(battle["caster"] as Unit).perform_move(0, Vector3i(2, 1, 0), battle["board"])
 	await get_tree().process_frame
 	assert_gt(_fx.get_child_count(), 0, "there is something in flight to drain")
 
@@ -238,10 +243,10 @@ func test_a_maw_detonation_erupts_across_its_whole_patch() -> void:
 
 	# The production path, end to end: a real hazard, armed on a real fuse, expired exactly
 	# as the shared turn-start tick expires it. THAT is what emits hazard_advanced.
-	var blast: Array[Vector2i] = []
+	var blast: Array[Vector3i] = []
 	for dx in [-1, 0, 1]:
 		for dy in [-1, 0, 1]:
-			blast.append(Vector2i(2 + dx, 2 + dy))
+			blast.append(Vector3i(2 + dx, 2 + dy, 0))
 	var hazard := DelayedBurstHazard.new(blast, 15,
 		CombatTypes.DamageCategory.MAGICAL, CombatTypes.TargetKind.ENEMY, battle["caster"])
 	hazard.element = &"dark"
@@ -251,7 +256,7 @@ func test_a_maw_detonation_erupts_across_its_whole_patch() -> void:
 	fuse.on_expire(battle["caster"], battle["board"])
 	await get_tree().process_frame
 
-	var cells: Array[Vector2i] = _impact_cells()
+	var cells: Array[Vector3i] = _impact_cells()
 	for cell in blast:
 		assert_true(cells.has(cell),
 			"maw cell (%d,%d) erupted -- the whole 3x3 opens, not just the cells with victims"
@@ -265,10 +270,10 @@ func test_a_maw_that_announces_twice_in_a_frame_erupts_once() -> void:
 		pending("no live board; skipping")
 		return
 
-	var hazard := DelayedBurstHazard.new([Vector2i(1, 1)] as Array[Vector2i], 5,
+	var hazard := DelayedBurstHazard.new([Vector3i(1, 1, 0)] as Array[Vector3i], 5,
 		CombatTypes.DamageCategory.MAGICAL, CombatTypes.TargetKind.ENEMY, null)
-	GameEvents.emit_signal(&"hazard_advanced", hazard, [Vector2i(1, 1)], [], 0)
-	GameEvents.emit_signal(&"hazard_advanced", hazard, [Vector2i(1, 1)], [], 0)
+	GameEvents.emit_signal(&"hazard_advanced", hazard, [Vector3i(1, 1, 0)], [], 0)
+	GameEvents.emit_signal(&"hazard_advanced", hazard, [Vector3i(1, 1, 0)], [], 0)
 	await get_tree().process_frame
 
 	assert_eq(_fx.get_child_count(), 1,
@@ -283,9 +288,9 @@ func test_a_maws_telegraph_does_not_erupt_a_turn_early() -> void:
 
 	# The cast-time announcement is EMPTY current cells + the marked patch as next -- a
 	# warning, which is HazardVisualizer's job. Erupting on it would spoil the counterplay.
-	var hazard := DelayedBurstHazard.new([Vector2i(1, 1)] as Array[Vector2i], 5,
+	var hazard := DelayedBurstHazard.new([Vector3i(1, 1, 0)] as Array[Vector3i], 5,
 		CombatTypes.DamageCategory.MAGICAL, CombatTypes.TargetKind.ENEMY, null)
-	GameEvents.emit_signal(&"hazard_advanced", hazard, [], [Vector2i(1, 1)], 0)
+	GameEvents.emit_signal(&"hazard_advanced", hazard, [], [Vector3i(1, 1, 0)], 0)
 	await get_tree().process_frame
 
 	assert_eq(_fx.get_child_count(), 0,
@@ -302,7 +307,7 @@ func test_an_override_changes_the_rendered_scale_and_colour() -> void:
 	var caster: Unit = battle["caster"]
 
 	# Baseline: the unauthored move.
-	caster.perform_move(0, Vector2i(2, 1), battle["board"])
+	caster.perform_move(0, Vector3i(2, 1, 0), battle["board"])
 	await get_tree().process_frame
 	var plain_ring: float = _widest_ring()
 	assert_gt(plain_ring, 0.0, "the default cast rendered a ground ring to measure")
@@ -314,7 +319,7 @@ func test_an_override_changes_the_rendered_scale_and_colour() -> void:
 	override.burst_scale = 2.0
 	override.ring_scale = 2.0
 	caster.get_move(0).fx = override
-	caster.perform_move(0, Vector2i(2, 1), battle["board"])
+	caster.perform_move(0, Vector3i(2, 1, 0), battle["board"])
 	await get_tree().process_frame
 
 	assert_gt(_widest_ring(), plain_ring * 1.5,
@@ -353,11 +358,11 @@ func test_animations_off_spawns_nothing_visual() -> void:
 		return
 
 	_guard.set_setting("animations_enabled", false)
-	(battle["caster"] as Unit).perform_move(0, Vector2i(2, 1), battle["board"])
+	(battle["caster"] as Unit).perform_move(0, Vector3i(2, 1, 0), battle["board"])
 	GameEvents.emit_signal(&"hazard_advanced",
-		DelayedBurstHazard.new([Vector2i(1, 1)] as Array[Vector2i], 5,
+		DelayedBurstHazard.new([Vector3i(1, 1, 0)] as Array[Vector3i], 5,
 			CombatTypes.DamageCategory.MAGICAL, CombatTypes.TargetKind.ENEMY, null),
-		[Vector2i(1, 1)], [], 0)
+		[Vector3i(1, 1, 0)], [], 0)
 	await get_tree().process_frame
 
 	assert_eq(_fx.get_child_count(), 0,
@@ -385,8 +390,8 @@ func test_rendering_consumes_no_shared_random_draw() -> void:
 
 	var move: MoveResource = (battle["caster"] as Unit).get_move(0)
 	var spec: Dictionary = _fx._move_spec(move, 0)
-	var area: Array[Vector2i] = _fx._derive_area(move, battle["caster"], Vector2i(0, 0),
-		[Vector2i(2, 1)] as Array[Vector2i])
+	var area: Array[Vector3i] = _fx._derive_area(move, battle["caster"], Vector3i(0, 0, 0),
+		[Vector3i(2, 1, 0)] as Array[Vector3i])
 	assert_eq(area.size(), 9, "the derivation produced a full 3x3 to render (not a vacuous pin)")
 
 	seed(987654321)
@@ -394,7 +399,7 @@ func test_rendering_consumes_no_shared_random_draw() -> void:
 
 	# NO frame boundary between the seed and the read: only FX code runs in between.
 	seed(987654321)
-	_fx._spawn_cast_accent(Vector2i(0, 0), spec)
+	_fx._spawn_cast_accent(Vector3i(0, 0, 0), spec)
 	for cell in area:
 		_fx._spawn_impact(cell, spec)
 	var actual: int = randi()

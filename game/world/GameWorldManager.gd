@@ -12,7 +12,7 @@ const GAME_OVER_SCREEN_SCENE := preload("res://game/ui/screens/GameOverScreen.ts
 ## Battle-juice layers, preloaded as SCRIPTS rather than referenced by their global
 ## class_name. Both are brand-new files, and a fresh checkout resolves a global class
 ## only once the editor/engine has rescanned -- a preload by path never has that problem.
-const DAMAGE_NUMBERS_SCRIPT := preload("res://game/visuals/DamageNumbers.gd")
+## (Floating numbers are [FloatingCombatText], mounted once in _ready.)
 const IMPACT_FX_SCRIPT := preload("res://game/visuals/ImpactFX.gd")
 const MOVE_FX_SCRIPT := preload("res://game/visuals/MoveFXDispatcher.gd")
 
@@ -107,13 +107,12 @@ var _hazard_manager: HazardManager = null
 ## state in [ItemInventory] and outlives this node.
 var _item_system: ItemSystem = null
 
-## Floating combat numbers (see [DamageNumbers]) and code-built impact particles (see
-## [ImpactFX]): two additive Node3D presentation layers mounted in the 3D scene root
-## beside [TileEffectOverlay]. Created fresh per battle in _setup_damage_numbers() /
+## Code-built impact particles (see [ImpactFX]): an additive Node3D presentation layer
+## mounted in the 3D scene root beside [TileEffectOverlay]. Created fresh per battle in
 ## _setup_impact_fx() -- the same free-then-recreate discipline as the spawn/hazard/item
-## runtimes -- so no popup or particle burst can outlive the battle that produced it.
-## Both self-wire to GameEvents in their own _ready; there is nothing to connect here.
-var _damage_numbers: Node3D = null
+## runtimes -- so no particle burst can outlive the battle that produced it. It self-wires
+## to GameEvents in its own _ready; there is nothing to connect here. (Floating numbers:
+## [FloatingCombatText], mounted once in _ready and cleared on every board_ready.)
 var _impact_fx: Node3D = null
 
 ## Default move FX (see [MoveFXDispatcher]): the layer that draws a cast accent and an
@@ -211,6 +210,10 @@ func _ready() -> void:
 	# create now -- nobody is eliminated at boot, so it just sits hidden.
 	_setup_game_over_screen()
 
+	# Survive / Seize objectives are decided without a death, so also re-score the
+	# map objectives on every turn start and committed move.
+	_setup_objective_checks()
+
 	# Tile-effect 3D overlay: additive Node3D floating effect pips over affected
 	# cells. Added to the 3D scene root (not the CanvasLayer) and, like the terrain
 	# panel, safe to add before the map loads -- it rebuilds itself on
@@ -222,6 +225,24 @@ func _ready() -> void:
 	# CombatServices.board_ready and on the vision core's vision_changed, exactly like the
 	# tile-effect overlay above, and costs nothing at all with fog off.
 	_setup_fog_overlay()
+
+	# Fire Emblem danger zone (combined enemy threat, toggled with `danger_zone` or the
+	# unit card's touch Danger button). Skips units the fog hides.
+	_setup_danger_zone_overlay()
+	# Multi-floor cutaway: fades floors above the cursor's view floor (no-op on flat
+	# maps). Listens to GameEvents.view_floor_changed, so it must exist before the
+	# map load's board_ready makes the cursor broadcast the initial view.
+	var cutaway := FloorCutaway.new()
+	add_child(cutaway)
+	# Unit facing (visual only; the ONE facing driver): rest facing toward the nearest
+	# enemy, attacker / target facing on every move. Before the map load so it hears
+	# board_ready.
+	add_child(FacingController.new())
+	# Floating combat text (the ONE floating-number layer): a number over the unit for
+	# every HP change (hits, crits, misses, heals, shields, tile / status / weather
+	# damage), fog-aware. Presentation only; a CanvasLayer under the HUD. Before the map
+	# load so it hears board_ready.
+	add_child(FloatingCombatText.new())
 
 	# Ultimate cut-in flash: its own high CanvasLayer overlay, additive and hidden until a
 	# unit fires an ultimate. Safe to add now -- it stays idle until GameEvents.ultimate_casting.
@@ -240,18 +261,23 @@ func _ready() -> void:
 
 	# Load the selected map or default map
 	await _load_selected_map()
+	# The scene may have been left while the map loaded (e.g. a network match was
+	# aborted by a disconnect) -- nothing left to set up then.
 	if not is_inside_tree():
 		return
 
 	# RESUMED BATTLE: swap the map's authored units for the saved ones before players are
 	# set up, so the ordinary ownership/turn-registration passes below adopt them unchanged.
-	# A no-op for every ordinary battle.
+	# A no-op for every ordinary battle (and never in a network match: nothing stages one).
 	_maybe_restore_battle_snapshot()
 
-	# Networked matches (GameMode.MULTIPLAYER) boot through the SAME deterministic setup
-	# as solo/hotseat: both peers build an identical board locally, and the NetSession
-	# command seam installed per map load (_install_command_seam) keeps them in lockstep.
-	await _setup_local_game()
+	# Network versus (a live NetSession match) boots through the network setup, which hands
+	# the finished board to NetGameRules; everything else through the local setup.
+	if GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER \
+			and GameModeManager != null and GameModeManager.is_multiplayer_active():
+		await _setup_network_multiplayer()
+	else:
+		await _setup_local_game()
 
 
 ## Runtime-summon a unit MID-BATTLE (the Necromancer's Reanimate / Undying Legion).
@@ -262,11 +288,12 @@ func _ready() -> void:
 ## marks it as having already acted so it holds the summon turn and only acts next turn
 ## (the same "summoning sickness" [SpawnManager]'s runtime spawns use). Returns the new
 ## [Unit], or null if the summon could not be placed. Null-safe end to end.
-func summon_unit(character_id: StringName, cell: Vector2i, player_id: int, stance: String = "aggressive", net_id: int = -1) -> Node:
+func summon_unit(character_id: StringName, cell: Vector3i, player_id: int, stance: String = "aggressive", net_id: int = -1) -> Node:
 	if map_loader == null:
 		return null
 	var unit = map_loader.spawn_unit_now({
-		"position": cell,
+		"position": Cells.flat(cell),
+		"floor": cell.z,
 		"player_id": player_id,
 		"character_id": String(character_id),
 		"spawn_kind": "Reinforcement",
@@ -274,8 +301,9 @@ func summon_unit(character_id: StringName, cell: Vector2i, player_id: int, stanc
 	})
 	if unit == null:
 		return null
-	# Networked command layer (CommandApplier) passes a deterministic net_id derived
-	# from the summoning command's seq so every peer names the same body identically.
+	# The command layer (CommandApplier: replays, the local command vocabulary) passes a
+	# deterministic net_id derived from the summoning command's seq so every peer names the
+	# same body identically. (A network match names units through NetUnitIds.)
 	# -1 (the default, single-player path) leaves the unit untagged exactly as before;
 	# CommandApplier can still assign an id reactively from the resolved event log.
 	if net_id >= 0:
@@ -383,10 +411,9 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# it can adopt the load-time seed units off the fresh board (to time their deaths).
 	_setup_spawn_manager()
 
-	# Battle juice for THIS battle: floating damage/heal numbers and impact particles.
-	# Recreated per load like the runtimes above, so a second battle in the same app run
-	# never inherits a popup or a burst from the previous one.
-	_setup_damage_numbers()
+	# Battle juice for THIS battle: impact particles and the default move FX. Recreated
+	# per load like the runtimes above, so a second battle in the same app run never
+	# inherits a burst from the previous one.
 	_setup_impact_fx()
 	_setup_move_fx()
 
@@ -414,16 +441,47 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# Compile THIS map's authored win conditions into a live rule set. This is what
 	# makes objectives per-map: a boss map ends on the boss's death, a skirmish on a
 	# wipe -- same engine, different WinCondition list (see _evaluate_game_end).
-	_game_mode_rules = WinConditionLibrary.build_rules(map_resource.victory_conditions)
+	# build_rules_for_map also threads the map's THRONE objective marker (seize) and
+	# turn_limit (survive) through, so those objectives resolve from map data.
+	_game_mode_rules = WinConditionLibrary.build_rules_for_map(map_resource)
 
 	# Light the battle: a sun + sky ambient so the 3D map reads with depth and
 	# shadow instead of flat ambient. The scene shipped with a WorldEnvironment but
 	# NO key light, which is why everything looked washed out.
 	_setup_lighting(map_resource)
 
+	# Battle weather (docs/WEATHER.md): gameplay state on CombatServices, seeded from
+	# the match's public seed in a network match so every peer rolls the same
+	# dynamic weather; plus the visual rig, which reads it (never the reverse).
+	CombatServices.configure_weather(map_resource, _weather_seed())
+	_setup_weather_fx()
+
 	# Update GameSettings with map info if available
 	if GameSettings.has_method("set_current_map"):
 		GameSettings.set_current_map(map_resource)
+
+## Seed for dynamic weather: the network match's public setup seed (identical on
+## every peer, see systems/net/README.md) or a fresh random one locally.
+func _weather_seed() -> int:
+	if GameModeManager != null and GameModeManager.is_multiplayer_active():
+		var ns := get_node_or_null("/root/NetSession")
+		if ns != null and ns.has_method("get_match_config"):
+			return int(ns.get_match_config().get("seed", 1))
+	return randi()
+
+## The per-battle weather visual rig (particles + light/fog adapter), reused across
+## map loads. Purely cosmetic; skipped on a headless dedicated server.
+func _setup_weather_fx() -> void:
+	var scene_root := get_tree().current_scene
+	if scene_root == null or DisplayServer.get_name() == "headless":
+		return
+	var existing := scene_root.get_node_or_null("WeatherFX")
+	if existing != null:
+		existing.rebase()  # the map load re-lit the scene: re-capture its base look
+		return
+	var fx := WeatherFX.new()
+	fx.name = "WeatherFX"
+	scene_root.add_child(fx)
 
 func _on_map_load_failed(error_message: String) -> void:
 	"""Handle map loading failure"""
@@ -499,38 +557,16 @@ func _setup_lighting(map_resource: MapResource) -> void:
 	if scene_root == null:
 		return
 
-	var sun := scene_root.get_node_or_null("Sun") as DirectionalLight3D
-	if sun == null:
-		sun = DirectionalLight3D.new()
-		sun.name = "Sun"
-		scene_root.add_child(sun)
-	# Angled from above-front so faces catch light and cast readable shadows.
-	sun.rotation_degrees = Vector3(-52.0, -38.0, 0.0)
-	sun.shadow_enabled = true
-
-	var sun_color := Color(1.0, 0.96, 0.88)
-	var sun_energy := 1.7
-	var ambient_energy := 0.6
-	match str(map_resource.lighting_preset):
-		"Night":
-			sun_color = Color(0.62, 0.70, 0.95)
-			sun_energy = 0.55
-			ambient_energy = 0.20
-		"Dawn", "Dusk":
-			sun_color = Color(1.0, 0.78, 0.62)
-			sun_energy = 1.0
-			ambient_energy = 0.30
-		_:
-			pass  # Day / Default: the warm values above
-	sun.light_color = sun_color
-	sun.light_energy = sun_energy
-
-	# Sky-sourced ambient so shadowed sides aren't crushed to black.
-	var we := scene_root.get_node_or_null("WorldEnvironment") as WorldEnvironment
-	if we != null and we.environment != null:
-		var env: Environment = we.environment
-		env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-		env.ambient_light_energy = ambient_energy
+	# Everything look-related lives in ONE node (WorldLook: sun, sky, ambient,
+	# fog, tonemap / glow / grade, haze, unit contact shadows) so the weather
+	# system can tween named properties instead of poking the environment.
+	var look := scene_root.get_node_or_null("WorldLook") as WorldLook
+	if look == null:
+		look = WorldLook.new()
+		look.name = "WorldLook"
+		scene_root.add_child(look)
+	look.setup(scene_root)
+	look.apply_preset(str(map_resource.lighting_preset))
 
 
 func _setup_game_over_screen() -> void:
@@ -638,10 +674,11 @@ func _apply_replay_match_seed() -> void:
 	"""REPLAY PLAYBACK, phase 2b: put the RECORDED match seed back (see the call site)."""
 	if not _is_replaying():
 		return
-	if typeof(NetSession) != TYPE_OBJECT or NetSession == null or NetSession.match_rng == null:
+	var ns = get_node_or_null("/root/NetSession")
+	if ns == null or ns.get("match_rng") == null:
 		return
 	var rng: Dictionary = _replay_log.get("rng", {})
-	NetSession.match_rng.match_seed = int(rng.get("match_seed", 0))
+	ns.get("match_rng").match_seed = int(rng.get("match_seed", 0))
 
 
 func _finish_replay_boot() -> void:
@@ -982,7 +1019,63 @@ func _build_win_state(just_removed) -> Dictionary:
 			units.append(u)
 	if just_removed != null and just_removed not in units:
 		units.append(just_removed)
-	return { "units": units, "board": board, "turn": 0 }
+	return { "units": units, "board": board, "turn": _current_win_turn() }
+
+
+## Full rounds elapsed in the active turn system -- the "turn" SurviveTurns counts
+## (see WinConditionLibrary.completed_rounds). 0 before any turn system is active.
+func _current_win_turn() -> int:
+	if TurnSystemManager == null or not TurnSystemManager.has_active_turn_system():
+		return 0
+	return WinConditionLibrary.completed_rounds(TurnSystemManager.get_active_turn_system())
+
+
+# --- Objective re-checks outside of deaths ------------------------------------
+# Survive-N-turns is decided by the clock and Seize by a unit STANDING on the throne,
+# neither of which kills anything -- so besides the death/elimination triggers the map
+# objectives are re-scored at every turn start and after every committed unit move.
+
+## Turn system the objective turn-start re-check is bound to (re-wired on switch).
+var _objective_watched_ts = null
+
+func _setup_objective_checks() -> void:
+	if GameEvents and not GameEvents.unit_moved.is_connected(_on_unit_moved_objectives):
+		GameEvents.unit_moved.connect(_on_unit_moved_objectives)
+	if TurnSystemManager != null:
+		if not TurnSystemManager.turn_system_activated.is_connected(_on_turn_system_activated_objectives):
+			TurnSystemManager.turn_system_activated.connect(_on_turn_system_activated_objectives)
+		if TurnSystemManager.has_active_turn_system():
+			_on_turn_system_activated_objectives(TurnSystemManager.get_active_turn_system())
+
+func _on_turn_system_activated_objectives(ts) -> void:
+	if _objective_watched_ts == ts:
+		return
+	if _objective_watched_ts != null and is_instance_valid(_objective_watched_ts) \
+			and _objective_watched_ts.turn_started.is_connected(_on_turn_started_objectives):
+		_objective_watched_ts.turn_started.disconnect(_on_turn_started_objectives)
+	_objective_watched_ts = ts
+	if ts != null and not ts.turn_started.is_connected(_on_turn_started_objectives):
+		ts.turn_started.connect(_on_turn_started_objectives)
+
+func _on_turn_started_objectives(_player) -> void:
+	_recheck_map_objectives()
+
+func _on_unit_moved_objectives(_unit, _from, _to) -> void:
+	_recheck_map_objectives()
+
+## Re-score the map's objectives when nothing died. Only the single-player,
+## map-driven path is re-checked here: the versus "last side standing" fallback is
+## purely elimination-driven and stays on the death triggers. Skipped while the board
+## is empty (e.g. mid-load), where every side would read as wiped out.
+func _recheck_map_objectives() -> void:
+	if _game_mode_rules == null or _game_over_screen == null:
+		return
+	if GameSettings == null or GameSettings.game_mode != GameSettings.GameMode.SINGLE_PLAYER:
+		return
+	var board = CombatServices.board() if CombatServices != null else null
+	if board == null or not board.has_method("all_units") or board.all_units().is_empty():
+		return
+	_evaluate_game_end(null)
 
 func _setup_tile_effect_overlay() -> void:
 	"""Instantiate TileEffectOverlay and add it to the 3D scene root (GameWorld
@@ -1016,6 +1109,23 @@ func _setup_fog_overlay() -> void:
 	_fog_overlay = FogOfWarOverlay.new()
 	scene_root.add_child(_fog_overlay)
 
+func _setup_danger_zone_overlay() -> void:
+	"""Add the DangerZoneOverlay (3D, scene root). It owns its toggle input and
+	recomputes itself off GameEvents / board_ready / turn starts."""
+	var scene_root := get_tree().current_scene
+	if scene_root == null or scene_root.get_node_or_null("DangerZoneOverlay") != null:
+		return
+	scene_root.add_child(DangerZoneOverlay.new())
+
+## The current map's compiled objectives (null before a map loads). Read by the HUD
+## objective chip and the map menu's Objective page.
+func get_game_mode_rules() -> GameModeRules:
+	return _game_mode_rules
+
+## Full rounds elapsed, the count Survive objectives use (HUD progress).
+func get_objective_rounds_done() -> int:
+	return _current_win_turn()
+
 # --- Runtime spawn scheduler ------------------------------------------------
 
 func _setup_spawn_manager() -> void:
@@ -1036,33 +1146,14 @@ func _setup_spawn_manager() -> void:
 	add_child(_spawn_manager)
 	_spawn_manager.setup(map_loader, map_loader.current_map)
 
-# --- Battle juice (floating numbers + impact particles) ---------------------
-
-func _setup_damage_numbers() -> void:
-	"""Create (or recreate) the per-battle [DamageNumbers] layer, mirroring
-	_setup_spawn_manager's free-then-recreate discipline. Unlike the spawn/hazard/item
-	runtimes this is a Node3D, so it goes in the 3D scene root (like TileEffectOverlay),
-	NOT the "UI" CanvasLayer. It subscribes to GameEvents in its own _ready -- there is
-	nothing to wire here. Bails silently without a current_scene: that is an expected
-	condition on every scene transition, and the missing numbers ARE the report."""
-	if _damage_numbers != null and is_instance_valid(_damage_numbers):
-		_damage_numbers.queue_free()
-	_damage_numbers = null
-
-	# Guard get_tree() too, not just current_scene: a map load can land on the same frame
-	# as a scene hand-off (Rematch / Arena), which detaches this node mid-call.
-	var tree := get_tree()
-	if tree == null or tree.current_scene == null:
-		return
-	var scene_root: Node = tree.current_scene
-
-	_damage_numbers = DAMAGE_NUMBERS_SCRIPT.new()
-	scene_root.add_child(_damage_numbers)
+# --- Battle juice (impact particles + move FX) --------------------------------
 
 func _setup_impact_fx() -> void:
-	"""Create (or recreate) the per-battle [ImpactFX] layer, exactly as
-	_setup_damage_numbers does -- same 3D scene-root mount, same per-battle lifetime,
-	same self-wiring."""
+	"""Create (or recreate) the per-battle [ImpactFX] layer, mirroring
+	_setup_spawn_manager's free-then-recreate discipline. A Node3D, so it goes in the 3D
+	scene root (like TileEffectOverlay), NOT the "UI" CanvasLayer. It subscribes to
+	GameEvents in its own _ready -- there is nothing to wire here. Bails silently without
+	a current_scene: an expected condition on every scene transition."""
 	if _impact_fx != null and is_instance_valid(_impact_fx):
 		_impact_fx.queue_free()
 	_impact_fx = null
@@ -1105,7 +1196,12 @@ func _setup_command_seam() -> void:
 
 	Rebuilt per map load so the applier/registry never outlive the board they mutate; the
 	stale seam is dropped in _exit_tree and replaced here on the next load."""
-	if typeof(NetSession) != TYPE_OBJECT or NetSession == null:
+	# Dynamic on purpose: the command seam is the local branch's NetSession surface
+	# (install_command_seam / match_rng / begin_solo_match_rng -- also what replay playback
+	# applies recorded commands through). A network match itself runs on NetGameRules
+	# (see _setup_network_multiplayer); a session without the seam simply skips this.
+	var ns = get_node_or_null("/root/NetSession")
+	if ns == null or not ns.has_method("install_command_seam"):
 		return
 	var board = CombatServices.board() if CombatServices != null else null
 	if board == null:
@@ -1119,15 +1215,16 @@ func _setup_command_seam() -> void:
 		units = board.all_units()
 	registry.assign_map_units(units)
 
-	var applier := CommandApplier.new(registry, NetSession.match_rng)
-	NetSession.install_command_seam(applier, _seam_board_provider)
+	var applier := CommandApplier.new(registry, ns.get("match_rng"))
+	ns.install_command_seam(applier, _seam_board_provider)
 
 	# Non-networked play (solo / hotseat / local versus): negotiate a solo match seed so
-	# the applier's per-command RNG stream exists. Networked play already negotiated the
-	# match seed via the lobby commit-reveal handshake, so we must not clobber it.
-	if not NetSession.is_networked_match():
-		NetSession.begin_solo_match_rng()
-		applier.match_rng = NetSession.match_rng
+	# the applier's per-command RNG stream exists. A network match negotiated its seed in
+	# the lobby's commit-reveal handshake, so it must not be clobbered.
+	var networked: bool = GameModeManager != null and GameModeManager.is_multiplayer_active()
+	if not networked and ns.has_method("begin_solo_match_rng"):
+		ns.begin_solo_match_rng()
+		applier.match_rng = ns.get("match_rng")
 
 func _seam_board_provider():
 	"""Board provider handed to NetSession: resolves the CURRENT live board each apply,
@@ -1137,14 +1234,12 @@ func _seam_board_provider():
 func _exit_tree() -> void:
 	"""Battle scene is being torn down: drop the command seam so a stale applier never
 	outlives the board it mutated. Null-safe -- a no-op if NetSession is absent."""
-	if typeof(NetSession) == TYPE_OBJECT and NetSession != null:
-		NetSession.clear_command_seam()
+	var ns = get_node_or_null("/root/NetSession") if is_inside_tree() else null
+	if ns != null and ns.has_method("clear_command_seam"):
+		ns.clear_command_seam()
 	# The juice layers are parented to the SCENE ROOT, not to this node, so they are not
 	# freed with us. The scene root normally takes them, but dropping them explicitly means
 	# a hand-off that reuses the root (Rematch / Arena) can never inherit the old layers.
-	if _damage_numbers != null and is_instance_valid(_damage_numbers):
-		_damage_numbers.queue_free()
-	_damage_numbers = null
 	if _impact_fx != null and is_instance_valid(_impact_fx):
 		_impact_fx.queue_free()
 	_impact_fx = null
@@ -1304,7 +1399,7 @@ func _on_turn_system_activated_tile_effects(ts) -> void:
 	if ts != null and not ts.turn_started.is_connected(_on_player_turn_started_tile_effects):
 		ts.turn_started.connect(_on_player_turn_started_tile_effects)
 
-func _prime_tile_effects(cell: Vector2i):
+func _prime_tile_effects(cell: Vector3i):
 	"""Feed the system the effects on `cell` (base + runtime) through its injected
 	lookup, recomputed each event so tile transforms and runtime ignite/douse are
 	always reflected. Returns the live board, or null if it/the system is absent."""
@@ -1317,11 +1412,11 @@ func _prime_tile_effects(cell: Vector2i):
 	return board
 
 func _on_unit_moved_tile_effects(unit, from_position, to_position) -> void:
-	"""Terrain enter/exit hook. from/to are Vector3(col, 0, row) grid coords."""
+	"""Terrain enter/exit hook. from/to are Vector3(col, floor, row) grid coords."""
 	if unit == null or _tile_effect_system == null:
 		return
-	var from_cell := Vector2i(int(round(from_position.x)), int(round(from_position.z)))
-	var to_cell := Vector2i(int(round(to_position.x)), int(round(to_position.z)))
+	var from_cell := Cells.from_grid(from_position)
+	var to_cell := Cells.from_grid(to_position)
 	var board = _prime_tile_effects(from_cell)
 	if board == null:
 		return
@@ -1352,9 +1447,61 @@ func _on_player_turn_started_tile_effects(player) -> void:
 	for unit in player.owned_units:
 		if unit == null:
 			continue
-		var cell: Vector2i = board.cell_of(unit)
+		var cell: Vector3i = board.cell_of(unit)
 		_prime_tile_effects(cell)
 		_tile_effect_system.on_turn_start(unit, board)
+
+func _setup_network_multiplayer() -> void:
+	"""Network versus (a NetSession match). Both peers build the IDENTICAL battle
+	from the host's match config (GameModeManager copied it into GameSettings):
+	same map, same two human players in slot order, same turn system. From here on
+	the board only changes through accepted network actions, applied identically
+	on every peer by NetGameRules."""
+	if not (GameModeManager and GameModeManager.is_multiplayer_active()):
+		await _setup_local_game()
+		return
+
+	PlayerManager.reset_for_new_game()
+	TurnSystemManager.reset_for_new_game()
+
+	# Slot i == PlayerManager.players[i] == Map/Player{i+1}. Both seats are human;
+	# no BotTurnDriver is created (no AI runs on either peer).
+	for i in range(2):
+		var pname: String = GameSettings.player_names[i] if i < GameSettings.player_names.size() else ""
+		PlayerManager.register_player(pname)
+	PlayerManager.assign_units_by_parent()
+	# Only the two SEATS are human. A faction the mode layer added on top (a neutral camp
+	# player registered off player_registered -- BaseAssaultRuntime) keeps its AI flag rather
+	# than masquerading as a third human; such maps are offline only (MapCatalog.network_refusal),
+	# and NetSession ends a match whose turn reaches an unseated slot (ABORT_UNDRIVEN_TURN).
+	for i in range(mini(2, PlayerManager.players.size())):
+		PlayerManager.players[i].is_ai = false
+
+	# Each await can outlive this scene: if the opponent drops mid-setup,
+	# GameModeManager returns to the menu and this node leaves the tree -- stop then.
+	await get_tree().process_frame
+	if not _network_setup_alive():
+		return
+	if GameSettings:
+		GameSettings.apply_settings_to_game()
+	await get_tree().process_frame
+	if not _network_setup_alive():
+		return
+	_start_game()
+	# Let the turn system's activation (and any deferred kickoff) settle, then hand
+	# the live board + turn system to the network rules.
+	await get_tree().process_frame
+	if not _network_setup_alive():
+		return
+	GameModeManager.on_network_world_ready()
+	# The VS clash reveal is presentation only (never synchronised). Played AFTER the rules
+	# are attached so an opponent action that lands mid-reveal applies normally; not
+	# awaited, so it never holds this peer's turn processing.
+	_play_versus_intro()
+
+
+func _network_setup_alive() -> bool:
+	return is_inside_tree() and GameModeManager != null and GameModeManager.is_multiplayer_active()
 
 func _setup_local_game() -> void:
 	"""Set up local single-player or local multiplayer game"""
@@ -1486,28 +1633,23 @@ func _start_game() -> void:
 # TOP BAR:    TurnQueue (Speed First) OR TurnIndicator chip (Traditional), centered;
 #             Settings gear button, top-right.
 # LEFT COL:   UnitInfoPanel -- persistent selected-unit stat card, top-anchored.
-# RIGHT COL:  UnitActionsPanel -- contextual command menu (shown when a unit acts).
+# RIGHT COL:  UnitActionsPanel -- the selected unit's command card (Move / Skills / Wait /
+#             Info / Cancel + touch Danger / Next / End Turn); the contextual action
+#             menu floats beside the unit after a move.
+# BOTTOM-RIGHT: UnitHoverPanel -- hover card for any OTHER unit.
+# ESC MENUS:  MapMenu (FE map menu, the local human's idle turn) and PauseMenu (leaving).
 # TOP-LEFT:   BattleLog (collapsible; auto-collapses while aiming) and, while aiming,
 #             the CombatForecastPanel.
 # BOTTOM-LEFT: TerrainInfoPanel -- hover terrain card (mounted on the UI CanvasLayer).
 # OVERLAYS:   TurnTransition wipe + ActionAnnouncer banner, each on its own CanvasLayer.
 
-# Debug input handling. Gated OFF by default: these raw single-key bindings collide
-# with gameplay hotkeys (M = legacy move mode, T = enemy danger-zone toggle) and
-# KEY_M would yank the player back to the main menu mid-battle. Flip on only for
-# hands-on debugging sessions.
-const DEBUG_HOTKEYS := false
-
+# Developer hotkeys. Debug builds only AND Ctrl+Shift held (InputActions.is_debug_hotkey),
+# so none of them can fire from a plain gameplay key: M is Move, S is camera pan, etc.
+# The old plain-M "quit to main menu" binding is gone entirely -- leaving a battle must
+# never happen from a single keypress.
 func _input(event: InputEvent) -> void:
-	if not DEBUG_HOTKEYS:
-		return
-	if not event.is_pressed():
-		return
-
-	if event is InputEventKey:
-		match event.keycode:
-			KEY_M:
-				_return_to_main_menu()
+	if InputActions.is_debug_hotkey(event):
+		match (event as InputEventKey).keycode:
 			KEY_S:
 				_print_game_status()
 			KEY_V:
@@ -1525,6 +1667,9 @@ func _input(event: InputEvent) -> void:
 
 func _test_unit_action() -> void:
 	"""Test unit action for debugging"""
+	# Never mutate a network match locally (it would desync this peer).
+	if GameModeManager and GameModeManager.is_multiplayer_active():
+		return
 	if not TurnSystemManager.has_active_turn_system():
 		return
 	
@@ -1567,10 +1712,6 @@ func _check_ui_layout() -> void:
 	var layout: Node = get_tree().current_scene.get_node_or_null("UI/GameUILayout")
 	if layout != null and layout.has_method("get_layout_info"):
 		print("[GameWorldManager] Layout: ", layout.get_layout_info())
-
-func _return_to_main_menu() -> void:
-	"""Return to the main menu"""
-	get_tree().change_scene_to_file("res://menus/MainMenu.tscn")
 
 func _print_game_status() -> void:
 	"""Print current game status"""

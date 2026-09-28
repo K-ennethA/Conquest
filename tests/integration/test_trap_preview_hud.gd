@@ -23,14 +23,14 @@ const GRID: Grid = preload("res://board/Grid.tres")
 const MOVER_ID := &"vineweave"
 const DESIGN := Vector2i(1280, 720)
 
-const START := Vector2i(0, 0)
-const TRAP_CELL := Vector2i(1, 0)
+const START := Vector3i(0, 0, 0)
+const TRAP_CELL := Vector3i(1, 0, 0)
 
 ## Where the fixture aims the move: the far end of the corridor within the mover's OWN
 ## movement budget, read off its movement STAT rather than hard-coded, so retuning the
 ## roster character's stride cannot silently turn these tests into no-ops (an unreachable
 ## destination derives no route, which would pass every "no trap" assertion vacuously).
-var _aimed: Vector2i = Vector2i(3, 0)
+var _aimed: Vector3i = Vector3i(3, 0, 0)
 
 var _prev_window_size: Vector2i
 var _map_root: Node3D = null
@@ -57,8 +57,8 @@ func after_each() -> void:
 
 # --- Fixtures ----------------------------------------------------------------
 
-func _cell_to_world(cell: Vector2i) -> Vector3:
-	return GRID.calculate_map_position(Vector3(cell.x, 0, cell.y))
+func _cell_to_world(cell: Vector3i) -> Vector3:
+	return GRID.calculate_map_position(Cells.to_grid(cell))
 
 
 ## A live one-unit board with an armed Vine Trap at TRAP_CELL, laid by the OTHER side so it
@@ -95,12 +95,12 @@ func _build_board() -> Dictionary:
 	# the profile's own `range` is only the no-mover fallback and would name a cell this
 	# unit's real budget has nothing to do with.
 	var stride: int = int(unit.get_stat("movement"))
-	_aimed = Vector2i(clampi(stride, 2, 4), 0)
+	_aimed = Vector3i(clampi(stride, 2, 4), 0, 0)
 	gut.p("mover: movement stat=%d (profile fallback range=%d), aiming at %s over a trap at %s"
 		% [stride, profile.range, _aimed, TRAP_CELL])
 	# A destination the unit cannot actually walk to would make every assertion below
 	# vacuous, so prove the corridor is real before anything is measured against it.
-	var route: Array[Vector2i] = MovementResolver.new().path_cells(START, _aimed, profile, board, unit)
+	var route: Array[Vector3i] = MovementResolver.new().path_cells(START, _aimed, profile, board, unit)
 	if route.is_empty() or not route.has(TRAP_CELL):
 		return {}
 
@@ -143,9 +143,9 @@ func test_the_route_warning_renders_in_the_real_sidebar() -> void:
 	# screen, not merely flagged visible inside a hidden panel.
 	panel.selected_unit = scene["unit"]
 	panel.movement_mode = true
-	panel.movement_range_tiles = [Vector3(_aimed.x, 0, _aimed.y)] as Array[Vector3]
+	panel.movement_range_tiles = [Cells.to_grid(_aimed)] as Array[Vector3]
 	panel._show_panel()
-	panel._refresh_trap_warning(Vector3(_aimed.x, 0, _aimed.y))
+	panel._refresh_trap_warning(Cells.to_grid(_aimed))
 	for _i in range(6):
 		await get_tree().process_frame
 
@@ -217,8 +217,8 @@ func test_the_pending_move_stands_on_the_cell_it_will_really_stop_on() -> void:
 
 	panel.selected_unit = unit
 	panel.movement_mode = true
-	panel.movement_range_tiles = [Vector3(_aimed.x, 0, _aimed.y)] as Array[Vector3]
-	panel._begin_tentative_move(Vector3(_aimed.x, 0, _aimed.y))
+	panel.movement_range_tiles = [Cells.to_grid(_aimed)] as Array[Vector3]
+	panel._begin_tentative_move(Cells.to_grid(_aimed))
 	for _i in range(4):
 		await get_tree().process_frame
 
@@ -241,8 +241,8 @@ func test_the_warning_goes_when_the_staged_move_is_cancelled() -> void:
 
 	panel.selected_unit = scene["unit"]
 	panel.movement_mode = true
-	panel.movement_range_tiles = [Vector3(_aimed.x, 0, _aimed.y)] as Array[Vector3]
-	panel._begin_tentative_move(Vector3(_aimed.x, 0, _aimed.y))
+	panel.movement_range_tiles = [Cells.to_grid(_aimed)] as Array[Vector3]
+	panel._begin_tentative_move(Cells.to_grid(_aimed))
 	panel._revert_tentative_move()
 	for _i in range(4):
 		await get_tree().process_frame
@@ -285,7 +285,7 @@ func test_the_terrain_card_says_a_trapped_tile_is_a_trap() -> void:
 		"and the extra row is absorbed by the effects scroll, not by growing the card (got %.1f)"
 			% panel_card.size.y)
 
-	card.show_for_cell(Vector2i(5, 5))
+	card.show_for_cell(Vector3i(5, 5, 0))
 	for _i in range(4):
 		await get_tree().process_frame
 	assert_false(line.visible, "an ordinary tile prints no trap row at all")
@@ -307,7 +307,7 @@ func test_an_applied_move_command_truncates_exactly_like_a_local_one() -> void:
 	var board = scene["board"]
 
 	var registry := CommandApplier.UnitRegistry.new()
-	registry.register(unit, 1)
+	registry.register(unit, "1")
 	var applier := CommandApplier.new(registry)
 
 	# GUT lambdas capture by VALUE, so the announcement is collected into an Array.
@@ -318,7 +318,7 @@ func test_an_applied_move_command_truncates_exactly_like_a_local_one() -> void:
 	GameEvents.unit_moved.connect(sink)
 
 	var result: Dictionary = applier.apply_command(
-		NetProtocol.make_move_unit(1, _aimed), board)
+		NetProtocol.make_move_unit("1", _aimed), board)
 	GameEvents.unit_moved.disconnect(sink)
 
 	assert_true(bool(result.get("ok", false)), "the applier accepted the move command")
@@ -327,13 +327,13 @@ func test_an_applied_move_command_truncates_exactly_like_a_local_one() -> void:
 		return
 
 	# What GameWorldManager._on_unit_moved_tile_effects does with that announcement.
-	var from_cell := Vector2i(int(round(announced[0][0].x)), int(round(announced[0][0].z)))
-	var to_cell := Vector2i(int(round(announced[0][1].x)), int(round(announced[0][1].z)))
+	var from_cell := Cells.from_grid(announced[0][0])
+	var to_cell := Cells.from_grid(announced[0][1])
 	assert_eq(from_cell, START, "the announcement is in GRID space, from the origin cell")
 	assert_eq(to_cell, _aimed, "to the destination the command carried")
 
 	var system: TileEffectSystem = autofree(TileEffectSystem.new())
-	var landed: Vector2i = system.apply_move(unit, from_cell, to_cell, board)
+	var landed: Vector3i = system.apply_move(unit, from_cell, to_cell, board)
 
 	assert_eq(landed, TRAP_CELL, "an applied command truncates on the trap, same as a local move")
 	assert_eq(board.cell_of(unit), TRAP_CELL, "and the applied board state ends there too")

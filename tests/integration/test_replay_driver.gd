@@ -13,8 +13,8 @@ extends GutTest
 # the real gate on its way to the applier, exactly as it does in a live playback.
 
 const REAL_CHECKSUM_ROWS: Array = [
-	{ "id": 1, "cell": Vector2i(2, 3), "hp": 20 },
-	{ "id": 2, "cell": Vector2i(5, 1), "hp": 14 },
+	{ "id": "0:1", "cell": Vector3i(2, 3, 0), "hp": 20 },
+	{ "id": "0:2", "cell": Vector3i(5, 1, 0), "hp": 14 },
 ]
 
 
@@ -40,7 +40,7 @@ class FakeApplier extends RefCounted:
 		var out: Array = []
 		for cmd in applied:
 			var data: Dictionary = (cmd as Dictionary).get(NetProtocol.KEY_DATA, {})
-			out.append(int(data.get(NetProtocol.KEY_UNIT_ID, -1)))
+			out.append(String(data.get(NetProtocol.KEY_UNIT_ID, "")))
 		return out
 
 
@@ -113,9 +113,9 @@ func _log(commands: Array, checksums: Array = [], turns: int = 3) -> Dictionary:
 ## The four-command shape of one recorded turn: move, cast, wait, end turn.
 func _one_turn() -> Array:
 	return [
-		NetProtocol.make_move_unit(1, Vector2i(2, 3), 0),
-		NetProtocol.make_cast_move(1, 0, Vector2i(4, 3), 0),
-		NetProtocol.make_wait_unit(2, 0),
+		NetProtocol.make_move_unit("0:1", Vector3i(2, 3, 0), 0),
+		NetProtocol.make_cast_move("0:1", 0, Vector3i(4, 3, 0), 0),
+		NetProtocol.make_wait_unit("0:2", 0),
 		NetProtocol.make_end_turn(0, 0),
 	]
 
@@ -146,15 +146,15 @@ func test_commands_are_applied_in_recorded_order() -> void:
 	assert_true(driver.is_finished(), "and the log ended when the last one was applied")
 
 func test_commands_reach_the_applier_decoded() -> void:
-	var driver: ReplayDriver = _driver(_log([NetProtocol.make_move_unit(7, Vector2i(9, 4), 0)]))
+	var driver: ReplayDriver = _driver(_log([NetProtocol.make_move_unit("0:7", Vector3i(9, 4, 0), 0)]))
 	driver.play()
 	_run(driver, 2.0)
 
 	assert_eq(_fake.applied.size(), 1, "the one recorded command was applied")
 	var data: Dictionary = (_fake.applied[0] as Dictionary).get(NetProtocol.KEY_DATA, {})
-	assert_eq(data.get(NetProtocol.KEY_DEST_CELL), Vector2i(9, 4),
-		"with its cell decoded back to a Vector2i -- the applier takes the command AS-IS")
-	assert_eq(int(data.get(NetProtocol.KEY_UNIT_ID, -1)), 7, "addressing the recorded unit")
+	assert_eq(data.get(NetProtocol.KEY_DEST_CELL), Vector3i(9, 4, 0),
+		"with its cell decoded back to a Vector3i -- the applier takes the command AS-IS")
+	assert_eq(data.get(NetProtocol.KEY_UNIT_ID, ""), "0:7", "addressing the recorded unit")
 
 func test_an_applier_refusal_does_not_stop_playback() -> void:
 	# The CHECKSUM is the authority on drift, not an individual apply result: a refused command
@@ -390,8 +390,8 @@ func test_playback_frees_the_bot_driver() -> void:
 
 const MAP_PATH := "res://game/maps/resources/proving_grounds.tres"
 
-## Load the real map, register its units the way the battle's command seam does, and hand back
-## { board, applier, unit, cell }. Empty when the fixture could not be built.
+## Load the real map, name its units the way the battle's command seam does, and hand back
+## { board, applier, unit, unit_id, cell }. Empty when the fixture could not be built.
 func _live_seam() -> Dictionary:
 	var root3d: Node3D = Node3D.new()
 	add_child_autofree(root3d)
@@ -407,14 +407,19 @@ func _live_seam() -> Dictionary:
 	var units: Array = board.all_units()
 	if units.is_empty():
 		return {}
-	# Deterministic ids in load order, ids from 1 -- exactly what _setup_command_seam does.
-	var registry := CommandApplier.UnitRegistry.new()
-	registry.assign_map_units(units)
+	# Deterministic NetUnitIds ("<slot>:<n>") -- exactly what the battle's command seam does.
+	var applier := CommandApplier.new()
+	applier.assign_initial_ids()
+	var unit_id: String = "%d:0" % NetUnitIds.owner_slot(units[0])
+	var unit = NetUnitIds.find(board, unit_id)
+	if unit == null:
+		return {}
 	return {
 		"board": board,
-		"applier": CommandApplier.new(registry, null),
-		"unit": registry.unit_for(1),
-		"cell": board.cell_of(registry.unit_for(1)),
+		"applier": applier,
+		"unit": unit,
+		"unit_id": unit_id,
+		"cell": board.cell_of(unit),
 	}
 
 func test_a_recorded_move_moves_a_real_unit() -> void:
@@ -423,8 +428,8 @@ func test_a_recorded_move_moves_a_real_unit() -> void:
 		pending("the proving_grounds fixture could not be built in this environment")
 		return
 	var board = seam["board"]
-	var origin: Vector2i = seam["cell"]
-	var destination: Vector2i = origin + Vector2i(0, 1)
+	var origin: Vector3i = seam["cell"]
+	var destination: Vector3i = origin + Vector3i(0, 1, 0)
 
 	var driver: ReplayDriver = ReplayDriver.new()
 	driver.process_mode = Node.PROCESS_MODE_DISABLED
@@ -433,7 +438,7 @@ func test_a_recorded_move_moves_a_real_unit() -> void:
 	driver.board_provider = func(): return board
 	driver.animation_gate = func(): return false
 	# Through the STRICT importer first, exactly as a replay read off disk would be.
-	driver.setup(ReplayLog.validate(_log([NetProtocol.make_move_unit(1, destination, 0)])))
+	driver.setup(ReplayLog.validate(_log([NetProtocol.make_move_unit(String(seam["unit_id"]), destination, 0)])))
 
 	assert_true(driver.step(), "the recorded command was applied")
 	assert_eq(board.cell_of(seam["unit"]), destination,

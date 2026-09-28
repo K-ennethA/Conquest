@@ -15,14 +15,14 @@ class_name ArenaRunHUD
 ## ArenaController call is guarded so mounting it without an active run can never
 ## crash.
 
-# --- Warm Conquest amber palette (pulled from ConquestTheme when present, with
-# tasteful hardcoded fallbacks so this panel renders even if the theme moves). ---
-const _AMBER: Color = Color("e6a64b")
-const _CREAM: Color = Color("fcefd6")
-const _CREAM_DIM: Color = Color("e7d3ad")
-const _INK: Color = Color("2a1608")
-const _BROWN: Color = Color("5a3a1e")
-const _PLATE: Color = Color("2c2114")
+# --- Shared HUD palette (ConquestTheme / MenuTheme tokens: navy + gold). _INK is
+# the TEXT colour on the navy panel (cream), kept under its old name. ---
+const _AMBER: Color = ConquestTheme.GOLD
+const _CREAM: Color = ConquestTheme.CREAM
+const _CREAM_DIM: Color = ConquestTheme.TEXT_DIM
+const _INK: Color = ConquestTheme.CREAM
+const _BROWN: Color = ConquestTheme.BORDER
+const _PLATE: Color = ConquestTheme.PANEL_SUNK
 
 var _controller: Node = null
 var _panel: PanelContainer = null
@@ -83,9 +83,11 @@ func _build_panel() -> void:
 	_panel.anchor_bottom = 0.0
 	_panel.grow_horizontal = Control.GROW_DIRECTION_END
 	_panel.grow_vertical = Control.GROW_DIRECTION_END
-	_panel.offset_left = 14.0
-	_panel.offset_top = 46.0
-	_panel.custom_minimum_size = Vector2(196.0, 0.0)
+	_panel.offset_left = ConquestTheme.MARGIN
+	_panel.offset_top = 60.0
+	_panel.custom_minimum_size = Vector2(220.0, 0.0)
+	# The combat forecast stacks below every "hud_top_left" panel.
+	_panel.add_to_group("hud_top_left")
 	_panel.add_theme_stylebox_override("panel", _panel_style())
 	root.add_child(_panel)
 
@@ -95,10 +97,10 @@ func _build_panel() -> void:
 	_panel.add_child(_body)
 
 
-func _panel_style() -> StyleBoxFlat:
+func _panel_style() -> StyleBox:
 	# Prefer the shared amber card look; fall back to an inline equivalent.
 	if _has_conquest_theme():
-		var themed: StyleBoxFlat = ConquestTheme.panel_box()
+		var themed: StyleBox = ConquestTheme.panel_box()
 		if themed != null:
 			return themed
 	var sb: StyleBoxFlat = StyleBoxFlat.new()
@@ -157,8 +159,9 @@ func _make_title(text: String) -> Label:
 	var l: Label = Label.new()
 	l.text = text
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	l.add_theme_color_override("font_color", _INK)
-	l.add_theme_font_size_override("font_size", 18)
+	l.add_theme_color_override("font_color", ConquestTheme.GOLD)
+	l.add_theme_font_override("font", MenuTheme.heading_font(2))
+	l.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
 	return l
 
 
@@ -182,7 +185,7 @@ func _make_unit_row(unit_state: ArenaUnitState, run: ArenaRun) -> Control:
 	name_label.text = _humanize(unit_state.character_id)
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	name_label.add_theme_color_override("font_color", _INK)
-	name_label.add_theme_font_size_override("font_size", 14)
+	name_label.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(name_label)
 
@@ -194,7 +197,7 @@ func _make_unit_row(unit_state: ArenaUnitState, run: ArenaRun) -> Control:
 		# click, so the panel still lets board input through.
 		badge.mouse_filter = Control.MOUSE_FILTER_PASS
 		badge.add_theme_color_override("font_color", _CREAM)
-		badge.add_theme_font_size_override("font_size", 13)
+		badge.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
 		badge.add_theme_stylebox_override("normal", _badge_style())
 		badge.tooltip_text = _augment_names(unit_state, run)  # names via augment_for_id
 		row.add_child(badge)
@@ -210,7 +213,7 @@ func _make_stat_row(label_text: String, value_text: String, value_color: Color) 
 	key.text = label_text
 	key.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	key.add_theme_color_override("font_color", _INK)
-	key.add_theme_font_size_override("font_size", 14)
+	key.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
 	key.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(key)
 
@@ -218,7 +221,7 @@ func _make_stat_row(label_text: String, value_text: String, value_color: Color) 
 	val.text = value_text
 	val.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	val.add_theme_color_override("font_color", value_color)
-	val.add_theme_font_size_override("font_size", 14)
+	val.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
 	val.add_theme_stylebox_override("normal", _badge_style())
 	row.add_child(val)
 

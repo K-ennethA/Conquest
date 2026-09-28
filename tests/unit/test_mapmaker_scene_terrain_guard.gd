@@ -34,25 +34,25 @@ func after_each():
 # --- Placement refusal (SPAWN / OBJECTIVE tools) ------------------------------
 
 func test_toggle_spawn_denied_on_wall_tile():
-	model.paint_tile(Vector2i(2, 2), "WALL", "", WALL_TILE_ID)
+	model.paint_tile(Vector2i(2, 2), "WALL", "", 0, WALL_TILE_ID)
 	scene._toggle_spawn_at(Vector2i(2, 2))
 	assert_true(model.get_spawn(Vector2i(2, 2)).is_empty(), "spawn must not be placed on a wall tile")
 
 
 func test_toggle_spawn_allowed_on_passable_tile():
-	model.paint_tile(Vector2i(2, 2), "NORMAL", "", GRASS_TILE_ID)
+	model.paint_tile(Vector2i(2, 2), "NORMAL", "", 0, GRASS_TILE_ID)
 	scene._toggle_spawn_at(Vector2i(2, 2))
 	assert_false(model.get_spawn(Vector2i(2, 2)).is_empty(), "spawn should be placed on passable terrain")
 
 
 func test_toggle_objective_denied_on_wall_tile():
-	model.paint_tile(Vector2i(1, 1), "WALL", "", WALL_TILE_ID)
+	model.paint_tile(Vector2i(1, 1), "WALL", "", 0, WALL_TILE_ID)
 	scene._toggle_objective_at(Vector2i(1, 1))
 	assert_true(model.get_objective(Vector2i(1, 1)).is_empty(), "objective must not be placed on a wall tile")
 
 
 func test_toggle_objective_allowed_on_passable_tile():
-	model.paint_tile(Vector2i(1, 1), "NORMAL", "", GRASS_TILE_ID)
+	model.paint_tile(Vector2i(1, 1), "NORMAL", "", 0, GRASS_TILE_ID)
 	scene._toggle_objective_at(Vector2i(1, 1))
 	assert_false(model.get_objective(Vector2i(1, 1)).is_empty(), "objective should be placed on passable terrain")
 
@@ -60,9 +60,9 @@ func test_toggle_objective_allowed_on_passable_tile():
 func test_removing_an_existing_spawn_ignores_terrain():
 	# Toggling OFF an existing spawn must always work, even if terrain later became
 	# impassable underneath it (e.g. via direct model edits bypassing the paint guard).
-	model.paint_tile(Vector2i(2, 2), "NORMAL", "", GRASS_TILE_ID)
+	model.paint_tile(Vector2i(2, 2), "NORMAL", "", 0, GRASS_TILE_ID)
 	model.place_spawn(Vector2i(2, 2), 0)
-	model.paint_tile(Vector2i(2, 2), "WALL", "", WALL_TILE_ID)  # direct model edit, bypasses the scene guard
+	model.paint_tile(Vector2i(2, 2), "WALL", "", 0, WALL_TILE_ID)  # direct model edit, bypasses the scene guard
 	scene._toggle_spawn_at(Vector2i(2, 2))  # should remove, not attempt to re-place
 	assert_true(model.get_spawn(Vector2i(2, 2)).is_empty(), "toggling an existing spawn always removes it")
 
@@ -70,7 +70,7 @@ func test_removing_an_existing_spawn_ignores_terrain():
 # --- Paint-over auto-remove ----------------------------------------------------
 
 func test_painting_wall_over_spawn_removes_it():
-	model.paint_tile(Vector2i(3, 3), "NORMAL", "", GRASS_TILE_ID)
+	model.paint_tile(Vector2i(3, 3), "NORMAL", "", 0, GRASS_TILE_ID)
 	model.place_spawn(Vector2i(3, 3), 0)
 	assert_false(model.get_spawn(Vector2i(3, 3)).is_empty(), "sanity: spawn placed before repaint")
 
@@ -84,7 +84,7 @@ func test_painting_wall_over_spawn_removes_it():
 
 
 func test_painting_wall_over_objective_removes_it():
-	model.paint_tile(Vector2i(4, 0), "NORMAL", "", GRASS_TILE_ID)
+	model.paint_tile(Vector2i(4, 0), "NORMAL", "", 0, GRASS_TILE_ID)
 	model.set_objective(Vector2i(4, 0), "THRONE", 0)
 
 	scene._selected_tile_type = "WALL"
@@ -106,7 +106,7 @@ func test_painting_wall_over_empty_cell_is_a_no_op_beyond_the_paint():
 
 
 func test_painting_passable_tile_over_spawn_keeps_it():
-	model.paint_tile(Vector2i(3, 3), "NORMAL", "", GRASS_TILE_ID)
+	model.paint_tile(Vector2i(3, 3), "NORMAL", "", 0, GRASS_TILE_ID)
 	model.place_spawn(Vector2i(3, 3), 0)
 
 	scene._selected_tile_type = "NORMAL"

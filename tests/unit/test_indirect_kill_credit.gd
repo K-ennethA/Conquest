@@ -53,7 +53,7 @@ class Prey:
 ## prefers, and removing a unit from `placements` is how a test takes it OFF the board.
 class MockBoard:
 	var placements: Array = []
-	func place(unit, cell: Vector2i) -> void:
+	func place(unit, cell: Vector3i) -> void:
 		placements.append({ "unit": unit, "cell": cell })
 	func remove(unit) -> void:
 		var kept: Array = []
@@ -61,12 +61,12 @@ class MockBoard:
 			if p.unit != unit:
 				kept.append(p)
 		placements = kept
-	func cell_of(unit) -> Vector2i:
+	func cell_of(unit) -> Vector3i:
 		for p in placements:
 			if p.unit == unit:
 				return p.cell
-		return Vector2i(-999, -999)
-	func units_at(cell: Vector2i) -> Array:
+		return Vector3i(-999, -999, 0)
+	func units_at(cell: Vector3i) -> Array:
 		var out: Array = []
 		for p in placements:
 			if p.cell == cell:
@@ -123,7 +123,7 @@ func _controller_for(unit) -> StatusController:
 
 ## An ENEMY-targeted single-cell context aimed at [param target].
 func _context(caster, board, target) -> MoveContext:
-	var cell: Vector2i = board.cell_of(target)
+	var cell: Vector3i = board.cell_of(target)
 	var move := MoveResource.new()
 	move.move_id = &"test_apply"
 	var pattern := TargetingPattern.new()
@@ -132,7 +132,7 @@ func _context(caster, board, target) -> MoveContext:
 	pattern.max_range = 6
 	pattern.area_shape = CombatTypes.AreaShape.SINGLE
 	move.targeting = pattern
-	return MoveContext.new(caster, board, move, cell, [cell] as Array[Vector2i])
+	return MoveContext.new(caster, board, move, cell, [cell] as Array[Vector3i])
 
 
 # ===========================================================================
@@ -143,8 +143,8 @@ func test_a_live_applier_on_the_board_is_credited() -> void:
 	var board := MockBoard.new()
 	var applier := Prey.new(50)
 	var victim := Prey.new(30)
-	board.place(applier, Vector2i(0, 0))
-	board.place(victim, Vector2i(3, 0))
+	board.place(applier, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(3, 0, 0))
 	assert_eq(DamageEffect.credited_source(applier, victim, board), applier,
 		"the unit that applied the status owns what it does")
 
@@ -153,8 +153,8 @@ func test_a_dead_applier_credits_nobody() -> void:
 	var board := MockBoard.new()
 	var applier := Prey.new(50)
 	var victim := Prey.new(30)
-	board.place(applier, Vector2i(0, 0))
-	board.place(victim, Vector2i(3, 0))
+	board.place(applier, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(3, 0, 0))
 	applier.hp = 0
 	assert_null(DamageEffect.credited_source(applier, victim, board),
 		"you cannot earn a kill after you are dead -- the poison outlives you unattributed")
@@ -164,8 +164,8 @@ func test_an_applier_no_longer_on_the_board_credits_nobody() -> void:
 	var board := MockBoard.new()
 	var applier := Prey.new(50)
 	var victim := Prey.new(30)
-	board.place(applier, Vector2i(0, 0))
-	board.place(victim, Vector2i(3, 0))
+	board.place(applier, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(3, 0, 0))
 	board.remove(applier)
 	assert_null(DamageEffect.credited_source(applier, victim, board),
 		"an applier that has left the board is absent, and absent credits nobody")
@@ -174,7 +174,7 @@ func test_an_applier_no_longer_on_the_board_credits_nobody() -> void:
 func test_self_inflicted_damage_never_credits_the_victim() -> void:
 	var board := MockBoard.new()
 	var victim := Prey.new(30)
-	board.place(victim, Vector2i(3, 0))
+	board.place(victim, Vector3i(3, 0, 0))
 	assert_null(DamageEffect.credited_source(victim, victim, board),
 		"a unit must never be credited with its own death -- the whole bug in one line")
 
@@ -182,7 +182,7 @@ func test_self_inflicted_damage_never_credits_the_victim() -> void:
 func test_no_applier_at_all_credits_nobody() -> void:
 	var board := MockBoard.new()
 	var victim := Prey.new(30)
-	board.place(victim, Vector2i(3, 0))
+	board.place(victim, Vector3i(3, 0, 0))
 	assert_null(DamageEffect.credited_source(null, victim, board),
 		"a status nobody applied (a tile, a scripted debuff) is unattributed")
 
@@ -190,7 +190,7 @@ func test_no_applier_at_all_credits_nobody() -> void:
 func test_a_freed_applier_credits_nobody_instead_of_dangling() -> void:
 	var board := MockBoard.new()
 	var victim := Prey.new(30)
-	board.place(victim, Vector2i(3, 0))
+	board.place(victim, Vector3i(3, 0, 0))
 	var ghost := Node.new()
 	ghost.free()
 	assert_null(DamageEffect.credited_source(ghost, victim, board),
@@ -207,8 +207,8 @@ func test_apply_status_stamps_the_caster_on_the_condition_it_inflicts() -> void:
 	var board := MockBoard.new()
 	var caster := Prey.new(50)
 	var victim := Doubles.StatusSinkUnit.new(1, { "health": 100 })
-	board.place(caster, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 
 	var effect := ApplyStatusEffect.new()
 	effect.condition = _poisoned()
@@ -226,7 +226,7 @@ func test_a_self_buff_is_stamped_with_the_caster_too() -> void:
 	# self-applied damaging status would tick unattributed.
 	var board := MockBoard.new()
 	var caster := Doubles.StatusSinkUnit.new(0, { "health": 100 })
-	board.place(caster, Vector2i(0, 0))
+	board.place(caster, Vector3i(0, 0, 0))
 
 	var effect := ApplyStatusEffect.new()
 	effect.condition = load("res://game/combat/status/braced.tres") as StatusCondition
@@ -284,8 +284,8 @@ func test_a_tick_credits_the_unit_that_applied_the_status() -> void:
 	var board := MockBoard.new()
 	var applier := Prey.new(50)
 	var victim := Prey.new(100)
-	board.place(applier, Vector2i(0, 0))
-	board.place(victim, Vector2i(4, 0))
+	board.place(applier, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(4, 0, 0))
 
 	var probe := CreditProbe.new()
 	_probed_status(probe, applier).tick(victim, board)
@@ -299,8 +299,8 @@ func test_a_tick_from_a_dead_applier_credits_nobody() -> void:
 	var board := MockBoard.new()
 	var applier := Prey.new(50)
 	var victim := Prey.new(100)
-	board.place(applier, Vector2i(0, 0))
-	board.place(victim, Vector2i(4, 0))
+	board.place(applier, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(4, 0, 0))
 	applier.hp = 0
 
 	var probe := CreditProbe.new()
@@ -312,7 +312,7 @@ func test_a_tick_from_a_dead_applier_credits_nobody() -> void:
 func test_a_self_applied_tick_credits_nobody() -> void:
 	var board := MockBoard.new()
 	var victim := Prey.new(100)
-	board.place(victim, Vector2i(4, 0))
+	board.place(victim, Vector3i(4, 0, 0))
 
 	var probe := CreditProbe.new()
 	_probed_status(probe, victim).tick(victim, board)
@@ -328,8 +328,8 @@ func test_a_tick_leaves_the_casters_own_math_alone() -> void:
 	var board := MockBoard.new()
 	var applier := Prey.new(50)
 	var victim := Prey.new(100)
-	board.place(applier, Vector2i(0, 0))
-	board.place(victim, Vector2i(4, 0))
+	board.place(applier, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(4, 0, 0))
 
 	var before: int = victim.hp
 	_probed_status(CreditProbe.new(), applier).tick(victim, board)
@@ -349,8 +349,8 @@ func test_an_unset_credit_still_resolves_to_the_caster() -> void:
 	var board := MockBoard.new()
 	var caster := Prey.new(50)
 	var target := Prey.new(100)
-	board.place(caster, Vector2i(0, 0))
-	board.place(target, Vector2i(1, 0))
+	board.place(caster, Vector3i(0, 0, 0))
+	board.place(target, Vector3i(1, 0, 0))
 	assert_eq(_context(caster, board, target).damage_credit(), caster,
 		"no override means the caster is credited")
 
@@ -361,7 +361,7 @@ func test_an_unset_credit_still_resolves_to_the_caster() -> void:
 
 func _hazard(source, damage: int, bus) -> TravelingHazard:
 	var hazard := TravelingHazard.new(
-		Vector2i(0, 0), Vector2i(1, 0), 0, 1, 4, damage,
+		Vector3i(0, 0, 0), Vector3i(1, 0, 0), 0, 1, 4, damage,
 		CombatTypes.DamageCategory.TRUE, CombatTypes.TargetKind.ENEMY, source)
 	hazard.event_bus = bus
 	return hazard
@@ -371,8 +371,8 @@ func test_a_hazard_hit_is_announced_and_credited_to_its_owner() -> void:
 	var board := MockBoard.new()
 	var eldroot := Prey.new(200)
 	var victim := Prey.new(50)
-	board.place(eldroot, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(eldroot, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 
 	var bus := MockBus.new()
 	var seen: Array = []
@@ -390,8 +390,8 @@ func test_a_hazard_announces_before_it_applies_so_a_lethal_band_is_attributable(
 	var board := MockBoard.new()
 	var eldroot := Prey.new(200)
 	var victim := Prey.new(5)
-	board.place(eldroot, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(eldroot, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 
 	var bus := MockBus.new()
 	var hp_when_announced: Array = []
@@ -408,8 +408,8 @@ func test_a_hazard_whose_owner_has_died_credits_nobody() -> void:
 	var board := MockBoard.new()
 	var eldroot := Prey.new(200)
 	var victim := Prey.new(50)
-	board.place(eldroot, Vector2i(0, 0))
-	board.place(victim, Vector2i(1, 0))
+	board.place(eldroot, Vector3i(0, 0, 0))
+	board.place(victim, Vector3i(1, 0, 0))
 	eldroot.hp = 0  # the boss fell before its vine finished crawling
 
 	var bus := MockBus.new()
@@ -425,7 +425,7 @@ func test_a_hazard_whose_owner_has_died_credits_nobody() -> void:
 func test_a_hazard_that_hits_nothing_announces_nothing() -> void:
 	var board := MockBoard.new()
 	var eldroot := Prey.new(200)
-	board.place(eldroot, Vector2i(0, 0))
+	board.place(eldroot, Vector3i(0, 0, 0))
 
 	var bus := MockBus.new()
 	var seen: Array = []

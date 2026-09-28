@@ -59,6 +59,7 @@ func apply(ctx: MoveContext) -> void:
 	for target in targets:
 		var outcome := ctx.resolve_hit(target)
 		if not outcome.get("hit", true):
+			CombatText.annotate(target, CombatText.info_for(ctx, CombatText.KIND_MISS, 0), ctx.event_bus)
 			ctx.log_event({
 				"effect": "damage",
 				"target": target,
@@ -73,6 +74,7 @@ func apply(ctx: MoveContext) -> void:
 		# otherwise drag it back up to 1. Logged explicitly so the combat log can say
 		# the hit was NEGATED rather than silently reporting a 0 that reads like a bug.
 		if is_invulnerable(target):
+			CombatText.annotate(target, CombatText.info_for(ctx, CombatText.KIND_NEGATED, 0), ctx.event_bus)
 			_announce(ctx, target, 0)
 			ctx.log_event({
 				"effect": "damage",
@@ -86,7 +88,8 @@ func apply(ctx: MoveContext) -> void:
 		# --- Damage order, after mitigation ---------------------------------
 		# THE WHOLE post-mitigation chain -- the attacker's predation bonus, the
 		# attacker's element-hunter bonus, the defender's own damage_taken_scale, then
-		# the ElementChart matchup -- is DamageMath.apply_scales: the SAME function
+		# the ElementChart matchup, the weather's element multiplier and the height
+		# advantage (multi-floor) -- is DamageMath.apply_scales: the SAME function
 		# MoveExecutor.preview_vs runs. It is not a copy of the forecast's arithmetic,
 		# it IS that arithmetic, so the number the player was shown and the number the
 		# board applies cannot drift apart. A caster with no passives hitting a target
@@ -128,6 +131,12 @@ func apply(ctx: MoveContext) -> void:
 		var applied: int = dealt
 		if not controlled_before and is_mind_controlled(target):
 			applied = mini(dealt, maxi(0, hp_of(target) - 1))
+		# Floating combat text / log annotation (presentation only, consumes no RNG).
+		# Emitted JUST BEFORE the HP change it describes, with the amount really applied.
+		CombatText.annotate(target, CombatText.info_for(ctx, CombatText.KIND_DAMAGE, applied, {
+			"crit": crit,
+			"effectiveness": ElementChart.type_scale_for(ctx.move, target),
+		}), ctx.event_bus)
 		if applied > 0 and target.has_method("take_damage"):
 			target.take_damage(applied)
 		total_dealt += applied
@@ -145,6 +154,10 @@ func apply(ctx: MoveContext) -> void:
 	if lifesteal > 0.0 and total_dealt > 0 and ctx.caster != null and ctx.caster.has_method("heal"):
 		var healed: int = int(round(float(total_dealt) * lifesteal))
 		if healed > 0:
+			CombatText.annotate(ctx.caster, {
+				"kind": CombatText.KIND_HEAL, "amount": healed,
+				"source_kind": CombatText.SRC_LIFESTEAL, "source": "Lifesteal",
+			}, ctx.event_bus)
 			ctx.caster.heal(healed)
 			ctx.log_event({
 				"effect": "lifesteal",
