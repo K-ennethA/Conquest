@@ -164,3 +164,16 @@ doc's default differs from this file, THIS FILE WINS. Anything not listed: use t
       roster to lose); fallen units show as fallen in the Party menu (with where/when they fell),
       are excluded from squads and duels, and their equipped item returns to the bag.
       The hero is not a battle unit yet — hero death rules come with that milestone.
+
+### Permadeath refinements (owner, 2026-09-28) — supersede 29's defaults where they differ
+- **Chosen at the start of a journey**, as a difficulty TIER. A player may move DOWN a tier
+  mid-journey if it's too hard (Classic -> Casual), never back up.
+- **Casual tier:** knocked-out units are recovered AT A COST OF GOLD (e.g. at a Wayshrine /
+  healer), not for free. (Revive items from shops also work in both tiers.)
+- **Story mode only for now.** Later idea (not now): a Campaign "challenge" mode where fallen
+  units are lost for the rest of that run.
+- **Fallen units:** as in 29 (kept as records, shown as fallen, excluded, item returned).
+- **Game over:** the MAIN CHARACTER falling is always a game over. Other characters can also
+  cause a game over when the story or mission objective says so (e.g. "Protect Linnea") — use
+  the engine's ProtectUnit lose condition (exists as a class; needs wiring into maps/story
+  battles). A game over returns to the last save / pre-battle autosave.
