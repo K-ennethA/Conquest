@@ -4,8 +4,7 @@ class_name SoloModeSelect
 
 ## Solo mode picker, reached from MainMenu's "Solo" button. Offers the single-player
 ## registers as large mode cards -- Campaign (the story battles ending at the Eldroot
-## boss, via [CampaignScreen]), Skirmish (pick a map, fight the AI), Siege (push the lanes
-## and take their base), Arena Run (draft augments across a gauntlet), Challenges and Duel
+## boss, via [CampaignScreen]), Skirmish (pick a map, fight the AI), Arena Run (draft augments across a gauntlet), Challenges and Duel
 ## (a 1v1 turn battle, via [DuelSetup]) -- then hands off to the matching screen. This is
 ## also the Arena entry point (Arena is no longer a title-screen command): Arena Run opens
 ## [MatchSetup] in its arena variant.
@@ -14,8 +13,11 @@ class_name SoloModeSelect
 ## key hints, Back in the footer); each mode is an [method MenuKit.option_card] with an
 ## accent edge, a Cinzel heading, a tagline and its number key.
 ##
-## Keyboard: 1 = Campaign, 2 = Skirmish, 3 = Siege, 4 = Arena Run, 5 = Challenges,
-## 6 = Duel, 7 = Story, Esc / pad B = back. Mouse hover and keyboard / pad focus are one
+## Siege (MatchConfigPanel.MODE_SIEGE) is no longer offered here; its runtime stays in
+## game/modes for a possible return.
+##
+## Keyboard: 1 = Campaign, 2 = Skirmish, 3 = Arena Run, 4 = Challenges, 5 = Duel,
+## 6 = Story, Esc / pad B = back. Mouse hover and keyboard / pad focus are one
 ## highlight (MenuNav).
 
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
@@ -30,16 +32,16 @@ const STORY_START_SCENE := "res://game/overworld/ui/StoryStartScreen.tscn"
 # The cards are EXPAND_FILL inside one HBox, so the row's MINIMUM width is what has to fit
 # -- a card narrower than its custom_minimum is not something a container will give you.
 #
-#   7 cards x CARD_WIDTH + 6 x CARD_SEPARATION  =  7 x 158 + 6 x 12  =  1178
+#   6 cards x CARD_WIDTH + 5 x CARD_SEPARATION  =  6 x 185 + 5 x 14  =  1180
 #
 # ...which is exactly the page width, inside the 1280 viewport. CARD_HEIGHT is the row's
 # height floor; the card content (rule, heading, tagline, wrapped blurb) fits inside it,
 # so the row never grows taller.
-const CARD_WIDTH: float = 158.0
-## 232 (was 180 with five cards, 200 with six): seven narrower cards wrap the longer
-## taglines and blurbs, so the row trades a little height for the extra cards' width.
-const CARD_HEIGHT: float = 232.0
-const CARD_SEPARATION: int = 12
+const CARD_WIDTH: float = 185.0
+## 200 (was 180 with five cards): six narrower cards wrap the longer taglines, so the row
+## trades a little height for the sixth card's width.
+const CARD_HEIGHT: float = 200.0
+const CARD_SEPARATION: int = 14
 const PAGE_WIDTH: float = 1180.0
 
 var _cards: Array[Button] = []
@@ -74,21 +76,15 @@ func _build_ui(page: Dictionary) -> void:
 	_add_card(cards, _make_mode_card(2, "Skirmish", "You vs the AI",
 		"Pick a map, choose your squad, defeat the AI.", MenuTheme.GOLD,
 		MatchConfigPanel.MODE_SKIRMISH))
-	# Siege sits beside Skirmish, not off in its own register: both are "pick a map, take a
-	# squad, fight the AI", and what makes Siege different is the MAP's own objective.
-	_add_card(cards, _make_mode_card(3, "Siege", "Lanes and bases",
-		"Push the lanes, hold your base, take theirs.", MenuTheme.TEAM_RED,
-		MatchConfigPanel.MODE_SIEGE))
-	_add_card(cards, _make_mode_card(4, "Arena Run", "Roguelite",
+	_add_card(cards, _make_mode_card(3, "Arena Run", "Roguelite",
 		"Draft augments between rounds. Survive the gauntlet.", MenuTheme.EL_FIRE,
 		MatchConfigPanel.MODE_ARENA))
-	_add_card(cards, _make_action_card(5, "Challenges", "Community",
+	_add_card(cards, _make_action_card(4, "Challenges", "Community",
 		"Beat maps other players built -- or share your own gauntlet.", MenuTheme.ACCENT,
 		_on_challenges_chosen))
-	_add_card(cards, _make_action_card(6, "Duel", "One on one",
+	_add_card(cards, _make_action_card(5, "Duel", "One on one",
 		"Two units, no movement -- just the moves.", MenuTheme.EL_EARTH, _on_duel_chosen))
-	# STORY (overworld): appended after Duel so the existing number keys keep their cards.
-	_add_card(cards, _make_action_card(7, "Story", "Journey",
+	_add_card(cards, _make_action_card(6, "Story", "Journey",
 		"Walk the forest, meet its people, fight what bars the road.", MenuTheme.EL_HOLY,
 		_on_story_chosen))
 	# Wrap horizontal focus across the row.
@@ -102,7 +98,7 @@ func _build_ui(page: Dictionary) -> void:
 
 	MenuKit.add_standard_hints(page.hints, "Select")
 	var hint := MenuKit.label(
-		"1 Campaign  •  2 Skirmish  •  3 Siege  •  4 Arena Run  •  5 Challenges  •  6 Duel  •  7 Story", &"MutedLabel")
+		"1 Campaign  •  2 Skirmish  •  3 Arena Run  •  4 Challenges  •  5 Duel  •  6 Story", &"MutedLabel")
 	hint.name = "KeyHint"
 	hint.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER

@@ -47,7 +47,7 @@ func test_solo_picker_has_a_story_card() -> void:
 	assert_not_null(card, "a Story card on the Solo picker")
 	assert_true(card.is_visible_in_tree(), "drawn")
 	var hint := screen.find_child("KeyHint", true, false) as Label
-	assert_true(hint.text.contains("7 Story"), "with its number key")
+	assert_true(hint.text.contains("6 Story"), "with its number key")
 	assert_true(card.get_global_rect().end.x <= DESIGN.x + 0.5, "and it fits the 720p page")
 
 

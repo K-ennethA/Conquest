@@ -109,7 +109,7 @@ func _spawns_for(player_id: int) -> Array:
 func test_map_loads_and_is_offered_to_players() -> void:
 	assert_not_null(_map, "the Riftwood map resource should load")
 	assert_eq(_map.map_name, "Riftwood")
-	assert_true(_map.is_active(), "must be Active so it lists in the map picker")
+	assert_false(_map.is_active(), "Inactive: Siege is no longer selectable, so its map is not listed")
 	assert_eq(String(_map.victory_conditions[0]), "Capture Enemy Base",
 		"a siege is won by TAKING the other base -- standing a hero on its cell and holding "
 		+ "it for a turn -- not by flattening a structure")
@@ -128,8 +128,10 @@ func test_declares_three_player_slots_for_the_neutral_faction() -> void:
 
 
 func test_it_is_listed_as_a_builtin_and_is_versus_eligible() -> void:
-	assert_has(MapLoader.get_available_maps(false), MAP_PATH,
-		"an Active builtin is offered by the map picker")
+	assert_does_not_have(MapLoader.get_available_maps(false), MAP_PATH,
+		"Inactive, so the map picker does not offer it")
+	assert_has(MapLoader.get_available_maps(true), MAP_PATH,
+		"but it is still a builtin (drafts included)")
 	assert_true(MapCatalog.is_versus_eligible(_map),
 		"two sides own squad chairs, so a versus match can be played on it")
 

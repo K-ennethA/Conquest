@@ -96,9 +96,11 @@ func test_two_seat_maps_stay_network_eligible() -> void:
 
 # --- the lobby rows -------------------------------------------------------------
 
-func test_the_networked_list_disables_riftwood_and_says_why() -> void:
-	var row := _row_for(MapRowBuilder.versus_rows(true), RIFTWOOD)
-	assert_false(row.is_empty(), "Riftwood is still LISTED online (greyed, not hidden)")
+# Riftwood itself is Inactive now (Siege is not selectable), so King's Crossing -- the other
+# third-faction map, still Active -- is the one the online list must grey out.
+func test_the_networked_list_disables_kings_crossing_and_says_why() -> void:
+	var row := _row_for(MapRowBuilder.versus_rows(true), KINGS_CROSSING)
+	assert_false(row.is_empty(), "King's Crossing is still LISTED online (greyed, not hidden)")
 	assert_true(bool(row["disabled"]), "but it cannot be picked")
 	assert_eq(String(row["tooltip"]),
 		MapCatalog.describe_network_refusal(MapCatalog.NET_REFUSAL_THIRD_FACTION), "the reason is the tooltip")

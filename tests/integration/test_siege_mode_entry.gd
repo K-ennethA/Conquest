@@ -138,17 +138,12 @@ func _bound_mode(button: Button) -> String:
 #  The solo picker
 # =====================================================================================
 
-func test_siege_is_a_card_on_the_solo_picker_beside_skirmish() -> void:
+# Siege is no longer SELECTABLE (owner decision, 2026-09-28): no card on either picker and
+# its map (Riftwood) is Inactive. The mode's runtime and its MatchSetup variant stay in the
+# code, so the setup-screen tests further down still pin that dormant path.
+func test_siege_is_not_offered_on_the_solo_picker() -> void:
 	var screen: Control = await _open("res://menus/SoloModeSelect.gd")
-	var card: Button = _card_with(screen, "Siege")
-
-	assert_not_null(card, "the solo picker offers Siege as a card, where Skirmish is offered")
-	if card == null:
-		return
-	gut.p("siege card  : rect=%s" % Rect2(card.global_position, card.size))
-	assert_true(card.is_visible_in_tree(), "and it is drawn, not built and hidden")
-	assert_eq(_bound_mode(card), MatchConfigPanel.MODE_SIEGE,
-			"pressing it stages the SIEGE variant of the setup screen")
+	assert_null(_card_with(screen, "Siege"), "the solo picker no longer offers Siege")
 
 
 func test_all_cards_still_fit_the_720p_page() -> void:
@@ -167,9 +162,9 @@ func test_all_cards_still_fit_the_720p_page() -> void:
 	gut.p("cards       : %d   min row width=%.0f   page=%.0f   viewport=%.0f"
 			% [count, expected, SoloModeSelect.PAGE_WIDTH, viewport_width])
 
-	assert_eq(count, 7, "Campaign, Skirmish, Siege, Arena Run, Challenges, Duel, Story")
+	assert_eq(count, 6, "Campaign, Skirmish, Arena Run, Challenges, Duel, Story")
 	assert_true(expected <= SoloModeSelect.PAGE_WIDTH + 0.5,
-			"7 x %.0f + 6 x %d = %.0f fits the page's %.0f"
+			"6 x %.0f + 5 x %d = %.0f fits the page's %.0f"
 			% [SoloModeSelect.CARD_WIDTH, SoloModeSelect.CARD_SEPARATION,
 			expected, SoloModeSelect.PAGE_WIDTH])
 	assert_true(cards.get_combined_minimum_size().x <= viewport_width + 0.5,
@@ -185,8 +180,8 @@ func test_the_key_hint_names_the_new_card_and_renumbers_the_rest() -> void:
 	if hint == null:
 		return
 	gut.p("key hint    : \"%s\"" % hint.text)
-	assert_true(hint.text.contains("3 Siege"), "Siege takes the 3 key")
-	assert_true(hint.text.contains("4 Arena Run") and hint.text.contains("5 Challenges"),
+	assert_false(hint.text.contains("Siege"), "Siege is gone from the key hints")
+	assert_true(hint.text.contains("3 Arena Run") and hint.text.contains("4 Challenges"),
 			"and the cards after it are renumbered rather than left lying about the keys")
 
 
@@ -194,17 +189,12 @@ func test_the_key_hint_names_the_new_card_and_renumbers_the_rest() -> void:
 #  The versus picker
 # =====================================================================================
 
-func test_siege_is_also_offerable_hot_seat() -> void:
+func test_siege_is_not_offered_hot_seat() -> void:
 	var screen: Control = await _open("res://menus/MultiplayerModeSelection.gd")
-	var card: Button = _card_with(screen, "Siege")
-
-	assert_not_null(card, "local versus offers Siege too -- the mode is not solo-only")
-	if card == null:
-		return
-	assert_true(card.is_visible_in_tree(), "and it is drawn")
+	assert_null(_card_with(screen, "Siege"), "local versus no longer offers Siege")
 	var hint: Label = _find_named(screen, "KeyHint") as Label
-	assert_true(hint != null and hint.text.contains("2 Siege"),
-			"with a key of its own on the hint line")
+	assert_true(hint != null and hint.text.contains("2 Network") and not hint.text.contains("Siege"),
+			"Network takes the 2 key")
 
 
 # =====================================================================================
