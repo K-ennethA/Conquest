@@ -12,6 +12,7 @@ extends GutTest
 ## Uses wall-clock holds (the step pace IS wall-clock), well under a second each.
 
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
+const StoryFixture := preload("res://tests/helpers/story_fixture.gd")
 const OVERWORLD_SCENE := preload("res://game/overworld/OverworldScene.tscn")
 const TEMP_DIR := "user://test_overworld_key_walk/"
 ## Oakvale's start: open flagstones for several cells west along row 11.
@@ -56,6 +57,8 @@ func _boot(facing: String) -> OverworldController:
 	StoryController.new_journey(1)
 	var s: StoryState = StoryController.state()
 	s.grace_steps = 9999
+	# Past the send-off: the opening's first scene would otherwise hold input on this boot.
+	StoryFixture.sent_off(s)
 	s.set_location("oakvale", START, facing)
 	var w: Node = OVERWORLD_SCENE.instantiate()
 	_prev_scene = get_tree().current_scene

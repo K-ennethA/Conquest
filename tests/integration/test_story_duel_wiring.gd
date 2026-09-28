@@ -15,6 +15,7 @@ extends GutTest
 ## the seeded rolls themselves are covered by test_duel_lifecycle.
 
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
+const StoryFixture := preload("res://tests/helpers/story_fixture.gd")
 const OVERWORLD_SCENE := preload("res://game/overworld/OverworldScene.tscn")
 const STAGE := preload("res://game/duel/DuelStage.tscn")
 const TEMP_DIR := "user://test_story_duel_wiring/"
@@ -93,6 +94,7 @@ func _restore_shipped_launchers() -> void:
 func _boot(area: String = "", cell: Vector3i = Cells.INVALID, facing: String = "south") -> OverworldController:
 	if not StoryController.has_session():
 		StoryController.new_journey(1)
+		StoryFixture.past_opening(StoryController.state())
 	if area != "":
 		var s: StoryState = StoryController.state()
 		if area != s.location_area():
@@ -182,6 +184,7 @@ func _press_continue() -> void:
 
 func test_grass_encounter_runs_the_real_duel_and_a_befriend_grows_the_party() -> void:
 	StoryController.new_journey(1)
+	StoryFixture.past_opening(StoryController.state())
 	var s: StoryState = StoryController.state()
 	s.grace_steps = 0
 	var lead: StoryPartyMember = s.member("vineweave")
@@ -262,6 +265,7 @@ func test_grass_encounter_runs_the_real_duel_and_a_befriend_grows_the_party() ->
 
 func test_a_lost_wild_duel_whites_out_to_the_wayshrine() -> void:
 	StoryController.new_journey(1)
+	StoryFixture.past_opening(StoryController.state())
 	var s: StoryState = StoryController.state()
 	s.set_location("mossway", Vector3i(6, 3, 0), "east")
 	var req := _begin_wild(&"petalfang")
@@ -282,6 +286,7 @@ func test_a_lost_wild_duel_whites_out_to_the_wayshrine() -> void:
 
 func test_fleeing_ends_the_duel_where_you_stood() -> void:
 	StoryController.new_journey(1)
+	StoryFixture.past_opening(StoryController.state())
 	var s: StoryState = StoryController.state()
 	s.set_location("mossway", Vector3i(6, 3, 0), "east")
 	s.member("vineweave").current_hp = 60
@@ -306,6 +311,7 @@ func test_fleeing_ends_the_duel_where_you_stood() -> void:
 
 func test_the_story_critical_recruit_always_offers_on_a_win() -> void:
 	StoryController.new_journey(1)
+	StoryFixture.past_opening(StoryController.state())
 	var moss := StoryController.load_area("mossway")
 	var recruit = moss.entity("lone_petalfang")
 	var spec: BattleSpec = null

@@ -1,59 +1,77 @@
 [gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
 
-[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_43rxs"]
-[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_ucrti"]
-[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_ji41c"]
-[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="4_20hya"]
-[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="5_tsg00"]
-[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="6_ouhht"]
-[ext_resource type="Script" path="res://game/overworld/data/TrainerEntity.gd" id="7_klsnh"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="8_0eeu8"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/StartDuelCommand.gd" id="9_06gi4"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="10_ic44m"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/BefriendPromptCommand.gd" id="11_dl3pe"]
-[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="12_4p26e"]
-[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="13_2rcsc"]
-[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="14_s5dhr"]
-[ext_resource type="Resource" path="res://game/overworld/content/areas/mossway/terrain.tres" id="15_ym451"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_ucrti"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_ji41c"]
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_20hya"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="4_tsg00"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="5_ouhht"]
+[ext_resource type="Script" path="res://game/overworld/data/TriggerZone.gd" id="6_klsnh"]
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="7_0eeu8"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="8_06gi4"]
+[ext_resource type="Script" path="res://game/overworld/data/TrainerEntity.gd" id="9_ic44m"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/StartDuelCommand.gd" id="10_dl3pe"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="11_4p26e"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/BefriendPromptCommand.gd" id="12_2rcsc"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="13_s5dhr"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="14_ym451"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="15_7qlx6"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/mossway/terrain.tres" id="16_0h47u"]
 
-[sub_resource type="Resource" id="Resource_7qlx6"]
-script = ExtResource("2_ucrti")
+[sub_resource type="Resource" id="Resource_jkdkb"]
+script = ExtResource("2_ji41c")
 character_id = &"petalfang"
 weight = 3.0
 
-[sub_resource type="Resource" id="Resource_0h47u"]
-script = ExtResource("2_ucrti")
+[sub_resource type="Resource" id="Resource_pm21e"]
+script = ExtResource("2_ji41c")
 character_id = &"blightcap"
 weight = 2.0
 
-[sub_resource type="Resource" id="Resource_jkdkb"]
-script = ExtResource("2_ucrti")
+[sub_resource type="Resource" id="Resource_c6ene"]
+script = ExtResource("2_ji41c")
 character_id = &"tree_grunt"
 
-[sub_resource type="Resource" id="Resource_pm21e"]
-script = ExtResource("1_43rxs")
+[sub_resource type="Resource" id="Resource_ha0qx"]
+script = ExtResource("1_ucrti")
 rate = 0.14
-table = Array[Resource]([SubResource("Resource_7qlx6"), SubResource("Resource_0h47u"), SubResource("Resource_jkdkb")])
+table = Array[Resource]([SubResource("Resource_jkdkb"), SubResource("Resource_pm21e"), SubResource("Resource_c6ene")])
 
-[sub_resource type="Resource" id="Resource_c6ene"]
-script = ExtResource("3_ji41c")
+[sub_resource type="Resource" id="Resource_aifop"]
+script = ExtResource("3_20hya")
 text = "ROUTE 1 -- THE MOSSWAY
-West: Oakvale.  East: the Blighted Clearing."
+West: Oakvale.  East: Crownhaven."
 id = &"route_sign"
 cell = Vector3i(3, 5, 0)
 display_name = "Route 1"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_ha0qx"]
-script = ExtResource("3_ji41c")
-text = "Past this stone the road is choked with rot. (The Blighted Clearing opens in the next part of the journey.)"
-id = &"clearing_sign"
+[sub_resource type="Resource" id="Resource_xgs62"]
+script = ExtResource("3_20hya")
+text = "EAST: CROWNHAVEN
+Royal city of Aldermere."
+id = &"crownhaven_sign"
 cell = Vector3i(31, 5, 0)
-display_name = "The Blighted Clearing"
+display_name = "Crownhaven"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_aifop"]
-script = ExtResource("4_20hya")
+[sub_resource type="Resource" id="Resource_drhob"]
+script = ExtResource("4_tsg00")
+text = "Something rustles in the tall grass and goes still. Wild creatures keep their distance from a traveller with no partner of their own."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_pdq4e"]
+script = ExtResource("5_ouhht")
+beats = Array[Resource]([SubResource("Resource_drhob")])
+
+[sub_resource type="Resource" id="Resource_1df8p"]
+script = ExtResource("6_klsnh")
+area_rect = Rect2i(4, 6, 1, 1)
+id = &"grass_hint"
+visible_if = "not has(\"opening.starter_received\")"
+on_step = Array[Resource]([SubResource("Resource_pdq4e")])
+
+[sub_resource type="Resource" id="Resource_q51bj"]
+script = ExtResource("7_0eeu8")
 map_path = "res://game/overworld/content/battles/ow_mossway_clearing.tres"
 opponent_name = "Bram"
 opponent_speaker_id = &"npc_bram"
@@ -67,51 +85,52 @@ opponent_team = Array[Dictionary]([{
 reward_gold = 120
 clash_intro = true
 
-[sub_resource type="Resource" id="Resource_xgs62"]
-script = ExtResource("5_tsg00")
+[sub_resource type="Resource" id="Resource_8q4e8"]
+script = ExtResource("4_tsg00")
 speaker_id = &"self"
 side = &"right"
-text = "Hah... you'll do. The Clearing's past the old stones. Watch the rot -- it watches back."
+text = "Hah... you'll do. Whatever you're chasing, I hope you catch it."
 
-[sub_resource type="Resource" id="Resource_drhob"]
-script = ExtResource("6_ouhht")
+[sub_resource type="Resource" id="Resource_sayo3"]
+script = ExtResource("8_06gi4")
 scene_id = &"moss_bram_after"
-beats = Array[Resource]([SubResource("Resource_xgs62")])
+beats = Array[Resource]([SubResource("Resource_8q4e8")])
 
-[sub_resource type="Resource" id="Resource_pdq4e"]
-script = ExtResource("5_tsg00")
+[sub_resource type="Resource" id="Resource_dn1tg"]
+script = ExtResource("4_tsg00")
 speaker_id = &"self"
 side = &"right"
-text = "Hold it! Elder Wynn sent you down the Mossway? Then show me you can keep a squad alive out here."
+text = "Hold it! You're the one from Oakvale -- the one who stood with the Sergeant. Show me you can keep a squad alive out here."
 
-[sub_resource type="Resource" id="Resource_1df8p"]
-script = ExtResource("6_ouhht")
+[sub_resource type="Resource" id="Resource_1xxt3"]
+script = ExtResource("8_06gi4")
 scene_id = &"moss_bram_pre"
-beats = Array[Resource]([SubResource("Resource_pdq4e")])
+beats = Array[Resource]([SubResource("Resource_dn1tg")])
 
-[sub_resource type="Resource" id="Resource_q51bj"]
-script = ExtResource("7_klsnh")
-battle = SubResource("Resource_aifop")
-pre_scene = SubResource("Resource_1df8p")
-defeated_scene = SubResource("Resource_drhob")
+[sub_resource type="Resource" id="Resource_26wcp"]
+script = ExtResource("9_ic44m")
+battle = SubResource("Resource_q51bj")
+pre_scene = SubResource("Resource_1xxt3")
+defeated_scene = SubResource("Resource_sayo3")
 speaker_id = &"npc_bram"
 speaker_name = "Bram"
 id = &"bram"
 cell = Vector3i(19, 4, 0)
 display_name = "Bram"
 tint = Color(0.3, 0.52, 0.3, 1)
+visible_if = "has(\"opening.complete\")"
 
-[sub_resource type="Resource" id="Resource_8q4e8"]
-script = ExtResource("5_tsg00")
+[sub_resource type="Resource" id="Resource_ftq8r"]
+script = ExtResource("4_tsg00")
 text = "A lone Petalfang watches you from the meadow, hackles raised. It will not be approached without a fight."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_sayo3"]
-script = ExtResource("8_0eeu8")
-beats = Array[Resource]([SubResource("Resource_8q4e8")])
+[sub_resource type="Resource" id="Resource_fkmiq"]
+script = ExtResource("5_ouhht")
+beats = Array[Resource]([SubResource("Resource_ftq8r")])
 
-[sub_resource type="Resource" id="Resource_dn1tg"]
-script = ExtResource("4_20hya")
+[sub_resource type="Resource" id="Resource_lewvs"]
+script = ExtResource("7_0eeu8")
 kind = 1
 encounter_id = "mossway.recruit.petalfang"
 opponent_name = "Lone Petalfang"
@@ -125,59 +144,81 @@ can_flee = true
 can_befriend = true
 story_critical = true
 
-[sub_resource type="Resource" id="Resource_1xxt3"]
-script = ExtResource("9_06gi4")
-spec = SubResource("Resource_dn1tg")
+[sub_resource type="Resource" id="Resource_f6bed"]
+script = ExtResource("10_dl3pe")
+spec = SubResource("Resource_lewvs")
 
-[sub_resource type="Resource" id="Resource_26wcp"]
-script = ExtResource("5_tsg00")
+[sub_resource type="Resource" id="Resource_5xqpn"]
+script = ExtResource("4_tsg00")
 text = "The Petalfang slinks back into the meadow. It is still watching you."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_ftq8r"]
-script = ExtResource("8_0eeu8")
-beats = Array[Resource]([SubResource("Resource_26wcp")])
+[sub_resource type="Resource" id="Resource_6idsj"]
+script = ExtResource("5_ouhht")
+beats = Array[Resource]([SubResource("Resource_5xqpn")])
 
-[sub_resource type="Resource" id="Resource_fkmiq"]
-script = ExtResource("11_dl3pe")
+[sub_resource type="Resource" id="Resource_frbyr"]
+script = ExtResource("12_2rcsc")
 flag_on_join = "mossway.petalfang.recruited"
 
-[sub_resource type="Resource" id="Resource_lewvs"]
-script = ExtResource("10_ic44m")
+[sub_resource type="Resource" id="Resource_52mfd"]
+script = ExtResource("11_4p26e")
 condition = "outcome() == \"victory\""
-then_commands = Array[Resource]([SubResource("Resource_fkmiq")])
-else_commands = Array[Resource]([SubResource("Resource_ftq8r")])
+then_commands = Array[Resource]([SubResource("Resource_frbyr")])
+else_commands = Array[Resource]([SubResource("Resource_6idsj")])
 
-[sub_resource type="Resource" id="Resource_f6bed"]
-script = ExtResource("12_4p26e")
+[sub_resource type="Resource" id="Resource_rqklu"]
+script = ExtResource("13_s5dhr")
 id = &"lone_petalfang"
 cell = Vector3i(30, 3, 0)
 facing = "west"
 display_name = "Lone Petalfang"
 visual_character = &"petalfang"
-visible_if = "not has(\"mossway.petalfang.recruited\")"
-on_interact = Array[Resource]([SubResource("Resource_sayo3"), SubResource("Resource_1xxt3"), SubResource("Resource_lewvs")])
+visible_if = "has(\"opening.complete\") and not has(\"mossway.petalfang.recruited\")"
+on_interact = Array[Resource]([SubResource("Resource_fkmiq"), SubResource("Resource_f6bed"), SubResource("Resource_52mfd")])
 
-[sub_resource type="Resource" id="Resource_5xqpn"]
-script = ExtResource("13_2rcsc")
+[sub_resource type="Resource" id="Resource_dodhr"]
+script = ExtResource("14_ym451")
 area_rect = Rect2i(0, 6, 1, 1)
 target_area = &"oakvale"
 target_entry = &"east_gate"
 id = &"west_exit"
 blocking = false
+visible_if = "not has(\"opening.attack\")"
+
+[sub_resource type="Resource" id="Resource_8keq5"]
+script = ExtResource("14_ym451")
+area_rect = Rect2i(0, 6, 1, 1)
+target_area = &"oakvale_ruins"
+target_entry = &"east_gate"
+id = &"west_exit_ruins"
+blocking = false
+visible_if = "has(\"opening.attack\")"
+
+[sub_resource type="Resource" id="Resource_piryq"]
+script = ExtResource("14_ym451")
+area_rect = Rect2i(33, 6, 1, 1)
+target_area = &"crownhaven"
+target_entry = &"west_gate"
+id = &"east_exit"
+blocking = false
 
 [resource]
-script = ExtResource("14_s5dhr")
+script = ExtResource("15_7qlx6")
 area_id = &"mossway"
 display_name = "Route 1 -- The Mossway"
-terrain = ExtResource("15_ym451")
+terrain = ExtResource("16_0h47u")
 kind = 1
 world_map_pos = Vector2(0.34, 0.5)
 entry_points = {
+"east": {
+"cell": [32, 6, 0],
+"facing": "west"
+},
 "west": {
 "cell": [1, 6, 0],
 "facing": "east"
 }
 }
-entities = Array[Resource]([SubResource("Resource_c6ene"), SubResource("Resource_ha0qx"), SubResource("Resource_q51bj"), SubResource("Resource_f6bed"), SubResource("Resource_5xqpn")])
-encounter_zones = Array[Resource]([SubResource("Resource_pm21e")])
+entities = Array[Resource]([SubResource("Resource_aifop"), SubResource("Resource_xgs62"), SubResource("Resource_1df8p"), SubResource("Resource_26wcp"), SubResource("Resource_rqklu"), SubResource("Resource_dodhr"), SubResource("Resource_8keq5"), SubResource("Resource_piryq")])
+encounter_zones = Array[Resource]([SubResource("Resource_ha0qx")])

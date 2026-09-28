@@ -10,8 +10,17 @@ extends RefCounted
 ##   * every read goes through a coercion helper (CONQUEST.md rule 3), no ResourceLoader on
 ##     save data (rule 8).
 ## No disk access here -- [StorySaveManager] owns the files.
+##
+## VERSION 2 = the story OPENING (Oakvale home -> the Crownhaven shard ceremony -> the raid).
+## A version-1 journey was played in the M1 slice's world (Elder Wynn's quest, a starting party
+## of two), which the opening replaced: its flags, party and position mean nothing to the new
+## story, so it is NOT migrated -- it loads as OUTDATED ("outdated_journey"): the slot card says
+## a new journey is required, Continue Journey skips it, and Delete clears it. Nothing crashes.
 
-const FORMAT_VERSION: int = 1
+const FORMAT_VERSION: int = 2
+## The oldest version this build still plays (pre-release: no migrations, see above).
+const MIN_FORMAT_VERSION: int = 2
+const REASON_OUTDATED := "outdated_journey"
 
 
 static func to_dict(state: StoryState) -> Dictionary:
@@ -59,6 +68,8 @@ static func from_dict(data) -> Dictionary:
 		return {"success": false, "state": null, "reason": "missing_version"}
 	if version > FORMAT_VERSION:
 		return {"success": false, "state": null, "reason": "newer_version"}
+	if version < MIN_FORMAT_VERSION:
+		return {"success": false, "state": null, "reason": REASON_OUTDATED}
 
 	var state := StoryState.new()
 	state.play_seconds = maxf(0.0, float(data.get("play_seconds", 0)))
@@ -122,6 +133,12 @@ static func from_dict(data) -> Dictionary:
 			state.actor_positions[String(key)] = {"cell": c, "facing": String(rec.get("facing", "south"))}
 
 	return {"success": true, "state": state, "reason": ""}
+
+
+## True when [param data] is a story save from before the opening (a new journey is required).
+static func is_outdated(data: Dictionary) -> bool:
+	var version: int = int(data.get("format_version", 0))
+	return version > 0 and version < MIN_FORMAT_VERSION
 
 
 ## A one-line caption for a slot card / the main-menu row: "Mossway · 2h 15m".

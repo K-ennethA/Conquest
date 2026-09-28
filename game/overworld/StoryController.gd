@@ -141,7 +141,7 @@ func hero() -> HeroResource:
 
 
 func hero_name() -> String:
-	return _hero.display_name if _hero != null else "Warden"
+	return _hero.display_name if _hero != null else "Wren"
 
 
 func hero_speaker_id() -> String:

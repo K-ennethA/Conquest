@@ -2,15 +2,20 @@ extends GutTest
 
 ## THE WALKABLE SCENE, booted for real (OverworldScene.tscn as the current scene, the shipped
 ## Oakvale / Mossway content), driven through its public host API rather than synthesised keys:
-## walking + collision, the sign, the chest (and that it stays open across a reload), the Elder's
-## choice opening the east gate (the guard walks aside), the Wayshrine (heal + respawn + save),
-## the edge warp, a trainer spotting you, and the grass hook through the debug duel stub with a
-## befriend offer accepted into the party. Animations off: every step / bubble is instant.
+## walking + collision, the sign, the chest (and that it stays open across a reload), the east
+## exit held until your mother's send-off, the Wayshrine (heal + respawn + save), the edge warp,
+## a trainer spotting you, the grass hook through the debug duel stub with a befriend offer
+## accepted into the party -- and that neither the grass nor a trainer touches a traveller with
+## no creature (the opening). Animations off: every step / bubble is instant.
+##
+## Mechanics suites start PAST the opening (StoryFixture.past_opening: the M1 two-member party);
+## the opening itself is played end to end by test_story_opening.gd.
 ##
 ## Scene changes are switched OFF on StoryController, so a warp / battle hand-off records its
 ## target and the suite re-boots the scene itself.
 
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
+const StoryFixture := preload("res://tests/helpers/story_fixture.gd")
 const OVERWORLD_SCENE := preload("res://game/overworld/OverworldScene.tscn")
 const TEMP_DIR := "user://test_overworld_walk/"
 
@@ -59,6 +64,7 @@ func after_each() -> void:
 func _boot(area: String = "", cell: Vector3i = Cells.INVALID, facing: String = "south") -> OverworldController:
 	if not StoryController.has_session():
 		StoryController.new_journey(1)
+		StoryFixture.past_opening(StoryController.state())
 	if area != "":
 		var s: StoryState = StoryController.state()
 		if area != s.location_area():
@@ -116,9 +122,10 @@ func test_boots_on_the_tile_board_with_hero_and_actors() -> void:
 	var ow := await _boot()
 	assert_not_null(ow.grid, "the grid is built")
 	assert_eq(ow.area.area_id, &"oakvale", "a new journey starts in Oakvale")
-	assert_eq(ow.player.cell, Vector3i(10, 11, 0), "at the start entry")
+	assert_eq(ow.player.cell, Vector3i(3, 6, 0), "at the start entry: your own doorstep")
 	assert_not_null(ow.get_node_or_null("Map/Tiles"), "MapLoader built the terrain as a battle board")
-	assert_not_null(ow.actor("elder"), "NPC actors exist")
+	assert_not_null(ow.actor("briony"), "NPC actors exist (your mother)")
+	assert_not_null(ow.actor("house_home"), "scenery props get actors too")
 	assert_not_null(ow.player.model(), "the hero has a model (the HeroResource placeholder)")
 	assert_eq(ow.hud.area_ribbon().get_node("Text").text, "OAKVALE", "the area ribbon names the town")
 
@@ -135,7 +142,7 @@ func test_walk_turn_and_collide() -> void:
 
 
 func test_sign_reads_in_the_text_box() -> void:
-	var ow := await _boot("oakvale", Vector3i(16, 8, 0), "east")
+	var ow := await _boot("oakvale", Vector3i(18, 8, 0), "east")
 	assert_true(ow.interact(), "Confirm on the town sign runs its script")
 	await _frames(2)
 	var d := ow.dialogue()
@@ -166,24 +173,39 @@ func test_chest_gives_once_and_stays_open_across_a_reload() -> void:
 	assert_eq(StoryController.state().item_count("sagebloom_poultice"), 1, "and it gives nothing twice")
 
 
-func test_guard_blocks_until_the_elders_quest_then_walks_aside() -> void:
-	var ow := await _boot("oakvale", Vector3i(18, 9, 0), "east")
-	assert_false(ow.grid.is_walkable(Vector3i(19, 9, 0)), "the guard stands in the east gate")
-	# Talk to the Elder and say NO first: nothing opens.
-	var ow2 := await _boot("oakvale", Vector3i(10, 6, 0), "north")
-	ow2.interact()
-	await _drain(ow2, 1)
-	assert_false(StoryController.state().has_flag("quest.blight_road"), "'Not yet' sets nothing")
-	ow2.interact()
-	await _drain(ow2, 0)
+func test_the_east_exit_waits_for_the_send_off() -> void:
+	StoryController.new_journey(1)
 	var s: StoryState = StoryController.state()
-	assert_eq(s.get_flag_int("quest.blight_road"), 1, "'I will walk it' starts the quest")
-	assert_eq(s.item_count("heartwood_charm"), 1, "the Elder's gift")
-	assert_eq(ow2.actor("guard").cell, Vector3i(18, 10, 0), "the guard walked aside")
-	assert_true(ow2.grid.is_walkable(Vector3i(19, 9, 0)), "the gate is open")
-	var ow3 := await _boot("oakvale", Vector3i(18, 9, 0), "east")
-	assert_true(ow3.grid.is_walkable(Vector3i(19, 9, 0)), "and it stays open on the next load (persisted move)")
-	assert_eq(ow3.actor("guard").cell, Vector3i(18, 10, 0), "the guard stands aside")
+	var ow := await _boot("oakvale", Vector3i(22, 9, 0), "east")
+	await _drain(ow)
+	s.clear_flag("opening.sent_off")
+	ow.refresh_world()
+	await _step(ow, Vector2i(1, 0))
+	assert_eq(s.location_area(), "oakvale", "before the send-off the east exit turns you back")
+	assert_true(StoryController.is_script_running() or ow.dialogue().root_control().visible,
+		"with your mother calling after you")
+	await _drain(ow)
+	s.set_flag("opening.sent_off", 1)
+	ow.try_step(Vector2i(-1, 0))
+	await _frames(3)
+	await _step(ow, Vector2i(1, 0))
+	assert_eq(s.location_area(), "mossway", "after it, the road east is open")
+
+
+func test_no_creature_no_grass_and_no_trainer() -> void:
+	StoryController.new_journey(1)
+	var s: StoryState = StoryController.state()
+	StoryFixture.past_opening(s)
+	s.party.clear()
+	s.grace_steps = 0
+	var ow := await _boot("mossway", Vector3i(4, 2, 0), "east")
+	for i in range(40):
+		var dir := Vector2i(1, 0) if (i / 4) % 2 == 0 else Vector2i(-1, 0)
+		await _step(ow, dir)
+		assert_false(StoryController.is_script_running(), "no wild encounter without a partner (step %d)" % i)
+	var ow2 := await _boot("mossway", Vector3i(18, 6, 0), "east")
+	await _step(ow2, Vector2i(1, 0))
+	assert_false(StoryController.is_script_running(), "and a trainer lets a traveller with no creature pass")
 
 
 func test_wayshrine_heals_sets_respawn_and_saves() -> void:
@@ -203,9 +225,8 @@ func test_wayshrine_heals_sets_respawn_and_saves() -> void:
 
 func test_edge_warp_to_the_mossway() -> void:
 	StoryController.new_journey(1)
-	StoryController.state().set_flag("quest.blight_road", 1)
-	StoryController.state().set_actor_position("oakvale", "guard", Vector3i(18, 10, 0), "west", true)
-	var ow := await _boot("oakvale", Vector3i(20, 9, 0), "east")
+	StoryFixture.sent_off(StoryController.state())
+	var ow := await _boot("oakvale", Vector3i(22, 9, 0), "east")
 	await _step(ow, Vector2i(1, 0))
 	var s: StoryState = StoryController.state()
 	assert_eq(s.location_area(), "mossway", "stepping onto the edge warps to Route 1")
@@ -276,7 +297,7 @@ func test_whiteout_returns_to_the_wayshrine_healed() -> void:
 
 func test_grass_encounter_through_the_duel_stub_and_befriend() -> void:
 	StoryController.new_journey(1)
-	var s: StoryState = StoryController.state()
+	var s: StoryState = StoryFixture.past_opening(StoryController.state())
 	s.grace_steps = 0
 	# Walk the Mossway's first grass patch until the deterministic roller fires (bounded).
 	var ow := await _boot("mossway", Vector3i(4, 2, 0), "east")
@@ -351,7 +372,7 @@ func test_tap_walks_a_path() -> void:
 	while ow.player.cell != Vector3i(12, 11, 0) and Time.get_ticks_msec() - t0 < 2000:
 		await get_tree().process_frame
 	assert_eq(ow.player.cell, Vector3i(12, 11, 0), "a tap walks there over the grid")
-	ow.tap_cell(Vector3i(14, 11, 0))
+	ow.tap_cell(Vector3i(13, 11, 0))
 	t0 = Time.get_ticks_msec()
 	while not StoryController.is_script_running() and Time.get_ticks_msec() - t0 < 2000:
 		await get_tree().process_frame

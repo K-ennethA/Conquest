@@ -5,34 +5,53 @@ This file records what M1 actually built, how to play it, and how it is wired to
 `feat/evolution` (Growth, the Evolution screen) and `feat/duel` (the real 1v1 duel) — see
 **Wiring** below.
 
-## How to play the slice
+## How to play — the story OPENING
 
-Solo → **Story** (card 7) → an empty slot → **Oakvale**.
+Solo → **Story** (card 7) → an empty slot. The opening (DECISIONS.md #12–#21) is built by
+`game/overworld/build/build_story_content.gd`; its names, the starter and the placeholders live
+in that file's `NAMES` / `STARTER_ID` / `GUEST_ID` / `RAIDER_UNITS` / `HERO_MODEL` constants
+(rename there and rebuild); its flags are the `F_*` constants.
 
-1. Arrows / WASD / d-pad / sticks step one cell (tap a new direction = turn; hold = walk;
-   Shift / R3 = run). Click / tap a cell to walk there; tap a person to walk up and talk.
-   Every step costs its walk / run time even with Animations off in Settings (the hero then
-   snaps a cell per step instead of gliding; pinned by `test_overworld_key_walk`).
-2. Confirm (Space / Enter / A) reads the **sign**, talks to **Maren** / **Tobin**, opens the
-   **mill chest** (poultice + 30 gold; stays open after reload).
-3. **Elder Wynn** (north of the plaza) asks a **choice** — "I will walk it." sets
-   `quest.blight_road`, gives the Heartwood Charm, sends **Sprig** (a Barkling, Growth 2 of 3)
-   along with you, toasts the quest, and **Gate Warden Hale walks aside** (a persisted move).
-   "Not yet." changes nothing.
-4. The fountain **Wayshrine** heals, sets the respawn point and saves.
-5. The east edge warps to **Route 1 — the Mossway**. Tall grass rolls deterministic wild
-   encounters → the **real duel** (`DuelStage`: your party lead with its carried HP vs one wild
-   unit; **Flee** may fail and cost the turn). The results card's **Continue Journey** puts you
-   back where you stood; a win may offer "X wants to join you!" → Welcome it / Not now. A loss
-   whites out to the Wayshrine.
-6. **Bram** watches the road: step into his line → "!" → he walks up → VS clash → tactical battle
-   on `ow_mossway_clearing` with your party (carried HP, story-bag items) → the end screen shows
-   the **Growth** each surviving member earns → **Continue Journey** (+120 gold, defeated flag,
-   back where you stood) → **"Sprig is evolving..."** (Evolve / Not now: Sprig becomes an
-   Oakheart for the rest of the journey, and Oakheart unlocks in Skirmish) — or **Return to
-   Wayshrine** on a loss.
-7. The **Lone Petalfang** in the meadow is a non-missable story recruit (duel; stays until it joins).
-8. Esc / Start → Journey menu (Resume · Party · Save · Title). Main menu → **Continue Journey**.
+1. **Oakvale (home)** — a new journey starts on your doorstep with **no creature**
+   (`story_ruleset.tres` `starting_party` is empty). The first boot plays the intro and your
+   mother **Briony**'s send-off → `opening.sent_off` (the east road is held until then).
+   Villagers Tobin / Hessa / Pell, the village-hall notice, the **mill chest**, the Wayshrine.
+2. **The Mossway** — with no partner the grass never rolls and trainers let you pass
+   (`OverworldController`: no healthy member → no encounter, no trainer); a one-time hint says
+   so. **Bram** and the **Lone Petalfang** only appear once `opening.complete`.
+3. **Crownhaven** (the Mossway's east end) — the walled castle town: keep, market, barracks
+   (**Sergeant Rowan**), the Royal Workshop. Talk to **Researcher Linnea**: the **ceremony**
+   gives the starter (**Barkling**, `STARTER_ID`) and the **bonding shard**
+   (`key.bonding_shard`, `opening.starter_received`).
+4. **The raid** (the same script) — Cindral raiders vault the east wall, seize Linnea and flee
+   west; Rowan runs up; the chase is a scripted warp to **Ruined Oakvale** (`opening.attack`,
+   `opening.researcher_taken`, `opening.raiders_fled`, `opening.chase`; the respawn moves to the
+   ruins' Wayshrine). A journey saved mid-raid resumes it on the next Crownhaven load.
+5. **Ruined Oakvale** (`oakvale_ruins`, a second area; the Mossway's west exit switches to it on
+   `opening.attack`) — night, smouldering ruins. The survivors tell you your mother went back
+   for the others; Rowan offers the chance to fight (`opening.ruins_seen`). "Not yet." leaves
+   him waiting in the square.
+6. **The first fight** — a TACTICAL battle on `ow_oakvale_ashes` (12x8) vs the raiders' rear
+   guard; your starter fights and Rowan's **Geode** joins as a **guest ally** (a player-0
+   Reinforcement due on turn 1: placed at load, never replaced by the squad pick). A loss →
+   Try Again / Return to Wayshrine (Rowan waits to offer it again).
+7. **Aftermath** — Rowan's hook (`opening.complete`, `act1.find_rowan`); a cairn for Briony; the
+   road opens. In Crownhaven, Rowan at the barracks starts the Act 1 hook (`act1.met_rowan`).
+
+Controls: arrows / WASD / d-pad / sticks step one cell (tap a new direction = turn; hold = walk;
+Shift / R3 = run; every step costs its walk / run time even with Animations off); click / tap
+to walk; Confirm reads / talks / opens; Esc / Start → Journey menu. After the opening the M1
+mechanics are unchanged: grass → the real duel, befriending, Bram's tactical battle → Growth →
+evolution offers, whiteouts to the Wayshrine.
+
+**Placeholders to replace:** the hero's model (Vineweave, `HERO_MODEL`); the human hero is not a
+battle unit yet (the party fights); the raiders' units (Undead ×2 + Duskmaw, `RAIDER_UNITS`);
+people are procedural figures (`NpcEntity.figure`) and buildings procedural props
+(`PropEntity.prop`: house, ruin, keep, tower, gate, windmill, stall, well, fence, crystal, …).
+
+**Saves:** `format_version` 2. A version-1 journey (the M1 slice's Elder-quest world) is not
+migrated: it loads as **outdated** — its slot card says a new journey is required (Delete it),
+and Continue Journey skips it (`StorySnapshot.is_outdated`). Nothing crashes.
 
 ## Where things live
 
@@ -97,7 +116,7 @@ they would collide; three save slots would share one ledger; and "Try Again" / r
 must rewind a journey's growth together with the rest of it. Keeping the record in the slot makes
 the slot self-contained.
 
-Save format: unchanged (`format_version` 1). An M1 save's `growth: {}` loads as Growth 0; unknown
+Save format: `format_version` 2 since the opening (v1 = outdated, see above). A record's `growth: {}` loads as Growth 0; unknown
 keys inside `growth` round-trip untouched. New members are keyed by their line (an Oakheart
 recruit joins as `tree_grunt`/`tree_grunt#2`).
 
@@ -121,8 +140,8 @@ recruit joins as `tree_grunt`/`tree_grunt#2`).
   open modes.
 - `EvolveMemberCommand` (script): a story beat evolves a member past its triggers
   (EVOLUTION.md §6 `evolve_member(uid_or_line, edge_id)`), through the same screen.
-- Content: the Elder's "I will walk it." now also sends **Sprig** (Barkling, `JoinPartyCommand.growth
-  = 2`), so winning Bram's battle (where Sprig fights) reaches the evolution offer in the slice.
+- Content: the Elder / Sprig quest was replaced by the opening; the starter joins at Growth 0,
+  so its evolution offer comes after a few won battles (Bram's, the grass).
 
 ### Standalone duels and Growth
 Choice: standalone duels (Solo → Duel) award Growth only if `evolution_rules.tres` lists
@@ -148,7 +167,7 @@ change. Story duels always follow `"story"`.
 
 - Hero = a dedicated `HeroResource` (DECISIONS.md #4) with Vineweave's model as the placeholder.
 - The squad for a story tactical battle is the first `squad_size` healthy members in party order
-  (no CharacterSelect story branch yet — with Sprig and a befriended recruit the party can now
+  (no CharacterSelect story branch yet — with the starter and befriended recruits the party can
   exceed Bram's squad of 3; the later members sit that battle out).
 - The Story card is appended as card 7 after Duel (existing number keys unchanged).
 - The Wayshrine stands on a sacred-ground basin (the plain fountain tile has no geometry).

@@ -79,11 +79,13 @@ func rebuild_blockers(area: OverworldAreaResource, state: StoryState) -> void:
 	for e in area.present_entities(state):
 		if not e.blocking or not e.has_actor():
 			continue
-		var c: Vector3i = e.cell
 		var ov: Dictionary = state.actor_override(aid, String(e.id)) if state != null else {}
 		if not ov.is_empty():
-			c = ov.get("cell", c)
-		_blockers[c] = String(e.id)
+			_blockers[ov.get("cell", e.cell)] = String(e.id)
+			continue
+		# A multi-cell blocker (a market stall, a well) blocks its whole footprint.
+		for c in e.cells():
+			_blockers[c] = String(e.id)
 
 
 func set_blocker(cell: Vector3i, entity_id: String) -> void:

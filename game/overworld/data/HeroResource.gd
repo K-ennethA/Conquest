@@ -11,7 +11,8 @@ extends Resource
 
 const DEFAULT_PATH := "res://game/overworld/content/hero.tres"
 
-@export var display_name: String = "Warden"
+## The hero's name ({hero} in dialogue). Player naming is planned; "Wren" is the default.
+@export var display_name: String = "Wren"
 @export var model_scene: PackedScene
 @export var model_yaw_deg: float = 0.0
 @export var model_scale: float = 1.0

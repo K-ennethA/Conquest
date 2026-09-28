@@ -9,6 +9,7 @@ extends GutTest
 
 const WORLD_SCENE := preload("res://game/world/GameWorld.tscn")
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
+const StoryFixture := preload("res://tests/helpers/story_fixture.gd")
 const TEMP_DIR := "user://test_story_round_trip/"
 const TEMP_BATTLE_SAVE := "user://test_story_round_trip_battle.json"
 
@@ -117,6 +118,7 @@ func _party_units() -> Array:
 
 func test_round_trip_victory() -> void:
 	StoryController.new_journey(1)
+	StoryFixture.past_opening(StoryController.state())
 	var s: StoryState = StoryController.state()
 	s.set_location("mossway", Vector3i(19, 6, 0), "north")
 	s.member("vineweave").current_hp = 50

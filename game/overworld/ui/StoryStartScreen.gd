@@ -82,8 +82,15 @@ func _slot_card(slot: int) -> Button:
 		var tag := MenuKit.label("NEW JOURNEY", &"SectionLabel")
 		tag.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
 		v.add_child(tag)
-		v.add_child(MenuKit.label("An empty page. Begin in Oakvale, at the edge of the forest.", &"DimLabel", true))
+		v.add_child(MenuKit.label("An empty page. Begin at home in Oakvale, at the edge of the forest.", &"DimLabel", true))
 		btn.pressed.connect(_on_new.bind(slot))
+	elif StorySnapshot.is_outdated(data):
+		# A journey from before the story opening (StorySnapshot: not migrated).
+		var old := MenuKit.label("OLDER JOURNEY", &"SectionLabel")
+		old.add_theme_color_override("font_color", MenuTheme.GOLD_DK)
+		v.add_child(old)
+		v.add_child(MenuKit.label("Written before the story's new opening. A new journey is required -- Delete it to begin again here.", &"DimLabel", true))
+		btn.pressed.connect(_on_outdated.bind(slot))
 	else:
 		var tag2 := MenuKit.label("CONTINUE", &"SectionLabel")
 		tag2.add_theme_color_override("font_color", MenuTheme.EL_NATURE.lightened(0.25))
@@ -130,6 +137,13 @@ func _on_new(slot: int) -> void:
 		MenuKit.set_status(_status, "Could not start a journey (%s)." % String(r.get("reason", "")), "error")
 		return
 	_story.enter_overworld()
+
+
+func _on_outdated(slot: int) -> void:
+	_cards[slot - 1].grab_focus()
+	MenuKit.set_status(_status,
+		"Journey %d predates the new opening and cannot be continued. Press Delete to clear it, then start a new journey." % slot,
+		"warn")
 
 
 func _on_continue(slot: int) -> void:

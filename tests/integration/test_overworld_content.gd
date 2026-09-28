@@ -4,6 +4,18 @@ extends GutTest
 ## its terrain validates, entity ids are unique, warps target a real area + entry, every
 ## condition parses, every referenced scene / map / character / item exists, every trainer has a
 ## battle whose board validates -- and none of it ever leaks into a map picker.
+##
+## Plus the story OPENING's content (build_story_content.gd): Oakvale (home) and its ruins,
+## the Mossway joining them to Crownhaven, the Crownhaven castle town (size budget, the
+## ceremony, the raid, walkable streets) and the first fight's board.
+
+const StoryFixture := preload("res://tests/helpers/story_fixture.gd")
+const OPENING_AREAS: Array[String] = ["oakvale", "oakvale_ruins", "mossway", "crownhaven"]
+const FIRST_FIGHT_MAP := "res://game/overworld/content/battles/ow_oakvale_ashes.tres"
+## docs/design/OVERWORLD.md §4.3: every cell is a tile node -- keep areas <= ~32x32 (a route may
+## be long and thin: the budget is the cell COUNT, each side within MapResource's 40).
+const MAX_AREA_CELLS := 32
+const MAX_AREA_SIDE := 40
 
 
 func _areas() -> Array[OverworldAreaResource]:
@@ -15,10 +27,28 @@ func _areas() -> Array[OverworldAreaResource]:
 	return out
 
 
-func test_the_slice_ships_oakvale_and_the_mossway() -> void:
+func _area(id: String) -> OverworldAreaResource:
+	return load(StoryController.area_path(id)) as OverworldAreaResource
+
+
+## Every command in [param commands], nested branches included.
+func _flatten(commands: Array) -> Array:
+	var out: Array = []
+	var stack: Array = commands.duplicate()
+	while not stack.is_empty():
+		var c = stack.pop_front()
+		if not (c is StoryCommand):
+			continue
+		out.append(c)
+		for l in (c as StoryCommand).child_lists():
+			stack.append_array(l)
+	return out
+
+
+func test_the_story_ships_the_opening_areas() -> void:
 	var ids: Array[String] = StoryController.all_area_ids()
-	assert_true(ids.has("oakvale"), "Oakvale ships")
-	assert_true(ids.has("mossway"), "Route 1 ships")
+	for id in OPENING_AREAS:
+		assert_true(ids.has(id), "%s ships" % id)
 	assert_eq(_areas().size(), ids.size(), "every area directory holds a loadable area.tres")
 
 
@@ -28,6 +58,13 @@ func test_every_area_validates() -> void:
 		assert_eq(issues, [] as Array[String], "%s validates clean: %s" % [a.area_id, str(issues)])
 		assert_eq(String(a.area_id), a.resource_path.get_base_dir().get_file(),
 			"%s: area_id matches its folder" % a.area_id)
+
+
+func test_every_area_fits_the_size_budget() -> void:
+	for a in _areas():
+		assert_lte(a.width() * a.height(), MAX_AREA_CELLS * MAX_AREA_CELLS,
+			"%s holds at most 32x32 cells (%dx%d)" % [a.area_id, a.width(), a.height()])
+		assert_lte(maxi(a.width(), a.height()), MAX_AREA_SIDE, "%s: each side within %d" % [a.area_id, MAX_AREA_SIDE])
 
 
 func test_warps_target_real_areas_and_entries() -> void:
@@ -54,6 +91,9 @@ func test_entries_and_actors_stand_on_walkable_ground() -> void:
 		for e in a.entity_list():
 			if e is NpcEntity or e is ChestEntity or e is SignEntity:
 				assert_true(g.is_terrain_passable(e.cell), "%s/%s stands on walkable ground" % [a.area_id, e.id])
+			if e is PropEntity and e.blocking:
+				for c in e.cells():
+					assert_true(g.is_terrain_passable(c), "%s/%s: a blocking prop stands on open ground" % [a.area_id, e.id])
 
 
 func test_trainers_have_battles_and_can_see_the_road() -> void:
@@ -68,23 +108,169 @@ func test_trainers_have_battles_and_can_see_the_road() -> void:
 			var g := OverworldGrid.build(a, StoryState.new())
 			var seen: Array[Vector3i] = TrainerSight.sight_cells(g, t.cell, OverworldEntity.facing_vector(t.facing), t.sight_range)
 			assert_gt(seen.size(), 0, "%s is not staring into a wall" % t.id)
-	assert_gt(trainers, 0, "the slice has a trainer (Bram)")
+	assert_gt(trainers, 0, "the story has a trainer (Bram)")
 
 
-func test_the_elder_asks_a_question_with_a_quest_flag() -> void:
-	var oak := load(StoryController.area_path("oakvale")) as OverworldAreaResource
-	var elder: OverworldEntity = oak.entity("elder")
-	assert_not_null(elder, "the Elder exists")
-	var found_choice := false
-	var stack: Array = elder.on_interact.duplicate()
-	while not stack.is_empty():
-		var c = stack.pop_back()
-		if c is ChoiceCommand:
-			found_choice = true
-		if c is StoryCommand:
-			for l in (c as StoryCommand).child_lists():
-				stack.append_array(l)
-	assert_true(found_choice, "her conversation offers a choice")
+func test_the_road_is_walkable_end_to_end() -> void:
+	# A traveller at the very start of the opening (sent off, no creature) can walk every leg.
+	var s := StoryFixture.sent_off(StoryState.new())
+	var legs := [
+		["oakvale", Vector3i(3, 6, 0), Vector3i(23, 9, 0), "home -> the east exit"],
+		["mossway", Vector3i(1, 6, 0), Vector3i(33, 6, 0), "the Mossway, west -> east"],
+		["crownhaven", Vector3i(1, 13, 0), Vector3i(24, 9, 0), "the west gate -> the Researcher"],
+		["crownhaven", Vector3i(1, 13, 0), Vector3i(15, 15, 0), "the west gate -> the Wayshrine"],
+		["crownhaven", Vector3i(1, 13, 0), Vector3i(7, 10, 0), "the west gate -> the barracks"],
+	]
+	for leg in legs:
+		var g := OverworldGrid.build(_area(leg[0]), s)
+		var path: Array[Vector3i] = TapPathfinder.find_path(g, leg[1], leg[2])
+		assert_false(path.is_empty(), "%s has a walkable path" % leg[3])
+	var after := StoryFixture.past_opening(StoryState.new())
+	after.clear_flag("opening.complete")
+	var ruins := OverworldGrid.build(_area("oakvale_ruins"), after)
+	assert_false(TapPathfinder.path_to_adjacent(ruins, Vector3i(21, 9, 0), Vector3i(13, 9, 0)).is_empty(),
+		"in the ruins the Sergeant can be reached from the road")
+
+
+func test_the_mossway_leads_home_to_whichever_oakvale_is_standing() -> void:
+	var moss := _area("mossway")
+	var before := StoryFixture.sent_off(StoryState.new())
+	var raided := StoryState.new()
+	raided.set_flag("opening.attack", 1)
+	for pair in [[before, &"oakvale"], [raided, &"oakvale_ruins"]]:
+		var targets: Array = []
+		for e in moss.present_entities(pair[0]):
+			if e is WarpEntity and e.occupies(Vector3i(0, 6, 0)):
+				targets.append((e as WarpEntity).target_area)
+		assert_eq(targets, [pair[1]], "exactly one west exit, to %s" % pair[1])
+	var bram := moss.entity("bram")
+	assert_false(bram.is_present(before), "Bram only takes the road after the opening")
+	assert_true(bram.is_present(StoryFixture.past_opening(StoryState.new())), "and then he does")
+
+
+func test_oakvale_home_opens_with_the_send_off() -> void:
+	var oak := _area("oakvale")
+	var rs := StoryRuleset.load_default()
+	assert_eq(String(rs.start_area), "oakvale", "a new journey starts in Oakvale")
+	assert_eq(rs.starting_party.size(), 0, "with no creature (the starter comes from the ceremony)")
+	assert_eq(oak.entry("start")["cell"], Vector3i(3, 6, 0), "on the hero's own doorstep")
+	assert_not_null(oak.entity("briony"), "the hero's mother is home")
+	var flags: Array = []
+	for c in _flatten(oak.on_enter):
+		if c is SetFlagCommand:
+			flags.append((c as SetFlagCommand).key)
+	assert_true(flags.has("opening.sent_off"), "the first boot's send-off sets opening.sent_off")
+	var props: int = 0
+	for e in oak.entity_list():
+		if e is PropEntity:
+			props += 1
+	assert_gt(props, 8, "a village's worth of scenery (houses, windmill, fields, well, fences)")
+
+
+func test_the_ruins_mourn_offer_the_fight_and_hook_act_one() -> void:
+	var ruins := _area("oakvale_ruins")
+	assert_eq(ruins.lighting_preset(), "Night", "the ruins are night-lit")
+	var vents: int = 0
+	for e in ruins.terrain.tile_layout:
+		if String(e.get("tile_id", "")) == "magma_vent":
+			vents += 1
+	assert_gt(vents, 10, "the burned houses smoulder (ember tiles under the ruins)")
+	var battles: Array = []
+	var flags: Array = []
+	for c in _flatten(ruins.on_enter):
+		if c is StartBattleCommand:
+			battles.append(c)
+		if c is SetFlagCommand:
+			flags.append((c as SetFlagCommand).key)
+	assert_eq(battles.size(), 1, "arriving leads to the Sergeant's offer of the first fight")
+	var spec: BattleSpec = (battles[0] as StartBattleCommand).spec
+	assert_eq(spec.kind, BattleSpec.Kind.TACTICAL, "the first fight is a TACTICAL battle")
+	assert_eq(spec.map_path, FIRST_FIGHT_MAP, "on the mill-road board")
+	assert_eq(spec.defeat_policy, BattleSpec.DefeatPolicy.RETRY, "a loss can be retried")
+	for f in ["opening.ruins_seen", "opening.complete", "act1.find_rowan"]:
+		assert_true(flags.has(f), "the ruins' script sets %s" % f)
+	var cairn := ruins.entity("cairn") as SignEntity
+	assert_not_null(cairn, "a cairn for the hero's mother")
+	assert_eq(cairn.look, "stone", "a standing stone, not a signpost")
+	assert_false(cairn.is_present(StoryState.new()), "raised only after the fight")
+
+
+func test_crownhaven_is_a_walled_castle_town() -> void:
+	var ch := _area("crownhaven")
+	assert_not_null(ch, "Crownhaven ships")
+	assert_eq(ch.validate(), [] as Array[String], "and validates clean")
+	assert_lte(ch.width(), MAX_AREA_CELLS, "within the size budget (width)")
+	assert_lte(ch.height(), MAX_AREA_CELLS, "within the size budget (height)")
+	var kinds: Dictionary = {}
+	for e in ch.entity_list():
+		if e is PropEntity:
+			kinds[(e as PropEntity).prop] = int(kinds.get((e as PropEntity).prop, 0)) + 1
+	for k in ["keep", "gate", "tower", "stall", "crystal", "house", "banner"]:
+		assert_true(kinds.has(k), "Crownhaven has a %s" % k)
+	assert_gte(int(kinds.get("stall", 0)), 4, "a market square of stalls")
+	var walls: int = 0
+	for e in ch.terrain.tile_layout:
+		if String(e.get("tile_id", "")) == "stone_wall":
+			walls += 1
+	assert_gt(walls, 80, "a stone wall rings the town")
+	assert_not_null(ch.entity("wayshrine"), "a Wayshrine in the market")
+	for id in ["linnea", "tam", "rowan", "lisk", "orwin", "dalla", "fenwick", "brisa", "corin"]:
+		assert_true(ch.entity(id) is NpcEntity, "%s lives in Crownhaven" % id)
+
+
+func test_the_ceremony_gives_the_starter_and_the_shard_then_the_raid() -> void:
+	var ch := _area("crownhaven")
+	var linnea := ch.entity("linnea") as NpcEntity
+	var cmds: Array = _flatten(linnea.on_interact)
+	var joins: Array = []
+	var flags: Array = []
+	var warps: Array = []
+	for c in cmds:
+		if c is JoinPartyCommand:
+			joins.append(c)
+		if c is SetFlagCommand:
+			flags.append((c as SetFlagCommand).key)
+		if c is WarpCommand:
+			warps.append(c)
+	assert_eq(joins.size(), 1, "the ceremony gives exactly one creature")
+	var starter: CharacterResource = CharacterLibrary.get_character((joins[0] as JoinPartyCommand).character_id)
+	assert_not_null(starter, "the starter is a real roster character")
+	for f in ["key.bonding_shard", "opening.starter_received", "opening.attack", "opening.researcher_taken",
+			"opening.raiders_fled", "opening.chase"]:
+		assert_true(flags.has(f) or (joins[0] as JoinPartyCommand).flag_on_join == f, "the ceremony + raid set %s" % f)
+	assert_eq(warps.size(), 1, "the raid ends in the chase to Oakvale")
+	assert_eq(String((warps[0] as WarpCommand).area_id), "oakvale_ruins", "to the burning village")
+	var raided := StoryState.new()
+	raided.set_flag("opening.attack", 1)
+	assert_true(ch.entity("raider_captain").is_present(raided), "raiders appear when the raid begins")
+	assert_false(ch.entity("raider_captain").is_present(StoryState.new()), "and not before")
+
+
+func test_the_first_fight_board() -> void:
+	var m := load(FIRST_FIGHT_MAP) as MapResource
+	assert_not_null(m, "the first fight's board ships")
+	assert_true(bool(m.validate_map(true).get("valid", false)), "and validates")
+	var starts: int = 0
+	var guest: Array = []
+	var foes: Array = []
+	for sp in m.unit_spawns:
+		var pid: int = int(sp.get("player_id", 0))
+		var kind: String = m.get_spawn_kind(sp)
+		if pid == 0 and kind == MapResource.SPAWN_KIND_START:
+			starts += 1
+		elif pid == 0:
+			guest.append(sp)
+		else:
+			foes.append(String(sp.get("character_id", "")))
+	assert_gt(starts, 0, "squad chairs for the party")
+	assert_eq(guest.size(), 1, "one guest ally slot (the Sergeant's creature)")
+	if guest.size() == 1:
+		assert_true(m.is_initial_spawn(guest[0]), "placed at load, never replaced by the squad pick")
+		assert_not_null(CharacterLibrary.get_character(StringName(String(guest[0].get("character_id", "")))),
+			"a real roster character")
+	assert_eq(foes.size(), 3, "three raider creatures (placeholders)")
+	for cid in foes:
+		assert_not_null(CharacterLibrary.get_character(StringName(cid)), "raider unit %s exists" % cid)
 
 
 func test_story_content_never_appears_in_map_pickers() -> void:
@@ -92,6 +278,7 @@ func test_story_content_never_appears_in_map_pickers() -> void:
 	for a in _areas():
 		content_paths.append(a.terrain.resource_path)
 	content_paths.append("res://game/overworld/content/battles/ow_mossway_clearing.tres")
+	content_paths.append(FIRST_FIGHT_MAP)
 	for listing in [MapLoader.get_available_maps(), MapLoader.get_available_maps(true)]:
 		for p in listing:
 			assert_false(String(p).begins_with("res://game/overworld/"), "picker lists %s" % p)
@@ -105,6 +292,7 @@ func test_story_content_never_appears_in_map_pickers() -> void:
 func test_hero_and_ruleset() -> void:
 	var hero := HeroResource.load_default()
 	assert_not_null(hero.model_scene, "the hero has a (placeholder) model, configured in ONE place")
+	assert_eq(hero.display_name, "Wren", "the default hero name")
 	var inst: Node = hero.model_scene.instantiate()
 	assert_not_null(inst, "that instantiates")
 	if inst != null:
