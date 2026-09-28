@@ -16,6 +16,7 @@ extends RefCounted
 ##   toast(text: String, kind: String)                           -> void
 ##   play_clash(request: BattleRequest)                          -> void (await; VS intro)
 ##   open_shop(shop: ShopResource)                               -> void (await; the shop screen)
+##   open_ladder(tournament: TournamentResource, state)          -> String (await; the ladder pick)
 ##   refresh_world()                                             -> void
 ##
 ## Battles, saves and warps are NOT host calls: they outlive the scene, so they go through the
@@ -56,6 +57,12 @@ func play_clash(_request) -> void:
 
 func open_shop(_shop) -> void:
 	pass
+
+
+## The tournament ladder ([RunTournamentCommand]): the player's pick -- "enter" / "fight" /
+## "withdraw" / "leave". The base leaves at once.
+func open_ladder(_tournament, _state) -> String:
+	return "leave"
 
 
 func refresh_world() -> void:

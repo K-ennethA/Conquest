@@ -42,6 +42,15 @@ enum DefeatPolicy { WHITEOUT, CONTINUE, RETRY }
 ## to the last save (both tiers).
 @export var protect: Array[String] = []
 
+@export_group("Scaling")
+## REMATCH SCALING (a rival, a champion, a repeat cup -- DECISIONS.md #33): every opponent's
+## strength is multiplied by 1 + [member scale_step] x min(flag([member scale_flag]),
+## [member scale_max_steps]) when a script starts the battle ([method apply_scaling]; the duel reads
+## strength only through DuelScaling). Blank flag = no scaling.
+@export var scale_flag: String = ""
+@export_range(0.0, 1.0, 0.01) var scale_step: float = 0.0
+@export_range(0, 20) var scale_max_steps: int = 0
+
 
 func kind_name() -> String:
 	return BattleRequest.KIND_DUEL if kind == Kind.DUEL else BattleRequest.KIND_TACTICAL
@@ -96,6 +105,35 @@ func to_request(source: String, fallback_id: String = "") -> BattleRequest:
 	return r
 
 
+## The strength multiplier [param state] earns this spec (1.0 without a [member scale_flag]).
+func scale_factor(state: StoryState) -> float:
+	if scale_flag.strip_edges().is_empty() or state == null or scale_step <= 0.0:
+		return 1.0
+	var n: int = clampi(state.get_flag_int(scale_flag), 0, maxi(0, scale_max_steps))
+	return 1.0 + scale_step * float(n)
+
+
+## Scale [param request]'s opponent strengths for [param state] ([method scale_factor]); a no-op
+## for an unscaled spec.
+func apply_scaling(request: BattleRequest, state: StoryState) -> void:
+	var f: float = scale_factor(state)
+	if request == null or is_equal_approx(f, 1.0):
+		return
+	var team = request.opponent.get("team", [])
+	if not (team is Array):
+		return
+	for t in team:
+		if t is Dictionary:
+			(t as Dictionary)["strength"] = snappedf(float((t as Dictionary).get("strength", 1.0)) * f, 0.001)
+
+
+## The first opponent's strength for [param state] (scaling included): what a ladder shows.
+func lead_strength(state: StoryState = null) -> float:
+	if opponent_team.is_empty():
+		return 1.0
+	return float(opponent_team[0].get("strength", 1.0)) * scale_factor(state)
+
+
 func validate(issues: Array[String]) -> void:
 	if kind == Kind.TACTICAL:
 		if map_path.is_empty() and campaign_chapter.is_empty():
@@ -116,8 +154,14 @@ func validate(issues: Array[String]) -> void:
 			issues.append("duel has no opponent_team")
 	for t in opponent_team:
 		var cid: String = String((t as Dictionary).get("character_id", ""))
-		if CharacterLibrary.get_character(StringName(cid)) == null:
+		var chr: CharacterResource = CharacterLibrary.get_character(StringName(cid))
+		if chr == null:
 			issues.append("opponent character '%s' does not exist" % cid)
+		elif kind == Kind.DUEL and not DuelMoveCompiler.is_duel_eligible(chr):
+			# The duel refuses a kit with no offensive move (DuelSetup lists only eligible units).
+			issues.append("duel opponent '%s' is not duel-eligible" % cid)
+	if not scale_flag.strip_edges().is_empty() and (scale_step <= 0.0 or scale_max_steps <= 0):
+		issues.append("scale_flag '%s' set but scale_step / scale_max_steps are zero" % scale_flag)
 	for i in reward_items:
 		if not ItemLibrary.has_item(i):
 			issues.append("reward item '%s' does not exist" % i)

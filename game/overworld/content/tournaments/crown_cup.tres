@@ -1,0 +1,77 @@
+[gd_resource type="Resource" script_class="TournamentResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="1_hhp4w"]
+[ext_resource type="Script" path="res://game/overworld/data/TournamentResource.gd" id="2_cajlg"]
+
+[sub_resource type="Resource" id="Resource_yxtbf"]
+script = ExtResource("1_hhp4w")
+kind = 1
+opponent_name = "Tamsin"
+opponent_speaker_id = &"npc_tamsin"
+opponent_team = Array[Dictionary]([{
+"character_id": "mycothrall",
+"strength": 0.9
+}])
+defeat_policy = 1
+spar = true
+scale_flag = "arena.crown_cup.wins"
+scale_step = 0.05
+scale_max_steps = 4
+
+[sub_resource type="Resource" id="Resource_6p0pd"]
+script = ExtResource("1_hhp4w")
+kind = 1
+opponent_name = "Old Harl"
+opponent_speaker_id = &"npc_harl"
+opponent_team = Array[Dictionary]([{
+"character_id": "blightcap",
+"strength": 0.95
+}])
+defeat_policy = 1
+spar = true
+scale_flag = "arena.crown_cup.wins"
+scale_step = 0.05
+scale_max_steps = 4
+
+[sub_resource type="Resource" id="Resource_3ebv5"]
+script = ExtResource("1_hhp4w")
+kind = 1
+opponent_name = "Ser Quenby"
+opponent_speaker_id = &"npc_quenby"
+opponent_team = Array[Dictionary]([{
+"character_id": "petalfang",
+"strength": 1.05
+}])
+defeat_policy = 1
+spar = true
+scale_flag = "arena.crown_cup.wins"
+scale_step = 0.05
+scale_max_steps = 4
+
+[sub_resource type="Resource" id="Resource_6mueg"]
+script = ExtResource("1_hhp4w")
+kind = 1
+opponent_name = "Champion Isolde"
+opponent_speaker_id = &"npc_isolde"
+opponent_team = Array[Dictionary]([{
+"character_id": "oakheart",
+"strength": 0.85
+}])
+defeat_policy = 1
+spar = true
+scale_flag = "arena.crown_cup.wins"
+scale_step = 0.05
+scale_max_steps = 4
+
+[resource]
+script = ExtResource("2_cajlg")
+id = &"crown_cup"
+display_name = "The Crown Cup"
+description = "Four bouts in the sand of The Crown Arena, one after another. Friendly -- nobody is hurt for real -- but the crowd only cheers for winners."
+host_name = "Arena Master Bex"
+host_speaker_id = &"npc_arena_master"
+rounds = Array[ExtResource("1_hhp4w")]([SubResource("Resource_yxtbf"), SubResource("Resource_6p0pd"), SubResource("Resource_3ebv5"), SubResource("Resource_6mueg")])
+prize_gold = 400
+first_prize_items = Array[StringName]([&"sunleaf_totem"])
+repeat_prize_gold = 200
+title = "Crown Cup Champion"

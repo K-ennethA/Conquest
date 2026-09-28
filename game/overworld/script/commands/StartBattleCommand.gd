@@ -26,6 +26,9 @@ func run(ctx: ScriptContext) -> void:
 		return
 	if not encounter_id.is_empty():
 		request.encounter_id = encounter_id
+	# A rematch grows with the journey's progress (BattleSpec scale_flag: a rival, a champion).
+	if spec != null:
+		spec.apply_scaling(request, ctx.state)
 	if request.clash_intro and ctx.has_host_method(&"play_clash"):
 		await ctx.host.play_clash(request)
 	if not ctx.has_session_method(&"run_battle"):

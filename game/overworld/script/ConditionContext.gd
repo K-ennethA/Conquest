@@ -8,6 +8,7 @@ extends RefCounted
 ##   flag("quest.blight_road") >= 1 and not has("oakvale.guard.moved")
 ##   party_has("petalfang") or item("sagebloom_poultice") > 0
 ##   outcome() == "victory"
+##   spar_ready("crownhaven.spar.rowan")
 ##
 ## Zero parser to write, and [method check] lets a content test parse + dry-run every condition
 ## in every area so a typo fails CI, not a playtest. Story content is SHIPPED, trusted data; if
@@ -50,6 +51,12 @@ func gold() -> int:
 
 func visited(area_id: String) -> bool:
 	return _state.visited_areas.has(area_id)
+
+
+## Is the sparring partner [param encounter_id] ready for another bout ([StorySparring]: rested
+## since the last one)? True for a partner never sparred.
+func spar_ready(encounter_id: String) -> bool:
+	return StorySparring.is_ready(_state, encounter_id)
 
 
 ## The outcome of the last battle a script ran ("victory", "defeat", "fled", "befriended",

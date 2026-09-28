@@ -68,6 +68,17 @@ const DEFAULT_PATH := "res://game/overworld/content/story_ruleset.tres"
 ## GAME OVER (back to the last save) instead of a whiteout with nobody left to fight.
 @export var classic_wipe_is_game_over: bool = true
 
+@export_group("Sparring")
+## A SPARRING PARTNER's cooldown ([StorySparring]; DECISIONS.md #33): after a bout with one partner
+## (a spar whose script asks [code]spar_ready("<encounter id>")[/code]), that partner is ready again
+## only once the journey has RESTED this many times since (a Wayshrine / healer / whiteout rest --
+## [member StoryState.rests]). Spars award Growth by the ordinary story rules, so this is what keeps
+## a friendly bout from being an endless Growth farm. 0 = no rest needed.
+@export_range(0, 10) var spar_cooldown_rests: int = 1
+## ...and walked at least this many steps since the bout ([member StoryState.steps]). 0 = no walk
+## needed. Both must hold when both are set.
+@export_range(0, 5000) var spar_cooldown_steps: int = 0
+
 
 static func load_default() -> StoryRuleset:
 	if ResourceLoader.exists(DEFAULT_PATH):
