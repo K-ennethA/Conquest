@@ -54,6 +54,10 @@ bottom for what they build on.
   "difficulty": 1,              // BotController.Difficulty
   "challenge_id": "",           // set in challenge mode (the challenge's content checksum)
   "campaign_chapter_id": "",
+  "unit_ids": "slot",           // NetUnitIds naming the ids follow: "slot" ("<owner_slot>:<n>",
+                                // assigned once ownership is known) or, when ABSENT, "legacy"
+                                // (the old map-load naming, "-1:<n>"; playback of such a file
+                                // names its board the old way so the archive still resolves)
 
   "entries": [                  // THE BODY — ordered, one per committed command
     { "turn": 3, "actor_slot": 0, "cmd": { /* encoded NetProtocol command */ } }
@@ -230,7 +234,11 @@ checksumming the moment the enemy acted (project convention #2).
   instead of going through a `NetProtocol` command, so it has nothing replayable to log. It
   only runs for units with no `Character` backing.
 - **Units with no `net_id`.** `note_*` returns early; those units are also skipped by the
-  checksum, so the log stays self-consistent.
+  checksum, so the log stays self-consistent. Match-start units are named once ownership is
+  known (`GameWorldManager._assign_initial_unit_ids`), but in LOCAL play a unit that arrives
+  MID-MATCH (a Siege creep or respawn, a summon, a reinforcement) is never named -- only the
+  network/playback apply path names arrivals (`NetUnitIds.assign(..., false)` after each
+  applied command) -- so its actions are not recorded.
 - The **custom-map payload** is left empty by the recorder (`_live_map`). The transport wave is
   what has the validated challenge blob in hand and fills it in.
 
@@ -360,7 +368,13 @@ seven; the rest are still open for the picker screen and the attempt-report tran
   each turn end during playback and compare against `checksums[i].hash`. A divergence should
   bail gracefully *at the turn it diverged*, naming the turn.
 - **`header.rng.match_seed`** — seed the playback `MatchRng` with it before the first command;
-  per-command `rng_seed` values are already carried inside each entry.
+  per-command `rng_seed` values are already carried inside each entry. LOCAL play (solo /
+  hot-seat) stamps them too: every local commit site (`UnitActionsPanel`, `BotTurnDriver`)
+  begins its command with `NetSessionNode.begin_local_command`, which rolls it from the solo
+  stream's next generator and installs it as `CombatServices.match_rng`, and the recorder
+  stamps that seed onto the command -- so playback re-rolls exactly the live dice. The
+  opening-turn generator and a local battle's dynamic-weather seed are derived from the
+  match seed as well (`install_local_setup_rng` / `local_weather_seed`).
 - **`ReplayLog.list_replays()`** — cheap browse listing (path/filename/bytes, no parse) for a
   replay-picker screen; `delete_replay(path)` for its delete button.
 - **`ReplayLog.set_replay_dir(path)`** — directory injection, already used by the tests; an

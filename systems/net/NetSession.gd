@@ -710,8 +710,107 @@ func net_id_for(unit) -> String:
 func begin_solo_match_rng() -> void:
 	match_rng = MatchRng.new()
 	match_rng.begin_solo(MatchRng.fresh_entropy())
+	_local_command_seq = 0
+	_local_command_seed = 0
 	_sync_applier_rng()
 	match_rng_ready.emit()
+
+
+# ---------------------------------------------------------------------------
+# The LOCAL command stream (solo / hot-seat live play)
+# ---------------------------------------------------------------------------
+#
+# A replay re-applies each recorded command through the command seam, which rolls from a
+# generator seeded by the command's stamped seed (NetGameRules.rng_for_action) and leaves it
+# installed as CombatServices.match_rng for whatever the command sets off (a status tick at
+# the turn it opened, a trap sprung by a move). Live LOCAL play resolves commands directly
+# (UnitActionsPanel, BotTurnDriver) rather than through that seam, so it must roll from the
+# very same generator or the replay re-decides every hit, miss and crit. Each local commit
+# site therefore BEGINS its command here before resolving it, and the recorder stamps the
+# seed it was given onto the recorded command -- the live battle and its playback then draw
+# the identical sequence. Network play never uses this: every accepted action carries its own
+# verified seed.
+
+## Seq of the last local command begun this battle (the solo stream's per-command index).
+var _local_command_seq: int = 0
+## Seed of the local command begun and not yet recorded; 0 when there is none.
+var _local_command_seed: int = 0
+
+## Domain of the solo stream the pre-first-command setup generator is drawn from (commands
+## start at seq 1, so this never collides with one).
+const LOCAL_SETUP_SEQ := 0
+## Domain of the solo stream a local battle's dynamic weather is seeded from.
+const LOCAL_WEATHER_SEQ := -1
+
+
+## True when this session has a ready solo stream and is NOT in a network match.
+func has_local_stream() -> bool:
+	return match_rng != null and match_rng.is_ready() and not is_networked_match()
+
+
+## BEGIN one locally-committed command: derive its generator from the next seed of the solo
+## stream, install it as [member CombatServices.match_rng] (exactly where the apply path
+## installs an applied command's), remember the seed for the recorder, and return it for the
+## caller to hand to [method Unit.perform_move]. Null -- and nothing touched -- when there is
+## no solo stream (a network match, a headless harness), so the caller rolls as it always did.
+func begin_local_command() -> RandomNumberGenerator:
+	_local_command_seed = 0
+	if not has_local_stream():
+		return null
+	_local_command_seq += 1
+	var seed_value: int = match_rng.seed_for(_local_command_seq)
+	# 0 is "unstamped" on the wire (the applier would fall back to the seq stream), so a 0
+	# seed -- one in 2^64 -- is nudged rather than silently changing meaning on playback.
+	if seed_value == 0:
+		seed_value = 1
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	_local_command_seed = seed_value
+	NetGameRules._install_rng(rng)
+	return rng
+
+
+## The seed of the local command begun and not yet recorded, CONSUMED (a second read is 0).
+## The recorder stamps it onto the command it records; 0 means "nothing was begun", which
+## records an unstamped command exactly as before.
+func take_local_command_seed() -> int:
+	var s: int = _local_command_seed
+	_local_command_seed = 0
+	return s
+
+
+## Install the generator every roll made BEFORE the first local command draws from (the
+## opening turn's ticks), derived from the match seed -- so the live battle and its playback
+## (which re-seeds the recorded match seed first) roll those identically too. No-op without a
+## solo stream.
+func install_local_setup_rng() -> void:
+	if not has_local_stream():
+		return
+	NetGameRules.install_setup_rng(match_rng.seed_for(LOCAL_SETUP_SEQ))
+
+
+## Seed for a LOCAL battle's dynamic weather: derived from the match seed, so a replay (which
+## restores the recorded match seed before the weather is configured) rolls the same sky.
+## Falls back to fresh entropy without a solo stream.
+func local_weather_seed() -> int:
+	if has_local_stream():
+		return match_rng.seed_for(LOCAL_WEATHER_SEQ)
+	return randi()
+
+
+## [method begin_local_command] on the autoload, for the local commit sites; null when there
+## is no NetSession autoload (a headless unit test).
+static func begin_local_command_rng() -> RandomNumberGenerator:
+	var ns = _autoload()
+	return ns.begin_local_command() if ns != null else null
+
+
+static func _autoload():
+	var loop = Engine.get_main_loop()
+	if not (loop is SceneTree):
+		return null
+	var node = (loop as SceneTree).root.get_node_or_null("NetSession")
+	return node if node is NetSessionNode else null
 
 
 ## Hand the CURRENT solo stream to an installed applier (every path that replaces

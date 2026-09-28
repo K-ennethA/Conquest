@@ -71,7 +71,7 @@ static func note_move_unit(unit, dest_cell: Vector3i) -> void:
 	var nid: String = net_id_of(unit)
 	if nid == "":
 		return
-	_emit(NetProtocol.make_move_unit(nid, dest_cell, slot_of_unit(unit)), slot_of_unit(unit))
+	_emit(_stamp_local_seed(NetProtocol.make_move_unit(nid, dest_cell, slot_of_unit(unit))), slot_of_unit(unit))
 
 
 ## Record a resolved cast: [param unit]'s [param move_slot] aimed at [param aim_cell]
@@ -82,7 +82,7 @@ static func note_cast_move(unit, move_slot: int, aim_cell: Vector3i) -> void:
 	var nid: String = net_id_of(unit)
 	if nid == "":
 		return
-	_emit(NetProtocol.make_cast_move(nid, move_slot, aim_cell, slot_of_unit(unit)), slot_of_unit(unit))
+	_emit(_stamp_local_seed(NetProtocol.make_cast_move(nid, move_slot, aim_cell, slot_of_unit(unit))), slot_of_unit(unit))
 
 
 ## Record [param unit] ending its own turn without casting (WAIT_UNIT).
@@ -92,15 +92,33 @@ static func note_wait_unit(unit) -> void:
 	var nid: String = net_id_of(unit)
 	if nid == "":
 		return
-	_emit(NetProtocol.make_wait_unit(nid, slot_of_unit(unit)), slot_of_unit(unit))
+	_emit(_stamp_local_seed(NetProtocol.make_wait_unit(nid, slot_of_unit(unit))), slot_of_unit(unit))
 
 
 ## Record [param player_id] ending their whole turn (END_TURN).
 static func note_end_turn(player_id: int) -> void:
 	if not is_active():
 		return
-	_emit(NetProtocol.make_end_turn(player_id, player_id), player_id)
+	_emit(_stamp_local_seed(NetProtocol.make_end_turn(player_id, player_id)), player_id)
 
+
+## Stamp the seed of the LOCAL command being recorded onto [param cmd] (see
+## [method NetSessionNode.begin_local_command]): the live battle rolled this command from that
+## seed, so playback -- which prefers a stamped seed over the seq stream -- rolls the same. The
+## seed is CONSUMED, so it can only ever land on the command it was begun for; nothing begun
+## (no solo stream) leaves the command unstamped, exactly as before. Looked up on the autoload
+## dynamically so this file keeps no static dependency on the net session.
+static func _stamp_local_seed(cmd: Dictionary) -> Dictionary:
+	var loop = Engine.get_main_loop()
+	if not (loop is SceneTree):
+		return cmd
+	var net = (loop as SceneTree).root.get_node_or_null("NetSession")
+	if net == null or not net.has_method("take_local_command_seed"):
+		return cmd
+	var seed_value: int = int(net.take_local_command_seed())
+	if seed_value != 0:
+		cmd[NetProtocol.KEY_RNG] = seed_value
+	return cmd
 
 ## The deterministic id naming [param unit] on every peer -- the [NetUnitIds] string
 ## ("<slot>:<n>", mid-match arrivals "<slot>:s<k>") stored in the unit's [code]net_id[/code]
@@ -414,6 +432,9 @@ func build_live_header() -> Dictionary:
 		"difficulty": int(GameSettings.ai_difficulty) if _autoload_ok(GameSettings) else 0,
 		"challenge_id": _live_challenge_id(),
 		"campaign_chapter_id": _live_chapter_id(),
+		# The battle names its units "<owner_slot>:<n>" once ownership is known (see
+		# GameWorldManager._assign_initial_unit_ids); stamped so playback names them the same.
+		"unit_ids": ReplayLog.UNIT_IDS_SLOT,
 	}
 
 

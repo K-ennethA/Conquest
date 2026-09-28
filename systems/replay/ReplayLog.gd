@@ -45,7 +45,9 @@ class_name ReplayLog
 ##   "difficulty": 1,                    # BotController.Difficulty
 ##   "challenge_id": "",                 # set in challenge mode (ChallengeCodec.challenge_id)
 ##   "campaign_chapter_id": "",
-##   "entries": [                        # THE BODY -- ordered, one per committed command
+##   "unit_ids": "slot",                 # which NetUnitIds naming the log's unit ids use --
+##                                       # see UNIT_IDS_SLOT / UNIT_IDS_LEGACY (absent = legacy)
+##   "entries": [                       # THE BODY -- ordered, one per committed command
 ##     { "turn": 3, "actor_slot": 0, "cmd": { ...encoded NetProtocol command... } }
 ##   ],
 ##   "checksums": [ { "turn": 3, "hash": "0a1b2c3d4e5f6071" } ],
@@ -101,6 +103,18 @@ const RESULT_VICTORY := "victory"
 const RESULT_DEFEAT := "defeat"
 const RESULT_DRAW := "draw"
 const RESULTS: Array[String] = [RESULT_UNKNOWN, RESULT_VICTORY, RESULT_DEFEAT, RESULT_DRAW]
+
+## Which [NetUnitIds] naming a log's unit ids follow -- the header's [code]unit_ids[/code].
+## The ids are a simulation input (commands address units by them, and every checksum row
+## hashes them), so playback must name its board exactly as the recording did.
+##   * [constant UNIT_IDS_SLOT]: the documented "<owner_slot>:<n>", assigned once ownership is
+##     known. Every recording made since that fix stamps this.
+##   * [constant UNIT_IDS_LEGACY]: the old map-load naming, assigned before any unit had an
+##     owner, so every match-start id came out "-1:<n>". A header WITHOUT the field predates it
+##     and is read as legacy, so an archived replay keeps playing back.
+const UNIT_IDS_SLOT := "slot"
+const UNIT_IDS_LEGACY := "legacy"
+const UNIT_ID_SCHEMES: Array[String] = [UNIT_IDS_SLOT, UNIT_IDS_LEGACY]
 
 ## The command types a replay may carry: exactly the ones [method CommandApplier.apply_command]
 ## has an apply branch for. See the class docs for why ATTACK_UNIT is excluded.
@@ -184,7 +198,20 @@ static func make_header(fields: Dictionary = {}) -> Dictionary:
 		"difficulty": int(fields.get("difficulty", 0)),
 		"challenge_id": _clip(String(fields.get("challenge_id", "")), MAX_STRING),
 		"campaign_chapter_id": _clip(String(fields.get("campaign_chapter_id", "")), MAX_STRING),
+		"unit_ids": _unit_id_scheme_or_legacy(fields.get("unit_ids", UNIT_IDS_LEGACY)),
 	}
+
+
+## The [NetUnitIds] naming [param log] uses (see [constant UNIT_IDS_SLOT]). A log with no
+## such field -- or an unrecognised value -- is [constant UNIT_IDS_LEGACY].
+static func unit_id_scheme_of(log: Dictionary) -> String:
+	return _unit_id_scheme_or_legacy(log.get("unit_ids", UNIT_IDS_LEGACY))
+
+
+static func _unit_id_scheme_or_legacy(value) -> String:
+	if value is String and UNIT_ID_SCHEMES.has(value):
+		return value
+	return UNIT_IDS_LEGACY
 
 
 ## An empty replay log around [param header] -- header keys plus the (empty) body. This is
@@ -444,6 +471,7 @@ static func validate(raw: Variant) -> Dictionary:
 		"difficulty": int(d.get("difficulty", 0)),
 		"challenge_id": String(d.get("challenge_id", "")),
 		"campaign_chapter_id": String(d.get("campaign_chapter_id", "")),
+		"unit_ids": d.get("unit_ids", UNIT_IDS_LEGACY),
 	})
 
 	var entries: Array = []

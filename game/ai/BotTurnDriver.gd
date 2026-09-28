@@ -1,7 +1,10 @@
 extends Node
 class_name BotTurnDriver
 
-## Drives turns for AI-controlled players in single-player.
+## Drives turns for AI-controlled players in every LOCAL battle -- single-player's opponent,
+## and in hot-seat too, a map's neutral faction and Siege's AI-driven creeps (see
+## [method GameWorldManager.should_mount_bot_driver]). It never acts for a unit a human
+## player commands, so the humans of a hot-seat match keep full manual control.
 ##
 ## Polls the active turn system each tick; when the current player is AI
 ## ([member Player.is_ai]) it makes ONE of that player's actable units act, then
@@ -467,6 +470,9 @@ func _relocate(unit, board, from_cell: Vector3i, to_cell: Vector3i) -> void:
 	# up there -- do NOT rewind it). The visible SLIDE is UnitAnimator's job: it hears
 	# unit_moved and glides the MESH child from the old cell to the new one while the root
 	# stays put. Emitting unit_moved here is what makes the enemy's movement animate at all.
+	# LOCAL COMMAND RNG: this relocation is the AI's MOVE_UNIT -- begin it before it resolves so
+	# a trap or terrain roll it springs draws from the generator its replay re-installs.
+	NetSessionNode.begin_local_command_rng()
 	board.move_unit(unit, to_cell)
 	if GameEvents:
 		GameEvents.unit_moved.emit(
@@ -542,6 +548,8 @@ func _act_canto(unit: Unit, board) -> bool:
 		if verbose:
 			print("[BotAI] %s repositions on canto" % unit.get_display_name())
 		return true
+	# LOCAL COMMAND RNG: giving up the canto is a WAIT_UNIT -- begin it before it resolves.
+	NetSessionNode.begin_local_command_rng()
 	if unit.has_method("finish_canto"):
 		unit.finish_canto("wait")
 	ReplayRecorder.note_wait_unit(unit)
@@ -863,7 +871,11 @@ func _execute_move_decision(unit: Unit, decision: Dictionary, board) -> bool:
 	# mounted the helper skips the await entirely, so the AI chain stays synchronous and GUT never
 	# hangs (this is why act_one_ai_unit / act_for_turn_system keep returning bools directly there).
 	await _await_ultimate_cutin(unit, move, slot)
-	var result: Dictionary = unit.perform_move(slot, aim_cell, board)
+	# LOCAL COMMAND RNG: roll the cast from the solo stream's next generator -- the one the
+	# recorder stamps onto this CAST_MOVE and its replay re-rolls from (null without a solo
+	# stream: the old unseeded behaviour).
+	var command_rng: RandomNumberGenerator = NetSessionNode.begin_local_command_rng()
+	var result: Dictionary = unit.perform_move(slot, aim_cell, board, command_rng)
 	if result != null and bool(result.get("success", false)):
 		# REPLAY: the AI's single cast point (plan-attack and the stashed second-beat strike
 		# both land here), normalised into the SAME CAST_MOVE the human and networked paths
@@ -988,6 +1000,10 @@ func _fallback_attack(unit: Unit, target: Unit) -> void:
 
 
 func _finish(unit: Unit, action: String) -> void:
+	# LOCAL COMMAND RNG: a recorded WAIT is its own command -- begin it before the turn it
+	# closes moves on (see the recording note below for why only "wait" is a command).
+	if action == "wait":
+		NetSessionNode.begin_local_command_rng()
 	if unit.has_method("mark_action_completed"):
 		unit.mark_action_completed(action)
 	# REPLAY: the AI's single "unit closed its turn without acting" point. ONLY the "wait"

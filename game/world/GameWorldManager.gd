@@ -438,6 +438,14 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 	# rng_seed, which the applier prefers -- this is the belt to those braces.)
 	_apply_replay_match_seed()
 
+	# LOCAL play (solo / hot-seat, and replay playback of either): the match seed is final now,
+	# so install the generator anything rolled before the first command draws from (the opening
+	# turn's ticks) off it -- live and playback then roll those identically. Every local command
+	# after that begins its own (NetSessionNode.begin_local_command). No-op in a network match.
+	var ns = get_node_or_null("/root/NetSession")
+	if ns != null and ns.has_method("install_local_setup_rng"):
+		ns.install_local_setup_rng()
+
 	# Compile THIS map's authored win conditions into a live rule set. This is what
 	# makes objectives per-map: a boss map ends on the boss's death, a skirmish on a
 	# wipe -- same engine, different WinCondition list (see _evaluate_game_end).
@@ -461,12 +469,15 @@ func _on_map_loaded(map_resource: MapResource) -> void:
 		GameSettings.set_current_map(map_resource)
 
 ## Seed for dynamic weather: the network match's public setup seed (identical on
-## every peer, see systems/net/README.md) or a fresh random one locally.
+## every peer, see systems/net/README.md) or, locally, one derived from the battle's solo
+## match seed -- so a replay, which restores that seed first, re-rolls the same sky.
 func _weather_seed() -> int:
+	var ns := get_node_or_null("/root/NetSession")
 	if GameModeManager != null and GameModeManager.is_multiplayer_active():
-		var ns := get_node_or_null("/root/NetSession")
 		if ns != null and ns.has_method("get_match_config"):
 			return int(ns.get_match_config().get("seed", 1))
+	if ns != null and ns.has_method("local_weather_seed"):
+		return int(ns.local_weather_seed())
 	return randi()
 
 ## The per-battle weather visual rig (particles + light/fog adapter), reused across
@@ -1188,11 +1199,11 @@ func _setup_move_fx() -> void:
 func _setup_command_seam() -> void:
 	"""Build the live command seam for this battle and hand it to NetSession.
 
-	Constructs a fresh [CommandApplier] over a new [CommandApplier.UnitRegistry], assigns
-	deterministic net_ids to the freshly spawned units in load order (board tree order,
-	identical on every peer for identical match settings), and installs the applier plus a
-	board provider on NetSession. In NON-networked play it also negotiates a solo match seed
-	so per-command RNG is available (single-player is the degenerate local case of lockstep).
+	Constructs a fresh [CommandApplier] over a new [CommandApplier.UnitRegistry] and installs
+	the applier plus a board provider on NetSession. (The units' net_ids are assigned later,
+	once ownership is known -- see _assign_initial_unit_ids.) In NON-networked play it also
+	negotiates a solo match seed so per-command RNG is available (single-player is the
+	degenerate local case of lockstep).
 
 	Rebuilt per map load so the applier/registry never outlive the board they mutate; the
 	stale seam is dropped in _exit_tree and replaced here on the next load."""
@@ -1208,12 +1219,14 @@ func _setup_command_seam() -> void:
 		return
 
 	var registry := CommandApplier.UnitRegistry.new()
-	# Deterministic load order: BoardAdapter.all_units() follows the map's tree order,
-	# which is identical across peers loading the same map + squads. Ids start at 1.
-	var units: Array = []
-	if board.has_method("all_units"):
-		units = board.all_units()
-	registry.assign_map_units(units)
+	# The units are NOT named here: nobody owns them yet at map load, and a NetUnitIds id's
+	# slot is its owner, so naming them now stamped every unit "-1:<n>". They are named once
+	# ownership is assigned (_assign_initial_unit_ids from _setup_players locally; the network
+	# setup after its own ownership pass). The one exception is playing back a replay that was
+	# RECORDED under that old map-load naming: its log addresses units by the old ids, so its
+	# board is named the old way, here, exactly as it was when it was recorded.
+	if _replay_uses_legacy_unit_ids():
+		registry.assign_map_units()
 
 	var applier := CommandApplier.new(registry, ns.get("match_rng"))
 	ns.install_command_seam(applier, _seam_board_provider)
@@ -1476,6 +1489,10 @@ func _setup_network_multiplayer() -> void:
 	# and NetSession ends a match whose turn reaches an unseated slot (ABORT_UNDRIVEN_TURN).
 	for i in range(mini(2, PlayerManager.players.size())):
 		PlayerManager.players[i].is_ai = false
+	# Name the units now that they are owned ("<slot>:<n>"). Every peer runs this same pass
+	# over the same board, so the ids agree everywhere (NetGameRules.assign_initial_ids in
+	# GameModeManager.on_network_world_ready is then a no-op re-assertion).
+	_assign_initial_unit_ids()
 
 	# Each await can outlive this scene: if the opponent drops mid-setup,
 	# GameModeManager returns to the menu and this node leaves the tree -- stop then.
@@ -1590,7 +1607,59 @@ func _setup_players() -> void:
 	if GameSettings and GameSettings.game_mode == GameSettings.GameMode.SINGLE_PLAYER:
 		for i in range(1, PlayerManager.players.size()):
 			PlayerManager.players[i].is_ai = true
+
+	# THE AI DRIVER, for EVERY local battle -- not just single-player. Hot-seat has AI too: a
+	# map's neutral faction (BaseAssaultRuntime registers it on slot 2, is_ai) and Siege's
+	# creeps (marked AI-driven on a HUMAN side). With no driver mounted nobody ever acts for
+	# them, so the first neutral turn wedged the match forever. Mounting it is safe for the
+	# humans: the driver acts only for an is_ai player and, on a human's turn, only for units
+	# explicitly marked AI-driven -- it never touches a unit a player commands, and in a
+	# hot-seat battle with no AI at all it is simply idle. See should_mount_bot_driver.
+	var mode: int = int(GameSettings.game_mode) if GameSettings else 0
+	if should_mount_bot_driver(mode, ReplayPlayback.is_playing()):
 		_ensure_bot_driver()
+
+	# Ownership is known from here on, so the battle's units can be NAMED (see
+	# _assign_initial_unit_ids for why this is not done at map load).
+	_assign_initial_unit_ids()
+
+
+## Whether a battle in [param game_mode] mounts the [BotTurnDriver]. Pure so the rule is
+## testable without a booted battle.
+##   * every LOCAL mode (single-player, hot-seat versus): yes. Whatever in it is AI -- the
+##     opponent, a neutral faction, a side's Siege creeps -- is driven, and nothing else is;
+##   * a NETWORK match: never. No AI runs on either peer (NetSession aborts a match whose turn
+##     reaches an unseated slot, and maps with AI factions are refused for network play);
+##   * REPLAY PLAYBACK: never. Every AI action is already in the log.
+static func should_mount_bot_driver(game_mode: int, replaying: bool) -> bool:
+	if replaying:
+		return false
+	return game_mode != GameSettings.GameMode.MULTIPLAYER
+
+
+## Give every unit on the board its match-start [NetUnitIds] id ("<owner_slot>:<n>").
+##
+## Runs once ownership is ASSIGNED, never at map load: the id's slot IS the owner, and at map
+## load nobody owns anything yet -- which is how every local battle used to come out named
+## "-1:0".."-1:N". Running here also names units that did not exist at map load at all (an
+## Arena round's squad and wave, a resumed battle's restored units), which the old map-load
+## pass left unnamed and therefore unrecordable. Idempotent: a unit that already has an id
+## keeps it (NetUnitIds.assign skips named units).
+##
+## A replay recorded before this fix carries the OLD names; its playback keeps the old
+## map-load naming instead (see _setup_command_seam), so that archive still resolves.
+func _assign_initial_unit_ids() -> void:
+	if _replay_uses_legacy_unit_ids():
+		return
+	var board = CombatServices.board() if CombatServices != null else null
+	if board == null:
+		return
+	NetUnitIds.assign(board, true)
+
+
+## True while playing back a replay recorded under the legacy map-load id scheme.
+func _replay_uses_legacy_unit_ids() -> bool:
+	return _is_replaying() and ReplayLog.unit_id_scheme_of(_replay_log) == ReplayLog.UNIT_IDS_LEGACY
 
 func _mount_arena_run_hud() -> void:
 	"""Add the Arena in-round HUD overlay to the battle scene when a run is active.

@@ -1085,6 +1085,9 @@ func _on_end_unit_turn_pressed() -> void:
 	if canto_end and selected_unit.has_method("finish_canto"):
 		selected_unit.finish_canto("wait")
 
+	# LOCAL COMMAND RNG: begin this WAIT before it resolves, so whatever it sets off (the turn
+	# ending, the next turn's ticks) rolls from the generator its replay will re-install.
+	NetSessionNode.begin_local_command_rng()
 	ReplayRecorder.note_wait_unit(selected_unit)  # REPLAY: solo WAIT_UNIT (End Unit Turn)
 
 	# Remember who is acting so _finish_command can tell whether Speed First has already
@@ -1216,6 +1219,9 @@ func _do_end_player_turn() -> void:
 	# with the turn it ended (the networked branch records apply-side instead).
 	var ending_player := _current_turn_player()
 	if ending_player != null:
+		# LOCAL COMMAND RNG: the next turn's opening ticks roll from this END_TURN's generator,
+		# the one its replay re-installs (see NetSessionNode.begin_local_command).
+		NetSessionNode.begin_local_command_rng()
 		ReplayRecorder.note_end_turn(int(ending_player.player_id))
 
 	# Local game logic (existing)
@@ -2216,6 +2222,9 @@ func _commit_tentative_move() -> void:
 	var dest_cell := _tentative_dest_cell
 	# Drop the tentative bookkeeping up front so a re-entrant call can't double-commit.
 	_clear_tentative_state()
+	# LOCAL COMMAND RNG: this commit is a MOVE_UNIT; begin it before it resolves so a trap or
+	# terrain roll it springs draws from the generator its replay re-installs.
+	NetSessionNode.begin_local_command_rng()
 
 	var board = CombatServices.board()
 	if board != null:
@@ -2501,6 +2510,8 @@ func _on_action_menu_wait_chosen() -> void:
 	# case without double-announcing the one that moved.
 	var canto_wait: bool = _unit_has_canto(unit)
 	_commit_tentative_move()
+	# LOCAL COMMAND RNG: the WAIT is its own command -- begin it before it resolves.
+	NetSessionNode.begin_local_command_rng()
 	if canto_wait:
 		if unit.has_method("finish_canto"):
 			unit.finish_canto("wait")
@@ -2809,7 +2820,11 @@ func _execute_move_on_target(aim_cell: Vector3i, move: MoveResource, slot: int) 
 	# Remember who is acting: mark_action_completed below advances the Speed First queue
 	# and may auto-select the next unit before _finish_command runs (see _finish_command).
 	var acting_unit := selected_unit
-	var result: Dictionary = selected_unit.perform_move(slot, aim_cell, board)
+	# LOCAL COMMAND RNG: roll this cast from the solo stream's next generator -- the one the
+	# recorder stamps onto the CAST_MOVE and its replay re-rolls from. Null without a solo
+	# stream, which is exactly the old unseeded behaviour.
+	var command_rng: RandomNumberGenerator = NetSessionNode.begin_local_command_rng()
+	var result: Dictionary = selected_unit.perform_move(slot, aim_cell, board, command_rng)
 
 	if result.get("success", false):
 		# REPLAY: the cast RESOLVED -- record it as CAST_MOVE in the same vocabulary the
