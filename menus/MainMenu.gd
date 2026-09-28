@@ -98,6 +98,7 @@ func _ready() -> void:
 
 	_build_ui()
 	_build_resume_entry()
+	_build_story_entry()
 	if net_msg != "":
 		_show_status_message(net_msg)
 	MenuNav.focus_deferred(resume_button if resume_button != null else single_player_button)
@@ -519,6 +520,69 @@ func _build_resume_entry() -> void:
 	_list.move_child(block, 0)
 	_buttons.insert(0, resume_button)
 	_wire_focus()
+
+
+# --- Continue Journey (story mode) ---------------------------------------------------
+#
+# The most recently saved story journey surfaces as a gold row beside Resume Battle (same shape
+# as _build_resume_entry): "Continue Journey" with its caption ("Mossway  ·  2h 15m").
+# Absent when no journey is saved. Guarded: a build without StoryController shows nothing.
+
+var journey_button: Button = null
+
+
+func _build_story_entry() -> void:
+	var story = get_node_or_null("/root/StoryController")
+	if story == null or _list == null:
+		return
+	var slot: int = StorySaveManager.most_recent_slot()
+	if slot <= 0:
+		return
+	var data: Dictionary = StorySaveManager.peek(slot)
+	var names: Dictionary = {}
+	for id in story.all_area_ids():
+		names[id] = story.area_display_name(id)
+	var block := VBoxContainer.new()
+	block.name = "JourneyBlock"
+	block.add_theme_constant_override("separation", 0)
+	journey_button = Button.new()
+	journey_button.name = "ContinueJourneyButton"
+	journey_button.text = "▶  Continue Journey"
+	journey_button.theme_type_variation = &"MenuItem"
+	journey_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	journey_button.custom_minimum_size = Vector2(0, 50)
+	journey_button.focus_mode = Control.FOCUS_ALL
+	journey_button.add_theme_color_override("font_color", MenuTheme.GOLD)
+	journey_button.add_theme_color_override("font_hover_color", MenuTheme.GOLD_LITE)
+	journey_button.add_theme_color_override("font_focus_color", MenuTheme.GOLD_LITE)
+	MenuNav.hover_focus(journey_button)
+	journey_button.pressed.connect(_on_continue_journey_pressed.bind(slot))
+	block.add_child(journey_button)
+	var caption := MenuKit.label(StorySnapshot.describe(data, names), &"MutedLabel")
+	caption.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	var cap_margin := MarginContainer.new()
+	cap_margin.add_theme_constant_override("margin_left", 48)
+	cap_margin.add_theme_constant_override("margin_bottom", 8)
+	cap_margin.add_child(caption)
+	block.add_child(cap_margin)
+	journey_button.focus_entered.connect(_on_entry_focused.bind(
+		"Walk on from where you last saved your journey: " + caption.text))
+	var at: int = 1 if _list.get_node_or_null("ResumeBlock") != null else 0
+	_list.add_child(block)
+	_list.move_child(block, at)
+	_buttons.insert(at, journey_button)
+	_wire_focus()
+
+
+func _on_continue_journey_pressed(slot: int) -> void:
+	var story = get_node_or_null("/root/StoryController")
+	if story == null:
+		return
+	var r: Dictionary = story.continue_journey(slot)
+	if not bool(r.get("success", false)):
+		_show_status_message("That journey could not be loaded.")
+		return
+	story.enter_overworld()
 
 
 func _on_resume_pressed() -> void:
