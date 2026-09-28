@@ -116,6 +116,10 @@ var _popup_item_ids: Array[String] = []
 var _popup_character_id: String = ""
 var _popup_team_slot: int = -1
 
+# --- Evolution (docs/design/EVOLUTION.md §5) ---------------------------------
+## The GROWTH block in the detail pane (gems, stage badge, EVOLVE).
+var _evo_block: EvolutionDetailBlock = null
+
 
 func _ready() -> void:
 	_resolve_mode()
@@ -400,6 +404,10 @@ func _build_detail_pane() -> Control:
 	id_col.add_child(_detail_tags)
 	_detail_action_hint = MenuKit.label("", &"MutedLabel")
 	id_col.add_child(_detail_action_hint)
+	# GROWTH (evolution): gems + EVOLVE up in the header, where they are seen without scrolling.
+	_evo_block = EvolutionDetailBlock.new()
+	_evo_block.evolve_requested.connect(_on_evolve_requested)
+	id_col.add_child(_evo_block)
 
 	_detail_desc = MenuKit.label("", &"DimLabel", true)
 	_detail_desc.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
@@ -451,16 +459,11 @@ func _build_detail_pane() -> Control:
 ## { id, name, element, role, stats, chr }.
 func _build_roster() -> Array:
 	var entries: Array = []
-	var ids: Array = CharacterLibrary.all_ids()
+	var ids: Array = pickable_ids(CharacterLibrary.all_ids(), RosterLedger.unlocked_forms(),
+		EvolutionRules.current().hide_locked_forms)
 	for id in ids:
 		var chr: CharacterResource = CharacterLibrary.get_character(id)
-		if chr == null:
-			continue
-		if chr.is_boss:
-			continue
 		var id_str := String(chr.character_id)
-		if id_str in EXCLUDED_IDS:
-			continue
 		var stats := {
 			"health": chr.base_health, "attack": chr.base_attack, "defense": chr.base_defense,
 			"magic": chr.base_magic, "magic_defense": chr.base_magic_defense,
@@ -550,6 +553,11 @@ func _make_unit_cell(entry: Dictionary) -> Control:
 	order.add_child(order_lbl)
 	btn.add_child(order)
 	_order_badges[id_str] = order
+
+	# Growth pips (bottom-right) for a unit growing toward an evolution.
+	var pips := GrowthGems.card_pips(id_str)
+	if pips != null:
+		btn.add_child(pips)
 
 	MenuKit.ignore_mouse(btn)
 	MenuNav.hover_focus(btn)
@@ -703,6 +711,8 @@ func _show_detail(id_str: String) -> void:
 		_detail_stats.add_child(val)
 
 	_refresh_item_row()
+	if _evo_block != null:
+		_evo_block.show_for(id_str)
 	_fill_abilities(chr)
 	_fill_moves(chr)
 	_update_detail_hint()
@@ -919,6 +929,62 @@ func _report_move(item_id: String, source: String) -> void:
 func _character_name(character_id: String) -> String:
 	var entry: Dictionary = _entries.get(character_id, {})
 	return String(entry["name"]) if not entry.is_empty() else character_id
+
+
+# --- Evolution ----------------------------------------------------------------
+
+## The pickable roster ids: every roster character minus bosses, [constant EXCLUDED_IDS] and
+## -- when [param hide_locked] -- evolved forms not yet in [param unlocked] (an evolved form is
+## an UNLOCK in open modes; its base form always stays pickable). Pure over its inputs plus
+## the static content libraries, so it is unit-tested without the screen.
+static func pickable_ids(all_ids: Array, unlocked: Array, hide_locked: bool) -> Array:
+	var out: Array = []
+	for id in all_ids:
+		var chr: CharacterResource = CharacterLibrary.get_character(id)
+		if chr == null or chr.is_boss:
+			continue
+		var id_str := String(chr.character_id)
+		if id_str in EXCLUDED_IDS:
+			continue
+		if hide_locked and EvolutionLibrary.is_evolved_form(id_str) and not (id_str in unlocked):
+			continue
+		out.append(id_str)
+	return out
+
+
+## EVOLVE was pressed in the detail pane: play the Evolution screen over this one, and on a
+## real evolution rebuild the roster (the new form is now pickable) with it in focus.
+func _on_evolve_requested(uid: String, edges: Array) -> void:
+	var screen := EvolutionScreen.open(self, uid, edges)
+	var outcome: Array = await screen.finished
+	if bool(outcome[0]) and outcome[1] != null and is_inside_tree():
+		_rebuild_after_evolution(String((outcome[1] as EvolutionResource).to_id))
+
+
+## Rebuild the whole screen in place, keeping the squad picked so far, and show [param focus_id].
+func _rebuild_after_evolution(focus_id: String) -> void:
+	# Only what _build_ui built (MenuKit.build_page's backdrop + page, and the item picker):
+	# the Evolution screen and PortraitCache's capture node also live under this screen.
+	for node_name in ["Backdrop", "Page", "ItemPopup"]:
+		var child := get_node_or_null(NodePath(node_name))
+		if child != null:
+			remove_child(child)
+			child.queue_free()
+	_unit_buttons.clear()
+	_order_badges.clear()
+	_card_crests.clear()
+	_entries.clear()
+	_stat_max.clear()
+	_shown_id = ""
+	_build_ui()
+	_refresh_selection_visuals()
+	_refresh_team_chips()
+	if _unit_buttons.has(focus_id):
+		MenuNav.focus_deferred(_unit_buttons[focus_id])
+		_show_detail(focus_id)
+	var chr := CharacterLibrary.get_character(focus_id)
+	if chr != null:
+		_show_message("%s joined your roster." % chr.display_name, "info")
 
 
 # --- Selection logic --------------------------------------------------------
