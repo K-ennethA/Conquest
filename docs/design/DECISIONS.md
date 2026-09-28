@@ -43,3 +43,27 @@ doc's default differs from this file, THIS FILE WINS. Anything not listed: use t
   `feat/evolution`, `feat/duel`, `feat/overworld`, each in its own worktree.
 - Milestone 1 of each feature first (the vertical slices). Keep GUT at 0 failures on your branch.
 - Follow CONQUEST.md coding conventions and docs/UI_STYLE.md (grove look) strictly.
+
+## Humans vs creatures (owner decisions, 2026-09-28)
+5. **Unit kind:** every CharacterResource gets `kind` = HUMAN or CREATURE (Compendium +
+   squad-select badge). Acquisition and progression key off it.
+6. **Humans are recruited, not caught:** unique named individuals (one of each), joined via
+   story / quests / talk-to-recruit. Never in the wild.
+7. **Humans fight in duels too, alongside creatures** — e.g. sparring to stay in shape, or
+   being attacked by criminals and defending yourself and your creatures. So duel sides can
+   field humans and creatures together (this supersedes "combatants are creatures" framing;
+   party size stays a ruleset knob — see decision 3).
+8. **Human progression = class promotion** (e.g. Squire -> Knight) on the same Growth +
+   EvolutionResource machinery as creature evolution.
+9. **Creatures are species; most are found in the wild** (per-area encounter tables), some
+   are story-only (starter, legendaries, bosses) or story gifts; you can own several of one
+   species. Trained via Growth -> evolution.
+10. **Catching = ACTIVE catch attempt during a wild duel** (an action/item); chance rises when
+    the target is weakened, subdued (Subdue move) or statused; a failed attempt costs the
+    turn. Rolled from the battle's seeded stream (deterministic, replayable). This replaces
+    decision 1's "offer to join after a win" as the primary way to get wild creatures.
+11. **Individual variation (rolled deterministically when caught, stored on the roster
+    record):** temperament (nature-like stat lean, shown on the card), hidden potential rolls
+    (small per-stat variance), rare variants (alternate colour or elemental form, e.g. changed
+    element + one different move). Cosmetic SKINS stay a separate, later system (the existing
+    SkinLibrary) and must not be confused with variants.
