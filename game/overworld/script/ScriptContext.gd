@@ -73,7 +73,7 @@ func substitute(text: String) -> String:
 	out = out.replace("{gold}", str(state.gold))
 	var lead: StoryPartyMember = state.lead()
 	out = out.replace("{lead}", lead.display_name() if lead != null else "your party")
-	var hero_name: String = "Warden"
+	var hero_name: String = "Wren"
 	if has_session_method(&"hero_name"):
 		hero_name = String(session.hero_name())
 	out = out.replace("{hero}", hero_name)

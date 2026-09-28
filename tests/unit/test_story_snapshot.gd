@@ -68,6 +68,19 @@ func test_version_gate() -> void:
 	assert_false(bool(StorySnapshot.from_dict([]) ["success"]), "a non-dictionary is refused")
 
 
+## A version-1 journey predates the story opening: it is not migrated, it is refused as
+## OUTDATED (a new journey is required) -- never a crash.
+func test_a_pre_opening_journey_is_outdated_not_migrated() -> void:
+	var d: Dictionary = StorySnapshot.to_dict(_state())
+	assert_false(StorySnapshot.is_outdated(d), "a current save is not outdated")
+	d["format_version"] = 1
+	assert_true(StorySnapshot.is_outdated(d), "a v1 save is outdated")
+	var r: Dictionary = StorySnapshot.from_dict(d)
+	assert_false(bool(r["success"]), "and does not load")
+	assert_eq(r["reason"], StorySnapshot.REASON_OUTDATED, "it says a new journey is required")
+	assert_null(r["state"], "with no half-built state")
+
+
 func test_unknown_ids_are_skipped_not_raised() -> void:
 	var d: Dictionary = StorySnapshot.to_dict(_state())
 	d["party"].append({"member_id": "dragon", "character_id": "dragon_that_does_not_exist"})

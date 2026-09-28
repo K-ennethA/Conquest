@@ -178,15 +178,20 @@ func _make_entity_actor(e: OverworldEntity) -> OverworldActor:
 	if not used_character:
 		match e.kind():
 			&"sign":
-				body = OverworldProps.signpost(e.tint)
+				if (e as SignEntity).look == "stone":
+					body = OverworldProps.standing_stone(e.tint)
+				else:
+					body = OverworldProps.signpost(e.tint)
 			&"chest":
 				body = OverworldProps.chest(e.tint)
 			&"wayshrine":
 				body = OverworldProps.wayshrine(e.tint)
 			&"prop":
-				body = OverworldProps.house((e as PropEntity).footprint, e.tint)
+				var p := e as PropEntity
+				body = OverworldProps.prop(p.prop, p.footprint, e.tint, _prop_seed(p))
 			&"trainer":
-				body = OverworldProps.figure(e.tint, "trainer")
+				var tf: String = (e as NpcEntity).figure
+				body = OverworldProps.figure(e.tint, tf if not tf.is_empty() else "trainer")
 			_:
 				body = OverworldProps.figure(e.tint, _figure_kind(e))
 		actor.set_model(body)
@@ -198,8 +203,16 @@ func _make_entity_actor(e: OverworldEntity) -> OverworldActor:
 	return actor
 
 
-## Procedural figure silhouette by id convention (elder / guard / villager).
+## Deterministic per-prop variation seed (flame placement, barrel spread).
+static func _prop_seed(p: PropEntity) -> int:
+	return p.cell.x * 131 + p.cell.y * 977 + absi(String(p.id).hash()) % 1000
+
+
+## Procedural figure silhouette: the NPC's authored [member NpcEntity.figure], else by id
+## convention (elder / guard / villager).
 static func _figure_kind(e: OverworldEntity) -> String:
+	if e is NpcEntity and not (e as NpcEntity).figure.is_empty():
+		return (e as NpcEntity).figure
 	var sid: String = String(e.id)
 	if sid.contains("elder"):
 		return "elder"
@@ -392,6 +405,9 @@ func _on_arrived(cell: Vector3i) -> void:
 func _check_trainers() -> bool:
 	if story.is_script_running():
 		return false
+	# No creature to fight with (the opening, before the shard ceremony): trainers let you pass.
+	if _state.healthy_members().is_empty():
+		return false
 	var aid: String = String(area.area_id)
 	for e in area.present_entities(_state):
 		if not (e is TrainerEntity):
@@ -413,6 +429,10 @@ func _check_trainers() -> bool:
 ## Roll the grass for the step onto [param cell]. True when a wild encounter started.
 func _roll_encounter(cell: Vector3i) -> bool:
 	if not DuelLauncher.has_launcher():
+		return false
+	# Wild creatures leave a traveller with no partner alone (the opening walks the Mossway before
+	# the shard ceremony) -- and a duel with no one to field could not start anyway.
+	if _state.healthy_members().is_empty():
 		return false
 	if _state.grace_steps > 0:
 		_state.grace_steps -= 1

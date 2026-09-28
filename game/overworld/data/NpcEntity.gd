@@ -8,6 +8,10 @@ extends OverworldEntity
 @export var speaker_id: StringName = &""
 @export var speaker_name: String = ""
 @export var dialogue: StoryScene
+## The procedural figure's silhouette ([method OverworldProps.figure] kind) when no
+## visual_character is set: villager, elder, guard, officer, trainer, raider, scholar, noble or
+## child. "" = guessed from the id (elder / guard / villager).
+@export var figure: String = ""
 
 
 func kind() -> StringName:

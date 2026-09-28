@@ -43,6 +43,22 @@ func test_save_peek_load_delete() -> void:
 	assert_false(StorySaveManager.has_save(2), "deleted")
 
 
+func test_an_outdated_journey_is_never_the_continue_target() -> void:
+	var s := StoryState.new()
+	s.set_location("oakvale", Vector3i(3, 6, 0), "east")
+	assert_true(bool(StorySaveManager.save(1, s)["success"]), "saves")
+	var data: Dictionary = StorySaveManager.peek(1)
+	data["format_version"] = 1
+	var f := FileAccess.open(StorySaveManager.slot_path(1), FileAccess.WRITE)
+	f.store_string(JSON.stringify(data))
+	f.close()
+	assert_true(StorySaveManager.has_save(1), "the old journey still occupies its slot (it can be deleted)")
+	assert_eq(StorySaveManager.most_recent_slot(), 0, "but Continue Journey never offers it")
+	var r: Dictionary = StoryController.continue_journey(1)
+	assert_false(bool(r["success"]), "continuing it is refused cleanly")
+	assert_eq(String(r["reason"]), StorySnapshot.REASON_OUTDATED, "because a new journey is required")
+
+
 func test_corrupt_file_reads_as_empty() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(TEMP_DIR))
 	var f := FileAccess.open(StorySaveManager.slot_path(1), FileAccess.WRITE)
@@ -56,19 +72,20 @@ func test_new_journey_and_continue_through_the_controller() -> void:
 	var r: Dictionary = StoryController.new_journey(1)
 	assert_true(bool(r["success"]), "a new journey starts")
 	var s: StoryState = StoryController.state()
-	assert_eq(s.location_area(), "oakvale", "in Oakvale")
-	assert_eq(s.party.size(), 2, "with the starting party")
-	assert_eq(s.party[0].character_id, "vineweave", "Vineweave leads")
+	assert_eq(s.location_area(), "oakvale", "at home in Oakvale")
+	assert_eq(s.location_cell(), Vector3i(3, 6, 0), "on the doorstep (the opening's start entry)")
+	assert_eq(s.party.size(), 0, "with no creature yet -- the starter comes from the Crownhaven ceremony")
+	assert_false(s.has_flag("opening.sent_off"), "before the send-off")
 	assert_ne(s.rng_seed, 0, "the journey has an encounter seed")
 	assert_true(StorySaveManager.has_save(1), "a new journey is saved at once")
 	s.gold = 777
-	s.set_flag("quest.blight_road", 1)
+	s.set_flag("opening.sent_off", 1)
 	assert_true(bool(StoryController.save_game()["success"]), "manual save")
 	StoryController.end_session()
 	assert_false(StoryController.has_session(), "session ended")
 	assert_true(bool(StoryController.continue_journey(1)["success"]), "continue loads it back")
 	assert_eq(StoryController.state().gold, 777, "gold survived")
-	assert_true(StoryController.state().has_flag("quest.blight_road"), "flags survived")
+	assert_true(StoryController.state().has_flag("opening.sent_off"), "flags survived")
 	assert_eq(StoryController.slot(), 1, "and the session writes back to slot 1")
 
 

@@ -10,7 +10,9 @@ const DEFAULT_PATH := "res://game/overworld/content/story_ruleset.tres"
 @export_group("Journey start")
 @export var start_area: StringName = &"oakvale"
 @export var start_entry: StringName = &"start"
-@export var starting_party: Array[StringName] = [&"vineweave", &"blightcap"]
+## Members a new journey starts with. EMPTY in the shipped story: the hero is a villager with no
+## creature until the shard ceremony in Crownhaven (docs/design/DECISIONS.md #14).
+@export var starting_party: Array[StringName] = []
 @export var starting_gold: int = 100
 @export_range(1, 12) var party_cap: int = 6
 

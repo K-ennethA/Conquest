@@ -99,13 +99,14 @@ static func delete(slot: int) -> void:
 
 
 ## The slot whose save was written most recently, or 0 when none exists (the main menu's
-## "Continue Journey" target).
+## "Continue Journey" target). An outdated (pre-opening) journey cannot be continued and is
+## skipped -- see [StorySnapshot].
 static func most_recent_slot() -> int:
 	var best: int = 0
 	var best_stamp: String = ""
 	for slot in range(1, SLOT_COUNT + 1):
 		var data: Dictionary = peek(slot)
-		if data.is_empty():
+		if data.is_empty() or StorySnapshot.is_outdated(data):
 			continue
 		var stamp: String = String(data.get("saved_at_utc", ""))
 		if best == 0 or stamp > best_stamp:
