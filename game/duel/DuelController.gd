@@ -7,27 +7,36 @@ extends Node
 ## - STANDALONE: [method start] validates and stages a [DuelRequest] (rule 1: a bad request
 ##   is a returned {success:false, reason}, never an engine error) and opens the stage. The
 ##   duel's own results card owns the way back.
-## - STORY (M4): [method launch_from_story] adapts OVERWORLD's BattleRequest; at the end the
-##   result goes to StoryController.report_battle_result exactly once, and the duel never
-##   changes scene itself. Registered with OVERWORLD's DuelLauncher when that seam exists.
+## - STORY: this node is THE registered story duel launcher ([method register_story_launcher]
+##   -> OVERWORLD's DuelLauncher seam; the overworld's debug DuelStub is only the fallback when
+##   no real launcher is present). [method launch_from_story] adapts the story's BattleRequest;
+##   at the end the result goes to StoryController.report_battle_result EXACTLY ONCE (as a
+##   BattleResult), and the duel never changes scene itself -- StoryController walks back to
+##   the overworld.
 ##
 ## [method finish] runs exactly once per duel: emits [signal duel_finished], records the
-## profile stat, and hands a story result back. The duel never writes the story save, gold,
-## flags, inventory or the RosterLedger.
+## profile stat, awards STANDALONE growth (only when EvolutionRules.growth_modes lists "duel"),
+## and hands a story result back. The duel never writes the story save, gold, flags or
+## inventory; story growth is StoryController's (the story party's own records).
 
 signal duel_finished(result: DuelResult)
 
 const STAGE_SCENE := "res://game/duel/DuelStage.tscn"
 const SETUP_SCENE := "res://menus/DuelSetup.tscn"
 const MENU_SCENE := "res://menus/SoloModeSelect.tscn"
+## The EvolutionRules.growth_modes id of a STANDALONE duel.
+const GROWTH_MODE := "duel"
 
 ## Record duel wins / losses on the PlayerProfile (tests switch it off: no disk writes).
 var record_profile: bool = true
+## Tests switch scene changes off (a story launch then only stages the request).
+var scene_changes_enabled: bool = true
 
 var _request: DuelRequest = null
 var _last_result: DuelResult = null
 var _active: bool = false
 var _finished: bool = false
+var _story_launcher: Callable = Callable()
 
 
 func _ready() -> void:
@@ -35,7 +44,21 @@ func _ready() -> void:
 	var audio := get_node_or_null("/root/AudioManager")
 	if audio != null and "battle_scene_paths" in audio and not (STAGE_SCENE in audio.battle_scene_paths):
 		audio.battle_scene_paths.append(STAGE_SCENE)
-	_register_story_launcher()
+	register_story_launcher()
+
+
+func _exit_tree() -> void:
+	# The launcher is a Callable bound to this node; a static holding it past shutdown crashes
+	# the engine on exit (the same rule StoryController follows for the stub).
+	if _story_launcher.is_valid() and DuelLauncher.is_registered(_story_launcher):
+		DuelLauncher.reset()
+
+
+## Put the REAL duel in OVERWORLD's seam (it replaces the debug stub; a stub never replaces
+## it). Public so tests that swapped launchers can restore the shipped state.
+func register_story_launcher() -> void:
+	_story_launcher = Callable(self, "launch_from_story")
+	DuelLauncher.register(_story_launcher)
 
 
 ## Stage [param request] and (unless [param change_scene] is false) open the duel stage.
@@ -50,7 +73,7 @@ func start(request: DuelRequest, change_scene: bool = true) -> Dictionary:
 	_last_result = null
 	_active = true
 	_finished = false
-	if change_scene and is_inside_tree():
+	if change_scene and scene_changes_enabled and is_inside_tree():
 		get_tree().change_scene_to_file(STAGE_SCENE)
 	return {"success": true, "reason": ""}
 
@@ -67,6 +90,11 @@ func last_result() -> DuelResult:
 	return _last_result
 
 
+## True when the staged duel belongs to story (its result goes to StoryController).
+func is_story_duel() -> bool:
+	return _request != null and _request.origin == DuelRequest.ORIGIN_STORY
+
+
 ## The duel ended. Idempotent per staged duel: only the first call counts.
 func finish(result: DuelResult) -> void:
 	if _finished or result == null:
@@ -78,11 +106,62 @@ func finish(result: DuelResult) -> void:
 		var profile := get_node_or_null("/root/PlayerProfile")
 		if profile != null and profile.has_method("notify_battle_result"):
 			profile.notify_battle_result("duel", result.player_won(), {"rounds": result.rounds})
+	if not is_story_duel():
+		result.growth = award_standalone_growth(_request, result, growth_context(_request))
 	duel_finished.emit(result)
-	if _request != null and _request.origin == DuelRequest.ORIGIN_STORY:
+	if is_story_duel():
 		var story := get_node_or_null("/root/StoryController")
 		if story != null and story.has_method("report_battle_result"):
-			story.report_battle_result(result.to_battle_result())
+			story.report_battle_result(BattleResult.from_dict(result.to_battle_result()))
+
+
+## The EVOLUTION growth gate for a standalone duel ([method GrowthTracker.gate_reason] keys).
+func growth_context(request: DuelRequest) -> Dictionary:
+	var networked: bool = request != null and request.kind == DuelRequest.KIND_VERSUS
+	var ns := get_node_or_null("/root/NetSession")
+	if ns != null and ns.has_method("is_networked_match") and bool(ns.is_networked_match()):
+		networked = true
+	return {"replay": ReplayPlayback.is_playing(), "networked": networked, "arena": false,
+		"mode": GROWTH_MODE}
+
+
+## STANDALONE growth (docs/design/DUEL_BATTLE.md §8.4, EVOLUTION.md §6): the player's fielded
+## combatant earns Growth on its open-mode RosterLedger member through the shared
+## [method GrowthTracker.compute_awards], gated exactly like a tactical battle (never in a
+## replay or a networked match, and only when EvolutionRules.growth_modes lists "duel" --
+## shipped OFF). An AI-driven player side (smoke runs) never earns. Saves the ledger when it
+## wrote. Returns GrowthTracker's latch rows for the results card.
+static func award_standalone_growth(request: DuelRequest, result: DuelResult, ctx: Dictionary) -> Array:
+	var rows_out: Array = []
+	if request == null or result == null or request.player_is_ai or request.player_party.is_empty():
+		return rows_out
+	if result.outcome != DuelResult.OUTCOME_VICTORY and result.outcome != DuelResult.OUTCOME_DEFEAT:
+		return rows_out
+	var rules: EvolutionRules = EvolutionRules.current()
+	if GrowthTracker.gate_reason(ctx, rules) != "":
+		return rows_out
+	var lead: DuelCombatant = request.player_party[0]
+	var cid: String = String(lead.character_id)
+	var uid: String = RosterLedger.member_for_character(cid)
+	var fought: Dictionary = result.party_after[0] if not result.party_after.is_empty() else {}
+	var rows: Array = [{"uid": uid, "alive": not bool(fought.get("wounded", false)),
+		"kos": int(fought.get("kos", 0))}]
+	var awards: Dictionary = GrowthTracker.compute_awards(rows, result.player_won(), rules)
+	if awards.is_empty():
+		return rows_out
+	var total: int = RosterLedger.add_growth(uid, int(awards[uid]))
+	var chr: CharacterResource = CharacterLibrary.get_character(cid)
+	rows_out.append({
+		"uid": uid,
+		"character_id": cid,
+		"name": chr.display_name if chr != null else cid,
+		"gained": int(awards[uid]),
+		"total": total,
+		"goal": RosterLedger.next_growth_goal(RosterLedger.form_of(uid)),
+		"ready": not RosterLedger.available_evolutions(uid).is_empty(),
+	})
+	RosterLedger.save()
+	return rows_out
 
 
 ## The same matchup again, from FRESH entropy (DECISIONS.md: retrying re-rolls).
@@ -118,8 +197,8 @@ func open_menu() -> void:
 		get_tree().change_scene_to_file(MENU_SCENE)
 
 
-## OVERWORLD's launcher entry (a BattleRequest, as its to_dict() shape). M4 wires the
-## return; this adapts and stages it.
+## OVERWORLD's launcher entry: a [BattleRequest] (or its to_dict() shape) -> a story
+## [DuelRequest] staged here, then the stage. {success, reason}.
 func launch_from_story(battle_request) -> Dictionary:
 	var br = battle_request
 	if br is Object and br.has_method("to_dict"):
@@ -128,17 +207,3 @@ func launch_from_story(battle_request) -> Dictionary:
 	if not bool(res["success"]):
 		return res
 	return start(res["request"])
-
-
-## Hand our launcher to OVERWORLD's DuelLauncher seam when that branch is present
-## (DuelLauncher.register(callable) -- docs/design/OVERWORLD.md §7.2). A no-op otherwise.
-func _register_story_launcher() -> void:
-	for entry in ProjectSettings.get_global_class_list():
-		if String(entry.get("class", "")) == "DuelLauncher":
-			var script = load(String(entry.get("path", "")))
-			if script is Script:
-				for m in (script as Script).get_script_method_list():
-					if String(m.get("name", "")) == "register":
-						script.call("register", Callable(self, "launch_from_story"))
-						break
-			return

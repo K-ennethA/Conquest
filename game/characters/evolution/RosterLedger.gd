@@ -12,10 +12,13 @@ class_name RosterLedger
 ##   * open modes (Skirmish / Campaign / Challenge ...) have ONE implicit member per evolution
 ##     LINE, whose uid is the line's root id ("tree_grunt"). [method member_for_character]
 ##     resolves any form of the line to it, and the record is created lazily on first write.
-##   * STORY (the overworld party, built elsewhere) adds individuals with
-##     [method create_member] -> "tree_grunt#2", without a schema change. The story party
-##     stores these uids; this record IS the party member's growth/form record (one record
-##     type, not two -- docs/design/DECISIONS.md "Shared contracts").
+##   * STORY: the overworld party is made of individuals with the same uid scheme
+##     ("tree_grunt", "tree_grunt#2"...) and THIS record shape (one record type, not two --
+##     docs/design/DECISIONS.md "Shared contracts"), but each journey keeps its members'
+##     records inside its own save slot ([StoryPartyMember] is the story-scoped view of one)
+##     and runs them through the RECORD-LEVEL API below ([method record_evolutions],
+##     [method evolve_record]); only the open-mode UNLOCK lands in this store.
+##     [method create_member] remains for a store-held individual ("tree_grunt#2").
 ##
 ## IDENTITY SEMANTICS (owner decision 2). In OPEN modes evolving UNLOCKS the new form: both
 ## Barkling and Oakheart stay pickable ([method is_form_unlocked]). In STORY the member itself
@@ -239,28 +242,16 @@ static func unlocked_forms() -> Array[String]:
 ## The trigger context for [param uid] (see [EvolutionTrigger]) merged with
 ## [param extra] (catalysts, story flags...). Built here, outside any battle.
 static func context_for(uid, extra: Dictionary = {}) -> Dictionary:
-	var rec: Dictionary = _record(String(uid), false)
-	var ctx: Dictionary = {
-		"uid": String(uid),
-		"form": StringName(String(rec.get("form", ""))),
-		"growth": int(rec.get("growth", 0)),
-	}
-	for k in extra.keys():
-		ctx[k] = extra[k]
-	return ctx
+	return record_context(_record(String(uid), false), String(uid), extra)
 
 
 ## The evolutions [param uid] can take RIGHT NOW from its current form, in edge-id order.
 static func available_evolutions(uid, extra: Dictionary = {}) -> Array[EvolutionResource]:
-	var out: Array[EvolutionResource] = []
 	var key: String = String(uid)
 	if key.is_empty():
-		return out
-	var ctx: Dictionary = context_for(key, extra)
-	for e in EvolutionLibrary.edges_from(ctx["form"]):
-		if e.is_available(ctx):
-			out.append(e)
-	return out
+		var none: Array[EvolutionResource] = []
+		return none
+	return record_evolutions(_record(key, false), key, extra)
 
 
 ## STORY hook: of [param uids] (the party), the ones with at least one evolution available,
@@ -290,27 +281,10 @@ static func evolve_member(uid, edge_id, scripted: bool = false) -> Dictionary:
 
 
 static func _evolve(uid: String, edge: EvolutionResource, extra: Dictionary, scripted: bool) -> Dictionary:
-	var result: Dictionary = { "success": false, "reason": "", "item_moved": false, "from": "", "to": "" }
-	if edge == null or uid.is_empty():
-		result["reason"] = "no_edge"
+	var result: Dictionary = _check_evolve(_record(uid, false), uid, edge, extra, scripted)
+	if not String(result["reason"]).is_empty():
 		return result
-	if form_of(uid) != edge.from_id:
-		result["reason"] = "wrong_form"
-		return result
-	if not scripted and not edge.is_available(context_for(uid, extra)):
-		result["reason"] = "not_available"
-		return result
-	if CharacterLibrary.get_character(edge.to_id) == null:
-		result["reason"] = "unknown_form"
-		return result
-
-	var rec: Dictionary = _record(uid, true)
-	rec["form"] = String(edge.to_id)
-	(rec["evolved"] as Array).append({
-		"edge": String(edge.id),
-		"at": Time.get_datetime_string_from_system(),
-	})
-	_unlock(String(edge.to_id))
+	_commit_step(_record(uid, true), edge)
 	var moved: bool = false
 	if edge.carry_item:
 		moved = ItemInventory.rekey_character(edge.from_id, edge.to_id)
@@ -319,9 +293,97 @@ static func _evolve(uid: String, edge: EvolutionResource, extra: Dictionary, scr
 		ItemInventory.save()
 	result["success"] = true
 	result["item_moved"] = moved
+	return result
+
+
+# --- Record-level API (members held OUTSIDE this store) ----------------------
+#
+# A member record is { line, form, growth, evolved, nickname }. Open-mode members live in THIS
+# store; a STORY party keeps its members' records inside the story save slot instead
+# (StoryPartyMember is the story-scoped view of one -- docs/STORY_MODE.md "Party records"), so
+# three journeys never share one Barkling and "Try Again" rewinds growth with the rest of the
+# journey. These functions run the SAME rules on a record the caller holds: one evolve path
+# for both.
+
+## A fresh member record for an individual that is [param character_id] (its line = the root).
+static func new_record(character_id) -> Dictionary:
+	var cid: String = String(character_id)
+	var rec: Dictionary = _default_record(member_for_character(cid))
+	rec["form"] = cid
+	return rec
+
+
+## The trigger context of the record [param rec] (member [param uid]) merged with [param extra].
+static func record_context(rec: Dictionary, uid: String, extra: Dictionary = {}) -> Dictionary:
+	var ctx: Dictionary = {
+		"uid": uid,
+		"form": StringName(String(rec.get("form", ""))),
+		"growth": int(rec.get("growth", 0)),
+	}
+	for k in extra.keys():
+		ctx[k] = extra[k]
+	return ctx
+
+
+## The evolutions the record [param rec] can take RIGHT NOW, in edge-id order.
+static func record_evolutions(rec: Dictionary, uid: String, extra: Dictionary = {}) -> Array[EvolutionResource]:
+	var out: Array[EvolutionResource] = []
+	if rec.is_empty():
+		return out
+	var ctx: Dictionary = record_context(rec, uid, extra)
+	for e in EvolutionLibrary.edges_from(ctx["form"]):
+		if e.is_available(ctx):
+			out.append(e)
+	return out
+
+
+## Evolve the caller-held record [param rec] IN PLACE along [param edge] (the same checks and
+## history as [method evolve]). The new form is also UNLOCKED in this store for open modes
+## (owner decision 2) and the store saved. No ItemInventory re-key: a record held outside the
+## store equips from its owner's bag (the story's member item). Returns
+## {success, reason, item_moved, from, to}; a refusal leaves [param rec] untouched.
+static func evolve_record(rec: Dictionary, uid: String, edge: EvolutionResource,
+		extra: Dictionary = {}, scripted: bool = false) -> Dictionary:
+	var result: Dictionary = _check_evolve(rec, uid, edge, extra, scripted)
+	if not String(result["reason"]).is_empty():
+		return result
+	_commit_step(rec, edge)
+	save()
+	result["success"] = true
+	return result
+
+
+static func _check_evolve(rec: Dictionary, uid: String, edge: EvolutionResource, extra: Dictionary,
+		scripted: bool) -> Dictionary:
+	var result: Dictionary = { "success": false, "reason": "", "item_moved": false, "from": "", "to": "" }
+	if edge == null or uid.is_empty() or rec.is_empty():
+		result["reason"] = "no_edge"
+		return result
+	if StringName(String(rec.get("form", ""))) != edge.from_id:
+		result["reason"] = "wrong_form"
+		return result
+	if not scripted and not edge.is_available(record_context(rec, uid, extra)):
+		result["reason"] = "not_available"
+		return result
+	if CharacterLibrary.get_character(edge.to_id) == null:
+		result["reason"] = "unknown_form"
+		return result
 	result["from"] = String(edge.from_id)
 	result["to"] = String(edge.to_id)
 	return result
+
+
+## Write one evolution step into [param rec] and unlock the new form (no save).
+static func _commit_step(rec: Dictionary, edge: EvolutionResource) -> void:
+	rec["form"] = String(edge.to_id)
+	if not (rec.get("evolved", null) is Array):
+		rec["evolved"] = []
+	(rec["evolved"] as Array).append({
+		"edge": String(edge.id),
+		"at": Time.get_datetime_string_from_system(),
+	})
+	ensure_loaded()
+	_unlock(String(edge.to_id))
 
 
 # --- internals --------------------------------------------------------------

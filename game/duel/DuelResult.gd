@@ -37,14 +37,24 @@ var commands: Array = []
 ## One row per applied command: {seq, actor, hp: [side A hp, side B hp]}.
 var hp_timeline: Array = []
 var replay_path: String = ""
+## STANDALONE duels: the Growth this duel awarded (GrowthTracker's latch-row shape), for the
+## results card. Empty in story (the story party's growth is StoryController's) and whenever
+## "duel" is not in EvolutionRules.growth_modes.
+var growth: Array = []
 
 
 func player_won() -> bool:
 	return winner_side == 0
 
 
-## OVERWORLD's BattleResult shape (docs/design/OVERWORLD.md §7.2 + DECISIONS.md).
+## OVERWORLD's BattleResult shape (docs/design/OVERWORLD.md §7.2 + DECISIONS.md), as a
+## Dictionary for [method BattleResult.from_dict]. The befriend offer is carried only when the
+## roll actually OFFERED ({character_id, accepted}); a declined roll is no offer at all.
 func to_battle_result() -> Dictionary:
+	var offer: Dictionary = {}
+	if bool(befriend_offer.get("offered", false)):
+		offer = {"character_id": String(befriend_offer.get("character_id", "")),
+			"accepted": bool(befriend_offer.get("accepted", false))}
 	return {
 		"encounter_id": encounter_id,
 		"outcome": outcome,
@@ -52,7 +62,7 @@ func to_battle_result() -> Dictionary:
 		"defeated": defeated.duplicate(),
 		"befriended": befriended,
 		"turns": turns,
-		"befriend_offer": befriend_offer.duplicate(),
+		"befriend_offer": offer,
 	}
 
 

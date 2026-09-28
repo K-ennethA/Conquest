@@ -125,7 +125,9 @@ func add_member(character_id: String, nickname: String = "", cap: int = 6) -> St
 		return null
 	if cap > 0 and party.size() >= cap:
 		return null
-	var uid: String = StoryPartyMember.uid_for(character_id, member_ids())
+	# The RosterLedger uid scheme keys an individual by its LINE ("tree_grunt", "tree_grunt#2"),
+	# so a recruit that joins as an evolved form still belongs to its line.
+	var uid: String = StoryPartyMember.uid_for(StoryPartyMember.line_of(character_id), member_ids())
 	var m := StoryPartyMember.create(uid, character_id, nickname)
 	party.append(m)
 	return m

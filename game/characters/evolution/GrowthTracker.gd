@@ -268,6 +268,11 @@ func settle(won: bool) -> bool:
 	var ctx: Dictionary = context_override if not context_override.is_empty() else live_context(self)
 	if gate_reason(ctx, rules) != "":
 		return false
+	# A STORY battle's growth belongs to the journey's own member records (story save slot), not
+	# this global store: StoryController awards it through StoryGrowth from the BattleResult
+	# (fed by this tracker's roll call, see [method collect_rows]) and seeds the end-screen rows.
+	if String(ctx.get("mode", "")) == "story":
+		return false
 	roll_call()
 	var rows: Array = collect_rows()
 	var awards: Dictionary = compute_awards(rows, won, rules)

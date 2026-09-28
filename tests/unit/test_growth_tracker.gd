@@ -63,8 +63,10 @@ func test_gates() -> void:
 		"an arena run never earns growth")
 	assert_eq(GrowthTracker.gate_reason({ "mode": "versus" }, rules), "mode",
 		"hotseat versus is not a growth mode")
-	assert_eq(GrowthTracker.gate_reason({ "mode": "story" }, rules), "mode",
-		"story joins growth_modes when the overworld lands (data, not code)")
+	assert_eq(GrowthTracker.gate_reason({ "mode": "story" }, rules), "",
+		"story battles earn growth (growth_modes lists \"story\" -- data, not code)")
+	assert_eq(GrowthTracker.gate_reason({ "mode": "duel" }, rules), "mode",
+		"standalone duels do not earn growth unless growth_modes lists \"duel\"")
 
 
 func test_result_rows_skip_forms_with_nothing_to_grow_into() -> void:

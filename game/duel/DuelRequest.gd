@@ -49,6 +49,11 @@ var foe_is_ai: bool = true
 ## BotController.Difficulty for the AI side(s); -1 = the ruleset's.
 var ai_difficulty: int = -1
 var player_ai_difficulty: int = -1
+## The ENCOUNTER's rules, the story BattleRequest's `rules` subset the duel honours:
+## {can_flee, can_befriend, story_critical} (bools). A missing key = the kind's default: a WILD
+## duel may be fled and its beaten foe may offer to join; any other duel neither. A
+## story-critical recruit ALWAYS offers on a win (DECISIONS.md: never missable).
+var rules: Dictionary = {}
 
 
 ## A standalone 1v1 of two roster ids.
@@ -62,6 +67,21 @@ static func standalone(player_id: StringName, foe_id: StringName, difficulty: in
 
 func is_wild() -> bool:
 	return kind == KIND_WILD
+
+
+## May the player run from this duel (the ruleset's allow_flee must agree -- DuelBattle)?
+func can_flee() -> bool:
+	return bool(rules.get("can_flee", is_wild()))
+
+
+## May the beaten foe offer to join (rolled on VICTORY off the duel's seeded stream)?
+func can_befriend() -> bool:
+	return bool(rules.get("can_befriend", is_wild()))
+
+
+## A non-missable story recruit: a won duel always offers.
+func is_story_critical() -> bool:
+	return bool(rules.get("story_critical", false))
 
 
 ## The station tile to register ([member station_tile_id], else the stage's).
@@ -124,6 +144,7 @@ func to_dict() -> Dictionary:
 		"foe_is_ai": foe_is_ai,
 		"ai_difficulty": ai_difficulty,
 		"player_ai_difficulty": player_ai_difficulty,
+		"rules": rules.duplicate(),
 	}
 
 
@@ -164,6 +185,15 @@ static func from_dict(d) -> Dictionary:
 	r.encounter_id = _str(d.get("encounter_id", ""))
 	r.player_is_ai = bool(d.get("player_is_ai", false))
 	r.foe_is_ai = bool(d.get("foe_is_ai", true))
+	var raw_rules = d.get("rules", {})
+	if not (raw_rules is Dictionary):
+		return _fail("bad_rules")
+	for key in ["can_flee", "can_befriend", "story_critical"]:
+		if (raw_rules as Dictionary).has(key):
+			var v = raw_rules[key]
+			if typeof(v) != TYPE_BOOL:
+				return _fail("bad_rules")
+			r.rules[key] = v
 	var check := r.validate()
 	if not bool(check["success"]):
 		return _fail(String(check["reason"]))
@@ -183,6 +213,7 @@ static func from_battle_request(br) -> Dictionary:
 			party.append({"member_id": _str(m.get("member_id", "")),
 				"character_id": m.get("character_id", ""), "current_hp": m.get("current_hp", -1),
 				"item_ids": [m.get("item_id")] if _str(m.get("item_id", "")) != "" else []})
+	var source := _str(br.get("source", "wild"))
 	var foes: Array = []
 	var opponent = br.get("opponent", {})
 	if opponent is Dictionary:
@@ -190,15 +221,27 @@ static func from_battle_request(br) -> Dictionary:
 			if t is Dictionary:
 				foes.append({"character_id": t.get("character_id", ""),
 					"strength": t.get("strength", 1.0)})
+	# A wild encounter is ONE foe (DECISIONS.md #3), whatever the table authored.
+	if source == "wild" and foes.size() > 1:
+		foes = foes.slice(0, 1)
 	var backdrop = br.get("backdrop", {})
 	var tile_id := ""
 	var weather := "clear"
 	if backdrop is Dictionary:
 		tile_id = _str(backdrop.get("tile_id", ""))
-		weather = _str(backdrop.get("weather", "clear"))
-		if weather == "":
-			weather = "clear"
-	var source := _str(br.get("source", "wild"))
+		weather = _str(backdrop.get("weather", "clear")).to_lower()
+	# The ground you stood on becomes the station tile when the duel knows it; an unknown
+	# overworld tile or weather falls back to the stage's own instead of refusing the duel.
+	if tile_id != "" and TileCatalog.find_by_id(StringName(tile_id)) == null:
+		tile_id = ""
+	if weather == "" or not Weather.has_weather(StringName(weather)):
+		weather = "clear"
+	var story_rules: Dictionary = {}
+	var raw_rules = br.get("rules", {})
+	if raw_rules is Dictionary:
+		for key in ["can_flee", "can_befriend", "story_critical"]:
+			if (raw_rules as Dictionary).has(key):
+				story_rules[key] = bool(raw_rules[key])
 	var d := {
 		"kind": KIND_WILD if source == "wild" else (KIND_TRAINER if source == "trainer" else KIND_STORY),
 		"origin": ORIGIN_STORY,
@@ -209,6 +252,7 @@ static func from_battle_request(br) -> Dictionary:
 		"weather_id": weather,
 		"seed": br.get("seed", 0),
 		"encounter_id": _str(br.get("encounter_id", "")),
+		"rules": story_rules,
 	}
 	return from_dict(d)
 

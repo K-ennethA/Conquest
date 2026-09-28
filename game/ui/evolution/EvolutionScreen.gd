@@ -16,7 +16,8 @@ class_name EvolutionScreen
 ## [signal finished] fires EXACTLY ONCE per screen, whichever way it closes, so an awaiting
 ## caller can never hang (the UltimateCutIn contract), and the screen frees itself after.
 ##
-## Pressing Evolve commits through [method RosterLedger.evolve] SYNCHRONOUSLY; the animation
+## Pressing Evolve commits through [method RosterLedger.evolve] (or the story caller's
+## [member commit], which evolves the journey's member record) SYNCHRONOUSLY; the animation
 ## only decorates a decided change, so closing mid-animation can never half-evolve a unit.
 ## Animations off (GameSettings) replace the sequence with one short static flash. Headless-
 ## safe: nothing here needs a renderer to reach [signal finished].
@@ -49,6 +50,14 @@ var edges: Array = []
 var chosen_edge: EvolutionResource = null
 ## {success, reason, item_moved, from, to} from the commit, {} before it.
 var result: Dictionary = {}
+## The commit call, edge -> {success, reason, item_moved, from, to}. Empty = open modes:
+## [method RosterLedger.evolve] on [member uid]. The STORY overworld passes one that evolves
+## the journey's own member record ([StoryGrowth.evolve]) -- the member BECOMES the form.
+var commit: Callable = Callable()
+## STORY: the member's equipped story-bag item (it always stays on the member), "" = none.
+var carried_item_id: String = ""
+## The member's own name for the ribbons ("Sprig is evolving..."); "" = the form's name.
+var member_name: String = ""
 
 var _from: CharacterResource = null
 var _to: CharacterResource = null
@@ -76,11 +85,27 @@ var continue_button: Button = null
 ## Open the screen over [param parent] for member [param member_uid] with the offered
 ## [param offered_edges] (from [method RosterLedger.available_evolutions]). Await
 ## [signal finished] on the returned screen.
-static func open(parent: Node, member_uid: String, offered_edges: Array) -> EvolutionScreen:
+## [param p_commit] / [param p_item_id]: the STORY caller's commit and carried item (see
+## [member commit]); omitted in open modes.
+static func open(parent: Node, member_uid: String, offered_edges: Array,
+		p_commit: Callable = Callable(), p_item_id: String = "", p_member_name: String = "") -> EvolutionScreen:
 	var screen := EvolutionScreen.new()
 	screen.configure(member_uid, offered_edges)
+	screen.commit = p_commit
+	screen.carried_item_id = p_item_id
+	screen.member_name = p_member_name
 	parent.add_child(screen)
 	return screen
+
+
+## True when a story caller owns the commit (the member becomes the form).
+func is_story() -> bool:
+	return commit.is_valid()
+
+
+## Who is evolving: the member's nickname when it has one ("Sprig"), else the form's name.
+func _who() -> String:
+	return member_name if not member_name.strip_edges().is_empty() else _from.display_name
 
 
 func configure(member_uid: String, offered_edges: Array) -> void:
@@ -117,7 +142,11 @@ func _ready() -> void:
 func confirm() -> Dictionary:
 	if phase != Phase.PROMPT or chosen_edge == null:
 		return {}
-	result = RosterLedger.evolve(uid, chosen_edge)
+	if commit.is_valid():
+		var r = commit.call(chosen_edge)
+		result = r if r is Dictionary else {"success": false, "reason": "no_commit"}
+	else:
+		result = RosterLedger.evolve(uid, chosen_edge)
 	if not bool(result.get("success", false)):
 		MenuKit.set_status(_status, "Cannot evolve right now (%s)." % String(result.get("reason", "")), "warn")
 		_status.visible = true
@@ -351,7 +380,7 @@ func _fill_form(crest: PanelContainer, name_lbl: Label, tags: HBoxContainer, chr
 
 func _show_prompt() -> void:
 	phase = Phase.PROMPT
-	_set_ribbon("%s is evolving..." % _from.display_name)
+	_set_ribbon("%s is evolving..." % _who())
 	_preview.show_character(_from)
 	_fill_form(_to_crest, _to_name, _to_tags, null)
 	var flavor: String = chosen_edge.flavor if chosen_edge != null else "It could grow in more than one direction."
@@ -369,7 +398,7 @@ func _show_reveal() -> void:
 	_glow.modulate.a = 0.0
 	_preview.show_character(_to)
 	_fill_form(_to_crest, _to_name, _to_tags, _to)
-	_set_ribbon("%s evolved into %s!" % [_from.display_name, _to.display_name])
+	_set_ribbon("%s evolved into %s!" % [_who(), _to.display_name])
 	_flavor.visible = false
 	_branch_row.visible = false
 	_build_reveal()
@@ -500,15 +529,24 @@ func _build_reveal() -> void:
 	notes.name = "Notes"
 	notes.add_theme_constant_override("separation", 2)
 	left.add_child(notes)
-	if bool(result.get("item_moved", false)):
-		var item: ItemResource = ItemInventory.equipped_resource(_to.character_id)
-		if item != null:
-			var note := MenuKit.label("%s %s carried over." % [item.icon_hint, item.display_name], &"", true)
-			note.name = "ItemCarried"
-			note.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
-			note.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
-			notes.add_child(note)
-	var unlock := MenuKit.label("%s joins your roster; %s stays pickable too." % [_to.display_name, _from.display_name], &"MutedLabel", true)
+	var item: ItemResource = null
+	if is_story():
+		item = ItemLibrary.get_item(carried_item_id) if not carried_item_id.is_empty() else null
+	elif bool(result.get("item_moved", false)):
+		item = ItemInventory.equipped_resource(_to.character_id)
+	if item != null:
+		var note := MenuKit.label("%s %s carried over." % [item.icon_hint, item.display_name], &"", true)
+		note.name = "ItemCarried"
+		note.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+		note.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
+		notes.add_child(note)
+	# Owner decision 2: in STORY the member itself becomes the new form (and the form unlocks for
+	# the open modes); elsewhere evolving is an unlock and both forms stay pickable.
+	var unlock_text: String = "%s joins your roster; %s stays pickable too." % [_to.display_name, _from.display_name]
+	if is_story():
+		unlock_text = "%s is now %s for the rest of your journey; %s is also unlocked in Skirmish." \
+			% [_who(), _to.display_name, _to.display_name]
+	var unlock := MenuKit.label(unlock_text, &"MutedLabel", true)
 	unlock.name = "UnlockNote"
 	unlock.custom_minimum_size = Vector2(300, 0)
 	unlock.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)

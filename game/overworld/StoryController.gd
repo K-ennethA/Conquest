@@ -12,14 +12,19 @@ extends Node
 ##
 ##       run_battle(request) -> begin_battle: fill party / seed / return point, autosave,
 ##           tactical -> stage GameSettings like a campaign chapter -> GameWorld
-##           duel     -> DuelLauncher.launch (the debug DuelStub until feat/duel lands)
+##           duel     -> DuelLauncher.launch (DuelController.launch_from_story -> DuelStage;
+##                       the debug DuelStub only when no real launcher is registered)
 ##       ...battle...
-##       report_battle_result(result)   <- EXACTLY ONCE per battle (duel, or the tactical
-##                                          bridge on GameEvents.battle_resolved)
+##       report_battle_result(result)   <- EXACTLY ONCE per battle (the duel on its results
+##                                          card's Continue, or the tactical bridge on
+##                                          GameEvents.battle_resolved)
 ##       tactical: GameOverScreen shows [method end_actions] (Continue / Return to Wayshrine /
 ##                 Try Again) and calls [method on_end_action]
-##       _conclude: StoryResultApplier.apply -> whiteout? -> autosave -> overworld
-##       overworld_ready(host) -> battle_concluded(result) -> the paused script continues
+##       _conclude: StoryResultApplier.apply (HP, rewards, GROWTH) -> whiteout? -> autosave
+##                  -> overworld
+##       overworld_ready(host) -> EVOLUTION offers (an EvolutionScreen per member with one
+##           pending, [method offer_pending_evolutions]) -> battle_concluded(result) -> the
+##           paused script continues (e.g. the befriend prompt)
 ##
 ## GameOverScreen finds this node through the "battle_mode_controller" group and only while
 ## [method is_active] (a story tactical battle is live); every other battle sees nothing.
@@ -40,6 +45,8 @@ const ACTION_WAYSHRINE := "wayshrine"
 ## what a paused StartBattle resumes on.
 signal battle_concluded(result)
 signal session_changed()
+## An [EvolutionScreen] was opened for a party member (tests / tools drive it from here).
+signal evolution_offered(screen)
 
 var _state: StoryState = null
 var _slot: int = 0
@@ -60,6 +67,8 @@ var _resume_pending: bool = false
 var _resume_result: BattleResult = null
 ## A line shown on the next overworld boot ("You retreat to the Wayshrine...").
 var _pending_message: String = ""
+## Offer pending evolutions once the overworld is back (set by _conclude, not after a whiteout).
+var _offer_after_battle: bool = false
 
 ## Tests switch scene changes off and drive the round trip by hand.
 var scene_changes_enabled: bool = true
@@ -71,8 +80,9 @@ func _ready() -> void:
 	add_to_group(MODE_GROUP)
 	_ruleset = StoryRuleset.load_default()
 	_hero = HeroResource.load_default()
-	# The debug duel stub fills the duel seam until feat/duel registers the real launcher
-	# (a stub never replaces a real one -- see DuelLauncher.register).
+	# The debug duel stub is only a FALLBACK: DuelController registers the real launcher, and a
+	# stub never replaces a real one (DuelLauncher.register), so the stub fills the seam only
+	# when no real duel is present.
 	if OS.is_debug_build():
 		register_debug_duel_stub()
 	if typeof(GameEvents) == TYPE_OBJECT and GameEvents != null \
@@ -193,6 +203,7 @@ func _begin_session(s: StoryState, slot: int) -> void:
 	_resume_pending = false
 	_resume_result = null
 	_pending_message = ""
+	_offer_after_battle = false
 	_runner = StoryScriptRunner.new()
 	session_changed.emit()
 
@@ -353,7 +364,57 @@ func overworld_ready(host) -> String:
 
 
 func _emit_concluded(result) -> void:
+	# "After the battle, X is evolving!" -- before the paused script resumes (EVOLUTION.md §6).
+	if _offer_after_battle:
+		_offer_after_battle = false
+		await offer_pending_evolutions({"trigger": "after_battle"})
 	battle_concluded.emit(result)
+
+
+## Chain an [EvolutionScreen] for every party member with an evolution available (party order),
+## each awaited before the next. Evolve = the member BECOMES the form ([StoryGrowth.evolve],
+## which also unlocks it for open modes); Not now = nothing written, offered again after the
+## next battle. Saves when anything evolved. Returns how many members evolved.
+func offer_pending_evolutions(extra: Dictionary = {}) -> int:
+	if _state == null or not is_inside_tree():
+		return 0
+	var ctx: Dictionary = StoryGrowth.evolution_context(_state, extra)
+	ctx["area_id"] = _state.location_area()
+	var evolved: int = 0
+	for mid in StoryGrowth.pending(_state, ctx):
+		var m: StoryPartyMember = _state.member(mid)
+		if m == null:
+			continue
+		if await offer_evolution(mid, StoryGrowth.available_for(m, ctx), ctx, false, false):
+			evolved += 1
+	if evolved > 0:
+		save_game()
+	return evolved
+
+
+## Open ONE [EvolutionScreen] for party member [param member_id] over [param edges] and await it.
+## [param scripted] evolves past the edges' triggers (a story beat -- [EvolveMemberCommand]).
+## True when the member evolved. [param save] saves the journey after an evolution.
+func offer_evolution(member_id: String, edges: Array, ctx: Dictionary = {}, scripted: bool = false,
+		save: bool = true) -> bool:
+	var m: StoryPartyMember = _state.member(member_id) if _state != null else null
+	if m == null or edges.is_empty() or not is_inside_tree():
+		return false
+	var parent: Node = _host if _host != null and is_instance_valid(_host) and _host is Node \
+		and (_host as Node).is_inside_tree() else get_tree().root
+	var state_ref: StoryState = _state
+	var commit := func(edge: EvolutionResource) -> Dictionary:
+		return StoryGrowth.evolve(state_ref, member_id, edge, ctx, scripted)
+	var screen: EvolutionScreen = EvolutionScreen.open(parent, member_id, edges, commit, m.item_id, m.nickname)
+	evolution_offered.emit(screen)
+	# An edge that needs no confirmation (a story beat) evolves at once; the screen only shows it.
+	if edges.size() == 1 and not (edges[0] as EvolutionResource).requires_confirmation:
+		screen.confirm()
+	var outcome: Array = await screen.finished
+	var evolved: bool = not outcome.is_empty() and bool(outcome[0])
+	if evolved and save:
+		save_game()
+	return evolved
 
 
 func detach_host(host) -> void:
@@ -490,6 +551,12 @@ func is_active() -> bool:
 	return is_battle_active()
 
 
+## GrowthTracker.detect_mode's probe: a live story tactical battle is mode "story" (the tracker
+## then leaves growth to [StoryGrowth]).
+func is_capturing() -> bool:
+	return is_battle_active()
+
+
 func mode_id() -> String:
 	return "story"
 
@@ -528,8 +595,31 @@ func _on_battle_resolved(outcome, _context = {}) -> void:
 	var turns: int = 0
 	if TurnSystemManager != null and TurnSystemManager.has_active_turn_system():
 		turns = WinConditionLibrary.completed_rounds(TurnSystemManager.get_active_turn_system())
+	_tracking["kos"] = _member_kos()
 	var result: BattleResult = StoryBattleBridge.build_result(String(outcome), _active_request, _tracking, turns)
 	report_battle_result(result)
+	# The end screen (revealed right after this signal) shows the Growth that Continue will
+	# award -- the story party's own records, not the global ledger GrowthTracker writes.
+	var awards: Dictionary = StoryGrowth.awards_for(result, EvolutionRules.current(), _growth_context())
+	GrowthTracker.seed_growth_this_battle(StoryGrowth.preview_rows(_state, awards))
+
+
+## Enemy KOs per member this battle, from the battle's GrowthTracker roll call ({} without one).
+func _member_kos() -> Dictionary:
+	var out: Dictionary = {}
+	if not is_inside_tree():
+		return out
+	for n in get_tree().get_nodes_in_group(GrowthTracker.GROUP):
+		if n is GrowthTracker:
+			for row in (n as GrowthTracker).collect_rows():
+				var uid: String = String(row.get("uid", ""))
+				out[uid] = maxi(int(out.get(uid, 0)), int(row.get("kos", 0)))
+	return out
+
+
+## The growth gate for story battles (StoryGrowth / GrowthTracker.gate_reason keys).
+func _growth_context() -> Dictionary:
+	return StoryGrowth.gate_context(ReplayPlayback.is_playing())
 
 
 ## THE ONE RETURN DOOR for every battle (DUEL_BATTLE.md §8.1): call EXACTLY ONCE with the
@@ -586,7 +676,7 @@ func _conclude(force_whiteout: bool = false) -> void:
 	var result: BattleResult = _last_result
 	if request == null or result == null or _state == null:
 		return
-	var applied: Dictionary = StoryResultApplier.apply(_state, request, result, _ruleset)
+	var applied: Dictionary = StoryResultApplier.apply(_state, request, result, _ruleset, _growth_context())
 	var whiteout: bool = bool(applied.get("whiteout", false))
 	if force_whiteout and not whiteout and result.is_defeat():
 		_state.heal_party()
@@ -610,6 +700,9 @@ func _conclude(force_whiteout: bool = false) -> void:
 	_disarm_battle()
 	_last_result = result
 	_resume_result = result
+	# Evolution is offered once the overworld is back -- never after a whiteout (you wake at the
+	# Wayshrine; the offer stays open for the next battle).
+	_offer_after_battle = not whiteout
 	save_game()
 	_resume_pending = true
 	_change_scene(OVERWORLD_SCENE)

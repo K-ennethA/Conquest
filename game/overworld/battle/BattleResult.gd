@@ -20,7 +20,9 @@ const OUTCOMES: Array[String] = [OUTCOME_VICTORY, OUTCOME_DEFEAT, OUTCOME_FLED,
 
 var encounter_id: String = ""
 var outcome: String = OUTCOME_ABORTED
-## [{member_id, current_hp, wounded}]
+## [{member_id, current_hp, wounded, fought, kos}] -- `fought` (default true) is false for a
+## duel's bench member who never took the field; `kos` = enemy KOs it scored (EVOLUTION growth
+## input, [StoryGrowth]).
 var party_after: Array = []
 ## Character ids of defeated foes (growth / evolution input).
 var defeated: Array = []
@@ -80,6 +82,8 @@ static func from_dict(d) -> BattleResult:
 					"member_id": String(e.get("member_id", "")),
 					"current_hp": int(e.get("current_hp", StoryPartyMember.HP_FULL)),
 					"wounded": bool(e.get("wounded", false)),
+					"fought": bool(e.get("fought", true)),
+					"kos": maxi(0, int(e.get("kos", 0))),
 				})
 	var df = d.get("defeated", [])
 	if df is Array:

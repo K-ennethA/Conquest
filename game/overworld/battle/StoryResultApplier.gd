@@ -10,18 +10,28 @@ extends RefCounted
 ##   * DEFEAT under WHITEOUT: the party is healed, [member StoryRuleset.whiteout_gold_penalty] is
 ##     taken, and the caller is told to send the player to the respawn Wayshrine;
 ##   * FLED / CONTINUE-defeat: HP only (a story-critical encounter stays in the world);
+##   * GROWTH (EVOLUTION, [StoryGrowth]) when [param growth_ctx] is given: the members that
+##     fought earn Growth by the shared rules and gates -- before a whiteout heals the party,
+##     so a loss awards exactly what growth_on_loss says;
 ##   * every outcome: a few grace steps before the grass may roll again.
 ## Befriending is NOT applied here -- the offer is the story prompt's decision
-## ([BefriendPromptCommand]).
+## ([BefriendPromptCommand]). Nor is evolving: StoryController offers the Evolution screen once
+## the overworld is back.
 ##
-## Returns {whiteout: bool, rewarded: bool, gold: int, items: Array, flags: Array}.
+## Returns {whiteout: bool, rewarded: bool, gold: int, items: Array, flags: Array,
+## growth: Array (the end-screen rows)}.
 
 
 static func apply(state: StoryState, request: BattleRequest, result: BattleResult,
-		ruleset: StoryRuleset = null) -> Dictionary:
-	var out: Dictionary = {"whiteout": false, "rewarded": false, "gold": 0, "items": [], "flags": []}
+		ruleset: StoryRuleset = null, growth_ctx: Dictionary = {}) -> Dictionary:
+	var out: Dictionary = {"whiteout": false, "rewarded": false, "gold": 0, "items": [], "flags": [],
+		"growth": []}
 	if state == null or result == null:
 		return out
+
+	if not growth_ctx.is_empty():
+		var awards: Dictionary = StoryGrowth.awards_for(result, EvolutionRules.current(), growth_ctx)
+		out["growth"] = StoryGrowth.apply_awards(state, awards)
 
 	for entry in result.party_after:
 		if not (entry is Dictionary):

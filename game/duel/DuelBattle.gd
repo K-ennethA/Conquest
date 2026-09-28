@@ -33,6 +33,7 @@ const UNIT_SCENE: PackedScene = preload("res://game/characters/CharacterUnit.tsc
 const SALT_TIE := 0x44756554  # "DueT"
 const SALT_AI := 0x44756541   # "DueA"
 const SALT_BEFRIEND := 0x44756542  # "DueB"
+const SALT_FLEE := 0x44756546  # "DueF"
 
 var request: DuelRequest = null
 var rules: DuelRuleset = null
@@ -58,6 +59,7 @@ var _replaying: bool = false
 var _subdued: Array[bool] = [false, false]
 var _ko: Array[bool] = [false, false]
 var _final_hp: Array[int] = [0, 0]
+var _flee_attempts: int = 0
 
 
 # --- Setup ---------------------------------------------------------------------------
@@ -426,6 +428,47 @@ func run_to_end(max_actions: int = 400) -> DuelResult:
 	return result if is_over else null
 
 
+## Can the acting human run right now? The encounter must allow it
+## ([method DuelRequest.can_flee]: wild duels) AND the ruleset ([member DuelRuleset.allow_flee]).
+func can_flee() -> bool:
+	if is_over or request == null or rules == null:
+		return false
+	return request.can_flee() and rules.allow_flee
+
+
+## The player tries to RUN (docs/design/DUEL_BATTLE.md §4.3). The chance is the ruleset's
+## [method DuelRuleset.flee_chance] (speed difference + attempts so far), rolled from the duel's
+## seeded stream under its own salt (never a combat roll, never randf()). Success ends the duel
+## as FLED (no winner, no befriend, HP carried); failure spends the turn as a recorded WAIT.
+## Returns {ok, reason, fled, chance, roll}.
+func attempt_flee() -> Dictionary:
+	var actor = current_actor()
+	if actor == null:
+		return {"ok": false, "reason": "no_actor", "fled": false}
+	if side_of(actor) != 0 or is_ai_unit(actor):
+		return {"ok": false, "reason": "not_player_turn", "fled": false}
+	if not can_flee():
+		return {"ok": false, "reason": "cannot_flee", "fled": false}
+	var foe = foe_of(actor)
+	var chance: float = rules.flee_chance(int(actor.get_stat("speed")),
+		int(foe.get_stat("speed")) if foe != null else 0, _flee_attempts)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = MatchRng._mix([SALT_FLEE, match_rng.match_seed, _flee_attempts])
+	var roll: float = -1.0
+	var fled: bool = chance >= 1.0
+	if not fled:
+		roll = rng.randf()
+		fled = roll < chance
+	_flee_attempts += 1
+	if fled:
+		result.outcome = DuelResult.OUTCOME_FLED
+		result.winner_side = -1
+		_finish(true)
+		return {"ok": true, "reason": "", "fled": true, "chance": chance, "roll": roll}
+	pass_turn()
+	return {"ok": true, "reason": "", "fled": false, "chance": chance, "roll": roll}
+
+
 ## Forfeit / quit: the duel ends as ABORTED (no winner, no befriend).
 func forfeit() -> void:
 	if is_over:
@@ -487,12 +530,13 @@ func _finish(aborted: bool = false) -> void:
 	if result.winner_side == 0:
 		for c in request.foe_party.slice(0, 1):
 			result.defeated.append(String(c.character_id))
-		if request.is_wild():
+		if request.can_befriend():
 			var foe_id := String(request.foe_party[0].character_id)
 			var roll := rules.roll_join(befriend_rng(), _subdued[1])
 			result.befriend_offer = {
 				"character_id": foe_id,
-				"offered": bool(roll["offered"]),
+				# A story-critical recruit is never missable: a win always offers.
+				"offered": bool(roll["offered"]) or request.is_story_critical(),
 				"accepted": false,
 				"chance": float(roll["chance"]),
 				"roll": float(roll["roll"]),
@@ -517,8 +561,11 @@ func _build_party_after() -> void:
 		if fielded:
 			wounded = _ko[0]
 			hp = 0 if wounded else _final_hp[0]
+		# `fought` / `kos` feed story Growth (StoryGrowth): only the fielded lead fought (the
+		# bench of a strict 1v1 never took the field and keeps its HP).
 		result.party_after.append({"member_id": c.member_id, "character_id": String(c.character_id),
-			"current_hp": hp, "wounded": wounded})
+			"current_hp": hp, "wounded": wounded, "fought": fielded,
+			"kos": 1 if fielded and _ko[1] else 0})
 
 
 # --- Bookkeeping -----------------------------------------------------------------------

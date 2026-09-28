@@ -8,6 +8,6 @@ growth_per_win = 1
 growth_per_ko = 0
 growth_ko_cap = 2
 growth_on_loss = 0
-growth_modes = PackedStringArray("skirmish", "campaign", "challenge")
+growth_modes = PackedStringArray("skirmish", "campaign", "challenge", "story")
 max_budget_growth = 1.75
 hide_locked_forms = true

@@ -7,6 +7,9 @@ extends StoryCommand
 @export var character_id: StringName = &""
 @export var nickname: String = ""
 @export var flag_on_join: String = ""
+## EVOLUTION Growth the recruit joins with (a companion who has already been growing), written
+## once into its member record. 0 = a fresh recruit.
+@export var growth: int = 0
 
 
 func run(ctx: ScriptContext) -> void:
@@ -17,6 +20,7 @@ func run(ctx: ScriptContext) -> void:
 	if m == null:
 		ctx.vars["joined"] = false
 		return
+	m.add_growth(growth)
 	ctx.vars["joined"] = true
 	if not flag_on_join.is_empty():
 		ctx.state.set_flag(flag_on_join, 1)

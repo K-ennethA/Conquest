@@ -32,13 +32,19 @@ func before_each() -> void:
 	Guard.rm_rf(TEMP_DIR)
 	StoryController.end_session()
 	StoryController.scene_changes_enabled = false
+	# This suite drives the DEBUG stub (the real duel is covered by test_story_duel_wiring):
+	# swap the shipped real launcher out for the stub fallback.
+	DuelLauncher.reset()
+	StoryController.register_debug_duel_stub()
 
 
 func after_each() -> void:
 	_teardown()
 	StoryController.end_session()
 	StoryController.scene_changes_enabled = true
+	# Restore the shipped seam: the real duel, with the stub only as the fallback.
 	DuelLauncher.reset()
+	DuelController.register_story_launcher()
 	StoryController.register_debug_duel_stub()
 	for n in get_tree().root.get_children():
 		if n is DuelStub:

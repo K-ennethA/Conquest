@@ -390,6 +390,10 @@ func _elder() -> NpcEntity:
 			_beat(&"self", "", "Then the forest has not forgotten us after all. Take this -- it kept my grandmother's roots steady."),
 		]),
 		_give(&"heartwood_charm"),
+		# EVOLUTION in story: a partly grown companion (Growth 2 of 3) -- one won battle where it
+		# fights (Bram's squad fields it) and it is offered its evolution into Oakheart.
+		_say([_beat(&"self", "", "And take Sprig. The sapling has trailed after me all season -- one good fight and it will finally take root.")]),
+		_join(&"tree_grunt", "Sprig", 2),
 		_move("guard", OAK_GUARD_ASIDE, true),
 		ToastCommand.make("Quest: The Blighted Road", "quest"),
 		_say([_beat(&"self", "", "Hale will open the east gate. Mind Bram on the road -- the boy means well.")]),
@@ -418,6 +422,14 @@ func _guard() -> NpcEntity:
 		_say([_beat(&"self", "", "The road east is closed by the Elder's word. Speak with Elder Wynn at the hall first.")]),
 	])])
 	return guard
+
+
+func _join(character_id: StringName, nickname: String, growth: int) -> JoinPartyCommand:
+	var j := JoinPartyCommand.new()
+	j.character_id = character_id
+	j.nickname = nickname
+	j.growth = growth
+	return j
 
 
 func _give(item: StringName) -> GiveItemCommand:
