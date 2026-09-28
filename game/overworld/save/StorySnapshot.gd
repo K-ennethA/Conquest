@@ -27,6 +27,9 @@ static func to_dict(state: StoryState) -> Dictionary:
 	var party: Array = []
 	for m in state.party:
 		party.append(m.to_dict())
+	var fallen: Array = []
+	for m in state.fallen:
+		fallen.append(m.to_dict())
 	var positions: Dictionary = {}
 	for key in state.actor_positions:
 		var rec: Dictionary = state.actor_positions[key]
@@ -57,6 +60,8 @@ static func to_dict(state: StoryState) -> Dictionary:
 		"actor_positions": positions,
 		"shops": state.shops.duplicate(true),
 		"rests": state.rests,
+		"tier": state.tier,
+		"fallen": fallen,
 		"pending": {},
 	}
 
@@ -137,6 +142,23 @@ static func from_dict(data) -> Dictionary:
 	# Merchants (added in format 2 -- an older save has none: every shop fully stocked).
 	state.shops = ShopLedger.sanitize_saved(data.get("shops", {}))
 	state.rests = maxi(0, int(data.get("rests", 0)))
+
+	# The difficulty tier (DECISIONS.md #29): a save from before tiers existed was played without
+	# permadeath, so it loads as CASUAL; an unknown tier string does too.
+	var tier: String = String(data.get("tier", StoryState.TIER_CASUAL))
+	state.tier = tier if StoryState.is_tier(tier) else StoryState.TIER_CASUAL
+	# Fallen members: kept records (unknown characters / duplicate uids skipped like the party's).
+	var fallen = data.get("fallen", [])
+	if fallen is Array:
+		for raw in fallen:
+			var f: StoryPartyMember = StoryPartyMember.from_dict(raw)
+			if f == null or CharacterLibrary.get_character(StringName(f.character_id)) == null:
+				continue
+			if state.member(f.member_id) != null or state.fallen_member(f.member_id) != null:
+				continue
+			if f.fallen_info.is_empty():
+				f.fallen_info = StoryPartyMember.sanitize_fallen({"kind": "battle"})
+			state.fallen.append(f)
 
 	return {"success": true, "state": state, "reason": ""}
 

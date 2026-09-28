@@ -50,9 +50,10 @@ var foe_is_ai: bool = true
 var ai_difficulty: int = -1
 var player_ai_difficulty: int = -1
 ## The ENCOUNTER's rules, the story BattleRequest's `rules` subset the duel honours:
-## {can_flee, can_befriend, story_critical} (bools). A missing key = the kind's default: a WILD
-## duel may be fled and its beaten foe may offer to join; any other duel neither. A
-## story-critical recruit ALWAYS offers on a win (DECISIONS.md: never missable).
+## {can_flee, can_befriend, story_critical, spar} (bools). A missing key = the kind's default: a
+## WILD duel may be fled and its beaten foe may offer to join; any other duel neither. A
+## story-critical recruit ALWAYS offers on a win (DECISIONS.md: never missable). `spar` only
+## changes the intro line (a friendly -- the story decides what it means, DECISIONS.md #29).
 var rules: Dictionary = {}
 ## The player side's BATTLE ITEMS ({item_id: count}) for the Items action -- the story bag's
 ## consumables usable in battle (a standalone duel has none). Only known battle consumables survive
@@ -86,6 +87,11 @@ func can_befriend() -> bool:
 ## A non-missable story recruit: a won duel always offers.
 func is_story_critical() -> bool:
 	return bool(rules.get("story_critical", false))
+
+
+## A friendly SPAR (a story training bout): the intro says so.
+func is_spar() -> bool:
+	return bool(rules.get("spar", false))
 
 
 ## The station tile to register ([member station_tile_id], else the stage's).
@@ -193,7 +199,7 @@ static func from_dict(d) -> Dictionary:
 	var raw_rules = d.get("rules", {})
 	if not (raw_rules is Dictionary):
 		return _fail("bad_rules")
-	for key in ["can_flee", "can_befriend", "story_critical"]:
+	for key in ["can_flee", "can_befriend", "story_critical", "spar"]:
 		if (raw_rules as Dictionary).has(key):
 			var v = raw_rules[key]
 			if typeof(v) != TYPE_BOOL:
@@ -263,7 +269,7 @@ static func from_battle_request(br) -> Dictionary:
 	var story_rules: Dictionary = {}
 	var raw_rules = br.get("rules", {})
 	if raw_rules is Dictionary:
-		for key in ["can_flee", "can_befriend", "story_critical"]:
+		for key in ["can_flee", "can_befriend", "story_critical", "spar"]:
 			if (raw_rules as Dictionary).has(key):
 				story_rules[key] = bool(raw_rules[key])
 	var d := {

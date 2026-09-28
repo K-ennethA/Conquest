@@ -13,6 +13,11 @@ extends RefCounted
 ## Facing names used by saves, entities and scripts (UnitFacing convention: +Z = south).
 const FACING_NAMES: Array[String] = ["south", "north", "east", "west"]
 
+## Difficulty tiers, HARDEST FIRST: a journey may only move to a later entry (DECISIONS.md #29).
+const TIER_CLASSIC := "classic"
+const TIER_CASUAL := "casual"
+const TIERS: Array[String] = [TIER_CLASSIC, TIER_CASUAL]
+
 var flags: Dictionary = {}
 ## Ordered: index 0 is the party LEAD (the member a duel sends first). The overworld avatar is
 ## the HERO (see [HeroResource]), never a party member.
@@ -43,6 +48,16 @@ var play_seconds: float = 0.0
 var shops: Dictionary = {}
 ## Rests taken (Wayshrine / healer / whiteout heals): the clock an ON_REST restock reads. Saved.
 var rests: int = 0
+## The journey's DIFFICULTY TIER (docs/design/DECISIONS.md #29 + "Permadeath refinements"),
+## chosen when the journey starts: [constant TIER_CLASSIC] (permadeath) or [constant TIER_CASUAL]
+## (knocked-out members recover for gold). It may only move DOWN [constant TIERS]
+## ([method lower_tier]), never back up. Saved as "tier"; a save from before tiers existed loads
+## as Casual (it was played without permadeath).
+var tier: String = TIER_CASUAL
+## FALLEN members (Classic): out of the party for good, kept as records in the order they fell
+## ([StoryPartyMember.fallen_info] says where / when). Everything that reads [member party] --
+## squads, duels, healing, revives, evolution, the party cap -- never sees them. Saved as "fallen".
+var fallen: Array[StoryPartyMember] = []
 ## What changed since the last [method drain_changes] -- the EVOLUTION auto-offer events
 ## (StoryController: a flag set / a member joining may have met a requirement). Never saved.
 var _changed_flags: Array[String] = []
@@ -159,8 +174,12 @@ func add_member(character_id: String, nickname: String = "", cap: int = 6) -> St
 	if cap > 0 and party.size() >= cap:
 		return null
 	# The RosterLedger uid scheme keys an individual by its LINE ("tree_grunt", "tree_grunt#2"),
-	# so a recruit that joins as an evolved form still belongs to its line.
-	var uid: String = StoryPartyMember.uid_for(StoryPartyMember.line_of(character_id), member_ids())
+	# so a recruit that joins as an evolved form still belongs to its line. A FALLEN member's uid
+	# stays taken: its record is kept, and a new recruit must never inherit it.
+	var taken: Array = member_ids()
+	for f in fallen:
+		taken.append(f.member_id)
+	var uid: String = StoryPartyMember.uid_for(StoryPartyMember.line_of(character_id), taken)
 	var m := StoryPartyMember.create(uid, character_id, nickname)
 	party.append(m)
 	_party_changed = true
@@ -176,12 +195,88 @@ func healthy_members() -> Array[StoryPartyMember]:
 	return out
 
 
-## A full rest (a Wayshrine, a healer, waking after a whiteout): every member healed and
-## un-wounded, and the rest counter advanced (merchants that restock ON_REST read it).
-func heal_party() -> void:
+## A full rest (a Wayshrine, a healer, waking after a whiteout): every member healed and the rest
+## counter advanced (merchants that restock ON_REST read it). With [param revive_knocked_out]
+## false (a Casual rest: knocked-out members recover for GOLD, [StoryPermadeath.revive_quote]) a
+## knocked-out member stays down and only the living are healed. The FALLEN are never touched
+## (they are not in [member party]).
+func heal_party(revive_knocked_out: bool = true) -> void:
 	for m in party:
+		if not revive_knocked_out and ConsumableEffect.member_is_down(m):
+			continue
 		m.heal_full()
 	rests += 1
+
+
+## Party members knocked out (wounded / 0 HP) and not fallen -- what a revive is for.
+func knocked_out_members() -> Array[StoryPartyMember]:
+	var out: Array[StoryPartyMember] = []
+	for m in party:
+		if ConsumableEffect.member_is_down(m):
+			out.append(m)
+	return out
+
+
+# --- Fallen (Classic permadeath) ------------------------------------------------------
+
+## The fallen record of [param member_id] (null when it never fell).
+func fallen_member(member_id: String) -> StoryPartyMember:
+	for m in fallen:
+		if m.member_id == member_id:
+			return m
+	return null
+
+
+## Mark party member [param member_id] FALLEN with [param info] (where / when): it leaves
+## [member party] for [member fallen], keeps its form, growth and nickname, and its equipped item
+## goes back into the bag (the record remembers which: info.item_id). Returns the record, or null
+## when there is no such party member.
+func mark_fallen(member_id: String, info: Dictionary) -> StoryPartyMember:
+	var m: StoryPartyMember = member(member_id)
+	if m == null:
+		return null
+	var rec: Dictionary = StoryPartyMember.sanitize_fallen(info)
+	if rec.is_empty():
+		rec = StoryPartyMember.sanitize_fallen({"kind": "battle"})
+	if not m.item_id.is_empty():
+		add_item(m.item_id)
+		rec["item_id"] = m.item_id
+		m.item_id = ""
+	m.fallen_info = rec
+	m.wounded = true
+	m.current_hp = 0
+	party.erase(m)
+	fallen.append(m)
+	_party_changed = true
+	return m
+
+
+# --- Difficulty tier ---------------------------------------------------------------------
+
+static func is_tier(t: String) -> bool:
+	return TIERS.has(t)
+
+
+func is_classic() -> bool:
+	return tier == TIER_CLASSIC
+
+
+## True when the journey may move from its tier to [param to] -- only DOWN (easier), never up.
+func can_lower_tier_to(to: String) -> bool:
+	return is_tier(to) and TIERS.find(to) > TIERS.find(tier)
+
+
+## Move the journey DOWN to [param to] (Classic -> Casual). {ok, reason}; reasons "unknown_tier",
+## "same_tier", "cannot_raise" (a journey never moves back up). Fallen members stay fallen.
+func lower_tier(to: String = TIER_CASUAL) -> Dictionary:
+	if not is_tier(to):
+		return {"ok": false, "reason": "unknown_tier"}
+	if to == tier:
+		return {"ok": false, "reason": "same_tier"}
+	if not can_lower_tier_to(to):
+		return {"ok": false, "reason": "cannot_raise"}
+	tier = to
+	return {"ok": true, "reason": ""}
 
 
 # --- Bag / gold ------------------------------------------------------------------
@@ -211,7 +306,7 @@ func take_item(item_id: String, count: int = 1) -> bool:
 ## USE a consumable from the bag on [param member_id] OUT OF BATTLE (Journey -> Bag): the rules are
 ## [method ConsumableEffect.check_member]; a use that helps spends ONE from the bag, a refused one
 ## spends nothing. {ok, reason, healed, revived, hp_before, hp_after}; reasons: "no_item",
-## "not_consumable", "no_member" or a [ConsumableEffect] refusal ("full_hp", "knocked_out", ...).
+## "not_consumable", "no_member", "fallen" or a [ConsumableEffect] refusal ("full_hp", ...).
 func use_consumable(item_id: String, member_id: String) -> Dictionary:
 	var out: Dictionary = {"ok": false, "reason": "", "healed": 0, "revived": false, "hp_before": 0, "hp_after": 0}
 	if item_count(item_id) <= 0:
@@ -223,7 +318,8 @@ func use_consumable(item_id: String, member_id: String) -> Dictionary:
 		return out
 	var m: StoryPartyMember = member(member_id)
 	if m == null:
-		out["reason"] = "no_member"
+		# A FALLEN member is out of the party: nothing -- not even a revive -- brings it back.
+		out["reason"] = "fallen" if fallen_member(member_id) != null else "no_member"
 		return out
 	var r: Dictionary = item.consumable.apply_to_member(m)
 	if bool(r.get("ok", false)):

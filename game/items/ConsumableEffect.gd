@@ -124,12 +124,16 @@ static func find_status(id: StringName) -> Resource:
 # --- Out of battle: a story party member ---------------------------------------------
 
 ## Could this be used on [param member] right now, OUT OF BATTLE? {ok, reason}; reasons:
-## "not_in_field", "no_member", "not_knocked_out", "knocked_out", "full_hp", "nothing_to_cure".
+## "not_in_field", "no_member", "fallen", "not_knocked_out", "knocked_out", "full_hp",
+## "nothing_to_cure". A FALLEN member (Classic permadeath) is refused by everything, revives
+## included: fallen is not knocked out.
 func check_member(member) -> Dictionary:
 	if not usable_in_field:
 		return _no("not_in_field")
 	if member == null:
 		return _no("no_member")
+	if member_is_fallen(member):
+		return _no("fallen")
 	var down: bool = member_is_down(member)
 	if revive:
 		return _ok() if down else _no("not_knocked_out")
@@ -184,6 +188,11 @@ func apply_to_member(member) -> Dictionary:
 ## ([param member] is a StoryPartyMember, duck-typed.)
 static func member_is_down(member) -> bool:
 	return member != null and (bool(member.wounded) or (int(member.current_hp) != HP_FULL and int(member.current_hp) <= 0))
+
+
+## A member that FELL for good (Classic permadeath: StoryPartyMember.is_fallen, duck-typed).
+static func member_is_fallen(member) -> bool:
+	return member != null and member.has_method("is_fallen") and bool(member.is_fallen())
 
 
 # --- In battle: a live Unit (the duel's USE_ITEM command) -----------------------------
@@ -276,6 +285,8 @@ static func reason_text(reason: String, who: String = "") -> String:
 			return "%s is knocked out -- only a revive will help." % name
 		"not_knocked_out":
 			return "%s is not knocked out." % name
+		"fallen":
+			return "%s has fallen -- nothing can bring them back." % name
 		"nothing_to_cure":
 			return "%s has nothing to cure." % name
 		"not_in_field":

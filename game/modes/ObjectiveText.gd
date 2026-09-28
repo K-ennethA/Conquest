@@ -63,7 +63,7 @@ static func detail_lines(rules: GameModeRules, rounds_done: int = 0) -> PackedSt
 	if wins.is_empty():
 		out.append("Victory: Rout the enemy")
 	out.append("Defeat: Lose all of your units")
-	for c in wins:
+	for c in wins + rules.lose_conditions:
 		if c is ProtectUnit:
-			out.append("Defeat: %s falls" % String((c as ProtectUnit).protected_id))
+			out.append("Defeat: %s falls" % (c as ProtectUnit).label())
 	return out

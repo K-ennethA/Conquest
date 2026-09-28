@@ -34,6 +34,13 @@ func describe() -> String:
 	return "Objective"
 
 
+## A GUARD is a standing "this must not happen" objective that is never MET, only violated
+## (FAILED) -- [ProtectUnit]. Listed as a LOSE condition, its FAILED is a defeat
+## ([method GameModeRules.evaluate]); every other lose condition loses only when MET.
+func is_guard() -> bool:
+	return false
+
+
 ## The LIVE one-line summary: [method describe], refined by [param state] wherever the
 ## objective can say something more useful about the battle in front of the player than
 ## its static phrasing can -- naming the boss still standing, counting down the turns

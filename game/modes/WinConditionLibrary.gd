@@ -9,7 +9,9 @@ class_name WinConditionLibrary
 ## objects [method GameModeRules.evaluate] scores each tick.
 ##
 ## All objectives are authored for the HUMAN faction (the player's side). The lose
-## side is derived: you lose when your own faction is wiped out.
+## side is derived: you lose when your own faction is wiped out -- plus one [ProtectUnit]
+## guard per "Protect <name>" string the map lists (an escort that must survive: it is
+## authored among the victory strings, but it is a LOSE condition, never a way to win).
 
 const HUMAN_FACTION: int = 0
 
@@ -24,7 +26,7 @@ static func build_rules(condition_strings: Array, faction: int = HUMAN_FACTION,
 		special_rules: Array = [], turn_limit: int = 0) -> GameModeRules:
 	var rules := GameModeRules.new()
 	rules.win_conditions = build_win_conditions(condition_strings, faction, special_rules, turn_limit)
-	rules.lose_conditions = build_lose_conditions(faction)
+	rules.lose_conditions = build_lose_conditions(faction, condition_strings)
 	# Every listed objective must be met to win (matters only for multi-objective
 	# maps; a single objective behaves identically either way).
 	rules.require_all_win = true
@@ -55,6 +57,9 @@ static func build_win_conditions(condition_strings: Array, faction: int,
 		special_rules: Array = [], turn_limit: int = 0) -> Array[WinCondition]:
 	var out: Array[WinCondition] = []
 	for s in condition_strings:
+		# "Protect X" is a LOSE condition ([method build_lose_conditions]), never a way to win.
+		if is_protect_string(String(s)):
+			continue
 		var c := build_one(String(s), faction, special_rules, turn_limit)
 		if c != null:
 			out.append(c)
@@ -68,10 +73,40 @@ static func build_win_conditions(condition_strings: Array, faction: int,
 ## You lose when your side is gone: from the ENEMY's point of view, they have
 ## "defeated all enemies". Derived rather than authored, so every map gets a defeat
 ## condition for free.
-static func build_lose_conditions(faction: int) -> Array[WinCondition]:
+## Every "Protect <name>" among [param condition_strings] adds a [ProtectUnit] guard for that
+## unit of [param faction]: it falling is a defeat as well.
+static func build_lose_conditions(faction: int, condition_strings: Array = []) -> Array[WinCondition]:
 	var out: Array[WinCondition] = []
 	out.append(_defeat_all(_enemy_of(faction)))
+	for s in condition_strings:
+		var p: ProtectUnit = build_protect(String(s), faction)
+		if p != null:
+			out.append(p)
 	return out
+
+
+## True for a "Protect <name>" / "Protect: <name>" objective string (case-insensitive).
+static func is_protect_string(text: String) -> bool:
+	return not protect_target(text).is_empty()
+
+
+## The unit a "Protect <name>" string names ("" when [param text] is not one).
+static func protect_target(text: String) -> String:
+	var t: String = text.strip_edges()
+	if t.length() <= 8 or not t.to_lower().begins_with("protect") or not (t[7] == " " or t[7] == ":"):
+		return ""
+	var rest: String = t.substr(7).strip_edges()
+	if rest.begins_with(":"):
+		rest = rest.substr(1).strip_edges()
+	return rest
+
+
+## A [ProtectUnit] guard for "Protect <name>" (that unit of [param faction]), or null.
+static func build_protect(text: String, faction: int = HUMAN_FACTION) -> ProtectUnit:
+	var who: String = protect_target(text)
+	if who.is_empty():
+		return null
+	return ProtectUnit.make(who, who, faction)
 
 
 ## Map ONE objective string to a [WinCondition]. Recognised (case-insensitive):
@@ -85,10 +120,14 @@ static func build_lose_conditions(faction: int) -> Array[WinCondition]:
 ##     "Seize 7,5" / "Seize (7, 5)"       "x,y" pair, else from the map's THRONE
 ##                                        objective marker in special_rules. With no
 ##                                        cell at all it falls back to DefeatAllEnemies.
-## Anything else falls back to DefeatAllEnemies with a log line. ProtectUnit needs a
-## unit reference a bare string can't carry, so it is still not string-parsed.
+##   "Protect Linnea"                  -> ProtectUnit, a LOSE-side guard ([method
+##                                        build_win_conditions] skips it, [method
+##                                        build_lose_conditions] adds it)
+## Anything else falls back to DefeatAllEnemies with a log line.
 static func build_one(name: String, faction: int, special_rules: Array = [], turn_limit: int = 0) -> WinCondition:
 	var key := name.strip_edges().to_lower()
+	if is_protect_string(name):
+		return build_protect(name, faction)
 	if key.begins_with("defeat boss") or key == "defeat the boss" or key == "kill the boss":
 		var db := DefeatBoss.new()
 		db.faction = faction
@@ -145,13 +184,16 @@ static func build_one(name: String, faction: int, special_rules: Array = [], tur
 
 ## True when [param rules] carry an objective a MAP really asked for -- anything other than
 ## the bare "eliminate all enemies" [method build_win_conditions] supplies when a map named
-## nothing (or nothing recognised). Lose conditions are ignored: one is DERIVED for every map
-## by [method build_lose_conditions], so it says nothing about what the author wanted.
+## nothing (or nothing recognised). The DERIVED wipe lose condition says nothing about what the
+## author wanted; a [ProtectUnit] guard on the lose side does.
 static func rules_are_map_authored(rules: GameModeRules) -> bool:
 	if rules == null:
 		return false
 	for c in rules.win_conditions:
 		if c != null and not (c is DefeatAllEnemies):
+			return true
+	for c in rules.lose_conditions:
+		if c is ProtectUnit:
 			return true
 	return false
 

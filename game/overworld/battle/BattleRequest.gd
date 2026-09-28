@@ -27,13 +27,16 @@ var source: String = SOURCE_SCRIPT
 ## The battle's RNG root. Filled by StoryController with FRESH ENTROPY per battle
 ## (DECISIONS.md: every battle starts from fresh entropy; retrying re-rolls).
 var seed: int = 0
-## Ordered snapshot of the fielded party: [{member_id, character_id, current_hp, item_id, growth}].
+## Ordered snapshot of the fielded party: [{member_id, character_id, current_hp, item_id, growth, hero}]
+## (`hero` = the main character as a battle unit: its fall is always a game over).
 var party: Array = []
 ## {name, speaker_id, portrait, team: [{character_id, strength, moves?}]}.
 var opponent: Dictionary = {}
 ## {area_id, tile_id, environment_preset, lighting_preset, weather}.
 var backdrop: Dictionary = {}
-## {can_flee, can_befriend, defeat_policy, story_critical}.
+## {can_flee, can_befriend, defeat_policy, story_critical, spar, protect}. `spar` (bool): a friendly
+## battle -- it never causes permadeath ([method is_spar]). `protect` (Array of names / ids): units
+## that must survive or the battle is lost and the journey is over ([method protect_targets]).
 var rules: Dictionary = {}
 ## Applied by StoryController, never by the battle: {gold, items: [...], points, flags: [...]}.
 var rewards: Dictionary = {}
@@ -73,6 +76,34 @@ func can_befriend() -> bool:
 ## Non-missable story recruit: a loss / flee leaves the encounter in the world.
 func is_story_critical() -> bool:
 	return bool(rules.get("story_critical", false))
+
+
+## A friendly SPAR (DECISIONS.md #29): it only knocks units out -- never permadeath, never a
+## hero game over.
+func is_spar() -> bool:
+	return bool(rules.get("spar", false))
+
+
+## The units this battle names as MUST SURVIVE ("Protect Linnea"): names / character ids / party
+## member ids, as authored. Losing one is a defeat and a GAME OVER (both tiers).
+func protect_targets() -> Array[String]:
+	var out: Array[String] = []
+	var raw = rules.get("protect", [])
+	if raw is Array:
+		for v in raw:
+			var s: String = String(v).strip_edges()
+			if not s.is_empty() and not out.has(s):
+				out.append(s)
+	return out
+
+
+## Member ids of the fielded party entries flagged as the HERO (the main character).
+func hero_member_ids() -> Array[String]:
+	var out: Array[String] = []
+	for p in party:
+		if p is Dictionary and bool(p.get("hero", false)):
+			out.append(String(p.get("member_id", "")))
+	return out
 
 
 func opponent_name() -> String:

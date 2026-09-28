@@ -48,6 +48,15 @@ var hold: bool = false
 ## EVOLUTION-owned growth payload ({"growth": int, "evolved": [...]}, RosterLedger's). Opaque to
 ## the overworld; read and written only through the ledger-record helpers below.
 var growth: Dictionary = {}
+## FALLEN (the Classic tier's permadeath, docs/design/DECISIONS.md #29 + refinements): where and
+## when this member fell -- {area_id, encounter_id, foe, kind, play_seconds, at_utc, item_id} --
+## or {} while it lives. A fallen member is KEPT as a record (form, growth, nickname) in
+## [member StoryState.fallen], never deleted, so a later mechanic can bring it back. Saved as
+## "fallen"; an older save loads it as {}.
+var fallen_info: Dictionary = {}
+## The MAIN CHARACTER as a battle unit (the hero is not one yet -- this is the hook): falling in
+## any real battle is always a GAME OVER ([StoryPermadeath]). Saved as "hero".
+var is_hero: bool = false
 
 
 static func create(p_member_id: String, p_character_id: String, p_nickname: String = "") -> StoryPartyMember:
@@ -176,9 +185,14 @@ func is_full_hp() -> bool:
 	return current_hp == HP_FULL or current_hp >= max_hp()
 
 
-## Can this member be sent into a battle?
+## Can this member be sent into a battle? (Never a FALLEN one.)
 func is_fieldable() -> bool:
-	return not wounded and hp_value() > 0
+	return not is_fallen() and not wounded and hp_value() > 0
+
+
+## True once this member FELL for good (Classic tier) -- see [member fallen_info].
+func is_fallen() -> bool:
+	return not fallen_info.is_empty()
 
 
 func heal_full() -> void:
@@ -197,6 +211,8 @@ func to_dict() -> Dictionary:
 		"item_id": item_id,
 		"hold": hold,
 		"growth": growth.duplicate(true),
+		"fallen": fallen_info.duplicate(true),
+		"hero": is_hero,
 	}
 
 
@@ -224,10 +240,28 @@ static func from_dict(d) -> StoryPartyMember:
 	m.hold = bool(d.get("hold", false))
 	var g = d.get("growth", {})
 	m.growth = (g as Dictionary).duplicate(true) if g is Dictionary else {}
+	m.fallen_info = sanitize_fallen(d.get("fallen", {}))
+	m.is_hero = bool(d.get("hero", false))
 	return m
+
+
+## A saved fall record, coerced key by key (CONQUEST.md rule 3); {} for anything that is not one.
+static func sanitize_fallen(raw) -> Dictionary:
+	if not (raw is Dictionary) or (raw as Dictionary).is_empty():
+		return {}
+	var d: Dictionary = raw
+	return {
+		"area_id": String(d.get("area_id", "")),
+		"encounter_id": String(d.get("encounter_id", "")),
+		"foe": String(d.get("foe", "")),
+		"kind": String(d.get("kind", "")),
+		"play_seconds": maxi(0, int(d.get("play_seconds", 0))),
+		"at_utc": String(d.get("at_utc", "")),
+		"item_id": String(d.get("item_id", "")),
+	}
 
 
 func _to_string() -> String:
 	return "Member %s (%s, hp %s%s%s)" % [member_id, character_id,
 		"full" if current_hp == HP_FULL else str(current_hp), ", wounded" if wounded else "",
-		", hold" if hold else ""]
+		(", hold" if hold else "") + (", FALLEN" if is_fallen() else "")]

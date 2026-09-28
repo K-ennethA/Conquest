@@ -7,7 +7,9 @@ class_name GameModeRules
 ##
 ## Evaluation contract (see [WinCondition] for the shared state schema):
 ##   - Any win condition reporting FAILED, or any lose condition reporting MET,
-##     is a [constant Outcome.DEFEAT].
+##     is a [constant Outcome.DEFEAT]. So is a GUARD lose condition reporting FAILED
+##     ([method WinCondition.is_guard]: a standing "must not happen" such as
+##     [ProtectUnit] -- the escort died).
 ##   - Victory requires the win conditions to be satisfied: ALL of them when
 ##     [member require_all_win] is true, otherwise ANY one.
 ##   - Defeat is checked before victory.
@@ -54,7 +56,10 @@ func evaluate(state: Dictionary) -> int:
 			all_met = false
 
 	for c in lose_conditions:
-		if c != null and c.evaluate(state) == WinCondition.Status.MET:
+		if c == null:
+			continue
+		var ls := c.evaluate(state)
+		if ls == WinCondition.Status.MET or (ls == WinCondition.Status.FAILED and c.is_guard()):
 			return Outcome.DEFEAT
 
 	if require_all_win:

@@ -195,7 +195,10 @@ func _run() -> void:
 	_driving = true
 	var foe = battle.unit_of(1)
 	var foe_name: String = foe.get_display_name() if foe != null else "The foe"
-	hud.show_intro(("A wild %s blocks the path!" if request.is_wild() else "%s challenges you!") % foe_name)
+	var intro: String = "A wild %s blocks the path!" if request.is_wild() else "%s challenges you!"
+	if request.is_spar():
+		intro = "Friendly spar: %s squares up!"
+	hud.show_intro(intro % foe_name)
 	hud.set_command_panel_visible(false)
 	await _beat(BEAT_INTRO)
 	hud.show_intro("")

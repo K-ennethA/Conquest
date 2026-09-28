@@ -61,9 +61,9 @@ and Continue Journey skips it (`StorySnapshot.is_outdated`). Nothing crashes.
 | Data | `game/overworld/data/` — `OverworldAreaResource`, entity kinds (`Npc`, `Trainer`, `Sign`, `Chest`, `Warp`, `Wayshrine`, `TriggerZone`, `Prop`), `EncounterZone/Entry`, `BattleSpec`, `HeroResource`, `StoryRuleset` |
 | Scripts | `game/overworld/script/` — `StoryCommand` + `commands/*`, `StoryScriptRunner`, `ScriptContext`, `StoryScriptHost` (the host contract), `ConditionContext` |
 | Runtime | `game/overworld/runtime/` — `OverworldController` (scene root + live host), `OverworldGrid`, `TrainerSight`, `EncounterRoller`, `TapPathfinder`, `OverworldActor`, `OverworldCamera`, `OverworldProps` |
-| Battles | `game/overworld/battle/` — `BattleRequest`, `BattleResult`, `StoryBattleBridge`, `StoryResultApplier`, `StoryGrowth` (story Growth + evolution rules), `DuelLauncher`, `DuelStub` (debug fallback) |
+| Battles | `game/overworld/battle/` — `BattleRequest`, `BattleResult`, `StoryBattleBridge`, `StoryResultApplier`, `StoryGrowth` (story Growth + evolution rules), `StoryPermadeath` (difficulty tiers, fallen, revives, game over), `DuelLauncher`, `DuelStub` (debug fallback) |
 | Saves | `game/overworld/save/` — `StoryState`, `StoryPartyMember`, `StorySnapshot`, `StorySaveManager` (`user://story/slot_<n>.json`) |
-| UI | `game/overworld/ui/` — `OverworldHUD`, `JourneyMenu`, `StoryStartScreen` |
+| UI | `game/overworld/ui/` — `OverworldHUD`, `JourneyMenu`, `StoryStartScreen` (slots + the New Journey tier picker), `StoryGameOverScreen` |
 | Content | `game/overworld/content/` — built by `game/overworld/build/build_story_content.gd` |
 
 Shared-file hooks (all guarded, no-ops outside story): `GameEvents.battle_resolved`,
@@ -232,7 +232,72 @@ stock lines (gated by story flags), not code.
   stays 2 (an older save loads with every merchant fully stocked).
 - **Compendium** — `CompendiumData` has no items section yet, so consumables have no entry.
 
+## Difficulty tiers, permadeath and game over (DECISIONS.md #29 + "Permadeath refinements")
+
+Story mode only. The rules are ONE pure class, `game/overworld/battle/StoryPermadeath.gd`; they run
+when a battle's result is APPLIED (`StoryResultApplier`), never inside the battle, so the tactical
+board, the duel and their replays know nothing about tiers.
+
+- **The tier** — `StoryState.tier`: `"classic"` or `"casual"`, chosen on the New Journey screen
+  (an empty slot → two grove choice cards, 1 / 2 or arrows + Confirm, Esc back to the slots).
+  `StoryState.lower_tier` / `StoryController.lower_tier` only ever move DOWN (Classic → Casual;
+  "cannot_raise" otherwise): Journey → **Difficulty** shows the tier, what it means and, in
+  Classic, "Lower to Casual" behind a confirm ("You can't go back up"). The slot card shows the tier.
+- **Classic (permadeath)** — every member knocked out in a REAL battle (tactical: dead on the board
+  when it ends; duel: the lead that fainted — the bench never fought) FALLS:
+  `StoryState.mark_fallen` moves it from `party` to `fallen` with `fallen_info`
+  `{area_id, encounter_id, foe, kind, play_seconds, at_utc, item_id}`; its form, growth and nickname
+  are kept (a later mechanic can bring it back), its equipped item goes back into the bag. Because
+  it is no longer in `party`, nothing that reads the party sees it: squads, duels, healing,
+  revives, evolution offers, merchants' previews, the party cap (a fallen uid is never reused).
+  Journey → Party lists them under **Fallen** ("Fell at The Mossway against Bram · 1h 02m into the
+  journey · Heartwood Charm returned to the bag"); the next overworld boot says who fell. A lost
+  battle still whites out as before (those knocked out in it are fallen first).
+- **Casual** — knocked-out members stay down until revived. A Wayshrine / healer rest heals the
+  living for free (`HealPartyCommand`), then the Wayshrine's `ReviveOfferCommand` asks "Revive N
+  knocked-out companions for X gold?" (`revive_fee_per_member` each; Not now keeps the gold; short
+  of gold it says the price; when nobody can fight and the fee cannot be paid it revives them free,
+  so a journey is never stuck). Revive items (Dawnpetal Draught) work in both tiers.
+- **Fallen refusal** — `ConsumableEffect.check_member` refuses a fallen member ("fallen" — "X has
+  fallen -- nothing can bring them back."), as do `StoryState.use_consumable` and
+  `StoryController.use_item_on_member`.
+- **Spars** — `BattleSpec.spar` → `BattleRequest.rules.spar` → `BattleResult.spar`: a friendly
+  battle never marks anyone fallen and never ends the journey through the hero rule; with
+  `spar_ko_recovers` its knocked-out leave it at 1 HP. The tactical objective banner shows a green
+  "Friendly spar" tag; the duel's intro reads "Friendly spar: X squares up!". Shipped example:
+  **Sergeant Rowan** at the Crownhaven barracks, after the Act 1 hook, offers a repeatable duel
+  spar with his Geode (`crownhaven.spar.rowan`, built by `_rowan_spar_offer`).
+- **Protect objectives** — `ProtectUnit` is now a GUARD (`WinCondition.is_guard`): listed as a
+  LOSE condition, its FAILED is a defeat (`GameModeRules`). A map authors it as a victory string,
+  `"Protect Linnea"` / `"Protect: Linnea"` (`WinConditionLibrary` puts it on the lose side, matched
+  to a player-side unit by protect_id / story member id / character id / display name); a story
+  battle names it on `BattleSpec.protect` (names, character ids or party member ids — a guest ally
+  works). StoryController adds the guards to the board's rules when it tags the party
+  (`StoryBattleBridge.guards_for`); the objective banner shows a rose "Protect Geode" tag and lists
+  "Keep Geode alive" in its tooltip; the map menu's Objective page says "Defeat: Geode falls". In a
+  duel a protected party member fainting counts the same way.
+- **Game over** — `StoryPermadeath.game_over_reason`: the HERO falling (a party entry flagged
+  `StoryPartyMember.is_hero` — the main character is not a battle unit yet; the flag is the hook and
+  is tested with a stub: its unit carries meta `story_hero` and its own guard), a protected unit
+  falling (both tiers), or — Classic, `classic_wipe_is_game_over` — a battle that would leave nobody
+  alive. A game-over result is never applied. Tactical: the end screen retitles to **GAME OVER**
+  with the reason (`end_banner`) and offers **Load Last Save** / **Return to Title**; a duel opens
+  the grove `StoryGameOverScreen` with the same two. Load Last Save reloads the slot (the pre-battle
+  autosave every battle writes; a slot-less journey rewinds to its in-memory copy); Return to Title
+  leaves without saving the lost battle.
+- **Knobs** (`story_ruleset.tres`, group "Difficulty tiers"): `default_tier` (casual: what a journey
+  gets when nothing chose one), `revive_fee_per_member` (50), `whiteout_revives` (true),
+  `spar_ko_recovers` (true), `classic_wipe_is_game_over` (true).
+- **Saves** — `"tier"` and `"fallen"` (member records with `"fallen"` info) in the slot, `"hero"` per
+  member; format_version stays 2. A save from before tiers loads as **Casual** (it was played without
+  permadeath) with nobody fallen.
+- Screenshots: `docs/screenshots/permadeath/`.
+
 ### Remaining gaps (M2)
+- The hero is not a battle unit yet: the hero rule is wired through `is_hero` / `story_hero` and
+  tested with a stub member; nothing in the shipped story sets it.
+- A fallen member can not be brought back yet (the record is kept for that mechanic).
+- No shipped battle uses a protect objective yet (the engine, the banner and the story wiring do).
 - Party duels (bench switching / KO-replacement) — the duel is strict 1v1; the bench never fights
   (and an item cannot target a bench member).
 - Tactical battle items (no Items action on the tactical HUD); the duel AI never uses items.
@@ -254,6 +319,6 @@ stock lines (gated by story flags), not code.
 - The Story card is appended as card 7 after Duel (existing number keys unchanged).
 - The Wayshrine stands on a sacred-ground basin (the plain fountain tile has no geometry).
 - Placeholder houses get procedural roofs (`PropEntity`), people are procedural figures.
-- Journey menu ships Resume / Party (with evolution checklists, EVOLVE, Hold) / Bag (evolution items
-  and consumables: Use on) / Save / Title; `pending` script resume across an app
+- Journey menu ships Resume / Party (with evolution checklists, EVOLVE, Hold, and the Fallen) / Bag
+  (evolution items and consumables: Use on) / Difficulty / Save / Title; `pending` script resume across an app
   restart is M3 (the pre-battle autosave puts you in front of the trainer instead).

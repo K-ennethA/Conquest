@@ -1,9 +1,11 @@
 class_name WayshrineEntity
 extends OverworldEntity
 
-## A Wayshrine (the fountain in a town square): touching it heals the party, clears wounds, sets
-## your respawn point (where a whiteout sends you) and saves. Lit once -> flag
-## wayshrine.<area>.<id>.lit (fast travel between lit shrines is M3).
+## A Wayshrine (the fountain in a town square): touching it heals the party, sets your respawn
+## point (where a whiteout sends you) and saves. Lit once -> flag wayshrine.<area>.<id>.lit (fast
+## travel between lit shrines is M3). KNOCKED-OUT members: revived for free, except in a CASUAL
+## journey, where the shrine then offers to revive them for gold ([ReviveOfferCommand],
+## DECISIONS.md #29 refinements). The fallen (Classic) are never touched.
 
 ## Entry point (in this area) a whiteout respawns you at.
 @export var respawn_entry: StringName = &"wayshrine"
@@ -43,5 +45,8 @@ func interact_script(area_id: String, _state: StoryState) -> Array:
 	say.beats = StoryCommand.list([SayCommand.beat(StoryBeat.NARRATOR,
 		display_name if not display_name.is_empty() else "Wayshrine", message)])
 	out.append(say)
+	var revive := ReviveOfferCommand.new()
+	revive.speaker_name = display_name if not display_name.is_empty() else "Wayshrine"
+	out.append(revive)
 	out.append_array(on_interact)
 	return out

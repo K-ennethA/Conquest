@@ -19,20 +19,27 @@ extends RefCounted
 ##   * VICTORY gold = the authored purse (rewards.gold) + per defeated foe the ruleset's
 ##     [member StoryRuleset.wild_gold_per_foe] (a wild encounter) or
 ##     [member StoryRuleset.battle_gold_per_foe] (any other battle).
+##   * the DIFFICULTY TIER ([StoryPermadeath]), once the HP is in: CLASSIC -- every member knocked
+##     out in a real battle FALLS (out of the party for good, its item back in the bag); a SPAR --
+##     nobody falls, and its knocked-out get up at 1 HP (the ruleset's spar_ko_recovers); CASUAL --
+##     the knocked-out stay down until revived. A whiteout then rests the living (and, with the
+##     ruleset's whiteout_revives, the knocked-out; never the fallen).
+## A GAME-OVER result ([method BattleResult.is_game_over]) is never applied -- StoryController
+## sends the player back to the last save instead.
 ## Befriending is NOT applied here -- the offer is the story prompt's decision
 ## ([BefriendPromptCommand]). Nor is evolving: StoryController offers the Evolution screen once
 ## the overworld is back.
 ##
 ## Returns {whiteout: bool, rewarded: bool, gold: int, items: Array, flags: Array,
 ## growth: Array (the end-screen rows), feats: Dictionary ({member_id: feat deltas}),
-## items_used: Dictionary}.
+## items_used: Dictionary, fallen: Array (member ids that fell), spar_recovered: Array}.
 
 
 static func apply(state: StoryState, request: BattleRequest, result: BattleResult,
 		ruleset: StoryRuleset = null, growth_ctx: Dictionary = {}) -> Dictionary:
 	var out: Dictionary = {"whiteout": false, "rewarded": false, "gold": 0, "items": [], "flags": [],
-		"growth": [], "feats": {}, "items_used": {}}
-	if state == null or result == null:
+		"growth": [], "feats": {}, "items_used": {}, "fallen": [], "spar_recovered": []}
+	if state == null or result == null or result.is_game_over():
 		return out
 
 	for item_id in result.items_used.keys():
@@ -63,6 +70,13 @@ static func apply(state: StoryState, request: BattleRequest, result: BattleResul
 			m.current_hp = maxi(0, hp)
 		m.wounded = wounded
 
+	# The difficulty tier decides what being knocked out in this battle MEANS.
+	if result.spar or (request != null and request.is_spar()):
+		if ruleset == null or ruleset.spar_ko_recovers:
+			out["spar_recovered"] = StoryPermadeath.recover_spar_knockouts(state, result)
+	else:
+		out["fallen"] = StoryPermadeath.apply_fallen(state, request, result)
+
 	if result.is_victory() and request != null:
 		var rw: Dictionary = request.rewards
 		var gold: int = maxi(0, int(rw.get("gold", 0))) + gold_for_foes(request, result, ruleset)
@@ -88,7 +102,7 @@ static func apply(state: StoryState, request: BattleRequest, result: BattleResul
 	elif result.is_defeat():
 		var policy: String = request.defeat_policy() if request != null else BattleRequest.DEFEAT_WHITEOUT
 		if policy == BattleRequest.DEFEAT_WHITEOUT:
-			state.heal_party()
+			state.heal_party(ruleset == null or ruleset.whiteout_revives)
 			var penalty: int = ruleset.whiteout_gold_penalty if ruleset != null else 0
 			if penalty > 0:
 				state.add_gold(-penalty)

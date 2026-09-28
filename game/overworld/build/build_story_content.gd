@@ -117,6 +117,8 @@ const F_COMPLETE := "opening.complete"
 const F_ACT1 := "act1.find_rowan"
 const F_ACT1_MET := "act1.met_rowan"
 const FIRST_FIGHT_ID := "story.opening.first_fight"
+## The example friendly SPAR (Sergeant Rowan's Geode, Crownhaven, after the opening).
+const SPAR_ROWAN_ID := "crownhaven.spar.rowan"
 
 const TILE_TYPES := {
 	"grass_plains": "NORMAL",
@@ -1519,6 +1521,7 @@ func _rowan_in_crownhaven() -> NpcEntity:
 			_toast("Act 1: The Borderlands (coming soon)", "quest"),
 		], [
 			_say([_line("rowan", "SOLDIER", "Rest while you can. We ride when the council stops shouting.")]),
+			_rowan_spar_offer(),
 		]),
 	], [
 		_say([
@@ -1527,3 +1530,34 @@ func _rowan_in_crownhaven() -> NpcEntity:
 		]),
 	])])
 	return rowan
+
+
+## THE EXAMPLE SPAR (DECISIONS.md #29): a friendly bout with the Sergeant's Geode, repeatable. It
+## is tagged `spar`, so nobody falls for good in it, even in a Classic journey -- a knocked-out
+## partner just gets back up (StoryRuleset.spar_ko_recovers).
+func _rowan_spar_offer() -> ChoiceCommand:
+	var spec := BattleSpec.new()
+	spec.kind = BattleSpec.Kind.DUEL
+	spec.encounter_id = SPAR_ROWAN_ID
+	spec.opponent_name = _t("{SOLDIER_TITLE}")
+	spec.opponent_speaker_id = &"npc_rowan"
+	var team: Array[Dictionary] = [{"character_id": GUEST_ID, "strength": 0.8}]
+	spec.opponent_team = team
+	spec.spar = true
+	spec.defeat_policy = BattleSpec.DefeatPolicy.CONTINUE
+	var duel := StartDuelCommand.new()
+	duel.spec = spec
+	duel.source = BattleRequest.SOURCE_SCRIPT
+	var ask := ChoiceCommand.new()
+	ask.prompt = _line("rowan", "SOLDIER", "Want to keep your partner sharp? Geode could use the exercise. A friendly bout -- nobody gets hurt for real.")
+	var yes := ChoiceOption.make("Let's spar.", [
+		duel,
+		IfCommand.make("outcome() == \"victory\"", [
+			_say([_line("rowan", "SOLDIER", "Ha! Geode felt that one. You're learning.")]),
+		], [
+			_say([_line("rowan", "SOLDIER", "On your feet. That's what spars are for -- come back when you're ready.")]),
+		]),
+	])
+	var no := ChoiceOption.make("Not now.", [], true)
+	ask.options = StoryCommand.list([yes, no])
+	return ask

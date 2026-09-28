@@ -51,6 +51,9 @@ const MODE_GROUP := &"battle_mode_controller"
 const ACTION_CONTINUE := "continue"
 const ACTION_RETRY := "retry"
 const ACTION_WAYSHRINE := "wayshrine"
+## GAME OVER (DECISIONS.md #29 refinements): back to the last save / to the title screen.
+const ACTION_LOAD_SAVE := "load_save"
+const ACTION_TITLE := "title"
 
 ## Emitted (deferred, once the overworld is back) with the concluded [BattleResult]: this is
 ## what a paused StartBattle resumes on.
@@ -58,6 +61,9 @@ signal battle_concluded(result)
 signal session_changed()
 ## An [EvolutionScreen] was opened for a party member (tests / tools drive it from here).
 signal evolution_offered(screen)
+## A battle ended the journey: the [BattleResult] (its game_over_reason says why). A duel shows
+## the [StoryGameOverScreen]; a tactical battle's end screen offers the same two choices.
+signal game_over(result)
 
 var _state: StoryState = null
 var _slot: int = 0
@@ -169,10 +175,16 @@ func party_cap() -> int:
 
 
 ## A brand-new journey in [param slot] (0 = in-memory only, never saved: tools / tests / running
-## the overworld scene directly). Returns {success, reason}.
-func new_journey(slot: int = 0) -> Dictionary:
+## the overworld scene directly) at difficulty [param tier] ("classic" / "casual"; "" = the
+## ruleset's default_tier -- the New Journey screen always passes the player's pick). Returns
+## {success, reason}; reason "unknown_tier" for a tier that does not exist.
+func new_journey(slot: int = 0, tier: String = "") -> Dictionary:
 	var s := StoryState.new()
 	var rs: StoryRuleset = _ruleset if _ruleset != null else StoryRuleset.new()
+	var t: String = tier if not tier.is_empty() else rs.default_tier
+	if not StoryState.is_tier(t):
+		return {"success": false, "reason": "unknown_tier"}
+	s.tier = t
 	s.rng_seed = _fresh_seed()
 	s.gold = rs.starting_gold
 	for cid in rs.starting_party:
@@ -238,6 +250,22 @@ func end_session() -> void:
 	_host = null
 	_runner = StoryScriptRunner.new()
 	session_changed.emit()
+
+
+## The journey's difficulty tier ("" without a session).
+func tier() -> String:
+	return _state.tier if _state != null else ""
+
+
+## Journey -> Difficulty: move the journey DOWN a tier (Classic -> Casual; never back up) and
+## save. {success, reason} -- reasons as [method StoryState.lower_tier], or "no_session".
+func lower_tier(to: String = StoryState.TIER_CASUAL) -> Dictionary:
+	if _state == null:
+		return {"success": false, "reason": "no_session"}
+	var r: Dictionary = _state.lower_tier(to)
+	if bool(r["ok"]):
+		save_game()
+	return {"success": bool(r["ok"]), "reason": String(r["reason"])}
 
 
 func save_game() -> Dictionary:
@@ -501,7 +529,9 @@ func use_item_on_member(item_id: String, member_id: String) -> Dictionary:
 		return {"success": false, "reason": "no_item", "evolved": false}
 	var m: StoryPartyMember = _state.member(member_id)
 	if m == null:
-		return {"success": false, "reason": "no_member", "evolved": false}
+		# A FALLEN member (Classic) is out of the party: no item -- revive or evolution -- helps.
+		var why: String = "fallen" if _state.fallen_member(member_id) != null else "no_member"
+		return {"success": false, "reason": why, "evolved": false}
 	var item: ItemResource = ItemLibrary.get_item(item_id)
 	if item != null and item.is_consumable():
 		var used: Dictionary = _state.use_consumable(item_id, member_id)
@@ -737,6 +767,34 @@ func prepare_battle_board(map_loader) -> void:
 	if not is_battle_active():
 		return
 	_tracking = StoryBattleBridge.prepare_board(map_loader, _active_request)
+	_install_guards()
+
+
+## The battle's GUARDS ("Protect Linnea", the hero -- [method StoryBattleBridge.guards_for]) join
+## the map's compiled rules as lose conditions, so the ordinary end check turns a guarded unit's
+## fall into a defeat (and the objective banner shows them). The rules object is rebuilt per map
+## load, so nothing leaks into the next battle.
+func _install_guards() -> void:
+	var names: Dictionary = {}
+	for mid in _active_request.hero_member_ids():
+		var m: StoryPartyMember = _state.member(mid) if _state != null else null
+		names[mid] = m.display_name() if m != null else hero_name()
+	var guards: Array[ProtectUnit] = StoryBattleBridge.guards_for(_active_request, names)
+	_tracking["guards"] = guards
+	if guards.is_empty() or not is_inside_tree():
+		return
+	var gwm := get_tree().get_first_node_in_group("game_world_manager")
+	if gwm == null or not gwm.has_method("get_game_mode_rules"):
+		return
+	var rules = gwm.get_game_mode_rules()
+	if rules is GameModeRules:
+		for g in guards:
+			(rules as GameModeRules).lose_conditions.append(g)
+
+
+## True while a live story battle is a friendly SPAR (the objective banner's tag).
+func is_spar_battle() -> bool:
+	return _active_request != null and _active_request.is_spar() and (is_battle_active() or _active_request.is_duel())
 
 
 ## ItemSystem's story branch: the items a party unit wears in a story battle (from the story
@@ -765,6 +823,14 @@ func _on_battle_resolved(outcome, _context = {}) -> void:
 	_tracking["kos"] = _member_kos()
 	_tracking["ko_elements"] = _member_ko_elements()
 	var result: BattleResult = StoryBattleBridge.build_result(String(outcome), _active_request, _tracking, turns)
+	# A guard that fell (the protected unit, the hero) ends the journey: read off the board as the
+	# battle ended (a dead unit has already left it -- that too is "fell").
+	if String(outcome) != BattleResult.OUTCOME_VICTORY:
+		var units: Array = []
+		var board = CombatServices.board() if CombatServices != null else null
+		if board != null and board.has_method("all_units"):
+			units = board.all_units()
+		result.game_over_reason = StoryBattleBridge.failed_guard_reason(_tracking.get("guards", []), units)
 	report_battle_result(result)
 	# The end screen (revealed right after this signal) shows the Growth that Continue will
 	# award -- the story party's own records, not the global ledger GrowthTracker writes.
@@ -820,6 +886,10 @@ func report_battle_result(result: BattleResult) -> Dictionary:
 	_reported = true
 	if result.encounter_id.is_empty():
 		result.encounter_id = _active_request.encounter_id
+	# The tier rules read these off the result: a friendly spar, and whether the journey is over
+	# (the hero / a protected unit fell, or -- Classic -- nobody would be left).
+	result.spar = result.spar or _active_request.is_spar()
+	result.game_over_reason = StoryPermadeath.game_over_reason(_state, _active_request, result, _ruleset)
 	_last_result = result
 	# A duel has no end screen of its own in story: conclude straight away (deferred, so the
 	# duel's own call stack unwinds first). A tactical battle waits for the end screen action.
@@ -832,6 +902,8 @@ func report_battle_result(result: BattleResult) -> Dictionary:
 func end_actions(outcome) -> Array:
 	if not is_battle_active():
 		return []
+	if _last_result != null and _last_result.is_game_over():
+		return game_over_actions()
 	if String(outcome) == BattleResult.OUTCOME_VICTORY:
 		return [{"id": ACTION_CONTINUE, "label": "Continue Journey"}]
 	match _active_request.defeat_policy():
@@ -851,8 +923,104 @@ func on_end_action(action_id) -> void:
 			_retry()
 		ACTION_WAYSHRINE:
 			_conclude(true)
+		ACTION_LOAD_SAVE:
+			load_last_save()
+		ACTION_TITLE:
+			abandon_to_title()
 		_:
 			_conclude()
+
+
+## The two choices a GAME OVER offers (the tactical end screen and [StoryGameOverScreen]).
+func game_over_actions() -> Array:
+	return [{"id": ACTION_LOAD_SAVE, "label": "Load Last Save"},
+		{"id": ACTION_TITLE, "label": "Return to Title"}]
+
+
+## GameOverScreen's optional retitle: a game over reads "GAME OVER" with why; {} otherwise.
+func end_banner(_outcome) -> Dictionary:
+	if _last_result == null or not _last_result.is_game_over():
+		return {}
+	return {"title": "GAME OVER", "subtitle": game_over_text(_last_result)}
+
+
+## The line saying why [param result] ended the journey.
+func game_over_text(result: BattleResult) -> String:
+	return StoryPermadeath.game_over_text(result.game_over_reason if result != null else "", hero_name())
+
+
+## GAME OVER -> "Load Last Save": the journey as the slot last saved it (the pre-battle autosave,
+## written as every battle began); a slot-less journey rewinds to its in-memory pre-battle copy.
+## Nothing of the lost battle is applied. {success, reason}.
+func load_last_save() -> Dictionary:
+	var slot: int = _slot
+	var pre: Dictionary = _pre_battle.duplicate(true)
+	_stop_running_script("game_over")
+	_close_game_over_screen()
+	_disarm_battle()
+	var loaded: bool = false
+	if slot > 0 and StorySaveManager.has_save(slot):
+		loaded = bool(continue_journey(slot).get("success", false))
+	if not loaded and not pre.is_empty():
+		var restored: Dictionary = StorySnapshot.from_dict(pre)
+		if bool(restored.get("success", false)):
+			_begin_session(restored["state"], slot)
+			loaded = true
+	if not loaded:
+		return {"success": false, "reason": "no_save"}
+	_pending_message = "The journey resumes from your last save."
+	enter_overworld()
+	return {"success": true, "reason": ""}
+
+
+## GAME OVER -> "Return to Title": leave WITHOUT saving the lost battle (the slot keeps its last
+## save, the pre-battle autosave).
+func abandon_to_title() -> void:
+	_stop_running_script("game_over")
+	_close_game_over_screen()
+	_disarm_battle()
+	_state = null
+	_slot = 0
+	_host = null
+	_runner = StoryScriptRunner.new()
+	session_changed.emit()
+	_change_scene(MAIN_MENU_SCENE)
+
+
+## Stop the script waiting on this battle and let its coroutine unwind (a StartBattle awaits
+## battle_concluded): the context is stopped first, so nothing after the battle runs.
+func _stop_running_script(reason: String) -> void:
+	var ctx: ScriptContext = _runner.context()
+	if ctx != null and _runner.is_running():
+		ctx.stop(reason)
+		battle_concluded.emit(_last_result)
+
+
+## Show the grove GAME OVER card (a duel ended the journey: the duel has no end screen of its
+## own in story).
+func _show_game_over(result: BattleResult) -> void:
+	game_over.emit(result)
+	if not is_inside_tree():
+		return
+	_close_game_over_screen()
+	var screen := StoryGameOverScreen.open(get_tree().root, game_over_text(result))
+	screen.action_chosen.connect(on_end_action)
+
+
+func _close_game_over_screen() -> void:
+	if not is_inside_tree():
+		return
+	var old := get_tree().root.get_node_or_null(StoryGameOverScreen.NODE_NAME)
+	if old != null:
+		old.get_parent().remove_child(old)
+		old.queue_free()
+
+
+## The GAME OVER card on screen (null when none).
+func game_over_screen() -> StoryGameOverScreen:
+	if not is_inside_tree():
+		return null
+	return get_tree().root.get_node_or_null(StoryGameOverScreen.NODE_NAME) as StoryGameOverScreen
 
 
 ## Apply the reported result and walk back into the overworld.
@@ -861,10 +1029,14 @@ func _conclude(force_whiteout: bool = false) -> void:
 	var result: BattleResult = _last_result
 	if request == null or result == null or _state == null:
 		return
+	# A battle that ENDED THE JOURNEY is never applied: the GAME OVER card offers the last save.
+	if result.is_game_over():
+		_show_game_over(result)
+		return
 	var applied: Dictionary = StoryResultApplier.apply(_state, request, result, _ruleset, _growth_context())
 	var whiteout: bool = bool(applied.get("whiteout", false))
 	if force_whiteout and not whiteout and result.is_defeat():
-		_state.heal_party()
+		_state.heal_party(_ruleset == null or _ruleset.whiteout_revives)
 		whiteout = true
 	if result.is_victory() and not request.campaign_chapter.is_empty():
 		var campaign := get_node_or_null("/root/CampaignController")
@@ -882,6 +1054,15 @@ func _conclude(force_whiteout: bool = false) -> void:
 		var cell: Vector3i = Cells.from_variant(ret.get("cell", null))
 		if cell != Cells.INVALID and String(ret.get("area_id", "")) == _state.location_area():
 			_state.set_location(_state.location_area(), cell, String(ret.get("facing", "south")))
+	# CLASSIC: say who fell (they are in Journey -> Party -> Fallen from now on).
+	var fell: Array = applied.get("fallen", [])
+	if not fell.is_empty():
+		var names: Array[String] = []
+		for mid in fell:
+			var f: StoryPartyMember = _state.fallen_member(String(mid))
+			names.append(f.display_name() if f != null else String(mid))
+		var line: String = "%s fell in battle, and will not return." % " and ".join(names)
+		_pending_message = line if _pending_message.is_empty() else "%s %s" % [line, _pending_message]
 	_disarm_battle()
 	_last_result = result
 	_resume_result = result

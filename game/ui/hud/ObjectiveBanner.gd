@@ -78,6 +78,13 @@ const DANGER_COLOR: Color = Color(0.772, 0.472, 0.97)
 const ROW_NAME: String = "Row"
 const TAG_NAME: String = "ObjectiveTag"
 const DANGER_NAME: String = "DangerTag"
+const GUARD_NAME: String = "ProtectTag"
+const SPAR_NAME: String = "SparTag"
+const SPAR_TEXT: String = "Friendly spar"
+## The "Protect X" tag: a warm rose -- a unit whose fall loses the battle.
+const GUARD_COLOR: Color = Color(0.93, 0.5, 0.45)
+## The "Friendly spar" tag: a soft leaf green -- nothing is lost for good here.
+const SPAR_COLOR: Color = Color(0.5, 0.82, 0.55)
 
 # --- State -------------------------------------------------------------------
 
@@ -88,6 +95,12 @@ var _tag: Label = null
 ## ([signal GameEvents.danger_zone_changed]). Folded in from the cloud ObjectiveChip.
 var _danger_chip: PanelContainer = null
 var _danger_on: bool = false
+## The battle's GUARD lose conditions ([ProtectUnit]s) and their rose "Protect X" tag.
+var _guards: Array = []
+var _guard_chip: PanelContainer = null
+## A friendly spar (story): the green "Friendly spar" tag.
+var _spar: bool = false
+var _spar_chip: PanelContainer = null
 
 ## The objectives currently on screen, as [WinCondition] resources.
 var _conditions: Array = []
@@ -226,6 +239,26 @@ func _build_ui() -> void:
 	_danger_chip.visible = false
 	_row.add_child(_danger_chip)
 
+	# "Protect Linnea" -- the battle's GUARD lose conditions ([ProtectUnit]): losing that unit
+	# loses the battle, so it is always on screen, not tucked into the "+N more" tooltip.
+	_guard_chip = _slim_chip("Protect", GUARD_COLOR, GUARD_NAME)
+	_row.add_child(_guard_chip)
+	# "Friendly spar" -- a story battle that never costs a life (DECISIONS.md #29).
+	_spar_chip = _slim_chip(SPAR_TEXT, SPAR_COLOR, SPAR_NAME)
+	_row.add_child(_spar_chip)
+
+
+func _slim_chip(text: String, color: Color, node_name: String) -> PanelContainer:
+	var chip := ConquestTheme.chip(text, color, ConquestTheme.FS_CAPTION)
+	chip.name = node_name
+	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var box := ConquestTheme.chip_style(color)
+	box.content_margin_top = 0
+	box.content_margin_bottom = 0
+	chip.add_theme_stylebox_override("panel", box)
+	chip.visible = false
+	return chip
+
 
 ## A slim grove chip (notched navy plate, fine grain, gold filigree): the same register as
 ## the [TurnIndicator] chip it hangs under, so it reads as that chip's second line rather
@@ -243,6 +276,47 @@ func _row_box() -> OrnateStyleBox:
 ## True while the violet "Danger zone" tag is showing.
 func is_danger_zone_shown() -> bool:
 	return _danger_on
+
+
+## Show [param guards] ([ProtectUnit]s: units whose fall loses the battle) as the rose
+## "Protect X" tag instead of the ones this battle's rules carry.
+func set_guards(guards: Array) -> void:
+	_guards = []
+	for g in guards:
+		if g is ProtectUnit:
+			_guards.append(g)
+	refresh()
+
+
+## The guard conditions on screen.
+func guards() -> Array:
+	return _guards.duplicate()
+
+
+## The "Protect X" tag's text ("" when the battle protects nobody).
+func guard_text() -> String:
+	return guard_text_for(_guards)
+
+
+## "Protect Linnea" / "Protect Linnea, Geode" for [param guards] ("" for none).
+static func guard_text_for(guards: Array) -> String:
+	var names: Array[String] = []
+	for g in guards:
+		if g is ProtectUnit:
+			var n: String = (g as ProtectUnit).label()
+			if not n.is_empty() and not names.has(n):
+				names.append(n)
+	return "" if names.is_empty() else "Protect " + ", ".join(names)
+
+
+## Show / hide the green "Friendly spar" tag.
+func set_spar(on: bool) -> void:
+	_spar = on
+	refresh()
+
+
+func is_spar_shown() -> bool:
+	return _spar
 
 
 # ===========================================================================
@@ -307,9 +381,19 @@ func refresh() -> void:
 		return
 	var lines: Array = objective_lines()
 	_label.text = banner_text(lines)
-	tooltip_text = tooltip_text_for(lines)
+	# The tooltip lists the guards too ("Keep Linnea alive"), under the ways to win.
+	var all_lines: Array = lines.duplicate()
+	for g in _guards:
+		all_lines.append((g as ProtectUnit).describe())
+	tooltip_text = tooltip_text_for(all_lines)
 	if _danger_chip != null and is_instance_valid(_danger_chip):
 		_danger_chip.visible = _danger_on
+	if _guard_chip != null and is_instance_valid(_guard_chip):
+		var gt: String = guard_text()
+		_guard_chip.visible = not gt.is_empty()
+		(_guard_chip.get_node("Text") as Label).text = gt
+	if _spar_chip != null and is_instance_valid(_spar_chip):
+		_spar_chip.visible = _spar
 	_fit_width()
 
 
@@ -361,6 +445,7 @@ func _chrome_width() -> float:
 ## [WinConditionLibrary] the runtime scores, so the banner can never drift from the rules.
 func _resolve_objectives() -> void:
 	_conditions = []
+	_resolve_guards_and_spar()
 
 	var survive: WinCondition = _challenge_survive_objective()
 	if survive != null:
@@ -376,6 +461,22 @@ func _resolve_objectives() -> void:
 	for c in WinConditionLibrary.build_win_conditions(
 			authored as Array, WinConditionLibrary.HUMAN_FACTION):
 		_conditions.append(c)
+
+
+## The GUARDS come off the battle's compiled rules (the runtime's own [GameModeRules], so a
+## story battle's "protect" / hero guards added at staging show too); the spar tag asks the
+## story controller (by path, guarded -- no story, no tag).
+func _resolve_guards_and_spar() -> void:
+	_guards = []
+	var gwm := get_tree().get_first_node_in_group("game_world_manager") if get_tree() != null else null
+	if gwm != null and is_instance_valid(gwm) and gwm.has_method("get_game_mode_rules"):
+		var rules = gwm.get_game_mode_rules()
+		if rules is GameModeRules:
+			for c in (rules as GameModeRules).lose_conditions:
+				if c is ProtectUnit:
+					_guards.append(c)
+	var story := get_node_or_null("/root/StoryController")
+	_spar = story != null and story.has_method("is_spar_battle") and bool(story.is_spar_battle())
 
 
 ## A [SurviveTurns] standing in for the live challenge's "hold out N rounds" rule, or null
