@@ -67,3 +67,22 @@ doc's default differs from this file, THIS FILE WINS. Anything not listed: use t
     (small per-stat variance), rare variants (alternate colour or elemental form, e.g. changed
     element + one different move). Cosmetic SKINS stay a separate, later system (the existing
     SkinLibrary) and must not be confused with variants.
+
+## Story premise and opening (owner, 2026-09-28)
+12. **World:** an asteroid struck the world long ago; humans and creatures alike can wield
+    elemental powers.
+13. **Bonding shards:** the kingdom's lead researcher (at the castle city) developed a unique
+    shard that makes bonding with creatures easier and safer. Shards were being handed out, but
+    not widely — a select few testers have them, and the army may have some. In game terms the
+    shard IS the catch / bond mechanic (decision 10): it is why few people have creatures and
+    why the tech is worth stealing.
+14. **Opening:** the villager hero goes to the castle city to receive their first creature (and
+    shard). While they are in town, an ENEMY NATION abducts the lead researcher for this new
+    technology. The raiders escape toward the hero's village and destroy it on the way — a
+    casualty of war, nothing personal to them. The hero's MOTHER is killed.
+15. **First fight:** an army soldier, feeling for the hero, offers them the chance to fight to
+    avenge their mother — the first battle is against the fleeing raiders (see decision 7:
+    humans fight alongside creatures).
+16. **Human class promotion needs an ITEM or a specific LOCATION** (e.g. a trainer/order at a
+    place, a crest/insignia item) in addition to Growth — it is a class change, not a
+    biological one. Creature evolution stays Growth-driven (items/story triggers optional).
