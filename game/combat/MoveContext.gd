@@ -30,6 +30,15 @@ var results: Array[Dictionary] = []
 ## ("Fire" tile, "Poisoned" tick, a weather rule, an ability). Never read by gameplay.
 var source: Dictionary = {}
 
+## True when the ENVIRONMENT is doing this, not a unit: a tile effect resolving on its
+## occupant ([method TileEffectResource.run]). Tiles resolve with the occupant as
+## [member caster] (so SELF targeting gathers exactly it), which makes anything they
+## inflict look self-applied; this is the gameplay flag that says otherwise. Read by
+## [ApplyStatusEffect] and [StatModifierEffect] so a trap's Ensnared or a rubble slow runs
+## on the AFFLICTION clock (CONQUEST.md rule 6a). False (the default) for moves, abilities
+## and status ticks, so every other resolution is unchanged.
+var environmental: bool = false
+
 ## Optional event-bus override for effects that announce themselves (see
 ## [DamageEffect]). Left null in the live game, where those effects fall back to
 ## the [code]GameEvents[/code] autoload; tests inject a mock bus here.

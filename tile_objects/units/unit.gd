@@ -682,6 +682,16 @@ func remove_stat_modifier(modifier_id: int) -> bool:
 		return unit_stats.remove_stat_modifier(modifier_id)
 	return false
 
+## Put timed modifier [param modifier_id] on the AFFLICTION clock (count this unit's own
+## turn ENDS) or the protective one (count its turn STARTS). See CONQUEST.md rule 6a and
+## [method UnitStats.set_modifier_clock]. A separate call rather than a fourth argument to
+## add_stat_modifier so every duck-typed target that only speaks the 3-argument form keeps
+## working untouched.
+func set_stat_modifier_clock(modifier_id: int, counts_own_turns: bool) -> bool:
+	if unit_stats and unit_stats.has_method("set_modifier_clock"):
+		return unit_stats.set_modifier_clock(modifier_id, counts_own_turns)
+	return false
+
 # Health management
 func take_damage(amount: int) -> void:
 	"""Apply damage to the unit"""
@@ -980,9 +990,11 @@ func is_immobilized() -> bool:
 ## True while a status makes this unit skip its next turn (Flinched). The one place
 ## the "stunned" flag name is spelled for turn-flow purposes.
 ##
-## NOTE this is the LIVE flag, not "is being skipped right now". A 1-turn stun is
-## expired by the very tick that opens the unit's turn, so the turn systems latch
-## the answer at the top of the turn instead of re-asking mid-turn — ask
+## NOTE this is the LIVE flag, not "is being skipped right now". A stun a foe
+## inflicted stays on through the turn it costs (the AFFLICTION clock, CONQUEST.md
+## rule 6a), but a protective-clock one is expired by the very tick that opens the
+## unit's turn, and a stun landing mid-turn must not cut that turn short -- so the turn
+## systems latch the answer at the top of the turn instead of re-asking mid-turn. Ask
 ## [method TurnSystemBase.is_turn_skipped] for that. This accessor is for UI and
 ## for anything wanting to know the status is present.
 func is_stunned() -> bool:
@@ -994,10 +1006,11 @@ func is_invulnerable() -> bool:
 	return has_status_rule_flag(&"invulnerable")
 
 ## Set true for the duration of a single forced-control action while the turn system
-## puppeteers this unit. Because the 1-turn Enthralled status is EXPIRED by the tick
-## that opens the unit's turn (the anti-lockout mechanism), the "controlled" rule flag
-## is already gone by the time the deferred forced-drive resolves its move -- so this
-## transient marker carries the control state through that one action, keeping
+## puppeteers this unit. Enthralled inflicted by a foe now holds through the hijacked
+## turn (the AFFLICTION clock, CONQUEST.md rule 6a), but a control on the protective
+## clock is EXPIRED by the tick that opens the unit's turn, so its "controlled" rule flag
+## is already gone by the time the deferred forced-drive resolves its move -- this
+## transient marker carries the control state through that one action on either clock, keeping
 ## [method is_controlled] true so both the AI allegiance inversion and the gather-target
 ## inversion ([MoveContext]) treat the unit as hijacked while it strikes its own ally.
 var _forced_control_action: bool = false
@@ -1292,9 +1305,11 @@ func process_turn_start() -> void:
 		unit_stats.process_modifier_durations()
 
 func process_turn_end() -> void:
-	"""Called when unit's turn ends"""
-	# Reset action points or other per-turn resources
-	pass
+	"""Called when unit's turn ends (TurnSystemBase._tick_unit_turn_end): count down
+	the AFFLICTION-clock timed modifiers this turn was played under -- the turn-end half
+	of the two-clock rule (CONQUEST.md rule 6a)."""
+	if unit_stats and unit_stats.has_method("process_modifier_turn_end"):
+		unit_stats.process_modifier_turn_end()
 func _on_health_changed(old_health: int, new_health: int) -> void:
 	"""Handle health changes"""
 	# Notify visual manager directly

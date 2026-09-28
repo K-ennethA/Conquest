@@ -93,6 +93,39 @@ named file is the canonical example — read it before you write the same kind o
    fresh bites. If you add a third, say so in the resource's own docs.
    → `game/combat/effects/InfestEffect.gd`, `game/combat/status/EnthralledStatus.gd`
 
+6a. **A duration counts the AFFLICTED unit's turns, on one of two clocks — and a debuff from
+   outside is in force for the victim's next N turns.** "1 turn" means two different things,
+   and the old single clock (count down at the unit's turn START) could only say one of them,
+   so every 1-turn debuff a foe inflicted expired at the very tick that opened the victim's
+   turn — an Ensnared victim moved freely, a Flinch skipped nothing.
+   - **AFFLICTION** — forced on the unit from outside: by a **hostile** unit (another owner,
+     or a mind-controlled puppet) or by the **environment** (a tile: `MoveContext.environmental`).
+     Counts down at the END of each of the unit's turns it was in force for; the turn it
+     landed in never counts. So Ensnared (1) stops the victim's next move, Flinched (1) skips
+     exactly its next turn, Sunder Guard's -8 defense (2) holds through its next two.
+   - **PROTECTIVE** — the unit's own, an ally's, or nobody's (code-built rewards, a restored
+     old save): counts down at the unit's turn START, exactly as before. A 1-turn Braced /
+     ward / Guarded cast on your turn covers the enemy's reply and is gone as your next turn
+     opens; the Abyssal Maw fuse erupts at its caster's next turn start.
+   - **Tick counts never change**: tick effects fire at turn start on both clocks, and an
+     N-turn poison ticks N times. Only the moment a condition *leaves* moves.
+   - The rule is `StatusCondition.is_affliction_from` — ONE function, shared by statuses and
+     **timed stat modifiers** (`StatModifierEffect` → `UnitStats.set_modifier_clock`), so a
+     debuff status and a debuff modifier can never disagree. A status may pin its clock with
+     the authored `clock` field when the timing is its contract whoever applies it (the maw
+     fuse pins PROTECTIVE); leave it `AUTO` otherwise. The clock is resolved when the status
+     lands and re-resolved on every refresh (the new applier owns it, as in rule 6).
+   - Both halves ride the active turn system's per-unit hooks (`_tick_unit_turn_start` /
+     `_tick_unit_turn_end`, rule 2): deterministic, no RNG, identical in Traditional (a whole
+     side opens/closes), Speed First (one unit) and replays. A turn start counts any earlier
+     turn whose end never arrived, so a missed end beat can delay an expiry but never strand
+     one. The stun / control latches in `turn_system_base.gd` still sample at turn start:
+     that is what makes a PROTECTIVE-clock stun skip anything, and what stops a stun landing
+     mid-turn from cutting the current turn short.
+   → `game/combat/status/StatusCondition.gd` (`Clock`, `is_affliction_from`),
+   `game/combat/status/StatusController.gd` (`tick_all` / `tick_turn_end`), pinned by
+   `tests/unit/test_status_clock.gd` and `tests/integration/test_status_clock_live.gd`
+
 7. **Shared materials, profiles and table entries are DUPLICATED before mutation.** They are
    loaded once and handed to every unit, so mutating in place recolours the whole roster.
    → `game/visuals/UnitVisualManager.gd` (`base_material.duplicate()`),

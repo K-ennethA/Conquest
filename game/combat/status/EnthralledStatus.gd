@@ -25,7 +25,10 @@ class_name EnthralledStatus
 ## already been SPENT, and a spent counter that lingers is what would deepen this one.
 ##
 ## The wipe runs from [method on_expire], so it fires however the control ends -- timing
-## out on the turn tick, being cleansed, or the whole controller being cleared.
+## out, being cleansed, or the whole controller being cleared. Inflicted by Mycothrall (a
+## foe), Enthralled runs on the AFFLICTION clock (CONQUEST.md rule 6a): it holds through
+## the host's next turn -- the one it is puppeteered on -- and times out as that turn ENDS,
+## so the counter is wiped after the hijacked turn rather than at its first tick.
 
 ## The counter status cleared when control lapses. Authored (rather than hard-coded)
 ## so the pairing lives in the .tres next to the effect that plants it; blank disables

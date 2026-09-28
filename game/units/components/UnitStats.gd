@@ -184,9 +184,16 @@ func add_stat_modifier(stat_name: String, amount: int, duration: int = -1) -> in
 		"stat": stat_name.to_lower(),
 		"amount": amount,
 		"duration": duration,
-		"turns_remaining": duration
+		"turns_remaining": duration,
+		# The two-clock rule timed statuses follow (CONQUEST.md rule 6a). false (the
+		# default) is the PROTECTIVE clock every modifier has always had: count at this
+		# unit's turn START. set_modifier_clock() flips a debuff forced on the unit from
+		# outside onto the AFFLICTION clock: count at the END of each turn the unit
+		# opened under it, so "defense -8 for 2 turns" is in force for its next 2 turns.
+		"counts_own_turns": false,
+		"turn_open": false,
 	}
-	
+
 	_stat_modifiers[modifier_id] = modifier
 	
 	# Apply the modifier immediately
@@ -217,18 +224,61 @@ func remove_stat_modifier(modifier_id: int) -> bool:
 	
 	return true
 
+## Put timed modifier [param modifier_id] on the AFFLICTION clock ([param counts_own_turns]
+## true) or back on the protective one. Called by [StatModifierEffect] right after it adds
+## a modifier that [method StatusCondition.is_affliction_from] reads as forced on this unit
+## (a hostile caster, or the environment). Resets the open-turn mark: the turn in progress
+## when it landed is never one of its N. Returns false for an unknown id.
+func set_modifier_clock(modifier_id: int, counts_own_turns: bool) -> bool:
+	if not _stat_modifiers.has(modifier_id):
+		return false
+	_stat_modifiers[modifier_id]["counts_own_turns"] = counts_own_turns
+	_stat_modifiers[modifier_id]["turn_open"] = false
+	return true
+
 func process_modifier_durations() -> void:
-	"""Process modifier durations (call each turn)"""
+	"""The unit's turn is OPENING (call once per turn start): count down and expire the
+	PROTECTIVE timed modifiers; mark the AFFLICTION ones as having a turn open under
+	them (they count at that turn's end, in process_modifier_turn_end). An affliction
+	still open from a turn whose end never arrived has that turn counted here first --
+	the mirror of StatusController.tick_all."""
 	var expired_modifiers = []
-	
+
 	for modifier_id in _stat_modifiers:
 		var modifier = _stat_modifiers[modifier_id]
-		if modifier.duration > 0:
-			modifier.turns_remaining -= 1
-			if modifier.turns_remaining <= 0:
-				expired_modifiers.append(modifier_id)
-	
+		if modifier.duration <= 0:
+			continue
+		if bool(modifier.get("counts_own_turns", false)):
+			if bool(modifier.get("turn_open", false)):
+				modifier.turns_remaining -= 1
+				if modifier.turns_remaining <= 0:
+					expired_modifiers.append(modifier_id)
+					continue
+			modifier["turn_open"] = true
+			continue
+		modifier.turns_remaining -= 1
+		if modifier.turns_remaining <= 0:
+			expired_modifiers.append(modifier_id)
+
 	# Remove expired modifiers
+	for modifier_id in expired_modifiers:
+		remove_stat_modifier(modifier_id)
+
+func process_modifier_turn_end() -> void:
+	"""The unit's turn is CLOSING (call once per turn end): count down and expire every
+	AFFLICTION modifier the unit opened this turn under. One that landed during this
+	turn is untouched; protective modifiers ignore this beat. Idempotent."""
+	var expired_modifiers = []
+	for modifier_id in _stat_modifiers:
+		var modifier = _stat_modifiers[modifier_id]
+		if modifier.duration <= 0 or not bool(modifier.get("counts_own_turns", false)):
+			continue
+		if not bool(modifier.get("turn_open", false)):
+			continue
+		modifier["turn_open"] = false
+		modifier.turns_remaining -= 1
+		if modifier.turns_remaining <= 0:
+			expired_modifiers.append(modifier_id)
 	for modifier_id in expired_modifiers:
 		remove_stat_modifier(modifier_id)
 

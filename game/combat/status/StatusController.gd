@@ -6,9 +6,12 @@ class_name StatusController
 ##
 ## Attach one to a unit (or hold one on a mock in tests). Moves/tiles/abilities
 ## inflict conditions through [method add_status]; the turn system calls
-## [method tick_all] once per turn to fire tick effects, decrement durations, and
-## expire finished conditions. Ordering is deterministic (insertion order), so
-## networked peers and replays resolve identically.
+## [method tick_all] as the unit's turn OPENS (fire tick effects, count down and expire
+## the PROTECTIVE conditions) and [method tick_turn_end] as it CLOSES (count down and
+## expire the AFFLICTIONS the unit just played a turn under). Which clock an instance
+## runs on is resolved when it lands -- see [enum StatusCondition.Clock] and CONQUEST.md
+## rule 6a. Ordering is deterministic (insertion order), so networked peers and replays
+## resolve identically.
 
 ## The unit these conditions are attached to. The controller passes it as the
 ## affected target when ticking. Defaults to the parent node if unset.
@@ -55,16 +58,33 @@ func add_status(condition: StatusCondition) -> StatusCondition:
 	# state, like turns_left -- has to be re-stated onto the stored copy or every kill
 	# by a status tick would go unattributed. See StatusCondition._source_ref.
 	instance.set_source(condition.get_source())
+	instance.inflicted_by_environment = condition.inflicted_by_environment
+	# The clock is decided HERE, once, as it lands (and again on every refresh): who
+	# inflicted it is only knowable now. No turn of the unit's has been opened under it
+	# yet, so the turn in progress (if any) never counts toward an affliction.
+	instance.counts_own_turns = condition.resolve_clock(_target())
+	instance.own_turn_open = false
 	_active.append(instance)
 	instance.on_apply(_target(), _board())
 	_announce(&"status_applied", instance)
 	return instance
 
 
-## Advance every active condition by one turn: apply tick effects, decrement
-## finite durations, and expire any that reach 0 (firing on_expire). Permanent
-## conditions (-1) tick forever. [param board] is the standard board adapter.
-## Returns the combined tick event log.
+## The unit's turn is OPENING: fire every active condition's tick effects, then count
+## down and expire the PROTECTIVE ones (firing on_expire). AFFLICTIONS are only marked
+## as having a turn open under them here -- they count down at that turn's END, in
+## [method tick_turn_end]. Permanent conditions (-1) tick forever. [param board] is the
+## standard board adapter. Returns the combined tick event log.
+##
+## Tick COUNTS are identical on both clocks: an N-turn condition fires N ticks. A
+## protective one fires on its N turn starts and lapses on the Nth; an affliction fires
+## on the N turn starts it is in force for and lapses as the Nth of those turns ends.
+##
+## A MISSED TURN END IS COUNTED HERE. An affliction still flagged open from a previous
+## turn never had that turn's end counted (a turn system that re-opened the same side
+## without closing it, a caller that only drives turn starts). That turn WAS played under
+## it, so it is counted now, before this turn opens -- which is also what keeps a
+## start-only driver firing exactly N ticks rather than N+1.
 ##
 ## RE-ENTRANCY: an on_expire hook may itself change this list -- [EnthralledStatus]
 ## clears the host's leftover infestation as control lapses, which calls
@@ -77,19 +97,50 @@ func tick_all(board) -> Array[Dictionary]:
 	for condition in _active.duplicate():
 		if condition == null or not (condition in _active):
 			continue  # an earlier expiry hook already took this one off the unit
+		if condition.counts_own_turns and condition.own_turn_open:
+			condition.own_turn_open = false
+			if _count_down(condition, board):
+				continue  # its last turn was the one whose end was never counted
 		var tick_events: Array[Dictionary] = condition.tick(_target(), board)
 		for e in tick_events:
 			events.append(e)
 		# AFTER the tick resolved, so the damage_dealt / unit_healed it produced have
 		# already been announced and the presentation layer can attribute them here.
 		_announce(&"status_ticked", condition, tick_events)
-		if condition.turns_left > 0:
-			condition.turns_left -= 1
-		if condition.turns_left == 0:
-			_active.erase(condition)
-			condition.on_expire(_target(), board)
-			_announce(&"status_expired", condition)
+		if condition.counts_own_turns:
+			condition.own_turn_open = true
+		else:
+			_count_down(condition, board)
 	return events
+
+
+## The unit's turn is CLOSING: count down every AFFLICTION the unit opened this turn
+## under, expiring any that reach 0 (firing on_expire). An affliction that landed during
+## this turn was never opened, so it is untouched -- the turn it arrived in is not one of
+## its N. PROTECTIVE conditions ignore this beat entirely. Idempotent by construction: a
+## second call finds nothing open. [param board] may be null (on_expire hooks accept it).
+func tick_turn_end(board = null) -> void:
+	for condition in _active.duplicate():
+		if condition == null or not (condition in _active):
+			continue
+		if not condition.counts_own_turns or not condition.own_turn_open:
+			continue
+		condition.own_turn_open = false
+		_count_down(condition, board)
+
+
+## Take one turn off [param condition]; at 0 erase it (BEFORE its hook -- see the
+## re-entrancy note on [method tick_all]), fire on_expire and announce it. Permanent (-1)
+## conditions never reach 0. Returns true when it expired.
+func _count_down(condition: StatusCondition, board) -> bool:
+	if condition.turns_left > 0:
+		condition.turns_left -= 1
+	if condition.turns_left != 0:
+		return false
+	_active.erase(condition)
+	condition.on_expire(_target(), board)
+	_announce(&"status_expired", condition)
+	return true
 
 
 ## Live conditions currently on the unit (the controller's own instances).
@@ -250,9 +301,17 @@ func _announce(signal_name: StringName, condition, events = null) -> void:
 ## top up the poison owns what it does from now on" is the only answer that does not
 ## require tracking one timer per source. It also self-heals attribution: a poison whose
 ## original applier has died credits nobody until somebody re-applies it.
+##
+## The CLOCK follows the same rule for the same reason: the refresh is a fresh application
+## by the new applier, so its clock is re-resolved from that applier, and an affliction's
+## fresh N counts from the unit's next turn -- a turn already open when the refresh lands
+## is not one of the new N (CONQUEST.md rule 6a).
 func _refresh(existing: StatusCondition, incoming: StatusCondition) -> void:
 	existing.turns_left = incoming.duration_turns
 	existing.set_source(incoming.get_source())
+	existing.inflicted_by_environment = incoming.inflicted_by_environment
+	existing.counts_own_turns = incoming.resolve_clock(_target())
+	existing.own_turn_open = false
 
 
 ## True when [param condition] is already at its

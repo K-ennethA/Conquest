@@ -206,13 +206,21 @@ var _last_tick_turn: Dictionary = {}
 # skip lands in get_active_units(), in Traditional's completion check and in the
 # AI driver from ONE place.
 #
-# WHY A LATCH AND NOT A LIVE QUERY: this is the whole trick, and getting it wrong
-# is a permanent unit lockout. A 1-turn status is decremented and EXPIRED by the
-# very tick that opens the unit's turn (StatusController.tick_all decrements then
-# expires at 0), so a can_unit_act() that asked "are you stunned right now?" would
-# always be asking AFTER the flag had already gone -- the stun would never skip
-# anything at all. So the flag is sampled at the top of the unit's turn, BEFORE
-# statuses tick, and remembered for the rest of that turn.
+# WHY A LATCH AND NOT A LIVE QUERY. Statuses run on two clocks (CONQUEST.md rule 6a).
+# A stun a FOE inflicted is an AFFLICTION: it stays on through the victim's whole next
+# turn and lapses at that turn's END, so for it a live query would also work. But a
+# stun on the PROTECTIVE clock (no applier -- a scripted or restored stun -- or one
+# landed by a unit of the victim's own side) is still decremented and EXPIRED by the
+# very tick that opens the unit's turn, and a can_unit_act() asking "are you stunned
+# right now?" would ask AFTER the flag had gone and skip nothing. The latch serves both:
+# the flag is sampled at the top of the unit's turn, BEFORE statuses tick, and that
+# answer holds for the rest of the turn. It also FREEZES the decision, so a stun that
+# lands mid-turn (a reactive flinch) can never cut short the turn already in progress --
+# it takes the NEXT one, which is exactly the turn its affliction clock counts.
+#
+# Exactly one skip per 1-turn stun on either clock: protective -- sampled, then expired
+# by the same opening tick; affliction -- sampled at the opening tick, expired at that
+# turn's end (TurnSystemBase._tick_unit_turn_end), so the next opening samples nothing.
 #
 # The mirror-image failure is worse and is the one worth pinning in tests: if a
 # stunned unit were instead dropped from the turn order (or its tick skipped), its
@@ -225,11 +233,12 @@ var _stun_skipped_turn: Dictionary = {}
 #
 # unit -> the `current_turn` value on which that unit was found "controlled" at the
 # top of its turn. The EXACT same latch shape as the stun skip above, and for the
-# same reason: Enthralled is a 1-turn status, so the tick that opens the unit's turn
-# both drives the puppeteering AND expires the flag. A live query at act time would
-# always be too late; sampling it at turn start (before statuses tick) is what makes
-# the control land on this turn while still letting it wear off, so a unit can never
-# be hijacked permanently -- the mirror of the stun lockout.
+# same reasons. Enthralled inflicted by Mycothrall is an AFFLICTION (rule 6a): it holds
+# through the host's next turn and wears off as that turn ENDS, so the host can never be
+# hijacked permanently -- the mirror of the stun lockout. A control on the protective
+# clock would instead expire at the very tick that opens the turn, where a live query at
+# act time would be too late; sampling at turn start (before statuses tick) makes the
+# control land on this turn on either clock.
 #
 # Unlike a stun (which merely skips), a controlled unit is FORCED to act against its
 # own side. The turn systems block the player from commanding it (can_unit_act returns
@@ -381,19 +390,19 @@ func _tick_unit_turn_start(unit) -> void:
 	if CombatServices and CombatServices.has_method("advance_weather"):
 		CombatServices.advance_weather(WinConditionLibrary.completed_rounds(self) + 1)
 
-	# Sample "stunned" FIRST, ahead of every tick below. The status ticks that
-	# follow are what EXPIRE the stun, so by the time they have run the flag is
-	# gone; latching it here is what makes the skip land on this turn while still
-	# letting the stun run out (see the _stun_skipped_turn docs above).
+	# Sample "stunned" FIRST, ahead of every tick below. A PROTECTIVE-clock stun is
+	# EXPIRED by the status ticks that follow, so by the time they have run the flag
+	# is gone; latching it here is what makes the skip land on this turn on either
+	# clock while still letting the stun run out (see the _stun_skipped_turn docs).
 	if _has_stun_flag(unit):
 		_stun_skipped_turn[unit] = current_turn
 		var who: String = unit.get_display_name() if unit.has_method("get_display_name") else str(unit)
 
-	# Sample "controlled" alongside the stun, and for the identical reason: the status
-	# ticks below EXPIRE Enthralled, so latching it here is what makes the hijack land
-	# on this turn while still letting it wear off (never a permanent puppet). The
-	# turn system then bars the player from the unit and force-drives it against its
-	# own side (see _drive_controlled_units in each system).
+	# Sample "controlled" alongside the stun, and for the identical reason: whichever
+	# clock Enthralled runs on, latching it here is what makes the hijack land on this
+	# turn while still letting it wear off (never a permanent puppet). The turn system
+	# then bars the player from the unit and force-drives it against its own side (see
+	# _drive_controlled_units in each system).
 	if _has_control_flag(unit):
 		_control_forced_turn[unit] = current_turn
 		var puppet: String = unit.get_display_name() if unit.has_method("get_display_name") else str(unit)
@@ -407,7 +416,13 @@ func _tick_unit_turn_start(unit) -> void:
 	# ORDER MATTERS: this must run BEFORE status conditions tick below. A status's
 	# tick can APPLY a modifier (entangled's slow does exactly that), and expiring
 	# afterwards would decrement a modifier on the same turn it was granted --
-	# cancelling a one-turn slow before it ever took effect.
+	# cancelling a one-turn slow before it ever took effect. (That tick-granted slow is
+	# PROTECTIVE -- its context's caster is the afflicted unit -- so it still lapses at
+	# the NEXT turn start here; Entangled itself, when a foe inflicted it, now lapses at
+	# the end of the turn it slowed, in _tick_unit_turn_end. Same one slowed turn.)
+	#
+	# Only PROTECTIVE-clock modifiers count down here; AFFLICTION ones (a hostile
+	# Sunder Guard) are marked open and count at this turn's end (CONQUEST.md rule 6a).
 	if unit.has_method("process_turn_start"):
 		unit.process_turn_start()
 
@@ -447,23 +462,40 @@ func _tick_unit_turn_start(unit) -> void:
 				ability_system.trigger(AbilityTrigger.Trigger.ON_TURN_START, unit, ability_board)
 
 func _tick_unit_turn_end(unit) -> void:
-	"""Fire a single unit's ON_TURN_END abilities as its turn closes.
+	"""Fire a single unit's ON_TURN_END abilities as its turn closes, then count down
+	the AFFLICTION-clock statuses and timed modifiers it just played this turn under.
 
 	The mirror of `_tick_unit_turn_start`, and the shared per-unit turn-END hook
 	the two turn systems previously lacked: Speed First closes one unit's turn
 	(`_end_unit_turn`) while Traditional closes a whole side's (`_end_player_turn`),
 	so each calls this for the unit(s) it is finishing. Null-safe for units without
-	an AbilitySystem, and deliberately NOT idempotency-tracked -- both systems end a
-	given unit's turn exactly once.
+	an AbilitySystem / StatusController, and deliberately NOT idempotency-tracked --
+	both systems end a given unit's turn exactly once, and the clock half is idempotent
+	on its own (a second call finds no turn open).
+
+	THE AFFLICTION CLOCK (CONQUEST.md rule 6a): a debuff/control a foe or the ground
+	forced on this unit counts the unit's own turns, so it lapses HERE, as the Nth turn
+	it was in force for closes -- never at the tick that opens that turn, which is what
+	used to let a 1-turn Ensnared / Flinched / defense-down expire before the victim ever
+	played under it. Riding the ACTIVE turn system's per-unit end hook (rule 2), so AI
+	turns, both turn orders and every lockstep peer / replay count identically.
 	"""
-	if unit == null:
+	if unit == null or not is_instance_valid(unit):
 		return
 	var ability_system = unit.get_ability_system() if unit.has_method("get_ability_system") else null
-	if ability_system == null or not ability_system.has_method("trigger"):
-		return
-	var ability_board = CombatServices.board() if CombatServices else null
-	if ability_board != null:
-		ability_system.trigger(AbilityTrigger.Trigger.ON_TURN_END, unit, ability_board)
+	if ability_system != null and ability_system.has_method("trigger"):
+		var ability_board = CombatServices.board() if CombatServices else null
+		if ability_board != null:
+			ability_system.trigger(AbilityTrigger.Trigger.ON_TURN_END, unit, ability_board)
+	# The clocks count LAST, after the turn's own end-of-turn beat: the condition was in
+	# force for this whole turn, ON_TURN_END included.
+	if not is_instance_valid(unit):
+		return  # an end-of-turn effect can kill (thorns, recoil)
+	if unit.has_method("process_turn_end"):
+		unit.process_turn_end()
+	var status = unit.get_status_controller() if unit.has_method("get_status_controller") else null
+	if status != null and status.has_method("tick_turn_end"):
+		status.tick_turn_end(CombatServices.board() if CombatServices else null)
 
 func _tick_all_units_turn_start(units: Array) -> void:
 	"""Convenience: tick every unit in `units` (each idempotent per turn)."""

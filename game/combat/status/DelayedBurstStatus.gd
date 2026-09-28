@@ -15,9 +15,16 @@ class_name DelayedBurstStatus
 ## systems drive [method TurnSystemBase._tick_unit_turn_start] for the unit whose turn is
 ## opening (Speed First for one unit, Traditional for every unit of the side that just
 ## became active), and that is where [method StatusController.tick_all] decrements and
-## expires. A `duration_turns` of 1 therefore expires on precisely the caster's next turn
-## start -- riding the ACTIVE turn system's signal, never PlayerManager's
-## (CONQUEST.md rule 2).
+## expires every PROTECTIVE-clock status. A `duration_turns` of 1 therefore expires on
+## precisely the caster's next turn start -- riding the ACTIVE turn system's signal, never
+## PlayerManager's (CONQUEST.md rule 2).
+##
+## THE CLOCK IS PINNED, NOT DERIVED. `void_maw_fuse.tres` authors
+## [code]clock = PROTECTIVE[/code] (CONQUEST.md rule 6a). The fuse is self-applied, so the
+## AUTO rule would already pick the protective clock -- but "erupts at the start of the
+## caster's next turn" is this status' contract, not a consequence of who applied it, so
+## it is stated on the resource. On the AFFLICTION clock it would erupt a whole turn late,
+## at the END of the caster's next turn.
 ##
 ## DETERMINISTIC AND REPLAY-SAFE end to end: the blast cells and the damage number were
 ## frozen at cast time on the hazard, the fuse length is authored, the expiry beat is the
