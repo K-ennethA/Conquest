@@ -42,6 +42,7 @@ PlayerProfile="*res://game/profile/PlayerProfile.gd"
 SceneFade="*res://systems/SceneFade.gd"
 MobileDisplay="*res://game/mobile/MobileDisplay.gd"
 DuelController="*res://game/duel/DuelController.gd"
+StoryController="*res://game/overworld/StoryController.gd"
 
 [display]
 

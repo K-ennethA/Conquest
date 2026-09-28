@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="HeroResource" format=3]
+
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/vineweave.glb" id="1_q5qmx"]
+[ext_resource type="Script" path="res://game/overworld/data/HeroResource.gd" id="2_mnqpo"]
+
+[resource]
+script = ExtResource("2_mnqpo")
+model_scene = ExtResource("1_q5qmx")
+model_scale = 1.3

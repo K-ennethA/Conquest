@@ -737,6 +737,11 @@ func show_result(outcome: StringName, title: String, subtitle: String) -> void:
 	else:
 		_rematch_button.grab_focus()
 
+	# A mode that owns what happens next (story: Continue Journey / Return to Wayshrine) swaps
+	# its own actions in. Every other battle resolves no controller and keeps the three above.
+	if not networked:
+		_apply_mode_end_actions(outcome)
+
 
 # --- Which mode was this? ----------------------------------------------------
 #
@@ -967,7 +972,66 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if MenuNav.is_back_event(event):
 		get_viewport().set_input_as_handled()
+		if not _mode_action_buttons.is_empty():
+			_mode_action_buttons[0].pressed.emit()
+			return
 		_on_main_menu_pressed()
+
+
+# --- Mode-supplied end actions ---------------------------------------------------------
+#
+# A mode controller in the MODE_ACTIONS_GROUP that answers is_active() == true and implements
+# end_actions(outcome) -> [{id, label}] + on_end_action(id) REPLACES Rematch / Main Menu / Quit
+# with its own buttons (story mode's "Continue Journey", "Return to Wayshrine", "Try Again").
+# Duck-typed and guarded like _mode_controller(): no such controller -> nothing changes.
+
+const MODE_ACTIONS_GROUP := &"battle_mode_controller"
+
+var _mode_action_buttons: Array[Button] = []
+
+
+func _end_actions_controller():
+	var tree := get_tree()
+	if tree == null:
+		return null
+	for n in tree.get_nodes_in_group(MODE_ACTIONS_GROUP):
+		if is_instance_valid(n) and n.has_method("is_active") and bool(n.is_active()) \
+				and n.has_method("end_actions") and n.has_method("on_end_action"):
+			return n
+	return null
+
+
+## The mode's own end buttons, when a mode supplies them. True when they replaced the defaults.
+func _apply_mode_end_actions(outcome: StringName) -> bool:
+	var ctrl = _end_actions_controller()
+	if ctrl == null:
+		return false
+	var actions = ctrl.end_actions(outcome)
+	if not (actions is Array) or actions.is_empty():
+		return false
+	for b in [_rematch_button, _menu_button, _quit_button]:
+		b.visible = false
+	for a in actions:
+		if not (a is Dictionary):
+			continue
+		var b := _make_button(String(a.get("label", "Continue")))
+		b.name = "ModeAction_" + String(a.get("id", ""))
+		b.theme_type_variation = &"PrimaryButton" if _mode_action_buttons.is_empty() else &""
+		var action_id: String = String(a.get("id", ""))
+		b.pressed.connect(func() -> void:
+			get_tree().paused = false
+			ctrl.on_end_action(action_id))
+		MenuNav.hover_focus(b)
+		_button_box.add_child(b)
+		_mode_action_buttons.append(b)
+	if not _mode_action_buttons.is_empty():
+		_mode_action_buttons[0].grab_focus()
+	return true
+
+
+## The mode-supplied end buttons now showing (empty for an ordinary battle).
+func mode_action_buttons() -> Array[Button]:
+	return _mode_action_buttons
 
 
 # =====================================================================================

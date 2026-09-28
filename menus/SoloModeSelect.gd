@@ -15,30 +15,31 @@ class_name SoloModeSelect
 ## accent edge, a Cinzel heading, a tagline and its number key.
 ##
 ## Keyboard: 1 = Campaign, 2 = Skirmish, 3 = Siege, 4 = Arena Run, 5 = Challenges,
-## 6 = Duel, Esc / pad B = back. Mouse hover and keyboard / pad focus are one highlight
-## (MenuNav).
+## 6 = Duel, 7 = Story, Esc / pad B = back. Mouse hover and keyboard / pad focus are one
+## highlight (MenuNav).
 
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 const MATCH_SETUP_SCENE := "res://menus/MatchSetup.tscn"
 const CHALLENGE_BROWSE_SCENE := "res://menus/ChallengeBrowse.tscn"
 const CAMPAIGN_SCREEN_SCENE := "res://menus/CampaignScreen.tscn"
 const DUEL_SETUP_SCENE := "res://menus/DuelSetup.tscn"
+const STORY_START_SCENE := "res://game/overworld/ui/StoryStartScreen.tscn"
 
 # --- Card row geometry (1280x720) --------------------------------------------
 #
 # The cards are EXPAND_FILL inside one HBox, so the row's MINIMUM width is what has to fit
 # -- a card narrower than its custom_minimum is not something a container will give you.
 #
-#   6 cards x CARD_WIDTH + 5 x CARD_SEPARATION  =  6 x 185 + 5 x 14  =  1180
+#   7 cards x CARD_WIDTH + 6 x CARD_SEPARATION  =  7 x 158 + 6 x 12  =  1178
 #
 # ...which is exactly the page width, inside the 1280 viewport. CARD_HEIGHT is the row's
 # height floor; the card content (rule, heading, tagline, wrapped blurb) fits inside it,
 # so the row never grows taller.
-const CARD_WIDTH: float = 185.0
-## 200 (was 180 with five cards): six narrower cards wrap the longest tagline (Siege) onto
-## a second line, so the row trades a little height for the sixth card's width.
-const CARD_HEIGHT: float = 200.0
-const CARD_SEPARATION: int = 14
+const CARD_WIDTH: float = 158.0
+## 220 (was 180 with five cards, 200 with six): seven narrower cards wrap the longer
+## taglines and blurbs, so the row trades a little height for the extra cards' width.
+const CARD_HEIGHT: float = 220.0
+const CARD_SEPARATION: int = 12
 const PAGE_WIDTH: float = 1180.0
 
 var _cards: Array[Button] = []
@@ -86,6 +87,10 @@ func _build_ui(page: Dictionary) -> void:
 		_on_challenges_chosen))
 	_add_card(cards, _make_action_card(6, "Duel", "One on one",
 		"Two units, no movement -- just the moves.", MenuTheme.EL_EARTH, _on_duel_chosen))
+	# STORY (overworld): appended after Duel so the existing number keys keep their cards.
+	_add_card(cards, _make_action_card(7, "Story", "Journey",
+		"Walk the forest, meet its people, fight what bars the road.", MenuTheme.EL_HOLY,
+		_on_story_chosen))
 	# Wrap horizontal focus across the row.
 	_cards[0].focus_neighbor_left = _cards[0].get_path_to(_cards[-1])
 	_cards[-1].focus_neighbor_right = _cards[-1].get_path_to(_cards[0])
@@ -97,7 +102,7 @@ func _build_ui(page: Dictionary) -> void:
 
 	MenuKit.add_standard_hints(page.hints, "Select")
 	var hint := MenuKit.label(
-		"1 Campaign  •  2 Skirmish  •  3 Siege  •  4 Arena Run  •  5 Challenges  •  6 Duel", &"MutedLabel")
+		"1 Campaign  •  2 Skirmish  •  3 Siege  •  4 Arena Run  •  5 Challenges  •  6 Duel  •  7 Story", &"MutedLabel")
 	hint.name = "KeyHint"
 	hint.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -155,7 +160,8 @@ func _make_card(number: int, heading: String, tagline: String, blurb: String,
 	var head := MenuKit.label(heading, &"SubheadingLabel")
 	head.add_theme_font_size_override("font_size", 22)
 	v.add_child(head)
-	var tl := MenuKit.label(tagline.to_upper(), &"SectionLabel")
+	# Wraps: six cards leave ~150px of text width, and "LANES AND BASES" is wider than that.
+	var tl := MenuKit.label(tagline.to_upper(), &"SectionLabel", true)
 	tl.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	tl.add_theme_color_override("font_color", accent.lightened(0.2))
 	# Six cards share the row: a long tagline wraps rather than spilling past the frame.
@@ -203,6 +209,10 @@ func _on_duel_chosen() -> void:
 
 func _on_campaign_chosen() -> void:
 	MenuNav.change_scene(self, CAMPAIGN_SCREEN_SCENE)
+
+
+func _on_story_chosen() -> void:
+	MenuNav.change_scene(self, STORY_START_SCENE)
 
 
 func _on_back_pressed() -> void:

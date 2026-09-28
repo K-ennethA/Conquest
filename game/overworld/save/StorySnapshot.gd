@@ -1,0 +1,151 @@
+class_name StorySnapshot
+extends RefCounted
+
+## PURE serializer between a live [StoryState] and the versioned JSON a story slot stores
+## (docs/design/OVERWORLD.md §4.11). Same discipline as [BattleSnapshot]:
+##   * FORMAT_VERSION stamped; a newer (unknown) version is REJECTED, never guessed at;
+##   * ids, never resource paths (areas, characters, items are keys into shipped content);
+##   * unknown ids are SKIPPED, never raised (a save from a build that shipped a character this
+##     one does not have loses that member, not the whole journey);
+##   * every read goes through a coercion helper (CONQUEST.md rule 3), no ResourceLoader on
+##     save data (rule 8).
+## No disk access here -- [StorySaveManager] owns the files.
+
+const FORMAT_VERSION: int = 1
+
+
+static func to_dict(state: StoryState) -> Dictionary:
+	var party: Array = []
+	for m in state.party:
+		party.append(m.to_dict())
+	var positions: Dictionary = {}
+	for key in state.actor_positions:
+		var rec: Dictionary = state.actor_positions[key]
+		positions[key] = {
+			"cell": Cells.to_array(rec.get("cell", Vector3i.ZERO)),
+			"facing": String(rec.get("facing", "south")),
+		}
+	return {
+		"format_version": FORMAT_VERSION,
+		"saved_at_utc": Time.get_datetime_string_from_system(true),
+		"play_seconds": int(state.play_seconds),
+		"location": {
+			"area_id": state.location_area(),
+			"cell": Cells.to_array(state.location_cell()),
+			"facing": state.location_facing(),
+		},
+		"respawn": {
+			"area_id": String(state.respawn.get("area_id", "")),
+			"entry": String(state.respawn.get("entry", "")),
+		},
+		"flags": state.flags.duplicate(true),
+		"party": party,
+		"bag": state.bag.duplicate(true),
+		"gold": state.gold,
+		"visited_areas": state.visited_areas.duplicate(),
+		"lit_wayshrines": state.lit_wayshrines.duplicate(),
+		"rng": {"seed": state.rng_seed, "steps": state.steps, "grace": state.grace_steps},
+		"actor_positions": positions,
+		"pending": {},
+	}
+
+
+## Rebuild a state from [param data]. Returns {success, state, reason}; never logs.
+static func from_dict(data) -> Dictionary:
+	if not (data is Dictionary):
+		return {"success": false, "state": null, "reason": "not_a_dictionary"}
+	var version: int = int(data.get("format_version", 0))
+	if version <= 0:
+		return {"success": false, "state": null, "reason": "missing_version"}
+	if version > FORMAT_VERSION:
+		return {"success": false, "state": null, "reason": "newer_version"}
+
+	var state := StoryState.new()
+	state.play_seconds = maxf(0.0, float(data.get("play_seconds", 0)))
+
+	var loc = data.get("location", {})
+	if loc is Dictionary:
+		var cell: Vector3i = Cells.from_variant(loc.get("cell", [0, 0, 0]))
+		if cell == Cells.INVALID:
+			cell = Vector3i.ZERO
+		state.set_location(String(loc.get("area_id", "")), cell, String(loc.get("facing", "south")))
+
+	var resp = data.get("respawn", {})
+	if resp is Dictionary:
+		state.respawn = {"area_id": String(resp.get("area_id", "")), "entry": String(resp.get("entry", ""))}
+
+	var flags = data.get("flags", {})
+	if flags is Dictionary:
+		for key in flags:
+			state.set_flag(String(key), flags[key])
+
+	var party = data.get("party", [])
+	if party is Array:
+		for raw in party:
+			var m: StoryPartyMember = StoryPartyMember.from_dict(raw)
+			if m == null:
+				continue
+			# Unknown ids skipped, not raised: a member whose character this build does not
+			# ship is dropped (and so is a duplicate uid).
+			if CharacterLibrary.get_character(StringName(m.character_id)) == null:
+				continue
+			if state.member(m.member_id) != null:
+				continue
+			state.party.append(m)
+
+	var bag = data.get("bag", {})
+	if bag is Dictionary:
+		for item_id in bag:
+			var n: int = int(bag[item_id])
+			if n > 0 and ItemLibrary.has_item(String(item_id)):
+				state.bag[String(item_id)] = n
+
+	state.gold = maxi(0, int(data.get("gold", 0)))
+	state.visited_areas = _to_string_array(data.get("visited_areas", []))
+	state.lit_wayshrines = _to_string_array(data.get("lit_wayshrines", []))
+
+	var rng = data.get("rng", {})
+	if rng is Dictionary:
+		state.rng_seed = int(rng.get("seed", 0))
+		state.steps = maxi(0, int(rng.get("steps", 0)))
+		state.grace_steps = maxi(0, int(rng.get("grace", 0)))
+
+	var positions = data.get("actor_positions", {})
+	if positions is Dictionary:
+		for key in positions:
+			var rec = positions[key]
+			if not (rec is Dictionary):
+				continue
+			var c: Vector3i = Cells.from_variant(rec.get("cell", null))
+			if c == Cells.INVALID:
+				continue
+			state.actor_positions[String(key)] = {"cell": c, "facing": String(rec.get("facing", "south"))}
+
+	return {"success": true, "state": state, "reason": ""}
+
+
+## A one-line caption for a slot card / the main-menu row: "Mossway · 2h 15m".
+static func describe(data: Dictionary, area_names: Dictionary = {}) -> String:
+	var loc = data.get("location", {})
+	var area_id: String = String(loc.get("area_id", "")) if loc is Dictionary else ""
+	var area_name: String = String(area_names.get(area_id, area_id.capitalize()))
+	return "%s  ·  %s" % [area_name, format_play_time(int(data.get("play_seconds", 0)))]
+
+
+static func format_play_time(seconds: int) -> String:
+	var h: int = seconds / 3600
+	var m: int = (seconds % 3600) / 60
+	if h > 0:
+		return "%dh %02dm" % [h, m]
+	return "%dm" % m
+
+
+## JSON Array -> Array[String] element-wise (CONQUEST.md rule 3).
+static func _to_string_array(raw) -> Array[String]:
+	var out: Array[String] = []
+	if raw is Array:
+		for v in raw:
+			var s: String = String(v)
+			if not s.is_empty() and not out.has(s):
+				out.append(s)
+	return out

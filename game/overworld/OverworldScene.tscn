@@ -1,0 +1,30 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://game/overworld/runtime/OverworldController.gd" id="1_ctrl"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_ow"]
+sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
+ground_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
+
+[sub_resource type="Sky" id="Sky_ow"]
+sky_material = SubResource("ProceduralSkyMaterial_ow")
+
+[sub_resource type="Environment" id="Environment_ow"]
+background_mode = 2
+sky = SubResource("Sky_ow")
+tonemap_mode = 2
+glow_enabled = true
+fog_enabled = true
+fog_light_color = Color(0.478431, 0.529412, 0.556863, 1)
+fog_light_energy = 1.0
+fog_sun_scatter = 0.0
+fog_density = 0.0015
+fog_sky_affect = 0.0
+fog_height = -1.0
+fog_height_density = 0.14
+
+[node name="OverworldScene" type="Node3D"]
+script = ExtResource("1_ctrl")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_ow")

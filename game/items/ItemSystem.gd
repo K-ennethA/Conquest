@@ -155,6 +155,17 @@ func apply_to_board() -> int:
 func apply_to_unit(unit) -> bool:
 	if not is_instance_valid(unit):
 		return false
+	# STORY: a story party unit wears what its member equipped from the story bag, not the
+	# profile ItemInventory. StoryController answers null for anything that is not one.
+	var story = get_node_or_null("/root/StoryController") if is_inside_tree() else null
+	if story != null and story.has_method("loadout_for_unit"):
+		var story_items = story.loadout_for_unit(unit)
+		if story_items is Array:
+			var typed: Array[ItemResource] = []
+			for it in story_items:
+				if it is ItemResource:
+					typed.append(it)
+			return ItemSystem.apply_loadout_items(unit, typed)
 	return ItemSystem.apply_loadout_items(unit, loadout_for_slot(_slot_of(unit), _character_id_of(unit)))
 
 
@@ -308,6 +319,10 @@ func _evaluate_outcome() -> void:
 	# worth seven drops.
 	var arena = get_node_or_null("/root/ArenaController")
 	if arena != null and arena.has_method("is_active") and arena.is_active():
+		return
+	# STORY battles pay authored rewards into the story bag (StoryController), never a profile drop.
+	var story = get_node_or_null("/root/StoryController") if is_inside_tree() else null
+	if story != null and story.has_method("is_battle_active") and story.is_battle_active():
 		return
 
 	var reward: ItemResource = roll_drop()

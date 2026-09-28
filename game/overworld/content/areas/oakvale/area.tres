@@ -1,0 +1,337 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="1_urwkg"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="2_c8k5q"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="3_8wnmi"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="4_037wj"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="5_01a5j"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="6_4pilx"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="7_yl85t"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/GiveItemCommand.gd" id="8_jaygs"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/MoveActorCommand.gd" id="9_r6e6o"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ToastCommand.gd" id="10_caic5"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="11_mfhw7"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="12_dv6l6"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="13_usgk5"]
+[ext_resource type="Script" path="res://game/overworld/data/ChestEntity.gd" id="14_sr32m"]
+[ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="15_gtcqo"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="16_3lg5e"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="17_lrckn"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/oakvale/terrain.tres" id="18_nty54"]
+
+[sub_resource type="Resource" id="Resource_02t2l"]
+script = ExtResource("1_urwkg")
+text = "OAKVALE -- where the Mossway begins.
+Travellers, mind the grass."
+id = &"town_sign"
+cell = Vector3i(17, 8, 0)
+display_name = "Oakvale"
+tint = Color(0.52, 0.36, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_47vhf"]
+script = ExtResource("1_urwkg")
+text = "The door is barred. A note is pinned to it: \"Gone to the mill.\""
+id = &"cottage_door"
+cell = Vector3i(3, 6, 0)
+display_name = "Mira's Cottage"
+tint = Color(0.52, 0.36, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_j6r5d"]
+script = ExtResource("1_urwkg")
+text = "The forge is cold. Chalked on the door: \"Closed until the road is safe.\""
+id = &"smithy_door"
+cell = Vector3i(14, 5, 0)
+display_name = "The Smithy"
+tint = Color(0.52, 0.36, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_cu3oh"]
+script = ExtResource("2_c8k5q")
+speaker_id = &"self"
+side = &"right"
+text = "The Elder has been pacing by the Wayshrine since dawn. Something about the road east."
+
+[sub_resource type="Resource" id="Resource_oy7lt"]
+script = ExtResource("2_c8k5q")
+speaker_id = &"self"
+side = &"right"
+text = "If you're hurt, touch the Wayshrine. It remembers everyone who drinks from it."
+
+[sub_resource type="Resource" id="Resource_46w87"]
+script = ExtResource("3_8wnmi")
+scene_id = &"oak_maren"
+beats = Array[Resource]([SubResource("Resource_cu3oh"), SubResource("Resource_oy7lt")])
+
+[sub_resource type="Resource" id="Resource_d8qq0"]
+script = ExtResource("4_037wj")
+speaker_id = &"npc_maren"
+speaker_name = "Maren"
+dialogue = SubResource("Resource_46w87")
+id = &"maren"
+cell = Vector3i(6, 9, 0)
+facing = "east"
+display_name = "Maren"
+tint = Color(0.62, 0.36, 0.3, 1)
+
+[sub_resource type="Resource" id="Resource_0rsdw"]
+script = ExtResource("2_c8k5q")
+speaker_id = &"self"
+side = &"right"
+text = "My brother went down the Mossway for moss-caps. Came back white as a ghost -- said the grass itself snapped at him."
+
+[sub_resource type="Resource" id="Resource_bskvf"]
+script = ExtResource("5_01a5j")
+beats = Array[Resource]([SubResource("Resource_0rsdw")])
+
+[sub_resource type="Resource" id="Resource_qebhi"]
+script = ExtResource("2_c8k5q")
+speaker_id = &"self"
+side = &"right"
+text = "Bram's out on the Mossway. Thinks he's a Warden already -- he'll want to test you."
+
+[sub_resource type="Resource" id="Resource_5ymmf"]
+script = ExtResource("5_01a5j")
+beats = Array[Resource]([SubResource("Resource_qebhi")])
+
+[sub_resource type="Resource" id="Resource_20uh4"]
+script = ExtResource("6_4pilx")
+condition = "flag(\"quest.blight_road\") >= 1"
+then_commands = Array[Resource]([SubResource("Resource_5ymmf")])
+else_commands = Array[Resource]([SubResource("Resource_bskvf")])
+
+[sub_resource type="Resource" id="Resource_gyxsc"]
+script = ExtResource("4_037wj")
+speaker_id = &"npc_tobin"
+speaker_name = "Tobin"
+id = &"tobin"
+cell = Vector3i(14, 11, 0)
+facing = "west"
+display_name = "Tobin"
+tint = Color(0.36, 0.46, 0.62, 1)
+on_interact = Array[Resource]([SubResource("Resource_20uh4")])
+
+[sub_resource type="Resource" id="Resource_hdkaw"]
+script = ExtResource("2_c8k5q")
+speaker_id = &"self"
+side = &"right"
+text = "Ah -- a Warden's coat. I had hoped one would come."
+
+[sub_resource type="Resource" id="Resource_uve6t"]
+script = ExtResource("2_c8k5q")
+speaker_id = &"self"
+side = &"right"
+text = "The Mossway is sick. The blight walks it at night, and the grass has started to bite."
+
+[sub_resource type="Resource" id="Resource_ir736"]
+script = ExtResource("5_01a5j")
+beats = Array[Resource]([SubResource("Resource_hdkaw"), SubResource("Resource_uve6t")])
+
+[sub_resource type="Resource" id="Resource_yn6om"]
+script = ExtResource("7_yl85t")
+key = "quest.blight_road"
+
+[sub_resource type="Resource" id="Resource_8o61w"]
+script = ExtResource("2_c8k5q")
+speaker_id = &"self"
+side = &"right"
+text = "Then the forest has not forgotten us after all. Take this -- it kept my grandmother's roots steady."
+
+[sub_resource type="Resource" id="Resource_w7agi"]
+script = ExtResource("5_01a5j")
+beats = Array[Resource]([SubResource("Resource_8o61w")])
+
+[sub_resource type="Resource" id="Resource_6igoc"]
+script = ExtResource("8_jaygs")
+item_id = &"heartwood_charm"
+
+[sub_resource type="Resource" id="Resource_g2n42"]
+script = ExtResource("9_r6e6o")
+actor = "guard"
+to = Vector3i(18, 10, 0)
+persist = true
+
+[sub_resource type="Resource" id="Resource_wljw8"]
+script = ExtResource("10_caic5")
+text = "Quest: The Blighted Road"
+toast_kind = "quest"
+
+[sub_resource type="Resource" id="Resource_4hl7o"]
+script = ExtResource("2_c8k5q")
+speaker_id = &"self"
+side = &"right"
+text = "Hale will open the east gate. Mind Bram on the road -- the boy means well."
+
+[sub_resource type="Resource" id="Resource_di53x"]
+script = ExtResource("5_01a5j")
+beats = Array[Resource]([SubResource("Resource_4hl7o")])
+
+[sub_resource type="Resource" id="Resource_34oop"]
+script = ExtResource("11_mfhw7")
+label = "I will walk it."
+commands = Array[Resource]([SubResource("Resource_yn6om"), SubResource("Resource_w7agi"), SubResource("Resource_6igoc"), SubResource("Resource_g2n42"), SubResource("Resource_wljw8"), SubResource("Resource_di53x")])
+
+[sub_resource type="Resource" id="Resource_ev43m"]
+script = ExtResource("2_c8k5q")
+speaker_id = &"self"
+side = &"right"
+text = "Come back when your roots are steady. The Mossway will wait -- the rot will not."
+
+[sub_resource type="Resource" id="Resource_acj8h"]
+script = ExtResource("5_01a5j")
+beats = Array[Resource]([SubResource("Resource_ev43m")])
+
+[sub_resource type="Resource" id="Resource_h3fel"]
+script = ExtResource("11_mfhw7")
+label = "Not yet."
+commands = Array[Resource]([SubResource("Resource_acj8h")])
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_862c6"]
+script = ExtResource("2_c8k5q")
+speaker_id = &"self"
+side = &"right"
+text = "Will you walk the Mossway for us, {hero}?"
+
+[sub_resource type="Resource" id="Resource_3ie2q"]
+script = ExtResource("12_dv6l6")
+prompt = SubResource("Resource_862c6")
+options = Array[Resource]([SubResource("Resource_34oop"), SubResource("Resource_h3fel")])
+
+[sub_resource type="Resource" id="Resource_ptury"]
+script = ExtResource("2_c8k5q")
+speaker_id = &"self"
+side = &"right"
+text = "The Mossway waits east of the gate. Follow it to the Blighted Clearing, and come home whole."
+
+[sub_resource type="Resource" id="Resource_x0kta"]
+script = ExtResource("5_01a5j")
+beats = Array[Resource]([SubResource("Resource_ptury")])
+
+[sub_resource type="Resource" id="Resource_47kwg"]
+script = ExtResource("6_4pilx")
+condition = "flag(\"quest.blight_road\") >= 1"
+then_commands = Array[Resource]([SubResource("Resource_x0kta")])
+else_commands = Array[Resource]([SubResource("Resource_ir736"), SubResource("Resource_3ie2q")])
+
+[sub_resource type="Resource" id="Resource_lq83w"]
+script = ExtResource("4_037wj")
+speaker_id = &"npc_elder"
+speaker_name = "Elder Wynn"
+id = &"elder"
+cell = Vector3i(10, 5, 0)
+display_name = "Elder Wynn"
+tint = Color(0.3, 0.48, 0.34, 1)
+on_interact = Array[Resource]([SubResource("Resource_47kwg")])
+
+[sub_resource type="Resource" id="Resource_lw70m"]
+script = ExtResource("2_c8k5q")
+speaker_id = &"self"
+side = &"right"
+text = "The road east is closed by the Elder's word. Speak with Elder Wynn at the hall first."
+
+[sub_resource type="Resource" id="Resource_dkdgj"]
+script = ExtResource("5_01a5j")
+beats = Array[Resource]([SubResource("Resource_lw70m")])
+
+[sub_resource type="Resource" id="Resource_cwe1v"]
+script = ExtResource("2_c8k5q")
+speaker_id = &"self"
+side = &"right"
+text = "The Elder's given her word. Go on, then -- and mind the grass."
+
+[sub_resource type="Resource" id="Resource_t1qba"]
+script = ExtResource("5_01a5j")
+beats = Array[Resource]([SubResource("Resource_cwe1v")])
+
+[sub_resource type="Resource" id="Resource_g1j3x"]
+script = ExtResource("6_4pilx")
+condition = "flag(\"quest.blight_road\") >= 1"
+then_commands = Array[Resource]([SubResource("Resource_t1qba")])
+else_commands = Array[Resource]([SubResource("Resource_dkdgj")])
+
+[sub_resource type="Resource" id="Resource_5l2ld"]
+script = ExtResource("4_037wj")
+speaker_id = &"npc_guard"
+speaker_name = "Gate Warden Hale"
+id = &"guard"
+cell = Vector3i(19, 9, 0)
+facing = "west"
+display_name = "Gate Warden Hale"
+tint = Color(0.52, 0.34, 0.24, 1)
+on_interact = Array[Resource]([SubResource("Resource_g1j3x")])
+
+[sub_resource type="Resource" id="Resource_5o6tp"]
+script = ExtResource("13_usgk5")
+footprint = Vector2i(5, 2)
+id = &"house_0"
+cell = Vector3i(8, 2, 0)
+tint = Color(0.5, 0.26, 0.18, 1)
+blocking = false
+
+[sub_resource type="Resource" id="Resource_7pch5"]
+script = ExtResource("13_usgk5")
+footprint = Vector2i(3, 3)
+id = &"house_1"
+cell = Vector3i(2, 3, 0)
+tint = Color(0.36, 0.42, 0.3, 1)
+blocking = false
+
+[sub_resource type="Resource" id="Resource_t0cp8"]
+script = ExtResource("13_usgk5")
+footprint = Vector2i(3, 2)
+id = &"house_2"
+cell = Vector3i(13, 3, 0)
+tint = Color(0.44, 0.3, 0.22, 1)
+blocking = false
+
+[sub_resource type="Resource" id="Resource_nu6ts"]
+script = ExtResource("13_usgk5")
+id = &"house_3"
+cell = Vector3i(2, 13, 0)
+tint = Color(0.55, 0.45, 0.25, 1)
+blocking = false
+
+[sub_resource type="Resource" id="Resource_yw5pv"]
+script = ExtResource("14_sr32m")
+loot_items = Array[StringName]([&"sagebloom_poultice"])
+loot_gold = 30
+id = &"mill_chest"
+cell = Vector3i(5, 14, 0)
+display_name = "Chest"
+tint = Color(0.5, 0.33, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_75jx2"]
+script = ExtResource("15_gtcqo")
+id = &"wayshrine"
+cell = Vector3i(10, 9, 0)
+display_name = "Oakvale Wayshrine"
+tint = Color(0.55, 0.92, 0.62, 1)
+
+[sub_resource type="Resource" id="Resource_4k0pl"]
+script = ExtResource("16_3lg5e")
+area_rect = Rect2i(21, 9, 1, 1)
+target_area = &"mossway"
+target_entry = &"west"
+id = &"east_exit"
+blocking = false
+
+[resource]
+script = ExtResource("17_lrckn")
+area_id = &"oakvale"
+display_name = "Oakvale"
+terrain = ExtResource("18_nty54")
+world_map_pos = Vector2(0.18, 0.55)
+entry_points = {
+"east_gate": {
+"cell": [20, 9, 0],
+"facing": "west"
+},
+"start": {
+"cell": [10, 11, 0],
+"facing": "north"
+},
+"wayshrine": {
+"cell": [10, 10, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_02t2l"), SubResource("Resource_47vhf"), SubResource("Resource_j6r5d"), SubResource("Resource_d8qq0"), SubResource("Resource_gyxsc"), SubResource("Resource_lq83w"), SubResource("Resource_5l2ld"), SubResource("Resource_5o6tp"), SubResource("Resource_7pch5"), SubResource("Resource_t0cp8"), SubResource("Resource_nu6ts"), SubResource("Resource_yw5pv"), SubResource("Resource_75jx2"), SubResource("Resource_4k0pl")])
