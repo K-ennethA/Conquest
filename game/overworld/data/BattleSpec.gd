@@ -33,6 +33,14 @@ enum DefeatPolicy { WHITEOUT, CONTINUE, RETRY }
 @export var story_critical: bool = false
 ## Play the VS clash before a trainer battle.
 @export var clash_intro: bool = false
+## A FRIENDLY battle (a training spar, a rival friendly): it only knocks units out -- it never
+## causes permadeath (DECISIONS.md #29). Shown as "Friendly spar" on the battle.
+@export var spar: bool = false
+## Units that MUST SURVIVE ("Protect Linnea"): a name, character id or party member id each. On a
+## tactical board a matching player-side unit (a guest ally, a party member) falling is a defeat;
+## in a duel, a matching party member fainting. Either way the journey is over: GAME OVER, back
+## to the last save (both tiers).
+@export var protect: Array[String] = []
 
 
 func kind_name() -> String:
@@ -68,6 +76,8 @@ func to_request(source: String, fallback_id: String = "") -> BattleRequest:
 		"can_befriend": can_befriend,
 		"defeat_policy": policy_name(),
 		"story_critical": story_critical,
+		"spar": spar,
+		"protect": protect.duplicate(),
 	}
 	var items: Array = []
 	for i in reward_items:

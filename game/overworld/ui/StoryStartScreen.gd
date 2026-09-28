@@ -2,19 +2,30 @@ extends Control
 
 ## STORY START (Solo -> Story): the three journey slots as grove option cards
 ## (docs/design/OVERWORLD.md §4.10). A filled slot shows where you are, how long you have
-## walked and your party's crests -- pressing it CONTINUES; an empty slot starts a NEW JOURNEY.
-## "Delete" (press twice to confirm) clears the focused slot.
+## walked, your party's crests and the journey's difficulty tier -- pressing it CONTINUES; an
+## empty slot starts a NEW JOURNEY, which first asks for the DIFFICULTY TIER
+## (docs/design/DECISIONS.md #29 refinements): two grove choice cards, CLASSIC (permadeath) and
+## CASUAL (knocked-out companions recover for gold), each explained, with the rule that a journey
+## may later move DOWN a tier but never up. "Delete" (press twice to confirm) clears the focused
+## slot.
 ##
-## Keyboard: 1-3 pick a slot, Del deletes the focused one, Esc / B back to the Solo picker.
+## Keyboard: 1-3 pick a slot, Del deletes the focused one, Esc / B back to the Solo picker. In the
+## tier picker: 1 Classic, 2 Casual (or arrows + Confirm), Esc / B back to the slots.
 
 const SOLO_SCENE := "res://menus/SoloModeSelect.tscn"
 const CARD_SIZE := Vector2(340, 200)
+const TIER_CARD_SIZE := Vector2(420, 330)
 
 var _cards: Array[Button] = []
 var _delete_button: Button = null
 var _status: Label = null
 var _armed_delete: int = 0
 var _story = null
+var _slot_row: HBoxContainer = null
+## The New Journey tier picker (hidden until an empty slot is pressed).
+var _tier_box: VBoxContainer = null
+var _tier_cards: Dictionary = {}
+var _tier_slot: int = 0
 
 
 func _ready() -> void:
@@ -41,6 +52,9 @@ func _build(page: Dictionary) -> void:
 		var card := _slot_card(slot)
 		row.add_child(card)
 		_cards.append(card)
+	_slot_row = row
+	_tier_box = _build_tier_picker()
+	col.add_child(_tier_box)
 	_status = MenuKit.label("", &"DimLabel")
 	_status.name = "Status"
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -95,6 +109,13 @@ func _slot_card(slot: int) -> Button:
 		var tag2 := MenuKit.label("CONTINUE", &"SectionLabel")
 		tag2.add_theme_color_override("font_color", MenuTheme.EL_NATURE.lightened(0.25))
 		v.add_child(tag2)
+		var tier: String = String(data.get("tier", StoryState.TIER_CASUAL))
+		var tier_l := MenuKit.label(StoryPermadeath.tier_name(tier), &"MutedLabel")
+		tier_l.name = "TierTag"
+		tier_l.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+		tier_l.add_theme_color_override("font_color",
+			MenuTheme.DANGER if tier == StoryState.TIER_CLASSIC else MenuTheme.TEXT_MUTED)
+		v.add_child(tier_l)
 		v.add_child(MenuKit.label(StorySnapshot.describe(data, _area_names()), &"DimLabel", true))
 		v.add_child(_party_row(data))
 		btn.pressed.connect(_on_continue.bind(slot))
@@ -129,10 +150,90 @@ func _area_names() -> Dictionary:
 	return out
 
 
+## An empty slot: ask for the difficulty tier first.
 func _on_new(slot: int) -> void:
-	if _story == null:
+	open_tier_picker(slot)
+
+
+# --- The New Journey tier picker ----------------------------------------------------------
+
+func _build_tier_picker() -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.name = "TierPicker"
+	box.add_theme_constant_override("separation", MenuTheme.SP_L)
+	box.visible = false
+	var head := MenuKit.label("Choose your journey's difficulty", &"SubheadingLabel")
+	head.name = "TierHeading"
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(head)
+	var row := HBoxContainer.new()
+	row.name = "TierCards"
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", MenuTheme.SP_XL)
+	box.add_child(row)
+	var rs: StoryRuleset = _story.ruleset() if _story != null and _story.has_method("ruleset") else null
+	var fee: int = rs.revive_fee_per_member if rs != null else 50
+	var classic := MenuKit.choice_card("Classic", "Permadeath",
+		StoryPermadeath.tier_blurb(StoryState.TIER_CLASSIC, rs),
+		["A fallen companion's item returns to your bag; their story stays in Journey > Party.",
+			"Losing the hero, or someone you swore to protect, ends the journey.",
+			"You may lower the difficulty later -- never raise it again."],
+		MenuTheme.DANGER, null, TIER_CARD_SIZE)
+	classic.name = "ClassicCard"
+	classic.pressed.connect(_on_tier_picked.bind(StoryState.TIER_CLASSIC))
+	row.add_child(classic)
+	var casual := MenuKit.choice_card("Casual", "Knocked out, never lost",
+		StoryPermadeath.tier_blurb(StoryState.TIER_CASUAL, rs),
+		[("Revive at any Wayshrine for %d gold each." % fee) if fee > 0 else "Revive at any Wayshrine for free.",
+			"Revive items from merchants work anywhere.",
+			"Losing the hero, or someone you swore to protect, still ends the journey."],
+		MenuTheme.EL_NATURE, null, TIER_CARD_SIZE)
+	casual.name = "CasualCard"
+	casual.pressed.connect(_on_tier_picked.bind(StoryState.TIER_CASUAL))
+	row.add_child(casual)
+	classic.focus_neighbor_right = classic.get_path_to(casual)
+	casual.focus_neighbor_left = casual.get_path_to(classic)
+	_tier_cards = {StoryState.TIER_CLASSIC: classic, StoryState.TIER_CASUAL: casual}
+	return box
+
+
+## Show the difficulty picker for a new journey in [param slot] (the default tier focused).
+func open_tier_picker(slot: int) -> void:
+	_tier_slot = slot
+	_slot_row.visible = false
+	_delete_button.visible = false
+	_tier_box.visible = true
+	var rs: StoryRuleset = _story.ruleset() if _story != null and _story.has_method("ruleset") else null
+	var default_tier: String = rs.default_tier if rs != null else StoryState.TIER_CASUAL
+	var focus: Button = _tier_cards.get(default_tier, _tier_cards[StoryState.TIER_CASUAL])
+	MenuNav.focus_deferred(focus)
+	MenuKit.set_status(_status, "Journey %d -- you can move down a tier later if it's too hard, but never back up." % slot, "")
+
+
+func is_tier_picker_open() -> bool:
+	return _tier_box != null and _tier_box.visible
+
+
+func close_tier_picker() -> void:
+	var slot: int = _tier_slot
+	_tier_slot = 0
+	_tier_box.visible = false
+	_slot_row.visible = true
+	_delete_button.visible = true
+	MenuKit.set_status(_status, "", "")
+	if slot > 0 and slot <= _cards.size():
+		_cards[slot - 1].grab_focus()
+
+
+## The tier cards ({"classic": Button, "casual": Button}).
+func tier_cards() -> Dictionary:
+	return _tier_cards
+
+
+func _on_tier_picked(tier: String) -> void:
+	if _story == null or _tier_slot <= 0:
 		return
-	var r: Dictionary = _story.new_journey(slot)
+	var r: Dictionary = _story.new_journey(_tier_slot, tier)
 	if not bool(r.get("success", false)):
 		MenuKit.set_status(_status, "Could not start a journey (%s)." % String(r.get("reason", "")), "error")
 		return
@@ -182,6 +283,9 @@ func _on_delete_pressed() -> void:
 
 
 func _on_back() -> void:
+	if is_tier_picker_open():
+		close_tier_picker()
+		return
 	MenuNav.change_scene(self, SOLO_SCENE)
 
 
@@ -193,6 +297,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
 	var k := event as InputEventKey
+	if is_tier_picker_open():
+		var pick: String = ""
+		if k.keycode == KEY_1:
+			pick = StoryState.TIER_CLASSIC
+		elif k.keycode == KEY_2:
+			pick = StoryState.TIER_CASUAL
+		if not pick.is_empty():
+			get_viewport().set_input_as_handled()
+			(_tier_cards[pick] as Button).grab_focus()
+			(_tier_cards[pick] as Button).pressed.emit()
+		return
 	if k.keycode == KEY_DELETE:
 		get_viewport().set_input_as_handled()
 		_on_delete_pressed()

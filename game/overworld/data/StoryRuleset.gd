@@ -50,6 +50,24 @@ const DEFAULT_PATH := "res://game/overworld/content/story_ruleset.tres"
 ## Gold lost on a whiteout (0 = Q2 default: lose nothing but position).
 @export var whiteout_gold_penalty: int = 0
 
+@export_group("Difficulty tiers")
+## The tier a journey gets when nothing chose one (tools, tests, [method StoryController.new_journey]
+## without a tier). The New Journey screen always asks. "classic" or "casual".
+@export_enum("classic", "casual") var default_tier: String = "casual"
+## CASUAL: gold a Wayshrine asks to revive EACH knocked-out member (the living are still rested for
+## free). 0 = revives are free (the pre-tier behaviour). Revive items work in both tiers.
+@export var revive_fee_per_member: int = 50
+## A whiteout (you wake at the Wayshrine) also revives the knocked-out, in both tiers -- a lost
+## battle already cost you your position (and [member whiteout_gold_penalty]). Off: they stay down
+## until revived.
+@export var whiteout_revives: bool = true
+## A member knocked out in a friendly SPAR (never permadeath) leaves it at 1 HP instead of
+## knocked out: a friendly never costs a revive. Off: it stays knocked out like any KO.
+@export var spar_ko_recovers: bool = true
+## CLASSIC: a battle that would leave the journey with NO living member (everyone fallen) is a
+## GAME OVER (back to the last save) instead of a whiteout with nobody left to fight.
+@export var classic_wipe_is_game_over: bool = true
+
 
 static func load_default() -> StoryRuleset:
 	if ResourceLoader.exists(DEFAULT_PATH):

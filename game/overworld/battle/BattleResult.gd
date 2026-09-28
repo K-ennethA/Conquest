@@ -34,6 +34,13 @@ var turns: int = 0
 ## Battle items the player USED ({item_id: count}) -- taken from the story bag by
 ## [StoryResultApplier], whatever the outcome.
 var items_used: Dictionary = {}
+## A friendly SPAR (copied from the request): nobody falls for good in it.
+var spar: bool = false
+## Why this battle ENDED THE JOURNEY ("" = it did not): "hero" (the main character fell),
+## "protect:<name>" (a unit the mission said to protect fell) or "wipe" (Classic: nobody left).
+## Set by StoryController ([StoryPermadeath.game_over_reason]); a game over is never applied --
+## the player goes back to the last save.
+var game_over_reason: String = ""
 
 
 func is_victory() -> bool:
@@ -42,6 +49,10 @@ func is_victory() -> bool:
 
 func is_defeat() -> bool:
 	return outcome == OUTCOME_DEFEAT
+
+
+func is_game_over() -> bool:
+	return not game_over_reason.is_empty()
 
 
 func has_open_offer() -> bool:
@@ -67,6 +78,8 @@ func to_dict() -> Dictionary:
 		"befriend_offer": befriend_offer.duplicate(true),
 		"turns": turns,
 		"items_used": items_used.duplicate(),
+		"spar": spar,
+		"game_over_reason": game_over_reason,
 	}
 
 
@@ -104,6 +117,8 @@ static func from_dict(d) -> BattleResult:
 		}
 	r.turns = maxi(0, int(d.get("turns", 0)))
 	r.items_used = _count_map(d.get("items_used", {}))
+	r.spar = bool(d.get("spar", false))
+	r.game_over_reason = String(d.get("game_over_reason", ""))
 	return r
 
 

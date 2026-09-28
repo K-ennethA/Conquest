@@ -15,6 +15,9 @@ extends RefCounted
 ##     [BattleResult] a duel reports: member HP by meta, KO'd members wounded, defeated foes.
 
 const MEMBER_META := &"story_member_id"
+## Meta on the unit that is the MAIN CHARACTER (a party entry flagged hero): its fall is always a
+## game over ([StoryPermadeath]).
+const HERO_META := &"story_hero"
 
 
 ## The members sent into a TACTICAL battle: healthy, in party order, up to [param squad_size].
@@ -40,6 +43,7 @@ static func party_snapshot(members: Array) -> Array:
 			"current_hp": sm.current_hp,
 			"item_id": sm.item_id,
 			"growth": sm.growth.duplicate(true),
+			"hero": sm.is_hero,
 		})
 	return out
 
@@ -80,6 +84,8 @@ static func prepare_board(map_loader, request: BattleRequest) -> Dictionary:
 				continue
 			claimed.append(u)
 			u.set_meta(MEMBER_META, mid)
+			if bool(p.get("hero", false)):
+				u.set_meta(HERO_META, true)
 			var hp: int = int(p.get("current_hp", StoryPartyMember.HP_FULL))
 			if hp != StoryPartyMember.HP_FULL and hp > 0 and u.unit_stats != null:
 				u.unit_stats.set_stat("health", mini(hp, u.max_health))
@@ -93,11 +99,19 @@ static func build_result(outcome: String, request: BattleRequest, tracking: Dict
 		turns: int = 0) -> BattleResult:
 	var result := BattleResult.make(request.encounter_id if request != null else "", outcome)
 	result.turns = turns
+	result.spar = request != null and request.is_spar()
 	var members: Dictionary = tracking.get("members", {})
 	if request != null:
 		for p in request.party:
 			var mid: String = String(p.get("member_id", ""))
-			var u = members.get(mid, null)
+			if not members.has(mid):
+				# Never placed (the map had no start slot left for it): it sat the battle out --
+				# carried HP, no Growth, and never counted as knocked out (let alone fallen).
+				result.party_after.append({"member_id": mid,
+					"current_hp": int(p.get("current_hp", StoryPartyMember.HP_FULL)), "wounded": false,
+					"fought": false, "kos": 0, "ko_elements": {}})
+				continue
+			var u = members[mid]
 			var alive: bool = u != null and is_instance_valid(u) and u.is_alive()
 			var hp: int = int(u.current_health) if alive else 0
 			# Every fielded member fought; its KOs (tracking["kos"], from the battle's
@@ -112,3 +126,37 @@ static func build_result(outcome: String, request: BattleRequest, tracking: Dict
 			if not cid.is_empty():
 				result.defeated.append(cid)
 	return result
+
+
+## The board GUARDS a story battle adds to the map's rules ([ProtectUnit] lose conditions for
+## player 0's units): one per [method BattleRequest.protect_targets] entry ("Protect Linnea" --
+## a guest ally, a party member), and one for the HERO (a party entry flagged hero; not in a
+## spar). Each carries meta "story_reason" -- "protect:<name>" / "hero" -- which becomes the
+## result's game-over reason when it fails. [param names] ({member_id: display name}) labels
+## the hero's guard.
+static func guards_for(request: BattleRequest, names: Dictionary = {}) -> Array[ProtectUnit]:
+	var out: Array[ProtectUnit] = []
+	if request == null:
+		return out
+	for t in request.protect_targets():
+		# A character id reads as its name on the banner ("gem_knight" -> "Geode").
+		var ch: CharacterResource = CharacterLibrary.get_character(StringName(t))
+		var shown: String = ch.display_name if ch != null and not ch.display_name.is_empty() else t
+		var g := ProtectUnit.make(t, shown, 0)
+		g.set_meta(&"story_reason", "%s:%s" % [StoryPermadeath.REASON_PROTECT, shown])
+		out.append(g)
+	if not request.is_spar():
+		for mid in request.hero_member_ids():
+			var h := ProtectUnit.make(mid, String(names.get(mid, mid)), 0)
+			h.set_meta(&"story_reason", StoryPermadeath.REASON_HERO)
+			out.append(h)
+	return out
+
+
+## The game-over reason of the first of [param guards] that FAILED against [param units] (the
+## board as the battle ended), or "".
+static func failed_guard_reason(guards: Array, units: Array) -> String:
+	for g in guards:
+		if g is ProtectUnit and (g as ProtectUnit).evaluate({"units": units}) == WinCondition.Status.FAILED:
+			return String((g as ProtectUnit).get_meta(&"story_reason", StoryPermadeath.REASON_PROTECT))
+	return ""
