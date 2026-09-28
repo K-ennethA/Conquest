@@ -625,9 +625,11 @@ func _slot_of_move(unit, move) -> int:
 
 ## The configured AI difficulty (NORMAL when GameSettings is unavailable, e.g. tests).
 func _forced_control_difficulty() -> int:
-	var gs = get_node_or_null("/root/GameSettings")
-	if gs != null and "ai_difficulty" in gs:
-		return int(gs.ai_difficulty)
+	# The autoload directly, not get_node("/root/..."): a turn system is not always inside
+	# the scene tree when a forced-control turn resolves, and an absolute get_node from
+	# outside the tree is an engine error (seen in the castle_siege soak).
+	if GameSettings != null and "ai_difficulty" in GameSettings:
+		return int(GameSettings.ai_difficulty)
 	return BotController.Difficulty.NORMAL
 
 # Debug and info methods
