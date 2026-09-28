@@ -38,7 +38,9 @@ func _cs() -> NetSessionNode:
 func _connect_pair() -> bool:
 	assert_eq(_hs().host_game("Hosty", _port), OK, "host listens")
 	assert_eq(_cs().join_game("127.0.0.1", "Clienty", _port), OK, "client dials")
-	return await H.wait_until(get_tree(), func(): return _cs().local_slot() == 1 and _hs().player_count() == 2)
+	# 15 s, not the 5 s default: on a busy full-suite run the real ENet handshake over
+	# loopback occasionally took longer than 5 s and flaked the forfeit test.
+	return await H.wait_until(get_tree(), func(): return _cs().local_slot() == 1 and _hs().player_count() == 2, 15000)
 
 
 func test_client_connects_and_is_seated_in_slot_1() -> void:
