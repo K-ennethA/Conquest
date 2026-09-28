@@ -29,6 +29,8 @@ func test_barkling_links_to_oakheart_and_back() -> void:
 	assert_string_contains(bark, "Evolves into", "Barkling's page says what it becomes")
 	assert_string_contains(oak, "Evolves from", "Oakheart's page says where it comes from")
 	assert_string_contains(bark, "Growth 3", "with the trigger text")
+	assert_string_contains(bark, "Requires all of", "every requirement is listed (DECISIONS.md #26)")
+	assert_string_contains(bark, "Win 2 battles with it", "the battle-feat requirement too")
 
 
 func test_units_in_no_line_have_no_evolution_block() -> void:

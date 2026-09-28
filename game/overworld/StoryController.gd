@@ -26,6 +26,17 @@ extends Node
 ##           pending, [method offer_pending_evolutions]) -> battle_concluded(result) -> the
 ##           paused script continues (e.g. the befriend prompt)
 ##
+##   * EVOLUTION AUTO-OFFERS (docs/design/DECISIONS.md #27, docs/STORY_MODE.md "Evolution in
+##     story"): whenever requirements MAY have become met, the Evolution screen is offered for
+##     eligible members -- never for a member on HOLD. The events: after a battle (every available
+##     edge), entering a new area ("area": warp_to), a story flag set / a member joining ("flag" /
+##     "party": StoryState.drain_changes, flushed once the script that set them ends), using an
+##     item from the bag ([method use_item_on_member]). A non-battle event only offers the edges
+##     it could have changed ([method EvolutionResource.responds_to]), so "Not now" never turns
+##     into a nag on every step or area change -- the offer returns at the next NEW relevant
+##     event, and the member's EVOLVE button in Journey -> Party is always there
+##     ([method evolve_from_menu]).
+##
 ## GameOverScreen finds this node through the "battle_mode_controller" group and only while
 ## [method is_active] (a story tactical battle is live); every other battle sees nothing.
 
@@ -69,6 +80,11 @@ var _resume_result: BattleResult = null
 var _pending_message: String = ""
 ## Offer pending evolutions once the overworld is back (set by _conclude, not after a whiteout).
 var _offer_after_battle: bool = false
+## Evolution auto-offer events not offered yet: {kinds: Array[String], flags: Array[String]}
+## ([method note_evolution_event] / [method flush_evolution_events]).
+var _pending_event: Dictionary = {}
+## An offer chain is on screen (never stack a second one on top).
+var _offering: bool = false
 
 ## Tests switch scene changes off and drive the round trip by hand.
 var scene_changes_enabled: bool = true
@@ -204,6 +220,10 @@ func _begin_session(s: StoryState, slot: int) -> void:
 	_resume_result = null
 	_pending_message = ""
 	_offer_after_battle = false
+	_pending_event = {}
+	_offering = false
+	if s != null:
+		s.drain_changes()   # loading a save "sets" every flag: not news
 	_runner = StoryScriptRunner.new()
 	session_changed.emit()
 
@@ -312,6 +332,8 @@ func warp_to(area_id: String, entry_id: String, from_cell: Vector3i = Cells.INVA
 				cell = c2
 	if area_id != _state.location_area():
 		_state.on_area_changed()
+		# A new place may meet a Location / Weather requirement: offered once the area is up.
+		note_evolution_event("area")
 	_state.set_location(area_id, cell, String(e["facing"]))
 	_state.mark_visited(area_id)
 	_state.grace_steps = _ruleset.grace_steps if _ruleset != null else 3
@@ -367,36 +389,137 @@ func _emit_concluded(result) -> void:
 	# "After the battle, X is evolving!" -- before the paused script resumes (EVOLUTION.md §6).
 	if _offer_after_battle:
 		_offer_after_battle = false
+		# The battle's rewards may have set flags: every available edge is offered anyway.
+		if _state != null:
+			_state.drain_changes()
 		await offer_pending_evolutions({"trigger": "after_battle"})
 	battle_concluded.emit(result)
 
 
 ## Chain an [EvolutionScreen] for every party member with an evolution available (party order),
-## each awaited before the next. Evolve = the member BECOMES the form ([StoryGrowth.evolve],
-## which also unlocks it for open modes); Not now = nothing written, offered again after the
-## next battle. Saves when anything evolved. Returns how many members evolved.
-func offer_pending_evolutions(extra: Dictionary = {}) -> int:
+## each awaited before the next -- members on HOLD are skipped (DECISIONS.md #27). With an
+## [param event] ({kinds, flags}) only the edges it could have changed are offered (no nag
+## loop); empty = every available edge (after a battle). Evolve = the member BECOMES the form
+## ([StoryGrowth.evolve], which also unlocks it for open modes); Not now = nothing written: the
+## member's EVOLVE in Journey -> Party stays, and the offer returns at the next relevant event.
+## Saves when anything evolved. Returns how many members evolved.
+func offer_pending_evolutions(extra: Dictionary = {}, event: Dictionary = {}) -> int:
 	if _state == null or not is_inside_tree():
 		return 0
-	var ctx: Dictionary = StoryGrowth.evolution_context(_state, extra)
-	ctx["area_id"] = _state.location_area()
+	if _offering:
+		# One chain at a time: fold this one into the next flush.
+		for k in event.get("kinds", ["battle"]):
+			note_evolution_event(String(k), event.get("flags", []))
+		return 0
+	_offering = true
 	var evolved: int = 0
-	for mid in StoryGrowth.pending(_state, ctx):
-		var m: StoryPartyMember = _state.member(mid)
+	for mid in StoryGrowth.pending(_state, StoryGrowth.evolution_context(_state, extra), true, event):
+		var m: StoryPartyMember = _state.member(mid) if _state != null else null
 		if m == null:
 			continue
-		if await offer_evolution(mid, StoryGrowth.available_for(m, ctx), ctx, false, false):
+		# Fresh per member: an earlier evolution changed the party the context describes.
+		var ctx: Dictionary = StoryGrowth.evolution_context(_state, extra)
+		var edges: Array[EvolutionResource] = StoryGrowth.offerable_for(m, ctx, event)
+		if edges.is_empty():
+			continue
+		if await offer_evolution(mid, edges, ctx, false, false):
 			evolved += 1
+	_offering = false
 	if evolved > 0:
 		save_game()
 	return evolved
 
 
+## Record an auto-offer event of [param kind] ("area", "flag", "party", "item", "battle"; flag
+## events name their [param flags]) to offer at the next [method flush_evolution_events].
+func note_evolution_event(kind: String, flags: Array = []) -> void:
+	var kinds: Array = _pending_event.get("kinds", [])
+	if not kinds.has(kind):
+		kinds.append(kind)
+	_pending_event["kinds"] = kinds
+	var fl: Array = _pending_event.get("flags", [])
+	for f in flags:
+		if not fl.has(String(f)):
+			fl.append(String(f))
+	_pending_event["flags"] = fl
+
+
+## The events waiting to be offered (a copy; {} when none).
+func pending_evolution_event() -> Dictionary:
+	return _pending_event.duplicate(true)
+
+
+## Offer what the pending events (plus flags set / members joined since the last flush) made due.
+## Called by the overworld once an area is up and whenever a script ends; waits (keeps the
+## events) while a script runs or another offer chain is on screen. Returns how many evolved.
+func flush_evolution_events() -> int:
+	if _state == null or not is_inside_tree() or _offering or _runner.is_running():
+		return 0
+	var changes: Dictionary = _state.drain_changes()
+	if not (changes["flags"] as Array).is_empty():
+		note_evolution_event("flag", changes["flags"])
+	if bool(changes["party"]):
+		note_evolution_event("party")
+	if _pending_event.is_empty():
+		return 0
+	var event: Dictionary = _pending_event
+	_pending_event = {}
+	return await offer_pending_evolutions({"trigger": "event"}, event)
+
+
+## EVOLVE LATER (Journey -> Party, DECISIONS.md #27): open the Evolution screen for
+## [param member_id] over every edge it can take now -- or by USING an item the bag holds
+## ([StoryGrowth.menu_edges]) -- whatever its Hold. {success, reason, evolved}; reason
+## "not_available" when nothing is due.
+func evolve_from_menu(member_id: String) -> Dictionary:
+	var m: StoryPartyMember = _state.member(member_id) if _state != null else null
+	if m == null:
+		return {"success": false, "reason": "no_member", "evolved": false}
+	var ctx: Dictionary = StoryGrowth.evolution_context(_state, {"trigger": "menu"})
+	var menu: Dictionary = StoryGrowth.menu_edges(m, ctx)
+	if (menu["edges"] as Array).is_empty():
+		return {"success": false, "reason": "not_available", "evolved": false}
+	var evolved: bool = await offer_evolution(member_id, menu["edges"], ctx, false, true, menu["use_items"])
+	return {"success": true, "reason": "", "evolved": evolved}
+
+
+## USE an item from the bag on a member (Journey -> Bag -> Use, DECISIONS.md #26): when the item
+## makes one of the member's evolutions available ([UseItemTrigger]) its Evolution screen is
+## offered (Hold does not apply: the player asked); a confirmed evolution SPENDS the item, Not now
+## keeps it. {success, reason, evolved}; reason "no_item" / "no_member" / "no_effect".
+func use_item_on_member(item_id: String, member_id: String) -> Dictionary:
+	if _state == null:
+		return {"success": false, "reason": "no_session", "evolved": false}
+	if _state.item_count(item_id) <= 0:
+		return {"success": false, "reason": "no_item", "evolved": false}
+	var m: StoryPartyMember = _state.member(member_id)
+	if m == null:
+		return {"success": false, "reason": "no_member", "evolved": false}
+	var ctx: Dictionary = StoryGrowth.evolution_context(_state, {"trigger": "use_item", "used_item": item_id})
+	var edges: Array[EvolutionResource] = StoryGrowth.edges_for_item(m, item_id, ctx)
+	if edges.is_empty():
+		return {"success": false, "reason": "no_effect", "evolved": false}
+	var evolved: bool = await offer_evolution(member_id, edges, ctx)
+	return {"success": true, "reason": "", "evolved": evolved}
+
+
+## Put party member [param member_id] on / off HOLD (no automatic evolution prompts) and save.
+func set_member_hold(member_id: String, on: bool) -> bool:
+	var m: StoryPartyMember = _state.member(member_id) if _state != null else null
+	if m == null:
+		return false
+	m.hold = on
+	save_game()
+	return true
+
+
 ## Open ONE [EvolutionScreen] for party member [param member_id] over [param edges] and await it.
 ## [param scripted] evolves past the edges' triggers (a story beat -- [EvolveMemberCommand]).
+## [param use_items] ({edge id: item_id}): an edge taken by USING a bag item (the menu's EVOLVE);
+## that item joins the commit's context and is spent on a confirmed evolution.
 ## True when the member evolved. [param save] saves the journey after an evolution.
 func offer_evolution(member_id: String, edges: Array, ctx: Dictionary = {}, scripted: bool = false,
-		save: bool = true) -> bool:
+		save: bool = true, use_items: Dictionary = {}) -> bool:
 	var m: StoryPartyMember = _state.member(member_id) if _state != null else null
 	if m == null or edges.is_empty() or not is_inside_tree():
 		return false
@@ -404,8 +527,20 @@ func offer_evolution(member_id: String, edges: Array, ctx: Dictionary = {}, scri
 		and (_host as Node).is_inside_tree() else get_tree().root
 	var state_ref: StoryState = _state
 	var commit := func(edge: EvolutionResource) -> Dictionary:
-		return StoryGrowth.evolve(state_ref, member_id, edge, ctx, scripted)
-	var screen: EvolutionScreen = EvolutionScreen.open(parent, member_id, edges, commit, m.item_id, m.nickname)
+		var c: Dictionary = ctx
+		if use_items.has(edge.id):
+			c = ctx.duplicate()
+			c["used_item"] = String(use_items[edge.id])
+		return StoryGrowth.evolve(state_ref, member_id, edge, c, scripted)
+	# The screen names the item an edge spends (the bag's Use, or the menu's EVOLVE-by-item).
+	var shown_items: Dictionary = use_items.duplicate()
+	var used: String = String(ctx.get("used_item", ""))
+	if not used.is_empty():
+		for e in edges:
+			if e is EvolutionResource and (e as EvolutionResource).use_item_ids().has(used):
+				shown_items[(e as EvolutionResource).id] = used
+	var screen: EvolutionScreen = EvolutionScreen.open(parent, member_id, edges, commit, m.item_id, m.nickname,
+		shown_items)
 	evolution_offered.emit(screen)
 	# An edge that needs no confirmation (a story beat) evolves at once; the screen only shows it.
 	if edges.size() == 1 and not (edges[0] as EvolutionResource).requires_confirmation:
@@ -596,12 +731,14 @@ func _on_battle_resolved(outcome, _context = {}) -> void:
 	if TurnSystemManager != null and TurnSystemManager.has_active_turn_system():
 		turns = WinConditionLibrary.completed_rounds(TurnSystemManager.get_active_turn_system())
 	_tracking["kos"] = _member_kos()
+	_tracking["ko_elements"] = _member_ko_elements()
 	var result: BattleResult = StoryBattleBridge.build_result(String(outcome), _active_request, _tracking, turns)
 	report_battle_result(result)
 	# The end screen (revealed right after this signal) shows the Growth that Continue will
 	# award -- the story party's own records, not the global ledger GrowthTracker writes.
 	var awards: Dictionary = StoryGrowth.awards_for(result, EvolutionRules.current(), _growth_context())
-	GrowthTracker.seed_growth_this_battle(StoryGrowth.preview_rows(_state, awards))
+	var feats: Dictionary = StoryGrowth.feats_for(_state, result, EvolutionRules.current(), _growth_context())
+	GrowthTracker.seed_growth_this_battle(StoryGrowth.preview_rows(_state, awards, {}, feats))
 
 
 ## Enemy KOs per member this battle, from the battle's GrowthTracker roll call ({} without one).
@@ -614,6 +751,22 @@ func _member_kos() -> Dictionary:
 			for row in (n as GrowthTracker).collect_rows():
 				var uid: String = String(row.get("uid", ""))
 				out[uid] = maxi(int(out.get(uid, 0)), int(row.get("kos", 0)))
+	return out
+
+
+## {member_id: {element: KOs}} this battle, from the battle's GrowthTracker (battle feats).
+func _member_ko_elements() -> Dictionary:
+	var out: Dictionary = {}
+	if not is_inside_tree():
+		return out
+	for n in get_tree().get_nodes_in_group(GrowthTracker.GROUP):
+		if n is GrowthTracker:
+			for row in (n as GrowthTracker).collect_rows():
+				var uid: String = String(row.get("uid", ""))
+				var by = row.get("element_kos", {})
+				if uid.is_empty() or not (by is Dictionary) or (by as Dictionary).is_empty():
+					continue
+				out[uid] = (by as Dictionary).duplicate()
 	return out
 
 
@@ -737,6 +890,7 @@ func _retry() -> void:
 		var ctx: ScriptContext = _runner.context()
 		if ctx != null:
 			ctx.state = s
+		s.drain_changes()
 	request.seed = _fresh_seed()
 	_reported = false
 	_last_result = null

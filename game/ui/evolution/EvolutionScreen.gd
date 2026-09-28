@@ -23,7 +23,11 @@ class_name EvolutionScreen
 ## safe: nothing here needs a renderer to reach [signal finished].
 ##
 ## Input: Esc / pad B = Not now (prompt) or Continue (reveal); Enter / pad A presses the
-## focused button. Focus is trapped inside the overlay and handed back on close.
+## focused button. Focus is trapped inside the overlay and handed back on close. While open the
+## overlay is in [constant InputActions.OVERLAY_GROUP], so the overworld hero cannot walk behind it.
+##
+## PROMOTIONS (DECISIONS.md #8, #16): an edge whose [member EvolutionResource.kind_label] is
+## "Promote" reads "<Name> is being promoted..." / [Promote] / "<Name> was promoted to <Class>!".
 
 signal finished(evolved: bool, edge: EvolutionResource)
 
@@ -58,6 +62,9 @@ var commit: Callable = Callable()
 var carried_item_id: String = ""
 ## The member's own name for the ribbons ("Sprig is evolving..."); "" = the form's name.
 var member_name: String = ""
+## {edge id: item_id}: the bag item an edge SPENDS when taken ([UseItemTrigger]); shown on the
+## prompt ("Uses one Sunstone.").
+var use_items: Dictionary = {}
 
 var _from: CharacterResource = null
 var _to: CharacterResource = null
@@ -77,6 +84,10 @@ var _flavor: Label = null
 var _branch_row: HBoxContainer = null
 var _reveal_box: HBoxContainer = null
 var _status: Label = null
+## "Uses one Sunstone." under the flavour (an item-driven edge).
+var _uses: Label = null
+## "Not now keeps it: evolve later from Journey > Party." (story prompt).
+var _later_hint: Label = null
 var not_now_button: Button = null
 var evolve_button: Button = null
 var continue_button: Button = null
@@ -87,13 +98,16 @@ var continue_button: Button = null
 ## [signal finished] on the returned screen.
 ## [param p_commit] / [param p_item_id]: the STORY caller's commit and carried item (see
 ## [member commit]); omitted in open modes.
+## [param p_use_items]: {edge id: item_id} the edge spends (see [member use_items]).
 static func open(parent: Node, member_uid: String, offered_edges: Array,
-		p_commit: Callable = Callable(), p_item_id: String = "", p_member_name: String = "") -> EvolutionScreen:
+		p_commit: Callable = Callable(), p_item_id: String = "", p_member_name: String = "",
+		p_use_items: Dictionary = {}) -> EvolutionScreen:
 	var screen := EvolutionScreen.new()
 	screen.configure(member_uid, offered_edges)
 	screen.commit = p_commit
 	screen.carried_item_id = p_item_id
 	screen.member_name = p_member_name
+	screen.use_items = p_use_items
 	parent.add_child(screen)
 	return screen
 
@@ -106,6 +120,19 @@ func is_story() -> bool:
 ## Who is evolving: the member's nickname when it has one ("Sprig"), else the form's name.
 func _who() -> String:
 	return member_name if not member_name.strip_edges().is_empty() else _from.display_name
+
+
+## The edge whose words the screen uses (the chosen one, else the first offered).
+func _word_edge() -> EvolutionResource:
+	if chosen_edge != null:
+		return chosen_edge
+	return edges[0] if not edges.is_empty() else null
+
+
+## "Evolve" / "Promote" for the action button.
+func verb() -> String:
+	var e: EvolutionResource = _word_edge()
+	return e.verb() if e != null else "Evolve"
 
 
 func configure(member_uid: String, offered_edges: Array) -> void:
@@ -184,6 +211,9 @@ func choose(edge: EvolutionResource) -> void:
 	chosen_edge = edge
 	_to = CharacterLibrary.get_character(edge.to_id)
 	evolve_button.disabled = false
+	evolve_button.text = verb()
+	_set_ribbon("%s %s" % [_who(), edge.progressive_text()])
+	_refresh_prompt_notes(phase)
 	_refresh_branch_row()
 
 
@@ -195,6 +225,7 @@ func _build() -> void:
 	_root.theme = MenuTheme.build()
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	_root.add_to_group(InputActions.OVERLAY_GROUP)
 	add_child(_root)
 
 	var dim := ColorRect.new()
@@ -277,6 +308,14 @@ func _build() -> void:
 	_reveal_box.visible = false
 	col.add_child(_reveal_box)
 
+	_uses = MenuKit.label("", &"", true)
+	_uses.name = "UsesItem"
+	_uses.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_uses.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	_uses.add_theme_color_override("font_color", MenuTheme.GOLD_LITE)
+	_uses.visible = false
+	col.add_child(_uses)
+
 	_status = MenuKit.label("", &"")
 	_status.name = "Status"
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -300,6 +339,12 @@ func _build() -> void:
 	continue_button.name = "ContinueButton"
 	continue_button.pressed.connect(dismiss)
 	actions.add_child(continue_button)
+	_later_hint = MenuKit.label("", &"MutedLabel", true)
+	_later_hint.name = "LaterHint"
+	_later_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_later_hint.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	_later_hint.visible = false
+	col.add_child(_later_hint)
 	_trap_focus()
 
 
@@ -380,7 +425,8 @@ func _fill_form(crest: PanelContainer, name_lbl: Label, tags: HBoxContainer, chr
 
 func _show_prompt() -> void:
 	phase = Phase.PROMPT
-	_set_ribbon("%s is evolving..." % _who())
+	var we: EvolutionResource = _word_edge()
+	_set_ribbon("%s %s" % [_who(), we.progressive_text() if we != null else "is evolving..."])
 	_preview.show_character(_from)
 	_fill_form(_to_crest, _to_name, _to_tags, null)
 	var flavor: String = chosen_edge.flavor if chosen_edge != null else "It could grow in more than one direction."
@@ -398,8 +444,11 @@ func _show_reveal() -> void:
 	_glow.modulate.a = 0.0
 	_preview.show_character(_to)
 	_fill_form(_to_crest, _to_name, _to_tags, _to)
-	_set_ribbon("%s evolved into %s!" % [_who(), _to.display_name])
+	_set_ribbon("%s %s %s!" % [_who(), chosen_edge.past_text() if chosen_edge != null else "evolved into",
+		_to.display_name])
 	_flavor.visible = false
+	_uses.visible = false
+	_later_hint.visible = false
 	_branch_row.visible = false
 	_build_reveal()
 	_reveal_box.visible = true
@@ -410,6 +459,8 @@ func _set_buttons_for(p: int) -> void:
 	not_now_button.visible = p == Phase.PROMPT
 	evolve_button.visible = p == Phase.PROMPT
 	evolve_button.disabled = chosen_edge == null
+	evolve_button.text = verb()
+	_refresh_prompt_notes(p)
 	continue_button.visible = p == Phase.REVEAL
 	if not is_inside_tree():
 		return
@@ -418,6 +469,39 @@ func _set_buttons_for(p: int) -> void:
 			call_deferred(&"_grab_if_live", evolve_button if chosen_edge != null else not_now_button)
 		Phase.REVEAL:
 			call_deferred(&"_grab_if_live", continue_button)
+
+
+## The prompt's small print: the item the chosen edge spends, and (story) where to find the offer
+## again after "Not now".
+func _refresh_prompt_notes(p: int) -> void:
+	var item_id: String = String(use_items.get(chosen_edge.id, "")) if chosen_edge != null else ""
+	if item_id.is_empty() and chosen_edge == null and edges.size() > 1:
+		for e in edges:
+			if use_items.has((e as EvolutionResource).id):
+				item_id = String(use_items[(e as EvolutionResource).id])
+	var item: ItemResource = ItemLibrary.get_item(item_id) if not item_id.is_empty() else null
+	_uses.text = ("Uses one %s %s from your bag." % [item.icon_hint, item.display_name]) if item != null else ""
+	_uses.visible = p == Phase.PROMPT and item != null
+	var we: EvolutionResource = _word_edge()
+	_later_hint.text = "Not now keeps the offer: %s later from Journey > Party." % \
+		(we.verb().to_lower() if we != null else "evolve")
+	_later_hint.visible = p == Phase.PROMPT and is_story()
+
+
+## The ribbon's text ("Sprig is evolving...") -- tests and tools.
+func ribbon_text() -> String:
+	var l := _ribbon.get_node_or_null("Text") as Label if _ribbon != null else null
+	return l.text if l != null else ""
+
+
+## The "Uses one Sunstone" line while shown, else "".
+func uses_text() -> String:
+	return _uses.text if _uses != null and _uses.visible else ""
+
+
+## True while the story prompt's "evolve later from Journey > Party" hint is shown.
+func later_hint_visible() -> bool:
+	return _later_hint != null and _later_hint.visible
 
 
 func _grab_if_live(c: Control) -> void:
@@ -546,6 +630,11 @@ func _build_reveal() -> void:
 	if is_story():
 		unlock_text = "%s is now %s for the rest of your journey; %s is also unlocked in Skirmish." \
 			% [_who(), _to.display_name, _to.display_name]
+	var spent: Array = result.get("consumed", []) if result.get("consumed", []) is Array else []
+	if not spent.is_empty():
+		var spent_item: ItemResource = ItemLibrary.get_item(String(spent[0]))
+		if spent_item != null:
+			unlock_text += " The %s was used up." % spent_item.display_name
 	var unlock := MenuKit.label(unlock_text, &"MutedLabel", true)
 	unlock.name = "UnlockNote"
 	unlock.custom_minimum_size = Vector2(300, 0)

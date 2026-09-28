@@ -16,6 +16,8 @@ const CONTENT_DIR: String = "res://game/characters/evolutions/"
 static var _graph: EvolutionGraph = null
 ## Discovered .tres paths (sorted), for diagnostics.
 static var _paths: Array[String] = []
+## Test-only edges served beside the content ([method add_extra_edges]).
+static var _extra_edges: Array[EvolutionResource] = []
 
 
 ## The graph over the shipped edges.
@@ -88,7 +90,24 @@ static func _ensure_scanned() -> void:
 		var res: Resource = load(path)
 		if res is EvolutionResource:
 			edges.append(res)
+	for e in _extra_edges:
+		edges.append(e)
 	_graph = EvolutionGraph.new(edges)
+
+
+## TEST SEAM: serve [param edges] (fixture / example edges, e.g. tests/helpers/evolution_examples)
+## BESIDE the shipped ones until [method clear_extra_edges]. Rebuilds the graph.
+static func add_extra_edges(edges: Array) -> void:
+	for e in edges:
+		if e is EvolutionResource and not _extra_edges.has(e):
+			_extra_edges.append(e)
+	_graph = null
+
+
+## Drop every [method add_extra_edges] edge (tests' after_each) and rebuild from content.
+static func clear_extra_edges() -> void:
+	_extra_edges.clear()
+	_graph = null
 
 
 static func _scan_dir(dir_path: String) -> void:

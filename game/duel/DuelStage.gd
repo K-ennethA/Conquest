@@ -378,12 +378,16 @@ func _show_results(result: DuelResult, standalone: bool) -> void:
 
 
 ## Standalone (DUEL_BATTLE.md §8.4): a member the duel's growth made ready is offered the
-## Evolution screen from the results card (story evolutions are the overworld's, never here).
+## Evolution screen from the results card (story evolutions are the overworld's, never here) --
+## unless the member is on HOLD (DECISIONS.md #27: no automatic prompts; Character Select's
+## EVOLVE still works).
 func _offer_standalone_evolutions(result: DuelResult) -> void:
 	for row in result.growth:
 		if not (row is Dictionary) or not bool(row.get("ready", false)):
 			continue
 		var uid: String = String(row.get("uid", ""))
+		if RosterLedger.is_held(uid):
+			continue
 		var edges: Array[EvolutionResource] = RosterLedger.available_evolutions(uid)
 		if edges.is_empty() or not is_inside_tree():
 			continue

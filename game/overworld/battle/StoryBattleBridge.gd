@@ -103,7 +103,8 @@ static func build_result(outcome: String, request: BattleRequest, tracking: Dict
 			# Every fielded member fought; its KOs (tracking["kos"], from the battle's
 			# GrowthTracker roll call) feed EVOLUTION's growth maths.
 			result.party_after.append({"member_id": mid, "current_hp": hp, "wounded": not alive,
-				"fought": true, "kos": int((tracking.get("kos", {}) as Dictionary).get(mid, 0))})
+				"fought": true, "kos": int((tracking.get("kos", {}) as Dictionary).get(mid, 0)),
+				"ko_elements": ((tracking.get("ko_elements", {}) as Dictionary).get(mid, {}) as Dictionary).duplicate()})
 	for rec in tracking.get("enemies", []):
 		var e = rec.get("unit", null)
 		if e == null or not is_instance_valid(e) or not e.is_alive():

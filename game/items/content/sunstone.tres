@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ItemResource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/items/ItemResource.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"sunstone"
+display_name = "Sunstone"
+description = "A warm amber stone that hums beside living wood. Used on a creature that is ready for it, it wakes a change Growth alone cannot."
+rarity = 1
+scope = 0
+stat_modifiers = {}
+regen_per_turn = 0
+damage_reduction_percent = 0
+icon_hint = "🔶"
+catalyst = true

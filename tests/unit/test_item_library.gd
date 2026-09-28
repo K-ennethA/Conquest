@@ -74,6 +74,8 @@ func test_every_stat_modifier_names_a_real_unit_stat():
 
 func test_every_item_actually_does_something():
 	for item in ItemLibrary.all_items():
+		if item.catalyst:
+			continue   # an evolution catalyst is USED on a unit, never worn (EVOLUTION.md §3.2a)
 		var has_stats: bool = false
 		for raw_stat in item.stat_modifiers.keys():
 			if int(item.stat_modifiers[raw_stat]) != 0:

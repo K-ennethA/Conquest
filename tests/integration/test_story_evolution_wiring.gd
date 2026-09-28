@@ -137,13 +137,15 @@ func _party_units() -> Array:
 	return out
 
 
-## A journey whose party is a Barkling one Growth short of Oakheart, plus Vineweave.
+## A journey whose party is a Barkling one won battle short of Oakheart (Growth 2 of 3, 1 of the
+## 2 wins -- EVOLUTION.md §3.2a), plus Vineweave.
 func _barkling_journey() -> StoryState:
 	StoryController.new_journey(1)
 	var s: StoryState = StoryController.state()
 	s.party.clear()
 	var bark: StoryPartyMember = s.add_member("tree_grunt")
 	bark.add_growth(2)
+	bark.add_feats({"wins": 1})
 	bark.item_id = "heartwood_charm"
 	s.add_member("vineweave")
 	s.set_location("mossway", Vector3i(19, 6, 0), "north")
@@ -243,6 +245,7 @@ func test_not_now_leaves_the_member_and_offers_again_later() -> void:
 	var s := _barkling_journey()
 	var bark: StoryPartyMember = s.member("tree_grunt")
 	bark.add_growth(1)
+	bark.add_feats({"wins": 1})
 	StoryController.offer_pending_evolutions()
 	assert_true(await _await_until(func() -> bool: return not _screens.is_empty(), 60), "offered")
 	if _screens.is_empty():
@@ -258,6 +261,7 @@ func test_save_and_reload_keeps_forms_and_growth() -> void:
 	var s := _barkling_journey()
 	var bark: StoryPartyMember = s.member("tree_grunt")
 	bark.add_growth(1)
+	bark.add_feats({"wins": 1})
 	var r: Dictionary = StoryGrowth.evolve(s, "tree_grunt", EvolutionLibrary.get_edge(&"tree_grunt__oakheart"))
 	assert_true(bool(r["success"]), "evolves")
 	assert_true(bool(StoryController.save_game()["success"]), "saves")

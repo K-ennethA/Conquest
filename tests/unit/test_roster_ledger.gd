@@ -63,7 +63,13 @@ func test_growth_accumulates_per_member() -> void:
 	assert_eq(RosterLedger.form_of("tree_grunt"), &"tree_grunt", "an implicit member is its base form")
 
 
+## Barkling -> Oakheart also needs 2 won battles (EVOLUTION.md §3.2a): meet that part.
+func _meet_the_wins() -> void:
+	RosterLedger.add_feats("tree_grunt", {"wins": 2})
+
+
 func test_availability_opens_exactly_at_the_goal() -> void:
+	_meet_the_wins()
 	RosterLedger.add_growth("tree_grunt", _goal - 1)
 	assert_eq(RosterLedger.available_evolutions("tree_grunt").size(), 0,
 		"one short of the goal (%d/%d) offers nothing" % [_goal - 1, _goal])
@@ -81,6 +87,7 @@ func test_evolve_unlocks_records_and_sets_the_form() -> void:
 	assert_false(RosterLedger.is_form_unlocked("oakheart"), "Oakheart starts locked")
 	assert_true(RosterLedger.is_form_unlocked("tree_grunt"), "a base form is always unlocked")
 	RosterLedger.add_growth("tree_grunt", _goal)
+	_meet_the_wins()
 	var result := RosterLedger.evolve("tree_grunt", _edge)
 	assert_true(bool(result["success"]), "evolve succeeds at the goal: %s" % str(result))
 	assert_true(RosterLedger.is_form_unlocked("oakheart"), "Oakheart is now unlocked for open modes")
@@ -111,6 +118,7 @@ func test_evolve_carries_the_item_only_when_the_new_form_wears_none() -> void:
 	ItemInventory.grant(ITEM)
 	ItemInventory.equip("tree_grunt", ITEM)
 	RosterLedger.add_growth("tree_grunt", _goal)
+	_meet_the_wins()
 	var result := RosterLedger.evolve("tree_grunt", _edge)
 	assert_true(bool(result["item_moved"]), "the Ironbark Sigil moved")
 	assert_eq(ItemInventory.equipped_item("oakheart"), ITEM, "Oakheart now wears it")
@@ -123,6 +131,7 @@ func test_evolve_never_overwrites_an_item_the_new_form_already_wears() -> void:
 	ItemInventory.equip("tree_grunt", ITEM)
 	ItemInventory.equip("oakheart", OTHER_ITEM)
 	RosterLedger.add_growth("tree_grunt", _goal)
+	_meet_the_wins()
 	var result := RosterLedger.evolve("tree_grunt", _edge)
 	assert_true(bool(result["success"]), "the evolution itself still happens")
 	assert_false(bool(result["item_moved"]), "but no item moved")
@@ -145,10 +154,78 @@ func test_scripted_story_evolution_skips_triggers_but_not_the_form_check() -> vo
 	assert_eq(RosterLedger.create_member("no_such_unit"), "", "an unknown character cannot join")
 
 
+func test_growth_alone_no_longer_evolves_barkling() -> void:
+	RosterLedger.add_growth("tree_grunt", _goal)
+	assert_eq(RosterLedger.available_evolutions("tree_grunt").size(), 0, "Growth 3 with no wins is not enough")
+	RosterLedger.add_feats("tree_grunt", {"wins": 1})
+	assert_eq(RosterLedger.available_evolutions("tree_grunt").size(), 0, "nor with one win")
+	RosterLedger.add_feats("tree_grunt", {"wins": 1})
+	assert_eq(RosterLedger.available_evolutions("tree_grunt").size(), 1, "two wins complete it")
+
+
+func test_the_open_mode_checklist() -> void:
+	RosterLedger.add_growth("tree_grunt", _goal)
+	RosterLedger.add_feats("tree_grunt", {"wins": 1})
+	var lists: Array[Dictionary] = RosterLedger.checklists("tree_grunt")
+	assert_eq(lists.size(), 1, "one entry per next form")
+	assert_eq(lists[0]["edge"], _edge, "Barkling -> Oakheart")
+	assert_false(bool(lists[0]["available"]), "not available yet")
+	var rows: Array = lists[0]["rows"]
+	assert_true(bool(rows[0]["met"]), "Growth met")
+	assert_false(bool(rows[1]["met"]), "wins not yet")
+	assert_eq(String(rows[1]["progress"]), "1/2", "1 of 2 wins")
+	assert_eq(RosterLedger.checklists("vineweave").size(), 0, "a unit in no line has no checklist")
+
+
+func test_hold_is_per_member_and_filters_the_automatic_question() -> void:
+	RosterLedger.add_growth("tree_grunt", _goal)
+	_meet_the_wins()
+	assert_false(RosterLedger.is_held("tree_grunt"), "Hold starts off")
+	RosterLedger.set_hold("tree_grunt", true)
+	assert_true(RosterLedger.is_held("tree_grunt"), "Hold is on")
+	assert_eq(RosterLedger.pending_evolutions(["tree_grunt"]), ["tree_grunt"] as Array[String],
+		"the evolution is still pending (the menu offers it)")
+	assert_eq(RosterLedger.pending_evolutions(["tree_grunt"], {}, true).size(), 0,
+		"but the automatic question skips a held member")
+	assert_eq(RosterLedger.available_evolutions("tree_grunt").size(), 1, "and EVOLVE still works")
+
+
+func test_hold_and_feats_survive_the_round_trip() -> void:
+	RosterLedger.set_hold("tree_grunt", true)
+	RosterLedger.add_feats("tree_grunt", {"wins": 2, "kos": 3, "element_kos": {"dark": 1}})
+	assert_true(RosterLedger.save(), "saves")
+	RosterLedger.set_save_path(LEDGER_PATH)
+	assert_true(RosterLedger.is_held("tree_grunt"), "Hold survives")
+	var f: Dictionary = RosterLedger.feats_of("tree_grunt")
+	assert_eq(int(f["wins"]), 2, "wins survive")
+	assert_eq(int(f["kos"]), 3, "KOs survive")
+	assert_eq(f["element_kos"], {"dark": 1}, "element KOs survive")
+
+
+func test_an_older_file_loads_hold_off_and_zero_feats() -> void:
+	var f := FileAccess.open(LEDGER_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify({ "version": 1, "members": { "tree_grunt": { "line": "tree_grunt",
+		"form": "tree_grunt", "growth": 3, "evolved": [], "nickname": "" } }, "unlocked_forms": [] }))
+	f.close()
+	RosterLedger.set_save_path(LEDGER_PATH)
+	assert_false(RosterLedger.is_held("tree_grunt"), "no 'hold' = off")
+	assert_eq(int(RosterLedger.feats_of("tree_grunt")["wins"]), 0, "no 'feats' = zero")
+	assert_eq(RosterLedger.growth_of("tree_grunt"), 3, "the rest reads as before")
+
+
+func test_open_modes_read_the_held_item_from_the_inventory() -> void:
+	ItemInventory.grant(ITEM)
+	ItemInventory.equip("tree_grunt", ITEM)
+	assert_eq(String(RosterLedger.context_for("tree_grunt")["held_item"]), ITEM,
+		"a HeldItem requirement sees the open-mode equip")
+	assert_false(RosterLedger.context_for("tree_grunt").has("mode"), "and the context is not story")
+
+
 # --- Persistence ----------------------------------------------------------------------
 
 func test_round_trip_save_and_load() -> void:
 	RosterLedger.add_growth("tree_grunt", _goal)
+	_meet_the_wins()
 	RosterLedger.evolve("tree_grunt", _edge)
 	RosterLedger.add_growth("vineweave", 2)
 	RosterLedger.set_nickname("vineweave", "Ivy")

@@ -3,10 +3,16 @@
 [ext_resource type="Script" path="res://game/characters/evolution/EvolutionResource.gd" id="1_evo"]
 [ext_resource type="Script" path="res://game/characters/evolution/EvolutionTrigger.gd" id="2_trig"]
 [ext_resource type="Script" path="res://game/characters/evolution/GrowthTrigger.gd" id="3_growth"]
+[ext_resource type="Script" path="res://game/characters/evolution/BattleFeatTrigger.gd" id="4_feat"]
 
 [sub_resource type="Resource" id="Resource_growth3"]
 script = ExtResource("3_growth")
 growth_required = 3
+
+[sub_resource type="Resource" id="Resource_wins2"]
+script = ExtResource("4_feat")
+feat = 0
+count = 2
 
 [resource]
 script = ExtResource("1_evo")
@@ -14,4 +20,4 @@ id = &"tree_grunt__oakheart"
 from_id = &"tree_grunt"
 to_id = &"oakheart"
 flavor = "The sapling finally takes root."
-triggers = Array[ExtResource("2_trig")]([SubResource("Resource_growth3")])
+triggers = Array[ExtResource("2_trig")]([SubResource("Resource_growth3"), SubResource("Resource_wins2")])

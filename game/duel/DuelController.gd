@@ -146,11 +146,27 @@ static func award_standalone_growth(request: DuelRequest, result: DuelResult, ct
 	var fought: Dictionary = result.party_after[0] if not result.party_after.is_empty() else {}
 	var rows: Array = [{"uid": uid, "alive": not bool(fought.get("wounded", false)),
 		"kos": int(fought.get("kos", 0))}]
+	# Battle feats ([BattleFeatTrigger]) under the same gate: the lead is the only fighter, so the
+	# foes it KO'd are result.defeated.
+	var chr: CharacterResource = CharacterLibrary.get_character(cid)
+	var el_kos: Dictionary = {}
+	for foe in result.defeated:
+		var fc: CharacterResource = CharacterLibrary.get_character(StringName(String(foe)))
+		if fc != null and fc.element != &"":
+			el_kos[String(fc.element)] = int(el_kos.get(String(fc.element), 0)) + 1
+	var feat_row: Dictionary = rows[0].duplicate()
+	feat_row["element_kos"] = el_kos if int(fought.get("kos", 0)) > 0 else {}
+	var hp: int = int(fought.get("current_hp", -1))
+	feat_row["hp_ratio"] = 1.0 if hp < 0 or chr == null else float(hp) / float(maxi(1, chr.base_health))
+	var feats: Dictionary = GrowthTracker.compute_feats([feat_row], result.player_won(), rules)
+	for fuid in feats.keys():
+		RosterLedger.add_feats(fuid, feats[fuid])
 	var awards: Dictionary = GrowthTracker.compute_awards(rows, result.player_won(), rules)
 	if awards.is_empty():
+		if not feats.is_empty():
+			RosterLedger.save()
 		return rows_out
 	var total: int = RosterLedger.add_growth(uid, int(awards[uid]))
-	var chr: CharacterResource = CharacterLibrary.get_character(cid)
 	rows_out.append({
 		"uid": uid,
 		"character_id": cid,

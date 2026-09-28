@@ -38,6 +38,10 @@ var actor_positions: Dictionary = {}
 ## trip, cleared when the player changes area. Never saved.
 var transient_positions: Dictionary = {}
 var play_seconds: float = 0.0
+## What changed since the last [method drain_changes] -- the EVOLUTION auto-offer events
+## (StoryController: a flag set / a member joining may have met a requirement). Never saved.
+var _changed_flags: Array[String] = []
+var _party_changed: bool = false
 
 
 # --- Flags --------------------------------------------------------------------
@@ -45,11 +49,35 @@ var play_seconds: float = 0.0
 func set_flag(key: String, value = true) -> void:
 	if key.strip_edges().is_empty():
 		return
-	flags[key] = _normalize_flag_value(value)
+	var v = _normalize_flag_value(value)
+	if not flags.has(key) or typeof(flags[key]) != typeof(v) or flags[key] != v:
+		_note_flag(key)
+	flags[key] = v
 
 
 func clear_flag(key: String) -> void:
+	if flags.has(key):
+		_note_flag(key)
 	flags.erase(key)
+
+
+func _note_flag(key: String) -> void:
+	if not _changed_flags.has(key):
+		_changed_flags.append(key)
+
+
+## The changes since the last call, then forgets them: {flags: Array[String] (keys set / changed /
+## cleared, in order), party: bool (a member joined)}.
+func drain_changes() -> Dictionary:
+	var out: Dictionary = {"flags": _changed_flags.duplicate(), "party": _party_changed}
+	_changed_flags.clear()
+	_party_changed = false
+	return out
+
+
+## True when something changed since the last [method drain_changes].
+func has_changes() -> bool:
+	return _party_changed or not _changed_flags.is_empty()
 
 
 ## The raw value, or [param default] when unset.
@@ -130,6 +158,7 @@ func add_member(character_id: String, nickname: String = "", cap: int = 6) -> St
 	var uid: String = StoryPartyMember.uid_for(StoryPartyMember.line_of(character_id), member_ids())
 	var m := StoryPartyMember.create(uid, character_id, nickname)
 	party.append(m)
+	_party_changed = true
 	return m
 
 

@@ -7,13 +7,18 @@ class_name EvolutionDetailBlock
 ##   GROWTH ◆◆◇ 2/3                        (a unit growing toward an evolution)
 ##   [Stage II · from Barkling]            (an evolved form)
 ##   Ready to evolve!                      (a short caption only when there is news)
-##   [ EVOLVE ]                            (only when an evolution is available)
+##   [ EVOLVE ]  [x] Hold                  (EVOLVE only when an evolution is available)
+##   ◆ Into Oakheart                       (the REQUIREMENTS CHECKLIST per next form --
+##     ✓ Growth 3            3/3            DECISIONS.md #27, [RequirementChecklist];
+##     ○ Win 2 battles       1/2            story-only requirements read "story only")
 ##
 ## Self-contained so the host screen adds it with one line and calls [method show_for] on every
 ## detail refresh; pressing EVOLVE raises [signal evolve_requested] and the host opens the
 ## [EvolutionScreen]. Hidden entirely for a character in no evolution line.
 ##
-## Reads the [RosterLedger] (menus may; the battle never does) and never writes it.
+## Reads the [RosterLedger] (menus may; the battle never does). Its one write is the HOLD toggle
+## (the open-mode member's "no automatic prompts" flag -- e.g. the standalone duel's results card
+## offer), saved at once.
 
 signal evolve_requested(uid: String, edges: Array)
 
@@ -26,7 +31,11 @@ var _gems_slot: HBoxContainer = null
 var _count_label: Label = null
 var _tags: HBoxContainer = null
 var _caption: Label = null
+var _checklist_slot: VBoxContainer = null
+var _actions: HFlowContainer = null
 var evolve_button: Button = null
+## HOLD (DECISIONS.md #27): no automatic evolve prompts for this member.
+var hold_toggle: CheckButton = null
 
 
 func _init() -> void:
@@ -59,11 +68,32 @@ func _init() -> void:
 	_caption.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	add_child(_caption)
 
+	# A flow row: Hold wraps under EVOLVE when the detail column is narrow.
+	_actions = HFlowContainer.new()
+	_actions.name = "EvolveActions"
+	_actions.add_theme_constant_override("h_separation", MenuTheme.SP_M)
+	_actions.add_theme_constant_override("v_separation", MenuTheme.SP_XS)
+	add_child(_actions)
 	evolve_button = MenuKit.button("Evolve", MenuKit.PRIMARY, 150, 40)
 	evolve_button.name = "EvolveButton"
 	evolve_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	evolve_button.pressed.connect(_on_evolve_pressed)
-	add_child(evolve_button)
+	_actions.add_child(evolve_button)
+	hold_toggle = CheckButton.new()
+	hold_toggle.name = "HoldToggle"
+	hold_toggle.text = "Hold"
+	hold_toggle.focus_mode = Control.FOCUS_ALL
+	hold_toggle.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	hold_toggle.tooltip_text = "Hold: no automatic evolution prompts (e.g. after a duel). EVOLVE here still works."
+	hold_toggle.toggled.connect(_on_hold_toggled)
+	MenuNav.hover_focus(hold_toggle)
+	_actions.add_child(hold_toggle)
+
+	# Under the actions, so EVOLVE stays in view in the header without scrolling.
+	_checklist_slot = VBoxContainer.new()
+	_checklist_slot.name = "ChecklistSlot"
+	_checklist_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_checklist_slot)
 	visible = false
 
 
@@ -108,12 +138,46 @@ func show_for(char_id: String) -> bool:
 			_roman(EvolutionLibrary.stage_of(char_id)), _name_of(parent)], MenuTheme.GOLD))
 	_tags.visible = _tags.get_child_count() > 0
 
+	# The checklist of what the member still needs, per next form (only for the form it IS).
+	for c in _checklist_slot.get_children():
+		_checklist_slot.remove_child(c)
+		c.free()
+	var entries: Array[Dictionary] = []
+	if is_current:
+		entries = RosterLedger.checklists(_uid)
+	if not entries.is_empty():
+		_checklist_slot.add_child(RequirementChecklist.build(entries))
+	_checklist_slot.visible = not entries.is_empty()
+
 	_caption.text = _caption_text(char_id, form, is_current)
 	_caption.visible = not _caption.text.is_empty()
 	_caption.add_theme_color_override("font_color",
 		MenuTheme.GOLD_LITE if not _edges.is_empty() else MenuTheme.TEXT_MUTED)
 	evolve_button.visible = not _edges.is_empty()
+	if not _edges.is_empty():
+		evolve_button.text = (_edges[0] as EvolutionResource).verb()
+	hold_toggle.visible = not entries.is_empty()
+	hold_toggle.set_pressed_no_signal(RosterLedger.is_held(_uid))
+	_actions.visible = evolve_button.visible or hold_toggle.visible
 	return true
+
+
+## The checklist rows currently shown (tests): [{edge_id, met, skipped}] in order.
+func checklist_rows() -> Array:
+	var out: Array = []
+	for block in _checklist_slot.find_children("Edge_*", "", true, false):
+		for row in block.get_children():
+			if row.has_meta(&"met"):
+				out.append({"edge_id": String(block.name).trim_prefix("Edge_"), "met": bool(row.get_meta(&"met")),
+					"skipped": bool(row.get_meta(&"skipped"))})
+	return out
+
+
+func _on_hold_toggled(on: bool) -> void:
+	if _uid.is_empty():
+		return
+	RosterLedger.set_hold(_uid, on)
+	RosterLedger.save()
 
 
 ## Only NEWS gets a visible caption; the goal itself lives in the gems' tooltip.
@@ -122,7 +186,9 @@ func _caption_text(char_id: String, form: String, is_current: bool) -> String:
 			and EvolutionLibrary.stage_of(form) > EvolutionLibrary.stage_of(char_id):
 		return "Evolved into %s" % _name_of(StringName(form))
 	if not _edges.is_empty():
-		return "Ready to evolve!"
+		return "Ready to be promoted!" if (_edges[0] as EvolutionResource).is_promotion() else "Ready to evolve!"
+	if RosterLedger.is_held(_uid) and is_current:
+		return "On hold -- no automatic prompts."
 	return ""
 
 
@@ -130,7 +196,7 @@ func _caption_text(char_id: String, form: String, is_current: bool) -> String:
 static func _goal_text(char_id: String) -> String:
 	var parts: PackedStringArray = []
 	for e in EvolutionLibrary.edges_from(char_id):
-		parts.append("%s at %s" % [_name_of(e.to_id), e.describe_triggers()])
+		parts.append("%s (needs %s)" % [_name_of(e.to_id), e.describe_triggers()])
 	if parts.is_empty():
 		return "Final form"
 	return "Evolves into " + ", ".join(parts) + ". Earn Growth by surviving won battles."

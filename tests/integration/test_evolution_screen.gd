@@ -53,6 +53,7 @@ func after_all() -> void:
 
 func _ready_to_evolve() -> void:
 	RosterLedger.add_growth("tree_grunt", _edge.growth_goal())
+	RosterLedger.add_feats("tree_grunt", {"wins": 2})   # Growth 3 + 2 wins (EVOLUTION.md §3.2a)
 
 
 func _on_finished(evolved: bool, edge) -> void:

@@ -30,6 +30,32 @@ enum Kind { TOWN, ROUTE, INTERIOR, DUNGEON }
 @export var lighting_preset_override: String = ""
 
 
+## Where shipped areas live: <AREAS_DIR><area_id>/area.tres (StoryController.area_path).
+const AREAS_DIR := "res://game/overworld/content/areas/"
+
+
+static func path_for(p_area_id: String) -> String:
+	return "%s%s/area.tres" % [AREAS_DIR, p_area_id]
+
+
+## The shipped area [param p_area_id] (trusted content), or null. Menus and evolution
+## requirements ([LocationTrigger]) read names / regions / weather through it.
+static func load_by_id(p_area_id: String) -> OverworldAreaResource:
+	if p_area_id.is_empty():
+		return null
+	var path: String = path_for(p_area_id)
+	if not ResourceLoader.exists(path):
+		return null
+	return load(path) as OverworldAreaResource
+
+
+## The weather id this area's terrain shows ("clear" when unset).
+func weather_id() -> String:
+	if terrain != null and not String(terrain.weather).is_empty():
+		return String(terrain.weather)
+	return "clear"
+
+
 func lighting_preset() -> String:
 	if not lighting_preset_override.is_empty():
 		return lighting_preset_override

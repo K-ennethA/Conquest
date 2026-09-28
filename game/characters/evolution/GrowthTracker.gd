@@ -26,6 +26,11 @@ class_name GrowthTracker
 ## [member EvolutionRules.growth_modes].
 ##
 ## The award maths is the pure static [method compute_awards], shared with the duel.
+##
+## BATTLE FEATS ([BattleFeatTrigger]): the same settle also records each member's feat counters
+## -- a win it fought in, the enemy KOs it landed (and the KO'd foes' elements), a clutch win at
+## low HP -- from exactly what this roll call already sees ([method compute_feats]). Same gates,
+## same post-simulation discipline.
 
 const GROUP: StringName = &"growth_tracker"
 
@@ -46,6 +51,8 @@ var _settled: bool = false
 var _roll: Dictionary = {}
 ## uid -> enemy KOs credited this battle.
 var _kos: Dictionary = {}
+## uid -> {element: KOs} of the foes it felled (BattleFeatTrigger ELEMENT_KOS).
+var _element_kos: Dictionary = {}
 var _watched_turn_system = null
 
 
@@ -157,6 +164,47 @@ static func gate_reason(ctx: Dictionary, rules: EvolutionRules) -> String:
 	return ""
 
 
+## The feat-counter DELTAS each member earns from one battle ([BattleFeatTrigger]).
+##
+## [param rows]: [{uid, alive, kos, element_kos: {element: n}, hp_ratio: float}], one per
+## fielded squad unit that FOUGHT (rows sharing a uid -- two forms of one line -- merge: KO
+## counts are per member already, so the largest is taken). Returns {uid: {wins, kos,
+## clutch_wins, element_kos}} for every uid with something to add:
+##   wins        +1 on a won battle (fallen or not: it fought in the win)
+##   kos         its enemy KOs (won or lost)
+##   clutch_wins +1 on a won battle it finished ALIVE at or under
+##               [member EvolutionRules.clutch_hp_ratio] of its max HP
+static func compute_feats(rows: Array, won: bool, rules: EvolutionRules) -> Dictionary:
+	var out: Dictionary = {}
+	var clutch_at: float = rules.clutch_hp_ratio if rules != null else 0.25
+	for row in rows:
+		if not (row is Dictionary):
+			continue
+		var uid: String = String(row.get("uid", ""))
+		if uid.is_empty():
+			continue
+		var d: Dictionary = out.get(uid, RosterLedger.blank_feats())
+		if won:
+			d["wins"] = 1
+			var ratio: float = float(row.get("hp_ratio", 1.0))
+			if bool(row.get("alive", false)) and ratio > 0.0 and ratio <= clutch_at + 0.0001:
+				d["clutch_wins"] = 1
+		d["kos"] = maxi(int(d["kos"]), maxi(0, int(row.get("kos", 0))))
+		var by = row.get("element_kos", {})
+		if by is Dictionary:
+			for el in by.keys():
+				var n: int = maxi(0, int(by[el]))
+				if n > int((d["element_kos"] as Dictionary).get(String(el), 0)):
+					d["element_kos"][String(el)] = n
+		out[uid] = d
+	for uid in out.keys():
+		var d: Dictionary = out[uid]
+		if int(d["wins"]) == 0 and int(d["kos"]) == 0 and int(d["clutch_wins"]) == 0 \
+				and (d["element_kos"] as Dictionary).is_empty():
+			out.erase(uid)
+	return out
+
+
 # --- Live battle state -------------------------------------------------------
 
 ## The gate context for the battle running under [param any_node]'s tree.
@@ -231,6 +279,13 @@ func _on_unit_eliminated(unit, eliminator) -> void:
 			and _roll.has(eliminator.get_instance_id()) and not _roll.has(unit.get_instance_id()):
 		var killer: String = String(_roll[eliminator.get_instance_id()]["uid"])
 		_kos[killer] = int(_kos.get(killer, 0)) + 1
+		var el: String = ""
+		if "character_resource" in unit and unit.character_resource != null:
+			el = String(unit.character_resource.element)
+		if not el.is_empty():
+			if not _element_kos.has(killer):
+				_element_kos[killer] = {}
+			_element_kos[killer][el] = int((_element_kos[killer] as Dictionary).get(el, 0)) + 1
 	_evaluate_outcome()
 
 
@@ -275,8 +330,15 @@ func settle(won: bool) -> bool:
 		return false
 	roll_call()
 	var rows: Array = collect_rows()
+	# Battle feats first: a battle can add to a feat counter without awarding any Growth (a KO in
+	# a lost battle).
+	var feats: Dictionary = compute_feats(rows, won, rules)
+	for uid in feats.keys():
+		RosterLedger.add_feats(uid, feats[uid])
 	var awards: Dictionary = compute_awards(rows, won, rules)
 	if awards.is_empty():
+		if not feats.is_empty():
+			RosterLedger.save()
 		return false
 	var shown: Dictionary = {}
 	for row in rows:
@@ -311,8 +373,13 @@ func collect_rows() -> Array:
 		var unit = (entry["unit"] as WeakRef).get_ref()
 		var alive: bool = unit != null and is_instance_valid(unit) \
 			and (not unit.has_method("is_alive") or unit.is_alive()) and _is_human_owned(unit)
+		var ratio: float = 0.0
+		if alive and "current_health" in unit and "max_health" in unit and int(unit.max_health) > 0:
+			ratio = float(unit.current_health) / float(unit.max_health)
 		rows.append({ "uid": String(entry["uid"]), "character_id": String(entry["character_id"]),
-			"alive": alive, "kos": int(_kos.get(entry["uid"], 0)) })
+			"alive": alive, "kos": int(_kos.get(entry["uid"], 0)),
+			"element_kos": (_element_kos.get(entry["uid"], {}) as Dictionary).duplicate(),
+			"hp_ratio": ratio })
 	return rows
 
 
