@@ -49,6 +49,10 @@ const MODEL_SPIN_SPEED := 0.45
 var _crest: PanelContainer = null
 ## Frame around the portrait; hidden while there is no portrait to show.
 var _portrait_slot: PanelContainer = null
+## EVOLUTION: the line strip + "evolves from / into" (CompendiumData.evolution_blocks), shown
+## only for a unit in an evolution line; its unit links re-point this gallery.
+var _evolution_header: Label = null
+var _evolution_text: RichTextLabel = null
 @onready var unit_type_label: Label
 @onready var unit_description: RichTextLabel
 @onready var unit_portrait: TextureRect
@@ -313,6 +317,17 @@ func _create_unit_display(parent: VBoxContainer) -> void:
 	abilities_container.set_h_size_flags(Control.SIZE_EXPAND_FILL)
 	abilities_container.add_theme_constant_override("separation", 8)
 	unit_display_container.add_child(abilities_container)
+
+	# --- Evolution (only for units in a line) ---
+	_evolution_header = _section_header("Evolution")
+	_evolution_header.name = "EvolutionHeader"
+	unit_display_container.add_child(_evolution_header)
+	_evolution_text = RichTextLabel.new()
+	_evolution_text.name = "EvolutionText"
+	_evolution_text.bbcode_enabled = true
+	_evolution_text.fit_content = true
+	_evolution_text.meta_clicked.connect(_on_evolution_link)
+	unit_display_container.add_child(_evolution_text)
 
 	# Hidden until a character is selected (an empty filter keeps it hidden).
 	unit_display_container.visible = false
@@ -624,6 +639,39 @@ func _display_character(character: CharacterResource) -> void:
 	_update_stats(character)
 	_update_moves(character)
 	_update_abilities(character)
+	_update_evolution(character)
+
+
+## The unit's evolution line, from the same blocks the Compendium's search entries carry.
+func _update_evolution(character: CharacterResource) -> void:
+	if _evolution_text == null:
+		return
+	var lines: PackedStringArray = []
+	for block in CompendiumData.evolution_blocks(character):
+		if block.get("type", "") == "text":
+			lines.append(String(block["text"]))
+		for item in block.get("items", []):
+			lines.append("• " + String(item))
+	_evolution_text.text = "\n".join(lines)
+	_evolution_header.visible = not lines.is_empty()
+	_evolution_text.visible = not lines.is_empty()
+
+
+## "units:<id>" from the evolution strip: show that unit (clearing a filter that hides it).
+func _on_evolution_link(meta) -> void:
+	var parts := String(meta).split(":", true, 1)
+	if parts.size() != 2 or parts[0] != CompendiumData.SECTION_UNITS:
+		return
+	for pass_index in 2:
+		for i in filtered_characters.size():
+			if String(filtered_characters[i].character_id) == parts[1]:
+				_select_index(i)
+				return
+		if search_input != null:
+			search_input.text = ""
+		if filter_option != null:
+			filter_option.select(0)
+		_apply_filters()
 
 
 func _update_portrait(character: CharacterResource) -> void:

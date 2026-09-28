@@ -175,6 +175,9 @@ var _perfect_badge: Label
 ## [method _populate_drop_rows]), so it can be cleared wholesale without freeing anything
 ## the one-time colour pass still points at.
 var _drop_rows_box: VBoxContainer
+## EVOLUTION growth rows ("Barkling +1 Growth (3/3)"), filled at reveal from
+## GrowthTracker.growth_this_battle(); hidden when the battle awarded none.
+var _growth_rows_box: VBoxContainer
 
 var _versus_box: VBoxContainer
 var _opponent_name_label: Label
@@ -492,6 +495,12 @@ func _build_rewards_section(col: VBoxContainer) -> void:
 	_drop_rows_box.visible = false
 	col.add_child(_drop_rows_box)
 
+	_growth_rows_box = VBoxContainer.new()
+	_growth_rows_box.name = "GrowthRows"
+	_growth_rows_box.add_theme_constant_override("separation", 4)
+	_growth_rows_box.visible = false
+	col.add_child(_growth_rows_box)
+
 
 ## VERSUS: built ALWAYS (so the node references are never null) but hidden unless
 ## [method should_show_versus_block] says this was a networked match -- see
@@ -692,6 +701,10 @@ func show_result(outcome: StringName, title: String, subtitle: String) -> void:
 	# A forfeit / disconnect win is NOT "all enemies defeated" -- say what actually happened.
 	_subtitle_label.text = SUBTITLE_FORFEIT if _opponent_forfeited else subtitle
 	_apply_mode_name()
+
+	# EVOLUTION: settle this battle's Growth with the outcome being shown (covers objective wins
+	# the tracker's elimination read cannot see) before the rewards section reads it.
+	GrowthTracker.settle_live(self, outcome == OUTCOME_VICTORY)
 
 	var accent: Color = VICTORY_GOLD if outcome == OUTCOME_VICTORY else DEFEAT_RED
 	_banner_label.add_theme_color_override("font_color", accent)
@@ -1081,6 +1094,7 @@ func _populate_rewards() -> void:
 		_balance_value.text = str(_points_balance())
 
 	_populate_drop_rows()
+	GrowthGems.fill_result_rows(_growth_rows_box, GrowthTracker.growth_this_battle(), ROW_FONT_SIZE)
 
 	if _challenge_row == null:
 		return

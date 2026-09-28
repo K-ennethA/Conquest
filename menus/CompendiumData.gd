@@ -695,7 +695,10 @@ static func unit_entry(c: CharacterResource) -> Dictionary:
 			ab_items.append(ability_line(a))
 	blocks.append({ "type": "heading", "text": "Abilities" })
 	blocks.append({ "type": "bullets", "items": ab_items if not ab_items.is_empty() else ["No abilities"] })
+	blocks.append_array(evolution_blocks(c))
 	var kw := "%s %s %s %s" % [_char_name(c), c.character_id, c.element, " ".join(PackedStringArray(c.tags.map(func(t): return String(t))))]
+	if EvolutionLibrary.in_any_line(c.character_id):
+		kw += " evolve evolution growth"
 	for m in c.moveset:
 		if m != null:
 			kw += " " + m.display_name
@@ -704,6 +707,42 @@ static func unit_entry(c: CharacterResource) -> Dictionary:
 			kw += " " + a.display_name
 	return _entry(SECTION_UNITS, String(c.character_id), _char_name(c), c.description,
 		MenuKit.element_color(String(c.element)), blocks, kw)
+
+
+## The EVOLUTION block of a unit page (docs/design/EVOLUTION.md §4.5): the whole line as a
+## cross-linked strip, then where this form comes from and what it becomes. [] for a unit in
+## no line, so every other page is unchanged. Read off [EvolutionLibrary], so new lines appear
+## without code.
+static func evolution_blocks(c: CharacterResource) -> Array:
+	if c == null or not EvolutionLibrary.in_any_line(c.character_id):
+		return []
+	var strip: PackedStringArray = []
+	for id in EvolutionLibrary.line_of(c.character_id):
+		var link := _unit_link(id)
+		var edge := EvolutionLibrary.edge_between(EvolutionLibrary.parent_of(id), id)
+		if edge != null and edge.describe_triggers() != "":
+			link += " [color=#9ba5c8](%s)[/color]" % edge.describe_triggers()
+		strip.append(link)
+	var items: Array = []
+	var parent := EvolutionLibrary.parent_of(c.character_id)
+	if parent != &"":
+		var from_edge := EvolutionLibrary.edge_between(parent, c.character_id)
+		items.append("Evolves from %s at %s. Stage %d." % [_unit_link(parent),
+			from_edge.describe_triggers() if from_edge.describe_triggers() != "" else "a story event",
+			EvolutionLibrary.stage_of(c.character_id)])
+	for e in EvolutionLibrary.edges_from(c.character_id):
+		items.append("Evolves into %s at %s." % [_unit_link(e.to_id),
+			e.describe_triggers() if e.describe_triggers() != "" else "a story event"])
+	return [
+		{ "type": "heading", "text": "Evolution" },
+		{ "type": "text", "text": "  »  ".join(strip) },
+		{ "type": "bullets", "items": items },
+	]
+
+
+## "[url=units:oakheart]Oakheart[/url]" -- a cross-link to a unit page.
+static func _unit_link(id) -> String:
+	return "[url=%s:%s]%s[/url]" % [SECTION_UNITS, String(id), _char_name(CharacterLibrary.get_character(id)) if CharacterLibrary.get_character(id) != null else String(id)]
 
 
 ## "Ground, orthogonal, 5 tiles" -- movement kind, pattern and range.
@@ -887,6 +926,7 @@ static func rules_entries() -> Array:
 	out.append(_rules_turns())
 	out.append(_rules_facing())
 	out.append(_rules_controls())
+	out.append(_rules_evolution())
 	return out
 
 
@@ -982,6 +1022,32 @@ static func _rules_fog() -> Dictionary:
 	var blocks: Array = [ { "type": "bullets", "items": items } ]
 	return _entry(SECTION_RULES, "fog", "Fog of War", "Per-side vision, reveal on attack, concealment.",
 		MenuTheme.TEXT_MUTED, blocks, "fog of war vision sight hidden reveal conceal smoke veil")
+
+
+## How units grow and evolve, read off evolution_rules.tres and the shipped lines.
+static func _rules_evolution() -> Dictionary:
+	var rules := EvolutionRules.current()
+	var modes: PackedStringArray = []
+	for m in rules.growth_modes:
+		modes.append(String(m).capitalize())
+	var lines: PackedStringArray = []
+	for e in EvolutionLibrary.all():
+		lines.append("%s » %s (%s)" % [_unit_link(e.from_id), _unit_link(e.to_id), e.describe_triggers()])
+	var items: Array = [
+		"Units earn Growth after battles: +%d for every squad unit that fought and survived a win%s." % [
+			rules.growth_per_win,
+			(", +%d per enemy KO (up to %d)" % [rules.growth_per_ko, rules.growth_ko_cap]) if rules.growth_per_ko > 0 else ""],
+		"Growth is earned in: %s. Arena runs, versus matches and replays never award it." % ", ".join(modes),
+		"When a unit's Growth reaches its evolution's goal, press Evolve on its card in Character Select. You can always say Not now; the offer stays open.",
+		"Evolving unlocks the new form: both forms stay in your roster. Its equipped item moves to the new form when that form wears none.",
+		"An evolved form is a full unit of its own: stats, moves, abilities and element.",
+	]
+	var blocks: Array = [ { "type": "bullets", "items": items } ]
+	if not lines.is_empty():
+		blocks.append({ "type": "heading", "text": "Evolution lines" })
+		blocks.append({ "type": "bullets", "items": Array(lines) })
+	return _entry(SECTION_RULES, "evolution", "Growth & Evolution", "How units grow and evolve into new forms.",
+		MenuTheme.GOLD, blocks, "evolution evolve growth form unlock stage")
 
 
 static func _rules_hit() -> Dictionary:

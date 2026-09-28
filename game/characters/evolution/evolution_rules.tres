@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="EvolutionRules" format=3]
+
+[ext_resource type="Script" path="res://game/characters/evolution/EvolutionRules.gd" id="1_rules"]
+
+[resource]
+script = ExtResource("1_rules")
+growth_per_win = 1
+growth_per_ko = 0
+growth_ko_cap = 2
+growth_on_loss = 0
+growth_modes = PackedStringArray("skirmish", "campaign", "challenge")
+max_budget_growth = 1.75
+hide_locked_forms = true

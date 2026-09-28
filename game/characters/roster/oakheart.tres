@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/tree_grunt.glb" id="2_model"]
+[ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
+[ext_resource type="Resource" path="res://game/combat/moves/bough_sweep.tres" id="4_bough"]
+[ext_resource type="Resource" path="res://game/combat/moves/rooted.tres" id="5_rooted"]
+[ext_resource type="Resource" path="res://game/combat/moves/verdant_call.tres" id="6_verdant"]
+[ext_resource type="Resource" path="res://game/combat/moves/timberfall.tres" id="7_timber"]
+[ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="8_abres"]
+[ext_resource type="Resource" path="res://game/abilities/natures_blessing.tres" id="9_blessing"]
+[ext_resource type="Resource" path="res://game/abilities/thornskin.tres" id="10_thornskin"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"oakheart"
+element = &"nature"
+display_name = "Oakheart"
+description = "A Barkling that survived long enough to take root. Heartwood where there was sapwood, bark that bites back, and at last the strength to bring a whole trunk down on whatever threatens the grove."
+model_scene = ExtResource("2_model")
+base_health = 96
+base_attack = 21
+base_defense = 16
+base_magic = 4
+base_magic_defense = 12
+base_speed = 7
+model_scale = 1.3
+moveset = Array[ExtResource("3_mvres")]([ExtResource("4_bough"), ExtResource("5_rooted"), ExtResource("6_verdant"), ExtResource("7_timber")])
+abilities = Array[ExtResource("8_abres")]([ExtResource("9_blessing"), ExtResource("10_thornskin")])
