@@ -206,7 +206,7 @@ func _build_ui() -> void:
 	# pinned. The inline notice lives in the footer beside the key hints. NOTHING below adds
 	# a fixed row: the attack log and publish flows are OVERLAYS with their own budgets (see
 	# _open_overlay), which is the reason they are overlays.
-	var page := MenuKit.build_page(self, ["Solo", "Challenges"], "My Bases",
+	var page := MenuKit.build_page(self, ["Online", "Challenges"], "My Bases",
 		"Your published challenges, defending while you are away.")
 	_page_root = page.root
 	_summary = page.subtitle

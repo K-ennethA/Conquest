@@ -59,7 +59,33 @@ const ACTION_MAX := 5
 ##   2: merged core -- NetUnitIds string ids, [col,row,floor] cells, per-action
 ##      commit-reveal RNG, host-seated handshake
 ##   3: USE_ITEM (battle consumables -- the duel's Items action)
-const PROTOCOL_VERSION := 3
+##   4: lobby MODE (conquest / duel) in the hello + match config, the duel match-config
+##      keys (duel_units / duel_stage / duel_weather) and REJECT_MODE_MISMATCH
+const PROTOCOL_VERSION := 4
+
+## What a network lobby plays (DECISIONS.md #32). Fixed per lobby: the host (or a dedicated
+## server's --mode) decides it, the joiner's hello names the mode it came for, and a mismatch
+## is refused at the gate ([constant REJECT_MODE_MISMATCH]). Stamped into the match config as
+## [constant CONFIG_MODE] so every peer boots the same kind of battle.
+const MODE_CONQUEST := "conquest"
+const MODE_DUEL := "duel"
+const MODES: Array[String] = [MODE_CONQUEST, MODE_DUEL]
+## Match-config key naming the mode (absent = conquest: older configs are map battles).
+const CONFIG_MODE := "mode"
+
+
+## The player-facing name of a lobby mode ("Conquest" / "Duel").
+static func mode_label(mode: String) -> String:
+	return "Duel" if mode == MODE_DUEL else "Conquest"
+
+
+## The mode a match config / hello names ([constant MODE_CONQUEST] when absent or unknown).
+static func mode_of(d: Variant) -> String:
+	if d is Dictionary:
+		var m = (d as Dictionary).get(CONFIG_MODE, MODE_CONQUEST)
+		if (m is String or m is StringName) and String(m) in MODES:
+			return String(m)
+	return MODE_CONQUEST
 
 ## Standard keys used on every action dictionary.
 const KEY_TYPE := "type"        ## int, one of [enum Action]
@@ -285,6 +311,7 @@ static func type_name(t: int) -> String:
 const KEY_HELLO_NAME := "name"   ## String, the joiner's display name
 const KEY_HELLO_PV := "pv"       ## int, the joiner's PROTOCOL_VERSION
 const KEY_HELLO_GAME := "game"   ## String, the joiner's application/config/version
+const KEY_HELLO_MODE := "mode"   ## String, the lobby mode the joiner came for (MODES; absent = conquest)
 
 ## Join rejection reasons. Empty string means "accepted" everywhere in this API.
 const REJECT_NONE := ""
@@ -292,6 +319,8 @@ const REJECT_MALFORMED_HELLO := "malformed_hello"
 const REJECT_VERSION_MISMATCH := "version_mismatch"
 const REJECT_LOBBY_FULL := "lobby_full"
 const REJECT_MATCH_IN_PROGRESS := "match_in_progress"
+## The host runs another mode's lobby (a Duel joiner at a Conquest host, or the reverse).
+const REJECT_MODE_MISMATCH := "mode_mismatch"
 
 ## Reported as the game version when the project declares no
 ## [code]application/config/version[/code] (an editor / unversioned run).
@@ -305,12 +334,13 @@ static func local_game_version() -> String:
 	return version if version != "" else GAME_VERSION_FALLBACK
 
 ## Build the hello a joining client sends to the host. [param game_version] defaults
-## to this build's own version.
-static func make_hello(player_name: String, game_version: String = "") -> Dictionary:
+## to this build's own version; [param mode] is the lobby mode the joiner came for.
+static func make_hello(player_name: String, game_version: String = "", mode: String = MODE_CONQUEST) -> Dictionary:
 	return {
 		KEY_HELLO_NAME: player_name,
 		KEY_HELLO_PV: PROTOCOL_VERSION,
 		KEY_HELLO_GAME: game_version if game_version != "" else local_game_version(),
+		KEY_HELLO_MODE: mode if mode in MODES else MODE_CONQUEST,
 	}
 
 ## Host-side gate: decide whether [param hello] may be seated. PURE -- pass
@@ -327,9 +357,14 @@ static func make_hello(player_name: String, game_version: String = "") -> Dictio
 ##   "host_pv": int, "client_pv": int,
 ##   "host_game": String, "client_game": String,
 ##   "build_differs": bool,     # advisory: same protocol, different game version
+##   "host_mode": String, "client_mode": String,   # lobby modes (MODES)
 ## }
 ## [/codeblock]
-static func validate_hello(hello: Variant, host_pv: int = PROTOCOL_VERSION, host_game: String = "") -> Dictionary:
+## [param host_mode] is the lobby's mode: a joiner who came for another mode is refused with
+## [constant REJECT_MODE_MISMATCH] (after the protocol check -- a different wire format is
+## the more fundamental answer).
+static func validate_hello(hello: Variant, host_pv: int = PROTOCOL_VERSION, host_game: String = "",
+		host_mode: String = MODE_CONQUEST) -> Dictionary:
 	var resolved_host_game: String = host_game if host_game != "" else local_game_version()
 	var result: Dictionary = {
 		"accepted": false,
@@ -340,6 +375,8 @@ static func validate_hello(hello: Variant, host_pv: int = PROTOCOL_VERSION, host
 		"host_game": resolved_host_game,
 		"client_game": "",
 		"build_differs": false,
+		"host_mode": host_mode,
+		"client_mode": MODE_CONQUEST,
 	}
 	if hello is not Dictionary:
 		return result
@@ -356,6 +393,10 @@ static func validate_hello(hello: Variant, host_pv: int = PROTOCOL_VERSION, host
 	if int(payload[KEY_HELLO_PV]) != host_pv:
 		result["reason"] = REJECT_VERSION_MISMATCH
 		return result
+	result["client_mode"] = mode_of(payload)
+	if String(result["client_mode"]) != host_mode:
+		result["reason"] = REJECT_MODE_MISMATCH
+		return result
 	result["accepted"] = true
 	result["reason"] = REJECT_NONE
 	return result
@@ -371,6 +412,10 @@ static func describe_rejection(reason: String, info: Dictionary = {}) -> String:
 				String(info.get("client_game", "?")),
 				int(info.get("client_pv", -1)),
 			]
+		REJECT_MODE_MISMATCH:
+			return "That host is running a %s lobby. Choose Online > Versus > %s to join it." % [
+				mode_label(String(info.get("host_mode", MODE_CONQUEST))),
+				mode_label(String(info.get("host_mode", MODE_CONQUEST)))]
 		REJECT_LOBBY_FULL:
 			return "The host's lobby is full."
 		REJECT_MATCH_IN_PROGRESS:
@@ -410,6 +455,13 @@ const INTENT_MOVE_UNAVAILABLE := "move_unavailable"
 const INTENT_ILLEGAL_TARGET := "illegal_target"
 const INTENT_UNKNOWN_ACTION := "unknown_action"
 const INTENT_ACTION_LIMIT := "action_limit"
+## Online DUEL reasons ([DuelNetRules]).
+## The acting combatant is stunned / controlled: its only legal action is WAIT.
+const INTENT_MUST_PASS := "must_pass"
+## The duel is decided; nothing more is applied.
+const INTENT_DUEL_OVER := "duel_over"
+## Not offered online (items and running are local / story duel actions).
+const INTENT_NOT_ONLINE := "not_allowed_online"
 
 ## Short label for the command an action carries, for a player-facing line ("Move rejected").
 ## [param action] may be anything at all -- a malformed payload off the wire, or null -- so an
@@ -466,6 +518,12 @@ static func describe_intent_rejection(reason: String, action: Variant = null) ->
 			why = "the turn cannot be ended right now"
 		INTENT_NO_MOVE_IN_SLOT:
 			why = "that unit has no such move"
+		INTENT_MUST_PASS:
+			why = "your partner cannot act this turn"
+		INTENT_DUEL_OVER:
+			why = "the duel is already decided"
+		INTENT_NOT_ONLINE:
+			why = "not available in online duels"
 		_:
 			why = String(reason).strip_edges().replace("_", " ")
 			if why.is_empty():

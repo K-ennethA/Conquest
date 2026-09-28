@@ -3,11 +3,14 @@ extends Control
 class_name SoloModeSelect
 
 ## Solo mode picker, reached from MainMenu's "Solo" button. Offers the single-player
-## registers as large mode cards -- Campaign (the story battles ending at the Eldroot
-## boss, via [CampaignScreen]), Skirmish (pick a map, fight the AI), Arena Run (draft augments across a gauntlet), Challenges and Duel
-## (a 1v1 turn battle, via [DuelSetup]) -- then hands off to the matching screen. This is
-## also the Arena entry point (Arena is no longer a title-screen command): Arena Run opens
-## [MatchSetup] in its arena variant.
+## registers as large mode cards -- Story (the overworld journey, via StoryStartScreen),
+## Campaign (the story battles ending at the Eldroot boss, via [CampaignScreen]), Skirmish
+## (pick a map, fight the AI) and Arena Run (draft augments across a gauntlet) -- then hands
+## off to the matching screen. Arena Run opens [MatchSetup] in its arena variant.
+##
+## Not here (docs/design/DECISIONS.md #31): DUELS are reached through Story mode (trainers,
+## spars, ambushes, the tournament) and Online > Versus > Duel -- there is no solo-vs-AI duel
+## on the menu; CHALLENGES moved to the Online screen ([OnlineHub]).
 ##
 ## Look: the shared illuminated-grove page ([MenuKit.build_page]: breadcrumb, Cinzel title,
 ## key hints, Back in the footer); each mode is an [method MenuKit.option_card] with an
@@ -16,15 +19,12 @@ class_name SoloModeSelect
 ## Siege (MatchConfigPanel.MODE_SIEGE) is no longer offered here; its runtime stays in
 ## game/modes for a possible return.
 ##
-## Keyboard: 1 = Campaign, 2 = Skirmish, 3 = Arena Run, 4 = Challenges, 5 = Duel,
-## 6 = Story, Esc / pad B = back. Mouse hover and keyboard / pad focus are one
+## Keyboard: 1 = Story, 2 = Campaign, 3 = Skirmish, 4 = Arena Run, Esc / pad B = back. Mouse hover and keyboard / pad focus are one
 ## highlight (MenuNav).
 
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 const MATCH_SETUP_SCENE := "res://menus/MatchSetup.tscn"
-const CHALLENGE_BROWSE_SCENE := "res://menus/ChallengeBrowse.tscn"
 const CAMPAIGN_SCREEN_SCENE := "res://menus/CampaignScreen.tscn"
-const DUEL_SETUP_SCENE := "res://menus/DuelSetup.tscn"
 const STORY_START_SCENE := "res://game/overworld/ui/StoryStartScreen.tscn"
 
 # --- Card row geometry (1280x720) --------------------------------------------
@@ -32,16 +32,15 @@ const STORY_START_SCENE := "res://game/overworld/ui/StoryStartScreen.tscn"
 # The cards are EXPAND_FILL inside one HBox, so the row's MINIMUM width is what has to fit
 # -- a card narrower than its custom_minimum is not something a container will give you.
 #
-#   6 cards x CARD_WIDTH + 5 x CARD_SEPARATION  =  6 x 185 + 5 x 14  =  1180
+#   4 cards x CARD_WIDTH + 3 x CARD_SEPARATION  =  4 x 280 + 3 x 20  =  1180
 #
 # ...which is exactly the page width, inside the 1280 viewport. CARD_HEIGHT is the row's
 # height floor; the card content (rule, heading, tagline, wrapped blurb) fits inside it,
 # so the row never grows taller.
-const CARD_WIDTH: float = 185.0
-## 200 (was 180 with five cards): six narrower cards wrap the longer taglines, so the row
-## trades a little height for the sixth card's width.
-const CARD_HEIGHT: float = 200.0
-const CARD_SEPARATION: int = 14
+const CARD_WIDTH: float = 280.0
+## Four cards (Story, Campaign, Skirmish, Arena Run): wider cards, one line per tagline.
+const CARD_HEIGHT: float = 220.0
+const CARD_SEPARATION: int = 20
 const PAGE_WIDTH: float = 1180.0
 
 var _cards: Array[Button] = []
@@ -71,22 +70,17 @@ func _build_ui(page: Dictionary) -> void:
 	cards.add_theme_constant_override("separation", CARD_SEPARATION)
 	column.add_child(cards)
 
-	_add_card(cards, _make_action_card(1, "Campaign", "Story",
+	_add_card(cards, _make_action_card(1, "Story", "Journey",
+		"Walk the forest, meet its people, fight what bars the road -- duels included.",
+		MenuTheme.EL_HOLY, _on_story_chosen))
+	_add_card(cards, _make_action_card(2, "Campaign", "Story battles",
 		"Story battles across the Forgotten Forest.", MenuTheme.EL_NATURE, _on_campaign_chosen))
-	_add_card(cards, _make_mode_card(2, "Skirmish", "You vs the AI",
+	_add_card(cards, _make_mode_card(3, "Skirmish", "You vs the AI",
 		"Pick a map, choose your squad, defeat the AI.", MenuTheme.GOLD,
 		MatchConfigPanel.MODE_SKIRMISH))
-	_add_card(cards, _make_mode_card(3, "Arena Run", "Roguelite",
+	_add_card(cards, _make_mode_card(4, "Arena Run", "Roguelite",
 		"Draft augments between rounds. Survive the gauntlet.", MenuTheme.EL_FIRE,
 		MatchConfigPanel.MODE_ARENA))
-	_add_card(cards, _make_action_card(4, "Challenges", "Community",
-		"Beat maps other players built -- or share your own gauntlet.", MenuTheme.ACCENT,
-		_on_challenges_chosen))
-	_add_card(cards, _make_action_card(5, "Duel", "One on one",
-		"Two units, no movement -- just the moves.", MenuTheme.EL_EARTH, _on_duel_chosen))
-	_add_card(cards, _make_action_card(6, "Story", "Journey",
-		"Walk the forest, meet its people, fight what bars the road.", MenuTheme.EL_HOLY,
-		_on_story_chosen))
 	# Wrap horizontal focus across the row.
 	_cards[0].focus_neighbor_left = _cards[0].get_path_to(_cards[-1])
 	_cards[-1].focus_neighbor_right = _cards[-1].get_path_to(_cards[0])
@@ -98,7 +92,7 @@ func _build_ui(page: Dictionary) -> void:
 
 	MenuKit.add_standard_hints(page.hints, "Select")
 	var hint := MenuKit.label(
-		"1 Campaign  •  2 Skirmish  •  3 Arena Run  •  4 Challenges  •  5 Duel  •  6 Story", &"MutedLabel")
+		"1 Story  •  2 Campaign  •  3 Skirmish  •  4 Arena Run", &"MutedLabel")
 	hint.name = "KeyHint"
 	hint.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -120,7 +114,7 @@ func _make_mode_card(number: int, heading: String, tagline: String, blurb: Strin
 
 
 ## A card that runs an arbitrary [param callback] instead of staging a MatchSetup mode
-## (Campaign and Challenges navigate to their own screens).
+## (Story and Campaign navigate to their own screens).
 func _make_action_card(number: int, heading: String, tagline: String, blurb: String,
 		accent: Color, callback: Callable) -> Button:
 	var btn := _make_card(number, heading, tagline, blurb, accent)
@@ -156,11 +150,11 @@ func _make_card(number: int, heading: String, tagline: String, blurb: String,
 	var head := MenuKit.label(heading, &"SubheadingLabel")
 	head.add_theme_font_size_override("font_size", 20)
 	v.add_child(head)
-	# Wraps: six cards leave ~150px of text width, and "LANES AND BASES" is wider than that.
+	# Wraps if a tagline is ever wider than the card's text column.
 	var tl := MenuKit.label(tagline.to_upper(), &"SectionLabel", true)
 	tl.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	tl.add_theme_color_override("font_color", accent.lightened(0.2))
-	# Six cards share the row: a long tagline wraps rather than spilling past the frame.
+	# A long tagline wraps rather than spilling past the frame.
 	tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(tl)
 	var desc := MenuKit.label(blurb, &"DimLabel", true)
@@ -193,14 +187,6 @@ func _on_mode_chosen(mode: String) -> void:
 		GameSettings.set_game_mode(GameSettings.GameMode.SINGLE_PLAYER)
 	MatchSetup.requested_mode = mode
 	MenuNav.change_scene(self, MATCH_SETUP_SCENE)
-
-
-func _on_challenges_chosen() -> void:
-	MenuNav.change_scene(self, CHALLENGE_BROWSE_SCENE)
-
-
-func _on_duel_chosen() -> void:
-	MenuNav.change_scene(self, DUEL_SETUP_SCENE)
 
 
 func _on_campaign_chosen() -> void:

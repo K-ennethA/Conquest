@@ -66,6 +66,19 @@ var _items_grid: GridContainer = null
 ## The item the last [constant ITEM_SLOT] pick chose.
 var chosen_item_id: String = ""
 
+# --- VERSUS (online / hot-seat) -----------------------------------------------------------
+## The side this screen belongs to: its combatant gets the player card (bottom-right), the
+## other side the foe card, and the results read Victory / Defeat for it. 0 everywhere except
+## an online duel seated in slot 1. Set before [method bind].
+var perspective_side: int = 0
+## Hot-seat: the two sides' names ("Player 1", "Player 2"). When set, the results name the
+## winner instead of Victory / Defeat (nobody at a shared screen "lost" to themselves).
+var side_names: Array[String] = []
+## Online: the results card offers only the way out (no rematch / change units).
+var results_menu_only: bool = false
+## The unit the move rows currently show (rebound when another side's human takes the turn).
+var _rows_unit = null
+
 
 func _ready() -> void:
 	layer = LAYER
@@ -330,11 +343,18 @@ func _wire_focus() -> void:
 
 func bind(p_battle: DuelBattle) -> void:
 	battle = p_battle
-	player_card.bind(battle.unit_of(0))
-	foe_card.bind(battle.unit_of(1))
-	for r in rows:
-		r.bind(battle.unit_of(0), battle.unit_of(1), battle.board)
+	var me := clampi(perspective_side, 0, 1)
+	player_card.bind(battle.unit_of(me))
+	foe_card.bind(battle.unit_of(1 - me))
+	_bind_rows(battle.unit_of(me))
 	refresh()
+
+
+## Point the move rows at [param unit] (and its foe).
+func _bind_rows(unit) -> void:
+	_rows_unit = unit
+	for r in rows:
+		r.bind(unit, battle.foe_of(unit) if battle != null else null, battle.board if battle != null else null)
 
 
 ## Re-read everything (rows, round, order). Cheap; the stage calls it after every action.
@@ -388,6 +408,8 @@ func _refresh_order() -> void:
 func show_commands(actor) -> void:
 	_actor = actor
 	_accepting = true
+	if actor != _rows_unit and battle != null:
+		_bind_rows(actor)  # hot-seat: the other human's turn shows THEIR moves
 	_items_box.visible = false
 	_grid.visible = true
 	_waiting.visible = false
@@ -478,9 +500,16 @@ func show_results(result: DuelResult, standalone: bool = true) -> void:
 	col.add_theme_constant_override("separation", 10)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	_results.add_child(col)
-	var won := result.player_won()
+	var me := clampi(perspective_side, 0, 1)
+	var won := result.player_won() if me == 0 else result.winner_side == 1
 	var title := "Victory" if won else ("Defeat" if result.outcome == DuelResult.OUTCOME_DEFEAT \
 		else ("Got Away" if result.outcome == DuelResult.OUTCOME_FLED else "Duel Ended"))
+	if me == 1 and not won and result.winner_side == 0:
+		title = "Defeat"
+	if side_names.size() == 2 and result.winner_side >= 0:
+		# Hot-seat: name the winner; the ribbon stays gold (somebody at this screen won).
+		title = "%s wins" % side_names[result.winner_side]
+		won = true
 	var ribbon := ConquestTheme.title_ribbon(title.to_upper(),
 		ConquestTheme.GOLD if won else ConquestTheme.DANGER, ConquestTheme.FS_PHASE)
 	ribbon.name = "Outcome"
@@ -491,8 +520,8 @@ func show_results(result: DuelResult, standalone: bool = true) -> void:
 	rule.centered = true
 	rule.custom_minimum_size = Vector2(0, 12)
 	col.add_child(rule)
-	var mine: Dictionary = result.stats[0] if result.stats.size() > 0 else {}
-	var theirs: Dictionary = result.stats[1] if result.stats.size() > 1 else {}
+	var mine: Dictionary = result.stats[me] if result.stats.size() > me else {}
+	var theirs: Dictionary = result.stats[1 - me] if result.stats.size() > 1 - me else {}
 	for line in [
 		"%d rounds · %d actions" % [result.rounds, result.turns],
 		"Damage dealt %d · taken %d" % [int(mine.get("damage_dealt", 0)), int(theirs.get("damage_dealt", 0))],
@@ -525,7 +554,15 @@ func show_results(result: DuelResult, standalone: bool = true) -> void:
 	seed_line.add_theme_font_size_override("font_size", ConquestTheme.FS_CAPTION)
 	seed_line.add_theme_color_override("font_color", ConquestTheme.TEXT_MUTED)
 	col.add_child(seed_line)
-	if standalone:
+	if results_menu_only:
+		# ONLINE: the match is over and the session is gone -- one way out.
+		var leave := MenuKit.button("Back to Online", MenuKit.PRIMARY, 220)
+		leave.name = "Menu"
+		leave.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		leave.pressed.connect(func() -> void: menu_requested.emit(), CONNECT_ONE_SHOT)
+		col.add_child(leave)
+		leave.call_deferred("grab_focus")
+	elif standalone:
 		var buttons := HBoxContainer.new()
 		buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 		buttons.add_theme_constant_override("separation", 12)

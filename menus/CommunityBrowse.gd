@@ -246,7 +246,7 @@ func _build_ui() -> void:
 func _crumbs() -> Array:
 	if not _return_scene.is_empty():
 		return [_return_scene.get_file().get_basename().capitalize()]
-	return ["Solo", "Challenges"]
+	return ["Online", "Challenges"]
 
 
 ## The search field. Debounced (see the class docs): typing restarts [member _search_timer],

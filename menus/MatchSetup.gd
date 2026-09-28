@@ -200,7 +200,7 @@ func _is_hotseat() -> bool:
 # place with a firm cap.
 
 func _build_ui() -> void:
-	var crumbs: Array = ["Versus"] if _is_hotseat() else ["Solo"]
+	var crumbs: Array = ["Online", "Versus"] if _is_hotseat() else ["Solo"]
 	var page := MenuKit.build_page(self, crumbs, _title_text(), _subtitle_text())
 
 	var row := HBoxContainer.new()

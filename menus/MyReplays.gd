@@ -91,7 +91,7 @@ func _ready() -> void:
 # --- UI construction --------------------------------------------------------
 
 func _build_ui() -> void:
-	var page := MenuKit.build_page(self, ["Solo", "Challenges"], "My Replays",
+	var page := MenuKit.build_page(self, ["Online", "Challenges"], "My Replays",
 		"Battles this device recorded, newest first.")
 
 	# The recordings, in a sunken well: the page's ONE EXPAND_FILL region.

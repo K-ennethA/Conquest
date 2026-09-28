@@ -424,7 +424,9 @@ DuelStage (Node3D)                      <- scene root; added to AudioManager.bat
   queue.
   - Gap to fix while here: AbilitySystem cooldowns and the RNG position are not captured.
     Store `seq` so `rng_for(seq)` resumes.
-- **Network duel (open question Q6, M5).**
+- **Network duel (open question Q6, M5).** BUILT (sequential mode, DECISIONS.md #32): see
+  `systems/net/README.md` *Online duels* (`DuelNetConfig`, `DuelNetRules`, `NetDuelStage`,
+  `DuelLobby`; no items / flee online; `--mode duel` dedicated servers).
   - Sequential mode rides the existing host-authoritative NetSession intent flow. The match
     config gets `mode: "duel"` and the lobby launches DuelStage instead of GameWorld.
   - Simultaneous mode needs a *choice* commit-reveal phase: each peer commits the hash of

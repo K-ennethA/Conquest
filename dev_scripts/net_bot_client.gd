@@ -18,6 +18,12 @@ extends Node
 ## action updates its last digest; when the match ends (any reason) it prints
 ##   [net-bot <name>] FINAL reason=<r> seq=<n> digest=<d> desyncs=<k>
 ## and exits (code 0; 2 if a desync or a randomness-verification failure was seen).
+##
+## ONLINE DUEL: add [code]--mode duel [--unit <character_id>][/code] (every bot of the match, and
+## the dedicated server's [code]--mode duel[/code]). The bot announces its unit on the lobby
+## channel (DuelNetConfig.MSG_PICK) before readying; a hosting bot folds both picks into the
+## start ([method DuelNetConfig.final_config]). On its turn it submits what the duel brain
+## ([method DuelBattle.decide_for], NORMAL -- deterministic) would pick, or its forced WAIT.
 
 var bot_name := "Bot"
 var _ns: NetSessionNode = null
@@ -31,6 +37,12 @@ var _done := false
 var _host_map := ""
 var _host_end_after := 0
 var _was_in_match := false
+## --mode duel: an online-duel bot.
+var _duel := false
+## --unit: this bot's duel combatant ("" = the slot's default).
+var _unit := ""
+## Hosting duel bot: the seats' announced units {slot: id}.
+var _picks: Dictionary = {}
 
 
 func start(args: PackedStringArray) -> void:
@@ -38,8 +50,16 @@ func start(args: PackedStringArray) -> void:
 	var opts := DedicatedServer.parse_args(args)
 	bot_name = String(opts.get("name", "Bot"))
 	_ns = get_node("/root/NetSession")
+	_duel = String(opts.get("mode", NetProtocol.MODE_CONQUEST)) == NetProtocol.MODE_DUEL
+	_unit = String(opts.get("unit", ""))
+	_ns.lobby_mode = NetProtocol.MODE_DUEL if _duel else NetProtocol.MODE_CONQUEST
+	_ns.lobby_message.connect(func(t, data, from_slot):
+		if t == DuelNetConfig.MSG_PICK and from_slot >= 0:
+			_picks[from_slot] = String(data.get("character_id", "")))
 	_ns.joined.connect(func(slot):
 		_log("seated in slot %d" % slot)
+		if _duel:
+			_announce_pick(slot)
 		_ns.set_ready(true))
 	_ns.join_rejected.connect(func(reason, _info): _finish("rejected:" + reason))
 	_ns.connection_failed.connect(func(): _finish("connection_failed"))
@@ -62,7 +82,10 @@ func start(args: PackedStringArray) -> void:
 		_host_map = String(opts.get("map", "res://game/maps/resources/default_skirmish.tres"))
 		err = _ns.host_game(bot_name, port)
 		if err == OK:
-			_ns.set_match_config({"map_path": _host_map, "turn_system": int(opts.get("turn_system", 0)), "auto_end_turn": true})
+			if _duel:
+				_announce_pick(0)
+			else:
+				_ns.set_match_config({"map_path": _host_map, "turn_system": int(opts.get("turn_system", 0)), "auto_end_turn": true})
 			_ns.set_ready(true)
 			_host_end_after = int(opts.get("end_after_actions", 0))
 	else:
@@ -75,7 +98,7 @@ func _process(_delta: float) -> void:
 	if _done or _ns == null:
 		return
 	if _ns.is_host() and _ns.can_start_match():
-		_ns.start_match()
+		_ns.start_match(DuelNetConfig.final_config(_picks) if _duel else {})
 	if not _ns.is_in_match():
 		# The game itself closed the session after the match started (e.g. every peer
 		# refused an offline-only map: GameModeManager.apply_match_config) -- report it
@@ -84,6 +107,9 @@ func _process(_delta: float) -> void:
 			_finish("session_closed: %s" % GameModeManager.pending_menu_message)
 		return
 	var decided: bool = PlayerManager.current_game_state == PlayerManager.GameState.FINISHED
+	var live_rules = GameModeManager.get_rules()
+	if live_rules != null and live_rules.has_method("is_match_over"):
+		decided = live_rules.is_match_over()   # an online duel ends on its own KO
 	if _ns.is_host() and (decided or (_host_end_after > 0 and _ns.last_applied_seq() >= _host_end_after)) \
 			and not _ns.has_pending_actions() and _last_seq == _ns.last_applied_seq() \
 			and GameModeManager.get_rules() != null:
@@ -110,7 +136,33 @@ func _process(_delta: float) -> void:
 	_ns.submit_intent(intent)
 
 
+## Duel bot: announce this seat's combatant on the lobby channel (and remember our own).
+func _announce_pick(slot: int) -> void:
+	var id := _unit if DuelNetConfig.is_eligible(_unit) else DuelNetConfig.default_unit(slot)
+	_picks[slot] = id
+	_log("duel pick: %s" % id)
+	_ns.send_lobby_message(DuelNetConfig.MSG_PICK, {"character_id": id})
+
+
+## Duel bot: the brain's pick for our combatant (NORMAL is deterministic), else the first legal
+## slot; a stunned / controlled combatant passes.
+func _choose_duel(rules: DuelNetRules, me: int) -> Dictionary:
+	var b: DuelBattle = rules.battle
+	var actor = b.current_actor() if b != null else null
+	if actor == null or b.side_of(actor) != me:
+		return {}
+	if b.must_pass(actor):
+		return rules.pass_intent()
+	var intent := rules.use_move_intent(int(b.decide_for(actor).get("slot", DuelBrain.NO_SLOT)))
+	if rules.validate_intent(intent, me) != "":
+		var legal := b.legal_slots(actor)
+		intent = rules.use_move_intent(legal[0]) if not legal.is_empty() else {}
+	return intent if not intent.is_empty() and rules.validate_intent(intent, me) == "" else {}
+
+
 func _choose(rules: NetGameRules, me: int) -> Dictionary:
+	if rules is DuelNetRules:
+		return _choose_duel(rules as DuelNetRules, me)
 	var b = rules.board()
 	if b == null:
 		return {}

@@ -32,7 +32,8 @@ toasts, apply-side ultimates and cooldown booking, replays, dev auto-join).
 | `menus/NetworkMultiplayerSetup.gd` | Host / join by address:port (a friend's game or a dedicated server): validation, remembered details, connect countdown, rejection text, LAN addresses; embeds the lobby. |
 | `menus/CollaborativeLobby.gd` | The lobby: roster + ready, map votes / coin flip (player-hosted) or the leader's pick (dedicated), host match settings, profile + loadout exchange, the start. |
 | `systems/multiplayer_launcher.gd` (autoload `MultiplayerLauncher`), `systems/AutoClientDetector.gd` | Dev two-instance auto-join (`-- --multiplayer-auto-join`) and the dev-gated "Host + Auto Client" spawner. |
-| `dev_scripts/net_bot_client.gd`, `dev_scripts/net_multiprocess_check.sh` | Scripted headless client + the 3-process check (see *Testing*). |
+| `dev_scripts/net_bot_client.gd`, `dev_scripts/net_multiprocess_check.sh` | Scripted headless client + the 3-process check (see *Testing*; `MODE=duel` for online duels). |
+| `DuelNetConfig.gd`, `DuelNetRules.gd`, `game/duel/net/NetDuelStage.gd`, `menus/DuelLobby.gd` | ONLINE DUELS (see *Online duels*): the duel match config + its strict request builder, the rules object over a `DuelBattle`, the network-driven duel stage, the duel lobby. |
 
 ## Flow
 
@@ -86,6 +87,12 @@ Match    UI --request_*--> submit_intent --rpc--> host intent queue
 
 ## Join handshake (the build gate)
 
+The hello also names the LOBBY MODE the joiner came for (`NetProtocol.MODE_CONQUEST` /
+`MODE_DUEL`, set on `NetSession.lobby_mode` by the Versus screen or `--mode`): a host running the
+other mode refuses it with `mode_mismatch` ("That host is running a Duel lobby. Choose Online >
+Versus > Duel to join it."), after the protocol check. The host stamps its mode into the match
+config (`config.mode`), which is what GameModeManager dispatches on.
+
 A joining client's **first** message is a hello — display name plus
 `NetProtocol.PROTOCOL_VERSION` and `application/config/version`. The host runs the pure
 `NetProtocol.validate_hello()` **before** the peer gets a roster slot:
@@ -97,8 +104,8 @@ A joining client's **first** message is a hello — display name plus
 - same protocol, different game version → admitted, `build_differs` logged
   (an editor run joining an exported build is a legitimate test setup).
 
-Bump `PROTOCOL_VERSION` whenever the envelope or an action's data shape changes (2 = this
-merged core). Replays stamp it too and refuse other versions. Two-machine procedure:
+Bump `PROTOCOL_VERSION` whenever the envelope or an action's data shape changes (2 = the
+merged core, 3 = USE_ITEM, 4 = lobby modes + the online-duel config keys). Replays stamp it too and refuse other versions. Two-machine procedure:
 `docs/NETWORK_TESTING.md`.
 
 ## Lobby channel
@@ -183,6 +190,37 @@ State is cleared when a new lobby forms and when a non-networked battle builds i
 (`MapLoader._clear_stale_replication`). `MatchLoadouts.normalise()` whitelists every id
 (library + scope + character), caps sizes; a hostile peer can only field fewer buffs than it
 claimed. Pinned by `tests/unit/test_match_loadouts.gd`, `test_lobby_loadout_exchange.gd`.
+
+## Online duels
+
+DECISIONS.md #32: a DUEL is played over this same core. Menu: Online > Versus > Duel > Network
+(host / join / a `--mode duel` dedicated server) -> `menus/DuelLobby.gd` (roster + ready, each
+seat's unit, the host's / leader's stage + weather).
+
+* **Config** (`DuelNetConfig`): `mode: "duel"`, `duel_units {slot: character_id}`, `duel_stage`,
+  `duel_weather`, plus the session's `seed`. Each seat announces its pick on the lobby channel
+  (`duel_pick`); the player-host's lobby, or the dedicated server (`auto_start_config`), folds
+  both into the start. Untrusted: `sanitize` whitelists, and `build_request` -- run on EVERY peer
+  -- refuses a unit that is not duel-eligible (`DuelMoveCompiler.is_duel_eligible`; humans and
+  creatures alike) or an unknown stage / weather (the match ends with `duel_refused`). Missing
+  picks fall back to each slot's default. The offline-only-maps rule does not apply (no map).
+* **The duel** is a VERSUS `DuelRequest` (both sides human, seed = the setup seed, so the speed
+  tie-break / weather / opening ticks agree) on every peer. GameModeManager opens
+  `NetDuelStage` (a `DuelStage` that never applies anything itself) and attaches `DuelNetRules`.
+* **Validation** (`DuelNetRules.validate_intent`, host + every client): the duel is live and it is
+  the sender's combatant's turn (the speed-order `DuelTurnSystem`; slot = side); `USE_MOVE` names
+  the acting combatant, a slot `legal_slots` offers, aimed exactly where `DuelBrain.aim_for` aims;
+  `WAIT` only while it must pass (stunned / controlled -- the seat's stage submits it by itself);
+  `MOVE` / `END_TURN` / `USE_ITEM` are refused. **No items and no flee online**: an online duel
+  carries no bag and cannot be run from (both are local / story actions).
+* **Apply**: `DuelBattle.apply_command` with the NetSession-stamped seq + commit-reveal seed (a
+  kept canto move's follow-up WAIT applies inside the same call on every peer). **Digest**: the
+  board digest + round, decided flag, winner, command count, whose turn.
+* **Leaving**: pause-menu Forfeit (a loss); the opponent's forfeit / drop is this seat's win
+  (`DuelBattle.concede`), with the same toasts and messages as Conquest online. No turn clock
+  (the ruleset's `turn_timer_seconds` is 0; a clock expiry would be a local, un-networked call).
+* **Same device**: Online > Versus > Duel > Same device is the hot-seat `DuelSetup` (two human
+  sides on one `DuelStage`) -- no network involved.
 
 ## What the player sees at the seam
 
@@ -300,7 +338,12 @@ godot --headless --path . -- --server --port 8910 \
       [--map res://game/maps/resources/default_skirmish.tres] \
       [--turn-system traditional|speed_first] [--rng all|server] \
       [--max-matches N] [--end-after-actions N] [--reveal-timeout 30] [--transport enet]
+      [--mode duel [--stage meadow|tall_grass|grove] [--weather clear|...]]
 ```
+
+`--mode duel` serves online DUELS instead (no map; `--stage` locks the stage, else the slot-0
+client picks; each seat's unit comes from its `duel_pick` lobby message; the match ends on the
+duel's KO -- `DuelNetRules.is_match_over`).
 
 `--server` is detected by `GameModeManager` (also any export with the
 `dedicated_server` feature tag, i.e. Godot's *Dedicated Server* export mode).
@@ -403,6 +446,8 @@ commit-reveal, the lobby channel) is transport-agnostic.
 | `tests/integration/test_net_cast_cooldown.gd` | apply-side cooldown / charge booking, the maxi rule, lockstep, replay round trip |
 | `tests/integration/test_net_host_squad.gd`, `test_net_client_squad.gd` | squad replication per slot through MapLoader |
 | `tests/integration/test_net_rejection_toast.gd` | refused command → NetToast |
+| `tests/integration/test_net_duel.gd` | ONLINE DUEL: mode stamped + mode-mismatch refused, both peers build one duel, a whole duel applies identically (commands, commit-reveal seeds, timeline, winner, digest), host validation (turn, slot, aim, no items / moves / end-turn / free skip), client re-validation, the actor cannot derive its roll before the other reveals, desync, forfeit / drop, ineligible picks refused, a `--mode duel` DedicatedServer folding both picks |
+| `tests/integration/test_net_duel_stage.gd` | the `NetDuelStage` on both seats: HUD pick -> intent -> applied on both, each seat prompted only for its own unit, per-seat Victory / Defeat, forfeit = the other seat's win |
 
 ```
 godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests/unit,res://tests/integration -gprefix=test_net -gexit
@@ -417,7 +462,9 @@ GODOT=/path/to/godot dev_scripts/net_multiprocess_check.sh \
 ```
 
 It passes when the server and both bots print the same `FINAL seq=… digest=…`
-with no desync / verification failure. `HOSTED=1` runs the player-hosted
+with no desync / verification failure. `MODE=duel` runs an online duel instead (map / turn
+system ignored; `UNIT_A` / `UNIT_B` pick the combatants), e.g.
+`MODE=duel GODOT=… dev_scripts/net_multiprocess_check.sh "" "" 60` (and `HOSTED=1`). `HOSTED=1` runs the player-hosted
 variant (a host bot = listen server + seat 0, and a guest bot). A bot alone:
 `godot --headless --path . -- --net-bot --connect 127.0.0.1 --port 8910 --name BotA`
 (add `--host [--map … --turn-system … --end-after-actions N]` to make it the player-host).
@@ -434,6 +481,7 @@ button (`NetworkMultiplayerSetup.ENABLE_HOST_AUTO_CLIENT`) spawns exactly that.
 ## Known limitations
 
 * 1v1 humans only; no AI seats in network play. No reconnect.
+* Online duels: strict 1v1 (party size 1), no items, no flee, no turn clock, no spectators.
 * Desync is detected (digest mismatch → match ends), not repaired.
 * ENet is unencrypted (see *Path to production hosting*).
 * One match per server process (see *Dedicated server*).

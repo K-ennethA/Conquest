@@ -44,6 +44,10 @@ var _ns: NetSessionNode = null
 var _finish_at: int = -1
 var _in_match: bool = false
 var _last_seq: int = 0   # survives NetSession's reset when a match is aborted
+## --mode duel: this server runs online DUELS (NetProtocol.MODE_DUEL lobbies).
+var duel: bool = false
+## Duel lobby: each seat's announced combatant {slot: character_id}.
+var _picks: Dictionary = {}
 
 
 ## Parse [param args] (OS.get_cmdline_user_args()) and start listening.
@@ -63,7 +67,20 @@ func start(args: PackedStringArray, session: NetSessionNode) -> Error:
 	if opts.has("reveal_timeout"):
 		_ns.reveal_timeout_ms = int(float(opts["reveal_timeout"]) * 1000.0)
 	var cfg := {}
-	if opts.has("map"):
+	duel = String(opts.get("mode", NetProtocol.MODE_CONQUEST)) == NetProtocol.MODE_DUEL
+	_ns.lobby_mode = NetProtocol.MODE_DUEL if duel else NetProtocol.MODE_CONQUEST
+	if duel:
+		# An online DUEL lobby: no map. --stage / --weather lock those; each seat picks its unit
+		# (lobby message DuelNetConfig.MSG_PICK) and the picks ride the auto-start.
+		for key in [["stage", DuelNetConfig.KEY_STAGE], ["weather", DuelNetConfig.KEY_WEATHER]]:
+			if opts.has(key[0]):
+				cfg[key[1]] = String(opts[key[0]])
+		var clean := DuelNetConfig.sanitize(cfg)
+		if clean.size() != cfg.size():
+			_log("unknown duel stage / weather: %s" % str(cfg))
+			return ERR_INVALID_PARAMETER
+		cfg = clean
+	elif opts.has("map"):
 		cfg["map_path"] = String(opts["map"])
 		if not ResourceLoader.exists(cfg["map_path"]):
 			_log("map not found: %s" % cfg["map_path"])
@@ -76,15 +93,22 @@ func start(args: PackedStringArray, session: NetSessionNode) -> Error:
 			_log("map refused for network play: %s -- %s (%s)" % [cfg["map_path"],
 				MapCatalog.describe_network_refusal(refusal), refusal])
 			return ERR_INVALID_PARAMETER
-	if opts.has("turn_system"):
+	if opts.has("turn_system") and not duel:
 		cfg["turn_system"] = int(opts["turn_system"])
-	cfg["auto_end_turn"] = true
+	if not duel:
+		cfg["auto_end_turn"] = true
 	var mode := NetSessionNode.RngMode.SERVER_ONLY if String(opts.get("rng", "all")) == "server" \
 		else NetSessionNode.RngMode.ALL
 	var err := _ns.host_dedicated(port, cfg, mode)
 	if err != OK:
 		_log("could not listen on %d: %s" % [port, error_string(err)])
 		return err
+	if duel and cfg.has(DuelNetConfig.KEY_STAGE):
+		_ns.config_locked = true
+	if duel:
+		_ns.lobby_message.connect(_on_lobby_message)
+		_ns.player_left.connect(func(_pid, slot): _picks.erase(slot))
+		_ns.auto_start_config = func() -> Dictionary: return DuelNetConfig.final_config(_picks)
 	_ns.max_actions = end_after_actions
 	_ns.player_joined.connect(func(pid, slot, pname): _log("seated '%s' (peer %d) in slot %d" % [pname, pid, slot]))
 	_ns.player_left.connect(func(pid, slot): _log("peer %d (slot %d) left" % [pid, slot]))
@@ -94,11 +118,28 @@ func start(args: PackedStringArray, session: NetSessionNode) -> Error:
 	_ns.cheat_detected.connect(func(pid, reason): _log("RANDOMNESS VERIFICATION FAILED: peer %d (%s)" % [pid, reason]))
 	if PlayerManager:
 		PlayerManager.game_state_changed.connect(_on_game_state_changed)
+	if duel:
+		_log("dedicated DUEL server listening on %s:%d  stage=%s  weather=%s  rng=%s%s" % [
+			t.id(), port, cfg.get(DuelNetConfig.KEY_STAGE, "<lobby leader>"),
+			cfg.get(DuelNetConfig.KEY_WEATHER, "<lobby leader>"),
+			"server" if mode == NetSessionNode.RngMode.SERVER_ONLY else "all",
+			"" if max_matches == 0 else "  max_matches=%d" % max_matches])
+		return OK
 	_log("dedicated server listening on %s:%d  map=%s  turn_system=%s  rng=%s%s" % [
 		t.id(), port, cfg.get("map_path", "<lobby leader>"),
 		cfg.get("turn_system", "<lobby leader>"), "server" if mode == NetSessionNode.RngMode.SERVER_ONLY else "all",
 		"" if max_matches == 0 else "  max_matches=%d" % max_matches])
 	return OK
+
+
+## Duel lobby: a seat announced its combatant (untrusted -- whitelisted at the start by
+## DuelNetConfig, and re-validated by every peer).
+func _on_lobby_message(message_type: String, data: Dictionary, from_slot: int) -> void:
+	if message_type != DuelNetConfig.MSG_PICK or from_slot < 0 or from_slot > 1:
+		return
+	var id = data.get("character_id", "")
+	if DuelNetConfig.is_eligible(id):
+		_picks[from_slot] = String(id)
 
 
 ## --key value / --flag parsing into a Dictionary with snake_case keys.
@@ -149,6 +190,11 @@ func _process(_delta: float) -> void:
 	if _finish_at < 0 and end_after_actions > 0 and _ns.last_applied_seq() >= end_after_actions \
 			and not _ns.has_pending_actions():
 		_finish_at = Time.get_ticks_msec() + 300
+	# An online duel is decided by its own rules (a KO), not PlayerManager's game state.
+	var rules = GameModeManager.get_rules() if GameModeManager else null
+	if _finish_at < 0 and rules != null and rules.has_method("is_match_over") and rules.is_match_over() \
+			and not _ns.has_pending_actions():
+		_finish_at = Time.get_ticks_msec() + FINISH_GRACE_MS
 	if _finish_at >= 0 and Time.get_ticks_msec() >= _finish_at:
 		_finish_match("match_complete")
 
@@ -157,6 +203,12 @@ func _on_match_started(config: Dictionary) -> void:
 	_in_match = true
 	_finish_at = -1
 	_last_seq = 0
+	if DuelNetConfig.is_duel(config):
+		_log("match %d starting: DUEL %s vs %s on %s, players %s, rng contributors %s" % [
+			matches_done + 1, DuelNetConfig.unit_of(config, 0), DuelNetConfig.unit_of(config, 1),
+			String(config.get(DuelNetConfig.KEY_STAGE, DuelNetConfig.DEFAULT_STAGE)),
+			str(config.get("slots", {})), str(config.get("rng_contributors", []))])
+		return
 	_log("match %d starting: %s, turn system %d, players %s, rng contributors %s" % [
 		matches_done + 1, config.get("map_path", DEFAULT_MAP), int(config.get("turn_system", 0)),
 		str(config.get("slots", {})), str(config.get("rng_contributors", []))])
@@ -190,6 +242,7 @@ func _log_final(reason: String) -> void:
 func _after_match() -> void:
 	_in_match = false
 	_finish_at = -1
+	_picks.clear()
 	matches_done += 1
 	if GameModeManager:
 		GameModeManager.reset_server_match()

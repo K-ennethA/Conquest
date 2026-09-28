@@ -33,6 +33,8 @@ signal network_intent_rejected(action: Dictionary, reason: String)
 signal network_turn_changed(slot: int)
 
 const GAME_WORLD_SCENE := "res://game/world/GameWorld.tscn"
+## The online duel's scene (a [DuelStage] driven by the network).
+const NET_DUEL_STAGE_SCENE := "res://game/duel/net/NetDuelStage.tscn"
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 
 ## A message for the main menu to show once (e.g. "Opponent disconnected.").
@@ -212,6 +214,9 @@ func submit_intent(action: Dictionary) -> bool:
 func _on_match_started(config: Dictionary) -> void:
 	_match_finished = false
 	_rules = null
+	if DuelNetConfig.is_duel(config):
+		_start_network_duel(config)
+		return
 	if apply_match_config(config) == "":
 		var ns := _session()
 		if _offline_only_refusal != "" and ns != null and ns.is_host():
@@ -225,6 +230,64 @@ func _on_match_started(config: Dictionary) -> void:
 		get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 		return
 	get_tree().change_scene_to_file(GAME_WORLD_SCENE)
+
+
+## ONLINE DUEL (DECISIONS.md #32): build the duel from the host's [param config] on this peer
+## and open the online duel stage -- or refuse the match (every peer runs the same check) when
+## the config names a unit that is not duel-eligible or a stage / weather this build lacks.
+func _start_network_duel(config: Dictionary) -> void:
+	var req := apply_duel_config(config)
+	if req == null:
+		var ns := _session()
+		if ns != null and ns.is_host():
+			ns.end_match(DUEL_REFUSED_REASON)
+			if is_dedicated_server_process():
+				return
+		end_network_session(ABORT_TEXT[DUEL_REFUSED_REASON])
+		get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+		return
+	get_tree().change_scene_to_file(NET_DUEL_STAGE_SCENE)
+
+
+## The duel half of [method apply_match_config]: [DuelNetConfig.build_request] (strict: a
+## non-eligible pick refuses), then GameSettings for a network match, and the request staged
+## on DuelController (the online stage reads it). Returns the request, or null to refuse.
+func apply_duel_config(config: Dictionary) -> DuelRequest:
+	_duel_refusal = ""
+	var res := DuelNetConfig.build_request(config)
+	if not bool(res["success"]):
+		_duel_refusal = String(res["reason"])
+		return null
+	var req: DuelRequest = res["request"]
+	GameSettings.set_game_mode(GameSettings.GameMode.MULTIPLAYER)
+	GameSettings.player_count = 2
+	var slots: Dictionary = config.get("slots", {})
+	var names: Array[String] = []
+	for s in range(2):
+		names.append(String(slots.get(s, "Player %d" % (s + 1))))
+	GameSettings.player_names = names
+	# No squads, items or skins ride an online duel: the picks are in the config itself.
+	MatchLoadouts.clear()
+	var ctrl := get_node_or_null("/root/DuelController")
+	if ctrl != null and ctrl.has_method("start"):
+		ctrl.start(req, false)
+	return req
+
+
+## Called by the online duel stage once its [DuelBattle] is set up and started (every peer):
+## the rules become the session's game.
+func on_network_duel_ready(rules: NetGameRules) -> void:
+	if not is_multiplayer_active() or rules == null:
+		return
+	_rules = rules
+	_session().attach_game(rules)
+
+
+## The live network battle was decided (the online duel's KO / concede): a disconnect from
+## here on only drops the link, it never throws the player off the results.
+func mark_network_match_finished() -> void:
+	if is_multiplayer_active():
+		_match_finished = true
 
 
 ## Copy the host's authoritative match [param config] into this peer's GameSettings
@@ -409,6 +472,11 @@ const OFFLINE_ONLY_MAP_REASON := "offline_only_map"
 ## ([code]MapCatalog.NET_REFUSAL_*[/code]), "" otherwise.
 var _offline_only_refusal: String = ""
 
+## Why the host's duel config was refused on this peer ([method DuelNetConfig.build_request]
+## reasons), "" otherwise. Also the reason the host broadcasts ([constant DUEL_REFUSED_REASON]).
+const DUEL_REFUSED_REASON := "duel_refused"
+var _duel_refusal: String = ""
+
 const ABORT_TEXT := {
 	"opponent_disconnected": "Opponent disconnected. The match has ended.",
 	"host_disconnected": "Lost connection to the host. The match has ended.",
@@ -417,6 +485,7 @@ const ABORT_TEXT := {
 	"reveal_timeout": "A player stopped responding. The match has ended.",
 	"match_complete": "The server closed the match.",
 	OFFLINE_ONLY_MAP_REASON: "That map is offline only (it needs AI-controlled units, and online matches run no AI). The match was not started.",
+	DUEL_REFUSED_REASON: "The duel's settings could not be verified (a unit that cannot duel, or an unknown stage). The match was not started.",
 	NetSessionNode.ABORT_UNDRIVEN_TURN: "The battle reached a turn no player controls (an AI or neutral side), which online matches cannot run. The match has ended.",
 }
 

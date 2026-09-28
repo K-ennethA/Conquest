@@ -162,9 +162,9 @@ func test_all_cards_still_fit_the_720p_page() -> void:
 	gut.p("cards       : %d   min row width=%.0f   page=%.0f   viewport=%.0f"
 			% [count, expected, SoloModeSelect.PAGE_WIDTH, viewport_width])
 
-	assert_eq(count, 6, "Campaign, Skirmish, Arena Run, Challenges, Duel, Story")
+	assert_eq(count, 4, "Story, Campaign, Skirmish, Arena Run (DECISIONS.md #31)")
 	assert_true(expected <= SoloModeSelect.PAGE_WIDTH + 0.5,
-			"6 x %.0f + 5 x %d = %.0f fits the page's %.0f"
+			"4 x %.0f + 3 x %d = %.0f fits the page's %.0f"
 			% [SoloModeSelect.CARD_WIDTH, SoloModeSelect.CARD_SEPARATION,
 			expected, SoloModeSelect.PAGE_WIDTH])
 	assert_true(cards.get_combined_minimum_size().x <= viewport_width + 0.5,
@@ -181,7 +181,7 @@ func test_the_key_hint_names_the_new_card_and_renumbers_the_rest() -> void:
 		return
 	gut.p("key hint    : \"%s\"" % hint.text)
 	assert_false(hint.text.contains("Siege"), "Siege is gone from the key hints")
-	assert_true(hint.text.contains("3 Arena Run") and hint.text.contains("4 Challenges"),
+	assert_true(hint.text.contains("3 Skirmish") and hint.text.contains("4 Arena Run"),
 			"and the cards after it are renumbered rather than left lying about the keys")
 
 
@@ -193,8 +193,8 @@ func test_siege_is_not_offered_hot_seat() -> void:
 	var screen: Control = await _open("res://menus/MultiplayerModeSelection.gd")
 	assert_null(_card_with(screen, "Siege"), "local versus no longer offers Siege")
 	var hint: Label = _find_named(screen, "KeyHint") as Label
-	assert_true(hint != null and hint.text.contains("2 Network") and not hint.text.contains("Siege"),
-			"Network takes the 2 key")
+	assert_true(hint != null and hint.text.contains("3 Network") and not hint.text.contains("Siege"),
+			"the Versus screen's keys: mode 1-2, where 3-4")
 
 
 # =====================================================================================

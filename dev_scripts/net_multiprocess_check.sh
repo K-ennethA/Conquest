@@ -9,6 +9,10 @@
 # Defaults: default_skirmish, traditional, 40 actions, rng=all. Run from the
 # project root (after `godot --headless --import .`). HOSTED=1 runs the
 # player-hosted variant instead (host bot = listen server + seat 0, guest bot).
+# MODE=duel runs an ONLINE DUEL instead of a map battle (the map / turn system are then
+# ignored; UNIT_A / UNIT_B pick the two combatants, default: each slot's default unit):
+#
+#   GODOT=... MODE=duel dev_scripts/net_multiprocess_check.sh "" "" 60
 set -u
 GODOT="${GODOT:-godot}"
 MAP="${1:-res://game/maps/resources/default_skirmish.tres}"
@@ -18,15 +22,19 @@ RNG="${4:-all}"
 PORT="${PORT:-$((20000 + RANDOM % 20000))}"
 OUT="${OUT:-$(mktemp -d)}"
 TIMEOUT="${TIMEOUT:-240}"
+MODE="${MODE:-conquest}"
+MODE_ARGS="--mode $MODE"
+UNIT_A_ARGS=""; [ -n "${UNIT_A:-}" ] && UNIT_A_ARGS="--unit $UNIT_A"
+UNIT_B_ARGS=""; [ -n "${UNIT_B:-}" ] && UNIT_B_ARGS="--unit $UNIT_B"
 
 if [ "${HOSTED:-0}" = "1" ]; then
 	# PLAYER-HOSTED variant: a host bot (listen server + seat 0) and a guest bot.
-	echo "net check (player-hosted): map=$MAP turns=$TURNS actions=$ACTIONS port=$PORT logs=$OUT"
-	timeout "$TIMEOUT" "$GODOT" --headless --path . -- --net-bot --host --port "$PORT" --name Host \
+	echo "net check (player-hosted): mode=$MODE map=$MAP turns=$TURNS actions=$ACTIONS port=$PORT logs=$OUT"
+	timeout "$TIMEOUT" "$GODOT" --headless --path . -- --net-bot --host --port "$PORT" --name Host $MODE_ARGS $UNIT_A_ARGS \
 		--map "$MAP" --turn-system "$TURNS" --end-after-actions "$ACTIONS" > "$OUT/host.log" 2>&1 &
 	H=$!
 	sleep 2
-	timeout "$TIMEOUT" "$GODOT" --headless --path . -- --net-bot --connect 127.0.0.1 --port "$PORT" --name Guest \
+	timeout "$TIMEOUT" "$GODOT" --headless --path . -- --net-bot --connect 127.0.0.1 --port "$PORT" --name Guest $MODE_ARGS $UNIT_B_ARGS \
 		> "$OUT/guest.log" 2>&1
 	RG=$?
 	wait $H; RH=$?
@@ -39,17 +47,17 @@ if [ "${HOSTED:-0}" = "1" ]; then
 	echo "FAIL (see $OUT)"; exit 1
 fi
 
-echo "net check: map=$MAP turns=$TURNS actions=$ACTIONS rng=$RNG port=$PORT logs=$OUT"
-timeout "$TIMEOUT" "$GODOT" --headless --path . -- --server --port "$PORT" --map "$MAP" \
+echo "net check: mode=$MODE map=$MAP turns=$TURNS actions=$ACTIONS rng=$RNG port=$PORT logs=$OUT"
+timeout "$TIMEOUT" "$GODOT" --headless --path . -- --server --port "$PORT" $MODE_ARGS --map "$MAP" \
 	--turn-system "$TURNS" --rng "$RNG" --max-matches 1 --end-after-actions "$ACTIONS" \
 	> "$OUT/server.log" 2>&1 &
 SRV=$!
 sleep 3
-timeout "$TIMEOUT" "$GODOT" --headless --path . -- --net-bot --connect 127.0.0.1 --port "$PORT" --name BotA \
+timeout "$TIMEOUT" "$GODOT" --headless --path . -- --net-bot --connect 127.0.0.1 --port "$PORT" --name BotA $MODE_ARGS $UNIT_A_ARGS \
 	> "$OUT/bot_a.log" 2>&1 &
 A=$!
 sleep 1
-timeout "$TIMEOUT" "$GODOT" --headless --path . -- --net-bot --connect 127.0.0.1 --port "$PORT" --name BotB \
+timeout "$TIMEOUT" "$GODOT" --headless --path . -- --net-bot --connect 127.0.0.1 --port "$PORT" --name BotB $MODE_ARGS $UNIT_B_ARGS \
 	> "$OUT/bot_b.log" 2>&1 &
 B=$!
 wait $A; RA=$?
