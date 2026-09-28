@@ -101,3 +101,16 @@ doc's default differs from this file, THIS FILE WINS. Anything not listed: use t
     enemy.
 21. **The recurring GENERAL:** the soldier from the opening becomes a recurring general the hero
     keeps bumping into across the game, eventually teaming up with them to save the day.
+
+## Story mechanics and arcs (owner approved, 2026-09-28)
+22. **Shard chains (villain mechanic):** the dark organization's creatures are CHAINED —
+    forced bonds, not friendship — shown as a status + visual. Breaking the chain in battle
+    frees the creature; a freed creature can then be catchable.
+23. **Old-way bonds:** the few people who befriended creatures WITHOUT shards (trial and error)
+    are mentors / recruitable humans; their creatures get something special for being
+    shard-free bonds.
+24. **The fallen creature's finale:** its dominion over lesser creatures can turn the hero's own
+    creatures against them until its hold is broken; the ending choice is capture / free /
+    befriend it the old way.
+25. **The general's arc:** met repeatedly at army battles — wary and by-the-book at first —
+    later learns their nation is being manipulated and sides with the hero for the finale.
