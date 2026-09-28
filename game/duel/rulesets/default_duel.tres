@@ -1,0 +1,64 @@
+[gd_resource type="Resource" script_class="DuelRuleset" format=3]
+
+[ext_resource type="Script" path="res://game/duel/DuelRuleset.gd" id="1_rules"]
+[ext_resource type="Resource" path="res://game/duel/moves/desperate_strike.tres" id="2_struggle"]
+
+[resource]
+script = ExtResource("1_rules")
+turn_mode = 0
+party_size = 1
+allow_switch = false
+ko_replacement = false
+allow_flee = false
+allow_items = false
+station_gap = 4
+turn_timer_seconds = 0
+flee_base = 0.5
+flee_per_speed = 0.05
+flee_per_attempt = 0.1
+flee_min = 0.1
+befriend_base_chance = 0.25
+befriend_subdue_bonus = 0.35
+struggle_move = ExtResource("2_struggle")
+effect_policies = {
+"ApplyStatusEffect": "keep",
+"ApplyTileEffect": "keep_if_stationary",
+"DamageEffect": "keep",
+"DashThroughEffect": "convert_damage",
+"DelayedBurstEffect": "keep",
+"DreadBrandEffect": "keep",
+"EvolveEffect": "keep",
+"HealEffect": "keep",
+"InfestEffect": "keep",
+"KnockbackEffect": "drop",
+"LeapEffect": "drop",
+"PercentHealthLossEffect": "keep",
+"SetWeatherEffect": "keep",
+"ShieldEffect": "keep",
+"SpawnHazardEffect": "exclude",
+"StackConsumeDamageEffect": "keep",
+"StatModifierEffect": "keep",
+"SummonEffect": "exclude",
+"TileTransformEffect": "drop",
+"VoidstepEffect": "exclude"
+}
+default_effect_policy = "keep"
+ability_policies = {
+"reanimate": "disable"
+}
+ai_difficulty = 1
+ai_lethal_bonus = 60.0
+ai_lethal_min_hit = 70.0
+ai_status_values = {
+"controlled": 16.0,
+"debuff": 6.0,
+"poisoned": 10.0,
+"status": 5.0,
+"stunned": 18.0
+}
+ai_guard_threshold = 0.3
+ai_guard_value = 14.0
+ai_heal_value = 30.0
+ai_heal_ceiling = 0.8
+ai_cooldown_penalty = 0.5
+ai_easy_temperature = 6.0

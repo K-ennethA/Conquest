@@ -127,9 +127,19 @@ func is_melee() -> bool:
 ## aim at a cell on another floor when the board links it directly to [param origin]
 ## (the unit at the other end of a stair). [param board] may be null.
 func in_reach(origin: Vector3i, aim: Vector3i, board = null, range_bonus: int = 0) -> bool:
-	if in_range(origin, aim, range_bonus):
+	if reach_is_unbounded(board) or in_range(origin, aim, range_bonus):
 		return true
 	return _melee_link_ok(origin, aim, board)
+
+
+## A board may declare that DISTANCE IS ABSTRACT (the duel's two-station board): every aim
+## is then in reach and only the range test is skipped -- the narrowing constraints
+## (requires_*, aim_rule, line of sight) still apply in [method is_aim_allowed]. The
+## authored [member min_range] / [member max_range] are never rewritten, so rules that read
+## them (Weather.is_ranged, Elevation.range_bonus) keep their meaning. [BoardAdapter] never
+## declares the method, so tactical play is byte-identical.
+static func reach_is_unbounded(board) -> bool:
+	return board != null and board.has_method("reach_is_unbounded") and bool(board.reach_is_unbounded())
 
 
 func _melee_link_ok(origin: Vector3i, aim: Vector3i, board) -> bool:
@@ -165,7 +175,7 @@ func needs_line_of_sight(origin: Vector3i, aim: Vector3i) -> bool:
 ## melee -- the stair itself is the path).
 func is_aim_allowed(origin: Vector3i, aim: Vector3i, caster = null, board = null, range_bonus: int = 0) -> bool:
 	var linked_melee := false
-	if not in_range(origin, aim, range_bonus):
+	if not reach_is_unbounded(board) and not in_range(origin, aim, range_bonus):
 		if not _melee_link_ok(origin, aim, board):
 			return false
 		linked_melee = true

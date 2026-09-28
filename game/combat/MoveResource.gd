@@ -79,6 +79,14 @@ class_name MoveResource
 ## field never has that problem. The dispatcher reads it duck-typed for the same reason.
 @export var fx: Resource = null
 
+@export_group("Duel")
+## OPTIONAL stand-in used in a DUEL (1v1, no movement -- see docs/design/DUEL_BATTLE.md)
+## instead of this move. [DuelMoveCompiler] uses it AS-IS when set, which is how a
+## position-heavy move (a trap someone must step on, a teleport) gets a duel-clean
+## substitute. Null (the default) = the compiler adapts this move by its policy table.
+## Tactical play never reads it.
+@export var duel_variant: MoveResource = null
+
 
 func is_valid() -> bool:
 	return targeting != null and not effects.is_empty()
