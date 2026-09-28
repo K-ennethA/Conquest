@@ -218,8 +218,15 @@ func test_grass_encounter_runs_the_real_duel_and_a_befriend_grows_the_party() ->
 	_rules.befriend_base_chance = 1.0
 	req.player_is_ai = true
 	req.foe_party[0].strength = 0.1
-	var stage := await _mount_stage()
+	# Read the HP in the SAME frame the stage enters the tree: setup (and the carried HP)
+	# happens in _ready, the fight only starts deferred. Reading after a few frames raced
+	# the AI's first swing on a busy full-suite run.
+	_stage = STAGE.instantiate()
+	_stage.instant = true
+	get_tree().root.add_child(_stage)
+	var stage: DuelStage = _stage
 	assert_eq(int(stage.battle.unit_of(0).get_hp()), half, "the duel unit starts at the carried HP")
+	await _frames(2)
 	assert_true(await _until(func() -> bool: return stage.battle.is_over, 900), "the duel ends")
 	assert_eq(stage.battle.result.outcome, DuelResult.OUTCOME_VICTORY, "a win")
 	assert_null(StoryController.last_result(), "nothing is reported before the card's Continue")
