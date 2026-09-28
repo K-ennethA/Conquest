@@ -34,6 +34,14 @@ class_name DamageEffect
 ## this field, so it is inherently preview-safe.
 @export_range(0.0, 1.0, 0.01) var group_crit_bonus_per_extra_target: float = 0.0
 
+## SUBDUE (False-Swipe style): this damage can never reduce a target below 1 HP. The hit
+## still resolves through the whole shared chain (mitigation, element, crit); only the HP
+## actually taken is capped by [method DamageMath.subdue_cap], the same rule the forecast
+## reports. A landed hit that leaves its target on exactly 1 HP logs
+## [code]"subdued": true[/code] (a wild duel's befriend roll reads it). Off by default, so
+## every authored move is unchanged.
+@export var subdue: bool = false
+
 
 func apply(ctx: MoveContext) -> void:
 	# Authored power + stat scaling + caster-state power, through the SAME helper the
@@ -131,6 +139,10 @@ func apply(ctx: MoveContext) -> void:
 		var applied: int = dealt
 		if not controlled_before and is_mind_controlled(target):
 			applied = mini(dealt, maxi(0, hp_of(target) - 1))
+		# SUBDUE: a non-lethal hit (see [member subdue]) keeps the target on 1 HP.
+		if subdue:
+			var shield: int = int(target.get_shield()) if target.has_method("get_shield") else 0
+			applied = DamageMath.subdue_cap(hp_of(target), shield, applied)
 		# Floating combat text / log annotation (presentation only, consumes no RNG).
 		# Emitted JUST BEFORE the HP change it describes, with the amount really applied.
 		CombatText.annotate(target, CombatText.info_for(ctx, CombatText.KIND_DAMAGE, applied, {
@@ -140,13 +152,16 @@ func apply(ctx: MoveContext) -> void:
 		if applied > 0 and target.has_method("take_damage"):
 			target.take_damage(applied)
 		total_dealt += applied
-		ctx.log_event({
+		var event := {
 			"effect": "damage",
 			"target": target,
 			"amount": applied,
 			"category": category,
 			"crit": crit,
-		})
+		}
+		if subdue and hp_of(target) == 1:
+			event["subdued"] = true
+		ctx.log_event(event)
 
 	# Lifesteal: heal the caster for a fraction of everything this cast dealt. A no-op
 	# at the default 0.0 (never touches the caster or the log), so it cannot perturb

@@ -151,7 +151,7 @@ func test_siege_is_a_card_on_the_solo_picker_beside_skirmish() -> void:
 			"pressing it stages the SIEGE variant of the setup screen")
 
 
-func test_five_cards_still_fit_the_720p_page() -> void:
+func test_six_cards_still_fit_the_720p_page() -> void:
 	# Adding a fifth card cost WIDTH, not height, and the cards are EXPAND_FILL inside one
 	# HBox -- so what has to fit is the row's MINIMUM, which a container will never go under.
 	var screen: Control = await _open("res://menus/SoloModeSelect.gd")
@@ -167,9 +167,9 @@ func test_five_cards_still_fit_the_720p_page() -> void:
 	gut.p("cards       : %d   min row width=%.0f   page=%.0f   viewport=%.0f"
 			% [count, expected, SoloModeSelect.PAGE_WIDTH, viewport_width])
 
-	assert_eq(count, 5, "Campaign, Skirmish, Siege, Arena Run, Challenges")
+	assert_eq(count, 6, "Campaign, Skirmish, Siege, Arena Run, Challenges, Duel")
 	assert_true(expected <= SoloModeSelect.PAGE_WIDTH + 0.5,
-			"5 x %.0f + 4 x %d = %.0f fits the page's %.0f"
+			"6 x %.0f + 5 x %d = %.0f fits the page's %.0f"
 			% [SoloModeSelect.CARD_WIDTH, SoloModeSelect.CARD_SEPARATION,
 			expected, SoloModeSelect.PAGE_WIDTH])
 	assert_true(cards.get_combined_minimum_size().x <= viewport_width + 0.5,

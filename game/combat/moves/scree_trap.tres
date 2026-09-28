@@ -5,6 +5,7 @@
 [ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
 [ext_resource type="Script" path="res://game/combat/TargetingPattern.gd" id="4_targp"]
 [ext_resource type="Resource" path="res://game/tiles/effects/resources/rock_rubble.tres" id="5_rubble"]
+[ext_resource type="Resource" path="res://game/duel/moves/scree_shower.tres" id="6_duel"]
 
 [sub_resource type="Resource" id="Resource_st_place"]
 script = ExtResource("2_applytile")
@@ -33,3 +34,4 @@ accuracy = 1.0
 crit_chance = 0.0
 targeting = SubResource("Resource_st_tgt")
 effects = Array[ExtResource("1_moveeffect")]([SubResource("Resource_st_place")])
+duel_variant = ExtResource("6_duel")

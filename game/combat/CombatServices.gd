@@ -177,6 +177,20 @@ func rebuild(map_root: Node3D) -> void:
 	board_ready.emit()
 
 
+## Install a ready-made [param adapter] as the live board -- the sibling of
+## [method rebuild] for a battle that is not a loaded map (the duel's two-station
+## [DuelBoard]). The adapter is handed the same shared terrain registry / floors / links
+## [method rebuild] wires, then [signal board_ready] fires. [method clear] tears it down.
+func install_board(adapter: BoardAdapter) -> void:
+	if adapter == null:
+		return
+	_board = adapter
+	_board.set_tile_registry(_tile_registry)
+	_board.set_present_cells(_present_cells)
+	_board.set_links(_links)
+	board_ready.emit()
+
+
 ## Drop the current adapter (e.g. when the map is cleared/torn down).
 ##
 ## After this [method board] returns null again until the next [method rebuild].

@@ -259,6 +259,24 @@ static func is_damage_effect(effect) -> bool:
 	return effect != null and effect is Object and effect.has_method("bonus_power_for")
 
 
+## SUBDUE (a False-Swipe-style, non-lethal hit): the HP a subduing hit of [param dealt]
+## may actually take from a target holding [param hp] health behind [param shield], so it
+## can never drop the target below 1 HP. THE rule, in one place: [DamageEffect] clamps the
+## resolved hit with it and [method MoveExecutor.preview_vs] reports the same cap.
+static func subdue_cap(hp: int, shield: int, dealt: int) -> int:
+	return mini(maxi(0, dealt), maxi(0, maxi(0, hp) + maxi(0, shield) - 1))
+
+
+## True when [param move] (in the mode in force for [param caster]) deals SUBDUING damage --
+## any of its damage effects declares [code]subdue = true[/code]. Duck-typed, like
+## [method is_damage_effect].
+static func move_subdues(move, caster) -> bool:
+	for effect in _damage_effects_of(move, caster):
+		if bool(effect.get("subdue")):
+			return true
+	return false
+
+
 ## Every damage effect on [param move], in the mode in force for [param caster].
 static func _damage_effects_of(move, caster) -> Array:
 	var out: Array = []

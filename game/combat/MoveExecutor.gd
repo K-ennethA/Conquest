@@ -115,6 +115,12 @@ static func preview_vs(move: MoveResource, caster, target, board = null) -> Dict
 		"lethal": hp > 0 and dmg >= hp,
 	}
 	out.merge(preview)
+	# SUBDUE: a non-lethal move never finishes its target -- the same floor the resolved hit
+	# applies ([method DamageMath.subdue_cap]), so the forecast never promises a KO.
+	if hp > 0 and DamageMath.move_subdues(move, caster):
+		out["remaining"] = maxi(1, hp - dmg)
+		out["lethal"] = false
+		out["subdue"] = true
 	# NO FORECAST FOR SOMETHING YOU CANNOT SEE. A hidden defender is not gathered by
 	# MoveContext, so the swing would deal exactly nothing -- quoting a mitigated number for it
 	# would be the forecast/reality drift CONQUEST.md rule 9 exists to forbid, and would also
