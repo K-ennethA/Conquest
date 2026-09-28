@@ -36,9 +36,9 @@ const STORY_START_SCENE := "res://game/overworld/ui/StoryStartScreen.tscn"
 # height floor; the card content (rule, heading, tagline, wrapped blurb) fits inside it,
 # so the row never grows taller.
 const CARD_WIDTH: float = 158.0
-## 220 (was 180 with five cards, 200 with six): seven narrower cards wrap the longer
+## 232 (was 180 with five cards, 200 with six): seven narrower cards wrap the longer
 ## taglines and blurbs, so the row trades a little height for the extra cards' width.
-const CARD_HEIGHT: float = 220.0
+const CARD_HEIGHT: float = 232.0
 const CARD_SEPARATION: int = 12
 const PAGE_WIDTH: float = 1180.0
 
@@ -145,7 +145,7 @@ func _make_card(number: int, heading: String, tagline: String, blurb: String,
 	MenuKit.accent_card(btn, accent)
 	var m: MarginContainer = parts["margin"]
 	for side in ["left", "right"]:
-		m.add_theme_constant_override("margin_" + side, 16)
+		m.add_theme_constant_override("margin_" + side, 12)
 	var v: VBoxContainer = parts["content"]
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	# 4, not 6: with the Cinzel heading the longest blurb (Siege) otherwise grows the
@@ -158,7 +158,7 @@ func _make_card(number: int, heading: String, tagline: String, blurb: String,
 	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	v.add_child(rule)
 	var head := MenuKit.label(heading, &"SubheadingLabel")
-	head.add_theme_font_size_override("font_size", 22)
+	head.add_theme_font_size_override("font_size", 20)
 	v.add_child(head)
 	# Wraps: six cards leave ~150px of text width, and "LANES AND BASES" is wider than that.
 	var tl := MenuKit.label(tagline.to_upper(), &"SectionLabel", true)

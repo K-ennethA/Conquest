@@ -39,7 +39,7 @@ const GAME_WORLD_SCENE := "res://game/world/GameWorld.tscn"
 
 const ENTRIES := [
 	{"id": "solo", "text": "Solo", "key": KEY_1,
-		"desc": "Campaign, Skirmish or Siege against the AI, an Arena run, or community Challenges."},
+		"desc": "Story journey, Campaign, Skirmish, Siege, Arena runs, Challenges and one-on-one Duels."},
 	{"id": "versus", "text": "Versus", "key": KEY_2,
 		"desc": "Two commanders, one battlefield. Play hot-seat on this device, or connect over the network."},
 	{"id": "compendium", "text": "Compendium", "key": KEY_3,
