@@ -12,6 +12,7 @@ extends SceneTree
 ##   game/overworld/content/hero.tres                        -- the avatar (placeholder model)
 ##   game/overworld/content/story_ruleset.tres               -- story tuning
 ##   game/overworld/content/shops/*.tres                     -- the merchants' shops (DECISIONS.md #28)
+##   game/overworld/content/tournaments/*.tres               -- the Crown Arena's cup (DECISIONS.md #33)
 ##
 ## Run with:
 ##   godot --headless --path . -s res://game/overworld/build/build_story_content.gd
@@ -37,6 +38,11 @@ extends SceneTree
 ##   6. The FIRST FIGHT: a tactical battle on ow_oakvale_ashes vs the raiders' rear guard, the
 ##      Sergeant's Geode fighting beside your starter as a guest .... opening.first_fight_won
 ##   7. Aftermath: the Sergeant's hook into Act 1 ............... opening.complete, act1.find_rowan
+##
+## DUELS IN STORY (DECISIONS.md #31 / #33 -- the section at the end of this file): a duel trainer
+## (Tester Fenna, the Mossway), the rival (Lark: rival.*), the barracks' sparring roster (a cooldown
+## per partner: spar_ready()), the Mossway ambush (mossway.ambush.*) and the Crown Arena's tournament
+## ladder + champion rematch (arena.crown_cup.*).
 ##
 ## NAMES live in ONE place ([constant NAMES]) -- rename a character there and rebuild. Text uses
 ## {TOKEN} placeholders filled at build time; lower-case {hero} / {lead} / {gold} are filled at
@@ -79,6 +85,21 @@ const NAMES := {
 	"SHOP_CROWNHAVEN": "Oda's General Goods",
 	"PEDLAR": "Pedlar Jory",                # the travelling merchant on the Mossway (after the opening)
 	"SHOP_PEDLAR": "Jory's Travelling Cart",
+	# --- Duels in story (DECISIONS.md #33) ---
+	"RIVAL": "Lark",                        # the RIVAL: a fellow tester from the first batch
+	"FENNA": "Tester Fenna",                # a duel trainer on the Mossway
+	"WYNN": "Corporal Wynn",                # barracks sparring partner (warm-up)
+	"ALDOUS": "Lieutenant Aldous",          # barracks sparring partner (sharp)
+	"BANDIT_BOSS": "Cutpurse Nell",         # the Mossway ambush
+	"FOOTPAD": "Footpad",
+	"ARENA": "The Crown Arena",
+	"CUP": "The Crown Cup",                 # the tournament ladder
+	"CUP_TITLE": "Crown Cup Champion",      # the title the first cup earns
+	"ARENA_MASTER": "Arena Master Bex",
+	"TAMSIN": "Tamsin",                     # the cup's entrants, weakest first
+	"HARL": "Old Harl",
+	"QUENBY": "Ser Quenby",
+	"CHAMPION": "Champion Isolde",
 }
 
 ## Shop ids (the save keys of their stock -- never rename once shipped; the NAMES above are free).
@@ -120,6 +141,33 @@ const FIRST_FIGHT_ID := "story.opening.first_fight"
 ## The example friendly SPAR (Sergeant Rowan's Geode, Crownhaven, after the opening).
 const SPAR_ROWAN_ID := "crownhaven.spar.rowan"
 
+# --- Duels in story (DECISIONS.md #33): ids are save keys, never rename once shipped ---------
+## The barracks' sparring roster (rising strength: Wynn < Aldous < Rowan). Each is ready once per
+## rest (StoryRuleset.spar_cooldown_rests -- spars award Growth, so this stops the farm).
+const SPAR_WYNN_ID := "crownhaven.spar.wynn"
+const SPAR_ALDOUS_ID := "crownhaven.spar.aldous"
+## THE RIVAL: the first duel (a trigger inside Crownhaven's west gate, after the opening), then
+## rematches by the arena (once per rest). Progress lives in flags so later rematches scale:
+const RIVAL_DUEL_ID := "crownhaven.rival.lark"
+const F_RIVAL_MET := "rival.met"
+## Rival duels FOUGHT (int) -- the rematch spec scales on it (BattleSpec.scale_flag).
+const F_RIVAL_STAGE := "rival.stage"
+## Rival duels WON by the hero (int).
+const F_RIVAL_WINS := "rival.wins"
+## The first rival duel is behind you.
+const F_RIVAL_DUEL1 := "rival.duel1"
+## THE MOSSWAY AMBUSH (after the Act 1 hook): a trigger on the brook's plank bridge.
+const F_AMBUSH_SPRUNG := "mossway.ambush.sprung"
+const F_AMBUSH_FOOTPAD := "mossway.ambush.footpad_beaten"
+const F_AMBUSH_CLEARED := "mossway.ambush.cleared"
+## THE CROWN CUP (a TournamentResource -- its run / round / wins / title flags are "arena.crown_cup.*").
+const CUP_ID := "crown_cup"
+const CUP_WINS_FLAG := "arena.crown_cup.wins"
+const CUP_TITLE_FLAG := "arena.crown_cup.champion"
+## The champion's rematch after the cup (once per rest), scaling with every win over her.
+const CHAMPION_REMATCH_ID := "arena.crown_cup.champion_rematch"
+const F_CHAMPION_BEATEN := "arena.crown_cup.champion_beaten"
+
 const TILE_TYPES := {
 	"grass_plains": "NORMAL",
 	"forest_dirt": "NORMAL",
@@ -140,11 +188,13 @@ var _ok: bool = true
 
 
 func _initialize() -> void:
-	for d in ["areas/oakvale", "areas/oakvale_ruins", "areas/mossway", "areas/crownhaven", "battles", "shops"]:
+	for d in ["areas/oakvale", "areas/oakvale_ruins", "areas/mossway", "areas/crownhaven", "battles", "shops",
+			"tournaments"]:
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CONTENT + d))
 	_build_hero()
 	_build_ruleset()
 	_build_shops()
+	_build_tournaments()
 	_build_battle_map()
 	_build_first_fight_map()
 	_build_oakvale(false)
@@ -226,6 +276,10 @@ func _build_ruleset() -> void:
 	rs.battle_gold_per_foe = 0
 	rs.sell_ratio = 0.5
 	rs.bag_stack_cap = 99
+	# Sparring partners (DECISIONS.md #33): each is ready again after one rest -- spars award Growth
+	# by the ordinary story rules, and this keeps a friendly bout from being a Growth farm.
+	rs.spar_cooldown_rests = 1
+	rs.spar_cooldown_steps = 0
 	_save(rs, CONTENT + "story_ruleset.tres")
 
 
@@ -1123,6 +1177,10 @@ func _build_mossway() -> void:
 	ents.append(pedlar)
 	ents.append(_prop("pedlar_cart", "cart", Vector2i(12, 4), Vector2i.ONE, Color(0.55, 0.42, 0.25), true, after_opening))
 
+	# Duels in story (DECISIONS.md #33): a trainer who challenges you to a DUEL, and the ambush.
+	ents.append(_fenna())
+	ents.append_array(_ambush())
+
 	# The west edge leads home -- to Oakvale as it was, or (once the raid began) to its ruins.
 	ents.append(_warp("west_exit", Rect2i(0, 6, 1, 1), &"oakvale", &"east_gate",
 		"not has(\"%s\")" % F_ATTACK))
@@ -1166,7 +1224,7 @@ const CH_LAB := Rect2i(22, 4, 4, 3)
 const CH_MARKET := Rect2i(10, 11, 11, 7)
 const CH_FOUNTAIN := Vector2i(15, 14)
 const CH_HOUSES := [Rect2i(5, 15, 3, 2), Rect2i(5, 19, 3, 2), Rect2i(11, 19, 3, 2), Rect2i(17, 19, 3, 2),
-	Rect2i(22, 15, 3, 2), Rect2i(22, 19, 4, 2)]
+	Rect2i(22, 15, 3, 2)]
 const CH_STALLS := [Rect2i(11, 12, 2, 1), Rect2i(18, 12, 2, 1), Rect2i(11, 16, 2, 1), Rect2i(18, 16, 2, 1)]
 ## The ceremony stage in front of the workshop.
 const CH_RESEARCHER := Vector2i(24, 8)
@@ -1194,7 +1252,8 @@ func _ch_terrain(x: int, y: int) -> String:
 			return "tree"
 		return "grass_plains"
 	# Inside the walls.
-	if CH_KEEP.has_point(c) or CH_BARRACKS.has_point(c) or CH_LAB.has_point(c) or _in(CH_HOUSES, c):
+	if CH_KEEP.has_point(c) or CH_BARRACKS.has_point(c) or CH_LAB.has_point(c) or _in(CH_HOUSES, c) \
+			or CH_ARENA.has_point(c):
 		return "stone_wall"
 	if c == CH_FOUNTAIN:
 		return "sacred_ground"
@@ -1257,6 +1316,10 @@ func _build_crownhaven() -> void:
 	ents.append_array(_ch_scenery())
 	ents.append(_shrine(CH_FOUNTAIN, "Crownhaven Wayshrine"))
 	ents.append_array(_ch_people())
+	# Duels in story (DECISIONS.md #33): the rival, the barracks' sparring roster, the Crown Arena.
+	ents.append_array(_rival())
+	ents.append_array(_spar_partners())
+	ents.append_array(_arena())
 	ents.append(_warp("west_exit", Rect2i(0, CH_GATE.y, 1, 1), &"mossway", &"east"))
 	a.entities = _entities(ents)
 	a.on_enter = StoryCommand.list([
@@ -1532,32 +1595,412 @@ func _rowan_in_crownhaven() -> NpcEntity:
 	return rowan
 
 
-## THE EXAMPLE SPAR (DECISIONS.md #29): a friendly bout with the Sergeant's Geode, repeatable. It
-## is tagged `spar`, so nobody falls for good in it, even in a Classic journey -- a knocked-out
-## partner just gets back up (StoryRuleset.spar_ko_recovers).
-func _rowan_spar_offer() -> ChoiceCommand:
+## THE EXAMPLE SPAR (DECISIONS.md #29): a friendly bout with the Sergeant's Geode, repeatable -- once
+## per rest, like every sparring partner (DECISIONS.md #33). It is tagged `spar`, so nobody falls
+## for good in it, even in a Classic journey -- a knocked-out partner just gets back up
+## (StoryRuleset.spar_ko_recovers). He heads the barracks' roster (the strongest of the three).
+func _rowan_spar_offer() -> IfCommand:
+	return _spar_partner_offer(SPAR_ROWAN_ID, "rowan", "SOLDIER", "{SOLDIER_TITLE}",
+		[{"character_id": GUEST_ID, "strength": 0.8}],
+		"Want to keep your partner sharp? Geode could use the exercise. A friendly bout -- nobody gets hurt for real.",
+		"Ha! Geode felt that one. You're learning.",
+		"On your feet. That's what spars are for -- come back when you're ready.",
+		"Geode's still shaking off the last bout. Rest up at the Wayshrine, then come and find me.")
+
+
+# =====================================================================================
+#  DUELS IN STORY (DECISIONS.md #31 / #33): duels are not on the menu any more -- story mode
+#  offers them. Trainers who challenge you to a DUEL, the RIVAL, SPARRING partners, an AMBUSH,
+#  and the CROWN ARENA's tournament ladder. Opponents are duel-eligible roster creatures
+#  (BattleSpec.validate checks), their strength the duel's stat scale (DuelScaling).
+#  DECISION 7 (humans fight alongside creatures) is NOT built yet: every duel here is the strict
+#  1v1 creature duel -- the party lead against the opponent's creature. The people are the
+#  trainers; their creatures fight.
+# =====================================================================================
+
+## A DUEL [BattleSpec]: [param team] = [{character_id, strength}], the lead first.
+func _duel_spec(encounter_id: String, opponent: String, speaker: StringName, team: Array,
+		spar: bool, policy: BattleSpec.DefeatPolicy, reward_gold: int = 0, items: Array = [],
+		flags: Array = []) -> BattleSpec:
 	var spec := BattleSpec.new()
 	spec.kind = BattleSpec.Kind.DUEL
-	spec.encounter_id = SPAR_ROWAN_ID
-	spec.opponent_name = _t("{SOLDIER_TITLE}")
-	spec.opponent_speaker_id = &"npc_rowan"
-	var team: Array[Dictionary] = [{"character_id": GUEST_ID, "strength": 0.8}]
-	spec.opponent_team = team
-	spec.spar = true
-	spec.defeat_policy = BattleSpec.DefeatPolicy.CONTINUE
-	var duel := StartDuelCommand.new()
-	duel.spec = spec
-	duel.source = BattleRequest.SOURCE_SCRIPT
+	spec.encounter_id = encounter_id
+	spec.opponent_name = _t(opponent)
+	spec.opponent_speaker_id = speaker
+	var typed: Array[Dictionary] = []
+	for t in team:
+		typed.append((t as Dictionary).duplicate())
+	spec.opponent_team = typed
+	spec.spar = spar
+	spec.defeat_policy = policy
+	spec.reward_gold = reward_gold
+	var ri: Array[StringName] = []
+	for i in items:
+		ri.append(StringName(String(i)))
+	spec.reward_items = ri
+	var rf: Array[String] = []
+	for f in flags:
+		rf.append(String(f))
+	spec.reward_flags = rf
+	return spec
+
+
+func _duel(spec: BattleSpec) -> StartDuelCommand:
+	var d := StartDuelCommand.new()
+	d.spec = spec
+	d.source = BattleRequest.SOURCE_SCRIPT
+	return d
+
+
+func _inc(key: String, by: int = 1) -> IncFlagCommand:
+	var c := IncFlagCommand.new()
+	c.key = key
+	c.by = by
+	return c
+
+
+## "The duel was actually fought" (a flee / an abort -- e.g. nobody able to fight -- is neither).
+const FOUGHT := "outcome() == \"victory\" or outcome() == \"defeat\""
+
+
+## A SPARRING PARTNER's offer (DECISIONS.md #33): ready -> "spar?" -> a friendly duel (spar: never
+## permadeath; Growth by the ordinary story rules); not ready -> the [param tired] line, until the
+## journey has rested (StoryRuleset.spar_cooldown_rests, [StorySparring]).
+func _spar_partner_offer(encounter_id: String, npc_id: String, name_key: String, opponent: String,
+		team: Array, ask_text: String, win_text: String, lose_text: String, tired_text: String) -> IfCommand:
+	var spec := _duel_spec(encounter_id, opponent, StringName("npc_" + npc_id), team, true,
+		BattleSpec.DefeatPolicy.CONTINUE)
 	var ask := ChoiceCommand.new()
-	ask.prompt = _line("rowan", "SOLDIER", "Want to keep your partner sharp? Geode could use the exercise. A friendly bout -- nobody gets hurt for real.")
+	ask.prompt = _line(npc_id, name_key, ask_text)
 	var yes := ChoiceOption.make("Let's spar.", [
-		duel,
+		_duel(spec),
 		IfCommand.make("outcome() == \"victory\"", [
-			_say([_line("rowan", "SOLDIER", "Ha! Geode felt that one. You're learning.")]),
+			_say([_line(npc_id, name_key, win_text)]),
 		], [
-			_say([_line("rowan", "SOLDIER", "On your feet. That's what spars are for -- come back when you're ready.")]),
+			IfCommand.make("outcome() == \"defeat\"", [_say([_line(npc_id, name_key, lose_text)])]),
 		]),
 	])
 	var no := ChoiceOption.make("Not now.", [], true)
 	ask.options = StoryCommand.list([yes, no])
-	return ask
+	return IfCommand.make("spar_ready(\"%s\")" % encounter_id, [ask], [
+		_say([_line(npc_id, name_key, tired_text)]),
+	])
+
+
+# --- The Mossway: a duel trainer, and the ambush ---------------------------------------
+
+## TESTER FENNA: a TRAINER whose battle is a DUEL (line of sight like Bram; a real battle: a loss
+## whites out, and in Classic a partner knocked out in it falls).
+func _fenna() -> TrainerEntity:
+	var t := TrainerEntity.new()
+	t.id = &"fenna"
+	t.cell = Vector3i(11, 7, 0)
+	t.facing = "north"
+	t.display_name = _t("{FENNA}")
+	t.speaker_name = t.display_name
+	t.speaker_id = &"npc_fenna"
+	t.tint = Color(0.62, 0.4, 0.56)
+	t.figure = "trainer"
+	t.sight_range = 3
+	t.visible_if = "has(\"%s\")" % F_COMPLETE
+	t.pre_scene = _scene("moss_fenna_pre", [
+		_beat(&"self", "", "A shard! You're a tester too? Then you know the rule -- two testers meet on the road, their partners have a word. One on one!"),
+	])
+	t.defeated_scene = _scene("moss_fenna_after", [
+		_beat(&"self", "", "Well fought. My Petalfang's sulking now -- that means you earned it."),
+	])
+	var spec := _duel_spec("", "{FENNA}", &"npc_fenna", [{"character_id": "petalfang", "strength": 0.9}],
+		false, BattleSpec.DefeatPolicy.WHITEOUT, 90)
+	spec.clash_intro = true
+	t.battle = spec
+	return t
+
+
+## THE AMBUSH (DECISIONS.md #7 / #33 "attacked by criminals"): once the Sergeant has signed you on
+## (act1.met_rowan), bandits wait at the brook's plank bridge -- the only crossing, so the trigger
+## cannot be walked round. Two self-defence duels back to back (HP carries between them), REAL
+## battles: a loss whites out (the bandits wait for you again; a beaten footpad stays beaten) and a
+## Classic partner knocked out in them falls. Winning pays a purse and a stolen draught.
+func _ambush() -> Array:
+	var out: Array = []
+	var vis: String = "has(\"%s\") and not has(\"%s\")" % [F_AMBUSH_SPRUNG, F_AMBUSH_CLEARED]
+	var nell := _npc("nell", Vector2i(22, 4), "south", "BANDIT_BOSS", Color(0.3, 0.26, 0.22), "raider")
+	nell.visible_if = vis
+	nell.dialogue = _scene("moss_nell_idle", [_line("nell", "BANDIT_BOSS", "Still here? Then your purse is still ours.")])
+	out.append(nell)
+	var pad := _npc("footpad", Vector2i(20, 8), "north", "FOOTPAD", Color(0.36, 0.3, 0.24), "raider")
+	pad.visible_if = vis
+	out.append(pad)
+
+	var footpad_spec := _duel_spec("mossway.ambush.footpad", "{FOOTPAD}", &"npc_footpad",
+		[{"character_id": "mycothrall", "strength": 0.9}], false, BattleSpec.DefeatPolicy.WHITEOUT,
+		40, [], [F_AMBUSH_FOOTPAD])
+	var nell_spec := _duel_spec("mossway.ambush.nell", "{BANDIT_BOSS}", &"npc_nell",
+		[{"character_id": "petalfang", "strength": 1.0}], false, BattleSpec.DefeatPolicy.WHITEOUT,
+		180, ["dawnpetal_draught"])
+	var boss_bout: Array = [
+		_say([_line("nell", "BANDIT_BOSS", "Useless! Fine -- I'll take it off you myself.")]),
+		_duel(nell_spec),
+		IfCommand.make("outcome() == \"victory\"", [
+			_say([
+				_line("nell", "BANDIT_BOSS", "Enough! Take the purse -- it wasn't ours anyway."),
+				_narr("The bandits scatter into the ferns, leaving a pouch of stolen coin and a Dawnpetal Draught on the planks."),
+			]),
+			_flag(F_AMBUSH_CLEARED),
+			_toast("The Mossway is safe again"),
+			SaveGameCommand.new(),
+		], [
+			IfCommand.make("not (%s)" % FOUGHT, [
+				_say([_line("nell", "BANDIT_BOSS", "Nothing left in you worth taking? Off with you, then.")]),
+			]),
+		]),
+	]
+	var zone := TriggerZone.new()
+	zone.id = &"bandit_ambush"
+	zone.area_rect = Rect2i(21, 6, 1, 1)
+	zone.once = false
+	zone.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_ACT1_MET, F_AMBUSH_CLEARED]
+	zone.on_step = StoryCommand.list([
+		_flag(F_AMBUSH_SPRUNG),
+		_say([_narr("Dusk is gathering over the brook. Halfway across the planks, the ferns on both banks stand up.")]),
+		_emote("player", "!"),
+		_move("nell", Vector2i(22, 6)),
+		_move("footpad", Vector2i(20, 6)),
+		_face("player", "toward:nell"),
+		_say([
+			_line("nell", "BANDIT_BOSS", "Evening, tester. That shard of yours, the gold in your purse -- set them on the planks and walk on."),
+			_me("It isn't mine to give. And neither is the gold."),
+			_line("nell", "BANDIT_BOSS", "The Guard's all ridden for the border, love. Nobody's coming. Take them!"),
+		]),
+		IfCommand.make("not has(\"%s\")" % F_AMBUSH_FOOTPAD, [
+			_face("player", "toward:footpad"),
+			_duel(footpad_spec),
+			IfCommand.make("outcome() == \"victory\"", boss_bout, [
+				IfCommand.make("not (%s)" % FOUGHT, [
+					_say([_line("nell", "BANDIT_BOSS", "Nothing left in you worth taking? Off with you, then.")]),
+				]),
+			]),
+		], boss_bout),
+	])
+	out.append(zone)
+	return out
+
+
+# --- Crownhaven: the rival, the barracks' sparring roster, the Crown Arena --------------
+
+const CH_ARENA := Rect2i(22, 19, 5, 3)
+const CH_ARENA_MASTER := Vector2i(22, 22)
+const CH_LARK_START := Vector2i(7, 14)
+const CH_LARK_ARENA := Vector2i(23, 18)
+const CH_CHAMPION := Vector2i(25, 18)
+## Every traveller from the west gate steps here (the gate guards flank the cell before it).
+const CH_RIVAL_TRIGGER := Rect2i(5, 13, 1, 1)
+
+
+## The RIVAL's duel spec: Lark's Blightcap, a FRIENDLY (DECISIONS.md #29: rival friendlies never
+## cost a life), scaling +8% per rival duel fought (rival.stage, up to 6) -- the first duel is
+## stage 0.
+func _rival_spec() -> BattleSpec:
+	var spec := _duel_spec(RIVAL_DUEL_ID, "{RIVAL}", &"npc_lark",
+		[{"character_id": "blightcap", "strength": 0.9}], true, BattleSpec.DefeatPolicy.CONTINUE, 60)
+	spec.clash_intro = true
+	spec.scale_flag = F_RIVAL_STAGE
+	spec.scale_step = 0.08
+	spec.scale_max_steps = 6
+	return spec
+
+
+## After any rival duel that was FOUGHT: the stage counter (the next rematch is stronger), the win
+## counter, and Lark's line.
+func _rival_after(win: Array, lose: Array) -> Array:
+	return [
+		IfCommand.make(FOUGHT, [
+			_inc(F_RIVAL_STAGE),
+			IfCommand.make("outcome() == \"victory\"", [_inc(F_RIVAL_WINS), _say(win)], [_say(lose)]),
+		]),
+	]
+
+
+func _rival() -> Array:
+	var out: Array = []
+	var lark := _npc("lark", CH_LARK_START, "west", "RIVAL", Color(0.78, 0.5, 0.2), "trainer")
+	lark.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_COMPLETE, F_RIVAL_DUEL1]
+	lark.dialogue = _scene("ch_lark_wait", [_line("lark", "RIVAL", "Well? Come on, Oakvale -- I haven't got all day.")])
+	out.append(lark)
+
+	var first: Array = [
+		_emote("lark", "!"),
+		_move("lark", Vector2i(CH_RIVAL_TRIGGER.position.x + 1, CH_RIVAL_TRIGGER.position.y)),
+		_face("player", "toward:lark"),
+		_face("lark", "toward:player"),
+		_say([
+			_line("lark", "RIVAL", "So YOU'RE the one from Oakvale. The tester who rode with the Sergeant."),
+			_line("lark", "RIVAL", "I'm {RIVAL}. First batch -- the Researcher picked me before she'd even heard of your village. Everyone in the barracks is talking about you, and I'm sick of it."),
+			_me("My village burned, {RIVAL}. I didn't do it to be talked about."),
+			_line("lark", "RIVAL", "...I know. I'm sorry about that. Truly. But a shard is a shard, and I want to see what yours can do. One bout -- a friendly. Nobody gets hurt."),
+		]),
+		_flag(F_RIVAL_MET),
+		_duel(_rival_spec()),
+	]
+	first.append_array(_rival_after([
+		_line("lark", "RIVAL", "...Huh. Fine. FINE. You got lucky, and Puck was still full from breakfast."),
+	], [
+		_line("lark", "RIVAL", "Ha! See? First batch. Don't feel bad, Oakvale -- you'll get there. Probably."),
+	]))
+	first.append(IfCommand.make(FOUGHT, [
+		_say([
+			_line("lark", "RIVAL", "I'll be at the Crown Arena. Every tester worth their shard ends up there sooner or later -- come find me when you want a rematch."),
+		]),
+		_flag(F_RIVAL_DUEL1),
+		_toast("Rival: {RIVAL}"),
+		SaveGameCommand.new(),
+	], [
+		_say([_line("lark", "RIVAL", "Your partner can barely stand. Rest up -- I'm not beating you like THAT.")]),
+	]))
+	var zone := TriggerZone.new()
+	zone.id = &"rival_meet"
+	zone.area_rect = CH_RIVAL_TRIGGER
+	zone.once = false
+	zone.visible_if = lark.visible_if
+	zone.on_step = StoryCommand.list(first)
+	out.append(zone)
+
+	# By the arena after the first duel: rematches, once per rest, stronger every time.
+	var lark2 := _npc("lark_arena", CH_LARK_ARENA, "south", "RIVAL", Color(0.78, 0.5, 0.2), "trainer")
+	lark2.visible_if = "has(\"%s\")" % F_RIVAL_DUEL1
+	var ask := ChoiceCommand.new()
+	ask.prompt = _line("lark_arena", "RIVAL", "Back for more, Oakvale? Puck's been training. Rematch?")
+	var yes_cmds: Array = [_duel(_rival_spec())]
+	yes_cmds.append_array(_rival_after([
+		_line("lark_arena", "RIVAL", "Again?! ...Alright. You're good. Don't let it go to your head."),
+	], [
+		_line("lark_arena", "RIVAL", "That's more like it. First batch, remember?"),
+	]))
+	ask.options = StoryCommand.list([ChoiceOption.make("Rematch!", yes_cmds), ChoiceOption.make("Not now.", [], true)])
+	lark2.on_interact = StoryCommand.list([
+		IfCommand.make("spar_ready(\"%s\")" % RIVAL_DUEL_ID, [ask], [
+			_say([_line("lark_arena", "RIVAL", "Puck needs a nap after that. Go rest at the Wayshrine -- then we go again.")]),
+		]),
+	])
+	out.append(lark2)
+	return out
+
+
+## The barracks' SPARRING ROSTER (rising strength): Corporal Wynn (warm-up), Lieutenant Aldous,
+## and the Sergeant himself (see [method _rowan_spar_offer]). Each ready once per rest.
+func _spar_partners() -> Array:
+	var out: Array = []
+	var after: String = "has(\"%s\")" % F_COMPLETE
+	var wynn := _npc("wynn", Vector2i(4, 10), "east", "WYNN", ALDERMERE_BLUE.lightened(0.1), "guard")
+	wynn.visible_if = after
+	wynn.on_interact = StoryCommand.list([_spar_partner_offer(SPAR_WYNN_ID, "wynn", "WYNN", "{WYNN}",
+		[{"character_id": "blightcap", "strength": 0.8}],
+		"Fancy a warm-up bout? My Blightcap's the gentlest thing in the barracks. Mostly.",
+		"Good form! Now go and try the Lieutenant.",
+		"Don't sulk -- everyone loses to the Blightcap once. It's the spores.",
+		"Blightcap's having a lie-down. Get some rest yourself and come back.")])
+	out.append(wynn)
+	var aldous := _npc("aldous", Vector2i(6, 7), "south", "ALDOUS", ALDERMERE_BLUE.darkened(0.1), "officer")
+	aldous.visible_if = after
+	aldous.on_interact = StoryCommand.list([_spar_partner_offer(SPAR_ALDOUS_ID, "aldous", "ALDOUS", "{ALDOUS}",
+		[{"character_id": "petalfang", "strength": 0.95}],
+		"The Sergeant says you're worth watching. Show me. A friendly bout, no quarter asked.",
+		"Hm. He was right. Once more some other day.",
+		"Speed. You lack it. Come back when you've found some.",
+		"My Petalfang has had enough for today. Rest, and we'll go again.")])
+	out.append(aldous)
+	out.append(_sign("roster_sign", Vector2i(8, 7), "Sparring Roster",
+		"BARRACKS SPARRING ROSTER\nCpl. Wynn -- warm-up bouts.\nLt. Aldous -- for the sharp.\nSgt. Rowan -- ask if you dare.\nOne bout each per rest. Friendly: nobody is hurt for real."))
+	return out
+
+
+## THE CROWN CUP (a [TournamentResource]): four spars, weakest first, back-to-back or one per visit;
+## healed before every bout; 100 gold to enter; 400 gold + a Sunleaf Totem and the title the first
+## time, 200 gold after. Every round scales +5% per cup already won (up to 4) -- repeat cups get
+## harder.
+func _build_tournaments() -> void:
+	var t := TournamentResource.new()
+	t.id = StringName(CUP_ID)
+	t.display_name = _t("{CUP}")
+	t.description = _t("Four bouts in the sand of {ARENA}, one after another. Friendly -- nobody is hurt for real -- but the crowd only cheers for winners.")
+	t.host_name = _t("{ARENA_MASTER}")
+	t.host_speaker_id = &"npc_arena_master"
+	t.entry_fee = 100
+	t.heal_between_bouts = true
+	t.prize_gold = 400
+	var prize: Array[StringName] = [&"sunleaf_totem"]
+	t.first_prize_items = prize
+	t.repeat_prize_gold = 200
+	t.title = _t("{CUP_TITLE}")
+	var entrants := [
+		["{TAMSIN}", "npc_tamsin", "mycothrall", 0.9],
+		["{HARL}", "npc_harl", "blightcap", 0.95],
+		["{QUENBY}", "npc_quenby", "petalfang", 1.05],
+		["{CHAMPION}", "npc_isolde", "oakheart", 0.85],
+	]
+	var rounds: Array[BattleSpec] = []
+	for i in range(entrants.size()):
+		var e: Array = entrants[i]
+		var spec := _duel_spec("", String(e[0]), StringName(String(e[1])),
+			[{"character_id": String(e[2]), "strength": float(e[3])}], true, BattleSpec.DefeatPolicy.CONTINUE)
+		spec.scale_flag = CUP_WINS_FLAG
+		spec.scale_step = 0.05
+		spec.scale_max_steps = 4
+		rounds.append(spec)
+	t.rounds = rounds
+	_save(t, TournamentResource.path_for(CUP_ID))
+
+
+func _arena() -> Array:
+	var out: Array = []
+	out.append(_prop("arena", "arena", CH_ARENA.position, CH_ARENA.size, Color(0.62, 0.18, 0.16)))
+	out.append(_sign("arena_sign", Vector2i(20, 22), "The Crown Arena",
+		"{ARENA}\n{CUP}: four bouts, 100 gold to enter.\nFriendly bouts only -- by order of the crown."))
+	var master := _npc("arena_master", CH_ARENA_MASTER, "west", "ARENA_MASTER", Color(0.62, 0.18, 0.16), "noble")
+	var run := RunTournamentCommand.new()
+	run.tournament = load(TournamentResource.path_for(CUP_ID)) as TournamentResource
+	master.on_interact = StoryCommand.list([IfCommand.make("has(\"%s\")" % F_COMPLETE, [
+		IfCommand.make("has(\"%s\")" % CUP_TITLE_FLAG, [
+			_say([_line("arena_master", "ARENA_MASTER", "The {CUP_TITLE} returns! The crowd's been asking after you. Another run?")]),
+		], [
+			_say([_line("arena_master", "ARENA_MASTER", "Welcome to {ARENA}! {CUP}: four bouts, the best partners in the city. Think yours is ready?")]),
+		]),
+		run,
+	], [
+		_say([_line("arena_master", "ARENA_MASTER", "{CUP} is for bonded partners, friend. Come back when you've a creature at your side.")]),
+	])])
+	out.append(master)
+
+	# The reigning champion stays for REMATCHES once you've taken her title (once per rest), each
+	# win over her making the next one harder (+8%, up to 6).
+	var champ := _npc("isolde", CH_CHAMPION, "south", "CHAMPION", Color(0.85, 0.7, 0.3), "noble")
+	champ.visible_if = "has(\"%s\")" % CUP_TITLE_FLAG
+	var spec := _duel_spec(CHAMPION_REMATCH_ID, "{CHAMPION}", &"npc_isolde",
+		[{"character_id": "oakheart", "strength": 0.9}], true, BattleSpec.DefeatPolicy.CONTINUE, 120)
+	spec.clash_intro = true
+	spec.scale_flag = F_CHAMPION_BEATEN
+	spec.scale_step = 0.08
+	spec.scale_max_steps = 6
+	var ask := ChoiceCommand.new()
+	ask.prompt = _line("isolde", "CHAMPION", "You took my title fair and square. I want it back. A champion's rematch?")
+	ask.options = StoryCommand.list([
+		ChoiceOption.make("Rematch!", [
+			_duel(spec),
+			IfCommand.make("outcome() == \"victory\"", [
+				_inc(F_CHAMPION_BEATEN),
+				_say([_line("isolde", "CHAMPION", "Again! My Oakheart will train twice as hard. Next time.")]),
+			], [
+				IfCommand.make("outcome() == \"defeat\"", [
+					_say([_line("isolde", "CHAMPION", "There -- the old champion still has teeth. Come back stronger.")]),
+				]),
+			]),
+		]),
+		ChoiceOption.make("Not now.", [], true),
+	])
+	champ.on_interact = StoryCommand.list([
+		IfCommand.make("spar_ready(\"%s\")" % CHAMPION_REMATCH_ID, [ask], [
+			_say([_line("isolde", "CHAMPION", "Oakheart's resting. So should you -- the Wayshrine, then back here.")]),
+		]),
+	])
+	out.append(champ)
+	return out

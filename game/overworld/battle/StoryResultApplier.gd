@@ -24,6 +24,8 @@ extends RefCounted
 ##     nobody falls, and its knocked-out get up at 1 HP (the ruleset's spar_ko_recovers); CASUAL --
 ##     the knocked-out stay down until revived. A whiteout then rests the living (and, with the
 ##     ruleset's whiteout_revives, the knocked-out; never the fallen).
+##   * a FOUGHT spar (won or lost) stamps its encounter id for the sparring-partner cooldown
+##     ([StorySparring]).
 ## A GAME-OVER result ([method BattleResult.is_game_over]) is never applied -- StoryController
 ## sends the player back to the last save instead.
 ## Befriending is NOT applied here -- the offer is the story prompt's decision
@@ -74,6 +76,11 @@ static func apply(state: StoryState, request: BattleRequest, result: BattleResul
 	if result.spar or (request != null and request.is_spar()):
 		if ruleset == null or ruleset.spar_ko_recovers:
 			out["spar_recovered"] = StoryPermadeath.recover_spar_knockouts(state, result)
+		# A fought spar starts that partner's cooldown ([StorySparring], DECISIONS.md #33).
+		if StorySparring.was_fought(result):
+			var sid: String = result.encounter_id if not result.encounter_id.is_empty() \
+				else (request.encounter_id if request != null else "")
+			StorySparring.note_bout(state, sid)
 	else:
 		out["fallen"] = StoryPermadeath.apply_fallen(state, request, result)
 

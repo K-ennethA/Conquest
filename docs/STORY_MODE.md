@@ -58,12 +58,12 @@ and Continue Journey skips it (`StorySnapshot.is_outdated`). Nothing crashes.
 | Piece | Files |
 |---|---|
 | Autoload (session, runner, battle round trip) | `game/overworld/StoryController.gd` |
-| Data | `game/overworld/data/` — `OverworldAreaResource`, entity kinds (`Npc`, `Trainer`, `Sign`, `Chest`, `Warp`, `Wayshrine`, `TriggerZone`, `Prop`), `EncounterZone/Entry`, `BattleSpec`, `HeroResource`, `StoryRuleset` |
+| Data | `game/overworld/data/` — `OverworldAreaResource`, entity kinds (`Npc`, `Trainer`, `Sign`, `Chest`, `Warp`, `Wayshrine`, `TriggerZone`, `Prop`), `EncounterZone/Entry`, `BattleSpec`, `HeroResource`, `StoryRuleset`, `TournamentResource` |
 | Scripts | `game/overworld/script/` — `StoryCommand` + `commands/*`, `StoryScriptRunner`, `ScriptContext`, `StoryScriptHost` (the host contract), `ConditionContext` |
 | Runtime | `game/overworld/runtime/` — `OverworldController` (scene root + live host), `OverworldGrid`, `TrainerSight`, `EncounterRoller`, `TapPathfinder`, `OverworldActor`, `OverworldCamera`, `OverworldProps` |
-| Battles | `game/overworld/battle/` — `BattleRequest`, `BattleResult`, `StoryBattleBridge`, `StoryResultApplier`, `StoryGrowth` (story Growth + evolution rules), `StoryPermadeath` (difficulty tiers, fallen, revives, game over), `DuelLauncher`, `DuelStub` (debug fallback) |
+| Battles | `game/overworld/battle/` — `BattleRequest`, `BattleResult`, `StoryBattleBridge`, `StoryResultApplier`, `StoryGrowth` (story Growth + evolution rules), `StoryPermadeath` (difficulty tiers, fallen, revives, game over), `StorySparring` (sparring-partner cooldown), `TournamentLedger` (the arena ladder), `DuelLauncher`, `DuelStub` (debug fallback) |
 | Saves | `game/overworld/save/` — `StoryState`, `StoryPartyMember`, `StorySnapshot`, `StorySaveManager` (`user://story/slot_<n>.json`) |
-| UI | `game/overworld/ui/` — `OverworldHUD`, `JourneyMenu`, `StoryStartScreen` (slots + the New Journey tier picker), `StoryGameOverScreen` |
+| UI | `game/overworld/ui/` — `OverworldHUD`, `JourneyMenu`, `StoryStartScreen` (slots + the New Journey tier picker), `StoryGameOverScreen`, `TournamentLadderPanel` |
 | Content | `game/overworld/content/` — built by `game/overworld/build/build_story_content.gd` |
 
 Shared-file hooks (all guarded, no-ops outside story): `GameEvents.battle_resolved`,
@@ -293,13 +293,82 @@ board, the duel and their replays know nothing about tiers.
   permadeath) with nobody fallen.
 - Screenshots: `docs/screenshots/permadeath/`.
 
+## Duels in story (DECISIONS.md #31 / #33)
+
+Duels are no longer on the Solo menu (#31): story mode is where they happen. Everything is content
+in `build_story_content.gd` (names in `NAMES`, flags / ids in the constants under "Duels in story",
+the section `DUELS IN STORY` at the end of the file); the small systems each piece needed are listed
+with it. Every opponent is a duel-eligible roster creature (`BattleSpec.validate` now refuses a duel
+opponent `DuelMoveCompiler.is_duel_eligible` rejects, e.g. Bastion), its difficulty the duel's
+`strength` stat scale (`DuelScaling`). **Decision 7 (humans fight alongside creatures) is not built:**
+every duel here is the strict 1v1 creature duel — the people are trainers, their creatures fight.
+
+| What | Where | Kind | Flags / ids |
+|---|---|---|---|
+| **Tester Fenna** — a trainer whose battle is a DUEL (line of sight 3, like Bram; Petalfang 0.9, 90 gold) | the Mossway (11,7), facing the path; after `opening.complete` | real duel, WHITEOUT | `trainer.mossway.fenna.defeated` |
+| **Lark** — the RIVAL, a first-batch tester (Blightcap "Puck"). First duel: a trigger just inside Crownhaven's west gate after the opening; then rematches by the arena | Crownhaven (7,14) → gate trigger (5,13) → (23,18) | spar (a rival FRIENDLY), CONTINUE, 60 gold on a win, `clash_intro` | `rival.met`, `rival.stage` (duels fought), `rival.wins`, `rival.duel1`; encounter `crownhaven.rival.lark` |
+| **Sparring roster** — Corporal Wynn (Blightcap 0.8) < Lieutenant Aldous (Petalfang 0.95) < Sergeant Rowan (Geode 0.8, the existing spar); a "Sparring Roster" sign | the barracks yard; after the opening (Rowan after the Act 1 hook) | spar, CONTINUE, no purse | `crownhaven.spar.wynn` / `.aldous` / `.rowan` |
+| **The ambush** — Cutpurse Nell and her footpad hold the brook's plank bridge (the only crossing) once Rowan has signed you on | the Mossway, trigger at (21,6); after `act1.met_rowan` | TWO real duels back to back (HP carries), WHITEOUT; Classic permadeath applies | `mossway.ambush.sprung`, `.footpad_beaten` (a beaten footpad stays beaten after a loss), `.cleared`; 40 + 180 gold + a Dawnpetal Draught |
+| **The Crown Arena** — a new `arena` prop (elliptical stone drum, pennants, gate arch) where the SE house stood; **Arena Master Bex** runs **the Crown Cup**; **Champion Isolde** offers rematches once her title is yours | Crownhaven (22..26, 19..21); master at (22,22), champion (25,18) | 4 spars | `arena.crown_cup.run` / `.round` / `.wins` / `.champion` (the title); rematch `arena.crown_cup.champion_beaten` |
+
+**Rematch scaling** — `BattleSpec.scale_flag` / `scale_step` / `scale_max_steps`: every opponent's
+strength is multiplied by `1 + step × min(flag, max)` when a script starts the battle
+(`StartBattleCommand` → `BattleSpec.apply_scaling`; the authored spec is never mutated). Lark +8% per
+rival duel fought (max 6), Isolde +8% per win over her (max 6), every Cup round +5% per cup already
+won (max 4).
+
+**Spars and Growth — choice.** A spar is a real duel for Growth: `StoryGrowth` awards it by the
+ordinary story rules (the lead that fought and won earns `growth_per_win`; a loss earns
+`growth_on_loss`, 0), and its feats count. What stops a friendly bout from being an endless Growth
+farm is a **cooldown per partner**, not a Growth gate: `StorySparring` stamps every FOUGHT spar
+(won or lost; a flee / abort does not count — `StoryResultApplier`) in two int flags
+(`sparred.<encounter id>.rest` / `.step`, so nothing new in the save format), and the partner is
+ready again once the journey has rested `StoryRuleset.spar_cooldown_rests` times (default **1**:
+a Wayshrine / healer / whiteout rest) and walked `spar_cooldown_steps` (default 0). Content opts in
+with the new condition `spar_ready("<encounter id>")` (the roster, Rowan, Lark's and Isolde's
+rematches); a partner who is not ready says so ("rest up at the Wayshrine"). Spars never cause
+permadeath (#29): `BattleSpec.spar` as before.
+
+**The Crown Cup — format (choice).** `TournamentResource` (`content/tournaments/crown_cup.tres`;
+rules `TournamentLedger`, flow `RunTournamentCommand`, screen `TournamentLadderPanel` via the new
+host call `open_ladder(tournament, state) -> "enter" / "fight" / "withdraw" / "leave"`):
+- **4 bouts, weakest first**: Tamsin (Mycothrall 0.9), Old Harl (Blightcap 0.95), Ser Quenby
+  (Petalfang 1.05), the final vs Champion Isolde (Oakheart 0.85).
+- **Entry 100 gold** opens a RUN. Bouts are fought **back-to-back or one per visit** — after every
+  bout the ladder re-opens (Fight Round N / Withdraw / Leave) and **Leave keeps your place**. A lost
+  bout ends the run; withdrawing forfeits the fee.
+- **Healed before every bout** (the arena's healers: the living to full HP; NOT a rest — it never
+  refreshes a sparring partner or an ON_REST merchant, and the knocked-out stay down).
+- **Spars**: friendly competition — no permadeath, no whiteout; a KO leaves you at 1 HP and ends the
+  run.
+- **Prize**: first cup 400 gold + a **Sunleaf Totem** + the title **Crown Cup Champion**
+  (`arena.crown_cup.champion`; toast "Title: …", badge on the ladder); later cups 200 gold. Winning
+  unlocks Isolde's scaling champion rematch (once per rest, 120 gold per win).
+- **Save / reload mid-ladder**: the run is flags, saved after every bout (and by the pre-battle
+  autosave). Quit between bouts or in the middle of one and the arena master offers "Fight Round N"
+  again — the same round, no second fee.
+- The ladder card: title ribbon, gold pill, entry / prize / healing badges, one row per round
+  (crest, entrant, species, **Threat** pips vs your lead, WON / NEXT chips), status line, buttons;
+  ←/→ + Enter, Esc leaves. Screenshots: `docs/screenshots/story_duels/`.
+
+Tests: `tests/unit/test_story_sparring.gd` (cooldown, `spar_ready`, applier stamps, scaling,
+eligibility), `tests/unit/test_tournament_ledger.gd` (fee, ladder, loss / withdraw, prize once,
+healing is not a rest, save round-trip, the command end to end), `tests/integration/test_story_duels.gd`
+(content + flags, Fenna spots you → a real duel, the rival's first duel + a scaled rematch after a
+rest, a Classic spar never falls + the cooldown, the ambush → two duels → reward, losing it in
+Classic costs the partner, a full Cup run → prize + title + the champion, save / reload mid-ladder).
+
 ### Remaining gaps (M2)
 - The hero is not a battle unit yet: the hero rule is wired through `is_hero` / `story_hero` and
   tested with a stub member; nothing in the shipped story sets it.
 - A fallen member can not be brought back yet (the record is kept for that mechanic).
 - No shipped battle uses a protect objective yet (the engine, the banner and the story wiring do).
 - Party duels (bench switching / KO-replacement) — the duel is strict 1v1; the bench never fights
-  (and an item cannot target a bench member).
+  (and an item cannot target a bench member). Humans fighting ALONGSIDE creatures in a duel
+  (DECISIONS.md #7: the hero defending themselves in the ambush, sparring to stay in shape) needs
+  mixed duel sides — every story duel is still the lead creature vs one foe creature.
+- The duel intro names the foe CREATURE ("Petalfang challenges you!"), not the trainer: the
+  DuelRequest carries no opponent name (the VS clash and the pre-battle lines name the trainer).
 - Tactical battle items (no Items action on the tactical HUD); the duel AI never uses items.
 - Flee is not a net command (the duel is offline-only); a replay of a fled duel ends at the last
   command. Duel replays (`ReplayLog.MODE_DUEL`) and mid-duel suspend are not built yet.

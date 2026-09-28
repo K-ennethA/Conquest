@@ -167,7 +167,92 @@ static func prop(kind: String, footprint: Vector2i, tint: Color, seed: int = 0) 
 			return fire(seed)
 		"rubble":
 			return rubble(seed)
+		"arena":
+			return arena(fp, tint)
 	return house(fp, tint)
+
+
+## THE TOURNAMENT ARENA (DECISIONS.md #33): an elliptical stone drum filling the footprint -- an
+## arcaded outer wall, a crenellated rim with pennants in [param tint], a lower seating tier
+## inside around a raked sand floor, and a gatehouse arch on the south face (the entrance, toward
+## the camera).
+static func arena(footprint: Vector2i, tint: Color = Color(0.2, 0.26, 0.42)) -> Node3D:
+	var e: Array = _extent(footprint, 0.1)
+	var x0: float = e[0]
+	var z0: float = e[1]
+	var x1: float = e[2]
+	var z1: float = e[3]
+	var c := Vector3((x0 + x1) * 0.5, 0.0, (z0 + z1) * 0.5)
+	var rx: float = (x1 - x0) * 0.5
+	var rz: float = (z1 - z0) * 0.5
+	var stone := Color(0.76, 0.72, 0.63)
+	var sand := Color(0.87, 0.77, 0.54)
+	var seat := Color(0.62, 0.58, 0.52)
+	var wall_h: float = 2.5
+	var tier_h: float = 1.1
+	var thick: float = 0.55
+	var n: int = 24
+	var pt := func(i: int, sx: float, sz: float, y: float) -> Vector3:
+		var a: float = TAU * float(i) / float(n)
+		return Vector3(c.x + cos(a) * sx, y, c.z + sin(a) * sz)
+	var pm := ProcMesh.new()
+	var ix: float = rx - thick
+	var iz: float = rz - thick
+	var sx: float = maxf(0.5, ix - 0.75)
+	var sz: float = maxf(0.4, iz - 0.75)
+	for i in n:
+		var j: int = (i + 1) % n
+		var o0: Vector3 = pt.call(i, rx, rz, 0.0)
+		var o1: Vector3 = pt.call(j, rx, rz, 0.0)
+		var out_n: Vector3 = ((o0 + o1) * 0.5 - c)
+		out_n.y = 0.0
+		out_n = out_n.normalized()
+		var up := Vector3(0, wall_h, 0)
+		var shade: Color = stone.darkened(0.05 * float(i % 2))
+		# The outer wall and its arcade (a dark arch opening on each bay).
+		pm.quad(o0, o1, o1 + up, o0 + up, out_n, shade)
+		var m0: Vector3 = o0.lerp(o1, 0.28) + out_n * 0.03
+		var m1: Vector3 = o0.lerp(o1, 0.72) + out_n * 0.03
+		pm.quad(m0 + Vector3(0, 0.25, 0), m1 + Vector3(0, 0.25, 0), m1 + Vector3(0, 1.45, 0), m0 + Vector3(0, 1.45, 0), out_n, Color(0.22, 0.2, 0.2))
+		# The inner face and the rim.
+		var i0: Vector3 = pt.call(i, ix, iz, 0.0)
+		var i1: Vector3 = pt.call(j, ix, iz, 0.0)
+		pm.quad(i1, i0, i0 + up, i1 + up, -out_n, stone.darkened(0.18))
+		pm.quad(o0 + up, o1 + up, i1 + up, i0 + up, Vector3.UP, stone.lightened(0.06))
+		# Merlons on every other bay.
+		if i % 2 == 0:
+			var mid: Vector3 = (o0 + o1) * 0.5 * 0.85 + (i0 + i1) * 0.5 * 0.15
+			pm.box(Vector3(mid.x - 0.18, wall_h, mid.z - 0.18), Vector3(mid.x + 0.18, wall_h + 0.35, mid.z + 0.18), stone)
+		# The seating tier: a lower ring stepping down to the floor.
+		var t0: Vector3 = pt.call(i, sx, sz, 0.0)
+		var t1: Vector3 = pt.call(j, sx, sz, 0.0)
+		var tu := Vector3(0, tier_h, 0)
+		pm.quad(i0 + tu, i1 + tu, t1 + tu, t0 + tu, Vector3.UP, seat.darkened(0.04 * float(i % 3)))
+		pm.quad(t1, t0, t0 + tu, t1 + tu, -out_n, seat.darkened(0.2))
+		# The sand floor (a fan).
+		var f0: Vector3 = pt.call(i, sx, sz, 0.06)
+		var f1: Vector3 = pt.call(j, sx, sz, 0.06)
+		var fc := Vector3(c.x, 0.06, c.z)
+		pm.quad(fc, f1, f0, f0, Vector3.UP, sand.darkened(0.03 * float(i % 2)))
+	# The gatehouse on the south face.
+	var gz: float = c.z + rz
+	pm.box(Vector3(c.x - 1.0, 0.0, gz - 0.9), Vector3(c.x + 1.0, wall_h + 0.9, gz + 0.15), stone.darkened(0.08), stone.lightened(0.04))
+	_battlements(pm, c.x - 1.0, gz - 0.9, c.x + 1.0, gz + 0.15, wall_h + 0.9, stone.darkened(0.08), 0.5)
+	pm.box(Vector3(c.x - 0.55, 0.0, gz + 0.15), Vector3(c.x + 0.55, 1.9, gz + 0.19), Color(0.16, 0.14, 0.14))
+	pm.box(Vector3(c.x - 0.7, 1.9, gz + 0.15), Vector3(c.x + 0.7, 2.25, gz + 0.2), tint)
+	var root := _wrap(pm, "Arena")
+	# Pennants around the rim, and two banners flanking the gate.
+	for k in 6:
+		var a: float = TAU * (float(k) + 0.5) / 6.0
+		var b := banner(tint, 1.6, true)
+		b.position = Vector3(c.x + cos(a) * (rx - thick * 0.5), wall_h, c.z + sin(a) * (rz - thick * 0.5))
+		b.scale = Vector3.ONE * 0.8
+		root.add_child(b)
+	for bx in [c.x - 1.35, c.x + 1.35]:
+		var g := banner(tint, 0.0, false)
+		g.position = Vector3(bx, 0.9, gz + 0.1)
+		root.add_child(g)
+	return root
 
 
 ## The footprint's inner rect in local space: [x0, z0, x1, z1] inset by [param inset].

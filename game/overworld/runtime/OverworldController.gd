@@ -29,6 +29,8 @@ var hud: OverworldHUD = null
 var journey: JourneyMenu = null
 ## The merchant screen while one is open ([method open_shop]), else null.
 var shop_screen: ShopScreen = null
+## The tournament ladder while one is open ([method open_ladder]), else null.
+var ladder_panel: TournamentLadderPanel = null
 var map_loader: MapLoader = null
 
 var _state: StoryState = null
@@ -777,6 +779,26 @@ func open_shop(shop: ShopResource) -> void:
 	if is_instance_valid(screen):
 		screen.queue_free()
 	_update_prompt.call_deferred()
+
+
+## The TOURNAMENT LADDER ([RunTournamentCommand]): shows the grove ladder card over the overworld
+## and returns the player's pick ("enter" / "fight" / "withdraw" / "leave"). Modal like the shop.
+func open_ladder(tournament: TournamentResource, state: StoryState) -> String:
+	if tournament == null or not is_inside_tree():
+		return RunTournamentCommand.ACTION_LEAVE
+	if hud != null:
+		hud.set_prompt("")
+	var panel := TournamentLadderPanel.new()
+	panel.name = TournamentLadderPanel.NODE_NAME
+	add_child(panel)
+	ladder_panel = panel
+	panel.open(tournament, state if state != null else _state)
+	var action: String = String(await panel.chosen)
+	ladder_panel = null
+	if is_instance_valid(panel):
+		panel.queue_free()
+	_update_prompt.call_deferred()
+	return action
 
 
 func refresh_world() -> void:

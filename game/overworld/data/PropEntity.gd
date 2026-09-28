@@ -23,6 +23,7 @@ extends OverworldEntity
 ##   crystal   the Researcher's shard pylon: a glowing crystal on a plinth
 ##   fire      a burning patch (scorch, flames, embers, a warm light)
 ##   rubble    a few charred stones
+##   arena     a round stone arena (the tournament hall): tiered walls, pennants, a gate arch
 ##
 ## [member OverworldEntity.cell] is the footprint's top-left cell; [member footprint] its size.
 ## Props are NOT blocking by default (the terrain under a house block already decides
@@ -30,10 +31,10 @@ extends OverworldEntity
 ## [member OverworldEntity.blocking] and then blocks EVERY cell of its footprint.
 
 const KINDS: Array[String] = ["house", "ruin", "keep", "tower", "gate", "windmill", "stall", "well",
-	"fence", "haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble"]
+	"fence", "haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena"]
 
 @export_enum("house", "ruin", "keep", "tower", "gate", "windmill", "stall", "well", "fence",
-	"haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble")
+	"haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena")
 var prop: String = "house"
 @export var footprint: Vector2i = Vector2i(2, 2)
 

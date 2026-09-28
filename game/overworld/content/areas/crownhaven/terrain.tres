@@ -2994,9 +2994,9 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "WALL"
 }, {
 "position": Vector2i(26, 19),
-"tile_id": "grass_plains",
+"tile_id": "stone_wall",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "WALL"
 }, {
 "position": Vector2i(27, 19),
 "tile_id": "stone_wall",
@@ -3144,9 +3144,9 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "WALL"
 }, {
 "position": Vector2i(26, 20),
-"tile_id": "grass_plains",
+"tile_id": "stone_wall",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "WALL"
 }, {
 "position": Vector2i(27, 20),
 "tile_id": "stone_wall",
@@ -3274,29 +3274,29 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(22, 21),
-"tile_id": "grass_plains",
+"tile_id": "stone_wall",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "WALL"
 }, {
 "position": Vector2i(23, 21),
-"tile_id": "grass_plains",
+"tile_id": "stone_wall",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "WALL"
 }, {
 "position": Vector2i(24, 21),
-"tile_id": "grass_plains",
+"tile_id": "stone_wall",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "WALL"
 }, {
 "position": Vector2i(25, 21),
-"tile_id": "grass_plains",
+"tile_id": "stone_wall",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "WALL"
 }, {
 "position": Vector2i(26, 21),
-"tile_id": "grass_plains",
+"tile_id": "stone_wall",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "WALL"
 }, {
 "position": Vector2i(27, 21),
 "tile_id": "stone_wall",
