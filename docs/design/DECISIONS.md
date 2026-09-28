@@ -86,3 +86,18 @@ doc's default differs from this file, THIS FILE WINS. Anything not listed: use t
 16. **Human class promotion needs an ITEM or a specific LOCATION** (e.g. a trainer/order at a
     place, a crest/insignia item) in addition to Growth — it is a class change, not a
     biological one. Creature evolution stays Growth-driven (items/story triggers optional).
+
+## World history, the true enemy, the general (owner, 2026-09-28)
+17. **Before shards:** nations and people bound creatures by FORCE — e.g. chains made of shard
+    material — or, among good people, genuinely befriended them through trial and error (those
+    bonds need no shard). The researcher's shard lets almost ANYONE forge a connection.
+18. **The fallen creature:** a creature so powerful it is thought to have crashed WITH the
+    asteroid. It wields shard magic directly, giving it dominion over lesser creatures and
+    potentially humans.
+19. **The true enemy is a hidden DARK ORGANIZATION** that wants to capture the fallen creature.
+    Whether Mortis / the Dark units belong to it is still OPEN.
+20. **Main thread:** the enemy nation takes the blame — framed by, or controlled by, the dark
+    organization. The hero must prevent an all-out war by uncovering its secrets and the true
+    enemy.
+21. **The recurring GENERAL:** the soldier from the opening becomes a recurring general the hero
+    keeps bumping into across the game, eventually teaming up with them to save the day.
