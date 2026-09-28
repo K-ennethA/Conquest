@@ -114,3 +114,17 @@ doc's default differs from this file, THIS FILE WINS. Anything not listed: use t
     befriend it the old way.
 25. **The general's arc:** met repeatedly at army battles — wary and by-the-book at first —
     later learns their nation is being manipulated and sides with the hero for the finale.
+
+## Evolution / promotion requirements and holding (owner, 2026-09-28)
+26. **Evolution is not just XP.** Each evolution/promotion lists REQUIREMENTS that must all be
+    met — Growth is only one kind. Others (data-authored per edge): hold/use an item, be at a
+    location (or a region/biome), a story flag, time-of-day or weather, knowing a move, a
+    battle feat (e.g. win N battles with this unit, land N KOs of an element, survive at low
+    HP), bond/friendship, party composition (e.g. a certain species in the party). Human class
+    promotions typically require an item or location (decision 16).
+27. **Auto-trigger + hold:** when a unit's requirements become met, the evolve/promote offer
+    appears automatically (after a battle, on reaching a location, on using an item). The
+    player can decline ("Not now") and evolve LATER from a menu (story: Journey -> Party;
+    open modes: squad select) — pending evolutions stay listed there. A per-unit "Hold"
+    toggle stops the automatic prompts entirely (Everstone-style) until turned off.
+    Unmet requirements are shown as a checklist so players know what's missing.
