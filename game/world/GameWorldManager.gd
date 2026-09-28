@@ -963,6 +963,11 @@ func _evaluate_game_end(just_removed) -> void:
 		if outcome == GameModeRules.Outcome.ONGOING:
 			return
 		if single_player:
+			# The battle is decided: say so ONCE, before the end screen (story mode builds its
+			# BattleResult off the live board here; the end screen then reads its actions).
+			if GameEvents != null and GameEvents.has_signal("battle_resolved"):
+				GameEvents.battle_resolved.emit(&"victory" if outcome == GameModeRules.Outcome.VICTORY \
+					else &"defeat", {"map_path": current_map_path})
 			if outcome == GameModeRules.Outcome.VICTORY:
 				_game_over_screen.show_victory()
 			else:
@@ -1538,6 +1543,12 @@ func _setup_local_game() -> void:
 		ArenaRoundBuilder.build_round(map_loader, arena_ctrl.run(), arena_ctrl.ruleset())
 		# (Run HUD removed -- the round is already in the turn banner and the squad is on
 		# the board, so the overlay was redundant and collided with the SELECT MOVE popup.)
+
+	# STORY: tag the fielded party members (story member id, carried HP) before players are
+	# assigned. No-op outside a story battle (StoryController.prepare_battle_board guards).
+	var story_ctrl = get_node_or_null("/root/StoryController")
+	if story_ctrl != null and story_ctrl.has_method("prepare_battle_board"):
+		story_ctrl.prepare_battle_board(map_loader)
 
 	# Initialize player management first
 	_setup_players()

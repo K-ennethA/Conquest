@@ -304,7 +304,8 @@ func can_save_now() -> bool:
 		TurnSystemManager != null and TurnSystemManager.has_active_turn_system(),
 		_has_living_player_unit(),
 		ReplayPlayback.is_playing(),
-		_is_siege_active())
+		_is_siege_active(),
+		_is_story_battle_active())
 
 
 ## The PURE decision behind [method can_save_now], split out so the gate can be tested
@@ -313,16 +314,23 @@ func can_save_now() -> bool:
 ## ([param networked], [param arena_active] and [param siege_active]).
 static func gate(solo: bool, networked: bool, arena_active: bool, in_progress: bool,
 		has_turn_system: bool, has_player_unit: bool, replay_playback: bool = false,
-		siege_active: bool = false) -> bool:
+		siege_active: bool = false, story_active: bool = false) -> bool:
 	if not solo:
 		return false
-	if networked or arena_active or siege_active:
+	# STORY battles are excluded too (M1): the overworld autosaved right before the battle, so
+	# quitting mid-battle resumes in front of the trainer. M3 adds a MODE_STORY snapshot.
+	if networked or arena_active or siege_active or story_active:
 		return false
 	# A replay-boot battle is a SPECTATED re-simulation, not the player's progress --
 	# saving it would resurrect a finished battle as a resumable one.
 	if replay_playback:
 		return false
 	return in_progress and has_turn_system and has_player_unit
+
+
+func _is_story_battle_active() -> bool:
+	var story = _node("/root/StoryController")
+	return story != null and story.has_method("is_battle_active") and story.is_battle_active()
 
 
 func _is_networked() -> bool:

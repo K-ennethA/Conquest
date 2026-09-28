@@ -174,6 +174,13 @@ signal move_aimed(caster, move, origin_cell, aim_cell, targets)
 ## like the hazard/control signals so mocks can ride it.
 signal combat_text_annotated(unit, info)
 
+## A single-player battle was DECIDED (APPENDED). Emitted once by GameWorldManager's end-of-battle
+## evaluation, just before the end screen is revealed: [param outcome] is &"victory" or
+## &"defeat", [param context] carries {map_path}. Generic on purpose (story mode reads it to
+## build its BattleResult; any mode could stop re-deriving its own verdict). Untyped params
+## like the signals above.
+signal battle_resolved(outcome, context)
+
 func _ready() -> void:
 	# Make this a singleton
 	name = "GameEvents"
