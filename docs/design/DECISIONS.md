@@ -145,3 +145,22 @@ doc's default differs from this file, THIS FILE WINS. Anything not listed: use t
       PROMOTION items (stones, crests — decision 16/26), and the existing EQUIPMENT (held items).
     - Uses the one "use an item on a party member" flow from the bag (built with evolution
       requirements), not a second one.
+
+### Revision to 28 (owner, 2026-09-28)
+- **Shop scope for now: healing items, status cures, revives, and the existing equipment only.**
+  Bonding shards and evolution/promotion items are NOT sold yet — those systems aren't fleshed
+  out. Keep the ShopResource generic so they can be added later as data.
+
+## Permanent death mode (owner, 2026-09-28)
+29. **Permadeath mode** (Fire Emblem "Classic" style), as an option:
+    - If an ally falls in a real battle (tactical or duel), they cannot be used for the rest of
+      the game. **Sparring and friendly battles never cause permadeath** — battles carry a
+      `spar` / friendly tag, and training spars, rival friendlies etc. only knock units out.
+    - A fallen unit is marked FALLEN, not deleted (its record, growth, form and items are kept),
+      so a later mechanic can bring them back ("we might introduce a mechanic to get them later").
+    - Defaults (lead's proposal, owner may revise): chosen per journey when starting a new story
+      (Classic = permadeath / Casual = knocked-out units recover at a Wayshrine); it can be turned
+      OFF mid-journey but not back ON; applies to STORY mode only (open modes have no persistent
+      roster to lose); fallen units show as fallen in the Party menu (with where/when they fell),
+      are excluded from squads and duels, and their equipped item returns to the bag.
+      The hero is not a battle unit yet — hero death rules come with that milestone.
