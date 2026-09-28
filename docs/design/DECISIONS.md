@@ -177,3 +177,19 @@ doc's default differs from this file, THIS FILE WINS. Anything not listed: use t
   cause a game over when the story or mission objective says so (e.g. "Protect Linnea") — use
   the engine's ProtectUnit lose condition (exists as a class; needs wiring into maps/story
   battles). A game over returns to the last save / pre-battle autosave.
+
+## Menu structure: Online, and duels live in story (owner, 2026-09-28)
+30. **Main menu:** Solo, **Online** (new), Compendium, Map Creator (+ Resume / Continue Journey
+    rows as today). The old top-level Versus entry folds into Online.
+31. **Solo:** Story, Campaign, Skirmish, Arena Run (solo roguelite stays). **No Duel card** —
+    duels are reached through STORY MODE, not the menu. Challenges moves out of Solo.
+32. **Online:** 
+    - **Versus** — choose the mode (Conquest map battle = today's tactical versus, or **Duel**)
+      and where the opponent is: **Network** (host/join/dedicated) or **Same device** (hot-seat).
+      **Online duels are built now** on the existing NetSession core (commit-reveal RNG,
+      validation, digests) — the duel is already deterministic commands.
+    - **Challenges** (moved here from Solo).
+    - **Arena** (multiplayer) — shown as COMING SOON; player count undecided, do not implement.
+33. **Duels in story mode:** trainers / rivals who challenge you to duels, friendly SPARRING
+    partners in towns (never permadeath; Rowan's spar exists), criminals / ambushes (scripted
+    self-defence duels), and a TOURNAMENT / arena building in a city with a ladder of duels.
