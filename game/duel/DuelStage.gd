@@ -24,6 +24,9 @@ const SETTLE_TIMEOUT := 6.0
 ## Model scale on the stage (presentation only; the board reads positions, never scale).
 const UNIT_SCALE := 1.35
 
+## Hot-seat versus: what the two sides are called (HUD prompts, the results' winner).
+const HOTSEAT_NAMES: Array[String] = ["Player 1", "Player 2"]
+
 ## Skip every wait (tests / headless auto-play).
 @export var instant: bool = false
 
@@ -56,6 +59,9 @@ func _ready() -> void:
 	_mount_presentation()
 	_present_units()
 	camera.frame(battle.board.station_world(0), battle.board.station_world(1))
+	if is_hotseat():
+		hud.side_names = HOTSEAT_NAMES
+	_configure_hud()
 	hud.bind(battle)
 	hud.rematch_requested.connect(_on_rematch)
 	hud.setup_requested.connect(_on_setup)
@@ -67,6 +73,29 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if battle != null and is_instance_valid(battle):
 		battle.teardown()
+
+
+## "Vineweave and Gem Knight square off!" -- the intro of a VERSUS duel (hot-seat / online).
+static func versus_intro(p_battle: DuelBattle) -> String:
+	var names: Array[String] = []
+	for side in 2:
+		var u = p_battle.unit_of(side) if p_battle != null else null
+		names.append(u.get_display_name() if u != null else "Player %d" % (side + 1))
+	return "%s and %s square off!" % names
+
+
+## Subclass hook, run just before the HUD binds the battle (the online stage sets its seat's
+## perspective here). Nothing by default.
+func _configure_hud() -> void:
+	pass
+
+
+## HOT-SEAT VERSUS (Online > Versus > Duel > Same device): a versus duel with a human on each
+## side, sharing this screen. The HUD prompts name whose turn it is and the results name the
+## winner (DuelSetup builds these requests).
+func is_hotseat() -> bool:
+	return request != null and request.kind == DuelRequest.KIND_VERSUS \
+		and not request.player_is_ai and not request.foe_is_ai
 
 
 ## The request the controller staged, or a default standalone duel.
@@ -199,6 +228,8 @@ func _run() -> void:
 	if request.is_spar():
 		intro = "Friendly spar: %s squares up!"
 	hud.show_intro(intro % foe_name)
+	if request.kind == DuelRequest.KIND_VERSUS:
+		hud.show_intro(versus_intro(battle))
 	hud.set_command_panel_visible(false)
 	await _beat(BEAT_INTRO)
 	hud.show_intro("")
@@ -224,7 +255,10 @@ func _run() -> void:
 			hud.show_waiting("")
 			slot = int(decision["slot"])
 		else:
-			hud.narrate("What will %s do?" % actor.get_display_name())
+			var prompt := "What will %s do?" % actor.get_display_name()
+			if is_hotseat():
+				prompt = "%s: %s" % [HOTSEAT_NAMES[clampi(battle.side_of(actor), 0, 1)], prompt]
+			hud.narrate(prompt)
 			hud.show_commands(actor)
 			slot = await hud.slot_chosen
 			hud.show_waiting("")

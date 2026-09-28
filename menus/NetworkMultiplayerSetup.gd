@@ -45,6 +45,14 @@ const MODE_SELECT_SCENE := "res://menus/MultiplayerModeSelection.tscn"
 
 const TITLE_SETUP := "Network Play"
 const SUBTITLE_SETUP := "Host a lobby on this computer, or join a friend's."
+const TITLE_DUEL := "Network Duel"
+const SUBTITLE_DUEL := "Host a duel lobby on this computer, or join a friend's (or a duel server)."
+
+## What this screen hosts / joins: [constant NetProtocol.MODE_CONQUEST] (the map battle) or
+## [constant NetProtocol.MODE_DUEL] -- set by the Versus screen before it opens this one (like
+## MatchSetup.requested_mode). It becomes [member NetSessionNode.lobby_mode]: a joiner's hello
+## names it and a host of the other mode refuses the join with the reason on screen.
+static var requested_mode: String = NetProtocol.MODE_CONQUEST
 const IDLE_STATUS := "Host a game, or join one by address and port."
 
 ## What the join half of this screen is doing right now. Drives the status text and
@@ -114,6 +122,9 @@ func _ready() -> void:
 	# Coming back here from anywhere means no match is running: start clean. (The main menu
 	# owns GameModeManager's one-shot menu message; it is not consumed here.)
 	GameModeManager.end_network_session()
+	var net: Node = _net()
+	if net != null and "lobby_mode" in net:
+		net.lobby_mode = NetProtocol.MODE_DUEL if is_duel() else NetProtocol.MODE_CONQUEST
 
 	_build_ui()
 
@@ -172,6 +183,11 @@ func _wire_session_signals(attach: bool) -> void:
 			net.connect(sig, handler)
 		elif not attach and is_bound:
 			net.disconnect(sig, handler)
+
+
+## True when this screen hosts / joins an online DUEL lobby ([member requested_mode]).
+func is_duel() -> bool:
+	return requested_mode == NetProtocol.MODE_DUEL
 
 
 func _in_session() -> bool:
@@ -240,6 +256,8 @@ func _host_display_name() -> String:
 
 func _hosting_status(players: int) -> String:
 	if players >= 2:
+		if is_duel():
+			return "Opponent connected -- pick your units, then both press Ready."
 		return "Opponent connected -- vote on a map, then both press Ready."
 	return "Hosting on port %d. Waiting for an opponent to join..." % _hosted_port
 
@@ -446,6 +464,16 @@ func _show_collaborative_lobby(as_host: bool, player_name: String) -> void:
 	"""Swap the setup for the collaborative lobby (initialised as host or client)."""
 	print("[SETUP] Showing collaborative lobby (host: " + str(as_host) + ")")
 	_remove_lobby()
+	if is_duel():
+		# An online DUEL lobby: roster + ready, each seat's unit, the host's stage / weather.
+		var duel_lobby := DuelLobby.new()
+		duel_lobby.name = "DuelLobby"
+		_embed_lobby(duel_lobby)
+		collaborative_lobby = duel_lobby
+		_enter_lobby_view(as_host)
+		duel_lobby.game_starting.connect(_on_duel_lobby_starting)
+		duel_lobby.initialize(as_host, player_name)
+		return
 	var lobby: CollaborativeLobbyScript = CollaborativeLobbyScript.new()
 	lobby.name = "CollaborativeLobby"
 	_embed_lobby(lobby)  # into the tree first: its _ready builds the lobby UI
@@ -453,6 +481,10 @@ func _show_collaborative_lobby(as_host: bool, player_name: String) -> void:
 	_enter_lobby_view(as_host)
 	lobby.game_starting.connect(_on_lobby_game_starting)
 	lobby.initialize(as_host, player_name)
+
+
+func _on_duel_lobby_starting() -> void:
+	_update_status("Starting the duel...")
 
 
 func _remove_lobby() -> void:
@@ -673,7 +705,8 @@ func _save_net_prefs(address: String, port: int, player_name: String) -> void:
 # =============================================================================
 
 func _build_ui() -> void:
-	_page = MenuKit.build_page(self, ["Versus"], TITLE_SETUP, SUBTITLE_SETUP)
+	_page = MenuKit.build_page(self, ["Online", "Versus"],
+		TITLE_DUEL if is_duel() else TITLE_SETUP, SUBTITLE_DUEL if is_duel() else SUBTITLE_SETUP)
 	var body: VBoxContainer = _page["body"]
 
 	var setup := VBoxContainer.new()
@@ -910,9 +943,11 @@ func _embed_lobby(lobby: Control) -> void:
 func _enter_lobby_view(as_host: bool) -> void:
 	if _setup_box != null:
 		_setup_box.visible = false
-	(_page["title"] as Label).text = "Lobby"
+	(_page["title"] as Label).text = "Duel Lobby" if is_duel() else "Lobby"
 	var subtitle: Label = _page["subtitle"]
-	if as_host:
+	if is_duel():
+		subtitle.text = "Pick your unit; once you have both pressed Ready the duel begins."
+	elif as_host:
 		subtitle.text = "Vote on a map with your opponent; once you have both pressed Ready the match begins."
 	elif _is_dedicated_session():
 		subtitle.text = "Both players mark themselves ready; the dedicated server starts the match."
@@ -925,8 +960,8 @@ func _enter_lobby_view(as_host: bool) -> void:
 func _exit_lobby_view() -> void:
 	if _setup_box != null:
 		_setup_box.visible = true
-	(_page["title"] as Label).text = TITLE_SETUP
-	(_page["subtitle"] as Label).text = SUBTITLE_SETUP
+	(_page["title"] as Label).text = TITLE_DUEL if is_duel() else TITLE_SETUP
+	(_page["subtitle"] as Label).text = SUBTITLE_DUEL if is_duel() else SUBTITLE_SETUP
 	_update_footer()
 	MenuNav.focus_deferred(host_button)
 

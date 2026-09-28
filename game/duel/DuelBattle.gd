@@ -543,6 +543,17 @@ func use_item(item_id: String) -> Dictionary:
 	return apply_command(NetProtocol.use_item(id, item_id, id))
 
 
+## VERSUS (online / hot-seat): [param side] walks away -- a forfeit or a dropped connection.
+## The OTHER side wins, recorded like a KO win from side A's point of view (VICTORY when side
+## A remains, DEFEAT when side B does; no befriend). Idempotent; ignored once decided.
+func concede(side: int) -> void:
+	if is_over or result == null or side < 0 or side > 1:
+		return
+	result.winner_side = 1 - side
+	result.outcome = DuelResult.OUTCOME_VICTORY if result.winner_side == 0 else DuelResult.OUTCOME_DEFEAT
+	_finish(true)
+
+
 ## Forfeit / quit: the duel ends as ABORTED (no winner, no befriend).
 func forfeit() -> void:
 	if is_over:

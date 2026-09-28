@@ -23,7 +23,9 @@ signal duel_finished(result: DuelResult)
 
 const STAGE_SCENE := "res://game/duel/DuelStage.tscn"
 const SETUP_SCENE := "res://menus/DuelSetup.tscn"
-const MENU_SCENE := "res://menus/SoloModeSelect.tscn"
+## Where a standalone duel's "Menu" goes: the Versus screen (DECISIONS.md #31/#32 -- the only
+## menu route to a duel is Online > Versus > Duel; story duels never use it).
+const MENU_SCENE := "res://menus/MultiplayerModeSelection.tscn"
 ## The EvolutionRules.growth_modes id of a STANDALONE duel.
 const GROWTH_MODE := "duel"
 
@@ -102,7 +104,9 @@ func finish(result: DuelResult) -> void:
 	_finished = true
 	_active = false
 	_last_result = result
-	if record_profile and result.outcome != DuelResult.OUTCOME_ABORTED:
+	# A hot-seat versus duel is two people at one screen: no profile win / loss for either.
+	var versus: bool = _request != null and _request.kind == DuelRequest.KIND_VERSUS
+	if record_profile and result.outcome != DuelResult.OUTCOME_ABORTED and not versus:
 		var profile := get_node_or_null("/root/PlayerProfile")
 		if profile != null and profile.has_method("notify_battle_result"):
 			profile.notify_battle_result("duel", result.player_won(), {"rounds": result.rounds})

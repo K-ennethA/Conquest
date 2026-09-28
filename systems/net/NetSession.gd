@@ -168,8 +168,18 @@ var dedicated: bool = false
 var rng_mode: RngMode = RngMode.ALL
 ## Dedicated: start automatically once the lobby is full and everyone is ready.
 var auto_start: bool = true
+## Dedicated auto-start: func() -> Dictionary, the start's last word (the final config
+## [method start_match] merges -- e.g. the seats' duel picks, DedicatedServer). Optional.
+var auto_start_config: Callable = Callable()
 ## Dedicated: the config was fixed by the server (clients cannot change it).
 var config_locked: bool = false
+## What this lobby plays ([constant NetProtocol.MODE_CONQUEST] / [constant NetProtocol.MODE_DUEL]).
+## Set BEFORE hosting / joining (the Versus screen's choice, a dedicated server's --mode):
+## a joiner's hello names it and the host refuses another mode's joiner
+## ([constant NetProtocol.REJECT_MODE_MISMATCH]); the host stamps it into the match config
+## ([constant NetProtocol.CONFIG_MODE]) so every peer boots the same kind of battle. Not reset
+## by [method leave] -- it is the screen's choice, not the connection's state.
+var lobby_mode: String = NetProtocol.MODE_CONQUEST
 
 ## Clients re-validate every accepted action against their own state before
 ## applying it, and check that actions in THEIR seat are ones they submitted.
@@ -506,6 +516,8 @@ static func _sanitize_config(config: Dictionary) -> Dictionary:
 	var aet = config.get("auto_end_turn", null)
 	if typeof(aet) == TYPE_BOOL:
 		out["auto_end_turn"] = aet
+	# Online duels: stage / weather / the seats' unit picks, whitelisted (DuelNetConfig).
+	out.merge(DuelNetConfig.sanitize(config), true)
 	return out
 
 
@@ -553,11 +565,20 @@ func can_start_match() -> bool:
 func start_match(final_config: Dictionary = {}) -> bool:
 	if not can_start_match():
 		return false
+	var per_match := {}
 	if not final_config.is_empty():
 		var extra := _sanitize_config(final_config) if dedicated else final_config.duplicate(true)
+		# The seats' duel picks belong to THIS match only (never the standing lobby config),
+		# and a locked server config still takes them: they are the players' own choice.
+		if extra.has(DuelNetConfig.KEY_UNITS):
+			per_match[DuelNetConfig.KEY_UNITS] = extra[DuelNetConfig.KEY_UNITS]
+			extra.erase(DuelNetConfig.KEY_UNITS)
 		if not (dedicated and config_locked):
 			_config.merge(extra, true)
 	var cfg := _config.duplicate(true)
+	cfg.merge(per_match, true)
+	# The lobby's mode is the host's, whatever a config said (NetProtocol.CONFIG_MODE).
+	cfg[NetProtocol.CONFIG_MODE] = lobby_mode
 	var slots := {}
 	for pid in _roster:
 		slots[int(_roster[pid]["slot"])] = String(_roster[pid]["name"])
@@ -912,7 +933,7 @@ func _process(_delta: float) -> void:
 	_tick_draining()
 	_tick_kicks()
 	if is_host() and dedicated and auto_start and state == State.LOBBY and can_start_match():
-		start_match()
+		start_match(auto_start_config.call() if auto_start_config.is_valid() else {})
 	if role == Role.CLIENT and _closing_reason != "" and _apply_queue.is_empty() \
 			and (game == null or _last_applied_seq <= _digest_seq):
 		_close_and_emit("ended", _closing_reason)
@@ -1161,7 +1182,7 @@ func _on_peer_disconnected(peer_id: int) -> void:
 func _on_connected_to_server() -> void:
 	# Our FIRST message is the hello (name + version stamps). The host seats us only
 	# if the build matches -- see _rpc_hello.
-	var hello := NetProtocol.make_hello(_pending_name)
+	var hello := NetProtocol.make_hello(_pending_name, "", lobby_mode)
 	if debug_hello_protocol_version >= 0:
 		hello[NetProtocol.KEY_HELLO_PV] = debug_hello_protocol_version
 	_rpc_hello.rpc_id(SERVER_PEER_ID, hello)
@@ -1249,7 +1270,7 @@ func _host_admit_peer(peer_id: int, hello: Dictionary) -> void:
 		return
 	if _roster.has(peer_id) or _kick_at.has(peer_id):
 		return
-	var check: Dictionary = NetProtocol.validate_hello(hello)
+	var check: Dictionary = NetProtocol.validate_hello(hello, NetProtocol.PROTOCOL_VERSION, "", lobby_mode)
 	if not bool(check.get("accepted", false)):
 		_refuse_peer(peer_id, String(check.get("reason", NetProtocol.REJECT_MALFORMED_HELLO)), check)
 		return

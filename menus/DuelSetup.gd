@@ -2,32 +2,34 @@ extends Control
 
 class_name DuelSetup
 
-## Solo -> Duel: pick your unit and the foe, the stage, the weather, the AI and the
-## encounter kind, then Fight (docs/design/DUEL_BATTLE.md §9). Builds a standalone
-## [DuelRequest] and hands it to [code]DuelController.start[/code]; the duel's results card
-## owns the way back (Rematch / Change Units / Menu).
+## Online > Versus > Duel > Same device: the HOT-SEAT duel. Player 1 and Player 2 each pick a
+## unit, then the stage and the weather, then Fight (docs/design/DUEL_BATTLE.md §9,
+## DECISIONS.md #32). Builds a VERSUS [DuelRequest] with a human on BOTH sides (no AI, no items,
+## no running) and hands it to [code]DuelController.start[/code]; the stage prompts whichever
+## player's unit is up and the results card names the winner (Rematch / Change Units / Menu).
+##
+## This is the only menu route to a duel (DECISIONS.md #31: duels otherwise live in Story);
+## the solo-vs-AI standalone duel left the menu -- [method DuelRequest.standalone] and the AI
+## driver stay for tests and dev tools.
 ##
 ## Only DUEL-ELIGIBLE units are offered ([method DuelMoveCompiler.is_duel_eligible]: a kit
 ## that cannot damage the foe cannot win a duel). Each unit card lists the duel moveset --
 ## the compiled moves, variants included -- so what you pick is what you fight with.
 ##
 ## Look: the shared grove page ([method MenuKit.build_page]); two carousels of crested
-## option cards, option rows, Back / Fight in the footer.
+## option cards, the stage / weather row, Back / Fight in the footer.
 ## Keys: Left / Right (or Q / E) cycle the focused carousel, Enter fights, Esc goes back.
 
-const SOLO_SCENE := "res://menus/SoloModeSelect.tscn"
+const VERSUS_SCENE := "res://menus/MultiplayerModeSelection.tscn"
 
 const STAGES := [["meadow", "Meadow"], ["tall_grass", "Tall Grass"], ["grove", "Grove"]]
-const DIFFICULTIES := [["Easy", 0], ["Normal", 1]]
-const ENCOUNTERS := [["Trainer duel", DuelRequest.KIND_STANDALONE], ["Wild encounter", DuelRequest.KIND_WILD]]
+const SIDE_NAMES := ["Player 1", "Player 2"]
 
 var _ids: Array[StringName] = []
 var _pick: Array[int] = [0, 1]
 var _cards: Array = [null, null]
 var _stage_opt: OptionButton
 var _weather_opt: OptionButton
-var _difficulty_opt: OptionButton
-var _kind_opt: OptionButton
 var _fight: Button
 var _status: Label
 var _weathers: Array[StringName] = []
@@ -38,22 +40,16 @@ func _ready() -> void:
 	var vw := _ids.find(&"vineweave")
 	var geode := _ids.find(&"gem_knight")
 	_pick = [maxi(vw, 0), geode if geode >= 0 else mini(1, _ids.size() - 1)]
-	var page := MenuKit.build_page(self, ["Solo"], "Duel", "One on one. No movement -- just the moves.")
+	var page := MenuKit.build_page(self, ["Online", "Versus"], "Duel",
+		"Two players, one screen. No movement -- just the moves.")
 	_build(page)
 	_refresh_cards()
 	MenuNav.focus_deferred(_fight)
 
 
-## Roster ids a duel can field, sorted by name.
+## Roster ids a duel can field, sorted by id (the one list online duels use too).
 static func eligible_ids() -> Array[StringName]:
-	var out: Array[StringName] = []
-	var rules := DuelRuleset.load_default()
-	for id in CharacterLibrary.all_ids():
-		var ch := CharacterLibrary.get_character(id)
-		if ch != null and DuelMoveCompiler.is_duel_eligible(ch, rules):
-			out.append(StringName(id))
-	out.sort_custom(func(a, b): return String(a) < String(b))
-	return out
+	return DuelNetConfig.eligible_ids()
 
 
 func _build(page: Dictionary) -> void:
@@ -69,14 +65,14 @@ func _build(page: Dictionary) -> void:
 	duo.alignment = BoxContainer.ALIGNMENT_CENTER
 	duo.add_theme_constant_override("separation", MenuTheme.SP_L)
 	col.add_child(duo)
-	duo.add_child(_carousel(0, "Your unit"))
+	duo.add_child(_carousel(0, SIDE_NAMES[0]))
 	var vs := MenuKit.label("VS", &"TitleLabel")
 	vs.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	vs.add_theme_font_override("font", MenuTheme.display_font(2))
 	vs.add_theme_font_size_override("font_size", MenuTheme.FS_TITLE)
 	vs.add_theme_color_override("font_color", MenuTheme.GOLD)
 	duo.add_child(vs)
-	duo.add_child(_carousel(1, "The foe"))
+	duo.add_child(_carousel(1, SIDE_NAMES[1]))
 
 	var opts := GridContainer.new()
 	opts.name = "Options"
@@ -91,9 +87,6 @@ func _build(page: Dictionary) -> void:
 		if w != &"clear":
 			_weathers.append(w)
 	_weather_opt = _option(opts, "Weather", _weathers.map(func(w): return Weather.get_weather(w).display_name if Weather.get_weather(w) != null else String(w)))
-	_difficulty_opt = _option(opts, "Foe AI", DIFFICULTIES.map(func(d): return d[0]))
-	_difficulty_opt.select(1)
-	_kind_opt = _option(opts, "Encounter", ENCOUNTERS.map(func(e): return e[0]))
 
 	_status = MenuKit.label("", &"DimLabel")
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -217,12 +210,16 @@ func _refresh_cards() -> void:
 		MenuKit.accent_card(c["card"], ConquestTheme.element_color(String(ch.element)))
 
 
-## The request the screen's current choices describe.
+## The request the screen's current choices describe: a hot-seat VERSUS duel (both sides
+## human; no flee, no befriend, no items). Fresh entropy at the fight (seed 0).
 func build_request() -> DuelRequest:
-	var req := DuelRequest.standalone(_ids[_pick[0]], _ids[_pick[1]], int(DIFFICULTIES[_difficulty_opt.selected][1]))
+	var req := DuelRequest.standalone(_ids[_pick[0]], _ids[_pick[1]])
+	req.kind = DuelRequest.KIND_VERSUS
+	req.player_is_ai = false
+	req.foe_is_ai = false
+	req.rules = {"can_flee": false, "can_befriend": false}
 	req.stage_id = String(STAGES[_stage_opt.selected][0])
 	req.weather_id = _weathers[_weather_opt.selected]
-	req.kind = String(ENCOUNTERS[_kind_opt.selected][1])
 	return req
 
 
@@ -238,7 +235,7 @@ func _on_fight() -> void:
 
 
 func _on_back() -> void:
-	MenuNav.change_scene(self, SOLO_SCENE)
+	MenuNav.change_scene(self, VERSUS_SCENE)
 
 
 func _unhandled_input(event: InputEvent) -> void:

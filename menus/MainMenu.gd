@@ -9,8 +9,9 @@ class_name MainMenu
 ##
 ## Information architecture (kept from the menu IA restructure):
 ##   [Resume Battle]  -- only when a Save & Quit battle exists (BattleSaveManager)
-##   Solo             -- SoloModeSelect: Campaign / Skirmish / Siege / Arena Run / Challenges
-##   Versus           -- MultiplayerModeSelection: hot-seat or network
+##   Solo             -- SoloModeSelect: Story / Campaign / Skirmish / Arena Run
+##   Online           -- OnlineHub: Versus (Conquest or Duel, network or same device) /
+##                       Challenges / Arena (coming soon)   (DECISIONS.md #30-32)
 ##   Compendium       -- the whole in-game reference (units, tiles, maps, weather, rules...)
 ##   Map Creator      -- the Map Maker (Back returns here)
 ##   Quit
@@ -29,7 +30,7 @@ const DIORAMA_MAPS: Array[String] = [
 ]
 
 const SOLO_SCENE := "res://menus/SoloModeSelect.tscn"
-const VERSUS_SCENE := "res://menus/MultiplayerModeSelection.tscn"
+const ONLINE_SCENE := "res://menus/OnlineHub.tscn"
 const COMPENDIUM_SCENE := "res://menus/Compendium.tscn"
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 # Progression (rank, points, achievements) -- reached through the top-right profile chip,
@@ -39,9 +40,9 @@ const GAME_WORLD_SCENE := "res://game/world/GameWorld.tscn"
 
 const ENTRIES := [
 	{"id": "solo", "text": "Solo", "key": KEY_1,
-		"desc": "Story journey, Campaign, Skirmish, Siege, Arena runs, Challenges and one-on-one Duels."},
-	{"id": "versus", "text": "Versus", "key": KEY_2,
-		"desc": "Two commanders, one battlefield. Play hot-seat on this device, or connect over the network."},
+		"desc": "Your Story journey, the Campaign, Skirmish against the AI and Arena runs."},
+	{"id": "online", "text": "Online", "key": KEY_2,
+		"desc": "Versus -- a Conquest battle or a Duel, over the network or on this device -- and Challenges."},
 	{"id": "compendium", "text": "Compendium", "key": KEY_3,
 		"desc": "Every unit, tile, map, weather, status and rule -- searchable, with the element chart."},
 	{"id": "map_creator", "text": "Map Creator", "key": KEY_4,
@@ -65,7 +66,7 @@ const GEAR_SIZE := 48.0
 const RESUME_EXPIRED_MESSAGE := "Challenge attempt expired — forfeited."
 
 var single_player_button: Button   # the "Solo" row (name kept for callers)
-var versus_button: Button
+var online_button: Button
 var compendium_button: Button
 var map_creator_button: Button
 var quit_button: Button
@@ -206,17 +207,17 @@ func _build_ui() -> void:
 		_buttons.append(b)
 
 	single_player_button = _buttons[0]
-	versus_button = _buttons[1]
+	online_button = _buttons[1]
 	compendium_button = _buttons[2]
 	map_creator_button = _buttons[3]
 	quit_button = _buttons[4]
 	single_player_button.pressed.connect(_on_single_player_pressed)
-	versus_button.pressed.connect(_on_versus_pressed)
+	online_button.pressed.connect(_on_online_pressed)
 	compendium_button.pressed.connect(_on_compendium_pressed)
 	map_creator_button.pressed.connect(_on_map_creator_pressed)
 	quit_button.pressed.connect(_on_quit_pressed)
-	single_player_button.tooltip_text = "Solo play: Campaign, Skirmish, Siege, Arena Run or Challenges."
-	versus_button.tooltip_text = "Face another player: local hot-seat or online."
+	single_player_button.tooltip_text = "Solo play: Story, Campaign, Skirmish or an Arena Run."
+	online_button.tooltip_text = "Play other people: Versus (Conquest or Duel) and Challenges."
 	compendium_button.tooltip_text = "Browse every unit, tile, map, weather, status and rule."
 	map_creator_button.tooltip_text = "Build custom maps."
 
@@ -616,15 +617,16 @@ func _dismiss_resume_entry() -> void:
 # --- Actions ------------------------------------------------------------------------
 
 func _on_single_player_pressed() -> void:
-	# Solo -> SoloModeSelect (Campaign / Skirmish / Siege / Arena Run / Challenges); the
-	# mode picker + Match Setup refine the settings from here.
+	# Solo -> SoloModeSelect (Story / Campaign / Skirmish / Arena Run); the mode picker +
+	# Match Setup refine the settings from here.
 	GameSettings.set_game_mode(GameSettings.GameMode.SINGLE_PLAYER)
 	GameSettings.set_player_count(1)  # Single player vs AI
 	MenuNav.change_scene(self, SOLO_SCENE)
 
 
-func _on_versus_pressed() -> void:
-	MenuNav.change_scene(self, VERSUS_SCENE)
+## Online -> OnlineHub (Versus / Challenges / Arena coming soon).
+func _on_online_pressed() -> void:
+	MenuNav.change_scene(self, ONLINE_SCENE)
 
 
 func _on_compendium_pressed() -> void:
@@ -747,7 +749,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			_on_settings_pressed()
 			return
-	var rows: Array[Button] = [single_player_button, versus_button, compendium_button,
+	var rows: Array[Button] = [single_player_button, online_button, compendium_button,
 		map_creator_button, quit_button]
 	for i in ENTRIES.size():
 		var code := int(ENTRIES[i]["key"])

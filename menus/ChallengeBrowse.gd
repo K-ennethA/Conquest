@@ -3,7 +3,8 @@ extends Control
 class_name ChallengeBrowse
 
 ## Browse + import screen for player-built CHALLENGES (Challenge Maps, Phase A). Reached
-## from the Solo screen's "Challenges" card. Built on the shared grove page
+## from the Online screen's "Challenges" card ([OnlineHub]; it moved there from Solo,
+## DECISIONS.md #31/#32). Built on the shared grove page
 ## ([MenuKit.build_page], [MenuTheme] -- see docs/UI_STYLE.md).
 ##
 ## Two ways a challenge gets here:
@@ -31,7 +32,7 @@ class_name ChallengeBrowse
 ##   daily hero 124 + import row 46 + import status 22 + the list (ONE EXPAND_FILL region)
 ## = 192 fixed + 3 * 16 = 240, so the list gets ~226 at 720p and every spare pixel above.
 
-const SOLO_SELECT_SCENE := "res://menus/SoloModeSelect.tscn"
+const ONLINE_SCENE := "res://menus/OnlineHub.tscn"
 
 ## The community browser, owned by a parallel workstream. Navigation to it is guarded by
 ## [method ResourceLoader.exists] so this screen still builds (with the button disabled and
@@ -80,7 +81,7 @@ func _ready() -> void:
 # --- UI construction --------------------------------------------------------
 
 func _build_ui() -> void:
-	var page := MenuKit.build_page(self, ["Solo"], "Challenges",
+	var page := MenuKit.build_page(self, ["Online"], "Challenges",
 		"Beat a map someone else built -- or import a share code.")
 
 	# --- Daily hero ----------------------------------------------------------
@@ -539,7 +540,7 @@ func _on_my_bases_pressed() -> void:
 
 
 func _on_back_pressed() -> void:
-	MenuNav.change_scene(self, SOLO_SELECT_SCENE)
+	MenuNav.change_scene(self, ONLINE_SCENE)
 
 
 func _unhandled_input(event: InputEvent) -> void:
