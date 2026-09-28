@@ -6,9 +6,10 @@ extends RefCounted
 ## waits for StoryController.report_battle_result.
 ##
 ## The DUEL feature registers its real launcher at startup --
-##   DuelLauncher.register(DuelController.launch_from_story)
+##   DuelController.register_story_launcher() -> DuelLauncher.register(launch_from_story)
 ## -- which REPLACES the debug [DuelStub] with no overworld change. A stub never replaces a real
-## launcher (registration order between autoloads does not matter).
+## launcher (registration order between autoloads does not matter), so the stub is only the
+## fallback when no real duel is present.
 ##
 ## A launcher is a Callable taking the request; it may return {success, reason} (anything else
 ## counts as success). It stages the request and changes scene (the real duel) or mounts an
@@ -35,6 +36,11 @@ static func has_launcher() -> bool:
 
 static func is_stub() -> bool:
 	return _launcher.is_valid() and _is_stub
+
+
+## True when [param launcher] is the one registered (its owner unregisters on shutdown).
+static func is_registered(launcher: Callable) -> bool:
+	return _launcher.is_valid() and launcher.is_valid() and _launcher == launcher
 
 
 ## Hand [param request] to the registered launcher. {success, reason}; never logs.

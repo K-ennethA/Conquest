@@ -20,6 +20,9 @@ const RULES_PATH: String = "res://game/characters/evolution/evolution_rules.tres
 @export var growth_on_loss: int = 0
 ## Mode ids ([method GrowthTracker.detect_mode]) in which Growth is earned. Arena and versus
 ## are deliberately absent: an arena run is its own progression and versus must not grind.
+## "story" = every story battle, tactical AND duel ([StoryGrowth]); "duel" = a STANDALONE duel
+## (Solo -> Duel), shipped OFF: a free pick-any-unit 1v1 against the AI is the cheapest grind in
+## the game, so it earns Growth only if a designer lists it here.
 @export var growth_modes: PackedStringArray = PackedStringArray(["skirmish", "campaign", "challenge"])
 ## Validator ceiling: an evolved form's power budget may be at most this multiple of its
 ## parent's ([method EvolutionLibrary.validate]).

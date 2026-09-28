@@ -21,6 +21,11 @@ signal slot_chosen(slot: int)
 signal rematch_requested
 signal setup_requested
 signal menu_requested
+## Story duels: the results card's Continue (the stage then reports to StoryController).
+signal continue_requested
+
+## [signal slot_chosen]'s value for the Flee button (never a move slot).
+const FLEE_SLOT := -2
 
 const MARGIN := 16.0
 const PANEL_H := 226.0
@@ -185,7 +190,7 @@ func _build_command_panel() -> void:
 	row.add_child(right)
 	for spec in [["Party", "Switching arrives with party duels (M2)."],
 			["Items", "Battle items are not in the game yet."],
-			["Flee", "Only wild encounters can be fled (M3)."],
+			["Flee", "Run from a wild encounter (it may fail and cost the turn)."],
 			["Info", "Details for the focused move (%s)." % ConquestTheme.action_glyph(InputActions.UNIT_INFO)]]:
 		var b := Button.new()
 		b.name = String(spec[0]) + "Button"
@@ -197,6 +202,7 @@ func _build_command_panel() -> void:
 		right.add_child(b)
 		_side_buttons[spec[0]] = b
 	(_side_buttons["Info"] as Button).pressed.connect(_toggle_info)
+	(_side_buttons["Flee"] as Button).pressed.connect(choose_flee)
 	_wire_focus()
 
 
@@ -298,6 +304,7 @@ func refresh() -> void:
 	for r in rows:
 		r.refresh(_accepting and r.slot in legal)
 	_struggle.visible = _accepting and DuelCharacter.STRUGGLE_SLOT in legal
+	(_side_buttons["Flee"] as Button).disabled = not (_accepting and battle.can_flee())
 	_refresh_order()
 
 
@@ -423,7 +430,8 @@ func show_results(result: DuelResult, standalone: bool = true) -> void:
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	_results.add_child(col)
 	var won := result.player_won()
-	var title := "Victory" if won else ("Defeat" if result.outcome == DuelResult.OUTCOME_DEFEAT else "Duel Ended")
+	var title := "Victory" if won else ("Defeat" if result.outcome == DuelResult.OUTCOME_DEFEAT \
+		else ("Got Away" if result.outcome == DuelResult.OUTCOME_FLED else "Duel Ended"))
 	var ribbon := ConquestTheme.title_ribbon(title.to_upper(),
 		ConquestTheme.GOLD if won else ConquestTheme.DANGER, ConquestTheme.FS_PHASE)
 	ribbon.name = "Outcome"
@@ -456,6 +464,12 @@ func show_results(result: DuelResult, standalone: bool = true) -> void:
 		j.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
 		j.add_theme_color_override("font_color", ConquestTheme.SUCCESS)
 		col.add_child(j)
+	if not result.growth.is_empty():
+		var growth_box := VBoxContainer.new()
+		growth_box.name = "GrowthRows"
+		growth_box.alignment = BoxContainer.ALIGNMENT_CENTER
+		col.add_child(growth_box)
+		GrowthGems.fill_result_rows(growth_box, result.growth, ConquestTheme.FS_BODY)
 	var seed_line := Label.new()
 	seed_line.text = "Seed %d" % result.seed
 	seed_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -480,6 +494,21 @@ func show_results(result: DuelResult, standalone: bool = true) -> void:
 		menu.pressed.connect(func() -> void: menu_requested.emit())
 		buttons.add_child(menu)
 		rematch.call_deferred("grab_focus")
+	else:
+		# STORY: one way on -- back to the overworld (StoryController applies the result).
+		var cont := MenuKit.button("Continue Journey", MenuKit.PRIMARY, 220)
+		cont.name = "Continue"
+		cont.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		cont.pressed.connect(func() -> void: continue_requested.emit(), CONNECT_ONE_SHOT)
+		col.add_child(cont)
+		cont.call_deferred("grab_focus")
+
+
+## The results card's Continue button (story duels), or null.
+func continue_button() -> Button:
+	if _results == null or not is_instance_valid(_results):
+		return null
+	return _results.find_child("Continue", true, false) as Button
 
 
 func results_visible() -> bool:
@@ -499,6 +528,14 @@ func _choose(slot: int) -> void:
 		return
 	_accepting = false
 	slot_chosen.emit(slot)
+
+
+## The Flee button: hand the director [constant FLEE_SLOT] (it rolls the escape).
+func choose_flee() -> void:
+	if not _accepting or battle == null or _actor == null or not battle.can_flee():
+		return
+	_accepting = false
+	slot_chosen.emit(FLEE_SLOT)
 
 
 func _on_row_focused(slot: int) -> void:

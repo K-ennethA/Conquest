@@ -100,7 +100,10 @@ static func build_result(outcome: String, request: BattleRequest, tracking: Dict
 			var u = members.get(mid, null)
 			var alive: bool = u != null and is_instance_valid(u) and u.is_alive()
 			var hp: int = int(u.current_health) if alive else 0
-			result.party_after.append({"member_id": mid, "current_hp": hp, "wounded": not alive})
+			# Every fielded member fought; its KOs (tracking["kos"], from the battle's
+			# GrowthTracker roll call) feed EVOLUTION's growth maths.
+			result.party_after.append({"member_id": mid, "current_hp": hp, "wounded": not alive,
+				"fought": true, "kos": int((tracking.get("kos", {}) as Dictionary).get(mid, 0))})
 	for rec in tracking.get("enemies", []):
 		var e = rec.get("unit", null)
 		if e == null or not is_instance_valid(e) or not e.is_alive():

@@ -58,9 +58,12 @@ static func build_result(p_request: BattleRequest, outcome: String, force_offer:
 	var lead_done: bool = false
 	for p in p_request.party:
 		var hp: int = int(p.get("current_hp", StoryPartyMember.HP_FULL))
-		var entry: Dictionary = {"member_id": String(p.get("member_id", "")), "current_hp": hp, "wounded": false}
+		var entry: Dictionary = {"member_id": String(p.get("member_id", "")), "current_hp": hp, "wounded": false,
+			"fought": false, "kos": 0}
 		if not lead_done and hp != 0:
 			lead_done = true
+			entry["fought"] = true
+			entry["kos"] = 1 if outcome == BattleResult.OUTCOME_VICTORY else 0
 			var c: CharacterResource = CharacterLibrary.get_character(StringName(String(p.get("character_id", ""))))
 			var max_hp: int = c.base_health if c != null else 100
 			var cur: int = max_hp if hp == StoryPartyMember.HP_FULL else hp

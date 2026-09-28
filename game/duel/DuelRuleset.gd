@@ -32,6 +32,8 @@ const POLICY_DISABLE := "disable"                    ## abilities: removed from 
 @export var allow_switch: bool = false
 ## KO'd lead is replaced from the bench instead of losing the duel. Needs party_size > 1.
 @export var ko_replacement: bool = false
+## Running is allowed at all (the encounter must also allow it: DuelRequest.can_flee -- wild
+## duels). Rolled per attempt by [method flee_chance] (DuelBattle.attempt_flee).
 @export var allow_flee: bool = false
 @export var allow_items: bool = false
 ## Cells between the two stations. 4 guarantees no authored AoE aimed at the foe (largest:
@@ -40,7 +42,7 @@ const POLICY_DISABLE := "disable"                    ## abilities: removed from 
 ## Per-unit move clock for human turns, seconds (0 = off; only PvP will want it).
 @export var turn_timer_seconds: int = 0
 
-@export_group("Flee (M3)")
+@export_group("Flee")
 @export_range(0.0, 1.0, 0.01) var flee_base: float = 0.5
 @export_range(0.0, 0.2, 0.005) var flee_per_speed: float = 0.05
 @export_range(0.0, 0.5, 0.01) var flee_per_attempt: float = 0.1

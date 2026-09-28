@@ -5,8 +5,9 @@ extends RefCounted
 ## battle bridge fields and the duel receives (BattleRequest.party[]).
 ##
 ## SHARED CONTRACT (docs/design/DECISIONS.md "Shared contracts"): the story party stores
-## EVOLUTION's RosterLedger-style member records -- one record type, not two. EVOLUTION's
-## RosterLedger is not on this branch yet, so this is the minimal COMPATIBLE record:
+## EVOLUTION's RosterLedger member records -- one record type, not two. A StoryPartyMember IS
+## the STORY-SCOPED VIEW of one RosterLedger member record, kept inside the journey's own save
+## slot (docs/STORY_MODE.md "Party records"):
 ##
 ##   RosterLedger member         StoryPartyMember
 ##   ------------------------    ----------------------------------------------------
@@ -14,17 +15,21 @@ extends RefCounted
 ##   line                        line       -- the evolution line's root character id
 ##   form                        character_id -- the CURRENT form (what spawns / fights)
 ##   nickname                    nickname
-##   growth, evolved             growth     -- opaque dictionary, owned by EVOLUTION
+##   growth, evolved             growth     -- {"growth": int, "evolved": [{edge, at}]}
 ##   (story only)                current_hp, wounded, item_id
 ##
-## At the merge with feat/evolution: `growth` carries RosterLedger's growth/evolved payload
-## verbatim, and RosterLedger.member_for_character / form_of can be answered from these
-## records (see the merge notes in docs/STORY_MODE.md). The overworld only
-## ever READS/WRITES member_id, character_id, nickname, current_hp, wounded and item_id;
-## member_id NEVER changes (an evolution rewrites character_id and keeps everything else).
+## [method ledger_record] hands EVOLUTION the exact RosterLedger record and
+## [method apply_ledger_record] folds an evolved one back, so every evolution rule runs through
+## RosterLedger's record-level API ([StoryGrowth]); the global roster.json only receives the
+## open-mode UNLOCK. The overworld itself only READS/WRITES member_id, character_id, nickname,
+## current_hp, wounded and item_id; member_id NEVER changes (an evolution rewrites
+## character_id and keeps everything else). Unknown keys inside `growth` round-trip untouched.
 
 ## current_hp sentinel: full health (the same idea as ArenaUnitState.HP_FULL).
 const HP_FULL: int = -1
+## Keys of the RosterLedger payload inside [member growth].
+const GROWTH_KEY := "growth"
+const EVOLVED_KEY := "evolved"
 
 var member_id: String = ""
 var character_id: String = ""
@@ -34,7 +39,8 @@ var current_hp: int = HP_FULL
 ## KO'd in the last battle: cannot be fielded until healed (a Wayshrine).
 var wounded: bool = false
 var item_id: String = ""
-## EVOLUTION-owned growth payload. Opaque to the overworld; round-tripped unchanged.
+## EVOLUTION-owned growth payload ({"growth": int, "evolved": [...]}, RosterLedger's). Opaque to
+## the overworld; read and written only through the ledger-record helpers below.
 var growth: Dictionary = {}
 
 
@@ -42,9 +48,69 @@ static func create(p_member_id: String, p_character_id: String, p_nickname: Stri
 	var m := StoryPartyMember.new()
 	m.member_id = p_member_id
 	m.character_id = p_character_id
-	m.line = p_character_id
+	m.line = line_of(p_character_id)
 	m.nickname = p_nickname
 	return m
+
+
+## The evolution LINE [param p_character_id] belongs to (its root form; itself outside any line).
+static func line_of(p_character_id: String) -> String:
+	if p_character_id.is_empty():
+		return ""
+	var root: String = String(EvolutionLibrary.line_root(StringName(p_character_id)))
+	return root if not root.is_empty() else p_character_id
+
+
+# --- The RosterLedger record ------------------------------------------------------
+
+## This member as EVOLUTION's RosterLedger record {line, form, growth, evolved, nickname}
+## (a copy: hand it to RosterLedger's record-level API, then [method apply_ledger_record]).
+func ledger_record() -> Dictionary:
+	return {
+		"line": line,
+		"form": character_id,
+		"growth": growth_points(),
+		"evolved": evolution_history(),
+		"nickname": nickname,
+	}
+
+
+## Fold a (possibly evolved) RosterLedger record back into this member: the form becomes
+## [member character_id], growth / history land in [member growth]. member_id, nickname, HP and
+## the item are the member's own and are not touched here.
+func apply_ledger_record(rec: Dictionary) -> void:
+	var form: String = String(rec.get("form", ""))
+	if not form.is_empty():
+		character_id = form
+	var rec_line: String = String(rec.get("line", ""))
+	if not rec_line.is_empty():
+		line = rec_line
+	growth[GROWTH_KEY] = maxi(0, int(rec.get("growth", 0)))
+	var ev = rec.get("evolved", [])
+	growth[EVOLVED_KEY] = (ev as Array).duplicate(true) if ev is Array else []
+
+
+## Cumulative Growth (RosterLedger's "growth"; 0 for a member that never earned any).
+func growth_points() -> int:
+	return maxi(0, int(growth.get(GROWTH_KEY, 0)))
+
+
+## Add [param n] Growth (a non-positive n is a no-op) and return the new total.
+func add_growth(n: int) -> int:
+	if n > 0:
+		growth[GROWTH_KEY] = growth_points() + n
+	return growth_points()
+
+
+## RosterLedger's evolution history [{edge, at}], oldest first (a copy).
+func evolution_history() -> Array:
+	var ev = growth.get(EVOLVED_KEY, [])
+	var out: Array = []
+	if ev is Array:
+		for step in ev:
+			if step is Dictionary:
+				out.append({"edge": String(step.get("edge", "")), "at": String(step.get("at", ""))})
+	return out
 
 
 ## The RosterLedger uid scheme: the first individual of a line is keyed by the line itself,
@@ -123,9 +189,9 @@ static func from_dict(d) -> StoryPartyMember:
 	var m := StoryPartyMember.new()
 	m.member_id = mid
 	m.character_id = cid
-	m.line = String(d.get("line", cid))
+	m.line = String(d.get("line", ""))
 	if m.line.is_empty():
-		m.line = cid
+		m.line = line_of(cid)
 	m.nickname = String(d.get("nickname", ""))
 	m.current_hp = int(d.get("current_hp", HP_FULL))
 	if m.current_hp < HP_FULL:

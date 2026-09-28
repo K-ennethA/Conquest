@@ -227,8 +227,25 @@ func _run() -> void:
 			hud.show_waiting("")
 		if not is_inside_tree() or battle.is_over:
 			break
+		if slot == DuelHUD.FLEE_SLOT:
+			await _flee(actor)
+			continue
 		await _cast(actor, slot, decision)
 	_driving = false
+
+
+## The player tries to run (DuelBattle.attempt_flee): away (the duel ends as FLED) or the turn
+## is spent.
+func _flee(actor) -> void:
+	var res: Dictionary = battle.attempt_flee()
+	if not bool(res.get("ok", false)):
+		return
+	if bool(res.get("fled", false)):
+		hud.narrate("Got away safely!")
+	else:
+		hud.narrate("%s couldn't get away!" % actor.get_display_name())
+		hud.refresh()
+		await _beat(BEAT_AFTER)
 
 
 ## Play one action: cut-in for an ultimate, the command, then wait for the show to settle.
@@ -331,20 +348,47 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # --- End -------------------------------------------------------------------------------
 
+## STANDALONE: the controller finishes at once (profile stat, growth) and the card offers
+## Rematch / Change Units / Menu. STORY: the card shows first and its Continue finishes -- the
+## report makes StoryController walk back to the overworld, so it must wait for the player.
 func _on_finished(result: DuelResult) -> void:
 	if camera != null:
 		camera.impulse_shake(0.5)
+	var standalone := request.origin == DuelRequest.ORIGIN_STANDALONE
+	if standalone:
+		_finish_with_controller(result)
+	else:
+		hud.continue_requested.connect(_finish_with_controller.bind(result), CONNECT_ONE_SHOT)
+	_show_results.call_deferred(result, standalone)
+
+
+func _finish_with_controller(result: DuelResult) -> void:
 	var ctrl := get_node_or_null("/root/DuelController")
 	if ctrl != null and ctrl.has_method("finish"):
 		ctrl.finish(result)
-	var standalone := request.origin == DuelRequest.ORIGIN_STANDALONE
-	_show_results.call_deferred(result, standalone)
 
 
 func _show_results(result: DuelResult, standalone: bool) -> void:
 	await _beat(BEAT_AFTER * 2.0)
-	if is_inside_tree():
-		hud.show_results(result, standalone)
+	if not is_inside_tree():
+		return
+	hud.show_results(result, standalone)
+	if standalone:
+		await _offer_standalone_evolutions(result)
+
+
+## Standalone (DUEL_BATTLE.md §8.4): a member the duel's growth made ready is offered the
+## Evolution screen from the results card (story evolutions are the overworld's, never here).
+func _offer_standalone_evolutions(result: DuelResult) -> void:
+	for row in result.growth:
+		if not (row is Dictionary) or not bool(row.get("ready", false)):
+			continue
+		var uid: String = String(row.get("uid", ""))
+		var edges: Array[EvolutionResource] = RosterLedger.available_evolutions(uid)
+		if edges.is_empty() or not is_inside_tree():
+			continue
+		var screen := EvolutionScreen.open(self, uid, edges)
+		await screen.finished
 
 
 func _on_rematch() -> void:
