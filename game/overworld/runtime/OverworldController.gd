@@ -11,7 +11,9 @@ extends Node3D
 ##
 ## Per frame (no script running, no overlay up): the held direction (cursor_* or camera_pan_*:
 ## arrows, WASD, d-pad, both sticks) steps the hero ONE CELL at a time -- a tap on a new
-## direction turns in place, a hold walks, fast_forward (Shift / R3) runs. On arrival:
+## direction turns in place, a hold walks, fast_forward (Shift / R3) runs. Each step costs its
+## walk / run seconds even with animations off (the hero then snaps a cell per step instead of
+## gliding) -- never a cell per frame. On arrival:
 ## warps -> trigger zones -> trainer sight -> the grass roll (only if nothing above fired).
 ## Confirm uses what the hero faces; a tap / click walks there (A*), and a tap on an NPC walks
 ## next to it and talks. map_menu / cancel opens the Journey menu.
@@ -40,6 +42,10 @@ var _turned_this_press: bool = false
 var _walk_streak: bool = false
 var _tap_path: Array[Vector3i] = []
 var _tap_interact_cell: Vector3i = Cells.INVALID
+## Seconds before the next INPUT-driven step (held direction / tap path) may start. Every step
+## costs its walk / run time even with animations off, where the actor snaps instead of gliding:
+## without this pace a held key stepped once per FRAME and the hero shot across the map.
+var _step_cooldown: float = 0.0
 ## A host-side dialogue (the whiteout line) holds input like a script does.
 var _busy: bool = false
 var _booted: bool = false
@@ -252,6 +258,7 @@ func _process(delta: float) -> void:
 		return
 	if _cursor != null and player != null:
 		_cursor.global_position = player.global_position
+	_step_cooldown = maxf(0.0, _step_cooldown - delta)
 	if _moving or is_input_blocked():
 		_held_dir = Vector2i.ZERO
 		return
@@ -259,7 +266,8 @@ func _process(delta: float) -> void:
 	if dir == Vector2i.ZERO:
 		_held_dir = Vector2i.ZERO
 		if not _tap_path.is_empty():
-			_follow_tap_path()
+			if _step_ready():
+				_follow_tap_path()
 		elif _walk_streak:
 			_walk_streak = false
 			player.settle()
@@ -280,7 +288,15 @@ func _process(delta: float) -> void:
 			return
 	if _turned_this_press and not _walk_streak and _held_time < _ruleset.turn_hold_seconds:
 		return
+	if not _step_ready():
+		return
 	try_step(dir)
+
+
+## True once the last step's walk / run time has passed (a hair of float slack so a glide that
+## ends on this frame chains straight into the next step with no idle frame).
+func _step_ready() -> bool:
+	return _step_cooldown <= 0.0001
 
 
 func _held_direction() -> Vector2i:
@@ -307,7 +323,8 @@ func _step_seconds() -> float:
 
 
 ## Step the hero one cell in [param dir]. Returns false (a bump: turn only) when blocked or
-## busy. Public so tests / tools can walk without synthesising input.
+## busy. Public so tests / tools can walk without synthesising input (it is not paced; the
+## per-frame input path waits out [member _step_cooldown] before calling it).
 func try_step(dir: Vector2i) -> bool:
 	if _moving or dir == Vector2i.ZERO or player == null:
 		return false
@@ -319,7 +336,9 @@ func try_step(dir: Vector2i) -> bool:
 		return false
 	_moving = true
 	_walk_streak = true
-	player.walk_to(to, _step_seconds())
+	var seconds: float = _step_seconds()
+	_step_cooldown = seconds
+	player.walk_to(to, seconds)
 	_await_arrival(to)
 	return true
 

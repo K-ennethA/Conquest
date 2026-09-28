@@ -346,14 +346,15 @@ func test_story_recruit_is_non_missable() -> void:
 func test_tap_walks_a_path() -> void:
 	var ow := await _boot("oakvale", Vector3i(10, 11, 0), "north")
 	ow.tap_cell(Vector3i(12, 11, 0))
-	for i in range(30):
+	# The path is paced a step's walk time per cell even with animations off (wall clock).
+	var t0: int = Time.get_ticks_msec()
+	while ow.player.cell != Vector3i(12, 11, 0) and Time.get_ticks_msec() - t0 < 2000:
 		await get_tree().process_frame
 	assert_eq(ow.player.cell, Vector3i(12, 11, 0), "a tap walks there over the grid")
 	ow.tap_cell(Vector3i(14, 11, 0))
-	for i in range(40):
+	t0 = Time.get_ticks_msec()
+	while not StoryController.is_script_running() and Time.get_ticks_msec() - t0 < 2000:
 		await get_tree().process_frame
-		if StoryController.is_script_running():
-			break
 	assert_true(StoryController.is_script_running(), "a tap on an NPC walks next to him and talks")
 	await _drain(ow)
 

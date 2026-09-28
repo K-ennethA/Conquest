@@ -11,6 +11,8 @@ Solo → **Story** (card 7) → an empty slot → **Oakvale**.
 
 1. Arrows / WASD / d-pad / sticks step one cell (tap a new direction = turn; hold = walk;
    Shift / R3 = run). Click / tap a cell to walk there; tap a person to walk up and talk.
+   Every step costs its walk / run time even with Animations off in Settings (the hero then
+   snaps a cell per step instead of gliding; pinned by `test_overworld_key_walk`).
 2. Confirm (Space / Enter / A) reads the **sign**, talks to **Maren** / **Tobin**, opens the
    **mill chest** (poultice + 30 gold; stays open after reload).
 3. **Elder Wynn** (north of the plaza) asks a **choice** — "I will walk it." sets
