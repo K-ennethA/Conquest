@@ -34,6 +34,7 @@ toasts, apply-side ultimates and cooldown booking, replays, dev auto-join).
 | `systems/multiplayer_launcher.gd` (autoload `MultiplayerLauncher`), `systems/AutoClientDetector.gd` | Dev two-instance auto-join (`-- --multiplayer-auto-join`) and the dev-gated "Host + Auto Client" spawner. |
 | `dev_scripts/net_bot_client.gd`, `dev_scripts/net_multiprocess_check.sh` | Scripted headless client + the 3-process check (see *Testing*; `MODE=duel` for online duels). |
 | `DuelNetConfig.gd`, `DuelNetRules.gd`, `game/duel/net/NetDuelStage.gd`, `menus/DuelLobby.gd` | ONLINE DUELS (see *Online duels*): the duel match config + its strict request builder, the rules object over a `DuelBattle`, the network-driven duel stage, the duel lobby. |
+| `NetTurnClock.gd` | The online TURN CLOCK's presets (Rapid / Standard / Relaxed), budgets per kind (side / unit / duel action), the anti-AFK default, config keys and the player-facing wording. Pure. The live clock is in `NetSession` (see *Turn clock*); the HUD is `game/ui/hud/TurnTimer.gd` (network mode) and `game/ui/hud/NetMatchBar.gd` (the duel's clock + Forfeit corner). |
 
 ## Flow
 
@@ -67,6 +68,13 @@ Match    UI --request_*--> submit_intent --rpc--> host intent queue
          every peer: verify, seed = H(shares || seq), apply_action (<= 1 per frame;
              clients first re-validate it on their own state)
          host, next frame: checkpoint {seq, turn slot, digest} -> clients compare.
+
+Clock    clients: battle attached -> GAME_ATTACHED -> host. Host, on a settled state once every
+         seat is attached: a new timed turn (rules.clock_turn_key) -> CLOCK {key, slot, kind,
+         budget_ms, remaining_ms, strikes, ...} to everyone; its deadline passed (+ grace) and
+         the seat has no intent queued -> the rules' timeout_action, stamped timeout:true, goes
+         through ACCEPT like any intent (or, on the Nth expiry in a row, CLOCK_FORFEIT(slot) +
+         match_ended("clock_forfeit")). See *Turn clock*.
 ```
 
 * **Actor is the sender's seat**, never a field of the payload.
@@ -105,7 +113,9 @@ A joining client's **first** message is a hello — display name plus
   (an editor run joining an exported build is a legitimate test setup).
 
 Bump `PROTOCOL_VERSION` whenever the envelope or an action's data shape changes (2 = the
-merged core, 3 = USE_ITEM, 4 = lobby modes + the online-duel config keys). Replays stamp it too and refuse other versions. Two-machine procedure:
+merged core, 3 = USE_ITEM, 4 = lobby modes + the online-duel config keys, 5 = the online turn
+clock: the `timeout` action stamp, the clock / attach / clock-forfeit RPCs, the `turn_clock` /
+`afk_limit` config keys). Replays stamp it too and refuse other versions. Two-machine procedure:
 `docs/NETWORK_TESTING.md`.
 
 ## Lobby channel
@@ -217,10 +227,90 @@ seat's unit, the host's / leader's stage + weather).
   kept canto move's follow-up WAIT applies inside the same call on every peer). **Digest**: the
   board digest + round, decided flag, winner, command count, whose turn.
 * **Leaving**: pause-menu Forfeit (a loss); the opponent's forfeit / drop is this seat's win
-  (`DuelBattle.concede`), with the same toasts and messages as Conquest online. No turn clock
-  (the ruleset's `turn_timer_seconds` is 0; a clock expiry would be a local, un-networked call).
+  (`DuelBattle.concede`), with the same toasts and messages as Conquest online. The stage shows
+  a visible **Forfeit** button (`NetMatchBar`, opening the pause menu's forfeit confirm).
+* **Turn clock**: every ACTION is timed by the host's clock (*Turn clock*; Standard 30s). The
+  duel's hook (`DuelNetRules`: `clock_kind` = action, `clock_turn_key` per applied command,
+  `timeout_action` = the acting combatant's pass) is all the duel adds; `NetDuelStage` mounts the
+  countdown and narrates "Time's up! X passes." (The local ruleset's `turn_timer_seconds` stays 0:
+  a local expiry would be an un-networked call.)
 * **Same device**: Online > Versus > Duel > Same device is the hot-seat `DuelSetup` (two human
   sides on one `DuelStage`) -- no network involved.
+
+## Turn clock (online timers)
+
+Owner rule: **every online match is timed** -- Conquest map battles (Traditional and Speed
+First) and online duels. There is no "Off" online. (The local Speed First clock,
+`GameSettings.speed_turn_timer_seconds`, is for solo / hot-seat only: `SpeedFirstTurnSystem`
+never arms it in a MULTIPLAYER match, because a local expiry would end the turn on one peer.)
+
+**Presets** (`NetTurnClock`; default **Standard**):
+
+| Preset | Traditional (per side) | Speed First (per unit) | Duel (per action) |
+|---|---|---|---|
+| Rapid | 45s + 3s per living unit | 10s | 15s |
+| Standard | 90s + 5s per living unit | 20s | 30s |
+| Relaxed | 150s + 8s per living unit | 35s | 50s |
+
+A Traditional side's allowance is counted when its turn opens (a bigger army gets a little
+longer). Chosen in the lobby by the player-host / the dedicated server's leader (the Turn clock
+picker in `CollaborativeLobby` / `DuelLobby`; the player-host publishes it with
+`set_match_config` so the joiner sees it) or fixed by the server's `--turn-clock <preset>`. The
+host stamps the match's `turn_clock` preset and `afk_limit` into the match config.
+
+**Who decides.** The host / dedicated server owns every deadline. Once every seat has reported
+its battle attached (`attach_game` -> `_rpc_game_attached`; a seat still loading never loses
+time), on each SETTLED state (every accepted action applied and digested) the host asks the
+rules for `clock_turn_key()` -- Traditional `"<turn>:<slot>"`, Speed First
+`"<turn>:<acting unit id>"`, duel `"<command count>:<actor id>"` -- and when it changes opens a
+new clock: `budget_ms` from the preset and `clock_kind()` (+ `clock_units(slot)` for a side), and
+broadcasts `{key, slot, kind, budget_ms, remaining_ms, seq, strikes, afk_limit, preset}`.
+Every peer stores `deadline = now + remaining_ms` (`turn_clock()`, `turn_clock_remaining_ms()`,
+signal `turn_clock_changed`) and only RENDERS it.
+
+**Expiry.** When `now > deadline + turn_clock_grace_ms` (500 ms of lag allowance) and the seat
+has no intent already queued (a last-instant intent goes first), the host builds the rules'
+`timeout_action(slot)` -- Traditional **END_TURN** for the seat; Speed First **WAIT** for the
+active unit (END_TURN if it cannot wait, e.g. stunned); duel: the acting combatant **passes**
+(a WAIT: fair -- the idle seat deals nothing and rolls nothing, the opponent simply gets the
+tempo) -- stamps it `timeout: true` and runs it through the SAME accept path as an intent
+(validation, commit-reveal round, apply, digest). So it is identical on every peer, recorded by
+the replay recorder like any action, and replayable. `turn_timed_out(slot, action, strikes)`
+fires on every peer at apply time (HUD: "TIME'S UP" on the chip, a NetToast line).
+
+**Anti-AFK.** Every peer counts a seat's consecutive applied timeouts (`turn_clock_strikes`; any
+own action resets it). On the host, the expiry that would be the seat's `afk_limit`-th in a row
+(default **3**, `--afk-limit N`, 0 = never) is not played out: the seat **forfeits** --
+`clock_forfeit(slot)` on every peer (the others also get `opponent_forfeited(slot)`, so the
+battle resolves exactly like a pause-menu forfeit: UILayoutManager eliminates that side, the
+duel stage concedes it), then the host ends the match with `match_aborted("clock_forfeit")`
+(GameModeManager keeps the decided battle on screen). A dedicated server reopens its lobby.
+
+**Trust model.**
+* Only the host issues timeouts. A client intent's `timeout` key is stripped (`submit_intent`,
+  and again on the host's `_rpc_intent`), so a claimed timeout is validated as the ordinary
+  intent it is -- e.g. a duel seat cannot "time itself out" to skip a turn.
+* Clients check every timeout: it must hit the seat whose clock they are counting and arrive no
+  earlier than their derived deadline minus `TIMEOUT_EARLY_TOLERANCE_MS` (1.5 s of jitter) --
+  else `premature_timeout` / `timeout_wrong_seat` / `unclocked_timeout` ->
+  `host_verification_failed`; and at apply time `validate_timeout` must find it IS the rules'
+  canonical timeout on their identical state (`timeout_mismatch` otherwise). So a host cannot
+  cut your time short (beyond the tolerance) nor dress a free choice up as a timeout.
+* Residual: the host decides the grace and can be *late* (give a seat more time) or stall; it
+  sets the budget within its preset; a timeout in your seat is exempt from the "only intents I
+  submitted" check (it is canonical and deadline-checked instead). A dedicated server is the
+  trusted clock for both seats.
+
+**HUD.** `TurnTimer` (the grove chip) follows the network clock whenever one is open: both seats
+see the countdown with a caption (YOUR TURN / OPPONENT), M:SS over a minute, the warning pulse
+under 10s and the urgent red band + per-second tick (own clock only) under 5s; it never expires
+anything itself. The Conquest battle mounts it in the top-centre column; the online duel stage
+mounts it in `NetMatchBar` with a visible **Forfeit** button. The battle **Map Menu** carries a
+**Forfeit** entry online (confirm page -> the pause menu's forfeit path, `forfeit_match()`), and
+online the menu opens on either seat's turn.
+
+**Bots** (`net_bot_client.gd`) play the safe move (END_TURN / WAIT) when their own clock has
+under 1.2 s left; `--idle-turns N` sits out their first N timed turns so the host times them out.
 
 ## What the player sees at the seam
 
@@ -319,6 +409,7 @@ by this; `MatchRng` remains only as the solo / replay stream.)
 | Roll biasing | impossible (committed chains) | impossible for clients; `rng server` mode trusts the server |
 | Host-private info | host sees everything a client sends | server sees everything |
 | State divergence | per-action digest checkpoint → `desync_detected` → match ends | same |
+| Turn clock | the host owns deadlines and issues timeouts; clients refuse an early / wrong-seat / non-canonical timeout (see *Turn clock*) | the server is the clock for both seats |
 | Lobby payloads (squads, items, skins, custom maps) | untrusted: whitelisted / strict-validated on receipt; no ownership proof yet | not used (map rosters) |
 | Remaining trust | the host process can still refuse / delay your intents, drop you, or run modified rules on ITS copy (you'd see a desync, not a silent change); ENet is unencrypted | operator runs the server; same transport caveat |
 
@@ -339,7 +430,11 @@ godot --headless --path . -- --server --port 8910 \
       [--turn-system traditional|speed_first] [--rng all|server] \
       [--max-matches N] [--end-after-actions N] [--reveal-timeout 30] [--transport enet]
       [--mode duel [--stage meadow|tall_grass|grove] [--weather clear|...]]
+      [--turn-clock rapid|standard|relaxed] [--afk-limit 3] [--turn-clock-ms MS]
 ```
+
+`--turn-clock` fixes the preset (else the leader picks; default Standard), `--afk-limit` the
+consecutive expiries that forfeit, `--turn-clock-ms` (testing) gives every timed turn MS ms.
 
 `--mode duel` serves online DUELS instead (no map; `--stage` locks the stage, else the slot-0
 client picks; each seat's unit comes from its `duel_pick` lobby message; the match ends on the
@@ -447,6 +542,8 @@ commit-reveal, the lobby channel) is transport-agnostic.
 | `tests/integration/test_net_host_squad.gd`, `test_net_client_squad.gd` | squad replication per slot through MapLoader |
 | `tests/integration/test_net_rejection_toast.gd` | refused command → NetToast |
 | `tests/integration/test_net_duel.gd` | ONLINE DUEL: mode stamped + mode-mismatch refused, both peers build one duel, a whole duel applies identically (commands, commit-reveal seeds, timeline, winner, digest), host validation (turn, slot, aim, no items / moves / end-turn / free skip), client re-validation, the actor cannot derive its roll before the other reveals, desync, forfeit / drop, ineligible picks refused, a `--mode duel` DedicatedServer folding both picks |
+| `tests/integration/test_net_turn_clock.gd` | the TURN CLOCK over ENet: deadline broadcast to both seats (and only once every battle is attached), a new turn = a new clock, expiry -> END_TURN (Traditional) / the active unit's WAIT (Speed First) / the duel's pass applied identically (stamped, digests), strikes cleared by an own action, a client cannot issue a timeout, an early host timeout is caught, N expiries forfeit (limit 0 never), lobby / locked presets, the HUD chip on both seats (caption, urgent band, TIME'S UP) |
+| `tests/unit/test_net_turn_clock_ui.gd` | presets / budgets / wording, PROTOCOL 5 + the timeout stamp, config sanitiser + server flags, the local Speed First clock off online, the chip in network mode (never expires), the timeout toast, the Map Menu's Forfeit (confirm -> the pause menu's forfeit), `NetMatchBar`, the lobbies' Turn clock pickers |
 | `tests/integration/test_net_duel_stage.gd` | the `NetDuelStage` on both seats: HUD pick -> intent -> applied on both, each seat prompted only for its own unit, per-seat Victory / Defeat, forfeit = the other seat's win |
 
 ```
@@ -470,6 +567,13 @@ variant (a host bot = listen server + seat 0, and a guest bot). A bot alone:
 (add `--host [--map … --turn-system … --end-after-actions N]` to make it the player-host).
 Large maps are slow with the naive bot (it pre-validates every candidate intent).
 
+**Idle-bot turn-clock check:** `IDLE=N` makes the second bot (BotB / the guest) sit out its first
+N timed turns with every turn clocked at `CLOCK_MS` (default 1500 ms, `--turn-clock-ms`), so the
+host / server times it out; it passes when the FINAL states agree AND the idle bot saw a timeout
+(`timeouts=K` on the FINAL lines), e.g. `IDLE=2 GODOT=... dev_scripts/net_multiprocess_check.sh
+res://game/maps/resources/castle_siege.tres traditional 40` (also `HOSTED=1`, `MODE=duel`). With
+N >= the forfeit limit (3) the match ends `reason=clock_forfeit`, still with identical digests.
+
 **Two interactive instances:** Debug → *Customize Run Instances…* → 2, Run;
 Host in one, Join `127.0.0.1` in the other (or both Join a local dedicated server).
 Or start the second instance with `godot --path . -- --multiplayer-auto-join
@@ -481,7 +585,9 @@ button (`NetworkMultiplayerSetup.ENABLE_HOST_AUTO_CLIENT`) spawns exactly that.
 ## Known limitations
 
 * 1v1 humans only; no AI seats in network play. No reconnect.
-* Online duels: strict 1v1 (party size 1), no items, no flee, no turn clock, no spectators.
+* Online duels: strict 1v1 (party size 1), no items, no flee, no spectators.
+* The turn clock is host-authoritative: a player-host could be LATE with a timeout (never early,
+  see *Turn clock*); there is no pause / reconnect time bank.
 * Desync is detected (digest mismatch → match ends), not repaired.
 * ENet is unencrypted (see *Path to production hosting*).
 * One match per server process (see *Dedicated server*).

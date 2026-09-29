@@ -127,6 +127,9 @@ func _wire_net_session() -> void:
 		return
 	if net.has_signal(&"intent_rejected") and not net.is_connected(&"intent_rejected", _on_intent_rejected):
 		net.connect(&"intent_rejected", _on_intent_rejected)
+	# The online turn clock: a host-issued timeout is announced on every seat.
+	if net.has_signal(&"turn_timed_out") and not net.is_connected(&"turn_timed_out", _on_turn_timed_out):
+		net.connect(&"turn_timed_out", _on_turn_timed_out)
 
 
 func _exit_tree() -> void:
@@ -137,6 +140,8 @@ func _exit_tree() -> void:
 		return
 	if net.has_signal(&"intent_rejected") and net.is_connected(&"intent_rejected", _on_intent_rejected):
 		net.disconnect(&"intent_rejected", _on_intent_rejected)
+	if net.has_signal(&"turn_timed_out") and net.is_connected(&"turn_timed_out", _on_turn_timed_out):
+		net.disconnect(&"turn_timed_out", _on_turn_timed_out)
 
 
 ## The live NetSession autoload, or null when it is unavailable (bare test harness / headless
@@ -151,6 +156,17 @@ func _net_session() -> Object:
 ## wire string; the player-facing wording is NetProtocol's, so this handler is a thin renderer.
 func _on_intent_rejected(action: Dictionary, reason: String) -> void:
 	show_notice(NetProtocol.describe_intent_rejection(reason, action))
+
+
+## The host's turn clock ran out for [param slot] ("Time's up -- your turn ended"), with a
+## warning when the next expiry would forfeit.
+func _on_turn_timed_out(slot: int, action: Dictionary, strikes: int) -> void:
+	var net: Object = _net_session()
+	var mine: bool = net != null and net.has_method("local_slot") and int(net.local_slot()) == slot
+	var limit: int = 0
+	if net != null and net.has_method("get_match_config"):
+		limit = int(net.get_match_config().get(NetTurnClock.CONFIG_AFK_LIMIT, 0))
+	show_notice(NetTurnClock.describe_timeout(action, mine, strikes, limit))
 
 
 # --- Public API -------------------------------------------------------------

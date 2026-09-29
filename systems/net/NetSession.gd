@@ -118,6 +118,18 @@ signal opponent_left()
 ## [method begin_solo_match_rng]). Networked play has no single stream -- every
 ## accepted action carries its own commit-reveal seed.
 signal match_rng_ready()
+## ONLINE TURN CLOCK ([NetTurnClock]): the host opened a timed turn (or stopped the clock).
+## [param clock] is {} when no timed turn is open, else [method turn_clock]'s shape. Every
+## peer; clients only ever RENDER it -- the host alone decides expiry.
+signal turn_clock_changed(clock: Dictionary)
+## A host-issued TIMEOUT for [param slot] was applied on this peer (every peer, in seq order).
+## [param strikes]: that seat's consecutive expiries so far (see [member afk_limit]).
+signal turn_timed_out(slot: int, action: Dictionary, strikes: int)
+## [param slot] let its clock run out [member afk_limit] times in a row and FORFEITS (every
+## peer, the forfeiter included). Peers other than the forfeiter also get
+## [signal opponent_forfeited], so the battle resolves exactly like a pause-menu forfeit;
+## then the host ends the match ([constant ABORT_CLOCK_FORFEIT]).
+signal clock_forfeit(slot: int)
 
 enum Role { NONE, HOST, CLIENT }
 enum State { IDLE, LOBBY, STARTING, IN_MATCH }
@@ -132,10 +144,17 @@ const DEFAULT_PORT := 8910
 ## action. The host ends the match instead of waiting forever. Offline-only maps are
 ## refused before a match starts (MapCatalog.network_refusal); this is the backstop.
 const ABORT_UNDRIVEN_TURN := "undriven_turn"
+## Host abort reason: a seat let its turn clock expire [member afk_limit] times in a row and
+## forfeited ([signal clock_forfeit] went out first, so the battle is already decided).
+const ABORT_CLOCK_FORFEIT := "clock_forfeit"
+## Client: a host timeout may arrive at most this long before the deadline this peer derived
+## from the host's clock broadcast (jitter between the two messages); earlier = the host is
+## cutting the seat's time short -> "host_verification_failed".
+const TIMEOUT_EARLY_TOLERANCE_MS := 1500
 const DEFAULT_ADDRESS := "127.0.0.1"
 const SERVER_PEER_ID := 1
 ## Config keys a lobby leader may set on a dedicated server.
-const CONFIG_KEYS := ["map_path", "turn_system", "auto_end_turn"]
+const CONFIG_KEYS := ["map_path", "turn_system", "auto_end_turn", "turn_clock"]
 ## Lobby-channel message type for a deliberate forfeit. It rides the LOBBY channel,
 ## not the action vocabulary: a forfeit is a session event, not a board mutation, and
 ## it has to survive being sent by a peer that is about to disconnect itself.
@@ -181,6 +200,23 @@ var config_locked: bool = false
 ## by [method leave] -- it is the screen's choice, not the connection's state.
 var lobby_mode: String = NetProtocol.MODE_CONQUEST
 
+# --- Online TURN CLOCK (host-authoritative; see NetTurnClock and README "Turn clock") ---
+## Host: the preset a match runs when the lobby config names none (a dedicated server's
+## [code]--turn-clock[/code]). Every online match has a clock -- there is no "off".
+var turn_clock_preset: String = NetTurnClock.DEFAULT_PRESET
+## Host: [member turn_clock_preset] is fixed (a dedicated server's --turn-clock): a lobby pick
+## is ignored.
+var turn_clock_locked: bool = false
+## Host: consecutive expiries (same seat, no own action in between) that forfeit the match;
+## the Nth expiry forfeits instead of being played out. 0 disables the anti-AFK rule.
+var afk_limit: int = NetTurnClock.DEFAULT_AFK_LIMIT
+## Host (tests / dev, [code]--turn-clock-ms[/code]): every timed turn gets this many ms
+## (0 = the preset's budgets).
+var turn_clock_override_ms: int = 0
+## Host: lag allowance past the broadcast deadline before the timeout is issued, so an intent
+## sent in the last instant still wins the race.
+var turn_clock_grace_ms: int = 500
+
 ## Clients re-validate every accepted action against their own state before
 ## applying it, and check that actions in THEIR seat are ones they submitted.
 var verify_host_actions: bool = true
@@ -195,6 +231,8 @@ var debug_accept_everything: bool = false
 ## TEST HOOK: announce this PROTOCOL_VERSION in the join hello instead of ours (-1 = ours),
 ## to exercise the host's build gate over a real socket.
 var debug_hello_protocol_version: int = -1
+## TEST HOOK: a cheating host that times the acting seat out the moment its clock opens.
+var debug_premature_timeouts: bool = false
 
 # --- Battle seam (every battle; see install_command_seam) ---------------------
 ## The battle's [CommandApplier] (THE apply path, bound to the live board) -- what
@@ -239,6 +277,10 @@ var _my_intents: Array = []            # clients: submitted, not yet answered (i
 var _closing_reason: String = ""       # clients: close once the apply queue drained
 var _signals_wired: bool = false
 var _draining: Array = []              # [{peer, until}] peers closing gracefully (forfeit)
+# Turn clock.
+var _clock: Dictionary = {}            # every peer: the open timed turn (+ "deadline", local ticks); {} = none
+var _clock_strikes: Dictionary = {}    # every peer: slot -> consecutive timeouts APPLIED (reset by an own action)
+var _attached_peers: Dictionary = {}   # host: client peer_id -> true once its battle is attached
 
 
 func _ready() -> void:
@@ -397,6 +439,15 @@ func _reset_match_state() -> void:
 	_pending_checkpoints.clear()
 	_digest_seq = 0
 	_rng = null
+	_reset_clock()
+
+
+func _reset_clock() -> void:
+	_clock_strikes.clear()
+	_attached_peers.clear()
+	if not _clock.is_empty():
+		_clock = {}
+		turn_clock_changed.emit({})
 
 
 ## Concede the live match and tear the session down. Quitting a networked battle is a
@@ -516,6 +567,10 @@ static func _sanitize_config(config: Dictionary) -> Dictionary:
 	var aet = config.get("auto_end_turn", null)
 	if typeof(aet) == TYPE_BOOL:
 		out["auto_end_turn"] = aet
+	# The online turn clock's preset (NetTurnClock); unknown names are dropped.
+	var clock = config.get(NetTurnClock.CONFIG_PRESET, null)
+	if NetTurnClock.is_preset(clock):
+		out[NetTurnClock.CONFIG_PRESET] = String(clock)
 	# Online duels: stage / weather / the seats' unit picks, whitelisted (DuelNetConfig).
 	out.merge(DuelNetConfig.sanitize(config), true)
 	return out
@@ -579,6 +634,11 @@ func start_match(final_config: Dictionary = {}) -> bool:
 	cfg.merge(per_match, true)
 	# The lobby's mode is the host's, whatever a config said (NetProtocol.CONFIG_MODE).
 	cfg[NetProtocol.CONFIG_MODE] = lobby_mode
+	# The turn clock this match runs (every online match has one): the lobby's pick, unless the
+	# server fixed it. Stamped so every peer can show it; only the host acts on it.
+	cfg[NetTurnClock.CONFIG_PRESET] = NetTurnClock.normalise_preset(turn_clock_preset) if turn_clock_locked \
+		else NetTurnClock.normalise_preset(cfg.get(NetTurnClock.CONFIG_PRESET, turn_clock_preset))
+	cfg[NetTurnClock.CONFIG_AFK_LIMIT] = NetTurnClock.normalise_afk_limit(afk_limit)
 	var slots := {}
 	for pid in _roster:
 		slots[int(_roster[pid]["slot"])] = String(_roster[pid]["name"])
@@ -666,6 +726,11 @@ func attach_game(rules) -> void:
 	# host's checkpoints take over from the first action on).
 	if game != null and _last_applied_seq == 0:
 		_set_turn_slot(int(game.current_turn_slot()))
+	# The turn clock starts only once EVERY peer has its battle up (a seat still loading the
+	# scene must not lose its first turn): clients report their attach to the host.
+	if game != null and state == State.IN_MATCH and is_connected_session():
+		if role == Role.CLIENT:
+			_rpc_game_attached.rpc_id(SERVER_PEER_ID)
 
 
 ## Submit an intent. Never mutates state directly -- the accepted action comes
@@ -681,6 +746,7 @@ func submit_intent(action: Dictionary) -> bool:
 	a[NetProtocol.KEY_SEQ] = 0
 	a.erase(NetProtocol.KEY_RNG)
 	a.erase(NetProtocol.KEY_PV)
+	a.erase(NetProtocol.KEY_TIMEOUT)   # only the host's clock issues timeouts
 	if is_host():
 		_intent_queue.append([_local_slot, a])
 	else:
@@ -899,6 +965,34 @@ func player_count() -> int:
 func last_applied_seq() -> int:
 	return _last_applied_seq
 
+## The open timed turn as THIS peer sees it, or {} when none:
+## { key, slot, kind (NetTurnClock.KIND_*), budget_ms, remaining_ms (now, >= 0), seq (last
+##   action applied when it opened), strikes (the slot's consecutive expiries), afk_limit,
+##   preset }.
+## Clients derive remaining_ms from the host's broadcast; only the host decides expiry.
+func turn_clock() -> Dictionary:
+	if _clock.is_empty():
+		return {}
+	var out := _clock.duplicate(true)
+	out.erase("deadline")
+	out.erase("spent")
+	out["remaining_ms"] = turn_clock_remaining_ms()
+	return out
+
+## Milliseconds left on the open timed turn (0 once it ran out), or -1 when no clock is open.
+func turn_clock_remaining_ms() -> int:
+	if _clock.is_empty():
+		return -1
+	return maxi(0, int(_clock.get("deadline", 0)) - Time.get_ticks_msec())
+
+## The slot whose clock is running, or -1.
+func turn_clock_slot() -> int:
+	return int(_clock.get("slot", -1)) if not _clock.is_empty() else -1
+
+## [param slot]'s consecutive expiries (applied timeouts since its last own action).
+func turn_clock_strikes(slot: int) -> int:
+	return int(_clock_strikes.get(slot, 0))
+
 ## Client: why the last join was refused, or {} when it was not. { "reason": String,
 ## "info": Dictionary }. Survives the disconnect that follows a refusal (and
 ## [method leave]); [method join_game] clears it.
@@ -956,6 +1050,12 @@ func _process(_delta: float) -> void:
 			and _current_turn_slot >= 0 and not _slot_is_seated(_current_turn_slot):
 		_host_abort(ABORT_UNDRIVEN_TURN)
 		return
+	# 1c. Host: the TURN CLOCK -- (re)open it when a new timed turn began, or play the
+	#     timeout when it ran out. Only on a SETTLED state (every accepted action applied
+	#     and digested), so the turn it reads is the one every peer sees.
+	if is_host() and _apply_queue.is_empty() and _pending_round.is_empty() \
+			and _digest_seq == _last_applied_seq and _host_tick_clock():
+		return
 	# 2. Apply one queued accepted action (its randomness is complete).
 	if not _apply_queue.is_empty():
 		_apply_now(_apply_queue.pop_front())
@@ -978,9 +1078,14 @@ func _host_handle_intent(actor_slot: int, action: Dictionary) -> void:
 		elif pid != -1:
 			_rpc_intent_rejected.rpc_id(pid, action, reason)
 		return
-	# ACCEPT: from here the action is irrevocable. Only now does the host reveal
-	# its share for this seq, and only after seeing it do the other contributors
-	# reveal theirs -- so nobody could know the roll when the action was chosen.
+	_host_accept(actor_slot, action)
+
+
+## ACCEPT [param action] for [param actor_slot] (already validated): from here the action is
+## irrevocable. Only now does the host reveal its share for this seq, and only after seeing it
+## do the other contributors reveal theirs -- so nobody could know the roll when the action was
+## chosen. Seat intents and the clock's timeouts both come through here (one pipeline).
+func _host_accept(actor_slot: int, action: Dictionary) -> void:
 	_seq += 1
 	action[NetProtocol.KEY_SEQ] = _seq
 	action[NetProtocol.KEY_ACTOR] = actor_slot
@@ -1025,6 +1130,12 @@ func _validate(actor_slot: int, action: Dictionary) -> String:
 		return NetProtocol.INTENT_UNKNOWN_ACTOR
 	if game == null:
 		return NetProtocol.INTENT_NO_GAME
+	if NetProtocol.is_timeout(action):
+		# A clock timeout is legal only as the rules' canonical timeout for the acting seat
+		# (every peer re-checks it on its identical state before applying).
+		if not game.has_method("validate_timeout"):
+			return NetProtocol.INTENT_TIMEOUT_MISMATCH
+		return String(game.validate_timeout(action, actor_slot))
 	return String(game.validate_intent(action, actor_slot))
 
 
@@ -1042,6 +1153,14 @@ func _apply_now(action: Dictionary) -> void:
 	var result = game.apply_action(action)
 	_last_applied_seq = seq
 	action_applied.emit(action, result if result is Dictionary else {})
+	# Anti-AFK bookkeeping, identical on every peer (it follows the applied sequence): a
+	# timeout adds a strike to its seat, any other action by a seat clears that seat's.
+	var actor := int(action.get(NetProtocol.KEY_ACTOR, -1))
+	if NetProtocol.is_timeout(action):
+		_clock_strikes[actor] = int(_clock_strikes.get(actor, 0)) + 1
+		turn_timed_out.emit(actor, action, int(_clock_strikes[actor]))
+	elif actor >= 0:
+		_clock_strikes[actor] = 0
 
 
 func _record_digest(seq: int) -> void:
@@ -1118,6 +1237,160 @@ func _host_abort(reason: String) -> void:
 		_reset_match_state()
 		state = State.LOBBY
 	match_aborted.emit(reason)
+
+
+# ---------------------------------------------------------------------------
+# The online TURN CLOCK (host-authoritative; NetTurnClock has the presets)
+# ---------------------------------------------------------------------------
+#
+# The host (or dedicated server) owns every deadline. When a timed turn opens -- the rules
+# say which (clock_turn_key: a Traditional side's turn, a Speed First unit's turn, a duel
+# action) -- it computes the budget, broadcasts {key, slot, budget, remaining ...} and every
+# peer counts the same deadline down. On expiry the HOST plays the rules' timeout action
+# (timeout_action: END_TURN / the active unit's WAIT / the duel's pass) as a normal accepted
+# action stamped KEY_TIMEOUT -- same validation, commit-reveal round, apply and digest on
+# every peer, recorded like any action. Clients never decide expiry; they check that a
+# timeout is the canonical one (validate_timeout, on their own state) and never early.
+
+## Host: open / play out / stop the clock for the settled state. True when this frame is spent
+## (a timeout was issued or the match ended on a clock forfeit).
+func _host_tick_clock() -> bool:
+	if game == null or not game.has_method("clock_turn_key") or not _all_attached():
+		return false
+	var key := String(game.clock_turn_key())
+	var slot := int(game.current_turn_slot()) if key != "" else -1
+	if key == "" or slot < 0 or not _slot_is_seated(slot):
+		if not _clock.is_empty():
+			_host_publish_clock({})
+		return false
+	if _clock.is_empty() or String(_clock.get("key", "")) != key or bool(_clock.get("spent", false)):
+		_host_open_clock(key, slot)
+		if not debug_premature_timeouts:
+			return false
+	if not debug_premature_timeouts \
+			and Time.get_ticks_msec() < int(_clock.get("deadline", 0)) + maxi(0, turn_clock_grace_ms):
+		return false
+	# The seat's own last-moment intent is already queued: it goes first (step 3, this frame).
+	for entry in _intent_queue:
+		if int(entry[0]) == slot:
+			return false
+	if max_actions > 0 and _seq >= max_actions:
+		return false   # a scripted run's action cap: nothing more is accepted
+	_host_expire(slot)
+	return true
+
+
+## Host: open a timed turn [param key] for [param slot] and tell everyone.
+func _host_open_clock(key: String, slot: int) -> void:
+	var preset := NetTurnClock.normalise_preset(_match_config.get(NetTurnClock.CONFIG_PRESET, turn_clock_preset))
+	var kind := String(game.clock_kind()) if game.has_method("clock_kind") else NetTurnClock.KIND_SIDE
+	var units := int(game.clock_units(slot)) if kind == NetTurnClock.KIND_SIDE and game.has_method("clock_units") else 0
+	var budget := NetTurnClock.budget_ms(preset, kind, units, turn_clock_override_ms)
+	_host_publish_clock({
+		"key": key, "slot": slot, "kind": kind, "budget_ms": budget, "remaining_ms": budget,
+		"seq": _last_applied_seq, "strikes": int(_clock_strikes.get(slot, 0)),
+		"afk_limit": _live_afk_limit(), "preset": preset,
+	})
+
+
+func _live_afk_limit() -> int:
+	return NetTurnClock.normalise_afk_limit(_match_config.get(NetTurnClock.CONFIG_AFK_LIMIT, afk_limit))
+
+
+## Host: adopt [param info] as the open clock ({} = stopped) and broadcast it.
+func _host_publish_clock(info: Dictionary) -> void:
+	_store_clock(info)
+	if is_connected_session():
+		_rpc_clock.rpc(info)
+
+
+## Every peer: [param info] (the host's broadcast; remaining_ms as of sending) becomes the open
+## clock, its deadline on THIS peer's clock = now + remaining_ms.
+func _store_clock(info: Dictionary) -> void:
+	if info.is_empty() or int(info.get("slot", -1)) < 0:
+		if _clock.is_empty():
+			return
+		_clock = {}
+		turn_clock_changed.emit({})
+		return
+	_clock = info.duplicate(true)
+	_clock["deadline"] = Time.get_ticks_msec() + maxi(0, int(info.get("remaining_ms", 0)))
+	turn_clock_changed.emit(turn_clock())
+
+
+## Host: [param slot]'s clock ran out. The Nth consecutive expiry forfeits the match;
+## otherwise the rules' timeout action is accepted like any intent (stamped KEY_TIMEOUT).
+func _host_expire(slot: int) -> void:
+	var limit := _live_afk_limit()
+	var strikes := int(_clock_strikes.get(slot, 0)) + 1
+	# Whatever happens, this clock is spent: the settled state after it opens a fresh one
+	# (a new turn -- or the same one again, if the timeout could not end it).
+	_clock["spent"] = true
+	if limit > 0 and strikes >= limit:
+		_host_clock_forfeit(slot)
+		return
+	var action: Dictionary = game.timeout_action(slot) if game.has_method("timeout_action") else {}
+	if action.is_empty():
+		return
+	action = action.duplicate(true)
+	action[NetProtocol.KEY_TIMEOUT] = true
+	action[NetProtocol.KEY_ACTOR] = slot
+	action[NetProtocol.KEY_SEQ] = 0
+	var why := _validate(slot, action)
+	if why != "":
+		push_warning("NetSession: the rules' timeout for slot %d is not legal (%s); reopening the clock" % [slot, why])
+		return
+	print("[NET] Turn clock ran out for slot %d (%s, strike %d/%d)" % [slot,
+		NetProtocol.type_name(int(action[NetProtocol.KEY_TYPE])), strikes, limit])
+	_host_accept(slot, action)
+
+
+## Host: [param slot] forfeits on time. Everyone hears it (the battle resolves it like a
+## forfeit), then the match ends with [constant ABORT_CLOCK_FORFEIT].
+func _host_clock_forfeit(slot: int) -> void:
+	print("[NET] Slot %d let its turn clock run out %d times in a row -- it forfeits" % [slot, _live_afk_limit()])
+	if is_connected_session():
+		_rpc_clock_forfeit.rpc(slot)
+	_deliver_clock_forfeit(slot)
+	if state != State.IN_MATCH:
+		return   # a listener already tore the session down
+	if is_connected_session():
+		_rpc_match_ended.rpc(ABORT_CLOCK_FORFEIT)
+	if dedicated:
+		reset_to_lobby()
+	else:
+		_reset_match_state()
+		state = State.LOBBY
+	match_aborted.emit(ABORT_CLOCK_FORFEIT)
+
+
+## Every peer: [param slot] forfeited on time.
+func _deliver_clock_forfeit(slot: int) -> void:
+	clock_forfeit.emit(slot)
+	if slot != _local_slot:
+		opponent_forfeited.emit(slot)
+
+
+## Host: every seated client reported its battle attached, and ours is.
+func _all_attached() -> bool:
+	if game == null:
+		return false
+	for pid in _roster:
+		if int(pid) != SERVER_PEER_ID and not _attached_peers.has(int(pid)):
+			return false
+	return true
+
+
+## Client: a timeout in [param actor]'s seat is only credible for the seat whose clock this
+## peer is counting, and not (much) before the deadline this peer derived. "" when fine.
+func _timeout_timing_problem(actor: int) -> String:
+	if _clock.is_empty():
+		return "unclocked_timeout"
+	if int(_clock.get("slot", -1)) != actor:
+		return "timeout_wrong_seat"
+	if Time.get_ticks_msec() + TIMEOUT_EARLY_TOLERANCE_MS < int(_clock.get("deadline", 0)):
+		return "premature_timeout"
+	return ""
 
 
 ## True when some seated peer (the player-host included) holds [param slot].
@@ -1330,7 +1603,21 @@ func _rpc_intent(action: Dictionary) -> void:
 	var peer_id := multiplayer.get_remote_sender_id()
 	# The actor is ALWAYS derived from the sender's seat, never from the payload.
 	var slot: int = int(_roster[peer_id]["slot"]) if _roster.has(peer_id) else -1
+	# Only the host's clock issues timeouts: a seat's claim to one is just dropped (the
+	# action is then validated as the ordinary intent it is).
+	action.erase(NetProtocol.KEY_TIMEOUT)
 	_intent_queue.append([slot, action])
+
+
+## Client -> host: my battle is up and the rules are attached (the turn clock starts only once
+## every seat's is).
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_game_attached() -> void:
+	if not is_host() or state != State.IN_MATCH:
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if _roster.has(peer_id):
+		_attached_peers[peer_id] = true
 
 
 ## Client -> host: please relay this lobby message to the others.
@@ -1488,6 +1775,7 @@ func _rpc_match_started(config: Dictionary) -> void:
 	_digest_seq = 0
 	_apply_queue.clear()
 	_intent_queue.clear()
+	_reset_clock()
 	match_started.emit(_match_config.duplicate(true))
 
 
@@ -1504,9 +1792,18 @@ func _rpc_accepted(action: Dictionary, host_share: Dictionary) -> void:
 	if err != "":
 		_client_cheat(err)
 		return
+	# A TIMEOUT is the host's call, but never an early one: it must hit the seat whose clock we
+	# are counting, at (about) the deadline we derived. What it does is re-checked at apply time
+	# (validate_timeout: the rules' canonical timeout on our identical state).
+	var is_timeout := NetProtocol.is_timeout(action)
+	if verify_host_actions and is_timeout:
+		var why := _timeout_timing_problem(int(action.get(NetProtocol.KEY_ACTOR, -1)))
+		if why != "":
+			_client_cheat(why)
+			return
 	# An action in OUR seat must be the next intent we actually submitted: the
 	# host cannot puppet our units.
-	if verify_host_actions and int(action.get(NetProtocol.KEY_ACTOR, -1)) == _local_slot:
+	if verify_host_actions and not is_timeout and int(action.get(NetProtocol.KEY_ACTOR, -1)) == _local_slot:
 		var mine: Dictionary = _my_intents.pop_front() if not _my_intents.is_empty() else {}
 		if mine.is_empty() or int(mine[NetProtocol.KEY_TYPE]) != int(action[NetProtocol.KEY_TYPE]) \
 				or mine[NetProtocol.KEY_DATA] != action[NetProtocol.KEY_DATA]:
@@ -1570,6 +1867,22 @@ func _rpc_intent_rejected(action: Dictionary, reason: String) -> void:
 	if not _my_intents.is_empty():
 		_my_intents.pop_front()   # answers arrive in submission order
 	intent_rejected.emit(action, reason)
+
+
+## Host -> clients: the turn clock (re)opened ({} = stopped). See [method turn_clock].
+@rpc("authority", "call_remote", "reliable")
+func _rpc_clock(info: Dictionary) -> void:
+	if role != Role.CLIENT or state != State.IN_MATCH:
+		return
+	_store_clock(info)
+
+
+## Host -> clients: [param slot] forfeited on time (the match-ended notice follows).
+@rpc("authority", "call_remote", "reliable")
+func _rpc_clock_forfeit(slot: int) -> void:
+	if role != Role.CLIENT or state != State.IN_MATCH:
+		return
+	_deliver_clock_forfeit(slot)
 
 
 @rpc("authority", "call_remote", "reliable")

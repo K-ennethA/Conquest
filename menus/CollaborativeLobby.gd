@@ -84,6 +84,11 @@ var ready_button: Button
 # start via apply_settings().
 var versus_config_panel: MatchConfigPanel
 
+# The online TURN CLOCK preset (NetTurnClock: Rapid / Standard / Relaxed -- every online match
+# has a clock). Picked by the player-host (published with set_match_config so the joiner sees
+# it) or a dedicated server's lobby leader (unless the server fixed it with --turn-clock).
+var turn_clock_option: OptionButton
+
 # Game mode manager
 var game_mode_manager: Node
 
@@ -429,6 +434,67 @@ func _build_settings_card(parent: Control) -> void:
 	v.add_child(versus_config_panel)
 	versus_config_panel.configure(MatchConfigPanel.MODE_VERSUS)
 	versus_config_panel.changed.connect(_on_settings_changed)
+	v.add_child(_build_turn_clock_row())
+
+
+## The Turn Clock picker row (every online match is timed; see NetTurnClock).
+func _build_turn_clock_row() -> Control:
+	var row := HBoxContainer.new()
+	row.name = "TurnClockRow"
+	row.add_theme_constant_override("separation", MenuTheme.SP_M)
+	var cap := MenuKit.label("Turn clock", &"DimLabel")
+	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(cap)
+	turn_clock_option = OptionButton.new()
+	turn_clock_option.name = "TurnClockOption"
+	turn_clock_option.custom_minimum_size = Vector2(180, 40)
+	for item in NetTurnClock.picker_items():
+		turn_clock_option.add_item(String(item[1]))
+		turn_clock_option.set_item_metadata(turn_clock_option.item_count - 1, String(item[0]))
+	turn_clock_option.select(NetTurnClock.PRESET_IDS.find(NetTurnClock.DEFAULT_PRESET))
+	turn_clock_option.tooltip_text = NetTurnClock.describe(NetTurnClock.DEFAULT_PRESET)
+	turn_clock_option.item_selected.connect(_on_turn_clock_selected)
+	row.add_child(turn_clock_option)
+	return row
+
+
+## The picked turn clock preset id.
+func turn_clock_pick() -> String:
+	if turn_clock_option == null or turn_clock_option.selected < 0:
+		return NetTurnClock.DEFAULT_PRESET
+	return NetTurnClock.normalise_preset(turn_clock_option.get_item_metadata(turn_clock_option.selected))
+
+
+## Show [param preset] as the pick (mirroring the host's / server's config).
+func _show_turn_clock(preset) -> void:
+	if turn_clock_option == null:
+		return
+	var i := NetTurnClock.PRESET_IDS.find(NetTurnClock.normalise_preset(preset))
+	if i >= 0 and i != turn_clock_option.selected:
+		turn_clock_option.select(i)
+	turn_clock_option.tooltip_text = NetTurnClock.describe(preset)
+
+
+## May this player change the turn clock? The player-host, or a dedicated server's leader.
+func _turn_clock_editable() -> bool:
+	return _session_is_leader() if _dedicated else is_host
+
+
+func _refresh_turn_clock_enabled() -> void:
+	if turn_clock_option != null:
+		turn_clock_option.disabled = not _turn_clock_editable()
+
+
+func _on_turn_clock_selected(_index: int) -> void:
+	turn_clock_option.tooltip_text = NetTurnClock.describe(turn_clock_pick())
+	if _mirroring or not _turn_clock_editable():
+		return
+	if _dedicated:
+		_reset_ready_after_change()
+		_push_dedicated_config()
+	elif is_host and _net_active() and _session_has("set_match_config"):
+		# Published so the joiner's lobby shows it; the start carries it as well.
+		net_session.set_match_config({NetTurnClock.CONFIG_PRESET: turn_clock_pick()})
 
 
 func _build_waiting_panel(parent: Control) -> void:
@@ -562,6 +628,7 @@ func _set_map_pick_enabled(enabled: bool) -> void:
 		btn.disabled = (not enabled) or bool(btn.get_meta(&"row_disabled", false))
 	if _dedicated and versus_config_panel != null:
 		_set_subtree_enabled(versus_config_panel, enabled)
+	_refresh_turn_clock_enabled()
 
 
 func _set_subtree_enabled(node: Node, enabled: bool) -> void:
@@ -593,6 +660,7 @@ func _present_mode() -> void:
 			versus_config_panel.configure(MatchConfigPanel.MODE_LOCAL)  # turn system only
 			_mirroring = false
 		versus_config_panel.visible = is_host or _dedicated
+	_refresh_turn_clock_enabled()
 	if _settings_note != null:
 		_settings_note.text = _settings_text()
 	_set_map_pick_enabled(not _dedicated or _session_is_leader())
@@ -1231,6 +1299,7 @@ func _build_start_config(map_path: String) -> Dictionary:
 		"versus_rounds": int(settings.get("versus_rounds", 1)),
 		"host_squad": squad,
 		"map_json": String(settings.get("map_json", "")),
+		NetTurnClock.CONFIG_PRESET: turn_clock_pick(),
 	}
 	if settings.has("map_payload"):
 		cfg["map_payload"] = settings["map_payload"]
@@ -1383,6 +1452,11 @@ func _watch_own_ready_flag() -> void:
 func _on_session_config_changed(config: Dictionary) -> void:
 	if _dedicated:
 		_mirror_dedicated_config(config)
+	elif not is_host and config.has(NetTurnClock.CONFIG_PRESET):
+		# The player-host's turn clock pick, shown read-only.
+		_mirroring = true
+		_show_turn_clock(config[NetTurnClock.CONFIG_PRESET])
+		_mirroring = false
 
 
 func _session_config() -> Dictionary:
@@ -1403,7 +1477,10 @@ func _mirror_dedicated_config(config: Dictionary) -> void:
 	_select_map_row(local_map_vote)
 	if config.has("turn_system") and versus_config_panel != null:
 		versus_config_panel.set_turn_system(int(config["turn_system"]))
+	if config.has(NetTurnClock.CONFIG_PRESET):
+		_show_turn_clock(config[NetTurnClock.CONFIG_PRESET])
 	_mirroring = false
+	_refresh_turn_clock_enabled()
 	_set_map_pick_enabled(_session_is_leader())
 	if _map_subtitle != null:
 		_map_subtitle.text = _map_rules_text()
@@ -1438,6 +1515,7 @@ func _push_dedicated_config() -> void:
 		"map_path": local_map_vote,
 		"turn_system": turn_system,
 		"auto_end_turn": true,
+		NetTurnClock.CONFIG_PRESET: turn_clock_pick(),
 	})
 
 

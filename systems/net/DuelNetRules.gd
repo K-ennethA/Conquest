@@ -169,3 +169,30 @@ func state_digest() -> int:
 	var turns: int = battle.result.turns if battle.result != null else 0
 	return hash([base, battle.round_number(), battle.is_over, winner, turns,
 		NetUnitIds.id_of(actor) if actor != null else ""])
+
+
+# --- ONLINE TURN CLOCK hook (NetSession's host clock; NetTurnClock) -----------------------------
+# The duel's only say in the clock: each ACTION is timed with the duel budget, and running out
+# PASSES the acting combatant's turn (a WAIT -- no damage and no roll for the idle seat; the
+# opponent simply gets the tempo). Everything else (deadlines, broadcast, expiry, the anti-AFK
+# forfeit) is the generic clock in NetSession.
+
+func clock_kind() -> String:
+	return NetTurnClock.KIND_ACTION
+
+
+## A new key per applied command (and acting combatant): every action gets a fresh clock.
+func clock_turn_key() -> String:
+	if is_match_over():
+		return ""
+	var actor = battle.current_actor()
+	if actor == null:
+		return ""
+	return "%d:%s" % [battle.result.turns if battle.result != null else 0, NetUnitIds.id_of(actor)]
+
+
+## The acting combatant passes (the stage narrates "Time's up").
+func timeout_action(slot: int) -> Dictionary:
+	if is_match_over() or current_turn_slot() != slot or slot < 0:
+		return {}
+	return pass_intent()

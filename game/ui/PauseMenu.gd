@@ -510,6 +510,20 @@ func toggle() -> void:
 		open()
 
 
+## Open straight onto the FORFEIT confirm (the online duel HUD's visible Forfeit button). Only
+## in a live networked match -- elsewhere it just opens the menu.
+func request_forfeit() -> void:
+	open()
+	if _is_networked_match():
+		_open_confirm(Row.FORFEIT_MATCH, CONFIRM_FORFEIT)
+
+
+## Forfeit NOW (the caller already confirmed -- the Map Menu's Forfeit page): exactly the
+## FORFEIT MATCH row ([method NetSessionNode.forfeit_match], then the menu).
+func forfeit_now() -> void:
+	_perform(Row.FORFEIT_MATCH)
+
+
 ## Battle SFX/music must keep playing through a pause. AudioManager is a PAUSABLE
 ## autoload, so a paused tree would silence it; promote it for the duration and put
 ## the previous mode back on close (so no other screen's pause behaviour changes).

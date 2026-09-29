@@ -14,6 +14,10 @@ class_name MapMenu
 ##                    current LOCAL human may end it (the LocalPlayer guard,
 ##                    routed through UnitActionsPanel's end-turn path so multiplayer
 ##                    still submits a network action).
+##   Forfeit       -- ONLINE only: concede the live network match (asks first; a loss).
+##                    [method NetSessionNode.forfeit_match] through the PauseMenu's forfeit
+##                    path, the same semantics as its FORFEIT MATCH row. Online the menu also
+##                    opens on the opponent's turn, so the way out is always one key away.
 ##   Return to Title -- hands over to the battle [PauseMenu] when one is mounted (it owns
 ##                    every way of leaving: save & quit, forfeit a network match, abandon
 ##                    an Arena run, quit to menu); otherwise asks first, then loads the
@@ -31,12 +35,17 @@ signal closed
 const MAIN_MENU_SCENE := "res://menus/MainMenu.tscn"
 
 ## Pages.
-enum Page { MAIN, UNITS, OBJECTIVE, CONFIRM_END, CONFIRM_TITLE }
+enum Page { MAIN, UNITS, OBJECTIVE, CONFIRM_END, CONFIRM_TITLE, CONFIRM_FORFEIT }
+
+const LABEL_FORFEIT := "Forfeit"
+const CONFIRM_FORFEIT_TEXT := "You will lose this match."
 
 var unit_actions_panel: Node = null   ## set by UILayoutManager
 var settings_panel: Node = null       ## set by UILayoutManager
 var turn_transition: Node = null      ## set by UILayoutManager (blocks opening mid-wipe)
 var pause_menu: Node = null           ## set by UILayoutManager (Return to Title opens it)
+## The network session (default: the NetSession autoload; tests inject one).
+var net_session: Node = null
 ## The in-battle Compendium overlay while it is open (Encyclopedia), else null.
 var encyclopedia: Node = null
 
@@ -136,7 +145,8 @@ func can_open() -> bool:
 	if unit_actions_panel != null and unit_actions_panel.has_method("has_active_interaction") \
 			and unit_actions_panel.has_active_interaction():
 		return false
-	return LocalPlayer.current_is_local_human()
+	# Online the menu (and its Forfeit) is reachable on the opponent's turn too.
+	return LocalPlayer.current_is_local_human() or is_networked()
 
 
 ## May the `end_turn` shortcut open the End Turn confirm now? Like [method can_open]
@@ -220,6 +230,8 @@ func show_page(p: int) -> void:
 			_add_button("Settings", _on_settings)
 			_add_button("End Turn", _on_end_turn, not LocalPlayer.current_is_local_human(),
 				ConquestTheme.action_glyph(InputActions.END_TURN))
+			if is_networked():
+				_add_button(LABEL_FORFEIT, func(): show_page(Page.CONFIRM_FORFEIT), false, "", "lose the match")
 			_add_button("Return to Title", _on_return_to_title)
 		Page.UNITS:
 			_title.text = "Ready Units"
@@ -250,6 +262,11 @@ func show_page(p: int) -> void:
 			_title.text = "Return to Title?"
 			_add_label("This battle's progress will be lost.")
 			_add_button("Return to Title", _do_return_to_title)
+			_add_button("Cancel", func(): show_page(Page.MAIN))
+		Page.CONFIRM_FORFEIT:
+			_title.text = "Forfeit Match?"
+			_add_label(CONFIRM_FORFEIT_TEXT)
+			_add_button(LABEL_FORFEIT, _do_forfeit)
 			_add_button("Cancel", func(): show_page(Page.MAIN))
 	var back_key := ConquestTheme.action_glyph(InputActions.CANCEL)
 	if back_key == "":
@@ -393,6 +410,35 @@ func _do_end_turn() -> void:
 		return
 	if unit_actions_panel != null and unit_actions_panel.has_method("request_end_player_turn"):
 		unit_actions_panel.request_end_player_turn()
+
+
+## Concede the live network match (confirmed on [constant Page.CONFIRM_FORFEIT]). The PauseMenu
+## owns the forfeit path (forfeit_match, then the menu); without one, the same two steps here.
+func _do_forfeit() -> void:
+	close()
+	if not is_networked():
+		return
+	if pause_menu != null and is_instance_valid(pause_menu) and pause_menu.has_method("forfeit_now"):
+		pause_menu.forfeit_now()
+		return
+	var ns := _session()
+	if ns != null and ns.has_method("forfeit_match"):
+		ns.forfeit_match()
+	var tree := get_tree()
+	tree.paused = false
+	tree.change_scene_to_file(MAIN_MENU_SCENE)
+
+
+## True in a live networked match (the Forfeit entry shows).
+func is_networked() -> bool:
+	var ns := _session()
+	return ns != null and ns.has_method("is_networked_match") and bool(ns.is_networked_match())
+
+
+func _session() -> Node:
+	if net_session != null and is_instance_valid(net_session):
+		return net_session
+	return get_node_or_null("/root/NetSession") if is_inside_tree() else null
 
 
 func _do_return_to_title() -> void:

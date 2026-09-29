@@ -53,6 +53,9 @@ var match_rng = null
 ## Highest seq applied so far (informational; folded into nothing that must agree
 ## between a live match and a replay).
 var last_applied_seq: int = 0
+## The battle is decided (GameModeManager sets it when the game is FINISHED): no timed turn
+## is open any more, so the online turn clock stops.
+var decided: bool = false
 var _board_provider: Callable
 var _turn_provider: Callable
 ## In/out counter for ids of units that appear mid-match (see [NetUnitIds]).
@@ -252,6 +255,84 @@ static func has_eligible_unit_at(b, move, caster, aim: Vector3i) -> bool:
 			_:
 				return true
 	return false
+
+
+# ---------------------------------------------------------------------------
+# The online TURN CLOCK hooks (NetSession's host-authoritative clock; NetTurnClock)
+# ---------------------------------------------------------------------------
+# What a "timed turn" is and what running out of time does. Pure reads of the (identical)
+# state, so every peer agrees; the host alone decides WHEN a clock ran out.
+
+## Which budget a timed turn draws: a Speed-First-style system (one acting unit) is clocked
+## per UNIT, anything else (Traditional) per SIDE.
+func clock_kind() -> String:
+	var ts = turn_system()
+	return NetTurnClock.KIND_UNIT if ts != null and "current_acting_unit" in ts else NetTurnClock.KIND_SIDE
+
+
+## Names the timed turn that is open now ("" = none: no active turn, or the battle is decided).
+## A new key opens a new clock: Traditional "<turn>:<slot>" (the side's turn), Speed First
+## "<turn>:<acting unit id>" (the unit's turn).
+func clock_turn_key() -> String:
+	if decided:
+		return ""
+	var ts = turn_system()
+	if ts == null or ("is_active" in ts and not bool(ts.is_active)):
+		return ""
+	var slot := current_turn_slot()
+	if slot < 0:
+		return ""
+	var turn_no: int = int(ts.current_turn) if "current_turn" in ts else 0
+	if clock_kind() == NetTurnClock.KIND_UNIT:
+		var u = ts.current_acting_unit
+		if u == null or not is_instance_valid(u):
+			return ""
+		return "%d:%s" % [turn_no, NetUnitIds.id_of(u)]
+	return "%d:%d" % [turn_no, slot]
+
+
+## Living units [param slot] fields (the per-unit allowance of a side's turn).
+func clock_units(slot: int) -> int:
+	var b = board()
+	var n := 0
+	if b == null or not b.has_method("all_units"):
+		return n
+	for u in b.all_units():
+		if u == null or not is_instance_valid(u) or (u.has_method("is_alive") and not u.is_alive()):
+			continue
+		if NetUnitIds.owner_slot(u) == slot:
+			n += 1
+	return n
+
+
+## The action a timeout plays for [param slot] (without the timeout stamp), or {} when there
+## is none: Speed First -> the acting unit WAITs (END_TURN if it cannot wait, e.g. stunned);
+## Traditional -> END_TURN for the side.
+func timeout_action(slot: int) -> Dictionary:
+	if slot < 0 or current_turn_slot() != slot:
+		return {}
+	if clock_kind() == NetTurnClock.KIND_UNIT:
+		var ts = turn_system()
+		var u = ts.current_acting_unit if ts != null else null
+		if u != null and is_instance_valid(u) and NetUnitIds.owner_slot(u) == slot:
+			var w := NetProtocol.wait(NetUnitIds.id_of(u))
+			if validate_intent(w, slot) == NetProtocol.INTENT_OK:
+				return w
+	var et := NetProtocol.end_turn(slot)
+	return et if validate_intent(et, slot) == NetProtocol.INTENT_OK else {}
+
+
+## Is [param action] (stamped [constant NetProtocol.KEY_TIMEOUT]) the canonical timeout for
+## [param actor_slot] on this state? "" when it is. The host checks it before issuing one and
+## every client re-checks it before applying, so a host cannot dress up a free choice as a timeout.
+func validate_timeout(action: Dictionary, actor_slot: int) -> String:
+	var want := timeout_action(actor_slot)
+	if want.is_empty():
+		return NetProtocol.INTENT_NO_ACTIVE_TURN
+	if int(action.get(NetProtocol.KEY_TYPE, -1)) != int(want[NetProtocol.KEY_TYPE]) \
+			or action.get(NetProtocol.KEY_DATA, {}) != want[NetProtocol.KEY_DATA]:
+		return NetProtocol.INTENT_TIMEOUT_MISMATCH
+	return NetProtocol.INTENT_OK
 
 
 # ---------------------------------------------------------------------------
