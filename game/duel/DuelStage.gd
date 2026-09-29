@@ -20,6 +20,8 @@ const BEAT_INTRO := 1.6
 const BEAT_THINK := 0.6
 const BEAT_AFTER := 0.55
 const BEAT_PASS := 0.9
+## The team preview before a party duel's intro line.
+const BEAT_PREVIEW := 1.8
 const SETTLE_TIMEOUT := 6.0
 ## Model scale on the stage (presentation only; the board reads positions, never scale).
 const UNIT_SCALE := 1.35
@@ -64,6 +66,7 @@ func _ready() -> void:
 	_configure_hud()
 	hud.bind(battle)
 	hud.rematch_requested.connect(_on_rematch)
+	battle.combatant_entered.connect(_on_combatant_entered)
 	hud.setup_requested.connect(_on_setup)
 	hud.menu_requested.connect(_on_menu)
 	battle.finished.connect(_on_finished)
@@ -199,21 +202,67 @@ func _mount_presentation() -> void:
 	add_child(_pause)
 
 
-## Face to face, idle bob on, and no floating 3D HP bars (the HUD cards replace them).
+## Face to face, idle bob on, and no floating 3D HP bars (the HUD cards replace them). Every
+## team member is dressed now (scale, no bar); a benched one is introduced when it comes in.
 func _present_units() -> void:
-	var vm := get_node_or_null("UnitVisualManager")
 	for side in 2:
-		var u = battle.unit_of(side)
-		if u == null:
-			continue
-		GameEvents.unit_spawned.emit(u, false)
-		if vm != null and vm.has_method("cleanup_unit_visuals"):
-			vm.cleanup_unit_visuals(u)
-		for c in u.get_children():
-			if c is HealthBar:
-				c.visible = false
-		# The stage scales the model (a duel reads at a closer, JRPG distance).
-		u.scale = Vector3.ONE * UNIT_SCALE
+		for rec in battle.team(side):
+			var u = rec["unit"]
+			if u == null or not is_instance_valid(u):
+				continue
+			_dress_unit(u)
+			if u == battle.unit_of(side):
+				GameEvents.unit_spawned.emit(u, false)
+
+
+func _dress_unit(u) -> void:
+	var vm := get_node_or_null("UnitVisualManager")
+	if vm != null and vm.has_method("cleanup_unit_visuals"):
+		vm.cleanup_unit_visuals(u)
+	for c in u.get_children():
+		if c is HealthBar:
+			c.visible = false
+	# The stage scales the model (a duel reads at a closer, JRPG distance).
+	u.scale = Vector3.ONE * UNIT_SCALE
+
+
+## A team member took the station (a switch or a KO replacement): idle bob on, bar off.
+func _on_combatant_entered(_side: int, unit, _previous) -> void:
+	if unit == null or not is_instance_valid(unit):
+		return
+	_dress_unit(unit)
+	GameEvents.unit_spawned.emit(unit, false)
+
+
+## What the HUD calls side [param side] ("Player 2" on a shared screen, "You" / "The foe").
+func side_name(side: int) -> String:
+	if is_hotseat():
+		return HOTSEAT_NAMES[clampi(side, 0, 1)]
+	var me: int = hud.perspective_side if hud != null else 0
+	return "You" if side == me else "The foe"
+
+
+## "Go, Petalfang!" / "The foe sends out Petalfang!" / "Vineweave, come back! Go, Geode!" --
+## the narration of an applied SWITCH record ([member DuelBattle] record's switch event).
+func switch_line(rec: Dictionary) -> String:
+	var ev: Dictionary = rec.get("switch", {})
+	if ev.is_empty():
+		return ""
+	var side: int = int(ev.get("side", 0))
+	var incoming = ev.get("unit")
+	var in_name: String = incoming.get_display_name() if incoming != null and is_instance_valid(incoming) else "a partner"
+	var outgoing = ev.get("from")
+	var out_name: String = outgoing.get_display_name() if outgoing != null and is_instance_valid(outgoing) else ""
+	var mine: bool = side == hud.perspective_side or is_hotseat()
+	var who := side_name(side)
+	if bool(ev.get("replacement", false)) or out_name == "":
+		if is_hotseat():
+			return "%s sends out %s!" % [who, in_name]
+		return "Go, %s!" % in_name if mine else "%s sends out %s!" % [who, in_name]
+	if is_hotseat():
+		return "%s withdraws %s and sends out %s!" % [who, out_name, in_name]
+	return "%s, come back! Go, %s!" % [out_name, in_name] if mine \
+		else "%s withdraws %s and sends out %s!" % [who, out_name, in_name]
 
 
 # --- The director ------------------------------------------------------------------------
@@ -231,11 +280,19 @@ func _run() -> void:
 	if request.kind == DuelRequest.KIND_VERSUS:
 		hud.show_intro(versus_intro(battle))
 	hud.set_command_panel_visible(false)
+	if _party_duel():
+		hud.show_team_preview([side_name(0), side_name(1)] if is_hotseat() else [])
+		await _beat(BEAT_PREVIEW)
+		hud.hide_team_preview()
 	await _beat(BEAT_INTRO)
 	hud.show_intro("")
 	hud.set_command_panel_visible(true)
 	battle.start()
 	while is_inside_tree() and not battle.is_over:
+		var pending := battle.pending_replacements()
+		if not pending.is_empty():
+			await _replace(pending[0])
+			continue
 		var actor = battle.current_actor()
 		if actor == null:
 			break
@@ -270,8 +327,53 @@ func _run() -> void:
 		if slot == DuelHUD.ITEM_SLOT:
 			await _use_item(actor, hud.chosen_item_id)
 			continue
+		if slot == DuelHUD.SWITCH_SLOT:
+			await _switch(actor, hud.chosen_member)
+			continue
+		if decision.has("switch"):
+			await _switch(actor, int(decision["switch"]))
+			continue
 		await _cast(actor, slot, decision)
 	_driving = false
+
+
+## True when either side brings a bench (the team preview, the party strips).
+func _party_duel() -> bool:
+	return battle != null and (battle.team_size(0) > 1 or battle.team_size(1) > 1)
+
+
+## A voluntary switch (the Party action / the brain's): the recorded SWITCH, then narration.
+func _switch(actor, index: int) -> void:
+	var rec: Dictionary = battle.submit_switch(index)
+	if not bool(rec.get("ok", false)):
+		hud.narrate(NetProtocol.describe_intent_rejection(String(rec.get("reason", "")), NetProtocol.switch_to("")))
+		await _beat(BEAT_AFTER)
+		return
+	hud.narrate(switch_line(rec))
+	hud.refresh()
+	await _settle()
+
+
+## A KO REPLACEMENT for [param side]: the brain picks for an AI side, the owner's picker for a
+## human one (on a shared screen the prompt names the player).
+func _replace(side: int) -> void:
+	var rec: Dictionary
+	if battle.is_ai_side(side):
+		hud.show_waiting("%s is choosing…" % side_name(side))
+		await _beat(BEAT_THINK)
+		rec = battle.play_ai_replacement(side)
+	else:
+		hud.narrate("%s: choose who fights next." % side_name(side) if is_hotseat() else "Choose who fights next.")
+		hud.show_replacement(side, side_name(side) if is_hotseat() else "")
+		var index: int = await hud.replacement_chosen
+		if not is_inside_tree() or battle.is_over:
+			return
+		rec = battle.choose_replacement(side, index)
+	hud.show_waiting("")
+	if bool(rec.get("ok", false)):
+		hud.narrate(switch_line(rec))
+		hud.refresh()
+		await _beat(BEAT_AFTER)
 
 
 ## The player tries to run (DuelBattle.attempt_flee): away (the duel ends as FLED) or the turn

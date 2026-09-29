@@ -25,13 +25,34 @@ const POLICY_DISABLE := "disable"                    ## abilities: removed from 
 
 @export_group("Format")
 @export var turn_mode: TurnMode = TurnMode.SEQUENTIAL
-## Combatants a side may bring: the lead plus (party_size - 1) on the bench. M1 duels are
-## strict 1v1 (1); DECISIONS.md #3 targets lead + up to 2 bench (3) with switching in M2/M3.
+## Combatants a side may bring: the lead plus (party_size - 1) on the bench. A [DuelFormat]
+## (Singles 1v1 / Trio 3v3 / Full 6v6 / custom) writes this and the party knobs below onto the
+## duel's private COPY of the ruleset ([method DuelFormat.apply_to]); the authored value is the
+## legacy strict 1v1.
 @export_range(1, 6) var party_size: int = 1
-## Voluntary switching (costs the turn). Needs party_size > 1.
+## Voluntary switching (the Party action; costs the switching side's turn). Needs party_size > 1.
 @export var allow_switch: bool = false
-## KO'd lead is replaced from the bench instead of losing the duel. Needs party_size > 1.
+## A KO'd lead's owner CHOOSES its replacement from the bench (free, immediate). Off: the next
+## healthy member in team order is sent in automatically. A side loses only when no member is
+## left standing.
 @export var ko_replacement: bool = false
+## Equipment (held items) is applied to the combatants.
+@export var allow_held_items: bool = true
+## No two members of one team may be the same character (checked by DuelRequest.validate).
+@export var species_clause: bool = false
+## Highest strength a combatant fights at (0 = no cap; DuelFormat.clamp_strength).
+@export_range(0.0, 10.0, 0.01) var strength_cap: float = 0.0
+## The format a STORY duel fields when its battle names none ([DuelFormat] preset id): the
+## party's lead plus up to (team size - 1) bench members; wild encounters are still one foe.
+@export var story_format: String = "story"
+
+@export_group("Party")
+## What SURVIVES a switch-out (docs/design/DUEL_BATTLE.md §4.2). HP, move cooldowns (frozen while
+## benched -- a benched unit takes no turns, so nothing ticks) and equipment always persist; so
+## do the status ids listed here (poison lingers, stacks and remaining turns frozen). Every other
+## status, every stat modifier gained in battle (buffs AND debuffs) and any shield are CLEARED
+## as the unit leaves the field.
+@export var persist_on_switch: Array[String] = ["poisoned"]
 ## Running is allowed at all (the encounter must also allow it: DuelRequest.can_flee -- wild
 ## duels). Rolled per attempt by [method flee_chance] (DuelBattle.attempt_flee).
 @export var allow_flee: bool = false
@@ -87,6 +108,14 @@ const POLICY_DISABLE := "disable"                    ## abilities: removed from 
 @export var ai_cooldown_penalty: float = 0.5
 ## EASY softmax temperature (higher = more random).
 @export var ai_easy_temperature: float = 6.0
+## SWITCHING (NORMAL and up; EASY never switches voluntarily). A unit's MATCHUP against the foe
+## is (its best expected hit / foe HP) - (the foe's best expected hit on it / its own HP), both
+## read off the shared forecast. The brain switches to the bench member with the best matchup
+## when that beats the fielded unit's by at least this margin...
+@export_range(0.0, 2.0, 0.01) var ai_switch_margin: float = 0.3
+## ...and the fielded unit has already taken at least this many turns on the field (no
+## ping-pong: a unit that just came in fights at least once).
+@export_range(0, 5) var ai_switch_min_turns: int = 1
 
 
 ## The chance a defeated wild unit offers to join: the base chance plus the subdue bonus
@@ -121,6 +150,16 @@ func flee_chance(my_speed: int, foe_speed: int, attempts: int) -> float:
 ## Bench slots per side ((party_size - 1), 0 in a strict 1v1).
 func bench_size() -> int:
 	return maxi(0, party_size - 1)
+
+
+## The strength a combatant authored at [param strength] fights at ([member strength_cap]).
+func clamp_strength(strength: float) -> float:
+	return minf(strength, strength_cap) if strength_cap > 0.0 else strength
+
+
+## True when status [param id] survives a switch-out ([member persist_on_switch]).
+func persists_on_switch(id: StringName) -> bool:
+	return String(id) in persist_on_switch
 
 
 ## The policy for an effect whose script chain is [param class_names] (most-derived first).

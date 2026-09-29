@@ -264,13 +264,57 @@ recharge bar.
    **Recommended target.** It matches squad sizes and keeps duels short.
 3. **Pokémon 6-party.** Long battles; mostly an overworld pacing question.
 
-Implementation note for 2 and 3:
-- Benched units exist as `Unit` nodes parked off-board. They are hidden, not in
-  `DuelBoard.units_at`, and not registered with the turn system.
-- A switch unregisters the outgoing unit, registers the incoming one (**adopt it**, rule 4),
-  places it on the station, and marks it acted this round.
-- Switching out clears statuses; cooldowns freeze while benched.
-- The **v1 slice is strict 1v1.** Party support is M3.
+**BUILT: party duels with configurable formats** (`game/duel/DuelFormat.gd`, data on the request;
+`DuelFormat.apply_to` writes the party knobs onto a private copy of the `DuelRuleset`):
+
+| Knob | Meaning |
+|---|---|
+| `team_size` 1-6 | The lead plus (n - 1) bench. A side's TEAM = the first n members of its party. |
+| `active_per_side` | 1 = singles, the only mode built. 2 (doubles) is refused until the engine has two stations per side. |
+| `allow_switch` | The Party action: a voluntary SWITCH that costs the turn. |
+| `ko_replacement` | On: the fainted unit's owner PICKS the replacement (free). Off: the next healthy member in team order enters automatically. |
+| `allow_battle_items` / `allow_held_items` | The Items action / equipment loadouts. |
+| `species_clause` | No two members of one team are the same character. |
+| `strength_cap` | The highest `DuelCombatant.strength` a member fights at (0 = none). |
+
+Presets: **Singles 1v1** (the M1 duel; every older request), **Trio 3v3** and **Full 6v6**
+(switching, picks, species clause), and **story** (lead + up to 2 bench, no clause: a journey may
+own several of one species -- `DuelRuleset.story_format`).
+
+- **Bench.** Every team member is a real `Unit` built at setup. A benched one stands hidden on
+  its side's station (so forecasts of it read the same stage), is owned by its side's `Player`
+  (the side is only out when nobody is left), is NOT in `DuelBoard.units_at` and is NOT
+  registered with the turn system -- nothing ticks for it. Scene: fielded under `Map/Player1|2`,
+  bench under `Map/Bench1|2` (never scanned by `TurnSystemManager`). Ids are the team's:
+  `"<side>:<index>"` (a lead is `"<side>:0"`, what `NetUnitIds.assign` always named it).
+- **SWITCH ordering (sequential model).** A switch is an action in the speed order: it resolves in
+  the switching combatant's own turn slot. The outgoing unit's turn ENDS normally (turn-end beat,
+  affliction clocks), it leaves the system, and the incoming one is adopted (rule 4) already
+  marked as having acted this round -- it takes the next round's order by its own speed. There
+  is no priority: a faster foe still acts before a slower side's switch.
+- **KO replacement.** Free and immediate: after the action that caused the faint resolves, the
+  fainted side's owner must pick (a recorded SWITCH; the UI's picker has no Back, `DuelBrain`
+  picks for the AI, the owning seat online) before any other turn opens. The newcomer is marked
+  acted (the fainted unit's turn this round is lost); then the queue resumes. Both sides can be
+  pending at once (a reprisal trade; side 0 picks first). The turn system never schedules its
+  own hand-off after a death -- `DuelBattle` resolves faints and resumes the queue
+  (`DuelTurnSystem.resume_if_idle`), so an instant AI pick and a slow online pick behave alike.
+- **What survives the bench** (`DuelRuleset.persist_on_switch`): HP, move cooldowns (FROZEN while
+  benched), equipment, and the listed statuses (default `poisoned`: stacks and remaining turns
+  frozen). Everything else clears as the unit leaves: other statuses (a pending burst fizzles),
+  every stat modifier the battle added (buffs AND debuffs), shields, forced control.
+- **First entry.** A bench member's ON_BATTLE_START moment fires when it first takes the field
+  (once; the per-unit latch).
+- **The end.** A side with nobody left loses; both at once is no win for A. `party_after` marks
+  every member that took the field `fought` and every one that fainted `wounded` (Classic
+  permadeath marks each -- a KO'd bench member switched in counts like the lead); members that
+  never fielded keep their HP. `defeated` lists every foe KO'd. KOs are credited to the fielded
+  member that landed them.
+- **AI.** NORMAL+ switches when the best benched MATCHUP beats the fielded one by
+  `ai_switch_margin` and the fielded unit has had `ai_switch_min_turns` turns on the field (no
+  ping-pong), never instead of a forecast KO; matchup = best expected hit / foe HP - foe's best
+  expected hit / own HP, both off `MoveExecutor.preview_vs` (rule 9). NORMAL+ sends the
+  best-matched replacement; EASY never switches by choice and sends the next in order.
 
 ### 4.3 Items, flee, capture
 
@@ -401,8 +445,9 @@ DuelStage (Node3D)                      <- scene root; added to AudioManager.bat
 ## 7. Determinism, replay, save, network
 
 - **One apply path.** Every duel action is a command applied by `CommandApplier.apply_command(cmd, duel_board, {"turn_system": ts})`: human, AI, replay, and later network. `USE_MOVE` (`NetProtocol.use_move(unit_id, slot, aim)`) with `aim` = the station cell already works. `NetGameRules._apply` books the cooldown (`_book_move_use`) and marks the unit acted.
-  - New actions `SWITCH` (M3), `FLEE` (M3) and `USE_ITEM` (if consumables exist) are appended
-    to `NetProtocol.Action`, with `PROTOCOL_VERSION` bumped.
+  - `USE_ITEM` (protocol 3) and `SWITCH` (protocol 5: a voluntary switch or a KO replacement
+    pick, `{unit_id}` = the incoming member) are appended to `NetProtocol.Action`. Flee is a
+    seeded local roll that spends the turn as a WAIT (no action of its own).
 - **Seeding.**
   - `DuelRequest.seed` comes from the overworld's RNG (so an encounter is reproducible from a
     save) or is random for standalone.
@@ -597,7 +642,10 @@ Vineweave (nature, speed 12) vs Geode (earth, speed 8).
   Forest Barrage, Ingrained). About 5 small `.tres` files; list them for the user's sign-off.
 
 ### M3: Depth
-- Party (≤3) with KO-replacement and switching (`SWITCH` command).
+- ~~Party (≤3) with KO-replacement and switching (`SWITCH` command).~~ BUILT as configurable
+  formats (§4.2): Singles / Trio / Full / custom, story + hot-seat + online. Follow-ups:
+  doubles (`active_per_side` 2), mixed human + creature teams once human units exist
+  (DECISIONS.md #7 -- the party mechanics are generic over units).
 - `turn_mode = SIMULTANEOUS` + `MoveResource.priority` (flinch-consume rule, §4.1).
 - Flee (`FLEE` command).
 - HARD/BRUTAL brain.

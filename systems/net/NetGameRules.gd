@@ -320,6 +320,13 @@ func _apply(action: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 	if t == NetProtocol.Action.END_TURN:
 		var ended: bool = ts != null and ts.has_method("end_turn_manually") and ts.end_turn_manually()
 		return {"ok": ended, "events": [{"effect": "end_turn", "player_id": int(d.get(NetProtocol.K_PLAYER, -1)), "advanced": ended}]}
+	if t == NetProtocol.Action.SWITCH:
+		# PARTY DUELS: the incoming member is BENCHED (not on the board), so the board that owns
+		# the party resolves it ([method DuelBoard.apply_switch]). A board without parties
+		# (tactical) has no switch.
+		if b != null and b.has_method("apply_switch"):
+			return b.apply_switch(d, ts)
+		return {"ok": false, "reason": NetProtocol.INTENT_UNKNOWN_ACTION}
 
 	var unit = find_unit(String(d.get(NetProtocol.K_UNIT, "")))
 	if unit == null or b == null:

@@ -11,8 +11,12 @@ class_name DuelBrain
 ## invulnerability are all already in the number. Every weight is on the [DuelRuleset].
 ##
 ## Difficulty (BotController vocabulary): EASY = softmax over the scores, drawn from the
-## injected seeded RNG; NORMAL = greedy. HARD / BRUTAL (1-ply lookahead, switching) are M3 and
-## play as NORMAL until then. Only EASY draws RNG.
+## injected seeded RNG; NORMAL = greedy. HARD / BRUTAL (1-ply lookahead) play as NORMAL until
+## then. Only EASY draws RNG.
+##
+## PARTY DUELS: NORMAL and up also SWITCH on a bad matchup ([method consider_switch]) and pick
+## the best-matched KO replacement ([method pick_replacement]); EASY never switches by choice and
+## sends its bench in team order. Both are deterministic (no RNG).
 
 const EASY := 0
 const NORMAL := 1
@@ -58,6 +62,94 @@ static func decide(actor, foe, board, ruleset: DuelRuleset, difficulty: int = NO
 		"score": float(pick["score"]),
 		"scores": scores,
 	}
+
+
+# --- Party duels: switching and KO replacement --------------------------------------------
+#
+# A unit's MATCHUP against the foe (higher = better): its best expected hit as a fraction of the
+# foe's HP, minus the foe's best expected hit on it as a fraction of its own HP. Both halves come
+# off the shared forecast ([method MoveExecutor.preview_vs]), so elements, abilities, weather and
+# guards are already in them -- rule 9, no damage maths here. A benched unit is parked on its
+# side's station (hidden), so its forecast reads the same stage as the fielded one's.
+
+## Matchup of [param unit] against [param foe] (see above). 0 when either is missing.
+static func matchup(unit, foe, board) -> float:
+	if unit == null or foe == null or not is_instance_valid(unit) or not is_instance_valid(foe):
+		return 0.0
+	var foe_hp: float = maxf(1.0, float(foe.get_hp()))
+	var my_hp: float = maxf(1.0, float(unit.get_hp()))
+	return best_expected_hit(unit, foe, board) / foe_hp - foe_threat(unit, foe, board) / my_hp
+
+
+## [param unit]'s best expected hit on [param foe] with the moves it could use now (the
+## struggle when nothing is ready).
+static func best_expected_hit(unit, foe, board) -> float:
+	var best := 0.0
+	var slots := ready_slots(unit)
+	if slots.is_empty():
+		var s := struggle_slot(unit)
+		if s != NO_SLOT:
+			slots.append(s)
+	for slot in slots:
+		var move: MoveResource = unit.get_move(slot)
+		if move == null or move.targeting_for(unit) == null:
+			continue
+		if move.targeting_for(unit).target_kind == CombatTypes.TargetKind.SELF or not deals_damage(move, unit):
+			continue
+		best = maxf(best, expected_damage(MoveExecutor.preview_vs(move, unit, foe, board)))
+	return best
+
+
+## Should [param actor] switch out instead of acting? Returns the bench index to bring in, or -1.
+## EASY never switches voluntarily. NORMAL and up switch when the best benched matchup beats the
+## fielded one by [member DuelRuleset.ai_switch_margin], the fielded unit has already had
+## [member DuelRuleset.ai_switch_min_turns] turns on the field (no ping-pong), and the planned
+## move ([param decision], [method decide]) is not a forecast KO. [param bench] = [{index, unit}]
+## (healthy benched members); [param turns_on_field] counts the current turn. Pure and
+## deterministic (no RNG).
+static func consider_switch(actor, foe, board, ruleset: DuelRuleset, difficulty: int, bench: Array,
+		decision: Dictionary = {}, turns_on_field: int = 99) -> int:
+	if ruleset == null or difficulty == EASY or bench.is_empty() or actor == null or foe == null:
+		return -1
+	if String(decision.get("reason", "")) == "lethal":
+		return -1
+	if turns_on_field <= ruleset.ai_switch_min_turns:
+		return -1
+	var mine := matchup(actor, foe, board)
+	var best_idx := -1
+	var best := -INF
+	for row in bench:
+		var u = row.get("unit")
+		if u == null or not is_instance_valid(u):
+			continue
+		var m := matchup(u, foe, board)
+		if m > best:
+			best = m
+			best_idx = int(row.get("index", -1))
+	if best_idx >= 0 and best - mine >= ruleset.ai_switch_margin:
+		return best_idx
+	return -1
+
+
+## Who replaces a fainted combatant: EASY sends the next healthy member in team order; NORMAL
+## and up the best matchup against [param foe] (ties -> team order). -1 when [param bench] is
+## empty. Pure, no RNG.
+static func pick_replacement(foe, board, ruleset: DuelRuleset, difficulty: int, bench: Array) -> int:
+	if bench.is_empty():
+		return -1
+	if difficulty == EASY or foe == null or not is_instance_valid(foe):
+		return int(bench[0].get("index", -1))
+	var best_idx := int(bench[0].get("index", -1))
+	var best := -INF
+	for row in bench:
+		var u = row.get("unit")
+		if u == null or not is_instance_valid(u):
+			continue
+		var m := matchup(u, foe, board)
+		if m > best:
+			best = m
+			best_idx = int(row.get("index", -1))
+	return best_idx
 
 
 ## The moveset slots [param actor] may use right now (ready per its MovesetController).

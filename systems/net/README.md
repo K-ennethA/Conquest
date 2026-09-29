@@ -21,7 +21,7 @@ toasts, apply-side ultimates and cooldown booking, replays, dev auto-join).
 | `NetSession.gd` (class `NetSessionNode`, autoload `NetSession`) | Join handshake (build gate), lobby, peer→slot seating, the lobby message channel, intent queue, action ordering (seq), the commit-reveal rounds, checkpoints, disconnects / forfeit. Player-hosted (`host_game`) and dedicated (`host_dedicated`) modes share every code path. Also holds the per-battle **seam** (`install_command_seam`: the `CommandApplier` replays drive) and the solo RNG stream. Knows nothing about units. |
 | `NetCommitReveal.gd` | Hash-chain commitments, share verification, epoch re-commit, per-action seed derivation. Pure (no networking), unit-tested. |
 | `transport/NetTransport.gd`, `transport/ENetTransport.gd` | The only place a `MultiplayerPeer` is created. See *Adding a transport*. |
-| `NetProtocol.gd` | Wire format: actions (`MOVE`, `USE_MOVE`, `WAIT`, `END_TURN`; the command-log names `MOVE_UNIT` / `CAST_MOVE` / `WAIT_UNIT` are aliases), builders, shape validation, THE cell (de)serialiser (`[col, row, floor]`, see docs/MULTI_FLOOR.md), `KEY_RNG` (locally stamped seed, never trusted from the wire), the join hello + `validate_hello` + `describe_rejection`, the `INTENT_*` rejection vocabulary + `describe_intent_rejection`, `PROTOCOL_VERSION`. |
+| `NetProtocol.gd` | Wire format: actions (`MOVE`, `USE_MOVE`, `WAIT`, `END_TURN`, `USE_ITEM`, `SWITCH`; the command-log names `MOVE_UNIT` / `CAST_MOVE` / `WAIT_UNIT` are aliases), builders, shape validation, THE cell (de)serialiser (`[col, row, floor]`, see docs/MULTI_FLOOR.md), `KEY_RNG` (locally stamped seed, never trusted from the wire), the join hello + `validate_hello` + `describe_rejection`, the `INTENT_*` rejection vocabulary + `describe_intent_rejection`, `PROTOCOL_VERSION`. |
 | `NetGameRules.gd` | `validate_intent` (host; re-run by clients) and THE deterministic `apply_action` every peer runs — incl. replay recording, the ultimate cut-in announcement, cooldown / charge booking, canto hand-off; `state_digest` for desync detection. |
 | `CommandApplier.gd` | `NetGameRules` bound to the live battle under the name the battle / replay code uses (`apply_command(cmd, board, ctx)`, `hash_match_state`). A subclass, never a second apply path. |
 | `NetUnitIds.gd` | Stable unit ids (`"<slot>:<n>"`, mid-match arrivals `"<slot>:s<k>"`). |
@@ -105,7 +105,8 @@ A joining client's **first** message is a hello — display name plus
   (an editor run joining an exported build is a legitimate test setup).
 
 Bump `PROTOCOL_VERSION` whenever the envelope or an action's data shape changes (2 = the
-merged core, 3 = USE_ITEM, 4 = lobby modes + the online-duel config keys). Replays stamp it too and refuse other versions. Two-machine procedure:
+merged core, 3 = USE_ITEM, 4 = lobby modes + the online-duel config keys, 5 = party duels: the
+`SWITCH` action, `duel_format` / `duel_teams`, the team-carrying `duel_pick`). Replays stamp it too and refuse other versions. Two-machine procedure:
 `docs/NETWORK_TESTING.md`.
 
 ## Lobby channel
@@ -195,15 +196,28 @@ claimed. Pinned by `tests/unit/test_match_loadouts.gd`, `test_lobby_loadout_exch
 
 DECISIONS.md #32: a DUEL is played over this same core. Menu: Online > Versus > Duel > Network
 (host / join / a `--mode duel` dedicated server) -> `menus/DuelLobby.gd` (roster + ready, each
-seat's unit, the host's / leader's stage + weather).
+seat's TEAM, the host's / leader's format + stage + weather).
 
-* **Config** (`DuelNetConfig`): `mode: "duel"`, `duel_units {slot: character_id}`, `duel_stage`,
-  `duel_weather`, plus the session's `seed`. Each seat announces its pick on the lobby channel
-  (`duel_pick`); the player-host's lobby, or the dedicated server (`auto_start_config`), folds
-  both into the start. Untrusted: `sanitize` whitelists, and `build_request` -- run on EVERY peer
-  -- refuses a unit that is not duel-eligible (`DuelMoveCompiler.is_duel_eligible`; humans and
-  creatures alike) or an unknown stage / weather (the match ends with `duel_refused`). Missing
-  picks fall back to each slot's default. The offline-only-maps rule does not apply (no map).
+* **Formats** (`game/duel/DuelFormat.gd`, data): team size (1-6), active per side (1 = singles;
+  doubles is refused until built), switching (costs the turn), KO replacement (the fainted
+  unit's owner picks, free), item rules, species clause, strength cap. Presets **Singles 1v1**,
+  **Trio 3v3** (a new player-host's default) and **Full 6v6**; anything else is custom. The
+  format writes the party knobs onto a private copy of the `DuelRuleset` (rule 7 / rule 11).
+* **Config** (`DuelNetConfig`): `mode: "duel"`, `duel_format` (`DuelFormat.to_dict`; absent =
+  Singles), `duel_teams {slot: [character_id, ...]}` (lead first, exactly the team size),
+  `duel_units {slot: lead}` (the Singles-era key, kept), `duel_stage`, `duel_weather`, plus the
+  session's `seed`. The host / lobby leader (or `--duel-format singles|trio|full` on a dedicated
+  server, which locks it) sets the format; each seat announces a team PREFERENCE list on the
+  lobby channel (`duel_pick {character_id, team}`); the player-host's lobby, or the dedicated
+  server (`auto_start_config`), folds both into the start trimmed / filled to the team size
+  (`final_config` / `teams_for`: repeats dropped under the clause, gaps filled with the seat's
+  defaults). The teams are per-match keys (`DuelNetConfig.PER_MATCH_KEYS`: never kept in a
+  standing lobby config, taken even when a server's config is locked). Untrusted: `sanitize`
+  whitelists, and `build_request` -- run on EVERY peer -- refuses an unreadable format, a team of
+  the wrong size (`bad_team_size`), a repeat under the clause (`species_clause`), a unit that is
+  not duel-eligible (`DuelMoveCompiler.is_duel_eligible`; humans and creatures alike) or an
+  unknown stage / weather (the match ends with `duel_refused`). Missing picks fall back to each
+  slot's default team. The offline-only-maps rule does not apply (no map).
 * **The duel** is a VERSUS `DuelRequest` (both sides human, seed = the setup seed, so the speed
   tie-break / weather / opening ticks agree) on every peer. GameModeManager opens
   `NetDuelStage` (a `DuelStage` that never applies anything itself) and attaches `DuelNetRules`.
@@ -213,9 +227,23 @@ seat's unit, the host's / leader's stage + weather).
   `WAIT` only while it must pass (stunned / controlled -- the seat's stage submits it by itself);
   `MOVE` / `END_TURN` / `USE_ITEM` are refused. **No items and no flee online**: an online duel
   carries no bag and cannot be run from (both are local / story actions).
+* **Party intents** (`SWITCH {unit_id}` = the incoming member's `"<side>:<index>"` id). A
+  voluntary switch needs the format's switching, the sender's own turn, a combatant free to act
+  and one of the SENDER's benched, healthy members (`INTENT_NO_SWITCHING`, `INTENT_NOT_YOUR_UNIT`,
+  `INTENT_ILLEGAL_SWITCH`). After a faint the fainted side's seat must send its KO replacement
+  pick first -- any other action from it is `INTENT_MUST_PICK`, the other seat is
+  `INTENT_NOT_YOUR_TURN` -- and `current_turn_slot()` names the picking side (side 0 first when
+  both must). Same rule object as the local duel (`DuelBattle.switch_problem`).
+* **Turn clocks**: `DuelNetRules.default_intent(slot)` is the seat's legal default right now
+  (its replacement pick when one is pending, else its forced pass / first legal move) -- what a
+  clock submits on expiry; a SWITCH never needs a clock branch of its own.
 * **Apply**: `DuelBattle.apply_command` with the NetSession-stamped seq + commit-reveal seed (a
-  kept canto move's follow-up WAIT applies inside the same call on every peer). **Digest**: the
-  board digest + round, decided flag, winner, command count, whose turn.
+  kept canto move's follow-up WAIT applies inside the same call on every peer). `NetGameRules`
+  hands a `SWITCH` to the board that owns the parties (`DuelBoard.apply_switch`: a benched member
+  is by design not on the board); a tactical board has none. **Digest**: the board digest +
+  round, decided flag, winner, command count, whose turn, and both PARTIES
+  (`DuelBattle.party_digest`: every member's HP / statuses / cooldowns / fainted flag, the pending
+  picks) -- a desync on a benched unit is caught too.
 * **Leaving**: pause-menu Forfeit (a loss); the opponent's forfeit / drop is this seat's win
   (`DuelBattle.concede`), with the same toasts and messages as Conquest online. No turn clock
   (the ruleset's `turn_timer_seconds` is 0; a clock expiry would be a local, un-networked call).
@@ -338,12 +366,12 @@ godot --headless --path . -- --server --port 8910 \
       [--map res://game/maps/resources/default_skirmish.tres] \
       [--turn-system traditional|speed_first] [--rng all|server] \
       [--max-matches N] [--end-after-actions N] [--reveal-timeout 30] [--transport enet]
-      [--mode duel [--stage meadow|tall_grass|grove] [--weather clear|...]]
+      [--mode duel [--duel-format singles|trio|full] [--stage meadow|tall_grass|grove] [--weather clear|...]]
 ```
 
-`--mode duel` serves online DUELS instead (no map; `--stage` locks the stage, else the slot-0
-client picks; each seat's unit comes from its `duel_pick` lobby message; the match ends on the
-duel's KO -- `DuelNetRules.is_match_over`).
+`--mode duel` serves online DUELS instead (no map; `--duel-format` / `--stage` lock the format /
+stage, else the slot-0 client picks; each seat's team comes from its `duel_pick` lobby message,
+fitted to the format; the match ends when a side has nobody left -- `DuelNetRules.is_match_over`).
 
 `--server` is detected by `GameModeManager` (also any export with the
 `dedicated_server` feature tag, i.e. Godot's *Dedicated Server* export mode).
@@ -448,6 +476,7 @@ commit-reveal, the lobby channel) is transport-agnostic.
 | `tests/integration/test_net_rejection_toast.gd` | refused command → NetToast |
 | `tests/integration/test_net_duel.gd` | ONLINE DUEL: mode stamped + mode-mismatch refused, both peers build one duel, a whole duel applies identically (commands, commit-reveal seeds, timeline, winner, digest), host validation (turn, slot, aim, no items / moves / end-turn / free skip), client re-validation, the actor cannot derive its roll before the other reveals, desync, forfeit / drop, ineligible picks refused, a `--mode duel` DedicatedServer folding both picks |
 | `tests/integration/test_net_duel_stage.gd` | the `NetDuelStage` on both seats: HUD pick -> intent -> applied on both, each seat prompted only for its own unit, per-seat Victory / Defeat, forfeit = the other seat's win |
+| `tests/integration/test_net_party_duel.gd` | ONLINE PARTY DUELS: format + teams ride the config, a whole 3v3 with switches and KO picks applies identically, illegal switches / picks refused (turn, bench, fainted, must-pick-first, Singles), a desync on a BENCHED unit caught, strict team / format configs, a `--duel-format trio` dedicated server folding both teams, the net stage's replacement picker |
 
 ```
 godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests/unit,res://tests/integration -gprefix=test_net -gexit
@@ -464,7 +493,9 @@ GODOT=/path/to/godot dev_scripts/net_multiprocess_check.sh \
 It passes when the server and both bots print the same `FINAL seq=… digest=…`
 with no desync / verification failure. `MODE=duel` runs an online duel instead (map / turn
 system ignored; `UNIT_A` / `UNIT_B` pick the combatants), e.g.
-`MODE=duel GODOT=… dev_scripts/net_multiprocess_check.sh "" "" 60` (and `HOSTED=1`). `HOSTED=1` runs the player-hosted
+`MODE=duel GODOT=… dev_scripts/net_multiprocess_check.sh "" "" 60` (and `HOSTED=1`). `FORMAT=trio` (or `full`)
+plays a PARTY duel: the server / hosting bot sets the format, the bots announce teams, switch
+every few turns and pick KO replacements (`MODE=duel FORMAT=trio … "" "" 400`). `HOSTED=1` runs the player-hosted
 variant (a host bot = listen server + seat 0, and a guest bot). A bot alone:
 `godot --headless --path . -- --net-bot --connect 127.0.0.1 --port 8910 --name BotA`
 (add `--host [--map … --turn-system … --end-after-actions N]` to make it the player-host).
@@ -481,7 +512,8 @@ button (`NetworkMultiplayerSetup.ENABLE_HOST_AUTO_CLIENT`) spawns exactly that.
 ## Known limitations
 
 * 1v1 humans only; no AI seats in network play. No reconnect.
-* Online duels: strict 1v1 (party size 1), no items, no flee, no turn clock, no spectators.
+* Online duels: singles-style (one combatant per side on the field; doubles is a follow-up),
+  no items, no flee, no spectators.
 * Desync is detected (digest mismatch → match ends), not repaired.
 * ENet is unencrypted (see *Path to production hosting*).
 * One match per server process (see *Dedicated server*).

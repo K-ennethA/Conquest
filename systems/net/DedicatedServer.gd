@@ -46,7 +46,7 @@ var _in_match: bool = false
 var _last_seq: int = 0   # survives NetSession's reset when a match is aborted
 ## --mode duel: this server runs online DUELS (NetProtocol.MODE_DUEL lobbies).
 var duel: bool = false
-## Duel lobby: each seat's announced combatant {slot: character_id}.
+## Duel lobby: each seat's announced pick {slot: [character_id, ...]} (lead first).
 var _picks: Dictionary = {}
 
 
@@ -70,11 +70,18 @@ func start(args: PackedStringArray, session: NetSessionNode) -> Error:
 	duel = String(opts.get("mode", NetProtocol.MODE_CONQUEST)) == NetProtocol.MODE_DUEL
 	_ns.lobby_mode = NetProtocol.MODE_DUEL if duel else NetProtocol.MODE_CONQUEST
 	if duel:
-		# An online DUEL lobby: no map. --stage / --weather lock those; each seat picks its unit
-		# (lobby message DuelNetConfig.MSG_PICK) and the picks ride the auto-start.
+		# An online DUEL lobby: no map. --stage / --weather / --duel-format (singles | trio |
+		# full) lock those; each seat picks its team (lobby message DuelNetConfig.MSG_PICK) and the
+		# picks ride the auto-start.
 		for key in [["stage", DuelNetConfig.KEY_STAGE], ["weather", DuelNetConfig.KEY_WEATHER]]:
 			if opts.has(key[0]):
 				cfg[key[1]] = String(opts[key[0]])
+		if opts.has("duel_format"):
+			var fcfg := DuelNetConfig.format_config(String(opts["duel_format"]))
+			if fcfg.is_empty():
+				_log("unknown duel format: %s (singles | trio | full)" % String(opts["duel_format"]))
+				return ERR_INVALID_PARAMETER
+			cfg[DuelNetConfig.KEY_FORMAT] = fcfg
 		var clean := DuelNetConfig.sanitize(cfg)
 		if clean.size() != cfg.size():
 			_log("unknown duel stage / weather: %s" % str(cfg))
@@ -103,12 +110,16 @@ func start(args: PackedStringArray, session: NetSessionNode) -> Error:
 	if err != OK:
 		_log("could not listen on %d: %s" % [port, error_string(err)])
 		return err
-	if duel and cfg.has(DuelNetConfig.KEY_STAGE):
+	if duel and (cfg.has(DuelNetConfig.KEY_STAGE) or cfg.has(DuelNetConfig.KEY_FORMAT)):
 		_ns.config_locked = true
 	if duel:
 		_ns.lobby_message.connect(_on_lobby_message)
 		_ns.player_left.connect(func(_pid, slot): _picks.erase(slot))
-		_ns.auto_start_config = func() -> Dictionary: return DuelNetConfig.final_config(_picks)
+		# The teams are sized for the lobby's CURRENT format (the operator's, or the leader's pick).
+		_ns.auto_start_config = func() -> Dictionary:
+			var lobby_cfg := _ns.get_match_config()
+			var f: DuelFormat = DuelNetConfig.format_of(lobby_cfg) if lobby_cfg.has(DuelNetConfig.KEY_FORMAT) else null
+			return DuelNetConfig.final_config(_picks, "", "", f)
 	_ns.max_actions = end_after_actions
 	_ns.player_joined.connect(func(pid, slot, pname): _log("seated '%s' (peer %d) in slot %d" % [pname, pid, slot]))
 	_ns.player_left.connect(func(pid, slot): _log("peer %d (slot %d) left" % [pid, slot]))
@@ -119,8 +130,9 @@ func start(args: PackedStringArray, session: NetSessionNode) -> Error:
 	if PlayerManager:
 		PlayerManager.game_state_changed.connect(_on_game_state_changed)
 	if duel:
-		_log("dedicated DUEL server listening on %s:%d  stage=%s  weather=%s  rng=%s%s" % [
-			t.id(), port, cfg.get(DuelNetConfig.KEY_STAGE, "<lobby leader>"),
+		_log("dedicated DUEL server listening on %s:%d  format=%s  stage=%s  weather=%s  rng=%s%s" % [
+			t.id(), port, DuelNetConfig.format_of(cfg).summary() if cfg.has(DuelNetConfig.KEY_FORMAT) else "<lobby leader>",
+			cfg.get(DuelNetConfig.KEY_STAGE, "<lobby leader>"),
 			cfg.get(DuelNetConfig.KEY_WEATHER, "<lobby leader>"),
 			"server" if mode == NetSessionNode.RngMode.SERVER_ONLY else "all",
 			"" if max_matches == 0 else "  max_matches=%d" % max_matches])
@@ -132,14 +144,16 @@ func start(args: PackedStringArray, session: NetSessionNode) -> Error:
 	return OK
 
 
-## Duel lobby: a seat announced its combatant (untrusted -- whitelisted at the start by
-## DuelNetConfig, and re-validated by every peer).
+## Duel lobby: a seat announced its pick (untrusted -- whitelisted here and at the start by
+## DuelNetConfig, and re-validated by every peer): its team preference list, else its lead.
 func _on_lobby_message(message_type: String, data: Dictionary, from_slot: int) -> void:
 	if message_type != DuelNetConfig.MSG_PICK or from_slot < 0 or from_slot > 1:
 		return
-	var id = data.get("character_id", "")
-	if DuelNetConfig.is_eligible(id):
-		_picks[from_slot] = String(id)
+	var team := DuelNetConfig.clean_team(data.get("team", []))
+	if team.is_empty():
+		team = DuelNetConfig.clean_team(data.get("character_id", ""))
+	if not team.is_empty():
+		_picks[from_slot] = team
 
 
 ## --key value / --flag parsing into a Dictionary with snake_case keys.
@@ -204,8 +218,9 @@ func _on_match_started(config: Dictionary) -> void:
 	_finish_at = -1
 	_last_seq = 0
 	if DuelNetConfig.is_duel(config):
-		_log("match %d starting: DUEL %s vs %s on %s, players %s, rng contributors %s" % [
-			matches_done + 1, DuelNetConfig.unit_of(config, 0), DuelNetConfig.unit_of(config, 1),
+		_log("match %d starting: DUEL %s, %s vs %s on %s, players %s, rng contributors %s" % [
+			matches_done + 1, DuelNetConfig.format_of(config).summary(),
+			",".join(DuelNetConfig.team_of(config, 0)), ",".join(DuelNetConfig.team_of(config, 1)),
 			String(config.get(DuelNetConfig.KEY_STAGE, DuelNetConfig.DEFAULT_STAGE)),
 			str(config.get("slots", {})), str(config.get("rng_contributors", []))])
 		return

@@ -7,7 +7,9 @@ class_name DuelUnitCard
 ##
 ## Reads the live [Unit] every frame it is visible (cheap: a handful of labels), eases its
 ## HP bar toward the real value so a hit reads as a drain, and rebuilds its status chips
-## only when the set changes. A unit freed on its KO reads as "Fainted".
+## only when the set changes. A unit freed on its KO reads as "Fainted". In a party duel the
+## card also carries the side's team pips ([DuelPartyStrip]) and is rebound to whoever takes
+## the station.
 
 const CARD_WIDTH := 392.0
 const CREST_PX := 54.0
@@ -23,6 +25,8 @@ var _hp_bar: ProgressBar
 var _hp_text: Label
 var _chips: HFlowContainer
 var _chip_sig: String = ""
+## The side's team pips (party duels).
+var party_strip: DuelPartyStrip = null
 var _shown_frac: float = 1.0
 
 
@@ -94,7 +98,15 @@ func _ready() -> void:
 	_chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_chips.visible = false
 	col.add_child(_chips)
+	party_strip = DuelPartyStrip.new()
+	col.add_child(party_strip)
 	refresh(true)
+
+
+## PARTY DUELS: this side's team pips ([method DuelBattle.team_view]); hidden for one member.
+func set_team(rows: Array) -> void:
+	if party_strip != null:
+		party_strip.set_rows(rows, _team())
 
 
 ## Point the card at [param p_unit].

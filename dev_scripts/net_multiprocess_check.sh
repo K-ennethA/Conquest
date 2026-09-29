@@ -13,6 +13,12 @@
 # ignored; UNIT_A / UNIT_B pick the two combatants, default: each slot's default unit):
 #
 #   GODOT=... MODE=duel dev_scripts/net_multiprocess_check.sh "" "" 60
+#
+# FORMAT=singles|trio|full (with MODE=duel) plays a PARTY duel: the dedicated server (or the
+# hosting bot) sets the format, each bot announces a team, and the bots switch now and then and
+# pick KO replacements -- SWITCH and the replacement picks ride the run like any action:
+#
+#   GODOT=... MODE=duel FORMAT=trio dev_scripts/net_multiprocess_check.sh "" "" 400
 set -u
 GODOT="${GODOT:-godot}"
 MAP="${1:-res://game/maps/resources/default_skirmish.tres}"
@@ -21,16 +27,18 @@ ACTIONS="${3:-40}"
 RNG="${4:-all}"
 PORT="${PORT:-$((20000 + RANDOM % 20000))}"
 OUT="${OUT:-$(mktemp -d)}"
+mkdir -p "$OUT"
 TIMEOUT="${TIMEOUT:-240}"
 MODE="${MODE:-conquest}"
 MODE_ARGS="--mode $MODE"
 UNIT_A_ARGS=""; [ -n "${UNIT_A:-}" ] && UNIT_A_ARGS="--unit $UNIT_A"
 UNIT_B_ARGS=""; [ -n "${UNIT_B:-}" ] && UNIT_B_ARGS="--unit $UNIT_B"
+FORMAT_ARGS=""; [ -n "${FORMAT:-}" ] && FORMAT_ARGS="--duel-format $FORMAT"
 
 if [ "${HOSTED:-0}" = "1" ]; then
 	# PLAYER-HOSTED variant: a host bot (listen server + seat 0) and a guest bot.
-	echo "net check (player-hosted): mode=$MODE map=$MAP turns=$TURNS actions=$ACTIONS port=$PORT logs=$OUT"
-	timeout "$TIMEOUT" "$GODOT" --headless --path . -- --net-bot --host --port "$PORT" --name Host $MODE_ARGS $UNIT_A_ARGS \
+	echo "net check (player-hosted): mode=$MODE format=${FORMAT:-} map=$MAP turns=$TURNS actions=$ACTIONS port=$PORT logs=$OUT"
+	timeout "$TIMEOUT" "$GODOT" --headless --path . -- --net-bot --host --port "$PORT" --name Host $MODE_ARGS $UNIT_A_ARGS $FORMAT_ARGS \
 		--map "$MAP" --turn-system "$TURNS" --end-after-actions "$ACTIONS" > "$OUT/host.log" 2>&1 &
 	H=$!
 	sleep 2
@@ -47,8 +55,8 @@ if [ "${HOSTED:-0}" = "1" ]; then
 	echo "FAIL (see $OUT)"; exit 1
 fi
 
-echo "net check: mode=$MODE map=$MAP turns=$TURNS actions=$ACTIONS rng=$RNG port=$PORT logs=$OUT"
-timeout "$TIMEOUT" "$GODOT" --headless --path . -- --server --port "$PORT" $MODE_ARGS --map "$MAP" \
+echo "net check: mode=$MODE format=${FORMAT:-} map=$MAP turns=$TURNS actions=$ACTIONS rng=$RNG port=$PORT logs=$OUT"
+timeout "$TIMEOUT" "$GODOT" --headless --path . -- --server --port "$PORT" $MODE_ARGS $FORMAT_ARGS --map "$MAP" \
 	--turn-system "$TURNS" --rng "$RNG" --max-matches 1 --end-after-actions "$ACTIONS" \
 	> "$OUT/server.log" 2>&1 &
 SRV=$!

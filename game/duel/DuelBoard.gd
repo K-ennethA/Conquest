@@ -18,6 +18,11 @@ class_name DuelBoard
 
 const STATION_A := Vector3i(0, 0, 0)
 
+## PARTY DUELS: resolves a SWITCH command (func(data: Dictionary, turn_system) -> Dictionary).
+## The owning [DuelBattle] sets it -- the board is where [NetGameRules] finds the party, because
+## a benched member is by design not on the board ([method apply_switch]).
+var switch_handler: Callable = Callable()
+
 var _gap: int = 4
 
 
@@ -64,6 +69,14 @@ func station_world(side: int) -> Vector3:
 ## Stations never change in a duel.
 func move_unit(_unit, _to_cell: Vector3i) -> void:
 	pass
+
+
+## The apply half of a SWITCH (THE apply path, [method NetGameRules._apply], hands it here):
+## the owning duel brings the named benched member in. {ok, reason, events}.
+func apply_switch(data: Dictionary, turn_system) -> Dictionary:
+	if not switch_handler.is_valid():
+		return {"ok": false, "reason": NetProtocol.INTENT_UNKNOWN_ACTION}
+	return switch_handler.call(data, turn_system)
 
 
 ## Nobody lands anywhere but their own station.
