@@ -434,6 +434,11 @@ func _disarm_turn_timer() -> void:
 ## lookup would fail; the global identifier resolves regardless. Null-safe for headless
 ## tests that run without the autoload.
 func _configured_turn_timer_seconds() -> int:
+	# ONLINE the clock is the host's (NetSession's turn clock, identical on every peer): a
+	# local expiry would end the turn on ONE peer only -- a desync -- so this clock stays off.
+	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null \
+			and GameSettings.game_mode == GameSettings.GameMode.MULTIPLAYER:
+		return 0
 	if typeof(GameSettings) == TYPE_OBJECT and GameSettings != null \
 			and "speed_turn_timer_seconds" in GameSettings:
 		return int(GameSettings.speed_turn_timer_seconds)

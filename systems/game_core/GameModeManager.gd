@@ -444,6 +444,9 @@ func show_toast(text: String, seconds: float = 2.0) -> void:
 func _on_game_state_changed(state) -> void:
 	if is_multiplayer_active() and state == PlayerManager.GameState.FINISHED:
 		_match_finished = true
+		# The battle is decided: no timed turn is open any more (the host stops the clock).
+		if _rules != null:
+			_rules.decided = true
 
 
 func _on_match_aborted(reason: String) -> void:
@@ -453,10 +456,12 @@ func _on_match_aborted(reason: String) -> void:
 		return
 	if is_dedicated_server_process():
 		return  # DedicatedServer reopens the lobby itself
-	if (reason == "opponent_disconnected" or reason == "host_disconnected") and _rules != null:
+	if (reason == "opponent_disconnected" or reason == "host_disconnected" \
+			or reason == NetSessionNode.ABORT_CLOCK_FORFEIT) and _rules != null:
 		# The other side left a LIVE battle: that is a loss for them. NetSession raised
 		# opponent_left first and the battle HUD resolves it as this player's victory
-		# (the standard game-over flow), so stay on the battle and just drop the link.
+		# (the standard game-over flow), so stay on the battle and just drop the link. A clock
+		# forfeit (a seat ran out of time too often) was resolved the same way before the end.
 		_match_finished = true
 		end_network_session()
 		return
@@ -486,6 +491,7 @@ const ABORT_TEXT := {
 	"match_complete": "The server closed the match.",
 	OFFLINE_ONLY_MAP_REASON: "That map is offline only (it needs AI-controlled units, and online matches run no AI). The match was not started.",
 	DUEL_REFUSED_REASON: "The duel's settings could not be verified (a unit that cannot duel, or an unknown stage). The match was not started.",
+	NetSessionNode.ABORT_CLOCK_FORFEIT: "A player ran out of time too many turns in a row and forfeited. The match has ended.",
 	NetSessionNode.ABORT_UNDRIVEN_TURN: "The battle reached a turn no player controls (an AI or neutral side), which online matches cannot run. The match has ended.",
 }
 

@@ -70,15 +70,49 @@ func _ready() -> void:
 		gmm.on_network_duel_ready(rules)
 	elif session != null:
 		session.attach_game(rules)
+	_mount_turn_clock()
 
 
 func _exit_tree() -> void:
+	_unmount_turn_clock()
 	if session != null and is_instance_valid(session):
 		for pair in [[session.action_applied, _on_applied], [session.intent_rejected, _on_rejected],
 				[session.opponent_left, _on_opponent_left], [session.opponent_forfeited, _on_opponent_forfeited]]:
 			if (pair[0] as Signal).is_connected(pair[1]):
 				(pair[0] as Signal).disconnect(pair[1])
 	super._exit_tree()
+
+
+# --- ONLINE TURN CLOCK hook (NetSession's host clock; the rules say a timeout = a pass) -------
+
+## The host's clock + a visible Forfeit, for the seats (a dedicated server shows nothing).
+var clock_bar: NetMatchBar = null
+
+
+func _mount_turn_clock() -> void:
+	if session == null or local_slot < 0:
+		return
+	clock_bar = NetMatchBar.new()
+	clock_bar.name = "NetMatchBar"
+	clock_bar.session = session
+	clock_bar.pause_menu = _pause
+	add_child(clock_bar)
+	if not session.clock_forfeit.is_connected(_on_clock_forfeit):
+		session.clock_forfeit.connect(_on_clock_forfeit)
+
+
+func _unmount_turn_clock() -> void:
+	if session != null and is_instance_valid(session) and session.clock_forfeit.is_connected(_on_clock_forfeit):
+		session.clock_forfeit.disconnect(_on_clock_forfeit)
+
+
+## A seat ran out of time too many actions in a row: it concedes (either seat).
+func _on_clock_forfeit(slot: int) -> void:
+	if local_slot < 0 or battle == null or battle.is_over or slot < 0 or slot > 1:
+		return
+	_conceded_text = "You ran out of time too many turns in a row." if slot == local_slot \
+		else "Your opponent ran out of time and forfeited."
+	battle.concede(slot)
 
 
 func _staged_request() -> DuelRequest:
@@ -214,7 +248,7 @@ func _present(rec: Dictionary) -> void:
 	var who: String = actor.get_display_name() if actor != null and is_instance_valid(actor) else "The foe"
 	hud.refresh()
 	if int(cmd.get(NetProtocol.KEY_TYPE, -1)) == NetProtocol.Action.WAIT:
-		hud.narrate("%s can't move!" % who)
+		hud.narrate("Time's up! %s passes." % who if NetProtocol.is_timeout(cmd) else "%s can't move!" % who)
 		await _beat(BEAT_PASS)
 		return
 	var move: MoveResource = rec.get("move")

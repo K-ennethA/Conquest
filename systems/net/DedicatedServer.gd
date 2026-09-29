@@ -11,7 +11,8 @@ class_name DedicatedServer
 ##         [--map res://game/maps/resources/default_skirmish.tres] \
 ##         [--turn-system traditional|speed_first] [--rng all|server] \
 ##         [--max-matches N] [--end-after-actions N] [--transport enet] \
-##         [--reveal-timeout SECONDS]
+##         [--reveal-timeout SECONDS] [--turn-clock rapid|standard|relaxed]
+##         [--afk-limit N] [--turn-clock-ms MS]
 ##
 ## It hosts [NetSession] in dedicated mode: the first two clients are seated as
 ## slots 0 and 1, ready up, and the match auto-starts. The battle runs through
@@ -29,6 +30,11 @@ class_name DedicatedServer
 ## [method MapCatalog.network_eligible] accepts are played: an offline-only map
 ## (AI neutral faction / AI-driven Siege creeps) is refused at --map and dropped
 ## from a leader pick.
+##
+## TURN CLOCK (every online match has one; see NetTurnClock): the server is the clock's
+## authority. --turn-clock FIXES the preset (the leader's pick is ignored; without it the
+## leader picks, default Standard); --afk-limit sets how many consecutive expiries forfeit
+## (default 3, 0 = never); --turn-clock-ms (testing) gives every timed turn that many ms.
 
 const DEFAULT_MAP := "res://game/maps/resources/default_skirmish.tres"
 ## Seconds the finished battle stays loaded before the server closes the match
@@ -48,6 +54,8 @@ var _last_seq: int = 0   # survives NetSession's reset when a match is aborted
 var duel: bool = false
 ## Duel lobby: each seat's announced combatant {slot: character_id}.
 var _picks: Dictionary = {}
+## Timeouts the clock played this match (logged on the FINAL line).
+var _timeouts: int = 0
 
 
 ## Parse [param args] (OS.get_cmdline_user_args()) and start listening.
@@ -66,6 +74,16 @@ func start(args: PackedStringArray, session: NetSessionNode) -> Error:
 	_ns.transport = t
 	if opts.has("reveal_timeout"):
 		_ns.reveal_timeout_ms = int(float(opts["reveal_timeout"]) * 1000.0)
+	if opts.has("turn_clock"):
+		if not NetTurnClock.is_preset(String(opts["turn_clock"]).to_lower()):
+			_log("unknown --turn-clock '%s' (use %s)" % [str(opts["turn_clock"]), " | ".join(NetTurnClock.PRESET_IDS)])
+			return ERR_INVALID_PARAMETER
+		_ns.turn_clock_preset = String(opts["turn_clock"]).to_lower()
+		_ns.turn_clock_locked = true
+	if opts.has("afk_limit"):
+		_ns.afk_limit = NetTurnClock.normalise_afk_limit(int(opts["afk_limit"]))
+	if opts.has("turn_clock_ms"):
+		_ns.turn_clock_override_ms = maxi(0, int(opts["turn_clock_ms"]))
 	var cfg := {}
 	duel = String(opts.get("mode", NetProtocol.MODE_CONQUEST)) == NetProtocol.MODE_DUEL
 	_ns.lobby_mode = NetProtocol.MODE_DUEL if duel else NetProtocol.MODE_CONQUEST
@@ -116,6 +134,10 @@ func start(args: PackedStringArray, session: NetSessionNode) -> Error:
 	_ns.action_applied.connect(func(a, _r): _last_seq = int(a.get(NetProtocol.KEY_SEQ, 0)))
 	_ns.match_aborted.connect(_on_match_aborted)
 	_ns.cheat_detected.connect(func(pid, reason): _log("RANDOMNESS VERIFICATION FAILED: peer %d (%s)" % [pid, reason]))
+	_ns.turn_timed_out.connect(func(slot, _a, strikes):
+		_timeouts += 1
+		_log("turn clock ran out for slot %d (strike %d)" % [slot, strikes]))
+	_ns.clock_forfeit.connect(func(slot): _log("slot %d forfeits on time" % slot))
 	if PlayerManager:
 		PlayerManager.game_state_changed.connect(_on_game_state_changed)
 	if duel:
@@ -203,6 +225,12 @@ func _on_match_started(config: Dictionary) -> void:
 	_in_match = true
 	_finish_at = -1
 	_last_seq = 0
+	_timeouts = 0
+	_log("turn clock: %s (%s), forfeit after %d consecutive expiries" % [
+		NetTurnClock.label(config.get(NetTurnClock.CONFIG_PRESET, "")),
+		NetTurnClock.describe(config.get(NetTurnClock.CONFIG_PRESET, "")) if _ns.turn_clock_override_ms <= 0 \
+			else "%d ms per timed turn (test override)" % _ns.turn_clock_override_ms,
+		int(config.get(NetTurnClock.CONFIG_AFK_LIMIT, 0))])
 	if DuelNetConfig.is_duel(config):
 		_log("match %d starting: DUEL %s vs %s on %s, players %s, rng contributors %s" % [
 			matches_done + 1, DuelNetConfig.unit_of(config, 0), DuelNetConfig.unit_of(config, 1),
@@ -236,7 +264,7 @@ func _on_match_aborted(reason: String) -> void:
 func _log_final(reason: String) -> void:
 	var rules = GameModeManager.get_rules() if GameModeManager else null
 	var digest: int = int(rules.state_digest()) if rules != null else 0
-	_log("FINAL match=%d reason=%s seq=%d digest=%d" % [matches_done + 1, reason, _last_seq, digest])
+	_log("FINAL match=%d reason=%s seq=%d digest=%d timeouts=%d" % [matches_done + 1, reason, _last_seq, digest, _timeouts])
 
 
 func _after_match() -> void:

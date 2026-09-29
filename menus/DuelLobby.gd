@@ -40,6 +40,8 @@ var ready_button: Button
 var unit_card: Button
 var stage_option: OptionButton
 var weather_option: OptionButton
+## The online TURN CLOCK preset (NetTurnClock; every online duel is timed per action).
+var turn_clock_option: OptionButton
 
 var _ids: Array[StringName] = []
 var _pick_index: int = 0
@@ -98,7 +100,8 @@ func initialize(as_host: bool, player_name: String) -> void:
 	if is_host and _session_ok() and not _dedicated():
 		# The host's defaults are the lobby's config from the start (the joiner mirrors them).
 		net_session.set_match_config({DuelNetConfig.KEY_STAGE: DuelNetConfig.DEFAULT_STAGE,
-			DuelNetConfig.KEY_WEATHER: DuelNetConfig.DEFAULT_WEATHER})
+			DuelNetConfig.KEY_WEATHER: DuelNetConfig.DEFAULT_WEATHER,
+			NetTurnClock.CONFIG_PRESET: NetTurnClock.DEFAULT_PRESET})
 	_refresh_settings_enabled()
 	_refresh_players()
 	_update_ready_button()
@@ -202,6 +205,7 @@ func _try_start() -> void:
 	var final := DuelNetConfig.final_config(picks(),
 		String(cfg.get(DuelNetConfig.KEY_STAGE, DuelNetConfig.DEFAULT_STAGE)),
 		String(cfg.get(DuelNetConfig.KEY_WEATHER, DuelNetConfig.DEFAULT_WEATHER)))
+	final[NetTurnClock.CONFIG_PRESET] = turn_clock_pick()
 	if net_session.start_match(final):
 		_start_requested = true
 		MenuKit.set_status(_status, "Starting the duel...", "ok")
@@ -247,6 +251,10 @@ func _on_config_changed(config: Dictionary) -> void:
 	var wi := _weathers.find(weather)
 	if wi >= 0 and weather_option != null:
 		weather_option.select(wi)
+	var ci := NetTurnClock.PRESET_IDS.find(NetTurnClock.normalise_preset(config.get(NetTurnClock.CONFIG_PRESET, "")))
+	if ci >= 0 and turn_clock_option != null:
+		turn_clock_option.select(ci)
+		turn_clock_option.tooltip_text = NetTurnClock.describe(turn_clock_pick())
 	_mirroring = false
 	_refresh_settings_enabled()
 
@@ -257,7 +265,15 @@ func _on_settings_changed(_index: int) -> void:
 	net_session.set_match_config({
 		DuelNetConfig.KEY_STAGE: String(DuelSetup.STAGES[stage_option.selected][0]),
 		DuelNetConfig.KEY_WEATHER: String(_weathers[weather_option.selected]),
+		NetTurnClock.CONFIG_PRESET: turn_clock_pick(),
 	})
+
+
+## The picked turn clock preset id (NetTurnClock).
+func turn_clock_pick() -> String:
+	if turn_clock_option == null or turn_clock_option.selected < 0:
+		return NetTurnClock.DEFAULT_PRESET
+	return NetTurnClock.PRESET_IDS[turn_clock_option.selected]
 
 
 # --- UI -------------------------------------------------------------------------------------
@@ -363,6 +379,10 @@ func _build_ui() -> void:
 		return wr.display_name if wr != null else String(w)))
 	stage_option.item_selected.connect(_on_settings_changed)
 	weather_option.item_selected.connect(_on_settings_changed)
+	turn_clock_option = _option(opts, "Turn clock", NetTurnClock.PRESET_IDS.map(func(id): return NetTurnClock.label(id)))
+	turn_clock_option.select(NetTurnClock.PRESET_IDS.find(NetTurnClock.DEFAULT_PRESET))
+	turn_clock_option.tooltip_text = NetTurnClock.describe(NetTurnClock.DEFAULT_PRESET)
+	turn_clock_option.item_selected.connect(_on_settings_changed)
 
 	ready_button = MenuKit.button(READY_TEXT, MenuKit.PRIMARY, 260)
 	ready_button.name = "ReadyButton"
@@ -392,7 +412,7 @@ func _option(grid: GridContainer, caption: String, items: Array) -> OptionButton
 
 func _refresh_settings_enabled() -> void:
 	var on := settings_editable()
-	for o in [stage_option, weather_option]:
+	for o in [stage_option, weather_option, turn_clock_option]:
 		if o != null:
 			o.disabled = not on
 			o.tooltip_text = "" if on else "The host sets the stage and weather."

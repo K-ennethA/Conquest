@@ -2,7 +2,8 @@ extends Control
 
 class_name TurnTimer
 
-## Per-unit move clock readout for Speed First mode.
+## Per-unit move clock readout for Speed First mode -- and, ONLINE, the readout of the host's
+## turn clock ([NetTurnClock]) for every mode.
 ##
 ## A big remaining-seconds chip that appears only while a HUMAN unit's move clock is
 ## armed (see [SpeedFirstTurnSystem]). The turn system is NOT in the scene tree, so it
@@ -15,6 +16,13 @@ class_name TurnTimer
 ## numerals. Visual bands: calm gold (>10s) -> warning-gold pulse (5-10s) -> danger-red
 ## pulse + urgency with a soft per-second tick (<=5s); the band colours the numerals and the
 ## chip's edge. Pulse honours GameSettings animations/battle-speed.
+##
+## NETWORK MODE (a live online match): the chip follows [signal NetSession.turn_clock_changed]
+## instead -- the HOST's deadline, shown to BOTH seats (a caption says whose clock it is:
+## YOUR TURN / OPPONENT) -- and never expires anything itself: at zero it just reads 0 until
+## the host's timeout arrives ("TIME'S UP" flashes on [signal NetSession.turn_timed_out]). The
+## per-second tick plays only on the local seat's own clock. The local Speed First clock never
+## arms online (SpeedFirstTurnSystem), so the two never fight over the chip.
 
 # Band thresholds (seconds remaining).
 const BAND_AMBER_AT := 10.0   # <= this: start the warning pulse
@@ -34,6 +42,21 @@ const TICK_SFX := &"sfx_ui_click"
 const TICK_VOLUME_DB := -8.0
 
 var turn_system: SpeedFirstTurnSystem = null
+## The network session whose turn clock this chip shows (default: the NetSession autoload;
+## tests inject one before adding the chip).
+var session: Node = null
+
+const CAPTION_MINE := "YOUR TURN"
+const CAPTION_THEIRS := "OPPONENT"
+const CAPTION_TIMEOUT := "TIME'S UP"
+## How long the TIME'S UP caption holds (ms).
+const TIMEOUT_FLASH_MS := 1600
+
+# Network mode (see class docs).
+var _net_mode: bool = false
+var _net_mine: bool = false
+var _flash_until: int = 0
+var _caption: Label = null
 
 # Countdown state.
 var _running: bool = false
@@ -59,6 +82,8 @@ func _ready() -> void:
 	_build_ui()
 	visible = false
 	set_process(false)
+
+	_wire_session()
 
 	# Track the active turn system exactly like TurnQueue does, and hook it now if one
 	# is already active (this HUD can be mounted after the match starts).
@@ -100,6 +125,80 @@ func _build_ui() -> void:
 	ConquestTheme.keep_style(_label)
 	add_child(_label)
 
+	# Whose clock (network mode only): a small caps line under the numerals.
+	_caption = Label.new()
+	_caption.name = "TimerCaption"
+	_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_caption.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	_caption.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_caption.offset_bottom = -4
+	_caption.add_theme_font_size_override("font_size", 12)
+	_caption.add_theme_color_override("font_color", ConquestTheme.GOLD)
+	ConquestTheme.keep_style(_caption)
+	_caption.visible = false
+	add_child(_caption)
+
+# --- Network turn clock -----------------------------------------------------
+
+func _wire_session() -> void:
+	if session == null and is_inside_tree():
+		session = get_node_or_null("/root/NetSession")
+	if session == null:
+		return
+	if session.has_signal(&"turn_clock_changed") and not session.is_connected(&"turn_clock_changed", _on_net_clock):
+		session.connect(&"turn_clock_changed", _on_net_clock)
+	if session.has_signal(&"turn_timed_out") and not session.is_connected(&"turn_timed_out", _on_net_timed_out):
+		session.connect(&"turn_timed_out", _on_net_timed_out)
+	# Mounted mid-match: show the clock that is already running.
+	if session.has_method("turn_clock"):
+		var live: Dictionary = session.turn_clock()
+		if not live.is_empty():
+			_on_net_clock(live)
+
+func _exit_tree() -> void:
+	if session != null and is_instance_valid(session):
+		if session.has_signal(&"turn_clock_changed") and session.is_connected(&"turn_clock_changed", _on_net_clock):
+			session.disconnect(&"turn_clock_changed", _on_net_clock)
+		if session.has_signal(&"turn_timed_out") and session.is_connected(&"turn_timed_out", _on_net_timed_out):
+			session.disconnect(&"turn_timed_out", _on_net_timed_out)
+
+func _local_slot() -> int:
+	return int(session.local_slot()) if session != null and session.has_method("local_slot") else -1
+
+## The host (re)opened a timed turn -- or stopped the clock ({}).
+func _on_net_clock(clock: Dictionary) -> void:
+	if clock.is_empty() or int(clock.get("slot", -1)) < 0:
+		if _net_mode:
+			_net_mode = false
+			_caption.visible = false
+			_stop_and_hide()
+		return
+	_net_mode = true
+	_net_mine = int(clock.get("slot", -1)) == _local_slot()
+	_armed_unit = null
+	_remaining = maxf(0.0, float(clock.get("remaining_ms", 0)) / 1000.0)
+	_running = true
+	_pulse_t = 0.0
+	_last_tick_whole = int(ceil(_remaining))
+	_last_shown = -1
+	_band = -1
+	custom_minimum_size = Vector2(140, 70)
+	_label.offset_bottom = -14
+	_caption.visible = true
+	if Time.get_ticks_msec() >= _flash_until:
+		_caption.text = CAPTION_MINE if _net_mine else CAPTION_THEIRS
+	modulate = Color(1, 1, 1, 1)
+	visible = true
+	set_process(true)
+	_refresh_visual()
+
+## A host timeout was applied: flash TIME'S UP (the next clock keeps the caption until it ends).
+func _on_net_timed_out(_slot: int, _action: Dictionary, _strikes: int) -> void:
+	_flash_until = Time.get_ticks_msec() + TIMEOUT_FLASH_MS
+	if _caption != null:
+		_caption.text = CAPTION_TIMEOUT
+
 # --- Turn-system wiring -----------------------------------------------------
 
 func _on_turn_system_activated(system: TurnSystemBase) -> void:
@@ -120,11 +219,14 @@ func _on_turn_system_activated(system: TurnSystemBase) -> void:
 		if turn_system.turn_timer_active and turn_system.turn_timer_unit != null:
 			_on_timer_armed(turn_system.turn_timer_unit, turn_system.turn_timer_seconds)
 	else:
-		# Non-speed system -> no clock for this HUD.
+		# Non-speed system -> no LOCAL clock for this HUD (the network clock may still run).
 		turn_system = null
-		_stop_and_hide()
+		if not _net_mode:
+			_stop_and_hide()
 
 func _on_timer_armed(unit: Unit, seconds: float) -> void:
+	if _net_mode:
+		return  # online the host's clock owns the chip
 	_armed_unit = unit
 	_remaining = maxf(0.0, seconds)
 	_running = true
@@ -138,6 +240,8 @@ func _on_timer_armed(unit: Unit, seconds: float) -> void:
 	_refresh_visual()
 
 func _on_timer_disarmed() -> void:
+	if _net_mode:
+		return
 	_stop_and_hide()
 
 func _stop_and_hide() -> void:
@@ -151,6 +255,9 @@ func _stop_and_hide() -> void:
 
 func _process(delta: float) -> void:
 	if not _running:
+		return
+	if _net_mode:
+		_process_net(delta)
 		return
 	_remaining -= delta
 	if _remaining <= 0.0:
@@ -172,6 +279,20 @@ func _process(delta: float) -> void:
 	_pulse_t += delta * _pulse_speed()
 	_refresh_visual()
 
+## Network mode: mirror the session's deadline (no drift, no local expiry -- at zero the chip
+## holds 0 until the host's timeout lands).
+func _process_net(delta: float) -> void:
+	if session != null and session.has_method("turn_clock_remaining_ms"):
+		var ms: int = int(session.turn_clock_remaining_ms())
+		_remaining = maxf(0.0, float(ms) / 1000.0) if ms >= 0 else maxf(0.0, _remaining - delta)
+	else:
+		_remaining = maxf(0.0, _remaining - delta)
+	if _flash_until > 0 and Time.get_ticks_msec() >= _flash_until:
+		_flash_until = 0
+		_caption.text = CAPTION_MINE if _net_mine else CAPTION_THEIRS
+	_pulse_t += delta * _pulse_speed()
+	_refresh_visual()
+
 ## Rebuild the readout + colour for the current remaining time. Cheap: the label text is
 ## only rewritten when its integer changes, and the stylebox colour is set every call but
 ## from a constant (no allocation).
@@ -180,7 +301,7 @@ func _refresh_visual() -> void:
 	if whole != _last_shown:
 		_last_shown = whole
 		if _label:
-			_label.text = str(whole)
+			_label.text = NetTurnClock.format_ms(whole * 1000) if _net_mode and whole >= 60 else str(whole)
 
 	var urgent: bool = _remaining <= BAND_URGENT_AT
 	var pulsing: bool = _remaining <= BAND_AMBER_AT
@@ -209,7 +330,7 @@ func _refresh_visual() -> void:
 		modulate = Color(1, 1, 1, 1)
 
 	# Soft per-second tick inside the urgency band.
-	if urgent and _remaining > 0.0 and whole != _last_tick_whole:
+	if urgent and _remaining > 0.0 and whole != _last_tick_whole and (not _net_mode or _net_mine):
 		_last_tick_whole = whole
 		_play_tick()
 
@@ -240,3 +361,23 @@ func is_running() -> bool:
 ## Seconds currently remaining on the readout (0 when idle).
 func seconds_left() -> float:
 	return _remaining if _running else 0.0
+
+## True while the chip shows the ONLINE host clock.
+func is_net_mode() -> bool:
+	return _net_mode
+
+## True when the shown network clock is the local seat's.
+func is_own_clock() -> bool:
+	return _net_mode and _net_mine
+
+## The numerals as drawn ("20", "1:35").
+func readout_text() -> String:
+	return _label.text if _label != null else ""
+
+## The caption line (YOUR TURN / OPPONENT / TIME'S UP), "" outside network mode.
+func caption_text() -> String:
+	return _caption.text if _caption != null and _caption.visible else ""
+
+## The urgency band drawn (0 calm, 1 warning, 2 urgent -- under [constant BAND_URGENT_AT]).
+func band() -> int:
+	return _band

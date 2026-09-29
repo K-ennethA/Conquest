@@ -61,7 +61,10 @@ const ACTION_MAX := 5
 ##   3: USE_ITEM (battle consumables -- the duel's Items action)
 ##   4: lobby MODE (conquest / duel) in the hello + match config, the duel match-config
 ##      keys (duel_units / duel_stage / duel_weather) and REJECT_MODE_MISMATCH
-const PROTOCOL_VERSION := 4
+##   5: the online TURN CLOCK -- the host's clock broadcast, host-issued timeout actions
+##      (KEY_TIMEOUT), the attach report, the clock forfeit and the turn_clock / afk_limit
+##      config keys (see NetTurnClock)
+const PROTOCOL_VERSION := 5
 
 ## What a network lobby plays (DECISIONS.md #32). Fixed per lobby: the host (or a dedicated
 ## server's --mode) decides it, the joiner's hello names the mode it came for, and a mismatch
@@ -98,6 +101,10 @@ const KEY_SEQ := "seq"          ## int, host-assigned order (0 on the wire from 
 ## playback rolls exactly what the match rolled.
 const KEY_RNG := "rng"
 const KEY_PV := "pv"            ## int, PROTOCOL_VERSION stamped on a resolved (recorded) command
+## bool, true on an action the HOST issued because the acting seat's turn clock ran out
+## ([NetTurnClock]). Only the host may issue one: a client intent carrying it has the key
+## stripped, and clients check a timeout is the rules' canonical one and never early.
+const KEY_TIMEOUT := "timeout"
 
 ## Payload keys.
 const K_UNIT := "unit_id"
@@ -266,6 +273,11 @@ static func is_resolved(action: Variant) -> bool:
 	return action.has(KEY_SEQ) and typeof(action[KEY_SEQ]) == TYPE_INT and int(action[KEY_SEQ]) > 0 \
 		and action.has(KEY_RNG) and typeof(action[KEY_RNG]) == TYPE_INT \
 		and int(action.get(KEY_PV, 0)) == PROTOCOL_VERSION
+
+
+## True when [param action] is a host-issued turn-clock TIMEOUT (see [constant KEY_TIMEOUT]).
+static func is_timeout(action: Variant) -> bool:
+	return action is Dictionary and bool((action as Dictionary).get(KEY_TIMEOUT, false))
 
 
 ## Stamp [param seq], the per-action [param rng_seed] and [constant PROTOCOL_VERSION]
@@ -462,6 +474,8 @@ const INTENT_MUST_PASS := "must_pass"
 const INTENT_DUEL_OVER := "duel_over"
 ## Not offered online (items and running are local / story duel actions).
 const INTENT_NOT_ONLINE := "not_allowed_online"
+## A host-issued timeout that is not the rules' canonical timeout action for the seat.
+const INTENT_TIMEOUT_MISMATCH := "timeout_mismatch"
 
 ## Short label for the command an action carries, for a player-facing line ("Move rejected").
 ## [param action] may be anything at all -- a malformed payload off the wire, or null -- so an

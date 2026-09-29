@@ -638,7 +638,8 @@ func _wire_net_session() -> void:
 	var ns = _net_session()
 	if ns == null:
 		return
-	for pair in [["opponent_forfeited", _on_opponent_forfeited], ["opponent_left", _on_opponent_left]]:
+	for pair in [["opponent_forfeited", _on_opponent_forfeited], ["opponent_left", _on_opponent_left],
+			["clock_forfeit", _on_clock_forfeit]]:
 		if ns.has_signal(pair[0]) and not ns.is_connected(pair[0], pair[1]):
 			ns.connect(pair[0], pair[1])
 
@@ -648,11 +649,17 @@ func _exit_tree() -> void:
 	var ns = _net_session()
 	if ns == null:
 		return
-	for pair in [["opponent_forfeited", _on_opponent_forfeited], ["opponent_left", _on_opponent_left]]:
+	for pair in [["opponent_forfeited", _on_opponent_forfeited], ["opponent_left", _on_opponent_left],
+			["clock_forfeit", _on_clock_forfeit]]:
 		if ns.has_signal(pair[0]) and ns.is_connected(pair[0], pair[1]):
 			ns.disconnect(pair[0], pair[1])
 
 func _on_opponent_forfeited(slot: int) -> void:
+	_eliminate_absent_players(slot)
+
+## A seat ran out of time too many turns in a row (NetSession's turn clock) -- possibly THIS
+## one: that side is defeated, exactly like a forfeit (idempotent with opponent_forfeited).
+func _on_clock_forfeit(slot: int) -> void:
 	_eliminate_absent_players(slot)
 
 func _on_opponent_left() -> void:

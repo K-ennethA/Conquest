@@ -24,6 +24,13 @@ extends Node
 ## channel (DuelNetConfig.MSG_PICK) before readying; a hosting bot folds both picks into the
 ## start ([method DuelNetConfig.final_config]). On its turn it submits what the duel brain
 ## ([method DuelBattle.decide_for], NORMAL -- deterministic) would pick, or its forced WAIT.
+##
+## TURN CLOCK: the bot respects the host's clock -- when little time is left on its own clock
+## ([constant CLOCK_MARGIN_MS]) it plays the safe move (end the turn / wait) instead of
+## deliberating. [code]--idle-turns N[/code] makes it sit out its first N timed turns so the
+## HOST times it out (the idle-bot check); a hosting bot also takes [code]--turn-clock
+## rapid|standard|relaxed[/code], [code]--turn-clock-ms MS[/code] and [code]--afk-limit N[/code].
+## The FINAL line counts the timeouts applied in the match ([code]timeouts=K[/code]).
 
 var bot_name := "Bot"
 var _ns: NetSessionNode = null
@@ -43,6 +50,14 @@ var _duel := false
 var _unit := ""
 ## Hosting duel bot: the seats' announced units {slot: id}.
 var _picks: Dictionary = {}
+## --idle-turns: timed turns of ours still to sit out (the host times them out).
+var _idle_turns := 0
+## The clock key we are sitting out ("" = none).
+var _idle_key := ""
+## Timeouts applied in this match (any seat).
+var _timeouts := 0
+## Play the safe move when our own clock has less than this left.
+const CLOCK_MARGIN_MS := 1200
 
 
 func start(args: PackedStringArray) -> void:
@@ -52,6 +67,10 @@ func start(args: PackedStringArray) -> void:
 	_ns = get_node("/root/NetSession")
 	_duel = String(opts.get("mode", NetProtocol.MODE_CONQUEST)) == NetProtocol.MODE_DUEL
 	_unit = String(opts.get("unit", ""))
+	_idle_turns = maxi(0, int(opts.get("idle_turns", 0)))
+	_ns.turn_timed_out.connect(func(slot, _a, strikes):
+		_timeouts += 1
+		_log("timeout: slot %d ran out of time (strike %d)" % [slot, strikes]))
 	_ns.lobby_mode = NetProtocol.MODE_DUEL if _duel else NetProtocol.MODE_CONQUEST
 	_ns.lobby_message.connect(func(t, data, from_slot):
 		if t == DuelNetConfig.MSG_PICK and from_slot >= 0:
@@ -80,6 +99,10 @@ func start(args: PackedStringArray) -> void:
 	if opts.has("host"):
 		# PLAYER-HOSTED: this bot is the listen server AND seat 0.
 		_host_map = String(opts.get("map", "res://game/maps/resources/default_skirmish.tres"))
+		_ns.turn_clock_preset = NetTurnClock.normalise_preset(opts.get("turn_clock", NetTurnClock.DEFAULT_PRESET))
+		_ns.turn_clock_override_ms = int(opts.get("turn_clock_ms", 0))
+		if opts.has("afk_limit"):
+			_ns.afk_limit = NetTurnClock.normalise_afk_limit(int(opts["afk_limit"]))
 		err = _ns.host_game(bot_name, port)
 		if err == OK:
 			if _duel:
@@ -129,11 +152,36 @@ func _process(_delta: float) -> void:
 	# it is our turn (avoids racing the deferred auto end-of-turn).
 	if _busy or _ns.has_pending_actions() or not GameModeManager.is_my_turn() or not _ns.is_my_turn():
 		return
+	if _sitting_out():
+		return
 	var intent := _choose(rules, _ns.local_slot())
+	# Respect the clock: with (almost) no time left, play the safe move rather than deliberate.
+	var left := _ns.turn_clock_remaining_ms()
+	if left >= 0 and left < CLOCK_MARGIN_MS and _ns.turn_clock_slot() == _ns.local_slot():
+		var safe: Dictionary = rules.timeout_action(_ns.local_slot()) if rules.has_method("timeout_action") else {}
+		if not safe.is_empty() and rules.validate_intent(safe, _ns.local_slot()) == "":
+			intent = safe
 	if intent.is_empty():
 		return
 	_busy = true
 	_ns.submit_intent(intent)
+
+
+## --idle-turns: true while we sit out the current timed turn of ours (the host will time it
+## out). Each new clock of ours spends one idle turn until none are left.
+func _sitting_out() -> bool:
+	var clock: Dictionary = _ns.turn_clock()
+	if clock.is_empty() or int(clock.get("slot", -1)) != _ns.local_slot():
+		return false
+	var key := "%s@%d" % [String(clock.get("key", "")), int(clock.get("seq", 0))]
+	if key == _idle_key:
+		return true
+	if _idle_turns <= 0:
+		return false
+	_idle_turns -= 1
+	_idle_key = key
+	_log("idling through this turn (%d more to sit out)" % _idle_turns)
+	return true
 
 
 ## Duel bot: announce this seat's combatant on the lobby channel (and remember our own).
@@ -237,7 +285,7 @@ func _finish(reason = "") -> void:
 		return
 	_done = true
 	var bad := _desyncs > 0 or _cheats > 0 or String(reason).contains("verification")
-	_log("FINAL reason=%s seq=%d digest=%d desyncs=%d" % [str(reason), _last_seq, _last_digest, _desyncs])
+	_log("FINAL reason=%s seq=%d digest=%d desyncs=%d timeouts=%d" % [str(reason), _last_seq, _last_digest, _desyncs, _timeouts])
 	await get_tree().create_timer(0.3).timeout
 	get_tree().quit(2 if bad else 0)
 
