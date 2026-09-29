@@ -72,6 +72,8 @@ var _hero: HeroResource = null
 var _runner: StoryScriptRunner = StoryScriptRunner.new()
 var _host = null
 var _area_cache: Dictionary = {}
+## Prepares the areas the current one's warps lead to in the background (AreaPrewarmer).
+var _prewarmer: AreaPrewarmer = AreaPrewarmer.new()
 
 # --- The battle in flight -------------------------------------------------------
 var _active_request: BattleRequest = null
@@ -119,6 +121,8 @@ func register_debug_duel_stub() -> void:
 
 
 func _exit_tree() -> void:
+	# Worker tasks must be waited for before the engine tears down.
+	_prewarmer.finish(self)
 	# The stub launcher is a Callable bound to this node; a static holding it past shutdown
 	# crashes the engine on exit. A real launcher (another autoload) is left alone.
 	if DuelLauncher.is_stub():
@@ -128,6 +132,7 @@ func _exit_tree() -> void:
 func _process(delta: float) -> void:
 	if _state != null and not get_tree().paused:
 		_state.play_seconds += delta
+	_prewarmer.poll(self)
 
 
 func _notification(what: int) -> void:
@@ -245,6 +250,7 @@ func end_session() -> void:
 	if _state != null and _slot > 0 and _active_request == null:
 		save_game()
 	_disarm_battle()
+	_prewarmer.release_held()
 	_state = null
 	_slot = 0
 	_host = null
@@ -308,6 +314,28 @@ func load_area(area_id: String) -> OverworldAreaResource:
 	if a != null:
 		_area_cache[area_id] = a
 	return a
+
+
+## True when area [param area_id] is already loaded (no disk read needed).
+func has_area_cached(area_id: String) -> bool:
+	return _area_cache.has(area_id)
+
+
+## Take an area resource loaded elsewhere (AreaPrewarmer's background load) into the cache.
+func adopt_area(area_id: String, a: OverworldAreaResource) -> void:
+	if a != null and not _area_cache.has(area_id):
+		_area_cache[area_id] = a
+
+
+## Start preparing, in the background, every area [param area]'s warps lead to (the overworld
+## calls this once it has booted an area). See [AreaPrewarmer].
+func prewarm_neighbours(area: OverworldAreaResource) -> void:
+	_prewarmer.request_neighbours(area, _state)
+
+
+## The background area prewarmer (tests / perf tools).
+func prewarmer() -> AreaPrewarmer:
+	return _prewarmer
 
 
 func current_area() -> OverworldAreaResource:

@@ -379,6 +379,43 @@ Classic costs the partner, a full Cup run → prize + title + the champion, save
   members; party > squad needs the picker (and a Party-screen reorder) in M2.
 - Profile points still accrue on the story tactical end screen (existing behaviour).
 
+## Area travel & loading
+
+A warp still swaps the whole `OverworldScene` behind the `SceneFade` (save → fade out → new scene
+builds the area → fade in), but the heavy parts of that build are now cached and prepared ahead:
+
+- **Tile geometry** (`TileMeshCache`): `LowPolyTileBuilder` / `PavedTileBuilder` meshes are pure
+  functions of (style, world cell) and every area starts at the world origin, so each cell is
+  built once per process and shared (it was ~0.5 ms of GDScript per tile per load). Capped at
+  `TileMeshCache.MAX_CELLS` (~35 KB per cell; the four areas use ~1.35 k cells).
+- **Neighbour prewarm** (`AreaPrewarmer`, polled by `StoryController._process`): once an area is
+  up, every area its *present* warps lead to gets its `area.tres`, tile scenes and NPC roster
+  models loaded with `ResourceLoader.load_threaded_request`, then its tile geometry
+  (`MapLoader.prewarm_tile_geometry`) and world skirt (`WorldSkirt.prewarm`) computed on the
+  WorkerThreadPool. One short step per frame; a warp taken before it finishes waits for the
+  in-flight task instead of redoing it. `GameWorld.tscn` and `DuelStage.tscn` are then loaded in
+  the background and held for the session (windowed only; released on Title).
+- **World skirt / terrain mask**: cached by `TerrainMask.content_key` (board size + tile layout);
+  the skirt is pure data computed off-thread and mounted from shared meshes / MultiMesh buffers.
+- **Board lookups**: `MapResource.build_tile_lookup` replaces the per-cell linear
+  `get_tile_at_position` scans (MapLoader, TerrainMask, BoardAdapter) — they were O(cells²).
+- **Fewer nodes**: overworld tiles drop the unused per-tile `StaticBody3D` (taps use the ground
+  plane; `MapLoader.tile_collision_enabled`, battles keep it), and every tile builds its effect
+  particles / overlay only when an effect lands (~10 → ~6 nodes per cell).
+- `SceneFade` holds black two frames after a scene lands before fading in, so a heavy arrival
+  frame no longer swallows the fade.
+
+Measured headless (CPU only, same machine, instantiate + `_ready` of the new scene): Oakvale →
+Mossway ~790 ms → ~60 ms when prewarmed (~160-250 ms if you leave the instant you arrive),
+Mossway → Crownhaven ~1.4 s → ~100-140 ms; node count per area −40 %. Guarded by
+`tests/integration/test_area_load_perf.gd` (node budgets, "a prewarmed area computes no tile
+geometry on the main thread", worker == inline geometry, cache keys).
+
+Content rules: keep areas ≤ ~32×32 (a tile is still ~6 nodes; batching tiles into MultiMesh /
+chunks is the next step if areas grow), never give a tile scene per-instance random state that
+is not a function of its cell (the cache would share it), and route new warp kinds through a
+`WarpEntity` (scripted `WarpCommand` warps are not prewarmed).
+
 ## Deviations from OVERWORLD.md (M1)
 
 - Hero = a dedicated `HeroResource` (DECISIONS.md #4) with Vineweave's model as the placeholder.

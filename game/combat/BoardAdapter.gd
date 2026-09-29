@@ -153,9 +153,10 @@ func set_links(links: Array) -> void:
 func configure_from_map(map: MapResource) -> BoardAdapter:
 	var registry := {}
 	var present := {}
+	var lookup: Dictionary = map.build_tile_lookup()
 	for x in range(map.width):
 		for y in range(map.height):
-			var res0 := MapLoader.resolve_tile_resource_for_entry(map.get_tile_at_position(Vector2i(x, y)))
+			var res0 := MapLoader.resolve_tile_resource_for_entry(MapResource.tile_from_lookup(lookup, Vector2i(x, y)))
 			if res0 != null:
 				registry[Vector3i(x, y, 0)] = res0
 	for entry in map.tile_layout:

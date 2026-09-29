@@ -78,3 +78,13 @@ area reads as a gentle plateau), continuing edge biomes (rivers / moats / lava
 straight out, roads a few cells, grass elsewhere), with MultiMesh trees, bushes
 and rocks. It has no collision, is never registered with CombatServices, and is
 skipped on the headless renderer.
+
+Computing it is ~350 ms of GDScript, so it is split into `WorldSkirt.compute`
+(pure data: surface arrays + MultiMesh transform buffers, thread-safe) and a cheap
+node mount. The data (and the meshes made from it) is cached per
+`TerrainMask.content_key` (board size + tile layout), and `WorldSkirt.prewarm`
+computes a neighbouring story area's skirt on the WorkerThreadPool. The terrain
+mask is cached the same way (`TerrainMask.mask_for`). Tile geometry from
+`LowPolyTileBuilder` / `PavedTileBuilder` is likewise built once per (style, cell)
+and shared (`TileMeshCache`) -- so a tile builder must stay a pure function of
+its style and cell.

@@ -69,6 +69,9 @@ func _ready() -> void:
 		return
 	_build_world()
 	_booted = true
+	# While the player walks here, the areas this one's warps lead to load + build their heavy
+	# parts in the background, so leaving is a short hitch behind the fade, not a freeze.
+	story.prewarm_neighbours(area)
 	# Method callable: the connection dies with this node, while the runner lives on.
 	if not story.runner().finished.is_connected(_on_script_finished):
 		story.runner().finished.connect(_on_script_finished)
@@ -104,6 +107,8 @@ func _build_world() -> void:
 	map_loader = MapLoader.new()
 	map_loader.name = "MapLoader"
 	map_loader.objective_markers_enabled = false
+	# Taps pick cells on the ground plane (OverworldCamera.ground_point): no per-tile colliders.
+	map_loader.tile_collision_enabled = false
 	add_child(map_loader)
 	map_loader.load_map(area.terrain, map_root)
 

@@ -57,23 +57,42 @@ enum HighlightType {
 	EFFECT_PREVIEW
 }
 
+## One highlight template for every tile ([method set_highlight] only ever duplicates it).
+static var _shared_highlight: StandardMaterial3D = null
+
+
 func _ready() -> void:
 	world_position = global_position
-	_setup_base_materials()
 	# If a TileResource was assigned before we entered the tree (MapLoader sets it
 	# prior to add_child, mirroring how units bind their character) or authored in
 	# the inspector, run the full bind now that the mesh exists so its data and
-	# material override the type-based default.
+	# material override the type-based default -- without first building the type-based
+	# default material it would immediately replace (hundreds of throwaway materials per board).
 	if tile_resource != null:
+		if mesh_instance:
+			highlight_material = _highlight_template()
 		set_tile_resource(tile_resource)
-	_setup_effect_system()
+	else:
+		_setup_base_materials()
+	# The effect particles / overlay are built on the FIRST effect ([method _ensure_effect_nodes]):
+	# almost every tile never carries one, and a GPUParticles3D + overlay mesh per cell was two
+	# extra nodes (and a particle system) on every tile of every board.
 	_connect_to_effect_manager()
+
+
+static func _highlight_template() -> StandardMaterial3D:
+	if _shared_highlight == null:
+		_shared_highlight = StandardMaterial3D.new()
+		_shared_highlight.albedo_color = Color(0.2, 0.8, 0.2, 0.7)  # Semi-transparent green
+		_shared_highlight.flags_transparent = true
+		_shared_highlight.flags_unshaded = true
+	return _shared_highlight
 
 func _setup_base_materials() -> void:
 	"""Initialize base materials for different tile types"""
 	if not mesh_instance:
 		return
-	
+
 	# Create base material based on tile type. Built as a local StandardMaterial3D
 	# (base_material is typed Material so it can also hold a ShaderMaterial style).
 	var mat := StandardMaterial3D.new()
@@ -111,15 +130,17 @@ func _setup_base_materials() -> void:
 			mat.emission = Color(0.3, 0.1, 0.3)
 	base_material = mat
 
-	# Create highlight material (for selection/movement preview)
-	highlight_material = StandardMaterial3D.new()
-	highlight_material.albedo_color = Color(0.2, 0.8, 0.2, 0.7)  # Semi-transparent green
-	highlight_material.flags_transparent = true
-	highlight_material.flags_unshaded = true
-	
+	# Highlight material (for selection/movement preview): the shared template.
+	highlight_material = _highlight_template()
+
 	# Apply base material
 	current_material = base_material
 	mesh_instance.material_override = current_material
+
+## Build the effect particles + overlay the first time an effect needs them.
+func _ensure_effect_nodes() -> void:
+	if effect_particles == null or effect_overlay == null:
+		_setup_effect_system()
 
 func _setup_effect_system() -> void:
 	"""Set up particle system and effect overlay for tile effects"""
@@ -383,10 +404,12 @@ func _update_effect_visuals() -> void:
 		# Reset to base material
 		current_material = base_material
 		mesh_instance.material_override = current_material
-		effect_overlay.visible = false
+		if effect_overlay:
+			effect_overlay.visible = false
 		if effect_particles:
 			effect_particles.emitting = false
 	else:
+		_ensure_effect_nodes()
 		# Use the most prominent effect for visuals
 		var primary_effect = _get_primary_effect()
 		_apply_effect_material(primary_effect)
