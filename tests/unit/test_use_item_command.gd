@@ -27,7 +27,8 @@ func test_a_malformed_use_item_is_rejected() -> void:
 
 func test_the_protocol_version_was_bumped_for_the_new_command() -> void:
 	assert_gte(NetProtocol.PROTOCOL_VERSION, 3, "protocol 3 = USE_ITEM (peers / replays on 2 refuse it)")
-	assert_gte(NetProtocol.PROTOCOL_VERSION, 4, "protocol 4 = lobby modes + the online duel config (5 = the online turn clock)")
+	assert_gte(NetProtocol.PROTOCOL_VERSION, 4, "protocol 4 = lobby modes + the online duel config")
+	assert_eq(NetProtocol.PROTOCOL_VERSION, 6, "protocol 6 = the online turn clock + party duels (SWITCH, duel_format / duel_teams)")
 
 
 func test_a_replay_log_round_trips_use_item() -> void:

@@ -178,6 +178,19 @@ func test_the_duel_lobby_offers_only_eligible_units() -> void:
 	await get_tree().process_frame
 	lobby.initialize(true, "Host")
 	assert_eq(lobby.pick, "vineweave", "the host's seat defaults to side A's unit")
+	assert_eq(lobby.format.id, DuelFormat.TRIO, "a new host plays Trio (online duels are team fights)")
+	assert_eq(lobby.team.size(), 3, "a team of three")
+	assert_eq(lobby.team[0], "vineweave", "led by the seat's default")
+	assert_not_null(lobby.format_option, "the host's format option")
+	lobby.select_team_slot(2)
+	var lead: String = lobby.team[0]
+	lobby.cycle_pick(1)
+	assert_eq(lobby.team[0], lead, "the carousel edits the selected slot, not the lead")
+	assert_eq(lobby.team.size(), 3, "still a team of three")
+	# Singles: the carousel walks the whole eligible roster for the one unit.
+	lobby.format = DuelFormat.preset(DuelFormat.SINGLES)
+	lobby.set_team(["vineweave"])
+	assert_eq(lobby.team.size(), 1)
 	var seen := {}
 	for i in range(DuelNetConfig.eligible_ids().size()):
 		assert_true(DuelNetConfig.is_eligible(lobby.pick), "%s is duel-eligible" % lobby.pick)
@@ -187,3 +200,6 @@ func test_the_duel_lobby_offers_only_eligible_units() -> void:
 	assert_eq(seen.size(), DuelNetConfig.eligible_ids().size(), "the carousel walks the whole eligible roster")
 	assert_not_null(lobby.ready_button, "a Ready button")
 	assert_not_null(lobby.stage_option, "the host's stage option")
+	# The player rows are rebuilt (queue_free) on every pick: let them go before GUT counts orphans.
+	await get_tree().process_frame
+	await get_tree().process_frame

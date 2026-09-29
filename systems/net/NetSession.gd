@@ -625,9 +625,10 @@ func start_match(final_config: Dictionary = {}) -> bool:
 		var extra := _sanitize_config(final_config) if dedicated else final_config.duplicate(true)
 		# The seats' duel picks belong to THIS match only (never the standing lobby config),
 		# and a locked server config still takes them: they are the players' own choice.
-		if extra.has(DuelNetConfig.KEY_UNITS):
-			per_match[DuelNetConfig.KEY_UNITS] = extra[DuelNetConfig.KEY_UNITS]
-			extra.erase(DuelNetConfig.KEY_UNITS)
+		for key in DuelNetConfig.PER_MATCH_KEYS:
+			if extra.has(key):
+				per_match[key] = extra[key]
+				extra.erase(key)
 		if not (dedicated and config_locked):
 			_config.merge(extra, true)
 	var cfg := _config.duplicate(true)

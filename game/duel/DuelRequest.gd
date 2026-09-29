@@ -59,6 +59,10 @@ var rules: Dictionary = {}
 ## consumables usable in battle (a standalone duel has none). Only known battle consumables survive
 ## the importer.
 var items: Dictionary = {}
+## The FORMAT ([DuelFormat]: team size, switching, KO replacement, item rules, species clause,
+## strength cap). Null = Singles (the strict 1v1 every older request meant). Each side's TEAM is
+## the first team_size members of its party ([method team_of]); the rest never take the field.
+var format: DuelFormat = null
 
 
 ## A standalone 1v1 of two roster ids.
@@ -66,6 +70,24 @@ static func standalone(player_id: StringName, foe_id: StringName, difficulty: in
 	var r := DuelRequest.new()
 	r.player_party.append(DuelCombatant.make(player_id))
 	r.foe_party.append(DuelCombatant.make(foe_id))
+	r.ai_difficulty = difficulty
+	return r
+
+
+## A standalone PARTY duel: [param player_ids] vs [param foe_ids] (lead first) under
+## [param p_format] (default: a custom format sized to the larger team, switching on).
+static func teams(player_ids: Array, foe_ids: Array, p_format: DuelFormat = null, difficulty: int = -1) -> DuelRequest:
+	var r := DuelRequest.new()
+	for id in player_ids:
+		r.player_party.append(DuelCombatant.make(StringName(String(id)), "%s_%d" % [String(id), r.player_party.size()]))
+	for id in foe_ids:
+		r.foe_party.append(DuelCombatant.make(StringName(String(id)), "%s_%d" % [String(id), r.foe_party.size()]))
+	if p_format == null:
+		p_format = DuelFormat.preset(DuelFormat.STORY)
+		p_format.id = DuelFormat.CUSTOM
+		p_format.display_name = "Custom"
+		p_format.team_size = clampi(maxi(player_ids.size(), foe_ids.size()), 1, DuelFormat.MAX_TEAM)
+	r.format = p_format
 	r.ai_difficulty = difficulty
 	return r
 
@@ -101,7 +123,8 @@ func resolved_station_tile_id() -> StringName:
 	return StringName(STAGES.get(stage_id, &"grass_plains"))
 
 
-## The ruleset this request names (the default when unknown).
+## The ruleset this request names (the default when unknown) -- the SHARED resource; a duel
+## plays on [method battle_rules] (the format applied to a copy).
 func load_ruleset() -> DuelRuleset:
 	var path: String = String(RULESETS.get(ruleset_id, ""))
 	if path != "" and ResourceLoader.exists(path):
@@ -109,6 +132,26 @@ func load_ruleset() -> DuelRuleset:
 		if rs is DuelRuleset:
 			return rs
 	return DuelRuleset.load_default()
+
+
+## The format in force ([member format], else Singles).
+func effective_format() -> DuelFormat:
+	return format if format != null else DuelFormat.preset(DuelFormat.SINGLES)
+
+
+## The rules this duel plays by: the named ruleset with the format written onto a private copy.
+func battle_rules() -> DuelRuleset:
+	return effective_format().apply_to(load_ruleset())
+
+
+## Side [param side]'s TEAM (0 = player, 1 = foe): the first team_size members of its party.
+func team_of(side: int) -> Array[DuelCombatant]:
+	var party: Array[DuelCombatant] = player_party if side == 0 else foe_party
+	var n: int = mini(party.size(), effective_format().team_size)
+	var out: Array[DuelCombatant] = []
+	for i in range(n):
+		out.append(party[i])
+	return out
 
 
 ## Semantic validation. Returns { success, reason } (rule 1: never logs).
@@ -129,6 +172,17 @@ func validate() -> Dictionary:
 		return {"success": false, "reason": "unknown_weather"}
 	if not RULESETS.has(ruleset_id):
 		return {"success": false, "reason": "unknown_ruleset"}
+	var f := effective_format()
+	var fcheck := f.validate()
+	if not bool(fcheck["success"]):
+		return fcheck
+	for side in 2:
+		var ids: Array = []
+		for c in team_of(side):
+			ids.append(String(c.character_id))
+		var problem := f.team_problem(ids, false)
+		if problem != "":
+			return {"success": false, "reason": problem}
 	return {"success": true, "reason": ""}
 
 
@@ -156,6 +210,7 @@ func to_dict() -> Dictionary:
 		"player_ai_difficulty": player_ai_difficulty,
 		"rules": rules.duplicate(),
 		"items": items.duplicate(),
+		"format": effective_format().to_dict(),
 	}
 
 
@@ -209,6 +264,11 @@ static func from_dict(d) -> Dictionary:
 	if not (raw_items is Dictionary):
 		return _fail("bad_items")
 	r.items = battle_item_counts(raw_items)
+	if d.has("format"):
+		var fres := DuelFormat.from_dict(d["format"])
+		if not bool(fres["success"]):
+			return _fail(String(fres["reason"]))
+		r.format = fres["format"]
 	var check := r.validate()
 	if not bool(check["success"]):
 		return _fail(String(check["reason"]))
@@ -268,10 +328,16 @@ static func from_battle_request(br) -> Dictionary:
 		weather = "clear"
 	var story_rules: Dictionary = {}
 	var raw_rules = br.get("rules", {})
+	# The story's duel FORMAT: the battle's own ("duel_format": a preset id), else the duel
+	# ruleset's story default -- the party lead plus up to (team size - 1) bench members.
+	var format_id: String = DuelRuleset.load_default().story_format
 	if raw_rules is Dictionary:
 		for key in ["can_flee", "can_befriend", "story_critical", "spar"]:
 			if (raw_rules as Dictionary).has(key):
 				story_rules[key] = bool(raw_rules[key])
+		var raw_format = (raw_rules as Dictionary).get("duel_format", "")
+		if (raw_format is String or raw_format is StringName) and DuelFormat.preset(String(raw_format)) != null:
+			format_id = String(raw_format)
 	var d := {
 		"kind": KIND_WILD if source == "wild" else (KIND_TRAINER if source == "trainer" else KIND_STORY),
 		"origin": ORIGIN_STORY,
@@ -284,6 +350,7 @@ static func from_battle_request(br) -> Dictionary:
 		"encounter_id": _str(br.get("encounter_id", "")),
 		"rules": story_rules,
 		"items": br.get("items", {}) if br.get("items", {}) is Dictionary else {},
+		"format": format_id if DuelFormat.preset(format_id) != null else DuelFormat.STORY,
 	}
 	return from_dict(d)
 

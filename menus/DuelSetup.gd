@@ -2,11 +2,14 @@ extends Control
 
 class_name DuelSetup
 
-## Online > Versus > Duel > Same device: the HOT-SEAT duel. Player 1 and Player 2 each pick a
-## unit, then the stage and the weather, then Fight (docs/design/DUEL_BATTLE.md §9,
+## Online > Versus > Duel > Same device: the HOT-SEAT duel. Choose the FORMAT (Singles 1v1 /
+## Trio 3v3 / Full 6v6 -- [DuelFormat]); Player 1 and Player 2 each build a TEAM of that size
+## (the slot chips under a card pick which member the carousel edits; no repeats under the
+## species clause), then the stage and the weather, then Fight (docs/design/DUEL_BATTLE.md §9,
 ## DECISIONS.md #32). Builds a VERSUS [DuelRequest] with a human on BOTH sides (no AI, no items,
 ## no running) and hands it to [code]DuelController.start[/code]; the stage prompts whichever
-## player's unit is up and the results card names the winner (Rematch / Change Units / Menu).
+## player's unit is up (switches and KO replacements included) and the results card names the
+## winner (Rematch / Change Units / Menu).
 ##
 ## This is the only menu route to a duel (DECISIONS.md #31: duels otherwise live in Story);
 ## the solo-vs-AI standalone duel left the menu -- [method DuelRequest.standalone] and the AI
@@ -26,10 +29,17 @@ const STAGES := [["meadow", "Meadow"], ["tall_grass", "Tall Grass"], ["grove", "
 const SIDE_NAMES := ["Player 1", "Player 2"]
 
 var _ids: Array[StringName] = []
+## The carousel position of each side's EDITED team slot.
 var _pick: Array[int] = [0, 1]
+## Each side's team (roster ids, lead first) and the slot its carousel edits.
+var _teams: Array = [[], []]
+var _edit: Array[int] = [0, 0]
+var _format_id: String = DuelFormat.SINGLES
 var _cards: Array = [null, null]
+var _slot_rows: Array = [null, null]
 var _stage_opt: OptionButton
 var _weather_opt: OptionButton
+var _format_opt: OptionButton
 var _fight: Button
 var _status: Label
 var _weathers: Array[StringName] = []
@@ -40,6 +50,8 @@ func _ready() -> void:
 	var vw := _ids.find(&"vineweave")
 	var geode := _ids.find(&"gem_knight")
 	_pick = [maxi(vw, 0), geode if geode >= 0 else mini(1, _ids.size() - 1)]
+	for side in 2:
+		_teams[side] = [String(_ids[_pick[side]])] if not _ids.is_empty() else []
 	var page := MenuKit.build_page(self, ["Online", "Versus"], "Duel",
 		"Two players, one screen. No movement -- just the moves.")
 	_build(page)
@@ -76,11 +88,13 @@ func _build(page: Dictionary) -> void:
 
 	var opts := GridContainer.new()
 	opts.name = "Options"
-	opts.columns = 4
+	opts.columns = 6
 	opts.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	opts.add_theme_constant_override("h_separation", MenuTheme.SP_L)
 	opts.add_theme_constant_override("v_separation", MenuTheme.SP_S)
 	col.add_child(opts)
+	_format_opt = _option(opts, "Format", DuelFormat.MENU_IDS.map(func(id): return DuelFormat.preset(id).display_name + " " + DuelFormat.preset(id).versus_label()))
+	_format_opt.item_selected.connect(func(i: int) -> void: set_format(DuelFormat.MENU_IDS[i]))
 	_stage_opt = _option(opts, "Stage", STAGES.map(func(s): return s[1]))
 	_weathers = [&"clear"]
 	for w in Weather.all_ids():
@@ -154,6 +168,12 @@ func _carousel(side: int, caption: String) -> Control:
 	moves.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 	v.add_child(moves)
 	MenuKit.ignore_mouse(card)
+	var slots := HBoxContainer.new()
+	slots.name = "TeamSlots%d" % side
+	slots.alignment = BoxContainer.ALIGNMENT_CENTER
+	slots.add_theme_constant_override("separation", MenuTheme.SP_S)
+	box.add_child(slots)
+	_slot_rows[side] = slots
 	_cards[side] = {"card": card, "crest": crest, "title": title, "badge": badge, "stats": stats,
 		"moves": moves, "side": side}
 	return box
@@ -179,10 +199,58 @@ func _option(grid: GridContainer, caption: String, items: Array) -> OptionButton
 	return o
 
 
+## Cycle side [param side]'s EDITED team slot by [param step] (a species clause skips units
+## already on that team).
 func _cycle(side: int, step: int) -> void:
 	if _ids.is_empty():
 		return
-	_pick[side] = posmod(_pick[side] + step, _ids.size())
+	var f := _format()
+	for _i in range(_ids.size()):
+		_pick[side] = posmod(_pick[side] + step, _ids.size())
+		var id := String(_ids[_pick[side]])
+		var at: int = (_teams[side] as Array).find(id)
+		if not f.species_clause or at < 0 or at == _edit[side]:
+			break
+	(_teams[side] as Array)[_edit[side]] = String(_ids[_pick[side]])
+	_refresh_cards()
+
+
+## The format in force.
+func _format() -> DuelFormat:
+	return DuelFormat.preset(_format_id)
+
+
+## Switch to preset [param id] ("singles" / "trio" / "full"): both teams are refitted to its
+## size (kept members first, then the roster in order; no repeats under its species clause).
+func set_format(id: String) -> void:
+	if DuelFormat.preset(id) == null:
+		return
+	_format_id = id
+	if _format_opt != null:
+		_format_opt.select(maxi(0, DuelFormat.MENU_IDS.find(id)))
+	for side in 2:
+		set_team(side, _teams[side])
+
+
+## Side [param side]'s team (a copy, lead first).
+func team(side: int) -> Array:
+	return (_teams[side] as Array).duplicate()
+
+
+## Set side [param side]'s team to [param ids], fitted to the format.
+func set_team(side: int, ids: Array) -> void:
+	_teams[side] = DuelNetConfig.fill_team(DuelNetConfig.clean_team(ids), side, _format())
+	_edit[side] = clampi(_edit[side], 0, (_teams[side] as Array).size() - 1)
+	_pick[side] = maxi(0, _ids.find(StringName(String(_teams[side][_edit[side]]))))
+	_refresh_cards()
+
+
+## Choose which member of side [param side]'s team the carousel edits.
+func edit_slot(side: int, index: int) -> void:
+	if (_teams[side] as Array).is_empty():
+		return
+	_edit[side] = clampi(index, 0, (_teams[side] as Array).size() - 1)
+	_pick[side] = maxi(0, _ids.find(StringName(String(_teams[side][_edit[side]]))))
 	_refresh_cards()
 
 
@@ -192,7 +260,7 @@ func _refresh_cards() -> void:
 		var c: Dictionary = _cards[side]
 		if c == null or _ids.is_empty():
 			continue
-		var ch := CharacterLibrary.get_character(_ids[_pick[side]])
+		var ch := CharacterLibrary.get_character(StringName(String(_teams[side][_edit[side]])))
 		var compiled: DuelCharacter = DuelMoveCompiler.compile(ch, rules)["character"]
 		c["title"].text = ch.display_name
 		MenuKit.set_crest(c["crest"], ch.display_name, ConquestTheme.element_color(String(ch.element)),
@@ -208,12 +276,39 @@ func _refresh_cards() -> void:
 			text += "\n(no duel form: %s)" % ", ".join(compiled.excluded_moves.map(func(id): return String(id).capitalize()))
 		c["moves"].text = text
 		MenuKit.accent_card(c["card"], ConquestTheme.element_color(String(ch.element)))
+		_refresh_slots(side)
+
+
+## Side [param side]'s team slot chips (hidden in Singles): the edited one highlighted.
+func _refresh_slots(side: int) -> void:
+	var row: HBoxContainer = _slot_rows[side]
+	if row == null:
+		return
+	var t: Array = _teams[side]
+	row.visible = t.size() > 1
+	# One chip per possible slot, built once and reused.
+	while row.get_child_count() < DuelFormat.MAX_TEAM:
+		var i := row.get_child_count()
+		var nb := MenuKit.button("", MenuKit.GHOST, 96)
+		nb.name = "Slot%d_%d" % [side, i]
+		nb.custom_minimum_size = Vector2(96, 40)
+		nb.tooltip_text = "Lead" if i == 0 else "Bench %d" % i
+		nb.pressed.connect(edit_slot.bind(side, i))
+		row.add_child(nb)
+	for i in range(row.get_child_count()):
+		var b := row.get_child(i) as Button
+		b.visible = i < t.size()
+		if not b.visible:
+			continue
+		var ch := CharacterLibrary.get_character(StringName(String(t[i])))
+		b.text = "%d %s" % [i + 1, ch.display_name if ch != null else String(t[i])]
+		b.theme_type_variation = MenuKit.PRIMARY if i == _edit[side] else MenuKit.GHOST
 
 
 ## The request the screen's current choices describe: a hot-seat VERSUS duel (both sides
 ## human; no flee, no befriend, no items). Fresh entropy at the fight (seed 0).
 func build_request() -> DuelRequest:
-	var req := DuelRequest.standalone(_ids[_pick[0]], _ids[_pick[1]])
+	var req := DuelRequest.teams(_teams[0], _teams[1], _format())
 	req.kind = DuelRequest.KIND_VERSUS
 	req.player_is_ai = false
 	req.foe_is_ai = false

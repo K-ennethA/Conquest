@@ -232,7 +232,10 @@ opponent_name = "Tester Fenna"
 opponent_speaker_id = &"npc_fenna"
 opponent_team = Array[Dictionary]([{
 "character_id": "petalfang",
-"strength": 0.9
+"strength": 0.85
+}, {
+"character_id": "undead",
+"strength": 0.7
 }])
 reward_gold = 90
 clash_intro = true
@@ -252,7 +255,7 @@ beats = Array[Resource]([SubResource("Resource_5wqan")])
 script = ExtResource("4_s5dhr")
 speaker_id = &"self"
 side = &"right"
-text = "A shard! You're a tester too? Then you know the rule -- two testers meet on the road, their partners have a word. One on one!"
+text = "A shard! You're a tester too? Then you know the rule -- two testers meet on the road, their partners have a word. Two of mine against yours!"
 
 [sub_resource type="Resource" id="Resource_y7878"]
 script = ExtResource("8_jkdkb")

@@ -86,7 +86,7 @@ func test_timeout_wording() -> void:
 # --- Wire -----------------------------------------------------------------------------------------
 
 func test_protocol_bump_and_timeout_stamp() -> void:
-	assert_eq(NetProtocol.PROTOCOL_VERSION, 5, "5 = the online turn clock")
+	assert_eq(NetProtocol.PROTOCOL_VERSION, 6, "6 = the online turn clock + party duels")
 	var a := NetProtocol.end_turn(1)
 	assert_false(NetProtocol.is_timeout(a))
 	a[NetProtocol.KEY_TIMEOUT] = true

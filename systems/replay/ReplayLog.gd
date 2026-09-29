@@ -124,6 +124,7 @@ const APPLIABLE_TYPES: Array[int] = [
 	NetProtocol.Action.END_TURN,
 	NetProtocol.Action.CAST_MOVE,
 	NetProtocol.Action.USE_ITEM,
+	NetProtocol.Action.SWITCH,
 ]
 
 # --- Caps (the untrusted-input ceilings) -------------------------------------
@@ -299,7 +300,7 @@ static func encode_command(cmd: Variant) -> Dictionary:
 		NetProtocol.Action.MOVE_UNIT:
 			out_data[NetProtocol.KEY_UNIT_ID] = unit_id_of(data.get(NetProtocol.KEY_UNIT_ID, ""))
 			out_data[NetProtocol.KEY_DEST_CELL] = encode_cell(decode_cell(data.get(NetProtocol.KEY_DEST_CELL, null)))
-		NetProtocol.Action.WAIT_UNIT:
+		NetProtocol.Action.WAIT_UNIT, NetProtocol.Action.SWITCH:
 			out_data[NetProtocol.KEY_UNIT_ID] = unit_id_of(data.get(NetProtocol.KEY_UNIT_ID, ""))
 		NetProtocol.Action.END_TURN:
 			out_data[NetProtocol.KEY_PLAYER_ID] = int(data.get(NetProtocol.KEY_PLAYER_ID, 0))
@@ -346,7 +347,7 @@ static func decode_command(raw: Variant) -> Dictionary:
 				return {}
 			out_data[NetProtocol.KEY_UNIT_ID] = unit_id_of(data[NetProtocol.KEY_UNIT_ID])
 			out_data[NetProtocol.KEY_DEST_CELL] = decode_cell(data[NetProtocol.KEY_DEST_CELL], Vector3i(-1, -1, 0))
-		NetProtocol.Action.WAIT_UNIT:
+		NetProtocol.Action.WAIT_UNIT, NetProtocol.Action.SWITCH:
 			if not _has_unit_id(data):
 				return {}
 			out_data[NetProtocol.KEY_UNIT_ID] = unit_id_of(data[NetProtocol.KEY_UNIT_ID])

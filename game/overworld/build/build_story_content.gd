@@ -1613,9 +1613,10 @@ func _rowan_spar_offer() -> IfCommand:
 #  offers them. Trainers who challenge you to a DUEL, the RIVAL, SPARRING partners, an AMBUSH,
 #  and the CROWN ARENA's tournament ladder. Opponents are duel-eligible roster creatures
 #  (BattleSpec.validate checks), their strength the duel's stat scale (DuelScaling).
-#  DECISION 7 (humans fight alongside creatures) is NOT built yet: every duel here is the strict
-#  1v1 creature duel -- the party lead against the opponent's creature. The people are the
-#  trainers; their creatures fight.
+#  DECISION 7 (humans fight alongside creatures) is NOT built yet: the people are the trainers;
+#  their creatures fight. PARTY DUELS: a duel fields your lead plus up to two bench members (the
+#  duel ruleset's story format) against the opponent's TEAM -- Fenna, Lark, the Cup's later
+#  rounds and the champion bring two or three; wild encounters and the ambush stay one foe.
 # =====================================================================================
 
 ## A DUEL [BattleSpec]: [param team] = [{character_id, strength}], the lead first.
@@ -1704,12 +1705,15 @@ func _fenna() -> TrainerEntity:
 	t.sight_range = 3
 	t.visible_if = "has(\"%s\")" % F_COMPLETE
 	t.pre_scene = _scene("moss_fenna_pre", [
-		_beat(&"self", "", "A shard! You're a tester too? Then you know the rule -- two testers meet on the road, their partners have a word. One on one!"),
+		_beat(&"self", "", "A shard! You're a tester too? Then you know the rule -- two testers meet on the road, their partners have a word. Two of mine against yours!"),
 	])
 	t.defeated_scene = _scene("moss_fenna_after", [
 		_beat(&"self", "", "Well fought. My Petalfang's sulking now -- that means you earned it."),
 	])
-	var spec := _duel_spec("", "{FENNA}", &"npc_fenna", [{"character_id": "petalfang", "strength": 0.9}],
+	# A small TEAM (party duels: the story format fields your lead + up to 2 bench), kept weak --
+	# she is the first trainer on the road.
+	var spec := _duel_spec("", "{FENNA}", &"npc_fenna", [{"character_id": "petalfang", "strength": 0.85},
+			{"character_id": "undead", "strength": 0.7}],
 		false, BattleSpec.DefeatPolicy.WHITEOUT, 90)
 	spec.clash_intro = true
 	t.battle = spec
@@ -1802,7 +1806,8 @@ const CH_RIVAL_TRIGGER := Rect2i(5, 13, 1, 1)
 ## stage 0.
 func _rival_spec() -> BattleSpec:
 	var spec := _duel_spec(RIVAL_DUEL_ID, "{RIVAL}", &"npc_lark",
-		[{"character_id": "blightcap", "strength": 0.9}], true, BattleSpec.DefeatPolicy.CONTINUE, 60)
+		[{"character_id": "blightcap", "strength": 0.9}, {"character_id": "petalfang", "strength": 0.75}],
+		true, BattleSpec.DefeatPolicy.CONTINUE, 60)
 	spec.clash_intro = true
 	spec.scale_flag = F_RIVAL_STAGE
 	spec.scale_step = 0.08
@@ -1932,17 +1937,22 @@ func _build_tournaments() -> void:
 	t.first_prize_items = prize
 	t.repeat_prize_gold = 200
 	t.title = _t("{CUP_TITLE}")
+	# [name, speaker, TEAM [[character_id, strength], ...]] -- the ladder grows from one partner to a
+	# champion's three (party duels).
 	var entrants := [
-		["{TAMSIN}", "npc_tamsin", "mycothrall", 0.9],
-		["{HARL}", "npc_harl", "blightcap", 0.95],
-		["{QUENBY}", "npc_quenby", "petalfang", 1.05],
-		["{CHAMPION}", "npc_isolde", "oakheart", 0.85],
+		["{TAMSIN}", "npc_tamsin", [["mycothrall", 0.9]]],
+		["{HARL}", "npc_harl", [["blightcap", 0.95], ["tree_grunt", 0.8]]],
+		["{QUENBY}", "npc_quenby", [["petalfang", 1.05], ["undead", 0.85]]],
+		["{CHAMPION}", "npc_isolde", [["oakheart", 0.85], ["monster", 0.8], ["blightcap", 0.8]]],
 	]
 	var rounds: Array[BattleSpec] = []
 	for i in range(entrants.size()):
 		var e: Array = entrants[i]
-		var spec := _duel_spec("", String(e[0]), StringName(String(e[1])),
-			[{"character_id": String(e[2]), "strength": float(e[3])}], true, BattleSpec.DefeatPolicy.CONTINUE)
+		var team: Array = []
+		for m in e[2]:
+			team.append({"character_id": String(m[0]), "strength": float(m[1])})
+		var spec := _duel_spec("", String(e[0]), StringName(String(e[1])), team, true,
+			BattleSpec.DefeatPolicy.CONTINUE)
 		spec.scale_flag = CUP_WINS_FLAG
 		spec.scale_step = 0.05
 		spec.scale_max_steps = 4
@@ -1976,7 +1986,8 @@ func _arena() -> Array:
 	var champ := _npc("isolde", CH_CHAMPION, "south", "CHAMPION", Color(0.85, 0.7, 0.3), "noble")
 	champ.visible_if = "has(\"%s\")" % CUP_TITLE_FLAG
 	var spec := _duel_spec(CHAMPION_REMATCH_ID, "{CHAMPION}", &"npc_isolde",
-		[{"character_id": "oakheart", "strength": 0.9}], true, BattleSpec.DefeatPolicy.CONTINUE, 120)
+		[{"character_id": "oakheart", "strength": 0.9}, {"character_id": "monster", "strength": 0.85},
+			{"character_id": "petalfang", "strength": 0.85}], true, BattleSpec.DefeatPolicy.CONTINUE, 120)
 	spec.clash_intro = true
 	spec.scale_flag = F_CHAMPION_BEATEN
 	spec.scale_step = 0.08
