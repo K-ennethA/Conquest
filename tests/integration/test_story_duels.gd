@@ -180,11 +180,15 @@ func _drive(ow: OverworldController, pick: int = 0, ladder_picks: Array = [], ma
 func _fight(win: bool = true) -> DuelResult:
 	var req: DuelRequest = DuelController.active_request()
 	req.player_is_ai = true
+	# Party duels: every member of the losing side is weakened (its whole team must faint).
 	if win:
-		req.foe_party[0].strength = 0.1
+		for c in req.foe_party:
+			c.strength = 0.1
 	else:
-		req.player_party[0].strength = 0.1
-		req.foe_party[0].strength = 4.0
+		for c in req.player_party:
+			c.strength = 0.1
+		for c in req.foe_party:
+			c.strength = 4.0
 	_free_stage()
 	_stage = STAGE.instantiate()
 	_stage.instant = true
@@ -393,12 +397,19 @@ func test_the_ambush_trigger_two_duels_and_the_reward() -> void:
 
 func test_losing_the_ambush_in_classic_costs_the_partner() -> void:
 	var s := _journey(StoryState.TIER_CLASSIC)
+	# A party of four: the story format fields three (lead + 2 bench), so a lost duel costs those
+	# three and the fourth carries on (no wipe, a whiteout).
+	s.add_member("petalfang")
+	s.add_member("oakheart")
 	s.set_flag("act1.met_rowan", 1)
 	var ow := await _boot("mossway", Vector3i(22, 6, 0), "west")
 	await _step(ow, Vector2i(-1, 0))
 	assert_eq(await _drive(ow), "duel", "ambushed")
 	await _fight(false)
 	assert_not_null(s.fallen_member("vineweave"), "Vineweave fell for good (Classic, a real battle)")
+	assert_not_null(s.fallen_member("blightcap"), "so did the bench member switched in after it")
+	assert_not_null(s.fallen_member("petalfang"), "and the third team member")
+	assert_null(s.fallen_member("oakheart"), "the member past the team size never fought")
 	assert_false(s.has_flag("mossway.ambush.footpad_beaten"), "the footpad is not beaten")
 	assert_ne(s.location_area(), "mossway", "whited out to the Wayshrine")
 	assert_true(StoryController.load_area("mossway").entity("bandit_ambush").is_present(s),

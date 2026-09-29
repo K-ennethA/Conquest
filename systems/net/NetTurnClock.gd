@@ -15,13 +15,16 @@ class_name NetTurnClock
 ##                           per-unit allowance for every living unit the side fields when its
 ##                           turn opens (a bigger army gets a little longer).
 ##   [constant KIND_UNIT]    Speed First: ONE unit's turn -- the tight "I go, you go" clock.
-##   [constant KIND_ACTION]  Online duel: one combatant's action.
+##   [constant KIND_ACTION]  Online duel: one combatant's action (a voluntary SWITCH is an action).
+##   [constant KIND_PICK]    Online PARTY duel: a KO replacement pick -- its own short clock,
+##                           opened when the fainted side must pick (before anyone acts).
 ##
 ## TIMEOUTS are played as a normal ACCEPTED action through the NetSession pipeline (identical
 ## on every peer, recorded, replayable), stamped [constant NetProtocol.KEY_TIMEOUT]:
 ##   Traditional -> END_TURN for the seat; Speed First -> WAIT for the active unit (END_TURN
 ##   when it cannot wait); duel -> the acting combatant PASSES (a WAIT: no damage, no roll for
-##   the idle seat, the opponent simply gets the tempo).
+##   the idle seat, the opponent simply gets the tempo); a pending KO replacement pick -> the
+##   host AUTO-PICKS the seat's first healthy benched member in team order (a SWITCH).
 ## [constant DEFAULT_AFK_LIMIT] consecutive expiries for the same seat = that seat FORFEITS.
 
 const PRESET_RAPID := "rapid"
@@ -34,13 +37,15 @@ const DEFAULT_PRESET := PRESET_STANDARD
 const KIND_SIDE := "side"
 const KIND_UNIT := "unit"
 const KIND_ACTION := "action"
+const KIND_PICK := "pick"
 
 ## Seconds per kind. side = Traditional per-side base, per_unit = Traditional allowance per
-## living unit at turn start, unit = Speed First per-unit clock, action = duel per-action clock.
+## living unit at turn start, unit = Speed First per-unit clock, action = duel per-action clock,
+## pick = a party duel's KO replacement pick (a single choice from the bench: half-ish an action).
 const PRESETS := {
-	PRESET_RAPID: {"label": "Rapid", "side": 45, "per_unit": 3, "unit": 10, "action": 15},
-	PRESET_STANDARD: {"label": "Standard", "side": 90, "per_unit": 5, "unit": 20, "action": 30},
-	PRESET_RELAXED: {"label": "Relaxed", "side": 150, "per_unit": 8, "unit": 35, "action": 50},
+	PRESET_RAPID: {"label": "Rapid", "side": 45, "per_unit": 3, "unit": 10, "action": 15, "pick": 10},
+	PRESET_STANDARD: {"label": "Standard", "side": 90, "per_unit": 5, "unit": 20, "action": 30, "pick": 15},
+	PRESET_RELAXED: {"label": "Relaxed", "side": 150, "per_unit": 8, "unit": 35, "action": 50, "pick": 25},
 }
 
 ## Consecutive expiries (same seat, no own action in between) that forfeit the match. The
@@ -91,6 +96,8 @@ static func seconds_for(preset, kind: String) -> int:
 			return int(p["unit"])
 		KIND_ACTION:
 			return int(p["action"])
+		KIND_PICK:
+			return int(p["pick"])
 	return int(p["side"])
 
 
@@ -101,17 +108,17 @@ static func budget_ms(preset, kind: String, units: int = 0, override_ms: int = 0
 	if override_ms > 0:
 		return override_ms
 	var s: int = seconds_for(preset, kind)
-	if kind != KIND_UNIT and kind != KIND_ACTION:
+	if kind == KIND_SIDE:
 		s += int(PRESETS[normalise_preset(preset)]["per_unit"]) * maxi(0, units)
 	return s * 1000
 
 
 ## One line for a lobby / tooltip: "90s per side (+5s per unit), 20s per unit in Speed First,
-## 30s per duel action".
+## 30s per duel action (15s per KO pick)".
 static func describe(preset) -> String:
 	var p: Dictionary = PRESETS[normalise_preset(preset)]
-	return "%ds per side (+%ds per unit), %ds per unit in Speed First, %ds per duel action" % [
-		int(p["side"]), int(p["per_unit"]), int(p["unit"]), int(p["action"])]
+	return "%ds per side (+%ds per unit), %ds per unit in Speed First, %ds per duel action (%ds per KO pick)" % [
+		int(p["side"]), int(p["per_unit"]), int(p["unit"]), int(p["action"]), int(p["pick"])]
 
 
 ## The picker's items: [[id, "Rapid"], ...] in display order.
@@ -133,8 +140,11 @@ static func format_ms(ms: int) -> String:
 ## (a warning is added while the next expiry would forfeit).
 static func describe_timeout(action: Variant, mine: bool, strikes: int = 0, limit: int = 0) -> String:
 	var what := "turn ended"
-	if action is Dictionary and int((action as Dictionary).get(NetProtocol.KEY_TYPE, -1)) == NetProtocol.Action.WAIT:
+	var t: int = int((action as Dictionary).get(NetProtocol.KEY_TYPE, -1)) if action is Dictionary else -1
+	if t == NetProtocol.Action.WAIT:
 		what = "unit waits"
+	elif t == NetProtocol.Action.SWITCH:
+		what = "replacement was auto-picked"
 	var line := "Time's up — %s %s" % ["your" if mine else "opponent's", what]
 	if mine and limit > 0 and strikes > 0 and strikes >= limit - 1:
 		line += " (one more and you forfeit)"

@@ -88,6 +88,74 @@ func _start_new_round() -> void:
 	super._start_new_round()
 
 
+## A death never schedules a deferred hand-off here: the owning [DuelBattle] resolves every
+## faint (a KO replacement pick, or the end of the duel) and then resumes the queue itself
+## ([method resume_if_idle]). A deferred advance would race a replacement that arrives in the
+## same frame (an AI pick) or many frames later (an online pick) -- and advance twice.
+func _on_registered_unit_died(unit: Unit) -> void:
+	var was_acting := unit != null and unit == current_acting_unit
+	if unit != null and is_instance_valid(unit) and unit in registered_units:
+		unregister_unit(unit)
+	if unit != null and unit in turn_queue:
+		turn_queue.erase(unit)
+	if was_acting:
+		_disarm_turn_timer()
+		current_acting_unit = null
+		is_turn_in_progress = false
+
+
+# --- Party duels: switching (docs/design/DUEL_BATTLE.md §4.2) ---------------------------
+#
+# ORDERING. A switch is an ACTION in the sequential speed order: it resolves in the switching
+# combatant's own turn slot, exactly where its move would have. The outgoing combatant's turn
+# ENDS normally (its turn-end beat and affliction clocks run), it leaves the queue, and the
+# incoming one joins the system already marked as having acted this round -- it takes the next
+# round's order by its own speed. A KO REPLACEMENT is free and immediate: it enters before any
+# other turn opens, likewise marked acted (the fainted combatant's turn this round is lost),
+# and then the queue resumes.
+
+## The acting [param out_unit] spends its turn on a switch: its turn ends (turn-end beat) and it
+## leaves the system. The caller brings the incoming unit in, then calls [method advance_after_switch].
+func retire_for_switch(out_unit: Unit) -> void:
+	if out_unit == null or not is_instance_valid(out_unit):
+		return
+	if out_unit == current_acting_unit and is_turn_in_progress:
+		_end_unit_turn(out_unit)
+	if out_unit in registered_units:
+		unregister_unit(out_unit)
+	if out_unit != current_acting_unit:
+		turn_queue.erase(out_unit)
+
+
+## Register [param unit] (an incoming party member) WITHOUT the idle kickoff Speed First
+## schedules for late arrivals, marked as having acted this round.
+func adopt_incoming(unit: Unit) -> void:
+	if unit == null or not is_instance_valid(unit):
+		return
+	var queued := _kickoff_queued
+	_kickoff_queued = true   # suppress SpeedFirstTurnSystem.register_unit's deferred kickoff
+	register_unit(unit)
+	_kickoff_queued = queued
+	if not (unit in units_acted_this_round):
+		units_acted_this_round.append(unit)
+	turn_queue.erase(unit)
+
+
+## After a voluntary switch applied: hand the turn on (synchronously, like any spent action).
+func advance_after_switch() -> void:
+	if not is_active or is_turn_in_progress:
+		return
+	_advance_to_next_unit()
+
+
+## Open the next turn when none is in progress (after a KO replacement, or once the action
+## that caused a faint has resolved). A no-op while a turn is open or the duel is decided.
+func resume_if_idle() -> void:
+	if not is_active or is_decided() or is_turn_in_progress:
+		return
+	_advance_to_next_unit()
+
+
 ## True once fewer than two sides still field a living, registered combatant.
 func is_decided() -> bool:
 	var sides: Dictionary = {}

@@ -14,14 +14,27 @@ class_name DuelHUD
 ##   above it     narration ribbon (left) and the player card (right)
 ##   centre       intro ribbon, results card
 ##
+## PARTY DUELS (a [DuelFormat] with a bench):
+##   cards        each card carries its side's team pips ([DuelPartyStrip]: HP, fainted crosses,
+##                the fielded member ringed gold) and rebinds to whoever takes the station
+##   Party        (enabled when the format allows switching and a healthy member waits) swaps the
+##                grid for the PARTY PICKER -- one row per member, fainted / fielded ones
+##                disabled; picking hands the stage [constant SWITCH_SLOT] with
+##                [member chosen_member] (it costs the turn); Back / Esc returns to the moves
+##   replacement  after a faint, [method show_replacement] opens the same picker with no way
+##                back: the owner MUST choose ([signal replacement_chosen])
+##   team preview [method show_team_preview]: both teams, shown during the intro
+##
 ## Pure presentation: it never touches game state. The stage asks it for a slot
 ## ([signal slot_chosen]) and applies the command itself.
 ##
 ## Input: move rows are focusable buttons (keyboard / gamepad via focus, mouse / touch by
-## click, each row >= 64 px tall); 1-4 pick a slot directly; Info (the unit_info action)
-## toggles the focused move's details; L toggles the log.
+## click, each row >= 64 px tall); 1-4 pick a slot directly (1-6 pick a member while a picker
+## is up); Info (the unit_info action) toggles the focused move's details; L toggles the log.
 
 signal slot_chosen(slot: int)
+## PARTY DUELS: the KO replacement picker's choice (a team index of [member replacement_side]).
+signal replacement_chosen(index: int)
 signal rematch_requested
 signal setup_requested
 signal menu_requested
@@ -32,6 +45,8 @@ signal continue_requested
 const FLEE_SLOT := -2
 ## [signal slot_chosen]'s value for an item pick ([member chosen_item_id] says which).
 const ITEM_SLOT := -3
+## [signal slot_chosen]'s value for a Party switch ([member chosen_member] says who comes in).
+const SWITCH_SLOT := -4
 
 const MARGIN := 16.0
 const PANEL_H := 226.0
@@ -65,6 +80,18 @@ var _items_box: VBoxContainer = null
 var _items_grid: GridContainer = null
 ## The item the last [constant ITEM_SLOT] pick chose.
 var chosen_item_id: String = ""
+## The party picker (switch / KO replacement; replaces the move grid while open) and its rows.
+var _party_box: VBoxContainer = null
+var _party_grid: GridContainer = null
+var _party_caption: Label = null
+var _party_back: Button = null
+## "switch" (the Party action, Back allowed) or "replace" (a KO replacement, no way back).
+var _party_mode: String = ""
+## The team index the last [constant SWITCH_SLOT] pick chose.
+var chosen_member: int = -1
+## The side whose KO replacement the picker is choosing (-1 = none).
+var replacement_side: int = -1
+var _team_preview: PanelContainer = null
 
 # --- VERSUS (online / hot-seat) -----------------------------------------------------------
 ## The side this screen belongs to: its combatant gets the player card (bottom-right), the
@@ -207,13 +234,14 @@ func _build_command_panel() -> void:
 	_waiting.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
 	left.add_child(_waiting)
 	_build_item_picker(left)
+	_build_party_picker(left)
 
 	var right := VBoxContainer.new()
 	right.name = "SideColumn"
 	right.custom_minimum_size = Vector2(RIGHT_COL_W, 0)
 	right.add_theme_constant_override("separation", 6)
 	row.add_child(right)
-	for spec in [["Party", "Switching arrives with party duels (M2)."],
+	for spec in [["Party", "Switch in a partner from your team (it costs the turn)."],
 			["Items", "Use a battle item from your bag (it costs the turn)."],
 			["Flee", "Run from a wild encounter (it may fail and cost the turn)."],
 			["Info", "Details for the focused move (%s)." % ConquestTheme.action_glyph(InputActions.UNIT_INFO)]]:
@@ -229,7 +257,40 @@ func _build_command_panel() -> void:
 	(_side_buttons["Info"] as Button).pressed.connect(_toggle_info)
 	(_side_buttons["Flee"] as Button).pressed.connect(choose_flee)
 	(_side_buttons["Items"] as Button).pressed.connect(open_items)
+	(_side_buttons["Party"] as Button).pressed.connect(open_party)
 	_wire_focus()
+
+
+## The party picker: a caption, a 2-column grid of member rows, and Back (switch mode only).
+func _build_party_picker(left: VBoxContainer) -> void:
+	_party_box = VBoxContainer.new()
+	_party_box.name = "PartyPicker"
+	_party_box.visible = false
+	_party_box.add_theme_constant_override("separation", 6)
+	left.add_child(_party_box)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	_party_box.add_child(head)
+	_party_caption = Label.new()
+	_party_caption.name = "Caption"
+	_party_caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_party_caption.add_theme_font_override("font", MenuTheme.heading_font(1))
+	_party_caption.add_theme_font_size_override("font_size", ConquestTheme.FS_SMALL)
+	_party_caption.add_theme_color_override("font_color", ConquestTheme.GOLD_LITE)
+	head.add_child(_party_caption)
+	_party_back = Button.new()
+	_party_back.name = "PartyBack"
+	_party_back.text = "Back"
+	_party_back.theme_type_variation = MenuKit.GHOST
+	_party_back.custom_minimum_size = Vector2(96, 30)
+	_party_back.pressed.connect(close_party)
+	head.add_child(_party_back)
+	_party_grid = GridContainer.new()
+	_party_grid.name = "PartyGrid"
+	_party_grid.columns = 2
+	_party_grid.add_theme_constant_override("h_separation", 10)
+	_party_grid.add_theme_constant_override("v_separation", 6)
+	_party_box.add_child(_party_grid)
 
 
 ## The item picker: a caption, a 2-column grid of item rows, and Back. Hidden until Items.
@@ -347,6 +408,25 @@ func bind(p_battle: DuelBattle) -> void:
 	player_card.bind(battle.unit_of(me))
 	foe_card.bind(battle.unit_of(1 - me))
 	_bind_rows(battle.unit_of(me))
+	if not battle.combatant_entered.is_connected(_on_combatant_entered):
+		battle.combatant_entered.connect(_on_combatant_entered)
+	refresh()
+
+
+## The card of [param side] (this screen's side gets the player card).
+func card_for(side: int) -> DuelUnitCard:
+	return player_card if side == clampi(perspective_side, 0, 1) else foe_card
+
+
+## A team member took the station: its side's card follows it.
+func _on_combatant_entered(side: int, unit, _previous) -> void:
+	card_for(side).bind(unit)
+	# The move rows follow their side's fielded unit, and re-read their forecasts against a new foe.
+	var rows_side := clampi(perspective_side, 0, 1)
+	if _rows_unit != null and is_instance_valid(_rows_unit) and battle.side_of(_rows_unit) >= 0:
+		rows_side = battle.side_of(_rows_unit)
+	if battle.unit_of(rows_side) != null:
+		_bind_rows(battle.unit_of(rows_side))
 	refresh()
 
 
@@ -372,6 +452,9 @@ func refresh() -> void:
 	_struggle.visible = _accepting and DuelCharacter.STRUGGLE_SLOT in legal
 	(_side_buttons["Flee"] as Button).disabled = not (_accepting and battle.can_flee())
 	(_side_buttons["Items"] as Button).disabled = not (_accepting and battle.can_use_items())
+	(_side_buttons["Party"] as Button).disabled = not (_accepting and _actor != null and battle.can_switch(_actor))
+	for side in 2:
+		card_for(side).set_team(battle.team_view(side))
 	_refresh_order()
 
 
@@ -409,8 +492,10 @@ func show_commands(actor) -> void:
 	_actor = actor
 	_accepting = true
 	if actor != _rows_unit and battle != null:
-		_bind_rows(actor)  # hot-seat: the other human's turn shows THEIR moves
+		_bind_rows(actor)  # hot-seat: the other human's turn / a switched-in partner
 	_items_box.visible = false
+	_party_box.visible = false
+	_party_mode = ""
 	_grid.visible = true
 	_waiting.visible = false
 	_detail.visible = true
@@ -433,6 +518,9 @@ func show_waiting(text: String) -> void:
 	_actor = null
 	_accepting = false
 	_items_box.visible = false
+	_party_box.visible = false
+	_party_mode = ""
+	replacement_side = -1
 	_grid.visible = false
 	_detail.visible = false
 	_struggle.visible = false
@@ -648,6 +736,7 @@ func open_items() -> void:
 			first = b
 	_grid.visible = false
 	_struggle.visible = false
+	_party_box.visible = false
 	_items_box.visible = true
 	_detail.visible = true
 	_detail.text = "Pick an item for %s." % (who if who != "" else "your partner")
@@ -655,6 +744,179 @@ func open_items() -> void:
 		first.grab_focus()
 	else:
 		(_items_box.find_child("ItemsBack", true, false) as Button).grab_focus()
+
+
+# --- Party (switching, KO replacement, team preview) --------------------------------------
+
+## The Party button: swap the move grid for the party picker (the acting side's team).
+func open_party() -> void:
+	if not _accepting or battle == null or _actor == null or not battle.can_switch(_actor):
+		return
+	_party_mode = "switch"
+	_fill_party(battle.side_of(_actor), "PARTY  ·  switching costs the turn", false)
+
+
+## KO REPLACEMENT: side [param side]'s combatant fainted -- open the picker with no way back
+## ([signal replacement_chosen]). [param who] names the player on a shared screen ("Player 2").
+func show_replacement(side: int, who: String = "") -> void:
+	_actor = null
+	_accepting = false
+	replacement_side = side
+	_party_mode = "replace"
+	_panel.visible = true
+	_waiting.visible = false
+	var cap := "CHOOSE WHO FIGHTS NEXT"
+	if who != "":
+		cap = "%s  ·  %s" % [who.to_upper(), cap]
+	_fill_party(side, cap, true)
+
+
+## True while the party picker (switch or replacement) is up.
+func party_open() -> bool:
+	return _party_box != null and _party_box.visible
+
+
+## Back from the party picker to the move grid (switch mode only; a replacement must be made).
+func close_party() -> void:
+	if not party_open() or _party_mode != "switch":
+		return
+	_party_box.visible = false
+	_party_mode = ""
+	if _accepting and _actor != null:
+		show_commands(_actor)
+
+
+## Pick team member [param index] in the open picker: a switch hands the stage
+## [constant SWITCH_SLOT] ([member chosen_member]); a replacement emits
+## [signal replacement_chosen]. A member that cannot come in is refused (its row is disabled).
+func choose_member(index: int) -> void:
+	if battle == null or not party_open():
+		return
+	if _party_mode == "switch":
+		if not _accepting or _actor == null:
+			return
+		if battle.switch_problem(battle.side_of(_actor), index, false) != "":
+			return
+		chosen_member = index
+		_accepting = false
+		_party_box.visible = false
+		_party_mode = ""
+		slot_chosen.emit(SWITCH_SLOT)
+	elif _party_mode == "replace":
+		if battle.switch_problem(replacement_side, index, true) != "":
+			return
+		chosen_member = index
+		_party_box.visible = false
+		_party_mode = ""
+		replacement_chosen.emit(index)
+
+
+func _fill_party(side: int, caption: String, replacement: bool) -> void:
+	for c in _party_grid.get_children():
+		_party_grid.remove_child(c)
+		c.queue_free()
+	_party_caption.text = caption
+	_party_back.visible = not replacement
+	var first: Button = null
+	for r in battle.team_view(side):
+		var idx := int(r["index"])
+		var b := Button.new()
+		b.name = "Member%d" % idx
+		var state := ""
+		if bool(r["fainted"]):
+			state = "Fainted"
+		elif bool(r["active"]):
+			state = "In battle"
+		else:
+			state = "HP %d/%d" % [int(r["hp"]), int(r["max_hp"])]
+		b.text = "%d  %s  ·  %s" % [idx + 1, String(r["name"]), state]
+		b.theme_type_variation = &"HudCommand"
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.custom_minimum_size = Vector2(0, 44)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.focus_mode = Control.FOCUS_ALL
+		b.disabled = battle.switch_problem(side, idx, replacement) != ""
+		var ch := CharacterLibrary.get_character(StringName(String(r["character_id"])))
+		b.tooltip_text = "%s -- %s" % [String(r["name"]), state] if ch == null else \
+			"%s (%s) -- %s" % [String(r["name"]), String(ch.element).capitalize(), state]
+		b.pressed.connect(choose_member.bind(idx))
+		b.focus_entered.connect(_on_item_focused.bind(b.tooltip_text))
+		b.mouse_entered.connect(_on_item_focused.bind(b.tooltip_text))
+		_party_grid.add_child(b)
+		if first == null and not b.disabled:
+			first = b
+	_grid.visible = false
+	_items_box.visible = false
+	_struggle.visible = false
+	_party_box.visible = true
+	_detail.visible = true
+	_detail.text = "Who comes in?" if replacement else "Pick a partner to switch in."
+	if first != null:
+		first.grab_focus()
+	elif _party_back.visible:
+		_party_back.grab_focus()
+
+
+## TEAM PREVIEW (party duels, during the intro): both teams, lead first, side A on the left.
+## [param names] labels the sides ("You" / the trainer, or the hot-seat players).
+func show_team_preview(names: Array = []) -> void:
+	hide_team_preview()
+	if battle == null:
+		return
+	_team_preview = PanelContainer.new()
+	_team_preview.name = "TeamPreview"
+	ConquestTheme.keep_style(_team_preview)
+	var sb := MenuTheme.card_box()
+	sb.content_margin_left = 24
+	sb.content_margin_right = 24
+	sb.content_margin_top = 18
+	sb.content_margin_bottom = 18
+	_team_preview.add_theme_stylebox_override("panel", sb)
+	_team_preview.set_anchors_preset(Control.PRESET_CENTER)
+	_team_preview.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_team_preview.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_team_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_team_preview)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 36)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_team_preview.add_child(row)
+	var me := clampi(perspective_side, 0, 1)
+	for side in [me, 1 - me]:
+		var col := VBoxContainer.new()
+		col.name = "Side%d" % side
+		col.add_theme_constant_override("separation", 6)
+		col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(col)
+		var title: String = String(names[side]) if side < names.size() and String(names[side]) != "" \
+			else ("Your team" if side == me else "Opponent")
+		var head := ConquestTheme.section_label(title.to_upper())
+		col.add_child(head)
+		for r in battle.team_view(side):
+			var line := HBoxContainer.new()
+			line.add_theme_constant_override("separation", 8)
+			line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			col.add_child(line)
+			var crest := ConquestTheme.portrait(String(r["name"]), ConquestTheme.element_color(String(r["element"])),
+				ConquestTheme.TEAM_BLUE if side == 0 else ConquestTheme.TEAM_RED, 30.0)
+			line.add_child(crest)
+			var l := Label.new()
+			l.text = String(r["name"])
+			l.add_theme_font_size_override("font_size", ConquestTheme.FS_BODY)
+			l.add_theme_color_override("font_color", ConquestTheme.CREAM)
+			l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			line.add_child(l)
+			line.add_child(ElementVisuals.make_badge(r["element"], ConquestTheme.FS_CAPTION))
+
+
+func hide_team_preview() -> void:
+	if _team_preview != null and is_instance_valid(_team_preview):
+		_team_preview.queue_free()
+	_team_preview = null
+
+
+func team_preview_visible() -> bool:
+	return _team_preview != null and is_instance_valid(_team_preview) and not _team_preview.is_queued_for_deletion()
 
 
 ## True while the item picker is up.
@@ -716,6 +978,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		close_items()
 		return
+	if party_open():
+		if _party_mode == "switch" and MenuNav.is_back_event(event):
+			get_viewport().set_input_as_handled()
+			close_party()
+			return
+		if event is InputEventKey and event.pressed and not event.echo:
+			var k := (event as InputEventKey).keycode
+			if k >= KEY_1 and k <= KEY_6:
+				get_viewport().set_input_as_handled()
+				choose_member(int(k - KEY_1))
+				return
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		if event.is_action_pressed(InputActions.UNIT_INFO):
 			_toggle_info()
@@ -729,7 +1002,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_info()
 		get_viewport().set_input_as_handled()
 		return
-	if _accepting and key >= KEY_1 and key <= KEY_4:
+	if _accepting and not party_open() and not items_open() and key >= KEY_1 and key <= KEY_4:
 		var slot := int(key - KEY_1)
 		if slot < rows.size() and rows[slot].visible and not rows[slot].disabled:
 			get_viewport().set_input_as_handled()

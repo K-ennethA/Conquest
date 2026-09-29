@@ -1384,6 +1384,9 @@ opponent_speaker_id = &"npc_lark"
 opponent_team = Array[Dictionary]([{
 "character_id": "blightcap",
 "strength": 0.9
+}, {
+"character_id": "petalfang",
+"strength": 0.75
 }])
 reward_gold = 60
 defeat_policy = 1
@@ -1506,6 +1509,9 @@ opponent_speaker_id = &"npc_lark"
 opponent_team = Array[Dictionary]([{
 "character_id": "blightcap",
 "strength": 0.9
+}, {
+"character_id": "petalfang",
+"strength": 0.75
 }])
 reward_gold = 60
 defeat_policy = 1
@@ -1915,6 +1921,12 @@ opponent_speaker_id = &"npc_isolde"
 opponent_team = Array[Dictionary]([{
 "character_id": "oakheart",
 "strength": 0.9
+}, {
+"character_id": "monster",
+"strength": 0.85
+}, {
+"character_id": "petalfang",
+"strength": 0.85
 }])
 reward_gold = 120
 defeat_policy = 1

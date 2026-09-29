@@ -19,18 +19,26 @@ extends Node
 ##   [net-bot <name>] FINAL reason=<r> seq=<n> digest=<d> desyncs=<k>
 ## and exits (code 0; 2 if a desync or a randomness-verification failure was seen).
 ##
-## ONLINE DUEL: add [code]--mode duel [--unit <character_id>][/code] (every bot of the match, and
-## the dedicated server's [code]--mode duel[/code]). The bot announces its unit on the lobby
-## channel (DuelNetConfig.MSG_PICK) before readying; a hosting bot folds both picks into the
-## start ([method DuelNetConfig.final_config]). On its turn it submits what the duel brain
-## ([method DuelBattle.decide_for], NORMAL -- deterministic) would pick, or its forced WAIT.
+## ONLINE DUEL: add [code]--mode duel [--unit <character_id>] [--team a,b,c][/code] (every bot of
+## the match, and the dedicated server's [code]--mode duel [--duel-format trio][/code]). The bot
+## announces its team preference on the lobby channel (DuelNetConfig.MSG_PICK) before readying
+## (default: the seat's default Full-party order, which the start trims to the format); a hosting
+## bot sets [code]--duel-format[/code] and folds both picks into the start
+## ([method DuelNetConfig.final_config]). On its turn it submits what the duel brain
+## ([method DuelBattle.decide_for], NORMAL -- deterministic; it switches on a bad matchup) would
+## pick (a forced WAIT is left to the seat's NetDuelStage); every [constant SWITCH_EVERY]th own action it switches to its first
+## healthy bench member when it can (so SWITCH rides every multi-process run); after a faint it
+## submits the brain's KO replacement pick.
 ##
 ## TURN CLOCK: the bot respects the host's clock -- when little time is left on its own clock
-## ([constant CLOCK_MARGIN_MS]) it plays the safe move (end the turn / wait) instead of
-## deliberating. [code]--idle-turns N[/code] makes it sit out its first N timed turns so the
-## HOST times it out (the idle-bot check); a hosting bot also takes [code]--turn-clock
+## ([constant CLOCK_MARGIN_MS]) it plays the safe move (end the turn / wait / the canonical
+## auto-pick) instead of deliberating. [code]--idle-turns N[/code] makes it sit out its first N
+## timed turns so the HOST times it out (the idle-bot check); [code]--idle-picks N[/code] makes a
+## duel bot also sit out its first N KO replacement picks (the host then auto-picks for it -- a
+## timeout-stamped SWITCH). A hosting bot also takes [code]--turn-clock
 ## rapid|standard|relaxed[/code], [code]--turn-clock-ms MS[/code] and [code]--afk-limit N[/code].
-## The FINAL line counts the timeouts applied in the match ([code]timeouts=K[/code]).
+## The FINAL line counts the timeouts applied in the match ([code]timeouts=K[/code]) and the
+## timed-out KO replacement picks among them ([code]autopicks=K[/code]).
 
 var bot_name := "Bot"
 var _ns: NetSessionNode = null
@@ -46,18 +54,29 @@ var _host_end_after := 0
 var _was_in_match := false
 ## --mode duel: an online-duel bot.
 var _duel := false
-## --unit: this bot's duel combatant ("" = the slot's default).
+## --unit: this bot's duel lead ("" = the slot's default).
 var _unit := ""
-## Hosting duel bot: the seats' announced units {slot: id}.
+## --team a,b,c: this bot's team preference (overrides --unit).
+var _team: Array = []
+## --duel-format (a hosting bot): the format it sets for the lobby.
+var _format_id := ""
+## Hosting duel bot: the seats' announced teams {slot: [ids]}.
 var _picks: Dictionary = {}
 ## --idle-turns: timed turns of ours still to sit out (the host times them out).
 var _idle_turns := 0
 ## The clock key we are sitting out ("" = none).
 var _idle_key := ""
-## Timeouts applied in this match (any seat).
+## --idle-picks (duel): KO replacement picks of ours still to sit out (the host auto-picks).
+var _idle_picks := 0
+## Timeouts applied in this match (any seat), and the timed-out KO picks among them.
 var _timeouts := 0
+var _autopicks := 0
 ## Play the safe move when our own clock has less than this left.
 const CLOCK_MARGIN_MS := 1200
+## Duel actions this bot submitted (drives the periodic switch).
+var _duel_actions := 0
+## A duel bot switches (when it legally can) on every Nth of its own actions.
+const SWITCH_EVERY := 4
 
 
 func start(args: PackedStringArray) -> void:
@@ -68,13 +87,22 @@ func start(args: PackedStringArray) -> void:
 	_duel = String(opts.get("mode", NetProtocol.MODE_CONQUEST)) == NetProtocol.MODE_DUEL
 	_unit = String(opts.get("unit", ""))
 	_idle_turns = maxi(0, int(opts.get("idle_turns", 0)))
-	_ns.turn_timed_out.connect(func(slot, _a, strikes):
+	_idle_picks = maxi(0, int(opts.get("idle_picks", 0)))
+	_ns.turn_timed_out.connect(func(slot, a, strikes):
 		_timeouts += 1
-		_log("timeout: slot %d ran out of time (strike %d)" % [slot, strikes]))
+		var pick: bool = int(a.get(NetProtocol.KEY_TYPE, -1)) == NetProtocol.Action.SWITCH
+		if pick:
+			_autopicks += 1
+		_log("timeout: slot %d ran out of time (strike %d)%s" % [slot, strikes,
+			" -- auto-picked %s" % String(a.get(NetProtocol.KEY_DATA, {}).get(NetProtocol.K_UNIT, "")) if pick else ""]))
+	if opts.has("team"):
+		_team = DuelNetConfig.clean_team(Array(String(opts["team"]).split(",", false)))
+	_format_id = String(opts.get("duel_format", ""))
 	_ns.lobby_mode = NetProtocol.MODE_DUEL if _duel else NetProtocol.MODE_CONQUEST
 	_ns.lobby_message.connect(func(t, data, from_slot):
 		if t == DuelNetConfig.MSG_PICK and from_slot >= 0:
-			_picks[from_slot] = String(data.get("character_id", "")))
+			var team := DuelNetConfig.clean_team(data.get("team", []))
+			_picks[from_slot] = team if not team.is_empty() else DuelNetConfig.clean_team(data.get("character_id", "")))
 	_ns.joined.connect(func(slot):
 		_log("seated in slot %d" % slot)
 		if _duel:
@@ -85,7 +113,11 @@ func start(args: PackedStringArray) -> void:
 	_ns.match_started.connect(func(cfg):
 		_was_in_match = true
 		_log("match started (setup seed %d)" % int(cfg.get("seed", 0))))
-	_ns.action_applied.connect(func(_a, _r): _busy = false)
+	# A duel seat can act twice running (a KO replacement pick, then its turn), so it waits for
+	# ITS OWN action to land before choosing again (another seat's apply says nothing about it).
+	_ns.action_applied.connect(func(a, _r):
+		if not _duel or int(a.get(NetProtocol.KEY_ACTOR, -1)) == _ns.local_slot():
+			_busy = false)
 	_ns.intent_rejected.connect(func(_a, reason):
 		_rejections += 1
 		_log("intent rejected: %s" % reason)
@@ -106,6 +138,8 @@ func start(args: PackedStringArray) -> void:
 		err = _ns.host_game(bot_name, port)
 		if err == OK:
 			if _duel:
+				if _format_id != "":
+					_ns.set_match_config({DuelNetConfig.KEY_FORMAT: DuelNetConfig.format_config(_format_id)})
 				_announce_pick(0)
 			else:
 				_ns.set_match_config({"map_path": _host_map, "turn_system": int(opts.get("turn_system", 0)), "auto_end_turn": true})
@@ -121,7 +155,7 @@ func _process(_delta: float) -> void:
 	if _done or _ns == null:
 		return
 	if _ns.is_host() and _ns.can_start_match():
-		_ns.start_match(DuelNetConfig.final_config(_picks) if _duel else {})
+		_ns.start_match(_duel_final_config() if _duel else {})
 	if not _ns.is_in_match():
 		# The game itself closed the session after the match started (e.g. every peer
 		# refused an offline-only map: GameModeManager.apply_match_config) -- report it
@@ -176,6 +210,14 @@ func _sitting_out() -> bool:
 	var key := "%s@%d" % [String(clock.get("key", "")), int(clock.get("seq", 0))]
 	if key == _idle_key:
 		return true
+	# A duel KO replacement pick has its own clock (DuelNetRules.clock_kind "pick"): --idle-picks.
+	if String(clock.get("kind", "")) == NetTurnClock.KIND_PICK:
+		if _idle_picks <= 0:
+			return false
+		_idle_picks -= 1
+		_idle_key = key
+		_log("idling through this KO replacement pick (%d more to sit out)" % _idle_picks)
+		return true
 	if _idle_turns <= 0:
 		return false
 	_idle_turns -= 1
@@ -184,24 +226,49 @@ func _sitting_out() -> bool:
 	return true
 
 
-## Duel bot: announce this seat's combatant on the lobby channel (and remember our own).
+## Hosting duel bot: both teams for the lobby's format (the one --duel-format set, else Singles).
+func _duel_final_config() -> Dictionary:
+	var cfg := _ns.get_match_config()
+	var f: DuelFormat = DuelNetConfig.format_of(cfg) if cfg.has(DuelNetConfig.KEY_FORMAT) else null
+	return DuelNetConfig.final_config(_picks, "", "", f)
+
+
+## Duel bot: announce this seat's team preference on the lobby channel (and remember our own).
 func _announce_pick(slot: int) -> void:
-	var id := _unit if DuelNetConfig.is_eligible(_unit) else DuelNetConfig.default_unit(slot)
-	_picks[slot] = id
-	_log("duel pick: %s" % id)
-	_ns.send_lobby_message(DuelNetConfig.MSG_PICK, {"character_id": id})
+	var team: Array = _team.duplicate()
+	if team.is_empty():
+		var lead := _unit if DuelNetConfig.is_eligible(_unit) else DuelNetConfig.default_unit(slot)
+		team = DuelNetConfig.fill_team([lead], slot, DuelFormat.preset(DuelFormat.FULL))
+	_picks[slot] = team
+	_log("duel pick: %s" % ",".join(team))
+	_ns.send_lobby_message(DuelNetConfig.MSG_PICK, {"character_id": String(team[0]), "team": team})
 
 
 ## Duel bot: the brain's pick for our combatant (NORMAL is deterministic), else the first legal
 ## slot; a stunned / controlled combatant passes.
 func _choose_duel(rules: DuelNetRules, me: int) -> Dictionary:
 	var b: DuelBattle = rules.battle
-	var actor = b.current_actor() if b != null else null
+	if b == null:
+		return {}
+	if b.has_pending_replacement():
+		# Our combatant fainted: the brain's KO replacement pick (or nothing: the other seat picks).
+		return rules.default_intent(me)
+	var actor = b.current_actor()
 	if actor == null or b.side_of(actor) != me:
 		return {}
 	if b.must_pass(actor):
-		return rules.pass_intent()
-	var intent := rules.use_move_intent(int(b.decide_for(actor).get("slot", DuelBrain.NO_SLOT)))
+		# The seat's NetDuelStage submits its forced pass by itself (a second WAIT would be refused).
+		return {}
+	_duel_actions += 1
+	var decision := b.decide_for(actor)
+	if _duel_actions % SWITCH_EVERY == 0 and b.can_switch(actor) and not decision.has("switch"):
+		decision = {"switch": b.usable_bench(me)[0]}
+	if decision.has("switch"):
+		var sw := rules.switch_intent(int(decision["switch"]))
+		if rules.validate_intent(sw, me) == "":
+			_log("switch -> %s" % String(sw[NetProtocol.KEY_DATA][NetProtocol.K_UNIT]))
+			return sw
+	var intent := rules.use_move_intent(int(decision.get("slot", DuelBrain.NO_SLOT)))
 	if rules.validate_intent(intent, me) != "":
 		var legal := b.legal_slots(actor)
 		intent = rules.use_move_intent(legal[0]) if not legal.is_empty() else {}
@@ -285,7 +352,7 @@ func _finish(reason = "") -> void:
 		return
 	_done = true
 	var bad := _desyncs > 0 or _cheats > 0 or String(reason).contains("verification")
-	_log("FINAL reason=%s seq=%d digest=%d desyncs=%d timeouts=%d" % [str(reason), _last_seq, _last_digest, _desyncs, _timeouts])
+	_log("FINAL reason=%s seq=%d digest=%d desyncs=%d timeouts=%d autopicks=%d" % [str(reason), _last_seq, _last_digest, _desyncs, _timeouts, _autopicks])
 	await get_tree().create_timer(0.3).timeout
 	get_tree().quit(2 if bad else 0)
 

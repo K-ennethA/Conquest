@@ -21,7 +21,7 @@ toasts, apply-side ultimates and cooldown booking, replays, dev auto-join).
 | `NetSession.gd` (class `NetSessionNode`, autoload `NetSession`) | Join handshake (build gate), lobby, peer→slot seating, the lobby message channel, intent queue, action ordering (seq), the commit-reveal rounds, checkpoints, disconnects / forfeit. Player-hosted (`host_game`) and dedicated (`host_dedicated`) modes share every code path. Also holds the per-battle **seam** (`install_command_seam`: the `CommandApplier` replays drive) and the solo RNG stream. Knows nothing about units. |
 | `NetCommitReveal.gd` | Hash-chain commitments, share verification, epoch re-commit, per-action seed derivation. Pure (no networking), unit-tested. |
 | `transport/NetTransport.gd`, `transport/ENetTransport.gd` | The only place a `MultiplayerPeer` is created. See *Adding a transport*. |
-| `NetProtocol.gd` | Wire format: actions (`MOVE`, `USE_MOVE`, `WAIT`, `END_TURN`; the command-log names `MOVE_UNIT` / `CAST_MOVE` / `WAIT_UNIT` are aliases), builders, shape validation, THE cell (de)serialiser (`[col, row, floor]`, see docs/MULTI_FLOOR.md), `KEY_RNG` (locally stamped seed, never trusted from the wire), the join hello + `validate_hello` + `describe_rejection`, the `INTENT_*` rejection vocabulary + `describe_intent_rejection`, `PROTOCOL_VERSION`. |
+| `NetProtocol.gd` | Wire format: actions (`MOVE`, `USE_MOVE`, `WAIT`, `END_TURN`, `USE_ITEM`, `SWITCH`; the command-log names `MOVE_UNIT` / `CAST_MOVE` / `WAIT_UNIT` are aliases), builders, shape validation, THE cell (de)serialiser (`[col, row, floor]`, see docs/MULTI_FLOOR.md), `KEY_RNG` (locally stamped seed, never trusted from the wire), the join hello + `validate_hello` + `describe_rejection`, the `INTENT_*` rejection vocabulary + `describe_intent_rejection`, `PROTOCOL_VERSION`. |
 | `NetGameRules.gd` | `validate_intent` (host; re-run by clients) and THE deterministic `apply_action` every peer runs — incl. replay recording, the ultimate cut-in announcement, cooldown / charge booking, canto hand-off; `state_digest` for desync detection. |
 | `CommandApplier.gd` | `NetGameRules` bound to the live battle under the name the battle / replay code uses (`apply_command(cmd, board, ctx)`, `hash_match_state`). A subclass, never a second apply path. |
 | `NetUnitIds.gd` | Stable unit ids (`"<slot>:<n>"`, mid-match arrivals `"<slot>:s<k>"`). |
@@ -34,7 +34,7 @@ toasts, apply-side ultimates and cooldown booking, replays, dev auto-join).
 | `systems/multiplayer_launcher.gd` (autoload `MultiplayerLauncher`), `systems/AutoClientDetector.gd` | Dev two-instance auto-join (`-- --multiplayer-auto-join`) and the dev-gated "Host + Auto Client" spawner. |
 | `dev_scripts/net_bot_client.gd`, `dev_scripts/net_multiprocess_check.sh` | Scripted headless client + the 3-process check (see *Testing*; `MODE=duel` for online duels). |
 | `DuelNetConfig.gd`, `DuelNetRules.gd`, `game/duel/net/NetDuelStage.gd`, `menus/DuelLobby.gd` | ONLINE DUELS (see *Online duels*): the duel match config + its strict request builder, the rules object over a `DuelBattle`, the network-driven duel stage, the duel lobby. |
-| `NetTurnClock.gd` | The online TURN CLOCK's presets (Rapid / Standard / Relaxed), budgets per kind (side / unit / duel action), the anti-AFK default, config keys and the player-facing wording. Pure. The live clock is in `NetSession` (see *Turn clock*); the HUD is `game/ui/hud/TurnTimer.gd` (network mode) and `game/ui/hud/NetMatchBar.gd` (the duel's clock + Forfeit corner). |
+| `NetTurnClock.gd` | The online TURN CLOCK's presets (Rapid / Standard / Relaxed), budgets per kind (side / unit / duel action / duel KO pick), the anti-AFK default, config keys and the player-facing wording. Pure. The live clock is in `NetSession` (see *Turn clock*); the HUD is `game/ui/hud/TurnTimer.gd` (network mode) and `game/ui/hud/NetMatchBar.gd` (the duel's clock + Forfeit corner). |
 
 ## Flow
 
@@ -113,9 +113,13 @@ A joining client's **first** message is a hello — display name plus
   (an editor run joining an exported build is a legitimate test setup).
 
 Bump `PROTOCOL_VERSION` whenever the envelope or an action's data shape changes (2 = the
-merged core, 3 = USE_ITEM, 4 = lobby modes + the online-duel config keys, 5 = the online turn
-clock: the `timeout` action stamp, the clock / attach / clock-forfeit RPCs, the `turn_clock` /
-`afk_limit` config keys). Replays stamp it too and refuse other versions. Two-machine procedure:
+merged core, 3 = USE_ITEM, 4 = lobby modes + the online-duel config keys, 5 = used by two
+parallel builds with different wire changes -- (a) the online turn clock: the `timeout` action
+stamp, the clock / attach / clock-forfeit RPCs, the `turn_clock` / `afk_limit` config keys;
+(b) party duels: the `SWITCH` action, `duel_format` / `duel_teams`, the team-carrying
+`duel_pick` -- and 6 = both together plus party-aware duel timeouts (a timed-out KO replacement
+pick is a `timeout`-stamped `SWITCH`). Replays stamp it too and refuse other versions.
+Two-machine procedure:
 `docs/NETWORK_TESTING.md`.
 
 ## Lobby channel
@@ -205,15 +209,28 @@ claimed. Pinned by `tests/unit/test_match_loadouts.gd`, `test_lobby_loadout_exch
 
 DECISIONS.md #32: a DUEL is played over this same core. Menu: Online > Versus > Duel > Network
 (host / join / a `--mode duel` dedicated server) -> `menus/DuelLobby.gd` (roster + ready, each
-seat's unit, the host's / leader's stage + weather).
+seat's TEAM, the host's / leader's format + stage + weather).
 
-* **Config** (`DuelNetConfig`): `mode: "duel"`, `duel_units {slot: character_id}`, `duel_stage`,
-  `duel_weather`, plus the session's `seed`. Each seat announces its pick on the lobby channel
-  (`duel_pick`); the player-host's lobby, or the dedicated server (`auto_start_config`), folds
-  both into the start. Untrusted: `sanitize` whitelists, and `build_request` -- run on EVERY peer
-  -- refuses a unit that is not duel-eligible (`DuelMoveCompiler.is_duel_eligible`; humans and
-  creatures alike) or an unknown stage / weather (the match ends with `duel_refused`). Missing
-  picks fall back to each slot's default. The offline-only-maps rule does not apply (no map).
+* **Formats** (`game/duel/DuelFormat.gd`, data): team size (1-6), active per side (1 = singles;
+  doubles is refused until built), switching (costs the turn), KO replacement (the fainted
+  unit's owner picks, free), item rules, species clause, strength cap. Presets **Singles 1v1**,
+  **Trio 3v3** (a new player-host's default) and **Full 6v6**; anything else is custom. The
+  format writes the party knobs onto a private copy of the `DuelRuleset` (rule 7 / rule 11).
+* **Config** (`DuelNetConfig`): `mode: "duel"`, `duel_format` (`DuelFormat.to_dict`; absent =
+  Singles), `duel_teams {slot: [character_id, ...]}` (lead first, exactly the team size),
+  `duel_units {slot: lead}` (the Singles-era key, kept), `duel_stage`, `duel_weather`, plus the
+  session's `seed`. The host / lobby leader (or `--duel-format singles|trio|full` on a dedicated
+  server, which locks it) sets the format; each seat announces a team PREFERENCE list on the
+  lobby channel (`duel_pick {character_id, team}`); the player-host's lobby, or the dedicated
+  server (`auto_start_config`), folds both into the start trimmed / filled to the team size
+  (`final_config` / `teams_for`: repeats dropped under the clause, gaps filled with the seat's
+  defaults). The teams are per-match keys (`DuelNetConfig.PER_MATCH_KEYS`: never kept in a
+  standing lobby config, taken even when a server's config is locked). Untrusted: `sanitize`
+  whitelists, and `build_request` -- run on EVERY peer -- refuses an unreadable format, a team of
+  the wrong size (`bad_team_size`), a repeat under the clause (`species_clause`), a unit that is
+  not duel-eligible (`DuelMoveCompiler.is_duel_eligible`; humans and creatures alike) or an
+  unknown stage / weather (the match ends with `duel_refused`). Missing picks fall back to each
+  slot's default team. The offline-only-maps rule does not apply (no map).
 * **The duel** is a VERSUS `DuelRequest` (both sides human, seed = the setup seed, so the speed
   tie-break / weather / opening ticks agree) on every peer. GameModeManager opens
   `NetDuelStage` (a `DuelStage` that never applies anything itself) and attaches `DuelNetRules`.
@@ -223,17 +240,50 @@ seat's unit, the host's / leader's stage + weather).
   `WAIT` only while it must pass (stunned / controlled -- the seat's stage submits it by itself);
   `MOVE` / `END_TURN` / `USE_ITEM` are refused. **No items and no flee online**: an online duel
   carries no bag and cannot be run from (both are local / story actions).
+* **Party intents** (`SWITCH {unit_id}` = the incoming member's `"<side>:<index>"` id). A
+  voluntary switch needs the format's switching, the sender's own turn, a combatant free to act
+  and one of the SENDER's benched, healthy members (`INTENT_NO_SWITCHING`, `INTENT_NOT_YOUR_UNIT`,
+  `INTENT_ILLEGAL_SWITCH`). After a faint the fainted side's seat must send its KO replacement
+  pick first -- any other action from it is `INTENT_MUST_PICK`, the other seat is
+  `INTENT_NOT_YOUR_TURN` -- and `current_turn_slot()` names the picking side (side 0 first when
+  both must). Same rule object as the local duel (`DuelBattle.switch_problem`).
+* **Defaults**: `DuelNetRules.default_intent(slot)` is the seat's sensible legal default right
+  now (the brain's replacement pick when one is pending, else its forced pass / first legal
+  move) -- what a bot or stand-in plays. It is NOT the clock's timeout (see *Turn clock* below).
 * **Apply**: `DuelBattle.apply_command` with the NetSession-stamped seq + commit-reveal seed (a
-  kept canto move's follow-up WAIT applies inside the same call on every peer). **Digest**: the
-  board digest + round, decided flag, winner, command count, whose turn.
+  kept canto move's follow-up WAIT applies inside the same call on every peer). `NetGameRules`
+  hands a `SWITCH` to the board that owns the parties (`DuelBoard.apply_switch`: a benched member
+  is by design not on the board); a tactical board has none. **Digest**: the board digest +
+  round, decided flag, winner, command count, whose turn, and both PARTIES
+  (`DuelBattle.party_digest`: every member's HP / statuses / cooldowns / fainted flag, the pending
+  picks) -- a desync on a benched unit is caught too.
 * **Leaving**: pause-menu Forfeit (a loss); the opponent's forfeit / drop is this seat's win
   (`DuelBattle.concede`), with the same toasts and messages as Conquest online. The stage shows
   a visible **Forfeit** button (`NetMatchBar`, opening the pause menu's forfeit confirm).
-* **Turn clock**: every ACTION is timed by the host's clock (*Turn clock*; Standard 30s). The
-  duel's hook (`DuelNetRules`: `clock_kind` = action, `clock_turn_key` per applied command,
-  `timeout_action` = the acting combatant's pass) is all the duel adds; `NetDuelStage` mounts the
-  countdown and narrates "Time's up! X passes." (The local ruleset's `turn_timer_seconds` stays 0:
-  a local expiry would be an un-networked call.)
+* **Turn clock**: every ACTION is timed by the host's clock (*Turn clock*; Standard 30s), and a
+  party duel's pending KO replacement PICK has its own short clock (Standard 15s). The duel's
+  hook (`DuelNetRules`) is all the duel adds:
+  * `clock_kind` = `action`, or `pick` while a replacement is pending; `clock_turn_key` =
+    `"<command count>:<actor id>"` per applied command, or `"pick:<side>:<members fainted>"`
+    for a pick (keyed by the picking side's KO count, so the OTHER seat's simultaneous pick after
+    a double KO does not restart it; with both pending, side 0's clock runs first, then side 1
+    gets a fresh pick clock if it has not picked meanwhile).
+  * A voluntary **SWITCH is the action**: it answers the action's clock like a move (it spends
+    the turn), and there is no separate switch deadline.
+  * The KO replacement pick is **not** charged to anyone's action clock: the faint settles, the
+    pick clock opens (nobody can act until the pick lands), and once it is picked the next
+    action gets a fresh action clock.
+  * `timeout_action`: an action expiry = the acting combatant **passes** (a WAIT -- the idle seat
+    deals no damage and rolls nothing; never "the first legal move"); a pick expiry = the host
+    **auto-picks** the seat's first healthy benched member in TEAM ORDER (`auto_pick_index`; the
+    same "next in order" the engine uses when `ko_replacement` is off) as a `SWITCH` stamped
+    `timeout: true`. It is a pure read of the identical party state, so every peer derives the
+    same member and `validate_timeout` re-checks it before applying.
+  * Strikes: a timed-out action or pick is a strike; any real action of the seat (a move, a
+    voluntary switch, its own pick) resets them -- the generic NetSession count.
+  `NetDuelStage` mounts the countdown, narrates "Time's up! X passes." / "Time's up! Go, Y!" and
+  drops a stale command grid / replacement picker when the clock played for its seat. (The
+  local ruleset's `turn_timer_seconds` stays 0: a local expiry would be an un-networked call.)
 * **Same device**: Online > Versus > Duel > Same device is the hot-seat `DuelSetup` (two human
   sides on one `DuelStage`) -- no network involved.
 
@@ -246,11 +296,11 @@ never arms it in a MULTIPLAYER match, because a local expiry would end the turn 
 
 **Presets** (`NetTurnClock`; default **Standard**):
 
-| Preset | Traditional (per side) | Speed First (per unit) | Duel (per action) |
-|---|---|---|---|
-| Rapid | 45s + 3s per living unit | 10s | 15s |
-| Standard | 90s + 5s per living unit | 20s | 30s |
-| Relaxed | 150s + 8s per living unit | 35s | 50s |
+| Preset | Traditional (per side) | Speed First (per unit) | Duel (per action) | Duel KO pick |
+|---|---|---|---|---|
+| Rapid | 45s + 3s per living unit | 10s | 15s | 10s |
+| Standard | 90s + 5s per living unit | 20s | 30s | 15s |
+| Relaxed | 150s + 8s per living unit | 35s | 50s | 25s |
 
 A Traditional side's allowance is counted when its turn opens (a bigger army gets a little
 longer). Chosen in the lobby by the player-host / the dedicated server's leader (the Turn clock
@@ -262,7 +312,8 @@ host stamps the match's `turn_clock` preset and `afk_limit` into the match confi
 its battle attached (`attach_game` -> `_rpc_game_attached`; a seat still loading never loses
 time), on each SETTLED state (every accepted action applied and digested) the host asks the
 rules for `clock_turn_key()` -- Traditional `"<turn>:<slot>"`, Speed First
-`"<turn>:<acting unit id>"`, duel `"<command count>:<actor id>"` -- and when it changes opens a
+`"<turn>:<acting unit id>"`, duel `"<command count>:<actor id>"` (a pending KO pick:
+`"pick:<side>:<members fainted>"`) -- and when it changes opens a
 new clock: `budget_ms` from the preset and `clock_kind()` (+ `clock_units(slot)` for a side), and
 broadcasts `{key, slot, kind, budget_ms, remaining_ms, seq, strikes, afk_limit, preset}`.
 Every peer stores `deadline = now + remaining_ms` (`turn_clock()`, `turn_clock_remaining_ms()`,
@@ -273,13 +324,15 @@ has no intent already queued (a last-instant intent goes first), the host builds
 `timeout_action(slot)` -- Traditional **END_TURN** for the seat; Speed First **WAIT** for the
 active unit (END_TURN if it cannot wait, e.g. stunned); duel: the acting combatant **passes**
 (a WAIT: fair -- the idle seat deals nothing and rolls nothing, the opponent simply gets the
-tempo) -- stamps it `timeout: true` and runs it through the SAME accept path as an intent
+tempo), or, while its KO replacement pick is pending, the **auto-pick** `SWITCH` (first healthy
+benched member in team order; see *Online duels*) -- stamps it `timeout: true` and runs it through the SAME accept path as an intent
 (validation, commit-reveal round, apply, digest). So it is identical on every peer, recorded by
 the replay recorder like any action, and replayable. `turn_timed_out(slot, action, strikes)`
 fires on every peer at apply time (HUD: "TIME'S UP" on the chip, a NetToast line).
 
 **Anti-AFK.** Every peer counts a seat's consecutive applied timeouts (`turn_clock_strikes`; any
-own action resets it). On the host, the expiry that would be the seat's `afk_limit`-th in a row
+own action resets it -- a duel's voluntary SWITCH or own KO pick included; a timed-out
+auto-pick is a strike like any timeout). On the host, the expiry that would be the seat's `afk_limit`-th in a row
 (default **3**, `--afk-limit N`, 0 = never) is not played out: the seat **forfeits** --
 `clock_forfeit(slot)` on every peer (the others also get `opponent_forfeited(slot)`, so the
 battle resolves exactly like a pause-menu forfeit: UILayoutManager eliminates that side, the
@@ -309,8 +362,10 @@ mounts it in `NetMatchBar` with a visible **Forfeit** button. The battle **Map M
 **Forfeit** entry online (confirm page -> the pause menu's forfeit path, `forfeit_match()`), and
 online the menu opens on either seat's turn.
 
-**Bots** (`net_bot_client.gd`) play the safe move (END_TURN / WAIT) when their own clock has
-under 1.2 s left; `--idle-turns N` sits out their first N timed turns so the host times them out.
+**Bots** (`net_bot_client.gd`) play the safe move (END_TURN / WAIT / the canonical auto-pick)
+when their own clock has under 1.2 s left; `--idle-turns N` sits out their first N timed turns
+so the host times them out, `--idle-picks N` (duel) their first N KO replacement picks (the
+host auto-picks; the FINAL line counts `timeouts=` and `autopicks=`).
 
 ## What the player sees at the seam
 
@@ -429,16 +484,17 @@ godot --headless --path . -- --server --port 8910 \
       [--map res://game/maps/resources/default_skirmish.tres] \
       [--turn-system traditional|speed_first] [--rng all|server] \
       [--max-matches N] [--end-after-actions N] [--reveal-timeout 30] [--transport enet]
-      [--mode duel [--stage meadow|tall_grass|grove] [--weather clear|...]]
+      [--mode duel [--duel-format singles|trio|full] [--stage meadow|tall_grass|grove] [--weather clear|...]]
       [--turn-clock rapid|standard|relaxed] [--afk-limit 3] [--turn-clock-ms MS]
 ```
 
 `--turn-clock` fixes the preset (else the leader picks; default Standard), `--afk-limit` the
 consecutive expiries that forfeit, `--turn-clock-ms` (testing) gives every timed turn MS ms.
+The clock flags apply to both modes and combine freely with the duel flags.
 
-`--mode duel` serves online DUELS instead (no map; `--stage` locks the stage, else the slot-0
-client picks; each seat's unit comes from its `duel_pick` lobby message; the match ends on the
-duel's KO -- `DuelNetRules.is_match_over`).
+`--mode duel` serves online DUELS instead (no map; `--duel-format` / `--stage` lock the format /
+stage, else the slot-0 client picks; each seat's team comes from its `duel_pick` lobby message,
+fitted to the format; the match ends when a side has nobody left -- `DuelNetRules.is_match_over`).
 
 `--server` is detected by `GameModeManager` (also any export with the
 `dedicated_server` feature tag, i.e. Godot's *Dedicated Server* export mode).
@@ -543,8 +599,10 @@ commit-reveal, the lobby channel) is transport-agnostic.
 | `tests/integration/test_net_rejection_toast.gd` | refused command → NetToast |
 | `tests/integration/test_net_duel.gd` | ONLINE DUEL: mode stamped + mode-mismatch refused, both peers build one duel, a whole duel applies identically (commands, commit-reveal seeds, timeline, winner, digest), host validation (turn, slot, aim, no items / moves / end-turn / free skip), client re-validation, the actor cannot derive its roll before the other reveals, desync, forfeit / drop, ineligible picks refused, a `--mode duel` DedicatedServer folding both picks |
 | `tests/integration/test_net_turn_clock.gd` | the TURN CLOCK over ENet: deadline broadcast to both seats (and only once every battle is attached), a new turn = a new clock, expiry -> END_TURN (Traditional) / the active unit's WAIT (Speed First) / the duel's pass applied identically (stamped, digests), strikes cleared by an own action, a client cannot issue a timeout, an early host timeout is caught, N expiries forfeit (limit 0 never), lobby / locked presets, the HUD chip on both seats (caption, urgent band, TIME'S UP) |
-| `tests/unit/test_net_turn_clock_ui.gd` | presets / budgets / wording, PROTOCOL 5 + the timeout stamp, config sanitiser + server flags, the local Speed First clock off online, the chip in network mode (never expires), the timeout toast, the Map Menu's Forfeit (confirm -> the pause menu's forfeit), `NetMatchBar`, the lobbies' Turn clock pickers |
+| `tests/unit/test_net_turn_clock_ui.gd` | presets / budgets (incl. the KO pick kind) / wording, PROTOCOL 6 + the timeout stamp, config sanitiser + server flags, the local Speed First clock off online, the chip in network mode (never expires), the timeout toast, the Map Menu's Forfeit (confirm -> the pause menu's forfeit), `NetMatchBar`, the lobbies' Turn clock pickers |
 | `tests/integration/test_net_duel_stage.gd` | the `NetDuelStage` on both seats: HUD pick -> intent -> applied on both, each seat prompted only for its own unit, per-seat Victory / Defeat, forfeit = the other seat's win |
+| `tests/integration/test_net_party_turn_clock.gd` | PARTY DUEL x TURN CLOCK over ENet: a pending KO pick gets its own `pick` clock (own budget / key), a timeout during it AUTO-PICKS the first healthy benched member in team order identically on both peers (`timeout: true` SWITCH, digests, party state), an expired action still passes (no attack), a voluntary SWITCH / own pick resets strikes while an auto-pick adds one, a non-canonical pick dressed as a timeout is refused |
+| `tests/integration/test_net_party_duel.gd` | ONLINE PARTY DUELS: format + teams ride the config, a whole 3v3 with switches and KO picks applies identically, illegal switches / picks refused (turn, bench, fainted, must-pick-first, Singles), a desync on a BENCHED unit caught, strict team / format configs, a `--duel-format trio` dedicated server folding both teams, the net stage's replacement picker |
 
 ```
 godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests/unit,res://tests/integration -gprefix=test_net -gexit
@@ -561,7 +619,14 @@ GODOT=/path/to/godot dev_scripts/net_multiprocess_check.sh \
 It passes when the server and both bots print the same `FINAL seq=… digest=…`
 with no desync / verification failure. `MODE=duel` runs an online duel instead (map / turn
 system ignored; `UNIT_A` / `UNIT_B` pick the combatants), e.g.
-`MODE=duel GODOT=… dev_scripts/net_multiprocess_check.sh "" "" 60` (and `HOSTED=1`). `HOSTED=1` runs the player-hosted
+`MODE=duel GODOT=… dev_scripts/net_multiprocess_check.sh "" "" 60` (and `HOSTED=1`). `FORMAT=trio` (or `full`)
+plays a PARTY duel: the server / hosting bot sets the format, the bots announce teams, switch
+every few turns and pick KO replacements (`MODE=duel FORMAT=trio … "" "" 400`). `IDLE=N` (any
+mode) has the second bot sit out its first N timed turns (the run must show timeouts; `CLOCK_MS`
+per timed turn, default 1500); `IDLE=9` exceeds the forfeit limit (`clock_forfeit`). With a party
+`FORMAT`, `IDLE` also sits out one KO pick (`IDLE_PICKS`, default 1) so the host auto-picks;
+`EXPECT_AUTOPICK=1` fails a run without one. FORMAT and IDLE combine
+(`MODE=duel FORMAT=trio IDLE=2 … "" "" 400`). `HOSTED=1` runs the player-hosted
 variant (a host bot = listen server + seat 0, and a guest bot). A bot alone:
 `godot --headless --path . -- --net-bot --connect 127.0.0.1 --port 8910 --name BotA`
 (add `--host [--map … --turn-system … --end-after-actions N]` to make it the player-host).
@@ -585,7 +650,8 @@ button (`NetworkMultiplayerSetup.ENABLE_HOST_AUTO_CLIENT`) spawns exactly that.
 ## Known limitations
 
 * 1v1 humans only; no AI seats in network play. No reconnect.
-* Online duels: strict 1v1 (party size 1), no items, no flee, no spectators.
+* Online duels: singles-style (one combatant per side on the field; doubles is a follow-up),
+  no items, no flee, no spectators.
 * The turn clock is host-authoritative: a player-host could be LATE with a timeout (never early,
   see *Turn clock*); there is no pause / reconnect time bank.
 * Desync is detected (digest mismatch → match ends), not repaired.

@@ -51,6 +51,7 @@ func _ready() -> void:
 		return
 	hud.results_menu_only = true
 	hud.slot_chosen.connect(_on_slot_chosen)
+	hud.replacement_chosen.connect(_on_replacement_chosen)
 	if session != null:
 		session.action_applied.connect(_on_applied)
 		session.intent_rejected.connect(_on_rejected)
@@ -83,7 +84,8 @@ func _exit_tree() -> void:
 	super._exit_tree()
 
 
-# --- ONLINE TURN CLOCK hook (NetSession's host clock; the rules say a timeout = a pass) -------
+# --- ONLINE TURN CLOCK hook (NetSession's host clock; DuelNetRules: a timeout = a pass, or the
+# --- team-order auto-pick while a KO replacement is pending) ------------------------------------
 
 ## The host's clock + a visible Forfeit, for the seats (a dedicated server shows nothing).
 var clock_bar: NetMatchBar = null
@@ -138,6 +140,10 @@ func _run() -> void:
 	_driving = true
 	hud.show_intro(versus_intro(battle))
 	hud.set_command_panel_visible(false)
+	if _party_duel():
+		hud.show_team_preview(_seat_names())
+		await _beat(BEAT_PREVIEW)
+		hud.hide_team_preview()
 	await _beat(BEAT_INTRO)
 	if not is_inside_tree():
 		return
@@ -156,8 +162,13 @@ func _run() -> void:
 	_driving = false
 
 
-## Whose turn: prompt our seat (or submit its forced pass), otherwise say who we wait for.
+## Whose turn: prompt our seat (or submit its forced pass), otherwise say who we wait for. A
+## pending KO replacement comes first: the fainted combatant's seat picks, the other waits.
 func _update_turn() -> void:
+	var pending := battle.pending_replacements()
+	if not pending.is_empty():
+		_update_replacement(pending)
+		return
 	var actor = battle.current_actor()
 	var mine: bool = actor != null and local_slot >= 0 and battle.side_of(actor) == local_slot
 	if not mine:
@@ -178,6 +189,54 @@ func _update_turn() -> void:
 		_waiting_text = ""
 		hud.narrate("What will %s do?" % actor.get_display_name())
 		hud.show_commands(actor)
+
+
+## PARTY DUELS: a combatant fainted -- our seat picks its replacement (the picker, no way back),
+## or we wait for the other seat's pick.
+func _update_replacement(pending: Array[int]) -> void:
+	var mine: bool = local_slot >= 0 and local_slot in pending
+	if not mine:
+		_prompted = false
+		_set_waiting(_waiting_for_pick(pending[0]))
+		return
+	var settled: bool = session != null and not session.has_pending_actions() \
+		and Engine.get_process_frames() > _last_apply_frame + 1
+	if _pending or not settled or _prompted:
+		return
+	_prompted = true
+	_waiting_text = ""
+	hud.narrate("Choose who fights next.")
+	hud.show_replacement(local_slot)
+
+
+func _waiting_for_pick(side: int) -> String:
+	if local_slot < 0:
+		return "Side %d is choosing a partner…" % (side + 1)
+	var names: Dictionary = session.get_match_config().get("slots", {}) if session != null else {}
+	var who: String = String(names.get(side, ""))
+	return "Waiting for %s to send out a partner…" % (who if who != "" else "your opponent")
+
+
+## The seats' names for the team preview (the local seat reads "Your team").
+func _seat_names() -> Array:
+	var names: Dictionary = session.get_match_config().get("slots", {}) if session != null else {}
+	var out: Array = []
+	for side in 2:
+		out.append("" if side == local_slot else String(names.get(side, "")))
+	return out
+
+
+## The picker handed back our replacement: send it as an intent.
+func _on_replacement_chosen(index: int) -> void:
+	if not _prompted or _pending or battle.is_over or local_slot < 0:
+		return
+	var intent := rules.replacement_intent(local_slot, index)
+	var why := rules.validate_intent(intent, local_slot)
+	if why != "":
+		hud.narrate(NetProtocol.describe_intent_rejection(why, intent))
+		hud.show_replacement(local_slot)
+		return
+	_submit(intent)
 
 
 func _waiting_for(actor) -> String:
@@ -202,6 +261,15 @@ func _on_slot_chosen(slot: int) -> void:
 	if not _prompted or _pending or battle.is_over:
 		return
 	var actor = battle.current_actor()
+	if slot == DuelHUD.SWITCH_SLOT and actor != null:
+		var sw := rules.switch_intent(hud.chosen_member)
+		var bad := rules.validate_intent(sw, local_slot)
+		if bad != "":
+			hud.narrate(NetProtocol.describe_intent_rejection(bad, sw))
+			hud.show_commands(actor)
+			return
+		_submit(sw)
+		return
 	if slot < 0 or actor == null:
 		# Items / Flee are never offered online (the buttons stay disabled); re-offer the grid.
 		if actor != null:
@@ -231,6 +299,11 @@ func _on_applied(action: Dictionary, result: Dictionary) -> void:
 	_last_apply_frame = Engine.get_process_frames()
 	if int(action.get(NetProtocol.KEY_ACTOR, -1)) == local_slot:
 		_pending = false
+		if NetProtocol.is_timeout(action) and _prompted:
+			# The host's clock played our turn / pick for us: the open grid or replacement
+			# picker is stale (a late click must not become the next turn's intent).
+			_prompted = false
+			hud.show_waiting("")
 	_waiting_text = ""
 	_records.append(result)
 
@@ -250,6 +323,10 @@ func _present(rec: Dictionary) -> void:
 	if int(cmd.get(NetProtocol.KEY_TYPE, -1)) == NetProtocol.Action.WAIT:
 		hud.narrate("Time's up! %s passes." % who if NetProtocol.is_timeout(cmd) else "%s can't move!" % who)
 		await _beat(BEAT_PASS)
+		return
+	if int(cmd.get(NetProtocol.KEY_TYPE, -1)) == NetProtocol.Action.SWITCH:
+		hud.narrate(("Time's up! " if NetProtocol.is_timeout(cmd) else "") + switch_line(rec))
+		await _beat(BEAT_AFTER)
 		return
 	var move: MoveResource = rec.get("move")
 	if move == null:

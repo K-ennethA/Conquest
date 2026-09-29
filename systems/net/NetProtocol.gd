@@ -19,7 +19,7 @@ class_name NetProtocol
 ## arrivals "<slot>:s<k>") -- the same id on every peer, derived from the board.
 ##
 ## ONE VOCABULARY. The network actions and the replay / command-log commands are the
-## same thing: MOVE, USE_MOVE, WAIT, END_TURN, USE_ITEM. The older command names (MOVE_UNIT,
+## same thing: MOVE, USE_MOVE, WAIT, END_TURN, USE_ITEM, SWITCH. The older command names (MOVE_UNIT,
 ## CAST_MOVE, WAIT_UNIT) and payload-key constants (KEY_UNIT_ID, KEY_DEST_CELL,
 ## KEY_MOVE_SLOT, KEY_AIM_CELL, KEY_RNG_SEED) are ALIASES of the canonical ones, kept so
 ## the replay system and the battle UI read unchanged -- they build and match the very
@@ -44,11 +44,17 @@ enum Action {
 	## Duels only today (DECISIONS.md #28): the bag lives on the duel ([DuelBattle]), the
 	## effect is the item's [ConsumableEffect] -- deterministic, no RNG.
 	USE_ITEM = 5,
+	## data: { unit_id:String }  -- PARTY DUELS: bring the benched team member [unit_id] onto its
+	## side's station. Two uses, told apart by the duel's state (never by the payload): a VOLUNTARY
+	## switch on the side's own turn (the outgoing combatant's turn is SPENT; the incoming one does
+	## not act again this round), or a KO REPLACEMENT the fainted combatant's owner picks (free,
+	## before any other turn opens). Deterministic, no roll ([DuelBattle], [DuelNetRules]).
+	SWITCH = 6,
 }
 
 ## Highest canonical action value (the enum carries aliases and a reserved id, so
 ## Action.size() is not the range; the reserved ATTACK_UNIT inside it is never well-formed).
-const ACTION_MAX := 5
+const ACTION_MAX := 6
 
 ## Wire/format version. Bump whenever the envelope or any action's data shape changes
 ## so peers on mismatched builds refuse each other at join time rather than silently
@@ -61,10 +67,16 @@ const ACTION_MAX := 5
 ##   3: USE_ITEM (battle consumables -- the duel's Items action)
 ##   4: lobby MODE (conquest / duel) in the hello + match config, the duel match-config
 ##      keys (duel_units / duel_stage / duel_weather) and REJECT_MODE_MISMATCH
-##   5: the online TURN CLOCK -- the host's clock broadcast, host-issued timeout actions
-##      (KEY_TIMEOUT), the attach report, the clock forfeit and the turn_clock / afk_limit
-##      config keys (see NetTurnClock)
-const PROTOCOL_VERSION := 5
+##   5: used by two parallel builds with DIFFERENT wire changes (neither can talk to the
+##      other, nor to 6):
+##      a) the online TURN CLOCK -- the host's clock broadcast, host-issued timeout actions
+##         (KEY_TIMEOUT), the attach report, the clock forfeit and the turn_clock / afk_limit
+##         config keys (see NetTurnClock)
+##      b) PARTY DUELS -- the SWITCH action (voluntary switch / KO replacement pick), the duel
+##         match-config keys duel_format / duel_teams, the team-carrying duel_pick lobby message
+##   6: both 5a and 5b together, plus party-aware duel timeouts (a clock expiry during a
+##      pending KO replacement pick is the host-issued, timeout-stamped auto-pick SWITCH)
+const PROTOCOL_VERSION := 6
 
 ## What a network lobby plays (DECISIONS.md #32). Fixed per lobby: the host (or a dedicated
 ## server's --mode) decides it, the joiner's hello names the mode it came for, and a mismatch
@@ -145,6 +157,11 @@ static func use_move(unit_id: String, slot: int, aim_cell) -> Dictionary:
 
 static func wait(unit_id: String) -> Dictionary:
 	return make_action(Action.WAIT, {K_UNIT: unit_id})
+
+
+## PARTY DUELS: send the benched team member [param unit_id] in (a switch or a KO replacement).
+static func switch_to(unit_id: String) -> Dictionary:
+	return make_action(Action.SWITCH, {K_UNIT: unit_id})
 
 
 ## Use consumable [param item_id] on the unit [param target_id] ("" = the user itself).
@@ -253,6 +270,8 @@ static func is_well_formed(action: Variant) -> bool:
 		Action.USE_ITEM:
 			return _has_unit(d) and typeof(d.get(K_ITEM)) == TYPE_STRING and String(d[K_ITEM]) != "" \
 				and typeof(d.get(K_TARGET)) == TYPE_STRING and String(d[K_TARGET]) != ""
+		Action.SWITCH:
+			return _has_unit(d)
 	return false
 
 
@@ -303,6 +322,8 @@ static func type_name(t: int) -> String:
 			return "END_TURN"
 		Action.USE_ITEM:
 			return "USE_ITEM"
+		Action.SWITCH:
+			return "SWITCH"
 	return "UNKNOWN(%d)" % t
 
 
@@ -476,6 +497,13 @@ const INTENT_DUEL_OVER := "duel_over"
 const INTENT_NOT_ONLINE := "not_allowed_online"
 ## A host-issued timeout that is not the rules' canonical timeout action for the seat.
 const INTENT_TIMEOUT_MISMATCH := "timeout_mismatch"
+## PARTY DUELS. A side's fielded combatant fainted: its owner must pick the replacement first
+## (the only legal action for that seat; everyone else waits).
+const INTENT_MUST_PICK := "must_pick_replacement"
+## The format has no switching (Singles), or this combatant may not switch now.
+const INTENT_NO_SWITCHING := "switching_not_allowed"
+## The named member cannot come in: not on this team, already fielded, or fainted.
+const INTENT_ILLEGAL_SWITCH := "illegal_switch"
 
 ## Short label for the command an action carries, for a player-facing line ("Move rejected").
 ## [param action] may be anything at all -- a malformed payload off the wire, or null -- so an
@@ -494,6 +522,8 @@ static func describe_action(action: Variant) -> String:
 			return "End turn"
 		Action.USE_ITEM:
 			return "Item"
+		Action.SWITCH:
+			return "Switch"
 	return "Command"
 
 
@@ -538,6 +568,12 @@ static func describe_intent_rejection(reason: String, action: Variant = null) ->
 			why = "the duel is already decided"
 		INTENT_NOT_ONLINE:
 			why = "not available in online duels"
+		INTENT_MUST_PICK:
+			why = "choose who fights next first"
+		INTENT_NO_SWITCHING:
+			why = "switching is not allowed right now"
+		INTENT_ILLEGAL_SWITCH:
+			why = "that partner cannot come in"
 		_:
 			why = String(reason).strip_edges().replace("_", " ")
 			if why.is_empty():

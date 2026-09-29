@@ -282,6 +282,11 @@ func process_modifier_turn_end() -> void:
 	for modifier_id in expired_modifiers:
 		remove_stat_modifier(modifier_id)
 
+## Ids of every live stat modifier (a copy). A party duel snapshots them when a unit is built
+## (equipment) so a switch-out can clear only what the battle added.
+func modifier_ids() -> Array:
+	return _stat_modifiers.keys()
+
 func clear_all_modifiers() -> void:
 	"""Remove all temporary stat modifiers"""
 	var modifier_ids = _stat_modifiers.keys()
