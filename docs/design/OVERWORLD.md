@@ -633,8 +633,10 @@ BattleResult
 ---
 
 ## 8. Risks & notes
-- **Tile-node cost:** every cell is a node + collision; keep areas ≤ ~32×32 until tile batching
-  (M4). Profile the skirt on mobile (already an open item in HANDOFF §3).
+- **Tile-node cost:** every cell is still a small node subtree (~6 nodes; overworld tiles no longer
+  carry collision); keep areas ≤ ~32×32 until tile batching (M4). Tile geometry, the skirt and the
+  terrain mask are cached and neighbours prewarmed in the background — see STORY_MODE.md "Area
+  travel & loading". Profile the skirt on mobile (already an open item in HANDOFF §3).
 - **Autoload global state:** `MapLoader` registers tiles with `CombatServices`; the battle boot
   rebuilds it, but the overworld must call `CombatServices.clear()` on exit to leave no stale
   board for menus/tests (verify in task 2).

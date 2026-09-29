@@ -21,9 +21,10 @@ class_name TileMeshCache
 const KIND_LOWPOLY := 1
 const KIND_PAVED := 2
 
-## Soft cap on cached cells: each is a few KB of vertices; the whole cache is dropped when full
-## (the four story areas together use ~2.5 k).
-const MAX_CELLS := 6000
+## Soft cap on cached cells. A cell is ~900 flat-shaded vertices (~35 KB of GPU buffers); the
+## four story areas together use ~1.35 k cells (~45 MB). The whole cache is dropped when full
+## (then rebuilt on demand), which bounds it at ~90 MB even across many battle boards.
+const MAX_CELLS := 2500
 
 static var _meshes: Dictionary = {}
 static var _ready: Dictionary = {}
