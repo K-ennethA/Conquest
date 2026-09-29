@@ -25,14 +25,21 @@ const CELL := 2.0
 const ROAD_RUN := 7
 const LAVA_RUN := 3
 
+## How many built masks [method mask_for] keeps (story areas are revisited constantly; a
+## mask is ~15 k pixels, so a handful costs a few hundred KB).
+const CACHE_SIZE := 8
+
 static var _img: Image = null
 static var _tex: ImageTexture = null
 static var _w: int = 0
 static var _h: int = 0
+## content key ([method content_key]) -> built mask Image, oldest first ([constant CACHE_SIZE]).
+static var _cache: Dictionary = {}
 
 
 ## Build + publish the mask for [param map]. Safe headless (RenderingServer calls
-## are no-ops on the dummy renderer).
+## are no-ops on the dummy renderer). A map whose mask was built before (a revisited story
+## area, a replayed battle map) reuses it ([method mask_for]).
 static func publish(map: MapResource) -> void:
 	if map == null:
 		return
@@ -40,32 +47,7 @@ static func publish(map: MapResource) -> void:
 	_h = maxi(1, int(map.height))
 	var tw := _w + MARGIN * 2
 	var th := _h + MARGIN * 2
-	var board: Array = []  # [x][y] -> Color
-	board.resize(_w)
-	for x in _w:
-		var col: Array = []
-		col.resize(_h)
-		for y in _h:
-			var entry: Dictionary = map.get_tile_at_position(Vector2i(x, y))
-			col[y] = classify(MapLoader.resolve_tile_resource_for_entry(entry), entry)
-		board[x] = col
-	_img = Image.create(tw, th, false, Image.FORMAT_RGBA8)
-	for ty in th:
-		for tx in tw:
-			var bx := tx - MARGIN
-			var by := ty - MARGIN
-			var cx := clampi(bx, 0, _w - 1)
-			var cy := clampi(by, 0, _h - 1)
-			var c: Color = board[cx][cy]
-			var out := maxi(absi(bx - cx), absi(by - cy))
-			if out > 0:
-				# Corner quadrants would smear the corner cell diagonally forever:
-				# only straight continuations keep their class there.
-				if bx != cx and by != cy:
-					c = Color(0, 0, 0, 1)
-				else:
-					c = _continue(c, out, bx, by)
-			_img.set_pixel(tx, ty, c)
+	_img = mask_for(map)
 	if _tex == null:
 		_tex = ImageTexture.create_from_image(_img)
 	else:
@@ -75,6 +57,75 @@ static func publish(map: MapResource) -> void:
 	rs.global_shader_parameter_set(&"terrain_mask_rect", Vector4(-MARGIN * CELL, -MARGIN * CELL, tw * CELL, th * CELL))
 	rs.global_shader_parameter_set(&"terrain_mask_on", 1.0)
 	rs.global_shader_parameter_set(&"board_rect", Vector4(0.0, 0.0, _w * CELL, _h * CELL))
+
+
+## Identity of what the mask (and everything built from it, e.g. the [WorldSkirt]) depends on:
+## the board size and its tile layout. Two loads of the same map -- or an edited copy with the
+## same tiles -- share a key; any tile change makes a new one.
+static func content_key(map: MapResource) -> int:
+	if map == null:
+		return 0
+	return [int(map.width), int(map.height), map.tile_layout].hash()
+
+
+## The class mask for [param map] (cached per [method content_key]). Never mutate the result.
+static func mask_for(map: MapResource) -> Image:
+	var key := content_key(map)
+	if _cache.has(key):
+		var hit: Image = _cache[key]
+		_cache.erase(key)   # re-insert: most recently used last
+		_cache[key] = hit
+		return hit
+	var img := build_image(map)
+	store_mask(key, img)
+	return img
+
+
+## Keep a mask built elsewhere (a background prewarm) under [param key] ([method content_key]).
+static func store_mask(key: int, img: Image) -> void:
+	if img == null:
+		return
+	_cache[key] = img
+	while _cache.size() > CACHE_SIZE:
+		_cache.erase(_cache.keys()[0])
+
+
+## Build the class mask of [param map] (board + [constant MARGIN] cells each side). Pure: reads
+## only the map, touches no static state.
+static func build_image(map: MapResource) -> Image:
+	var w := maxi(1, int(map.width))
+	var h := maxi(1, int(map.height))
+	var tw := w + MARGIN * 2
+	var th := h + MARGIN * 2
+	var board: Array = []  # [x][y] -> Color
+	board.resize(w)
+	# One pass over the layout (get_tile_at_position is a linear scan per call).
+	var lookup: Dictionary = map.build_tile_lookup()
+	for x in w:
+		var col: Array = []
+		col.resize(h)
+		for y in h:
+			var entry: Dictionary = MapResource.tile_from_lookup(lookup, Vector2i(x, y))
+			col[y] = classify(MapLoader.resolve_tile_resource_for_entry(entry), entry)
+		board[x] = col
+	var img := Image.create(tw, th, false, Image.FORMAT_RGBA8)
+	for ty in th:
+		for tx in tw:
+			var bx := tx - MARGIN
+			var by := ty - MARGIN
+			var cx := clampi(bx, 0, w - 1)
+			var cy := clampi(by, 0, h - 1)
+			var c: Color = board[cx][cy]
+			var out := maxi(absi(bx - cx), absi(by - cy))
+			if out > 0:
+				# Corner quadrants would smear the corner cell diagonally forever:
+				# only straight continuations keep their class there.
+				if bx != cx and by != cy:
+					c = Color(0, 0, 0, 1)
+				else:
+					c = _continue(c, out, bx, by)
+			img.set_pixel(tx, ty, c)
+	return img
 
 
 ## Terrain class colour for one resolved tile.
@@ -119,13 +170,19 @@ static func _continue(c: Color, out: int, bx: int, by: int) -> Color:
 ## CPU read of the published classes at board cell ([param x], [param y]) (may lie
 ## outside the board, within the margin). Returns grass beyond the texture.
 static func class_at(x: int, y: int) -> Color:
-	if _img == null:
+	return class_in(_img, x, y)
+
+
+## [method class_at] against a given mask [param img] (a [method mask_for] result) rather than
+## the published one -- what a builder running off the main thread reads.
+static func class_in(img: Image, x: int, y: int) -> Color:
+	if img == null:
 		return Color(0, 0, 0, 1)
 	var tx := x + MARGIN
 	var ty := y + MARGIN
-	if tx < 0 or ty < 0 or tx >= _img.get_width() or ty >= _img.get_height():
+	if tx < 0 or ty < 0 or tx >= img.get_width() or ty >= img.get_height():
 		return Color(0, 0, 0, 1)
-	return _img.get_pixel(tx, ty)
+	return img.get_pixel(tx, ty)
 
 
 static func board_size() -> Vector2i:

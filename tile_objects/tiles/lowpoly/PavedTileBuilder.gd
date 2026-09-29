@@ -27,17 +27,45 @@ func _ready() -> void:
 		paving = MeshInstance3D.new()
 		paving.name = "Paving"
 		add_child(paving)
-	paving.mesh = build_mesh(style, int(round(global_position.x)), int(round(global_position.z)), int(round(global_position.y)))
+	var kx := int(round(global_position.x))
+	var kz := int(round(global_position.z))
+	var ky := int(round(global_position.y))
+	var st: int = style
+	# Built once per (style, cell) per process and shared ([TileMeshCache]).
+	var meshes: Dictionary = TileMeshCache.meshes_for(
+		TileMeshCache.key(TileMeshCache.KIND_PAVED, st, kx, kz, ky),
+		func() -> Dictionary: return {"paving": build_arrays(st, kx, kz, ky)})
+	paving.mesh = meshes["paving"]
 	paving.material_override = ProcMesh.material()
 
 
 static func build_mesh(s: int, kx: int, kz: int, ky: int = 0) -> ArrayMesh:
+	return TileMeshCache.mesh_from_arrays(build_arrays(s, kx, kz, ky))
+
+
+## The paving's surface arrays (pure: safe on a worker thread).
+static func build_arrays(s: int, kx: int, kz: int, ky: int = 0) -> Array:
 	var pm := ProcMesh.new()
 	if s == Style.PLANKS:
 		_planks(pm, kx, kz, ky)
 	else:
 		_flagstones(pm, kx, kz, ky)
-	return pm.commit()
+	return pm.to_arrays()
+
+
+## Start computing the paving of every cell in [param cells] ([code][style, kx, kz, ky][/code])
+## on the WorkerThreadPool ([method TileMeshCache.prewarm]). Returns the task id, or -1.
+static func prewarm(cells: Array) -> int:
+	var keys: Array = []
+	for c in cells:
+		keys.append(TileMeshCache.key(TileMeshCache.KIND_PAVED, int(c[0]), int(c[1]), int(c[2]), int(c[3])))
+	return TileMeshCache.prewarm(keys, _prewarm_batch)
+
+
+static func _prewarm_batch(keys: Array, result: Dictionary) -> void:
+	for k in keys:
+		var key: Vector4i = k
+		result[key] = {"paving": build_arrays(key.x - TileMeshCache.KIND_PAVED * 64, key.y, key.z, key.w)}
 
 
 static func _flagstones(pm: ProcMesh, kx: int, kz: int, ky: int) -> void:

@@ -45,13 +45,21 @@ func commit() -> ArrayMesh:
 	var m := ArrayMesh.new()
 	if v.is_empty():
 		return m
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, to_arrays())
+	return m
+
+
+## The surface arrays [method commit] would upload ([] when empty) -- pure data, so a worker
+## thread can build geometry and leave the ArrayMesh to the main thread.
+func to_arrays() -> Array:
+	if v.is_empty():
+		return []
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = v
 	arrays[Mesh.ARRAY_NORMAL] = n
 	arrays[Mesh.ARRAY_COLOR] = c
-	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return m
+	return arrays
 
 
 ## A quad a-b-d-e (counter-clockwise seen from the side [param normal] points to).

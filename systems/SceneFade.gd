@@ -107,7 +107,10 @@ func change_scene(path: String) -> void:
 		return
 
 	_kill_tween()
-	_rect.modulate.a = 0.0
+	# A fade-in still waiting to start (screen black) is superseded: stay black, no flash.
+	if _settle_frames <= 0:
+		_rect.modulate.a = 0.0
+	_settle_frames = 0
 	_tween = create_tween()
 	_tween.tween_property(_rect, "modulate:a", 1.0, FADE_OUT_TIME)
 	# tween_callback (not await) so this never suspends the caller and can never hang
@@ -135,6 +138,26 @@ func _fade_in() -> void:
 	if not _animations_on():
 		_rect.modulate.a = 0.0
 		return
+	# Hold black for a couple of frames first: the arriving scene builds in its _ready (an
+	# overworld area, a battle board), and a tween started now would take that long frame's
+	# delta as its first step and jump most of the way through the fade in one hitch.
+	_settle_frames = FADE_IN_SETTLE_FRAMES
+	set_process(true)
+
+
+## Frames the screen stays black after a scene lands before the fade-in starts.
+const FADE_IN_SETTLE_FRAMES: int = 2
+var _settle_frames: int = 0
+
+
+func _process(_delta: float) -> void:
+	if _settle_frames <= 0:
+		set_process(false)
+		return
+	_settle_frames -= 1
+	if _settle_frames > 0 or _rect == null:
+		return
+	set_process(false)
 	_tween = create_tween()
 	_tween.tween_property(_rect, "modulate:a", 0.0, FADE_IN_TIME)
 

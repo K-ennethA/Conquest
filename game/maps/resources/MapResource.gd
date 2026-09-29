@@ -271,6 +271,36 @@ func get_tile_at_position(pos: Vector2i, floor_index: int = 0) -> Dictionary:
 		"tile_id": ""
 	}
 
+
+## ONE pass over [member tile_layout]: board cell (col, row, floor) -> its entry, the FIRST
+## entry per cell winning exactly as [method get_tile_at_position]'s scan does. Whole-board
+## builders (MapLoader, TerrainMask, BoardAdapter) read cells through this instead of calling
+## get_tile_at_position per cell -- that is a linear scan, so a W*H sweep was O(cells^2)
+## (~70 ms on a 24x18 area, ~225 ms on a 30x26 one). A snapshot: rebuild after editing.
+func build_tile_lookup() -> Dictionary:
+	var out: Dictionary = {}
+	for tile_data in tile_layout:
+		var cell := entry_cell(tile_data)
+		if not out.has(cell):
+			out[cell] = tile_data
+	return out
+
+
+## [method get_tile_at_position] answered from a [method build_tile_lookup] snapshot: the same
+## entry (or the same default NORMAL entry on floor 0 / {} on an upper floor) in O(1).
+static func tile_from_lookup(lookup: Dictionary, pos: Vector2i, floor_index: int = 0) -> Dictionary:
+	var e = lookup.get(Vector3i(pos.x, pos.y, floor_index), null)
+	if e != null:
+		return e
+	if floor_index != 0:
+		return {}
+	return {
+		"position": pos,
+		"tile_type": "NORMAL",
+		"tile_resource_path": "",
+		"tile_id": ""
+	}
+
 func set_tile_at_position(pos: Vector2i, tile_type: String, tile_resource_path: String = "", tile_id = "", floor_index: int = 0) -> void:
 	"""Set tile data at specific position.
 

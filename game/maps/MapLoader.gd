@@ -34,6 +34,12 @@ var surround_enabled: bool = true
 ## WorldSkirt. Pending the user's per-screen look decision -- flip here, one place.
 var prefer_world_skirt: bool = true
 
+## Give every tile its click / hover collider (the tile scene's StaticBody3D). Battles pick
+## cells with physics rays and keep it on; the story overworld picks with a ground-plane
+## intersection (OverworldCamera.ground_point) and switches it off, sparing ~2 nodes and a
+## physics body per cell on every area load.
+var tile_collision_enabled: bool = true
+
 ## True once [method _build_world_dressing] mounted a [WorldSkirt] for the current map.
 var _world_skirt_built: bool = false
 
@@ -446,12 +452,14 @@ func _load_tiles() -> bool:
 		return false
 
 	var map_size = current_map.get_map_size()
+	# One pass over the layout instead of a linear get_tile_at_position scan per cell.
+	var lookup: Dictionary = current_map.build_tile_lookup()
 
 	# Create tiles for each position
 	for x in range(map_size.x):
 		for y in range(map_size.y):
 			var pos = Vector2i(x, y)
-			var tile_data = current_map.get_tile_at_position(pos)
+			var tile_data = MapResource.tile_from_lookup(lookup, pos)
 
 			if not _create_tile_at_position(pos, tile_data):
 				return false
@@ -543,27 +551,32 @@ func _create_tile_at_position(grid_pos: Vector2i, tile_data: Dictionary, floor_i
 	if resolved_tile_resource != null:
 		var model_path: String = resolved_tile_resource.model_path
 		if not model_path.is_empty():
-			if ResourceLoader.exists(model_path):
-				var model_scene = load(model_path) as PackedScene
-				if model_scene != null:
-					tile_scene = model_scene
-					uses_authored_geometry = true
-				else:
-					_note_tile_model_fallback(model_path, "not a PackedScene")
+			var looked: Array = _tile_scene_lookup(model_path)
+			if looked[0] == SCENE_OK:
+				tile_scene = looked[1]
+				uses_authored_geometry = true
+			elif looked[0] == SCENE_NOT_PACKED:
+				_note_tile_model_fallback(model_path, "not a PackedScene")
 			else:
 				_note_tile_model_fallback(model_path, "not found")
 
 	# Legacy fallback: the same field may hold a scene path instead of a TileResource.
-	if not uses_authored_geometry and not tile_resource_path.is_empty() and ResourceLoader.exists(tile_resource_path):
-		var custom_scene = load(tile_resource_path) as PackedScene
-		if custom_scene:
-			tile_scene = custom_scene
+	if not uses_authored_geometry and not tile_resource_path.is_empty():
+		var legacy: Array = _tile_scene_lookup(tile_resource_path)
+		if legacy[0] == SCENE_OK:
+			tile_scene = legacy[1]
 
 	# Instantiate tile
 	var tile_instance = tile_scene.instantiate()
 	if not tile_instance:
 		return false
-	
+	if not tile_collision_enabled:
+		# Dropped BEFORE the tile enters the tree: its body never reaches the physics server.
+		var body := tile_instance.get_node_or_null(^"StaticBody3D")
+		if body != null:
+			tile_instance.remove_child(body)
+			body.free()
+
 	# Set tile name and position
 	# Tile_<x>_<y>_<floor> under Tiles/Floor_<floor> (BoardAdapter._tile_node_at).
 	tile_instance.name = "Tile_%d_%d_%d" % [grid_pos.x, grid_pos.y, floor_index]
@@ -627,6 +640,138 @@ const TYPE_TO_TILE_ID: Dictionary = {
 	"LAVA": &"molten_lava",
 	"SACRED_GROUND": &"sacred_ground",
 }
+
+
+const SCENE_OK := 0
+const SCENE_NOT_PACKED := 1
+const SCENE_MISSING := 2
+
+## path -> [SCENE_OK / SCENE_NOT_PACKED / SCENE_MISSING, PackedScene-or-null]. A board places
+## the same handful of tile scenes hundreds of times, and ResourceLoader.exists() + load() cost
+## ~0.2 ms per call even on a cache hit (a filesystem probe + path resolution) -- ~100 ms of
+## every 24x18 area load went to re-asking for the same eight scenes. Shipped tile scenes never
+## change at runtime, so the answer is kept for the process.
+static var _tile_scene_cache: Dictionary = {}
+
+
+## [SCENE_* status, PackedScene or null] for [param path], resolved once per process.
+static func _tile_scene_lookup(path: String) -> Array:
+	var hit = _tile_scene_cache.get(path, null)
+	if hit != null:
+		return hit
+	var out: Array = [SCENE_MISSING, null]
+	if ResourceLoader.exists(path):
+		var ps := load(path) as PackedScene
+		out = [SCENE_OK, ps] if ps != null else [SCENE_NOT_PACKED, null]
+	_tile_scene_cache[path] = out
+	return out
+
+
+## Is the tile scene at [param path] already resolved (so [method lowpoly_cells] costs no disk
+## load for it)?
+static func is_tile_scene_resolved(path: String) -> bool:
+	return _tile_scene_cache.has(path)
+
+
+# --- Prewarm support (see TileMeshCache / AreaPrewarmer) ------------------------------------
+
+## tile scene path -> [TileMeshCache kind (0 = none), builder style, builder offset in the scene].
+static var _builder_info: Dictionary = {}
+
+
+## The authored tile scene path the entry [param entry] instantiates ("" = the default tile),
+## by exactly the rule [method _create_tile_at_position] applies.
+static func model_path_for_entry(entry: Dictionary) -> String:
+	var res := resolve_tile_resource_for_entry(entry)
+	if res != null and not res.model_path.is_empty():
+		return res.model_path
+	return ""
+
+
+## Every distinct authored tile scene [param map] uses (resolving each distinct tile entry once).
+static func model_paths_for(map: MapResource) -> Array[String]:
+	var seen: Dictionary = {}
+	var by_combo: Dictionary = {}
+	var need_default := map.tile_layout.size() < int(map.width) * int(map.height)
+	var entries: Array = map.tile_layout.duplicate()
+	if need_default:
+		entries.append({"tile_type": "NORMAL", "tile_resource_path": "", "tile_id": ""})
+	for e in entries:
+		var combo := [str(e.get("tile_id", "")), str(e.get("tile_resource_path", "")), str(e.get("tile_type", "NORMAL"))]
+		if by_combo.has(combo):
+			continue
+		var p := model_path_for_entry(e)
+		by_combo[combo] = p
+		if not p.is_empty():
+			seen[p] = true
+	var out: Array[String] = []
+	for p in seen:
+		out.append(p)
+	return out
+
+
+## [TileMeshCache kind, style, local offset] of the procedural builder ([LowPolyTileBuilder] /
+## [PavedTileBuilder]) inside tile scene [param path]; kind 0 when it has none. Resolved once per
+## scene (instantiated off-tree, never entering the tree).
+static func tile_builder_info(path: String) -> Array:
+	if _builder_info.has(path):
+		return _builder_info[path]
+	var out: Array = [0, 0, Vector3.ZERO]
+	var looked: Array = _tile_scene_lookup(path)
+	if looked[0] == SCENE_OK:
+		var inst: Node = (looked[1] as PackedScene).instantiate()
+		for c in inst.get_children():
+			if c is LowPolyTileBuilder:
+				out = [TileMeshCache.KIND_LOWPOLY, int((c as LowPolyTileBuilder).style), (c as Node3D).position]
+				break
+			if c is PavedTileBuilder:
+				out = [TileMeshCache.KIND_PAVED, int((c as PavedTileBuilder).style), (c as Node3D).position]
+				break
+		inst.free()
+	_builder_info[path] = out
+	return out
+
+
+## Start computing, in the background, the procedural geometry of every tile [param map] will
+## place ([method LowPolyTileBuilder.prewarm] / [method PavedTileBuilder.prewarm]). A wrong guess
+## only wastes background work: the builders key their cache on the style and the cell they
+## actually stand on. Returns how many cells were queued (0 when all were known).
+static func prewarm_tile_geometry(map: MapResource) -> int:
+	var lowpoly: Array = []
+	var paved: Array = []
+	var by_combo: Dictionary = {}
+	var lookup: Dictionary = map.build_tile_lookup()
+	var cells: Array = []
+	for x in range(int(map.width)):
+		for y in range(int(map.height)):
+			cells.append([MapResource.tile_from_lookup(lookup, Vector2i(x, y)), Vector2i(x, y), 0])
+	for e in map.tile_layout:
+		var f := MapResource.entry_floor(e)
+		if f > 0:
+			cells.append([e, MapResource.entry_position(e), f])
+	for triple in cells:
+		var e: Dictionary = triple[0]
+		var combo := [str(e.get("tile_id", "")), str(e.get("tile_resource_path", "")), str(e.get("tile_type", "NORMAL"))]
+		if not by_combo.has(combo):
+			var p := model_path_for_entry(e)
+			by_combo[combo] = tile_builder_info(p) if not p.is_empty() else [0, 0, Vector3.ZERO]
+		var info: Array = by_combo[combo]
+		if int(info[0]) == 0:
+			continue
+		var pos: Vector2i = triple[1]
+		var off: Vector3 = info[2]
+		var wx := int(round(pos.x * 2 + 1 + off.x))
+		var wz := int(round(pos.y * 2 + 1 + off.z))
+		if int(info[0]) == TileMeshCache.KIND_LOWPOLY:
+			lowpoly.append([int(info[1]), wx, wz])
+		else:
+			paved.append([int(info[1]), wx, wz, int(round(Cells.floor_y(int(triple[2])) + off.y))])
+	var n := 0
+	if LowPolyTileBuilder.prewarm(lowpoly) >= 0:
+		n += lowpoly.size()
+	if PavedTileBuilder.prewarm(paved) >= 0:
+		n += paved.size()
+	return n
 
 
 ## Report a tile falling back to the default geometry, ONCE per distinct model_path.

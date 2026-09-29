@@ -245,6 +245,21 @@ func validate_configuration() -> Dictionary:
 		"warnings": warnings
 	}
 
+## shader-material path -> the shared ShaderMaterial (null = missing / not a ShaderMaterial).
+## create_material runs once per tile per board load, and ResourceLoader.exists() + load() are
+## a filesystem probe + path resolution each time even on a cache hit.
+static var _style_materials: Dictionary = {}
+
+
+static func _style_material(path: String) -> ShaderMaterial:
+	if _style_materials.has(path):
+		return _style_materials[path]
+	var mat: ShaderMaterial = null
+	if ResourceLoader.exists(path):
+		mat = load(path) as ShaderMaterial
+	_style_materials[path] = mat
+	return mat
+
 func create_material() -> Material:
 	"""Create the tile surface material based on tile configuration.
 
@@ -255,11 +270,9 @@ func create_material() -> Material:
 	# Stylized shader styles: return the shared material instance (load() caches,
 	# so every grass tile references the same resource -- seamless + batched).
 	if material_style != MaterialStyle.FLAT and MATERIAL_STYLE_SHADERS.has(material_style):
-		var shader_path: String = MATERIAL_STYLE_SHADERS[material_style]
-		if ResourceLoader.exists(shader_path):
-			var shader_mat = load(shader_path)
-			if shader_mat is ShaderMaterial:
-				return shader_mat
+		var shader_mat: ShaderMaterial = _style_material(MATERIAL_STYLE_SHADERS[material_style])
+		if shader_mat != null:
+			return shader_mat
 		# Falling back to FLAT is the DESIGNED behaviour for a missing optional shader, and
 		# this resolver runs per tile material -- so a single absent shader file used to
 		# emit one debugger warning per tile on the board. The returned FLAT material IS

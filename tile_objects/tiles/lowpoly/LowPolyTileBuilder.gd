@@ -74,9 +74,19 @@ const GRASS_BLADE_MID: Color = Color(0.18, 0.55, 0.20, 0.82)   # mid leaf green
 const GRASS_BLADE_TIP: Color = Color(0.44, 0.82, 0.32, 0.68)   # bright (but still green) lit tip
 
 var _rng: int = 1
+## The tile's world cell origin (rounded world X / Z): the ONLY input besides [member style]
+## that the geometry depends on. Set from global_position in [method _ready], or directly by
+## an off-tree builder ([method prewarm]).
+var _kx: int = 0
+var _kz: int = 0
 static var _decor_mat: ShaderMaterial = null
 static var _grass_mat: ShaderMaterial = null
 static var _mote_mat: ShaderMaterial = null
+
+## GEOMETRY CACHE: every mesh this builder makes is a pure function of (style, world cell) --
+## the cap of the style alone, the decor / tall grass / motes / wall of (style, cell) -- so they
+## are built once per process and shared ([TileMeshCache]; the cap here, per style).
+static var _cap_cache: Dictionary = {}
 
 const DECOR_SHADER := "res://tile_objects/tiles/shaders/stylized_decor.gdshader"
 const TALL_GRASS_SHADER := "res://tile_objects/tiles/shaders/stylized_tall_grass.gdshader"
@@ -85,11 +95,14 @@ const TALL_TIP_DRY: Color = Color(0.78, 0.74, 0.36, 0.62)
 
 
 func _ready() -> void:
-	_rng = (_seed() | 1) & 0x7fffffff
+	_kx = int(round(global_position.x))
+	_kz = int(round(global_position.z))
+	var meshes: Dictionary = TileMeshCache.meshes_for(
+		TileMeshCache.key(TileMeshCache.KIND_LOWPOLY, style, _kx, _kz), _compute_arrays)
 
 	var cap := get_node_or_null("../MeshInstance3D") as MeshInstance3D
 	if cap != null:
-		cap.mesh = _build_cap()
+		cap.mesh = cap_mesh(style)
 		cap.rotation = Vector3(0.0, deg_to_rad(90.0 * float(_seed() % 4)), 0.0)
 
 	var decor := get_node_or_null("Decor") as MeshInstance3D
@@ -97,7 +110,7 @@ func _ready() -> void:
 		decor = MeshInstance3D.new()
 		decor.name = "Decor"
 		add_child(decor)
-	decor.mesh = _build_decor()
+	decor.mesh = meshes["decor"]
 	decor.material_override = _get_decor_mat()
 
 	# TALL_GRASS grows its blades on a SEPARATE, slightly translucent double-sided mesh:
@@ -109,7 +122,7 @@ func _ready() -> void:
 			grass = MeshInstance3D.new()
 			grass.name = "Grass"
 			add_child(grass)
-		grass.mesh = _build_grass_clumps()
+		grass.mesh = meshes["grass"]
 		grass.material_override = _get_grass_mat()
 	elif grass != null:
 		grass.queue_free()
@@ -122,7 +135,7 @@ func _ready() -> void:
 			motes = MeshInstance3D.new()
 			motes.name = "Motes"
 			add_child(motes)
-		motes.mesh = _build_motes(7 if style == Style.MEADOW else 10)
+		motes.mesh = meshes["motes"]
 		motes.material_override = _get_mote_mat()
 		motes.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		motes.custom_aabb = AABB(Vector3(-1.2, -0.2, -1.2), Vector3(2.4, 1.8, 2.4))
@@ -136,18 +149,65 @@ func _ready() -> void:
 			wall = MeshInstance3D.new()
 			wall.name = "Wall"
 			add_child(wall)
-		wall.mesh = _build_wall()
+		wall.mesh = meshes["wall"]
 		wall.material_override = ProcMesh.material()
 	elif wall != null:
 		wall.queue_free()
 
 
+# --- Geometry cache + background prewarm -------------------------------------
+
+## The shared cap mesh of [param st] (it depends on the style alone).
+static func cap_mesh(st: int) -> ArrayMesh:
+	if not _cap_cache.has(st):
+		var b := LowPolyTileBuilder.new()
+		b.style = st
+		_cap_cache[st] = b._build_cap()
+		b.free()
+	return _cap_cache[st]
+
+
+## The surface ARRAYS of this tile's cell geometry, the RNG-driven parts in the exact order the
+## RNG was always consumed (decor, then tall-grass clumps, then motes). Pure: reads only
+## style / _kx / _kz, so it also runs on a worker thread for [method prewarm].
+func _compute_arrays() -> Dictionary:
+	_rng = (_seed() | 1) & 0x7fffffff
+	var out: Dictionary = {"decor": _build_decor()}
+	if style == Style.TALL_GRASS:
+		out["grass"] = _build_grass_clumps()
+	if style == Style.MEADOW or style == Style.SACRED:
+		out["motes"] = _build_motes(7 if style == Style.MEADOW else 10)
+	if style == Style.WALL:
+		out["wall"] = _wall_arrays()
+	return out
+
+
+## Start computing, on the WorkerThreadPool, the geometry of every cell in [param cells]
+## ([code][style, kx, kz][/code]) not cached or queued yet -- a neighbouring area's tiles while
+## the player walks the current one (see [TileMeshCache]). Returns the task id, or -1.
+static func prewarm(cells: Array) -> int:
+	var keys: Array = []
+	for c in cells:
+		keys.append(TileMeshCache.key(TileMeshCache.KIND_LOWPOLY, int(c[0]), int(c[1]), int(c[2])))
+	return TileMeshCache.prewarm(keys, _prewarm_batch)
+
+
+## Worker-thread body of [method prewarm]: one off-tree builder, its fields set per cell.
+static func _prewarm_batch(keys: Array, result: Dictionary) -> void:
+	var b := LowPolyTileBuilder.new()
+	for k in keys:
+		var key: Vector4i = k
+		b.style = key.x - TileMeshCache.KIND_LOWPOLY * 64
+		b._kx = key.y
+		b._kz = key.z
+		result[key] = b._compute_arrays()
+	b.free()
+
+
 # --- Deterministic RNG ------------------------------------------------------
 
 func _seed() -> int:
-	var ix: int = int(round(global_position.x))
-	var iz: int = int(round(global_position.z))
-	var h: int = (ix * 73856093) ^ (iz * 19349663)
+	var h: int = (_kx * 73856093) ^ (_kz * 19349663)
 	return absi(h) % 1000000 + 1
 
 func _rand() -> float:
@@ -192,7 +252,7 @@ func _build_cap() -> ArrayMesh:
 	# Skirt: from the flat perimeter (CAP_TOP) down to CAP_LIP, facing outward.
 	# Water / lava sit below their banks: no skirt (the soil block shows at edges).
 	if style == Style.WATER or style == Style.LAVA:
-		return _mesh(v, n, null)
+		return _mesh_from_arrays(_surface(v, n, null))
 	var corners := [
 		Vector3(-HALF, CAP_TOP, -HALF), Vector3(HALF, CAP_TOP, -HALF),
 		Vector3(HALF, CAP_TOP, HALF), Vector3(-HALF, CAP_TOP, HALF)
@@ -207,7 +267,7 @@ func _build_cap() -> ArrayMesh:
 		_tri(v, n, null, t0, t1, b1, outward, Color.WHITE)
 		_tri(v, n, null, t0, b1, b0, outward, Color.WHITE)
 
-	return _mesh(v, n, null)
+	return _mesh_from_arrays(_surface(v, n, null))
 
 
 func _cap_top() -> float:
@@ -225,7 +285,7 @@ func _cap_jitter(ix: int, iz: int) -> float:
 
 # --- Decoration (dirt base + rocks + tufts), vertex-coloured ----------------
 
-func _build_decor() -> ArrayMesh:
+func _build_decor() -> Array:
 	var v := PackedVector3Array()
 	var n := PackedVector3Array()
 	var c := PackedColorArray()
@@ -323,13 +383,13 @@ func _build_decor() -> ArrayMesh:
 			var pz: float = _rand_range(-0.7, 0.7)
 			_add_pebble(v, n, c, Vector3(px, CAP_TOP, pz), _rand_range(0.04, 0.07))
 
-	return _mesh(v, n, c)
+	return _surface(v, n, c)
 
 
 ## Build the tall-grass blade layer: taller, bushier clumps spread to fill the tile,
 ## on their own translucent mesh (see _get_grass_mat). Vertex-coloured with alpha so a
 ## unit shows through. Only called for Style.TALL_GRASS.
-func _build_grass_clumps() -> ArrayMesh:
+func _build_grass_clumps() -> Array:
 	var v := PackedVector3Array()
 	var n := PackedVector3Array()
 	var c := PackedColorArray()
@@ -340,7 +400,7 @@ func _build_grass_clumps() -> ArrayMesh:
 		var cz: float = _rand_range(-0.74, 0.74)
 		var ch: float = _rand_range(0.66, 0.98)   # taller than before
 		_add_grass_clump(v, n, c, Vector3(cx, CAP_TOP, cz), ch)
-	return _mesh(v, n, c)
+	return _surface(v, n, c)
 
 
 func _add_rock(v: PackedVector3Array, n: PackedVector3Array, c: PackedColorArray, center: Vector3, s: float) -> void:
@@ -477,7 +537,7 @@ func _add_curved_blade(v: PackedVector3Array, n: PackedVector3Array, c: PackedCo
 
 ## Tiny camera-facing mote quads (billboarded + animated in stylized_motes).
 ## COLOR.a = per-mote phase; UV = quad corner.
-func _build_motes(count: int) -> ArrayMesh:
+func _build_motes(count: int) -> Array:
 	var v := PackedVector3Array()
 	var uv := PackedVector2Array()
 	var c := PackedColorArray()
@@ -489,14 +549,12 @@ func _build_motes(count: int) -> ArrayMesh:
 			v.append(p)
 			uv.append(k)
 			c.append(Color(1, 1, 1, phase))
-	var m := ArrayMesh.new()
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = v
 	arrays[Mesh.ARRAY_TEX_UV] = uv
 	arrays[Mesh.ARRAY_COLOR] = c
-	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return m
+	return arrays
 
 
 ## Four weathered standing stones and a low ring of pale pavers: the shrine read
@@ -529,10 +587,10 @@ func _add_shrine_stones(v: PackedVector3Array, n: PackedVector3Array, c: PackedC
 
 ## A dry-stone wall block filling the cell: irregular coursed stones (props shader
 ## adds dabs + moss), a mossy capstone course on top.
-func _build_wall() -> ArrayMesh:
+func _wall_arrays() -> Array:
 	var pm := ProcMesh.new()
-	var kx: int = int(round(global_position.x))
-	var kz: int = int(round(global_position.z))
+	var kx: int = _kx
+	var kz: int = _kz
 	var stone := Color(0.47, 0.45, 0.42)
 	var stone_dk := Color(0.33, 0.31, 0.29)
 	pm.box(Vector3(-0.93, CAP_TOP - 0.02, -0.93), Vector3(0.93, WALL_TOP - 0.05, 0.93), stone_dk)
@@ -569,7 +627,7 @@ func _build_wall() -> ArrayMesh:
 		pm.box(Vector3(x + 0.02, WALL_TOP - 0.05, -0.97), Vector3(x1 - 0.02, WALL_TOP + 0.02 + hh * 0.05, 0.97), stone.lerp(stone_dk, hh * 0.5), stone.lightened(0.08))
 		x = x1
 		j += 1
-	return pm.commit()
+	return pm.to_arrays()
 
 
 # --- Mesh helpers -----------------------------------------------------------
@@ -621,18 +679,23 @@ func _tri_grad(v: PackedVector3Array, n: PackedVector3Array, c: PackedColorArray
 	c.append(ca); c.append(cbb); c.append(cdd)
 
 
-func _mesh(v: PackedVector3Array, n: PackedVector3Array, c) -> ArrayMesh:
-	var m := ArrayMesh.new()
+## Surface arrays for one triangle list ([] when there is no geometry). Pure data, so it can be
+## built off the main thread; [method _mesh_from_arrays] makes the mesh.
+func _surface(v: PackedVector3Array, n: PackedVector3Array, c) -> Array:
 	if v.size() == 0:
-		return m
+		return []
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = v
 	arrays[Mesh.ARRAY_NORMAL] = n
 	if c != null:
 		arrays[Mesh.ARRAY_COLOR] = c
-	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return m
+	return arrays
+
+
+## An ArrayMesh from [method _surface] arrays (an empty mesh for []).
+static func _mesh_from_arrays(arrays: Array) -> ArrayMesh:
+	return TileMeshCache.mesh_from_arrays(arrays)
 
 
 ## Shared vertex-coloured material for the dirt base, rocks, tufts and flowers
