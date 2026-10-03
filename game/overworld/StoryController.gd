@@ -893,7 +893,7 @@ func prepare_battle_board(map_loader) -> void:
 	_install_guards()
 
 
-## The battle's GUARDS ("Protect Linnea", the hero -- [method StoryBattleBridge.guards_for]) join
+## The battle's GUARDS ("Protect Elias", the hero -- [method StoryBattleBridge.guards_for]) join
 ## the map's compiled rules as lose conditions, so the ordinary end check turns a guarded unit's
 ## fall into a defeat (and the objective banner shows them). The rules object is rebuilt per map
 ## load, so nothing leaks into the next battle.

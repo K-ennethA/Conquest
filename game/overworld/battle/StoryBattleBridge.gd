@@ -129,7 +129,7 @@ static func build_result(outcome: String, request: BattleRequest, tracking: Dict
 
 
 ## The board GUARDS a story battle adds to the map's rules ([ProtectUnit] lose conditions for
-## player 0's units): one per [method BattleRequest.protect_targets] entry ("Protect Linnea" --
+## player 0's units): one per [method BattleRequest.protect_targets] entry ("Protect Elias" --
 ## a guest ally, a party member), and one for the HERO (a party entry flagged hero; not in a
 ## spar). Each carries meta "story_reason" -- "protect:<name>" / "hero" -- which becomes the
 ## result's game-over reason when it fails. [param names] ({member_id: display name}) labels

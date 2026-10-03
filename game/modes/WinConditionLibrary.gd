@@ -120,7 +120,7 @@ static func build_protect(text: String, faction: int = HUMAN_FACTION) -> Protect
 ##     "Seize 7,5" / "Seize (7, 5)"       "x,y" pair, else from the map's THRONE
 ##                                        objective marker in special_rules. With no
 ##                                        cell at all it falls back to DefeatAllEnemies.
-##   "Protect Linnea"                  -> ProtectUnit, a LOSE-side guard ([method
+##   "Protect Elias"                  -> ProtectUnit, a LOSE-side guard ([method
 ##                                        build_win_conditions] skips it, [method
 ##                                        build_lose_conditions] adds it)
 ## Anything else falls back to DefeatAllEnemies with a log line.

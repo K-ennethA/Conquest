@@ -328,7 +328,7 @@ func test_a_protected_member_falling_is_a_game_over_in_both_tiers() -> void:
 			{"member_id": "blightcap", "current_hp": 0, "wounded": true, "fought": true}])
 		assert_eq(StoryPermadeath.game_over_reason(s, req, res, _ruleset()), "protect:Blightcap",
 			"%s: the protected member fell" % tier)
-	assert_true(StoryPermadeath.game_over_text("protect:Linnea").begins_with("Linnea has fallen"), "the card names them")
+	assert_true(StoryPermadeath.game_over_text("protect:Elias").begins_with("Elias has fallen"), "the card names them")
 
 
 func test_a_classic_wipe_is_a_game_over_behind_its_knob() -> void:
@@ -390,7 +390,7 @@ func test_spar_and_protect_ride_the_spec_request_and_result() -> void:
 	var team: Array[Dictionary] = [{"character_id": "gem_knight", "strength": 0.8}]
 	spec.opponent_team = team
 	spec.spar = true
-	var names: Array[String] = ["Linnea", "gem_knight"]
+	var names: Array[String] = ["Elias", "gem_knight"]
 	spec.protect = names
 	var r: BattleRequest = spec.to_request(BattleRequest.SOURCE_SCRIPT, "x.spar")
 	assert_true(r.is_spar(), "the request is a spar")
@@ -405,7 +405,7 @@ func test_spar_and_protect_ride_the_spec_request_and_result() -> void:
 		assert_true((dr["request"] as DuelRequest).is_spar(), "and hears it's a spar (its intro says so)")
 	var res := BattleResult.make("x", BattleResult.OUTCOME_DEFEAT)
 	res.spar = true
-	res.game_over_reason = "protect:Linnea"
+	res.game_over_reason = "protect:Elias"
 	var rb: BattleResult = BattleResult.from_dict(JSON.parse_string(JSON.stringify(res.to_dict())))
 	assert_true(rb.spar, "the result carries the spar tag")
 	assert_true(rb.is_game_over(), "and the game-over reason")
@@ -464,7 +464,7 @@ func test_a_guard_lose_condition_failing_is_a_defeat() -> void:
 
 
 func test_protect_strings_compile_to_the_lose_side() -> void:
-	var rules: GameModeRules = WinConditionLibrary.build_rules(["Defeat Boss", "Protect Linnea"])
+	var rules: GameModeRules = WinConditionLibrary.build_rules(["Defeat Boss", "Protect Elias"])
 	assert_eq(rules.win_conditions.size(), 1, "Protect is not a way to win")
 	assert_true(rules.win_conditions[0] is DefeatBoss, "the boss is")
 	var guards: Array = []
@@ -474,13 +474,13 @@ func test_protect_strings_compile_to_the_lose_side() -> void:
 	assert_eq(guards.size(), 1, "one guard on the lose side")
 	if guards.is_empty():
 		return
-	assert_eq(String((guards[0] as ProtectUnit).protected_id), "Linnea", "for Linnea")
+	assert_eq(String((guards[0] as ProtectUnit).protected_id), "Elias", "for Elias")
 	assert_eq((guards[0] as ProtectUnit).faction, WinConditionLibrary.HUMAN_FACTION, "on the player's side")
 	assert_eq(WinConditionLibrary.protect_target("Protect: Tam"), "Tam", "the colon form")
 	assert_eq(WinConditionLibrary.protect_target("Protectorate"), "", "a word that merely starts with protect is not one")
-	var only: GameModeRules = WinConditionLibrary.build_rules(["Protect Linnea"])
+	var only: GameModeRules = WinConditionLibrary.build_rules(["Protect Elias"])
 	assert_true(only.win_conditions[0] is DefeatAllEnemies, "protect alone still needs a way to win: rout the enemy")
 	assert_true(WinConditionLibrary.rules_are_map_authored(only), "and counts as an authored objective")
 	var lines: PackedStringArray = ObjectiveText.detail_lines(rules)
-	assert_true(lines.has("Defeat: Linnea falls"), "the Objective page lists the guard (%s)" % str(lines))
-	assert_eq(ObjectiveBanner.guard_text_for(guards), "Protect Linnea", "the banner's tag")
+	assert_true(lines.has("Defeat: Elias falls"), "the Objective page lists the guard (%s)" % str(lines))
+	assert_eq(ObjectiveBanner.guard_text_for(guards), "Protect Elias", "the banner's tag")

@@ -158,7 +158,7 @@ static func _names(target: String, member_id: String, character_id: String, stat
 	return m != null and m.display_name().to_lower() == t
 
 
-## The game-over screen's line for [param reason] ("Linnea has fallen."), naming the hero
+## The game-over screen's line for [param reason] ("Elias has fallen."), naming the hero
 ## [param hero_name] for the hero rule.
 static func game_over_text(reason: String, hero_name: String = "") -> String:
 	if reason == REASON_HERO:

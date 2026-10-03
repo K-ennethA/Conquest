@@ -36,7 +36,7 @@ enum DefeatPolicy { WHITEOUT, CONTINUE, RETRY }
 ## A FRIENDLY battle (a training spar, a rival friendly): it only knocks units out -- it never
 ## causes permadeath (DECISIONS.md #29). Shown as "Friendly spar" on the battle.
 @export var spar: bool = false
-## Units that MUST SURVIVE ("Protect Linnea"): a name, character id or party member id each. On a
+## Units that MUST SURVIVE ("Protect Elias"): a name, character id or party member id each. On a
 ## tactical board a matching player-side unit (a guest ally, a party member) falling is a defeat;
 ## in a duel, a matching party member fainting. Either way the journey is over: GAME OVER, back
 ## to the last save (both tiers).

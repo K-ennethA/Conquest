@@ -95,7 +95,7 @@ func is_spar() -> bool:
 	return bool(rules.get("spar", false))
 
 
-## The units this battle names as MUST SURVIVE ("Protect Linnea"): names / character ids / party
+## The units this battle names as MUST SURVIVE ("Protect Elias"): names / character ids / party
 ## member ids, as authored. Losing one is a defeat and a GAME OVER (both tiers).
 func protect_targets() -> Array[String]:
 	var out: Array[String] = []
