@@ -31,11 +31,16 @@ func location(location_id: String) -> WorldLocation:
 	return null
 
 
-## The place a walkable area belongs to (null for an area the map does not show).
+## The place a walkable area belongs to (null for an area the map does not show). A building
+## INTERIOR is listed under its town's place by the builder; one that is not falls back to its
+## [member OverworldAreaResource.parent_area]'s place.
 func location_for_area(area_id: String) -> WorldLocation:
 	for l in locations:
 		if l != null and l.area_ids.has(StringName(area_id)):
 			return l
+	var a: OverworldAreaResource = OverworldAreaResource.load_by_id(area_id)
+	if a != null and not String(a.parent_area).is_empty() and String(a.parent_area) != area_id:
+		return location_for_area(String(a.parent_area))
 	return null
 
 

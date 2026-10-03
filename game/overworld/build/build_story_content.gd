@@ -35,18 +35,19 @@ extends SceneTree
 ##
 ## THE OPENING, as built here (flags in the F_* constants):
 ##   1. Oakvale (home): a new journey starts at your door; your mother sends you to Crownhaven,
-##      where your longtime friend the Royal Researcher (Linnea, he/him) has asked for you as a
-##      shard tester ....................................................... opening.sent_off
+##      where Professor Elias -- the Royal Researcher, an old friend of your mother's -- has asked
+##      to see you ......................................................... opening.sent_off
 ##   2. The Mossway (east) and River Crossing (north over the Old Bridge): wild creatures leave a
 ##      traveller with no partner alone (no encounters, trainers let you pass -- OverworldController);
 ##      Bram and the Lone Petalfang only appear once the opening is over .... (opening.complete)
-##   3. Crownhaven (in by the south gate): the reunion with the Researcher, who explains HIS
-##      invention (the shard listens to the old star's spark in every creature); the shard is
-##      yours and you CHOOSE a starter among his three test creatures (STARTER_CHOICES)
+##   3. Crownhaven (in by the south gate): Professor Elias waits INSIDE the Royal Workshop (an
+##      interior, see INTERIORS); he explains his new invention (the stones let a person bond with
+##      a creature), the stone is yours and you CHOOSE a starter from STARTER_OPTIONS (placeholders)
 ##      ......................... opening.starter_received, opening.starter_pick, key.bonding_shard
-##   4. The raid: Cindral raiders vault the east wall, seize the Researcher and flee out the south
-##      gate, down the road home; the Sergeant runs up; you give chase (a scripted warp) ... opening.attack,
-##      opening.researcher_taken, opening.raiders_fled, opening.chase
+##   4. The raid: an alarm ends the ceremony -- Elias and the hero step out into the workshop yard,
+##      where Crownhaven's on_enter plays the raid: Cindral raiders seize Elias and flee out the
+##      south gate, down the road home; the Sergeant runs up; you give chase (a scripted warp)
+##      ........ opening.attack, opening.researcher_taken, opening.raiders_fled, opening.chase
 ##   5. Oakvale in ashes (a second area, swapped in by the Mossway's flag-gated west warps):
 ##      your mother's fate, and the Sergeant's offer to fight ...... opening.ruins_seen
 ##   6. The FIRST FIGHT: a tactical battle on ow_oakvale_ashes vs the raiders' rear guard, the
@@ -73,10 +74,11 @@ const FIRST_FIGHT_MAP_PATH := CONTENT + "battles/ow_oakvale_ashes.tres"
 const NAMES := {
 	"HERO": "Wren",                         # default hero name (player naming is planned)
 	"MOTHER": "Briony",
-	# The Royal Researcher (he/him): the hero's LONGTIME FRIEND -- an Oakvale boy who went to the
-	# city's academy and invented the bonding shard. (A name does not set pronouns: he is "he".)
-	"RESEARCHER": "Linnea",
-	"RESEARCHER_TITLE": "Researcher Linnea",
+	# PROFESSOR ELIAS (owner): the Royal Researcher (magic / history / science), 60+, he/him, wise,
+	# calm, intelligent, wears glasses; a longtime friend of the hero's MOTHER and a family friend.
+	# Reference sheet: docs/design/characters/professor_elias.webp. Anything else about him is TBD.
+	"RESEARCHER": "Elias",
+	"RESEARCHER_TITLE": "Professor Elias",
 	"ASSISTANT": "Tam",
 	"SOLDIER": "Rowan",                     # becomes the recurring general (DECISIONS.md #21)
 	"SOLDIER_TITLE": "Sergeant Rowan",
@@ -238,22 +240,26 @@ const SHOP_WOODLAND := "woodland_trader"
 
 ## The STARTER creature (a CharacterLibrary id): the DEFAULT of the ceremony's choice -- the first
 ## option, the one tests and a no-host run pick -- and the placeholder in the first fight's squad
-## chairs. Change it here and rebuild.
+## chairs. Keep it equal to STARTER_OPTIONS[0].character_id.
 const STARTER_ID := &"tree_grunt"
 const STARTER_NICKNAME := ""
-## The Researcher's three TEST CREATURES: the ceremony lets you CHOOSE one (the owner's opening).
-## STARTER_ID must stay first (the default). The pick is also recorded as the int flag
-## F_STARTER_PICK (1-based) -- STORY.md: the two you did not choose are stolen in the raid.
-const STARTER_CHOICES: Array[StringName] = [STARTER_ID, &"petalfang", &"blightcap"]
-## Where the three wait by the pylon during the ceremony (the first is the "starter" entity).
-const STARTER_CELLS: Array[Vector2i] = [Vector2i(25, 8), Vector2i(23, 8), Vector2i(25, 7)]
+## THE STARTER CHOICE (owner: the hero chooses a starter; the roster is TBD). ONE list of N options,
+## each {character_id, label}; the ceremony offers whatever is here (1 option = no question asked,
+## 2+ = a choice, the first being the default). The pick is recorded as the int flag F_STARTER_PICK
+## (1-based index into this list). Edit the list and rebuild.
+## PLACEHOLDERS: existing roster units standing in until the real starters are decided.
+const STARTER_OPTIONS: Array[Dictionary] = [
+	{"character_id": STARTER_ID, "label": "Barkling", "placeholder": true},
+	{"character_id": &"petalfang", "label": "Petalfang", "placeholder": true},
+	{"character_id": &"blightcap", "label": "Blightcap", "placeholder": true},
+]
 ## The Sergeant's army-issued creature, fighting as a GUEST in the first fight (a player-0 turn-1
 ## Reinforcement slot on the battle map: placed at load, never replaced by the squad pick).
 const GUEST_ID := "gem_knight"
 ## PLACEHOLDER raider units (existing Dark roster creatures) until Cindral's own units exist.
 const RAIDER_UNITS: Array[String] = ["undead", "undead", "monster"]
 ## The hero's placeholder overworld model (DECISIONS.md #4): swap the model here.
-const HERO_MODEL := "res://game/characters/models/forest/vineweave.glb"
+const HERO_MODEL := "res://game/characters/models/forest/wren_forge.glb"
 
 ## Tints (the raiders' Cindral colours, the kingdom's blue).
 const CINDRAL_RED := Color(0.62, 0.16, 0.12)
@@ -264,7 +270,7 @@ const F_SENT_OFF := "opening.sent_off"
 const F_ARRIVED := "opening.arrived_crownhaven"
 const F_CEREMONY := "opening.ceremony"
 const F_STARTER := "opening.starter_received"
-## WHICH test creature you chose (1-based index into STARTER_CHOICES).
+## WHICH starter you chose (1-based index into STARTER_OPTIONS).
 const F_STARTER_PICK := "opening.starter_pick"
 const F_SHARD := "key.bonding_shard"
 const F_ATTACK := "opening.attack"
@@ -368,6 +374,10 @@ func _build_world() -> void:
 		var areas: Array[StringName] = []
 		for aid in row[5]:
 			areas.append(StringName(aid))
+		# A town's building interiors are part of its place (not places of their own).
+		for aid in row[5]:
+			for iid in _interior_ids(String(aid)):
+				areas.append(StringName(iid))
 		l.area_ids = areas
 		l.status = WorldLocation.Status.BUILT if not areas.is_empty() else WorldLocation.Status.CLOSED
 		l.open_flag = String(row[6])
@@ -465,13 +475,13 @@ func _species_name(character_id: StringName) -> String:
 func _build_hero() -> void:
 	var hero := HeroResource.new()
 	hero.display_name = String(NAMES["HERO"])
-	# PLACEHOLDER (DECISIONS.md owner decision 4): Vineweave's model -- the one bipedal,
-	# humanoid silhouette in the roster -- stands in for the human hero until the real Blender
-	# model exists. Swapping it is this block (model + yaw + scale): data, not code. The human
+	# DECISIONS.md owner decision 4: the Wren forge model (HERO_MODEL; it replaced the Vineweave
+	# placeholder in 7f8ac62 -- kept here so a rebuild no longer reverts it). Swapping it is this
+	# block (model + yaw + scale): data, not code. The human
 	# hero as a BATTLE unit does not exist yet (planned): the party fights, the hero does not.
 	hero.model_scene = load(HERO_MODEL)
 	hero.model_yaw_deg = 0.0
-	hero.model_scale = 1.3
+	hero.model_scale = 1.0
 	hero.speaker_id = &"hero"
 	_save(hero, CONTENT + "hero.tres")
 
@@ -817,6 +827,199 @@ func _warp_cmd(area_id: StringName, entry: StringName) -> WarpCommand:
 
 
 # =====================================================================================
+#  INTERIORS -- enterable buildings (docs/STORY_MODE.md "Interiors")
+# =====================================================================================
+
+## The Royal Workshop's prop id in Crownhaven. Its door's town entry ("door_workshop", the cell in
+## front of the door) is where the ceremony's alarm brings the hero out, into the raid.
+const CH_WORKSHOP_PROP := "workshop"
+
+## OPT-IN, per building: town area id -> {building prop id -> spec}. A building NOT listed here
+## stays a plain solid block: no door, no marker, no room. Listed: the places the story uses now
+## (the Royal Workshop, the hero's home) and the community buildings the towns already had (inns,
+## the village hall, shops, the barracks, the guildhall, the chapel, the forges, the Wardens' Lodge,
+## the toll house). Spec keys:
+##   "id"     the interior's area id (a SAVE KEY -- never rename once shipped)
+##   "name"   its display name (the area ribbon)
+##   "size"   the FLOOR in cells (8x6 .. 12x8); walls go round three sides, the south is the open
+##            cut-away with the exit mat at its middle
+##   "door"   optional: the door's offset in the prop footprint (default: the bottom row's middle,
+##            else the nearest bottom-row cell whose front cell is open ground nobody stands on)
+##   "floor"  optional: the floor tile id (default wooden_planks)
+## Who stands inside: [method _interior_people] (nobody, by default -- no new NPCs).
+const INTERIORS := {
+	"oakvale": {
+		"house_home": {"id": "oakvale_home", "name": "Home", "size": Vector2i(8, 6)},
+		"house_inn": {"id": "oakvale_inn", "name": "The Hearth & Hen", "size": Vector2i(10, 7)},
+		"house_hall": {"id": "oakvale_hall", "name": "Village Hall", "size": Vector2i(10, 6)},
+		"house_bakery": {"id": "oakvale_bakery", "name": "Oakvale Bakery", "size": Vector2i(8, 6)},
+	},
+	"river_crossing": {
+		"toll_house": {"id": "river_crossing_toll_house", "name": "Toll House", "size": Vector2i(8, 6)},
+	},
+	"crownhaven": {
+		"workshop": {"id": "crownhaven_workshop", "name": "The Royal Workshop", "size": Vector2i(10, 7), "door": Vector2i(2, 2)},
+		"barracks": {"id": "crownhaven_barracks", "name": "The Barracks", "size": Vector2i(10, 7)},
+		"gilded_stag": {"id": "crownhaven_inn", "name": "The Gilded Stag", "size": Vector2i(10, 7)},
+		"guildhall": {"id": "crownhaven_guildhall", "name": "The Merchants' Guildhall", "size": Vector2i(12, 8), "floor": "flagstones"},
+		"chapel": {"id": "crownhaven_chapel", "name": "Chapel of the Starfall", "size": Vector2i(8, 8), "floor": "flagstones"},
+		"forge": {"id": "crownhaven_forge", "name": "The Aldermere Forge", "size": Vector2i(8, 6), "floor": "flagstones"},
+	},
+	"woodland_town": {
+		"wardens_lodge": {"id": "woodland_lodge", "name": "The Wardens' Lodge", "size": Vector2i(12, 7)},
+		"stumped_hart": {"id": "woodland_inn", "name": "The Stumped Hart", "size": Vector2i(10, 7)},
+		"trading_post": {"id": "woodland_trading_post", "name": "Sedge's Trading Post", "size": Vector2i(8, 6)},
+		"forge": {"id": "woodland_forge", "name": "Woodland Smithy", "size": Vector2i(8, 6), "floor": "flagstones"},
+		"herb_hut": {"id": "woodland_herb_hut", "name": "The Herb Hut", "size": Vector2i(8, 6)},
+	},
+}
+
+
+## Every interior area id of town [param town_id] (the world map lists them under its place).
+static func _interior_ids(town_id: String) -> Array[String]:
+	var out: Array[String] = []
+	var specs: Dictionary = INTERIORS.get(town_id, {})
+	for k in specs:
+		out.append(String(specs[k]["id"]))
+	return out
+
+
+## Give the enterable buildings of [param a] (INTERIORS) their doors: mark the prop enterable,
+## put a [DoorEntity] on its facade, add the town entry the interior's exit mat returns to (the
+## front cell, facing away from the building), and build the interior. Called by every town
+## builder just before its entity list is stored; a town with no INTERIORS row is untouched.
+func _add_doors(a: OverworldAreaResource, ents: Array) -> void:
+	var specs: Dictionary = INTERIORS.get(String(a.area_id), {})
+	if specs.is_empty():
+		return
+	var g := OverworldGrid.from_map(a.terrain)
+	# Cells something stands on (NPCs, signs, chests, props): a door never opens onto one.
+	var taken: Dictionary = {}
+	for e in ents:
+		var oe := e as OverworldEntity
+		if oe == null or oe is WarpEntity or oe is TriggerZone:
+			continue
+		for c in oe.cells():
+			taken[c] = String(oe.id)
+	for e in ents.duplicate():
+		var p := e as PropEntity
+		if p == null or not specs.has(String(p.id)):
+			continue
+		var spec: Dictionary = specs[String(p.id)]
+		p.enterable = true
+		p.door_offset = spec["door"] if spec.has("door") else _pick_door(p, g, taken)
+		var d := DoorEntity.new()
+		d.id = StringName("door_" + String(p.id))
+		d.building = p.id
+		d.cell = p.door_cell()
+		d.area_rect = Rect2i(d.cell.x, d.cell.y, 1, 1)
+		d.blocking = false
+		d.facing = "south"
+		d.tint = p.tint
+		d.display_name = String(spec["name"])
+		d.target_area = StringName(spec["id"])
+		d.target_entry = &"door"
+		var front: Vector3i = d.front_cell()
+		if not g.is_terrain_passable(front) or taken.has(front):
+			push_error("[build_story_content] %s/%s: the door's front cell %s is not open ground (%s)" % [
+				a.area_id, p.id, str(front), String(taken.get(front, g.tile_id_at(front)))])
+			_ok = false
+		a.entry_points[DoorEntity.entry_id_for(String(p.id))] = {"cell": [front.x, front.y, 0], "facing": d.exit_facing()}
+		ents.append(d)
+		_build_interior(a, p, spec)
+
+
+## The door offset for [param p]: the bottom row's middle, else the nearest bottom-row cell whose
+## front cell (and, preferably, the cell beyond it) is open, unoccupied ground.
+func _pick_door(p: PropEntity, g: OverworldGrid, taken: Dictionary) -> Vector2i:
+	var fp := Vector2i(maxi(1, p.footprint.x), maxi(1, p.footprint.y))
+	var mid: int = (fp.x - 1) / 2
+	var order: Array[int] = [mid]
+	for k in range(1, fp.x):
+		for x in [mid + k, mid - k]:
+			if x >= 0 and x < fp.x and not order.has(x):
+				order.append(x)
+	# Best: the front cell AND the one beyond it are open (you come out facing open ground); else
+	# just the front cell.
+	for need_beyond in [true, false]:
+		for x in order:
+			var front := Vector3i(p.cell.x + x, p.cell.y + fp.y, 0)
+			var beyond := Vector3i(front.x, front.y + 1, 0)
+			if not g.is_terrain_passable(front) or taken.has(front):
+				continue
+			if need_beyond and (not g.is_terrain_passable(beyond) or taken.has(beyond)):
+				continue
+			return Vector2i(x, fp.y - 1)
+	return Vector2i(mid, fp.y - 1)
+
+
+## THE INTERIOR TEMPLATE -- one function for every enterable building: a floor of
+## spec.size cells walled on three sides (the south is the cut-away the camera looks in through),
+## the EXIT MAT at the bottom-centre (a warp back to the town's "door_<building>" entry), the
+## arrival cell just above it (entry "door", facing in), two placeholder barrel stacks in the back
+## corners, and [method _interior_people] (nobody by default). No encounter zones: no wild
+## creatures inside. On the world map an interior is part of its town's place (WORLD_LOCATIONS
+## lists it there), so "You are here" stays the town.
+func _build_interior(town: OverworldAreaResource, p: PropEntity, spec: Dictionary) -> void:
+	var iid: String = String(spec["id"])
+	var nm: String = String(spec["name"])
+	var floor_size: Vector2i = spec.get("size", Vector2i(8, 6))
+	var w: int = floor_size.x + 2
+	var h: int = floor_size.y + 1
+	var door_x: int = w / 2
+	var floor_tile: String = String(spec.get("floor", "wooden_planks"))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CONTENT + "areas/" + iid))
+	var t := _new_map(nm, w, h, "%s, inside (%s). Story-mode interior." % [nm, town.display_name])
+	t.lighting_preset = "Day"
+	_paint(t, func(x: int, y: int) -> String:
+		if y == 0 or x == 0 or x == w - 1:
+			return "stone_wall"
+		return floor_tile)
+	_add_validator_anchors(t, Vector2i(1, 1), Vector2i(w - 2, h - 1))
+	_save(t, CONTENT + "areas/%s/terrain.tres" % iid)
+
+	var a := OverworldAreaResource.new()
+	a.area_id = StringName(iid)
+	a.display_name = nm
+	a.kind = OverworldAreaResource.Kind.INTERIOR
+	a.parent_area = town.area_id
+	a.world_map_pos = town.world_map_pos
+	a.region_id = town.region_id
+	a.terrain = load(CONTENT + "areas/%s/terrain.tres" % iid)
+	a.entry_points = {"door": {"cell": [door_x, h - 2, 0], "facing": "north"}}
+	var ents: Array = []
+	ents.append(_prop("exit_mat", "mat", Vector2i(door_x, h - 1), Vector2i.ONE, Color(0.62, 0.22, 0.18)))
+	ents.append(_warp("exit", Rect2i(door_x, h - 1, 1, 1), town.area_id, StringName(DoorEntity.entry_id_for(String(p.id)))))
+	# PLACEHOLDER furniture (procedural; the real interiors come from Blender).
+	ents.append(_prop("barrels_w", "barrels", Vector2i(1, 1), Vector2i.ONE, Color.WHITE, true))
+	ents.append(_prop("barrels_e", "barrels", Vector2i(w - 2, 1), Vector2i.ONE, Color.WHITE, true))
+	ents.append_array(_interior_people(iid, floor_size, door_x))
+	a.entities = _entities(ents)
+	a.on_enter = StoryCommand.list(_interior_on_enter(iid))
+	_save(a, CONTENT + "areas/%s/area.tres" % iid)
+
+
+## Who stands inside interior [param iid] (per-building override; empty rooms by default).
+func _interior_people(iid: String, size: Vector2i, door_x: int) -> Array:
+	match iid:
+		"crownhaven_workshop":
+			return _workshop_people(size, door_x)
+	return []
+
+
+## Scripts run when interior [param iid] loads (per-building override).
+func _interior_on_enter(iid: String) -> Array:
+	match iid:
+		"crownhaven_workshop":
+			# A journey that stopped between the ceremony and the raid: back out to the yard (the
+			# raid resumes there -- Crownhaven's on_enter).
+			return [IfCommand.make("has(\"%s\") and not has(\"%s\")" % [F_STARTER, F_CHASE], [
+				_warp_cmd(&"crownhaven", StringName(DoorEntity.entry_id_for(CH_WORKSHOP_PROP))),
+			])]
+	return []
+
+
+# =====================================================================================
 #  Battle boards
 # =====================================================================================
 
@@ -1090,6 +1293,7 @@ func _build_oakvale(ruined: bool) -> void:
 		a.on_enter = StoryCommand.list([
 			IfCommand.make("not has(\"%s\")" % F_SENT_OFF, _send_off()),
 		])
+	_add_doors(a, ents)
 	a.entities = _entities(ents)
 	_save(a, CONTENT + "areas/%s/area.tres" % aid)
 
@@ -1189,16 +1393,19 @@ func _send_off() -> Array:
 	return [
 		_say([
 			_narr("Long ago, a star fell on this world. Its dust sank into the stone and the soil, and ever since, humans and creatures alike have called on the elements.", "Conquest"),
-			_narr("Few people ever bond with a creature. It takes years of patient trust -- or chains. But in the royal city, a boy from this very village grew up to be the King's researcher -- and he has cut a shard of {STONE} that makes the bond easy and safe."),
+			# TODO(story): the intro's lore is not decided -- a neutral placeholder line.
+			_narr("In the royal city, the King's researcher has made something new: a stone that lets a person bond with a creature."),
 		]),
 		_face("player", "toward:briony"),
 		_say([
-			_line("briony", "MOTHER", "There you are! Today's the day, {hero}. {RESEARCHER}'s letter says noon -- you'll be late if you dawdle."),
-			_line("briony", "MOTHER", "Fancy that. The boy who used to follow you round the barley field, the King's own researcher -- and he asked for YOU by name. One of his chosen testers."),
+			# TODO(story): placeholder send-off. Owner facts only: Professor Elias is an old friend of
+			# the hero's mother (a family friend) and has asked to see the hero.
+			_line("briony", "MOTHER", "There you are! Today's the day, {hero}. {RESEARCHER_TITLE} is expecting you at his workshop in Crownhaven."),
+			_line("briony", "MOTHER", "He's an old friend of mine -- of the whole family. And he asked for you."),
 			_line("briony", "MOTHER", "A shard of your own, and a creature to go with it. Your father would have been so proud."),
-			_me("I'll be home before dark, Mother. I promise. And I'll make {RESEARCHER} tell me everything."),
+			_me("I'll be home before dark, Mother. I promise."),
 			_line("briony", "MOTHER", "Follow the Mossway east to River Crossing, and the road north over the bridge to Crownhaven. The wild ones in the grass leave a traveller alone -- until you walk with a partner of your own. Then mind yourself."),
-			_line("briony", "MOTHER", "Go on, then. And {hero} -- I love you. Bring your new friend home for supper. Both of them, if {RESEARCHER} can tear himself away from his work."),
+			_line("briony", "MOTHER", "Go on, then. And {hero} -- I love you. Bring your new friend home for supper."),
 		]),
 		_flag(F_SENT_OFF),
 	]
@@ -1253,7 +1460,7 @@ func _ruins_arrival() -> Array:
 		_say([
 			_line("tobin", "TOBIN", "{hero}! Thank the stars you weren't here."),
 			_line("tobin", "TOBIN", "They came out of the Mossway at a run -- a dozen of them in {NATION} red, dragging a man in a scholar's coat. Anyone in their way, they just... went through."),
-			_me("A scholar's coat... {RESEARCHER}. They've still got {RESEARCHER}."),
+			_me("A scholar's coat... {RESEARCHER_TITLE}. They've still got {RESEARCHER_TITLE}."),
 			_me("Where's my mother? Tobin -- where is she?"),
 			_line("tobin", "TOBIN", "...Hessa's with her. Come."),
 		]),
@@ -1309,7 +1516,7 @@ func _aftermath() -> Array:
 		_say([
 			_narr("The last chained beast falls. Beyond the mill, hoofbeats fade toward the border."),
 			_line("rowan", "SOLDIER", "That's the rear guard broken. The rest got away with the Researcher -- over the border by nightfall, I'd wager."),
-			_me("His name is {RESEARCHER}. We grew up on this green. I'm going to bring him home."),
+			_me("His name is {RESEARCHER_TITLE}. I'm going to bring him home."),
 			_line("rowan", "SOLDIER", "You fought like you had something to fight for. Your mother would have been proud of you -- and furious with me for letting you."),
 			_line("rowan", "SOLDIER", "The King will call this an act of war. {NATION} will swear it never sent a soul. And something about this whole raid stinks."),
 			_line("rowan", "SOLDIER", "Bury your mother, {hero}. Then come and find me at the barracks in Crownhaven. I could use someone with a shard -- and a reason."),
@@ -1490,6 +1697,7 @@ func _build_mossway() -> void:
 		"has(\"%s\")" % F_ATTACK))
 	ents.append(_warp("east_exit", Rect2i(MOSS_W - 1, 6, 1, 1), &"river_crossing", &"west"))
 
+	_add_doors(a, ents)
 	a.entities = _entities(ents)
 
 	var zone := EncounterZone.new()
@@ -1633,6 +1841,7 @@ func _build_river_crossing() -> void:
 	ents.append(_warp("north_exit", Rect2i(RC_BRIDGE_X0, 0, 2, 1), &"crownhaven", &"south_gate"))
 	ents.append(_closed_road("east_exit", Rect2i(RC_W - 1, RC_ROAD_Y, 1, 1), "beach_village", &"river_crossing", &"east_road",
 		"The coast road east toward Beach Village and the sea dips into a ford -- and the ford has become a lake. A Warden's rope and a painted board: \"Road closed. Ferry suspended. Ask again after the rains.\""))
+	_add_doors(a, ents)
 	a.entities = _entities(ents)
 	a.on_enter = StoryCommand.list([
 		IfCommand.make("not has(\"river_crossing.arrived\")", [
@@ -1678,7 +1887,7 @@ const CH_MARKET := Rect2i(10, 11, 11, 7)
 const CH_FOUNTAIN := Vector2i(15, 14)
 const CH_HOUSES := [Rect2i(5, 15, 3, 2), Rect2i(5, 19, 3, 2), Rect2i(17, 19, 3, 2), Rect2i(22, 15, 3, 2)]
 const CH_STALLS := [Rect2i(11, 12, 2, 1), Rect2i(18, 12, 2, 1), Rect2i(11, 16, 2, 1), Rect2i(18, 16, 2, 1)]
-## The ceremony stage in front of the workshop.
+## Where Professor Elias stands in the workshop yard during the raid (the ceremony is inside).
 const CH_RESEARCHER := Vector2i(24, 8)
 const CH_PYLON := Vector2i(22, 8)
 ## The capital's districts, built out: the Gilded Stag inn (by the market), the Merchants' Guildhall
@@ -1833,6 +2042,7 @@ func _build_crownhaven() -> void:
 		"The Redrock road runs east into the red mesas of the Rocky Badlands. A chain hangs across it, and a notice: \"No caravans until the Badlands road is cleared of rockfalls. By order of the Guildhall.\""))
 	ents.append(_closed_road("harbour_exit", Rect2i(CH_W - 1, CH_HARBOUR_GATE.y, 1, 1), "beach_village", &"crownhaven", &"harbour_gate",
 		"The coast road slopes south-east toward Beach Village and the harbour. The gate warden waves you back: \"Ford's flooded below the city. Nothing's getting to the coast this week.\""))
+	_add_doors(a, ents)
 	a.entities = _entities(ents)
 	a.on_enter = StoryCommand.list([
 		# Resume the raid if the journey was saved in the middle of it (a closed window).
@@ -1962,19 +2172,11 @@ func _ch_people() -> Array:
 	out.append(_npc("kit", Vector2i(16, 16), "north", "KIT", Color(0.7, 0.55, 0.3), "child"))
 	out.append(_npc("baker", Vector2i(14, 12), "south", "BAKER", Color(0.75, 0.62, 0.45)))
 
-	# The workshop: the Researcher, his assistant, and his three test creatures (only during the
-	# ceremony -- the first is the default starter, the "starter" entity).
-	out.append(_researcher())
+	# The workshop yard: the assistant, and Professor Elias once the ceremony INSIDE is over (the
+	# alarm brings him out here, where the raid plays). Before that he waits inside the workshop
+	# (INTERIORS: crownhaven_workshop, _workshop_people).
+	out.append(_researcher_in_yard())
 	out.append(_npc("tam", Vector2i(26, 8), "west", "ASSISTANT", Color(0.5, 0.42, 0.6), "scholar"))
-	for i in range(STARTER_CHOICES.size()):
-		var starter := NpcEntity.new()
-		starter.id = _starter_entity_id(i)
-		starter.cell = Vector3i(STARTER_CELLS[i].x, STARTER_CELLS[i].y, 0)
-		starter.facing = "south"
-		starter.display_name = _species_name(STARTER_CHOICES[i])
-		starter.visual_character = STARTER_CHOICES[i]
-		starter.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_CEREMONY, F_STARTER]
-		out.append(starter)
 
 	# The raiders (only during the raid). PLACEHOLDER figures in Cindral red.
 	var raid_vis: String = "has(\"%s\") and not has(\"%s\")" % [F_ATTACK, F_FLED]
@@ -2024,11 +2226,47 @@ func _ch_districts() -> Array:
 	return out
 
 
-func _researcher() -> NpcEntity:
-	var r := _npc("linnea", CH_RESEARCHER, "south", "RESEARCHER_TITLE", Color(0.28, 0.42, 0.55), "scholar")
-	r.visible_if = "not has(\"%s\")" % F_TAKEN
-	r.on_interact = StoryCommand.list([IfCommand.make("not has(\"%s\")" % F_STARTER, _ceremony())])
+## Professor Elias's look (a procedural figure until the Blender model lands).
+const ELIAS_TINT := Color(0.28, 0.42, 0.55)
+
+
+## Elias in the workshop YARD: only between the ceremony and the raid that takes him.
+func _researcher_in_yard() -> NpcEntity:
+	var r := _npc("elias", CH_RESEARCHER, "north", "RESEARCHER_TITLE", ELIAS_TINT, "elder")
+	r.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_STARTER, F_TAKEN]
 	return r
+
+
+## The people inside the Royal Workshop (an interior): Elias waits there until the ceremony,
+## with the starter options beside him during it.
+func _workshop_people(size: Vector2i, door_x: int) -> Array:
+	var out: Array = []
+	var elias_cell := Vector2i(door_x, 2)
+	var r := _npc("elias", elias_cell, "south", "RESEARCHER_TITLE", ELIAS_TINT, "elder")
+	r.visible_if = "not has(\"%s\")" % F_STARTER
+	r.on_interact = StoryCommand.list([IfCommand.make("not has(\"%s\")" % F_STARTER, _ceremony())])
+	out.append(r)
+	# The starter options stand in a row either side of him (only during the ceremony).
+	for i in range(STARTER_OPTIONS.size()):
+		var k: int = i / 2 + 2
+		var x: int = door_x - k if i % 2 == 0 else door_x + k
+		x = clampi(x, 1, size.x)
+		var cid: StringName = StringName(STARTER_OPTIONS[i]["character_id"])
+		var starter := NpcEntity.new()
+		starter.id = _starter_entity_id(i)
+		starter.cell = Vector3i(x, 2 + (i / 6), 0)
+		starter.facing = "south"
+		starter.display_name = _starter_label(i)
+		starter.visual_character = cid
+		starter.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_CEREMONY, F_STARTER]
+		out.append(starter)
+	return out
+
+
+## The display label of starter option [param i] (its "label", else the species name).
+func _starter_label(i: int) -> String:
+	var label: String = String(STARTER_OPTIONS[i].get("label", ""))
+	return label if not label.is_empty() else _species_name(StringName(STARTER_OPTIONS[i]["character_id"]))
 
 
 ## The ceremony's creature entity ids: "starter" (the default, STARTER_ID), then "starter_2", ...
@@ -2036,79 +2274,79 @@ static func _starter_entity_id(i: int) -> StringName:
 	return &"starter" if i == 0 else StringName("starter_%d" % (i + 1))
 
 
-## THE SHARD CEREMONY (the owner's opening): a reunion with your LONGTIME FRIEND, the Royal
-## Researcher (he/him); he explains HIS invention -- the bonding shard, and the power of the
-## stones to bond with creatures; the shard is yours and you CHOOSE a starter among his three test
-## creatures (STARTER_CHOICES; the first is the default) -- and then the raid.
+## THE CEREMONY (the owner's opening), INSIDE the Royal Workshop: Professor Elias explains his new
+## invention -- the stones that let a person bond with a creature -- the stone is yours, and you
+## CHOOSE a starter from STARTER_OPTIONS (the first is the default; one option = no question).
+## Then an ALARM ends it: Elias hurries out into the workshop yard and you follow (a warp to the
+## yard -- the script ends there); Crownhaven's on_enter plays THE RAID in the yard.
+## TODO(story): every line here is a short neutral PLACEHOLDER -- the lore of the stones, the
+## starters and the ceremony is not decided yet.
 func _ceremony() -> Array:
-	var names: Array[String] = []
-	for cid in STARTER_CHOICES:
-		names.append(_species_name(cid))
 	var out: Array = [
 		_say([
-			_line("linnea", "RESEARCHER_TITLE", "{hero}! You came -- you actually came! Look at you. Come here."),
-			_me("{RESEARCHER}! The King's own researcher, and you STILL can't keep the ink off your sleeves."),
-			_line("linnea", "RESEARCHER_TITLE", "Twelve years since I left Oakvale, and you notice the ink first. Some things never change. Come in, come in -- mind the cables. I've waited months to show you this."),
-			_line("linnea", "RESEARCHER_TITLE", "You remember the old ways. Chains of {STONE}, forged hot, for lords who wanted obedience. Years of bread and patience for the rare few who wanted a friend. Most folk got neither, and learned to fear creatures instead."),
-			_line("linnea", "RESEARCHER_TITLE", "This is my invention: the bonding shard. The same {STONE} -- but cut thin and tuned on that pylon until it stops ringing and starts to LISTEN."),
-			_line("linnea", "RESEARCHER_TITLE", "Every creature carries a spark of the star that fell. The shard hums with that spark. Hold it out and it carries what you MEAN, heart to heart -- the trust the slow way takes years to build, in a single heartbeat."),
-			_line("linnea", "RESEARCHER_TITLE", "No chain, no force. It only works if you both want it. Almost anyone could do it -- which is why only a handful of testers have one yet, and the army a few crates. I'm told to hand them out slowly, and never to say where they're kept."),
-			_me("And you picked me."),
-			_line("linnea", "RESEARCHER_TITLE", "Of course I picked you. I wanted the first proof to be someone I'd trust with my life. Now -- some friends of mine have been waiting to meet you."),
+			_line("elias", "RESEARCHER_TITLE", "Ah, {hero}. Welcome to the workshop."),
+			_line("elias", "RESEARCHER_TITLE", "This is my new invention: the bonding shards -- stones that let a person bond with a creature."),
 		]),
 		_flag(F_CEREMONY),
 	]
-	for i in range(STARTER_CHOICES.size()):
+	for i in range(STARTER_OPTIONS.size()):
 		out.append(_emote(String(_starter_entity_id(i)), "?"))
 	out.append(_say([
-		_narr("Three small creatures peer out from behind the pylon -- a %s, a %s and a %s -- each one watching you with bright, wary eyes." % names),
-		_line("linnea", "RESEARCHER_TITLE", "My three test creatures. They answered the pylon this morning. Here -- the shard is yours. Don't grab -- offer. Let them feel what you mean, and see which of them answers YOU."),
-		_narr("The shard warms in your palm like a second heartbeat."),
+		_line("elias", "RESEARCHER_TITLE", "This shard is yours now. Choose a partner."),
 	]))
 	out.append(_flag(F_SHARD))
 	out.append(_toast("Received: Bonding Shard", "item"))
-	# THE CHOICE: the default (STARTER_ID) is the first option -- what a test or a no-host run picks.
-	var ask := ChoiceCommand.new()
-	ask.prompt = _line("linnea", "RESEARCHER_TITLE", "Well, {hero}? Which one answers you?")
-	var opts: Array = []
-	for i in range(STARTER_CHOICES.size()):
-		opts.append(ChoiceOption.make(names[i], [
-			_say([_narr("A thread of green light runs from the stone to the %s, and it steps to your side as if it has always stood there." % names[i])]),
+	# THE CHOICE: whatever STARTER_OPTIONS holds. The first option is the default -- what a test
+	# or a no-host run picks. A single option needs no question.
+	var picks: Array = []
+	for i in range(STARTER_OPTIONS.size()):
+		picks.append([
+			_say([_narr("The %s steps to your side." % _starter_label(i))]),
 			_flag(F_STARTER_PICK, i + 1),
-			_join(STARTER_CHOICES[i], STARTER_NICKNAME, 0, F_STARTER),
-		]))
-	ask.options = StoryCommand.list(opts)
-	out.append(ask)
+			_join(StringName(STARTER_OPTIONS[i]["character_id"]), STARTER_NICKNAME, 0, F_STARTER),
+		])
+	if picks.size() == 1:
+		out.append_array(picks[0])
+	elif picks.size() > 1:
+		var ask := ChoiceCommand.new()
+		ask.prompt = _line("elias", "RESEARCHER_TITLE", "Which one will you choose?")
+		var opts: Array = []
+		for i in range(picks.size()):
+			opts.append(ChoiceOption.make(_starter_label(i), picks[i]))
+		ask.options = StoryCommand.list(opts)
+		out.append(ask)
 	out.append(_say([
-		_line("linnea", "RESEARCHER_TITLE", "There. Bonded. Look after each other -- that is the whole of the science, really."),
-		_line("linnea", "RESEARCHER_TITLE", "The other two stay with me for now. Stay for supper? I want to hear everything about home -- is old Ned still talking to his barley?"),
+		_line("elias", "RESEARCHER_TITLE", "There. Look after each other."),
+		# The alarm: the raid itself plays outside, in the yard (Crownhaven's on_enter).
+		_narr("Shouting in the street outside. {RESEARCHER_TITLE} hurries out into the workshop yard, and you follow."),
 	]))
-	out.append_array(_raid())
+	out.append(_warp_cmd(&"crownhaven", StringName(DoorEntity.entry_id_for(CH_WORKSHOP_PROP))))
 	return out
 
 
-## THE RAID: raiders vault the wall, seize the Researcher and flee out the south gate; the Sergeant runs up;
+## THE RAID (in the workshop yard, after the ceremony inside): raiders vault the wall, seize Professor
+## Elias and flee out the south gate; the Sergeant runs up;
 ## you give chase toward Oakvale (a scripted warp -- the script ends here).
 func _raid() -> Array:
 	return [
 		_flag(F_ATTACK),
 		_say([_narr("A horn blares from the east wall. Then another -- cut short.")]),
-		_emote("linnea", "!"),
+		_emote("elias", "!"),
 		_emote("player", "!"),
 		_move("raider_captain", Vector2i(CH_RESEARCHER.x + 1, CH_RESEARCHER.y)),
 		_move("raider_a", Vector2i(CH_RESEARCHER.x - 1, CH_RESEARCHER.y - 1)),
 		_move("raider_b", Vector2i(26, 7)),
-		_face("linnea", "toward:raider_captain"),
+		_face("elias", "toward:raider_captain"),
 		_face("player", "toward:raider_captain"),
 		_say([
 			_line("raider_captain", "RAIDER_CAPTAIN", "{RESEARCHER_TITLE}. You will come with us. Your shards belong to {NATION} now."),
-			_line("linnea", "RESEARCHER_TITLE", "{hero} -- keep that shard hidden. Whatever happens, don't let them have it!"),
+			_line("elias", "RESEARCHER_TITLE", "{hero} -- keep that shard hidden. Whatever happens, don't let them have it!"),
 			_narr("Behind the raiders, a hulking creature strains at black chains -- {STONE} links, glowing dully where they bite."),
 		]),
 		_flag(F_TAKEN),
 		_say([
-			_me("{RESEARCHER}!"),
-			_narr("They seize the Researcher and drag him toward the lower town -- and the two test creatures you did not choose go with him, bundled into a raider's crate -- scattering townsfolk as they run for the south gate."),
+			_me("{RESEARCHER_TITLE}!"),
+			_narr("They seize the Researcher and drag him toward the lower town, scattering townsfolk as they run for the south gate."),
 		]),
 		_move("raider_captain", Vector2i(23, 11)),
 		_flag(F_FLED),
@@ -2142,7 +2380,7 @@ func _rowan_in_crownhaven() -> NpcEntity:
 				_line("rowan", "SOLDIER", "You came. Good. I'm sorry about Oakvale -- I mean that."),
 				_line("rowan", "SOLDIER", "The council's been shouting since dawn. {NATION}'s envoy swears his people never sent a raider across the border. Half the lords want to march tomorrow."),
 				_line("rowan", "SOLDIER", "But those chains, {hero}. {NATION} doesn't forge {STONE}. Someone armed those raiders -- and I mean to find out who before this turns into a war."),
-				_line("rowan", "SOLDIER", "And your friend {RESEARCHER} is out there somewhere past that border. I'd sooner go after him with someone who knows what he's worth."),
+				_line("rowan", "SOLDIER", "And {RESEARCHER_TITLE} is out there somewhere past that border. I'd sooner go after him with someone who knows what he's worth."),
 				_line("rowan", "SOLDIER", "I've asked for you on my detail. Rest up at the Wayshrine. When you're ready, we ride."),
 			]),
 			_flag(F_ACT1_MET),
@@ -2402,7 +2640,7 @@ func _rival() -> Array:
 		_face("lark", "toward:player"),
 		_say([
 			_line("lark", "RIVAL", "So YOU'RE the one from Oakvale. The tester who rode with the Sergeant."),
-			_line("lark", "RIVAL", "I'm {RIVAL}. First batch -- the Researcher picked me months before he sent for his old friend from Oakvale. Everyone in the barracks is talking about you, and I'm sick of it."),
+			_line("lark", "RIVAL", "I'm {RIVAL}. First batch -- the Researcher picked me months before he sent for you. Everyone in the barracks is talking about you, and I'm sick of it."),
 			_me("My village burned, {RIVAL}. I didn't do it to be talked about."),
 			_line("lark", "RIVAL", "...I know. I'm sorry about that. Truly. But a shard is a shard, and I want to see what yours can do. One bout -- a friendly. Nobody gets hurt."),
 		]),
@@ -2655,6 +2893,7 @@ func _build_sparse_forest() -> void:
 	ents.append(_npc("alder", Vector2i(15, 3), "south", "WOODSMAN", Color(0.4, 0.46, 0.28), "villager"))
 	ents.append(_warp("west_exit", Rect2i(0, SF_ROAD_Y, 1, 1), &"woodland_town", &"east_road"))
 	ents.append(_warp("east_exit", Rect2i(SF_W - 1, SF_ROAD_Y, 1, 1), &"crownhaven", &"west_gate"))
+	_add_doors(a, ents)
 	a.entities = _entities(ents)
 
 	var zone := EncounterZone.new()
@@ -2800,6 +3039,7 @@ func _build_woodland_town() -> void:
 		"has(\"world.thieves_guild_open\")", _scene("wt_south_locked", [
 			_narr("A narrow trail slips south between the roots, toward a cave mouth nobody here admits to knowing. Fresh boot prints say the way is kept open from the other end. A rockfall blocks it for now."),
 		])))
+	_add_doors(a, ents)
 	a.entities = _entities(ents)
 	a.on_enter = StoryCommand.list([
 		IfCommand.make("not has(\"woodland.arrived\")", [

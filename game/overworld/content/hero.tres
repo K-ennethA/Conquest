@@ -6,4 +6,3 @@
 [resource]
 script = ExtResource("2_mnqpo")
 model_scene = ExtResource("1_q5qmx")
-model_scale = 1.0

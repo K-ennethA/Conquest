@@ -7,34 +7,40 @@ This file records what M1 actually built, how to play it, and how it is wired to
 
 ## How to play — the story OPENING
 
-Solo → **Story** (card 7) → an empty slot. The opening (DECISIONS.md #12–#21 + "Story alignment")
-is built by `game/overworld/build/build_story_content.gd` (run it with
+Solo → **Story** (card 7) → an empty slot. The opening (DECISIONS.md #12–#21 + "The researcher and
+the starter") is built by `game/overworld/build/build_story_content.gd` (run it with
 `godot --headless --path . -s res://game/overworld/build/run_builder.gd`); its names, the starters
-and the placeholders live in that file's `NAMES` / `STARTER_ID` / `STARTER_CHOICES` / `GUEST_ID` /
+and the placeholders live in that file's `NAMES` / `STARTER_ID` / `STARTER_OPTIONS` / `GUEST_ID` /
 `RAIDER_UNITS` / `HERO_MODEL` constants (rename there and rebuild); its flags are the `F_*`
 constants. What NPCs SAY outside cutscenes is the **dialogue bank** (see "Dialogue bank & editor").
+**Story text is placeholder** where the owner has not decided it (`TODO(story)` in the builder /
+the bank's `note` fields) -- don't invent lore there.
 
 1. **Oakvale (home)** — a new journey starts on your doorstep with **no creature**
    (`story_ruleset.tres` `starting_party` is empty). The first boot plays the intro and your
-   mother **Briony**'s send-off → `opening.sent_off` (the east road is held until then): your
-   **longtime friend Linnea** — an Oakvale boy, now the Royal Researcher (he/him) — has asked for you
-   as a shard tester. Villagers Tobin / Hessa / Pell, the village-hall notice, the **mill chest**,
-   the Wayshrine.
+   mother **Briony**'s send-off → `opening.sent_off` (the east road is held until then):
+   **Professor Elias** — the Royal Researcher (he/him), an old friend of your mother's and of the
+   family — has asked to see you at his workshop in Crownhaven. Villagers Tobin / Hessa / Pell, the
+   village-hall notice, the **mill chest**, the Wayshrine; your **home** can be entered (see
+   "Interiors"), as can the inn, the village hall and the bakery.
 2. **The Mossway** (east out of Oakvale) — with no partner the grass never rolls and trainers let
    you pass (`OverworldController`: no healthy member → no encounter, no trainer); a one-time hint
    says so. **Bram** and the **Lone Petalfang** only appear once `opening.complete`. Its east end
    is **River Crossing**: north over the Old Bridge, the King's road ends at Crownhaven's south gate.
 3. **Crownhaven** (in by the south gate) — the walled river city: keep, market, barracks
-   (**Sergeant Rowan**), the Royal Workshop. Talk to **Researcher Linnea**: the reunion — he
-   explains HIS invention, the **bonding shard** (starstone tuned to listen to the spark of the
-   fallen star every creature carries), gives you one (`key.bonding_shard`), and you **choose your
-   starter** among his three test creatures (`STARTER_CHOICES`: **Barkling** — the default, the
-   first option — Petalfang, Blightcap; `opening.starter_received`, and `opening.starter_pick` =
-   1 / 2 / 3 records which).
-4. **The raid** (the same script) — Cindral raiders vault the east wall, seize Linnea (and the two
-   test creatures you did not pick) and flee out the south gate, down the road home; Rowan runs up; the chase is a scripted warp to **Ruined Oakvale** (`opening.attack`,
-   `opening.researcher_taken`, `opening.raiders_fled`, `opening.chase`; the respawn moves to the
-   ruins' Wayshrine). A journey saved mid-raid resumes it on the next Crownhaven load.
+   (**Sergeant Rowan**), the Royal Workshop. Walk into the **Royal Workshop's door** (east of the
+   keep): **Professor Elias** waits INSIDE (`crownhaven_workshop`). Talk to him: he explains his new
+   invention — the bonding shards, stones that let a person bond with a creature (placeholder
+   lines) — gives you one (`key.bonding_shard`), and you **choose your starter** from
+   `STARTER_OPTIONS` (placeholders: **Barkling** — the default, the first option — Petalfang,
+   Blightcap; `opening.starter_received`, and `opening.starter_pick` = the 1-based option).
+4. **The raid** — an alarm ends the ceremony: Elias hurries out and the hero follows (a scripted
+   warp to the workshop yard, the door's front cell). Crownhaven's `on_enter` then plays the
+   EXISTING raid script there: Cindral raiders vault the east wall, seize Elias and flee out the
+   south gate, down the road home; Rowan runs up; the chase is a scripted warp to **Ruined
+   Oakvale** (`opening.attack`, `opening.researcher_taken`, `opening.raiders_fled`,
+   `opening.chase`; the respawn moves to the ruins' Wayshrine). A journey saved mid-raid resumes it
+   on the next Crownhaven load (or the next workshop load: its `on_enter` sends you back out).
 5. **Ruined Oakvale** (`oakvale_ruins`, a second area; the Mossway's west exit switches to it on
    `opening.attack`) — night, smouldering ruins. The survivors tell you your mother went back
    for the others; Rowan offers the chance to fight (`opening.ruins_seen`). "Not yet." leaves
@@ -53,10 +59,12 @@ mechanics are unchanged: wild creatures (visible ones you walk into, or a hidden
 see "Visible wild creatures") → the real duel, befriending, Bram's tactical battle → Growth →
 evolution offers, whiteouts to the Wayshrine.
 
-**Placeholders to replace:** the hero's model (Vineweave, `HERO_MODEL`); the human hero is not a
-battle unit yet (the party fights); the raiders' units (Undead ×2 + Duskmaw, `RAIDER_UNITS`);
-people are procedural figures (`NpcEntity.figure`) and buildings procedural props
-(`PropEntity.prop`: house, ruin, keep, tower, gate, windmill, stall, well, fence, crystal, …).
+**Placeholders to replace:** the starter options (`STARTER_OPTIONS`, roster TBD); the opening's
+story lines (`TODO(story)`); the human hero is not a battle unit yet (the party fights); the
+raiders' units (Undead ×2 + Duskmaw, `RAIDER_UNITS`); people are procedural figures
+(`NpcEntity.figure` -- Professor Elias too, until his model exists) and buildings, door markers and
+interiors procedural props (`PropEntity.prop`: house, ruin, keep, tower, gate, windmill, stall,
+well, fence, crystal, mat, …). The hero's model is the Wren forge model (`HERO_MODEL`).
 
 **Saves:** `format_version` 2. A version-1 journey (the M1 slice's Elder-quest world) is not
 migrated: it loads as **outdated** — its slot card says a new journey is required (Delete it),
@@ -67,7 +75,7 @@ and Continue Journey skips it (`StorySnapshot.is_outdated`). Nothing crashes.
 | Piece | Files |
 |---|---|
 | Autoload (session, runner, battle round trip) | `game/overworld/StoryController.gd` |
-| Data | `game/overworld/data/` — `OverworldAreaResource`, entity kinds (`Npc`, `Trainer`, `Sign`, `Chest`, `Warp`, `Wayshrine`, `TriggerZone`, `Prop`), `EncounterZone/Entry`, `BattleSpec`, `HeroResource`, `StoryRuleset`, `TournamentResource`, `WorldAtlas` / `WorldLocation`, `QuestLog` / `QuestTracker` / `QuestValidator` |
+| Data | `game/overworld/data/` — `OverworldAreaResource`, entity kinds (`Npc`, `Trainer`, `Sign`, `Chest`, `Warp`, `Door`, `Wayshrine`, `TriggerZone`, `Prop`), `EncounterZone/Entry`, `BattleSpec`, `HeroResource`, `StoryRuleset`, `TournamentResource`, `WorldAtlas` / `WorldLocation`, `QuestLog` / `QuestTracker` / `QuestValidator` |
 | Scripts | `game/overworld/script/` — `StoryCommand` + `commands/*`, `StoryScriptRunner`, `ScriptContext`, `StoryScriptHost` (the host contract), `ConditionContext` |
 | Runtime | `game/overworld/runtime/` — `OverworldController` (scene root + live host), `OverworldGrid`, `TrainerSight`, `EncounterRoller`, `WildSpawner` (visible wild creatures), `TapPathfinder`, `OverworldActor`, `OverworldCamera`, `OverworldProps` |
 | Battles | `game/overworld/battle/` — `BattleRequest`, `BattleResult`, `StoryBattleBridge`, `StoryResultApplier`, `StoryGrowth` (story Growth + evolution rules), `StoryPermadeath` (difficulty tiers, fallen, revives, game over), `StorySparring` (sparring-partner cooldown), `TournamentLedger` (the arena ladder), `DuelLauncher`, `DuelStub` (debug fallback) |
@@ -278,7 +286,7 @@ board, the duel and their replays know nothing about tiers.
   spar with his Geode (`crownhaven.spar.rowan`, built by `_rowan_spar_offer`).
 - **Protect objectives** — `ProtectUnit` is now a GUARD (`WinCondition.is_guard`): listed as a
   LOSE condition, its FAILED is a defeat (`GameModeRules`). A map authors it as a victory string,
-  `"Protect Linnea"` / `"Protect: Linnea"` (`WinConditionLibrary` puts it on the lose side, matched
+  `"Protect Elias"` / `"Protect: Elias"` (`WinConditionLibrary` puts it on the lose side, matched
   to a player-side unit by protect_id / story member id / character id / display name); a story
   battle names it on `BattleSpec.protect` (names, character ids or party member ids — a guest ally
   works). StoryController adds the guards to the board's rules when it tags the party
@@ -438,6 +446,56 @@ visible wild creatures. Warps and trigger zones never block.
   encounter headless: `godot --headless --path . --script dev_scripts/wild_encounter_smoke.gd`
   (overworld -> grass step -> the real duel scene played by the AI -> Continue -> back on the same
   cell, with a pass / fail line per step).
+
+## Interiors
+
+Buildings can be entered, Pokemon-style -- **opt-in per building** (a building is NOT enterable by
+default: a plain solid block, no door, no marker, no room).
+
+- **Data** -- `PropEntity.enterable` (default false) + `door_offset` (default: the bottom row's middle
+  cell, the south facade); `PropEntity.door_cell()`. A `DoorEntity` (a `WarpEntity`, kind `door`)
+  sits on that facade cell -- still a SOLID cell of the footprint -- with `building` (the prop id) and
+  `enter_dir` ("north"). Its actor is a placeholder door marker (`OverworldProps.door_marker`: plank
+  door, frame, step); the real buildings come from Blender.
+- **Going in** -- stepping toward the door from its front cell while facing the building
+  (`OverworldController.try_step` → `door_at` / `enter_door`), Confirm on it (prompt "Enter"), or a
+  tap on it: the door's `WarpCommand` → `StoryController.warp_to` (the same save + fade as every
+  warp). You arrive inside at entry `door` (just above the exit mat), facing in.
+- **Coming out** -- the interior's **exit mat** (bottom-centre, a `mat` prop under a plain warp):
+  step onto it and you are back on the door's FRONT cell (town entry `door_<building id>`), facing
+  away from the building.
+- **The interior template** -- `_build_interior` in the builder: ONE function builds every room: an
+  OverworldAreaResource of kind `INTERIOR` (`parent_area` = the town) with a floor of `size` cells
+  (8x6 .. 12x8), stone walls on three sides (the south is the open cut-away the camera looks in
+  through), the mat + exit, two placeholder barrel stacks, no encounter zones (no wild creatures).
+  Indoors the overworld mounts no world skirt / scenery ring (a dark backdrop instead) and the camera
+  (`OverworldController.camera_bounds_for`) holds on the room's middle, a little closer
+  (`OverworldCamera.INTERIOR_DISTANCE`).
+- **Map + tracker** -- interiors are listed under their town's place in `world.tres` (not places of
+  their own), so `WorldAtlas.location_for_area(<interior>)` is the town (it also falls back to
+  `parent_area`) and "You are here" stays the town. The quest tracker counts a town and its
+  interiors as the same "Here".
+- **Saves** -- an interior is an ordinary area: a save made inside loads inside; the respawn point
+  and whiteouts are unchanged (interiors have no Wayshrine).
+
+**Enabled now** (`INTERIORS` in the builder): Oakvale -- the hero's **home**, the Hearth & Hen, the
+village hall, the bakery; River Crossing -- the toll house; Crownhaven -- the **Royal Workshop**
+(Professor Elias waits inside; the ceremony happens there), the barracks, the Gilded Stag, the
+Merchants' Guildhall, the Chapel of the Starfall, the Aldermere Forge; Woodland Town -- the Wardens'
+Lodge, the Stumped Hart, the trading post, the smithy, the herb hut. Every room is empty except the
+workshop (no new NPCs).
+
+**Adding one** -- in `build_story_content.gd`, add a row to `INTERIORS[<town area id>]`:
+`"<building prop id>": {"id": "<interior area id>", "name": "...", "size": Vector2i(w, h)}` (optional
+`"door": Vector2i(x, y)` in the footprint, `"floor": "<tile id>"`); for people inside, add a case to
+`_interior_people` (and `_interior_on_enter` for an arrival script). Rebuild. The door, the town
+entry and the room are generated; the builder fails if the door would open onto a wall, a prop or
+an NPC (it picks the nearest open bottom-row cell when no `door` is given).
+
+Tests: `tests/integration/test_interiors.gd` (the opt-in list and a default house with no door, doors
+↔ interiors ↔ exits, reachable encounter-free rooms, a door step in and the mat out with the facing,
+Confirm on a door, save / load inside, the map's "You are here", the tracker, the workshop ceremony
+→ the raid in the yard); the collision audit treats a door as used from its front cell.
 
 ## Journey menu pages (Esc / Start)
 
@@ -754,7 +812,8 @@ clocks on each talk.
   story time + its save round trip, readable conditions, the validator, phases) and
   `tests/integration/test_dialogue_content.gd` (the shipped bank validates and is canonical, every
   talking NPC has an entry, no raid talk before the raid, the towns talk about it after, time moves
-  people on, the Researcher is he/him and the hero's friend, the live overworld plays the bank, the
+  people on, the Researcher is Professor Elias (he/him, a family friend; none of the removed invented
+  backstory / lore comes back), the live overworld plays the bank, the
   editor loads / edits / simulates / searches / saves).
 
 ## Deviations from OVERWORLD.md (M1)

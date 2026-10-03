@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_13h4y"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="2_2tp8n"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="3_ftetx"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/crownhaven_inn/terrain.tres" id="4_dpa5a"]
+
+[sub_resource type="Resource" id="Resource_3deny"]
+script = ExtResource("1_13h4y")
+prop = "mat"
+footprint = Vector2i(1, 1)
+id = &"exit_mat"
+cell = Vector3i(6, 7, 0)
+tint = Color(0.62, 0.22, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_x8vr0"]
+script = ExtResource("2_2tp8n")
+area_rect = Rect2i(6, 7, 1, 1)
+target_area = &"crownhaven"
+target_entry = &"door_gilded_stag"
+id = &"exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_4fu8t"]
+script = ExtResource("1_13h4y")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_w"
+cell = Vector3i(1, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_rw04e"]
+script = ExtResource("1_13h4y")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_e"
+cell = Vector3i(10, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[resource]
+script = ExtResource("3_ftetx")
+area_id = &"crownhaven_inn"
+display_name = "The Gilded Stag"
+terrain = ExtResource("4_dpa5a")
+kind = 2
+region_id = &"heartlands"
+world_map_pos = Vector2(0.498, 0.41)
+entry_points = {
+"door": {
+"cell": [6, 6, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_3deny"), SubResource("Resource_x8vr0"), SubResource("Resource_4fu8t"), SubResource("Resource_rw04e")])
+parent_area = &"crownhaven"

@@ -8,7 +8,6 @@ script = ExtResource("1_kjjir")
 map_name = "River Crossing"
 description = "River Crossing: a toll village at the Old Bridge, where the King's road crosses the river north to Crownhaven. Story-mode terrain."
 author = "System"
-version = "1.0"
 status = "Inactive"
 width = 24
 height = 20
@@ -2440,27 +2439,9 @@ unit_spawns = Array[Dictionary]([{
 "unit_resource_path": "",
 "unit_type": ""
 }])
-lanes = []
-base_cells = {}
-control_points = []
-links = Array[Dictionary]([])
-max_players = 2
-recommended_players = 2
-difficulty = "Normal"
 map_type = "Story"
 environment_preset = "Forest"
-lighting_preset = "Day"
 background_color = Color(0.12, 0.16, 0.12, 1)
-turn_limit = 0
-fog_of_war = false
-victory_conditions = Array[String](["Eliminate All Enemies"])
-special_rules = Array[String]([])
-weather_mode = "fixed"
-weather = "clear"
-weather_schedule = Array[Dictionary]([])
-weather_pool = {}
-weather_change_every = 3
 creation_date = "2026-09-27T00:00:00"
 last_modified = "2026-09-28T00:00:00"
 tags = Array[String](["story"])
-preview_image_path = ""

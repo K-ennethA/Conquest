@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_nxqyc"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="2_ugkk5"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="3_31tct"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/crownhaven_chapel/terrain.tres" id="4_ofn4b"]
+
+[sub_resource type="Resource" id="Resource_c1q7x"]
+script = ExtResource("1_nxqyc")
+prop = "mat"
+footprint = Vector2i(1, 1)
+id = &"exit_mat"
+cell = Vector3i(5, 8, 0)
+tint = Color(0.62, 0.22, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_thxth"]
+script = ExtResource("2_ugkk5")
+area_rect = Rect2i(5, 8, 1, 1)
+target_area = &"crownhaven"
+target_entry = &"door_chapel"
+id = &"exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_jiicj"]
+script = ExtResource("1_nxqyc")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_w"
+cell = Vector3i(1, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_etayi"]
+script = ExtResource("1_nxqyc")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_e"
+cell = Vector3i(8, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[resource]
+script = ExtResource("3_31tct")
+area_id = &"crownhaven_chapel"
+display_name = "Chapel of the Starfall"
+terrain = ExtResource("4_ofn4b")
+kind = 2
+region_id = &"heartlands"
+world_map_pos = Vector2(0.498, 0.41)
+entry_points = {
+"door": {
+"cell": [5, 7, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_c1q7x"), SubResource("Resource_thxth"), SubResource("Resource_jiicj"), SubResource("Resource_etayi")])
+parent_area = &"crownhaven"

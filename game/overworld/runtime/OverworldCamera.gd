@@ -15,6 +15,8 @@ const FOV_DEG: float = 50.0
 const DEFAULT_DISTANCE: float = 14.0
 const MIN_DISTANCE: float = 10.0
 const MAX_DISTANCE: float = 28.0
+## A building interior is a small room: a little closer than outdoors, the whole room in view.
+const INTERIOR_DISTANCE: float = 13.5
 ## Follow smoothing (per second, exponential).
 const FOLLOW_RATE: float = 7.0
 const LOOK_RETURN_RATE: float = 3.0

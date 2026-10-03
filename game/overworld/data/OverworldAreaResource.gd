@@ -28,6 +28,13 @@ enum Kind { TOWN, ROUTE, INTERIOR, DUNGEON }
 @export var music_cue: StringName = &""
 ## "" = the terrain's own lighting preset.
 @export var lighting_preset_override: String = ""
+## An INTERIOR's town: the area whose building door leads here (docs/STORY_MODE.md "Interiors").
+## The world map lists the interior under the town's place, so "You are here" stays the town.
+@export var parent_area: StringName = &""
+
+
+func is_interior() -> bool:
+	return kind == Kind.INTERIOR
 
 
 ## Where shipped areas live: <AREAS_DIR><area_id>/area.tres (StoryController.area_path).

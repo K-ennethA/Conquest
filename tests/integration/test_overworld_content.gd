@@ -79,7 +79,11 @@ func test_warps_target_real_areas_and_entries() -> void:
 			if target != null:
 				assert_false(target.entry(String(w.target_entry)).is_empty(),
 					"%s/%s targets an existing entry" % [a.area_id, w.id])
-			for c in w.cells():
+			# A building's door is on its (solid) facade: it is used from the cell in front of it.
+			var used: Array[Vector3i] = w.cells()
+			if w is DoorEntity:
+				used = [(w as DoorEntity).front_cell()]
+			for c in used:
 				assert_true(OverworldGrid.build(a, StoryState.new()).is_terrain_passable(c),
 					"%s/%s: its cells can be walked onto" % [a.area_id, w.id])
 
@@ -119,7 +123,7 @@ func test_the_road_is_walkable_end_to_end() -> void:
 		["oakvale", Vector3i(3, 6, 0), Vector3i(23, 9, 0), "home -> the east exit"],
 		["mossway", Vector3i(1, 6, 0), Vector3i(33, 6, 0), "the Mossway, west -> east"],
 		["river_crossing", Vector3i(1, 14, 0), Vector3i(11, 0, 0), "River Crossing: the Mossway road -> over the Old Bridge -> north"],
-		["crownhaven", Vector3i(15, 27, 0), Vector3i(24, 9, 0), "the south gate -> the Researcher"],
+		["crownhaven", Vector3i(15, 27, 0), Vector3i(24, 7, 0), "the south gate -> the Royal Workshop's door"],
 		["crownhaven", Vector3i(15, 27, 0), Vector3i(15, 15, 0), "the south gate -> the Wayshrine"],
 		["crownhaven", Vector3i(15, 27, 0), Vector3i(7, 10, 0), "the south gate -> the barracks"],
 	]
@@ -216,14 +220,22 @@ func test_crownhaven_is_a_walled_castle_town() -> void:
 			walls += 1
 	assert_gt(walls, 80, "a stone wall rings the town")
 	assert_not_null(ch.entity("wayshrine"), "a Wayshrine in the market")
-	for id in ["linnea", "tam", "rowan", "lisk", "orwin", "dalla", "fenwick", "brisa", "corin"]:
+	for id in ["elias", "tam", "rowan", "lisk", "orwin", "dalla", "fenwick", "brisa", "corin"]:
 		assert_true(ch.entity(id) is NpcEntity, "%s lives in Crownhaven" % id)
 
 
 func test_the_ceremony_gives_the_starter_and_the_shard_then_the_raid() -> void:
+	# The ceremony happens INSIDE the Royal Workshop (an interior); the alarm brings the hero out
+	# to the workshop yard, where Crownhaven's on_enter plays the raid.
 	var ch := _area("crownhaven")
-	var linnea := ch.entity("linnea") as NpcEntity
-	var cmds: Array = _flatten(linnea.on_interact)
+	var ws := _area("crownhaven_workshop")
+	assert_not_null(ws, "the Royal Workshop has an interior")
+	assert_eq(ws.kind, OverworldAreaResource.Kind.INTERIOR, "it is an INTERIOR")
+	assert_eq(String(ws.parent_area), "crownhaven", "of Crownhaven")
+	var elias := ws.entity("elias") as NpcEntity
+	assert_not_null(elias, "Professor Elias waits inside")
+	assert_true(elias.is_present(StoryFixture.sent_off(StoryState.new())), "before the ceremony")
+	var cmds: Array = _flatten(elias.on_interact)
 	var joins: Array = []
 	var flags: Array = []
 	var warps: Array = []
@@ -234,33 +246,52 @@ func test_the_ceremony_gives_the_starter_and_the_shard_then_the_raid() -> void:
 			flags.append((c as SetFlagCommand).key)
 		if c is WarpCommand:
 			warps.append(c)
-	# The owner's opening: you CHOOSE your starter among the Researcher's three test creatures -- one
-	# JoinParty per option of ONE choice, the default (Barkling) first.
+	# The owner's opening: you CHOOSE your starter -- one JoinParty per STARTER_OPTIONS entry (placeholder
+	# roster units), of ONE choice, the default (Barkling) first.
 	var choices: Array = []
 	for c in cmds:
 		if c is ChoiceCommand:
 			choices.append(c)
-	assert_eq(choices.size(), 1, "the ceremony asks one question: which creature")
-	assert_eq(joins.size(), 3, "three test creatures to choose from")
+	assert_eq(choices.size(), 1, "the ceremony asks one question: which starter")
+	assert_eq(joins.size(), 3, "the placeholder options (STARTER_OPTIONS)")
 	assert_eq(String((joins[0] as JoinPartyCommand).character_id), "tree_grunt", "the default (first option) is Barkling")
 	for j in joins:
 		assert_not_null(CharacterLibrary.get_character((j as JoinPartyCommand).character_id), "%s is a real roster character" % j.character_id)
 		assert_eq((j as JoinPartyCommand).flag_on_join, "opening.starter_received", "whichever you pick receives the starter")
-	assert_true(flags.has("opening.starter_pick"), "the pick is remembered (opening.starter_pick)")
-	for f in ["key.bonding_shard", "opening.starter_received", "opening.attack", "opening.researcher_taken",
-			"opening.raiders_fled", "opening.chase"]:
-		assert_true(flags.has(f) or (joins[0] as JoinPartyCommand).flag_on_join == f, "the ceremony + raid set %s" % f)
+	for f in ["opening.starter_pick", "key.bonding_shard", "opening.ceremony"]:
+		assert_true(flags.has(f), "the ceremony sets %s" % f)
 	for id in ["starter", "starter_2", "starter_3"]:
-		var st := ch.entity(id)
-		assert_not_null(st, "%s waits by the pylon" % id)
+		var st := ws.entity(id)
+		assert_not_null(st, "%s stands beside Elias" % id)
 		if st != null:
 			var during := StoryState.new()
 			during.set_flag("opening.ceremony", 1)
 			assert_true(st.is_present(during), "%s shows during the ceremony" % id)
 			during.set_flag("opening.starter_received", 1)
 			assert_false(st.is_present(during), "%s is gone once you have chosen" % id)
-	assert_eq(warps.size(), 1, "the raid ends in the chase to Oakvale")
-	assert_eq(String((warps[0] as WarpCommand).area_id), "oakvale_ruins", "to the burning village")
+	assert_eq(warps.size(), 1, "the alarm ends the ceremony")
+	assert_eq(String((warps[0] as WarpCommand).area_id), "crownhaven", "out into Crownhaven")
+	assert_eq(String((warps[0] as WarpCommand).entry), "door_workshop", "the workshop yard, in front of its door")
+	# The raid (Crownhaven's on_enter, once the starter is received).
+	var raid_flags: Array = []
+	var raid_warps: Array = []
+	for c in _flatten(ch.on_enter):
+		if c is SetFlagCommand:
+			raid_flags.append((c as SetFlagCommand).key)
+		if c is WarpCommand:
+			raid_warps.append(c)
+	for f in ["opening.attack", "opening.researcher_taken", "opening.raiders_fled", "opening.chase"]:
+		assert_true(raid_flags.has(f), "the raid sets %s" % f)
+	assert_eq(raid_warps.size(), 1, "the raid ends in the chase to Oakvale")
+	assert_eq(String((raid_warps[0] as WarpCommand).area_id), "oakvale_ruins", "to the burning village")
+	var yard := ch.entity("elias")
+	assert_not_null(yard, "Elias stands in the yard for the raid")
+	var after_ceremony := StoryState.new()
+	after_ceremony.set_flag("opening.starter_received", 1)
+	assert_true(yard.is_present(after_ceremony), "once the ceremony is over")
+	assert_false(yard.is_present(StoryState.new()), "not before (he waits inside)")
+	after_ceremony.set_flag("opening.researcher_taken", 1)
+	assert_false(yard.is_present(after_ceremony), "and gone once he is taken")
 	var raided := StoryState.new()
 	raided.set_flag("opening.attack", 1)
 	assert_true(ch.entity("raider_captain").is_present(raided), "raiders appear when the raid begins")

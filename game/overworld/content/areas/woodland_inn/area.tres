@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_cvfl2"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="2_v7gx4"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="3_iujhj"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/woodland_inn/terrain.tres" id="4_membn"]
+
+[sub_resource type="Resource" id="Resource_75fec"]
+script = ExtResource("1_cvfl2")
+prop = "mat"
+footprint = Vector2i(1, 1)
+id = &"exit_mat"
+cell = Vector3i(6, 7, 0)
+tint = Color(0.62, 0.22, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_e6su2"]
+script = ExtResource("2_v7gx4")
+area_rect = Rect2i(6, 7, 1, 1)
+target_area = &"woodland_town"
+target_entry = &"door_stumped_hart"
+id = &"exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_6bdhy"]
+script = ExtResource("1_cvfl2")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_w"
+cell = Vector3i(1, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_mno6r"]
+script = ExtResource("1_cvfl2")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_e"
+cell = Vector3i(10, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[resource]
+script = ExtResource("3_iujhj")
+area_id = &"woodland_inn"
+display_name = "The Stumped Hart"
+terrain = ExtResource("4_membn")
+kind = 2
+region_id = &"woodlands"
+world_map_pos = Vector2(0.301, 0.384)
+entry_points = {
+"door": {
+"cell": [6, 6, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_75fec"), SubResource("Resource_e6su2"), SubResource("Resource_6bdhy"), SubResource("Resource_mno6r")])
+parent_area = &"woodland_town"

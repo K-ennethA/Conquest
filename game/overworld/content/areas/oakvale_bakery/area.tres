@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_qqo18"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="2_vacbr"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="3_1d0yq"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/oakvale_bakery/terrain.tres" id="4_o3163"]
+
+[sub_resource type="Resource" id="Resource_807qn"]
+script = ExtResource("1_qqo18")
+prop = "mat"
+footprint = Vector2i(1, 1)
+id = &"exit_mat"
+cell = Vector3i(5, 6, 0)
+tint = Color(0.62, 0.22, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_xqk3g"]
+script = ExtResource("2_vacbr")
+area_rect = Rect2i(5, 6, 1, 1)
+target_area = &"oakvale"
+target_entry = &"door_house_bakery"
+id = &"exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_p74ci"]
+script = ExtResource("1_qqo18")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_w"
+cell = Vector3i(1, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_g3ses"]
+script = ExtResource("1_qqo18")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_e"
+cell = Vector3i(8, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[resource]
+script = ExtResource("3_1d0yq")
+area_id = &"oakvale_bakery"
+display_name = "Oakvale Bakery"
+terrain = ExtResource("4_o3163")
+kind = 2
+region_id = &"heartlands"
+world_map_pos = Vector2(0.426, 0.63)
+entry_points = {
+"door": {
+"cell": [5, 5, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_807qn"), SubResource("Resource_xqk3g"), SubResource("Resource_p74ci"), SubResource("Resource_g3ses")])
+parent_area = &"oakvale"

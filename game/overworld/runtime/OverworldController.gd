@@ -21,6 +21,8 @@ extends Node3D
 ## next to it and talks. map_menu / cancel opens the Journey menu.
 
 const STEP_SOUND_EVENT := &"sfx_footstep"
+## Metres the camera's look-at point sits SOUTH of an interior's middle ([method camera_bounds_for]).
+const INTERIOR_FOCUS_SOUTH := 1.2
 
 var story = null
 var area: OverworldAreaResource = null
@@ -115,6 +117,9 @@ func _build_world() -> void:
 	map_loader.objective_markers_enabled = false
 	# Taps pick cells on the ground plane (OverworldCamera.ground_point): no per-tile colliders.
 	map_loader.tile_collision_enabled = false
+	# A building INTERIOR is a room, not a landscape: no world skirt / scenery ring round it.
+	if area.is_interior():
+		map_loader.surround_enabled = false
 	add_child(map_loader)
 	map_loader.load_map(area.terrain, map_root)
 
@@ -125,6 +130,8 @@ func _build_world() -> void:
 		add_child(look)
 	look.setup(self)
 	look.apply_preset(area.lighting_preset())
+	if area.is_interior():
+		map_root.add_child(_interior_backdrop())
 
 	grid = OverworldGrid.build(area, _state)
 
@@ -163,11 +170,9 @@ func _build_world() -> void:
 	camera = OverworldCamera.new()
 	camera.name = "OverworldCamera"
 	camera.target = player
-	var w: float = area.width() * Cells.CELL_SIZE
-	var h: float = area.height() * Cells.CELL_SIZE
-	# Keep the look-at point a few cells inside the edge so the skirt frames the area.
-	camera.bounds = Rect2(Vector2(minf(6.0, w * 0.5), minf(4.0, h * 0.5)),
-		Vector2(maxf(0.0, w - 12.0), maxf(0.0, h - 8.0)))
+	camera.bounds = camera_bounds_for(area)
+	if area.is_interior():
+		camera.distance = OverworldCamera.INTERIOR_DISTANCE
 	add_child(camera)
 	camera.snap()
 
@@ -212,6 +217,8 @@ func _make_entity_actor(e: OverworldEntity) -> OverworldActor:
 				body = OverworldProps.chest(e.tint)
 			&"wayshrine":
 				body = OverworldProps.wayshrine(e.tint)
+			&"door":
+				body = OverworldProps.door_marker(e.tint)
 			&"prop":
 				var p := e as PropEntity
 				body = OverworldProps.prop(p.prop, p.footprint, e.tint, _prop_seed(p))
@@ -227,6 +234,45 @@ func _make_entity_actor(e: OverworldEntity) -> OverworldActor:
 	actor.place(c)
 	actor.set_facing(OverworldEntity.facing_vector(f))
 	return actor
+
+
+## The camera's look-at clamp for [param a]. Outdoors: a few cells inside the edge, so the skirt
+## frames the area. An INTERIOR is a small room with nothing round it: the look-at point stays
+## at the room's middle and only pans once the room is wider / deeper than the view.
+static func camera_bounds_for(a: OverworldAreaResource) -> Rect2:
+	var cs: float = Cells.CELL_SIZE
+	var w: float = a.width() * cs
+	var h: float = a.height() * cs
+	if a.is_interior():
+		# Cell (0, 0)'s CENTRE is the world origin: the room spans -cs/2 .. w - cs/2. The look-at
+		# point sits a little south of the middle: the camera looks north and down, so the near (south)
+		# half of the room fills more of the frame -- this centres the whole room, walls to exit mat.
+		var cx: float = w * 0.5 - cs * 0.5
+		var cz: float = h * 0.5 - cs * 0.5 + INTERIOR_FOCUS_SOUTH
+		var half_x: float = maxf(0.0, (w - 20.0) * 0.5)
+		var half_z: float = maxf(0.0, (h - 14.0) * 0.5)
+		# (Never a zero-size rect: OverworldCamera reads that as "no clamp" and would follow the hero.)
+		half_x = maxf(half_x, 0.01)
+		half_z = maxf(half_z, 0.01)
+		return Rect2(Vector2(cx - half_x, cz - half_z), Vector2(half_x * 2.0, half_z * 2.0))
+	return Rect2(Vector2(minf(6.0, w * 0.5), minf(4.0, h * 0.5)),
+		Vector2(maxf(0.0, w - 12.0), maxf(0.0, h - 8.0)))
+
+
+## A dark floor under and round a room, so the edges of the view show darkness, not sky
+## (interiors have no world skirt).
+static func _interior_backdrop() -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = "InteriorBackdrop"
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(400.0, 400.0)
+	mi.mesh = pm
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(0.05, 0.04, 0.035)
+	mi.material_override = mat
+	mi.position = Vector3(0.0, -0.6, 0.0)
+	return mi
 
 
 ## Deterministic per-prop variation seed (flame placement, barrel spread).
@@ -503,6 +549,12 @@ func try_step(dir: Vector2i) -> bool:
 		start_wild_battle(creature, WildSpawner.contact_opening(creature, player.cell))
 		_update_prompt()
 		return false
+	# A step into an enterable building's door from its front cell goes inside.
+	var door: DoorEntity = door_at(to)
+	if door != null and door.accepts(player.cell, dir):
+		_walk_streak = false
+		enter_door(door)
+		return false
 	if not grid.is_walkable(to):
 		_walk_streak = false
 		_update_prompt()
@@ -533,6 +585,26 @@ func _await_arrival(to: Vector3i) -> void:
 ## An overlay owns the input right now: the journey menu, or any screen of the overlay group.
 func _overlay_open() -> bool:
 	return (journey != null and journey.is_open()) or InputActions.gameplay_input_blocked(get_tree())
+
+
+## The present door on [param cell] (a building facade), or null.
+func door_at(cell: Vector3i) -> DoorEntity:
+	for e in area.present_entities(_state):
+		if e is DoorEntity and (e as DoorEntity).cell == cell:
+			return e as DoorEntity
+	return null
+
+
+## Go through [param door] (its locked scene while it is shut): the same fade-and-warp as every
+## other warp. True when the warp / scene started.
+func enter_door(door: DoorEntity) -> bool:
+	if door == null or story.is_script_running():
+		return false
+	story.note_player_position(player.cell, OverworldEntity.facing_name(player.facing))
+	_tap_path.clear()
+	var ok: bool = story.run_script(door.interact_script(String(area.area_id), _state), String(door.id))
+	_update_prompt()
+	return ok
 
 
 ## True while the hero is mid-step.
@@ -938,7 +1010,8 @@ func refresh_quest_tracker() -> void:
 		var loc_id: String = String(e.get("location", ""))
 		var obj_area: String = String(e.get("area", ""))
 		if not obj_area.is_empty():
-			here = obj_area == aid
+			# A town and its building interiors count as the same "here".
+			here = obj_area == aid or _town_of(obj_area) == _town_of(aid)
 		elif not loc_id.is_empty() and atlas != null:
 			var cur: WorldLocation = atlas.location_for_area(aid)
 			here = cur != null and String(cur.id) == loc_id
@@ -946,6 +1019,14 @@ func refresh_quest_tracker() -> void:
 		place = l.display_name if l != null else ""
 	hud.set_tracked_quest(e, place, here)
 	_mark_objective_actor(String(e.get("npc", "")) if here else "")
+
+
+## The town area [param area_id] belongs to: an interior's parent_area, else the area itself.
+static func _town_of(area_id: String) -> String:
+	var a: OverworldAreaResource = OverworldAreaResource.load_by_id(area_id)
+	if a != null and a.is_interior() and not String(a.parent_area).is_empty():
+		return String(a.parent_area)
+	return area_id
 
 
 ## A gold diamond over the actor the tracked objective points at ("" clears it).
