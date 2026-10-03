@@ -51,6 +51,7 @@ static func to_dict(state: StoryState) -> Dictionary:
 			"entry": String(state.respawn.get("entry", "")),
 		},
 		"flags": state.flags.duplicate(true),
+		"flag_times": state.flag_times.duplicate(true),
 		"party": party,
 		"bag": state.bag.duplicate(true),
 		"gold": state.gold,
@@ -97,6 +98,10 @@ static func from_dict(data) -> Dictionary:
 	if flags is Dictionary:
 		for key in flags:
 			state.set_flag(String(key), flags[key])
+	# When each flag was set (story time: "3 rests since ..."; added within format 2). set_flag just
+	# stamped every flag with the load-time clocks -- replace them with the saved stamps; a flag with
+	# none (an older save) counts as set at the journey's start.
+	state.flag_times = StoryState.sanitize_flag_times(data.get("flag_times", {}), state.flags)
 
 	var party = data.get("party", [])
 	if party is Array:
