@@ -100,11 +100,33 @@ const NAMES := {
 	"HARL": "Old Harl",
 	"QUENBY": "Ser Quenby",
 	"CHAMPION": "Champion Isolde",
+	# --- The three home towns, built out (Oakvale / Crownhaven / Woodland Town) ---
+	"MARRA": "Goodwife Marra",              # Oakvale: the Hearth & Hen's landlady
+	"NED": "Old Ned",                       # Oakvale: a farmer
+	"WICK": "Wick",                         # Oakvale: a shepherd boy
+	"MARIBEL": "Innkeeper Maribel",         # Crownhaven: the Gilded Stag
+	"GARRICK": "Smith Garrick",             # Crownhaven: the Aldermere Forge
+	"VEYRA": "Guildmaster Veyra",           # Crownhaven: the Merchants' Guildhall
+	"ODALYS": "Sister Odalys",              # Crownhaven: the Chapel of the Starfall
+	"GATE_WARDEN": "Gate Warden",           # Crownhaven: the north gate
+	"HALE": "Warden Hale",                  # Woodland Town: the Wardens' Lodge
+	"BRYN": "Innkeeper Bryn",               # Woodland Town: the Stumped Hart
+	"SEDGE": "Trader Sedge",                # Woodland Town: the Trapper's Trading Post
+	"BURR": "Smith Burr",                   # Woodland Town: the smithy
+	"TORVALD": "Lumberjack Torvald",        # Woodland Town: the lumber yard
+	"ILSE": "Herbalist Ilse",               # Woodland Town: the herb hut
+	"FERRA": "Huntress Ferra",              # Woodland Town: the archery range
+	"WICKE": "Gran Wicke",                  # Woodland Town: the glade
+	"FERN": "Fern",                         # Woodland Town: a child
+	"STRANGER": "Cloaked Stranger",         # Woodland Town: a hint of the Thieves Guild
+	"ROAD_WARDEN": "Road Warden",           # Woodland Town: the east road
+	"SHOP_WOODLAND": "Sedge's Trading Post",
 }
 
 ## Shop ids (the save keys of their stock -- never rename once shipped; the NAMES above are free).
 const SHOP_CROWNHAVEN := "crownhaven_general"
 const SHOP_PEDLAR := "mossway_pedlar"
+const SHOP_WOODLAND := "woodland_trader"
 
 ## The STARTER creature the ceremony gives (a CharacterLibrary id) -- change it here and rebuild.
 const STARTER_ID := &"tree_grunt"
@@ -188,7 +210,8 @@ var _ok: bool = true
 
 
 func _initialize() -> void:
-	for d in ["areas/oakvale", "areas/oakvale_ruins", "areas/mossway", "areas/crownhaven", "battles", "shops",
+	for d in ["areas/oakvale", "areas/oakvale_ruins", "areas/mossway", "areas/crownhaven", "areas/woodland_town",
+			"battles", "shops",
 			"tournaments"]:
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CONTENT + d))
 	_build_hero()
@@ -201,6 +224,7 @@ func _initialize() -> void:
 	_build_oakvale(true)
 	_build_mossway()
 	_build_crownhaven()
+	_build_woodland_town()
 	print("[build_story_content] %s" % ("done" if _ok else "FAILED"))
 	quit(0 if _ok else 1)
 
@@ -330,6 +354,23 @@ func _build_shops() -> void:
 	pedlar.restock_steps = 150
 	pedlar.sell_ratio = 0.4
 	_save(pedlar, ShopResource.path_for(SHOP_PEDLAR))
+
+	# Woodland Town's trading post: a forester's stock -- cures and tonics at forest prices.
+	var woodland := ShopResource.new()
+	woodland.id = StringName(SHOP_WOODLAND)
+	woodland.display_name = _t("{SHOP_WOODLAND}")
+	woodland.greeting = _t("\"Furs, flasks and forest remedies. Everything you'd need if the trees ever start whispering back.\"")
+	var ws: Array[ShopStockEntry] = [
+		_stock("mossleaf_tonic"),
+		_stock("bitterroot_salve"),
+		_stock("heartwood_tonic", 0, 4),
+		_stock("clearwater_draught", 0, 2),
+		_stock("windwhisper_pendant", 0, 1),
+	]
+	woodland.stock = ws
+	woodland.restock = ShopResource.Restock.ON_REST
+	woodland.sell_ratio = -1.0
+	_save(woodland, ShopResource.path_for(SHOP_WOODLAND))
 
 
 ## A merchant NPC standing at [param cell] selling [param shop_id].
@@ -693,17 +734,30 @@ const OAK_GARDEN := Rect2i(5, 7, 2, 2)
 const OAK_POND := Rect2i(6, 3, 2, 2)
 ## Where a new journey starts: your own doorstep.
 const OAK_START := Vector2i(3, 6)
+## The Hearth & Hen (the village inn, north of the high road) and a family cottage on the west edge.
+const OAK_INN := Rect2i(15, 6, 3, 2)
+const OAK_COTTAGE := Rect2i(1, 9, 2, 2)
+## The mill lane runs out of the village here, west, toward Farm Hamlet.
+const OAK_WEST_Y := 12
 
 
-func _oak_buildings() -> Array:
-	return [OAK_HOME, OAK_HALL, OAK_FARM, OAK_BAKERY, OAK_BARN, OAK_MILL]
+## The buildings. The inn and the cottage have no ruined counterpart: the raid left only scorched
+## ground there (and the ruins' node budget has no room for two more burned houses).
+func _oak_buildings(ruined: bool = false) -> Array:
+	var base: Array = [OAK_HOME, OAK_HALL, OAK_FARM, OAK_BAKERY, OAK_BARN, OAK_MILL]
+	if not ruined:
+		base.append_array([OAK_INN, OAK_COTTAGE])
+	return base
 
 
 func _oak_terrain(x: int, y: int, ruined: bool) -> String:
 	var c := Vector2i(x, y)
 	# Outer border: forest.
-	if y <= 1 or y >= OAK_H - 1 or x == 0:
+	if y <= 1 or y >= OAK_H - 1 or (x == 0 and not (y == OAK_WEST_Y and not ruined)):
 		return "tree"
+	# The west lane runs out to the Farm Hamlet track (the village as it was; the fire closed it).
+	if not ruined and y == OAK_WEST_Y and x <= 1:
+		return "forest_dirt"
 	# East: a tree line with one gap for the road; the road runs on to the map edge.
 	if x == 20:
 		return "forest_dirt" if y == OAK_ROAD_Y else "tree"
@@ -713,7 +767,7 @@ func _oak_terrain(x: int, y: int, ruined: bool) -> String:
 		return "tree" if (x + y) % 3 != 0 or y < 4 or y > 14 else "grass_plains"
 	# Buildings: stone blocks under the house props; after the raid, smouldering embers under
 	# the ruins (a vent glows and never lets a walker in). The bakery still stands.
-	if _in(_oak_buildings(), c):
+	if _in(_oak_buildings(ruined), c):
 		return "magma_vent" if ruined and not OAK_BAKERY.has_point(c) else "stone_wall"
 	if OAK_POND.has_point(c):
 		return "deep_water"
@@ -737,13 +791,20 @@ func _oak_terrain(x: int, y: int, ruined: bool) -> String:
 	# The mill yard.
 	if x >= 4 and x <= 6 and y >= 13 and y <= 15:
 		return "wooden_planks"
+	# The inn's doorstep path down to the high road.
+	if not ruined and x >= 15 and x <= 17 and y == 8:
+		return "forest_dirt"
 	if c in [Vector2i(5, 10), Vector2i(17, 7), Vector2i(19, 4), Vector2i(13, 4), Vector2i(19, 16),
 			Vector2i(1, 16), Vector2i(7, 16), Vector2i(19, 11)]:
+		return "tree"
+	# The village orchard behind the inn, and a windbreak along the south lane (the fire took them).
+	if not ruined and c in [Vector2i(18, 5), Vector2i(19, 6), Vector2i(18, 7), Vector2i(19, 2), Vector2i(14, 5),
+			Vector2i(9, 17), Vector2i(15, 17), Vector2i(2, 16)]:
 		return "tree"
 	if ruined:
 		# Scorched earth and drifts of ash around every burned building, and scorch marks
 		# across the green.
-		for r in _oak_buildings():
+		for r in _oak_buildings(true):
 			if (r as Rect2i).grow(1).has_point(c):
 				return "ash_field" if _h(x, y, 3) < 0.35 else "forest_dirt"
 		if _h(x, y, 2) < 0.14:
@@ -807,6 +868,12 @@ func _build_oakvale(ruined: bool) -> void:
 			"has(\"%s\")" % F_SENT_OFF, _scene("oak_locked", [
 				_line("briony", "MOTHER", "{hero}! Not without saying goodbye, you don't."),
 			])))
+		# The mill lane's west end: the cart track to Farm Hamlet (not part of the story yet -- the
+		# warp targets the village itself and its condition never holds, so it always answers).
+		ents.append(_warp("west_exit", Rect2i(0, OAK_WEST_Y, 1, 1), &"oakvale", &"start", "",
+			"has(\"world.farm_hamlet_open\")", _scene("oak_hamlet_locked", [
+				_beat(StoryBeat.NARRATOR, "", "The cart track west of the mill runs on through the barley toward Farm Hamlet. A hurdle gate across it is tied shut with a ribbon: \"Harvest in progress -- back soon.\""),
+			])))
 		a.on_enter = StoryCommand.list([
 			IfCommand.make("not has(\"%s\")" % F_SENT_OFF, _send_off()),
 		])
@@ -823,12 +890,16 @@ func _oak_scenery(ruined: bool) -> Array:
 		"farm": [OAK_FARM, Color(0.55, 0.45, 0.25)],
 		"bakery": [OAK_BAKERY, Color(0.6, 0.36, 0.22)],
 		"barn": [OAK_BARN, Color(0.58, 0.2, 0.16)],
+		"inn": [OAK_INN, Color(0.62, 0.3, 0.2)],
+		"cottage": [OAK_COTTAGE, Color(0.5, 0.42, 0.26)],
 	}
 	for k in roofs:
 		var r: Rect2i = roofs[k][0]
 		# The bakery stands (scorched) -- everything else burned.
 		var kind: String = "ruin" if ruined and k != "bakery" else "house"
 		var tint: Color = roofs[k][1]
+		if ruined and (k == "inn" or k == "cottage"):
+			continue
 		if ruined and k == "bakery":
 			tint = tint.darkened(0.45)
 		out.append(_prop("house_" + k, kind, r.position, r.size, tint))
@@ -850,6 +921,15 @@ func _oak_scenery(ruined: bool) -> Array:
 		out.append(_prop("cart", "cart", Vector2i(19, 12), Vector2i.ONE, Color(0.86, 0.72, 0.38), true))
 		out.append(_prop("well", "well", Vector2i(8, 13), Vector2i.ONE, Color(0.5, 0.3, 0.2), true))
 		out.append(_prop("barrels", "barrels", Vector2i(7, 14), Vector2i.ONE, Color.WHITE, true))
+		# Farming-village flavour: a scarecrow in the field, a second haystack, a market-day stall
+		# on the plaza, lamps at its corners, a barrel by the inn door and a fence round the pond.
+		out.append(_prop("scarecrow", "scarecrow", Vector2i(16, 10), Vector2i.ONE, Color(0.5, 0.36, 0.2), true))
+		out.append(_prop("haystack_2", "haystack", Vector2i(19, 15), Vector2i.ONE, Color.WHITE, true))
+		out.append(_prop("market_stall", "stall", Vector2i(11, 7), Vector2i(2, 1), Color(0.78, 0.6, 0.22), true))
+		for lc in [Vector2i(7, 6), Vector2i(13, 6), Vector2i(7, 12), Vector2i(13, 12)]:
+			out.append(_prop("lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(1.0, 0.82, 0.45), true))
+		out.append(_prop("inn_barrels", "barrels", Vector2i(14, 7), Vector2i.ONE, Color.WHITE, true))
+		out.append(_prop("pond_fence", "fence", Vector2i(6, 5), Vector2i(2, 1), Color(0.5, 0.36, 0.22), true))
 	return out
 
 
@@ -885,6 +965,31 @@ func _oak_people() -> Array:
 		_line("pell", "PELL", "Will your creature be big? Will it breathe fire? Can I hold the shard? Just once?"),
 	])])
 	out.append(pell)
+
+	# --- The farming village, filled in: the inn, the fields, the pond, the lanes ---------------
+	out.append(_sign("inn_sign", Vector2i(14, 8), "The Hearth & Hen",
+		"THE HEARTH & HEN\nBed, broth and a warm hearth. Muddy boots at the door, please.\nRoad north-east: Crownhaven by way of River Crossing."))
+	out.append(_sign("field_sign", Vector2i(13, 10), "Barley Field",
+		"\"Please keep to the lane. The barley is counting on you.\" -- Ned"))
+	out.append(_sign("mill_sign", Vector2i(5, 11), "The Mill Lane",
+		"WEST: the cart track to Farm Hamlet.\nMILL LANE: flour, sacks and gossip, in that order."))
+	var marra := _npc("marra", Vector2i(15, 8), "south", "MARRA", Color(0.7, 0.4, 0.3), "villager")
+	marra.on_interact = StoryCommand.list([_say([
+		_line("marra", "MARRA", "Stew's on, and the hearth's lit. Travellers stop here before the Mossway -- it's a long road to River Crossing, and a longer one to the city."),
+		_line("marra", "MARRA", "Folk say the old bridge at River Crossing is older than the kingdom. Mind the toll-keeper; he'll tell you the same story twice."),
+	])])
+	out.append(marra)
+	var ned := _npc("ned", Vector2i(13, 8), "east", "NED", Color(0.5, 0.45, 0.3), "elder")
+	ned.on_interact = StoryCommand.list([_say([
+		_line("ned", "NED", "Forty harvests I've brought in off that field. A good year's barley for the bread, a bad year's for the pigs."),
+		_line("ned", "NED", "This year the creatures in the hedgerow have been restless. Something stirs them. Mind yourself out there."),
+	])])
+	out.append(ned)
+	var wick := _npc("wick", Vector2i(8, 5), "south", "WICK", Color(0.62, 0.5, 0.34), "child")
+	wick.on_interact = StoryCommand.list([_say([
+		_line("wick", "WICK", "I'm watching the pond for the golden frog. Nobody's seen it. That's how I know it's clever."),
+	])])
+	out.append(wick)
 	return out
 
 
@@ -1091,6 +1196,13 @@ func _build_mossway() -> void:
 		"ROUTE 1 -- THE MOSSWAY\nWest: Oakvale.  East: Crownhaven."))
 	ents.append(_sign("crownhaven_sign", Vector2i(31, 5), "Crownhaven",
 		"EAST: CROWNHAVEN\nRoyal city of {KINGDOM}."))
+	# RIVER CROSSING (the world map's stop between Oakvale and the capital): the brook's plank
+	# bridge, lamp-posted and signed, with a fence along the bank.
+	ents.append(_sign("river_crossing_sign", Vector2i(20, 5), "River Crossing",
+		"RIVER CROSSING\nThe King's bridge. Cross freely; cross carefully.\nWest: Oakvale.  East: Crownhaven."))
+	ents.append(_prop("bridge_lamp_n", "lamp", Vector2i(20, 7), Vector2i.ONE, Color(1.0, 0.82, 0.45), true))
+	ents.append(_prop("bridge_lamp_s", "lamp", Vector2i(22, 5), Vector2i.ONE, Color(1.0, 0.82, 0.45), true))
+	ents.append(_prop("bank_fence", "fence", Vector2i(20, 2), Vector2i(1, 3), Color(0.5, 0.36, 0.22), true))
 
 	# Before you have a partner, the grass rustles -- and lets you pass.
 	var hint := TriggerZone.new()
@@ -1229,6 +1341,17 @@ const CH_STALLS := [Rect2i(11, 12, 2, 1), Rect2i(18, 12, 2, 1), Rect2i(11, 16, 2
 ## The ceremony stage in front of the workshop.
 const CH_RESEARCHER := Vector2i(24, 8)
 const CH_PYLON := Vector2i(22, 8)
+## The capital's districts, built out: the Gilded Stag inn (by the market), the Merchants' Guildhall
+## (south), the Chapel of the Starfall (the east park), the Aldermere Forge (the east quarter).
+const CH_INN := Rect2i(7, 11, 3, 2)
+const CH_GUILD := Rect2i(14, 19, 3, 2)
+const CH_CHAPEL := Rect2i(24, 10, 3, 2)
+const CH_SMITHY := Rect2i(25, 15, 2, 2)
+const CH_NEW_BUILDINGS := [CH_INN, CH_GUILD, CH_CHAPEL, CH_SMITHY]
+## The north gate (the road to Woodland Town) and the east gate (the road to the Mountain Pass,
+## closed by royal order); both are gaps in the wall ring with a road running out of them.
+const CH_NORTH_GATE := Vector2i(9, 3)
+const CH_EAST_GATE := Vector2i(27, 13)
 
 
 func _ch_terrain(x: int, y: int) -> String:
@@ -1237,8 +1360,15 @@ func _ch_terrain(x: int, y: int) -> String:
 		and y > CH_WALL.position.y and y < CH_WALL.end.y - 1
 	var on_wall: bool = CH_WALL.has_point(c) and not inside
 	if on_wall:
-		return "flagstones" if c == CH_GATE else "stone_wall"
+		return "flagstones" if (c == CH_GATE or c == CH_NORTH_GATE or c == CH_EAST_GATE) else "stone_wall"
 	if not CH_WALL.has_point(c):
+		# The north road (to Woodland Town) and the east road (to the Mountain Pass).
+		if x == CH_NORTH_GATE.x and y < CH_WALL.position.y:
+			return "forest_dirt"
+		if y == CH_EAST_GATE.y and x > CH_EAST_GATE.x:
+			return "forest_dirt"
+		if absi(x - CH_NORTH_GATE.x) <= 1 and y == CH_WALL.position.y - 1:
+			return "grass_plains"
 		# Outside the walls: the road in from the Mossway, a moat, the forest edge.
 		if y == CH_GATE.y and x < CH_GATE.x:
 			return "wooden_planks" if x == 2 else "forest_dirt"
@@ -1253,8 +1383,13 @@ func _ch_terrain(x: int, y: int) -> String:
 		return "grass_plains"
 	# Inside the walls.
 	if CH_KEEP.has_point(c) or CH_BARRACKS.has_point(c) or CH_LAB.has_point(c) or _in(CH_HOUSES, c) \
-			or CH_ARENA.has_point(c):
+			or CH_ARENA.has_point(c) or _in(CH_NEW_BUILDINGS, c):
 		return "stone_wall"
+	# The north gate's avenue to the keep courtyard, and the chapel's garden path.
+	if x == CH_NORTH_GATE.x and y >= 4 and y <= 8:
+		return "flagstones"
+	if (x == 25 and y == 12) or (x == 26 and y == 12):
+		return "flagstones"
 	if c == CH_FOUNTAIN:
 		return "sacred_ground"
 	# Shade trees in the market's south corners.
@@ -1287,7 +1422,7 @@ func _ch_terrain(x: int, y: int) -> String:
 	# A little park in the east.
 	if x >= 24 and x <= 26 and y >= 10 and y <= 12:
 		return "sacred_meadow"
-	if c in [Vector2i(26, 11), Vector2i(4, 21), Vector2i(15, 21), Vector2i(26, 22), Vector2i(10, 22),
+	if c in [Vector2i(26, 11), Vector2i(4, 21), Vector2i(26, 22), Vector2i(10, 22),
 			Vector2i(20, 21), Vector2i(8, 4), Vector2i(20, 5)]:
 		return "tree"
 	return "grass_plains"
@@ -1309,6 +1444,7 @@ func _build_crownhaven() -> void:
 	a.terrain = load(CONTENT + "areas/crownhaven/terrain.tres")
 	a.entry_points = {
 		"west_gate": {"cell": [1, CH_GATE.y, 0], "facing": "east"},
+		"north_gate": {"cell": [CH_NORTH_GATE.x, 1, 0], "facing": "south"},
 		"wayshrine": {"cell": [CH_FOUNTAIN.x, CH_FOUNTAIN.y + 1, 0], "facing": "north"},
 	}
 
@@ -1321,6 +1457,17 @@ func _build_crownhaven() -> void:
 	ents.append_array(_spar_partners())
 	ents.append_array(_arena())
 	ents.append(_warp("west_exit", Rect2i(0, CH_GATE.y, 1, 1), &"mossway", &"east"))
+	# The wider kingdom: the north gate's road to Woodland Town (open once the opening is over --
+	# the alert is lifted), and the east gate's road to the Mountain Pass (closed by royal order).
+	ents.append_array(_ch_districts())
+	ents.append(_warp("north_exit", Rect2i(CH_NORTH_GATE.x, 0, 1, 1), &"woodland_town", &"east_road", "",
+		"has(\"%s\")" % F_COMPLETE, _scene("ch_north_locked", [
+			_narr("A Gate Warden bars the way. \"The north road is closed while the alert stands. The Sergeant will pass word when it's safe to leave the city.\""),
+		])))
+	ents.append(_warp("east_exit", Rect2i(CH_W - 1, CH_EAST_GATE.y, 1, 1), &"crownhaven", &"west_gate", "",
+		"has(\"world.mountain_road_open\")", _scene("ch_east_locked", [
+			_narr("A warden shakes his head. \"The Mountain Pass road is closed by order of the crown. Landslides, they say. Soldiers, I say.\""),
+		])))
 	a.entities = _entities(ents)
 	a.on_enter = StoryCommand.list([
 		# Resume the raid if the journey was saved in the middle of it (a closed window).
@@ -1349,9 +1496,25 @@ func _ch_scenery() -> Array:
 		out.append(_prop("house_%d" % i, "house", r.position, r.size, roof_tints[i % roof_tints.size()]))
 	# The walls' towers and the west gatehouse.
 	for c in [Vector2i(3, 3), Vector2i(27, 3), Vector2i(3, 23), Vector2i(27, 23), Vector2i(15, 23),
-			Vector2i(27, 13), Vector2i(3, 18), Vector2i(3, 8)]:
+			Vector2i(3, 18), Vector2i(3, 8), Vector2i(27, 8), Vector2i(27, 18), Vector2i(21, 3)]:
 		out.append(_prop("tower_%d_%d" % [c.x, c.y], "tower", c, Vector2i.ONE, ALDERMERE_BLUE))
 	out.append(_prop("west_gatehouse", "gate", Vector2i(CH_GATE.x, CH_GATE.y - 1), Vector2i(1, 3), ALDERMERE_BLUE))
+	out.append(_prop("north_gatehouse", "gate", Vector2i(CH_NORTH_GATE.x - 1, CH_NORTH_GATE.y), Vector2i(3, 1), ALDERMERE_BLUE))
+	out.append(_prop("east_gatehouse", "gate", Vector2i(CH_EAST_GATE.x, CH_EAST_GATE.y - 1), Vector2i(1, 3), ALDERMERE_BLUE))
+	# The new districts: a gabled inn, a gold-roofed guildhall, a blue-slate chapel, a forge.
+	out.append(_prop("gilded_stag", "house", CH_INN.position, CH_INN.size, Color(0.62, 0.42, 0.16)))
+	out.append(_prop("guildhall", "keep", CH_GUILD.position, CH_GUILD.size, Color(0.72, 0.55, 0.15)))
+	out.append(_prop("chapel", "chapel", CH_CHAPEL.position, CH_CHAPEL.size, Color(0.3, 0.38, 0.6)))
+	out.append(_prop("forge", "smithy", CH_SMITHY.position, CH_SMITHY.size, Color(0.3, 0.28, 0.3)))
+	out.append(_prop("forge_barrels", "barrels", Vector2i(24, 17), Vector2i.ONE, Color.WHITE, true))
+	out.append(_prop("guild_banner_w", "banner", Vector2i(13, 21), Vector2i.ONE, Color(0.72, 0.55, 0.15), true))
+	out.append(_prop("guild_banner_e", "banner", Vector2i(17, 21), Vector2i.ONE, Color(0.72, 0.55, 0.15), true))
+	out.append(_prop("inn_barrels", "barrels", Vector2i(6, 14), Vector2i.ONE, Color.WHITE, true))
+	# Street lamps: the gate street, the keep courtyard and the workshop yard.
+	for lc in [Vector2i(5, 14), Vector2i(12, 10), Vector2i(18, 10), Vector2i(20, 14), Vector2i(25, 9), Vector2i(10, 5), Vector2i(26, 14)]:
+		out.append(_prop("lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(1.0, 0.82, 0.45), true))
+	# The chapel garden: standing stones for the fallen star, and the park's trees kept as shade.
+	out.append(_prop("chapel_lamp", "lamp", Vector2i(24, 12), Vector2i.ONE, Color(0.7, 0.9, 1.0), true))
 	# The market's stalls (blocking), banners down the main street, the training yard, the pylon.
 	var awnings := [Color(0.7, 0.25, 0.2), Color(0.25, 0.45, 0.3), Color(0.8, 0.6, 0.2), Color(0.35, 0.3, 0.6)]
 	for i in range(CH_STALLS.size()):
@@ -1491,6 +1654,75 @@ func _ch_people() -> Array:
 			CINDRAL_RED, "raider")
 		r.visible_if = raid_vis
 		out.append(r)
+	return out
+
+
+## The capital's built-out districts: the north gate, the Gilded Stag, the Merchants' Guildhall,
+## the Chapel of the Starfall and the Aldermere Forge -- signs and people, no scripts.
+func _ch_districts() -> Array:
+	var out: Array = []
+	var raided: String = "has(\"%s\")" % F_ATTACK
+	# The north gate.
+	out.append(_sign("north_gate_sign", Vector2i(8, 5), "North Gate",
+		"THE NORTH GATE\nWoodland Town and the Deepwood road. Wardens' tolls are paid at the Lodge."))
+	var warden := _npc("gate_warden", Vector2i(10, 4), "west", "GATE_WARDEN", ALDERMERE_BLUE, "guard")
+	warden.on_interact = StoryCommand.list([IfCommand.make("has(\"%s\")" % F_COMPLETE, [
+		_say([_line("gate_warden", "GATE_WARDEN", "The north road is open again. Woodland Town is a day's walk under the trees -- keep to the cart ruts, and don't follow any lights.")]),
+	], [
+		_say([_line("gate_warden", "GATE_WARDEN", "The north gate stays barred till the alert's lifted. Nobody in, nobody out.")]),
+	])])
+	out.append(warden)
+
+	# The Gilded Stag (inn).
+	out.append(_sign("inn_sign", Vector2i(10, 14), "The Gilded Stag",
+		"THE GILDED STAG\nFeather beds, hot baths, a locked stable. Guests of the crown drink free."))
+	var maribel := _npc("maribel", Vector2i(10, 12), "west", "MARIBEL", Color(0.66, 0.42, 0.3), "villager")
+	maribel.on_interact = StoryCommand.list([IfCommand.make(raided, [
+		_say([_line("maribel", "MARIBEL", "Half my rooms are full of frightened scholars and the other half of soldiers. The kitchen's never been so busy -- and I've never been so worried.")]),
+	], [
+		_say([_line("maribel", "MARIBEL", "Welcome to the Stag! Testers from every corner of {KINGDOM} sleep under this roof the night before the ceremony. Nobody sleeps well, mind.")]),
+		_say([_line("maribel", "MARIBEL", "If you're heading for the forest, the Wardens at Woodland Town keep a good table. Tell them Maribel sent you -- they'll water the soup.")]),
+	])])
+	out.append(maribel)
+
+	# The Merchants' Guildhall.
+	out.append(_sign("guild_sign", Vector2i(16, 21), "The Merchants' Guildhall",
+		"MERCHANTS' GUILDHALL\nCharter of the Crown. Weights, measures and honest coin."))
+	var veyra := _npc("veyra", Vector2i(15, 21), "south", "VEYRA", Color(0.72, 0.55, 0.15), "noble")
+	veyra.dialogue = _scene("ch_veyra", [
+		_line("veyra", "VEYRA", "Every road in {KINGDOM} runs through this city, and every merchant on those roads answers to this hall."),
+		_line("veyra", "VEYRA", "Timber from Woodland Town, grain from Oakvale, iron from the Mountain Pass -- when the roads are open. Some are closed. I dislike closed roads."),
+	])
+	out.append(veyra)
+
+	# The Chapel of the Starfall.
+	out.append(_sign("chapel_sign", Vector2i(22, 12), "Chapel of the Starfall",
+		"THE CHAPEL OF THE STARFALL\nWhere the old star's dust was first gathered. All are welcome; silence is kindly requested."))
+	var odalys := _npc("odalys", Vector2i(26, 12), "west", "ODALYS", Color(0.78, 0.8, 0.9), "elder")
+	odalys.on_interact = StoryCommand.list([IfCommand.make(raided, [
+		_say([_line("odalys", "ODALYS", "I lit a candle for the Researcher. Starstone listens, they say, to anyone who's afraid enough to be honest.")]),
+	], [
+		_say([_line("odalys", "ODALYS", "Long ago a star fell, and the land remembers it. Every creature and every shard carries a little of that falling. Be gentle with what you bond.")]),
+	])])
+	out.append(odalys)
+
+	# The Aldermere Forge.
+	out.append(_sign("forge_sign", Vector2i(25, 14), "The Aldermere Forge",
+		"THE ALDERMERE FORGE\nArms for the Guard. Civilians: please don't touch the anvil. It bites."))
+	var garrick := _npc("garrick", Vector2i(25, 17), "north", "GARRICK", Color(0.4, 0.3, 0.26), "trainer")
+	garrick.on_interact = StoryCommand.list([IfCommand.make(raided, [
+		_say([_line("garrick", "GARRICK", "Spearheads. Shield rims. Every blade the Guard owns passes under my hammer this week. Whoever did this is going to regret it.")]),
+	], [
+		_say([_line("garrick", "GARRICK", "Forged half the spears on those walls. The other half I'm still forging. Ask the Sergeant -- the Guard never has enough spears.")]),
+	])])
+	out.append(garrick)
+
+	# A courtier in the keep's shadow.
+	var merrow := _npc("merrow", Vector2i(19, 10), "west", "Lady Merrow", Color(0.52, 0.3, 0.5), "noble")
+	merrow.dialogue = _scene("ch_merrow", [
+		_line("merrow", "Lady Merrow", "The King will not see petitioners, but the garden is lovely this time of year. Please admire it quietly."),
+	])
+	out.append(merrow)
 	return out
 
 
@@ -2014,4 +2246,266 @@ func _arena() -> Array:
 		]),
 	])
 	out.append(champ)
+	return out
+
+
+# =====================================================================================
+#  Woodland Town -- the timber town at the edge of the Sparse Forest / Deep Woods
+# =====================================================================================
+#
+# A rustic forest town, deliberately NOT a village or a castle: no wall, no flagstone plaza -- a
+# boardwalk square, log cabins under mossy roofs, a stream with a plank bridge splitting a quiet
+# WEST BANK (herbalist, archery range, the sacred glade, the trail to the Hidden Thieves Guild and
+# the road on to Deepwood Village) from the busy EAST BANK (the Wardens' Lodge, the Stumped Hart
+# inn, Timber Row's trading post and forge, the lumber yard and the sawmill). It sits in a
+# clearing: dense woods close in on every side but the roads. Reached from Crownhaven's north gate
+# (the east end, entry `east_road`); the west road and the south trail are placeholders for the
+# later regions (their warps target this town and never open yet).
+
+const WT_W := 28
+const WT_H := 24
+const WT_ROAD_Y := 12
+const WT_STREAM_X := 7
+const WT_LODGE := Rect2i(10, 6, 6, 3)
+const WT_INN := Rect2i(18, 8, 4, 3)
+const WT_POST := Rect2i(22, 9, 3, 2)
+const WT_SMITHY := Rect2i(25, 9, 2, 2)
+const WT_SAWMILL := Rect2i(23, 15, 4, 3)
+const WT_HOMES := [Rect2i(10, 16, 3, 2), Rect2i(14, 16, 3, 2)]
+const WT_HERB := Rect2i(3, 9, 3, 2)
+const WT_HUNT := Rect2i(3, 5, 3, 2)
+const WT_PLAZA := Rect2i(10, 11, 7, 4)
+const WT_SHRINE := Vector2i(13, 13)
+const WT_YARD := Rect2i(17, 14, 10, 7)
+const WT_CAMP := Rect2i(11, 18, 5, 3)
+const WT_GLADE := Rect2i(2, 17, 4, 3)
+const WT_GARDEN := Rect2i(3, 14, 3, 2)
+## Hand-placed trees inside the clearing (the rest is the forest around it).
+const WT_TREES := [Vector2i(9, 4), Vector2i(8, 8), Vector2i(17, 5), Vector2i(9, 20), Vector2i(8, 15),
+	Vector2i(9, 13), Vector2i(20, 5), Vector2i(2, 3), Vector2i(2, 7), Vector2i(21, 21), Vector2i(10, 21)]
+
+
+func _wt_buildings() -> Array:
+	return [WT_LODGE, WT_INN, WT_POST, WT_SMITHY, WT_SAWMILL, WT_HERB, WT_HUNT] + WT_HOMES
+
+
+func _wt_terrain(x: int, y: int) -> String:
+	var c := Vector2i(x, y)
+	# The roads out: east to Crownhaven, west toward Deepwood Village, and the south trail.
+	if x == 0 or x == WT_W - 1:
+		return "forest_dirt" if y == WT_ROAD_Y else "tree"
+	if y <= 1 or y >= WT_H - 2:
+		return "forest_dirt" if (x == 4 and y >= WT_H - 2) else "tree"
+	if x == WT_STREAM_X and y >= 2 and y <= WT_H - 3:
+		return "wooden_planks" if y == WT_ROAD_Y else "deep_water"
+	if _in(_wt_buildings(), c):
+		return "stone_wall"
+	if c == WT_SHRINE:
+		return "sacred_ground"
+	# The boardwalk square and the Lodge's path onto it.
+	if WT_PLAZA.has_point(c) or (x >= 12 and x <= 13 and y >= 9 and y <= 10):
+		return "wooden_planks"
+	if WT_GLADE.has_point(c):
+		return "sacred_meadow"
+	if c in WT_TREES:
+		return "tree"
+	# The high road (Timber Street) and the front lane of Timber Row.
+	if y == WT_ROAD_Y or (y == 11 and x >= 17 and x <= WT_W - 2):
+		return "forest_dirt"
+	# The lumber yard, the camp, the herb garden, and the lanes.
+	if WT_YARD.has_point(c) or WT_CAMP.has_point(c) or WT_GARDEN.has_point(c):
+		return "forest_dirt"
+	if (x == 13 and y >= 15 and y <= 18) or (x == 6 and y >= 7 and y <= 19) or (y == 7 and x >= 4 and x <= 6) \
+			or (x == 4 and y == 11) or (x == 4 and y >= 20):
+		return "forest_dirt"
+	# The forest closes in beyond the clearing, thickest to the west (the Deep Woods).
+	var dx: float = (float(x) - 14.0) / 13.0
+	var dy: float = (float(y) - 12.0) / 10.0
+	if dx * dx + dy * dy > 1.0:
+		return "tree" if _h(x, y, 21) < (0.9 if x < 8 else 0.75) else "grass_plains"
+	if _h(x, y, 22) < 0.1 and absi(y - WT_ROAD_Y) > 1 and (x < 8 or x > 20):
+		return "tall_grass"
+	return "grass_plains"
+
+
+func _build_woodland_town() -> void:
+	var t := _new_map("Woodland Town", WT_W, WT_H,
+		"Woodland Town: a timber town in a clearing at the edge of the Sparse Forest -- log cabins, a lumber yard, a stream with a plank bridge. Story-mode terrain.")
+	t.lighting_preset = "Dawn"
+	_paint(t, _wt_terrain)
+	_add_validator_anchors(t, Vector2i(26, WT_ROAD_Y), Vector2i(13, 14))
+	_save(t, CONTENT + "areas/woodland_town/terrain.tres")
+
+	var a := OverworldAreaResource.new()
+	a.area_id = &"woodland_town"
+	a.display_name = "Woodland Town"
+	a.kind = OverworldAreaResource.Kind.TOWN
+	a.world_map_pos = Vector2(0.3, 0.38)
+	a.terrain = load(CONTENT + "areas/woodland_town/terrain.tres")
+	a.entry_points = {
+		"east_road": {"cell": [WT_W - 2, WT_ROAD_Y, 0], "facing": "west"},
+		"wayshrine": {"cell": [WT_SHRINE.x, WT_SHRINE.y + 1, 0], "facing": "north"},
+		"west_road": {"cell": [1, WT_ROAD_Y, 0], "facing": "east"},
+	}
+	var ents: Array = []
+	ents.append_array(_wt_scenery())
+	ents.append(_shrine(WT_SHRINE, "Woodland Wayshrine"))
+	ents.append_array(_wt_people())
+	# Roads: east to Crownhaven; west (Deepwood Village) and the south trail (the Hidden Thieves
+	# Guild) are the next chapters -- their warps target this town and never open yet.
+	ents.append(_warp("east_exit", Rect2i(WT_W - 1, WT_ROAD_Y, 1, 1), &"crownhaven", &"north_gate"))
+	ents.append(_warp("west_exit", Rect2i(0, WT_ROAD_Y, 1, 1), &"woodland_town", &"west_road", "",
+		"has(\"world.deepwood_open\")", _scene("wt_west_locked", [
+			_narr("The road west thins to a deer track and then to nothing. Somewhere beyond the thorns lies Deepwood Village -- but the Wardens have strung a rope across the track with a painted warning: \"No travellers. Ask at the Lodge.\""),
+		])))
+	ents.append(_warp("south_exit", Rect2i(4, WT_H - 1, 1, 1), &"woodland_town", &"wayshrine", "",
+		"has(\"world.thieves_guild_open\")", _scene("wt_south_locked", [
+			_narr("A narrow trail slips south between the roots, toward a cave mouth nobody here admits to knowing. Fresh boot prints say the way is kept open from the other end. A rockfall blocks it for now."),
+		])))
+	a.entities = _entities(ents)
+	a.on_enter = StoryCommand.list([
+		IfCommand.make("not has(\"woodland.arrived\")", [
+			_say([
+				_narr("Woodland Town. The air smells of pine resin and woodsmoke, and somewhere a saw sings through green timber. Lanterns still burn in the cabin windows against the morning mist."),
+				_narr("The Wardens' Lodge stands at the heart of the town, north of the boardwalk square. The lumber yard is east, past the inn; the old trail south runs toward the Hidden Thieves Guild."),
+			]),
+			_flag("woodland.arrived"),
+		]),
+	])
+	_save(a, CONTENT + "areas/woodland_town/area.tres")
+
+
+func _wt_scenery() -> Array:
+	var out: Array = []
+	var moss := Color(0.3, 0.42, 0.24)
+	var bark := Color(0.42, 0.32, 0.2)
+	out.append(_prop("wardens_lodge", "cabin", WT_LODGE.position, WT_LODGE.size, Color(0.24, 0.4, 0.26)))
+	out.append(_prop("stumped_hart", "cabin", WT_INN.position, WT_INN.size, Color(0.5, 0.3, 0.2)))
+	out.append(_prop("trading_post", "cabin", WT_POST.position, WT_POST.size, Color(0.36, 0.36, 0.24)))
+	out.append(_prop("forge", "smithy", WT_SMITHY.position, WT_SMITHY.size, Color(0.3, 0.26, 0.24)))
+	out.append(_prop("sawmill", "cabin", WT_SAWMILL.position, WT_SAWMILL.size, bark))
+	out.append(_prop("herb_hut", "cabin", WT_HERB.position, WT_HERB.size, Color(0.3, 0.5, 0.3)))
+	out.append(_prop("hunters_lodge", "cabin", WT_HUNT.position, WT_HUNT.size, Color(0.4, 0.34, 0.2)))
+	for i in range(WT_HOMES.size()):
+		var r: Rect2i = WT_HOMES[i]
+		out.append(_prop("cabin_%d" % i, "cabin", r.position, r.size, [moss, Color(0.4, 0.34, 0.24)][i % 2]))
+	# The lumber yard: stacked logs, a hand cart, barrels.
+	out.append(_prop("logs_a", "logs", Vector2i(17, 15), Vector2i(3, 1), Color(0.62, 0.45, 0.26), true))
+	out.append(_prop("logs_b", "logs", Vector2i(17, 17), Vector2i(3, 1), Color(0.56, 0.4, 0.24), true))
+	out.append(_prop("logs_c", "logs", Vector2i(20, 19), Vector2i(3, 1), Color(0.66, 0.5, 0.3), true))
+	out.append(_prop("logs_d", "logs", Vector2i(21, 15), Vector2i(2, 1), Color(0.6, 0.44, 0.26), true))
+	out.append(_prop("timber_cart", "cart", Vector2i(21, 17), Vector2i.ONE, Color(0.55, 0.4, 0.22), true))
+	out.append(_prop("yard_barrels", "barrels", Vector2i(22, 18), Vector2i.ONE, Color.WHITE, true))
+	# The herb garden, the archery range, the camp fire.
+	out.append(_prop("herb_garden", "crops", WT_GARDEN.position, WT_GARDEN.size, Color(0.28, 0.5, 0.34)))
+	out.append(_prop("garden_fence", "fence", Vector2i(3, 16), Vector2i(3, 1), Color(0.45, 0.33, 0.2), true))
+	out.append(_prop("target_a", "dummy", Vector2i(3, 8), Vector2i.ONE, Color.WHITE, true))
+	out.append(_prop("target_b", "dummy", Vector2i(5, 8), Vector2i.ONE, Color.WHITE, true))
+	out.append(_prop("campfire", "fire", Vector2i(13, 19), Vector2i.ONE, Color.WHITE, true))
+	# The square: lamps at its corners, the Wardens' green banners at the Lodge path, a well.
+	for lc in [Vector2i(10, 11), Vector2i(16, 11), Vector2i(10, 14), Vector2i(16, 14), Vector2i(8, 11), Vector2i(8, 13)]:
+		out.append(_prop("lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(1.0, 0.78, 0.4), true))
+	out.append(_prop("banner_w", "banner", Vector2i(11, 9), Vector2i.ONE, Color(0.24, 0.44, 0.28), true))
+	out.append(_prop("banner_e", "banner", Vector2i(14, 9), Vector2i.ONE, Color(0.24, 0.44, 0.28), true))
+	out.append(_prop("well", "well", Vector2i(15, 10), Vector2i.ONE, Color(0.3, 0.38, 0.22), true))
+	out.append(_prop("woodpile_inn", "logs", Vector2i(17, 8), Vector2i.ONE, Color(0.58, 0.42, 0.24), true))
+	return out
+
+
+func _wt_people() -> Array:
+	var out: Array = []
+	var cloak_green := Color(0.28, 0.44, 0.3)
+	# --- Signs ---------------------------------------------------------------------------------
+	out.append(_sign("town_sign", Vector2i(WT_W - 2, WT_ROAD_Y + 1), "Woodland Town",
+		"WOODLAND TOWN\nTimber, tolls and tall tales. East: Crownhaven.  West: Deepwood Village (road closed)."))
+	out.append(_sign("lodge_sign", Vector2i(10, 9), "The Wardens' Lodge",
+		"THE WARDENS' LODGE\nTolls, maps, and the loan of a lantern. Ask for Warden Hale."))
+	out.append(_sign("inn_sign", Vector2i(17, 10), "The Stumped Hart",
+		"THE STUMPED HART\nA stump for a stool, a stag for a sign. Venison pie daily."))
+	out.append(_sign("yard_sign", Vector2i(18, 13), "Lumber Yard",
+		"HAMMOND & DAUGHTERS -- LUMBER\nCut green, sold dry.\nDo not lean on the stacks."))
+	out.append(_sign("deepwood_sign", Vector2i(2, WT_ROAD_Y + 1), "To Deepwood",
+		"WEST: DEEPWOOD VILLAGE\nThe road is closed by the Wardens. Ask at the Lodge."))
+	out.append(_sign("trail_sign", Vector2i(5, 19), "The South Trail",
+		"A hand-lettered board nailed to a root:\n\"NOT A ROAD. Not a trail. Not your business.\""))
+	out.append(_sign("standing_stone", Vector2i(3, 17), "The Starfall Stone",
+		"A knee-high stone, furred with moss and scored with old marks. Fresh flowers lie before it. It hums very faintly, like a held note.", "stone"))
+
+	# --- East bank: the Lodge, the inn, Timber Row, the lumber yard --------------------------
+	var hale := _npc("hale", Vector2i(12, 9), "south", "HALE", cloak_green, "officer")
+	hale.on_interact = StoryCommand.list([_say([
+		_line("hale", "HALE", "Welcome to Woodland Town. The Wardens keep the roads, the tolls and the peace between the town and the trees -- in about that order of difficulty."),
+		_line("hale", "HALE", "Deepwood's road is shut. The wood's been restless, and a restless wood eats carts. If you want to go west, bring me a reason I can write down."),
+		_line("hale", "HALE", "And if you meet a lantern in the dark that nobody's holding -- go the other way."),
+	])])
+	out.append(hale)
+	var bryn := _npc("bryn", Vector2i(19, 11), "south", "BRYN", Color(0.6, 0.38, 0.28), "villager")
+	bryn.on_interact = StoryCommand.list([_say([
+		_line("bryn", "BRYN", "Venison pie, hot cider, and a room with a window onto the pines. The Stumped Hart's never let a traveller go hungry."),
+		_line("bryn", "BRYN", "Odd crowd lately. Folk with no luggage and a lot of questions about the south trail. I tell them it's a trail to nowhere."),
+	])])
+	out.append(bryn)
+	var sedge := _merchant("sedge", Vector2i(23, 11), "south", "SEDGE", Color(0.4, 0.34, 0.2), SHOP_WOODLAND)
+	sedge.dialogue = _scene("wt_sedge", [_line("sedge", "SEDGE", "Furs, flasks and forest remedies, friend. Have a look.")])
+	out.append(sedge)
+	var burr := _npc("burr", Vector2i(26, 11), "west", "BURR", Color(0.36, 0.28, 0.24), "trainer")
+	burr.on_interact = StoryCommand.list([_say([
+		_line("burr", "BURR", "Axe heads, saw teeth, nails by the barrel. The Guard's smiths in the city make swords. I make the things that actually feed people."),
+	])])
+	out.append(burr)
+	var torvald := _npc("torvald", Vector2i(19, 16), "east", "TORVALD", Color(0.5, 0.3, 0.2), "trainer")
+	torvald.on_interact = StoryCommand.list([_say([
+		_line("torvald", "TORVALD", "Every plank in the capital's keep started life on this yard. Mind the stacks -- they have opinions about strangers."),
+		_line("torvald", "TORVALD", "We only fell what's marked. The Wardens paint a ring on the trunk, and I don't argue with a ring."),
+	])])
+	out.append(torvald)
+	var road_warden := _npc("road_warden", Vector2i(WT_W - 3, WT_ROAD_Y + 1), "north", "ROAD_WARDEN", cloak_green, "guard")
+	road_warden.dialogue = _scene("wt_road_warden", [
+		_beat(&"self", "Road Warden", "East road's clear to the city. If anyone asks, I wasn't smiling."),
+	])
+	out.append(road_warden)
+	var fern := _npc("fern", Vector2i(11, 13), "south", "FERN", Color(0.5, 0.6, 0.35), "child")
+	fern.on_interact = StoryCommand.list([_say([
+		_line("fern", "FERN", "I counted forty-one lanterns last night and only forty windows. Nobody believes me."),
+	])])
+	out.append(fern)
+
+	# --- West bank: the herbalist, the archery range, the glade ----------------------------------
+	var ilse := _npc("ilse", Vector2i(4, 11), "south", "ILSE", Color(0.34, 0.52, 0.4), "scholar")
+	ilse.on_interact = StoryCommand.list([_say([
+		_line("ilse", "ILSE", "Bitterroot for stings, mossleaf for scrapes, and something I'm not allowed to call a cure for anything at all. Don't tell the Wardens."),
+		_line("ilse", "ILSE", "The woods are older than the kingdom, you know. Things sleep in the roots out there. Nobody here says so aloud."),
+	])])
+	out.append(ilse)
+	var ferra := _npc("ferra", Vector2i(4, 7), "south", "FERRA", Color(0.34, 0.42, 0.26), "trainer")
+	ferra.on_interact = StoryCommand.list([_say([
+		_line("ferra", "FERRA", "Three arrows, three straw men, and one of them is still standing. Don't ask which. The range is open to anyone who can keep from shooting the pigeons."),
+	])])
+	out.append(ferra)
+	var wicke := _npc("wicke", Vector2i(3, 18), "east", "WICKE", Color(0.7, 0.68, 0.74), "elder")
+	wicke.on_interact = StoryCommand.list([_say([
+		_line("wicke", "WICKE", "When I was a girl this stone was taller. Or I was shorter. The glade keeps its own counsel."),
+		_line("wicke", "WICKE", "If you're ever lost in the woods, set your hand on a stone and listen. The star remembers the way home."),
+	])])
+	out.append(wicke)
+
+	# --- The camp on the south lane ------------------------------------------------------------
+	var stranger := _npc("stranger", Vector2i(12, 19), "east", "STRANGER", Color(0.2, 0.18, 0.22), "raider")
+	stranger.on_interact = StoryCommand.list([_say([
+		_line("stranger", "STRANGER", "Warm fire, warm night. You've the look of someone who counts doors and exits, traveller. Good habit."),
+		_line("stranger", "STRANGER", "Some doors in this wood are only doors if you know the knock. I'd tell you the knock, but I don't know it. Obviously."),
+	])])
+	out.append(stranger)
+
+	# --- A woodcutter's chest at the back of the yard ------------------------------------------
+	var chest := ChestEntity.new()
+	chest.id = &"yard_chest"
+	chest.cell = Vector3i(25, 19, 0)
+	chest.facing = "west"
+	chest.display_name = "Chest"
+	chest.tint = Color(0.46, 0.32, 0.18)
+	var loot: Array[StringName] = [&"mossleaf_tonic", &"bitterroot_salve"]
+	chest.loot_items = loot
+	chest.loot_gold = 40
+	out.append(chest)
 	return out

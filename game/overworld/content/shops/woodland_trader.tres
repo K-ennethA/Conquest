@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="ShopResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/ShopResource.gd" id="1_3m767"]
+[ext_resource type="Script" path="res://game/overworld/data/ShopStockEntry.gd" id="2_y7q1j"]
+
+[sub_resource type="Resource" id="Resource_qlnpq"]
+script = ExtResource("2_y7q1j")
+item_id = &"mossleaf_tonic"
+
+[sub_resource type="Resource" id="Resource_3d1ir"]
+script = ExtResource("2_y7q1j")
+item_id = &"bitterroot_salve"
+
+[sub_resource type="Resource" id="Resource_hffsc"]
+script = ExtResource("2_y7q1j")
+item_id = &"heartwood_tonic"
+stock_limit = 4
+
+[sub_resource type="Resource" id="Resource_orjt8"]
+script = ExtResource("2_y7q1j")
+item_id = &"clearwater_draught"
+stock_limit = 2
+
+[sub_resource type="Resource" id="Resource_xarqh"]
+script = ExtResource("2_y7q1j")
+item_id = &"windwhisper_pendant"
+stock_limit = 1
+
+[resource]
+script = ExtResource("1_3m767")
+id = &"woodland_trader"
+display_name = "Sedge's Trading Post"
+greeting = "\"Furs, flasks and forest remedies. Everything you'd need if the trees ever start whispering back.\""
+stock = Array[ExtResource("2_y7q1j")]([SubResource("Resource_qlnpq"), SubResource("Resource_3d1ir"), SubResource("Resource_hffsc"), SubResource("Resource_orjt8"), SubResource("Resource_xarqh")])
