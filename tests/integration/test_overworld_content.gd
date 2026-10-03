@@ -10,7 +10,8 @@
 ## ceremony, the raid, walkable streets) and the first fight's board.
 
 const StoryFixture := preload("res://tests/helpers/story_fixture.gd")
-const OPENING_AREAS: Array[String] = ["oakvale", "oakvale_ruins", "mossway", "crownhaven", "woodland_town"]
+const OPENING_AREAS: Array[String] = ["oakvale", "oakvale_ruins", "mossway", "river_crossing", "crownhaven",
+	"sparse_forest", "woodland_town"]
 const FIRST_FIGHT_MAP := "res://game/overworld/content/battles/ow_oakvale_ashes.tres"
 ## docs/design/OVERWORLD.md Â§4.3: every cell is a tile node -- keep areas <= ~32x32 (a route may
 ## be long and thin: the budget is the cell COUNT, each side within MapResource's 40).
@@ -117,9 +118,10 @@ func test_the_road_is_walkable_end_to_end() -> void:
 	var legs := [
 		["oakvale", Vector3i(3, 6, 0), Vector3i(23, 9, 0), "home -> the east exit"],
 		["mossway", Vector3i(1, 6, 0), Vector3i(33, 6, 0), "the Mossway, west -> east"],
-		["crownhaven", Vector3i(1, 13, 0), Vector3i(24, 9, 0), "the west gate -> the Researcher"],
-		["crownhaven", Vector3i(1, 13, 0), Vector3i(15, 15, 0), "the west gate -> the Wayshrine"],
-		["crownhaven", Vector3i(1, 13, 0), Vector3i(7, 10, 0), "the west gate -> the barracks"],
+		["river_crossing", Vector3i(1, 14, 0), Vector3i(11, 0, 0), "River Crossing: the Mossway road -> over the Old Bridge -> north"],
+		["crownhaven", Vector3i(15, 27, 0), Vector3i(24, 9, 0), "the south gate -> the Researcher"],
+		["crownhaven", Vector3i(15, 27, 0), Vector3i(15, 15, 0), "the south gate -> the Wayshrine"],
+		["crownhaven", Vector3i(15, 27, 0), Vector3i(7, 10, 0), "the south gate -> the barracks"],
 	]
 	for leg in legs:
 		var g := OverworldGrid.build(_area(leg[0]), s)
@@ -331,25 +333,66 @@ func test_oakvale_is_a_farming_village_with_an_inn_and_a_farm_hamlet_track() -> 
 	for id in ["marra", "ned", "wick", "briony", "tobin", "hessa", "pell"]:
 		assert_true(oak.entity(id) is NpcEntity, "%s lives in Oakvale" % id)
 	assert_not_null(oak.entity("house_inn"), "the Hearth & Hen")
-	var west := oak.entity("west_exit") as WarpEntity
-	assert_not_null(west, "the mill lane runs out west toward Farm Hamlet")
-	assert_ne(west.locked_scene, null, "and answers with a scene until that chapter exists")
-	assert_not_null(_area("mossway").entity("river_crossing_sign"), "the Mossway marks River Crossing")
+	for aid in ["oakvale", "oakvale_ruins"]:
+		var west := _area(aid).entity("west_exit") as WarpEntity
+		assert_not_null(west, "%s: the mill lane runs out west toward Farm Hamlet" % aid)
+		assert_eq(west.requires, "has(\"world.farm_hamlet_open\")", "%s: held by Farm Hamlet's flag" % aid)
+		assert_ne(west.locked_scene, null, "%s: and answers with a scene until that chapter exists" % aid)
+	assert_not_null(_area("mossway").entity("brook_sign"), "the Mossway's plank bridge is the Mossbrook")
+	assert_null(_area("mossway").entity("river_crossing_sign"), "River Crossing is its own place now")
 
 
-func test_crownhaven_has_districts_and_three_gates() -> void:
+func test_after_the_opening_the_village_rebuilds_in_the_ruins() -> void:
+	var ruins := _area("oakvale_ruins")
+	var during := StoryFixture.sent_off(StoryState.new())
+	during.set_flag("opening.attack", 1)
+	var after := StoryFixture.past_opening(StoryState.new())
+	for id in ["marra", "ned", "wick"]:
+		var n := ruins.entity(id)
+		assert_true(n is NpcEntity, "%s survives the raid" % id)
+		assert_false(n.is_present(during), "%s is not out on the night of the raid" % id)
+		assert_true(n.is_present(after), "%s is back to rebuild after the opening" % id)
+	var fires: int = 0
+	for e in ruins.present_entities(after):
+		if e is PropEntity and (e as PropEntity).prop == "fire":
+			fires += 1
+	assert_eq(fires, 0, "the fires are out once the opening is over")
+	assert_true(ruins.entity("rebuild_logs").is_present(after), "new timber on the inn's plot")
+
+
+func test_crownhaven_has_five_gates_on_the_world_map_roads() -> void:
 	var ch := _area("crownhaven")
 	var kinds := _prop_kinds(ch)
 	for k in ["chapel", "smithy", "keep", "gate", "lamp"]:
 		assert_true(kinds.has(k), "Crownhaven has a %s" % k)
-	assert_gte(int(kinds.get("gate", 0)), 3, "west, north and east gatehouses")
+	assert_gte(int(kinds.get("gate", 0)), 5, "south, west, north, east and harbour gatehouses")
 	for id in ["maribel", "veyra", "odalys", "garrick", "gate_warden"]:
 		assert_true(ch.entity(id) is NpcEntity, "%s lives in Crownhaven" % id)
-	var north := ch.entity("north_exit") as WarpEntity
-	assert_eq(north.target_area, &"woodland_town", "the north gate leads to Woodland Town")
 	var s := StoryFixture.past_opening(StoryState.new())
-	assert_true(north.is_present(s), "the north exit exists")
-	assert_false(north.requires.is_empty(), "and is held until the opening is over")
+	# [exit, target area, open after the opening, the map's direction]
+	for spec in [["south_exit", &"river_crossing", true, "south: River Crossing / Oakvale"],
+			["west_exit", &"sparse_forest", true, "west: the Sparse Forest / Woodland Town"],
+			["north_exit", &"crownhaven", false, "north: Mountain Base (closed)"],
+			["east_exit", &"crownhaven", false, "east: the Rocky Badlands (closed)"],
+			["harbour_exit", &"crownhaven", false, "south-east: Beach Village (closed)"]]:
+		var w := ch.entity(spec[0]) as WarpEntity
+		assert_not_null(w, spec[3])
+		if w == null:
+			continue
+		assert_eq(w.target_area, spec[1], "%s targets %s" % [spec[3], spec[1]])
+		assert_eq(w.is_open(s), spec[2], "%s is %s after the opening" % [spec[3], "open" if spec[2] else "closed"])
+	assert_false((ch.entity("west_exit") as WarpEntity).is_open(StoryFixture.sent_off(StoryState.new())),
+		"the west road is held until the opening is over")
+	assert_true((ch.entity("south_exit") as WarpEntity).is_open(StoryState.new()), "the road home is always open")
+	# A river city: the river runs along the whole south side, crossed only by the stone bridge.
+	var g := OverworldGrid.from_map(ch.terrain)
+	for x in range(ch.width()):
+		for y in [25, 26]:
+			var c := Vector3i(x, y, 0)
+			if x >= 14 and x <= 16:
+				assert_eq(String(g.tile_id_at(c)), "flagstones", "the bridge deck at %s" % c)
+			else:
+				assert_false(g.is_terrain_passable(c), "the river at %s" % c)
 
 
 func test_woodland_town_is_a_timber_town() -> void:
@@ -379,50 +422,307 @@ func test_woodland_town_is_a_timber_town() -> void:
 
 
 func test_the_world_route_is_connected_and_walkable() -> void:
-	# Oakvale -> the Mossway (River Crossing) -> Crownhaven -> Woodland Town, once the opening is over.
+	# Oakvale -> the Mossway -> River Crossing -> Crownhaven -> the Sparse Forest -> Woodland Town,
+	# once the opening is over.
 	var s := StoryFixture.past_opening(StoryState.new())
 	var oak := _area("oakvale")
 	var moss := _area("mossway")
+	var rc := _area("river_crossing")
 	var ch := _area("crownhaven")
+	var sf := _area("sparse_forest")
 	var wt := _area("woodland_town")
 	var legs := [
-		[oak, Vector3i(22, 9, 0), Vector3i(10, 11, 0), "Oakvale: east gate -> the square"],
-		[oak, Vector3i(10, 11, 0), Vector3i(16, 9, 0), "Oakvale: the square -> the inn path"],
-		[oak, Vector3i(10, 11, 0), Vector3i(1, 12, 0), "Oakvale: the square -> the Farm Hamlet track"],
-		[ch, Vector3i(1, 13, 0), Vector3i(9, 1, 0), "Crownhaven: west gate -> north gate"],
-		[ch, Vector3i(1, 13, 0), Vector3i(25, 12, 0), "Crownhaven: west gate -> the chapel"],
-		[ch, Vector3i(1, 13, 0), Vector3i(26, 17, 0), "Crownhaven: west gate -> the forge"],
-		[ch, Vector3i(1, 13, 0), Vector3i(14, 21, 0), "Crownhaven: west gate -> the guildhall"],
-		[ch, Vector3i(1, 13, 0), Vector3i(28, 13, 0), "Crownhaven: west gate -> the east road"],
+		[oak, Vector3i(22, 9, 0), Vector3i(10, 11, 0), "Oakvale: east gate -> the green"],
+		[oak, Vector3i(10, 11, 0), Vector3i(16, 9, 0), "Oakvale: the green -> the inn path"],
+		[oak, Vector3i(10, 11, 0), Vector3i(1, 12, 0), "Oakvale: the green -> the Farm Hamlet track"],
+		[oak, Vector3i(10, 11, 0), Vector3i(10, 19, 0), "Oakvale: the green -> the jetty on the coast"],
+		[_area("oakvale_ruins"), Vector3i(21, 9, 0), Vector3i(1, 12, 0), "the ruins: east road -> the Farm Hamlet track"],
+		[rc, Vector3i(1, 14, 0), Vector3i(22, 14, 0), "River Crossing: the Mossway road -> the coast road"],
+		[rc, Vector3i(22, 14, 0), Vector3i(11, 1, 0), "River Crossing: the coast road -> over the bridge, north"],
+		[ch, Vector3i(15, 27, 0), Vector3i(1, 13, 0), "Crownhaven: south gate -> west gate"],
+		[ch, Vector3i(15, 27, 0), Vector3i(9, 1, 0), "Crownhaven: south gate -> north gate"],
+		[ch, Vector3i(15, 27, 0), Vector3i(25, 12, 0), "Crownhaven: south gate -> the chapel"],
+		[ch, Vector3i(15, 27, 0), Vector3i(26, 17, 0), "Crownhaven: south gate -> Harbour Lane by the forge"],
+		[ch, Vector3i(15, 27, 0), Vector3i(14, 21, 0), "Crownhaven: south gate -> the guildhall"],
+		[ch, Vector3i(15, 27, 0), Vector3i(28, 13, 0), "Crownhaven: south gate -> the east road"],
+		[ch, Vector3i(15, 27, 0), Vector3i(28, 17, 0), "Crownhaven: south gate -> the harbour road"],
+		[sf, Vector3i(26, 6, 0), Vector3i(1, 6, 0), "the Sparse Forest, east -> west"],
 		[wt, Vector3i(26, 12, 0), Vector3i(1, 12, 0), "Woodland Town: east road -> west road"],
 		[wt, Vector3i(26, 12, 0), Vector3i(13, 14, 0), "Woodland Town: east road -> the Wayshrine"],
 		[wt, Vector3i(26, 12, 0), Vector3i(24, 19, 0), "Woodland Town: east road -> the lumber yard"],
 		[wt, Vector3i(26, 12, 0), Vector3i(12, 18, 0), "Woodland Town: east road -> the camp"],
 		[wt, Vector3i(26, 12, 0), Vector3i(4, 22, 0), "Woodland Town: east road -> the south trail"],
+		[wt, Vector3i(26, 12, 0), Vector3i(17, 1, 0), "Woodland Town: east road -> the north trail"],
 		[wt, Vector3i(26, 12, 0), Vector3i(4, 8, 0), "Woodland Town: east road -> the archery range"],
 	]
 	for leg in legs:
 		var g := OverworldGrid.build(leg[0], s)
 		assert_false(TapPathfinder.find_path(g, leg[1], leg[2]).is_empty(), "%s is walkable" % leg[3])
-	# The warps chain: Mossway east -> Crownhaven west gate; Crownhaven north -> Woodland east road
-	# and back.
+	# The warps chain, both ways.
 	var hops := [
-		[moss, "east_exit", &"crownhaven", &"west_gate"],
-		[ch, "north_exit", &"woodland_town", &"east_road"],
-		[wt, "east_exit", &"crownhaven", &"north_gate"],
+		[oak, "east_exit", &"mossway", &"west"],
+		[moss, "east_exit", &"river_crossing", &"west"],
+		[rc, "west_exit", &"mossway", &"east"],
+		[rc, "north_exit", &"crownhaven", &"south_gate"],
+		[ch, "south_exit", &"river_crossing", &"north"],
+		[ch, "west_exit", &"sparse_forest", &"east"],
+		[sf, "east_exit", &"crownhaven", &"west_gate"],
+		[sf, "west_exit", &"woodland_town", &"east_road"],
+		[wt, "east_exit", &"sparse_forest", &"west"],
 	]
 	for h in hops:
 		var w := (h[0] as OverworldAreaResource).entity(h[1]) as WarpEntity
-		assert_not_null(w, "%s exists" % h[1])
+		assert_not_null(w, "%s/%s exists" % [(h[0] as OverworldAreaResource).area_id, h[1]])
+		if w == null:
+			continue
 		assert_eq(w.target_area, h[2], "%s leads to %s" % [h[1], h[2]])
 		assert_eq(w.target_entry, h[3], "at %s" % h[3])
+		assert_true(w.is_open(s), "%s/%s is open after the opening" % [(h[0] as OverworldAreaResource).area_id, h[1]])
 
 
 func test_the_future_roads_stay_closed_for_now() -> void:
 	var s := StoryFixture.past_opening(StoryState.new())
-	for pair in [["woodland_town", "west_exit"], ["woodland_town", "south_exit"], ["crownhaven", "east_exit"],
-			["oakvale", "west_exit"]]:
-		var w := _area(pair[0]).entity(pair[1]) as WarpEntity
-		assert_not_null(w, "%s/%s exists" % pair)
-		assert_false(w.requires.is_empty(), "%s/%s is gated" % pair)
-		assert_not_null(w.locked_scene, "%s/%s explains itself" % pair)
+	var atlas := WorldAtlas.load_default()
+	# [area, exit, the closed place it leads toward]
+	for spec in [["woodland_town", "west_exit", "deepwood_village"], ["woodland_town", "south_exit", "thieves_guild"],
+			["woodland_town", "north_exit", "frostpeak_village"], ["crownhaven", "north_exit", "mountain_base"],
+			["crownhaven", "east_exit", "redrock_village"], ["crownhaven", "harbour_exit", "beach_village"],
+			["river_crossing", "east_exit", "beach_village"], ["oakvale", "west_exit", "farm_hamlet"],
+			["oakvale_ruins", "west_exit", "farm_hamlet"]]:
+		var w := _area(spec[0]).entity(spec[1]) as WarpEntity
+		assert_not_null(w, "%s/%s exists" % [spec[0], spec[1]])
+		if w == null:
+			continue
+		assert_false(w.is_open(s), "%s/%s is closed" % [spec[0], spec[1]])
+		assert_not_null(w.locked_scene, "%s/%s explains itself" % [spec[0], spec[1]])
+		var place := atlas.location(spec[2])
+		assert_false(place.is_built(), "%s is not built yet" % spec[2])
+		assert_eq(w.requires, "has(\"%s\")" % place.open_flag, "%s/%s opens with %s's flag" % [spec[0], spec[1], spec[2]])
+		assert_true(atlas.has_road(String(atlas.location_for_area(spec[0]).id), spec[2]),
+			"the map has a road from %s toward %s" % [spec[0], spec[2]])
+
+
+# --- The world map (WorldAtlas: content/world.tres) ---------------------------------------------
+
+func test_the_world_atlas_registers_every_place_on_the_map() -> void:
+	var atlas := WorldAtlas.load_default()
+	assert_not_null(atlas, "content/world.tres ships")
+	if atlas == null:
+		return
+	assert_eq(atlas.validate(), [] as Array[String], "and validates clean")
+	for id in ["oakvale", "farm_hamlet", "mossway", "river_crossing", "crownhaven", "sparse_forest", "woodland_town",
+			"thieves_guild", "deepwood_village", "depths_of_the_wood", "frostpeak_village", "mountain_base",
+			"mountain_pass", "hidden_depths", "cindral", "redrock_village", "beach_village", "sunrise_isle",
+			"island_of_tides", "stormreef_isle"]:
+		assert_not_null(atlas.location(id), "%s is on the map" % id)
+	# Every shipped area belongs to exactly one place, and shares its map position and region.
+	for a in _areas():
+		var l := atlas.location_for_area(String(a.area_id))
+		assert_not_null(l, "%s is on the world map" % a.area_id)
+		if l == null:
+			continue
+		assert_true(l.is_built(), "%s's place is BUILT" % a.area_id)
+		assert_eq(a.world_map_pos, l.map_pos, "%s sits where the map puts %s" % [a.area_id, l.id])
+		assert_eq(a.region_id, l.region_id, "%s is in %s's region" % [a.area_id, l.id])
+	# Every built place's areas exist; a closed place has none yet, and a flag that opens it.
+	for l in atlas.locations:
+		for aid in l.area_ids:
+			assert_not_null(_area(String(aid)), "%s's area %s ships" % [l.id, aid])
+		if not l.is_built():
+			assert_true(l.open_flag.begins_with("world."), "%s opens with a world.* flag" % l.id)
+	# The built heartland is one connected road, Oakvale to Woodland Town.
+	var reach: Array[String] = atlas.reachable_built("oakvale")
+	for id in ["mossway", "river_crossing", "crownhaven", "sparse_forest", "woodland_town"]:
+		assert_true(reach.has(id), "%s is reachable from Oakvale over built roads" % id)
+	assert_eq(atlas.neighbours("beach_village", "sea").size(), 3, "Beach Village is the port for three isles")
+
+
+func test_world_map_positions_follow_the_owners_map() -> void:
+	var atlas := WorldAtlas.load_default()
+	var pos := {}
+	for l in atlas.locations:
+		pos[String(l.id)] = l.map_pos
+	# The map's landmarks, compass-checked: x grows east, y grows south.
+	assert_lt(pos["oakvale"].distance_to(Vector2(0.46, 0.67)), 0.025, "Oakvale (the Starting Village)")
+	assert_lt(pos["river_crossing"].distance_to(Vector2(0.58, 0.69)), 0.025, "River Crossing")
+	assert_lt(pos["crownhaven"].distance_to(Vector2(0.49, 0.47)), 0.025, "Crownhaven (the Central Kingdom)")
+	assert_lt(pos["woodland_town"].distance_to(Vector2(0.34, 0.41)), 0.025, "Woodland Town")
+	assert_gt(pos["oakvale"].y, pos["crownhaven"].y, "Oakvale is south of the capital")
+	assert_gt(pos["river_crossing"].x, pos["oakvale"].x, "River Crossing is east of Oakvale")
+	assert_lt(pos["woodland_town"].x, pos["crownhaven"].x, "Woodland Town is west of the capital")
+	assert_lt(pos["mountain_base"].y, pos["crownhaven"].y, "the mountains are north")
+	assert_gt(pos["redrock_village"].x, pos["crownhaven"].x, "the Badlands are east")
+	assert_gt(pos["beach_village"].x, pos["crownhaven"].x, "Beach Village is east...")
+	assert_gt(pos["beach_village"].y, pos["crownhaven"].y, "...and south of the capital")
+	assert_lt(pos["frostpeak_village"].y, pos["woodland_town"].y, "Frostpeak is north of Woodland Town")
+	assert_lt(pos["deepwood_village"].x, pos["woodland_town"].x, "Deepwood is west of Woodland Town")
+	assert_lt(pos["cindral"].y, pos["mountain_pass"].y, "Cindral lies beyond the Pass")
+
+
+func test_the_thieves_guild_stays_a_secret() -> void:
+	var atlas := WorldAtlas.load_default()
+	var guild := atlas.location("thieves_guild")
+	assert_true(guild.secret, "the Hidden Thieves Guild is a secret place")
+	assert_false(guild.is_known(StoryFixture.past_opening(StoryState.new())), "off the map until it is found")
+	var found := StoryState.new()
+	found.set_flag(guild.open_flag, 1)
+	assert_true(guild.is_known(found), "and on it once the way opens")
+	# Woodland Town never names it: not on arrival, not on a sign.
+	var wt := _area("woodland_town")
+	for c in _flatten(wt.on_enter):
+		if c is SayCommand:
+			for b in (c as SayCommand).beats:
+				assert_false(String((b as StoryBeat).text).contains("Thieves"), "the arrival scene keeps the secret")
+	for e in wt.entity_list():
+		if e is SignEntity:
+			assert_false((e as SignEntity).text.contains("Thieves"), "%s keeps the secret" % e.id)
+
+
+# --- River Crossing: a real river --------------------------------------------------------------
+
+func test_river_crossing_is_a_real_river_with_one_stone_bridge() -> void:
+	var rc := _area("river_crossing")
+	assert_not_null(rc, "River Crossing ships")
+	if rc == null:
+		return
+	assert_eq(rc.kind, OverworldAreaResource.Kind.TOWN, "a village (no wild grass)")
+	var g := OverworldGrid.from_map(rc.terrain)
+	var bridge: Array[Vector3i] = []
+	for x in range(rc.width()):
+		for y in range(7, 10):
+			var c := Vector3i(x, y, 0)
+			var tid: String = String(g.tile_id_at(c))
+			if tid == "flagstones":
+				bridge.append(c)
+			elif tid != "wooden_planks":
+				assert_eq(tid, "deep_water", "the river runs edge to edge at %s" % c)
+	assert_eq(bridge.size(), 6, "a two-wide stone bridge over three rows of water")
+	# Without the bridge there is no way over: the south bank cannot reach the north bank.
+	var s := StoryFixture.past_opening(StoryState.new())
+	var full := OverworldGrid.build(rc, s)
+	assert_false(TapPathfinder.find_path(full, Vector3i(1, 14, 0), Vector3i(11, 1, 0)).is_empty(), "over the bridge")
+	for c in bridge:
+		full.set_blocker(c, "test")
+	assert_true(TapPathfinder.find_path(full, Vector3i(1, 14, 0), Vector3i(11, 1, 0)).is_empty(),
+		"and no way round it")
+	for id in ["hobb", "nan", "joss"]:
+		assert_true(rc.entity(id) is NpcEntity, "%s lives at River Crossing" % id)
+	var kinds := _prop_kinds(rc)
+	assert_gte(int(kinds.get("house", 0)), 3, "a toll-house and cottages")
+	assert_not_null(rc.entity("wayshrine"), "a Wayshrine")
+	# Hobb tells the same story twice (Marra warns you in Oakvale).
+	var older: int = 0
+	for c in _flatten((rc.entity("hobb") as NpcEntity).on_interact):
+		if c is SayCommand:
+			for b in (c as SayCommand).beats:
+				if String((b as StoryBeat).text).to_lower().contains("older than the kingdom"):
+					older += 1
+	assert_eq(older, 2, "the bridge is older than the kingdom -- he says so twice")
+
+
+func test_the_mossbrook_cannot_be_walked_round() -> void:
+	var moss := _area("mossway")
+	var g := OverworldGrid.build(moss, StoryFixture.past_opening(StoryState.new()))
+	assert_false(TapPathfinder.find_path(g, Vector3i(1, 6, 0), Vector3i(32, 6, 0)).is_empty(), "the road runs through")
+	g.set_blocker(Vector3i(21, 6, 0), "test")
+	assert_true(TapPathfinder.find_path(g, Vector3i(1, 6, 0), Vector3i(32, 6, 0)).is_empty(),
+		"the plank bridge (the ambush) is the only way over the brook")
+
+
+# --- Three towns that look like three different places -------------------------------------------
+
+func _tile_counts(a: OverworldAreaResource) -> Dictionary:
+	var out: Dictionary = {}
+	for e in a.terrain.tile_layout:
+		var tid: String = String(e.get("tile_id", ""))
+		out[tid] = int(out.get(tid, 0)) + 1
+	return out
+
+
+func test_the_three_towns_are_built_differently() -> void:
+	var oak := _area("oakvale")
+	var ch := _area("crownhaven")
+	var wt := _area("woodland_town")
+	var oak_tiles := _tile_counts(oak)
+	# Oakvale: an open farming village -- no paving, a dirt green with a well, one roof colour, the sea.
+	assert_eq(int(oak_tiles.get("flagstones", 0)), 0, "Oakvale is unpaved")
+	assert_gt(int(oak_tiles.get("deep_water", 0)), 2 * oak.width(), "Oakvale looks out on the sea to the south")
+	var well := oak.entity("well") as PropEntity
+	assert_not_null(well, "a well")
+	if well != null:
+		assert_true(Rect2i(7, 6, 7, 7).has_point(Vector2i(well.cell.x, well.cell.y)), "on the village green")
+	var roofs: Array[Color] = []
+	for e in oak.entity_list():
+		if e is PropEntity and (e as PropEntity).prop == "house" and String(e.id) != "house_barn":
+			roofs.append((e as PropEntity).tint)
+	for r in roofs:
+		assert_almost_eq(r.h, roofs[0].h, 0.03, "every Oakvale roof is the same terracotta")
+		assert_gt(r.r, r.b + 0.3, "warm red-orange, not slate")
+	# Crownhaven: a walled river city, paved, slate roofs.
+	var ch_tiles := _tile_counts(ch)
+	assert_gt(int(ch_tiles.get("flagstones", 0)), 120, "Crownhaven is paved")
+	assert_gt(int(ch_tiles.get("deep_water", 0)), 2 * ch.width(), "Crownhaven stands on its river")
+	for e in ch.entity_list():
+		if e is PropEntity and String(e.id).begins_with("house_"):
+			assert_gt((e as PropEntity).tint.b, (e as PropEntity).tint.r, "%s: a slate roof" % e.id)
+	# Woodland Town: a forest clearing -- cabins, no paving, no wild grass in town.
+	var wt_tiles := _tile_counts(wt)
+	assert_eq(int(wt_tiles.get("flagstones", 0)), 0, "Woodland Town is unpaved")
+	assert_eq(int(wt_tiles.get("tall_grass", 0)), 0, "no tall grass in a town with no encounter table")
+	assert_eq(int(_prop_kinds(wt).get("house", 0)), 0, "log cabins, not houses")
+
+
+# --- Everyone can be reached, whatever the story has done -------------------------------------
+
+## The cells walkable from any entry of [param a] under [param s].
+func _reach(a: OverworldAreaResource, s: StoryState) -> Dictionary:
+	var g := OverworldGrid.build(a, s)
+	var reach: Dictionary = {}
+	var queue: Array[Vector3i] = []
+	for eid in a.entry_ids():
+		var c: Vector3i = a.entry(eid)["cell"]
+		if g.is_walkable(c) and not reach.has(c):
+			reach[c] = true
+			queue.append(c)
+	var head: int = 0
+	while head < queue.size():
+		var c: Vector3i = queue[head]
+		head += 1
+		for n in g.walkable_neighbours(c):
+			if not reach.has(n):
+				reach[n] = true
+				queue.append(n)
+	return reach
+
+
+func test_everyone_can_be_reached_at_every_stage_of_the_story() -> void:
+	# The fullest stage: past the opening, the rival met and moved to the arena, the cup won (the
+	# champion out), the ambush cleared, the Sergeant's detail joined. (The forge's barrels and the
+	# arena's rival once sealed Smith Garrick and Champion Isolde into Crownhaven's south-east corner.)
+	var everything := StoryFixture.past_opening(StoryState.new())
+	for f in ["act1.met_rowan", "rival.met", "rival.duel1", "arena.crown_cup.champion", "mossway.ambush.sprung",
+			"mossway.ambush.cleared", "woodland.arrived", "river_crossing.arrived"]:
+		everything.set_flag(f, 1)
+	var raided := StoryFixture.sent_off(StoryState.new())
+	raided.set_flag("opening.attack", 1)
+	var stages := {"new": StoryState.new(), "sent_off": StoryFixture.sent_off(StoryState.new()), "raided": raided,
+		"past_opening": StoryFixture.past_opening(StoryState.new()), "everything": everything}
+	for a in _areas():
+		for stage in stages:
+			var s: StoryState = stages[stage]
+			var reach := _reach(a, s)
+			for e in a.present_entities(s):
+				if not e.is_interactable() or not e.has_actor():
+					continue
+				var ok := false
+				for c in e.cells():
+					for d in OverworldGrid.DIRS:
+						if reach.has(Vector3i(c.x + d.x, c.y + d.y, 0)):
+							ok = true
+				assert_true(ok, "%s/%s can be reached and talked to (%s)" % [a.area_id, e.id, stage])
+	# The bug itself, by name: Garrick, Isolde and the rival by the arena.
+	var ch := _area("crownhaven")
+	var g := OverworldGrid.build(ch, everything)
+	for id in ["garrick", "isolde", "lark_arena", "arena_master"]:
+		assert_false(TapPathfinder.path_to_adjacent(g, ch.entry("south_gate")["cell"], ch.entity(id).cell).is_empty(),
+			"%s is reachable from the south gate with every flag set" % id)

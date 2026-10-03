@@ -1,9 +1,9 @@
 extends GutTest
 
 ## TRAVEL BETWEEN THE BUILT-OUT TOWNS, booted for real (OverworldScene.tscn as the current scene):
-## Oakvale -> the Mossway (River Crossing) -> Crownhaven -> Woodland Town and back, each hop a real
+## Oakvale -> the Mossway -> River Crossing -> Crownhaven -> the Sparse Forest -> Woodland Town and back, each hop a real
 ## step onto the exit tile of the shipped content, plus the road stubs that stay closed for now
-## (Farm Hamlet, Deepwood Village, the Hidden Thieves Guild, the Mountain Pass). Content checks
+## (Farm Hamlet, Deepwood Village, the Hidden Thieves Guild, Frostpeak, Mountain Base, the Badlands, Beach Village). Content checks
 ## (layout, props, people) live in test_overworld_content.gd.
 
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
@@ -85,11 +85,17 @@ func _drain(ow: OverworldController, max_frames: int = 600) -> void:
 			return
 
 
-func test_crownhaven_north_gate_leads_to_woodland_town_and_back() -> void:
-	var ow := await _boot("crownhaven", Vector3i(9, 1, 0), "north")
+func test_crownhaven_west_gate_leads_through_the_sparse_forest_to_woodland_town_and_back() -> void:
+	var ow := await _boot("crownhaven", Vector3i(1, 13, 0), "west")
 	var s: StoryState = StoryController.state()
-	await _step(ow, Vector2i(0, -1))
-	assert_eq(s.location_area(), "woodland_town", "the north exit leads to Woodland Town")
+	await _step(ow, Vector2i(-1, 0))
+	assert_eq(s.location_area(), "sparse_forest", "the west gate opens on the Sparse Forest")
+	assert_eq(s.location_cell(), Vector3i(26, 6, 0), "at its east end")
+	ow = await _boot("sparse_forest", Vector3i(1, 6, 0), "west")
+	assert_eq(ow.area.area_id, &"sparse_forest", "the Sparse Forest boots")
+	assert_not_null(ow.actor("alder"), "the woodsman is in his clearing")
+	await _step(ow, Vector2i(-1, 0))
+	assert_eq(s.location_area(), "woodland_town", "its west end leads to Woodland Town")
 	assert_eq(s.location_cell(), Vector3i(26, 12, 0), "arriving on the east road")
 	ow = await _boot("woodland_town", s.location_cell(), "west")
 	assert_eq(ow.area.area_id, &"woodland_town", "Woodland Town boots")
@@ -97,48 +103,62 @@ func test_crownhaven_north_gate_leads_to_woodland_town_and_back() -> void:
 	assert_not_null(ow.actor("wardens_lodge"), "the Lodge stands")
 	await _drain(ow)
 	assert_true(s.has_flag("woodland.arrived"), "the first visit's arrival scene played")
-	# Back out the east end of the road.
+	# Back out the east end of the road, and through the forest to the city.
 	ow = await _boot("woodland_town", Vector3i(26, 12, 0), "east")
 	await _step(ow, Vector2i(1, 0))
-	assert_eq(s.location_area(), "crownhaven", "the east road returns to Crownhaven")
-	assert_eq(s.location_cell(), Vector3i(9, 1, 0), "outside the north gate")
+	assert_eq(s.location_area(), "sparse_forest", "the east road returns to the Sparse Forest")
+	ow = await _boot("sparse_forest", Vector3i(26, 6, 0), "east")
+	await _step(ow, Vector2i(1, 0))
+	assert_eq(s.location_area(), "crownhaven", "and the forest to Crownhaven")
+	assert_eq(s.location_cell(), Vector3i(1, 13, 0), "outside the west gate")
 
 
-func test_the_north_gate_is_held_until_the_opening_is_over() -> void:
+func test_the_west_gate_is_held_until_the_opening_is_over() -> void:
 	StoryController.new_journey(1)
 	var s: StoryState = StoryController.state()
 	StoryFixture.sent_off(s)
-	var ow := await _boot("crownhaven", Vector3i(9, 1, 0), "north")
-	await _step(ow, Vector2i(0, -1))
-	assert_eq(s.location_area(), "crownhaven", "the warden bars the north road during the alert")
+	var ow := await _boot("crownhaven", Vector3i(1, 13, 0), "west")
+	await _step(ow, Vector2i(-1, 0))
+	assert_eq(s.location_area(), "crownhaven", "the warden bars the west road during the opening")
 	await _drain(ow)
 
 
-func test_the_full_road_from_the_mossway_to_the_forest() -> void:
+func test_the_road_home_runs_south_over_the_old_bridge() -> void:
 	var ow := await _boot("mossway", Vector3i(32, 6, 0), "east")
 	var s: StoryState = StoryController.state()
 	await _step(ow, Vector2i(1, 0))
-	assert_eq(s.location_area(), "crownhaven", "the Mossway's east end opens on Crownhaven's west gate")
-	assert_eq(s.location_cell(), Vector3i(1, 13, 0), "outside the gate")
+	assert_eq(s.location_area(), "river_crossing", "the Mossway's east end opens on River Crossing")
+	assert_eq(s.location_cell(), Vector3i(1, 14, 0), "on the Mossway road")
+	ow = await _boot("river_crossing", Vector3i(11, 1, 0), "north")
+	assert_not_null(ow.actor("hobb"), "the toll-keeper keeps the bridge")
+	await _drain(ow)
+	await _step(ow, Vector2i(0, -1))
+	assert_eq(s.location_area(), "crownhaven", "the King's road north ends at Crownhaven")
+	assert_eq(s.location_cell(), Vector3i(15, 27, 0), "outside the south gate")
+	ow = await _boot("crownhaven", Vector3i(15, 28 - 1, 0), "south")
+	await _step(ow, Vector2i(0, 1))
+	assert_eq(s.location_area(), "river_crossing", "and the south gate's road leads back over the river")
+	assert_eq(s.location_cell(), Vector3i(11, 1, 0), "onto the King's road")
 
 
 func test_roads_not_yet_open_turn_you_back() -> void:
 	for spec in [
-		["oakvale", Vector3i(1, 12, 0), "oakvale", "the Farm Hamlet track"],
-		["woodland_town", Vector3i(1, 12, 0), "woodland_town", "the road to Deepwood Village"],
-		["woodland_town", Vector3i(4, 22, 0), "woodland_town", "the south trail to the Thieves Guild"],
-		["crownhaven", Vector3i(28, 13, 0), "crownhaven", "the east road to the Mountain Pass"],
+		["oakvale", Vector3i(1, 12, 0), Vector2i(-1, 0), "the Farm Hamlet track"],
+		["oakvale_ruins", Vector3i(1, 12, 0), Vector2i(-1, 0), "the Farm Hamlet track (after the raid)"],
+		["woodland_town", Vector3i(1, 12, 0), Vector2i(-1, 0), "the road to Deepwood Village"],
+		["woodland_town", Vector3i(4, 22, 0), Vector2i(0, 1), "the south trail"],
+		["woodland_town", Vector3i(17, 1, 0), Vector2i(0, -1), "the north trail to Frostpeak"],
+		["crownhaven", Vector3i(9, 1, 0), Vector2i(0, -1), "the Mountain Road"],
+		["crownhaven", Vector3i(28, 13, 0), Vector2i(1, 0), "the Redrock road"],
+		["crownhaven", Vector3i(28, 17, 0), Vector2i(1, 0), "the coast road from the harbour gate"],
+		["river_crossing", Vector3i(22, 14, 0), Vector2i(1, 0), "the coast road from River Crossing"],
 	]:
 		StoryController.end_session()
-		var step_dir := Vector2i(-1, 0)
-		if spec[3].contains("south"):
-			step_dir = Vector2i(0, 1)
-		elif spec[3].contains("east"):
-			step_dir = Vector2i(1, 0)
-		var ow := await _boot(spec[0], spec[1], "west")
+		var ow := await _boot(spec[0], spec[1], "south")
 		var s: StoryState = StoryController.state()
-		await _step(ow, step_dir)
-		assert_eq(s.location_area(), spec[2], "%s stays in %s" % [spec[3], spec[2]])
+		await _drain(ow)
+		await _step(ow, spec[2])
+		assert_eq(s.location_area(), spec[0], "%s stays in %s" % [spec[3], spec[0]])
 		assert_true(StoryController.is_script_running() or ow.dialogue().root_control().visible,
 			"%s explains itself" % spec[3])
 		await _drain(ow)

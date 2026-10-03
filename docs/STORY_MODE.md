@@ -16,15 +16,16 @@ in that file's `NAMES` / `STARTER_ID` / `GUEST_ID` / `RAIDER_UNITS` / `HERO_MODE
    (`story_ruleset.tres` `starting_party` is empty). The first boot plays the intro and your
    mother **Briony**'s send-off → `opening.sent_off` (the east road is held until then).
    Villagers Tobin / Hessa / Pell, the village-hall notice, the **mill chest**, the Wayshrine.
-2. **The Mossway** — with no partner the grass never rolls and trainers let you pass
-   (`OverworldController`: no healthy member → no encounter, no trainer); a one-time hint says
-   so. **Bram** and the **Lone Petalfang** only appear once `opening.complete`.
-3. **Crownhaven** (the Mossway's east end) — the walled castle town: keep, market, barracks
+2. **The Mossway** (east out of Oakvale) — with no partner the grass never rolls and trainers let
+   you pass (`OverworldController`: no healthy member → no encounter, no trainer); a one-time hint
+   says so. **Bram** and the **Lone Petalfang** only appear once `opening.complete`. Its east end
+   is **River Crossing**: north over the Old Bridge, the King's road ends at Crownhaven's south gate.
+3. **Crownhaven** (in by the south gate) — the walled river city: keep, market, barracks
    (**Sergeant Rowan**), the Royal Workshop. Talk to **Researcher Linnea**: the **ceremony**
    gives the starter (**Barkling**, `STARTER_ID`) and the **bonding shard**
    (`key.bonding_shard`, `opening.starter_received`).
 4. **The raid** (the same script) — Cindral raiders vault the east wall, seize Linnea and flee
-   west; Rowan runs up; the chase is a scripted warp to **Ruined Oakvale** (`opening.attack`,
+   out the south gate, down the road home; Rowan runs up; the chase is a scripted warp to **Ruined Oakvale** (`opening.attack`,
    `opening.researcher_taken`, `opening.raiders_fled`, `opening.chase`; the respawn moves to the
    ruins' Wayshrine). A journey saved mid-raid resumes it on the next Crownhaven load.
 5. **Ruined Oakvale** (`oakvale_ruins`, a second area; the Mossway's west exit switches to it on
@@ -306,9 +307,9 @@ every duel here is the strict 1v1 creature duel — the people are trainers, the
 | What | Where | Kind | Flags / ids |
 |---|---|---|---|
 | **Tester Fenna** — a trainer whose battle is a DUEL (line of sight 3, like Bram; Petalfang 0.9, 90 gold) | the Mossway (11,7), facing the path; after `opening.complete` | real duel, WHITEOUT | `trainer.mossway.fenna.defeated` |
-| **Lark** — the RIVAL, a first-batch tester (Blightcap "Puck"). First duel: a trigger just inside Crownhaven's west gate after the opening; then rematches by the arena | Crownhaven (7,14) → gate trigger (5,13) → (23,18) | spar (a rival FRIENDLY), CONTINUE, 60 gold on a win, `clash_intro` | `rival.met`, `rival.stage` (duels fought), `rival.wins`, `rival.duel1`; encounter `crownhaven.rival.lark` |
+| **Lark** — the RIVAL, a first-batch tester (Blightcap "Puck"). First duel: a trigger just inside Crownhaven's south gate (the road home) after the opening; then rematches by the arena | Crownhaven (17,21) → gate trigger (15,21) → (23,18) | spar (a rival FRIENDLY), CONTINUE, 60 gold on a win, `clash_intro` | `rival.met`, `rival.stage` (duels fought), `rival.wins`, `rival.duel1`; encounter `crownhaven.rival.lark` |
 | **Sparring roster** — Corporal Wynn (Blightcap 0.8) < Lieutenant Aldous (Petalfang 0.95) < Sergeant Rowan (Geode 0.8, the existing spar); a "Sparring Roster" sign | the barracks yard; after the opening (Rowan after the Act 1 hook) | spar, CONTINUE, no purse | `crownhaven.spar.wynn` / `.aldous` / `.rowan` |
-| **The ambush** — Cutpurse Nell and her footpad hold the brook's plank bridge (the only crossing) once Rowan has signed you on | the Mossway, trigger at (21,6); after `act1.met_rowan` | TWO real duels back to back (HP carries), WHITEOUT; Classic permadeath applies | `mossway.ambush.sprung`, `.footpad_beaten` (a beaten footpad stays beaten after a loss), `.cleared`; 40 + 180 gold + a Dawnpetal Draught |
+| **The ambush** — Cutpurse Nell and her footpad hold the Mossbrook's plank bridge (the only crossing: the brook runs tree line to tree line) once Rowan has signed you on | the Mossway, trigger at (21,6); after `act1.met_rowan` | TWO real duels back to back (HP carries), WHITEOUT; Classic permadeath applies | `mossway.ambush.sprung`, `.footpad_beaten` (a beaten footpad stays beaten after a loss), `.cleared`; 40 + 180 gold + a Dawnpetal Draught |
 | **The Crown Arena** — a new `arena` prop (elliptical stone drum, pennants, gate arch) where the SE house stood; **Arena Master Bex** runs **the Crown Cup**; **Champion Isolde** offers rematches once her title is yours | Crownhaven (22..26, 19..21); master at (22,22), champion (25,18) | 4 spars | `arena.crown_cup.run` / `.round` / `.wins` / `.champion` (the title); rematch `arena.crown_cup.champion_beaten` |
 
 **Rematch scaling** — `BattleSpec.scale_flag` / `scale_step` / `scale_max_steps`: every opponent's
@@ -416,25 +417,63 @@ chunks is the next step if areas grow), never give a tile scene per-instance ran
 is not a function of its cell (the cache would share it), and route new warp kinds through a
 `WarpEntity` (scripted `WarpCommand` warps are not prewarmed).
 
-## The three home towns, built out (Oakvale / Crownhaven / Woodland Town)
+## The world map, and the towns on it
 
-The world map's Starting Village, Central Kingdom and Woodland Town are the story's **Oakvale**,
-**Crownhaven** and the new **Woodland Town** (`woodland_town`). All three are generated by
-`build_story_content.gd` (rerun it after editing; see the header for the command) and drawn from the
-procedural prop kit in `OverworldProps` (new kinds: `cabin`, `logs`, `lamp`, `chapel`, `smithy`,
-`scarecrow`; `PropEntity.KINDS`). Route: Oakvale -> Mossway (River Crossing) -> Crownhaven -> Woodland Town.
+The owner's world map (`docs/design/world_map/world_map.webp`) is the source of truth for
+geography. The story's **Oakvale** is the map's Starting Village, **Crownhaven** its Central
+Kingdom; River Crossing, the Sparse Forest and Woodland Town keep their map names. Everything is
+generated by `build_story_content.gd` (rerun it after editing; see the header for the command) and
+drawn from the procedural prop kit in `OverworldProps` (placeholders until the Blender models land).
+
+**Built route:** Oakvale → (east) the Mossway → River Crossing → (north over the Old Bridge)
+Crownhaven's south gate → (west gate, after the opening) the Sparse Forest → Woodland Town.
 
 | Area | Character | Layout |
 |---|---|---|
-| Oakvale 24x18 | humble farming village, warm thatch and fields | plaza + well + pond; the Hearth & Hen inn, family cottage, mill, barn, bakery; barley field with scarecrow, orchard, haystacks; the mill lane runs west to the Farm Hamlet track (closed: a hurdle gate) |
-| Crownhaven 30x26 | grand walled capital, blue banners and stone | walls with gatehouses west (Mossway), **north (Woodland Town, opens after the opening)**, east (Mountain Pass, closed); keep + courtyard, barracks yard, Royal Workshop, market square, the Gilded Stag inn, Merchants' Guildhall, Chapel of the Starfall (park), Aldermere Forge, the Crown Arena; lamps and banners along the streets |
-| Woodland Town 28x24 | rustic timber town in a forest clearing, dawn light | stream with a plank bridge; east bank: Wardens' Lodge, boardwalk square + Wayshrine, Stumped Hart inn, Timber Row (trading post shop `woodland_trader`, forge), lumber yard + sawmill, camp; west bank: herbalist, archery range, the Starfall Stone glade, the south trail (Hidden Thieves Guild, closed) and the west road (Deepwood Village, closed) |
+| Oakvale 24x21 | open farming village above the coast; one terracotta roof colour | no paving: a beaten-earth green with a crossroads, the well and the Wayshrine basin; the Hearth & Hen inn, cottages, mill, barn, bakery; barley field + scarecrow, orchard, haystacks; the south lane runs down to the Strand and a jetty on the sea; the mill lane runs west to the Farm Hamlet track (closed) |
+| Ruined Oakvale | the same village after the raid, night | embers and ash; the Farm Hamlet track still runs west (closed); **after the opening** the fires are out, Marra / Ned / Wick are back to rebuild (new timber on the inn's plot) |
+| The Mossway 34x12 (route) | mossy forest road | biting grass; Bram, Fenna, the Lone Petalfang, Pedlar Jory; the **Mossbrook** (bank to bank -- its plank bridge, and the ambush on it, cannot be walked round) |
+| River Crossing 24x20 (village) | slate-roofed toll village | the river runs edge to edge (3 rows), the **Old Bridge** (2-wide stone) is the only way over; toll-keeper Hobb (tells the bridge story twice), Fisher Nan on the jetty, Carter Joss, the Wayshrine; the coast road east to Beach Village is washed out (closed) |
+| Crownhaven 30x29 | grand walled river city, slate roofs, blue banners | the river along its south side with a 3-wide stone bridge; **five gates**: south (River Crossing, always open), west (the Sparse Forest, after the opening), north (the Mountain Road to Mountain Base, closed), east (the Redrock road to the Badlands, closed), the harbour gate south-east (the coast road to Beach Village, closed); keep + courtyard, barracks yard, Royal Workshop, market + Wayshrine, the Gilded Stag, Merchants' Guildhall, Chapel of the Starfall, Aldermere Forge on Harbour Lane, the Crown Arena |
+| The Sparse Forest 28x12 (route) | open woodland | a winding cart track, four thickets of wild grass (its own table: Petalfang, Blightcap, Mycothrall, Barkling), Woodsman Alder's clearing |
+| Woodland Town 28x24 | rustic timber town in a forest clearing, dawn light | stream with a plank bridge; east bank: Wardens' Lodge, boardwalk square + Wayshrine, Stumped Hart inn, Timber Row (trading post `woodland_trader`, forge), lumber yard + sawmill, camp; west bank: herbalist, archery range, the Starfall Stone glade; roads: east (the Sparse Forest), west (Deepwood Village, closed), the north trail (Frostpeak Village, closed), the unmarked south trail (closed -- the Thieves Guild is never named in town) |
 
-Closed roads are `WarpEntity`s whose `requires` never holds yet (`world.farm_hamlet_open`,
-`world.deepwood_open`, `world.thieves_guild_open`, `world.mountain_road_open`): they answer with a
-`locked_scene`, so the next chapter only has to add the target area and set the flag. Tests:
-`test_overworld_content.gd` (layouts, props, people, walkable legs) and `test_story_towns_travel.gd`
-(real warps between the towns).
+### The world registry (`content/world.tres`)
+
+A `WorldAtlas` of `WorldLocation`s (`game/overworld/data/`), generated from the builder's
+`WORLD_LOCATIONS` / `WORLD_REGIONS` / `WORLD_ROADS` -- the ONE place for geography. Each place has
+an id, a name, a kind (city / town / village / route / dungeon / special / island / nation), a
+region, a normalised `map_pos` on the map image, a status (**BUILT** with its `area_ids`, or
+**CLOSED** with the `world.*_open` flag that will open its road) and an optional `secret` (the
+Hidden Thieves Guild stays off the map until its flag is set: `is_known(state)`). Roads are
+undirected `{a, b, kind}` with the map legend's kinds (`main` / `secondary` / `sea`); helpers:
+`location`, `location_for_area`, `neighbours`, `has_road`, `reachable_built`, `validate`. Each built
+area's `world_map_pos` / `region_id` come from its place (`_place()` in the builder).
+
+| Place | Region | Status / opening flag | Reached from |
+|---|---|---|---|
+| Oakvale (0.46, 0.67) | heartlands | built (`oakvale`, `oakvale_ruins`) | Mossway, Farm Hamlet |
+| Farm Hamlet | heartlands | closed `world.farm_hamlet_open` | Oakvale's mill lane |
+| The Mossway | heartlands | built | Oakvale, River Crossing |
+| River Crossing (0.58, 0.69) | heartlands | built | Mossway, Crownhaven, Beach Village |
+| Crownhaven (0.49, 0.47) | heartlands | built | River Crossing, Sparse Forest, Mountain Base, Redrock, Beach Village |
+| The Sparse Forest | woodlands | built | Crownhaven, Woodland Town |
+| Woodland Town (0.34, 0.41) | woodlands | built | Sparse Forest, Deepwood, Thieves Guild, Frostpeak |
+| Hidden Thieves Guild | woodlands | closed `world.thieves_guild_open`, **secret** | Woodland Town's south trail |
+| Deepwood Village / Depths of the Wood | woodlands | closed `world.deepwood_open` / `world.depths_of_the_wood_open` | Woodland Town's west road / Deepwood |
+| Frostpeak Village | snowy_peaks | closed `world.frostpeak_open` | Woodland Town's north trail |
+| Mountain Base / Mountain Pass / Hidden Depths | northern_mountains | closed `world.mountain_road_open` / `world.mountain_pass_open` / `world.hidden_depths_open` | Crownhaven's north gate / Mountain Base |
+| Cindral (the Other Nation) | cindral | closed `world.cindral_open` | the Mountain Pass |
+| Redrock Village | rocky_badlands | closed `world.badlands_open` | Crownhaven's east gate |
+| Beach Village | sunlit_coast | closed `world.beach_road_open` | Crownhaven's harbour gate, River Crossing's coast road |
+| Sunrise Isle / Island of Tides / Stormreef Isle | open_ocean | closed `world.sea_routes_open` | sea routes from Beach Village |
+
+Closed roads are `WarpEntity`s built by `_closed_road()`: `requires` is the place's open flag and a
+`locked_scene` answers until then (the warp targets an entry beside it meanwhile), so the next
+chapter only has to add the target area, retarget the warp, flip the place to BUILT and set the
+flag. Tests: `test_overworld_content.gd` (layouts, the atlas and positions, the river and the
+bridges, the three towns' looks, every NPC reachable at every story stage) and
+`test_story_towns_travel.gd` (real warps between the towns, every closed road turning you back).
 
 ## Deviations from OVERWORLD.md (M1)
 

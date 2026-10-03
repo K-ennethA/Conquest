@@ -290,8 +290,8 @@ func test_a_duel_trainer_spots_you_and_fights_a_real_duel() -> void:
 func test_the_rival_duel_after_the_opening_sets_rival_flags_and_rematches_scale() -> void:
 	var s := _journey()
 	var gold: int = s.gold
-	var ow := await _boot("crownhaven", Vector3i(4, 13, 0), "east")
-	await _step(ow, Vector2i(1, 0))
+	var ow := await _boot("crownhaven", Vector3i(15, 22, 0), "north")
+	await _step(ow, Vector2i(0, -1))
 	assert_true(StoryController.is_script_running(), "Lark stops you inside the gate")
 	assert_eq(await _drive(ow), "duel", "and challenges you to a duel")
 	var br: BattleRequest = StoryController.active_request()
@@ -307,8 +307,8 @@ func test_the_rival_duel_after_the_opening_sets_rival_flags_and_rematches_scale(
 	assert_eq(s.get_flag_int("rival.wins"), 1, "and won")
 	assert_true(s.has_flag("rival.duel1"), "the first rival duel is behind you")
 	assert_eq(s.gold, gold + 60, "her purse")
-	await _step(ow2, Vector2i(-1, 0))
-	await _step(ow2, Vector2i(1, 0))
+	await _step(ow2, Vector2i(0, 1))
+	await _step(ow2, Vector2i(0, -1))
 	assert_false(StoryController.is_script_running(), "the gate trigger is gone")
 
 	# The rematch by the arena: tired until a rest, then stronger.

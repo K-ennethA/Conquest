@@ -48,7 +48,7 @@ table = Array[Resource]([SubResource("Resource_f6bed"), SubResource("Resource_5x
 [sub_resource type="Resource" id="Resource_52mfd"]
 script = ExtResource("3_2rcsc")
 text = "ROUTE 1 -- THE MOSSWAY
-West: Oakvale.  East: Crownhaven."
+West: Oakvale.  East: River Crossing."
 id = &"route_sign"
 cell = Vector3i(3, 5, 0)
 display_name = "Route 1"
@@ -56,21 +56,21 @@ tint = Color(0.52, 0.36, 0.2, 1)
 
 [sub_resource type="Resource" id="Resource_rqklu"]
 script = ExtResource("3_2rcsc")
-text = "EAST: CROWNHAVEN
-Royal city of Aldermere."
+text = "EAST: RIVER CROSSING
+The Old Bridge, and the King's road north to Crownhaven."
 id = &"crownhaven_sign"
 cell = Vector3i(31, 5, 0)
-display_name = "Crownhaven"
+display_name = "River Crossing"
 tint = Color(0.52, 0.36, 0.2, 1)
 
 [sub_resource type="Resource" id="Resource_dodhr"]
 script = ExtResource("3_2rcsc")
-text = "RIVER CROSSING
-The King's bridge. Cross freely; cross carefully.
-West: Oakvale.  East: Crownhaven."
-id = &"river_crossing_sign"
+text = "THE MOSSBROOK
+Planks laid by the Wardens. Cross carefully -- the brook is deeper than it looks.
+West: Oakvale.  East: River Crossing."
+id = &"brook_sign"
 cell = Vector3i(20, 5, 0)
-display_name = "River Crossing"
+display_name = "The Mossbrook"
 tint = Color(0.52, 0.36, 0.2, 1)
 
 [sub_resource type="Resource" id="Resource_8keq5"]
@@ -241,14 +241,9 @@ dialogue = SubResource("Resource_5wqan")
 figure = "villager"
 id = &"pedlar"
 cell = Vector3i(13, 4, 0)
-facing = "south"
 display_name = "Pedlar Jory"
-visual_character = &""
 tint = Color(0.55, 0.42, 0.25, 1)
-blocking = true
 visible_if = "has(\"opening.complete\")"
-on_interact = Array[Resource]([])
-on_step = Array[Resource]([])
 
 [sub_resource type="Resource" id="Resource_k2f78"]
 script = ExtResource("4_s5dhr")
@@ -560,8 +555,8 @@ visible_if = "has(\"opening.attack\")"
 [sub_resource type="Resource" id="Resource_1ktb0"]
 script = ExtResource("23_ftq8r")
 area_rect = Rect2i(33, 6, 1, 1)
-target_area = &"crownhaven"
-target_entry = &"west_gate"
+target_area = &"river_crossing"
+target_entry = &"west"
 id = &"east_exit"
 blocking = false
 
@@ -571,7 +566,8 @@ area_id = &"mossway"
 display_name = "Route 1 -- The Mossway"
 terrain = ExtResource("25_lewvs")
 kind = 1
-world_map_pos = Vector2(0.34, 0.5)
+region_id = &"heartlands"
+world_map_pos = Vector2(0.52, 0.68)
 entry_points = {
 "east": {
 "cell": [32, 6, 0],
@@ -584,3 +580,6 @@ entry_points = {
 }
 entities = Array[Resource]([SubResource("Resource_52mfd"), SubResource("Resource_rqklu"), SubResource("Resource_dodhr"), SubResource("Resource_8keq5"), SubResource("Resource_piryq"), SubResource("Resource_wavax"), SubResource("Resource_iuc3b"), SubResource("Resource_1ckgg"), SubResource("Resource_nxr85"), SubResource("Resource_7sjmq"), SubResource("Resource_k2f78"), SubResource("Resource_uob8g"), SubResource("Resource_4240e"), SubResource("Resource_du4ot"), SubResource("Resource_0kqwg"), SubResource("Resource_ou2l1"), SubResource("Resource_d8f4y"), SubResource("Resource_1ktb0")])
 encounter_zones = Array[Resource]([SubResource("Resource_frbyr")])
+on_enter = Array[Resource]([])
+music_cue = &""
+lighting_preset_override = ""
