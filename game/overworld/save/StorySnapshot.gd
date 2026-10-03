@@ -63,6 +63,7 @@ static func to_dict(state: StoryState) -> Dictionary:
 		"wild": {"visit": state.visit_serial, "zones": state.wild.duplicate(true)},
 		"tier": state.tier,
 		"fallen": fallen,
+		"tracked_quest": state.tracked_quest,
 		"pending": {},
 	}
 
@@ -167,6 +168,12 @@ static func from_dict(data) -> Dictionary:
 			if f.fallen_info.is_empty():
 				f.fallen_info = StoryPartyMember.sanitize_fallen({"kind": "battle"})
 			state.fallen.append(f)
+
+	# The quest pinned to the HUD tracker (added within format 2 -- an older save has none: the main
+	# quest is tracked). Kept as written: an id this build does not ship just falls back
+	# (QuestLog.tracked_entry), so no quest list is consulted here.
+	var pin = data.get("tracked_quest", "")
+	state.tracked_quest = String(pin).strip_edges() if pin is String else ""
 
 	return {"success": true, "state": state, "reason": ""}
 
