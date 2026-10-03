@@ -1201,7 +1201,6 @@ func _send_off() -> Array:
 			_line("briony", "MOTHER", "Go on, then. And {hero} -- I love you. Bring your new friend home for supper. Both of them, if {RESEARCHER} can tear himself away from his work."),
 		]),
 		_flag(F_SENT_OFF),
-		_toast("Quest: The Shard Ceremony"),
 	]
 
 
@@ -1318,7 +1317,6 @@ func _aftermath() -> Array:
 		]),
 		_flag(F_COMPLETE),
 		_flag(F_ACT1),
-		_toast("Quest: Answers in Crownhaven"),
 		SaveGameCommand.new(),
 	]
 
@@ -1890,7 +1888,7 @@ func _ch_scenery() -> Array:
 	# Street lamps: the gate street, the keep courtyard and the workshop yard.
 	# (The north-gate lamp stands in the barracks-side column at (8, 6), not mid-corridor at (10, 5): lamps are
 	# solid, and with the two signs there it left no way from the gate to the town.)
-	for lc in [Vector2i(5, 14), Vector2i(12, 10), Vector2i(18, 10), Vector2i(20, 14), Vector2i(26, 9), Vector2i(8, 6)]:
+	for lc in [Vector2i(5, 14), Vector2i(12, 10), Vector2i(18, 10), Vector2i(20, 14), Vector2i(26, 10), Vector2i(8, 6)]:
 		out.append(_prop("lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(1.0, 0.82, 0.45), true))
 	# The chapel garden: standing stones for the fallen star, and the park's trees kept as shade.
 	out.append(_prop("chapel_lamp", "lamp", Vector2i(24, 12), Vector2i.ONE, Color(0.7, 0.9, 1.0), true))
@@ -2127,7 +2125,6 @@ func _raid() -> Array:
 			_line("rowan", "SOLDIER", "Then we don't stand here talking. My riders are saddling now. Run, and don't stop until you're home."),
 		]),
 		_flag(F_CHASE),
-		_toast("Quest: The Burning Road"),
 		_say([_narr("You run the King's road, the Old Bridge and the Mossway as fast as your legs will carry you, your {lead} crashing through the ferns at your side. Long before you reach home, you see the smoke.")]),
 		# Whiteouts from here wake you in the ruins (the first fight waits there).
 		_respawn(&"oakvale_ruins", &"wayshrine"),
