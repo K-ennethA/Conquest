@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="CharacterResource" format=3]
 
 [ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
-[ext_resource type="PackedScene" path="res://game/characters/models/forest/vineweave.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/vineweave_forge.glb" id="2_model"]
 [ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
 [ext_resource type="Resource" path="res://game/combat/moves/bramble_cleave.tres" id="4_cleave"]
 [ext_resource type="Resource" path="res://game/combat/moves/thornward.tres" id="5_thornward"]

@@ -842,8 +842,8 @@ func test_the_monster_roster_entry_loads_and_validates():
 	assert_not_null(character, "monster.tres loads as a CharacterResource")
 	assert_eq(character.character_id, &"monster", "its id is 'monster'")
 	assert_eq(character.element, &"dark", "it is a dark unit")
-	assert_eq(character.model_yaw_deg, 180.0,
-		"yawed 180 like the rest of the roster -- the sculpts face -Y in Blender")
+	assert_eq(character.model_yaw_deg, 0.0,
+		"no yaw correction -- the forge Duskmaw faces -Y in Blender, which exports to +Z (model-forward)")
 	assert_not_null(character.model_scene, "and it carries its imported model")
 	var validation: Dictionary = character.validate()
 	assert_true(bool(validation["valid"]),

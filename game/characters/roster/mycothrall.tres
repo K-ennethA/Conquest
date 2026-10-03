@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="CharacterResource" format=3]
 
 [ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
-[ext_resource type="PackedScene" path="res://game/characters/models/forest/mycothrall.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/mycothrall_forge.glb" id="2_model"]
 [ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
 [ext_resource type="Resource" path="res://game/combat/moves/infesting_lunge.tres" id="4_lunge"]
 [ext_resource type="Resource" path="res://game/combat/moves/siphon_bite.tres" id="5_siphon"]
@@ -24,6 +24,6 @@ base_magic_defense = 7
 base_speed = 14
 base_movement = 5
 min_difficulty = 2
-model_yaw_deg = 180.0
+model_yaw_deg = 0.0
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_lunge"), ExtResource("5_siphon")])
 abilities = Array[ExtResource("6_abres")]([ExtResource("7_parasitic"), ExtResource("20_rainbath")])

@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="CharacterResource" format=3]
 
 [ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
-[ext_resource type="PackedScene" path="res://game/characters/models/forest/eldroot.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/eldroot_forge.glb" id="2_model"]
 [ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
 [ext_resource type="Resource" path="res://game/combat/moves/bough_sweep.tres" id="4_bough"]
 [ext_resource type="Resource" path="res://game/combat/moves/heartwood_guard.tres" id="5_guard"]
@@ -26,6 +26,7 @@ base_speed = 5
 base_movement = 2
 is_boss = true
 footprint = Vector2i(2, 2)
+; forge import 2026-10-02: model = forge eldroot_standing4 (4.561 m tall, 3.8 m footprint) at root_scale 1.0 (eldroot_forge.glb.import). OPEN artist call: the review-log ship build is --no-cell-refit at 5.10 m; rebuild + re-export from forge if chosen.
 default_ai_stance = "defensive"
 default_aggro_range = 3
 default_leash_radius = 0
