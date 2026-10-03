@@ -21,10 +21,9 @@ func prompt_verb() -> String:
 	return "Shop" if shop != null else "Talk"
 
 
-func interact_script(_area_id: String, _state: StoryState) -> Array:
-	var out: Array = []
-	if dialogue != null:
-		out.append(SayCommand.from_scene(dialogue))
+func interact_script(area_id: String, state: StoryState) -> Array:
+	# The greeting: the dialogue bank's line, else the authored .tres scene (NpcEntity.talk_script).
+	var out: Array = talk_script(area_id, state)
 	if shop != null:
 		var open := OpenShopCommand.new()
 		open.shop = shop

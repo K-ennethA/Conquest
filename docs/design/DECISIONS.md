@@ -102,6 +102,18 @@ doc's default differs from this file, THIS FILE WINS. Anything not listed: use t
 21. **The recurring GENERAL:** the soldier from the opening becomes a recurring general the hero
     keeps bumping into across the game, eventually teaming up with them to save the day.
 
+## Story alignment (owner, 2026-10-03)
+The owner's opening, in their words: you start in the starting town and can visit the kingdom
+city; you go to speak with a **longtime friend, the researcher**, who tells you about **his** new
+discovery / invention and the power of the stones to bond with creatures; there you receive a stone
+and **choose** a starter creature; they are attacked and he is taken; your home village is destroyed
+in the enemies' escape; you chase them down and have your first real battle.
+- **The researcher (Linnea) is the hero's longtime friend and uses he/him.** The name stays.
+- **The starter is chosen** among the researcher's three test creatures (this settles STORY.md's
+  open "starter creature" question; #14's "receive their first creature" stands, with a choice).
+- Ambient NPC talk is data (`game/overworld/content/dialogue.json`, the Dialogue editor) and changes
+  with story events and time; see docs/STORY_MODE.md "Dialogue bank & editor".
+
 ## Story mechanics and arcs (owner approved, 2026-09-28)
 22. **Shard chains (villain mechanic):** the dark organization's creatures are CHAINED —
     forced bonds, not friendship — shown as a status + visual. Breaking the chain in battle

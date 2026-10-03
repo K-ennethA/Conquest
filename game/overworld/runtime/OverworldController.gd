@@ -668,7 +668,7 @@ func faced_cell() -> Vector3i:
 ## now), or null.
 func entity_at(cell: Vector3i) -> OverworldEntity:
 	for e in area.present_entities(_state):
-		if not e.is_interactable():
+		if not e.is_interactable_in(String(area.area_id)):
 			continue
 		var actor: OverworldActor = _actors.get(String(e.id), null)
 		if actor != null:

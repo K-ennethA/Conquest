@@ -1,0 +1,1414 @@
+{
+	"_about": "Ambient NPC dialogue (DialogueBank). Per area, per NPC id: an ORDERED list of variants -- the first whose 'if' passes plays. 'if' is a story condition: after('flag'), before('flag'), has('flag'), flag('x') >= 2, visited('area'), rests_since('flag') >= 3, steps_since('flag') >= 200, minutes_since('flag') >= 10; blank = always. Line speakers: self, hero, narrator or another NPC id of the area. Edit with the Dialogue editor (Godot: the 'Dialogue' main-screen tab) or by hand; no rebuild, no save migration. Cutscenes stay in game/overworld/build/build_story_content.gd.",
+	"areas": {
+		"crownhaven": {
+			"baker": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Starstone buns, half price! ...Nobody's buying starstone anything this week. They're currant buns now. Very loyal currant buns."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Starstone buns! Get your starstone buns! ...No, there's no starstone in them. There's currants. Glowing currants would be a health hazard."
+							}
+						]
+					}
+				]
+			},
+			"biscuit": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "narrator",
+								"text": "Biscuit presses against your legs and will not let go. It has not left Brisa's side since the raid."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "narrator",
+								"text": "The Petalfang sniffs your hand and wags its whole back half."
+							}
+						]
+					}
+				]
+			},
+			"brisa": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "If they took the Researcher for his shards... then everyone who carries one is a target now. Keep yours hidden, {hero}."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "I was in the first batch of testers! Biscuit here trusted me the moment the shard warmed. You'll see -- it feels like a second heartbeat."
+							}
+						]
+					}
+				]
+			},
+			"corin": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Cindral raiders, they're saying. Funny -- Cindral has no shards of its own. So why come all this way for the man who makes them?"
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "A select few testers, and a crate for the army. Everyone else keeps waiting. That's how it always goes, isn't it?"
+							}
+						]
+					}
+				]
+			},
+			"dalla": {
+				"variants": [
+					{
+						"if": "after('opening.attack') and rests_since('opening.complete') >= 3",
+						"label": "life goes on",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Turnips are selling again. Folk are frightened, but frightened folk still eat. Nothing comforts like a stew."
+							}
+						]
+					},
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Raiders, in the royal city! In broad daylight! What's next -- dragons in the fish stall?"
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Everyone wants to talk shards today. Nobody wants to buy turnips. You'd think a bit of glowing rock was worth more than supper."
+							}
+						]
+					}
+				]
+			},
+			"fenwick": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "black chains",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Black chains on those raider beasts, they're saying. BLACK. Starstone forged that way was outlawed before my father was born."
+							},
+							{
+								"speaker": "self",
+								"text": "Somebody has been keeping old secrets. Mark me."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "In my father's day, the lords bound their creatures in chains -- starstone chains, forged hot. The beasts obeyed. They never loved anyone for it."
+							},
+							{
+								"speaker": "self",
+								"text": "Good folk did it the slow way: years of trust, trial and error, bread and patience. Those bonds need no shard at all."
+							},
+							{
+								"speaker": "self",
+								"text": "Now the Researcher says almost anyone can do it with a sliver of the same stone. Hm. Stone is stone. It's the hand that holds it."
+							}
+						]
+					}
+				]
+			},
+			"garrick": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Spearheads. Shield rims. Every blade the Guard owns passes under my hammer this week. Whoever did this is going to regret it."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Forged half the spears on those walls. The other half I'm still forging. Ask the Sergeant -- the Guard never has enough spears."
+							}
+						]
+					}
+				]
+			},
+			"gate_guard": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Gates shut at dusk now, and every cart gets turned out. Orders from the keep. Don't take it personally."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Crownhaven's gates are open from dawn to dusk. Keep the peace inside them."
+							}
+						]
+					}
+				]
+			},
+			"gate_warden": {
+				"variants": [
+					{
+						"if": "after('opening.complete')",
+						"label": "the west road opens",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The west road is open again. Through the Sparse Forest, and Woodland Town's at the far side of it -- keep to the cart ruts, and don't follow any lights."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The west gate stays barred today. Orders from the keep -- nobody in, nobody out."
+							}
+						]
+					}
+				]
+			},
+			"keep_guard_e": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The Cindral envoy went in an hour ago. I haven't heard shouting yet. Give it time."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The King is in council. No petitions today."
+							}
+						]
+					}
+				]
+			},
+			"keep_guard_w": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The King is in council with his war lords. No petitions -- not today, not this week."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The King is in council. No petitions today."
+							}
+						]
+					}
+				]
+			},
+			"kit": {
+				"variants": [
+					{
+						"if": "after('opening.attack') and rests_since('opening.complete') >= 3",
+						"label": "allowed out again",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Mum says I can go past the fountain again! I went past it twice, to make sure."
+							}
+						]
+					},
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Mum says I'm not allowed past the fountain till the soldiers catch them."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "I saw the Sergeant's Geode this morning! It was THIS big. Bigger! When I'm a tester I'm getting two."
+							}
+						]
+					}
+				]
+			},
+			"lark": {
+				"note": "Waiting by the south gate after the opening, until the first rival duel (the duel itself is a trigger zone in the builder).",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Well? Come on, Oakvale -- I haven't got all day."
+							}
+						]
+					}
+				]
+			},
+			"lisk": {
+				"variants": [
+					{
+						"if": "after('act1.met_rowan') and rests_since('opening.complete') >= 3",
+						"label": "word from the border",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Word from the border: Cindral's mustering too. The Sergeant doesn't say much. He sharpens his sword a lot, though."
+							}
+						]
+					},
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The Sergeant says we're on alert till the King decides what this raid means. I think it means war."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The army got a crate of the Researcher's shards last month. Only the officers carry them. The Sergeant's Geode could flatten this dummy with one arm."
+							}
+						]
+					}
+				]
+			},
+			"maribel": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Half my rooms are full of frightened scholars and the other half of soldiers. The kitchen's never been so busy -- and I've never been so worried."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Welcome to the Stag! Testers from every corner of Aldermere sleep under this roof the night before the ceremony. Nobody sleeps well, mind."
+							},
+							{
+								"speaker": "self",
+								"text": "If you're heading for the forest, the Wardens at Woodland Town keep a good table. Tell them Maribel sent you -- they'll water the soup."
+							}
+						]
+					}
+				]
+			},
+			"merchant": {
+				"note": "Merchant Oda: this is her greeting; the shop opens after it.",
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Still open, love -- raid or no raid. I'd stock up on tonics, the way things are going."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Welcome to the market! Tonics for the road, salves for the stings -- have a look."
+							}
+						]
+					}
+				]
+			},
+			"merrow": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The council has argued for three days. Chancellor Vesk would have us at war by the harvest."
+							},
+							{
+								"speaker": "self",
+								"text": "I prefer the garden. The garden has never once wanted a war."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The King will not see petitioners, but the garden is lovely this time of year. Please admire it quietly."
+							}
+						]
+					}
+				]
+			},
+			"north_guard": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The Mountain Road's shut tighter than ever. Half the garrison at Mountain Base is being called down. Something's coming."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The Mountain Road's shut. Supply wagons for the garrison at Mountain Base go up under escort, and nobody else goes up at all."
+							}
+						]
+					}
+				]
+			},
+			"odalys": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "I lit a candle for the Researcher. Starstone listens, they say, to anyone who's afraid enough to be honest."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Long ago a star fell, and the land remembers it. Every creature and every shard carries a little of that falling. Be gentle with what you bond."
+							}
+						]
+					}
+				]
+			},
+			"orwin": {
+				"variants": [
+					{
+						"if": "after('act1.met_rowan')",
+						"label": "on Rowan's detail",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The Sergeant's detail rides soon, I hear -- with you in it. Stay on his shield side. It's the safest place in the kingdom."
+							}
+						]
+					},
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "They came over the EAST wall, and out through my gate before I'd got my spear up. I'll not forget it."
+							}
+						]
+					},
+					{
+						"if": "",
+						"label": "before the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "A shard tester, from Oakvale? The Researcher's workshop is in the upper town -- east of the keep. Mind the market crowd."
+							},
+							{
+								"speaker": "self",
+								"text": "He's been up on the wall walk every morning this week, watching the south road. Waiting on a friend, he said. You, I take it."
+							}
+						]
+					}
+				]
+			},
+			"rowan": {
+				"note": "Before the opening is over only: after it, his SCRIPT runs (the Act 1 hook, then the spar offer -- in the builder).",
+				"variants": [
+					{
+						"if": "before('opening.complete')",
+						"label": "meeting the Sergeant",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Sergeant Rowan, Crownhaven Guard. You'll be the Researcher's friend from Oakvale -- he's talked of nothing else all week."
+							},
+							{
+								"speaker": "self",
+								"text": "The army got a crate of his shards. Mine's bonded to a Geode that could hold a bridge by itself. Takes the recruits a month to stop flinching at it."
+							}
+						]
+					}
+				]
+			},
+			"tam": {
+				"note": "The Researcher's assistant.",
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "They knew exactly where he'd be, and exactly when. They didn't touch a single note -- they only wanted HIM."
+							},
+							{
+								"speaker": "self",
+								"text": "He kept every letter you ever sent him, you know. In the drawer under the pylon drawings. I'll keep them safe till he's back."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Don't touch the pylon, please. The last tester who touched the pylon could hear colours for a week."
+							},
+							{
+								"speaker": "self",
+								"text": "He's been pacing since dawn. 'What if they've forgotten me in Oakvale?' Honestly. Go and put him out of his misery."
+							}
+						]
+					}
+				]
+			},
+			"veyra": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The raid has done what no bandit ever managed: shut the King's own road. Every caravan searched twice over."
+							},
+							{
+								"speaker": "self",
+								"text": "I used to dislike closed roads. I find I have graduated to loathing them."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Five gates, five roads, and every merchant on them answers to this hall."
+							},
+							{
+								"speaker": "self",
+								"text": "Timber from Woodland Town, grain from Oakvale, iron from Mountain Base, salt fish from Beach Village, red clay from the Badlands -- when the roads are open. Most are closed. I dislike closed roads."
+							}
+						]
+					}
+				]
+			}
+		},
+		"mossway": {
+			"bram": {
+				"note": "A trainer: the bank is only consulted once he is BEATEN (his challenge stays in the builder).",
+				"variants": [
+					{
+						"if": "after('act1.met_rowan')",
+						"label": "you ride with Rowan",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Signed on with the Sergeant, I hear. Then I'll keep the grass honest while you're gone. Somebody has to."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Hah... you'll do. Whatever you're chasing, I hope you catch it."
+							}
+						]
+					}
+				]
+			},
+			"fenna": {
+				"note": "A trainer: the bank is only consulted once she is BEATEN.",
+				"variants": [
+					{
+						"if": "after('rival.duel1')",
+						"label": "you've met Lark",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "You've duelled Lark? First batch, and doesn't she let everyone know it. My Petalfang wants a rematch with you first, mind."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Well fought. My Petalfang's sulking now -- that means you earned it."
+							}
+						]
+					}
+				]
+			},
+			"nell": {
+				"note": "Only on the planks while the ambush is sprung (visible_if).",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Still here? Then your purse is still ours."
+							}
+						]
+					}
+				]
+			},
+			"pedlar": {
+				"note": "Merchant: this is his greeting; the shop opens after it.",
+				"variants": [
+					{
+						"if": "after('mossway.ambush.cleared')",
+						"label": "after the ambush",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "You're the one who sent Nell's lot packing? The road's twice as busy since. Good for trade -- have a look, friend."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Mind the grass, traveller. Need anything for the road?"
+							}
+						]
+					}
+				]
+			}
+		},
+		"oakvale": {
+			"briony": {
+				"note": "The hero's mother. Oakvale (home) only exists before the raid.",
+				"variants": [
+					{
+						"if": "after('opening.arrived_crownhaven')",
+						"label": "back home before the ceremony",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Back already? Don't tell me the city turned you round at the gate."
+							},
+							{
+								"speaker": "self",
+								"text": "Go on -- Linnea's waiting. He'll have been pacing since breakfast. That boy never could sit still when he had something to show you."
+							}
+						]
+					},
+					{
+						"if": "",
+						"label": "sending you off",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "East along the Mossway to River Crossing, then north over the Old Bridge -- Crownhaven's south gate is at the end of it."
+							},
+							{
+								"speaker": "self",
+								"text": "Go on -- Linnea won't wait all day, and neither will I! And give him a hug from me. Three pages about rocks every winter, that boy writes, and not one word about whether he's eating."
+							}
+						]
+					}
+				]
+			},
+			"hessa": {
+				"variants": [
+					{
+						"if": "after('opening.arrived_crownhaven')",
+						"label": "the soldiers came back",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The soldiers rode back through at noon, dusty and quiet. Whatever they went to the border to see, they didn't like it."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Soldiers went down the Mossway at dawn, riding for the border. Nobody would say why."
+							},
+							{
+								"speaker": "self",
+								"text": "There's talk of Cindral again. There's always talk of Cindral."
+							}
+						]
+					}
+				]
+			},
+			"marra": {
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Stew's on, and the hearth's lit. Travellers stop here before the Mossway -- it's a long road to River Crossing, and a longer one to the city."
+							},
+							{
+								"speaker": "self",
+								"text": "Folk say the old bridge at River Crossing is older than the kingdom. Mind the toll-keeper; he'll tell you the same story twice."
+							}
+						]
+					}
+				]
+			},
+			"ned": {
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Forty harvests I've brought in off that field. A good year's barley for the bread, a bad year's for the pigs."
+							},
+							{
+								"speaker": "self",
+								"text": "This year the creatures in the hedgerow have been restless. Something stirs them. Mind yourself out there."
+							}
+						]
+					}
+				]
+			},
+			"pell": {
+				"variants": [
+					{
+						"if": "after('opening.arrived_crownhaven')",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Did you see the King? Did he have his crown ON? Was it heavy? Did you ask him if it was heavy?"
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Will your creature be big? Will it breathe fire? Can I hold the shard? Just once?"
+							}
+						]
+					}
+				]
+			},
+			"tobin": {
+				"variants": [
+					{
+						"if": "after('opening.arrived_crownhaven')",
+						"label": "you've seen the city",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "You've been to the capital already? Is it true every street is paved in stone? EVERY one?"
+							},
+							{
+								"speaker": "self",
+								"text": "Then what do they do with all their mud?"
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Off to get your shard, then? Pa says in his day you befriended a creature by sharing your bread with it for a year."
+							},
+							{
+								"speaker": "self",
+								"text": "Less bread this way, I suppose. Say hello to Linnea for me -- and tell him he still owes me a kite."
+							}
+						]
+					}
+				]
+			},
+			"wick": {
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "I'm watching the pond for the golden frog. Nobody's seen it. That's how I know it's clever."
+							},
+							{
+								"speaker": "self",
+								"text": "Linnea used to help me look, before he went to the city. He said a golden frog was 'statistically unlikely'. He's wrong."
+							}
+						]
+					}
+				]
+			}
+		},
+		"oakvale_ruins": {
+			"hessa": {
+				"variants": [
+					{
+						"if": "after('opening.complete') and rests_since('opening.complete') >= 2",
+						"label": "rebuilding",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Maud's walking again, a little, with a stick Ned cut for her. She asks for your mother every morning, and every morning I have to tell her."
+							}
+						]
+					},
+					{
+						"if": "after('opening.complete')",
+						"label": "the morning after",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "We laid her beside the house she built. Every one of the little ones put a flower on the cairn."
+							},
+							{
+								"speaker": "self",
+								"text": "She'd want you to go, {hero}. Go and find that boy, and bring him home."
+							}
+						]
+					},
+					{
+						"if": "",
+						"label": "the night of the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The little ones are safe in the mill cellar, thanks to her. Every one of them."
+							}
+						]
+					}
+				]
+			},
+			"marra": {
+				"note": "Out in the ruins only after the opening (visible_if).",
+				"variants": [
+					{
+						"if": "rests_since('opening.complete') >= 2",
+						"label": "rafters up",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Rafters are up! Farm Hamlet's timber, Oakvale's hands. Come back in a month and I'll have a door. Maybe even a bed."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The Hearth & Hen burned to the hearthstone. The hearthstone's still good, though. We'll have a roof on it by the harvest -- Farm Hamlet's sending timber."
+							},
+							{
+								"speaker": "self",
+								"text": "You'll always have a bowl of stew here, {hero}. Even if for now it's stew under the sky."
+							}
+						]
+					}
+				]
+			},
+			"ned": {
+				"note": "Out in the ruins only after the opening (visible_if).",
+				"variants": [
+					{
+						"if": "rests_since('opening.complete') >= 2",
+						"label": "turning the ash in",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Turned the ash into the soil this morning. My back says it was a mistake. My barley will say otherwise, come spring."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Forty harvests off that field, and the forty-first is ash. Ash is good for the soil, mind. Next year's barley will be the best this village ever grew."
+							}
+						]
+					}
+				]
+			},
+			"pell": {
+				"variants": [
+					{
+						"if": "after('opening.complete')",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "I'm going to be a tester when I'm big. A real one. And I'm never hiding in a cellar again."
+							}
+						]
+					},
+					{
+						"if": "",
+						"label": "the night of the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "...She told us to count to a thousand in the dark and not come out. I only got to four hundred."
+							}
+						]
+					}
+				]
+			},
+			"tobin": {
+				"variants": [
+					{
+						"if": "after('opening.complete') and rests_since('opening.complete') >= 2",
+						"label": "rebuilding",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Farm Hamlet's timber came in yesterday. The first new roof goes on the Hearth & Hen -- Marra's orders, and nobody argues with Marra."
+							},
+							{
+								"speaker": "self",
+								"text": "Any word of Linnea? ...No. I didn't think so. Keep looking, {hero}."
+							}
+						]
+					},
+					{
+						"if": "after('opening.complete')",
+						"label": "the morning after",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "We'll rebuild. Oakvale always does. Go and find the ones who did this, {hero}."
+							},
+							{
+								"speaker": "self",
+								"text": "And bring Linnea home. He was ours before he was the King's."
+							}
+						]
+					},
+					{
+						"if": "",
+						"label": "the night of the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "They went past the mill toward the border. The Sergeant's waiting on you."
+							}
+						]
+					}
+				]
+			},
+			"wick": {
+				"note": "Out in the ruins only after the opening (visible_if).",
+				"variants": [
+					{
+						"if": "rests_since('opening.complete') >= 3",
+						"label": "a name for the frog",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "I've named the golden frog Briony. Is that alright? It seemed like a brave sort of name."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The golden frog came back to the pond this morning. I saw it. It means the village is going to be alright."
+							}
+						]
+					}
+				]
+			}
+		},
+		"river_crossing": {
+			"hobb": {
+				"variants": [
+					{
+						"if": "after('opening.attack') and rests_since('opening.complete') >= 3",
+						"label": "soldiers going north",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Still no word of the Researcher? I've had soldiers over this bridge every day since. Going north, mostly. Always north."
+							},
+							{
+								"speaker": "self",
+								"text": "This bridge is older than the kingdom, you know. It's seen wars start before. It never liked it."
+							}
+						]
+					},
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Raiders came over my bridge at a dead run, red cloaks, a man in a scholar's coat slung between them. Didn't stop. Didn't pay."
+							},
+							{
+								"speaker": "self",
+								"text": "Forty years I've kept this bridge. Never seen anyone cross it like they were running from the city instead of to it."
+							}
+						]
+					},
+					{
+						"if": "",
+						"label": "before the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Welcome to the Old Bridge! Older than the kingdom, this bridge. The first King of Aldermere rode over it to his crowning -- and paid the toll, mind."
+							},
+							{
+								"speaker": "self",
+								"text": "Testers carrying the Researcher's letter cross free, by royal order. Everyone else, a copper. The bridge doesn't mind either way."
+							},
+							{
+								"speaker": "self",
+								"text": "Did I tell you this bridge is older than the kingdom? The first King rode over it to his crowning. Paid the toll, too."
+							}
+						]
+					}
+				]
+			},
+			"joss": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Coast road's still washed out, and now there's soldiers on the King's road turning out every cart. I'll be stuck here so long they'll make me a local."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Coast road's washed out past the ford. Beach Village will have to wait for its flour, and I'll have to wait for Beach Village."
+							},
+							{
+								"speaker": "self",
+								"text": "They say the harbour's full of ships bound for the isles, and none of them able to sail till the road's mended. Funny old world."
+							}
+						]
+					}
+				]
+			},
+			"nan": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "They forded the shallows below the bridge, the raiders -- churned the whole bed to mud. Fish won't bite since. Can't say I blame them."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The river comes down from the city walls and runs out to the sea past Beach Village. Every fish in it has seen the King. Not one of them is impressed."
+							}
+						]
+					}
+				]
+			},
+			"rc_child": {
+				"variants": [
+					{
+						"if": "after('opening.attack')",
+						"label": "after the raid",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "I dropped a pebble off the bridge and wished for the soldiers to catch the bad men. That's forty-one wishes. I'm owed."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "If you drop a pebble off the bridge and count to three, a river spirit grants you a wish. I've wished for a creature forty times."
+							}
+						]
+					}
+				]
+			}
+		},
+		"sparse_forest": {
+			"alder": {
+				"variants": [
+					{
+						"if": "after('act1.met_rowan')",
+						"label": "soldiers on the road",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Soldiers on the west road, heading for the woods. The Sergeant's lot? Tell them to keep their boots off my saplings."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Sparse, they call it. Sparse! Every tree you see here, my grandfather planted, and every tree you don't, he cut. It's a garden, really."
+							},
+							{
+								"speaker": "self",
+								"text": "West of the town the woods close up for good -- the Deep Woods. Nobody plants those. Nobody cuts them, either."
+							}
+						]
+					}
+				]
+			}
+		},
+		"woodland_town": {
+			"bryn": {
+				"variants": [
+					{
+						"if": "rests_since('woodland.arrived') >= 2",
+						"label": "a regular",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Back again? The pie's the same, the cider's the same, and the odd crowd's still asking about the south trail. Some things in this town never change."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Venison pie, hot cider, and a room with a window onto the pines. The Stumped Hart's never let a traveller go hungry."
+							},
+							{
+								"speaker": "self",
+								"text": "Odd crowd lately. Folk with no luggage and a lot of questions about the south trail. I tell them it's a trail to nowhere."
+							}
+						]
+					}
+				]
+			},
+			"burr": {
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Axe heads, saw teeth, nails by the barrel. The Guard's smiths in the city make swords. I make the things that actually feed people."
+							}
+						]
+					}
+				]
+			},
+			"fern": {
+				"variants": [
+					{
+						"if": "steps_since('woodland.arrived') >= 300",
+						"label": "still counting",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Forty-two lanterns last night! And STILL only forty windows. I'm keeping a list now."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "I counted forty-one lanterns last night and only forty windows. Nobody believes me."
+							}
+						]
+					}
+				]
+			},
+			"ferra": {
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Three arrows, three straw men, and one of them is still standing. Don't ask which. The range is open to anyone who can keep from shooting the pigeons."
+							}
+						]
+					}
+				]
+			},
+			"hale": {
+				"variants": [
+					{
+						"if": "after('act1.met_rowan')",
+						"label": "riding with Rowan",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Crownhaven's Sergeant sends word you ride with him now. Then you're welcome at this Lodge at any hour."
+							},
+							{
+								"speaker": "self",
+								"text": "The Deepwood road stays shut all the same. The wood doesn't read the King's letters."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Welcome to Woodland Town. The Wardens keep the roads, the tolls and the peace between the town and the trees -- in about that order of difficulty."
+							},
+							{
+								"speaker": "self",
+								"text": "Deepwood's road is shut. The wood's been restless, and a restless wood eats carts. If you want to go west, bring me a reason I can write down."
+							},
+							{
+								"speaker": "self",
+								"text": "And if you meet a lantern in the dark that nobody's holding -- go the other way."
+							}
+						]
+					}
+				]
+			},
+			"ilse": {
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Bitterroot for stings, mossleaf for scrapes, and something I'm not allowed to call a cure for anything at all. Don't tell the Wardens."
+							},
+							{
+								"speaker": "self",
+								"text": "The woods are older than the kingdom, you know. Things sleep in the roots out there. Nobody here says so aloud."
+							}
+						]
+					}
+				]
+			},
+			"road_warden": {
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "East road's clear to the city. If anyone asks, I wasn't smiling."
+							}
+						]
+					}
+				]
+			},
+			"sedge": {
+				"note": "Merchant: this is his greeting; the shop opens after it.",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Furs, flasks and forest remedies, friend. Have a look."
+							}
+						]
+					}
+				]
+			},
+			"stranger": {
+				"variants": [
+					{
+						"if": "after('act1.met_rowan')",
+						"label": "riding with the Crown",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Riding with the Crown's soldiers now? Pity. You had a face for doors and exits."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Warm fire, warm night. You've the look of someone who counts doors and exits, traveller. Good habit."
+							},
+							{
+								"speaker": "self",
+								"text": "Some doors in this wood are only doors if you know the knock. I'd tell you the knock, but I don't know it. Obviously."
+							}
+						]
+					}
+				]
+			},
+			"torvald": {
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Every plank in the capital's keep started life on this yard. Mind the stacks -- they have opinions about strangers."
+							},
+							{
+								"speaker": "self",
+								"text": "We only fell what's marked. The Wardens paint a ring on the trunk, and I don't argue with a ring."
+							}
+						]
+					}
+				]
+			},
+			"wicke": {
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "When I was a girl this stone was taller. Or I was shorter. The glade keeps its own counsel."
+							},
+							{
+								"speaker": "self",
+								"text": "If you're ever lost in the woods, set your hand on a stone and listen. The star remembers the way home."
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"version": 1
+}

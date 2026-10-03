@@ -38,11 +38,15 @@ func is_interactable() -> bool:
 	return true
 
 
-## Talking to him: the defeated line once beaten, else the challenge (no walk-up).
+## Talking to him: once beaten, his dialogue-bank line when the bank has one that matches (what he
+## says changes with the story), else the defeated line; unbeaten, the challenge (no walk-up).
 func interact_script(area_id: String, state: StoryState) -> Array:
 	if is_defeated(area_id, state) and not rematchable:
 		var out: Array = []
-		if defeated_scene != null:
+		var say: SayCommand = DialogueBank.say_command(area_id, String(id), state)
+		if say != null:
+			out.append(say)
+		elif defeated_scene != null:
 			out.append(SayCommand.from_scene(defeated_scene))
 		out.append_array(on_interact)
 		return out

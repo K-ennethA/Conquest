@@ -19,6 +19,13 @@ const TIER_CASUAL := "casual"
 const TIERS: Array[String] = [TIER_CLASSIC, TIER_CASUAL]
 
 var flags: Dictionary = {}
+## STORY TIME per flag: when each flag was last SET from unset / falsy to truthy, as the journey's
+## clocks read then -- {key: {"step": steps, "rest": rests, "sec": play seconds}}. Conditions read
+## it through "time since" helpers ([method rests_since], [method steps_since],
+## [method minutes_since]: "3 rests since opening.complete"). Clearing a flag forgets its stamp.
+## Saved as "flag_times" (additive, format_version unchanged): a save from before stamps loads
+## with none, and a set flag with no stamp counts as set at the journey's START (clock 0).
+var flag_times: Dictionary = {}
 ## Ordered: index 0 is the party LEAD (the member a duel sends first). The overworld avatar is
 ## the HERO (see [HeroResource]), never a party member.
 var party: Array[StoryPartyMember] = []
@@ -80,13 +87,65 @@ func set_flag(key: String, value = true) -> void:
 	var v = _normalize_flag_value(value)
 	if not flags.has(key) or typeof(flags[key]) != typeof(v) or flags[key] != v:
 		_note_flag(key)
+	var was_set: bool = has_flag(key)
 	flags[key] = v
+	if not has_flag(key):
+		flag_times.erase(key)
+	elif not was_set:
+		flag_times[key] = clock_stamp()
 
 
 func clear_flag(key: String) -> void:
 	if flags.has(key):
 		_note_flag(key)
 	flags.erase(key)
+	flag_times.erase(key)
+
+
+## The journey's clocks right now (what [member flag_times] stores per flag).
+func clock_stamp() -> Dictionary:
+	return {"step": steps, "rest": rests, "sec": int(play_seconds)}
+
+
+## Rests taken since [param key] was set (0 = not since), or -1 while it is unset. A set flag with
+## no stamp (an older save) counts from the journey's start.
+func rests_since(key: String) -> int:
+	return _since(key, "rest", rests)
+
+
+## Overworld steps walked since [param key] was set, or -1 while it is unset.
+func steps_since(key: String) -> int:
+	return _since(key, "step", steps)
+
+
+## Whole minutes of play since [param key] was set, or -1 while it is unset.
+func minutes_since(key: String) -> int:
+	var s: int = _since(key, "sec", int(play_seconds))
+	return -1 if s < 0 else s / 60
+
+
+func _since(key: String, clock: String, now: int) -> int:
+	if not has_flag(key):
+		return -1
+	var stamp = flag_times.get(key, {})
+	var then: int = int(stamp.get(clock, 0)) if stamp is Dictionary else 0
+	return maxi(0, now - then)
+
+
+## Saved stamps -> {key: {step, rest, sec}} for flags that are set (CONQUEST.md rule 3: every
+## field coerced; malformed rows and stamps of unset flags are dropped).
+static func sanitize_flag_times(raw, p_flags: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	if not (raw is Dictionary):
+		return out
+	for key in raw:
+		var rec = raw[key]
+		var k: String = String(key)
+		if not (rec is Dictionary) or not p_flags.has(k):
+			continue
+		out[k] = {"step": maxi(0, int(rec.get("step", 0))), "rest": maxi(0, int(rec.get("rest", 0))),
+			"sec": maxi(0, int(rec.get("sec", 0)))}
+	return out
 
 
 func _note_flag(key: String) -> void:

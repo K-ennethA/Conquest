@@ -63,6 +63,11 @@ func is_interactable() -> bool:
 	return not on_interact.is_empty()
 
 
+## Interactable in [param area_id] (an NPC may be talkable only through the [DialogueBank]).
+func is_interactable_in(_area_id: String) -> bool:
+	return is_interactable()
+
+
 ## The prompt verb on the HUD chip ("Talk", "Read", "Open", "Touch").
 func prompt_verb() -> String:
 	return "Talk"

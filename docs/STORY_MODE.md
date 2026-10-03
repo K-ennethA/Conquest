@@ -7,25 +7,32 @@ This file records what M1 actually built, how to play it, and how it is wired to
 
 ## How to play — the story OPENING
 
-Solo → **Story** (card 7) → an empty slot. The opening (DECISIONS.md #12–#21) is built by
-`game/overworld/build/build_story_content.gd`; its names, the starter and the placeholders live
-in that file's `NAMES` / `STARTER_ID` / `GUEST_ID` / `RAIDER_UNITS` / `HERO_MODEL` constants
-(rename there and rebuild); its flags are the `F_*` constants.
+Solo → **Story** (card 7) → an empty slot. The opening (DECISIONS.md #12–#21 + "Story alignment")
+is built by `game/overworld/build/build_story_content.gd` (run it with
+`godot --headless --path . -s res://game/overworld/build/run_builder.gd`); its names, the starters
+and the placeholders live in that file's `NAMES` / `STARTER_ID` / `STARTER_CHOICES` / `GUEST_ID` /
+`RAIDER_UNITS` / `HERO_MODEL` constants (rename there and rebuild); its flags are the `F_*`
+constants. What NPCs SAY outside cutscenes is the **dialogue bank** (see "Dialogue bank & editor").
 
 1. **Oakvale (home)** — a new journey starts on your doorstep with **no creature**
    (`story_ruleset.tres` `starting_party` is empty). The first boot plays the intro and your
-   mother **Briony**'s send-off → `opening.sent_off` (the east road is held until then).
-   Villagers Tobin / Hessa / Pell, the village-hall notice, the **mill chest**, the Wayshrine.
+   mother **Briony**'s send-off → `opening.sent_off` (the east road is held until then): your
+   **longtime friend Linnea** — an Oakvale boy, now the Royal Researcher (he/him) — has asked for you
+   as a shard tester. Villagers Tobin / Hessa / Pell, the village-hall notice, the **mill chest**,
+   the Wayshrine.
 2. **The Mossway** (east out of Oakvale) — with no partner the grass never rolls and trainers let
    you pass (`OverworldController`: no healthy member → no encounter, no trainer); a one-time hint
    says so. **Bram** and the **Lone Petalfang** only appear once `opening.complete`. Its east end
    is **River Crossing**: north over the Old Bridge, the King's road ends at Crownhaven's south gate.
 3. **Crownhaven** (in by the south gate) — the walled river city: keep, market, barracks
-   (**Sergeant Rowan**), the Royal Workshop. Talk to **Researcher Linnea**: the **ceremony**
-   gives the starter (**Barkling**, `STARTER_ID`) and the **bonding shard**
-   (`key.bonding_shard`, `opening.starter_received`).
-4. **The raid** (the same script) — Cindral raiders vault the east wall, seize Linnea and flee
-   out the south gate, down the road home; Rowan runs up; the chase is a scripted warp to **Ruined Oakvale** (`opening.attack`,
+   (**Sergeant Rowan**), the Royal Workshop. Talk to **Researcher Linnea**: the reunion — he
+   explains HIS invention, the **bonding shard** (starstone tuned to listen to the spark of the
+   fallen star every creature carries), gives you one (`key.bonding_shard`), and you **choose your
+   starter** among his three test creatures (`STARTER_CHOICES`: **Barkling** — the default, the
+   first option — Petalfang, Blightcap; `opening.starter_received`, and `opening.starter_pick` =
+   1 / 2 / 3 records which).
+4. **The raid** (the same script) — Cindral raiders vault the east wall, seize Linnea (and the two
+   test creatures you did not pick) and flee out the south gate, down the road home; Rowan runs up; the chase is a scripted warp to **Ruined Oakvale** (`opening.attack`,
    `opening.researcher_taken`, `opening.raiders_fled`, `opening.chase`; the respawn moves to the
    ruins' Wayshrine). A journey saved mid-raid resumes it on the next Crownhaven load.
 5. **Ruined Oakvale** (`oakvale_ruins`, a second area; the Mossway's west exit switches to it on
@@ -631,6 +638,63 @@ chapter only has to add the target area, retarget the warp, flip the place to BU
 flag. Tests: `test_overworld_content.gd` (layouts, the atlas and positions, the river and the
 bridges, the three towns' looks, every NPC reachable at every story stage) and
 `test_story_towns_travel.gd` (real warps between the towns, every closed road turning you back).
+
+## Dialogue bank & editor
+
+**What NPCs say is data**: `game/overworld/content/dialogue.json`, read at runtime by
+`DialogueBank` (`game/overworld/data/`). Editing it needs **no rebuild and no save migration** —
+like `quests.json`, nothing of it is saved; every pick is computed from the journey's flags and
+clocks on each talk.
+
+- **Schema** — `{"areas": {"<area id>": {"<npc id>": {"note"?, "variants": [{"if", "label"?,
+  "lines": [{"speaker", "text", "side"?, "name"?}]}]}}}, "version": 1}`. Variants are ORDERED: the
+  first whose `if` passes plays (blank = always — put it last as the fallback). Speakers: `self`
+  (the NPC, right side), `hero` (left), `narrator` (no portraits) or another NPC id of the same
+  area. `{hero}` / `{lead}` / `{gold}` are filled at runtime.
+- **Conditions** — the `ConditionContext` expressions (`has`, `flag`, `visited`, `party_has`, …) plus
+  the readable `after('flag')` / `before('flag')` and **story time**: `rests_since('flag')`,
+  `steps_since('flag')`, `minutes_since('flag')` (-1 while unset) and `rests()` / `steps()` /
+  `play_minutes()`. Time comes from `StoryState.flag_times`: when a flag is first set (unset →
+  truthy) it is stamped with the journey's clocks `{step, rest, sec}`; clearing it forgets the stamp.
+  Saved additively as `"flag_times"` (**format_version stays 2**; an older save loads with none and
+  its flags count from the journey's start). Single quotes work in conditions, so the JSON stays
+  readable.
+- **Runtime** — `NpcEntity.interact_script` (also merchants' greetings, and a trainer once BEATEN):
+  an NPC **with** an entry says its matching variant (nothing when none matches) **instead of** its
+  `.tres` `dialogue`; its `on_interact` script (a ceremony, an offer, a shop) still runs after the
+  line. An NPC **without** an entry keeps its authored `.tres` line. An entry also makes an NPC with
+  no lines talkable (`is_interactable_in(area_id)`, used by `OverworldController.entity_at`).
+- **Content** — every ambient line of every built area moved out of the builder into the bank, with
+  phase variants: before the raid / after it (`opening.attack`) / after the first fight
+  (`opening.complete`) / Act 1 (`act1.met_rowan`) and a few time-based ones ("3 rests after the
+  opening": Crownhaven moves on, Oakvale rebuilds). Nobody mentions the raid before `opening.attack`.
+  Cutscenes (send-off, ceremony, raid, ruins arrival, Rowan's offer and hook, rival, ambush, arena,
+  spars) stay in the builder.
+- **Story phases** — `StoryPhases` derives the timeline from the MAIN quests in `quests.json` (start
+  flag, step flags, completion flag, in order): phase k = the first k milestones set. A new main quest
+  extends it with no code change.
+- **The editor** — `addons/dialogue_editor` (enabled in `project.godot`): the **Dialogue** tab at the
+  top of the Godot editor (beside 2D / 3D / Script). Left: Town → NPC tree + search. Top: the story
+  phase and "+ rests / + steps" of story time; every view simulates that state. Tabs: **Lines** (the
+  NPC's variants in order, each condition shown readably — "after: opening.attack · before:
+  opening.complete · 3+ rests since opening.complete" — the phases it plays in, the variant that
+  plays now highlighted; edit text inline, add / remove / reorder / duplicate variants and lines,
+  condition helpers, create an entry for any NPC of the area `.tres`), **Town now** (tick flags, see
+  what every NPC of a town says), **Cutscenes** (the area's scripted dialogue, read-only, each line
+  under the condition that gates it), **Search**, **Missing** (NPCs with no entry, NPCs silent in a
+  phase, TODO lines, variants that never play), **Issues** (the validator). **Save** runs the
+  validator and writes sorted-key, tab-indented JSON (`DialogueBank.to_json`), so diffs stay small.
+  The editor reads area resources through `StoryContentIndex` (properties only: in the editor the
+  overworld scripts are not `@tool`, so their methods cannot be called).
+- **Validator** — `DialogueBank.validate`: unknown areas / NPC ids / speakers, malformed conditions,
+  flags no script / quest / entity sets or reads, entries without variants, variants without lines,
+  empty text, variants shadowed by an earlier always-variant.
+- Tests: `tests/unit/test_dialogue_bank.gd` (parsing, picking, the fallback, merchants and trainers,
+  story time + its save round trip, readable conditions, the validator, phases) and
+  `tests/integration/test_dialogue_content.gd` (the shipped bank validates and is canonical, every
+  talking NPC has an entry, no raid talk before the raid, the towns talk about it after, time moves
+  people on, the Researcher is he/him and the hero's friend, the live overworld plays the bank, the
+  editor loads / edits / simulates / searches / saves).
 
 ## Deviations from OVERWORLD.md (M1)
 
