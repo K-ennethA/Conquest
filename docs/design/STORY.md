@@ -61,7 +61,7 @@ name is the person's name ("Rowan"), and the class is a subtitle (see §6.6).
 | **Now** | Linnea's **bonding shard** makes a safe bond possible for almost anyone [D13, D17]. Only testers and some army units have one [D13]. That scarcity is why few people have creatures, and why the shards are worth stealing. |
 
 **(Proposed late reveal)** The shards are cut from the purest starstone, which resonates with
-Astrael. That is why they bond, and why the Gloam needs Linnea: her method could make a shard
+Astrael. That is why they bond, and why the Gloam needs Linnea: his method could make a shard
 strong enough to bind the fallen creature.
 
 ### 1.2 The fallen creature (Astrael)
@@ -93,8 +93,11 @@ strong enough to bind the fallen creature.
   Grovewarden appears.
 
 ### 2.3 Linnea †, the Royal Shardwright
+- **He/him.** The hero's **longtime friend**: an Oakvale boy a few years older than the hero who
+  left for the city's academy twelve years ago and writes home every winter. He asked for the hero
+  by name as a tester (owner, 2026-10-03; DECISIONS.md "Story alignment").
 - Inventor of the bonding shard [D13], abducted during the hero's visit [D14].
-- (Proposed) Rescued at the end of Act 2. She joins as a human support unit and upgrades your
+- (Proposed) Rescued at the end of Act 2. He joins as a human support unit and upgrades your
   shards (§6.4).
 
 ### 2.4 Rowan †, the soldier who becomes the general [D15, D21, D25]
@@ -172,7 +175,11 @@ The battle types are **Duel** (turn-based, no movement; humans fight alongside c
 tiny **tactical** board (hero, starter and Rowan as a guest vs 2 raiders and 1 chained creature,
 Eliminate All), which the engine supports today.
 
-**Starter creature: OPEN.**
+**Starter creature: DECIDED (owner, 2026-10-03) -- the player CHOOSES among Linnea's three test
+creatures** (built: Barkling -- the default, first option -- Petalfang, Blightcap; all three are
+nature lines until more base lines exist). The two not chosen are carried off in the raid, as
+recommended below; `opening.starter_pick` records which one you took. The options table is kept for
+the record.
 
 | Option | Pro | Con |
 |---|---|---|
@@ -204,7 +211,7 @@ Beating Eldroot breaks the chain and ends the blight. The chain's age is the sec
 
 **Act 2.** In the Greyspine's starstone mines, General Rowan carries out the Crown's reprisals.
 Kesh swears the raiders' company does not exist, and Garrow shows what old-way bonds can do. Once
-rescued, Linnea reveals her captors wanted a shard that could bind "the one that fell", and names
+rescued, Linnea reveals his captors wanted a shard that could bind "the one that fell", and names
 **the Gloam**. Rowan calls it Cindral trickery, and Aldermere declares war.
 
 **Act 3.** The armies mass on the Sundered Field. Vesk's letters to both courts, found in the
