@@ -9,6 +9,7 @@ extends RefCounted
 ##   party_has("petalfang") or item("sagebloom_poultice") > 0
 ##   outcome() == "victory"
 ##   spar_ready("crownhaven.spar.rowan")
+##   after('opening.attack') and rests_since('opening.complete') >= 3   (story time: flag_times)
 ##
 ## Zero parser to write, and [method check] lets a content test parse + dry-run every condition
 ## in every area so a typo fails CI, not a playtest. Story content is SHIPPED, trusted data; if
@@ -35,6 +36,44 @@ func flag(key: String) -> int:
 
 func has(key: String) -> bool:
 	return _state.has_flag(key)
+
+
+## Readable aliases for dialogue conditions: after('opening.attack') == has(...), before(...) its
+## negation -- the story-phase words the dialogue editor shows.
+func after(key: String) -> bool:
+	return _state.has_flag(key)
+
+
+func before(key: String) -> bool:
+	return not _state.has_flag(key)
+
+
+# --- Story TIME (StoryState.flag_times): "N rests / steps / minutes since a flag was set" -------
+# Each is -1 while the flag is unset, so rests_since('x') >= 2 is false until x happens.
+
+func rests_since(key: String) -> int:
+	return _state.rests_since(key)
+
+
+func steps_since(key: String) -> int:
+	return _state.steps_since(key)
+
+
+func minutes_since(key: String) -> int:
+	return _state.minutes_since(key)
+
+
+## The journey's clocks: rests taken (Wayshrine / healer / whiteout), steps walked, minutes played.
+func rests() -> int:
+	return _state.rests
+
+
+func steps() -> int:
+	return _state.steps
+
+
+func play_minutes() -> int:
+	return int(_state.play_seconds) / 60
 
 
 func party_has(character_id: String) -> bool:

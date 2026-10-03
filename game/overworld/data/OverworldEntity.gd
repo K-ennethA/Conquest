@@ -47,6 +47,12 @@ func occupies(c: Vector3i) -> bool:
 	return cells().has(c)
 
 
+## Does this entity block the cells it occupies? Kinds whose solidity is not the plain
+## [member blocking] flag (props: by kind) override it.
+func is_blocking() -> bool:
+	return blocking
+
+
 ## Does it get an actor node (a model / prop)? Warps and trigger zones are invisible.
 func has_actor() -> bool:
 	return true
@@ -55,6 +61,11 @@ func has_actor() -> bool:
 ## Can the player talk to / use it by facing it and pressing Confirm?
 func is_interactable() -> bool:
 	return not on_interact.is_empty()
+
+
+## Interactable in [param area_id] (an NPC may be talkable only through the [DialogueBank]).
+func is_interactable_in(_area_id: String) -> bool:
+	return is_interactable()
 
 
 ## The prompt verb on the HUD chip ("Talk", "Read", "Open", "Touch").

@@ -7,25 +7,32 @@ This file records what M1 actually built, how to play it, and how it is wired to
 
 ## How to play — the story OPENING
 
-Solo → **Story** (card 7) → an empty slot. The opening (DECISIONS.md #12–#21) is built by
-`game/overworld/build/build_story_content.gd`; its names, the starter and the placeholders live
-in that file's `NAMES` / `STARTER_ID` / `GUEST_ID` / `RAIDER_UNITS` / `HERO_MODEL` constants
-(rename there and rebuild); its flags are the `F_*` constants.
+Solo → **Story** (card 7) → an empty slot. The opening (DECISIONS.md #12–#21 + "Story alignment")
+is built by `game/overworld/build/build_story_content.gd` (run it with
+`godot --headless --path . -s res://game/overworld/build/run_builder.gd`); its names, the starters
+and the placeholders live in that file's `NAMES` / `STARTER_ID` / `STARTER_CHOICES` / `GUEST_ID` /
+`RAIDER_UNITS` / `HERO_MODEL` constants (rename there and rebuild); its flags are the `F_*`
+constants. What NPCs SAY outside cutscenes is the **dialogue bank** (see "Dialogue bank & editor").
 
 1. **Oakvale (home)** — a new journey starts on your doorstep with **no creature**
    (`story_ruleset.tres` `starting_party` is empty). The first boot plays the intro and your
-   mother **Briony**'s send-off → `opening.sent_off` (the east road is held until then).
-   Villagers Tobin / Hessa / Pell, the village-hall notice, the **mill chest**, the Wayshrine.
+   mother **Briony**'s send-off → `opening.sent_off` (the east road is held until then): your
+   **longtime friend Linnea** — an Oakvale boy, now the Royal Researcher (he/him) — has asked for you
+   as a shard tester. Villagers Tobin / Hessa / Pell, the village-hall notice, the **mill chest**,
+   the Wayshrine.
 2. **The Mossway** (east out of Oakvale) — with no partner the grass never rolls and trainers let
    you pass (`OverworldController`: no healthy member → no encounter, no trainer); a one-time hint
    says so. **Bram** and the **Lone Petalfang** only appear once `opening.complete`. Its east end
    is **River Crossing**: north over the Old Bridge, the King's road ends at Crownhaven's south gate.
 3. **Crownhaven** (in by the south gate) — the walled river city: keep, market, barracks
-   (**Sergeant Rowan**), the Royal Workshop. Talk to **Researcher Linnea**: the **ceremony**
-   gives the starter (**Barkling**, `STARTER_ID`) and the **bonding shard**
-   (`key.bonding_shard`, `opening.starter_received`).
-4. **The raid** (the same script) — Cindral raiders vault the east wall, seize Linnea and flee
-   out the south gate, down the road home; Rowan runs up; the chase is a scripted warp to **Ruined Oakvale** (`opening.attack`,
+   (**Sergeant Rowan**), the Royal Workshop. Talk to **Researcher Linnea**: the reunion — he
+   explains HIS invention, the **bonding shard** (starstone tuned to listen to the spark of the
+   fallen star every creature carries), gives you one (`key.bonding_shard`), and you **choose your
+   starter** among his three test creatures (`STARTER_CHOICES`: **Barkling** — the default, the
+   first option — Petalfang, Blightcap; `opening.starter_received`, and `opening.starter_pick` =
+   1 / 2 / 3 records which).
+4. **The raid** (the same script) — Cindral raiders vault the east wall, seize Linnea (and the two
+   test creatures you did not pick) and flee out the south gate, down the road home; Rowan runs up; the chase is a scripted warp to **Ruined Oakvale** (`opening.attack`,
    `opening.researcher_taken`, `opening.raiders_fled`, `opening.chase`; the respawn moves to the
    ruins' Wayshrine). A journey saved mid-raid resumes it on the next Crownhaven load.
 5. **Ruined Oakvale** (`oakvale_ruins`, a second area; the Mossway's west exit switches to it on
@@ -60,12 +67,12 @@ and Continue Journey skips it (`StorySnapshot.is_outdated`). Nothing crashes.
 | Piece | Files |
 |---|---|
 | Autoload (session, runner, battle round trip) | `game/overworld/StoryController.gd` |
-| Data | `game/overworld/data/` — `OverworldAreaResource`, entity kinds (`Npc`, `Trainer`, `Sign`, `Chest`, `Warp`, `Wayshrine`, `TriggerZone`, `Prop`), `EncounterZone/Entry`, `BattleSpec`, `HeroResource`, `StoryRuleset`, `TournamentResource` |
+| Data | `game/overworld/data/` — `OverworldAreaResource`, entity kinds (`Npc`, `Trainer`, `Sign`, `Chest`, `Warp`, `Wayshrine`, `TriggerZone`, `Prop`), `EncounterZone/Entry`, `BattleSpec`, `HeroResource`, `StoryRuleset`, `TournamentResource`, `WorldAtlas` / `WorldLocation`, `QuestLog` / `QuestTracker` / `QuestValidator` |
 | Scripts | `game/overworld/script/` — `StoryCommand` + `commands/*`, `StoryScriptRunner`, `ScriptContext`, `StoryScriptHost` (the host contract), `ConditionContext` |
 | Runtime | `game/overworld/runtime/` — `OverworldController` (scene root + live host), `OverworldGrid`, `TrainerSight`, `EncounterRoller`, `WildSpawner` (visible wild creatures), `TapPathfinder`, `OverworldActor`, `OverworldCamera`, `OverworldProps` |
 | Battles | `game/overworld/battle/` — `BattleRequest`, `BattleResult`, `StoryBattleBridge`, `StoryResultApplier`, `StoryGrowth` (story Growth + evolution rules), `StoryPermadeath` (difficulty tiers, fallen, revives, game over), `StorySparring` (sparring-partner cooldown), `TournamentLedger` (the arena ladder), `DuelLauncher`, `DuelStub` (debug fallback) |
 | Saves | `game/overworld/save/` — `StoryState`, `StoryPartyMember`, `StorySnapshot`, `StorySaveManager` (`user://story/slot_<n>.json`) |
-| UI | `game/overworld/ui/` — `OverworldHUD`, `JourneyMenu`, `StoryStartScreen` (slots + the New Journey tier picker), `StoryGameOverScreen`, `TournamentLadderPanel` |
+| UI | `game/overworld/ui/` — `OverworldHUD` (+ the quest tracker), `JourneyMenu`, `world_map/WorldMapView`, `StoryStartScreen` (slots + the New Journey tier picker), `StoryGameOverScreen`, `TournamentLadderPanel` |
 | Content | `game/overworld/content/` — built by `game/overworld/build/build_story_content.gd` |
 
 Shared-file hooks (all guarded, no-ops outside story): `GameEvents.battle_resolved`,
@@ -381,22 +388,134 @@ Classic costs the partner, a full Cup run → prize + title + the champion, save
   members; party > squad needs the picker (and a Party-screen reorder) in M2.
 - Profile points still accrue on the story tactical end screen (existing behaviour).
 
+## Collision
+
+`OverworldGrid.is_walkable(cell)` = the terrain's `is_passable` (minus water / lava, see
+`OVERWORLD_BLOCKING_TILES`) AND no blocker on it. Blockers are the present entities whose
+`is_blocking()` is true (NPCs, trainers, signs, chests, the Wayshrine, **solid props**) plus the
+visible wild creatures. Warps and trigger zones never block.
+
+- **Props are solid by KIND.** `PropEntity.SOLID_KINDS` (house, ruin, keep, tower, windmill, stall,
+  well, fence, haystack, barrels, cart, banner, dummy, crystal, fire, rubble, arena, cabin, logs,
+  lamp, chapel, smithy, scarecrow) block **every cell of their footprint**. Walk-over decor
+  (`crops`) and a `gate` (its arch is walked under; the towers are wall terrain) are not.
+  `PropEntity.collision` (`"auto"` / `"solid"` / `"walkable"`) overrides one prop either way; the
+  builder's `_prop(..., blocking)` sets `"solid"` for a walk-over kind passed `true`.
+- **Why the carts were walk-through.** `PropEntity._init()` forced `blocking = false`, but the
+  exported default of `blocking` is `true`. `ResourceSaver` omits a value equal to the exported
+  default, so every `blocking = true` the builder set was dropped from `area.tres`, and the
+  reload came back with `false`. Never give an `@export` a different runtime default than its
+  declared one; props no longer read `blocking` at all (`OverworldEntity.is_blocking()`, which
+  `PropEntity` overrides, is what the grid asks).
+- **Footprints.** A prop's footprint is its model's cell rect (`OverworldProps` builds each model
+  inside it; one cell is 2 m). A cart / barrels / haystack / lamp is one cell; stalls and fences
+  are 2+ cells along their long axis and block all of them. Houses and other buildings stand on
+  `stone_wall` terrain, so they were already impassable; the prop being solid too keeps a model
+  from ever being walkable if its terrain is repainted.
+- **Routes.** `tests/integration/test_overworld_collision.gd` flood-fills every area from each
+  entry point under every story stage and asserts every warp, NPC (a neighbouring cell), chest,
+  sign, shrine, trigger and scripted-move target is still reachable, that no solid prop sits on an
+  entry, an exit, an actor or a cutscene destination, that every solid prop cell is unwalkable on
+  the real grid, and that prop models stay inside their footprints. When adding a prop, run it: a
+  failure means a prop sealed something off (or walled a pocket of open ground away) -- nudge the
+  prop's position in `build_story_content.gd`, then rebuild. The nudges made when props went solid:
+  Crownhaven's four bridge lamps now stand on the deck corners (they cut each one-cell river bank in
+  two and walled the south sign into a nook), the north-gate street lamp moved to the barracks-side
+  column, one yard lamp and a training dummy moved a cell; Oakvale's plaza lamp (14, 6) and the barn
+  haystacks (19, 13) / (19, 14); the River Crossing bank fence (3, 10); Woodland Town's archery
+  targets (3, 7) / (5, 7) and the lumber-yard logs (18, 17).
+- **Saves.** A save made before a prop turned solid may stand inside it: `StoryController.settle_location`
+  (run by `continue_journey`) moves the hero to the nearest reachable open cell, wild creatures
+  too (`WildSpawner._restore_slot` re-lays-out one on a blocked cell).
+- **Encounter arrival.** A step that lands while the journey menu (or another overlay) is open
+  waits for it to close before warps, triggers, trainers, creatures and the grass roll run
+  (`OverworldController._await_arrival`; the menu can be opened mid-step, so without this a wild
+  battle could start behind it). A TACTICAL encounter row stays a tactical battle
+  (`StartDuelCommand.build_request` no longer forces `kind = duel` on it). Tests:
+  `tests/integration/test_wild_encounter_flow.gd` (seeded grass roll -> the predicted foe on the
+  predicted step; a contact fought on the real stage returns to the same cell with the duel's HP;
+  every shipped table plays; no shipped roster spawns on a blocked cell). To watch a real
+  encounter headless: `godot --headless --path . --script dev_scripts/wild_encounter_smoke.gd`
+  (overworld -> grass step -> the real duel scene played by the AI -> Continue -> back on the same
+  cell, with a pass / fail line per step).
+
 ## Journey menu pages (Esc / Start)
 
 Rows: Resume · Party · Quests · Bag · Map · Difficulty · Settings · Load · Save · Title Screen. The
-card footer is the journey summary (place, gold, play time, current objective).
+card footer is the journey summary (place, gold, play time, the TRACKED quest's objective).
 
 - **Quests** — `QuestLog` (`game/overworld/data/`) derives the log from story flags against
   `game/overworld/content/quests.json` (`start_flag`, `complete_flag`, ordered `steps` of
-  `{flag, text}`); nothing is saved. Edit the JSON to add / reword quests.
+  `{flag, text}` + the optional pointers below); only the pin is saved. All / Main / Side /
+  Completed filters, **Track** / Untrack and **Show on map** per open quest (see "Quest tracking").
+  Edit quests with the Quest Editor plugin (or the JSON).
 - **Party → Details** — `PartyDetailPage`: portrait, form / element / role chips, HP, Growth
   (there are no levels), the shared `UnitPageContent` stat table, equipment and move / ability
   cards. Equip / Unequip move a unit-scope item between the member and the bag
   (`StoryState.equip_item` / `unequip_item`, `StoryController.equip_from_menu`).
-- **Map** — the current place, the Wayshrine rest point and every visited area (no world-map scene yet).
+- **Map** — the WORLD MAP (see "World map" below); its **Places** toggle keeps the old list (the
+  current place, the Wayshrine rest point and every visited area).
 - **Settings** — the shared `SettingsPanel`. **Load** — reloads the slot's last save behind a second press.
 
-Tests: `tests/unit/test_story_journey_pages.gd`.
+Tests: `tests/unit/test_story_journey_pages.gd`, `tests/integration/test_quest_tracking_live.gd`.
+
+### World map
+
+`WorldMapView` (`game/overworld/ui/world_map/`) draws the owner's painting
+(`game/overworld/ui/world_map/world_map.webp`, a copy of `docs/design/world_map/world_map.webp`;
+imported lossy with mipmaps) with one marker per known `WorldLocation` at its `map_pos`:
+
+- **Glyph by kind** — city = keep, town / village = house, dungeon / special = red seal, island =
+  isle, route = waystone, nation = banner. **Gold** = visited, **cream** = built but not visited,
+  **dim + lock** = CLOSED; a secret place is drawn only once `is_known` (its open flag is set).
+- **You are here** pulses (gold rings); the **respawn Wayshrine** wears a green flame; each active
+  quest's objective hangs a **"!" pennant** over its place (gold = main, green = side). **Roads**
+  (toolbar toggle) overlay the atlas roads by kind: gold = main, dashed cream = track, dashed blue = sea.
+- **The card** (corner away from the selection): name, region · kind, status chips, description,
+  the quests that point there. A short view (phone landscape) drops the description.
+- **Controls** — arrows / d-pad / left stick step to the nearest marker that way (nothing that
+  way: focus moves on, as everywhere in the menu), Tab / shoulders cycle markers, Confirm zooms onto
+  the selection (again: back out), right stick / WASD pan, + / - / PgUp / PgDn / triggers / wheel
+  zoom, Home resets; mouse or one finger drags, a click / tap selects, two fingers / a trackpad
+  pinch zoom; toolbar - / + for touch. The opening view COVERS the frame and centres on the player.
+- **Phone width** (< 1000 logical px): the command card steps aside while the map has focus (a
+  **Back** button and Esc bring it back); short views (< 560 px) tighten the page gutters.
+- **Positions** — every `map_pos` sits on the place's ART (just above its painted label, so the
+  marker never hides the label text); verified with `dev_scripts/world_map_shots.tscn -- align`
+  (`docs/screenshots/world_map/map_alignment.png`). Screenshots: `docs/screenshots/world_map/`.
+
+### Quest tracking
+
+- **Schema (additive; old entries load unchanged)** — on a quest and / or a step (a step's own
+  wins): `location` (a `WorldLocation` id, or an area id that resolves to its place), `area` (the
+  area id the objective is in), `npc` (step: the entity to talk to), `giver` (quest: who anchors it).
+  `QuestLog.entries` adds `step_index`, `location`, `area`, `npc`, `giver` to each row.
+- **Tracked quest** — `QuestLog.tracked_entry`: the PIN (`StoryState.tracked_quest`, set by Journey
+  → Quests **Track** via `StoryController.set_tracked_quest`, which saves) while it is active, else the
+  first active main quest, else the first active side quest. The pin is saved as `"tracked_quest"`
+  inside format 2 (no version bump: an older save has none and tracks the main quest; a finished /
+  unknown pin just falls back).
+- **HUD tracker** (`OverworldHUD`, top left): MAIN / SIDE kicker, title, objective and where it is
+  ("→ Crownhaven", or "Here" in the objective's area -- then the step's `npc` wears a gold ◆).
+- **Toasts** — `QuestTracker` diffs two `QuestLog` views (STARTED / ADVANCED / COMPLETED); it never
+  listens to single flags, so scripts, battle rewards and tournaments are all covered. The baseline
+  is taken whenever a session begins (a load / new journey is not news) and a swapped-in state (Try
+  Again) re-baselines silently; `StoryState.flags_revision` makes the no-change poll free.
+  `OverworldController._tick_quests` polls `StoryController.poll_quest_events()` only at a quiet
+  moment (no script running, the Journey menu shut) and shows each event as a quest toast card.
+  Scripted `_toast("Quest: ...")` beats in the builder still fire as before.
+- **Quest Editor** (`addons/quest_editor`, enabled in project.godot; the **Quests** tab in the
+  editor's bottom panel): quests grouped Main / Side (add / duplicate / remove / reorder), the
+  fields above plus steps, flag / place pickers fed by `QuestValidator.scan_project` (the builder's
+  F_* constants and flag literals, the generated .tres: SetFlag keys, joins, reward flags, trainer
+  `.defeated`, tournament flags), **Validate** (unknown flags, unreachable quests whose start flag no
+  content sets, duplicate ids, empty text, unknown places) and **Story flow** (quests in the order
+  their start flags are reached). Saves via `QuestLog.to_json`: tab-indented, fixed key order, empty
+  optional keys omitted -- `quests.json` is kept in exactly that form (a test checks).
+
+Tests: `tests/unit/test_quest_tracking.gd` (schema, tracked entry, filters, JSON, the transition
+detector, the pin's save round trip, the validator + story flow) and
+`tests/integration/test_quest_tracking_live.gd`.
 
 ## Visible wild creatures (the default encounter mode)
 
@@ -558,13 +677,13 @@ area's `world_map_pos` / `region_id` come from its place (`_place()` in the buil
 
 | Place | Region | Status / opening flag | Reached from |
 |---|---|---|---|
-| Oakvale (0.46, 0.67) | heartlands | built (`oakvale`, `oakvale_ruins`) | Mossway, Farm Hamlet |
+| Oakvale (0.426, 0.63) | heartlands | built (`oakvale`, `oakvale_ruins`) | Mossway, Farm Hamlet |
 | Farm Hamlet | heartlands | closed `world.farm_hamlet_open` | Oakvale's mill lane |
 | The Mossway | heartlands | built | Oakvale, River Crossing |
-| River Crossing (0.58, 0.69) | heartlands | built | Mossway, Crownhaven, Beach Village |
-| Crownhaven (0.49, 0.47) | heartlands | built | River Crossing, Sparse Forest, Mountain Base, Redrock, Beach Village |
+| River Crossing (0.544, 0.655) | heartlands | built | Mossway, Crownhaven, Beach Village |
+| Crownhaven (0.498, 0.41) | heartlands | built | River Crossing, Sparse Forest, Mountain Base, Redrock, Beach Village |
 | The Sparse Forest | woodlands | built | Crownhaven, Woodland Town |
-| Woodland Town (0.34, 0.41) | woodlands | built | Sparse Forest, Deepwood, Thieves Guild, Frostpeak |
+| Woodland Town (0.301, 0.384) | woodlands | built | Sparse Forest, Deepwood, Thieves Guild, Frostpeak |
 | Hidden Thieves Guild | woodlands | closed `world.thieves_guild_open`, **secret** | Woodland Town's south trail |
 | Deepwood Village / Depths of the Wood | woodlands | closed `world.deepwood_open` / `world.depths_of_the_wood_open` | Woodland Town's west road / Deepwood |
 | Frostpeak Village | snowy_peaks | closed `world.frostpeak_open` | Woodland Town's north trail |
@@ -580,6 +699,63 @@ chapter only has to add the target area, retarget the warp, flip the place to BU
 flag. Tests: `test_overworld_content.gd` (layouts, the atlas and positions, the river and the
 bridges, the three towns' looks, every NPC reachable at every story stage) and
 `test_story_towns_travel.gd` (real warps between the towns, every closed road turning you back).
+
+## Dialogue bank & editor
+
+**What NPCs say is data**: `game/overworld/content/dialogue.json`, read at runtime by
+`DialogueBank` (`game/overworld/data/`). Editing it needs **no rebuild and no save migration** —
+like `quests.json`, nothing of it is saved; every pick is computed from the journey's flags and
+clocks on each talk.
+
+- **Schema** — `{"areas": {"<area id>": {"<npc id>": {"note"?, "variants": [{"if", "label"?,
+  "lines": [{"speaker", "text", "side"?, "name"?}]}]}}}, "version": 1}`. Variants are ORDERED: the
+  first whose `if` passes plays (blank = always — put it last as the fallback). Speakers: `self`
+  (the NPC, right side), `hero` (left), `narrator` (no portraits) or another NPC id of the same
+  area. `{hero}` / `{lead}` / `{gold}` are filled at runtime.
+- **Conditions** — the `ConditionContext` expressions (`has`, `flag`, `visited`, `party_has`, …) plus
+  the readable `after('flag')` / `before('flag')` and **story time**: `rests_since('flag')`,
+  `steps_since('flag')`, `minutes_since('flag')` (-1 while unset) and `rests()` / `steps()` /
+  `play_minutes()`. Time comes from `StoryState.flag_times`: when a flag is first set (unset →
+  truthy) it is stamped with the journey's clocks `{step, rest, sec}`; clearing it forgets the stamp.
+  Saved additively as `"flag_times"` (**format_version stays 2**; an older save loads with none and
+  its flags count from the journey's start). Single quotes work in conditions, so the JSON stays
+  readable.
+- **Runtime** — `NpcEntity.interact_script` (also merchants' greetings, and a trainer once BEATEN):
+  an NPC **with** an entry says its matching variant (nothing when none matches) **instead of** its
+  `.tres` `dialogue`; its `on_interact` script (a ceremony, an offer, a shop) still runs after the
+  line. An NPC **without** an entry keeps its authored `.tres` line. An entry also makes an NPC with
+  no lines talkable (`is_interactable_in(area_id)`, used by `OverworldController.entity_at`).
+- **Content** — every ambient line of every built area moved out of the builder into the bank, with
+  phase variants: before the raid / after it (`opening.attack`) / after the first fight
+  (`opening.complete`) / Act 1 (`act1.met_rowan`) and a few time-based ones ("3 rests after the
+  opening": Crownhaven moves on, Oakvale rebuilds). Nobody mentions the raid before `opening.attack`.
+  Cutscenes (send-off, ceremony, raid, ruins arrival, Rowan's offer and hook, rival, ambush, arena,
+  spars) stay in the builder.
+- **Story phases** — `StoryPhases` derives the timeline from the MAIN quests in `quests.json` (start
+  flag, step flags, completion flag, in order): phase k = the first k milestones set. A new main quest
+  extends it with no code change.
+- **The editor** — `addons/dialogue_editor` (enabled in `project.godot`): the **Dialogue** tab at the
+  top of the Godot editor (beside 2D / 3D / Script). Left: Town → NPC tree + search. Top: the story
+  phase and "+ rests / + steps" of story time; every view simulates that state. Tabs: **Lines** (the
+  NPC's variants in order, each condition shown readably — "after: opening.attack · before:
+  opening.complete · 3+ rests since opening.complete" — the phases it plays in, the variant that
+  plays now highlighted; edit text inline, add / remove / reorder / duplicate variants and lines,
+  condition helpers, create an entry for any NPC of the area `.tres`), **Town now** (tick flags, see
+  what every NPC of a town says), **Cutscenes** (the area's scripted dialogue, read-only, each line
+  under the condition that gates it), **Search**, **Missing** (NPCs with no entry, NPCs silent in a
+  phase, TODO lines, variants that never play), **Issues** (the validator). **Save** runs the
+  validator and writes sorted-key, tab-indented JSON (`DialogueBank.to_json`), so diffs stay small.
+  The editor reads area resources through `StoryContentIndex` (properties only: in the editor the
+  overworld scripts are not `@tool`, so their methods cannot be called).
+- **Validator** — `DialogueBank.validate`: unknown areas / NPC ids / speakers, malformed conditions,
+  flags no script / quest / entity sets or reads, entries without variants, variants without lines,
+  empty text, variants shadowed by an earlier always-variant.
+- Tests: `tests/unit/test_dialogue_bank.gd` (parsing, picking, the fallback, merchants and trainers,
+  story time + its save round trip, readable conditions, the validator, phases) and
+  `tests/integration/test_dialogue_content.gd` (the shipped bank validates and is canonical, every
+  talking NPC has an entry, no raid talk before the raid, the towns talk about it after, time moves
+  people on, the Researcher is he/him and the hero's friend, the live overworld plays the bank, the
+  editor loads / edits / simulates / searches / saves).
 
 ## Deviations from OVERWORLD.md (M1)
 

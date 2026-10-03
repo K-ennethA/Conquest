@@ -51,6 +51,7 @@ static func to_dict(state: StoryState) -> Dictionary:
 			"entry": String(state.respawn.get("entry", "")),
 		},
 		"flags": state.flags.duplicate(true),
+		"flag_times": state.flag_times.duplicate(true),
 		"party": party,
 		"bag": state.bag.duplicate(true),
 		"gold": state.gold,
@@ -63,6 +64,7 @@ static func to_dict(state: StoryState) -> Dictionary:
 		"wild": {"visit": state.visit_serial, "zones": state.wild.duplicate(true)},
 		"tier": state.tier,
 		"fallen": fallen,
+		"tracked_quest": state.tracked_quest,
 		"pending": {},
 	}
 
@@ -97,6 +99,10 @@ static func from_dict(data) -> Dictionary:
 	if flags is Dictionary:
 		for key in flags:
 			state.set_flag(String(key), flags[key])
+	# When each flag was set (story time: "3 rests since ..."; added within format 2). set_flag just
+	# stamped every flag with the load-time clocks -- replace them with the saved stamps; a flag with
+	# none (an older save) counts as set at the journey's start.
+	state.flag_times = StoryState.sanitize_flag_times(data.get("flag_times", {}), state.flags)
 
 	var party = data.get("party", [])
 	if party is Array:
@@ -167,6 +173,12 @@ static func from_dict(data) -> Dictionary:
 			if f.fallen_info.is_empty():
 				f.fallen_info = StoryPartyMember.sanitize_fallen({"kind": "battle"})
 			state.fallen.append(f)
+
+	# The quest pinned to the HUD tracker (added within format 2 -- an older save has none: the main
+	# quest is tracked). Kept as written: an id this build does not ship just falls back
+	# (QuestLog.tracked_entry), so no quest list is consulted here.
+	var pin = data.get("tracked_quest", "")
+	state.tracked_quest = String(pin).strip_edges() if pin is String else ""
 
 	return {"success": true, "state": state, "reason": ""}
 

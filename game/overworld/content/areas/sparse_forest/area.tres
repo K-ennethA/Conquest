@@ -1,42 +1,40 @@
 [gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
 
-[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_nbkj8"]
-[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_tcdbs"]
-[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_picba"]
-[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="4_kabky"]
-[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="5_xx1b6"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="6_7euxq"]
-[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="7_05ulf"]
-[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="8_078pq"]
-[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="9_3ky5a"]
-[ext_resource type="Resource" path="res://game/overworld/content/areas/sparse_forest/terrain.tres" id="10_oj3gq"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_44cu2"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_6hibq"]
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_nbkj8"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="4_tcdbs"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="5_picba"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="6_kabky"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="7_xx1b6"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/sparse_forest/terrain.tres" id="8_7euxq"]
 
-[sub_resource type="Resource" id="Resource_k0fs6"]
-script = ExtResource("2_tcdbs")
+[sub_resource type="Resource" id="Resource_05ulf"]
+script = ExtResource("2_6hibq")
 character_id = &"petalfang"
 weight = 2.0
 
-[sub_resource type="Resource" id="Resource_lxepw"]
-script = ExtResource("2_tcdbs")
+[sub_resource type="Resource" id="Resource_078pq"]
+script = ExtResource("2_6hibq")
 character_id = &"blightcap"
 weight = 2.0
 
-[sub_resource type="Resource" id="Resource_hjhvd"]
-script = ExtResource("2_tcdbs")
+[sub_resource type="Resource" id="Resource_3ky5a"]
+script = ExtResource("2_6hibq")
 character_id = &"mycothrall"
 weight = 1.5
 
-[sub_resource type="Resource" id="Resource_ae2hf"]
-script = ExtResource("2_tcdbs")
+[sub_resource type="Resource" id="Resource_oj3gq"]
+script = ExtResource("2_6hibq")
 character_id = &"tree_grunt"
 
-[sub_resource type="Resource" id="Resource_imohw"]
-script = ExtResource("1_nbkj8")
+[sub_resource type="Resource" id="Resource_k0fs6"]
+script = ExtResource("1_44cu2")
+table = Array[Resource]([SubResource("Resource_05ulf"), SubResource("Resource_078pq"), SubResource("Resource_3ky5a"), SubResource("Resource_oj3gq")])
 rate = 0.12
-table = Array[Resource]([SubResource("Resource_k0fs6"), SubResource("Resource_lxepw"), SubResource("Resource_hjhvd"), SubResource("Resource_ae2hf")])
 
-[sub_resource type="Resource" id="Resource_56w5p"]
-script = ExtResource("3_picba")
+[sub_resource type="Resource" id="Resource_lxepw"]
+script = ExtResource("3_nbkj8")
 text = "THE SPARSE FOREST
 West: Woodland Town.  East: Crownhaven."
 id = &"west_sign"
@@ -44,8 +42,8 @@ cell = Vector3i(2, 5, 0)
 display_name = "The Sparse Forest"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_ap5xq"]
-script = ExtResource("3_picba")
+[sub_resource type="Resource" id="Resource_hjhvd"]
+script = ExtResource("3_nbkj8")
 text = "THE SPARSE FOREST
 West: Woodland Town, a morning's walk.  East: Crownhaven's west gate.
 Mind the grass -- the forest's creatures are bolder than the Mossway's."
@@ -54,34 +52,16 @@ cell = Vector3i(25, 5, 0)
 display_name = "The Sparse Forest"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_jibkl"]
-script = ExtResource("4_kabky")
+[sub_resource type="Resource" id="Resource_ae2hf"]
+script = ExtResource("4_tcdbs")
 prop = "logs"
 footprint = Vector2i(2, 1)
 id = &"woodpile"
 cell = Vector3i(13, 3, 0)
 tint = Color(0.6, 0.44, 0.26, 1)
 
-[sub_resource type="Resource" id="Resource_sff5d"]
-script = ExtResource("5_xx1b6")
-speaker_id = &"npc_alder"
-speaker_name = "Woodsman Alder"
-side = &"right"
-text = "Sparse, they call it. Sparse! Every tree you see here, my grandfather planted, and every tree you don't, he cut. It's a garden, really."
-
-[sub_resource type="Resource" id="Resource_8canv"]
-script = ExtResource("5_xx1b6")
-speaker_id = &"npc_alder"
-speaker_name = "Woodsman Alder"
-side = &"right"
-text = "West of the town the woods close up for good -- the Deep Woods. Nobody plants those. Nobody cuts them, either."
-
-[sub_resource type="Resource" id="Resource_kcdgd"]
-script = ExtResource("6_7euxq")
-beats = Array[Resource]([SubResource("Resource_sff5d"), SubResource("Resource_8canv")])
-
-[sub_resource type="Resource" id="Resource_ku25u"]
-script = ExtResource("7_05ulf")
+[sub_resource type="Resource" id="Resource_imohw"]
+script = ExtResource("5_picba")
 speaker_id = &"npc_alder"
 speaker_name = "Woodsman Alder"
 figure = "villager"
@@ -89,18 +69,17 @@ id = &"alder"
 cell = Vector3i(15, 3, 0)
 display_name = "Woodsman Alder"
 tint = Color(0.4, 0.46, 0.28, 1)
-on_interact = Array[Resource]([SubResource("Resource_kcdgd")])
 
-[sub_resource type="Resource" id="Resource_expbx"]
-script = ExtResource("8_078pq")
+[sub_resource type="Resource" id="Resource_56w5p"]
+script = ExtResource("6_kabky")
 area_rect = Rect2i(0, 6, 1, 1)
 target_area = &"woodland_town"
 target_entry = &"east_road"
 id = &"west_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_pkgud"]
-script = ExtResource("8_078pq")
+[sub_resource type="Resource" id="Resource_ap5xq"]
+script = ExtResource("6_kabky")
 area_rect = Rect2i(27, 6, 1, 1)
 target_area = &"crownhaven"
 target_entry = &"west_gate"
@@ -108,13 +87,13 @@ id = &"east_exit"
 blocking = false
 
 [resource]
-script = ExtResource("9_3ky5a")
+script = ExtResource("7_xx1b6")
 area_id = &"sparse_forest"
 display_name = "The Sparse Forest"
-terrain = ExtResource("10_oj3gq")
+terrain = ExtResource("8_7euxq")
 kind = 1
 region_id = &"woodlands"
-world_map_pos = Vector2(0.41, 0.43)
+world_map_pos = Vector2(0.4, 0.4)
 entry_points = {
 "east": {
 "cell": [26, 6, 0],
@@ -125,8 +104,5 @@ entry_points = {
 "facing": "east"
 }
 }
-entities = Array[Resource]([SubResource("Resource_56w5p"), SubResource("Resource_ap5xq"), SubResource("Resource_jibkl"), SubResource("Resource_ku25u"), SubResource("Resource_expbx"), SubResource("Resource_pkgud")])
-encounter_zones = Array[Resource]([SubResource("Resource_imohw")])
-on_enter = Array[Resource]([])
-music_cue = &""
-lighting_preset_override = ""
+entities = Array[Resource]([SubResource("Resource_lxepw"), SubResource("Resource_hjhvd"), SubResource("Resource_ae2hf"), SubResource("Resource_imohw"), SubResource("Resource_56w5p"), SubResource("Resource_ap5xq")])
+encounter_zones = Array[Resource]([SubResource("Resource_k0fs6")])

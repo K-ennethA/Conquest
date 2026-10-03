@@ -5,12 +5,15 @@
 			"title": "The Road to Crownhaven",
 			"category": "main",
 			"summary": "Your journey begins. Say goodbye to home and find the royal researcher.",
+			"giver": "briony",
+			"location": "oakvale",
+			"area": "oakvale",
 			"start_flag": "",
 			"complete_flag": "opening.starter_received",
 			"steps": [
-				{"flag": "opening.sent_off", "text": "Talk to Briony at home, then take the east road."},
-				{"flag": "opening.arrived_crownhaven", "text": "Follow the Mossway east to Crownhaven."},
-				{"flag": "opening.starter_received", "text": "Find Researcher Linnea at the Royal Workshop."}
+				{"flag": "opening.sent_off", "text": "Talk to Briony at home, then take the east road.", "location": "oakvale", "area": "oakvale", "npc": "briony"},
+				{"flag": "opening.arrived_crownhaven", "text": "Follow the Mossway east to Crownhaven.", "location": "crownhaven", "area": "crownhaven"},
+				{"flag": "opening.starter_received", "text": "Find Researcher Linnea at the Royal Workshop.", "location": "crownhaven", "area": "crownhaven", "npc": "linnea"}
 			]
 		},
 		{
@@ -18,12 +21,15 @@
 			"title": "Smoke Over Oakvale",
 			"category": "main",
 			"summary": "Cindral raiders struck Crownhaven and fled west with the researcher. Oakvale lies in their path.",
+			"giver": "rowan",
+			"location": "oakvale",
+			"area": "oakvale_ruins",
 			"start_flag": "opening.attack",
 			"complete_flag": "opening.complete",
 			"steps": [
-				{"flag": "opening.ruins_seen", "text": "Chase the raiders west to Oakvale and see what is left."},
-				{"flag": "opening.first_fight_won", "text": "Stand with Sergeant Rowan against the raiders' rear guard."},
-				{"flag": "opening.complete", "text": "Speak with Rowan once the smoke clears."}
+				{"flag": "opening.ruins_seen", "text": "Chase the raiders west to Oakvale and see what is left.", "location": "oakvale", "area": "oakvale_ruins"},
+				{"flag": "opening.first_fight_won", "text": "Stand with Sergeant Rowan against the raiders' rear guard.", "location": "oakvale", "area": "oakvale_ruins", "npc": "rowan"},
+				{"flag": "opening.complete", "text": "Speak with Rowan once the smoke clears.", "location": "oakvale", "area": "oakvale_ruins", "npc": "rowan"}
 			]
 		},
 		{
@@ -31,10 +37,13 @@
 			"title": "Rowan's Charge",
 			"category": "main",
 			"summary": "The raiders took Linnea. Sergeant Rowan has the next lead.",
+			"giver": "rowan",
+			"location": "crownhaven",
+			"area": "crownhaven",
 			"start_flag": "act1.find_rowan",
 			"complete_flag": "act1.met_rowan",
 			"steps": [
-				{"flag": "act1.met_rowan", "text": "Find Sergeant Rowan at the Crownhaven barracks."}
+				{"flag": "act1.met_rowan", "text": "Find Sergeant Rowan at the Crownhaven barracks.", "location": "crownhaven", "area": "crownhaven", "npc": "rowan"}
 			]
 		},
 		{
@@ -42,11 +51,13 @@
 			"title": "Trouble on the Mossway",
 			"category": "side",
 			"summary": "Cutpurses hold the plank bridge over the brook.",
+			"location": "mossway",
+			"area": "mossway",
 			"start_flag": "act1.met_rowan",
 			"complete_flag": "mossway.ambush.cleared",
 			"steps": [
-				{"flag": "mossway.ambush.sprung", "text": "Cross the plank bridge on the Mossway."},
-				{"flag": "mossway.ambush.cleared", "text": "Beat the footpad and Cutpurse Nell."}
+				{"flag": "mossway.ambush.sprung", "text": "Cross the plank bridge on the Mossway.", "location": "mossway", "area": "mossway"},
+				{"flag": "mossway.ambush.cleared", "text": "Beat the footpad and Cutpurse Nell.", "location": "mossway", "area": "mossway", "npc": "nell"}
 			]
 		},
 		{
@@ -54,11 +65,14 @@
 			"title": "A Fellow Tester",
 			"category": "side",
 			"summary": "Lark, another first-batch tester, wants to measure herself against you.",
+			"giver": "lark",
+			"location": "crownhaven",
+			"area": "crownhaven",
 			"start_flag": "opening.complete",
 			"complete_flag": "rival.duel1",
 			"steps": [
-				{"flag": "rival.met", "text": "Look for Lark just inside Crownhaven's west gate."},
-				{"flag": "rival.duel1", "text": "Win or lose, finish your first duel with Lark."}
+				{"flag": "rival.met", "text": "Look for Lark just inside Crownhaven's south gate.", "location": "crownhaven", "area": "crownhaven", "npc": "lark"},
+				{"flag": "rival.duel1", "text": "Win or lose, finish your first duel with Lark.", "location": "crownhaven", "area": "crownhaven", "npc": "lark"}
 			]
 		},
 		{
@@ -66,11 +80,14 @@
 			"title": "The Crown Cup",
 			"category": "side",
 			"summary": "Four bouts, weakest first, ending against Champion Isolde.",
+			"giver": "arena_master",
+			"location": "crownhaven",
+			"area": "crownhaven",
 			"start_flag": "opening.complete",
 			"complete_flag": "arena.crown_cup.champion",
 			"steps": [
-				{"flag": "arena.crown_cup.run", "text": "Enter the cup with Arena Master Bex at the Crownhaven arena."},
-				{"flag": "arena.crown_cup.champion", "text": "Win every bout, finishing against Champion Isolde."}
+				{"flag": "arena.crown_cup.run", "text": "Enter the cup with Arena Master Bex at the Crownhaven arena.", "location": "crownhaven", "area": "crownhaven", "npc": "arena_master"},
+				{"flag": "arena.crown_cup.champion", "text": "Win every bout, finishing against Champion Isolde.", "location": "crownhaven", "area": "crownhaven", "npc": "isolde"}
 			]
 		}
 	]

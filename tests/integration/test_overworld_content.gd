@@ -92,7 +92,7 @@ func test_entries_and_actors_stand_on_walkable_ground() -> void:
 		for e in a.entity_list():
 			if e is NpcEntity or e is ChestEntity or e is SignEntity:
 				assert_true(g.is_terrain_passable(e.cell), "%s/%s stands on walkable ground" % [a.area_id, e.id])
-			if e is PropEntity and e.blocking:
+			if e is PropEntity and e.collision == "solid":
 				for c in e.cells():
 					assert_true(g.is_terrain_passable(c), "%s/%s: a blocking prop stands on open ground" % [a.area_id, e.id])
 
@@ -234,12 +234,31 @@ func test_the_ceremony_gives_the_starter_and_the_shard_then_the_raid() -> void:
 			flags.append((c as SetFlagCommand).key)
 		if c is WarpCommand:
 			warps.append(c)
-	assert_eq(joins.size(), 1, "the ceremony gives exactly one creature")
-	var starter: CharacterResource = CharacterLibrary.get_character((joins[0] as JoinPartyCommand).character_id)
-	assert_not_null(starter, "the starter is a real roster character")
+	# The owner's opening: you CHOOSE your starter among the Researcher's three test creatures -- one
+	# JoinParty per option of ONE choice, the default (Barkling) first.
+	var choices: Array = []
+	for c in cmds:
+		if c is ChoiceCommand:
+			choices.append(c)
+	assert_eq(choices.size(), 1, "the ceremony asks one question: which creature")
+	assert_eq(joins.size(), 3, "three test creatures to choose from")
+	assert_eq(String((joins[0] as JoinPartyCommand).character_id), "tree_grunt", "the default (first option) is Barkling")
+	for j in joins:
+		assert_not_null(CharacterLibrary.get_character((j as JoinPartyCommand).character_id), "%s is a real roster character" % j.character_id)
+		assert_eq((j as JoinPartyCommand).flag_on_join, "opening.starter_received", "whichever you pick receives the starter")
+	assert_true(flags.has("opening.starter_pick"), "the pick is remembered (opening.starter_pick)")
 	for f in ["key.bonding_shard", "opening.starter_received", "opening.attack", "opening.researcher_taken",
 			"opening.raiders_fled", "opening.chase"]:
 		assert_true(flags.has(f) or (joins[0] as JoinPartyCommand).flag_on_join == f, "the ceremony + raid set %s" % f)
+	for id in ["starter", "starter_2", "starter_3"]:
+		var st := ch.entity(id)
+		assert_not_null(st, "%s waits by the pylon" % id)
+		if st != null:
+			var during := StoryState.new()
+			during.set_flag("opening.ceremony", 1)
+			assert_true(st.is_present(during), "%s shows during the ceremony" % id)
+			during.set_flag("opening.starter_received", 1)
+			assert_false(st.is_present(during), "%s is gone once you have chosen" % id)
 	assert_eq(warps.size(), 1, "the raid ends in the chase to Oakvale")
 	assert_eq(String((warps[0] as WarpCommand).area_id), "oakvale_ruins", "to the burning village")
 	var raided := StoryState.new()
@@ -542,11 +561,15 @@ func test_world_map_positions_follow_the_owners_map() -> void:
 	var pos := {}
 	for l in atlas.locations:
 		pos[String(l.id)] = l.map_pos
-	# The map's landmarks, compass-checked: x grows east, y grows south.
-	assert_lt(pos["oakvale"].distance_to(Vector2(0.46, 0.67)), 0.025, "Oakvale (the Starting Village)")
-	assert_lt(pos["river_crossing"].distance_to(Vector2(0.58, 0.69)), 0.025, "River Crossing")
-	assert_lt(pos["crownhaven"].distance_to(Vector2(0.49, 0.47)), 0.025, "Crownhaven (the Central Kingdom)")
-	assert_lt(pos["woodland_town"].distance_to(Vector2(0.34, 0.41)), 0.025, "Woodland Town")
+	# The map's landmarks, compass-checked: x grows east, y grows south. Each position sits on the
+	# place's ART (the houses / keep / cave the painting draws just above its label), so the world
+	# map's marker covers the drawing, not the label text (docs/screenshots/world_map/map_alignment.png).
+	assert_lt(pos["oakvale"].distance_to(Vector2(0.426, 0.63)), 0.025, "Oakvale (the Starting Village)")
+	assert_lt(pos["river_crossing"].distance_to(Vector2(0.544, 0.655)), 0.025, "River Crossing")
+	assert_lt(pos["crownhaven"].distance_to(Vector2(0.498, 0.41)), 0.025, "Crownhaven (the Central Kingdom)")
+	assert_lt(pos["woodland_town"].distance_to(Vector2(0.301, 0.384)), 0.025, "Woodland Town")
+	assert_lt(pos["beach_village"].distance_to(Vector2(0.678, 0.685)), 0.025, "Beach Village")
+	assert_lt(pos["thieves_guild"].distance_to(Vector2(0.275, 0.478)), 0.025, "the Thieves Guild's cave")
 	assert_gt(pos["oakvale"].y, pos["crownhaven"].y, "Oakvale is south of the capital")
 	assert_gt(pos["river_crossing"].x, pos["oakvale"].x, "River Crossing is east of Oakvale")
 	assert_lt(pos["woodland_town"].x, pos["crownhaven"].x, "Woodland Town is west of the capital")
@@ -610,9 +633,10 @@ func test_river_crossing_is_a_real_river_with_one_stone_bridge() -> void:
 	var kinds := _prop_kinds(rc)
 	assert_gte(int(kinds.get("house", 0)), 3, "a toll-house and cottages")
 	assert_not_null(rc.entity("wayshrine"), "a Wayshrine")
-	# Hobb tells the same story twice (Marra warns you in Oakvale).
+	# Hobb tells the same story twice (Marra warns you in Oakvale) -- his talk is in the dialogue bank.
 	var older: int = 0
-	for c in _flatten((rc.entity("hobb") as NpcEntity).on_interact):
+	var say: Array = (rc.entity("hobb") as NpcEntity).interact_script("river_crossing", StoryFixture.sent_off(StoryState.new()))
+	for c in _flatten(say):
 		if c is SayCommand:
 			for b in (c as SayCommand).beats:
 				if String((b as StoryBeat).text).to_lower().contains("older than the kingdom"):
@@ -712,7 +736,7 @@ func test_everyone_can_be_reached_at_every_stage_of_the_story() -> void:
 			var s: StoryState = stages[stage]
 			var reach := _reach(a, s)
 			for e in a.present_entities(s):
-				if not e.is_interactable() or not e.has_actor():
+				if not e.is_interactable_in(String(a.area_id)) or not e.has_actor():
 					continue
 				var ok := false
 				for c in e.cells():
