@@ -514,8 +514,21 @@ func try_step(dir: Vector2i) -> bool:
 
 func _await_arrival(to: Vector3i) -> void:
 	await player.walk_finished
+	# The journey menu (or a pause screen) can open while the step is under way -- the step itself
+	# is already committed. The ARRIVAL (warps, triggers, trainers, wild creatures, the grass roll)
+	# waits for it to close, so no battle or area change ever starts behind a menu. _moving stays
+	# true meanwhile: no further step can begin.
+	while is_inside_tree() and _overlay_open():
+		await get_tree().process_frame
+	if not is_inside_tree():
+		return
 	_moving = false
 	_on_arrived(to)
+
+
+## An overlay owns the input right now: the journey menu, or any screen of the overlay group.
+func _overlay_open() -> bool:
+	return (journey != null and journey.is_open()) or InputActions.gameplay_input_blocked(get_tree())
 
 
 ## True while the hero is mid-step.
@@ -597,7 +610,7 @@ func _check_trainers() -> bool:
 func _roll_encounter(cell: Vector3i) -> bool:
 	# Wild creatures leave a traveller with no partner alone (the opening walks the Mossway before
 	# the shard ceremony) -- and a duel with no one to field could not start anyway.
-	if not _can_fight_wild():
+	if not _can_fight_wild() or story.is_script_running():
 		return false
 	var tid: StringName = grid.tile_id_at(cell)
 	for z in area.zones():
@@ -965,7 +978,7 @@ func refresh_world() -> void:
 		var e: OverworldEntity = area.entity(id)
 		if e == null:
 			continue
-		if not e.is_present(_state) or not e.blocking:
+		if not e.is_present(_state) or not e.is_blocking():
 			grid.clear_blocker(actor.cell)
 	if wild != null:
 		wild.register_blockers()

@@ -92,7 +92,7 @@ func test_entries_and_actors_stand_on_walkable_ground() -> void:
 		for e in a.entity_list():
 			if e is NpcEntity or e is ChestEntity or e is SignEntity:
 				assert_true(g.is_terrain_passable(e.cell), "%s/%s stands on walkable ground" % [a.area_id, e.id])
-			if e is PropEntity and e.blocking:
+			if e is PropEntity and e.collision == "solid":
 				for c in e.cells():
 					assert_true(g.is_terrain_passable(c), "%s/%s: a blocking prop stands on open ground" % [a.area_id, e.id])
 

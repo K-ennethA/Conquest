@@ -22,7 +22,9 @@ func build_request(ctx: ScriptContext) -> BattleRequest:
 		r = entry.to_request(area_id if not area_id.is_empty() else ctx.area_id, id_kind, opening)
 	elif spec != null:
 		r = spec.to_request(source, encounter_id)
-	if r != null:
+	# A TACTICAL encounter row (an authored board) stays tactical: only everything else is a duel.
+	var tactical_row: bool = entry != null and entry.kind == EncounterEntry.Kind.TACTICAL and entry.battle != null
+	if r != null and not tactical_row:
 		r.kind = BattleRequest.KIND_DUEL
 	return r
 

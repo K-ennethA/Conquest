@@ -69,25 +69,25 @@ func test_blocking_entities_and_visible_if() -> void:
 	assert_true(g.is_walkable(Vector3i(2, 2, 0)), "once hidden by visible_if it no longer blocks")
 
 
-func test_props_block_their_whole_footprint_only_when_blocking() -> void:
+func test_props_block_their_whole_footprint_by_kind() -> void:
 	var stall := PropEntity.new()
 	stall.id = &"stall"
 	stall.prop = "stall"
 	stall.cell = Vector3i(0, 3, 0)
 	stall.footprint = Vector2i(2, 1)
-	stall.blocking = true
 	var roof := PropEntity.new()
 	roof.id = &"roof"
-	roof.prop = "house"
+	roof.prop = "crops"
 	roof.cell = Vector3i(4, 3, 0)
 	roof.footprint = Vector2i(2, 2)
-	assert_false(roof.blocking, "scenery is not blocking by default")
+	assert_true(stall.is_blocking(), "a stall is solid by kind")
+	assert_false(roof.is_blocking(), "walk-over decor is not")
 	assert_eq(stall.cells().size(), 2, "a prop occupies its footprint")
 	var a := _area([stall, roof])
 	var g := OverworldGrid.build(a, StoryState.new())
-	assert_false(g.is_walkable(Vector3i(0, 3, 0)), "a blocking stall blocks its first cell")
+	assert_false(g.is_walkable(Vector3i(0, 3, 0)), "a stall blocks its first cell")
 	assert_false(g.is_walkable(Vector3i(1, 3, 0)), "and every other cell of its footprint")
-	assert_true(g.is_walkable(Vector3i(5, 4, 0)), "a roof over open ground does not block")
+	assert_true(g.is_walkable(Vector3i(5, 4, 0)), "crops over open ground do not block")
 	assert_eq(a.validate().filter(func(i: String) -> bool: return i.contains("stall") or i.contains("roof")),
 		[], "known prop kinds validate")
 	var bad := PropEntity.new()

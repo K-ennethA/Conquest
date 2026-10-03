@@ -692,7 +692,9 @@ func _prop(id: String, kind: String, cell: Vector2i, footprint: Vector2i, tint: 
 	p.cell = Vector3i(cell.x, cell.y, 0)
 	p.footprint = footprint
 	p.tint = tint
-	p.blocking = blocking
+	# Solidity is per KIND (PropEntity.SOLID_KINDS); an explicit `true` on a walk-over kind makes it solid.
+	if blocking and not PropEntity.SOLID_KINDS.has(kind):
+		p.collision = "solid"
 	p.visible_if = visible_if
 	return p
 
@@ -1112,15 +1114,15 @@ func _oak_scenery(ruined: bool) -> Array:
 		out.append(_prop("field", "crops", OAK_FIELD.position, OAK_FIELD.size, Color(0.4, 0.6, 0.26)))
 		out.append(_prop("garden", "crops", OAK_GARDEN.position, OAK_GARDEN.size, Color(0.3, 0.55, 0.3)))
 		out.append(_prop("field_fence", "fence", Vector2i(14, 12), Vector2i(5, 1), Color(0.5, 0.36, 0.22), true))
-		out.append(_prop("haystack", "haystack", Vector2i(19, 14), Vector2i.ONE, Color.WHITE, true))
+		out.append(_prop("haystack", "haystack", Vector2i(19, 13), Vector2i.ONE, Color.WHITE, true))
 		out.append(_prop("cart", "cart", Vector2i(19, 12), Vector2i.ONE, Color(0.86, 0.72, 0.38), true))
 		out.append(_prop("barrels", "barrels", Vector2i(7, 14), Vector2i.ONE, Color.WHITE, true))
 		# Farming-village flavour: a scarecrow in the field, a second haystack, a market-day stall
 		# on the plaza, lamps at its corners, a barrel by the inn door and a fence round the pond.
 		out.append(_prop("scarecrow", "scarecrow", Vector2i(16, 10), Vector2i.ONE, Color(0.5, 0.36, 0.2), true))
-		out.append(_prop("haystack_2", "haystack", Vector2i(19, 15), Vector2i.ONE, Color.WHITE, true))
+		out.append(_prop("haystack_2", "haystack", Vector2i(19, 14), Vector2i.ONE, Color.WHITE, true))
 		out.append(_prop("market_stall", "stall", Vector2i(11, 7), Vector2i(2, 1), Color(0.78, 0.6, 0.22), true))
-		for lc in [Vector2i(7, 6), Vector2i(13, 6), Vector2i(7, 12), Vector2i(13, 12)]:
+		for lc in [Vector2i(7, 6), Vector2i(14, 6), Vector2i(7, 12), Vector2i(13, 12)]:
 			out.append(_prop("lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(1.0, 0.82, 0.45), true))
 		out.append(_prop("inn_barrels", "barrels", Vector2i(14, 7), Vector2i.ONE, Color.WHITE, true))
 		out.append(_prop("pond_fence", "fence", Vector2i(6, 5), Vector2i(2, 1), Color(0.5, 0.36, 0.22), true))
@@ -1638,7 +1640,7 @@ func _build_river_crossing() -> void:
 	for lc in [Vector2i(RC_BRIDGE_X0 - 1, RC_RIVER_Y0 - 1), Vector2i(RC_BRIDGE_X1 + 1, RC_RIVER_Y0 - 1),
 			Vector2i(RC_BRIDGE_X0 - 1, RC_RIVER_Y1 + 1)]:
 		ents.append(_prop("bridge_lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(1.0, 0.82, 0.45), true))
-	ents.append(_prop("bank_fence", "fence", Vector2i(2, RC_RIVER_Y1 + 1), Vector2i(6, 1), Color(0.5, 0.36, 0.22), true))
+	ents.append(_prop("bank_fence", "fence", Vector2i(3, RC_RIVER_Y1 + 1), Vector2i(6, 1), Color(0.5, 0.36, 0.22), true))
 	ents.append(_prop("toll_barrels", "barrels", Vector2i(RC_TOLL.end.x, RC_TOLL.position.y + 1), Vector2i.ONE, Color.WHITE, true))
 	ents.append(_prop("coast_cart", "cart", Vector2i(21, RC_ROAD_Y - 1), Vector2i.ONE, Color(0.7, 0.58, 0.34), true))
 	ents.append(_shrine(RC_SHRINE, "River Crossing Wayshrine"))
@@ -1920,9 +1922,11 @@ func _ch_scenery() -> Array:
 	out.append(_prop("east_gatehouse", "gate", Vector2i(CH_EAST_GATE.x, CH_EAST_GATE.y - 1), Vector2i(1, 3), ALDERMERE_BLUE))
 	out.append(_prop("south_gatehouse", "gate", Vector2i(CH_SOUTH_GATE.x - 1, CH_SOUTH_GATE.y), Vector2i(3, 1), ALDERMERE_BLUE))
 	out.append(_prop("harbour_gatehouse", "gate", Vector2i(CH_HARBOUR_GATE.x, CH_HARBOUR_GATE.y - 1), Vector2i(1, 3), ALDERMERE_BLUE))
-	# Lamps at the ends of the river bridge.
-	for lc in [Vector2i(CH_BRIDGE_X0 - 1, CH_WALL.end.y), Vector2i(CH_BRIDGE_X1 + 1, CH_WALL.end.y),
-			Vector2i(CH_BRIDGE_X0 - 1, CH_RIVER_Y1 + 1), Vector2i(CH_BRIDGE_X1 + 1, CH_RIVER_Y1 + 1)]:
+	# Lamps at the four corners of the river bridge's deck. (They stood on the banks, one cell off the bridge ends --
+	# but lamps are solid and each bank is a one-cell strip, so a lamp there cut the strip in two and walled the south
+	# gate's sign into its nook. On the deck's edge the middle lane stays open.)
+	for lc in [Vector2i(CH_BRIDGE_X0, CH_RIVER_Y0), Vector2i(CH_BRIDGE_X1, CH_RIVER_Y0),
+			Vector2i(CH_BRIDGE_X0, CH_RIVER_Y1), Vector2i(CH_BRIDGE_X1, CH_RIVER_Y1)]:
 		out.append(_prop("bridge_lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(1.0, 0.82, 0.45), true))
 	# The new districts: a gabled inn, a gold-roofed guildhall, a blue-slate chapel, a forge.
 	out.append(_prop("gilded_stag", "house", CH_INN.position, CH_INN.size, Color(0.62, 0.42, 0.16)))
@@ -1935,7 +1939,9 @@ func _ch_scenery() -> Array:
 	out.append(_prop("guild_banner_e", "banner", Vector2i(CH_GUILD.end.x, CH_GUILD.end.y - 1), Vector2i.ONE, Color(0.72, 0.55, 0.15), true))
 	out.append(_prop("inn_barrels", "barrels", Vector2i(6, 14), Vector2i.ONE, Color.WHITE, true))
 	# Street lamps: the gate street, the keep courtyard and the workshop yard.
-	for lc in [Vector2i(5, 14), Vector2i(12, 10), Vector2i(18, 10), Vector2i(20, 14), Vector2i(25, 9), Vector2i(10, 5)]:
+	# (The north-gate lamp stands in the barracks-side column at (8, 6), not mid-corridor at (10, 5): lamps are
+	# solid, and with the two signs there it left no way from the gate to the town.)
+	for lc in [Vector2i(5, 14), Vector2i(12, 10), Vector2i(18, 10), Vector2i(20, 14), Vector2i(26, 9), Vector2i(8, 6)]:
 		out.append(_prop("lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(1.0, 0.82, 0.45), true))
 	# The chapel garden: standing stones for the fallen star, and the park's trees kept as shade.
 	out.append(_prop("chapel_lamp", "lamp", Vector2i(24, 12), Vector2i.ONE, Color(0.7, 0.9, 1.0), true))
@@ -1946,7 +1952,7 @@ func _ch_scenery() -> Array:
 		out.append(_prop("stall_%d" % i, "stall", s.position, s.size, awnings[i], true))
 	for c in [Vector2i(5, 12), Vector2i(8, 14), Vector2i(10, 10), Vector2i(20, 10)]:
 		out.append(_prop("banner_%d_%d" % [c.x, c.y], "banner", c, Vector2i.ONE, ALDERMERE_BLUE, true))
-	out.append(_prop("dummy_a", "dummy", Vector2i(4, 8), Vector2i.ONE, Color.WHITE, true))
+	out.append(_prop("dummy_a", "dummy", Vector2i(4, 7), Vector2i.ONE, Color.WHITE, true))
 	out.append(_prop("dummy_b", "dummy", Vector2i(8, 8), Vector2i.ONE, Color.WHITE, true))
 	out.append(_prop("barracks_barrels", "barrels", Vector2i(8, 10), Vector2i.ONE, Color.WHITE, true))
 	out.append(_prop("pylon", "crystal", CH_PYLON, Vector2i.ONE, Color(0.5, 0.92, 1.0), true))
@@ -2943,7 +2949,7 @@ func _wt_scenery() -> Array:
 		out.append(_prop("cabin_%d" % i, "cabin", r.position, r.size, [moss, Color(0.4, 0.34, 0.24)][i % 2]))
 	# The lumber yard: stacked logs, a hand cart, barrels.
 	out.append(_prop("logs_a", "logs", Vector2i(17, 15), Vector2i(3, 1), Color(0.62, 0.45, 0.26), true))
-	out.append(_prop("logs_b", "logs", Vector2i(17, 17), Vector2i(3, 1), Color(0.56, 0.4, 0.24), true))
+	out.append(_prop("logs_b", "logs", Vector2i(18, 17), Vector2i(3, 1), Color(0.56, 0.4, 0.24), true))
 	out.append(_prop("logs_c", "logs", Vector2i(20, 19), Vector2i(3, 1), Color(0.66, 0.5, 0.3), true))
 	out.append(_prop("logs_d", "logs", Vector2i(21, 15), Vector2i(2, 1), Color(0.6, 0.44, 0.26), true))
 	out.append(_prop("timber_cart", "cart", Vector2i(21, 17), Vector2i.ONE, Color(0.55, 0.4, 0.22), true))
@@ -2951,8 +2957,10 @@ func _wt_scenery() -> Array:
 	# The herb garden, the archery range, the camp fire.
 	out.append(_prop("herb_garden", "crops", WT_GARDEN.position, WT_GARDEN.size, Color(0.28, 0.5, 0.34)))
 	out.append(_prop("garden_fence", "fence", Vector2i(3, 16), Vector2i(3, 1), Color(0.45, 0.33, 0.2), true))
-	out.append(_prop("target_a", "dummy", Vector2i(3, 8), Vector2i.ONE, Color.WHITE, true))
-	out.append(_prop("target_b", "dummy", Vector2i(5, 8), Vector2i.ONE, Color.WHITE, true))
+	# (The two targets stand one row up, either side of the archer at (4, 7): dummies are solid, and at (3, 8) / (5, 8)
+	# they sealed the cell in front of the archer -- the range itself -- off on all four sides.)
+	out.append(_prop("target_a", "dummy", Vector2i(3, 7), Vector2i.ONE, Color.WHITE, true))
+	out.append(_prop("target_b", "dummy", Vector2i(5, 7), Vector2i.ONE, Color.WHITE, true))
 	out.append(_prop("campfire", "fire", Vector2i(13, 19), Vector2i.ONE, Color.WHITE, true))
 	# The square: lamps at its corners, the Wardens' green banners at the Lodge path, a well.
 	for lc in [Vector2i(10, 11), Vector2i(16, 11), Vector2i(10, 14), Vector2i(16, 14), Vector2i(8, 11), Vector2i(8, 13)]:
