@@ -1,269 +1,280 @@
 [gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
 
-[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_vdpbv"]
-[ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="2_a2lir"]
-[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_1aipj"]
-[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="4_wrcc3"]
-[ext_resource type="Script" path="res://game/overworld/data/ShopEntity.gd" id="5_mqkfy"]
-[ext_resource type="Resource" path="res://game/overworld/content/shops/woodland_trader.tres" id="6_n63fb"]
-[ext_resource type="Script" path="res://game/overworld/data/ChestEntity.gd" id="7_6u3lw"]
-[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="8_rf7n4"]
-[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="9_2rb6d"]
-[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="10_bbcff"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="11_wyfs0"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="12_50ekr"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="13_2jvbe"]
-[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="14_b2e5w"]
-[ext_resource type="Resource" path="res://game/overworld/content/areas/woodland_town/terrain.tres" id="15_ny8je"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_a2lir"]
+[ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="2_1aipj"]
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_wrcc3"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="4_mqkfy"]
+[ext_resource type="Script" path="res://game/overworld/data/ShopEntity.gd" id="5_n63fb"]
+[ext_resource type="Resource" path="res://game/overworld/content/shops/woodland_trader.tres" id="6_6u3lw"]
+[ext_resource type="Script" path="res://game/overworld/data/ChestEntity.gd" id="7_rf7n4"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="8_2rb6d"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="9_bbcff"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="10_wyfs0"]
+[ext_resource type="Script" path="res://game/overworld/data/DoorEntity.gd" id="11_50ekr"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="12_2jvbe"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="13_b2e5w"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="14_ny8je"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="15_x2ou8"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/woodland_town/terrain.tres" id="16_evs08"]
 
-[sub_resource type="Resource" id="Resource_x2ou8"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_7y4ia"]
+script = ExtResource("1_a2lir")
 prop = "cabin"
 footprint = Vector2i(6, 3)
+enterable = true
+door_offset = Vector2i(3, 2)
 id = &"wardens_lodge"
 cell = Vector3i(10, 6, 0)
 tint = Color(0.24, 0.4, 0.26, 1)
 
-[sub_resource type="Resource" id="Resource_evs08"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_74b4b"]
+script = ExtResource("1_a2lir")
 prop = "cabin"
 footprint = Vector2i(4, 3)
+enterable = true
+door_offset = Vector2i(2, 2)
 id = &"stumped_hart"
 cell = Vector3i(18, 8, 0)
 tint = Color(0.5, 0.3, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_7y4ia"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_jfxso"]
+script = ExtResource("1_a2lir")
 prop = "cabin"
 footprint = Vector2i(3, 2)
+enterable = true
+door_offset = Vector2i(2, 1)
 id = &"trading_post"
 cell = Vector3i(22, 9, 0)
 tint = Color(0.36, 0.36, 0.24, 1)
 
-[sub_resource type="Resource" id="Resource_74b4b"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_kvu8g"]
+script = ExtResource("1_a2lir")
 prop = "smithy"
+enterable = true
+door_offset = Vector2i(0, 1)
 id = &"forge"
 cell = Vector3i(25, 9, 0)
 tint = Color(0.3, 0.26, 0.24, 1)
 
-[sub_resource type="Resource" id="Resource_jfxso"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_bh2qa"]
+script = ExtResource("1_a2lir")
 prop = "cabin"
 footprint = Vector2i(4, 3)
 id = &"sawmill"
 cell = Vector3i(23, 15, 0)
 tint = Color(0.42, 0.32, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_kvu8g"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_yqa1r"]
+script = ExtResource("1_a2lir")
 prop = "cabin"
 footprint = Vector2i(3, 2)
+enterable = true
+door_offset = Vector2i(2, 1)
 id = &"herb_hut"
 cell = Vector3i(3, 9, 0)
 tint = Color(0.3, 0.5, 0.3, 1)
 
-[sub_resource type="Resource" id="Resource_bh2qa"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_b76f3"]
+script = ExtResource("1_a2lir")
 prop = "cabin"
 footprint = Vector2i(3, 2)
 id = &"hunters_lodge"
 cell = Vector3i(3, 5, 0)
 tint = Color(0.4, 0.34, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_yqa1r"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_pehgx"]
+script = ExtResource("1_a2lir")
 prop = "cabin"
 footprint = Vector2i(3, 2)
 id = &"cabin_0"
 cell = Vector3i(10, 16, 0)
 tint = Color(0.3, 0.42, 0.24, 1)
 
-[sub_resource type="Resource" id="Resource_b76f3"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_oeal2"]
+script = ExtResource("1_a2lir")
 prop = "cabin"
 footprint = Vector2i(3, 2)
 id = &"cabin_1"
 cell = Vector3i(14, 16, 0)
 tint = Color(0.4, 0.34, 0.24, 1)
 
-[sub_resource type="Resource" id="Resource_pehgx"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_xt4m5"]
+script = ExtResource("1_a2lir")
 prop = "logs"
 footprint = Vector2i(3, 1)
 id = &"logs_a"
 cell = Vector3i(17, 15, 0)
 tint = Color(0.62, 0.45, 0.26, 1)
 
-[sub_resource type="Resource" id="Resource_oeal2"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_c6xwg"]
+script = ExtResource("1_a2lir")
 prop = "logs"
 footprint = Vector2i(3, 1)
 id = &"logs_b"
 cell = Vector3i(18, 17, 0)
 tint = Color(0.56, 0.4, 0.24, 1)
 
-[sub_resource type="Resource" id="Resource_xt4m5"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_5ktu5"]
+script = ExtResource("1_a2lir")
 prop = "logs"
 footprint = Vector2i(3, 1)
 id = &"logs_c"
 cell = Vector3i(20, 19, 0)
 tint = Color(0.66, 0.5, 0.3, 1)
 
-[sub_resource type="Resource" id="Resource_c6xwg"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_ih22u"]
+script = ExtResource("1_a2lir")
 prop = "logs"
 footprint = Vector2i(2, 1)
 id = &"logs_d"
 cell = Vector3i(21, 15, 0)
 tint = Color(0.6, 0.44, 0.26, 1)
 
-[sub_resource type="Resource" id="Resource_5ktu5"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_hnhof"]
+script = ExtResource("1_a2lir")
 prop = "cart"
 footprint = Vector2i(1, 1)
 id = &"timber_cart"
 cell = Vector3i(21, 17, 0)
 tint = Color(0.55, 0.4, 0.22, 1)
 
-[sub_resource type="Resource" id="Resource_ih22u"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_mo0v2"]
+script = ExtResource("1_a2lir")
 prop = "barrels"
 footprint = Vector2i(1, 1)
 id = &"yard_barrels"
 cell = Vector3i(22, 18, 0)
 tint = Color(1, 1, 1, 1)
 
-[sub_resource type="Resource" id="Resource_hnhof"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_aapqm"]
+script = ExtResource("1_a2lir")
 prop = "crops"
 footprint = Vector2i(3, 2)
 id = &"herb_garden"
 cell = Vector3i(3, 14, 0)
 tint = Color(0.28, 0.5, 0.34, 1)
 
-[sub_resource type="Resource" id="Resource_mo0v2"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_1g1ld"]
+script = ExtResource("1_a2lir")
 prop = "fence"
 footprint = Vector2i(3, 1)
 id = &"garden_fence"
 cell = Vector3i(3, 16, 0)
 tint = Color(0.45, 0.33, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_aapqm"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_7thhs"]
+script = ExtResource("1_a2lir")
 prop = "dummy"
 footprint = Vector2i(1, 1)
 id = &"target_a"
 cell = Vector3i(3, 7, 0)
 tint = Color(1, 1, 1, 1)
 
-[sub_resource type="Resource" id="Resource_1g1ld"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_tg737"]
+script = ExtResource("1_a2lir")
 prop = "dummy"
 footprint = Vector2i(1, 1)
 id = &"target_b"
 cell = Vector3i(5, 7, 0)
 tint = Color(1, 1, 1, 1)
 
-[sub_resource type="Resource" id="Resource_7thhs"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_5mlgd"]
+script = ExtResource("1_a2lir")
 prop = "fire"
 footprint = Vector2i(1, 1)
 id = &"campfire"
 cell = Vector3i(13, 19, 0)
 tint = Color(1, 1, 1, 1)
 
-[sub_resource type="Resource" id="Resource_tg737"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_thqy0"]
+script = ExtResource("1_a2lir")
 prop = "lamp"
 footprint = Vector2i(1, 1)
 id = &"lamp_10_11"
 cell = Vector3i(10, 11, 0)
 tint = Color(1, 0.78, 0.4, 1)
 
-[sub_resource type="Resource" id="Resource_5mlgd"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_gb8y8"]
+script = ExtResource("1_a2lir")
 prop = "lamp"
 footprint = Vector2i(1, 1)
 id = &"lamp_16_11"
 cell = Vector3i(16, 11, 0)
 tint = Color(1, 0.78, 0.4, 1)
 
-[sub_resource type="Resource" id="Resource_thqy0"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_eu2i4"]
+script = ExtResource("1_a2lir")
 prop = "lamp"
 footprint = Vector2i(1, 1)
 id = &"lamp_10_14"
 cell = Vector3i(10, 14, 0)
 tint = Color(1, 0.78, 0.4, 1)
 
-[sub_resource type="Resource" id="Resource_gb8y8"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_anhhy"]
+script = ExtResource("1_a2lir")
 prop = "lamp"
 footprint = Vector2i(1, 1)
 id = &"lamp_16_14"
 cell = Vector3i(16, 14, 0)
 tint = Color(1, 0.78, 0.4, 1)
 
-[sub_resource type="Resource" id="Resource_eu2i4"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_e6wty"]
+script = ExtResource("1_a2lir")
 prop = "lamp"
 footprint = Vector2i(1, 1)
 id = &"lamp_8_11"
 cell = Vector3i(8, 11, 0)
 tint = Color(1, 0.78, 0.4, 1)
 
-[sub_resource type="Resource" id="Resource_anhhy"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_50364"]
+script = ExtResource("1_a2lir")
 prop = "lamp"
 footprint = Vector2i(1, 1)
 id = &"lamp_8_13"
 cell = Vector3i(8, 13, 0)
 tint = Color(1, 0.78, 0.4, 1)
 
-[sub_resource type="Resource" id="Resource_e6wty"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_rljtt"]
+script = ExtResource("1_a2lir")
 prop = "banner"
 footprint = Vector2i(1, 1)
 id = &"banner_w"
 cell = Vector3i(11, 9, 0)
 tint = Color(0.24, 0.44, 0.28, 1)
 
-[sub_resource type="Resource" id="Resource_50364"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_i31na"]
+script = ExtResource("1_a2lir")
 prop = "banner"
 footprint = Vector2i(1, 1)
 id = &"banner_e"
 cell = Vector3i(14, 9, 0)
 tint = Color(0.24, 0.44, 0.28, 1)
 
-[sub_resource type="Resource" id="Resource_rljtt"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_6nloy"]
+script = ExtResource("1_a2lir")
 prop = "well"
 footprint = Vector2i(1, 1)
 id = &"well"
 cell = Vector3i(15, 10, 0)
 tint = Color(0.3, 0.38, 0.22, 1)
 
-[sub_resource type="Resource" id="Resource_i31na"]
-script = ExtResource("1_vdpbv")
+[sub_resource type="Resource" id="Resource_wdowa"]
+script = ExtResource("1_a2lir")
 prop = "logs"
 footprint = Vector2i(1, 1)
 id = &"woodpile_inn"
 cell = Vector3i(16, 8, 0)
 tint = Color(0.58, 0.42, 0.24, 1)
 
-[sub_resource type="Resource" id="Resource_6nloy"]
-script = ExtResource("2_a2lir")
+[sub_resource type="Resource" id="Resource_r2i4f"]
+script = ExtResource("2_1aipj")
 id = &"wayshrine"
 cell = Vector3i(13, 13, 0)
 display_name = "Woodland Wayshrine"
 tint = Color(0.55, 0.92, 0.62, 1)
 
-[sub_resource type="Resource" id="Resource_wdowa"]
-script = ExtResource("3_1aipj")
+[sub_resource type="Resource" id="Resource_o7ttn"]
+script = ExtResource("3_wrcc3")
 text = "WOODLAND TOWN
 Timber, tolls and tall tales.
 East: the Sparse Forest and Crownhaven.  West: Deepwood Village (road closed).
@@ -273,8 +284,8 @@ cell = Vector3i(26, 13, 0)
 display_name = "Woodland Town"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_r2i4f"]
-script = ExtResource("3_1aipj")
+[sub_resource type="Resource" id="Resource_m2cea"]
+script = ExtResource("3_wrcc3")
 text = "NORTH: FROSTPEAK VILLAGE
 The high trail, under the Snowy Peaks. Closed till the thaw -- by order of the Wardens."
 id = &"north_trail_sign"
@@ -282,8 +293,8 @@ cell = Vector3i(16, 2, 0)
 display_name = "The High Trail"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_o7ttn"]
-script = ExtResource("3_1aipj")
+[sub_resource type="Resource" id="Resource_2j6rj"]
+script = ExtResource("3_wrcc3")
 text = "THE WARDENS' LODGE
 Tolls, maps, and the loan of a lantern. Ask for Warden Hale."
 id = &"lodge_sign"
@@ -291,8 +302,8 @@ cell = Vector3i(10, 9, 0)
 display_name = "The Wardens' Lodge"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_m2cea"]
-script = ExtResource("3_1aipj")
+[sub_resource type="Resource" id="Resource_crl2q"]
+script = ExtResource("3_wrcc3")
 text = "THE STUMPED HART
 A stump for a stool, a stag for a sign. Venison pie daily."
 id = &"inn_sign"
@@ -300,8 +311,8 @@ cell = Vector3i(18, 11, 0)
 display_name = "The Stumped Hart"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_2j6rj"]
-script = ExtResource("3_1aipj")
+[sub_resource type="Resource" id="Resource_7uahq"]
+script = ExtResource("3_wrcc3")
 text = "HAMMOND & DAUGHTERS -- LUMBER
 Cut green, sold dry.
 Do not lean on the stacks."
@@ -310,8 +321,8 @@ cell = Vector3i(18, 13, 0)
 display_name = "Lumber Yard"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_crl2q"]
-script = ExtResource("3_1aipj")
+[sub_resource type="Resource" id="Resource_b8d28"]
+script = ExtResource("3_wrcc3")
 text = "WEST: DEEPWOOD VILLAGE
 The road is closed by the Wardens. Ask at the Lodge."
 id = &"deepwood_sign"
@@ -319,8 +330,8 @@ cell = Vector3i(2, 13, 0)
 display_name = "To Deepwood"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_7uahq"]
-script = ExtResource("3_1aipj")
+[sub_resource type="Resource" id="Resource_2j0bs"]
+script = ExtResource("3_wrcc3")
 text = "A hand-lettered board nailed to a root:
 \"NOT A ROAD. Not a trail. Not your business.\""
 id = &"trail_sign"
@@ -328,8 +339,8 @@ cell = Vector3i(5, 19, 0)
 display_name = "The South Trail"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_b8d28"]
-script = ExtResource("3_1aipj")
+[sub_resource type="Resource" id="Resource_tg31k"]
+script = ExtResource("3_wrcc3")
 text = "A knee-high stone, furred with moss and scored with old marks. Fresh flowers lie before it. It hums very faintly, like a held note."
 look = "stone"
 id = &"standing_stone"
@@ -337,8 +348,8 @@ cell = Vector3i(3, 17, 0)
 display_name = "The Starfall Stone"
 tint = Color(0.55, 0.9, 0.6, 1)
 
-[sub_resource type="Resource" id="Resource_2j0bs"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_82v5q"]
+script = ExtResource("4_mqkfy")
 speaker_id = &"npc_hale"
 speaker_name = "Warden Hale"
 figure = "officer"
@@ -347,8 +358,8 @@ cell = Vector3i(12, 9, 0)
 display_name = "Warden Hale"
 tint = Color(0.28, 0.44, 0.3, 1)
 
-[sub_resource type="Resource" id="Resource_tg31k"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_1oel7"]
+script = ExtResource("4_mqkfy")
 speaker_id = &"npc_bryn"
 speaker_name = "Innkeeper Bryn"
 figure = "villager"
@@ -357,9 +368,9 @@ cell = Vector3i(19, 11, 0)
 display_name = "Innkeeper Bryn"
 tint = Color(0.6, 0.38, 0.28, 1)
 
-[sub_resource type="Resource" id="Resource_82v5q"]
-script = ExtResource("5_mqkfy")
-shop = ExtResource("6_n63fb")
+[sub_resource type="Resource" id="Resource_v62xw"]
+script = ExtResource("5_n63fb")
+shop = ExtResource("6_6u3lw")
 speaker_id = &"npc_sedge"
 speaker_name = "Trader Sedge"
 figure = "villager"
@@ -368,8 +379,8 @@ cell = Vector3i(23, 11, 0)
 display_name = "Trader Sedge"
 tint = Color(0.4, 0.34, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_1oel7"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_6xbmb"]
+script = ExtResource("4_mqkfy")
 speaker_id = &"npc_burr"
 speaker_name = "Smith Burr"
 figure = "trainer"
@@ -379,8 +390,8 @@ facing = "west"
 display_name = "Smith Burr"
 tint = Color(0.36, 0.28, 0.24, 1)
 
-[sub_resource type="Resource" id="Resource_v62xw"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_4nc6j"]
+script = ExtResource("4_mqkfy")
 speaker_id = &"npc_torvald"
 speaker_name = "Lumberjack Torvald"
 figure = "trainer"
@@ -390,8 +401,8 @@ facing = "east"
 display_name = "Lumberjack Torvald"
 tint = Color(0.5, 0.3, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_6xbmb"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_2ee2y"]
+script = ExtResource("4_mqkfy")
 speaker_id = &"npc_road_warden"
 speaker_name = "Road Warden"
 figure = "guard"
@@ -401,8 +412,8 @@ facing = "north"
 display_name = "Road Warden"
 tint = Color(0.28, 0.44, 0.3, 1)
 
-[sub_resource type="Resource" id="Resource_4nc6j"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_vi38h"]
+script = ExtResource("4_mqkfy")
 speaker_id = &"npc_fern"
 speaker_name = "Fern"
 figure = "child"
@@ -411,8 +422,8 @@ cell = Vector3i(11, 13, 0)
 display_name = "Fern"
 tint = Color(0.5, 0.6, 0.35, 1)
 
-[sub_resource type="Resource" id="Resource_2ee2y"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_4k0m1"]
+script = ExtResource("4_mqkfy")
 speaker_id = &"npc_ilse"
 speaker_name = "Herbalist Ilse"
 figure = "scholar"
@@ -421,8 +432,8 @@ cell = Vector3i(4, 11, 0)
 display_name = "Herbalist Ilse"
 tint = Color(0.34, 0.52, 0.4, 1)
 
-[sub_resource type="Resource" id="Resource_vi38h"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_pvh64"]
+script = ExtResource("4_mqkfy")
 speaker_id = &"npc_ferra"
 speaker_name = "Huntress Ferra"
 figure = "trainer"
@@ -431,8 +442,8 @@ cell = Vector3i(4, 7, 0)
 display_name = "Huntress Ferra"
 tint = Color(0.34, 0.42, 0.26, 1)
 
-[sub_resource type="Resource" id="Resource_4k0m1"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_dq76t"]
+script = ExtResource("4_mqkfy")
 speaker_id = &"npc_wicke"
 speaker_name = "Gran Wicke"
 figure = "elder"
@@ -442,8 +453,8 @@ facing = "east"
 display_name = "Gran Wicke"
 tint = Color(0.7, 0.68, 0.74, 1)
 
-[sub_resource type="Resource" id="Resource_pvh64"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_8sndg"]
+script = ExtResource("4_mqkfy")
 speaker_id = &"npc_stranger"
 speaker_name = "Cloaked Stranger"
 figure = "raider"
@@ -453,8 +464,8 @@ facing = "east"
 display_name = "Cloaked Stranger"
 tint = Color(0.2, 0.18, 0.22, 1)
 
-[sub_resource type="Resource" id="Resource_dq76t"]
-script = ExtResource("7_6u3lw")
+[sub_resource type="Resource" id="Resource_c1l3h"]
+script = ExtResource("7_rf7n4")
 loot_items = Array[StringName]([&"mossleaf_tonic", &"bitterroot_salve"])
 loot_gold = 40
 id = &"yard_chest"
@@ -463,105 +474,185 @@ facing = "west"
 display_name = "Chest"
 tint = Color(0.46, 0.32, 0.18, 1)
 
-[sub_resource type="Resource" id="Resource_8sndg"]
-script = ExtResource("8_rf7n4")
+[sub_resource type="Resource" id="Resource_njdvs"]
+script = ExtResource("8_2rb6d")
 area_rect = Rect2i(27, 12, 1, 1)
 target_area = &"sparse_forest"
 target_entry = &"west"
 id = &"east_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_c1l3h"]
-script = ExtResource("9_2rb6d")
+[sub_resource type="Resource" id="Resource_p7kdo"]
+script = ExtResource("9_bbcff")
 text = "The trail north climbs out of the pines toward the snowline, where Frostpeak Village sits under the Snowy Peaks. A Warden's chain is drawn across it, hung with a frosted board: \"High trail closed -- snow. Open at the thaw.\""
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_njdvs"]
-script = ExtResource("10_bbcff")
+[sub_resource type="Resource" id="Resource_pg7r4"]
+script = ExtResource("10_wyfs0")
 scene_id = &"frostpeak_village_road_locked_north_exit"
-beats = Array[Resource]([SubResource("Resource_c1l3h")])
+beats = Array[Resource]([SubResource("Resource_p7kdo")])
 
-[sub_resource type="Resource" id="Resource_p7kdo"]
-script = ExtResource("8_rf7n4")
+[sub_resource type="Resource" id="Resource_a0ffa"]
+script = ExtResource("8_2rb6d")
 area_rect = Rect2i(17, 0, 1, 1)
 target_area = &"woodland_town"
 target_entry = &"north_trail"
 requires = "has(\"world.frostpeak_open\")"
-locked_scene = SubResource("Resource_njdvs")
+locked_scene = SubResource("Resource_pg7r4")
 id = &"north_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_pg7r4"]
-script = ExtResource("9_2rb6d")
+[sub_resource type="Resource" id="Resource_lmnu4"]
+script = ExtResource("9_bbcff")
 text = "The road west thins to a deer track and then to nothing. Somewhere beyond the thorns lies Deepwood Village -- but the Wardens have strung a rope across the track with a painted warning: \"No travellers. Ask at the Lodge.\""
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_a0ffa"]
-script = ExtResource("10_bbcff")
+[sub_resource type="Resource" id="Resource_pv2gf"]
+script = ExtResource("10_wyfs0")
 scene_id = &"wt_west_locked"
-beats = Array[Resource]([SubResource("Resource_pg7r4")])
+beats = Array[Resource]([SubResource("Resource_lmnu4")])
 
-[sub_resource type="Resource" id="Resource_lmnu4"]
-script = ExtResource("8_rf7n4")
+[sub_resource type="Resource" id="Resource_htpel"]
+script = ExtResource("8_2rb6d")
 area_rect = Rect2i(0, 12, 1, 1)
 target_area = &"woodland_town"
 target_entry = &"west_road"
 requires = "has(\"world.deepwood_open\")"
-locked_scene = SubResource("Resource_a0ffa")
+locked_scene = SubResource("Resource_pv2gf")
 id = &"west_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_pv2gf"]
-script = ExtResource("9_2rb6d")
+[sub_resource type="Resource" id="Resource_ccc16"]
+script = ExtResource("9_bbcff")
 text = "A narrow trail slips south between the roots, toward a cave mouth nobody here admits to knowing. Fresh boot prints say the way is kept open from the other end. A rockfall blocks it for now."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_htpel"]
-script = ExtResource("10_bbcff")
+[sub_resource type="Resource" id="Resource_0jvki"]
+script = ExtResource("10_wyfs0")
 scene_id = &"wt_south_locked"
-beats = Array[Resource]([SubResource("Resource_pv2gf")])
+beats = Array[Resource]([SubResource("Resource_ccc16")])
 
-[sub_resource type="Resource" id="Resource_ccc16"]
-script = ExtResource("8_rf7n4")
+[sub_resource type="Resource" id="Resource_0uvg0"]
+script = ExtResource("8_2rb6d")
 area_rect = Rect2i(4, 23, 1, 1)
 target_area = &"woodland_town"
 target_entry = &"wayshrine"
 requires = "has(\"world.thieves_guild_open\")"
-locked_scene = SubResource("Resource_htpel")
+locked_scene = SubResource("Resource_0jvki")
 id = &"south_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_0jvki"]
-script = ExtResource("9_2rb6d")
+[sub_resource type="Resource" id="Resource_628w3"]
+script = ExtResource("11_50ekr")
+building = &"wardens_lodge"
+area_rect = Rect2i(13, 8, 1, 1)
+target_area = &"woodland_lodge"
+target_entry = &"door"
+id = &"door_wardens_lodge"
+cell = Vector3i(13, 8, 0)
+display_name = "The Wardens' Lodge"
+tint = Color(0.24, 0.4, 0.26, 1)
+blocking = false
+
+[sub_resource type="Resource" id="Resource_5kh6c"]
+script = ExtResource("11_50ekr")
+building = &"stumped_hart"
+area_rect = Rect2i(20, 10, 1, 1)
+target_area = &"woodland_inn"
+target_entry = &"door"
+id = &"door_stumped_hart"
+cell = Vector3i(20, 10, 0)
+display_name = "The Stumped Hart"
+tint = Color(0.5, 0.3, 0.2, 1)
+blocking = false
+
+[sub_resource type="Resource" id="Resource_qbtve"]
+script = ExtResource("11_50ekr")
+building = &"trading_post"
+area_rect = Rect2i(24, 10, 1, 1)
+target_area = &"woodland_trading_post"
+target_entry = &"door"
+id = &"door_trading_post"
+cell = Vector3i(24, 10, 0)
+display_name = "Sedge's Trading Post"
+tint = Color(0.36, 0.36, 0.24, 1)
+blocking = false
+
+[sub_resource type="Resource" id="Resource_ocvp3"]
+script = ExtResource("11_50ekr")
+building = &"forge"
+area_rect = Rect2i(25, 10, 1, 1)
+target_area = &"woodland_forge"
+target_entry = &"door"
+id = &"door_forge"
+cell = Vector3i(25, 10, 0)
+display_name = "Woodland Smithy"
+tint = Color(0.3, 0.26, 0.24, 1)
+blocking = false
+
+[sub_resource type="Resource" id="Resource_2guil"]
+script = ExtResource("11_50ekr")
+building = &"herb_hut"
+area_rect = Rect2i(5, 10, 1, 1)
+target_area = &"woodland_herb_hut"
+target_entry = &"door"
+id = &"door_herb_hut"
+cell = Vector3i(5, 10, 0)
+display_name = "The Herb Hut"
+tint = Color(0.3, 0.5, 0.3, 1)
+blocking = false
+
+[sub_resource type="Resource" id="Resource_hpult"]
+script = ExtResource("9_bbcff")
 text = "Woodland Town. The air smells of pine resin and woodsmoke, and somewhere a saw sings through green timber. Lanterns still burn in the cabin windows against the morning mist."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_0uvg0"]
-script = ExtResource("9_2rb6d")
+[sub_resource type="Resource" id="Resource_8c8hl"]
+script = ExtResource("9_bbcff")
 text = "The Wardens' Lodge stands at the heart of the town, north of the boardwalk square. The lumber yard is east, past the inn; a trail climbs north toward the snowline, and another slips away south between the roots."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_628w3"]
-script = ExtResource("12_50ekr")
-beats = Array[Resource]([SubResource("Resource_0jvki"), SubResource("Resource_0uvg0")])
+[sub_resource type="Resource" id="Resource_hg154"]
+script = ExtResource("13_b2e5w")
+beats = Array[Resource]([SubResource("Resource_hpult"), SubResource("Resource_8c8hl")])
 
-[sub_resource type="Resource" id="Resource_5kh6c"]
-script = ExtResource("13_2jvbe")
+[sub_resource type="Resource" id="Resource_8tck5"]
+script = ExtResource("14_ny8je")
 key = "woodland.arrived"
 
-[sub_resource type="Resource" id="Resource_qbtve"]
-script = ExtResource("11_wyfs0")
+[sub_resource type="Resource" id="Resource_35cwe"]
+script = ExtResource("12_2jvbe")
 condition = "not has(\"woodland.arrived\")"
-then_commands = Array[Resource]([SubResource("Resource_628w3"), SubResource("Resource_5kh6c")])
+then_commands = Array[Resource]([SubResource("Resource_hg154"), SubResource("Resource_8tck5")])
 
 [resource]
-script = ExtResource("14_b2e5w")
+script = ExtResource("15_x2ou8")
 area_id = &"woodland_town"
 display_name = "Woodland Town"
-terrain = ExtResource("15_ny8je")
+terrain = ExtResource("16_evs08")
 region_id = &"woodlands"
 world_map_pos = Vector2(0.301, 0.384)
 entry_points = {
+"door_forge": {
+"cell": [25, 11, 0],
+"facing": "south"
+},
+"door_herb_hut": {
+"cell": [5, 11, 0],
+"facing": "south"
+},
+"door_stumped_hart": {
+"cell": [20, 11, 0],
+"facing": "south"
+},
+"door_trading_post": {
+"cell": [24, 11, 0],
+"facing": "south"
+},
+"door_wardens_lodge": {
+"cell": [13, 9, 0],
+"facing": "south"
+},
 "east_road": {
 "cell": [26, 12, 0],
 "facing": "west"
@@ -579,5 +670,5 @@ entry_points = {
 "facing": "east"
 }
 }
-entities = Array[Resource]([SubResource("Resource_x2ou8"), SubResource("Resource_evs08"), SubResource("Resource_7y4ia"), SubResource("Resource_74b4b"), SubResource("Resource_jfxso"), SubResource("Resource_kvu8g"), SubResource("Resource_bh2qa"), SubResource("Resource_yqa1r"), SubResource("Resource_b76f3"), SubResource("Resource_pehgx"), SubResource("Resource_oeal2"), SubResource("Resource_xt4m5"), SubResource("Resource_c6xwg"), SubResource("Resource_5ktu5"), SubResource("Resource_ih22u"), SubResource("Resource_hnhof"), SubResource("Resource_mo0v2"), SubResource("Resource_aapqm"), SubResource("Resource_1g1ld"), SubResource("Resource_7thhs"), SubResource("Resource_tg737"), SubResource("Resource_5mlgd"), SubResource("Resource_thqy0"), SubResource("Resource_gb8y8"), SubResource("Resource_eu2i4"), SubResource("Resource_anhhy"), SubResource("Resource_e6wty"), SubResource("Resource_50364"), SubResource("Resource_rljtt"), SubResource("Resource_i31na"), SubResource("Resource_6nloy"), SubResource("Resource_wdowa"), SubResource("Resource_r2i4f"), SubResource("Resource_o7ttn"), SubResource("Resource_m2cea"), SubResource("Resource_2j6rj"), SubResource("Resource_crl2q"), SubResource("Resource_7uahq"), SubResource("Resource_b8d28"), SubResource("Resource_2j0bs"), SubResource("Resource_tg31k"), SubResource("Resource_82v5q"), SubResource("Resource_1oel7"), SubResource("Resource_v62xw"), SubResource("Resource_6xbmb"), SubResource("Resource_4nc6j"), SubResource("Resource_2ee2y"), SubResource("Resource_vi38h"), SubResource("Resource_4k0m1"), SubResource("Resource_pvh64"), SubResource("Resource_dq76t"), SubResource("Resource_8sndg"), SubResource("Resource_p7kdo"), SubResource("Resource_lmnu4"), SubResource("Resource_ccc16")])
-on_enter = Array[Resource]([SubResource("Resource_qbtve")])
+entities = Array[Resource]([SubResource("Resource_7y4ia"), SubResource("Resource_74b4b"), SubResource("Resource_jfxso"), SubResource("Resource_kvu8g"), SubResource("Resource_bh2qa"), SubResource("Resource_yqa1r"), SubResource("Resource_b76f3"), SubResource("Resource_pehgx"), SubResource("Resource_oeal2"), SubResource("Resource_xt4m5"), SubResource("Resource_c6xwg"), SubResource("Resource_5ktu5"), SubResource("Resource_ih22u"), SubResource("Resource_hnhof"), SubResource("Resource_mo0v2"), SubResource("Resource_aapqm"), SubResource("Resource_1g1ld"), SubResource("Resource_7thhs"), SubResource("Resource_tg737"), SubResource("Resource_5mlgd"), SubResource("Resource_thqy0"), SubResource("Resource_gb8y8"), SubResource("Resource_eu2i4"), SubResource("Resource_anhhy"), SubResource("Resource_e6wty"), SubResource("Resource_50364"), SubResource("Resource_rljtt"), SubResource("Resource_i31na"), SubResource("Resource_6nloy"), SubResource("Resource_wdowa"), SubResource("Resource_r2i4f"), SubResource("Resource_o7ttn"), SubResource("Resource_m2cea"), SubResource("Resource_2j6rj"), SubResource("Resource_crl2q"), SubResource("Resource_7uahq"), SubResource("Resource_b8d28"), SubResource("Resource_2j0bs"), SubResource("Resource_tg31k"), SubResource("Resource_82v5q"), SubResource("Resource_1oel7"), SubResource("Resource_v62xw"), SubResource("Resource_6xbmb"), SubResource("Resource_4nc6j"), SubResource("Resource_2ee2y"), SubResource("Resource_vi38h"), SubResource("Resource_4k0m1"), SubResource("Resource_pvh64"), SubResource("Resource_dq76t"), SubResource("Resource_8sndg"), SubResource("Resource_c1l3h"), SubResource("Resource_njdvs"), SubResource("Resource_a0ffa"), SubResource("Resource_htpel"), SubResource("Resource_0uvg0"), SubResource("Resource_628w3"), SubResource("Resource_5kh6c"), SubResource("Resource_qbtve"), SubResource("Resource_ocvp3"), SubResource("Resource_2guil")])
+on_enter = Array[Resource]([SubResource("Resource_35cwe")])

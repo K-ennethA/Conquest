@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_4dyh7"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="2_c0st5"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="3_hsce4"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/crownhaven_barracks/terrain.tres" id="4_kteg2"]
+
+[sub_resource type="Resource" id="Resource_gplco"]
+script = ExtResource("1_4dyh7")
+prop = "mat"
+footprint = Vector2i(1, 1)
+id = &"exit_mat"
+cell = Vector3i(6, 7, 0)
+tint = Color(0.62, 0.22, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_t8iy1"]
+script = ExtResource("2_c0st5")
+area_rect = Rect2i(6, 7, 1, 1)
+target_area = &"crownhaven"
+target_entry = &"door_barracks"
+id = &"exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_oq47x"]
+script = ExtResource("1_4dyh7")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_w"
+cell = Vector3i(1, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_1hw8b"]
+script = ExtResource("1_4dyh7")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_e"
+cell = Vector3i(10, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[resource]
+script = ExtResource("3_hsce4")
+area_id = &"crownhaven_barracks"
+display_name = "The Barracks"
+terrain = ExtResource("4_kteg2")
+kind = 2
+region_id = &"heartlands"
+world_map_pos = Vector2(0.498, 0.41)
+entry_points = {
+"door": {
+"cell": [6, 6, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_gplco"), SubResource("Resource_t8iy1"), SubResource("Resource_oq47x"), SubResource("Resource_1hw8b")])
+parent_area = &"crownhaven"

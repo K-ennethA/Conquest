@@ -304,6 +304,9 @@ func _neighbours(c: Vector3i) -> Array:
 ## The cells an entity can be used FROM: its own cells for walk-on things (warps, triggers), the
 ## neighbours of its cells for things you face (NPC, chest, sign, shrine, trainer).
 func _use_cells(e: OverworldEntity) -> Array:
+	# A building's door sits on its solid facade: it is used from the cell in front of it.
+	if e is DoorEntity:
+		return [(e as DoorEntity).front_cell()]
 	if e is WarpEntity or e is TriggerZone:
 		return e.cells()
 	var out: Array = []
@@ -375,6 +378,12 @@ func test_no_solid_prop_sits_on_an_entry_an_exit_or_an_actor() -> void:
 					continue
 				var walked: bool = e is WarpEntity or e is TriggerZone
 				if not walked and not e.has_actor():
+					continue
+				if e is DoorEntity:
+					# A door IS on its building's facade; the cell in front of it must stay clear.
+					var front: Vector3i = (e as DoorEntity).front_cell()
+					if solid.has(front):
+						problems["%s: door '%s' opens onto prop %s at %s" % [a.area_id, e.id, solid[front], front]] = true
 					continue
 				for c in e.cells():
 					# A warp over a wall (a map-edge cell) is never walked; only walkable cells count.
@@ -473,6 +482,9 @@ func test_building_models_sit_on_wall_terrain_and_every_wall_has_a_building() ->
 	# is under a building).
 	var problems: Dictionary = {}
 	for a in _areas():
+		# An interior's walls are the room itself, not buildings.
+		if a.is_interior():
+			continue
 		var g := OverworldGrid.from_map(a.terrain)
 		var covered: Dictionary = {}
 		for e in a.entity_list():

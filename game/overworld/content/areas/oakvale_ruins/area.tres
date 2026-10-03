@@ -294,7 +294,7 @@ text = "That's the rear guard broken. The rest got away with the Researcher -- o
 [sub_resource type="Resource" id="Resource_awhnd"]
 script = ExtResource("4_0h2dx")
 speaker_id = &"hero"
-text = "His name is Linnea. We grew up on this green. I'm going to bring him home."
+text = "His name is Professor Elias. I'm going to bring him home."
 
 [sub_resource type="Resource" id="Resource_mhfpm"]
 script = ExtResource("4_0h2dx")
@@ -491,7 +491,7 @@ text = "That's the rear guard broken. The rest got away with the Researcher -- o
 [sub_resource type="Resource" id="Resource_dhdou"]
 script = ExtResource("4_0h2dx")
 speaker_id = &"hero"
-text = "His name is Linnea. We grew up on this green. I'm going to bring him home."
+text = "His name is Professor Elias. I'm going to bring him home."
 
 [sub_resource type="Resource" id="Resource_iq6q6"]
 script = ExtResource("4_0h2dx")
@@ -584,7 +584,7 @@ text = "They came out of the Mossway at a run -- a dozen of them in Cindral red,
 [sub_resource type="Resource" id="Resource_73hk1"]
 script = ExtResource("4_0h2dx")
 speaker_id = &"hero"
-text = "A scholar's coat... Linnea. They've still got Linnea."
+text = "A scholar's coat... Professor Elias. They've still got Professor Elias."
 
 [sub_resource type="Resource" id="Resource_4th1s"]
 script = ExtResource("4_0h2dx")
@@ -763,7 +763,7 @@ text = "That's the rear guard broken. The rest got away with the Researcher -- o
 [sub_resource type="Resource" id="Resource_s18tf"]
 script = ExtResource("4_0h2dx")
 speaker_id = &"hero"
-text = "His name is Linnea. We grew up on this green. I'm going to bring him home."
+text = "His name is Professor Elias. I'm going to bring him home."
 
 [sub_resource type="Resource" id="Resource_qnp4o"]
 script = ExtResource("4_0h2dx")

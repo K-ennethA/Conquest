@@ -3,7 +3,8 @@ extends GutTest
 ## THE SHIPPED DIALOGUE BANK (game/overworld/content/dialogue.json) against the shipped story:
 ## it validates clean, every townsperson who talks has an entry, nobody mentions the raid before it
 ## happens and the towns talk about it after, story time changes what people say, the Researcher is
-## the hero's longtime friend (he/him), the live overworld plays the bank -- and the Dialogue
+## Professor Elias (he/him, a friend of the hero's family -- no invented backstory), the live
+## overworld plays the bank -- and the Dialogue
 ## editor (addons/dialogue_editor) loads, edits, simulates and saves it.
 
 const StoryFixture := preload("res://tests/helpers/story_fixture.gd")
@@ -141,7 +142,15 @@ func test_story_time_changes_what_people_say() -> void:
 			"%s/%s has moved on three rests later" % pair)
 
 
-func test_the_researcher_is_the_heros_longtime_friend_he_him() -> void:
+## Invented details the owner had removed (2026-10-03): the hero / researcher childhood backstory,
+## the specific stone lore, the unpicked starters carried off in the raid, the old name.
+const REMOVED_INVENTIONS: Array[String] = ["linnea", "twelve years", "that boy", "grew up on this green",
+	"a boy from this very village", "spark of the star", "starts to listen", "you did not choose",
+	"test creatures", "old friend from oakvale", "carries a little of that falling", "starstone listens",
+	"forgotten me in oakvale", "every letter you ever sent", "owes me a kite", "used to help me look"]
+
+
+func test_the_researcher_is_professor_elias_he_him_a_family_friend() -> void:
 	var idx := StoryContentIndex.build()
 	var lines: Array[String] = []
 	var bank: Dictionary = DialogueBank.data()
@@ -158,24 +167,25 @@ func test_the_researcher_is_the_heros_longtime_friend_he_him() -> void:
 	var she := RegEx.create_from_string("\\b(she|her|hers|herself|woman)\\b")
 	var mentions: int = 0
 	for t in lines:
-		if t.contains("Researcher") or t.contains("Linnea"):
+		var low: String = t.to_lower()
+		for banned in REMOVED_INVENTIONS:
+			assert_false(low.contains(banned), "removed invented detail '%s' is back: %s" % [banned, t])
+		if t.contains("Researcher") or t.contains("Elias"):
 			mentions += 1
-			assert_null(she.search(t.to_lower()), "the Researcher is 'he': %s" % t)
+			assert_null(she.search(low), "the Researcher is 'he': %s" % t)
 	assert_gt(mentions, 10, "the Researcher is talked about")
-	# Oakvale sets up the friendship before you leave; the reunion explains the invention.
+	# At home, your mother says he is an old friend of the family.
 	var home := _phase_state("opening.sent_off")
-	var friends: int = 0
-	for nid in MIGRATED["oakvale"]:
-		if _said("oakvale", nid, home).contains("Linnea"):
-			friends += 1
-	assert_gte(friends, 3, "Oakvale talks about its boy Linnea")
+	assert_true(_said("oakvale", "briony", home).contains("Professor Elias is an old friend of the family"),
+		"Briony: Professor Elias is a family friend (%s)" % _said("oakvale", "briony", home))
+	# Inside the Royal Workshop he explains his invention and you choose a starter.
 	var ceremony: String = ""
-	for s in idx.scripts("crownhaven"):
-		if String(s["owner"]) == "linnea":
+	for s in idx.scripts("crownhaven_workshop"):
+		if String(s["owner"]) == "elias":
 			for l in s["lines"]:
 				ceremony += String(l["text"]) + "\n"
-	for needle in ["invention", "Twelve years since I left Oakvale", "spark", "Which one answers you"]:
-		assert_true(ceremony.contains(needle), "the reunion: '%s'" % needle)
+	for needle in ["invention", "bond with a creature", "Which one will you choose"]:
+		assert_true(ceremony.contains(needle), "the ceremony: '%s'" % needle)
 
 
 func test_every_cutscene_line_is_indexed_with_its_gate() -> void:
@@ -352,4 +362,4 @@ func test_the_editor_simulates_a_town_and_searches_everything() -> void:
 	var ids: Array = []
 	for r in rep["no_entry"]:
 		ids.append("%s/%s" % [r["area"], r["npc"]])
-	assert_true(ids.has("crownhaven/linnea"), "scripted-only NPCs are listed as having no bank entry")
+	assert_true(ids.has("crownhaven_workshop/elias"), "scripted-only NPCs are listed as having no bank entry")

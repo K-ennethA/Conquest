@@ -1009,7 +1009,7 @@ func _apply_mode_end_actions(outcome: StringName) -> bool:
 	var actions = ctrl.end_actions(outcome)
 	if not (actions is Array) or actions.is_empty():
 		return false
-	# The mode may retitle the card too (story: "GAME OVER" -- "Linnea has fallen...").
+	# The mode may retitle the card too (story: "GAME OVER" -- "Elias has fallen...").
 	if ctrl.has_method("end_banner"):
 		var banner = ctrl.end_banner(outcome)
 		if banner is Dictionary and not (banner as Dictionary).is_empty():

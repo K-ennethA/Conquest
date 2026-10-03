@@ -181,6 +181,8 @@ static func prop(kind: String, footprint: Vector2i, tint: Color, seed: int = 0) 
 			return smithy(fp, tint)
 		"scarecrow":
 			return scarecrow(tint)
+		"mat":
+			return mat(fp, tint)
 	return house(fp, tint)
 
 
@@ -632,7 +634,7 @@ static func dummy() -> Node3D:
 	return _wrap(pm, "Dummy")
 
 
-## The Researcher's shard pylon: a carved plinth with a floating, glowing starstone crystal.
+## The Royal Workshop's pylon: a carved plinth with a floating, glowing starstone crystal.
 static func crystal(tint: Color = Color(0.5, 0.92, 1.0)) -> Node3D:
 	var pm := ProcMesh.new()
 	pm.box(Vector3(-0.5, 0.0, -0.5), Vector3(0.5, 0.3, 0.5), STONE.darkened(0.1))
@@ -757,6 +759,30 @@ static func set_chest_open(prop: Node3D, open: bool) -> void:
 	var lid := prop.get_node_or_null("Lid") as Node3D
 	if lid != null:
 		lid.rotation_degrees.x = -105.0 if open else 0.0
+
+
+## PLACEHOLDER DOOR MARKER (a [DoorEntity]'s actor, origin = the door cell's centre): a dark
+## plank door in a [param tint] frame on the south facade, with a stone step in front -- just
+## enough to read "you can go in here". The real buildings (and doors) come from Blender.
+static func door_marker(tint: Color = WOOD) -> Node3D:
+	var cs: float = Cells.CELL_SIZE
+	var face: float = cs * 0.5 - 0.06
+	var pm := ProcMesh.new()
+	pm.box(Vector3(-0.5, 0.0, face), Vector3(0.5, 1.62, face + 0.08), tint.darkened(0.25))
+	pm.box(Vector3(-0.4, 0.0, face + 0.08), Vector3(0.4, 1.5, face + 0.12), WOOD_DARK)
+	pm.box(Vector3(-0.02, 0.0, face + 0.12), Vector3(0.02, 1.5, face + 0.13), WOOD_DARK.darkened(0.3))
+	pm.box(Vector3(0.22, 0.7, face + 0.12), Vector3(0.3, 0.78, face + 0.16), GOLD)
+	pm.box(Vector3(-0.55, 0.0, face + 0.12), Vector3(0.55, 0.06, face + 0.5), STONE.darkened(0.1))
+	return _wrap(pm, "DoorMarker")
+
+
+## An interior's EXIT MAT (walk-over): a woven rug over the footprint.
+static func mat(footprint: Vector2i, tint: Color = Color(0.62, 0.22, 0.18)) -> Node3D:
+	var e: Array = _extent(footprint, 0.2)
+	var pm := ProcMesh.new()
+	pm.box(Vector3(e[0], 0.0, e[1]), Vector3(e[2], 0.04, e[3]), tint)
+	pm.box(Vector3(e[0] + 0.15, 0.04, e[1] + 0.15), Vector3(e[2] - 0.15, 0.05, e[3] - 0.15), tint.lightened(0.25))
+	return _wrap(pm, "Mat")
 
 
 ## A placeholder HOUSE over a [param footprint]-cell block (origin = the top-left cell's centre):

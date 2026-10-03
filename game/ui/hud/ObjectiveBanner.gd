@@ -239,7 +239,7 @@ func _build_ui() -> void:
 	_danger_chip.visible = false
 	_row.add_child(_danger_chip)
 
-	# "Protect Linnea" -- the battle's GUARD lose conditions ([ProtectUnit]): losing that unit
+	# "Protect Elias" -- the battle's GUARD lose conditions ([ProtectUnit]): losing that unit
 	# loses the battle, so it is always on screen, not tucked into the "+N more" tooltip.
 	_guard_chip = _slim_chip("Protect", GUARD_COLOR, GUARD_NAME)
 	_row.add_child(_guard_chip)
@@ -298,7 +298,7 @@ func guard_text() -> String:
 	return guard_text_for(_guards)
 
 
-## "Protect Linnea" / "Protect Linnea, Geode" for [param guards] ("" for none).
+## "Protect Elias" / "Protect Elias, Geode" for [param guards] ("" for none).
 static func guard_text_for(guards: Array) -> String:
 	var names: Array[String] = []
 	for g in guards:
@@ -381,7 +381,7 @@ func refresh() -> void:
 		return
 	var lines: Array = objective_lines()
 	_label.text = banner_text(lines)
-	# The tooltip lists the guards too ("Keep Linnea alive"), under the ways to win.
+	# The tooltip lists the guards too ("Keep Elias alive"), under the ways to win.
 	var all_lines: Array = lines.duplicate()
 	for g in _guards:
 		all_lines.append((g as ProtectUnit).describe())

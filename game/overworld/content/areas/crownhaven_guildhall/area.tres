@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_re57o"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="2_5bsxs"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="3_7sjwp"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/crownhaven_guildhall/terrain.tres" id="4_bp6qy"]
+
+[sub_resource type="Resource" id="Resource_dyj0g"]
+script = ExtResource("1_re57o")
+prop = "mat"
+footprint = Vector2i(1, 1)
+id = &"exit_mat"
+cell = Vector3i(7, 8, 0)
+tint = Color(0.62, 0.22, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_htuaa"]
+script = ExtResource("2_5bsxs")
+area_rect = Rect2i(7, 8, 1, 1)
+target_area = &"crownhaven"
+target_entry = &"door_guildhall"
+id = &"exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_tyeym"]
+script = ExtResource("1_re57o")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_w"
+cell = Vector3i(1, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_evyyy"]
+script = ExtResource("1_re57o")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_e"
+cell = Vector3i(12, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[resource]
+script = ExtResource("3_7sjwp")
+area_id = &"crownhaven_guildhall"
+display_name = "The Merchants' Guildhall"
+terrain = ExtResource("4_bp6qy")
+kind = 2
+region_id = &"heartlands"
+world_map_pos = Vector2(0.498, 0.41)
+entry_points = {
+"door": {
+"cell": [7, 7, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_dyj0g"), SubResource("Resource_htuaa"), SubResource("Resource_tyeym"), SubResource("Resource_evyyy")])
+parent_area = &"crownhaven"

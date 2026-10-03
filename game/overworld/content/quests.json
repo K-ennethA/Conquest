@@ -13,7 +13,7 @@
 			"steps": [
 				{"flag": "opening.sent_off", "text": "Talk to Briony at home, then take the east road.", "location": "oakvale", "area": "oakvale", "npc": "briony"},
 				{"flag": "opening.arrived_crownhaven", "text": "Follow the Mossway east to Crownhaven.", "location": "crownhaven", "area": "crownhaven"},
-				{"flag": "opening.starter_received", "text": "Find Researcher Linnea at the Royal Workshop.", "location": "crownhaven", "area": "crownhaven", "npc": "linnea"}
+				{"flag": "opening.starter_received", "text": "Find Professor Elias inside the Royal Workshop.", "location": "crownhaven", "area": "crownhaven_workshop", "npc": "elias"}
 			]
 		},
 		{
@@ -36,7 +36,7 @@
 			"id": "rowans_charge",
 			"title": "Rowan's Charge",
 			"category": "main",
-			"summary": "The raiders took Linnea. Sergeant Rowan has the next lead.",
+			"summary": "The raiders took Professor Elias. Sergeant Rowan has the next lead.",
 			"giver": "rowan",
 			"location": "crownhaven",
 			"area": "crownhaven",

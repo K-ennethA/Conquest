@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_d6v0g"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="2_hug2k"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="3_kmc84"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/oakvale_inn/terrain.tres" id="4_8h2qq"]
+
+[sub_resource type="Resource" id="Resource_m7foh"]
+script = ExtResource("1_d6v0g")
+prop = "mat"
+footprint = Vector2i(1, 1)
+id = &"exit_mat"
+cell = Vector3i(6, 7, 0)
+tint = Color(0.62, 0.22, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_k277e"]
+script = ExtResource("2_hug2k")
+area_rect = Rect2i(6, 7, 1, 1)
+target_area = &"oakvale"
+target_entry = &"door_house_inn"
+id = &"exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_uglc1"]
+script = ExtResource("1_d6v0g")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_w"
+cell = Vector3i(1, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_72pkj"]
+script = ExtResource("1_d6v0g")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_e"
+cell = Vector3i(10, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[resource]
+script = ExtResource("3_kmc84")
+area_id = &"oakvale_inn"
+display_name = "The Hearth & Hen"
+terrain = ExtResource("4_8h2qq")
+kind = 2
+region_id = &"heartlands"
+world_map_pos = Vector2(0.426, 0.63)
+entry_points = {
+"door": {
+"cell": [6, 6, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_m7foh"), SubResource("Resource_k277e"), SubResource("Resource_uglc1"), SubResource("Resource_72pkj")])
+parent_area = &"oakvale"

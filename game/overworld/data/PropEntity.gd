@@ -20,7 +20,7 @@ extends OverworldEntity
 ##   crops     rows of leafy crops over the footprint
 ##   banner    a pole with a hanging banner
 ##   dummy     a straw training dummy
-##   crystal   the Researcher's shard pylon: a glowing crystal on a plinth
+##   crystal   the Royal Workshop's pylon: a glowing crystal on a plinth
 ##   fire      a burning patch (scorch, flames, embers, a warm light)
 ##   rubble    a few charred stones
 ##   arena     a round stone arena (the tournament hall): tiered walls, pennants, a gate arch
@@ -30,6 +30,7 @@ extends OverworldEntity
 ##   chapel    a stone chapel with a bell tower and spire
 ##   smithy    a forge house: glowing forge mouth, chimney, anvil
 ##   scarecrow a field scarecrow
+##   mat       an interior's exit mat: a rug on the floor (walk-over)
 ##
 ## [member OverworldEntity.cell] is the footprint's top-left cell; [member footprint] its size.
 ## COLLISION is per KIND: [constant SOLID_KINDS] (a cart, barrels, a well, a stall, fences,
@@ -41,14 +42,21 @@ extends OverworldEntity
 
 const KINDS: Array[String] = ["house", "ruin", "keep", "tower", "gate", "windmill", "stall", "well",
 	"fence", "haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena",
-	"cabin", "logs", "lamp", "chapel", "smithy", "scarecrow"]
+	"cabin", "logs", "lamp", "chapel", "smithy", "scarecrow", "mat"]
 
 @export_enum("house", "ruin", "keep", "tower", "gate", "windmill", "stall", "well", "fence",
-	"haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena", "cabin", "logs", "lamp", "chapel", "smithy", "scarecrow")
+	"haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena", "cabin", "logs", "lamp", "chapel", "smithy", "scarecrow", "mat")
 var prop: String = "house"
 @export var footprint: Vector2i = Vector2i(2, 2)
 ## "auto" = the kind's default ([constant SOLID_KINDS]); "solid" / "walkable" override it.
 @export_enum("auto", "solid", "walkable") var collision: String = "auto"
+## OPT-IN: can the hero go inside? A building is NOT enterable by default (a plain solid block
+## with no door). When true, the area carries a [DoorEntity] on [method door_cell] that leads to
+## the building's interior area (docs/STORY_MODE.md "Interiors").
+@export var enterable: bool = false
+## The door's cell inside the footprint (offset from [member OverworldEntity.cell]); (-1, -1) =
+## the bottom row's centre column (the south facade, toward the camera).
+@export var door_offset: Vector2i = Vector2i(-1, -1)
 
 ## Kinds that block their whole footprint unless [member collision] says "walkable". Walk-over
 ## decor (crops) and arches the player walks under (gate) are deliberately absent.
@@ -84,8 +92,25 @@ func cells() -> Array[Vector3i]:
 	return out
 
 
+## The facade cell the door is on, or [constant Cells.INVALID] when the building is not
+## [member enterable]. Still a SOLID cell of the footprint: the hero never stands on it -- a step
+## into it from the front cell enters ([DoorEntity]).
+func door_cell() -> Vector3i:
+	if not enterable:
+		return Cells.INVALID
+	var fp := Vector2i(maxi(1, footprint.x), maxi(1, footprint.y))
+	var off: Vector2i = door_offset
+	if off.x < 0 or off.y < 0:
+		off = Vector2i((fp.x - 1) / 2, fp.y - 1)
+	return Vector3i(cell.x + off.x, cell.y + off.y, cell.z)
+
+
 func validate(area: Resource, issues: Array[String]) -> void:
 	super.validate(area, issues)
+	if enterable:
+		var d: Vector3i = door_cell()
+		if not cells().has(d):
+			issues.append("%s: door %s is outside the footprint" % [String(id), str(d)])
 	if not KINDS.has(prop):
 		issues.append("%s: unknown prop kind '%s'" % [String(id), prop])
 	if not ["auto", "solid", "walkable"].has(collision):

@@ -459,6 +459,7 @@
 				]
 			},
 			"odalys": {
+				"note": "TODO(story): the default line is a neutral placeholder (the fallen-star / shard lore it used to repeat is not decided).",
 				"variants": [
 					{
 						"if": "after('opening.attack')",
@@ -466,7 +467,7 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "I lit a candle for the Researcher. Starstone listens, they say, to anyone who's afraid enough to be honest."
+								"text": "I lit a candle for the Researcher."
 							}
 						]
 					},
@@ -475,7 +476,7 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "Long ago a star fell, and the land remembers it. Every creature and every shard carries a little of that falling. Be gentle with what you bond."
+								"text": "Welcome to the chapel, traveller. Be gentle with what you bond."
 							}
 						]
 					}
@@ -510,10 +511,6 @@
 							{
 								"speaker": "self",
 								"text": "A shard tester, from Oakvale? The Researcher's workshop is in the upper town -- east of the keep. Mind the market crowd."
-							},
-							{
-								"speaker": "self",
-								"text": "He's been up on the wall walk every morning this week, watching the south road. Waiting on a friend, he said. You, I take it."
 							}
 						]
 					}
@@ -528,7 +525,7 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "Sergeant Rowan, Crownhaven Guard. You'll be the Researcher's friend from Oakvale -- he's talked of nothing else all week."
+								"text": "Sergeant Rowan, Crownhaven Guard. You'll be the tester from Oakvale."
 							},
 							{
 								"speaker": "self",
@@ -548,10 +545,6 @@
 							{
 								"speaker": "self",
 								"text": "They knew exactly where he'd be, and exactly when. They didn't touch a single note -- they only wanted HIM."
-							},
-							{
-								"speaker": "self",
-								"text": "He kept every letter you ever sent him, you know. In the drawer under the pylon drawings. I'll keep them safe till he's back."
 							}
 						]
 					},
@@ -561,10 +554,6 @@
 							{
 								"speaker": "self",
 								"text": "Don't touch the pylon, please. The last tester who touched the pylon could hear colours for a week."
-							},
-							{
-								"speaker": "self",
-								"text": "He's been pacing since dawn. 'What if they've forgotten me in Oakvale?' Honestly. Go and put him out of his misery."
 							}
 						]
 					}
@@ -704,7 +693,7 @@
 							},
 							{
 								"speaker": "self",
-								"text": "Go on -- Linnea's waiting. He'll have been pacing since breakfast. That boy never could sit still when he had something to show you."
+								"text": "Go on -- Professor Elias is waiting for you at his workshop."
 							}
 						]
 					},
@@ -718,7 +707,7 @@
 							},
 							{
 								"speaker": "self",
-								"text": "Go on -- Linnea won't wait all day, and neither will I! And give him a hug from me. Three pages about rocks every winter, that boy writes, and not one word about whether he's eating."
+								"text": "Go on -- Professor Elias is an old friend of the family. Don't keep him waiting."
 							}
 						]
 					}
@@ -832,7 +821,7 @@
 							},
 							{
 								"speaker": "self",
-								"text": "Less bread this way, I suppose. Say hello to Linnea for me -- and tell him he still owes me a kite."
+								"text": "Less bread this way, I suppose."
 							}
 						]
 					}
@@ -846,10 +835,6 @@
 							{
 								"speaker": "self",
 								"text": "I'm watching the pond for the golden frog. Nobody's seen it. That's how I know it's clever."
-							},
-							{
-								"speaker": "self",
-								"text": "Linnea used to help me look, before he went to the city. He said a golden frog was 'statistically unlikely'. He's wrong."
 							}
 						]
 					}
@@ -879,7 +864,11 @@
 							},
 							{
 								"speaker": "self",
-								"text": "She'd want you to go, {hero}. Go and find that boy, and bring him home."
+								"text": "She'd want you to go, {hero}."
+							},
+							{
+								"speaker": "self",
+								"text": "Go and find Professor Elias, and bring him home."
 							}
 						]
 					},
@@ -982,7 +971,7 @@
 							},
 							{
 								"speaker": "self",
-								"text": "Any word of Linnea? ...No. I didn't think so. Keep looking, {hero}."
+								"text": "Any word of Professor Elias? ...No. I didn't think so. Keep looking, {hero}."
 							}
 						]
 					},
@@ -996,7 +985,7 @@
 							},
 							{
 								"speaker": "self",
-								"text": "And bring Linnea home. He was ours before he was the King's."
+								"text": "And bring Professor Elias home."
 							}
 						]
 					},

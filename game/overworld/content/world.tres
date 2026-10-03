@@ -10,7 +10,7 @@ display_name = "Oakvale"
 region_id = &"heartlands"
 map_pos = Vector2(0.426, 0.63)
 status = 0
-area_ids = Array[StringName]([&"oakvale", &"oakvale_ruins"])
+area_ids = Array[StringName]([&"oakvale", &"oakvale_ruins", &"oakvale_home", &"oakvale_inn", &"oakvale_hall", &"oakvale_bakery"])
 description = "The Starting Village: farmland above the southern coast. The hero's home."
 
 [sub_resource type="Resource" id="Resource_btytd"]
@@ -40,7 +40,7 @@ display_name = "River Crossing"
 region_id = &"heartlands"
 map_pos = Vector2(0.544, 0.655)
 status = 0
-area_ids = Array[StringName]([&"river_crossing"])
+area_ids = Array[StringName]([&"river_crossing", &"river_crossing_toll_house"])
 description = "A toll village at the Old Bridge, where the road north to the capital crosses the river."
 
 [sub_resource type="Resource" id="Resource_i6wmj"]
@@ -51,7 +51,7 @@ kind = "city"
 region_id = &"heartlands"
 map_pos = Vector2(0.498, 0.41)
 status = 0
-area_ids = Array[StringName]([&"crownhaven"])
+area_ids = Array[StringName]([&"crownhaven", &"crownhaven_workshop", &"crownhaven_barracks", &"crownhaven_inn", &"crownhaven_guildhall", &"crownhaven_chapel", &"crownhaven_forge"])
 description = "The Central Kingdom's walled river city, royal seat of Aldermere."
 
 [sub_resource type="Resource" id="Resource_0t3tf"]
@@ -73,7 +73,7 @@ kind = "town"
 region_id = &"woodlands"
 map_pos = Vector2(0.301, 0.384)
 status = 0
-area_ids = Array[StringName]([&"woodland_town"])
+area_ids = Array[StringName]([&"woodland_town", &"woodland_lodge", &"woodland_inn", &"woodland_trading_post", &"woodland_forge", &"woodland_herb_hut"])
 description = "A timber town in a forest clearing at the edge of the Deep Woods."
 
 [sub_resource type="Resource" id="Resource_7dich"]

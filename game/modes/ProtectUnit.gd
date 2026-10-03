@@ -6,10 +6,10 @@ class_name ProtectUnit
 ##
 ## On its own it never reports MET. It belongs in a rule set's LOSE conditions
 ## ([GameModeRules] turns a lose condition reporting FAILED into a defeat), beside the
-## win conditions that actually win the battle -- "rout the enemy, and keep Linnea
+## win conditions that actually win the battle -- "rout the enemy, and keep Elias
 ## alive". (As a WIN condition its FAILED is a defeat too, but it would then have to be
 ## MET to win, which it never is.) Maps author it as a victory-condition STRING,
-## "Protect Linnea" ([WinConditionLibrary] moves it to the lose side); story battles name
+## "Protect Elias" ([WinConditionLibrary] moves it to the lose side); story battles name
 ## it on their [BattleSpec] (`protect`) and StoryController adds it when the board is
 ## staged, together with the HERO rule (the main character falling is always a defeat).
 ##
@@ -23,7 +23,7 @@ class_name ProtectUnit
 
 ## Identifier of the unit that must be kept alive (see the class docs for what matches).
 @export var protected_id: StringName = &""
-## The name the objective shows ("Keep Linnea alive"); "" = [member protected_id].
+## The name the objective shows ("Keep Elias alive"); "" = [member protected_id].
 @export var display_label: String = ""
 ## Only units of this faction can be the protected one (-1 = any faction).
 @export var faction: int = -1

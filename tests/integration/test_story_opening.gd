@@ -5,8 +5,9 @@ extends GutTest
 ## booted GameWorld for the first fight:
 ##
 ##   new journey -> Oakvale (home): the mother's send-off -> the Mossway (no creature: the grass
-##   hint, no encounters) -> Crownhaven: arrival -> the Researcher's ceremony (the starter joins,
-##   the bonding shard) -> the raid (raiders appear, the Researcher is taken, the Sergeant runs
+##   hint, no encounters) -> Crownhaven: arrival -> through the Royal Workshop's door -> Professor
+##   Elias's ceremony inside (the starter joins,
+##   the bonding shard) -> the alarm: out to the yard -> the raid (raiders appear, Elias is taken, the Sergeant runs
 ##   up) -> the chase to Oakvale's ruins -> the mother's fate + the Sergeant's offer -> the FIRST
 ##   FIGHT (tactical; the Sergeant's creature as a guest ally) -> win -> Continue Journey -> the
 ##   aftermath: opening.complete + the Act 1 hook, the cairn, the road open again.
@@ -222,9 +223,15 @@ func test_the_opening_plays_end_to_end() -> void:
 	await _drain(ow)
 	assert_true(s.has_flag("opening.arrived_crownhaven"), "the arrival narration plays once")
 
-	# 5. THE CEREMONY and THE RAID.
-	ow = await _boot("crownhaven", Vector3i(24, 9, 0), "north")
-	assert_eq(ow.entity_at(Vector3i(24, 8, 0)).id, &"linnea", "the Researcher waits at her workshop")
+	# 5. THE CEREMONY (inside the Royal Workshop) and THE RAID (out in its yard).
+	ow = await _boot("crownhaven", Vector3i(24, 7, 0), "north")
+	assert_eq(ow.entity_at(Vector3i(24, 6, 0)).kind(), &"door", "the Royal Workshop's door")
+	assert_false(ow.try_step(Vector2i(0, -1)), "the door is not a cell to stand on...")
+	await _frames(3)
+	assert_eq(s.location_area(), "crownhaven_workshop", "...stepping into it goes inside")
+	assert_eq(s.location_cell(), Vector3i(6, 6, 0), "onto the cell above the exit mat")
+	ow = await _boot("crownhaven_workshop", Vector3i(6, 3, 0), "north")
+	assert_eq(ow.entity_at(Vector3i(6, 2, 0)).id, &"elias", "Professor Elias waits inside his workshop")
 	var seen := {"raiders": false, "starter": false}
 	var watch := func() -> void:
 		if not is_instance_valid(ow):
@@ -235,15 +242,29 @@ func test_the_opening_plays_end_to_end() -> void:
 		var st: OverworldActor = ow.actor("starter")
 		if st != null and st.visible:
 			seen["starter"] = true
-	assert_true(ow.interact(), "talk to the Researcher")
+	assert_true(ow.interact(), "talk to Professor Elias")
 	await _drain(ow, 0, watch)
 	assert_true(seen["starter"], "the starter appears at the ceremony")
-	assert_true(seen["raiders"], "raiders storm the workshop")
 	assert_eq(s.party.size(), 1, "the ceremony gives you your FIRST CREATURE")
 	if s.party.size() == 1:
 		assert_eq(s.party[0].character_id, STARTER, "the starter (%s)" % STARTER)
-	for f in ["key.bonding_shard", "opening.starter_received", "opening.attack", "opening.researcher_taken",
-			"opening.raiders_fled", "opening.chase"]:
+	for f in ["key.bonding_shard", "opening.starter_received", "opening.starter_pick"]:
+		assert_true(s.has_flag(f), "flag %s is set" % f)
+	assert_false(s.has_flag("opening.attack"), "the raid has not started inside")
+	assert_eq(s.location_area(), "crownhaven", "the alarm brings you out...")
+	assert_eq(s.location_cell(), Vector3i(24, 7, 0), "...into the workshop yard, in front of the door")
+	ow = await _boot()
+	assert_true(StoryController.is_script_running(), "the raid starts in the yard")
+	var yard_ow: OverworldController = ow
+	var watch_yard := func() -> void:
+		if not is_instance_valid(yard_ow):
+			return
+		var r: OverworldActor = yard_ow.actor("raider_captain")
+		if r != null and r.visible:
+			seen["raiders"] = true
+	await _drain(ow, 0, watch_yard)
+	assert_true(seen["raiders"], "raiders storm the workshop yard")
+	for f in ["opening.attack", "opening.researcher_taken", "opening.raiders_fled", "opening.chase"]:
 		assert_true(s.has_flag(f), "flag %s is set" % f)
 	assert_eq(s.location_area(), "oakvale_ruins", "the chase ends in Oakvale's ruins")
 	assert_eq(s.location_cell(), Vector3i(21, 9, 0), "on the east road")

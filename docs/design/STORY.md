@@ -37,7 +37,7 @@ came down with the asteroid [D18]. The hero has to stop the war [D20] and face t
 | The dark organization | **the Gloam** | † |
 | The hero | player-named, default **Wren** | † |
 | The hero's mother | **Briony** | † |
-| The lead researcher (the "Royal Shardwright") | **Linnea** | † |
+| The lead researcher (the Royal Researcher) | **Professor Elias** | † |
 | The soldier who becomes the general | **Rowan** (Sergeant at the start, then Captain, then General) | † |
 | The fallen creature (a boss, so a multi-word title is allowed) | **Astrael, the Fallen Star** | † |
 | The asteroid / its crater | **the Starfall** / **the Shardscar** | † |
@@ -58,10 +58,10 @@ name is the person's name ("Rowan"), and the class is a subtitle (see §6.6).
 | **The Starfall** | The asteroid struck, and people and creatures alike gained elemental power [D12]. (Proposed) Its crater, **the Shardscar**, lies in the dark borderland both Aldermere and Cindral claim, with **starstone** scattered around it. **Astrael** came down with it [D18] and sleeps there. |
 | **The Chain Age** | Nations bound creatures by force with **shard chains** of forged starstone [D17]. Armies were built that way, and it is why common folk still fear creatures. |
 | **The old way** | A few good people befriended creatures with no shard, by trial and error [D17]: the **Grovewardens**, fewer every year [D23]. |
-| **Now** | Linnea's **bonding shard** makes a safe bond possible for almost anyone [D13, D17]. Only testers and some army units have one [D13]. That scarcity is why few people have creatures, and why the shards are worth stealing. |
+| **Now** | Elias's **bonding shard** makes a safe bond possible for almost anyone [D13, D17]. Only testers and some army units have one [D13]. That scarcity is why few people have creatures, and why the shards are worth stealing. |
 
 **(Proposed late reveal)** The shards are cut from the purest starstone, which resonates with
-Astrael. That is why they bond, and why the Gloam needs Linnea: his method could make a shard
+Astrael. That is why they bond, and why the Gloam needs Elias: his method could make a shard
 strong enough to bind the fallen creature.
 
 ### 1.2 The fallen creature (Astrael)
@@ -82,7 +82,7 @@ strong enough to bind the fallen creature.
   (Proposed: **Wayfarer**, then either **Warden** at the Grovewarden lodge with the *Warden's
   Crest*, or **Knight** at the Crownhaven barracks with *Rowan's Insignia*: the old way or the
   army's way.)
-- (Proposed) Linnea picks ordinary villagers as testers on purpose, to prove almost anyone can
+- (Proposed) Elias picks ordinary villagers as testers on purpose, to prove almost anyone can
   bond [D17].
 
 ### 2.2 Briony †, the mother
@@ -92,10 +92,10 @@ strong enough to bind the fallen creature.
   toward kindness rather than revenge, which plants the old way in the hero before any
   Grovewarden appears.
 
-### 2.3 Linnea †, the Royal Shardwright
-- **He/him.** The hero's **longtime friend**: an Oakvale boy a few years older than the hero who
-  left for the city's academy twelve years ago and writes home every winter. He asked for the hero
-  by name as a tester (owner, 2026-10-03; DECISIONS.md "Story alignment").
+### 2.3 Professor Elias †, the Royal Researcher
+- (Owner, 2026-10-03; DECISIONS.md "The researcher and the starter") The Royal Researcher (magic /
+  history / science), 60+, he/him, wise, calm, intelligent, wears glasses; a longtime friend of the
+  hero's mother and a family friend. Reference sheet: `docs/design/characters/professor_elias.webp`.
 - Inventor of the bonding shard [D13], abducted during the hero's visit [D14].
 - (Proposed) Rescued at the end of Act 2. He joins as a human support unit and upgrades your
   shards (§6.4).
@@ -161,34 +161,29 @@ The battle types are **Duel** (turn-based, no movement; humans fight alongside c
 |---|---|---|---|---|---|---|
 | 1 | **Village morning** | Oakvale | Hero, Briony, villagers (the existing slice cast can be recast) | Chores; Briony gives the Heartwood Charm. **Optional spar with Bram** (human vs human) teaches duels [D7]. | Optional **duel** | `story.prologue.started`, `spar.bram.won` |
 | 2 | **The Mossway** | the Mossway | Hero, Sergeant Rowan | Walks to the capital. Wild creatures are visible, but encounters stay **off** until the hero has a shard. Rowan checks the hero's summons. | none | `met.rowan` |
-| 3 | **Crownhaven** | Crownhaven, the Royal Shardworks | Linnea, other testers | Explores the city. Linnea: almost anyone can bond [D17]. | none | `met.linnea` |
-| 4 | **First creature + shard** | Shardworks | Linnea | Bonds with the **starter** (see below) in a short guided scene. | none | `party.starter`, `story.has_shard` |
-| 5 | **The abduction** | Shardworks, streets | Raiders in Cindral colours, **chained** creatures [D22], Rowan | Rowan shoves the hero clear. Linnea is taken with a crate of shards and the other test creatures. | none (cutscene) | `story.linnea_taken` |
+| 3 | **Crownhaven** | Crownhaven, the Royal Shardworks | Elias, other testers | Explores the city. Elias: almost anyone can bond [D17]. | none | `met.elias` |
+| 4 | **First creature + shard** | Shardworks | Elias | Bonds with the **starter** (see below) in a short guided scene. | none | `party.starter`, `story.has_shard` |
+| 5 | **The abduction** | Shardworks, streets | Raiders in Cindral colours, **chained** creatures [D22], Rowan | Rowan shoves the hero clear. Elias is taken with a crate of shards. | none (cutscene) | `story.elias_taken` |
 | 6 | **Raiders flee toward Oakvale** | the Mossway, smoking | Hero, Rowan's squad | Runs home. Grass encounters switch **on**. | optional wild **duel** | `story.prologue.pursuit` |
 | 7 | **Oakvale destroyed; mother killed** | Oakvale (burned variant) | Hero, Briony, survivors | Finds Briony; her last words. The village burned to slow pursuit: war, not personal [D14]. | none | `oakvale.burned`, `story.briony_lost` |
 | 8 | **Rowan's offer** | Oakvale outskirts | Rowan | *"Their rearguard's still on the far road. I can't order you. I won't stop you."* A choice; "Not yet" keeps the offer open. | none | `story.accepted_fight` |
 | 9 | **FIRST FIGHT** | Oakvale's far road | Hero + starter vs raider + chained creature | The hero fights **alongside** the starter [D7, D15]; Rowan holds off the rest. At low HP the creature's **chain breaks** and it flees, free. | **Duel** (story-critical, retry on loss) | `trainer.raider_rearguard.defeated`, `seen.chain_break` |
-| 10 | **Aftermath / hook** | Oakvale ruins, then Crownhaven | Rowan, the Crown's steward | The raider's chain is **blackstone**; only the player notices. The Crown blames Cindral and musters. The hero is named a **Shardbearer** and sent after the raiders. Survivors move to Crownhaven (the hub). | none | `quest.find_linnea`, `clue.blackstone` |
+| 10 | **Aftermath / hook** | Oakvale ruins, then Crownhaven | Rowan, the Crown's steward | The raider's chain is **blackstone**; only the player notices. The Crown blames Cindral and musters. The hero is named a **Shardbearer** and sent after the raiders. Survivors move to Crownhaven (the hub). | none | `quest.find_elias`, `clue.blackstone` |
 
 **First-fight format.** Ideal: a *tandem* duel, with hero and starter on the field together
 (§6.7). Until then, a **party duel** (the hero leads, the starter switches in), or as a stopgap a
 tiny **tactical** board (hero, starter and Rowan as a guest vs 2 raiders and 1 chained creature,
 Eliminate All), which the engine supports today.
 
-**Starter creature: DECIDED (owner, 2026-10-03) -- the player CHOOSES among Linnea's three test
-creatures** (built: Barkling -- the default, first option -- Petalfang, Blightcap; all three are
-nature lines until more base lines exist). The two not chosen are carried off in the raid, as
-recommended below; `opening.starter_pick` records which one you took. The options table is kept for
-the record.
+**Starter creature (owner, 2026-10-03): the hero CHOOSES a starter; the starter roster is TBD.**
+The build offers placeholder options (existing roster units, `STARTER_OPTIONS` in
+`build_story_content.gd`); `opening.starter_pick` records which one you took. Nothing else about
+the starters is decided. The options table is kept for the record.
 
 | Option | Pro | Con |
 |---|---|---|
-| **One fixed starter (Barkling)** | Barkling to Oakheart is the only finished 2-stage line; the existing Sprig content fits; the story is simpler | Less player ownership |
-| Choice of 3 (Linnea's three test creatures) | A classic hook, plus replay value | Needs two more 2-stage base lines (nature is the only one that exists; fire and water barely have content) |
-
-**Recommendation:** one fixed **Barkling** now. The other two test creatures are **stolen in the
-raid** and come back chained, to be freed and caught in Acts 1 and 2. A choice of 3 later is a
-content change; the stolen ones are always the two you didn't pick.
+| One fixed starter (Barkling) | Barkling to Oakheart is the only finished 2-stage line; the existing Sprig content fits; the story is simpler | Less player ownership |
+| **A choice** (owner's pick) | A classic hook, plus replay value | Needs more 2-stage base lines (nature is the only one that exists; fire and water barely have content) |
 
 ---
 
@@ -200,7 +195,7 @@ content change; the stolen ones are always the two you didn't pick.
 |---|---|---|---|---|
 | Prologue | Ashes on the Mossway | the Greenwold (Oakvale, the Mossway, Crownhaven) | Get a creature; lose home | The hero is sent after the raiders |
 | 1 | The Blighted Road | the Greenwold (the Forgotten Forest) | Follow the trail and meet the old way | Eldroot is freed from its chain; the trail turns to the mountains |
-| 2 | The Stone Border | the Greyspine | Rescue Linnea; the frame starts to crack | Linnea is rescued; the Gloam is named; war is declared anyway |
+| 2 | The Stone Border | the Greyspine | Rescue Elias; the frame starts to crack | Elias is rescued; the Gloam is named; war is declared anyway |
 | 3 | The Shardscar | the Duskmire | Stop the war; face Astrael | The ending choice |
 
 **Act 1 (proposed: the Forgotten Forest campaign folded in).** The raiders cut through the dying
@@ -211,7 +206,7 @@ Beating Eldroot breaks the chain and ends the blight. The chain's age is the sec
 
 **Act 2.** In the Greyspine's starstone mines, General Rowan carries out the Crown's reprisals.
 Kesh swears the raiders' company does not exist, and Garrow shows what old-way bonds can do. Once
-rescued, Linnea reveals his captors wanted a shard that could bind "the one that fell", and names
+rescued, Elias reveals his captors wanted a shard that could bind "the one that fell", and names
 **the Gloam**. Rowan calls it Cindral trickery, and Aldermere declares war.
 
 **Act 3.** The armies mass on the Sundered Field. Vesk's letters to both courts, found in the
@@ -219,7 +214,7 @@ rescued, Linnea reveals his captors wanted a shard that could bind "the one that
 truth, and the war stops [D20]. Out of time, the Gloam starts its ritual and wakes Astrael.
 
 **How the frame is uncovered:** the blackstone chain (prologue), a years-old chain on Eldroot
-(Act 1), forged orders and Kesh's testimony (Act 2), Linnea's account (Act 2), Vesk's letters
+(Act 1), forged orders and Kesh's testimony (Act 2), Elias's account (Act 2), Vesk's letters
 (Act 3).
 
 ### Key battles
@@ -244,9 +239,9 @@ player's control; there is no AI-allied faction today.
 | 2-2 | Brannock Drill | Fort Brannock | Tactical | Eliminate All (sparring) | none | Rowan is now General; a by-the-book exercise |
 | 2-3 | The Cindral Pass | Border pass | Tactical | **Destroy Base** (the "raider" camp) | Rowan (guest) | The camp's orders are forged; `clue.forged_orders` |
 | 2-4 | Kesh | Pass cells | Duel | Subdue, then talk | none | Kesh joins; Rowan objects |
-| 2-5 | Deepvein Rescue | the Mines | Tactical | **Seize** (the wardroom where Linnea is held) | Kesh, Garrow | `story.linnea_rescued` |
+| 2-5 | Deepvein Rescue | the Mines | Tactical | **Seize** (the wardroom where Elias is held) | Kesh, Garrow | `story.elias_rescued` |
 | 2-6 | The Gravecaller | Mine mouth | Tactical | **Defeat Boss** (Mortis, if option A) | none | The Gloam is named |
-| 3-1 | Lanternmoor Night | Lanternmoor | Tactical | **Survive 5** (a Gloam raid on the town) | Linnea | |
+| 3-1 | Lanternmoor Night | Lanternmoor | Tactical | **Survive 5** (a Gloam raid on the town) | Elias | |
 | 3-2 | The Hollow Spire | Gloam hideout | Tactical | **Seize** (the archive) | none | Vesk's letters; `clue.vesk` |
 | 3-3 | **The Sundered Field** | Border | Tactical | **Protect** the Cindral envoy (needs the ProtectUnit hook; fallback: Survive 6) | **Rowan joins for good** | War averted [D20, D25] |
 | 3-4 | The Binding | Shardscar rim | Tactical | **Destroy Base** (three ritual anchors) | Rowan | |
@@ -276,7 +271,7 @@ player's control; there is no AI-allied faction today.
 |---|---|---|---|---|---|
 | **The Greenwold** † | Nature | **Oakvale** (a ruin after the prologue), **Crownhaven** (hub and capital), Thornwick † (forest town), Sorrel's hollow, the Grovewarden lodge, the Blighted Clearing, the Tainted Crossroads, the Proving Grounds, the Heartwood | **the Mossway**, the Treeline Path †, the Blight Road † | Barkling (common), Petalfang (meadow), Blightcap (blighted zones only; they thin out after 1-7), Mycothrall (deep forest, rare) | Bram (Warden-apprentice, optional), **Sorrel** |
 | **The Greyspine** † | Earth | Quarryhold † (mining town), Fort Brannock † (army), the Cindral Pass, the Deepvein Mines | the Switchback †, the Quarry Road † | Geode (mines, rare); Bastion (proposed as story-only: the living gatehouse of Fort Brannock); **new earth species needed** (at least 2 common) | **Garrow**, **Kesh** |
-| **The Duskmire** † | Dark | Lanternmoor † (a lamplit stilt village), the Hollow Spire, the Sundered Field, **the Shardscar** | the Fenwalk †, the Crater Rim † | Duskmaw (night fen), Mycothrall (rot), Undead (option A: chained remnants, not catchable; option B: wild) | **Linnea**, **Rowan** (permanent), Mortis (option B only) |
+| **The Duskmire** † | Dark | Lanternmoor † (a lamplit stilt village), the Hollow Spire, the Sundered Field, **the Shardscar** | the Fenwalk †, the Crater Rim † | Duskmaw (night fen), Mycothrall (rot), Undead (option A: chained remnants, not catchable; option B: wild) | **Elias**, **Rowan** (permanent), Mortis (option B only) |
 
 ### 5.2 Later regions (not for launch)
 
@@ -327,9 +322,8 @@ duels and 6.10, then 6.4 and 6.8 (Act 1's core loop), then 6.5, 6.6 and 6.9, the
 
 ## 7. Open questions for the owner
 
-1. **Starter: one fixed creature, or a choice of 3?** Recommendation: one fixed **Barkling** at
-   launch. The other two test creatures are stolen in the raid and come back chained; upgrade to a
-   choice of 3 once two more base lines exist.
+1. **Starter roster.** ANSWERED in part (owner, 2026-10-03): the hero chooses a starter. Still
+   open: which creatures (and how many) are offered -- the build uses placeholders.
 2. **Mortis and the Dark units [D19]:** A (a Gloam lieutenant; Undead are dead chained creatures)
    or B (an independent gravecaller who can be recruited)? Recommendation: **A**, with Duskmaw
    wild and neutral.
@@ -341,7 +335,7 @@ duels and 6.10, then 6.4 and 6.8 (Act 1's core loop), then 6.5, 6.6 and 6.9, the
    Recommendation: three endings, with **befriend the old way** as the true ending, gated by
    old-way bonds.
 5. **Bonding shards as items:** consumable with tiers, or one reusable shard? Recommendation:
-   **consumable, in tiers**, scarce early and crafted later by Linnea. That keeps the "rare
+   **consumable, in tiers**, scarce early and crafted later by Elias. That keeps the "rare
    technology" of D13 true in the gameplay.
 6. **What does "alongside" mean in duels [D7]?** On the field together (a tandem duel), or in the
    same party with switching? Recommendation: party switching first (M2), then tandem for story

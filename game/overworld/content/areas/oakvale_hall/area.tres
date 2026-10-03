@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_itwl4"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="2_1w1c1"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="3_qysqx"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/oakvale_hall/terrain.tres" id="4_bc4rl"]
+
+[sub_resource type="Resource" id="Resource_nb7h2"]
+script = ExtResource("1_itwl4")
+prop = "mat"
+footprint = Vector2i(1, 1)
+id = &"exit_mat"
+cell = Vector3i(6, 6, 0)
+tint = Color(0.62, 0.22, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_bd1ap"]
+script = ExtResource("2_1w1c1")
+area_rect = Rect2i(6, 6, 1, 1)
+target_area = &"oakvale"
+target_entry = &"door_house_hall"
+id = &"exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_erqv1"]
+script = ExtResource("1_itwl4")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_w"
+cell = Vector3i(1, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_ki4ea"]
+script = ExtResource("1_itwl4")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_e"
+cell = Vector3i(10, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[resource]
+script = ExtResource("3_qysqx")
+area_id = &"oakvale_hall"
+display_name = "Village Hall"
+terrain = ExtResource("4_bc4rl")
+kind = 2
+region_id = &"heartlands"
+world_map_pos = Vector2(0.426, 0.63)
+entry_points = {
+"door": {
+"cell": [6, 5, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_nb7h2"), SubResource("Resource_bd1ap"), SubResource("Resource_erqv1"), SubResource("Resource_ki4ea")])
+parent_area = &"oakvale"
