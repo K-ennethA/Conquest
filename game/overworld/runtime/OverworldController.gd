@@ -183,11 +183,14 @@ func _build_world() -> void:
 	add_child(journey)
 	journey.save_requested.connect(_on_journey_save)
 	journey.title_requested.connect(_on_journey_title)
+	# A pin changed in Journey -> Quests shows on the tracker as the menu closes.
+	journey.closed.connect(refresh_quest_tracker)
 
 	_dialogue = StoryDialogue.new()
 	add_child(_dialogue)
 	_dialogue.name = "OverworldDialogue"
 	_update_prompt()
+	refresh_quest_tracker()
 
 
 func _make_entity_actor(e: OverworldEntity) -> OverworldActor:
@@ -418,6 +421,7 @@ func is_input_blocked() -> bool:
 func _process(delta: float) -> void:
 	if not _booted:
 		return
+	_tick_quests()
 	if _cursor != null and player != null:
 		_cursor.global_position = player.global_position
 	_step_cooldown = maxf(0.0, _step_cooldown - delta)
@@ -885,6 +889,83 @@ func wait(seconds: float) -> void:
 func toast(text: String, kind: String = "") -> void:
 	if hud != null:
 		hud.toast(text, kind)
+
+
+# =====================================================================================
+#  Quest tracking (docs/STORY_MODE.md "Quest tracking")
+# =====================================================================================
+
+## Toast the quest transitions since the last look ([method StoryController.poll_quest_events])
+## and refresh the tracker -- at a QUIET moment only (no script running, the Journey menu shut), so
+## a cutscene that starts and advances a quest in one go reads as one settled change.
+func _tick_quests() -> void:
+	if story == null or hud == null or not story.has_method(&"poll_quest_events"):
+		return
+	if story.is_script_running() or (journey != null and journey.is_open()):
+		return
+	var events: Array = story.poll_quest_events()
+	if events.is_empty():
+		return
+	for e in events:
+		hud.quest_toast(e)
+	refresh_quest_tracker()
+
+
+## Show the tracked quest ([method QuestLog.tracked_entry]) on the HUD, say where its objective is,
+## and mark the objective's NPC when the hero is already in its area.
+func refresh_quest_tracker() -> void:
+	if hud == null or _state == null:
+		return
+	var e: Dictionary = QuestLog.tracked_entry(_state)
+	var aid: String = String(area.area_id) if area != null else ""
+	var here: bool = false
+	var place: String = ""
+	if not e.is_empty():
+		var atlas: WorldAtlas = QuestLog.atlas()
+		var loc_id: String = String(e.get("location", ""))
+		var obj_area: String = String(e.get("area", ""))
+		if not obj_area.is_empty():
+			here = obj_area == aid
+		elif not loc_id.is_empty() and atlas != null:
+			var cur: WorldLocation = atlas.location_for_area(aid)
+			here = cur != null and String(cur.id) == loc_id
+		var l: WorldLocation = atlas.location(loc_id) if atlas != null and not loc_id.is_empty() else null
+		place = l.display_name if l != null else ""
+	hud.set_tracked_quest(e, place, here)
+	_mark_objective_actor(String(e.get("npc", "")) if here else "")
+
+
+## A gold diamond over the actor the tracked objective points at ("" clears it).
+func _mark_objective_actor(actor_id: String) -> void:
+	for a in _actors.values():
+		var old: Node = (a as Node).get_node_or_null("ObjectiveMarker") if is_instance_valid(a) else null
+		if old != null and String((a as OverworldActor).entity_id) != actor_id:
+			a.remove_child(old)
+			old.queue_free()
+	var actor: OverworldActor = _actors.get(actor_id, null)
+	if actor == null or actor.get_node_or_null("ObjectiveMarker") != null:
+		return
+	var mark := Label3D.new()
+	mark.name = "ObjectiveMarker"
+	mark.text = "◆"
+	mark.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	mark.font_size = 64
+	mark.outline_size = 14
+	mark.pixel_size = 0.01
+	mark.modulate = MenuTheme.GOLD
+	mark.outline_modulate = MenuTheme.BG_DEEP
+	mark.no_depth_test = true
+	mark.position = Vector3(0, 2.5, 0)
+	actor.add_child(mark)
+
+
+## The actor wearing the objective marker ("" = none) -- tests.
+func objective_marker_actor() -> String:
+	for id in _actors:
+		var a: OverworldActor = _actors[id]
+		if is_instance_valid(a) and a.get_node_or_null("ObjectiveMarker") != null:
+			return String(id)
+	return ""
 
 
 ## The trainer VS clash, played over the overworld before the hand-off (the same VersusIntro

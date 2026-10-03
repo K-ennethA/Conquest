@@ -968,7 +968,7 @@ display_name = "Ruined Oakvale"
 terrain = ExtResource("22_w37dv")
 kind = 0
 region_id = &"heartlands"
-world_map_pos = Vector2(0.46, 0.67)
+world_map_pos = Vector2(0.426, 0.63)
 entry_points = {
 "east_gate": {
 "cell": [22, 9, 0],

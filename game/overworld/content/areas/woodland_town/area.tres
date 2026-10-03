@@ -754,7 +754,7 @@ display_name = "Woodland Town"
 terrain = ExtResource("15_ny8je")
 kind = 0
 region_id = &"woodlands"
-world_map_pos = Vector2(0.34, 0.41)
+world_map_pos = Vector2(0.301, 0.384)
 entry_points = {
 "east_road": {
 "cell": [26, 12, 0],

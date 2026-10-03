@@ -32,8 +32,8 @@ character_id = &"tree_grunt"
 
 [sub_resource type="Resource" id="Resource_imohw"]
 script = ExtResource("1_nbkj8")
-rate = 0.12
 table = Array[Resource]([SubResource("Resource_k0fs6"), SubResource("Resource_lxepw"), SubResource("Resource_hjhvd"), SubResource("Resource_ae2hf")])
+rate = 0.12
 
 [sub_resource type="Resource" id="Resource_56w5p"]
 script = ExtResource("3_picba")
@@ -114,7 +114,7 @@ display_name = "The Sparse Forest"
 terrain = ExtResource("10_oj3gq")
 kind = 1
 region_id = &"woodlands"
-world_map_pos = Vector2(0.41, 0.43)
+world_map_pos = Vector2(0.4, 0.4)
 entry_points = {
 "east": {
 "cell": [26, 6, 0],

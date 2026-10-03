@@ -42,8 +42,8 @@ character_id = &"tree_grunt"
 
 [sub_resource type="Resource" id="Resource_frbyr"]
 script = ExtResource("1_dl3pe")
-rate = 0.14
 table = Array[Resource]([SubResource("Resource_f6bed"), SubResource("Resource_5xqpn"), SubResource("Resource_6idsj")])
+rate = 0.14
 
 [sub_resource type="Resource" id="Resource_52mfd"]
 script = ExtResource("3_2rcsc")
@@ -567,7 +567,7 @@ display_name = "Route 1 -- The Mossway"
 terrain = ExtResource("25_lewvs")
 kind = 1
 region_id = &"heartlands"
-world_map_pos = Vector2(0.52, 0.68)
+world_map_pos = Vector2(0.485, 0.645)
 entry_points = {
 "east": {
 "cell": [32, 6, 0],

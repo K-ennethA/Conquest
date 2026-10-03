@@ -542,11 +542,15 @@ func test_world_map_positions_follow_the_owners_map() -> void:
 	var pos := {}
 	for l in atlas.locations:
 		pos[String(l.id)] = l.map_pos
-	# The map's landmarks, compass-checked: x grows east, y grows south.
-	assert_lt(pos["oakvale"].distance_to(Vector2(0.46, 0.67)), 0.025, "Oakvale (the Starting Village)")
-	assert_lt(pos["river_crossing"].distance_to(Vector2(0.58, 0.69)), 0.025, "River Crossing")
-	assert_lt(pos["crownhaven"].distance_to(Vector2(0.49, 0.47)), 0.025, "Crownhaven (the Central Kingdom)")
-	assert_lt(pos["woodland_town"].distance_to(Vector2(0.34, 0.41)), 0.025, "Woodland Town")
+	# The map's landmarks, compass-checked: x grows east, y grows south. Each position sits on the
+	# place's ART (the houses / keep / cave the painting draws just above its label), so the world
+	# map's marker covers the drawing, not the label text (docs/screenshots/world_map/map_alignment.png).
+	assert_lt(pos["oakvale"].distance_to(Vector2(0.426, 0.63)), 0.025, "Oakvale (the Starting Village)")
+	assert_lt(pos["river_crossing"].distance_to(Vector2(0.544, 0.655)), 0.025, "River Crossing")
+	assert_lt(pos["crownhaven"].distance_to(Vector2(0.498, 0.41)), 0.025, "Crownhaven (the Central Kingdom)")
+	assert_lt(pos["woodland_town"].distance_to(Vector2(0.301, 0.384)), 0.025, "Woodland Town")
+	assert_lt(pos["beach_village"].distance_to(Vector2(0.678, 0.685)), 0.025, "Beach Village")
+	assert_lt(pos["thieves_guild"].distance_to(Vector2(0.275, 0.478)), 0.025, "the Thieves Guild's cave")
 	assert_gt(pos["oakvale"].y, pos["crownhaven"].y, "Oakvale is south of the capital")
 	assert_gt(pos["river_crossing"].x, pos["oakvale"].x, "River Crossing is east of Oakvale")
 	assert_lt(pos["woodland_town"].x, pos["crownhaven"].x, "Woodland Town is west of the capital")

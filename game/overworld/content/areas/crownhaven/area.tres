@@ -2843,7 +2843,7 @@ display_name = "Crownhaven"
 terrain = ExtResource("30_fumqp")
 kind = 0
 region_id = &"heartlands"
-world_map_pos = Vector2(0.49, 0.47)
+world_map_pos = Vector2(0.498, 0.41)
 entry_points = {
 "east_gate": {
 "cell": [28, 13, 0],

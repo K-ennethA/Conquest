@@ -93,6 +93,8 @@ var _offer_after_battle: bool = false
 var _pending_event: Dictionary = {}
 ## An offer chain is on screen (never stack a second one on top).
 var _offering: bool = false
+## Quest start / advance / complete detection ([method poll_quest_events]).
+var _quest_tracker: QuestTracker = QuestTracker.new()
 
 ## Tests switch scene changes off and drive the round trip by hand.
 var scene_changes_enabled: bool = true
@@ -280,6 +282,7 @@ func _begin_session(s: StoryState, slot: int) -> void:
 	_offering = false
 	if s != null:
 		s.drain_changes()   # loading a save "sets" every flag: not news
+	_quest_tracker.reset(s)   # nor is any quest it already holds
 	_runner = StoryScriptRunner.new()
 	session_changed.emit()
 
@@ -293,6 +296,7 @@ func end_session() -> void:
 	_state = null
 	_slot = 0
 	_host = null
+	_quest_tracker.reset(null)
 	_runner = StoryScriptRunner.new()
 	session_changed.emit()
 
@@ -613,6 +617,37 @@ func use_item_on_member(item_id: String, member_id: String) -> Dictionary:
 		return {"success": false, "reason": "no_effect", "evolved": false}
 	var evolved: bool = await offer_evolution(member_id, edges, ctx)
 	return {"success": true, "reason": "", "evolved": evolved}
+
+
+## QUEST TRACKING (docs/STORY_MODE.md "Quest tracking"): the quests that started / advanced /
+## completed since the last call ([QuestTracker] events, oldest first). The tracker's baseline is
+## taken whenever a session begins (a load is not news) and a swapped-in state (Try Again) is
+## re-baselined silently. The overworld polls this while no script runs and toasts the events.
+func poll_quest_events() -> Array:
+	if _state == null:
+		return []
+	return _quest_tracker.poll(_state)
+
+
+func quest_tracker() -> QuestTracker:
+	return _quest_tracker
+
+
+## The quest the HUD tracker follows ([method QuestLog.tracked_entry]; {} without a session).
+func tracked_quest_entry() -> Dictionary:
+	return QuestLog.tracked_entry(_state) if _state != null else {}
+
+
+## Journey -> Quests "Track": PIN [param quest_id] to the HUD tracker ("" = back to the main quest)
+## and save. False (nothing changed) for a quest that is not listed and active.
+func set_tracked_quest(quest_id: String) -> bool:
+	if _state == null:
+		return false
+	if not quest_id.is_empty() and not QuestLog.is_active(_state, quest_id):
+		return false
+	_state.tracked_quest = quest_id
+	save_game()
+	return true
 
 
 ## Put party member [param member_id] on / off HOLD (no automatic evolution prompts) and save.
@@ -1070,6 +1105,7 @@ func abandon_to_title() -> void:
 	_state = null
 	_slot = 0
 	_host = null
+	_quest_tracker.reset(null)
 	_runner = StoryScriptRunner.new()
 	session_changed.emit()
 	_change_scene(MAIN_MENU_SCENE)
