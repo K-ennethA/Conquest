@@ -32,9 +32,12 @@ extends OverworldEntity
 ##   scarecrow a field scarecrow
 ##
 ## [member OverworldEntity.cell] is the footprint's top-left cell; [member footprint] its size.
-## Props are NOT blocking by default (the terrain under a house block already decides
-## walkability); a prop standing on open ground (a well, a stall) sets
-## [member OverworldEntity.blocking] and then blocks EVERY cell of its footprint.
+## COLLISION is per KIND: [constant SOLID_KINDS] (a cart, barrels, a well, a stall, fences,
+## houses, ...) block EVERY cell of their footprint; the rest (crops, a gatehouse's arch) are
+## walk-over and the terrain under them decides. [member collision] overrides one prop either way
+## ("solid" / "walkable"). [member OverworldEntity.blocking] is NOT used by props: its exported
+## default (true) differed from what the old _init() forced (false), so ResourceSaver dropped an
+## authored `true` and every reloaded prop came back walk-through (the pass-through-carts bug).
 
 const KINDS: Array[String] = ["house", "ruin", "keep", "tower", "gate", "windmill", "stall", "well",
 	"fence", "haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena",
@@ -44,6 +47,14 @@ const KINDS: Array[String] = ["house", "ruin", "keep", "tower", "gate", "windmil
 	"haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena", "cabin", "logs", "lamp", "chapel", "smithy", "scarecrow")
 var prop: String = "house"
 @export var footprint: Vector2i = Vector2i(2, 2)
+## "auto" = the kind's default ([constant SOLID_KINDS]); "solid" / "walkable" override it.
+@export_enum("auto", "solid", "walkable") var collision: String = "auto"
+
+## Kinds that block their whole footprint unless [member collision] says "walkable". Walk-over
+## decor (crops) and arches the player walks under (gate) are deliberately absent.
+const SOLID_KINDS: Array[String] = ["house", "ruin", "keep", "tower", "windmill", "stall", "well",
+	"fence", "haystack", "barrels", "cart", "banner", "dummy", "crystal", "fire", "rubble", "arena",
+	"cabin", "logs", "lamp", "chapel", "smithy", "scarecrow"]
 
 
 func kind() -> StringName:
@@ -54,8 +65,14 @@ func is_interactable() -> bool:
 	return false
 
 
-func _init() -> void:
-	blocking = false
+## Does this prop block its footprint? The kind's default, unless [member collision] overrides it.
+func is_blocking() -> bool:
+	match collision:
+		"solid":
+			return true
+		"walkable":
+			return false
+	return SOLID_KINDS.has(prop)
 
 
 ## Every cell of the footprint (a blocking prop blocks them all).
@@ -71,5 +88,7 @@ func validate(area: Resource, issues: Array[String]) -> void:
 	super.validate(area, issues)
 	if not KINDS.has(prop):
 		issues.append("%s: unknown prop kind '%s'" % [String(id), prop])
+	if not ["auto", "solid", "walkable"].has(collision):
+		issues.append("%s: unknown collision '%s'" % [String(id), collision])
 	if footprint.x < 1 or footprint.y < 1:
 		issues.append("%s: prop footprint %s is empty" % [String(id), str(footprint)])

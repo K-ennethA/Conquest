@@ -79,7 +79,7 @@ func rebuild_blockers(area: OverworldAreaResource, state: StoryState) -> void:
 		return
 	var aid: String = String(area.area_id)
 	for e in area.present_entities(state):
-		if not e.blocking or not e.has_actor():
+		if not e.is_blocking() or not e.has_actor():
 			continue
 		var ov: Dictionary = state.actor_override(aid, String(e.id)) if state != null else {}
 		if not ov.is_empty():

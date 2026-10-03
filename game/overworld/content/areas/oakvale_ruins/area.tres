@@ -30,7 +30,6 @@ footprint = Vector2i(3, 3)
 id = &"house_home"
 cell = Vector3i(2, 3, 0)
 tint = Color(0.72, 0.34, 0.2, 1)
-blocking = false
 
 [sub_resource type="Resource" id="Resource_yj2uu"]
 script = ExtResource("1_76032")
@@ -39,7 +38,6 @@ footprint = Vector2i(5, 2)
 id = &"house_hall"
 cell = Vector3i(8, 2, 0)
 tint = Color(0.66240007, 0.31280002, 0.184, 1)
-blocking = false
 
 [sub_resource type="Resource" id="Resource_51q05"]
 script = ExtResource("1_76032")
@@ -48,7 +46,6 @@ footprint = Vector2i(3, 2)
 id = &"house_farm"
 cell = Vector3i(15, 3, 0)
 tint = Color(0.734, 0.373, 0.24000001, 1)
-blocking = false
 
 [sub_resource type="Resource" id="Resource_mnat3"]
 script = ExtResource("1_76032")
@@ -56,7 +53,6 @@ footprint = Vector2i(3, 2)
 id = &"house_bakery"
 cell = Vector3i(12, 14, 0)
 tint = Color(0.39600003, 0.187, 0.11000001, 1)
-blocking = false
 
 [sub_resource type="Resource" id="Resource_61ixc"]
 script = ExtResource("1_76032")
@@ -65,7 +61,6 @@ footprint = Vector2i(3, 2)
 id = &"house_barn"
 cell = Vector3i(16, 13, 0)
 tint = Color(0.6, 0.18, 0.14, 1)
-blocking = false
 
 [sub_resource type="Resource" id="Resource_yyqan"]
 script = ExtResource("1_76032")
@@ -73,7 +68,6 @@ prop = "ruin"
 id = &"mill"
 cell = Vector3i(2, 13, 0)
 tint = Color(0.5, 0.3, 0.2, 1)
-blocking = false
 
 [sub_resource type="Resource" id="Resource_rdnxe"]
 script = ExtResource("1_76032")
@@ -90,7 +84,6 @@ footprint = Vector2i(1, 1)
 id = &"fire_15_10"
 cell = Vector3i(15, 10, 0)
 tint = Color(1, 1, 1, 1)
-blocking = false
 visible_if = "not has(\"opening.complete\")"
 
 [sub_resource type="Resource" id="Resource_q3wg7"]
@@ -100,7 +93,6 @@ footprint = Vector2i(1, 1)
 id = &"fire_17_11"
 cell = Vector3i(17, 11, 0)
 tint = Color(1, 1, 1, 1)
-blocking = false
 visible_if = "not has(\"opening.complete\")"
 
 [sub_resource type="Resource" id="Resource_1dxlu"]
@@ -110,7 +102,6 @@ footprint = Vector2i(1, 1)
 id = &"fire_8_15"
 cell = Vector3i(8, 15, 0)
 tint = Color(1, 1, 1, 1)
-blocking = false
 visible_if = "not has(\"opening.complete\")"
 
 [sub_resource type="Resource" id="Resource_lt0vh"]
@@ -120,7 +111,6 @@ footprint = Vector2i(1, 1)
 id = &"fire_19_13"
 cell = Vector3i(19, 13, 0)
 tint = Color(1, 1, 1, 1)
-blocking = false
 visible_if = "not has(\"opening.complete\")"
 
 [sub_resource type="Resource" id="Resource_gp022"]
@@ -130,7 +120,6 @@ footprint = Vector2i(1, 1)
 id = &"fire_12_3"
 cell = Vector3i(12, 3, 0)
 tint = Color(1, 1, 1, 1)
-blocking = false
 visible_if = "not has(\"opening.complete\")"
 
 [sub_resource type="Resource" id="Resource_ou81t"]
@@ -140,7 +129,6 @@ footprint = Vector2i(1, 1)
 id = &"fire_16_16"
 cell = Vector3i(16, 16, 0)
 tint = Color(1, 1, 1, 1)
-blocking = false
 visible_if = "not has(\"opening.complete\")"
 
 [sub_resource type="Resource" id="Resource_glcco"]
@@ -150,7 +138,6 @@ footprint = Vector2i(1, 1)
 id = &"rubble_14_12"
 cell = Vector3i(14, 12, 0)
 tint = Color(1, 1, 1, 1)
-blocking = false
 
 [sub_resource type="Resource" id="Resource_x573u"]
 script = ExtResource("1_76032")
@@ -159,7 +146,6 @@ footprint = Vector2i(1, 1)
 id = &"rubble_8_14"
 cell = Vector3i(8, 14, 0)
 tint = Color(1, 1, 1, 1)
-blocking = false
 
 [sub_resource type="Resource" id="Resource_cp2h0"]
 script = ExtResource("1_76032")
@@ -168,7 +154,6 @@ footprint = Vector2i(1, 1)
 id = &"rubble_18_8"
 cell = Vector3i(18, 8, 0)
 tint = Color(1, 1, 1, 1)
-blocking = false
 
 [sub_resource type="Resource" id="Resource_136u7"]
 script = ExtResource("1_76032")
@@ -177,7 +162,6 @@ footprint = Vector2i(1, 1)
 id = &"rubble_6_11"
 cell = Vector3i(6, 11, 0)
 tint = Color(1, 1, 1, 1)
-blocking = false
 
 [sub_resource type="Resource" id="Resource_4gk17"]
 script = ExtResource("1_76032")
@@ -186,7 +170,6 @@ footprint = Vector2i(1, 1)
 id = &"cart"
 cell = Vector3i(19, 12, 0)
 tint = Color(1, 1, 1, 1)
-blocking = false
 
 [sub_resource type="Resource" id="Resource_ow3tw"]
 script = ExtResource("1_76032")

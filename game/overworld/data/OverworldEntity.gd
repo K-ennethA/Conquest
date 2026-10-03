@@ -47,6 +47,12 @@ func occupies(c: Vector3i) -> bool:
 	return cells().has(c)
 
 
+## Does this entity block the cells it occupies? Kinds whose solidity is not the plain
+## [member blocking] flag (props: by kind) override it.
+func is_blocking() -> bool:
+	return blocking
+
+
 ## Does it get an actor node (a model / prop)? Warps and trigger zones are invisible.
 func has_actor() -> bool:
 	return true

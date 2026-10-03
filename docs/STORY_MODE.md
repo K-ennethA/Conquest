@@ -381,6 +381,57 @@ Classic costs the partner, a full Cup run → prize + title + the champion, save
   members; party > squad needs the picker (and a Party-screen reorder) in M2.
 - Profile points still accrue on the story tactical end screen (existing behaviour).
 
+## Collision
+
+`OverworldGrid.is_walkable(cell)` = the terrain's `is_passable` (minus water / lava, see
+`OVERWORLD_BLOCKING_TILES`) AND no blocker on it. Blockers are the present entities whose
+`is_blocking()` is true (NPCs, trainers, signs, chests, the Wayshrine, **solid props**) plus the
+visible wild creatures. Warps and trigger zones never block.
+
+- **Props are solid by KIND.** `PropEntity.SOLID_KINDS` (house, ruin, keep, tower, windmill, stall,
+  well, fence, haystack, barrels, cart, banner, dummy, crystal, fire, rubble, arena, cabin, logs,
+  lamp, chapel, smithy, scarecrow) block **every cell of their footprint**. Walk-over decor
+  (`crops`) and a `gate` (its arch is walked under; the towers are wall terrain) are not.
+  `PropEntity.collision` (`"auto"` / `"solid"` / `"walkable"`) overrides one prop either way; the
+  builder's `_prop(..., blocking)` sets `"solid"` for a walk-over kind passed `true`.
+- **Why the carts were walk-through.** `PropEntity._init()` forced `blocking = false`, but the
+  exported default of `blocking` is `true`. `ResourceSaver` omits a value equal to the exported
+  default, so every `blocking = true` the builder set was dropped from `area.tres`, and the
+  reload came back with `false`. Never give an `@export` a different runtime default than its
+  declared one; props no longer read `blocking` at all (`OverworldEntity.is_blocking()`, which
+  `PropEntity` overrides, is what the grid asks).
+- **Footprints.** A prop's footprint is its model's cell rect (`OverworldProps` builds each model
+  inside it; one cell is 2 m). A cart / barrels / haystack / lamp is one cell; stalls and fences
+  are 2+ cells along their long axis and block all of them. Houses and other buildings stand on
+  `stone_wall` terrain, so they were already impassable; the prop being solid too keeps a model
+  from ever being walkable if its terrain is repainted.
+- **Routes.** `tests/integration/test_overworld_collision.gd` flood-fills every area from each
+  entry point under every story stage and asserts every warp, NPC (a neighbouring cell), chest,
+  sign, shrine, trigger and scripted-move target is still reachable, that no solid prop sits on an
+  entry, an exit, an actor or a cutscene destination, that every solid prop cell is unwalkable on
+  the real grid, and that prop models stay inside their footprints. When adding a prop, run it: a
+  failure means a prop sealed something off (or walled a pocket of open ground away) -- nudge the
+  prop's position in `build_story_content.gd`, then rebuild. The nudges made when props went solid:
+  Crownhaven's four bridge lamps now stand on the deck corners (they cut each one-cell river bank in
+  two and walled the south sign into a nook), the north-gate street lamp moved to the barracks-side
+  column, one yard lamp and a training dummy moved a cell; Oakvale's plaza lamp (14, 6) and the barn
+  haystacks (19, 13) / (19, 14); the River Crossing bank fence (3, 10); Woodland Town's archery
+  targets (3, 7) / (5, 7) and the lumber-yard logs (18, 17).
+- **Saves.** A save made before a prop turned solid may stand inside it: `StoryController.settle_location`
+  (run by `continue_journey`) moves the hero to the nearest reachable open cell, wild creatures
+  too (`WildSpawner._restore_slot` re-lays-out one on a blocked cell).
+- **Encounter arrival.** A step that lands while the journey menu (or another overlay) is open
+  waits for it to close before warps, triggers, trainers, creatures and the grass roll run
+  (`OverworldController._await_arrival`; the menu can be opened mid-step, so without this a wild
+  battle could start behind it). A TACTICAL encounter row stays a tactical battle
+  (`StartDuelCommand.build_request` no longer forces `kind = duel` on it). Tests:
+  `tests/integration/test_wild_encounter_flow.gd` (seeded grass roll -> the predicted foe on the
+  predicted step; a contact fought on the real stage returns to the same cell with the duel's HP;
+  every shipped table plays; no shipped roster spawns on a blocked cell). To watch a real
+  encounter headless: `godot --headless --path . --script dev_scripts/wild_encounter_smoke.gd`
+  (overworld -> grass step -> the real duel scene played by the AI -> Continue -> back on the same
+  cell, with a pass / fail line per step).
+
 ## Journey menu pages (Esc / Start)
 
 Rows: Resume · Party · Quests · Bag · Map · Difficulty · Settings · Load · Save · Title Screen. The
