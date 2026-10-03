@@ -58,13 +58,49 @@ class_name WorldLook
 	set(v):
 		exposure = v
 		_apply()
-@export var glow_intensity: float = 0.55:
+## GLOW (retuned 2026-10-03, research godot-world-feel.md item 2; the pre-change values
+## live verbatim in LOOK_PRESETS["current"]). Godot 4.6 (PR #110671) blends glow BEFORE
+## the tonemap for every mode except soft light, and made Screen + intensity 0.3 + levels
+## {0, .8, .4, .1, 0, 0, 0} the defaults. We now use exactly those, so the glow is the
+## engine's own 4.6 look rather than the soft-light mode that "removes the glow effect
+## when blending against dark backgrounds" (the PR's words).
+@export var glow_intensity: float = 0.3:
 	set(v):
 		glow_intensity = v
 		_apply()
-@export var glow_bloom: float = 0.04:
+## Bloom = the glow-feedback FLOOR for pixels below the threshold (4.6 copy.glsl:
+## feedback = max(smoothstep(thr, thr + hdr_scale, lum), bloom)), i.e. it makes ALL lit
+## surfaces glow. 0 = only emissives bloom (the research's intent). The old base 0.04
+## under soft light added 0.0037 linear on a typical lit pixel (c = 0.8 -> 0.598 after
+## Filmic; 0.6%), below visibility, so dropping it loses nothing that was seen.
+@export var glow_bloom: float = 0.0:
 	set(v):
 		glow_bloom = v
+		_apply()
+## Pre-tonemap luminance where glow starts. A lit board pixel is albedo x (sun 1.55 x
+## sin 50 deg + sky ambient ~0.42) = albedo x ~1.6, so 1.2 keeps albedo <= 0.75 (grass,
+## dirt, stone) out of the glow and lets emissives (fire, magic, unit _GLOW) in.
+@export var glow_hdr_threshold: float = 1.2:
+	set(v):
+		glow_hdr_threshold = v
+		_apply()
+## Width of the threshold ramp. Derived, not tuned: GLOW_HDR_CEILING_MOBILE - threshold,
+## so the ramp completes exactly at 2.0 -- an emissive at the forge palette cap (peak
+## <= 2.0, godot-import-notes.md) gets FULL glow feedback on both renderers. With the
+## engine default 2.0 it would get smoothstep(1.2, 3.2, 2.0) = 0.35 on desktop and could
+## never get more on a phone (Mobile RGB10A2 clips at 2.0).
+@export var glow_hdr_scale: float = GLOW_HDR_CEILING_MOBILE - 1.2:
+	set(v):
+		glow_hdr_scale = v
+		_apply()
+@export var glow_blend_mode: Environment.GlowBlendMode = Environment.GLOW_BLEND_MODE_SCREEN:
+	set(v):
+		glow_blend_mode = v
+		_apply()
+## Glow mip weights, levels 1..7 (4.6 defaults).
+@export var glow_levels: PackedFloat32Array = PackedFloat32Array([0.0, 0.8, 0.4, 0.1, 0.0, 0.0, 0.0]):
+	set(v):
+		glow_levels = v
 		_apply()
 @export var saturation: float = 1.0:
 	set(v):
@@ -75,6 +111,109 @@ class_name WorldLook
 		contrast = v
 		_apply()
 @export var contact_shadows: bool = true
+## Screen-space AO. Forward+ only (the Mobile renderer ignores it); the A/B harness turns
+## it off in the "mobile profile" preset so desktop previews what a phone renders.
+@export var ssao_enabled: bool = true:
+	set(v):
+		ssao_enabled = v
+		_apply()
+## Sun shadow profile: SHADOW_PROFILE_DESKTOP / SHADOW_PROFILE_MOBILE, or &"" = auto
+## ([method detect_shadow_profile]: the Mobile renderer or a mobile platform -> mobile).
+@export var shadow_profile: StringName = &"":
+	set(v):
+		shadow_profile = v
+		_apply()
+
+# --- Render profile constants (research godot-world-feel.md item 1) -------------------
+## ANTI-ALIASING lives in project.godot [rendering] (it is a viewport setting, not an
+## Environment one):
+##   anti_aliasing/quality/msaa_3d=2          4x MSAA on desktop (Forward+)
+##   anti_aliasing/quality/msaa_3d.mobile=1   2x MSAA on phones (feature tag "mobile";
+##                                            Android/iOS run the Mobile renderer, since
+##                                            rendering_method.mobile defaults to "mobile")
+##   anti_aliasing/quality/use_debanding=true both renderers (Mobile's RGB10A2 buffer
+##                                            bands on fog/sky gradients)
+## Mobile choice: the Godot 4.6 Mobile renderer supports MSAA 3D, FXAA and SMAA 1x (3D
+## antialiasing docs: FXAA/SMAA are "only available in the Forward+ and Mobile
+## renderers"; TAA is Forward+ only). 2x MSAA is picked over SMAA because our aliasing is
+## GEOMETRIC (flat-shaded low-poly edges, toon light steps), which MSAA samples and a
+## post filter only guesses at, and because tile-based phone GPUs resolve MSAA in tile
+## memory while SMAA adds three full-screen passes of framebuffer bandwidth. The docs:
+## "2x MSAA may be usable ... higher MSAA levels are unlikely to run smoothly on mobile
+## GPUs". If 2x measures too slow on the target phone, screen_space_aa.mobile=2 (SMAA)
+## is the supported fallback.
+const SHADOW_PROFILE_DESKTOP := &"desktop"
+const SHADOW_PROFILE_MOBILE := &"mobile"
+## Mobile RGB10A2 framebuffer range: no pixel brighter than Color(2, 2, 2) on phones.
+const GLOW_HDR_CEILING_MOBILE := 2.0
+## Desktop shadows: the pre-change values, unchanged (engine-default split ratios).
+const DESKTOP_SHADOW_MAX_DISTANCE := 140.0
+const DESKTOP_SHADOW_SPLITS := Vector3(0.1, 0.2, 0.5)
+## Camera rig facts the mobile shadow fit is derived from (read from the code, not eyed):
+## both cameras pitch 50 deg down with a 50 deg vertical FOV (GameWorld.tscn Camera3D,
+## OverworldCamera.FOV_DEG); the battle camera's authored zoom-out clamp is
+## CameraController.dist_max = 90 (the overworld's MAX_DISTANCE 28 is smaller), and its
+## typical fit distance is ~20 (13x11 board, CameraController's dist_max comment).
+## Boards past the authored budget raise the clamp at runtime (board_zoom_limit); there
+## the far edge falls outside the mobile shadow range and fades out (fade_start 0.8).
+const CAMERA_PITCH_DEG := 50.0
+const CAMERA_FOV_DEG := 50.0
+const CAMERA_DIST_MAX := 90.0
+const CAMERA_FIT_DISTANCE := 20.0
+
+## LOOK PRESETS for the artist's A/B harness ([WorldLookPresetCycler], debug builds,
+## F7). "current" = the pre-2026-10-03 values captured verbatim (glow levels and
+## hdr_scale were never set, so they were the 4.6 engine defaults; AA was off).
+## "msaa" = a Viewport.MSAA_* value, or -1 = whatever project.godot sets for this
+## platform; "mobile" in "msaa" reads the project's .mobile override.
+const LOOK_PRESET_DEFAULT := "new"
+const LOOK_PRESETS := {
+	"current": {
+		"glow_intensity": 0.55, "glow_bloom": 0.04, "glow_hdr_threshold": 0.95,
+		"glow_hdr_scale": 2.0, "glow_blend_mode": Environment.GLOW_BLEND_MODE_SOFTLIGHT,
+		"glow_levels": [0.0, 0.8, 0.4, 0.1, 0.0, 0.0, 0.0],
+		"msaa": Viewport.MSAA_DISABLED, "debanding": false,
+		"shadow_profile": &"desktop", "ssao_enabled": true,
+	},
+	"new": {
+		"glow_intensity": 0.3, "glow_bloom": 0.0, "glow_hdr_threshold": 1.2,
+		"glow_hdr_scale": GLOW_HDR_CEILING_MOBILE - 1.2, "glow_blend_mode": Environment.GLOW_BLEND_MODE_SCREEN,
+		"glow_levels": [0.0, 0.8, 0.4, 0.1, 0.0, 0.0, 0.0],
+		"msaa": -1, "debanding": true,
+		"shadow_profile": &"", "ssao_enabled": true,
+	},
+	# Research T2 range low end: albedo above ~0.62 in full sun starts to glow too.
+	"new thr1.0": {
+		"glow_intensity": 0.3, "glow_bloom": 0.0, "glow_hdr_threshold": 1.0,
+		"glow_hdr_scale": GLOW_HDR_CEILING_MOBILE - 1.0, "glow_blend_mode": Environment.GLOW_BLEND_MODE_SCREEN,
+		"glow_levels": [0.0, 0.8, 0.4, 0.1, 0.0, 0.0, 0.0],
+		"msaa": -1, "debanding": true,
+		"shadow_profile": &"", "ssao_enabled": true,
+	},
+	# What a phone renders, previewed on desktop: 2x MSAA, 2-split fitted shadows, no
+	# SSAO. (Not emulated: the 2.0 HDR clip and Hard shadow filtering.)
+	"new mobile-profile": {
+		"glow_intensity": 0.3, "glow_bloom": 0.0, "glow_hdr_threshold": 1.2,
+		"glow_hdr_scale": GLOW_HDR_CEILING_MOBILE - 1.2, "glow_blend_mode": Environment.GLOW_BLEND_MODE_SCREEN,
+		"glow_levels": [0.0, 0.8, 0.4, 0.1, 0.0, 0.0, 0.0],
+		"msaa": "mobile", "debanding": true,
+		"shadow_profile": &"mobile", "ssao_enabled": false,
+	},
+}
+const LOOK_PRESET_ORDER: Array[String] = ["current", "new", "new thr1.0", "new mobile-profile"]
+
+## Weather glow_bloom conversion (see [method _weather_bloom_factor]). The weather
+## resources' additive glow_bloom values were authored against soft light at base
+## intensity 0.55. Both blends are linear in a small glow g, so the multiplicative
+## glow_scale keeps its meaning unchanged; an ADDITIVE bloom needs re-scaling by the
+## ratio of the two blends' slopes. 4.6 tonemap.glsl: soft light adds
+## Tf(g) * (D(t) - t) after the tonemap (t = Tf(c), D = the soft-light curve); Screen
+## adds g * (1 - c / white) before it. At a typical lit board pixel c = 0.8 (Filmic,
+## white 6): soft slope 0.1339, Screen slope 0.3165 -> 0.423. (The ratio runs 0.23 at
+## c = 0.3 to 0.68 at c = 1.5; 0.8 is the board's mid-lit value from the threshold
+## comment above.)
+const SOFTLIGHT_TO_SCREEN_BLOOM_SLOPE := 0.423
+const WEATHER_AUTHORED_GLOW_INTENSITY := 0.55
 
 var sun: DirectionalLight3D = null
 var environment: Environment = null
@@ -85,6 +224,12 @@ var _ready_to_apply := false
 var _weather_base: Dictionary = {}
 ## Where depth fog starts; weather pulls it in (rain / sand close the view down).
 var _fog_begin: float = 70.0
+## Last weather params handed to [method apply_weather_look], so a look-preset switch
+## can re-apply the active weather on top of the new base.
+var _last_weather: Dictionary = {}
+## Name of the last look preset applied ([method apply_look_preset]); the defaults above
+## ARE the "new" preset.
+var look_preset: String = LOOK_PRESET_DEFAULT
 
 # Unit contact-shadow pool (blob quads following units; no unit files touched).
 var _blob_pool: Array[MeshInstance3D] = []
@@ -115,6 +260,7 @@ func setup(scene_root: Node) -> void:
 	_ready_to_apply = true
 	add_to_group(&"world_look")
 	_apply()
+	WorldLookPresetCycler.attach(self)
 
 
 ## Map lighting preset ("Day" default, "Dawn", "Dusk", "Night").
@@ -154,6 +300,7 @@ static func set_weather(wetness: float, dust: float, bloom: float, sun_amt: floa
 ## an EXPONENTIAL fog density (~0.0006 light .. 0.02 heavy) that is mapped onto this
 ## node's depth fog + haze. All properties are written in one batch, then applied once.
 func apply_weather_look(p: Dictionary) -> void:
+	_last_weather = p
 	if _weather_base.is_empty():
 		_weather_base = {
 			"sun_color": sun_color, "sun_energy": sun_energy, "ambient_energy": ambient_energy,
@@ -178,7 +325,7 @@ func apply_weather_look(p: Dictionary) -> void:
 	fog_density = clampf(float(b["fog"]) + fog_amt * 0.45, 0.0, 1.0)
 	_fog_begin = lerpf(70.0, 18.0, fog_amt)
 	glow_intensity = float(b["glow"]) * float(p.get("glow_scale", 1.0))
-	glow_bloom = float(b["bloom"]) + float(p.get("glow_bloom", 0.0))
+	glow_bloom = float(b["bloom"]) + float(p.get("glow_bloom", 0.0)) * _weather_bloom_factor(float(b["glow"]))
 	saturation = float(b["saturation"]) * float(p.get("saturation", 1.0))
 	contrast = float(b["contrast"]) * float(p.get("contrast", 1.0))
 	exposure = float(b["exposure"]) * float(p.get("brightness", 1.0))
@@ -186,6 +333,128 @@ func apply_weather_look(p: Dictionary) -> void:
 	_apply()
 	set_weather(float(p.get("wetness", 0.0)), float(p.get("dust", 0.0)), float(p.get("bloom", 0.0)),
 		float(p.get("sun", 0.0)), float(p.get("wind", 1.0)))
+
+
+## Multiplier for a weather's additive glow_bloom under the current blend mode: 1 under
+## soft light (what the weather was authored for); otherwise the slope ratio times the
+## base-intensity ratio, so the bloom's on-screen lift on a typical lit pixel matches the
+## authored one (constants derived at SOFTLIGHT_TO_SCREEN_BLOOM_SLOPE). New base 0.3 ->
+## 0.423 x 0.55 / 0.3 = 0.776 (bright_sun's +0.12 -> +0.093).
+func _weather_bloom_factor(base_glow: float) -> float:
+	if glow_blend_mode == Environment.GLOW_BLEND_MODE_SOFTLIGHT or base_glow <= 0.0:
+		return 1.0
+	return SOFTLIGHT_TO_SCREEN_BLOOM_SLOPE * WEATHER_AUTHORED_GLOW_INTENSITY / base_glow
+
+
+## Resolved shadow profile (auto -> renderer/platform).
+func active_shadow_profile() -> StringName:
+	return shadow_profile if shadow_profile != &"" else detect_shadow_profile()
+
+
+static func detect_shadow_profile() -> StringName:
+	if OS.has_feature("mobile") or RenderingServer.get_current_rendering_method() == "mobile":
+		return SHADOW_PROFILE_MOBILE
+	return SHADOW_PROFILE_DESKTOP
+
+
+## View-space depth of the farthest ground point on screen (the top frame edge) for a
+## camera [param dist] from its ground focus at CAMERA_PITCH_DEG / CAMERA_FOV_DEG:
+## height h = dist * sin(pitch); per unit of view depth the top-edge ray drops
+## sin(pitch) - tan(fov/2) * cos(pitch). Directional shadow distance is view depth.
+static func far_ground_depth(dist: float) -> float:
+	var p := deg_to_rad(CAMERA_PITCH_DEG)
+	var hf := deg_to_rad(CAMERA_FOV_DEG * 0.5)
+	return dist * sin(p) / maxf(sin(p) - tan(hf) * cos(p), 0.01)
+
+
+## Mobile shadows: 2 splits (the split count is the pass-count cost driver), max
+## distance = the far ground edge at max zoom-out (90 -> 147.9), and the split placed so
+## the near split holds the whole board at the typical fit distance (20 -> 32.9 m,
+## split_1 = 0.222) instead of the engine default 0.1 (14.8 m, mid-board).
+static func mobile_shadow_max_distance() -> float:
+	return far_ground_depth(CAMERA_DIST_MAX)
+
+
+static func mobile_shadow_split_1() -> float:
+	return far_ground_depth(CAMERA_FIT_DISTANCE) / far_ground_depth(CAMERA_DIST_MAX)
+
+
+static func look_preset_names() -> Array[String]:
+	return LOOK_PRESET_ORDER.duplicate()
+
+
+## Apply a named look preset (LOOK_PRESETS): glow, shadow profile, SSAO, and the
+## viewport's MSAA / debanding. Debug A/B harness entry point ([WorldLookPresetCycler]);
+## an active weather is re-applied on top of the new base. Unknown names are ignored.
+func apply_look_preset(preset_name: String) -> bool:
+	if not LOOK_PRESETS.has(preset_name):
+		return false
+	var d: Dictionary = LOOK_PRESETS[preset_name]
+	look_preset = preset_name
+	var was_ready := _ready_to_apply
+	_ready_to_apply = false
+	glow_intensity = float(d["glow_intensity"])
+	glow_bloom = float(d["glow_bloom"])
+	glow_hdr_threshold = float(d["glow_hdr_threshold"])
+	glow_hdr_scale = float(d["glow_hdr_scale"])
+	glow_blend_mode = int(d["glow_blend_mode"]) as Environment.GlowBlendMode
+	glow_levels = PackedFloat32Array(d["glow_levels"])
+	shadow_profile = d["shadow_profile"]
+	ssao_enabled = bool(d["ssao_enabled"])
+	_ready_to_apply = was_ready
+	_apply_viewport_aa(_resolve_msaa(d["msaa"]), bool(d["debanding"]))
+	if not _weather_base.is_empty() and not _last_weather.is_empty():
+		_weather_base["glow"] = glow_intensity
+		_weather_base["bloom"] = glow_bloom
+		apply_weather_look(_last_weather)
+	else:
+		_apply()
+	return true
+
+
+static func _resolve_msaa(v) -> int:
+	if v is String and v == "mobile":
+		return int(ProjectSettings.get_setting("rendering/anti_aliasing/quality/msaa_3d.mobile", Viewport.MSAA_2X))
+	if int(v) < 0:
+		return int(ProjectSettings.get_setting("rendering/anti_aliasing/quality/msaa_3d", Viewport.MSAA_DISABLED))
+	return int(v)
+
+
+func _apply_viewport_aa(msaa: int, debanding: bool) -> void:
+	if not is_inside_tree():
+		return
+	var vp := get_viewport()
+	if vp == null:
+		return
+	vp.msaa_3d = msaa as Viewport.MSAA
+	vp.use_debanding = debanding
+
+
+## The values the look actually rendered with (Environment + sun + viewport), for the
+## A/B harness label and the headless preset gate.
+func dump_state() -> Dictionary:
+	var out := {"preset": look_preset, "shadow_profile": String(active_shadow_profile())}
+	if environment != null:
+		var e := environment
+		out["glow_enabled"] = e.glow_enabled
+		out["glow_intensity"] = e.glow_intensity
+		out["glow_bloom"] = e.glow_bloom
+		out["glow_hdr_threshold"] = e.glow_hdr_threshold
+		out["glow_hdr_scale"] = e.glow_hdr_scale
+		out["glow_blend_mode"] = e.glow_blend_mode
+		var lv: Array = []
+		for i in 7:
+			lv.append(snappedf(e.get_glow_level(i), 0.001))
+		out["glow_levels"] = lv
+		out["ssao_enabled"] = e.ssao_enabled
+	if sun != null:
+		out["shadow_mode"] = sun.directional_shadow_mode
+		out["shadow_max_distance"] = snappedf(sun.directional_shadow_max_distance, 0.01)
+		out["shadow_split_1"] = snappedf(sun.directional_shadow_split_1, 0.001)
+	if is_inside_tree() and get_viewport() != null:
+		out["msaa_3d"] = get_viewport().msaa_3d
+		out["use_debanding"] = get_viewport().use_debanding
+	return out
 
 
 func _apply() -> void:
@@ -200,8 +469,16 @@ func _apply() -> void:
 		sun.shadow_blur = shadow_softness
 		sun.shadow_bias = 0.04
 		sun.shadow_normal_bias = 1.2
-		sun.directional_shadow_max_distance = 140.0
-		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+		if active_shadow_profile() == SHADOW_PROFILE_MOBILE:
+			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+			sun.directional_shadow_max_distance = mobile_shadow_max_distance()
+			sun.directional_shadow_split_1 = mobile_shadow_split_1()
+		else:
+			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+			sun.directional_shadow_max_distance = DESKTOP_SHADOW_MAX_DISTANCE
+			sun.directional_shadow_split_1 = DESKTOP_SHADOW_SPLITS.x
+			sun.directional_shadow_split_2 = DESKTOP_SHADOW_SPLITS.y
+			sun.directional_shadow_split_3 = DESKTOP_SHADOW_SPLITS.z
 	if environment == null:
 		return
 	var env := environment
@@ -229,8 +506,11 @@ func _apply() -> void:
 	env.glow_enabled = glow_intensity > 0.0
 	env.glow_intensity = glow_intensity
 	env.glow_bloom = glow_bloom
-	env.glow_hdr_threshold = 0.95
-	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	env.glow_hdr_threshold = glow_hdr_threshold
+	env.glow_hdr_scale = glow_hdr_scale
+	env.glow_blend_mode = glow_blend_mode
+	for i in mini(glow_levels.size(), 7):
+		env.set_glow_level(i, glow_levels[i])
 	env.adjustment_enabled = true
 	env.adjustment_saturation = saturation
 	env.adjustment_contrast = contrast
@@ -247,7 +527,7 @@ func _apply() -> void:
 	env.fog_sky_affect = 0.0
 	env.fog_aerial_perspective = 0.0
 	# Screen-space AO is Forward+ only; harmless (ignored) elsewhere.
-	env.ssao_enabled = true
+	env.ssao_enabled = ssao_enabled
 	env.ssao_radius = 0.8
 	env.ssao_intensity = 1.4
 	env.ssao_power = 1.4
