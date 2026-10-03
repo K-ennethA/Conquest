@@ -3,15 +3,15 @@
 [ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_vdpbv"]
 [ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="2_a2lir"]
 [ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_1aipj"]
-[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="4_wrcc3"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="5_mqkfy"]
-[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="6_n63fb"]
-[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="7_6u3lw"]
-[ext_resource type="Script" path="res://game/overworld/data/ShopEntity.gd" id="8_rf7n4"]
-[ext_resource type="Resource" path="res://game/overworld/content/shops/woodland_trader.tres" id="9_2rb6d"]
-[ext_resource type="Script" path="res://game/overworld/data/ChestEntity.gd" id="10_bbcff"]
-[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="11_wyfs0"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="12_50ekr"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="4_wrcc3"]
+[ext_resource type="Script" path="res://game/overworld/data/ShopEntity.gd" id="5_mqkfy"]
+[ext_resource type="Resource" path="res://game/overworld/content/shops/woodland_trader.tres" id="6_n63fb"]
+[ext_resource type="Script" path="res://game/overworld/data/ChestEntity.gd" id="7_6u3lw"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="8_rf7n4"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="9_2rb6d"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="10_bbcff"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="11_wyfs0"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="12_50ekr"]
 [ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="13_2jvbe"]
 [ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="14_b2e5w"]
 [ext_resource type="Resource" path="res://game/overworld/content/areas/woodland_town/terrain.tres" id="15_ny8je"]
@@ -351,58 +351,14 @@ tint = Color(0.55, 0.9, 0.6, 1)
 script = ExtResource("4_wrcc3")
 speaker_id = &"npc_hale"
 speaker_name = "Warden Hale"
-side = &"right"
-text = "Welcome to Woodland Town. The Wardens keep the roads, the tolls and the peace between the town and the trees -- in about that order of difficulty."
-
-[sub_resource type="Resource" id="Resource_tg31k"]
-script = ExtResource("4_wrcc3")
-speaker_id = &"npc_hale"
-speaker_name = "Warden Hale"
-side = &"right"
-text = "Deepwood's road is shut. The wood's been restless, and a restless wood eats carts. If you want to go west, bring me a reason I can write down."
-
-[sub_resource type="Resource" id="Resource_82v5q"]
-script = ExtResource("4_wrcc3")
-speaker_id = &"npc_hale"
-speaker_name = "Warden Hale"
-side = &"right"
-text = "And if you meet a lantern in the dark that nobody's holding -- go the other way."
-
-[sub_resource type="Resource" id="Resource_1oel7"]
-script = ExtResource("5_mqkfy")
-beats = Array[Resource]([SubResource("Resource_2j0bs"), SubResource("Resource_tg31k"), SubResource("Resource_82v5q")])
-
-[sub_resource type="Resource" id="Resource_v62xw"]
-script = ExtResource("6_n63fb")
-speaker_id = &"npc_hale"
-speaker_name = "Warden Hale"
 figure = "officer"
 id = &"hale"
 cell = Vector3i(12, 9, 0)
 display_name = "Warden Hale"
 tint = Color(0.28, 0.44, 0.3, 1)
-on_interact = Array[Resource]([SubResource("Resource_1oel7")])
 
-[sub_resource type="Resource" id="Resource_6xbmb"]
+[sub_resource type="Resource" id="Resource_tg31k"]
 script = ExtResource("4_wrcc3")
-speaker_id = &"npc_bryn"
-speaker_name = "Innkeeper Bryn"
-side = &"right"
-text = "Venison pie, hot cider, and a room with a window onto the pines. The Stumped Hart's never let a traveller go hungry."
-
-[sub_resource type="Resource" id="Resource_4nc6j"]
-script = ExtResource("4_wrcc3")
-speaker_id = &"npc_bryn"
-speaker_name = "Innkeeper Bryn"
-side = &"right"
-text = "Odd crowd lately. Folk with no luggage and a lot of questions about the south trail. I tell them it's a trail to nowhere."
-
-[sub_resource type="Resource" id="Resource_2ee2y"]
-script = ExtResource("5_mqkfy")
-beats = Array[Resource]([SubResource("Resource_6xbmb"), SubResource("Resource_4nc6j")])
-
-[sub_resource type="Resource" id="Resource_vi38h"]
-script = ExtResource("6_n63fb")
 speaker_id = &"npc_bryn"
 speaker_name = "Innkeeper Bryn"
 figure = "villager"
@@ -410,45 +366,20 @@ id = &"bryn"
 cell = Vector3i(19, 11, 0)
 display_name = "Innkeeper Bryn"
 tint = Color(0.6, 0.38, 0.28, 1)
-on_interact = Array[Resource]([SubResource("Resource_2ee2y")])
 
-[sub_resource type="Resource" id="Resource_4k0m1"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_82v5q"]
+script = ExtResource("5_mqkfy")
+shop = ExtResource("6_n63fb")
 speaker_id = &"npc_sedge"
 speaker_name = "Trader Sedge"
-side = &"right"
-text = "Furs, flasks and forest remedies, friend. Have a look."
-
-[sub_resource type="Resource" id="Resource_pvh64"]
-script = ExtResource("7_6u3lw")
-scene_id = &"wt_sedge"
-beats = Array[Resource]([SubResource("Resource_4k0m1")])
-
-[sub_resource type="Resource" id="Resource_dq76t"]
-script = ExtResource("8_rf7n4")
-shop = ExtResource("9_2rb6d")
-speaker_id = &"npc_sedge"
-speaker_name = "Trader Sedge"
-dialogue = SubResource("Resource_pvh64")
 figure = "villager"
 id = &"sedge"
 cell = Vector3i(23, 11, 0)
 display_name = "Trader Sedge"
 tint = Color(0.4, 0.34, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_8sndg"]
+[sub_resource type="Resource" id="Resource_1oel7"]
 script = ExtResource("4_wrcc3")
-speaker_id = &"npc_burr"
-speaker_name = "Smith Burr"
-side = &"right"
-text = "Axe heads, saw teeth, nails by the barrel. The Guard's smiths in the city make swords. I make the things that actually feed people."
-
-[sub_resource type="Resource" id="Resource_c1l3h"]
-script = ExtResource("5_mqkfy")
-beats = Array[Resource]([SubResource("Resource_8sndg")])
-
-[sub_resource type="Resource" id="Resource_njdvs"]
-script = ExtResource("6_n63fb")
 speaker_id = &"npc_burr"
 speaker_name = "Smith Burr"
 figure = "trainer"
@@ -457,28 +388,9 @@ cell = Vector3i(26, 11, 0)
 facing = "west"
 display_name = "Smith Burr"
 tint = Color(0.36, 0.28, 0.24, 1)
-on_interact = Array[Resource]([SubResource("Resource_c1l3h")])
 
-[sub_resource type="Resource" id="Resource_p7kdo"]
+[sub_resource type="Resource" id="Resource_v62xw"]
 script = ExtResource("4_wrcc3")
-speaker_id = &"npc_torvald"
-speaker_name = "Lumberjack Torvald"
-side = &"right"
-text = "Every plank in the capital's keep started life on this yard. Mind the stacks -- they have opinions about strangers."
-
-[sub_resource type="Resource" id="Resource_pg7r4"]
-script = ExtResource("4_wrcc3")
-speaker_id = &"npc_torvald"
-speaker_name = "Lumberjack Torvald"
-side = &"right"
-text = "We only fell what's marked. The Wardens paint a ring on the trunk, and I don't argue with a ring."
-
-[sub_resource type="Resource" id="Resource_a0ffa"]
-script = ExtResource("5_mqkfy")
-beats = Array[Resource]([SubResource("Resource_p7kdo"), SubResource("Resource_pg7r4")])
-
-[sub_resource type="Resource" id="Resource_lmnu4"]
-script = ExtResource("6_n63fb")
 speaker_id = &"npc_torvald"
 speaker_name = "Lumberjack Torvald"
 figure = "trainer"
@@ -487,25 +399,11 @@ cell = Vector3i(19, 16, 0)
 facing = "east"
 display_name = "Lumberjack Torvald"
 tint = Color(0.5, 0.3, 0.2, 1)
-on_interact = Array[Resource]([SubResource("Resource_a0ffa")])
 
-[sub_resource type="Resource" id="Resource_pv2gf"]
+[sub_resource type="Resource" id="Resource_6xbmb"]
 script = ExtResource("4_wrcc3")
-speaker_id = &"self"
-speaker_name = "Road Warden"
-side = &"right"
-text = "East road's clear to the city. If anyone asks, I wasn't smiling."
-
-[sub_resource type="Resource" id="Resource_htpel"]
-script = ExtResource("7_6u3lw")
-scene_id = &"wt_road_warden"
-beats = Array[Resource]([SubResource("Resource_pv2gf")])
-
-[sub_resource type="Resource" id="Resource_ccc16"]
-script = ExtResource("6_n63fb")
 speaker_id = &"npc_road_warden"
 speaker_name = "Road Warden"
-dialogue = SubResource("Resource_htpel")
 figure = "guard"
 id = &"road_warden"
 cell = Vector3i(25, 13, 0)
@@ -513,19 +411,8 @@ facing = "north"
 display_name = "Road Warden"
 tint = Color(0.28, 0.44, 0.3, 1)
 
-[sub_resource type="Resource" id="Resource_0jvki"]
+[sub_resource type="Resource" id="Resource_4nc6j"]
 script = ExtResource("4_wrcc3")
-speaker_id = &"npc_fern"
-speaker_name = "Fern"
-side = &"right"
-text = "I counted forty-one lanterns last night and only forty windows. Nobody believes me."
-
-[sub_resource type="Resource" id="Resource_0uvg0"]
-script = ExtResource("5_mqkfy")
-beats = Array[Resource]([SubResource("Resource_0jvki")])
-
-[sub_resource type="Resource" id="Resource_628w3"]
-script = ExtResource("6_n63fb")
 speaker_id = &"npc_fern"
 speaker_name = "Fern"
 figure = "child"
@@ -533,28 +420,9 @@ id = &"fern"
 cell = Vector3i(11, 13, 0)
 display_name = "Fern"
 tint = Color(0.5, 0.6, 0.35, 1)
-on_interact = Array[Resource]([SubResource("Resource_0uvg0")])
 
-[sub_resource type="Resource" id="Resource_5kh6c"]
+[sub_resource type="Resource" id="Resource_2ee2y"]
 script = ExtResource("4_wrcc3")
-speaker_id = &"npc_ilse"
-speaker_name = "Herbalist Ilse"
-side = &"right"
-text = "Bitterroot for stings, mossleaf for scrapes, and something I'm not allowed to call a cure for anything at all. Don't tell the Wardens."
-
-[sub_resource type="Resource" id="Resource_qbtve"]
-script = ExtResource("4_wrcc3")
-speaker_id = &"npc_ilse"
-speaker_name = "Herbalist Ilse"
-side = &"right"
-text = "The woods are older than the kingdom, you know. Things sleep in the roots out there. Nobody here says so aloud."
-
-[sub_resource type="Resource" id="Resource_ocvp3"]
-script = ExtResource("5_mqkfy")
-beats = Array[Resource]([SubResource("Resource_5kh6c"), SubResource("Resource_qbtve")])
-
-[sub_resource type="Resource" id="Resource_2guil"]
-script = ExtResource("6_n63fb")
 speaker_id = &"npc_ilse"
 speaker_name = "Herbalist Ilse"
 figure = "scholar"
@@ -562,21 +430,9 @@ id = &"ilse"
 cell = Vector3i(4, 11, 0)
 display_name = "Herbalist Ilse"
 tint = Color(0.34, 0.52, 0.4, 1)
-on_interact = Array[Resource]([SubResource("Resource_ocvp3")])
 
-[sub_resource type="Resource" id="Resource_hpult"]
+[sub_resource type="Resource" id="Resource_vi38h"]
 script = ExtResource("4_wrcc3")
-speaker_id = &"npc_ferra"
-speaker_name = "Huntress Ferra"
-side = &"right"
-text = "Three arrows, three straw men, and one of them is still standing. Don't ask which. The range is open to anyone who can keep from shooting the pigeons."
-
-[sub_resource type="Resource" id="Resource_8c8hl"]
-script = ExtResource("5_mqkfy")
-beats = Array[Resource]([SubResource("Resource_hpult")])
-
-[sub_resource type="Resource" id="Resource_hg154"]
-script = ExtResource("6_n63fb")
 speaker_id = &"npc_ferra"
 speaker_name = "Huntress Ferra"
 figure = "trainer"
@@ -584,28 +440,9 @@ id = &"ferra"
 cell = Vector3i(4, 7, 0)
 display_name = "Huntress Ferra"
 tint = Color(0.34, 0.42, 0.26, 1)
-on_interact = Array[Resource]([SubResource("Resource_8c8hl")])
 
-[sub_resource type="Resource" id="Resource_8tck5"]
+[sub_resource type="Resource" id="Resource_4k0m1"]
 script = ExtResource("4_wrcc3")
-speaker_id = &"npc_wicke"
-speaker_name = "Gran Wicke"
-side = &"right"
-text = "When I was a girl this stone was taller. Or I was shorter. The glade keeps its own counsel."
-
-[sub_resource type="Resource" id="Resource_35cwe"]
-script = ExtResource("4_wrcc3")
-speaker_id = &"npc_wicke"
-speaker_name = "Gran Wicke"
-side = &"right"
-text = "If you're ever lost in the woods, set your hand on a stone and listen. The star remembers the way home."
-
-[sub_resource type="Resource" id="Resource_mr0bw"]
-script = ExtResource("5_mqkfy")
-beats = Array[Resource]([SubResource("Resource_8tck5"), SubResource("Resource_35cwe")])
-
-[sub_resource type="Resource" id="Resource_kq1jr"]
-script = ExtResource("6_n63fb")
 speaker_id = &"npc_wicke"
 speaker_name = "Gran Wicke"
 figure = "elder"
@@ -614,28 +451,9 @@ cell = Vector3i(3, 18, 0)
 facing = "east"
 display_name = "Gran Wicke"
 tint = Color(0.7, 0.68, 0.74, 1)
-on_interact = Array[Resource]([SubResource("Resource_mr0bw")])
 
-[sub_resource type="Resource" id="Resource_rotus"]
+[sub_resource type="Resource" id="Resource_pvh64"]
 script = ExtResource("4_wrcc3")
-speaker_id = &"npc_stranger"
-speaker_name = "Cloaked Stranger"
-side = &"right"
-text = "Warm fire, warm night. You've the look of someone who counts doors and exits, traveller. Good habit."
-
-[sub_resource type="Resource" id="Resource_3778o"]
-script = ExtResource("4_wrcc3")
-speaker_id = &"npc_stranger"
-speaker_name = "Cloaked Stranger"
-side = &"right"
-text = "Some doors in this wood are only doors if you know the knock. I'd tell you the knock, but I don't know it. Obviously."
-
-[sub_resource type="Resource" id="Resource_lgx05"]
-script = ExtResource("5_mqkfy")
-beats = Array[Resource]([SubResource("Resource_rotus"), SubResource("Resource_3778o")])
-
-[sub_resource type="Resource" id="Resource_44frk"]
-script = ExtResource("6_n63fb")
 speaker_id = &"npc_stranger"
 speaker_name = "Cloaked Stranger"
 figure = "raider"
@@ -644,10 +462,9 @@ cell = Vector3i(12, 19, 0)
 facing = "east"
 display_name = "Cloaked Stranger"
 tint = Color(0.2, 0.18, 0.22, 1)
-on_interact = Array[Resource]([SubResource("Resource_lgx05")])
 
-[sub_resource type="Resource" id="Resource_4jndd"]
-script = ExtResource("10_bbcff")
+[sub_resource type="Resource" id="Resource_dq76t"]
+script = ExtResource("7_6u3lw")
 loot_items = Array[StringName]([&"mossleaf_tonic", &"bitterroot_salve"])
 loot_gold = 40
 id = &"yard_chest"
@@ -656,103 +473,102 @@ facing = "west"
 display_name = "Chest"
 tint = Color(0.46, 0.32, 0.18, 1)
 
-[sub_resource type="Resource" id="Resource_2vmoj"]
-script = ExtResource("11_wyfs0")
+[sub_resource type="Resource" id="Resource_8sndg"]
+script = ExtResource("8_rf7n4")
 area_rect = Rect2i(27, 12, 1, 1)
 target_area = &"sparse_forest"
 target_entry = &"west"
 id = &"east_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_quki3"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_c1l3h"]
+script = ExtResource("9_2rb6d")
 text = "The trail north climbs out of the pines toward the snowline, where Frostpeak Village sits under the Snowy Peaks. A Warden's chain is drawn across it, hung with a frosted board: \"High trail closed -- snow. Open at the thaw.\""
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_er06v"]
-script = ExtResource("7_6u3lw")
+[sub_resource type="Resource" id="Resource_njdvs"]
+script = ExtResource("10_bbcff")
 scene_id = &"frostpeak_village_road_locked_north_exit"
-beats = Array[Resource]([SubResource("Resource_quki3")])
+beats = Array[Resource]([SubResource("Resource_c1l3h")])
 
-[sub_resource type="Resource" id="Resource_7y84g"]
-script = ExtResource("11_wyfs0")
+[sub_resource type="Resource" id="Resource_p7kdo"]
+script = ExtResource("8_rf7n4")
 area_rect = Rect2i(17, 0, 1, 1)
 target_area = &"woodland_town"
 target_entry = &"north_trail"
 requires = "has(\"world.frostpeak_open\")"
-locked_scene = SubResource("Resource_er06v")
+locked_scene = SubResource("Resource_njdvs")
 id = &"north_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_ar7d7"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_pg7r4"]
+script = ExtResource("9_2rb6d")
 text = "The road west thins to a deer track and then to nothing. Somewhere beyond the thorns lies Deepwood Village -- but the Wardens have strung a rope across the track with a painted warning: \"No travellers. Ask at the Lodge.\""
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_uat2p"]
-script = ExtResource("7_6u3lw")
+[sub_resource type="Resource" id="Resource_a0ffa"]
+script = ExtResource("10_bbcff")
 scene_id = &"wt_west_locked"
-beats = Array[Resource]([SubResource("Resource_ar7d7")])
+beats = Array[Resource]([SubResource("Resource_pg7r4")])
 
-[sub_resource type="Resource" id="Resource_4iue0"]
-script = ExtResource("11_wyfs0")
+[sub_resource type="Resource" id="Resource_lmnu4"]
+script = ExtResource("8_rf7n4")
 area_rect = Rect2i(0, 12, 1, 1)
 target_area = &"woodland_town"
 target_entry = &"west_road"
 requires = "has(\"world.deepwood_open\")"
-locked_scene = SubResource("Resource_uat2p")
+locked_scene = SubResource("Resource_a0ffa")
 id = &"west_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_yut8i"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_pv2gf"]
+script = ExtResource("9_2rb6d")
 text = "A narrow trail slips south between the roots, toward a cave mouth nobody here admits to knowing. Fresh boot prints say the way is kept open from the other end. A rockfall blocks it for now."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_allec"]
-script = ExtResource("7_6u3lw")
+[sub_resource type="Resource" id="Resource_htpel"]
+script = ExtResource("10_bbcff")
 scene_id = &"wt_south_locked"
-beats = Array[Resource]([SubResource("Resource_yut8i")])
+beats = Array[Resource]([SubResource("Resource_pv2gf")])
 
-[sub_resource type="Resource" id="Resource_vc8e1"]
-script = ExtResource("11_wyfs0")
+[sub_resource type="Resource" id="Resource_ccc16"]
+script = ExtResource("8_rf7n4")
 area_rect = Rect2i(4, 23, 1, 1)
 target_area = &"woodland_town"
 target_entry = &"wayshrine"
 requires = "has(\"world.thieves_guild_open\")"
-locked_scene = SubResource("Resource_allec")
+locked_scene = SubResource("Resource_htpel")
 id = &"south_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_4gqox"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_0jvki"]
+script = ExtResource("9_2rb6d")
 text = "Woodland Town. The air smells of pine resin and woodsmoke, and somewhere a saw sings through green timber. Lanterns still burn in the cabin windows against the morning mist."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_ty5oc"]
-script = ExtResource("4_wrcc3")
+[sub_resource type="Resource" id="Resource_0uvg0"]
+script = ExtResource("9_2rb6d")
 text = "The Wardens' Lodge stands at the heart of the town, north of the boardwalk square. The lumber yard is east, past the inn; a trail climbs north toward the snowline, and another slips away south between the roots."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_2vvd3"]
-script = ExtResource("5_mqkfy")
-beats = Array[Resource]([SubResource("Resource_4gqox"), SubResource("Resource_ty5oc")])
+[sub_resource type="Resource" id="Resource_628w3"]
+script = ExtResource("12_50ekr")
+beats = Array[Resource]([SubResource("Resource_0jvki"), SubResource("Resource_0uvg0")])
 
-[sub_resource type="Resource" id="Resource_oe252"]
+[sub_resource type="Resource" id="Resource_5kh6c"]
 script = ExtResource("13_2jvbe")
 key = "woodland.arrived"
 
-[sub_resource type="Resource" id="Resource_ic4ei"]
-script = ExtResource("12_50ekr")
+[sub_resource type="Resource" id="Resource_qbtve"]
+script = ExtResource("11_wyfs0")
 condition = "not has(\"woodland.arrived\")"
-then_commands = Array[Resource]([SubResource("Resource_2vvd3"), SubResource("Resource_oe252")])
+then_commands = Array[Resource]([SubResource("Resource_628w3"), SubResource("Resource_5kh6c")])
 
 [resource]
 script = ExtResource("14_b2e5w")
 area_id = &"woodland_town"
 display_name = "Woodland Town"
 terrain = ExtResource("15_ny8je")
-kind = 0
 region_id = &"woodlands"
 world_map_pos = Vector2(0.34, 0.41)
 entry_points = {
@@ -773,8 +589,5 @@ entry_points = {
 "facing": "east"
 }
 }
-entities = Array[Resource]([SubResource("Resource_x2ou8"), SubResource("Resource_evs08"), SubResource("Resource_7y4ia"), SubResource("Resource_74b4b"), SubResource("Resource_jfxso"), SubResource("Resource_kvu8g"), SubResource("Resource_bh2qa"), SubResource("Resource_yqa1r"), SubResource("Resource_b76f3"), SubResource("Resource_pehgx"), SubResource("Resource_oeal2"), SubResource("Resource_xt4m5"), SubResource("Resource_c6xwg"), SubResource("Resource_5ktu5"), SubResource("Resource_ih22u"), SubResource("Resource_hnhof"), SubResource("Resource_mo0v2"), SubResource("Resource_aapqm"), SubResource("Resource_1g1ld"), SubResource("Resource_7thhs"), SubResource("Resource_tg737"), SubResource("Resource_5mlgd"), SubResource("Resource_thqy0"), SubResource("Resource_gb8y8"), SubResource("Resource_eu2i4"), SubResource("Resource_anhhy"), SubResource("Resource_e6wty"), SubResource("Resource_50364"), SubResource("Resource_rljtt"), SubResource("Resource_i31na"), SubResource("Resource_6nloy"), SubResource("Resource_wdowa"), SubResource("Resource_r2i4f"), SubResource("Resource_o7ttn"), SubResource("Resource_m2cea"), SubResource("Resource_2j6rj"), SubResource("Resource_crl2q"), SubResource("Resource_7uahq"), SubResource("Resource_b8d28"), SubResource("Resource_v62xw"), SubResource("Resource_vi38h"), SubResource("Resource_dq76t"), SubResource("Resource_njdvs"), SubResource("Resource_lmnu4"), SubResource("Resource_ccc16"), SubResource("Resource_628w3"), SubResource("Resource_2guil"), SubResource("Resource_hg154"), SubResource("Resource_kq1jr"), SubResource("Resource_44frk"), SubResource("Resource_4jndd"), SubResource("Resource_2vmoj"), SubResource("Resource_7y84g"), SubResource("Resource_4iue0"), SubResource("Resource_vc8e1")])
-encounter_zones = Array[Resource]([])
-on_enter = Array[Resource]([SubResource("Resource_ic4ei")])
-music_cue = &""
-lighting_preset_override = ""
+entities = Array[Resource]([SubResource("Resource_x2ou8"), SubResource("Resource_evs08"), SubResource("Resource_7y4ia"), SubResource("Resource_74b4b"), SubResource("Resource_jfxso"), SubResource("Resource_kvu8g"), SubResource("Resource_bh2qa"), SubResource("Resource_yqa1r"), SubResource("Resource_b76f3"), SubResource("Resource_pehgx"), SubResource("Resource_oeal2"), SubResource("Resource_xt4m5"), SubResource("Resource_c6xwg"), SubResource("Resource_5ktu5"), SubResource("Resource_ih22u"), SubResource("Resource_hnhof"), SubResource("Resource_mo0v2"), SubResource("Resource_aapqm"), SubResource("Resource_1g1ld"), SubResource("Resource_7thhs"), SubResource("Resource_tg737"), SubResource("Resource_5mlgd"), SubResource("Resource_thqy0"), SubResource("Resource_gb8y8"), SubResource("Resource_eu2i4"), SubResource("Resource_anhhy"), SubResource("Resource_e6wty"), SubResource("Resource_50364"), SubResource("Resource_rljtt"), SubResource("Resource_i31na"), SubResource("Resource_6nloy"), SubResource("Resource_wdowa"), SubResource("Resource_r2i4f"), SubResource("Resource_o7ttn"), SubResource("Resource_m2cea"), SubResource("Resource_2j6rj"), SubResource("Resource_crl2q"), SubResource("Resource_7uahq"), SubResource("Resource_b8d28"), SubResource("Resource_2j0bs"), SubResource("Resource_tg31k"), SubResource("Resource_82v5q"), SubResource("Resource_1oel7"), SubResource("Resource_v62xw"), SubResource("Resource_6xbmb"), SubResource("Resource_4nc6j"), SubResource("Resource_2ee2y"), SubResource("Resource_vi38h"), SubResource("Resource_4k0m1"), SubResource("Resource_pvh64"), SubResource("Resource_dq76t"), SubResource("Resource_8sndg"), SubResource("Resource_p7kdo"), SubResource("Resource_lmnu4"), SubResource("Resource_ccc16")])
+on_enter = Array[Resource]([SubResource("Resource_qbtve")])

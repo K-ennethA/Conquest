@@ -3,13 +3,13 @@
 [ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_6womj"]
 [ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="2_b7tak"]
 [ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_t0i4t"]
-[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="4_urwkg"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="5_c8k5q"]
-[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="6_8wnmi"]
-[ext_resource type="Script" path="res://game/overworld/data/ChestEntity.gd" id="7_037wj"]
-[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="8_01a5j"]
-[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="9_4pilx"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="10_yl85t"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="4_urwkg"]
+[ext_resource type="Script" path="res://game/overworld/data/ChestEntity.gd" id="5_c8k5q"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="6_8wnmi"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="7_037wj"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="8_01a5j"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="9_4pilx"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="10_yl85t"]
 [ext_resource type="Script" path="res://game/overworld/script/commands/FaceActorCommand.gd" id="11_jaygs"]
 [ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="12_r6e6o"]
 [ext_resource type="Script" path="res://game/overworld/script/commands/ToastCommand.gd" id="13_caic5"]
@@ -238,7 +238,7 @@ tint = Color(0.52, 0.36, 0.2, 1)
 [sub_resource type="Resource" id="Resource_wljw8"]
 script = ExtResource("3_t0i4t")
 text = "A notice is nailed to the door:
-\"By order of Aldermere's crown: shards of starstone will be granted to chosen testers at Crownhaven. Oakvale's name was drawn.\""
+\"By order of Aldermere's crown: shards of starstone will be granted to chosen testers at Crownhaven. One tester is called from Oakvale, at the Royal Researcher's own request: {hero}.\""
 id = &"hall_sign"
 cell = Vector3i(13, 5, 0)
 display_name = "Village Hall"
@@ -248,44 +248,14 @@ tint = Color(0.52, 0.36, 0.2, 1)
 script = ExtResource("4_urwkg")
 speaker_id = &"npc_briony"
 speaker_name = "Briony"
-side = &"right"
-text = "East along the Mossway to River Crossing, then north over the Old Bridge -- Crownhaven's south gate is at the end of it. Go on -- the Researcher won't wait all day, and neither will I!"
-
-[sub_resource type="Resource" id="Resource_di53x"]
-script = ExtResource("5_c8k5q")
-beats = Array[Resource]([SubResource("Resource_4hl7o")])
-
-[sub_resource type="Resource" id="Resource_34oop"]
-script = ExtResource("6_8wnmi")
-speaker_id = &"npc_briony"
-speaker_name = "Briony"
 id = &"briony"
 cell = Vector3i(4, 6, 0)
 facing = "west"
 display_name = "Briony"
 tint = Color(0.62, 0.36, 0.3, 1)
-on_interact = Array[Resource]([SubResource("Resource_di53x")])
 
-[sub_resource type="Resource" id="Resource_ev43m"]
+[sub_resource type="Resource" id="Resource_di53x"]
 script = ExtResource("4_urwkg")
-speaker_id = &"npc_tobin"
-speaker_name = "Tobin"
-side = &"right"
-text = "Off to get your shard, then? Pa says in his day you befriended a creature by sharing your bread with it for a year."
-
-[sub_resource type="Resource" id="Resource_acj8h"]
-script = ExtResource("4_urwkg")
-speaker_id = &"npc_tobin"
-speaker_name = "Tobin"
-side = &"right"
-text = "Less bread this way, I suppose."
-
-[sub_resource type="Resource" id="Resource_h3fel"]
-script = ExtResource("5_c8k5q")
-beats = Array[Resource]([SubResource("Resource_ev43m"), SubResource("Resource_acj8h")])
-
-[sub_resource type="Resource" id="Resource_862c6"]
-script = ExtResource("6_8wnmi")
 speaker_id = &"npc_tobin"
 speaker_name = "Tobin"
 id = &"tobin"
@@ -293,28 +263,9 @@ cell = Vector3i(13, 11, 0)
 facing = "east"
 display_name = "Tobin"
 tint = Color(0.36, 0.46, 0.62, 1)
-on_interact = Array[Resource]([SubResource("Resource_h3fel")])
 
-[sub_resource type="Resource" id="Resource_3ie2q"]
+[sub_resource type="Resource" id="Resource_34oop"]
 script = ExtResource("4_urwkg")
-speaker_id = &"npc_hessa"
-speaker_name = "Hessa"
-side = &"right"
-text = "Soldiers went down the Mossway at dawn, riding for the border. Nobody would say why."
-
-[sub_resource type="Resource" id="Resource_ptury"]
-script = ExtResource("4_urwkg")
-speaker_id = &"npc_hessa"
-speaker_name = "Hessa"
-side = &"right"
-text = "There's talk of Cindral again. There's always talk of Cindral."
-
-[sub_resource type="Resource" id="Resource_x0kta"]
-script = ExtResource("5_c8k5q")
-beats = Array[Resource]([SubResource("Resource_3ie2q"), SubResource("Resource_ptury")])
-
-[sub_resource type="Resource" id="Resource_47kwg"]
-script = ExtResource("6_8wnmi")
 speaker_id = &"npc_hessa"
 speaker_name = "Hessa"
 figure = "villager"
@@ -323,21 +274,9 @@ cell = Vector3i(11, 15, 0)
 facing = "east"
 display_name = "Hessa"
 tint = Color(0.6, 0.5, 0.3, 1)
-on_interact = Array[Resource]([SubResource("Resource_x0kta")])
 
-[sub_resource type="Resource" id="Resource_lq83w"]
+[sub_resource type="Resource" id="Resource_ev43m"]
 script = ExtResource("4_urwkg")
-speaker_id = &"npc_pell"
-speaker_name = "Pell"
-side = &"right"
-text = "Will your creature be big? Will it breathe fire? Can I hold the shard? Just once?"
-
-[sub_resource type="Resource" id="Resource_lw70m"]
-script = ExtResource("5_c8k5q")
-beats = Array[Resource]([SubResource("Resource_lq83w")])
-
-[sub_resource type="Resource" id="Resource_dkdgj"]
-script = ExtResource("6_8wnmi")
 speaker_id = &"npc_pell"
 speaker_name = "Pell"
 figure = "child"
@@ -345,9 +284,8 @@ id = &"pell"
 cell = Vector3i(8, 7, 0)
 display_name = "Pell"
 tint = Color(0.4, 0.6, 0.5, 1)
-on_interact = Array[Resource]([SubResource("Resource_lw70m")])
 
-[sub_resource type="Resource" id="Resource_cwe1v"]
+[sub_resource type="Resource" id="Resource_acj8h"]
 script = ExtResource("3_t0i4t")
 text = "THE HEARTH & HEN
 Bed, broth and a warm hearth. Muddy boots at the door, please.
@@ -357,7 +295,7 @@ cell = Vector3i(14, 8, 0)
 display_name = "The Hearth & Hen"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_t1qba"]
+[sub_resource type="Resource" id="Resource_h3fel"]
 script = ExtResource("3_t0i4t")
 text = "\"Please keep to the lane. The barley is counting on you.\" -- Ned"
 id = &"field_sign"
@@ -365,7 +303,7 @@ cell = Vector3i(13, 10, 0)
 display_name = "Barley Field"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_g1j3x"]
+[sub_resource type="Resource" id="Resource_862c6"]
 script = ExtResource("3_t0i4t")
 text = "WEST: the cart track to Farm Hamlet.
 MILL LANE: flour, sacks and gossip, in that order."
@@ -374,26 +312,8 @@ cell = Vector3i(5, 11, 0)
 display_name = "The Mill Lane"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_5l2ld"]
+[sub_resource type="Resource" id="Resource_3ie2q"]
 script = ExtResource("4_urwkg")
-speaker_id = &"npc_marra"
-speaker_name = "Goodwife Marra"
-side = &"right"
-text = "Stew's on, and the hearth's lit. Travellers stop here before the Mossway -- it's a long road to River Crossing, and a longer one to the city."
-
-[sub_resource type="Resource" id="Resource_5o6tp"]
-script = ExtResource("4_urwkg")
-speaker_id = &"npc_marra"
-speaker_name = "Goodwife Marra"
-side = &"right"
-text = "Folk say the old bridge at River Crossing is older than the kingdom. Mind the toll-keeper; he'll tell you the same story twice."
-
-[sub_resource type="Resource" id="Resource_7pch5"]
-script = ExtResource("5_c8k5q")
-beats = Array[Resource]([SubResource("Resource_5l2ld"), SubResource("Resource_5o6tp")])
-
-[sub_resource type="Resource" id="Resource_t0cp8"]
-script = ExtResource("6_8wnmi")
 speaker_id = &"npc_marra"
 speaker_name = "Goodwife Marra"
 figure = "villager"
@@ -401,28 +321,9 @@ id = &"marra"
 cell = Vector3i(15, 8, 0)
 display_name = "Goodwife Marra"
 tint = Color(0.7, 0.4, 0.3, 1)
-on_interact = Array[Resource]([SubResource("Resource_7pch5")])
 
-[sub_resource type="Resource" id="Resource_nu6ts"]
+[sub_resource type="Resource" id="Resource_ptury"]
 script = ExtResource("4_urwkg")
-speaker_id = &"npc_ned"
-speaker_name = "Old Ned"
-side = &"right"
-text = "Forty harvests I've brought in off that field. A good year's barley for the bread, a bad year's for the pigs."
-
-[sub_resource type="Resource" id="Resource_yw5pv"]
-script = ExtResource("4_urwkg")
-speaker_id = &"npc_ned"
-speaker_name = "Old Ned"
-side = &"right"
-text = "This year the creatures in the hedgerow have been restless. Something stirs them. Mind yourself out there."
-
-[sub_resource type="Resource" id="Resource_75jx2"]
-script = ExtResource("5_c8k5q")
-beats = Array[Resource]([SubResource("Resource_nu6ts"), SubResource("Resource_yw5pv")])
-
-[sub_resource type="Resource" id="Resource_4k0pl"]
-script = ExtResource("6_8wnmi")
 speaker_id = &"npc_ned"
 speaker_name = "Old Ned"
 figure = "elder"
@@ -431,21 +332,9 @@ cell = Vector3i(13, 8, 0)
 facing = "east"
 display_name = "Old Ned"
 tint = Color(0.5, 0.45, 0.3, 1)
-on_interact = Array[Resource]([SubResource("Resource_75jx2")])
 
-[sub_resource type="Resource" id="Resource_aesbt"]
+[sub_resource type="Resource" id="Resource_x0kta"]
 script = ExtResource("4_urwkg")
-speaker_id = &"npc_wick"
-speaker_name = "Wick"
-side = &"right"
-text = "I'm watching the pond for the golden frog. Nobody's seen it. That's how I know it's clever."
-
-[sub_resource type="Resource" id="Resource_4t2ot"]
-script = ExtResource("5_c8k5q")
-beats = Array[Resource]([SubResource("Resource_aesbt")])
-
-[sub_resource type="Resource" id="Resource_sl0el"]
-script = ExtResource("6_8wnmi")
 speaker_id = &"npc_wick"
 speaker_name = "Wick"
 figure = "child"
@@ -453,10 +342,9 @@ id = &"wick"
 cell = Vector3i(8, 5, 0)
 display_name = "Wick"
 tint = Color(0.62, 0.5, 0.34, 1)
-on_interact = Array[Resource]([SubResource("Resource_4t2ot")])
 
-[sub_resource type="Resource" id="Resource_5trwl"]
-script = ExtResource("7_037wj")
+[sub_resource type="Resource" id="Resource_47kwg"]
+script = ExtResource("5_c8k5q")
 loot_items = Array[StringName]([&"sagebloom_poultice"])
 loot_gold = 30
 id = &"mill_chest"
@@ -464,125 +352,131 @@ cell = Vector3i(5, 14, 0)
 display_name = "Chest"
 tint = Color(0.5, 0.33, 0.18, 1)
 
-[sub_resource type="Resource" id="Resource_6lixs"]
-script = ExtResource("4_urwkg")
+[sub_resource type="Resource" id="Resource_lq83w"]
+script = ExtResource("6_8wnmi")
 speaker_id = &"npc_briony"
 speaker_name = "Briony"
 side = &"right"
 text = "{hero}! Not without saying goodbye, you don't."
 
-[sub_resource type="Resource" id="Resource_qqvbx"]
-script = ExtResource("8_01a5j")
+[sub_resource type="Resource" id="Resource_lw70m"]
+script = ExtResource("7_037wj")
 scene_id = &"oak_locked"
-beats = Array[Resource]([SubResource("Resource_6lixs")])
+beats = Array[Resource]([SubResource("Resource_lq83w")])
 
-[sub_resource type="Resource" id="Resource_1264y"]
-script = ExtResource("9_4pilx")
+[sub_resource type="Resource" id="Resource_dkdgj"]
+script = ExtResource("8_01a5j")
 area_rect = Rect2i(23, 9, 1, 1)
 target_area = &"mossway"
 target_entry = &"west"
 requires = "has(\"opening.sent_off\")"
-locked_scene = SubResource("Resource_qqvbx")
+locked_scene = SubResource("Resource_lw70m")
 id = &"east_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_xt6qu"]
-script = ExtResource("4_urwkg")
+[sub_resource type="Resource" id="Resource_cwe1v"]
+script = ExtResource("6_8wnmi")
 text = "The cart track west of the mill runs on through the barley toward Farm Hamlet. A hurdle gate across it is tied shut with a ribbon: \"Harvest in progress -- back soon.\""
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_g2v14"]
-script = ExtResource("8_01a5j")
+[sub_resource type="Resource" id="Resource_t1qba"]
+script = ExtResource("7_037wj")
 scene_id = &"farm_hamlet_road_locked_west_exit"
-beats = Array[Resource]([SubResource("Resource_xt6qu")])
+beats = Array[Resource]([SubResource("Resource_cwe1v")])
 
-[sub_resource type="Resource" id="Resource_t12fh"]
-script = ExtResource("9_4pilx")
+[sub_resource type="Resource" id="Resource_g1j3x"]
+script = ExtResource("8_01a5j")
 area_rect = Rect2i(0, 12, 1, 1)
 target_area = &"oakvale"
 target_entry = &"west_lane"
 requires = "has(\"world.farm_hamlet_open\")"
-locked_scene = SubResource("Resource_g2v14")
+locked_scene = SubResource("Resource_t1qba")
 id = &"west_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_varbv"]
-script = ExtResource("4_urwkg")
+[sub_resource type="Resource" id="Resource_5l2ld"]
+script = ExtResource("6_8wnmi")
 speaker_name = "Conquest"
 text = "Long ago, a star fell on this world. Its dust sank into the stone and the soil, and ever since, humans and creatures alike have called on the elements."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_lj2bk"]
-script = ExtResource("4_urwkg")
-text = "Few people ever bond with a creature. It takes years of patient trust -- or chains. But in the royal city, a researcher has cut a shard of starstone that makes the bond easy and safe."
+[sub_resource type="Resource" id="Resource_5o6tp"]
+script = ExtResource("6_8wnmi")
+text = "Few people ever bond with a creature. It takes years of patient trust -- or chains. But in the royal city, a boy from this very village grew up to be the King's researcher -- and he has cut a shard of starstone that makes the bond easy and safe."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_vado3"]
-script = ExtResource("5_c8k5q")
-beats = Array[Resource]([SubResource("Resource_varbv"), SubResource("Resource_lj2bk")])
+[sub_resource type="Resource" id="Resource_7pch5"]
+script = ExtResource("10_yl85t")
+beats = Array[Resource]([SubResource("Resource_5l2ld"), SubResource("Resource_5o6tp")])
 
-[sub_resource type="Resource" id="Resource_c644b"]
+[sub_resource type="Resource" id="Resource_t0cp8"]
 script = ExtResource("11_jaygs")
 actor = "player"
 facing = "toward:briony"
 
-[sub_resource type="Resource" id="Resource_mrq15"]
-script = ExtResource("4_urwkg")
+[sub_resource type="Resource" id="Resource_nu6ts"]
+script = ExtResource("6_8wnmi")
 speaker_id = &"npc_briony"
 speaker_name = "Briony"
 side = &"right"
-text = "There you are! Today's the day, {hero}. The letter says noon -- you'll be late if you dawdle."
+text = "There you are! Today's the day, {hero}. Linnea's letter says noon -- you'll be late if you dawdle."
 
-[sub_resource type="Resource" id="Resource_myx75"]
-script = ExtResource("4_urwkg")
+[sub_resource type="Resource" id="Resource_yw5pv"]
+script = ExtResource("6_8wnmi")
 speaker_id = &"npc_briony"
 speaker_name = "Briony"
 side = &"right"
-text = "One of Researcher Linnea's chosen testers. A shard of your own, and a creature to go with it. Your father would have been so proud."
+text = "Fancy that. The boy who used to follow you round the barley field, the King's own researcher -- and he asked for YOU by name. One of his chosen testers."
 
-[sub_resource type="Resource" id="Resource_ksesh"]
-script = ExtResource("4_urwkg")
+[sub_resource type="Resource" id="Resource_75jx2"]
+script = ExtResource("6_8wnmi")
+speaker_id = &"npc_briony"
+speaker_name = "Briony"
+side = &"right"
+text = "A shard of your own, and a creature to go with it. Your father would have been so proud."
+
+[sub_resource type="Resource" id="Resource_4k0pl"]
+script = ExtResource("6_8wnmi")
 speaker_id = &"hero"
-text = "I'll be home before dark, Mother. I promise."
+text = "I'll be home before dark, Mother. I promise. And I'll make Linnea tell me everything."
 
-[sub_resource type="Resource" id="Resource_6wfxc"]
-script = ExtResource("4_urwkg")
+[sub_resource type="Resource" id="Resource_aesbt"]
+script = ExtResource("6_8wnmi")
 speaker_id = &"npc_briony"
 speaker_name = "Briony"
 side = &"right"
 text = "Follow the Mossway east to River Crossing, and the road north over the bridge to Crownhaven. The wild ones in the grass leave a traveller alone -- until you walk with a partner of your own. Then mind yourself."
 
-[sub_resource type="Resource" id="Resource_488kr"]
-script = ExtResource("4_urwkg")
+[sub_resource type="Resource" id="Resource_4t2ot"]
+script = ExtResource("6_8wnmi")
 speaker_id = &"npc_briony"
 speaker_name = "Briony"
 side = &"right"
-text = "Go on, then. And {hero} -- I love you. Bring your new friend home for supper."
+text = "Go on, then. And {hero} -- I love you. Bring your new friend home for supper. Both of them, if Linnea can tear himself away from his work."
 
-[sub_resource type="Resource" id="Resource_iwbnb"]
-script = ExtResource("5_c8k5q")
-beats = Array[Resource]([SubResource("Resource_mrq15"), SubResource("Resource_myx75"), SubResource("Resource_ksesh"), SubResource("Resource_6wfxc"), SubResource("Resource_488kr")])
+[sub_resource type="Resource" id="Resource_sl0el"]
+script = ExtResource("10_yl85t")
+beats = Array[Resource]([SubResource("Resource_nu6ts"), SubResource("Resource_yw5pv"), SubResource("Resource_75jx2"), SubResource("Resource_4k0pl"), SubResource("Resource_aesbt"), SubResource("Resource_4t2ot")])
 
-[sub_resource type="Resource" id="Resource_8c0xp"]
+[sub_resource type="Resource" id="Resource_5trwl"]
 script = ExtResource("12_r6e6o")
 key = "opening.sent_off"
 
-[sub_resource type="Resource" id="Resource_1h05c"]
+[sub_resource type="Resource" id="Resource_6lixs"]
 script = ExtResource("13_caic5")
 text = "Quest: The Shard Ceremony"
 toast_kind = "quest"
 
-[sub_resource type="Resource" id="Resource_ptc0v"]
-script = ExtResource("10_yl85t")
+[sub_resource type="Resource" id="Resource_qqvbx"]
+script = ExtResource("9_4pilx")
 condition = "not has(\"opening.sent_off\")"
-then_commands = Array[Resource]([SubResource("Resource_vado3"), SubResource("Resource_c644b"), SubResource("Resource_iwbnb"), SubResource("Resource_8c0xp"), SubResource("Resource_1h05c")])
+then_commands = Array[Resource]([SubResource("Resource_7pch5"), SubResource("Resource_t0cp8"), SubResource("Resource_sl0el"), SubResource("Resource_5trwl"), SubResource("Resource_6lixs")])
 
 [resource]
 script = ExtResource("14_mfhw7")
 area_id = &"oakvale"
 display_name = "Oakvale"
 terrain = ExtResource("15_dv6l6")
-kind = 0
 region_id = &"heartlands"
 world_map_pos = Vector2(0.46, 0.67)
 entry_points = {
@@ -603,8 +497,5 @@ entry_points = {
 "facing": "east"
 }
 }
-entities = Array[Resource]([SubResource("Resource_usgk5"), SubResource("Resource_sr32m"), SubResource("Resource_gtcqo"), SubResource("Resource_3lg5e"), SubResource("Resource_lrckn"), SubResource("Resource_nty54"), SubResource("Resource_02t2l"), SubResource("Resource_47vhf"), SubResource("Resource_j6r5d"), SubResource("Resource_cu3oh"), SubResource("Resource_oy7lt"), SubResource("Resource_46w87"), SubResource("Resource_d8qq0"), SubResource("Resource_0rsdw"), SubResource("Resource_bskvf"), SubResource("Resource_qebhi"), SubResource("Resource_5ymmf"), SubResource("Resource_20uh4"), SubResource("Resource_gyxsc"), SubResource("Resource_hdkaw"), SubResource("Resource_uve6t"), SubResource("Resource_ir736"), SubResource("Resource_yn6om"), SubResource("Resource_8o61w"), SubResource("Resource_w7agi"), SubResource("Resource_6igoc"), SubResource("Resource_g2n42"), SubResource("Resource_wljw8"), SubResource("Resource_34oop"), SubResource("Resource_862c6"), SubResource("Resource_47kwg"), SubResource("Resource_dkdgj"), SubResource("Resource_cwe1v"), SubResource("Resource_t1qba"), SubResource("Resource_g1j3x"), SubResource("Resource_t0cp8"), SubResource("Resource_4k0pl"), SubResource("Resource_sl0el"), SubResource("Resource_5trwl"), SubResource("Resource_1264y"), SubResource("Resource_t12fh")])
-encounter_zones = Array[Resource]([])
-on_enter = Array[Resource]([SubResource("Resource_ptc0v")])
-music_cue = &""
-lighting_preset_override = ""
+entities = Array[Resource]([SubResource("Resource_usgk5"), SubResource("Resource_sr32m"), SubResource("Resource_gtcqo"), SubResource("Resource_3lg5e"), SubResource("Resource_lrckn"), SubResource("Resource_nty54"), SubResource("Resource_02t2l"), SubResource("Resource_47vhf"), SubResource("Resource_j6r5d"), SubResource("Resource_cu3oh"), SubResource("Resource_oy7lt"), SubResource("Resource_46w87"), SubResource("Resource_d8qq0"), SubResource("Resource_0rsdw"), SubResource("Resource_bskvf"), SubResource("Resource_qebhi"), SubResource("Resource_5ymmf"), SubResource("Resource_20uh4"), SubResource("Resource_gyxsc"), SubResource("Resource_hdkaw"), SubResource("Resource_uve6t"), SubResource("Resource_ir736"), SubResource("Resource_yn6om"), SubResource("Resource_8o61w"), SubResource("Resource_w7agi"), SubResource("Resource_6igoc"), SubResource("Resource_g2n42"), SubResource("Resource_wljw8"), SubResource("Resource_4hl7o"), SubResource("Resource_di53x"), SubResource("Resource_34oop"), SubResource("Resource_ev43m"), SubResource("Resource_acj8h"), SubResource("Resource_h3fel"), SubResource("Resource_862c6"), SubResource("Resource_3ie2q"), SubResource("Resource_ptury"), SubResource("Resource_x0kta"), SubResource("Resource_47kwg"), SubResource("Resource_dkdgj"), SubResource("Resource_g1j3x")])
+on_enter = Array[Resource]([SubResource("Resource_qqvbx")])

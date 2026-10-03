@@ -44,7 +44,7 @@ func _warp_at(a: OverworldAreaResource, s: StoryState, c: Vector3i) -> WarpEntit
 
 func _interactable_at(a: OverworldAreaResource, s: StoryState, c: Vector3i) -> bool:
 	for e in a.present_entities(s):
-		if e.is_interactable() and e.occupies(c):
+		if e.is_interactable_in(String(a.area_id)) and e.occupies(c):
 			return true
 	return false
 

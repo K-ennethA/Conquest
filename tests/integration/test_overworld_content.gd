@@ -234,12 +234,31 @@ func test_the_ceremony_gives_the_starter_and_the_shard_then_the_raid() -> void:
 			flags.append((c as SetFlagCommand).key)
 		if c is WarpCommand:
 			warps.append(c)
-	assert_eq(joins.size(), 1, "the ceremony gives exactly one creature")
-	var starter: CharacterResource = CharacterLibrary.get_character((joins[0] as JoinPartyCommand).character_id)
-	assert_not_null(starter, "the starter is a real roster character")
+	# The owner's opening: you CHOOSE your starter among the Researcher's three test creatures -- one
+	# JoinParty per option of ONE choice, the default (Barkling) first.
+	var choices: Array = []
+	for c in cmds:
+		if c is ChoiceCommand:
+			choices.append(c)
+	assert_eq(choices.size(), 1, "the ceremony asks one question: which creature")
+	assert_eq(joins.size(), 3, "three test creatures to choose from")
+	assert_eq(String((joins[0] as JoinPartyCommand).character_id), "tree_grunt", "the default (first option) is Barkling")
+	for j in joins:
+		assert_not_null(CharacterLibrary.get_character((j as JoinPartyCommand).character_id), "%s is a real roster character" % j.character_id)
+		assert_eq((j as JoinPartyCommand).flag_on_join, "opening.starter_received", "whichever you pick receives the starter")
+	assert_true(flags.has("opening.starter_pick"), "the pick is remembered (opening.starter_pick)")
 	for f in ["key.bonding_shard", "opening.starter_received", "opening.attack", "opening.researcher_taken",
 			"opening.raiders_fled", "opening.chase"]:
 		assert_true(flags.has(f) or (joins[0] as JoinPartyCommand).flag_on_join == f, "the ceremony + raid set %s" % f)
+	for id in ["starter", "starter_2", "starter_3"]:
+		var st := ch.entity(id)
+		assert_not_null(st, "%s waits by the pylon" % id)
+		if st != null:
+			var during := StoryState.new()
+			during.set_flag("opening.ceremony", 1)
+			assert_true(st.is_present(during), "%s shows during the ceremony" % id)
+			during.set_flag("opening.starter_received", 1)
+			assert_false(st.is_present(during), "%s is gone once you have chosen" % id)
 	assert_eq(warps.size(), 1, "the raid ends in the chase to Oakvale")
 	assert_eq(String((warps[0] as WarpCommand).area_id), "oakvale_ruins", "to the burning village")
 	var raided := StoryState.new()
@@ -610,9 +629,10 @@ func test_river_crossing_is_a_real_river_with_one_stone_bridge() -> void:
 	var kinds := _prop_kinds(rc)
 	assert_gte(int(kinds.get("house", 0)), 3, "a toll-house and cottages")
 	assert_not_null(rc.entity("wayshrine"), "a Wayshrine")
-	# Hobb tells the same story twice (Marra warns you in Oakvale).
+	# Hobb tells the same story twice (Marra warns you in Oakvale) -- his talk is in the dialogue bank.
 	var older: int = 0
-	for c in _flatten((rc.entity("hobb") as NpcEntity).on_interact):
+	var say: Array = (rc.entity("hobb") as NpcEntity).interact_script("river_crossing", StoryFixture.sent_off(StoryState.new()))
+	for c in _flatten(say):
 		if c is SayCommand:
 			for b in (c as SayCommand).beats:
 				if String((b as StoryBeat).text).to_lower().contains("older than the kingdom"):
@@ -712,7 +732,7 @@ func test_everyone_can_be_reached_at_every_stage_of_the_story() -> void:
 			var s: StoryState = stages[stage]
 			var reach := _reach(a, s)
 			for e in a.present_entities(s):
-				if not e.is_interactable() or not e.has_actor():
+				if not e.is_interactable_in(String(a.area_id)) or not e.has_actor():
 					continue
 				var ok := false
 				for c in e.cells():

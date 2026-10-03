@@ -3,12 +3,12 @@
 [ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_7nbgp"]
 [ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="2_hd5qq"]
 [ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_qx6el"]
-[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="4_akgv5"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="5_wmbul"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="6_xh0mo"]
-[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="7_qpsqo"]
-[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="8_1x3i8"]
-[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="9_y55b1"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="4_akgv5"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="5_wmbul"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="6_xh0mo"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="7_qpsqo"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="8_1x3i8"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="9_y55b1"]
 [ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="10_oj0ws"]
 [ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="11_0fgpi"]
 [ext_resource type="Resource" path="res://game/overworld/content/areas/river_crossing/terrain.tres" id="12_al7v6"]
@@ -140,76 +140,15 @@ tint = Color(0.52, 0.36, 0.2, 1)
 script = ExtResource("4_akgv5")
 speaker_id = &"npc_hobb"
 speaker_name = "Toll-keeper Hobb"
-side = &"right"
-text = "Welcome to the Old Bridge! Older than the kingdom, this bridge. The first King of Aldermere rode over it to his crowning -- and paid the toll, mind."
-
-[sub_resource type="Resource" id="Resource_e7e26"]
-script = ExtResource("4_akgv5")
-speaker_id = &"npc_hobb"
-speaker_name = "Toll-keeper Hobb"
-side = &"right"
-text = "Testers carrying the Researcher's letter cross free, by royal order. Everyone else, a copper. The bridge doesn't mind either way."
-
-[sub_resource type="Resource" id="Resource_unfpc"]
-script = ExtResource("4_akgv5")
-speaker_id = &"npc_hobb"
-speaker_name = "Toll-keeper Hobb"
-side = &"right"
-text = "Did I tell you this bridge is older than the kingdom? The first King rode over it to his crowning. Paid the toll, too."
-
-[sub_resource type="Resource" id="Resource_4ffgr"]
-script = ExtResource("5_wmbul")
-beats = Array[Resource]([SubResource("Resource_5ttts"), SubResource("Resource_e7e26"), SubResource("Resource_unfpc")])
-
-[sub_resource type="Resource" id="Resource_gypw4"]
-script = ExtResource("4_akgv5")
-speaker_id = &"npc_hobb"
-speaker_name = "Toll-keeper Hobb"
-side = &"right"
-text = "Raiders came over my bridge at a dead run, red cloaks, a woman in a scholar's coat slung between them. Didn't stop. Didn't pay."
-
-[sub_resource type="Resource" id="Resource_86bip"]
-script = ExtResource("4_akgv5")
-speaker_id = &"npc_hobb"
-speaker_name = "Toll-keeper Hobb"
-side = &"right"
-text = "Forty years I've kept this bridge. Never seen anyone cross it like they were running from the city instead of to it."
-
-[sub_resource type="Resource" id="Resource_xdhhb"]
-script = ExtResource("5_wmbul")
-beats = Array[Resource]([SubResource("Resource_gypw4"), SubResource("Resource_86bip")])
-
-[sub_resource type="Resource" id="Resource_83hwk"]
-script = ExtResource("6_xh0mo")
-condition = "has(\"opening.attack\")"
-then_commands = Array[Resource]([SubResource("Resource_xdhhb")])
-else_commands = Array[Resource]([SubResource("Resource_4ffgr")])
-
-[sub_resource type="Resource" id="Resource_hv65l"]
-script = ExtResource("7_qpsqo")
-speaker_id = &"npc_hobb"
-speaker_name = "Toll-keeper Hobb"
 figure = "elder"
 id = &"hobb"
 cell = Vector3i(13, 10, 0)
 facing = "west"
 display_name = "Toll-keeper Hobb"
 tint = Color(0.4, 0.4, 0.5, 1)
-on_interact = Array[Resource]([SubResource("Resource_83hwk")])
 
-[sub_resource type="Resource" id="Resource_owh4t"]
+[sub_resource type="Resource" id="Resource_e7e26"]
 script = ExtResource("4_akgv5")
-speaker_id = &"npc_nan"
-speaker_name = "Fisher Nan"
-side = &"right"
-text = "The river comes down from the city walls and runs out to the sea past Beach Village. Every fish in it has seen the King. Not one of them is impressed."
-
-[sub_resource type="Resource" id="Resource_kdarp"]
-script = ExtResource("5_wmbul")
-beats = Array[Resource]([SubResource("Resource_owh4t")])
-
-[sub_resource type="Resource" id="Resource_n45xl"]
-script = ExtResource("7_qpsqo")
 speaker_id = &"npc_nan"
 speaker_name = "Fisher Nan"
 figure = "villager"
@@ -218,28 +157,9 @@ cell = Vector3i(17, 9, 0)
 facing = "north"
 display_name = "Fisher Nan"
 tint = Color(0.36, 0.5, 0.56, 1)
-on_interact = Array[Resource]([SubResource("Resource_kdarp")])
 
-[sub_resource type="Resource" id="Resource_lvt5j"]
+[sub_resource type="Resource" id="Resource_unfpc"]
 script = ExtResource("4_akgv5")
-speaker_id = &"npc_joss"
-speaker_name = "Carter Joss"
-side = &"right"
-text = "Coast road's washed out past the ford. Beach Village will have to wait for its flour, and I'll have to wait for Beach Village."
-
-[sub_resource type="Resource" id="Resource_qot7i"]
-script = ExtResource("4_akgv5")
-speaker_id = &"npc_joss"
-speaker_name = "Carter Joss"
-side = &"right"
-text = "They say the harbour's full of ships bound for the isles, and none of them able to sail till the road's mended. Funny old world."
-
-[sub_resource type="Resource" id="Resource_kv7q5"]
-script = ExtResource("5_wmbul")
-beats = Array[Resource]([SubResource("Resource_lvt5j"), SubResource("Resource_qot7i")])
-
-[sub_resource type="Resource" id="Resource_u65qw"]
-script = ExtResource("7_qpsqo")
 speaker_id = &"npc_joss"
 speaker_name = "Carter Joss"
 figure = "villager"
@@ -248,25 +168,11 @@ cell = Vector3i(20, 13, 0)
 facing = "east"
 display_name = "Carter Joss"
 tint = Color(0.55, 0.42, 0.26, 1)
-on_interact = Array[Resource]([SubResource("Resource_kv7q5")])
 
-[sub_resource type="Resource" id="Resource_se6pd"]
+[sub_resource type="Resource" id="Resource_4ffgr"]
 script = ExtResource("4_akgv5")
 speaker_id = &"npc_rc_child"
 speaker_name = "Pip"
-side = &"right"
-text = "If you drop a pebble off the bridge and count to three, a river spirit grants you a wish. I've wished for a creature forty times."
-
-[sub_resource type="Resource" id="Resource_v0awe"]
-script = ExtResource("8_1x3i8")
-scene_id = &"rc_pip"
-beats = Array[Resource]([SubResource("Resource_se6pd")])
-
-[sub_resource type="Resource" id="Resource_n3wgd"]
-script = ExtResource("7_qpsqo")
-speaker_id = &"npc_rc_child"
-speaker_name = "Pip"
-dialogue = SubResource("Resource_v0awe")
 figure = "child"
 id = &"rc_child"
 cell = Vector3i(7, 15, 0)
@@ -274,71 +180,70 @@ facing = "north"
 display_name = "Pip"
 tint = Color(0.6, 0.5, 0.36, 1)
 
-[sub_resource type="Resource" id="Resource_h67cp"]
-script = ExtResource("9_y55b1")
+[sub_resource type="Resource" id="Resource_gypw4"]
+script = ExtResource("5_wmbul")
 area_rect = Rect2i(0, 14, 1, 1)
 target_area = &"mossway"
 target_entry = &"east"
 id = &"west_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_pxwpt"]
-script = ExtResource("9_y55b1")
+[sub_resource type="Resource" id="Resource_86bip"]
+script = ExtResource("5_wmbul")
 area_rect = Rect2i(11, 0, 2, 1)
 target_area = &"crownhaven"
 target_entry = &"south_gate"
 id = &"north_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_2sg6v"]
-script = ExtResource("4_akgv5")
+[sub_resource type="Resource" id="Resource_xdhhb"]
+script = ExtResource("6_xh0mo")
 text = "The coast road east toward Beach Village and the sea dips into a ford -- and the ford has become a lake. A Warden's rope and a painted board: \"Road closed. Ferry suspended. Ask again after the rains.\""
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_1k70n"]
-script = ExtResource("8_1x3i8")
+[sub_resource type="Resource" id="Resource_83hwk"]
+script = ExtResource("7_qpsqo")
 scene_id = &"beach_village_road_locked_east_exit"
-beats = Array[Resource]([SubResource("Resource_2sg6v")])
+beats = Array[Resource]([SubResource("Resource_xdhhb")])
 
-[sub_resource type="Resource" id="Resource_p7eie"]
-script = ExtResource("9_y55b1")
+[sub_resource type="Resource" id="Resource_hv65l"]
+script = ExtResource("5_wmbul")
 area_rect = Rect2i(23, 14, 1, 1)
 target_area = &"river_crossing"
 target_entry = &"east_road"
 requires = "has(\"world.beach_road_open\")"
-locked_scene = SubResource("Resource_1k70n")
+locked_scene = SubResource("Resource_83hwk")
 id = &"east_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_xk34a"]
-script = ExtResource("4_akgv5")
+[sub_resource type="Resource" id="Resource_owh4t"]
+script = ExtResource("6_xh0mo")
 text = "River Crossing. The river slides wide and green under the Old Bridge, and the toll-keeper's lantern swings from its stone rail."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_86src"]
-script = ExtResource("4_akgv5")
+[sub_resource type="Resource" id="Resource_kdarp"]
+script = ExtResource("6_xh0mo")
 text = "North over the bridge, the King's road climbs to Crownhaven's south gate."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_enf06"]
-script = ExtResource("5_wmbul")
-beats = Array[Resource]([SubResource("Resource_xk34a"), SubResource("Resource_86src")])
+[sub_resource type="Resource" id="Resource_n45xl"]
+script = ExtResource("9_y55b1")
+beats = Array[Resource]([SubResource("Resource_owh4t"), SubResource("Resource_kdarp")])
 
-[sub_resource type="Resource" id="Resource_11kn0"]
+[sub_resource type="Resource" id="Resource_lvt5j"]
 script = ExtResource("10_oj0ws")
 key = "river_crossing.arrived"
 
-[sub_resource type="Resource" id="Resource_xm0hi"]
-script = ExtResource("6_xh0mo")
+[sub_resource type="Resource" id="Resource_qot7i"]
+script = ExtResource("8_1x3i8")
 condition = "not has(\"river_crossing.arrived\")"
-then_commands = Array[Resource]([SubResource("Resource_enf06"), SubResource("Resource_11kn0")])
+then_commands = Array[Resource]([SubResource("Resource_n45xl"), SubResource("Resource_lvt5j")])
 
 [resource]
 script = ExtResource("11_0fgpi")
 area_id = &"river_crossing"
 display_name = "River Crossing"
 terrain = ExtResource("12_al7v6")
-kind = 0
 region_id = &"heartlands"
 world_map_pos = Vector2(0.58, 0.69)
 entry_points = {
@@ -359,8 +264,5 @@ entry_points = {
 "facing": "east"
 }
 }
-entities = Array[Resource]([SubResource("Resource_g0l7k"), SubResource("Resource_474uf"), SubResource("Resource_b6dki"), SubResource("Resource_mtg3m"), SubResource("Resource_5m0st"), SubResource("Resource_65pmo"), SubResource("Resource_xeg3g"), SubResource("Resource_o4rin"), SubResource("Resource_0d5hf"), SubResource("Resource_u5mpc"), SubResource("Resource_om6bn"), SubResource("Resource_o4bd6"), SubResource("Resource_u4wfy"), SubResource("Resource_5307s"), SubResource("Resource_wm3sh"), SubResource("Resource_hv65l"), SubResource("Resource_n45xl"), SubResource("Resource_u65qw"), SubResource("Resource_n3wgd"), SubResource("Resource_h67cp"), SubResource("Resource_pxwpt"), SubResource("Resource_p7eie")])
-encounter_zones = Array[Resource]([])
-on_enter = Array[Resource]([SubResource("Resource_xm0hi")])
-music_cue = &""
-lighting_preset_override = ""
+entities = Array[Resource]([SubResource("Resource_g0l7k"), SubResource("Resource_474uf"), SubResource("Resource_b6dki"), SubResource("Resource_mtg3m"), SubResource("Resource_5m0st"), SubResource("Resource_65pmo"), SubResource("Resource_xeg3g"), SubResource("Resource_o4rin"), SubResource("Resource_0d5hf"), SubResource("Resource_u5mpc"), SubResource("Resource_om6bn"), SubResource("Resource_o4bd6"), SubResource("Resource_u4wfy"), SubResource("Resource_5307s"), SubResource("Resource_wm3sh"), SubResource("Resource_5ttts"), SubResource("Resource_e7e26"), SubResource("Resource_unfpc"), SubResource("Resource_4ffgr"), SubResource("Resource_gypw4"), SubResource("Resource_86bip"), SubResource("Resource_hv65l")])
+on_enter = Array[Resource]([SubResource("Resource_qot7i")])

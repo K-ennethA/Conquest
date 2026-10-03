@@ -18,22 +18,32 @@ extends SceneTree
 ##   game/overworld/content/shops/*.tres                     -- the merchants' shops (DECISIONS.md #28)
 ##   game/overworld/content/tournaments/*.tres               -- the Crown Arena's cup (DECISIONS.md #33)
 ##
-## Run with:
-##   godot --headless --path . -s res://game/overworld/build/build_story_content.gd
+## Run with (the runner loads this file once the autoloads exist -- run directly with -s, its typed
+## dependencies reach autoload names the analyzer does not know yet and it fails to compile):
+##   godot --headless --path . -s res://game/overworld/build/run_builder.gd
 ##
 ## Terrain is ordinary MapResource data (the Map Maker can open and repaint it); everything
 ## story -- NPCs, signs, props, warps, the Wayshrines, dialogue, the opening's scripts -- is the
 ## OverworldAreaResource beside it. Nothing here lives under game/maps/resources/, so no picker
 ## (Skirmish, Siege, network, Map Gallery) ever lists it; every map is also status Inactive.
 ##
+## AMBIENT NPC TALK IS NOT HERE: what townsfolk say (and how it changes with the story and with
+## time) lives in game/overworld/content/dialogue.json -- the DialogueBank, edited with the
+## Dialogue editor (addons/dialogue_editor) and read at runtime, so editing it needs no rebuild.
+## An NPC here is just its place, look and SCRIPTED behaviour (cutscenes, offers, shops, battles);
+## a bank entry keyed by the area id + the NPC id gives it its lines.
+##
 ## THE OPENING, as built here (flags in the F_* constants):
-##   1. Oakvale (home): a new journey starts at your door; your mother sends you to Crownhaven
-##      to receive your first creature and a bonding shard ............... opening.sent_off
+##   1. Oakvale (home): a new journey starts at your door; your mother sends you to Crownhaven,
+##      where your longtime friend the Royal Researcher (Linnea, he/him) has asked for you as a
+##      shard tester ....................................................... opening.sent_off
 ##   2. The Mossway (east) and River Crossing (north over the Old Bridge): wild creatures leave a
 ##      traveller with no partner alone (no encounters, trainers let you pass -- OverworldController);
 ##      Bram and the Lone Petalfang only appear once the opening is over .... (opening.complete)
-##   3. Crownhaven (in by the south gate): the Researcher's ceremony -- the STARTER joins, the
-##      shard is yours ............................ opening.starter_received, key.bonding_shard
+##   3. Crownhaven (in by the south gate): the reunion with the Researcher, who explains HIS
+##      invention (the shard listens to the old star's spark in every creature); the shard is
+##      yours and you CHOOSE a starter among his three test creatures (STARTER_CHOICES)
+##      ......................... opening.starter_received, opening.starter_pick, key.bonding_shard
 ##   4. The raid: Cindral raiders vault the east wall, seize the Researcher and flee out the south
 ##      gate, down the road home; the Sergeant runs up; you give chase (a scripted warp) ... opening.attack,
 ##      opening.researcher_taken, opening.raiders_fled, opening.chase
@@ -63,6 +73,8 @@ const FIRST_FIGHT_MAP_PATH := CONTENT + "battles/ow_oakvale_ashes.tres"
 const NAMES := {
 	"HERO": "Wren",                         # default hero name (player naming is planned)
 	"MOTHER": "Briony",
+	# The Royal Researcher (he/him): the hero's LONGTIME FRIEND -- an Oakvale boy who went to the
+	# city's academy and invented the bonding shard. (A name does not set pronouns: he is "he".)
 	"RESEARCHER": "Linnea",
 	"RESEARCHER_TITLE": "Researcher Linnea",
 	"ASSISTANT": "Tam",
@@ -224,9 +236,17 @@ const SHOP_CROWNHAVEN := "crownhaven_general"
 const SHOP_PEDLAR := "mossway_pedlar"
 const SHOP_WOODLAND := "woodland_trader"
 
-## The STARTER creature the ceremony gives (a CharacterLibrary id) -- change it here and rebuild.
+## The STARTER creature (a CharacterLibrary id): the DEFAULT of the ceremony's choice -- the first
+## option, the one tests and a no-host run pick -- and the placeholder in the first fight's squad
+## chairs. Change it here and rebuild.
 const STARTER_ID := &"tree_grunt"
 const STARTER_NICKNAME := ""
+## The Researcher's three TEST CREATURES: the ceremony lets you CHOOSE one (the owner's opening).
+## STARTER_ID must stay first (the default). The pick is also recorded as the int flag
+## F_STARTER_PICK (1-based) -- STORY.md: the two you did not choose are stolen in the raid.
+const STARTER_CHOICES: Array[StringName] = [STARTER_ID, &"petalfang", &"blightcap"]
+## Where the three wait by the pylon during the ceremony (the first is the "starter" entity).
+const STARTER_CELLS: Array[Vector2i] = [Vector2i(25, 8), Vector2i(23, 8), Vector2i(25, 7)]
 ## The Sergeant's army-issued creature, fighting as a GUEST in the first fight (a player-0 turn-1
 ## Reinforcement slot on the battle map: placed at load, never replaced by the squad pick).
 const GUEST_ID := "gem_knight"
@@ -244,6 +264,8 @@ const F_SENT_OFF := "opening.sent_off"
 const F_ARRIVED := "opening.arrived_crownhaven"
 const F_CEREMONY := "opening.ceremony"
 const F_STARTER := "opening.starter_received"
+## WHICH test creature you chose (1-based index into STARTER_CHOICES).
+const F_STARTER_PICK := "opening.starter_pick"
 const F_SHARD := "key.bonding_shard"
 const F_ATTACK := "opening.attack"
 const F_TAKEN := "opening.researcher_taken"
@@ -412,9 +434,14 @@ func _t(text: String) -> String:
 	return out
 
 
-## The starter's species name, read straight from its roster .tres TEXT (CharacterLibrary needs
-## the autoloads, which a -s builder run does not have).
+## The default starter's species name.
 func _starter_name() -> String:
+	return _species_name(STARTER_ID)
+
+
+## A species name, read straight from its roster .tres TEXT (CharacterLibrary needs the autoloads,
+## which a -s builder run does not have).
+func _species_name(character_id: StringName) -> String:
 	var roster: String = "res://game/characters/roster/"
 	var dir := DirAccess.open(roster)
 	if dir != null:
@@ -422,13 +449,13 @@ func _starter_name() -> String:
 			if not f.ends_with(".tres"):
 				continue
 			var text: String = FileAccess.get_file_as_string(roster + f)
-			if not text.contains("character_id = &\"%s\"" % STARTER_ID):
+			if not text.contains("character_id = &\"%s\"" % character_id):
 				continue
 			var re := RegEx.create_from_string("display_name = \"([^\"]*)\"")
 			var m := re.search(text)
 			if m != null:
 				return m.get_string(1)
-	return String(STARTER_ID).capitalize()
+	return String(character_id).capitalize()
 
 
 # =====================================================================================
@@ -1134,33 +1161,13 @@ func _oak_people() -> Array:
 	out.append(_sign("strand_sign", Vector2i(11, OAK_SHORE_Y), "The Strand",
 		"THE STRAND\nOakvale's shingle beach and the fishing jetty. The tide comes in faster than you think."))
 	out.append(_sign("hall_sign", Vector2i(13, 5), "Village Hall",
-		"A notice is nailed to the door:\n\"By order of {KINGDOM}'s crown: shards of {STONE} will be granted to chosen testers at Crownhaven. Oakvale's name was drawn.\""))
+		"A notice is nailed to the door:\n\"By order of {KINGDOM}'s crown: shards of {STONE} will be granted to chosen testers at Crownhaven. One tester is called from Oakvale, at the Royal Researcher's own request: {hero}.\""))
 
-	var mom := _npc("briony", Vector2i(OAK_START.x + 1, OAK_START.y), "west", "MOTHER", Color(0.62, 0.36, 0.3))
-	mom.on_interact = StoryCommand.list([_say([
-		_line("briony", "MOTHER", "East along the Mossway to River Crossing, then north over the Old Bridge -- Crownhaven's south gate is at the end of it. Go on -- the Researcher won't wait all day, and neither will I!"),
-	])])
-	out.append(mom)
-
-	var tobin := _npc("tobin", Vector2i(13, 11), "east", "TOBIN", Color(0.36, 0.46, 0.62))
-	tobin.on_interact = StoryCommand.list([_say([
-		_line("tobin", "TOBIN", "Off to get your shard, then? Pa says in his day you befriended a creature by sharing your bread with it for a year."),
-		_line("tobin", "TOBIN", "Less bread this way, I suppose."),
-	])])
-	out.append(tobin)
-
-	var hessa := _npc("hessa", Vector2i(11, 15), "east", "HESSA", Color(0.6, 0.5, 0.3), "villager")
-	hessa.on_interact = StoryCommand.list([_say([
-		_line("hessa", "HESSA", "Soldiers went down the Mossway at dawn, riding for the border. Nobody would say why."),
-		_line("hessa", "HESSA", "There's talk of {NATION} again. There's always talk of {NATION}."),
-	])])
-	out.append(hessa)
-
-	var pell := _npc("pell", Vector2i(8, 7), "south", "PELL", Color(0.4, 0.6, 0.5), "child")
-	pell.on_interact = StoryCommand.list([_say([
-		_line("pell", "PELL", "Will your creature be big? Will it breathe fire? Can I hold the shard? Just once?"),
-	])])
-	out.append(pell)
+	# The villagers' talk is in dialogue.json (DialogueBank): areas.oakvale.<id>.
+	out.append(_npc("briony", Vector2i(OAK_START.x + 1, OAK_START.y), "west", "MOTHER", Color(0.62, 0.36, 0.3)))
+	out.append(_npc("tobin", Vector2i(13, 11), "east", "TOBIN", Color(0.36, 0.46, 0.62)))
+	out.append(_npc("hessa", Vector2i(11, 15), "east", "HESSA", Color(0.6, 0.5, 0.3), "villager"))
+	out.append(_npc("pell", Vector2i(8, 7), "south", "PELL", Color(0.4, 0.6, 0.5), "child"))
 
 	# --- The farming village, filled in: the inn, the fields, the pond, the lanes ---------------
 	out.append(_sign("inn_sign", Vector2i(14, 8), "The Hearth & Hen",
@@ -1169,23 +1176,9 @@ func _oak_people() -> Array:
 		"\"Please keep to the lane. The barley is counting on you.\" -- Ned"))
 	out.append(_sign("mill_sign", Vector2i(5, 11), "The Mill Lane",
 		"WEST: the cart track to Farm Hamlet.\nMILL LANE: flour, sacks and gossip, in that order."))
-	var marra := _npc("marra", Vector2i(15, 8), "south", "MARRA", Color(0.7, 0.4, 0.3), "villager")
-	marra.on_interact = StoryCommand.list([_say([
-		_line("marra", "MARRA", "Stew's on, and the hearth's lit. Travellers stop here before the Mossway -- it's a long road to River Crossing, and a longer one to the city."),
-		_line("marra", "MARRA", "Folk say the old bridge at River Crossing is older than the kingdom. Mind the toll-keeper; he'll tell you the same story twice."),
-	])])
-	out.append(marra)
-	var ned := _npc("ned", Vector2i(13, 8), "east", "NED", Color(0.5, 0.45, 0.3), "elder")
-	ned.on_interact = StoryCommand.list([_say([
-		_line("ned", "NED", "Forty harvests I've brought in off that field. A good year's barley for the bread, a bad year's for the pigs."),
-		_line("ned", "NED", "This year the creatures in the hedgerow have been restless. Something stirs them. Mind yourself out there."),
-	])])
-	out.append(ned)
-	var wick := _npc("wick", Vector2i(8, 5), "south", "WICK", Color(0.62, 0.5, 0.34), "child")
-	wick.on_interact = StoryCommand.list([_say([
-		_line("wick", "WICK", "I'm watching the pond for the golden frog. Nobody's seen it. That's how I know it's clever."),
-	])])
-	out.append(wick)
+	out.append(_npc("marra", Vector2i(15, 8), "south", "MARRA", Color(0.7, 0.4, 0.3), "villager"))
+	out.append(_npc("ned", Vector2i(13, 8), "east", "NED", Color(0.5, 0.45, 0.3), "elder"))
+	out.append(_npc("wick", Vector2i(8, 5), "south", "WICK", Color(0.62, 0.5, 0.34), "child"))
 	return out
 
 
@@ -1194,15 +1187,16 @@ func _send_off() -> Array:
 	return [
 		_say([
 			_narr("Long ago, a star fell on this world. Its dust sank into the stone and the soil, and ever since, humans and creatures alike have called on the elements.", "Conquest"),
-			_narr("Few people ever bond with a creature. It takes years of patient trust -- or chains. But in the royal city, a researcher has cut a shard of {STONE} that makes the bond easy and safe."),
+			_narr("Few people ever bond with a creature. It takes years of patient trust -- or chains. But in the royal city, a boy from this very village grew up to be the King's researcher -- and he has cut a shard of {STONE} that makes the bond easy and safe."),
 		]),
 		_face("player", "toward:briony"),
 		_say([
-			_line("briony", "MOTHER", "There you are! Today's the day, {hero}. The letter says noon -- you'll be late if you dawdle."),
-			_line("briony", "MOTHER", "One of {RESEARCHER_TITLE}'s chosen testers. A shard of your own, and a creature to go with it. Your father would have been so proud."),
-			_me("I'll be home before dark, Mother. I promise."),
+			_line("briony", "MOTHER", "There you are! Today's the day, {hero}. {RESEARCHER}'s letter says noon -- you'll be late if you dawdle."),
+			_line("briony", "MOTHER", "Fancy that. The boy who used to follow you round the barley field, the King's own researcher -- and he asked for YOU by name. One of his chosen testers."),
+			_line("briony", "MOTHER", "A shard of your own, and a creature to go with it. Your father would have been so proud."),
+			_me("I'll be home before dark, Mother. I promise. And I'll make {RESEARCHER} tell me everything."),
 			_line("briony", "MOTHER", "Follow the Mossway east to River Crossing, and the road north over the bridge to Crownhaven. The wild ones in the grass leave a traveller alone -- until you walk with a partner of your own. Then mind yourself."),
-			_line("briony", "MOTHER", "Go on, then. And {hero} -- I love you. Bring your new friend home for supper."),
+			_line("briony", "MOTHER", "Go on, then. And {hero} -- I love you. Bring your new friend home for supper. Both of them, if {RESEARCHER} can tear himself away from his work."),
 		]),
 		_flag(F_SENT_OFF),
 		_toast("Quest: The Shard Ceremony"),
@@ -1211,23 +1205,10 @@ func _send_off() -> Array:
 
 func _oak_ruins_people() -> Array:
 	var out: Array = []
-	var tobin := _npc("tobin", Vector2i(11, 11), "north", "TOBIN", Color(0.3, 0.36, 0.44))
-	tobin.on_interact = StoryCommand.list([IfCommand.make("has(\"%s\")" % F_COMPLETE, [
-		_say([_line("tobin", "TOBIN", "We'll rebuild. Oakvale always does. Go and find the ones who did this, {hero}.")]),
-	], [
-		_say([_line("tobin", "TOBIN", "They went past the mill toward the border. The Sergeant's waiting on you.")]),
-	])])
-	out.append(tobin)
-	var hessa := _npc("hessa", Vector2i(4, 9), "west", "HESSA", Color(0.45, 0.38, 0.26), "villager")
-	hessa.on_interact = StoryCommand.list([_say([
-		_line("hessa", "HESSA", "The little ones are safe in the mill cellar, thanks to her. Every one of them."),
-	])])
-	out.append(hessa)
-	var pell := _npc("pell", Vector2i(6, 10), "north", "PELL", Color(0.3, 0.45, 0.4), "child")
-	pell.dialogue = _scene("ruins_pell", [
-		_line("pell", "PELL", "...She told us to count to a thousand in the dark and not come out. I only got to four hundred."),
-	])
-	out.append(pell)
+	# The survivors' talk is in dialogue.json (DialogueBank): areas.oakvale_ruins.<id>.
+	out.append(_npc("tobin", Vector2i(11, 11), "north", "TOBIN", Color(0.3, 0.36, 0.44)))
+	out.append(_npc("hessa", Vector2i(4, 9), "west", "HESSA", Color(0.45, 0.38, 0.26), "villager"))
+	out.append(_npc("pell", Vector2i(6, 10), "north", "PELL", Color(0.3, 0.45, 0.4), "child"))
 	out.append(_rowan_in_ruins())
 	var cairn := _sign("cairn", Vector2i(OAK_GARDEN.position.x + 1, OAK_GARDEN.position.y), "A cairn",
 		"Stones piled with care beside a burned house, and wildflowers laid across them.\n\"{MOTHER} of Oakvale, who went back for the others.\"", "stone")
@@ -1238,22 +1219,12 @@ func _oak_ruins_people() -> Array:
 	var after: String = "has(\"%s\")" % F_COMPLETE
 	var marra := _npc("marra", Vector2i(OAK_INN.position.x, OAK_INN.end.y), "south", "MARRA", Color(0.6, 0.34, 0.26), "villager")
 	marra.visible_if = after
-	marra.on_interact = StoryCommand.list([_say([
-		_line("marra", "MARRA", "The Hearth & Hen burned to the hearthstone. The hearthstone's still good, though. We'll have a roof on it by the harvest -- Farm Hamlet's sending timber."),
-		_line("marra", "MARRA", "You'll always have a bowl of stew here, {hero}. Even if for now it's stew under the sky."),
-	])])
 	out.append(marra)
 	var ned := _npc("ned", Vector2i(13, 12), "east", "NED", Color(0.45, 0.4, 0.28), "elder")
 	ned.visible_if = after
-	ned.on_interact = StoryCommand.list([_say([
-		_line("ned", "NED", "Forty harvests off that field, and the forty-first is ash. Ash is good for the soil, mind. Next year's barley will be the best this village ever grew."),
-	])])
 	out.append(ned)
 	var wick := _npc("wick", Vector2i(8, 5), "south", "WICK", Color(0.52, 0.42, 0.3), "child")
 	wick.visible_if = after
-	wick.on_interact = StoryCommand.list([_say([
-		_line("wick", "WICK", "The golden frog came back to the pond this morning. I saw it. It means the village is going to be alright."),
-	])])
 	out.append(wick)
 	return out
 
@@ -1280,7 +1251,8 @@ func _ruins_arrival() -> Array:
 		_face("player", "toward:tobin"),
 		_say([
 			_line("tobin", "TOBIN", "{hero}! Thank the stars you weren't here."),
-			_line("tobin", "TOBIN", "They came out of the Mossway at a run -- a dozen of them in {NATION} red, dragging a woman in a scholar's coat. Anyone in their way, they just... went through."),
+			_line("tobin", "TOBIN", "They came out of the Mossway at a run -- a dozen of them in {NATION} red, dragging a man in a scholar's coat. Anyone in their way, they just... went through."),
+			_me("A scholar's coat... {RESEARCHER}. They've still got {RESEARCHER}."),
 			_me("Where's my mother? Tobin -- where is she?"),
 			_line("tobin", "TOBIN", "...Hessa's with her. Come."),
 		]),
@@ -1317,7 +1289,7 @@ func _rowan_offer() -> ChoiceCommand:
 	fight.spec = _first_fight_spec()
 	fight.source = BattleRequest.SOURCE_SCRIPT
 	var yes := ChoiceOption.make(_t("I'll fight."), [
-		_say([_line("rowan", "SOLDIER", "Then keep your {STARTER} close, and stay on my shield side.")]),
+		_say([_line("rowan", "SOLDIER", "Then keep your {lead} close, and stay on my shield side.")]),
 		# A loss sends you to this Wayshrine (the fight waits here with the Sergeant).
 		_respawn(&"oakvale_ruins", &"wayshrine"),
 		fight,
@@ -1336,6 +1308,7 @@ func _aftermath() -> Array:
 		_say([
 			_narr("The last chained beast falls. Beyond the mill, hoofbeats fade toward the border."),
 			_line("rowan", "SOLDIER", "That's the rear guard broken. The rest got away with the Researcher -- over the border by nightfall, I'd wager."),
+			_me("His name is {RESEARCHER}. We grew up on this green. I'm going to bring him home."),
 			_line("rowan", "SOLDIER", "You fought like you had something to fight for. Your mother would have been proud of you -- and furious with me for letting you."),
 			_line("rowan", "SOLDIER", "The King will call this an act of war. {NATION} will swear it never sent a soul. And something about this whole raid stinks."),
 			_line("rowan", "SOLDIER", "Bury your mother, {hero}. Then come and find me at the barracks in Crownhaven. I could use someone with a shard -- and a reason."),
@@ -1502,7 +1475,7 @@ func _build_mossway() -> void:
 	# A TRAVELLING MERCHANT camps by the road once the opening is over (his cart beside him).
 	var pedlar := _merchant("pedlar", Vector2i(13, 4), "south", "PEDLAR", Color(0.55, 0.42, 0.25), SHOP_PEDLAR)
 	pedlar.visible_if = after_opening
-	pedlar.dialogue = _scene("moss_pedlar", [_line("pedlar", "PEDLAR", "Mind the grass, traveller. Need anything for the road?")])
+	# His greeting is in dialogue.json (areas.mossway.pedlar).
 	ents.append(pedlar)
 	ents.append(_prop("pedlar_cart", "cart", Vector2i(12, 4), Vector2i.ONE, Color(0.55, 0.42, 0.25), true, after_opening))
 
@@ -1650,35 +1623,11 @@ func _build_river_crossing() -> void:
 	ents.append(_sign("coast_sign", Vector2i(RC_W - 3, RC_ROAD_Y + 1), "The Coast Road",
 		"EAST: BEACH VILLAGE\nRoad closed -- washed out at the ford. By order of the Wardens."))
 
-	var raided: String = "has(\"%s\")" % F_ATTACK
-	var hobb := _npc("hobb", Vector2i(RC_BRIDGE_X1 + 1, RC_RIVER_Y1 + 1), "west", "TOLLKEEPER", Color(0.4, 0.4, 0.5), "elder")
-	hobb.on_interact = StoryCommand.list([IfCommand.make(raided, [
-		_say([
-			_line("hobb", "TOLLKEEPER", "Raiders came over my bridge at a dead run, red cloaks, a woman in a scholar's coat slung between them. Didn't stop. Didn't pay."),
-			_line("hobb", "TOLLKEEPER", "Forty years I've kept this bridge. Never seen anyone cross it like they were running from the city instead of to it."),
-		]),
-	], [
-		_say([
-			_line("hobb", "TOLLKEEPER", "Welcome to the Old Bridge! Older than the kingdom, this bridge. The first King of {KINGDOM} rode over it to his crowning -- and paid the toll, mind."),
-			_line("hobb", "TOLLKEEPER", "Testers carrying the Researcher's letter cross free, by royal order. Everyone else, a copper. The bridge doesn't mind either way."),
-			_line("hobb", "TOLLKEEPER", "Did I tell you this bridge is older than the kingdom? The first King rode over it to his crowning. Paid the toll, too."),
-		]),
-	])])
-	ents.append(hobb)
-	var nan := _npc("nan", RC_JETTY, "north", "FISHER", Color(0.36, 0.5, 0.56), "villager")
-	nan.on_interact = StoryCommand.list([_say([
-		_line("nan", "FISHER", "The river comes down from the city walls and runs out to the sea past Beach Village. Every fish in it has seen the King. Not one of them is impressed."),
-	])])
-	ents.append(nan)
-	var joss := _npc("joss", Vector2i(20, RC_ROAD_Y - 1), "east", "CARTER", Color(0.55, 0.42, 0.26), "villager")
-	joss.on_interact = StoryCommand.list([_say([
-		_line("joss", "CARTER", "Coast road's washed out past the ford. Beach Village will have to wait for its flour, and I'll have to wait for Beach Village."),
-		_line("joss", "CARTER", "They say the harbour's full of ships bound for the isles, and none of them able to sail till the road's mended. Funny old world."),
-	])])
-	ents.append(joss)
-	var child := _npc("rc_child", Vector2i(7, 15), "north", "Pip", Color(0.6, 0.5, 0.36), "child")
-	child.dialogue = _scene("rc_pip", [_line("rc_child", "Pip", "If you drop a pebble off the bridge and count to three, a river spirit grants you a wish. I've wished for a creature forty times.")])
-	ents.append(child)
+	# The villagers' talk is in dialogue.json (DialogueBank): areas.river_crossing.<id>.
+	ents.append(_npc("hobb", Vector2i(RC_BRIDGE_X1 + 1, RC_RIVER_Y1 + 1), "west", "TOLLKEEPER", Color(0.4, 0.4, 0.5), "elder"))
+	ents.append(_npc("nan", RC_JETTY, "north", "FISHER", Color(0.36, 0.5, 0.56), "villager"))
+	ents.append(_npc("joss", Vector2i(20, RC_ROAD_Y - 1), "east", "CARTER", Color(0.55, 0.42, 0.26), "villager"))
+	ents.append(_npc("rc_child", Vector2i(7, 15), "north", "Pip", Color(0.6, 0.5, 0.36), "child"))
 
 	ents.append(_warp("west_exit", Rect2i(0, RC_ROAD_Y, 1, 1), &"mossway", &"east"))
 	ents.append(_warp("north_exit", Rect2i(RC_BRIDGE_X0, 0, 2, 1), &"crownhaven", &"south_gate"))
@@ -1958,7 +1907,6 @@ func _ch_scenery() -> Array:
 
 func _ch_people() -> Array:
 	var out: Array = []
-	var raided: String = "has(\"%s\")" % F_ATTACK
 	out.append(_sign("town_sign", Vector2i(1, CH_GATE.y - 1), "Crownhaven",
 		"CROWNHAVEN -- THE WEST GATE\nRoyal city of {KINGDOM}. Keep the peace.\nWest: the Sparse Forest and Woodland Town."))
 	out.append(_sign("south_sign", Vector2i(CH_BRIDGE_X0 - 2, CH_RIVER_Y1 + 1), "Crownhaven",
@@ -1968,114 +1916,61 @@ func _ch_people() -> Array:
 	out.append(_sign("harbour_gate_sign", Vector2i(CH_W - 2, CH_HARBOUR_GATE.y + 1), "The Coast Road",
 		"SOUTH-EAST: BEACH VILLAGE\nThe harbour and the isles. Road closed -- the ford is flooded."))
 	out.append(_sign("workshop_sign", Vector2i(21, 9), "The Royal Workshop",
-		"THE ROYAL WORKSHOP\n{RESEARCHER_TITLE}. Knock loudly -- she will not hear you otherwise."))
+		"THE ROYAL WORKSHOP\n{RESEARCHER_TITLE}. Knock loudly -- he will not hear you otherwise."))
 	out.append(_sign("barracks_sign", Vector2i(9, 6), "The Barracks",
 		"CROWNHAVEN GUARD -- BARRACKS\nRecruits drill at dawn."))
 	out.append(_sign("notice_board", Vector2i(10, 11), "Notice Board",
 		"By order of the crown: shards of bonding {STONE} are issued to chosen testers only. The sale, theft or copying of shards is forbidden.\nBelow, in smaller hand: \"Lost: one Petalfang. Answers to Biscuit.\""))
 
+	# EVERY townsperson's talk is in dialogue.json (DialogueBank): areas.crownhaven.<id> -- the
+	# entities here are their places and looks (and, for Rowan, the Act 1 hook + his spar).
 	# The south gate's guards (the gate travellers from Oakvale use), flanking the avenue inside it.
-	var orwin := _npc("orwin", Vector2i(CH_SOUTH_GATE.x - 1, CH_SOUTH_GATE.y - 1), "east", "ORWIN", ALDERMERE_BLUE, "guard")
-	orwin.on_interact = StoryCommand.list([IfCommand.make(raided, [
-		_say([_line("orwin", "ORWIN", "They came over the EAST wall, and out through my gate before I'd got my spear up. I'll not forget it.")]),
-	], [
-		_say([_line("orwin", "ORWIN", "A shard tester, from Oakvale? The Researcher's workshop is in the upper town -- east of the keep. Mind the market crowd.")]),
-	])])
-	out.append(orwin)
+	out.append(_npc("orwin", Vector2i(CH_SOUTH_GATE.x - 1, CH_SOUTH_GATE.y - 1), "east", "ORWIN", ALDERMERE_BLUE, "guard"))
 	var gate2 := _npc("gate_guard", Vector2i(CH_SOUTH_GATE.x + 1, CH_SOUTH_GATE.y - 1), "west", "KEEP_GUARD", ALDERMERE_BLUE, "guard")
 	gate2.display_name = "Gate Guard"
 	gate2.speaker_name = "Gate Guard"
-	gate2.dialogue = _scene("ch_gate_guard", [_beat(&"self", "Gate Guard", "Crownhaven's gates are open from dawn to dusk. Keep the peace inside them.")])
 	out.append(gate2)
 
 	# The keep's guards.
 	for spec in [["keep_guard_w", Vector2i(13, 8)], ["keep_guard_e", Vector2i(16, 8)]]:
-		var g := _npc(spec[0], spec[1], "south", "KEEP_GUARD", Color(0.45, 0.4, 0.6), "guard")
-		g.dialogue = _scene("ch_" + String(spec[0]), [_beat(&"self", "", "The King is in council. No petitions today.")])
-		out.append(g)
+		out.append(_npc(spec[0], spec[1], "south", "KEEP_GUARD", Color(0.45, 0.4, 0.6), "guard"))
 
 	# The barracks: the Sergeant and a recruit.
 	out.append(_rowan_in_crownhaven())
-	var lisk := _npc("lisk", Vector2i(5, 9), "east", "LISK", ALDERMERE_BLUE.lightened(0.15), "guard")
-	lisk.on_interact = StoryCommand.list([IfCommand.make(raided, [
-		_say([_line("lisk", "LISK", "The Sergeant says we're on alert till the King decides what this raid means. I think it means war.")]),
-	], [
-		_say([_line("lisk", "LISK", "The army got a crate of the Researcher's shards last month. Only the officers carry them. The Sergeant's Geode could flatten this dummy with one arm.")]),
-	])])
-	out.append(lisk)
+	out.append(_npc("lisk", Vector2i(5, 9), "east", "LISK", ALDERMERE_BLUE.lightened(0.15), "guard"))
 
 	# The market.
-	var dalla := _npc("dalla", Vector2i(12, 11), "south", "DALLA", Color(0.7, 0.45, 0.3))
-	dalla.on_interact = StoryCommand.list([IfCommand.make(raided, [
-		_say([_line("dalla", "DALLA", "Raiders, in the royal city! In broad daylight! What's next -- dragons in the fish stall?")]),
-	], [
-		_say([_line("dalla", "DALLA", "Everyone wants to talk shards today. Nobody wants to buy turnips. You'd think a bit of glowing rock was worth more than supper.")]),
-	])])
-	out.append(dalla)
+	out.append(_npc("dalla", Vector2i(12, 11), "south", "DALLA", Color(0.7, 0.45, 0.3)))
 	# THE MERCHANT (DECISIONS.md #28): at the end of the green-awning stall, between it and the well.
-	var oda := _merchant("merchant", Vector2i(20, 12), "south", "MERCHANT", Color(0.3, 0.5, 0.36), SHOP_CROWNHAVEN)
-	oda.dialogue = _scene("ch_merchant", [_line("merchant", "MERCHANT", "Welcome to the market! Tonics for the road, salves for the stings -- have a look.")])
-	out.append(oda)
-	var fenwick := _npc("fenwick", Vector2i(17, 14), "west", "FENWICK", Color(0.4, 0.42, 0.48), "elder")
-	fenwick.dialogue = _scene("ch_fenwick", [
-		_line("fenwick", "FENWICK", "In my father's day, the lords bound their creatures in chains -- {STONE} chains, forged hot. The beasts obeyed. They never loved anyone for it."),
-		_line("fenwick", "FENWICK", "Good folk did it the slow way: years of trust, trial and error, bread and patience. Those bonds need no shard at all."),
-		_line("fenwick", "FENWICK", "Now the Researcher says almost anyone can do it with a sliver of the same stone. Hm. Stone is stone. It's the hand that holds it."),
-	])
-	out.append(fenwick)
-	var brisa := _npc("brisa", Vector2i(13, 15), "east", "BRISA", Color(0.45, 0.62, 0.4), "trainer")
-	brisa.on_interact = StoryCommand.list([IfCommand.make(raided, [
-		_say([_line("brisa", "BRISA", "If they took the Researcher for her shards... then everyone who carries one is a target now. Keep yours hidden, {hero}.")]),
-	], [
-		_say([_line("brisa", "BRISA", "I was in the first batch of testers! Biscuit here trusted me the moment the shard warmed. You'll see -- it feels like a second heartbeat.")]),
-	])])
-	out.append(brisa)
+	out.append(_merchant("merchant", Vector2i(20, 12), "south", "MERCHANT", Color(0.3, 0.5, 0.36), SHOP_CROWNHAVEN))
+	out.append(_npc("fenwick", Vector2i(17, 14), "west", "FENWICK", Color(0.4, 0.42, 0.48), "elder"))
+	out.append(_npc("brisa", Vector2i(13, 15), "east", "BRISA", Color(0.45, 0.62, 0.4), "trainer"))
 	var biscuit := NpcEntity.new()
 	biscuit.id = &"biscuit"
 	biscuit.cell = Vector3i(12, 15, 0)
 	biscuit.facing = "east"
 	biscuit.display_name = "Biscuit"
+	biscuit.speaker_name = "Biscuit"
+	biscuit.speaker_id = &"npc_biscuit"
 	biscuit.visual_character = &"petalfang"
-	biscuit.dialogue = _scene("ch_biscuit", [_narr("The Petalfang sniffs your hand and wags its whole back half.")])
 	out.append(biscuit)
-	var corin := _npc("corin", Vector2i(19, 13), "west", "CORIN", Color(0.55, 0.5, 0.4))
-	corin.on_interact = StoryCommand.list([IfCommand.make(raided, [
-		_say([_line("corin", "CORIN", "{NATION} raiders, they're saying. Funny -- {NATION} has no shards of its own. So why come all this way for the woman who makes them?")]),
-	], [
-		_say([_line("corin", "CORIN", "A select few testers, and a crate for the army. Everyone else keeps waiting. That's how it always goes, isn't it?")]),
-	])])
-	out.append(corin)
+	out.append(_npc("corin", Vector2i(19, 13), "west", "CORIN", Color(0.55, 0.5, 0.4)))
+	out.append(_npc("kit", Vector2i(16, 16), "north", "KIT", Color(0.7, 0.55, 0.3), "child"))
+	out.append(_npc("baker", Vector2i(14, 12), "south", "BAKER", Color(0.75, 0.62, 0.45)))
 
-	var kit := _npc("kit", Vector2i(16, 16), "north", "KIT", Color(0.7, 0.55, 0.3), "child")
-	kit.on_interact = StoryCommand.list([IfCommand.make(raided, [
-		_say([_line("kit", "KIT", "Mum says I'm not allowed past the fountain till the soldiers catch them.")]),
-	], [
-		_say([_line("kit", "KIT", "I saw the Sergeant's Geode this morning! It was THIS big. Bigger! When I'm a tester I'm getting two.")]),
-	])])
-	out.append(kit)
-	var baker := _npc("baker", Vector2i(14, 12), "south", "BAKER", Color(0.75, 0.62, 0.45))
-	baker.dialogue = _scene("ch_baker", [
-		_line("baker", "BAKER", "Starstone buns! Get your starstone buns! ...No, there's no starstone in them. There's currants. Glowing currants would be a health hazard."),
-	])
-	out.append(baker)
-
-	# The workshop: the Researcher, her assistant, and the starter (only during the ceremony).
+	# The workshop: the Researcher, his assistant, and his three test creatures (only during the
+	# ceremony -- the first is the default starter, the "starter" entity).
 	out.append(_researcher())
-	var tam := _npc("tam", Vector2i(26, 8), "west", "ASSISTANT", Color(0.5, 0.42, 0.6), "scholar")
-	tam.on_interact = StoryCommand.list([IfCommand.make("has(\"%s\")" % F_TAKEN, [
-		_say([_line("tam", "ASSISTANT", "They knew exactly where she'd be, and exactly when. They didn't touch a single note -- they only wanted HER.")]),
-	], [
-		_say([_line("tam", "ASSISTANT", "Don't touch the pylon, please. The last tester who touched the pylon could hear colours for a week.")]),
-	])])
-	out.append(tam)
-	var starter := NpcEntity.new()
-	starter.id = &"starter"
-	starter.cell = Vector3i(CH_RESEARCHER.x + 1, CH_RESEARCHER.y, 0)
-	starter.facing = "south"
-	starter.display_name = _starter_name()
-	starter.visual_character = STARTER_ID
-	starter.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_CEREMONY, F_STARTER]
-	out.append(starter)
+	out.append(_npc("tam", Vector2i(26, 8), "west", "ASSISTANT", Color(0.5, 0.42, 0.6), "scholar"))
+	for i in range(STARTER_CHOICES.size()):
+		var starter := NpcEntity.new()
+		starter.id = _starter_entity_id(i)
+		starter.cell = Vector3i(STARTER_CELLS[i].x, STARTER_CELLS[i].y, 0)
+		starter.facing = "south"
+		starter.display_name = _species_name(STARTER_CHOICES[i])
+		starter.visual_character = STARTER_CHOICES[i]
+		starter.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_CEREMONY, F_STARTER]
+		out.append(starter)
 
 	# The raiders (only during the raid). PLACEHOLDER figures in Cindral red.
 	var raid_vis: String = "has(\"%s\") and not has(\"%s\")" % [F_ATTACK, F_FLED]
@@ -2088,78 +1983,40 @@ func _ch_people() -> Array:
 
 
 ## The capital's built-out districts: the north gate, the Gilded Stag, the Merchants' Guildhall,
-## the Chapel of the Starfall and the Aldermere Forge -- signs and people, no scripts.
+## the Chapel of the Starfall and the Aldermere Forge -- signs and people (their talk is in
+## dialogue.json), no scripts.
 func _ch_districts() -> Array:
 	var out: Array = []
-	var raided: String = "has(\"%s\")" % F_ATTACK
 	# The north gate: the Mountain Road (closed).
 	out.append(_sign("north_gate_sign", Vector2i(8, 5), "North Gate",
 		"THE NORTH GATE\nThe Mountain Road: Mountain Base, and the Pass beyond it.\nClosed by order of the crown."))
-	var north_guard := _npc("north_guard", Vector2i(10, 4), "west", "KEEP_GUARD", ALDERMERE_BLUE, "guard")
-	north_guard.dialogue = _scene("ch_north_guard", [
-		_line("north_guard", "KEEP_GUARD", "The Mountain Road's shut. Supply wagons for the garrison at Mountain Base go up under escort, and nobody else goes up at all."),
-	])
-	out.append(north_guard)
+	out.append(_npc("north_guard", Vector2i(10, 4), "west", "KEEP_GUARD", ALDERMERE_BLUE, "guard"))
 	# The west gate: the Sparse Forest road to Woodland Town (barred until the opening is over).
-	var warden := _npc("gate_warden", Vector2i(CH_GATE.x + 1, CH_GATE.y - 1), "south", "GATE_WARDEN", ALDERMERE_BLUE, "guard")
-	warden.on_interact = StoryCommand.list([IfCommand.make("has(\"%s\")" % F_COMPLETE, [
-		_say([_line("gate_warden", "GATE_WARDEN", "The west road is open again. Through the Sparse Forest, and Woodland Town's at the far side of it -- keep to the cart ruts, and don't follow any lights.")]),
-	], [
-		_say([_line("gate_warden", "GATE_WARDEN", "The west gate stays barred today. Orders from the keep -- nobody in, nobody out.")]),
-	])])
-	out.append(warden)
+	out.append(_npc("gate_warden", Vector2i(CH_GATE.x + 1, CH_GATE.y - 1), "south", "GATE_WARDEN", ALDERMERE_BLUE, "guard"))
 
 	# The Gilded Stag (inn).
 	out.append(_sign("inn_sign", Vector2i(10, 14), "The Gilded Stag",
 		"THE GILDED STAG\nFeather beds, hot baths, a locked stable. Guests of the crown drink free."))
-	var maribel := _npc("maribel", Vector2i(10, 12), "west", "MARIBEL", Color(0.66, 0.42, 0.3), "villager")
-	maribel.on_interact = StoryCommand.list([IfCommand.make(raided, [
-		_say([_line("maribel", "MARIBEL", "Half my rooms are full of frightened scholars and the other half of soldiers. The kitchen's never been so busy -- and I've never been so worried.")]),
-	], [
-		_say([_line("maribel", "MARIBEL", "Welcome to the Stag! Testers from every corner of {KINGDOM} sleep under this roof the night before the ceremony. Nobody sleeps well, mind.")]),
-		_say([_line("maribel", "MARIBEL", "If you're heading for the forest, the Wardens at Woodland Town keep a good table. Tell them Maribel sent you -- they'll water the soup.")]),
-	])])
-	out.append(maribel)
+	out.append(_npc("maribel", Vector2i(10, 12), "west", "MARIBEL", Color(0.66, 0.42, 0.3), "villager"))
 
 	# The Merchants' Guildhall.
 	out.append(_sign("guild_sign", Vector2i(CH_GUILD.position.x - 1, CH_GUILD.end.y), "The Merchants' Guildhall",
 		"MERCHANTS' GUILDHALL\nCharter of the Crown. Weights, measures and honest coin."))
-	var veyra := _npc("veyra", Vector2i(CH_GUILD.position.x + 1, CH_GUILD.end.y), "north", "VEYRA", Color(0.72, 0.55, 0.15), "noble")
-	veyra.dialogue = _scene("ch_veyra", [
-		_line("veyra", "VEYRA", "Five gates, five roads, and every merchant on them answers to this hall."),
-		_line("veyra", "VEYRA", "Timber from Woodland Town, grain from Oakvale, iron from Mountain Base, salt fish from Beach Village, red clay from the Badlands -- when the roads are open. Most are closed. I dislike closed roads."),
-	])
-	out.append(veyra)
+	out.append(_npc("veyra", Vector2i(CH_GUILD.position.x + 1, CH_GUILD.end.y), "north", "VEYRA", Color(0.72, 0.55, 0.15), "noble"))
 
 	# The Chapel of the Starfall.
 	out.append(_sign("chapel_sign", Vector2i(22, 12), "Chapel of the Starfall",
 		"THE CHAPEL OF THE STARFALL\nWhere the old star's dust was first gathered. All are welcome; silence is kindly requested."))
-	var odalys := _npc("odalys", Vector2i(26, 12), "west", "ODALYS", Color(0.78, 0.8, 0.9), "elder")
-	odalys.on_interact = StoryCommand.list([IfCommand.make(raided, [
-		_say([_line("odalys", "ODALYS", "I lit a candle for the Researcher. Starstone listens, they say, to anyone who's afraid enough to be honest.")]),
-	], [
-		_say([_line("odalys", "ODALYS", "Long ago a star fell, and the land remembers it. Every creature and every shard carries a little of that falling. Be gentle with what you bond.")]),
-	])])
-	out.append(odalys)
+	out.append(_npc("odalys", Vector2i(26, 12), "west", "ODALYS", Color(0.78, 0.8, 0.9), "elder"))
 
 	# The Aldermere Forge.
 	out.append(_sign("forge_sign", Vector2i(25, 14), "The Aldermere Forge",
 		"THE ALDERMERE FORGE\nArms for the Guard. Civilians: please don't touch the anvil. It bites."))
 	# At his forge's door, on the east street (Harbour Lane past the forge stays clear to the gate).
-	var garrick := _npc("garrick", Vector2i(CH_SMITHY.end.x - 1, CH_SMITHY.position.y - 1), "north", "GARRICK", Color(0.4, 0.3, 0.26), "trainer")
-	garrick.on_interact = StoryCommand.list([IfCommand.make(raided, [
-		_say([_line("garrick", "GARRICK", "Spearheads. Shield rims. Every blade the Guard owns passes under my hammer this week. Whoever did this is going to regret it.")]),
-	], [
-		_say([_line("garrick", "GARRICK", "Forged half the spears on those walls. The other half I'm still forging. Ask the Sergeant -- the Guard never has enough spears.")]),
-	])])
-	out.append(garrick)
+	out.append(_npc("garrick", Vector2i(CH_SMITHY.end.x - 1, CH_SMITHY.position.y - 1), "north", "GARRICK", Color(0.4, 0.3, 0.26), "trainer"))
 
 	# A courtier in the keep's shadow.
-	var merrow := _npc("merrow", Vector2i(19, 10), "west", "Lady Merrow", Color(0.52, 0.3, 0.5), "noble")
-	merrow.dialogue = _scene("ch_merrow", [
-		_line("merrow", "Lady Merrow", "The King will not see petitioners, but the garden is lovely this time of year. Please admire it quietly."),
-	])
-	out.append(merrow)
+	out.append(_npc("merrow", Vector2i(19, 10), "west", "Lady Merrow", Color(0.52, 0.3, 0.5), "noble"))
 	return out
 
 
@@ -2170,29 +2027,58 @@ func _researcher() -> NpcEntity:
 	return r
 
 
-## THE SHARD CEREMONY: the starter joins, the shard is yours -- and then the raid.
+## The ceremony's creature entity ids: "starter" (the default, STARTER_ID), then "starter_2", ...
+static func _starter_entity_id(i: int) -> StringName:
+	return &"starter" if i == 0 else StringName("starter_%d" % (i + 1))
+
+
+## THE SHARD CEREMONY (the owner's opening): a reunion with your LONGTIME FRIEND, the Royal
+## Researcher (he/him); he explains HIS invention -- the bonding shard, and the power of the
+## stones to bond with creatures; the shard is yours and you CHOOSE a starter among his three test
+## creatures (STARTER_CHOICES; the first is the default) -- and then the raid.
 func _ceremony() -> Array:
+	var names: Array[String] = []
+	for cid in STARTER_CHOICES:
+		names.append(_species_name(cid))
 	var out: Array = [
 		_say([
-			_line("linnea", "RESEARCHER_TITLE", "Ah -- the tester from Oakvale! {hero}, isn't it? Come in, come in. Mind the cables."),
-			_line("linnea", "RESEARCHER_TITLE", "You know the old ways. Chains of {STONE}, forged hot, for those who wanted obedience. Years of patience for those who wanted a friend."),
-			_line("linnea", "RESEARCHER_TITLE", "This shard is cut from the same {STONE} -- but tuned to listen, not to bind. Almost anyone can forge a true bond with it. Only a handful of testers have one yet, and the army a few crates."),
-			_line("linnea", "RESEARCHER_TITLE", "Which is why I am told to hand them out slowly, and never to say where they're kept. Now -- someone has been waiting to meet you."),
+			_line("linnea", "RESEARCHER_TITLE", "{hero}! You came -- you actually came! Look at you. Come here."),
+			_me("{RESEARCHER}! The King's own researcher, and you STILL can't keep the ink off your sleeves."),
+			_line("linnea", "RESEARCHER_TITLE", "Twelve years since I left Oakvale, and you notice the ink first. Some things never change. Come in, come in -- mind the cables. I've waited months to show you this."),
+			_line("linnea", "RESEARCHER_TITLE", "You remember the old ways. Chains of {STONE}, forged hot, for lords who wanted obedience. Years of bread and patience for the rare few who wanted a friend. Most folk got neither, and learned to fear creatures instead."),
+			_line("linnea", "RESEARCHER_TITLE", "This is my invention: the bonding shard. The same {STONE} -- but cut thin and tuned on that pylon until it stops ringing and starts to LISTEN."),
+			_line("linnea", "RESEARCHER_TITLE", "Every creature carries a spark of the star that fell. The shard hums with that spark. Hold it out and it carries what you MEAN, heart to heart -- the trust the slow way takes years to build, in a single heartbeat."),
+			_line("linnea", "RESEARCHER_TITLE", "No chain, no force. It only works if you both want it. Almost anyone could do it -- which is why only a handful of testers have one yet, and the army a few crates. I'm told to hand them out slowly, and never to say where they're kept."),
+			_me("And you picked me."),
+			_line("linnea", "RESEARCHER_TITLE", "Of course I picked you. I wanted the first proof to be someone I'd trust with my life. Now -- some friends of mine have been waiting to meet you."),
 		]),
 		_flag(F_CEREMONY),
-		_emote("starter", "?"),
-		_say([
-			_narr("A small {STARTER} peers out from behind the pylon, bark-skin rustling."),
-			_line("linnea", "RESEARCHER_TITLE", "Hold the shard out. Don't grab -- offer. Let it feel what you mean."),
-			_narr("The shard warms in your palm like a second heartbeat. A thread of green light runs from the stone to the {STARTER}, and it steps to your side as if it has always stood there."),
-		]),
-		_flag(F_SHARD),
-		_toast("Received: Bonding Shard", "item"),
-		_join(STARTER_ID, STARTER_NICKNAME, 0, F_STARTER),
-		_say([
-			_line("linnea", "RESEARCHER_TITLE", "There. Bonded. Look after each other -- that is the whole of the science, really."),
-		]),
 	]
+	for i in range(STARTER_CHOICES.size()):
+		out.append(_emote(String(_starter_entity_id(i)), "?"))
+	out.append(_say([
+		_narr("Three small creatures peer out from behind the pylon -- a %s, a %s and a %s -- each one watching you with bright, wary eyes." % names),
+		_line("linnea", "RESEARCHER_TITLE", "My three test creatures. They answered the pylon this morning. Here -- the shard is yours. Don't grab -- offer. Let them feel what you mean, and see which of them answers YOU."),
+		_narr("The shard warms in your palm like a second heartbeat."),
+	]))
+	out.append(_flag(F_SHARD))
+	out.append(_toast("Received: Bonding Shard", "item"))
+	# THE CHOICE: the default (STARTER_ID) is the first option -- what a test or a no-host run picks.
+	var ask := ChoiceCommand.new()
+	ask.prompt = _line("linnea", "RESEARCHER_TITLE", "Well, {hero}? Which one answers you?")
+	var opts: Array = []
+	for i in range(STARTER_CHOICES.size()):
+		opts.append(ChoiceOption.make(names[i], [
+			_say([_narr("A thread of green light runs from the stone to the %s, and it steps to your side as if it has always stood there." % names[i])]),
+			_flag(F_STARTER_PICK, i + 1),
+			_join(STARTER_CHOICES[i], STARTER_NICKNAME, 0, F_STARTER),
+		]))
+	ask.options = StoryCommand.list(opts)
+	out.append(ask)
+	out.append(_say([
+		_line("linnea", "RESEARCHER_TITLE", "There. Bonded. Look after each other -- that is the whole of the science, really."),
+		_line("linnea", "RESEARCHER_TITLE", "The other two stay with me for now. Stay for supper? I want to hear everything about home -- is old Ned still talking to his barley?"),
+	]))
 	out.append_array(_raid())
 	return out
 
@@ -2216,7 +2102,10 @@ func _raid() -> Array:
 			_narr("Behind the raiders, a hulking creature strains at black chains -- {STONE} links, glowing dully where they bite."),
 		]),
 		_flag(F_TAKEN),
-		_say([_narr("They seize the Researcher and drag her toward the lower town, scattering townsfolk as they run for the south gate.")]),
+		_say([
+			_me("{RESEARCHER}!"),
+			_narr("They seize the Researcher and drag him toward the lower town -- and the two test creatures you did not choose go with him, bundled into a raider's crate -- scattering townsfolk as they run for the south gate."),
+		]),
 		_move("raider_captain", Vector2i(23, 11)),
 		_flag(F_FLED),
 		_flag("act1.researcher_abducted"),
@@ -2233,13 +2122,15 @@ func _raid() -> Array:
 		]),
 		_flag(F_CHASE),
 		_toast("Quest: The Burning Road"),
-		_say([_narr("You run the King's road, the Old Bridge and the Mossway as fast as your legs will carry you, the {STARTER} crashing through the ferns at your side. Long before you reach home, you see the smoke.")]),
+		_say([_narr("You run the King's road, the Old Bridge and the Mossway as fast as your legs will carry you, your {lead} crashing through the ferns at your side. Long before you reach home, you see the smoke.")]),
 		# Whiteouts from here wake you in the ruins (the first fight waits there).
 		_respawn(&"oakvale_ruins", &"wayshrine"),
 		_warp_cmd(&"oakvale_ruins", &"east_road"),
 	]
 
 
+## The Sergeant at the barracks. His ambient talk (before the opening is over) is in dialogue.json
+## (areas.crownhaven.rowan); after it, his SCRIPT: the Act 1 hook, then the sparring offer.
 func _rowan_in_crownhaven() -> NpcEntity:
 	var rowan := _npc("rowan", Vector2i(7, 9), "south", "SOLDIER", ALDERMERE_BLUE, "officer")
 	rowan.on_interact = StoryCommand.list([IfCommand.make("has(\"%s\")" % F_COMPLETE, [
@@ -2248,6 +2139,7 @@ func _rowan_in_crownhaven() -> NpcEntity:
 				_line("rowan", "SOLDIER", "You came. Good. I'm sorry about Oakvale -- I mean that."),
 				_line("rowan", "SOLDIER", "The council's been shouting since dawn. {NATION}'s envoy swears his people never sent a raider across the border. Half the lords want to march tomorrow."),
 				_line("rowan", "SOLDIER", "But those chains, {hero}. {NATION} doesn't forge {STONE}. Someone armed those raiders -- and I mean to find out who before this turns into a war."),
+				_line("rowan", "SOLDIER", "And your friend {RESEARCHER} is out there somewhere past that border. I'd sooner go after him with someone who knows what he's worth."),
 				_line("rowan", "SOLDIER", "I've asked for you on my detail. Rest up at the Wayshrine. When you're ready, we ride."),
 			]),
 			_flag(F_ACT1_MET),
@@ -2255,11 +2147,6 @@ func _rowan_in_crownhaven() -> NpcEntity:
 		], [
 			_say([_line("rowan", "SOLDIER", "Rest while you can. We ride when the council stops shouting.")]),
 			_rowan_spar_offer(),
-		]),
-	], [
-		_say([
-			_line("rowan", "SOLDIER", "{SOLDIER_TITLE}, Crownhaven Guard. You'll be one of the Researcher's testers, then."),
-			_line("rowan", "SOLDIER", "The army got a crate of her shards. Mine's bonded to a Geode that could hold a bridge by itself. Takes the recruits a month to stop flinching at it."),
 		]),
 	])])
 	return rowan
@@ -2400,7 +2287,7 @@ func _ambush() -> Array:
 	var vis: String = "has(\"%s\") and not has(\"%s\")" % [F_AMBUSH_SPRUNG, F_AMBUSH_CLEARED]
 	var nell := _npc("nell", Vector2i(22, 4), "south", "BANDIT_BOSS", Color(0.3, 0.26, 0.22), "raider")
 	nell.visible_if = vis
-	nell.dialogue = _scene("moss_nell_idle", [_line("nell", "BANDIT_BOSS", "Still here? Then your purse is still ours.")])
+	# Her idle line is in dialogue.json (areas.mossway.nell).
 	out.append(nell)
 	var pad := _npc("footpad", Vector2i(20, 8), "north", "FOOTPAD", Color(0.36, 0.3, 0.24), "raider")
 	pad.visible_if = vis
@@ -2502,7 +2389,7 @@ func _rival() -> Array:
 	var out: Array = []
 	var lark := _npc("lark", CH_LARK_START, "west", "RIVAL", Color(0.78, 0.5, 0.2), "trainer")
 	lark.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_COMPLETE, F_RIVAL_DUEL1]
-	lark.dialogue = _scene("ch_lark_wait", [_line("lark", "RIVAL", "Well? Come on, Oakvale -- I haven't got all day.")])
+	# Her waiting line is in dialogue.json (areas.crownhaven.lark).
 	out.append(lark)
 
 	var first: Array = [
@@ -2512,7 +2399,7 @@ func _rival() -> Array:
 		_face("lark", "toward:player"),
 		_say([
 			_line("lark", "RIVAL", "So YOU'RE the one from Oakvale. The tester who rode with the Sergeant."),
-			_line("lark", "RIVAL", "I'm {RIVAL}. First batch -- the Researcher picked me before she'd even heard of your village. Everyone in the barracks is talking about you, and I'm sick of it."),
+			_line("lark", "RIVAL", "I'm {RIVAL}. First batch -- the Researcher picked me months before he sent for his old friend from Oakvale. Everyone in the barracks is talking about you, and I'm sick of it."),
 			_me("My village burned, {RIVAL}. I didn't do it to be talked about."),
 			_line("lark", "RIVAL", "...I know. I'm sorry about that. Truly. But a shard is a shard, and I want to see what yours can do. One bout -- a friendly. Nobody gets hurt."),
 		]),
@@ -2761,12 +2648,8 @@ func _build_sparse_forest() -> void:
 	ents.append(_sign("east_sign", Vector2i(SF_W - 3, SF_ROAD_Y - 1), "The Sparse Forest",
 		"THE SPARSE FOREST\nWest: Woodland Town, a morning's walk.  East: Crownhaven's west gate.\nMind the grass -- the forest's creatures are bolder than the Mossway's."))
 	ents.append(_prop("woodpile", "logs", Vector2i(13, 3), Vector2i(2, 1), Color(0.6, 0.44, 0.26), true))
-	var alder := _npc("alder", Vector2i(15, 3), "south", "WOODSMAN", Color(0.4, 0.46, 0.28), "villager")
-	alder.on_interact = StoryCommand.list([_say([
-		_line("alder", "WOODSMAN", "Sparse, they call it. Sparse! Every tree you see here, my grandfather planted, and every tree you don't, he cut. It's a garden, really."),
-		_line("alder", "WOODSMAN", "West of the town the woods close up for good -- the Deep Woods. Nobody plants those. Nobody cuts them, either."),
-	])])
-	ents.append(alder)
+	# The woodsman's talk is in dialogue.json (areas.sparse_forest.alder).
+	ents.append(_npc("alder", Vector2i(15, 3), "south", "WOODSMAN", Color(0.4, 0.46, 0.28), "villager"))
 	ents.append(_warp("west_exit", Rect2i(0, SF_ROAD_Y, 1, 1), &"woodland_town", &"east_road"))
 	ents.append(_warp("east_exit", Rect2i(SF_W - 1, SF_ROAD_Y, 1, 1), &"crownhaven", &"west_gate"))
 	a.entities = _entities(ents)
@@ -2985,71 +2868,23 @@ func _wt_people() -> Array:
 	out.append(_sign("standing_stone", Vector2i(3, 17), "The Starfall Stone",
 		"A knee-high stone, furred with moss and scored with old marks. Fresh flowers lie before it. It hums very faintly, like a held note.", "stone"))
 
+	# EVERY townsperson's talk is in dialogue.json (DialogueBank): areas.woodland_town.<id>.
 	# --- East bank: the Lodge, the inn, Timber Row, the lumber yard --------------------------
-	var hale := _npc("hale", Vector2i(12, 9), "south", "HALE", cloak_green, "officer")
-	hale.on_interact = StoryCommand.list([_say([
-		_line("hale", "HALE", "Welcome to Woodland Town. The Wardens keep the roads, the tolls and the peace between the town and the trees -- in about that order of difficulty."),
-		_line("hale", "HALE", "Deepwood's road is shut. The wood's been restless, and a restless wood eats carts. If you want to go west, bring me a reason I can write down."),
-		_line("hale", "HALE", "And if you meet a lantern in the dark that nobody's holding -- go the other way."),
-	])])
-	out.append(hale)
-	var bryn := _npc("bryn", Vector2i(19, 11), "south", "BRYN", Color(0.6, 0.38, 0.28), "villager")
-	bryn.on_interact = StoryCommand.list([_say([
-		_line("bryn", "BRYN", "Venison pie, hot cider, and a room with a window onto the pines. The Stumped Hart's never let a traveller go hungry."),
-		_line("bryn", "BRYN", "Odd crowd lately. Folk with no luggage and a lot of questions about the south trail. I tell them it's a trail to nowhere."),
-	])])
-	out.append(bryn)
-	var sedge := _merchant("sedge", Vector2i(23, 11), "south", "SEDGE", Color(0.4, 0.34, 0.2), SHOP_WOODLAND)
-	sedge.dialogue = _scene("wt_sedge", [_line("sedge", "SEDGE", "Furs, flasks and forest remedies, friend. Have a look.")])
-	out.append(sedge)
-	var burr := _npc("burr", Vector2i(26, 11), "west", "BURR", Color(0.36, 0.28, 0.24), "trainer")
-	burr.on_interact = StoryCommand.list([_say([
-		_line("burr", "BURR", "Axe heads, saw teeth, nails by the barrel. The Guard's smiths in the city make swords. I make the things that actually feed people."),
-	])])
-	out.append(burr)
-	var torvald := _npc("torvald", Vector2i(19, 16), "east", "TORVALD", Color(0.5, 0.3, 0.2), "trainer")
-	torvald.on_interact = StoryCommand.list([_say([
-		_line("torvald", "TORVALD", "Every plank in the capital's keep started life on this yard. Mind the stacks -- they have opinions about strangers."),
-		_line("torvald", "TORVALD", "We only fell what's marked. The Wardens paint a ring on the trunk, and I don't argue with a ring."),
-	])])
-	out.append(torvald)
-	var road_warden := _npc("road_warden", Vector2i(WT_W - 3, WT_ROAD_Y + 1), "north", "ROAD_WARDEN", cloak_green, "guard")
-	road_warden.dialogue = _scene("wt_road_warden", [
-		_beat(&"self", "Road Warden", "East road's clear to the city. If anyone asks, I wasn't smiling."),
-	])
-	out.append(road_warden)
-	var fern := _npc("fern", Vector2i(11, 13), "south", "FERN", Color(0.5, 0.6, 0.35), "child")
-	fern.on_interact = StoryCommand.list([_say([
-		_line("fern", "FERN", "I counted forty-one lanterns last night and only forty windows. Nobody believes me."),
-	])])
-	out.append(fern)
+	out.append(_npc("hale", Vector2i(12, 9), "south", "HALE", cloak_green, "officer"))
+	out.append(_npc("bryn", Vector2i(19, 11), "south", "BRYN", Color(0.6, 0.38, 0.28), "villager"))
+	out.append(_merchant("sedge", Vector2i(23, 11), "south", "SEDGE", Color(0.4, 0.34, 0.2), SHOP_WOODLAND))
+	out.append(_npc("burr", Vector2i(26, 11), "west", "BURR", Color(0.36, 0.28, 0.24), "trainer"))
+	out.append(_npc("torvald", Vector2i(19, 16), "east", "TORVALD", Color(0.5, 0.3, 0.2), "trainer"))
+	out.append(_npc("road_warden", Vector2i(WT_W - 3, WT_ROAD_Y + 1), "north", "ROAD_WARDEN", cloak_green, "guard"))
+	out.append(_npc("fern", Vector2i(11, 13), "south", "FERN", Color(0.5, 0.6, 0.35), "child"))
 
 	# --- West bank: the herbalist, the archery range, the glade ----------------------------------
-	var ilse := _npc("ilse", Vector2i(4, 11), "south", "ILSE", Color(0.34, 0.52, 0.4), "scholar")
-	ilse.on_interact = StoryCommand.list([_say([
-		_line("ilse", "ILSE", "Bitterroot for stings, mossleaf for scrapes, and something I'm not allowed to call a cure for anything at all. Don't tell the Wardens."),
-		_line("ilse", "ILSE", "The woods are older than the kingdom, you know. Things sleep in the roots out there. Nobody here says so aloud."),
-	])])
-	out.append(ilse)
-	var ferra := _npc("ferra", Vector2i(4, 7), "south", "FERRA", Color(0.34, 0.42, 0.26), "trainer")
-	ferra.on_interact = StoryCommand.list([_say([
-		_line("ferra", "FERRA", "Three arrows, three straw men, and one of them is still standing. Don't ask which. The range is open to anyone who can keep from shooting the pigeons."),
-	])])
-	out.append(ferra)
-	var wicke := _npc("wicke", Vector2i(3, 18), "east", "WICKE", Color(0.7, 0.68, 0.74), "elder")
-	wicke.on_interact = StoryCommand.list([_say([
-		_line("wicke", "WICKE", "When I was a girl this stone was taller. Or I was shorter. The glade keeps its own counsel."),
-		_line("wicke", "WICKE", "If you're ever lost in the woods, set your hand on a stone and listen. The star remembers the way home."),
-	])])
-	out.append(wicke)
+	out.append(_npc("ilse", Vector2i(4, 11), "south", "ILSE", Color(0.34, 0.52, 0.4), "scholar"))
+	out.append(_npc("ferra", Vector2i(4, 7), "south", "FERRA", Color(0.34, 0.42, 0.26), "trainer"))
+	out.append(_npc("wicke", Vector2i(3, 18), "east", "WICKE", Color(0.7, 0.68, 0.74), "elder"))
 
 	# --- The camp on the south lane ------------------------------------------------------------
-	var stranger := _npc("stranger", Vector2i(12, 19), "east", "STRANGER", Color(0.2, 0.18, 0.22), "raider")
-	stranger.on_interact = StoryCommand.list([_say([
-		_line("stranger", "STRANGER", "Warm fire, warm night. You've the look of someone who counts doors and exits, traveller. Good habit."),
-		_line("stranger", "STRANGER", "Some doors in this wood are only doors if you know the knock. I'd tell you the knock, but I don't know it. Obviously."),
-	])])
-	out.append(stranger)
+	out.append(_npc("stranger", Vector2i(12, 19), "east", "STRANGER", Color(0.2, 0.18, 0.22), "raider"))
 
 	# --- A woodcutter's chest at the back of the yard ------------------------------------------
 	var chest := ChestEntity.new()
