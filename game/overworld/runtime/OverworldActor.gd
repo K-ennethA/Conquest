@@ -8,11 +8,26 @@ extends Node3D
 ## clips when the model has them, and pops an emote bubble.
 ##
 ## Animations off (Settings) -> every move / turn / bubble is instant, so headless tests run
-## without wall-clock waits.
+## without wall-clock waits. Skeletal clips still play: they cost no wall-clock time, and gating
+## them left the hero stepping in its idle pose whenever the (persisted) switch was off.
 
 ## Feet height over a tile (MapLoader.UNIT_GROUND_Y).
 const GROUND_Y: float = 0.1
 const TURN_TIME: float = 0.08
+const CLIP_BLEND: float = 0.15
+
+## Locomotion clips (looped by this node: glTF imports them LOOP_NONE, which froze idle after its
+## 4 s and dropped walk out mid-streak every 1.125 s).
+const CLIP_IDLE := "idle"
+const CLIP_WALK := "walk"
+const CLIP_RUN := "run"
+## Walk pace the run threshold derives from: StoryRuleset.walk_step_seconds (shipped 0.22 s/cell
+## = 4.55 cells/s). The controller copies the live ruleset value into [member walk_step_seconds].
+const DEFAULT_WALK_STEP_SECONDS: float = 0.22
+## "Run speed" knob: a step at least this many times faster than walk pace asks for "run"
+## (falling back to "walk" when the model has no run clip). Shipped run_step_seconds 0.12 is
+## 1.83x walk pace; 1.3x sits between, so a small walk retune never flips a walk into a run.
+const RUN_SPEED_FACTOR: float = 1.3
 
 signal walk_finished
 
@@ -22,9 +37,18 @@ var facing: Vector2i = Vector2i(0, 1)
 ## The model's authored yaw correction (CharacterResource / HeroResource model_yaw_deg).
 var model_yaw_deg: float = 0.0
 var is_walking: bool = false
+## Seconds per cell at walk pace (the run threshold's reference, see [constant RUN_SPEED_FACTOR]).
+var walk_step_seconds: float = DEFAULT_WALK_STEP_SECONDS
+## Return to idle when a walk ends and no further step was chained from walk_finished. Off for the
+## hero: the controller settles it when the walk STREAK ends (no idle flicker between steps).
+var settle_on_arrival: bool = true
 
 var _model: Node3D = null
 var _anim: AnimationPlayer = null
+## The looped locomotion clip currently wanted ("" = none); replayed on animation_finished.
+var _loop_clip: String = ""
+## Bumped by every walk_to, so arrival can tell whether a listener chained another step.
+var _step_serial: int = 0
 var _move_tween: Tween = null
 var _turn_tween: Tween = null
 var _bubble: Label3D = null
@@ -43,8 +67,11 @@ func set_model(model: Node3D, yaw_deg: float = 0.0, model_scale: float = 1.0) ->
 		model.scale = Vector3.ONE * model_scale
 	add_child(model)
 	_anim = _find_anim_player(model)
+	_loop_clip = ""
+	if _anim != null:
+		_anim.animation_finished.connect(_on_clip_finished)
 	_apply_facing_now()
-	play_clip("idle")
+	play_clip(CLIP_IDLE)
 
 
 ## A roster model (CharacterResource) as this actor's body.
@@ -120,26 +147,40 @@ func walk_to(to: Vector3i, seconds: float) -> void:
 		turn_to(dir)
 	cell = to
 	_kill_move()
+	_step_serial += 1
+	play_clip(locomotion_clip(seconds), CLIP_WALK)
 	if not _anims_on() or seconds <= 0.0:
 		position = world_of(to)
 		is_walking = false
-		call_deferred("emit_signal", "walk_finished")
+		call_deferred("_on_walk_done")
 		return
 	is_walking = true
-	play_clip("walk")
 	_move_tween = create_tween()
 	_move_tween.tween_property(self, "position", world_of(to), seconds)
 	_move_tween.finished.connect(_on_walk_done, CONNECT_ONE_SHOT)
 
 
+## "run" when a step of [param seconds] per cell beats walk pace by [constant RUN_SPEED_FACTOR],
+## else "walk" (play_clip falls back to "walk" when the model has no run clip).
+func locomotion_clip(seconds: float) -> String:
+	if seconds > 0.0 and walk_step_seconds > 0.0 \
+			and (1.0 / seconds) > RUN_SPEED_FACTOR / walk_step_seconds:
+		return CLIP_RUN
+	return CLIP_WALK
+
+
 func _on_walk_done() -> void:
 	is_walking = false
+	var serial: int = _step_serial
 	walk_finished.emit()
+	# A listener that chains the next step does so synchronously inside the emit.
+	if settle_on_arrival and serial == _step_serial:
+		settle()
 
 
 ## Called by the controller when a walk streak ends (no key held) so the model settles.
 func settle() -> void:
-	play_clip("idle")
+	play_clip(CLIP_IDLE)
 
 
 func _kill_move() -> void:
@@ -186,15 +227,28 @@ func bubble_visible() -> bool:
 
 # --- Clips ------------------------------------------------------------------------
 
-func play_clip(base: String) -> void:
-	if _anim == null or not _anims_on():
-		return
+## Play the model's clip for [param base] (else [param fallback]); idle / walk / run loop.
+## Returns true when a clip resolved. Not gated on the animations switch (see the class doc).
+func play_clip(base: String, fallback: String = "") -> bool:
+	if _anim == null:
+		return false
 	var clip: String = _find_clip(base)
+	var resolved: String = base
+	if clip.is_empty() and not fallback.is_empty():
+		clip = _find_clip(fallback)
+		resolved = fallback
 	if clip.is_empty():
-		return
+		return false
+	_loop_clip = clip if resolved in [CLIP_IDLE, CLIP_WALK, CLIP_RUN] else ""
 	if _anim.current_animation == clip and _anim.is_playing():
-		return
-	_anim.play(clip, 0.15)
+		return true
+	_anim.play(clip, CLIP_BLEND)
+	return true
+
+
+func _on_clip_finished(anim_name: StringName) -> void:
+	if _anim != null and not _loop_clip.is_empty() and String(anim_name) == _loop_clip:
+		_anim.play(_loop_clip)
 
 
 func _find_clip(base: String) -> String:

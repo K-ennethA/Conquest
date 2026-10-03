@@ -149,6 +149,9 @@ func _build_world() -> void:
 	player = OverworldActor.new()
 	player.name = "Player"
 	player.entity_id = "player"
+	# The hero settles when its walk STREAK ends (_process / move_actor), not after every step.
+	player.settle_on_arrival = false
+	player.walk_step_seconds = _ruleset.walk_step_seconds
 	var hero: HeroResource = story.hero()
 	if hero != null and hero.model_scene != null:
 		var inst := hero.model_scene.instantiate() as Node3D
@@ -843,6 +846,7 @@ func move_actor(actor_id: String, to: Vector3i, _persist: bool = false) -> void:
 		await actor.walk_finished
 		if actor_id != "player":
 			grid.move_blocker(actor_id, c)
+	actor.settle()
 	if actor_id == "player":
 		story.note_player_position(actor.cell, OverworldEntity.facing_name(actor.facing))
 	else:

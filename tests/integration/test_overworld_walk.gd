@@ -147,6 +147,39 @@ func test_walk_turn_and_collide() -> void:
 	assert_eq(ow.hud.prompt_text().contains("Touch"), true, "the prompt offers to touch the shrine")
 
 
+## The SHIPPED hero model (hero.tres), mounted in the booted scene with animations ON (the rest of
+## this suite runs them off, which skipped every clip): a step plays its walk clip, the clip loops
+## past its end (glTF imports LOOP_NONE), and the streak's end settles to idle. A hero model whose
+## clips fail to resolve fails here.
+func test_the_hero_model_plays_its_walk_and_idle_clips() -> void:
+	_guard.set_setting("animations_enabled", true)
+	var ow := await _boot("oakvale", Vector3i(10, 11, 0), "north")
+	var players: Array[Node] = ow.player.model().find_children("*", "AnimationPlayer", true, false)
+	assert_false(players.is_empty(), "the hero model carries an AnimationPlayer")
+	if players.is_empty():
+		return
+	var anim := players[0] as AnimationPlayer
+	assert_true(anim.current_animation.to_lower().contains("idle") and anim.is_playing(),
+		"standing: the idle clip plays (got '%s')" % anim.current_animation)
+	assert_true(ow.try_step(Vector2i(0, -1)), "a step onto flagstones")
+	await _frames(2)
+	assert_true(ow.player.is_walking, "gliding between cells (animations on)")
+	assert_true(anim.current_animation.to_lower().contains("walk") and anim.is_playing(),
+		"mid-step: the walk clip plays (got '%s')" % anim.current_animation)
+	var walk: String = anim.current_animation
+	anim.seek(anim.current_animation_length - 0.001, true)
+	await _frames(2)
+	assert_eq(anim.current_animation, walk, "the walk clip loops past its end")
+	assert_true(anim.is_playing(), "and keeps playing")
+	var t0: int = Time.get_ticks_msec()
+	while (ow.player.is_walking or not anim.current_animation.to_lower().contains("idle")) \
+			and Time.get_ticks_msec() - t0 < 2000:
+		await get_tree().process_frame
+	assert_eq(ow.player.cell, Vector3i(10, 10, 0), "arrived")
+	assert_true(anim.current_animation.to_lower().contains("idle") and anim.is_playing(),
+		"the streak's end settles to idle (got '%s')" % anim.current_animation)
+
+
 func test_sign_reads_in_the_text_box() -> void:
 	var ow := await _boot("oakvale", Vector3i(18, 8, 0), "east")
 	assert_true(ow.interact(), "Confirm on the town sign runs its script")
