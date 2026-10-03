@@ -27,6 +27,27 @@ static func past_opening(s: StoryState, party: Array[String] = LEGACY_PARTY) -> 
 	return s
 
 
+## Force every encounter zone of [param area] to [param mode] (EncounterZone.Mode) -- e.g. the
+## Mossway's grass HIDDEN for a suite about the per-step roll. The area resource is the cached,
+## shared one: ALWAYS undo with [method restore_zone_modes] (after_each). Returns the old modes.
+static func set_zone_modes(area: OverworldAreaResource, mode: int) -> Array:
+	var old: Array = []
+	if area == null:
+		return old
+	for z in area.zones():
+		old.append(z.mode)
+		z.mode = mode
+	return old
+
+
+static func restore_zone_modes(area: OverworldAreaResource, old: Array) -> void:
+	if area == null:
+		return
+	var zs: Array[EncounterZone] = area.zones()
+	for i in range(mini(zs.size(), old.size())):
+		zs[i].mode = old[i]
+
+
 ## Only the send-off: the journey can leave Oakvale (no intro on boot), nothing else has happened.
 static func sent_off(s: StoryState) -> StoryState:
 	s.set_flag("opening.sent_off", 1)

@@ -172,6 +172,8 @@ func setup(p_request: DuelRequest, p_map_root: Node3D = null, use_turn_manager: 
 	turn_system.name = "DuelTurnSystem"
 	turn_system.tie_seed = MatchRng._mix([SALT_TIE, match_rng.match_seed])
 	turn_system.timer_seconds = rules.turn_timer_seconds
+	# A story wild duel started by contact: the ambushing side opens round 1 (-1 = speed order).
+	turn_system.first_side = request.opening_side()
 	add_child(turn_system)
 	for p in players:
 		turn_system.register_player(p)

@@ -20,6 +20,17 @@ const DEFEAT_CONTINUE := "continue"
 const DEFEAT_RETRY := "retry"
 const DEFEAT_POLICIES: Array[String] = [DEFEAT_WHITEOUT, DEFEAT_CONTINUE, DEFEAT_RETRY]
 
+## THE OPENING of a battle started by CONTACT with a visible wild creature ([WildSpawner]):
+## rules[RULE_OPENING]. "ambush" = the hero walked into its back / side (or it slept): the PLAYER
+## acts first; "ambushed" = it walked into the hero: the FOE acts first; "neutral" = face to face
+## (speed decides, as always). A missing key = neutral. The duel consumes it (DuelRequest ->
+## DuelTurnSystem.first_side: round 1 only); a tactical battle ignores it for now.
+const RULE_OPENING := "opening"
+const OPENING_AMBUSH := "ambush"
+const OPENING_AMBUSHED := "ambushed"
+const OPENING_NEUTRAL := "neutral"
+const OPENINGS: Array[String] = [OPENING_AMBUSH, OPENING_AMBUSHED, OPENING_NEUTRAL]
+
 var kind: String = KIND_TACTICAL
 ## Stable id ("mossway.grass.petalfang", "trainer.mossway.bram").
 var encounter_id: String = ""
@@ -104,6 +115,13 @@ func hero_member_ids() -> Array[String]:
 		if p is Dictionary and bool(p.get("hero", false)):
 			out.append(String(p.get("member_id", "")))
 	return out
+
+
+## The contact opening ([constant OPENING_AMBUSH] / [constant OPENING_AMBUSHED] /
+## [constant OPENING_NEUTRAL]); an unknown or missing value reads neutral.
+func opening() -> String:
+	var o: String = String(rules.get(RULE_OPENING, OPENING_NEUTRAL))
+	return o if OPENINGS.has(o) else OPENING_NEUTRAL
 
 
 func opponent_name() -> String:

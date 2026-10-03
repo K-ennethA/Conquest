@@ -191,6 +191,14 @@ func _step_scenes(story, area_id: String, job: Dictionary) -> void:
 				var cid := String(e.visual_character)
 				if not cid.is_empty():
 					paths[CharacterLibrary.ROSTER_DIR + cid + ".tres"] = true
+			# Visible wild creatures stand on the map from the first frame: their species too.
+			for z in area.zones():
+				if not z.is_visible_mode():
+					continue
+				for entry in z.entries():
+					var wid := String(entry.character_id)
+					if not wid.is_empty():
+						paths[CharacterLibrary.ROSTER_DIR + wid + ".tres"] = true
 		for p in paths:
 			if ResourceLoader.has_cached(p) or not ResourceLoader.exists(p):
 				continue

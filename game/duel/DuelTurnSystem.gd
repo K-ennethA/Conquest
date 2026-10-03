@@ -26,6 +26,10 @@ const _SALT_TIE := 0x546965427265616B  # "TieBreak"
 var tie_seed: int = 0
 ## Move-clock seconds for human turns (0 = off).
 var timer_seconds: int = 0
+## The CONTACT OPENING ([method DuelRequest.opening_side]): the side (unit meta "duel_side") whose
+## units act before the other's in ROUND 1 regardless of speed; -1 = speed order (every duel
+## except a story ambush). From round 2 on, speed decides as always.
+var first_side: int = -1
 
 
 func _init() -> void:
@@ -43,6 +47,11 @@ func tie_key(unit, round_no: int) -> int:
 
 
 func _compare_unit_current_speed(unit_a: Unit, unit_b: Unit) -> bool:
+	if first_side >= 0 and round_number == 1:
+		var a_first: bool = int(unit_a.get_meta(&"duel_side", -1)) == first_side
+		var b_first: bool = int(unit_b.get_meta(&"duel_side", -1)) == first_side
+		if a_first != b_first:
+			return a_first
 	var speed_a := get_unit_current_speed(unit_a)
 	var speed_b := get_unit_current_speed(unit_b)
 	if speed_a != speed_b:

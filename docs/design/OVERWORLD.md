@@ -207,10 +207,14 @@ a prop scene, or none), `blocking: bool`, `visible_if: String`, `on_interact: Ar
 | `EncounterNest` (M2) | visible blight nest → tactical battle, disappears when cleared | `<area>.<id>.cleared` |
 
 **`EncounterZone`**: `cells: Rect2i` (empty = whole area) **and/or** `tile_ids: Array[StringName]`
-(e.g. `[&"tall_grass"]` — the grass *is* the zone, no double authoring), `rate` (per step, e.g.
-0.08), `grace_steps` (3), `table: Array[Resource]` of **`EncounterEntry`** {`character_id`,
-`weight`, `kind: DUEL|TACTICAL`, `strength` (stat scale / level — see §7.1), `condition`,
-`battle` (optional `BattleSpec` for TACTICAL)}.
+(e.g. `[&"tall_grass"]` — the grass *is* the zone, no double authoring), `mode: VISIBLE|HIDDEN`
+(**VISIBLE is the default**, see §4.5), `grace_steps` (3), `table: Array[Resource]` of
+**`EncounterEntry`** {`character_id`, `weight`, `kind: DUEL|TACTICAL`, `strength` (stat scale /
+level — see §7.1), `condition`, `battle` (optional `BattleSpec` for TACTICAL), `behaviour:
+WANDER|TIMID|AGGRESSIVE|SLEEPING|PATROL`, `sense_range`, `move_chance`, `patrol`}. HIDDEN zones use
+`rate` (per step, e.g. 0.08); VISIBLE zones use `max_active` (3–6), `respawn: ON_REST|ON_REENTER|
+EVERY_N_STEPS` (+ `respawn_steps`, mirroring `ShopResource.restock`), `spawn_clearance` and an
+optional stable `zone_id`.
 
 **`BattleSpec`** (authored; turned into a runtime `BattleRequest`):
 `kind: TACTICAL|DUEL`, `encounter_id`, `map` (MapResource, tactical) or `campaign_chapter`
@@ -253,8 +257,10 @@ Per frame: if a script is running or `InputActions.gameplay_input_blocked()` →
 read the held direction (`cursor_*` **or** `camera_pan_*`, so arrows, WASD, d-pad and both
 sticks all walk) → `GridMover.try_step(dir)`:
 - new direction and not moving → turn in place (a tap turns; a hold walks);
+- target cell holds a visible wild creature → **contact** (a battle, no step; §4.5);
 - target cell passable and unoccupied → tween step; **on arrival**: warps → trigger zones →
-  trainer sight (every visible undefeated trainer) → encounter roll (only if nothing above fired).
+  trainer sight (every visible undefeated trainer) → visible wild creatures take their step (one
+  may walk into you: contact) → hidden-zone encounter roll (only if nothing above fired).
 - `confirm` → `InteractionResolver` finds the entity in the faced cell (counter tiles extend
   reach one cell, Pokémon shop-counter style) → runs its `on_interact`.
 - `map_menu` → Journey menu. `fast_forward` held → run.
@@ -317,8 +323,20 @@ holds the lock; `StoryDialogue`'s own skip skips dialogue, never the state chang
 |---|---|---|---|
 | **Trainer / rival** | `TrainerSight`: after each player step (and on area entry) each undefeated, visible trainer checks the cells in a straight line along its facing, up to `sight_range`; blocked by a non-passable tile, a `blocks_line_of_sight` tile, or a blocking entity. Hit → `Emote "!"`, trainer `MoveActor`s to adjacent, `pre_scene`, `StartBattle`. Talking to a trainer from the side/behind also starts it. | Tactical (spec may say duel) | `trainer.*.defeated`, gold/items, `defeated_scene` on later talks |
 | **Scripted story battle** | any script (`StartBattle`), incl. campaign chapters | Tactical | flags, quest stage, `outro_scene` |
-| **Wild (grass)** | `EncounterRoller` on each completed step inside a zone | Duel | party HP; later: befriend (Q5) |
+| **Wild (visible — the default)** | contact with a creature standing in a VISIBLE zone (`WildSpawner`): you walk into it, or it walks into you | Duel; `rules.opening` = ambush / ambushed / neutral | party HP, befriend; a win despawns it until the zone respawns |
+| **Wild (hidden grass, opt-in)** | `EncounterRoller` on each completed step inside a HIDDEN zone | Duel | party HP, befriend |
 | **Nest** (M2) | visible `EncounterNest` entity | Tactical (small map) | cleared flag |
+
+**Visible wild creatures (decided: the default; built — docs/STORY_MODE.md "Visible wild
+creatures").** Grid-locked "symbol" encounters (Let's Go / Mystery Dungeon): each VISIBLE zone
+holds `max_active` creatures that move **one cell per player step** (no real-time AI) by their
+species' behaviour — wander (leashed to the zone), timid (flees within `sense_range`), aggressive
+(`TrainerSight` along its facing: "!" and it closes in), sleeping, patrol (waypoint loop).
+Walking into a creature's back or side (or a sleeper) is an **ambush** (the player acts first in
+round 1); being walked into is **ambushed** (the foe acts first); face to face is neutral. Rosters
+and moves are pure functions of (seed, area, zone, epoch / step, slot); the live roster is saved,
+so a battle round trip or a reload finds every creature where it stood. HIDDEN zones keep the
+classic roll below for places where surprise is the point.
 
 **Deterministic rolls:** `EncounterRoller.roll(save_seed, area_id, step_counter, zone)` is a pure
 function over a hash (never `randf()`), so it is unit-testable and reloading a save does not
@@ -665,7 +683,6 @@ BattleResult
    share `ItemInventory` + profile points (your gacha/arena loot would power the story party).
 5. **Recruitment.** **Default: v1 party grows only through story joins; "befriend after a wild
    duel" (Pokémon catching) is considered for M3.** Do you want collecting to be a core loop?
-6. **Encounter feel.** **Default: random encounters in tall grass at a modest rate (≈1 per 12
-   grass steps, 3-step grace) → duels; trainers → tactical; bosses → tactical; visible blight
-   nests (M2) → tactical.** Alternative: no random battles at all — only visible/wandering
-   encounters on the map.
+6. **Encounter feel.** **Decided: visible, grid-locked wild creatures are the default (§4.5);
+   hidden tall-grass rolls stay as an opt-in zone mode (`EncounterZone.mode = HIDDEN`).** Trainers
+   → tactical; bosses → tactical; visible blight nests (M2) → tactical.

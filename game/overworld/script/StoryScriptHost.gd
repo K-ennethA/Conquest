@@ -67,3 +67,9 @@ func open_ladder(_tournament, _state) -> String:
 
 func refresh_world() -> void:
 	pass
+
+
+## A beaten / befriended VISIBLE wild creature leaves the map ([WildOutcomeCommand]; the save
+## record is already updated when this is called).
+func despawn_wild(_creature_key: String) -> void:
+	pass

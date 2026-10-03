@@ -60,6 +60,7 @@ static func to_dict(state: StoryState) -> Dictionary:
 		"actor_positions": positions,
 		"shops": state.shops.duplicate(true),
 		"rests": state.rests,
+		"wild": {"visit": state.visit_serial, "zones": state.wild.duplicate(true)},
 		"tier": state.tier,
 		"fallen": fallen,
 		"pending": {},
@@ -142,6 +143,13 @@ static func from_dict(data) -> Dictionary:
 	# Merchants (added in format 2 -- an older save has none: every shop fully stocked).
 	state.shops = ShopLedger.sanitize_saved(data.get("shops", {}))
 	state.rests = maxi(0, int(data.get("rests", 0)))
+
+	# Visible wild creatures (added within format 2 -- an older save has none: every visible
+	# zone rolls a fresh roster on the next load; malformed records are dropped).
+	var wild = data.get("wild", {})
+	if wild is Dictionary:
+		state.visit_serial = maxi(0, int(wild.get("visit", 0)))
+		state.wild = WildSpawner.sanitize_saved(wild.get("zones", {}))
 
 	# The difficulty tier (DECISIONS.md #29): a save from before tiers existed was played without
 	# permadeath, so it loads as CASUAL; an unknown tier string does too.
