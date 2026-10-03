@@ -60,12 +60,12 @@ and Continue Journey skips it (`StorySnapshot.is_outdated`). Nothing crashes.
 | Piece | Files |
 |---|---|
 | Autoload (session, runner, battle round trip) | `game/overworld/StoryController.gd` |
-| Data | `game/overworld/data/` — `OverworldAreaResource`, entity kinds (`Npc`, `Trainer`, `Sign`, `Chest`, `Warp`, `Wayshrine`, `TriggerZone`, `Prop`), `EncounterZone/Entry`, `BattleSpec`, `HeroResource`, `StoryRuleset`, `TournamentResource` |
+| Data | `game/overworld/data/` — `OverworldAreaResource`, entity kinds (`Npc`, `Trainer`, `Sign`, `Chest`, `Warp`, `Wayshrine`, `TriggerZone`, `Prop`), `EncounterZone/Entry`, `BattleSpec`, `HeroResource`, `StoryRuleset`, `TournamentResource`, `WorldAtlas` / `WorldLocation`, `QuestLog` / `QuestTracker` / `QuestValidator` |
 | Scripts | `game/overworld/script/` — `StoryCommand` + `commands/*`, `StoryScriptRunner`, `ScriptContext`, `StoryScriptHost` (the host contract), `ConditionContext` |
 | Runtime | `game/overworld/runtime/` — `OverworldController` (scene root + live host), `OverworldGrid`, `TrainerSight`, `EncounterRoller`, `WildSpawner` (visible wild creatures), `TapPathfinder`, `OverworldActor`, `OverworldCamera`, `OverworldProps` |
 | Battles | `game/overworld/battle/` — `BattleRequest`, `BattleResult`, `StoryBattleBridge`, `StoryResultApplier`, `StoryGrowth` (story Growth + evolution rules), `StoryPermadeath` (difficulty tiers, fallen, revives, game over), `StorySparring` (sparring-partner cooldown), `TournamentLedger` (the arena ladder), `DuelLauncher`, `DuelStub` (debug fallback) |
 | Saves | `game/overworld/save/` — `StoryState`, `StoryPartyMember`, `StorySnapshot`, `StorySaveManager` (`user://story/slot_<n>.json`) |
-| UI | `game/overworld/ui/` — `OverworldHUD`, `JourneyMenu`, `StoryStartScreen` (slots + the New Journey tier picker), `StoryGameOverScreen`, `TournamentLadderPanel` |
+| UI | `game/overworld/ui/` — `OverworldHUD` (+ the quest tracker), `JourneyMenu`, `world_map/WorldMapView`, `StoryStartScreen` (slots + the New Journey tier picker), `StoryGameOverScreen`, `TournamentLadderPanel` |
 | Content | `game/overworld/content/` — built by `game/overworld/build/build_story_content.gd` |
 
 Shared-file hooks (all guarded, no-ops outside story): `GameEvents.battle_resolved`,
@@ -384,19 +384,80 @@ Classic costs the partner, a full Cup run → prize + title + the champion, save
 ## Journey menu pages (Esc / Start)
 
 Rows: Resume · Party · Quests · Bag · Map · Difficulty · Settings · Load · Save · Title Screen. The
-card footer is the journey summary (place, gold, play time, current objective).
+card footer is the journey summary (place, gold, play time, the TRACKED quest's objective).
 
 - **Quests** — `QuestLog` (`game/overworld/data/`) derives the log from story flags against
   `game/overworld/content/quests.json` (`start_flag`, `complete_flag`, ordered `steps` of
-  `{flag, text}`); nothing is saved. Edit the JSON to add / reword quests.
+  `{flag, text}` + the optional pointers below); only the pin is saved. All / Main / Side /
+  Completed filters, **Track** / Untrack and **Show on map** per open quest (see "Quest tracking").
+  Edit quests with the Quest Editor plugin (or the JSON).
 - **Party → Details** — `PartyDetailPage`: portrait, form / element / role chips, HP, Growth
   (there are no levels), the shared `UnitPageContent` stat table, equipment and move / ability
   cards. Equip / Unequip move a unit-scope item between the member and the bag
   (`StoryState.equip_item` / `unequip_item`, `StoryController.equip_from_menu`).
-- **Map** — the current place, the Wayshrine rest point and every visited area (no world-map scene yet).
+- **Map** — the WORLD MAP (see "World map" below); its **Places** toggle keeps the old list (the
+  current place, the Wayshrine rest point and every visited area).
 - **Settings** — the shared `SettingsPanel`. **Load** — reloads the slot's last save behind a second press.
 
-Tests: `tests/unit/test_story_journey_pages.gd`.
+Tests: `tests/unit/test_story_journey_pages.gd`, `tests/integration/test_quest_tracking_live.gd`.
+
+### World map
+
+`WorldMapView` (`game/overworld/ui/world_map/`) draws the owner's painting
+(`game/overworld/ui/world_map/world_map.webp`, a copy of `docs/design/world_map/world_map.webp`;
+imported lossy with mipmaps) with one marker per known `WorldLocation` at its `map_pos`:
+
+- **Glyph by kind** — city = keep, town / village = house, dungeon / special = red seal, island =
+  isle, route = waystone, nation = banner. **Gold** = visited, **cream** = built but not visited,
+  **dim + lock** = CLOSED; a secret place is drawn only once `is_known` (its open flag is set).
+- **You are here** pulses (gold rings); the **respawn Wayshrine** wears a green flame; each active
+  quest's objective hangs a **"!" pennant** over its place (gold = main, green = side). **Roads**
+  (toolbar toggle) overlay the atlas roads by kind: gold = main, dashed cream = track, dashed blue = sea.
+- **The card** (corner away from the selection): name, region · kind, status chips, description,
+  the quests that point there. A short view (phone landscape) drops the description.
+- **Controls** — arrows / d-pad / left stick step to the nearest marker that way (nothing that
+  way: focus moves on, as everywhere in the menu), Tab / shoulders cycle markers, Confirm zooms onto
+  the selection (again: back out), right stick / WASD pan, + / - / PgUp / PgDn / triggers / wheel
+  zoom, Home resets; mouse or one finger drags, a click / tap selects, two fingers / a trackpad
+  pinch zoom; toolbar - / + for touch. The opening view COVERS the frame and centres on the player.
+- **Phone width** (< 1000 logical px): the command card steps aside while the map has focus (a
+  **Back** button and Esc bring it back); short views (< 560 px) tighten the page gutters.
+- **Positions** — every `map_pos` sits on the place's ART (just above its painted label, so the
+  marker never hides the label text); verified with `dev_scripts/world_map_shots.tscn -- align`
+  (`docs/screenshots/world_map/map_alignment.png`). Screenshots: `docs/screenshots/world_map/`.
+
+### Quest tracking
+
+- **Schema (additive; old entries load unchanged)** — on a quest and / or a step (a step's own
+  wins): `location` (a `WorldLocation` id, or an area id that resolves to its place), `area` (the
+  area id the objective is in), `npc` (step: the entity to talk to), `giver` (quest: who anchors it).
+  `QuestLog.entries` adds `step_index`, `location`, `area`, `npc`, `giver` to each row.
+- **Tracked quest** — `QuestLog.tracked_entry`: the PIN (`StoryState.tracked_quest`, set by Journey
+  → Quests **Track** via `StoryController.set_tracked_quest`, which saves) while it is active, else the
+  first active main quest, else the first active side quest. The pin is saved as `"tracked_quest"`
+  inside format 2 (no version bump: an older save has none and tracks the main quest; a finished /
+  unknown pin just falls back).
+- **HUD tracker** (`OverworldHUD`, top left): MAIN / SIDE kicker, title, objective and where it is
+  ("→ Crownhaven", or "Here" in the objective's area -- then the step's `npc` wears a gold ◆).
+- **Toasts** — `QuestTracker` diffs two `QuestLog` views (STARTED / ADVANCED / COMPLETED); it never
+  listens to single flags, so scripts, battle rewards and tournaments are all covered. The baseline
+  is taken whenever a session begins (a load / new journey is not news) and a swapped-in state (Try
+  Again) re-baselines silently; `StoryState.flags_revision` makes the no-change poll free.
+  `OverworldController._tick_quests` polls `StoryController.poll_quest_events()` only at a quiet
+  moment (no script running, the Journey menu shut) and shows each event as a quest toast card.
+  Scripted `_toast("Quest: ...")` beats in the builder still fire as before.
+- **Quest Editor** (`addons/quest_editor`, enabled in project.godot; the **Quests** tab in the
+  editor's bottom panel): quests grouped Main / Side (add / duplicate / remove / reorder), the
+  fields above plus steps, flag / place pickers fed by `QuestValidator.scan_project` (the builder's
+  F_* constants and flag literals, the generated .tres: SetFlag keys, joins, reward flags, trainer
+  `.defeated`, tournament flags), **Validate** (unknown flags, unreachable quests whose start flag no
+  content sets, duplicate ids, empty text, unknown places) and **Story flow** (quests in the order
+  their start flags are reached). Saves via `QuestLog.to_json`: tab-indented, fixed key order, empty
+  optional keys omitted -- `quests.json` is kept in exactly that form (a test checks).
+
+Tests: `tests/unit/test_quest_tracking.gd` (schema, tracked entry, filters, JSON, the transition
+detector, the pin's save round trip, the validator + story flow) and
+`tests/integration/test_quest_tracking_live.gd`.
 
 ## Visible wild creatures (the default encounter mode)
 
@@ -558,13 +619,13 @@ area's `world_map_pos` / `region_id` come from its place (`_place()` in the buil
 
 | Place | Region | Status / opening flag | Reached from |
 |---|---|---|---|
-| Oakvale (0.46, 0.67) | heartlands | built (`oakvale`, `oakvale_ruins`) | Mossway, Farm Hamlet |
+| Oakvale (0.426, 0.63) | heartlands | built (`oakvale`, `oakvale_ruins`) | Mossway, Farm Hamlet |
 | Farm Hamlet | heartlands | closed `world.farm_hamlet_open` | Oakvale's mill lane |
 | The Mossway | heartlands | built | Oakvale, River Crossing |
-| River Crossing (0.58, 0.69) | heartlands | built | Mossway, Crownhaven, Beach Village |
-| Crownhaven (0.49, 0.47) | heartlands | built | River Crossing, Sparse Forest, Mountain Base, Redrock, Beach Village |
+| River Crossing (0.544, 0.655) | heartlands | built | Mossway, Crownhaven, Beach Village |
+| Crownhaven (0.498, 0.41) | heartlands | built | River Crossing, Sparse Forest, Mountain Base, Redrock, Beach Village |
 | The Sparse Forest | woodlands | built | Crownhaven, Woodland Town |
-| Woodland Town (0.34, 0.41) | woodlands | built | Sparse Forest, Deepwood, Thieves Guild, Frostpeak |
+| Woodland Town (0.301, 0.384) | woodlands | built | Sparse Forest, Deepwood, Thieves Guild, Frostpeak |
 | Hidden Thieves Guild | woodlands | closed `world.thieves_guild_open`, **secret** | Woodland Town's south trail |
 | Deepwood Village / Depths of the Wood | woodlands | closed `world.deepwood_open` / `world.depths_of_the_wood_open` | Woodland Town's west road / Deepwood |
 | Frostpeak Village | snowy_peaks | closed `world.frostpeak_open` | Woodland Town's north trail |
