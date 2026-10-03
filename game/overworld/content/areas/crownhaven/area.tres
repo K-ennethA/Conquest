@@ -1290,7 +1290,7 @@ actor = "rowan"
 [sub_resource type="Resource" id="Resource_m4mhv"]
 script = ExtResource("19_pmyhw")
 actor = "rowan"
-to = Vector3i(24, 10, 0)
+to = Vector3i(23, 10, 0)
 
 [sub_resource type="Resource" id="Resource_5d701"]
 script = ExtResource("20_r7vwj")
@@ -2626,7 +2626,7 @@ actor = "rowan"
 [sub_resource type="Resource" id="Resource_d4kyu"]
 script = ExtResource("19_pmyhw")
 actor = "rowan"
-to = Vector3i(24, 10, 0)
+to = Vector3i(23, 10, 0)
 
 [sub_resource type="Resource" id="Resource_0fa0t"]
 script = ExtResource("20_r7vwj")

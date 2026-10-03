@@ -1784,7 +1784,8 @@ func _raid() -> Array:
 		_flag(F_FLED),
 		_flag("act1.researcher_abducted"),
 		_emote("rowan", "!"),
-		_move("rowan", Vector2i(CH_RESEARCHER.x, CH_RESEARCHER.y + 2)),
+		# Beside the player, clear of the Chapel of the Starfall's wall south of the workshop.
+		_move("rowan", Vector2i(CH_RESEARCHER.x - 1, CH_RESEARCHER.y + 2)),
 		_face("player", "toward:rowan"),
 		_say([
 			_line("rowan", "SOLDIER", "Which way did they go?"),
