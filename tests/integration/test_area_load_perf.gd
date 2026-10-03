@@ -10,7 +10,8 @@ const Guard := preload("res://tests/helpers/global_state_guard.gd")
 const StoryFixture := preload("res://tests/helpers/story_fixture.gd")
 const OVERWORLD_SCENE := preload("res://game/overworld/OverworldScene.tscn")
 const TEMP_DIR := "user://test_area_load_perf/"
-const AREAS: Array[String] = ["oakvale", "oakvale_ruins", "mossway", "crownhaven"]
+const AREAS: Array[String] = ["oakvale", "oakvale_ruins", "mossway", "river_crossing", "crownhaven", "sparse_forest",
+	"woodland_town"]
 
 ## Scene nodes an overworld area may use per board cell (tiles + skirt + actors + UI). Measured
 ## at ~5.5-6.8 once tiles dropped their unused colliders / effect nodes (it was ~10 before).

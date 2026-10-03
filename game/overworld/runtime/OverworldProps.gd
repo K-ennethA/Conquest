@@ -169,6 +169,18 @@ static func prop(kind: String, footprint: Vector2i, tint: Color, seed: int = 0) 
 			return rubble(seed)
 		"arena":
 			return arena(fp, tint)
+		"cabin":
+			return cabin(fp, tint)
+		"logs":
+			return logs(fp, tint, seed)
+		"lamp":
+			return lamp(tint)
+		"chapel":
+			return chapel(fp, tint)
+		"smithy":
+			return smithy(fp, tint)
+		"scarecrow":
+			return scarecrow(tint)
 	return house(fp, tint)
 
 
@@ -790,6 +802,167 @@ static func house(footprint: Vector2i, tint: Color = Color(0.55, 0.3, 0.2)) -> N
 	pm.box(Vector3(x1 - 0.7, ridge_h - 0.6, zm - 0.5), Vector3(x1 - 0.35, ridge_h + 0.35, zm - 0.15), STONE)
 	root.add_child(_node(pm, "Body"))
 	return root
+
+
+# ---------------------------------------------------------------------------------------
+#  Town flavour props (the forest town's cabins and lumber yard, the capital's chapel and
+#  smithy, the farm village's scarecrow, street lamps)
+# ---------------------------------------------------------------------------------------
+
+## A TIMBER CABIN over [param footprint]: stacked dark log walls with notched corners, a steep
+## mossy roof in [param tint], a porch roof over the door and a stone chimney.
+static func cabin(footprint: Vector2i, tint: Color = Color(0.3, 0.42, 0.26)) -> Node3D:
+	var cs: float = Cells.CELL_SIZE
+	var x0: float = -cs * 0.5 + 0.1
+	var z0: float = -cs * 0.5 + 0.1
+	var x1: float = footprint.x * cs - cs * 0.5 - 0.1
+	var z1: float = footprint.y * cs - cs * 0.5 - 0.1
+	var wall_h: float = 1.6
+	var ridge_h: float = wall_h + 1.5 + 0.2 * footprint.y
+	var log_col := Color(0.4, 0.27, 0.16)
+	var pm := ProcMesh.new()
+	pm.box(Vector3(x0, 0.0, z0), Vector3(x1, 0.18, z1), STONE.darkened(0.2))
+	var y: float = 0.18
+	var k: int = 0
+	while y < wall_h - 0.05:
+		var c: Color = log_col.lightened(0.05 * float(k % 3))
+		pm.box(Vector3(x0, y, z0), Vector3(x1, y + 0.27, z1), c)
+		# Log ends poking out at the corners.
+		pm.box(Vector3(x0 - 0.1, y, z0 - 0.1), Vector3(x0 + 0.2, y + 0.24, z1 + 0.1), c.darkened(0.08))
+		pm.box(Vector3(x1 - 0.2, y, z0 - 0.1), Vector3(x1 + 0.1, y + 0.24, z1 + 0.1), c.darkened(0.08))
+		y += 0.29
+		k += 1
+	var mid: float = (x0 + x1) * 0.5
+	pm.box(Vector3(mid - 0.3, 0.0, z1 + 0.1), Vector3(mid + 0.3, 1.2, z1 + 0.16), WOOD_DARK.darkened(0.3))
+	pm.box(Vector3(x0 + 0.3, 0.75, z1 + 0.1), Vector3(x0 + 0.75, 1.15, z1 + 0.15), Color(0.95, 0.8, 0.45))
+	pm.box(Vector3(x1 - 0.75, 0.75, z1 + 0.1), Vector3(x1 - 0.3, 1.15, z1 + 0.15), Color(0.95, 0.8, 0.45))
+	# Porch roof on two posts.
+	for px in [mid - 0.55, mid + 0.45]:
+		pm.box(Vector3(px, 0.0, z1 + 0.5), Vector3(px + 0.1, 1.3, z1 + 0.6), WOOD)
+	pm.box(Vector3(mid - 0.7, 1.3, z1 - 0.05), Vector3(mid + 0.7, 1.4, z1 + 0.65), tint.darkened(0.15))
+	# Steep gabled roof, ridge along X, deep eaves.
+	var o: float = 0.35
+	var zm: float = (z0 + z1) * 0.5
+	var a := Vector3(x0 - o, wall_h - 0.1, z1 + o)
+	var b := Vector3(x1 + o, wall_h - 0.1, z1 + o)
+	var r0 := Vector3(x0 - o, ridge_h, zm)
+	var r1 := Vector3(x1 + o, ridge_h, zm)
+	var c2 := Vector3(x1 + o, wall_h - 0.1, z0 - o)
+	var d := Vector3(x0 - o, wall_h - 0.1, z0 - o)
+	pm.quad(a, b, r1, r0, Vector3(0, 1, 0.8).normalized(), tint)
+	pm.quad(c2, d, r0, r1, Vector3(0, 1, -0.8).normalized(), tint.darkened(0.2))
+	pm.quad(Vector3(x0, wall_h, z1), Vector3(x0, wall_h, z0), Vector3(x0, ridge_h - 0.1, zm), Vector3(x0, ridge_h - 0.1, zm), Vector3.LEFT, log_col.darkened(0.1))
+	pm.quad(Vector3(x1, wall_h, z0), Vector3(x1, wall_h, z1), Vector3(x1, ridge_h - 0.1, zm), Vector3(x1, ridge_h - 0.1, zm), Vector3.RIGHT, log_col.darkened(0.1))
+	pm.box(Vector3(x0 + 0.4, ridge_h - 0.7, zm - 0.45), Vector3(x0 + 0.75, ridge_h + 0.3, zm - 0.1), STONE.darkened(0.1))
+	return _wrap(pm, "Cabin")
+
+
+## A stack of cut logs over the footprint (the lumber yard): rows of round log ends facing south,
+## pyramid-stacked, [param tint] tinting the freshest cut.
+static func logs(footprint: Vector2i, tint: Color = Color(0.62, 0.45, 0.26), seed: int = 0) -> Node3D:
+	var e: Array = _extent(footprint, 0.12)
+	var pm := ProcMesh.new()
+	var width: float = e[2] - e[0]
+	var per_row: int = maxi(2, int(width / 0.42))
+	for t in range(3):
+		var n: int = per_row - t
+		if n < 1:
+			break
+		var x_off: float = e[0] + (width - float(n) * 0.42) * 0.5
+		for i in range(n):
+			var cx: float = x_off + 0.21 + float(i) * 0.42
+			var col: Color = tint.lerp(WOOD_DARK, ProcMesh.hash01(seed + i, t, 9) * 0.5)
+			pm.box(Vector3(cx - 0.19, 0.04 + float(t) * 0.36, e[1] + 0.1), Vector3(cx + 0.19, 0.4 + float(t) * 0.36, e[3] - 0.1), col)
+			# The pale cut face on the south end.
+			pm.box(Vector3(cx - 0.15, 0.08 + float(t) * 0.36, e[3] - 0.1), Vector3(cx + 0.15, 0.36 + float(t) * 0.36, e[3] - 0.07), Color(0.82, 0.7, 0.45))
+	return _wrap(pm, "Logs")
+
+
+## A street lamp: an iron-capped post with a warm glass lantern in [param tint].
+static func lamp(tint: Color = Color(1.0, 0.82, 0.45)) -> Node3D:
+	var pm := ProcMesh.new()
+	pm.box(Vector3(-0.1, 0.0, -0.1), Vector3(0.1, 0.25, 0.1), STONE.darkened(0.15))
+	pm.box(Vector3(-0.05, 0.25, -0.05), Vector3(0.05, 2.0, 0.05), IRON.darkened(0.35))
+	pm.box(Vector3(-0.2, 2.0, -0.2), Vector3(0.2, 2.45, 0.2), tint)
+	pm.box(Vector3(-0.26, 1.96, -0.26), Vector3(0.26, 2.04, 0.26), IRON.darkened(0.3))
+	_pyramid(pm, -0.28, -0.28, 0.28, 0.28, 2.45, 2.75, IRON.darkened(0.3))
+	return _wrap(pm, "Lamp")
+
+
+## A CHAPEL over the footprint: a stone nave under a slate roof in [param tint], and a bell tower
+## with a spire and a gold star at the south front.
+static func chapel(footprint: Vector2i, tint: Color = Color(0.3, 0.38, 0.55)) -> Node3D:
+	var cs: float = Cells.CELL_SIZE
+	var x0: float = -cs * 0.5 + 0.1
+	var z0: float = -cs * 0.5 + 0.1
+	var x1: float = footprint.x * cs - cs * 0.5 - 0.1
+	var z1: float = footprint.y * cs - cs * 0.5 - 0.1
+	var stone := Color(0.78, 0.76, 0.7)
+	var wall_h: float = 2.0
+	var mid: float = (x0 + x1) * 0.5
+	var zm: float = (z0 + z1) * 0.5
+	var pm := ProcMesh.new()
+	pm.box(Vector3(x0, 0.0, z0), Vector3(x1, wall_h, z1), stone, stone.darkened(0.05))
+	for wx in [x0 + 0.4, x1 - 0.9]:
+		pm.box(Vector3(wx, 0.9, z1), Vector3(wx + 0.5, 1.7, z1 + 0.05), Color(0.35, 0.5, 0.85))
+	var ridge_h: float = wall_h + 1.3
+	var o: float = 0.2
+	pm.quad(Vector3(x0 - o, wall_h - 0.1, z1 + o), Vector3(x1 + o, wall_h - 0.1, z1 + o), Vector3(x1 + o, ridge_h, zm), Vector3(x0 - o, ridge_h, zm), Vector3(0, 1, 1).normalized(), tint)
+	pm.quad(Vector3(x1 + o, wall_h - 0.1, z0 - o), Vector3(x0 - o, wall_h - 0.1, z0 - o), Vector3(x0 - o, ridge_h, zm), Vector3(x1 + o, ridge_h, zm), Vector3(0, 1, -1).normalized(), tint.darkened(0.2))
+	# Bell tower at the front, centred.
+	var tx0: float = mid - 0.55
+	var tx1: float = mid + 0.55
+	var tz1: float = z1 + 0.1
+	var tz0: float = tz1 - 1.1
+	var tzm: float = (tz0 + tz1) * 0.5
+	pm.box(Vector3(tx0, 0.0, tz0), Vector3(tx1, 3.6, tz1), stone.darkened(0.04))
+	pm.box(Vector3(mid - 0.3, 0.0, tz1), Vector3(mid + 0.3, 1.3, tz1 + 0.05), WOOD_DARK.darkened(0.2))
+	pm.box(Vector3(mid - 0.22, 2.6, tz1), Vector3(mid + 0.22, 3.3, tz1 + 0.04), CHAR)
+	_pyramid(pm, tx0 - 0.1, tz0 - 0.1, tx1 + 0.1, tz1 + 0.1, 3.6, 5.3, tint)
+	pm.box(Vector3(mid - 0.04, 5.3, tzm - 0.04), Vector3(mid + 0.04, 5.75, tzm + 0.04), GOLD)
+	pm.box(Vector3(mid - 0.2, 5.5, tzm - 0.03), Vector3(mid + 0.2, 5.58, tzm + 0.03), GOLD)
+	return _wrap(pm, "Chapel")
+
+
+## A SMITHY over the footprint: a stone forge house with a lean-to roof in [param tint], a tall
+## sooty chimney, a glowing forge mouth and an anvil out front.
+static func smithy(footprint: Vector2i, tint: Color = Color(0.32, 0.3, 0.3)) -> Node3D:
+	var cs: float = Cells.CELL_SIZE
+	var x0: float = -cs * 0.5 + 0.1
+	var z0: float = -cs * 0.5 + 0.1
+	var x1: float = footprint.x * cs - cs * 0.5 - 0.1
+	var z1: float = footprint.y * cs - cs * 0.5 - 0.1
+	var stone := Color(0.55, 0.54, 0.52)
+	var wall_h: float = 1.7
+	var mx: float = (x0 + x1) * 0.5
+	var pm := ProcMesh.new()
+	pm.box(Vector3(x0, 0.0, z0), Vector3(x1, wall_h, z1), stone, stone.lightened(0.04))
+	pm.box(Vector3(x0 + 0.3, 0.0, z1), Vector3(x0 + 0.95, 1.1, z1 + 0.05), Color(1.0, 0.5, 0.15))
+	pm.box(Vector3(x0 + 0.2, 1.1, z1), Vector3(x0 + 1.05, 1.2, z1 + 0.12), IRON.darkened(0.3))
+	# Lean-to roof sloping to the front.
+	pm.quad(Vector3(x0 - 0.2, wall_h + 0.7, z0 - 0.2), Vector3(x1 + 0.2, wall_h + 0.7, z0 - 0.2),
+		Vector3(x1 + 0.2, wall_h - 0.05, z1 + 0.35), Vector3(x0 - 0.2, wall_h - 0.05, z1 + 0.35), Vector3(0, 1, 0.5).normalized(), tint)
+	pm.box(Vector3(x1 - 0.7, 0.0, z0 + 0.2), Vector3(x1 - 0.2, wall_h + 2.0, z0 + 0.7), stone.darkened(0.15))
+	pm.box(Vector3(x1 - 0.78, wall_h + 1.9, z0 + 0.12), Vector3(x1 - 0.12, wall_h + 2.1, z0 + 0.78), CHAR)
+	# Anvil on a block, a quench barrel.
+	pm.box(Vector3(mx - 0.2, 0.0, z1 + 0.25), Vector3(mx + 0.2, 0.45, z1 + 0.6), WOOD)
+	pm.box(Vector3(mx - 0.32, 0.45, z1 + 0.28), Vector3(mx + 0.32, 0.65, z1 + 0.57), IRON.darkened(0.25))
+	_octagon(pm, Vector3(x1 - 0.5, 0.0, z1 + 0.35), 0.26, 0.6, WOOD_DARK, Color(0.1, 0.17, 0.22))
+	return _wrap(pm, "Smithy")
+
+
+## A scarecrow on a cross-pole: a straw body, a hat in [param tint], ragged sleeves.
+static func scarecrow(tint: Color = Color(0.5, 0.36, 0.2)) -> Node3D:
+	var pm := ProcMesh.new()
+	pm.box(Vector3(-0.05, 0.0, -0.05), Vector3(0.05, 1.7, 0.05), WOOD_DARK)
+	pm.box(Vector3(-0.6, 1.15, -0.04), Vector3(0.6, 1.25, 0.04), WOOD_DARK)
+	pm.box(Vector3(-0.22, 0.75, -0.14), Vector3(0.22, 1.2, 0.14), Color(0.55, 0.38, 0.3))
+	pm.box(Vector3(-0.62, 1.1, -0.08), Vector3(-0.38, 1.3, 0.08), STRAW)
+	pm.box(Vector3(0.38, 1.1, -0.08), Vector3(0.62, 1.3, 0.08), STRAW)
+	pm.box(Vector3(-0.16, 1.3, -0.16), Vector3(0.16, 1.6, 0.16), STRAW.lightened(0.1))
+	pm.box(Vector3(-0.3, 1.58, -0.3), Vector3(0.3, 1.64, 0.3), tint)
+	pm.box(Vector3(-0.17, 1.64, -0.17), Vector3(0.17, 1.9, 0.17), tint)
+	return _wrap(pm, "Scarecrow")
 
 
 ## The Wayshrine's standing stone: a carved pillar with a glowing leaf-green orb, set in the

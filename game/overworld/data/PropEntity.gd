@@ -24,6 +24,12 @@ extends OverworldEntity
 ##   fire      a burning patch (scorch, flames, embers, a warm light)
 ##   rubble    a few charred stones
 ##   arena     a round stone arena (the tournament hall): tiered walls, pennants, a gate arch
+##   cabin     a timber log cabin: dark log walls, steep mossy roof, porch (the forest town)
+##   logs      a pyramid stack of cut logs over the footprint (the lumber yard)
+##   lamp      a street lamp
+##   chapel    a stone chapel with a bell tower and spire
+##   smithy    a forge house: glowing forge mouth, chimney, anvil
+##   scarecrow a field scarecrow
 ##
 ## [member OverworldEntity.cell] is the footprint's top-left cell; [member footprint] its size.
 ## Props are NOT blocking by default (the terrain under a house block already decides
@@ -31,10 +37,11 @@ extends OverworldEntity
 ## [member OverworldEntity.blocking] and then blocks EVERY cell of its footprint.
 
 const KINDS: Array[String] = ["house", "ruin", "keep", "tower", "gate", "windmill", "stall", "well",
-	"fence", "haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena"]
+	"fence", "haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena",
+	"cabin", "logs", "lamp", "chapel", "smithy", "scarecrow"]
 
 @export_enum("house", "ruin", "keep", "tower", "gate", "windmill", "stall", "well", "fence",
-	"haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena")
+	"haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena", "cabin", "logs", "lamp", "chapel", "smithy", "scarecrow")
 var prop: String = "house"
 @export var footprint: Vector2i = Vector2i(2, 2)
 

@@ -1,0 +1,300 @@
+[gd_resource type="Resource" script_class="WorldAtlas" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/WorldLocation.gd" id="1_s3x8b"]
+[ext_resource type="Script" path="res://game/overworld/data/WorldAtlas.gd" id="2_wo6p0"]
+
+[sub_resource type="Resource" id="Resource_j2pa5"]
+script = ExtResource("1_s3x8b")
+id = &"oakvale"
+display_name = "Oakvale"
+region_id = &"heartlands"
+map_pos = Vector2(0.46, 0.67)
+status = 0
+area_ids = Array[StringName]([&"oakvale", &"oakvale_ruins"])
+description = "The Starting Village: farmland above the southern coast. The hero's home."
+
+[sub_resource type="Resource" id="Resource_btytd"]
+script = ExtResource("1_s3x8b")
+id = &"farm_hamlet"
+display_name = "Farm Hamlet"
+region_id = &"heartlands"
+map_pos = Vector2(0.31, 0.7)
+open_flag = "world.farm_hamlet_open"
+description = "A barley hamlet west of Oakvale, down the mill lane."
+
+[sub_resource type="Resource" id="Resource_kkhaq"]
+script = ExtResource("1_s3x8b")
+id = &"mossway"
+display_name = "The Mossway"
+kind = "route"
+region_id = &"heartlands"
+map_pos = Vector2(0.52, 0.68)
+status = 0
+area_ids = Array[StringName]([&"mossway"])
+description = "Route 1: the mossy road east from Oakvale to River Crossing."
+
+[sub_resource type="Resource" id="Resource_54odp"]
+script = ExtResource("1_s3x8b")
+id = &"river_crossing"
+display_name = "River Crossing"
+region_id = &"heartlands"
+map_pos = Vector2(0.58, 0.69)
+status = 0
+area_ids = Array[StringName]([&"river_crossing"])
+description = "A toll village at the Old Bridge, where the road north to the capital crosses the river."
+
+[sub_resource type="Resource" id="Resource_i6wmj"]
+script = ExtResource("1_s3x8b")
+id = &"crownhaven"
+display_name = "Crownhaven"
+kind = "city"
+region_id = &"heartlands"
+map_pos = Vector2(0.49, 0.47)
+status = 0
+area_ids = Array[StringName]([&"crownhaven"])
+description = "The Central Kingdom's walled river city, royal seat of Aldermere."
+
+[sub_resource type="Resource" id="Resource_0t3tf"]
+script = ExtResource("1_s3x8b")
+id = &"sparse_forest"
+display_name = "The Sparse Forest"
+kind = "route"
+region_id = &"woodlands"
+map_pos = Vector2(0.41, 0.43)
+status = 0
+area_ids = Array[StringName]([&"sparse_forest"])
+description = "Open woodland between Crownhaven's west gate and Woodland Town."
+
+[sub_resource type="Resource" id="Resource_e0er2"]
+script = ExtResource("1_s3x8b")
+id = &"woodland_town"
+display_name = "Woodland Town"
+kind = "town"
+region_id = &"woodlands"
+map_pos = Vector2(0.34, 0.41)
+status = 0
+area_ids = Array[StringName]([&"woodland_town"])
+description = "A timber town in a forest clearing at the edge of the Deep Woods."
+
+[sub_resource type="Resource" id="Resource_7dich"]
+script = ExtResource("1_s3x8b")
+id = &"thieves_guild"
+display_name = "Hidden Thieves Guild"
+kind = "dungeon"
+region_id = &"woodlands"
+map_pos = Vector2(0.28, 0.49)
+open_flag = "world.thieves_guild_open"
+secret = true
+description = "A cave below Woodland Town that nobody admits to knowing."
+
+[sub_resource type="Resource" id="Resource_83ka0"]
+script = ExtResource("1_s3x8b")
+id = &"deepwood_village"
+display_name = "Deepwood Village"
+region_id = &"woodlands"
+map_pos = Vector2(0.11, 0.49)
+open_flag = "world.deepwood_open"
+description = "A village deep in the old forest, west of Woodland Town."
+
+[sub_resource type="Resource" id="Resource_moc57"]
+script = ExtResource("1_s3x8b")
+id = &"depths_of_the_wood"
+display_name = "Depths of the Wood"
+kind = "special"
+region_id = &"woodlands"
+map_pos = Vector2(0.15, 0.32)
+open_flag = "world.depths_of_the_wood_open"
+description = "A glowing glade at the forest's heart. A special encounter."
+
+[sub_resource type="Resource" id="Resource_ecw1r"]
+script = ExtResource("1_s3x8b")
+id = &"frostpeak_village"
+display_name = "Frostpeak Village"
+region_id = &"snowy_peaks"
+map_pos = Vector2(0.25, 0.18)
+open_flag = "world.frostpeak_open"
+description = "A village under the Snowy Peaks, up the north trail from Woodland Town."
+
+[sub_resource type="Resource" id="Resource_eii5k"]
+script = ExtResource("1_s3x8b")
+id = &"mountain_base"
+display_name = "Mountain Base"
+kind = "town"
+region_id = &"northern_mountains"
+map_pos = Vector2(0.69, 0.2)
+open_flag = "world.mountain_road_open"
+description = "The fortified town at the foot of the mountains, up the road from Crownhaven's north gate."
+
+[sub_resource type="Resource" id="Resource_c71jp"]
+script = ExtResource("1_s3x8b")
+id = &"mountain_pass"
+display_name = "Mountain Pass"
+kind = "route"
+region_id = &"northern_mountains"
+map_pos = Vector2(0.63, 0.09)
+open_flag = "world.mountain_pass_open"
+description = "The high pass over the mountains toward Cindral."
+
+[sub_resource type="Resource" id="Resource_0pqtp"]
+script = ExtResource("1_s3x8b")
+id = &"hidden_depths"
+display_name = "Hidden Depths"
+kind = "special"
+region_id = &"northern_mountains"
+map_pos = Vector2(0.85, 0.13)
+open_flag = "world.hidden_depths_open"
+description = "A crystal cave in the eastern mountains. A special encounter."
+
+[sub_resource type="Resource" id="Resource_ntetj"]
+script = ExtResource("1_s3x8b")
+id = &"cindral"
+display_name = "Cindral"
+kind = "nation"
+region_id = &"cindral"
+map_pos = Vector2(0.76, 0.03)
+open_flag = "world.cindral_open"
+description = "The Other Nation, beyond the Mountain Pass."
+
+[sub_resource type="Resource" id="Resource_c0ywa"]
+script = ExtResource("1_s3x8b")
+id = &"redrock_village"
+display_name = "Redrock Village"
+region_id = &"rocky_badlands"
+map_pos = Vector2(0.85, 0.43)
+open_flag = "world.badlands_open"
+description = "A village among the red mesas, down the road from Crownhaven's east gate."
+
+[sub_resource type="Resource" id="Resource_x5fcs"]
+script = ExtResource("1_s3x8b")
+id = &"beach_village"
+display_name = "Beach Village"
+region_id = &"sunlit_coast"
+map_pos = Vector2(0.71, 0.7)
+open_flag = "world.beach_road_open"
+description = "A harbour village on stilts, south-east of the capital: the port for the isles."
+
+[sub_resource type="Resource" id="Resource_c75c1"]
+script = ExtResource("1_s3x8b")
+id = &"sunrise_isle"
+display_name = "Sunrise Isle"
+kind = "island"
+region_id = &"open_ocean"
+map_pos = Vector2(0.92, 0.65)
+open_flag = "world.sea_routes_open"
+description = "An island to the east, a short sail from Beach Village."
+
+[sub_resource type="Resource" id="Resource_1iivx"]
+script = ExtResource("1_s3x8b")
+id = &"island_of_tides"
+display_name = "Island of Tides"
+kind = "special"
+region_id = &"open_ocean"
+map_pos = Vector2(0.9, 0.83)
+open_flag = "world.sea_routes_open"
+description = "A storm-wrapped island far out to sea. A special encounter."
+
+[sub_resource type="Resource" id="Resource_2lp2s"]
+script = ExtResource("1_s3x8b")
+id = &"stormreef_isle"
+display_name = "Stormreef Isle"
+kind = "island"
+region_id = &"open_ocean"
+map_pos = Vector2(0.62, 0.93)
+open_flag = "world.sea_routes_open"
+description = "A reef island south of Beach Village."
+
+[resource]
+script = ExtResource("2_wo6p0")
+world_name = "Aldermere and its neighbours"
+regions = {
+"cindral": "Cindral",
+"heartlands": "The Heartlands",
+"northern_mountains": "The Northern Mountains",
+"open_ocean": "The Open Ocean",
+"rocky_badlands": "The Rocky Badlands",
+"snowy_peaks": "The Snowy Peaks",
+"sunlit_coast": "The Sunlit Coast",
+"woodlands": "The Deep Woods"
+}
+locations = Array[ExtResource("1_s3x8b")]([SubResource("Resource_j2pa5"), SubResource("Resource_btytd"), SubResource("Resource_kkhaq"), SubResource("Resource_54odp"), SubResource("Resource_i6wmj"), SubResource("Resource_0t3tf"), SubResource("Resource_e0er2"), SubResource("Resource_7dich"), SubResource("Resource_83ka0"), SubResource("Resource_moc57"), SubResource("Resource_ecw1r"), SubResource("Resource_eii5k"), SubResource("Resource_c71jp"), SubResource("Resource_0pqtp"), SubResource("Resource_ntetj"), SubResource("Resource_c0ywa"), SubResource("Resource_x5fcs"), SubResource("Resource_c75c1"), SubResource("Resource_1iivx"), SubResource("Resource_2lp2s")])
+roads = Array[Dictionary]([{
+"a": &"oakvale",
+"b": &"mossway",
+"kind": "main"
+}, {
+"a": &"mossway",
+"b": &"river_crossing",
+"kind": "main"
+}, {
+"a": &"river_crossing",
+"b": &"crownhaven",
+"kind": "main"
+}, {
+"a": &"crownhaven",
+"b": &"sparse_forest",
+"kind": "main"
+}, {
+"a": &"sparse_forest",
+"b": &"woodland_town",
+"kind": "main"
+}, {
+"a": &"crownhaven",
+"b": &"mountain_base",
+"kind": "main"
+}, {
+"a": &"mountain_base",
+"b": &"mountain_pass",
+"kind": "main"
+}, {
+"a": &"mountain_pass",
+"b": &"cindral",
+"kind": "main"
+}, {
+"a": &"crownhaven",
+"b": &"redrock_village",
+"kind": "main"
+}, {
+"a": &"crownhaven",
+"b": &"beach_village",
+"kind": "main"
+}, {
+"a": &"river_crossing",
+"b": &"beach_village",
+"kind": "main"
+}, {
+"a": &"oakvale",
+"b": &"farm_hamlet",
+"kind": "secondary"
+}, {
+"a": &"woodland_town",
+"b": &"deepwood_village",
+"kind": "secondary"
+}, {
+"a": &"woodland_town",
+"b": &"thieves_guild",
+"kind": "secondary"
+}, {
+"a": &"woodland_town",
+"b": &"frostpeak_village",
+"kind": "secondary"
+}, {
+"a": &"deepwood_village",
+"b": &"depths_of_the_wood",
+"kind": "secondary"
+}, {
+"a": &"mountain_base",
+"b": &"hidden_depths",
+"kind": "secondary"
+}, {
+"a": &"beach_village",
+"b": &"sunrise_isle",
+"kind": "sea"
+}, {
+"a": &"beach_village",
+"b": &"island_of_tides",
+"kind": "sea"
+}, {
+"a": &"beach_village",
+"b": &"stormreef_isle",
+"kind": "sea"
+}])

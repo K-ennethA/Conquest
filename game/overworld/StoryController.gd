@@ -218,10 +218,49 @@ func continue_journey(slot: int) -> Dictionary:
 	if not bool(loaded.get("success", false)):
 		return {"success": false, "reason": String(loaded.get("reason", "load_failed"))}
 	var s: StoryState = loaded["state"]
-	if load_area(s.location_area()) == null:
+	var area: OverworldAreaResource = load_area(s.location_area())
+	if area == null:
 		return {"success": false, "reason": "unknown_area"}
+	settle_location(s, area)
 	_begin_session(s, slot)
 	return {"success": true, "reason": ""}
+
+
+## A save made before its area was rebuilt can stand the hero inside a new wall, prop or NPC, or
+## in a pocket walled off from the rest of the area. Move [param s]'s location to the nearest
+## cell walkable AND reachable from the area's entries (unchanged when it already is, or when no
+## entry is walkable). Returns true when it moved.
+static func settle_location(s: StoryState, area: OverworldAreaResource) -> bool:
+	if s == null or area == null:
+		return false
+	var g := OverworldGrid.build(area, s)
+	var reach: Dictionary = {}
+	var queue: Array[Vector3i] = []
+	for eid in area.entry_ids():
+		var e: Dictionary = area.entry(eid)
+		if not e.is_empty() and g.is_walkable(e["cell"]) and not reach.has(e["cell"]):
+			reach[e["cell"]] = true
+			queue.append(e["cell"])
+	var head: int = 0
+	while head < queue.size():
+		var c: Vector3i = queue[head]
+		head += 1
+		for n in g.walkable_neighbours(c):
+			if not reach.has(n):
+				reach[n] = true
+				queue.append(n)
+	var at: Vector3i = s.location_cell()
+	if reach.is_empty() or reach.has(at):
+		return false
+	var best: Vector3i = queue[0]
+	var best_d: int = absi(best.x - at.x) + absi(best.y - at.y)
+	for c in queue:
+		var d: int = absi(c.x - at.x) + absi(c.y - at.y)
+		if d < best_d:
+			best = c
+			best_d = d
+	s.set_location(s.location_area(), best, s.location_facing())
+	return true
 
 
 ## Adopt an externally built state (tests, tools).

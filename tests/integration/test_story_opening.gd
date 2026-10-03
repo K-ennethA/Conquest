@@ -207,10 +207,16 @@ func test_the_opening_plays_end_to_end() -> void:
 	assert_false(StoryController.is_script_running(), "and no wild creature challenges a traveller with no partner")
 	assert_false(ow.actor("bram").visible, "Bram is not on the road yet")
 
-	# 4. INTO CROWNHAVEN.
+	# 4. OVER THE OLD BRIDGE AT RIVER CROSSING, INTO CROWNHAVEN BY THE SOUTH GATE.
 	ow = await _boot("mossway", Vector3i(32, 6, 0), "east")
 	await _step(ow, Vector2i(1, 0))
-	assert_eq(s.location_area(), "crownhaven", "the Mossway's east end is Crownhaven's west gate")
+	assert_eq(s.location_area(), "river_crossing", "the Mossway's east end is River Crossing")
+	ow = await _boot()
+	await _drain(ow)
+	assert_true(s.has_flag("river_crossing.arrived"), "River Crossing's arrival narration plays")
+	ow = await _boot("river_crossing", Vector3i(11, 1, 0), "north")
+	await _step(ow, Vector2i(0, -1))
+	assert_eq(s.location_area(), "crownhaven", "the King's road north ends at Crownhaven's south gate")
 	ow = await _boot()
 	assert_eq(ow.hud.area_ribbon().get_node("Text").text, "CROWNHAVEN", "the ribbon names the town")
 	await _drain(ow)
