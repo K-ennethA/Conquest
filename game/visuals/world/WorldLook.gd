@@ -110,6 +110,37 @@ class_name WorldLook
 	set(v):
 		contrast = v
 		_apply()
+## WARM GRADE fields (research godot-world-feel.md item 3). The defaults are the pre-grade
+## look exactly: black non-sky ambient, 85% sky ambient, ground hemisphere derived from
+## haze, Filmic white 6, no LUT. Grades ([constant GRADES]) set them per time of day.
+## Non-sky part of the ambient fill (the (1 - ambient_sky_contribution) share).
+@export var ambient_light_color: Color = Color(0.0, 0.0, 0.0):
+	set(v):
+		ambient_light_color = v
+		_apply()
+@export var ambient_sky_contribution: float = 0.85:
+	set(v):
+		ambient_sky_contribution = v
+		_apply()
+## Lower sky hemisphere (the bounce side faces and units pick up). Alpha 0 = derive from
+## haze_color (horizon = haze, bottom = haze darkened 25%), the pre-grade behaviour.
+@export var ground_bottom_color: Color = Color(0.0, 0.0, 0.0, 0.0):
+	set(v):
+		ground_bottom_color = v
+		_apply()
+@export var ground_horizon_color: Color = Color(0.0, 0.0, 0.0, 0.0):
+	set(v):
+		ground_horizon_color = v
+		_apply()
+@export var tonemap_white: float = 6.0:
+	set(v):
+		tonemap_white = v
+		_apply()
+## 3D colour-correction LUT (sRGB in -> sRGB out, sampled after the tonemap + adjustments).
+@export var color_correction: Texture = null:
+	set(v):
+		color_correction = v
+		_apply()
 @export var contact_shadows: bool = true
 ## Screen-space AO. Forward+ only (the Mobile renderer ignores it); the A/B harness turns
 ## it off in the "mobile profile" preset so desktop previews what a phone renders.
@@ -199,8 +230,118 @@ const LOOK_PRESETS := {
 		"msaa": "mobile", "debanding": true,
 		"shadow_profile": &"mobile", "ssao_enabled": false,
 	},
+	# WARM GRADE (research item 3): "new" + GRADES["warm"] -- warm/coloured shadow fill,
+	# key:fill 3:1, Filmic white 3 (light trim baked into the energies), warm 3D LUT.
+	# Glow values are "new"'s on purpose: the light trim lowers the lit board, never the
+	# emissives, so the threshold/ramp derivations above still hold (see GRADES).
+	"warm": {
+		"glow_intensity": 0.3, "glow_bloom": 0.0, "glow_hdr_threshold": 1.2,
+		"glow_hdr_scale": GLOW_HDR_CEILING_MOBILE - 1.2, "glow_blend_mode": Environment.GLOW_BLEND_MODE_SCREEN,
+		"glow_levels": [0.0, 0.8, 0.4, 0.1, 0.0, 0.0, 0.0],
+		"msaa": -1, "debanding": true,
+		"shadow_profile": &"", "ssao_enabled": true,
+		"grade": "warm", "lut": true,
+	},
+	# The research's T3 A/B axis: identical light, fill and tonemap, but a NEUTRAL
+	# (identity = none) LUT -- so warm vs this isolates what the LUT alone adds.
+	"warm-neutralLUT": {
+		"glow_intensity": 0.3, "glow_bloom": 0.0, "glow_hdr_threshold": 1.2,
+		"glow_hdr_scale": GLOW_HDR_CEILING_MOBILE - 1.2, "glow_blend_mode": Environment.GLOW_BLEND_MODE_SCREEN,
+		"glow_levels": [0.0, 0.8, 0.4, 0.1, 0.0, 0.0, 0.0],
+		"msaa": -1, "debanding": true,
+		"shadow_profile": &"", "ssao_enabled": true,
+		"grade": "warm", "lut": false,
+	},
 }
-const LOOK_PRESET_ORDER: Array[String] = ["current", "new", "new thr1.0", "new mobile-profile"]
+const LOOK_PRESET_ORDER: Array[String] = ["current", "new", "new thr1.0", "new mobile-profile", "warm", "warm-neutralLUT"]
+
+## Map lighting presets (time of day; [method apply_preset]). Values are the pre-grade
+## ones verbatim ("Day" = the property defaults above; "Dusk" shares "Dawn").
+const TIME_OF_DAY := {
+	"Day": {
+		"sun_color": Color(1.0, 0.93, 0.8), "sun_energy": 1.55, "ambient_energy": 0.62,
+		"sky_top": Color(0.42, 0.6, 0.78), "sky_horizon": Color(0.74, 0.82, 0.86), "haze": Color(0.66, 0.75, 0.8),
+	},
+	"Dawn": {
+		"sun_color": Color(1.0, 0.76, 0.58), "sun_energy": 1.1, "ambient_energy": 0.42,
+		"sky_top": Color(0.46, 0.5, 0.68), "sky_horizon": Color(0.92, 0.72, 0.58), "haze": Color(0.78, 0.66, 0.6),
+	},
+	"Night": {
+		"sun_color": Color(0.62, 0.7, 0.95), "sun_energy": 0.55, "ambient_energy": 0.28,
+		"sky_top": Color(0.08, 0.1, 0.2), "sky_horizon": Color(0.2, 0.24, 0.34), "haze": Color(0.16, 0.2, 0.28),
+	},
+}
+
+## COLOUR GRADES layered on a time of day by a look preset's "grade" key (none = the
+## TIME_OF_DAY values with the pre-grade fill/tonemap defaults).
+##
+## "warm" (research item 3, FE warm-amber direction). How the numbers were derived:
+## * Fill = Godot 4.6 sky ambient: energy x mix(ambient_light_color, sky radiance,
+##   ambient_sky_contribution); 4.6's ProceduralSkyMaterial is sky = mix(top, horizon,
+##   (1 - y)^4), ground = mix(bottom, ground_horizon, (1 + y)^30). An up-facing tile in
+##   sun shadow sees the cosine-weighted upper hemisphere ([method estimate_key_fill]).
+##   Key on that tile = sun_energy x lum(sun_color) x sin(50 deg pitch). (Ignored: the
+##   sun halo in the sky, ~2% of the fill; toon diffuse raising N.L on world tiles.)
+## * Pre-grade Day measures key 1.024 + fill 0.169 -> 7.05:1, and the fill hue is
+##   (0.30, 0.59, 1.00) -- grey-blue. Target: 3:1 at the SAME lit total (1.20), so the
+##   board's mid-tones keep their brightness and only shadows lift (fill 0.40, key 0.80).
+##   Key: sun a touch more golden, energy = 0.80 / (lum 0.810 x sin 50) = 1.29.
+##   Fill colour: saturated sky blue at 50% share + warm ambient_light_color at 50% gives
+##   an up-face shadow hue (0.98, 0.85, 1.00) (soft rose, coloured not grey); the ground
+##   hemisphere becomes a sunlit grass/sand bounce, so side faces + units read warm
+##   (1.00, 0.81, 0.69). ambient_energy then solved for exactly 3.00:1 -> 0.772.
+##   Dawn/Dusk and Night: same 3:1 at their own lit totals (0.61, 0.21); Night's fill
+##   stays moonlit blue-violet (warmth is a daylight read) but is no longer black
+##   (pre-grade night measures 61:1).
+## * Tonemap: Filmic white 6 -> 3. 4.6 Filmic (tonemap.glsl constants, exposure bias 2)
+##   puts albedo 1.0 fully lit at f(1)/f(6) = 0.66 (the milky shoulder); white 3 gives
+##   0.73. To keep a lit mid-albedo pixel (0.5 x 1.2) at the same display value, every
+##   light energy is trimmed by light_trim = 0.8561 (solved: f(0.6 t)/f(3) = f(0.6)/f(6)).
+##   The trim is in the LIGHTS, not tonemap_exposure, because the glow threshold is
+##   compared AFTER exposure (4.6 copy.glsl) -- an exposure trim would also dim the
+##   emissives and break the "ramp ends at 2.0" glow derivation; trimming lights leaves
+##   emissives untouched, so they now sit relatively brighter (2.0 -> 0.92 display vs 0.83).
+## * LUT: see WARM_LUT_* below. Night uses none (the warm LUT targets daylight).
+const GRADES := {
+	"warm": {
+		"tonemap_white": 3.0,
+		"light_trim": 0.8561,
+		"lut": {"Day": true, "Dawn": true, "Night": false},
+		"Day": {
+			"sun_color": Color(1.0, 0.9, 0.72), "sun_energy": 1.29, "ambient_energy": 0.772,
+			"ambient_color": Color(1.0, 0.84, 0.68), "ambient_sky_contribution": 0.5,
+			"sky_top": Color(0.36, 0.58, 0.88), "sky_horizon": Color(0.78, 0.84, 0.86),
+			"ground_bottom": Color(0.56, 0.56, 0.42), "ground_horizon": Color(0.7, 0.7, 0.6),
+		},
+		"Dawn": {
+			"sun_color": Color(1.0, 0.76, 0.58), "sun_energy": 0.86, "ambient_energy": 0.497,
+			"ambient_color": Color(1.0, 0.74, 0.62), "ambient_sky_contribution": 0.5,
+			"sky_top": Color(0.44, 0.46, 0.74), "sky_horizon": Color(0.94, 0.7, 0.54),
+			"ground_bottom": Color(0.56, 0.46, 0.4), "ground_horizon": Color(0.78, 0.62, 0.54),
+		},
+		"Night": {
+			"sun_color": Color(0.62, 0.7, 0.95), "sun_energy": 0.4, "ambient_energy": 0.497,
+			"ambient_color": Color(0.5, 0.52, 0.85), "ambient_sky_contribution": 0.5,
+			"sky_top": Color(0.1, 0.12, 0.3), "sky_horizon": Color(0.24, 0.26, 0.42),
+			"ground_bottom": Color(0.16, 0.16, 0.24), "ground_horizon": Color(0.22, 0.24, 0.32),
+		},
+	},
+}
+
+## WARM LUT (artist knobs). Built at runtime ([method warm_lut]) from [method warm_grade_srgb],
+## so it is reproducible from these constants with no texture asset. Godot 4.6 samples the
+## 3D LUT with the display-encoded (sRGB) colour after tonemap + contrast + saturation
+## (tonemap.glsl), so the grade is written in sRGB. L = Rec.709 luma of the sRGB value.
+##   1. shadow lift:  c += LIFT x TINT x (1 - smoothstep(0, 0.5, L))^2   (soft, coloured blacks)
+##   2. warm highlights: c *= mix(1, HIGHLIGHT_GAIN, smoothstep(0.55, 1, L))
+##   3. mid saturation: chroma x (1 + MID_SAT x 4L(1 - L))               (peaks at L = 0.5)
+## Kept subtle: largest channel shift is white's blue, 1.0 -> 0.93; black lifts to 0.027.
+const WARM_LUT_SIZE := 32
+const WARM_LUT_SHADOW_LIFT := 0.03
+const WARM_LUT_SHADOW_TINT := Color(0.9, 0.62, 0.48)
+const WARM_LUT_HIGHLIGHT_GAIN := Color(1.03, 1.0, 0.93)
+const WARM_LUT_MID_SAT := 0.12
+static var _warm_lut: ImageTexture3D = null
 
 ## Weather glow_bloom conversion (see [method _weather_bloom_factor]). The weather
 ## resources' additive glow_bloom values were authored against soft light at base
@@ -212,7 +353,13 @@ const LOOK_PRESET_ORDER: Array[String] = ["current", "new", "new thr1.0", "new m
 ## white 6): soft slope 0.1339, Screen slope 0.3165 -> 0.423. (The ratio runs 0.23 at
 ## c = 0.3 to 0.68 at c = 1.5; 0.8 is the board's mid-lit value from the threshold
 ## comment above.)
+## Since the warm grade the Screen slope is COMPUTED ([method screen_glow_slope]) for the
+## active tonemap_white at the active grade's mid-lit pixel (0.8 x light_trim), against
+## the fixed authored soft-light slope; at white 6 / trim 1 that reproduces 0.423 (the
+## preset gate checks it). Warm (white 3, c = 0.685): slope 0.3669 -> ratio 0.365.
 const SOFTLIGHT_TO_SCREEN_BLOOM_SLOPE := 0.423
+const SOFTLIGHT_AUTHORED_SLOPE := 0.1339
+const WEATHER_REFERENCE_LIT := 0.8
 const WEATHER_AUTHORED_GLOW_INTENSITY := 0.55
 
 var sun: DirectionalLight3D = null
@@ -230,6 +377,14 @@ var _last_weather: Dictionary = {}
 ## Name of the last look preset applied ([method apply_look_preset]); the defaults above
 ## ARE the "new" preset.
 var look_preset: String = LOOK_PRESET_DEFAULT
+## Map time of day last given to [method apply_preset] (TIME_OF_DAY key), and the grade
+## the active look preset layers on it ("" = none). A preset switch re-derives the
+## lighting from both, so F7 never loses a Night map's night.
+var lighting_preset: String = "Day"
+var grade: String = ""
+var _light_trim: float = 1.0
+## The look preset's "lut" switch (false = the grade's neutral-LUT A/B variant).
+var _grade_lut_enabled: bool = true
 
 # Unit contact-shadow pool (blob quads following units; no unit files touched).
 var _blob_pool: Array[MeshInstance3D] = []
@@ -264,25 +419,61 @@ func setup(scene_root: Node) -> void:
 
 
 ## Map lighting preset ("Day" default, "Dawn", "Dusk", "Night").
+## Values come from TIME_OF_DAY, with the active look preset's grade layered on top.
 func apply_preset(preset: String) -> void:
 	_weather_base = {}  # the preset is the new un-weathered base
+	lighting_preset = time_of_day_key(preset)
+	var was_ready := _ready_to_apply
+	_ready_to_apply = false
+	_write_lighting()
+	_ready_to_apply = was_ready
+	_apply()
+
+
+## TIME_OF_DAY key for a map lighting preset name ("Dusk" -> "Dawn", unknown -> "Day").
+static func time_of_day_key(preset: String) -> String:
 	match preset:
 		"Night":
-			sun_color = Color(0.62, 0.7, 0.95)
-			sun_energy = 0.55
-			ambient_energy = 0.28
-			sky_top_color = Color(0.08, 0.1, 0.2)
-			sky_horizon_color = Color(0.2, 0.24, 0.34)
-			haze_color = Color(0.16, 0.2, 0.28)
+			return "Night"
 		"Dawn", "Dusk":
-			sun_color = Color(1.0, 0.76, 0.58)
-			sun_energy = 1.1
-			ambient_energy = 0.42
-			sky_top_color = Color(0.46, 0.5, 0.68)
-			sky_horizon_color = Color(0.92, 0.72, 0.58)
-			haze_color = Color(0.78, 0.66, 0.6)
-		_:
-			pass
+			return "Dawn"
+	return "Day"
+
+
+## Write the un-weathered lighting for (lighting_preset, grade): sun, sky, fill, ground
+## bounce, haze, tonemap white and LUT. Callers batch (_ready_to_apply false).
+func _write_lighting() -> void:
+	var tod: Dictionary = TIME_OF_DAY[lighting_preset]
+	haze_color = tod["haze"]
+	var g: Dictionary = GRADES.get(grade, {})
+	if g.is_empty():
+		_light_trim = 1.0
+		sun_color = tod["sun_color"]
+		sun_energy = float(tod["sun_energy"])
+		ambient_energy = float(tod["ambient_energy"])
+		sky_top_color = tod["sky_top"]
+		sky_horizon_color = tod["sky_horizon"]
+		ambient_light_color = Color(0.0, 0.0, 0.0)
+		ambient_sky_contribution = 0.85
+		ground_bottom_color = Color(0.0, 0.0, 0.0, 0.0)
+		ground_horizon_color = Color(0.0, 0.0, 0.0, 0.0)
+		tonemap_white = 6.0
+		color_correction = null
+		return
+	var gt: Dictionary = g[lighting_preset]
+	_light_trim = float(g["light_trim"])
+	sun_color = gt["sun_color"]
+	sun_energy = float(gt["sun_energy"]) * _light_trim
+	ambient_energy = float(gt["ambient_energy"]) * _light_trim
+	sky_top_color = gt["sky_top"]
+	sky_horizon_color = gt["sky_horizon"]
+	ambient_light_color = gt["ambient_color"]
+	ambient_sky_contribution = float(gt["ambient_sky_contribution"])
+	ground_bottom_color = gt["ground_bottom"]
+	ground_horizon_color = gt["ground_horizon"]
+	tonemap_white = float(g["tonemap_white"])
+	var lut_on: bool = bool((g["lut"] as Dictionary).get(lighting_preset, false)) and _grade_lut_enabled
+	color_correction = warm_lut() if lut_on else null
 
 
 ## Convenience for the weather system: write the global material hooks at once.
@@ -307,6 +498,8 @@ func apply_weather_look(p: Dictionary) -> void:
 			"sky_top": sky_top_color, "sky_horizon": sky_horizon_color, "haze": haze_color,
 			"fog": fog_density, "glow": glow_intensity, "bloom": glow_bloom,
 			"saturation": saturation, "contrast": contrast, "exposure": exposure,
+			"ambient_color": ambient_light_color,
+			"ground_bottom": ground_bottom_color, "ground_horizon": ground_horizon_color,
 		}
 	var b := _weather_base
 	var was_ready := _ready_to_apply
@@ -320,6 +513,25 @@ func apply_weather_look(p: Dictionary) -> void:
 	var sky_tint: Color = p.get("sky_tint", Color(1, 1, 1))
 	sky_top_color = (b["sky_top"] as Color) * sky_tint
 	sky_horizon_color = (b["sky_horizon"] as Color) * sky_tint
+	# Grade-era weather terms (meaning re-derived because the grade made them non-zero):
+	# ambient_tint was a no-op while the non-sky ambient was black; it now tints the grade's
+	# ambient_light_color (the same rule WeatherEnvAdapter's own fallback path uses). An
+	# explicit ground bounce takes the sky_tint like the rest of the fill hemisphere (the
+	# adapter's rule too); a haze-derived ground (alpha 0) still follows haze + fog below.
+	# sun_energy_scale / ambient_scale / glow_scale stay plain multipliers: the grade moves
+	# the key:fill balance, so e.g. rain's 0.62 sun now dims the frame less (lit 1.20 ->
+	# 0.88 vs 1.19 -> 0.80 pre-grade) -- an overcast frame being fill-dominated is the
+	# intended 3:1 behaviour, not a broken weather.
+	var amb_tint: Color = p.get("ambient_tint", Color(1, 1, 1))
+	var bac: Color = b["ambient_color"]
+	ambient_light_color = Color(bac.r * amb_tint.r, bac.g * amb_tint.g, bac.b * amb_tint.b)
+	for key in ["ground_bottom", "ground_horizon"]:
+		var gc: Color = b[key]
+		var tinted := Color(gc.r * sky_tint.r, gc.g * sky_tint.g, gc.b * sky_tint.b, gc.a)
+		if key == "ground_bottom":
+			ground_bottom_color = tinted
+		else:
+			ground_horizon_color = tinted
 	var fog_amt := clampf(float(p.get("fog_density", 0.0)) * 50.0, 0.0, 1.0)
 	haze_color = (b["haze"] as Color).lerp(p.get("fog_color", b["haze"]), clampf(fog_amt * 1.2, 0.0, 0.85))
 	fog_density = clampf(float(b["fog"]) + fog_amt * 0.45, 0.0, 1.0)
@@ -338,12 +550,41 @@ func apply_weather_look(p: Dictionary) -> void:
 ## Multiplier for a weather's additive glow_bloom under the current blend mode: 1 under
 ## soft light (what the weather was authored for); otherwise the slope ratio times the
 ## base-intensity ratio, so the bloom's on-screen lift on a typical lit pixel matches the
-## authored one (constants derived at SOFTLIGHT_TO_SCREEN_BLOOM_SLOPE). New base 0.3 ->
-## 0.423 x 0.55 / 0.3 = 0.776 (bright_sun's +0.12 -> +0.093).
+## authored one. New base 0.3 at white 6 -> 0.423 x 0.55 / 0.3 = 0.776 (bright_sun's
+## +0.12 -> +0.093); warm (white 3, trim 0.8561) -> 0.365 x 0.55 / 0.3 = 0.669 (+0.080).
 func _weather_bloom_factor(base_glow: float) -> float:
 	if glow_blend_mode == Environment.GLOW_BLEND_MODE_SOFTLIGHT or base_glow <= 0.0:
 		return 1.0
-	return SOFTLIGHT_TO_SCREEN_BLOOM_SLOPE * WEATHER_AUTHORED_GLOW_INTENSITY / base_glow
+	return softlight_to_screen_ratio(tonemap_white, _light_trim) * WEATHER_AUTHORED_GLOW_INTENSITY / base_glow
+
+
+## Authored soft-light slope / Screen slope at the grade's mid-lit pixel (see the
+## SOFTLIGHT_TO_SCREEN_BLOOM_SLOPE comment). White 6, trim 1 -> 0.423.
+static func softlight_to_screen_ratio(white: float, light_trim: float) -> float:
+	return SOFTLIGHT_AUTHORED_SLOPE / screen_glow_slope(WEATHER_REFERENCE_LIT * light_trim, white)
+
+
+## Godot 4.6 Filmic (tonemap.glsl, exposure bias 2 baked into A and B), un-normalized.
+static func filmic_curve(x: float) -> float:
+	const A := 0.88
+	const B := 0.6
+	const C := 0.1
+	const D := 0.2
+	const E := 0.01
+	const F := 0.3
+	return (x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F) - E / F
+
+
+## Display (linear) value of scene value [param x] under Filmic with [param white].
+static func filmic(x: float, white: float) -> float:
+	return filmic_curve(x) / filmic_curve(white)
+
+
+## d(display)/d(glow) for Screen glow at scene value c: Screen adds g (1 - c / white)
+## before the tonemap (4.6 apply_glow), so the slope is filmic'(c) x (1 - c / white).
+static func screen_glow_slope(c: float, white: float) -> float:
+	var h := 1e-4
+	return (filmic(c + h, white) - filmic(c - h, white)) / (2.0 * h) * (1.0 - c / white)
 
 
 ## Resolved shadow profile (auto -> renderer/platform).
@@ -393,6 +634,14 @@ func apply_look_preset(preset_name: String) -> bool:
 	look_preset = preset_name
 	var was_ready := _ready_to_apply
 	_ready_to_apply = false
+	var weathered := not _weather_base.is_empty() and not _last_weather.is_empty()
+	if weathered:
+		# Put the weather-touched, non-lighting fields back to their un-weathered values;
+		# the lighting ones are rewritten from (time of day, grade) just below.
+		fog_density = float(_weather_base["fog"])
+		saturation = float(_weather_base["saturation"])
+		contrast = float(_weather_base["contrast"])
+		exposure = float(_weather_base["exposure"])
 	glow_intensity = float(d["glow_intensity"])
 	glow_bloom = float(d["glow_bloom"])
 	glow_hdr_threshold = float(d["glow_hdr_threshold"])
@@ -401,12 +650,14 @@ func apply_look_preset(preset_name: String) -> bool:
 	glow_levels = PackedFloat32Array(d["glow_levels"])
 	shadow_profile = d["shadow_profile"]
 	ssao_enabled = bool(d["ssao_enabled"])
+	grade = String(d.get("grade", ""))
+	_grade_lut_enabled = bool(d.get("lut", true))
+	_write_lighting()
 	_ready_to_apply = was_ready
 	_apply_viewport_aa(_resolve_msaa(d["msaa"]), bool(d["debanding"]))
-	if not _weather_base.is_empty() and not _last_weather.is_empty():
-		_weather_base["glow"] = glow_intensity
-		_weather_base["bloom"] = glow_bloom
-		apply_weather_look(_last_weather)
+	_weather_base = {}
+	if weathered:
+		apply_weather_look(_last_weather)  # re-captures the new base, then re-weathers it
 	else:
 		_apply()
 	return true
@@ -447,7 +698,27 @@ func dump_state() -> Dictionary:
 			lv.append(snappedf(e.get_glow_level(i), 0.001))
 		out["glow_levels"] = lv
 		out["ssao_enabled"] = e.ssao_enabled
+		out["tonemap_white"] = e.tonemap_white
+		out["exposure"] = e.tonemap_exposure
+		out["ambient_light_energy"] = snappedf(e.ambient_light_energy, 0.001)
+		out["ambient_light_color"] = _c3(e.ambient_light_color)
+		out["ambient_sky_contribution"] = e.ambient_light_sky_contribution
+		out["lut"] = e.adjustment_color_correction != null and e.adjustment_enabled
+		if _sky_mat != null:
+			out["sky_top"] = _c3(_sky_mat.sky_top_color)
+			out["sky_horizon"] = _c3(_sky_mat.sky_horizon_color)
+			out["ground_horizon"] = _c3(_sky_mat.ground_horizon_color)
+			out["ground_bottom"] = _c3(_sky_mat.ground_bottom_color)
+			var kf := estimate_key_fill(sun_color, sun_energy, e.ambient_light_energy, e.ambient_light_color,
+				e.ambient_light_sky_contribution, _sky_mat.sky_top_color, _sky_mat.sky_horizon_color)
+			out["key_up"] = snappedf(kf["key"], 0.001)
+			out["fill_up"] = snappedf(kf["fill"], 0.001)
+			out["key_fill_ratio"] = snappedf(kf["ratio"], 0.01)
+	out["grade"] = grade
+	out["lighting_preset"] = lighting_preset
 	if sun != null:
+		out["sun_color"] = _c3(sun.light_color)
+		out["sun_energy"] = snappedf(sun.light_energy, 0.001)
 		out["shadow_mode"] = sun.directional_shadow_mode
 		out["shadow_max_distance"] = snappedf(sun.directional_shadow_max_distance, 0.01)
 		out["shadow_split_1"] = snappedf(sun.directional_shadow_split_1, 0.001)
@@ -455,6 +726,100 @@ func dump_state() -> Dictionary:
 		out["msaa_3d"] = get_viewport().msaa_3d
 		out["use_debanding"] = get_viewport().use_debanding
 	return out
+
+
+static func _c3(c: Color) -> Array:
+	return [snappedf(c.r, 0.001), snappedf(c.g, 0.001), snappedf(c.b, 0.001)]
+
+
+## Analytic key:fill on an up-facing board tile (derivation at GRADES). Colours are the
+## sRGB property values; Godot linearizes light, ambient and sky (source_color) colours.
+## Fill irradiance of the upper hemisphere, cosine-weighted: E = integral 0..1 of
+## L(y) 2y dy, L(y) = mix(top, horizon, (1 - y)^4) (4.6 ProceduralSkyMaterial).
+static func estimate_key_fill(p_sun_color: Color, p_sun_energy: float, amb_energy: float, amb_color: Color,
+		sky_contrib: float, top: Color, horizon: Color, pitch_deg: float = CAMERA_PITCH_DEG) -> Dictionary:
+	var t := top.srgb_to_linear()
+	var h := horizon.srgb_to_linear()
+	var steps := 400
+	var e_sky := Color(0, 0, 0)
+	for i in steps:
+		var y := (i + 0.5) / steps
+		var l := t.lerp(h, pow(1.0 - y, 4.0))
+		var w := 2.0 * y / steps
+		e_sky = Color(e_sky.r + l.r * w, e_sky.g + l.g * w, e_sky.b + l.b * w)
+	var a := amb_color.srgb_to_linear()
+	var fill := Color(
+		amb_energy * lerpf(a.r, e_sky.r, sky_contrib),
+		amb_energy * lerpf(a.g, e_sky.g, sky_contrib),
+		amb_energy * lerpf(a.b, e_sky.b, sky_contrib))
+	var s := p_sun_color.srgb_to_linear()
+	var key := _luma_linear(s) * p_sun_energy * sin(deg_to_rad(pitch_deg))
+	var fl := _luma_linear(fill)
+	return {"key": key, "fill": fl, "ratio": (key + fl) / maxf(fl, 1e-6), "fill_rgb": fill}
+
+
+static func _luma_linear(c: Color) -> float:
+	return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+
+
+## The warm grade in sRGB display space (formula + knobs at WARM_LUT_*).
+static func warm_grade_srgb(c: Color) -> Color:
+	var l := 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+	var ws := pow(1.0 - smoothstep(0.0, 0.5, l), 2.0)
+	var r := c.r + WARM_LUT_SHADOW_LIFT * WARM_LUT_SHADOW_TINT.r * ws
+	var g := c.g + WARM_LUT_SHADOW_LIFT * WARM_LUT_SHADOW_TINT.g * ws
+	var b := c.b + WARM_LUT_SHADOW_LIFT * WARM_LUT_SHADOW_TINT.b * ws
+	var wh := smoothstep(0.55, 1.0, l)
+	r *= lerpf(1.0, WARM_LUT_HIGHLIGHT_GAIN.r, wh)
+	g *= lerpf(1.0, WARM_LUT_HIGHLIGHT_GAIN.g, wh)
+	b *= lerpf(1.0, WARM_LUT_HIGHLIGHT_GAIN.b, wh)
+	var l2 := 0.2126 * r + 0.7152 * g + 0.0722 * b
+	var sat := 1.0 + WARM_LUT_MID_SAT * 4.0 * l2 * (1.0 - l2)
+	return Color(clampf(l2 + (r - l2) * sat, 0.0, 1.0), clampf(l2 + (g - l2) * sat, 0.0, 1.0),
+		clampf(l2 + (b - l2) * sat, 0.0, 1.0))
+
+
+## LUT input value stored at texel i. The shader samples with linear filtering and no
+## half-texel remap, so texel i is read exactly at coordinate (i + 0.5) / N: storing the
+## grade of THAT input makes the interior exact; the end texels store 0 and 1 so black
+## and white (which clamp to them) stay exact too.
+static func lut_texel_input(i: int, n: int = WARM_LUT_SIZE) -> float:
+	if i <= 0:
+		return 0.0
+	if i >= n - 1:
+		return 1.0
+	return (i + 0.5) / n
+
+
+## Slices (blue = depth, red = x, green = y) of the warm LUT, RGB8.
+static func warm_lut_images() -> Array[Image]:
+	var n := WARM_LUT_SIZE
+	var out: Array[Image] = []
+	for bi in n:
+		var bytes := PackedByteArray()
+		bytes.resize(n * n * 3)
+		var k := 0
+		for gi in n:
+			for ri in n:
+				var c := warm_grade_srgb(Color(lut_texel_input(ri), lut_texel_input(gi), lut_texel_input(bi)))
+				bytes[k] = int(roundf(c.r * 255.0))
+				bytes[k + 1] = int(roundf(c.g * 255.0))
+				bytes[k + 2] = int(roundf(c.b * 255.0))
+				k += 3
+		out.append(Image.create_from_data(n, n, false, Image.FORMAT_RGB8, bytes))
+	return out
+
+
+## The warm LUT texture, built once per run (32^3, ~30k texels).
+static func warm_lut() -> ImageTexture3D:
+	if _warm_lut == null:
+		var tex := ImageTexture3D.new()
+		var err := tex.create(Image.FORMAT_RGB8, WARM_LUT_SIZE, WARM_LUT_SIZE, WARM_LUT_SIZE, false, warm_lut_images())
+		if err != OK:
+			push_warning("WorldLook: warm LUT create failed (%d)" % err)
+			return null
+		_warm_lut = tex
+	return _warm_lut
 
 
 func _apply() -> void:
@@ -494,15 +859,16 @@ func _apply() -> void:
 	env.background_mode = Environment.BG_SKY
 	_sky_mat.sky_top_color = sky_top_color
 	_sky_mat.sky_horizon_color = sky_horizon_color
-	_sky_mat.ground_horizon_color = haze_color
-	_sky_mat.ground_bottom_color = haze_color.darkened(0.25)
+	_sky_mat.ground_horizon_color = ground_horizon_color if ground_horizon_color.a > 0.0 else haze_color
+	_sky_mat.ground_bottom_color = ground_bottom_color if ground_bottom_color.a > 0.0 else haze_color.darkened(0.25)
 	_sky_mat.sun_angle_max = 20.0
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_color = Color(ambient_light_color.r, ambient_light_color.g, ambient_light_color.b, 1.0)
 	env.ambient_light_energy = ambient_energy
-	env.ambient_light_sky_contribution = 0.85
+	env.ambient_light_sky_contribution = ambient_sky_contribution
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = exposure
-	env.tonemap_white = 6.0
+	env.tonemap_white = tonemap_white
 	env.glow_enabled = glow_intensity > 0.0
 	env.glow_intensity = glow_intensity
 	env.glow_bloom = glow_bloom
@@ -515,6 +881,7 @@ func _apply() -> void:
 	env.adjustment_saturation = saturation
 	env.adjustment_contrast = contrast
 	env.adjustment_brightness = 1.0
+	env.adjustment_color_correction = color_correction
 	# Aerial perspective for anything far (the world skirt also hazes by distance
 	# from the board in its own shaders, so this stays gentle).
 	env.fog_enabled = fog_density > 0.0

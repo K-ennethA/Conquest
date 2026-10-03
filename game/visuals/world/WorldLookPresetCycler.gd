@@ -3,7 +3,8 @@ class_name WorldLookPresetCycler
 
 ## DEBUG-ONLY look A/B harness (research godot-world-feel.md item 1). Press F7 in any
 ## battle / overworld / duel launch to cycle [constant WorldLook.LOOK_PRESET_ORDER]
-## ("current" = pre-retune values, "new" = shipped defaults, plus labeled variants) on
+## ("current" = pre-retune values, "new" = shipped defaults, labeled variants, and the
+## warm colour grade "warm" / "warm-neutralLUT" from research item 3) on
 ## every [WorldLook] in the tree; a small corner label names the active preset.
 ##
 ## Spawned by [method WorldLook.setup] via [method attach] -- one instance under /root,
@@ -108,5 +109,8 @@ func _refresh_label() -> void:
 	var p := active_preset()
 	var d: Dictionary = WorldLook.LOOK_PRESETS[p]
 	var blend := "softlight" if int(d["glow_blend_mode"]) == Environment.GLOW_BLEND_MODE_SOFTLIGHT else "screen"
-	_label.text = "Look [F7] %d/%d: %s  (%s, thr %.2f)" % [_index + 1, WorldLook.LOOK_PRESET_ORDER.size(), p,
-		blend, float(d["glow_hdr_threshold"])]
+	# Grade suffix: which colour grade + whether its LUT is on (warm vs warm-neutralLUT).
+	var g := String(d.get("grade", ""))
+	var grade_txt := ", grade %s %s" % [g, "+LUT" if bool(d.get("lut", true)) else "neutral LUT"] if g != "" else ""
+	_label.text = "Look [F7] %d/%d: %s  (%s, thr %.2f%s)" % [_index + 1, WorldLook.LOOK_PRESET_ORDER.size(), p,
+		blend, float(d["glow_hdr_threshold"]), grade_txt]
