@@ -14,6 +14,8 @@ extends RefCounted
 const OVERWORLD_BLOCKING_TILES: Array[StringName] = [&"deep_water", &"molten_lava", &"magma_vent"]
 
 const DIRS: Array[Vector2i] = [Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0)]
+## Blocker ids of visible wild creatures (WildSpawner.BLOCKER_PREFIX).
+const WILD_BLOCKER_PREFIX := "wild:"
 
 var width: int = 0
 var height: int = 0
@@ -135,13 +137,15 @@ func is_walkable(cell: Vector3i, ignore_entity: String = "") -> bool:
 
 
 ## Does [param cell] stop a trainer's line of sight? Impassable / LOS-blocking terrain or a
-## blocking entity.
+## blocking entity. A visible wild creature ([WildSpawner], blocker id "wild:...") blocks WALKING
+## but not sight: a trainer looks over a creature in the grass.
 func blocks_sight(cell: Vector3i) -> bool:
 	if not in_bounds(cell):
 		return true
 	if _blocks_sight[_i(cell)] == 1:
 		return true
-	return not blocker_at(cell).is_empty()
+	var b: String = blocker_at(cell)
+	return not b.is_empty() and not b.begins_with(WILD_BLOCKER_PREFIX)
 
 
 ## Walkable orthogonal neighbours of [param cell].

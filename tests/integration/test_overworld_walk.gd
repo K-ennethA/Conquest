@@ -22,6 +22,9 @@ const TEMP_DIR := "user://test_overworld_walk/"
 var _guard
 var _world: Node = null
 var _prev_scene: Node = null
+## A shared area whose zone modes a test forced (restored in after_each).
+var _hidden_area: OverworldAreaResource = null
+var _hidden_modes: Array = []
 
 
 func before_each() -> void:
@@ -45,6 +48,9 @@ func before_each() -> void:
 
 func after_each() -> void:
 	_teardown()
+	StoryFixture.restore_zone_modes(_hidden_area, _hidden_modes)
+	_hidden_area = null
+	_hidden_modes = []
 	StoryController.end_session()
 	StoryController.scene_changes_enabled = true
 	# Restore the shipped seam: the real duel, with the stub only as the fallback.
@@ -299,6 +305,10 @@ func test_grass_encounter_through_the_duel_stub_and_befriend() -> void:
 	StoryController.new_journey(1)
 	var s: StoryState = StoryFixture.past_opening(StoryController.state())
 	s.grace_steps = 0
+	# The per-step roll is the HIDDEN zone mode (visible creatures are the default and have their
+	# own suite, test_wild_spawns): force the Mossway's grass hidden for this test.
+	_hidden_area = StoryController.load_area("mossway")
+	_hidden_modes = StoryFixture.set_zone_modes(_hidden_area, EncounterZone.Mode.HIDDEN)
 	# Walk the Mossway's first grass patch until the deterministic roller fires (bounded).
 	var ow := await _boot("mossway", Vector3i(4, 2, 0), "east")
 	var fired := false

@@ -48,6 +48,14 @@ var play_seconds: float = 0.0
 var shops: Dictionary = {}
 ## Rests taken (Wayshrine / healer / whiteout heals): the clock an ON_REST restock reads. Saved.
 var rests: int = 0
+## VISIBLE wild creatures ([WildSpawner]): "<area>|<zone key>" -> {epoch, mark, visit, slots:
+## {"<slot>": {cid, cell: [c, r, f], facing, wp}}} -- the live roster of every visible zone, so a
+## battle round trip or a reload finds each creature where it stood and a beaten one stays gone
+## until its zone respawns. Saved as "wild" (an older save has none: every zone rolls afresh).
+var wild: Dictionary = {}
+## Area entries so far (one per [method on_area_changed]): an ON_REENTER zone rolls a fresh
+## roster on every new visit. Saved with "wild".
+var visit_serial: int = 0
 ## The journey's DIFFICULTY TIER (docs/design/DECISIONS.md #29 + "Permadeath refinements"),
 ## chosen when the journey starts: [constant TIER_CLASSIC] (permadeath) or [constant TIER_CASUAL]
 ## (knocked-out members recover for gold). It may only move DOWN [constant TIERS]
@@ -440,6 +448,7 @@ func set_actor_position(area_id: String, entity_id: String, cell: Vector3i, faci
 ## post once you leave and come back).
 func on_area_changed() -> void:
 	transient_positions.clear()
+	visit_serial += 1
 
 
 # --- Views -------------------------------------------------------------------------

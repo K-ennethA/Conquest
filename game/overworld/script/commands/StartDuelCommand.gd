@@ -8,12 +8,18 @@ extends StartBattleCommand
 ## Wild alternative to [member StartBattleCommand.spec] (grass encounters build this at runtime).
 @export var entry: EncounterEntry
 @export var area_id: String = ""
+## Wild only: how the encounter began -- "grass" (a hidden roll) or "wild" (a visible creature);
+## part of the encounter id ("mossway.wild.petalfang").
+@export var id_kind: String = "grass"
+## Wild only: the CONTACT opening ([constant BattleRequest.OPENING_AMBUSH] / ..._AMBUSHED /
+## ..._NEUTRAL; "" = none) written to the request's rules.
+@export var opening: String = ""
 
 
 func build_request(ctx: ScriptContext) -> BattleRequest:
 	var r: BattleRequest = null
 	if entry != null:
-		r = entry.to_request(area_id if not area_id.is_empty() else ctx.area_id)
+		r = entry.to_request(area_id if not area_id.is_empty() else ctx.area_id, id_kind, opening)
 	elif spec != null:
 		r = spec.to_request(source, encounter_id)
 	if r != null:

@@ -42,7 +42,8 @@ in that file's `NAMES` / `STARTER_ID` / `GUEST_ID` / `RAIDER_UNITS` / `HERO_MODE
 Controls: arrows / WASD / d-pad / sticks step one cell (tap a new direction = turn; hold = walk;
 Shift / R3 = run; every step costs its walk / run time even with Animations off); click / tap
 to walk; Confirm reads / talks / opens; Esc / Start → Journey menu. After the opening the M1
-mechanics are unchanged: grass → the real duel, befriending, Bram's tactical battle → Growth →
+mechanics are unchanged: wild creatures (visible ones you walk into, or a hidden grass roll —
+see "Visible wild creatures") → the real duel, befriending, Bram's tactical battle → Growth →
 evolution offers, whiteouts to the Wayshrine.
 
 **Placeholders to replace:** the hero's model (Vineweave, `HERO_MODEL`); the human hero is not a
@@ -61,7 +62,7 @@ and Continue Journey skips it (`StorySnapshot.is_outdated`). Nothing crashes.
 | Autoload (session, runner, battle round trip) | `game/overworld/StoryController.gd` |
 | Data | `game/overworld/data/` — `OverworldAreaResource`, entity kinds (`Npc`, `Trainer`, `Sign`, `Chest`, `Warp`, `Wayshrine`, `TriggerZone`, `Prop`), `EncounterZone/Entry`, `BattleSpec`, `HeroResource`, `StoryRuleset`, `TournamentResource` |
 | Scripts | `game/overworld/script/` — `StoryCommand` + `commands/*`, `StoryScriptRunner`, `ScriptContext`, `StoryScriptHost` (the host contract), `ConditionContext` |
-| Runtime | `game/overworld/runtime/` — `OverworldController` (scene root + live host), `OverworldGrid`, `TrainerSight`, `EncounterRoller`, `TapPathfinder`, `OverworldActor`, `OverworldCamera`, `OverworldProps` |
+| Runtime | `game/overworld/runtime/` — `OverworldController` (scene root + live host), `OverworldGrid`, `TrainerSight`, `EncounterRoller`, `WildSpawner` (visible wild creatures), `TapPathfinder`, `OverworldActor`, `OverworldCamera`, `OverworldProps` |
 | Battles | `game/overworld/battle/` — `BattleRequest`, `BattleResult`, `StoryBattleBridge`, `StoryResultApplier`, `StoryGrowth` (story Growth + evolution rules), `StoryPermadeath` (difficulty tiers, fallen, revives, game over), `StorySparring` (sparring-partner cooldown), `TournamentLedger` (the arena ladder), `DuelLauncher`, `DuelStub` (debug fallback) |
 | Saves | `game/overworld/save/` — `StoryState`, `StoryPartyMember`, `StorySnapshot`, `StorySaveManager` (`user://story/slot_<n>.json`) |
 | UI | `game/overworld/ui/` — `OverworldHUD`, `JourneyMenu`, `StoryStartScreen` (slots + the New Journey tier picker), `StoryGameOverScreen`, `TournamentLadderPanel` |
@@ -396,6 +397,94 @@ card footer is the journey summary (place, gold, play time, current objective).
 - **Settings** — the shared `SettingsPanel`. **Load** — reloads the slot's last save behind a second press.
 
 Tests: `tests/unit/test_story_journey_pages.gd`.
+
+## Visible wild creatures (the default encounter mode)
+
+Decision: wild creatures are **visible and grid-locked** (Let's Go / Mystery Dungeon "symbol"
+encounters); the classic hidden tall-grass roll stays as an **opt-in zone mode**. Rationale and
+options: the world research memo (§1) and docs/design/OVERWORLD.md §4.5.
+
+**How it works**
+- `EncounterZone.mode` — `VISIBLE` (default) or `HIDDEN` (the old per-step roll, `rate`). A VISIBLE
+  zone holds `max_active` creatures (1–8, 3–6 reads well), one per **slot**, standing on the zone's
+  cells (its rect and / or tile ids, minus any cell an entity occupies). `spawn_clearance` (3) keeps
+  a freshly laid-out roster away from where you arrive.
+- **Determinism** — `WildSpawner` (`game/overworld/runtime/`, pure logic) picks each slot's species
+  (weighted, condition-filtered table) and cell from `EncounterRoller.unit_float(seed, "area|wild|
+  zone|epoch|slot|…")`, and every move from `(seed, area, zone, slot, steps)`. Never `randf()`.
+- **The step clock** — creatures move **one cell per player step** (after warps, triggers and
+  trainers, before the hidden roll), never in real time. Behaviours on `EncounterEntry.behaviour`
+  (per species row): `WANDER` (random walk, leashed to the zone, `move_chance`), `TIMID` (steps away
+  while you are within `sense_range`), `AGGRESSIVE` (TrainerSight along its facing, `sense_range`:
+  "!" and it closes in; it never leaves its zone), `SLEEPING` (never moves, "z z"), `PATROL`
+  (walks the `patrol` waypoints in a loop; may leave the zone, never walls).
+- **Contact** — `OverworldController.try_step` (and Confirm / a tap on a creature) checks for a
+  creature in the target cell *before* walkability: walking into its **back or side** (or a sleeper)
+  = `"ambush"`, face to face = `"neutral"`. `_on_arrived` step 4 ticks the creatures; one that walks
+  **into you** = `"ambushed"`. The battle is the wild duel (`StartDuelCommand` with `id_kind =
+  "wild"`, encounter id `<area>.wild.<species>`), then `WildOutcomeCommand`, then the befriend prompt.
+  Grace steps (after a battle / an area entry) stop creatures walking into you (you may still walk
+  into them); a traveller with no healthy partner is never engaged (the opening).
+- **The opening rule key** — `BattleRequest.rules["opening"]` (`BattleRequest.RULE_OPENING`,
+  `OPENING_AMBUSH` / `_AMBUSHED` / `_NEUTRAL`; missing = neutral). **Consumed by the duel:**
+  `DuelRequest.from_battle_request` copies it (the strict `from_dict` accepts only the three values),
+  `DuelRequest.opening_side()` → `DuelTurnSystem.first_side` (set in `DuelBattle.setup`): the
+  ambushing side acts first in **round 1 only**, whatever the speeds; round 2 on is speed order.
+  It is recorded with the request, so a replay starts the same way. **Not consumed by tactical
+  battles yet** (a TACTICAL wild entry still runs as a duel today, like the grass): the place to
+  read it is `StoryBattleBridge.prepare_board` (e.g. a first-phase / initiative bonus).
+- **Despawn / respawn** — a **win** (victory, befriended or not) removes the creature
+  (`WildOutcomeCommand` → `WildSpawner.forget` + host `despawn_wild`); a flee or a loss leaves it where
+  it stood. Its slot refills when `EncounterZone.respawn` fires (mirrors `ShopResource.restock`):
+  `ON_REENTER` (default: every new visit rolls a fresh roster), `ON_REST` (`StoryState.rests`: a
+  Wayshrine / healer / whiteout rest), `EVERY_N_STEPS` (`respawn_steps`). In-area refills (a rest, N
+  steps) only fill empty slots — survivors never jump.
+- **Saves** — `StoryState.wild` (`"<area>|<zone key>"` → `{epoch, mark, visit, slots: {"<slot>":
+  {cid, cell, facing, wp}}}`) + `StoryState.visit_serial` (bumped by `on_area_changed`), saved as
+  `"wild": {visit, zones}`. **Format version stays 2**: an older save has no `"wild"` (every zone
+  rolls fresh); `WildSpawner.sanitize_saved` drops malformed records; a saved species no longer in
+  the zone's table is skipped. Within one visit (a battle round trip, a save + reload) every
+  creature stands exactly where it stood and walks on identically.
+- **Visuals** — each creature is an `OverworldActor` with its **roster model** as a placeholder
+  (`CharacterResource.model_scene`, idle / walk clips; a procedural figure if a species has none),
+  under the scene's `Wild` node; real overworld models come from Blender later (swap the model in
+  `OverworldController._mount_wild`). `AreaPrewarmer` preloads the roster `.tres` (and so the
+  `.glb`) of every VISIBLE zone's species with the neighbour's NPCs.
+- **Grid** — creatures are `OverworldGrid` blockers (id `wild:<zone>#<slot>`): NPC paths and tap
+  paths go round them, but sight does NOT stop at them (`OverworldGrid.blocks_sight`: trainers and
+aggressive creatures look over a creature in the grass). `refresh_world` re-registers them.
+
+**Adding a visible zone to an area** (content lives in `build_story_content.gd`; this branch did
+not touch it): in the area's builder function, create an `EncounterZone` (mode defaults to
+VISIBLE), set `tile_ids` (`[&"tall_grass"]`) and / or `area_rect`, `max_active`, `respawn` (+
+`respawn_steps`), give it a stable `zone_id` (e.g. `&"mossway_grass"`, so reordering zones never
+orphans saved rosters), and fill `table` with `EncounterEntry` rows — `character_id`, `weight`,
+`behaviour`, `sense_range`, `move_chance`, `patrol` (≥ 2 waypoints for PATROL), `condition` (flag
+gates). Append it to `area.encounter_zones` and rebuild. For the old feel set `mode = HIDDEN` and
+`rate`. `EncounterZone.validate` (run by `test_overworld_content`) flags an empty table, an unknown
+species, a bad condition and a patrol without a route.
+
+**Shipped content note:** the Mossway's grass zone predates modes and does not store one, so it
+now loads as VISIBLE (4 creatures from its Petalfang / Blightcap / Barkling table, wandering,
+ON_REENTER). The world-data rework decides per zone (set `mode = HIDDEN` + `rate` to keep a roll).
+The two grass-roll integration tests force the Mossway zone HIDDEN for their duration
+(`StoryFixture.set_zone_modes`).
+
+Tests: `tests/unit/test_wild_spawner.gd` (deterministic roster + walk, leash, one cell per step,
+each behaviour, creatures block walking but not sight, contact openings, every respawn rule, conditions,
+save round trip + malformed / old saves, the request / duel-request rule key),
+`tests/integration/test_wild_spawns.gd` (the real scene on the test-only fixture area
+`tests/helpers/wild_fixture.gd`: actors + blockers, ambush from behind → win → despawn → still gone
+after a reload → back on re-entry, neutral + flee, ambushed by an aggressive one, grace / no
+partner, a HIDDEN zone still rolls), `tests/integration/test_duel_contact_opening.gd` (round-1
+order).
+
+**Gaps:** creature models are roster placeholders (scale / idle clips as in battle); no
+encounter "!" wipe or transition; the tactical battle ignores `opening`; a TACTICAL wild entry is
+still forced to a duel (as the grass always did); creatures do not react to weather / time of day
+beyond `condition`; no repel; a patrol's waypoints are absolute cells (re-author them if the
+terrain moves); NPCs walking scripted paths treat creatures as walls (a cutscene through a crowd
+falls back to a straight line).
 
 ## Area travel & loading
 

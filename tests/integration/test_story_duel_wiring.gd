@@ -29,6 +29,9 @@ var _rules_backup: Dictionary = {}
 ## HELD for the whole test: a Resource nobody references drops out of the cache, and the next
 ## load() would re-read the shipped odds from disk.
 var _rules: DuelRuleset = null
+## A shared area whose zone modes a test forced (restored in after_each).
+var _hidden_area: OverworldAreaResource = null
+var _hidden_modes: Array = []
 
 
 func before_all() -> void:
@@ -64,6 +67,9 @@ func before_each() -> void:
 func after_each() -> void:
 	_free_stage()
 	_teardown()
+	StoryFixture.restore_zone_modes(_hidden_area, _hidden_modes)
+	_hidden_area = null
+	_hidden_modes = []
 	StoryController.end_session()
 	StoryController.scene_changes_enabled = true
 	DuelController.reset()
@@ -191,6 +197,10 @@ func test_grass_encounter_runs_the_real_duel_and_a_befriend_grows_the_party() ->
 	var half: int = floori(lead.max_hp() * 0.5)
 	lead.current_hp = half
 	s.member("blightcap").current_hp = 20
+	# The per-step roll is the HIDDEN zone mode (visible creatures are the default; their contact
+	# battles are test_wild_spawns'): force the Mossway's grass hidden for this test.
+	_hidden_area = StoryController.load_area("mossway")
+	_hidden_modes = StoryFixture.set_zone_modes(_hidden_area, EncounterZone.Mode.HIDDEN)
 	var ow := await _boot("mossway", Vector3i(4, 2, 0), "east")
 	var fired := false
 	for i in range(80):

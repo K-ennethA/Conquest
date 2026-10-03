@@ -14,7 +14,9 @@ extends Node3D
 ## direction turns in place, a hold walks, fast_forward (Shift / R3) runs. Each step costs its
 ## walk / run seconds even with animations off (the hero then snaps a cell per step instead of
 ## gliding) -- never a cell per frame. On arrival:
-## warps -> trigger zones -> trainer sight -> the grass roll (only if nothing above fired).
+## warps -> trigger zones -> trainer sight -> the VISIBLE wild creatures take their step (one may
+## walk into you: contact) -> the HIDDEN grass roll (only if nothing above fired). Walking into a
+## visible creature (a step, Confirm, a tap) is contact too ([WildSpawner], [method try_step]).
 ## Confirm uses what the hero faces; a tap / click walks there (A*), and a tap on an NPC walks
 ## next to it and talks. map_menu / cancel opens the Journey menu.
 
@@ -37,6 +39,10 @@ var _state: StoryState = null
 var _ruleset: StoryRuleset = null
 ## entity id -> OverworldActor (only entities that have an actor).
 var _actors: Dictionary = {}
+## The VISIBLE wild creatures of this area (null before boot), and creature key -> its actor.
+var wild: WildSpawner = null
+var _wild_actors: Dictionary = {}
+var _wild_root: Node3D = null
 var _dialogue: StoryDialogue = null
 var _cursor: Node3D = null
 var _moving: bool = false
@@ -132,6 +138,13 @@ func _build_world() -> void:
 		entities_root.add_child(actor)
 		_actors[String(e.id)] = actor
 	_refresh_actor_states()
+
+	# Visible wild creatures: the roster for this visit (or exactly where they stood, on a battle
+	# round trip / reload), each a grid blocker with a roster-model actor.
+	wild = WildSpawner.create(area, grid, _state)
+	wild.sync(_state.location_cell())
+	for c in wild.creatures:
+		_mount_wild(c)
 
 	player = OverworldActor.new()
 	player.name = "Player"
@@ -231,6 +244,120 @@ static func _figure_kind(e: OverworldEntity) -> String:
 	return "villager"
 
 
+## An actor for wild creature [param c]: its roster model (placeholder until the overworld
+## creature models come from Blender), else a small procedural figure; a sleeping one wears "z".
+func _mount_wild(c: WildSpawner.WildCreature) -> OverworldActor:
+	var actor := OverworldActor.new()
+	actor.name = "Wild_" + c.key.replace("#", "_")
+	actor.entity_id = WildSpawner.blocker_id(c.key)
+	if not actor.set_character_model(CharacterLibrary.get_character(c.entry.character_id)):
+		actor.set_model(OverworldProps.figure(Color(0.45, 0.36, 0.26), "villager"))
+	if c.behaviour() == EncounterEntry.Behaviour.SLEEPING:
+		var z := Label3D.new()
+		z.name = "Asleep"
+		z.text = "z z"
+		z.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		z.font_size = 48
+		z.outline_size = 12
+		z.pixel_size = 0.01
+		z.modulate = Color(0.85, 0.9, 1.0)
+		z.position = Vector3(0, 1.9, 0)
+		actor.add_child(z)
+	if _wild_root == null:
+		# Only areas with visible creatures get the node (node budgets: tests/integration/test_area_load_perf.gd).
+		_wild_root = Node3D.new()
+		_wild_root.name = "Wild"
+		add_child(_wild_root)
+	_wild_root.add_child(actor)
+	actor.place(c.cell)
+	actor.set_facing(c.facing)
+	_wild_actors[c.key] = actor
+	return actor
+
+
+## The actor of wild creature [param key] (null when none / despawned).
+func wild_actor(key: String) -> OverworldActor:
+	var a: OverworldActor = _wild_actors.get(key, null)
+	return a if a != null and is_instance_valid(a) else null
+
+
+## A beaten / befriended wild creature leaves the map ([WildOutcomeCommand]).
+func despawn_wild(key: String) -> void:
+	if wild != null:
+		wild.remove(key)
+	var a: OverworldActor = _wild_actors.get(key, null)
+	_wild_actors.erase(key)
+	if a != null and is_instance_valid(a):
+		a.get_parent().remove_child(a)
+		a.queue_free()
+	_update_prompt()
+
+
+## Mount the creatures a respawn rule brought back while the hero is here (EVERY_N_STEPS, a rest).
+func _refresh_wild_spawns() -> void:
+	if wild == null or player == null:
+		return
+	for c in wild.refresh_respawns(player.cell):
+		_mount_wild(c)
+
+
+## Can a wild creature start a battle with the hero right now? (A duel launcher exists and the
+## party has someone to field -- the opening walks the grass with no partner.)
+func _can_fight_wild() -> bool:
+	return DuelLauncher.has_launcher() and not _state.healthy_members().is_empty()
+
+
+## Battle wild creature [param c] with the contact [param opening]: the duel, then its despawn on
+## a win, then the befriend prompt. True when the script started.
+func start_wild_battle(c: WildSpawner.WildCreature, opening: String) -> bool:
+	if c == null or story.is_script_running() or not _can_fight_wild():
+		return false
+	var aid: String = String(area.area_id)
+	var duel := StartDuelCommand.new()
+	duel.entry = c.entry
+	duel.area_id = aid
+	duel.id_kind = "wild"
+	duel.opening = opening
+	var outcome := WildOutcomeCommand.new()
+	outcome.area_id = aid
+	outcome.creature_key = c.key
+	var prompt := BefriendPromptCommand.new()
+	# Face each other (an ambush leaves the hero at its back until the battle).
+	player.face_cell(c.cell)
+	wild.face(c, player.cell)
+	var actor: OverworldActor = wild_actor(c.key)
+	if actor != null:
+		actor.turn_to(c.facing)
+	_state.grace_steps = c.zone.grace_steps if c.zone != null else _state.grace_steps
+	_tap_path.clear()
+	return story.run_script([duel, outcome, prompt], "")
+
+
+## The creatures take their step after the hero's; true when one walked into him (a battle began).
+func _tick_wild(cell: Vector3i, allow_contact: bool) -> bool:
+	if wild == null or not wild.has_zones():
+		return false
+	var r: Dictionary = wild.tick(cell, allow_contact)
+	var seconds: float = _step_seconds()
+	for c in r["moved"]:
+		var a: OverworldActor = wild_actor(c.key)
+		if a != null:
+			a.walk_to(c.cell, seconds)
+	for c in r["turned"]:
+		var a: OverworldActor = wild_actor(c.key)
+		if a != null:
+			a.turn_to(c.facing)
+	for c in r["alerted"]:
+		var a: OverworldActor = wild_actor(c.key)
+		if a != null and not a.bubble_visible():
+			a.emote("!")
+	_refresh_wild_spawns()
+	var contact: WildSpawner.WildCreature = r["contact"]
+	if contact != null:
+		return start_wild_battle(contact, BattleRequest.OPENING_AMBUSHED)
+	return false
+
+
 ## Show/hide actors by visible_if, open chest lids, light shrines.
 func _refresh_actor_states() -> void:
 	for e in area.entity_list():
@@ -246,6 +373,8 @@ func _on_script_finished(_stopped: bool, _reason: String) -> void:
 	if not is_inside_tree():
 		return
 	_refresh_actor_states()
+	# A rest (Wayshrine / healer) may have fired an ON_REST respawn.
+	_refresh_wild_spawns()
 	_update_prompt()
 	# A trainer who was blocked by a cutscene can still spot you once it ends.
 	_check_trainers.call_deferred()
@@ -363,6 +492,13 @@ func try_step(dir: Vector2i) -> bool:
 		return false
 	player.turn_to(dir)
 	var to := Vector3i(player.cell.x + dir.x, player.cell.y + dir.y, player.cell.z)
+	# Walking into a visible wild creature is CONTACT (its back / side: an ambush), not a step.
+	var creature: WildSpawner.WildCreature = wild.creature_at(to) if wild != null else null
+	if creature != null:
+		_walk_streak = false
+		start_wild_battle(creature, WildSpawner.contact_opening(creature, player.cell))
+		_update_prompt()
+		return false
 	if not grid.is_walkable(to):
 		_walk_streak = false
 		_update_prompt()
@@ -415,8 +551,18 @@ func _on_arrived(cell: Vector3i) -> void:
 	if _check_trainers():
 		_tap_path.clear()
 		return
-	# 4. The grass.
-	if _roll_encounter(cell):
+	# Grace steps (after a battle / an area entry): no hidden roll, no creature walks into you.
+	var can_fight: bool = _can_fight_wild()
+	var graced: bool = false
+	if can_fight and _state.grace_steps > 0:
+		_state.grace_steps -= 1
+		graced = true
+	# 4. Visible wild creatures take their step (contact: one walked into the hero).
+	if _tick_wild(cell, can_fight and not graced):
+		_tap_path.clear()
+		return
+	# 5. The hidden grass.
+	if can_fight and not graced and _roll_encounter(cell):
 		_tap_path.clear()
 
 
@@ -446,20 +592,16 @@ func _check_trainers() -> bool:
 	return false
 
 
-## Roll the grass for the step onto [param cell]. True when a wild encounter started.
+## Roll the HIDDEN zones for the step onto [param cell] (the caller has checked the launcher, the
+## party and the grace steps). True when a wild encounter started.
 func _roll_encounter(cell: Vector3i) -> bool:
-	if not DuelLauncher.has_launcher():
-		return false
 	# Wild creatures leave a traveller with no partner alone (the opening walks the Mossway before
 	# the shard ceremony) -- and a duel with no one to field could not start anyway.
-	if _state.healthy_members().is_empty():
-		return false
-	if _state.grace_steps > 0:
-		_state.grace_steps -= 1
+	if not _can_fight_wild():
 		return false
 	var tid: StringName = grid.tile_id_at(cell)
 	for z in area.zones():
-		if not z.contains(cell, tid):
+		if not z.is_hidden_mode() or not z.contains(cell, tid):
 			continue
 		var r: Dictionary = EncounterRoller.roll(_state.rng_seed, String(area.area_id), _state.steps, z, _state)
 		if not bool(r.get("hit", false)):
@@ -530,6 +672,10 @@ func interact() -> bool:
 		return false
 	var e: OverworldEntity = entity_at(faced_cell())
 	if e == null:
+		# Confirm on a visible wild creature: contact, as if you walked into it.
+		var creature: WildSpawner.WildCreature = wild.creature_at(faced_cell()) if wild != null else null
+		if creature != null:
+			return start_wild_battle(creature, WildSpawner.contact_opening(creature, player.cell))
 		return false
 	var actor: OverworldActor = _actors.get(String(e.id), null)
 	if actor != null and (e is NpcEntity):
@@ -552,6 +698,9 @@ func _update_prompt() -> void:
 		hud.set_prompt("")
 		return
 	var e: OverworldEntity = entity_at(faced_cell())
+	if e == null and wild != null and wild.creature_at(faced_cell()) != null and _can_fight_wild():
+		hud.set_prompt("Battle")
+		return
 	hud.set_prompt(e.prompt_verb() if e != null else "")
 
 
@@ -596,7 +745,7 @@ func tap_cell(cell: Vector3i) -> void:
 	if not grid.in_bounds(cell):
 		return
 	var target: OverworldEntity = entity_at(cell)
-	if target != null:
+	if target != null or (wild != null and wild.creature_at(cell) != null):
 		var plan: Dictionary = TapPathfinder.path_to_adjacent(grid, player.cell, cell)
 		if plan.is_empty():
 			return
@@ -818,6 +967,8 @@ func refresh_world() -> void:
 			continue
 		if not e.is_present(_state) or not e.blocking:
 			grid.clear_blocker(actor.cell)
+	if wild != null:
+		wild.register_blockers()
 	_refresh_actor_states()
 	_update_prompt()
 
@@ -842,6 +993,8 @@ func _show_system_message(text: String) -> void:
 func actor(entity_id: String) -> OverworldActor:
 	if entity_id == "player":
 		return player
+	if entity_id.begins_with(WildSpawner.BLOCKER_PREFIX):
+		return wild_actor(entity_id.substr(WildSpawner.BLOCKER_PREFIX.length()))
 	return _actors.get(entity_id, null)
 
 

@@ -28,6 +28,13 @@ const RULESETS := {
 	"default": "res://game/duel/rulesets/default_duel.tres",
 }
 
+## rules["opening"] values (mirror the overworld's BattleRequest.OPENING_*; see [method opening_side]).
+const RULE_OPENING := "opening"
+const OPENING_AMBUSH := "ambush"
+const OPENING_AMBUSHED := "ambushed"
+const OPENING_NEUTRAL := "neutral"
+const OPENINGS: Array[String] = [OPENING_AMBUSH, OPENING_AMBUSHED, OPENING_NEUTRAL]
+
 var kind: String = KIND_STANDALONE
 var origin: String = ORIGIN_STANDALONE
 ## Side A (the player / challenger) and side B (the foe), lead first.
@@ -114,6 +121,20 @@ func is_story_critical() -> bool:
 ## A friendly SPAR (a story training bout): the intro says so.
 func is_spar() -> bool:
 	return bool(rules.get("spar", false))
+
+
+## The CONTACT OPENING of a story wild duel (rules["opening"], the overworld's BattleRequest
+## RULE_OPENING): the side that acts first in ROUND 1 whatever the speeds -- 0 (the player:
+## "ambush", the hero walked into its back), 1 (the foe: "ambushed", it walked into the hero), or
+## -1 (speed order as always: "neutral" / no key). Read by [DuelBattle.setup] into
+## [member DuelTurnSystem.first_side]. Recorded with the request, so a replay starts the same way.
+func opening_side() -> int:
+	match String(rules.get(RULE_OPENING, "")):
+		OPENING_AMBUSH:
+			return 0
+		OPENING_AMBUSHED:
+			return 1
+	return -1
 
 
 ## The station tile to register ([member station_tile_id], else the stage's).
@@ -260,6 +281,12 @@ static func from_dict(d) -> Dictionary:
 			if typeof(v) != TYPE_BOOL:
 				return _fail("bad_rules")
 			r.rules[key] = v
+	# The contact opening (a visible wild creature): a known string or nothing.
+	if (raw_rules as Dictionary).has(RULE_OPENING):
+		var o = raw_rules[RULE_OPENING]
+		if not (o is String or o is StringName) or not OPENINGS.has(String(o)):
+			return _fail("bad_rules")
+		r.rules[RULE_OPENING] = String(o)
 	var raw_items = d.get("items", {})
 	if not (raw_items is Dictionary):
 		return _fail("bad_items")
@@ -335,6 +362,9 @@ static func from_battle_request(br) -> Dictionary:
 		for key in ["can_flee", "can_befriend", "story_critical", "spar"]:
 			if (raw_rules as Dictionary).has(key):
 				story_rules[key] = bool(raw_rules[key])
+		var raw_opening = (raw_rules as Dictionary).get(RULE_OPENING, "")
+		if (raw_opening is String or raw_opening is StringName) and OPENINGS.has(String(raw_opening)):
+			story_rules[RULE_OPENING] = String(raw_opening)
 		var raw_format = (raw_rules as Dictionary).get("duel_format", "")
 		if (raw_format is String or raw_format is StringName) and DuelFormat.preset(String(raw_format)) != null:
 			format_id = String(raw_format)
