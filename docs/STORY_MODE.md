@@ -379,6 +379,23 @@ Classic costs the partner, a full Cup run → prize + title + the champion, save
   members; party > squad needs the picker (and a Party-screen reorder) in M2.
 - Profile points still accrue on the story tactical end screen (existing behaviour).
 
+## Journey menu pages (Esc / Start)
+
+Rows: Resume · Party · Quests · Bag · Map · Difficulty · Settings · Load · Save · Title Screen. The
+card footer is the journey summary (place, gold, play time, current objective).
+
+- **Quests** — `QuestLog` (`game/overworld/data/`) derives the log from story flags against
+  `game/overworld/content/quests.json` (`start_flag`, `complete_flag`, ordered `steps` of
+  `{flag, text}`); nothing is saved. Edit the JSON to add / reword quests.
+- **Party → Details** — `PartyDetailPage`: portrait, form / element / role chips, HP, Growth
+  (there are no levels), the shared `UnitPageContent` stat table, equipment and move / ability
+  cards. Equip / Unequip move a unit-scope item between the member and the bag
+  (`StoryState.equip_item` / `unequip_item`, `StoryController.equip_from_menu`).
+- **Map** — the current place, the Wayshrine rest point and every visited area (no world-map scene yet).
+- **Settings** — the shared `SettingsPanel`. **Load** — reloads the slot's last save behind a second press.
+
+Tests: `tests/unit/test_story_journey_pages.gd`.
+
 ## Area travel & loading
 
 A warp still swaps the whole `OverworldScene` behind the `SceneFade` (save → fade out → new scene

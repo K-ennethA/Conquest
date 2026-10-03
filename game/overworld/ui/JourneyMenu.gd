@@ -2,8 +2,16 @@ class_name JourneyMenu
 extends CanvasLayer
 
 ## The JOURNEY MENU (Esc / Start on the overworld) -- the grove MapMenu look: a gold-framed card
-## of command rows: Resume · Party · Bag · Difficulty · Save · Title (Quests, Map and Settings are
-## M2 -- docs/design/OVERWORLD.md §4.10). Modal: in InputActions.OVERLAY_GROUP while open.
+## of command rows: Resume · Party · Quests · Bag · Map · Difficulty · Settings · Load · Save · Title
+## (docs/design/OVERWORLD.md §4.10). Modal: in InputActions.OVERLAY_GROUP while open. The card's
+## footer line is the journey summary: where you are, gold, play time and the current objective.
+##
+## QUESTS: the flag-derived log ([QuestLog], data in content/quests.json) -- active quests with their
+## step checklist, finished ones below. MAP: the current place, where a whiteout would send you and
+## every area visited (there is no world-map scene yet; this is its place in the menu).
+## PARTY DETAILS: a member's "Details" opens [PartyDetailPage] (stats, equipment, moves, abilities)
+## in the Party page; Equip / Unequip go through the session. SETTINGS: the shared [SettingsPanel].
+## LOAD: reloads the slot's last save behind a second press.
 ##
 ## FALLEN (docs/design/DECISIONS.md #29, Classic): the Party page ends with a "Fallen" section --
 ## one muted card per member that fell for good, saying where and when (their growth and form are
@@ -52,6 +60,18 @@ var _buttons: Array[Button] = []
 var _state: StoryState = null
 var _party_row: Button = null
 var _bag_row: Button = null
+var _quest_scroll: ScrollContainer = null
+var _quest: VBoxContainer = null
+var _quests_row: Button = null
+var _map_scroll: ScrollContainer = null
+var _map: VBoxContainer = null
+var _map_row: Button = null
+var _load_row: Button = null
+var _settings: SettingsPanel = null
+## The Party page shows this member's detail page ("" = the list).
+var _detail_id: String = ""
+## Load is waiting for its second press ("unsaved progress is lost").
+var _load_confirming: bool = false
 ## A session call (an Evolution screen) is in flight: page input waits.
 var _busy: bool = false
 
@@ -106,8 +126,12 @@ func _ready() -> void:
 	_rows.add_child(title)
 	_add_row("Resume", close)
 	_party_row = _add_row("Party", _toggle_party)
+	_quests_row = _add_row("Quests", _toggle_quests)
 	_bag_row = _add_row("Bag", _toggle_bag)
+	_map_row = _add_row("Map", _toggle_map)
 	_tier_row = _add_row("Difficulty", _toggle_tier)
+	_add_row("Settings", func() -> void: _settings.open())
+	_load_row = _add_row("Load", _on_load_pressed)
 	_add_row("Save", func() -> void: save_requested.emit())
 	_add_row("Title Screen", func() -> void: title_requested.emit())
 	_status = MenuKit.label("", &"DimLabel", true)
@@ -128,6 +152,19 @@ func _ready() -> void:
 	row.add_child(_tier_scroll)
 	_tier = _page_box("TierPanel")
 	_tier_scroll.add_child(_tier)
+	_quest_scroll = _page_scroll("QuestScroll")
+	row.add_child(_quest_scroll)
+	_quest = _page_box("QuestPanel")
+	_quest_scroll.add_child(_quest)
+	_map_scroll = _page_scroll("MapScroll")
+	row.add_child(_map_scroll)
+	_map = _page_box("MapPanel")
+	_map_scroll.add_child(_map)
+	# The ONE settings surface (SettingsPanel), mounted on this layer so it draws over the menu --
+	# the same arrangement PauseMenu uses.
+	_settings = SettingsPanel.new()
+	_settings.name = "JourneySettingsPanel"
+	add_child(_settings)
 
 
 func _page_scroll(node_name: String) -> ScrollContainer:
@@ -170,11 +207,10 @@ func is_open() -> bool:
 
 func open(state: StoryState) -> void:
 	_state = state
-	_status.text = "Gold %d  ·  %s" % [state.gold if state != null else 0,
-		StorySnapshot.format_play_time(int(state.play_seconds)) if state != null else ""]
-	_party_scroll.visible = false
-	_bag_scroll.visible = false
-	_tier_scroll.visible = false
+	_hide_pages_except(null)
+	_detail_id = ""
+	_load_confirming = false
+	_refresh_summary()
 	_root.visible = true
 	_root.add_to_group(InputActions.OVERLAY_GROUP)
 	if not _buttons.is_empty():
@@ -199,8 +235,8 @@ func set_status(text: String) -> void:
 
 func _toggle_party() -> void:
 	var show: bool = not _party_scroll.visible
-	_bag_scroll.visible = false
-	_tier_scroll.visible = false
+	_hide_pages_except(_party_scroll)
+	_detail_id = ""
 	_party_scroll.visible = show
 	if show:
 		refresh_party()
@@ -225,6 +261,14 @@ func refresh_party() -> void:
 		c.queue_free()
 	if _state == null:
 		return
+	if not _detail_id.is_empty():
+		var dm: StoryPartyMember = _state.member(_detail_id)
+		if dm != null:
+			_party.add_child(PartyDetailPage.build(dm, _state, _state.lead() == dm, show_member_detail.bind(""),
+				_on_equip_pressed.bind(dm.member_id), _on_unequip_pressed.bind(dm.member_id)))
+			_link_rows_to(_party_scroll)
+			return
+		_detail_id = ""
 	var head := ConquestTheme.title_ribbon("PARTY", MenuTheme.GOLD_DK, MenuTheme.FS_BODY)
 	head.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_party.add_child(head)
@@ -255,6 +299,7 @@ func _member_card(m: StoryPartyMember, is_lead: bool, ctx: Dictionary) -> PanelC
 	var portrait := ConquestTheme.portrait(m.display_name().substr(0, 1), el_col, MenuTheme.GOLD_DK, 44)
 	portrait.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	row.add_child(portrait)
+	PartyDetailPage.apply_portrait(portrait, c)
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 3)
@@ -274,6 +319,18 @@ func _member_card(m: StoryPartyMember, is_lead: bool, ctx: Dictionary) -> PanelC
 	var hp := MenuKit.label("HP %d / %d%s" % [m.hp_value(), m.max_hp(), "  ·  Wounded" if m.wounded else ""], &"DimLabel")
 	hp.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	col.add_child(hp)
+	var worn: ItemResource = ItemLibrary.get_item(m.item_id) if not m.item_id.is_empty() else null
+	if worn != null:
+		var gear := MenuKit.label("Holding: " + worn.display_name, &"DimLabel")
+		gear.name = "Holding"
+		gear.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+		col.add_child(gear)
+	var details := MenuKit.button("Details", MenuKit.GHOST, 110, 34)
+	details.name = "DetailsButton"
+	details.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	details.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	details.pressed.connect(show_member_detail.bind(m.member_id))
+	col.add_child(details)
 	_add_evolution_section(col, m, ctx)
 	return card
 
@@ -445,8 +502,7 @@ func _member_name(member_id: String) -> String:
 
 func _toggle_bag() -> void:
 	var show: bool = not _bag_scroll.visible
-	_party_scroll.visible = false
-	_tier_scroll.visible = false
+	_hide_pages_except(_bag_scroll)
 	_bag_scroll.visible = show
 	if show:
 		refresh_bag()
@@ -579,8 +635,7 @@ func _on_use_pressed(item_id: String, member_id: String) -> void:
 
 func _toggle_tier() -> void:
 	var show: bool = not _tier_scroll.visible
-	_party_scroll.visible = false
-	_bag_scroll.visible = false
+	_hide_pages_except(_tier_scroll)
 	_tier_scroll.visible = show
 	_tier_confirming = false
 	if show:
@@ -721,8 +776,9 @@ func _focus_in_page() -> Control:
 	var f: Control = get_viewport().gui_get_focus_owner() if get_viewport() != null else null
 	if f == null:
 		return null
-	if _party_scroll.is_ancestor_of(f) or _bag_scroll.is_ancestor_of(f) or _tier_scroll.is_ancestor_of(f):
-		return f
+	for s in _page_scrolls():
+		if s.is_ancestor_of(f):
+			return f
 	return null
 
 
@@ -732,13 +788,328 @@ func _unhandled_input(event: InputEvent) -> void:
 	if MenuNav.is_back_event(event) or event.is_action_pressed(InputActions.MAP_MENU):
 		get_viewport().set_input_as_handled()
 		# Back from inside a page returns to its row; back on the rows closes the menu.
+		if _settings != null and _settings.is_open():
+			_settings.close()
+			return
 		var inside: Control = _focus_in_page()
 		if inside != null and MenuNav.is_back_event(event):
-			if _party_scroll.is_ancestor_of(inside) and _party_row != null:
-				_party_row.grab_focus()
-			elif _tier_scroll.is_ancestor_of(inside) and _tier_row != null:
-				_tier_row.grab_focus()
-			elif _bag_row != null:
-				_bag_row.grab_focus()
+			# A member's detail page backs out to the party list first.
+			if not _detail_id.is_empty() and _party_scroll.is_ancestor_of(inside):
+				show_member_detail("")
+				return
+			var row: Button = _row_for_page_of(inside)
+			if row != null:
+				row.grab_focus()
 			return
 		close()
+
+
+# =====================================================================================
+#  Page plumbing + journey summary
+# =====================================================================================
+
+func _page_scrolls() -> Array[ScrollContainer]:
+	return [_party_scroll, _bag_scroll, _tier_scroll, _quest_scroll, _map_scroll]
+
+
+## Hide every page but [param keep] (null = hide all).
+func _hide_pages_except(keep: ScrollContainer) -> void:
+	for s in _page_scrolls():
+		if s != keep:
+			s.visible = false
+
+
+## The command row that opened the page [param inside] sits in (Esc from a page returns to it).
+func _row_for_page_of(inside: Control) -> Button:
+	if _party_scroll.is_ancestor_of(inside):
+		return _party_row
+	if _tier_scroll.is_ancestor_of(inside):
+		return _tier_row
+	if _quest_scroll.is_ancestor_of(inside):
+		return _quests_row
+	if _map_scroll.is_ancestor_of(inside):
+		return _map_row
+	return _bag_row
+
+
+## The card's footer: "Oakvale  ·  Gold 120  ·  1h 02m" and the current objective underneath.
+func _refresh_summary() -> void:
+	if _state == null:
+		_status.text = ""
+		return
+	var place: String = area_name(_state.location_area())
+	var lines: Array[String] = ["%s%sGold %d  ·  %s" % [place, "  ·  " if not place.is_empty() else "", _state.gold,
+		StorySnapshot.format_play_time(int(_state.play_seconds))]]
+	var goal: String = QuestLog.current_objective(_state)
+	if not goal.is_empty():
+		lines.append("Objective: " + goal)
+	_status.text = "\n".join(lines)
+	if _load_row != null:
+		_load_row.text = "Load"
+		_load_row.disabled = not can_load()
+
+
+## The area's display name (the session's cache when there is one), "" for an empty id.
+func area_name(area_id: String) -> String:
+	if area_id.is_empty():
+		return ""
+	if session != null and session.has_method(&"area_display_name"):
+		return String(session.area_display_name(area_id))
+	var a: OverworldAreaResource = OverworldAreaResource.load_by_id(area_id)
+	return a.display_name if a != null and not a.display_name.is_empty() else area_id.capitalize()
+
+
+# =====================================================================================
+#  Party details + equipment
+# =====================================================================================
+
+## Show [param member_id]'s detail page in the Party page ("" = back to the list).
+func show_member_detail(member_id: String) -> void:
+	var leaving: String = _detail_id
+	_detail_id = member_id
+	if not _party_scroll.visible:
+		_toggle_party()
+	else:
+		refresh_party()
+	_party_scroll.scroll_vertical = 0
+	if member_id.is_empty():
+		var card := member_card(leaving)
+		var btn: Node = card.find_child("DetailsButton", true, false) if card != null else null
+		if btn is Control:
+			(btn as Control).grab_focus()
+	else:
+		_refocus_detail(["BackButton"])
+
+
+func detail_member_id() -> String:
+	return _detail_id
+
+
+func _on_equip_pressed(item_id: String, member_id: String) -> void:
+	var r: Dictionary
+	if session != null and session.has_method(&"equip_from_menu"):
+		r = session.equip_from_menu(member_id, item_id)
+	elif _state != null:
+		r = _state.equip_item(member_id, item_id)
+	else:
+		return
+	var item: ItemResource = ItemLibrary.get_item(item_id)
+	var item_name: String = item.display_name if item != null else item_id
+	if bool(r.get("ok", false)):
+		set_status("%s now holds the %s." % [_member_name(member_id), item_name])
+	else:
+		set_status("Cannot equip the %s (%s)." % [item_name, String(r.get("reason", ""))])
+	refresh_party()
+	_refocus_detail(["UnequipButton"])
+
+
+func _on_unequip_pressed(member_id: String) -> void:
+	var ok: bool
+	if session != null and session.has_method(&"unequip_from_menu"):
+		ok = session.unequip_from_menu(member_id)
+	else:
+		ok = _state != null and _state.unequip_item(member_id)
+	if ok:
+		set_status("%s put its item back in the bag." % _member_name(member_id))
+	refresh_party()
+	_refocus_detail(["BackButton"])
+
+
+func _refocus_detail(names: Array) -> void:
+	for n in names:
+		var found: Node = _party.find_child(String(n), true, false)
+		if found is Control and (found as Control).is_visible_in_tree():
+			(found as Control).grab_focus()
+			return
+
+
+# =====================================================================================
+#  Quests
+# =====================================================================================
+
+func _toggle_quests() -> void:
+	var show: bool = not _quest_scroll.visible
+	_hide_pages_except(_quest_scroll)
+	_quest_scroll.visible = show
+	if show:
+		refresh_quests()
+	_link_rows_to(_quest_scroll if show else null)
+
+
+func is_quests_open() -> bool:
+	return _quest_scroll.visible
+
+
+func show_quests() -> void:
+	if not _quest_scroll.visible:
+		_toggle_quests()
+
+
+## Rebuild the Quests page from the flags: active quests (main first) then finished ones.
+func refresh_quests() -> void:
+	_clear(_quest)
+	var head := ConquestTheme.title_ribbon("QUESTS", MenuTheme.GOLD_DK, MenuTheme.FS_BODY)
+	head.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_quest.add_child(head)
+	var entries: Array = QuestLog.entries(_state) if _state != null else []
+	if entries.is_empty():
+		var empty := MenuKit.label("No quests yet. Talk to people and explore.", &"DimLabel", true)
+		empty.name = "EmptyQuests"
+		_quest.add_child(empty)
+	var done_heading_added: bool = false
+	for e in entries:
+		if String(e["status"]) == QuestLog.STATUS_DONE and not done_heading_added:
+			done_heading_added = true
+			var dh := ConquestTheme.title_ribbon("COMPLETED", MenuTheme.TEXT_MUTED, MenuTheme.FS_BODY)
+			dh.name = "CompletedHeading"
+			dh.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			_quest.add_child(dh)
+		_quest.add_child(_quest_card(e))
+	_link_rows_to(_quest_scroll)
+
+
+func _quest_card(e: Dictionary) -> PanelContainer:
+	var done: bool = String(e["status"]) == QuestLog.STATUS_DONE
+	var main: bool = String(e["category"]) == QuestLog.MAIN
+	var accent: Color = MenuTheme.TEXT_MUTED if done else (MenuTheme.GOLD if main else MenuTheme.SUCCESS)
+	var card := PanelContainer.new()
+	card.name = "Quest_" + String(e["id"])
+	card.set_meta(&"quest_id", String(e["id"]))
+	card.add_theme_stylebox_override("panel", MenuTheme.accented_card(accent))
+	ConquestTheme.keep_style(card)
+	if done:
+		card.modulate = Color(1, 1, 1, 0.8)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 3)
+	card.add_child(col)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	col.add_child(top)
+	var title := MenuKit.label(String(e["title"]), &"SubheadingLabel")
+	title.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(title)
+	top.add_child(ConquestTheme.chip("Done" if done else ("Main" if main else "Side"), accent, MenuTheme.FS_CAPTION))
+	if not String(e["summary"]).is_empty():
+		var s := MenuKit.label(String(e["summary"]), &"DimLabel", true)
+		s.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+		col.add_child(s)
+	for step in e["steps"]:
+		var sd: bool = bool(step["done"])
+		var l := MenuKit.label("%s  %s" % ["[x]" if sd else "[ ]", String(step["text"])],
+			&"MutedLabel" if sd else &"", true)
+		l.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+		col.add_child(l)
+	return card
+
+
+# =====================================================================================
+#  Map (places)
+# =====================================================================================
+
+func _toggle_map() -> void:
+	var show: bool = not _map_scroll.visible
+	_hide_pages_except(_map_scroll)
+	_map_scroll.visible = show
+	if show:
+		refresh_map()
+	_link_rows_to(_map_scroll if show else null)
+
+
+func is_map_open() -> bool:
+	return _map_scroll.visible
+
+
+func show_map() -> void:
+	if not _map_scroll.visible:
+		_toggle_map()
+
+
+## Rebuild the Map page: where you are, where a whiteout leads, every area visited and its Wayshrines.
+func refresh_map() -> void:
+	_clear(_map)
+	var head := ConquestTheme.title_ribbon("MAP", MenuTheme.GOLD_DK, MenuTheme.FS_BODY)
+	head.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_map.add_child(head)
+	if _state == null:
+		return
+	var here: String = _state.location_area()
+	var respawn_id: String = String(_state.respawn.get("area_id", ""))
+	var ids: Array[String] = []
+	for id in _state.visited_areas:
+		ids.append(id)
+	if not here.is_empty() and not ids.has(here):
+		ids.append(here)
+	if ids.is_empty():
+		var empty := MenuKit.label("You have not been anywhere yet.", &"DimLabel")
+		empty.name = "EmptyMap"
+		_map.add_child(empty)
+	for id in ids:
+		_map.add_child(_place_card(id, id == here, id == respawn_id))
+	_link_rows_to(_map_scroll)
+
+
+func _place_card(id: String, is_here: bool, is_rest: bool) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.name = "Place_" + id
+	card.set_meta(&"area_id", id)
+	card.add_theme_stylebox_override("panel",
+		MenuTheme.accented_card(MenuTheme.GOLD if is_here else MenuTheme.GOLD_DK))
+	ConquestTheme.keep_style(card)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 3)
+	card.add_child(col)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	col.add_child(top)
+	var name_l := MenuKit.label(area_name(id), &"SubheadingLabel")
+	name_l.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
+	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(name_l)
+	if is_here:
+		top.add_child(ConquestTheme.chip("You are here", MenuTheme.GOLD, MenuTheme.FS_CAPTION))
+	if is_rest:
+		top.add_child(ConquestTheme.chip("Rest point", MenuTheme.SUCCESS, MenuTheme.FS_CAPTION))
+	var shrines: int = 0
+	for key in _state.lit_wayshrines:
+		if key.begins_with(id + "."):
+			shrines += 1
+	var detail: String = "Wayshrines lit: %d" % shrines
+	var area: OverworldAreaResource = OverworldAreaResource.load_by_id(id)
+	if area != null:
+		detail = "%s  ·  %s" % [String(area.region_id).replace("_", " ").capitalize(), detail]
+	var d := MenuKit.label(detail, &"DimLabel")
+	d.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	col.add_child(d)
+	return card
+
+
+func _clear(box: Node) -> void:
+	for c in box.get_children():
+		box.remove_child(c)
+		c.queue_free()
+
+
+# =====================================================================================
+#  Load
+# =====================================================================================
+
+## Is there a saved slot to go back to?
+func can_load() -> bool:
+	return session != null and session.has_method(&"load_last_save") and session.has_method(&"slot") \
+		and int(session.slot()) > 0 and StorySaveManager.has_save(int(session.slot()))
+
+
+## Load: the first press asks, the second reloads the slot's last save.
+func _on_load_pressed() -> void:
+	if not can_load():
+		set_status("Nothing saved to load.")
+		return
+	if not _load_confirming:
+		_load_confirming = true
+		_load_row.text = "Load -- press again"
+		set_status("Reload your last save? Progress since then is lost.")
+		return
+	_load_confirming = false
+	close()
+	session.load_last_save()

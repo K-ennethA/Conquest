@@ -327,6 +327,47 @@ func use_consumable(item_id: String, member_id: String) -> Dictionary:
 	return r
 
 
+## EQUIP a unit-scope equipment item from the bag onto [param member_id]; whatever it wore goes back
+## into the bag. {ok, reason, swapped}; reasons: "no_member", "no_item", "not_equipment", "team_item"
+## (shared team slots are not a per-member choice), "already".
+func equip_item(member_id: String, item_id: String) -> Dictionary:
+	var out: Dictionary = {"ok": false, "reason": "", "swapped": ""}
+	var m: StoryPartyMember = member(member_id)
+	if m == null:
+		out["reason"] = "no_member"
+		return out
+	var item: ItemResource = ItemLibrary.get_item(item_id)
+	if item == null or item_count(item_id) <= 0:
+		out["reason"] = "no_item"
+		return out
+	if not item.is_equipment():
+		out["reason"] = "not_equipment"
+		return out
+	if item.is_team_item():
+		out["reason"] = "team_item"
+		return out
+	if m.item_id == item_id:
+		out["reason"] = "already"
+		return out
+	take_item(item_id, 1)
+	if not m.item_id.is_empty():
+		out["swapped"] = m.item_id
+		add_item(m.item_id, 1)
+	m.item_id = item_id
+	out["ok"] = true
+	return out
+
+
+## Take the equipped item off [param member_id] and into the bag. False when nothing was worn.
+func unequip_item(member_id: String) -> bool:
+	var m: StoryPartyMember = member(member_id)
+	if m == null or m.item_id.is_empty():
+		return false
+	add_item(m.item_id, 1)
+	m.item_id = ""
+	return true
+
+
 func add_gold(amount: int) -> void:
 	gold = maxi(0, gold + amount)
 

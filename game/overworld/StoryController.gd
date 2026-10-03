@@ -586,6 +586,27 @@ func set_member_hold(member_id: String, on: bool) -> bool:
 	return true
 
 
+## Journey -> Party -> a member: wear a unit equipment item from the bag ([method StoryState.equip_item])
+## and save. {ok, reason, swapped}.
+func equip_from_menu(member_id: String, item_id: String) -> Dictionary:
+	if _state == null:
+		return {"ok": false, "reason": "no_session", "swapped": ""}
+	var r: Dictionary = _state.equip_item(member_id, item_id)
+	if bool(r.get("ok", false)):
+		save_game()
+	return r
+
+
+## Journey -> Party -> a member: put the worn item back in the bag and save.
+func unequip_from_menu(member_id: String) -> bool:
+	if _state == null:
+		return false
+	var ok: bool = _state.unequip_item(member_id)
+	if ok:
+		save_game()
+	return ok
+
+
 ## Open ONE [EvolutionScreen] for party member [param member_id] over [param edges] and await it.
 ## [param scripted] evolves past the edges' triggers (a story beat -- [EvolveMemberCommand]).
 ## [param use_items] ({edge id: item_id}): an edge taken by USING a bag item (the menu's EVOLVE);
