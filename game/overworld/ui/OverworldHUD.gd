@@ -6,12 +6,17 @@ extends CanvasLayer
 ##   * the INTERACTION PROMPT (bottom centre) -- "[Space] Talk" in the live binding's glyph,
 ##     shown while the hero faces something usable;
 ##   * TOASTS (top right) -- gold ribbons for quests, items and gold, stacked, self-dismissing;
+##     quest transitions (started / new objective / complete) get a small card with a kicker;
+##   * the QUEST TRACKER (top left) -- the tracked quest's title and current objective, plus where
+##     it is ("Here" when the hero stands in the objective's area); hidden with nothing to track;
 ##   * a MENU hint (bottom right) and, on touch devices, "A" / "Menu" buttons.
 ## Presentation only: the controller tells it what to show.
 
 const LAYER_INDEX: int = 20
 const RIBBON_HOLD: float = 2.4
 const TOAST_HOLD: float = 2.6
+const QUEST_TOAST_HOLD: float = 3.4
+const TRACKER_WIDTH: float = 280.0
 
 signal touch_confirm_pressed
 signal touch_menu_pressed
@@ -22,6 +27,12 @@ var _prompt: PanelContainer = null
 var _prompt_row: HBoxContainer = null
 var _toasts: VBoxContainer = null
 var _menu_hint: HBoxContainer = null
+var _tracker: PanelContainer = null
+var _tracker_kind: Label = null
+var _tracker_title: Label = null
+var _tracker_objective: Label = null
+var _tracker_place: Label = null
+var _tracked_id: String = ""
 
 
 func _ready() -> void:
@@ -33,6 +44,7 @@ func _ready() -> void:
 	_root.theme = ConquestTheme.build()
 	add_child(_root)
 	_build_prompt()
+	_build_tracker()
 	_build_toasts()
 	_build_menu_hint()
 	if _is_touch():
@@ -164,6 +176,139 @@ func toast(text: String, kind: String = "info") -> void:
 
 func toast_count() -> int:
 	return _toasts.get_child_count()
+
+
+## A QUEST TRANSITION toast ([QuestTracker] event): a small card with a gold kicker ("NEW QUEST",
+## "NEW OBJECTIVE", "QUEST COMPLETE"), the quest's title and, for a new objective, its line.
+func quest_toast(event: Dictionary) -> void:
+	var kind: String = String(event.get("kind", ""))
+	var main: bool = String(event.get("category", "")) == QuestLog.MAIN
+	var accent: Color = MenuTheme.GOLD if main else MenuTheme.SUCCESS
+	var kicker: String = "NEW QUEST"
+	match kind:
+		QuestTracker.ADVANCED:
+			kicker = "NEW OBJECTIVE"
+		QuestTracker.COMPLETED:
+			kicker = "QUEST COMPLETE"
+			accent = MenuTheme.GOLD_LITE
+	var card := PanelContainer.new()
+	card.name = "QuestToast"
+	card.set_meta(&"quest_event", kind)
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.size_flags_horizontal = Control.SIZE_SHRINK_END
+	card.custom_minimum_size = Vector2(TRACKER_WIDTH, 0)
+	var sb := MenuTheme.accented_card(accent, SIDE_LEFT, MenuTheme.PANEL, 0.95)
+	card.add_theme_stylebox_override("panel", sb)
+	ConquestTheme.keep_style(card)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 2)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(col)
+	var k := MenuKit.label(kicker, &"SectionLabel")
+	k.add_theme_color_override("font_color", accent)
+	k.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	col.add_child(k)
+	var t := MenuKit.label(String(event.get("title", "")), &"SubheadingLabel", true)
+	t.name = "QuestToastTitle"
+	t.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
+	t.custom_minimum_size = Vector2(TRACKER_WIDTH - 44, 0)
+	col.add_child(t)
+	var obj: String = String(event.get("objective", ""))
+	if kind != QuestTracker.COMPLETED and not obj.is_empty():
+		var o := MenuKit.label(obj, &"DimLabel", true)
+		o.custom_minimum_size = Vector2(TRACKER_WIDTH - 44, 0)
+		o.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+		col.add_child(o)
+	_toasts.add_child(card)
+	if not _anims_on():
+		card.set_meta(&"toast", true)
+		get_tree().create_timer(QUEST_TOAST_HOLD).timeout.connect(card.queue_free)
+		return
+	card.modulate.a = 0.0
+	var tw := card.create_tween()
+	tw.tween_property(card, "modulate:a", 1.0, 0.25)
+	tw.tween_interval(QUEST_TOAST_HOLD)
+	tw.tween_property(card, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(card.queue_free)
+
+
+# --- Quest tracker ----------------------------------------------------------------------
+
+func _build_tracker() -> void:
+	_tracker = PanelContainer.new()
+	_tracker.name = "QuestTracker"
+	_tracker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tracker.offset_left = 22
+	_tracker.offset_top = 22
+	_tracker.custom_minimum_size = Vector2(TRACKER_WIDTH, 0)
+	_tracker.visible = false
+	_root.add_child(_tracker)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 2)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tracker.add_child(col)
+	_tracker_kind = MenuKit.label("", &"SectionLabel")
+	_tracker_kind.name = "TrackerKind"
+	_tracker_kind.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	col.add_child(_tracker_kind)
+	_tracker_title = MenuKit.label("", &"SubheadingLabel", true)
+	_tracker_title.name = "TrackerTitle"
+	_tracker_title.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	# A fixed wrap width: an autowrapped label measured at width 0 asks for one line per word.
+	_tracker_title.custom_minimum_size = Vector2(TRACKER_WIDTH - 44, 0)
+	col.add_child(_tracker_title)
+	_tracker_objective = MenuKit.label("", &"", true)
+	_tracker_objective.custom_minimum_size = Vector2(TRACKER_WIDTH - 44, 0)
+	_tracker_objective.name = "TrackerObjective"
+	_tracker_objective.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	col.add_child(_tracker_objective)
+	_tracker_place = MenuKit.label("", &"DimLabel")
+	_tracker_place.name = "TrackerPlace"
+	_tracker_place.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	col.add_child(_tracker_place)
+
+
+## Show [param entry] (a [QuestLog] entry; {} hides the tracker). [param place] names where the
+## objective is ("" = say nothing); [param here] = the hero is already in its area.
+func set_tracked_quest(entry: Dictionary, place: String = "", here: bool = false) -> void:
+	if entry.is_empty() or String(entry.get("objective", "")).is_empty():
+		_tracker.visible = false
+		_tracked_id = ""
+		return
+	var main: bool = String(entry.get("category", "")) == QuestLog.MAIN
+	var accent: Color = MenuTheme.GOLD if main else MenuTheme.SUCCESS
+	_tracker.add_theme_stylebox_override("panel", MenuTheme.accented_card(accent, SIDE_LEFT, MenuTheme.PANEL, 0.86))
+	ConquestTheme.keep_style(_tracker)
+	_tracked_id = String(entry.get("id", ""))
+	_tracker_kind.text = "MAIN QUEST" if main else "SIDE QUEST"
+	_tracker_kind.add_theme_color_override("font_color", accent)
+	_tracker_title.text = String(entry.get("title", ""))
+	_tracker_objective.text = "◆ " + String(entry.get("objective", ""))
+	_tracker_place.text = "Here" if here else ("→ " + place if not place.is_empty() else "")
+	_tracker_place.visible = not _tracker_place.text.is_empty()
+	_tracker.visible = true
+	_tracker.size = Vector2.ZERO
+	_tracker.reset_size.call_deferred()
+
+
+func tracker_visible() -> bool:
+	return _tracker.visible
+
+
+func tracked_quest_id() -> String:
+	return _tracked_id
+
+
+func tracker_title() -> String:
+	return _tracker_title.text
+
+
+func tracker_objective() -> String:
+	return _tracker_objective.text.trim_prefix("◆ ")
+
+
+func tracker_place() -> String:
+	return _tracker_place.text
 
 
 # --- Menu hint / touch ------------------------------------------------------------------

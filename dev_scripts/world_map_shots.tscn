@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://dev_scripts/world_map_shots.gd" id="1"]
+
+[node name="WorldMapShots" type="Node"]
+script = ExtResource("1")

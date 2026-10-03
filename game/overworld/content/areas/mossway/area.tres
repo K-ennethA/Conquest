@@ -541,7 +541,7 @@ display_name = "Route 1 -- The Mossway"
 terrain = ExtResource("25_lewvs")
 kind = 1
 region_id = &"heartlands"
-world_map_pos = Vector2(0.52, 0.68)
+world_map_pos = Vector2(0.485, 0.645)
 entry_points = {
 "east": {
 "cell": [32, 6, 0],

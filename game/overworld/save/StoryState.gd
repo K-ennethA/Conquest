@@ -73,6 +73,14 @@ var tier: String = TIER_CASUAL
 ## ([StoryPartyMember.fallen_info] says where / when). Everything that reads [member party] --
 ## squads, duels, healing, revives, evolution, the party cap -- never sees them. Saved as "fallen".
 var fallen: Array[StoryPartyMember] = []
+## The quest the player PINNED to the HUD tracker (Journey -> Quests "Track"); "" = follow the main
+## quest ([method QuestLog.tracked_entry] falls back while the pin is finished / unknown). Saved as
+## "tracked_quest" (an older save has none: the main quest is tracked).
+var tracked_quest: String = ""
+## Bumped on every flag change (set / changed / cleared), never reset, never saved: a cheap "did
+## anything change?" test for views that re-derive from flags ([QuestTracker]'s diff) without
+## competing for [method drain_changes].
+var flags_revision: int = 0
 ## What changed since the last [method drain_changes] -- the EVOLUTION auto-offer events
 ## (StoryController: a flag set / a member joining may have met a requirement). Never saved.
 var _changed_flags: Array[String] = []
@@ -149,6 +157,7 @@ static func sanitize_flag_times(raw, p_flags: Dictionary) -> Dictionary:
 
 
 func _note_flag(key: String) -> void:
+	flags_revision += 1
 	if not _changed_flags.has(key):
 		_changed_flags.append(key)
 

@@ -7,8 +7,12 @@ extends CanvasLayer
 ## footer line is the journey summary: where you are, gold, play time and the current objective.
 ##
 ## QUESTS: the flag-derived log ([QuestLog], data in content/quests.json) -- active quests with their
-## step checklist, finished ones below. MAP: the current place, where a whiteout would send you and
-## every area visited (there is no world-map scene yet; this is its place in the menu).
+## step checklist, finished ones below; All / Main / Side / Completed filters, TRACK (pins the quest
+## to the HUD tracker: [member StoryState.tracked_quest], saved) and SHOW ON MAP (opens the map
+## focused on the objective's place). MAP: the WORLD MAP ([WorldMapView]: the owner's painting with a
+## marker per known place, quest pennants, roads, zoom / pan) and, behind the "Places" toggle, the
+## place-card list (the current place, where a whiteout would send you and every area visited).
+## At phone width the command card steps aside while the map has focus (Back / Esc returns).
 ## PARTY DETAILS: a member's "Details" opens [PartyDetailPage] (stats, equipment, moves, abilities)
 ## in the Party page; Equip / Unequip go through the session. SETTINGS: the shared [SettingsPanel].
 ## LOAD: reloads the slot's last save behind a second press.
@@ -35,6 +39,10 @@ extends CanvasLayer
 
 const LAYER_INDEX: int = 60
 const PAGE_WIDTH: float = 470.0
+## Below this viewport width the command card hides while the world map has focus.
+const COMPACT_WIDTH: float = 1000.0
+const MAP_MODE_MAP := "map"
+const MAP_MODE_LIST := "list"
 
 signal closed
 signal save_requested
@@ -44,6 +52,7 @@ signal title_requested
 var session = null
 
 var _root: Control = null
+var _margin: MarginContainer = null
 var _card: PanelContainer = null
 var _rows: VBoxContainer = null
 var _party_scroll: ScrollContainer = null
@@ -66,6 +75,16 @@ var _quests_row: Button = null
 var _map_scroll: ScrollContainer = null
 var _map: VBoxContainer = null
 var _map_row: Button = null
+## The world map page's persistent parts (built once; [method refresh_map] re-feeds them).
+var _map_view: WorldMapView = null
+var _map_list: VBoxContainer = null
+var _map_mode_button: Button = null
+var _map_roads: CheckButton = null
+var _map_back: Button = null
+var _map_hint: Label = null
+var _map_mode: String = MAP_MODE_MAP
+## Journey -> Quests filter (one of [constant QuestLog.FILTERS]).
+var _quest_filter: String = QuestLog.FILTER_ALL
 var _load_row: Button = null
 var _settings: SettingsPanel = null
 ## The Party page shows this member's detail page ("" = the list).
@@ -95,11 +114,10 @@ func _ready() -> void:
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 48)
-	margin.add_theme_constant_override("margin_top", 48)
-	margin.add_theme_constant_override("margin_bottom", 48)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(margin)
+	_margin = margin
+	_apply_margins()
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 20)
@@ -157,14 +175,37 @@ func _ready() -> void:
 	_quest = _page_box("QuestPanel")
 	_quest_scroll.add_child(_quest)
 	_map_scroll = _page_scroll("MapScroll")
+	# The world map takes every pixel the command card leaves.
+	_map_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_map_scroll.custom_minimum_size = Vector2(300, 0)
 	row.add_child(_map_scroll)
 	_map = _page_box("MapPanel")
+	_map.custom_minimum_size = Vector2(280, 0)
+	_map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_map.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_map_scroll.add_child(_map)
+	_build_map_page()
 	# The ONE settings surface (SettingsPanel), mounted on this layer so it draws over the menu --
 	# the same arrangement PauseMenu uses.
 	_settings = SettingsPanel.new()
 	_settings.name = "JourneySettingsPanel"
 	add_child(_settings)
+	# Phone width: the command card steps aside while the world map has focus.
+	get_viewport().gui_focus_changed.connect(_on_gui_focus_changed)
+	get_viewport().size_changed.connect(_apply_margins)
+
+
+## The page gutter: SP_PAGE on a desktop-sized view, tight on a short (phone landscape) one so the
+## world map keeps its height.
+func _apply_margins() -> void:
+	if _margin == null or get_viewport() == null:
+		return
+	var short: bool = get_viewport().get_visible_rect().size.y < 560.0
+	var m: int = 12 if short else MenuTheme.SP_PAGE
+	for side in ["margin_left", "margin_top", "margin_bottom", "margin_right"]:
+		_margin.add_theme_constant_override(side, m)
+	if _map_hint != null:
+		_map_hint.visible = not short and _map_mode == MAP_MODE_MAP
 
 
 func _page_scroll(node_name: String) -> ScrollContainer:
@@ -207,6 +248,7 @@ func is_open() -> bool:
 
 func open(state: StoryState) -> void:
 	_state = state
+	_card.visible = true
 	_hide_pages_except(null)
 	_detail_id = ""
 	_load_confirming = false
@@ -758,6 +800,9 @@ func _focus_tier_control(node_name: String) -> void:
 ## null = none open: right stays put).
 func _link_rows_to(page: Control) -> void:
 	var first: Control = _first_focusable(page) if page != null and page.visible else null
+	# Into the world map, "right" lands on the map itself, not its toolbar.
+	if page == _map_scroll and first != null and _map_mode == MAP_MODE_MAP and _map_view != null:
+		first = _map_view
 	for b in _buttons:
 		b.focus_neighbor_right = b.get_path_to(first) if first != null and first.is_inside_tree() else NodePath("")
 
@@ -799,6 +844,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 			var row: Button = _row_for_page_of(inside)
 			if row != null:
+				_card.visible = true
 				row.grab_focus()
 			return
 		close()
@@ -840,7 +886,8 @@ func _refresh_summary() -> void:
 	var place: String = area_name(_state.location_area())
 	var lines: Array[String] = ["%s%sGold %d  ·  %s" % [place, "  ·  " if not place.is_empty() else "", _state.gold,
 		StorySnapshot.format_play_time(int(_state.play_seconds))]]
-	var goal: String = QuestLog.current_objective(_state)
+	# The TRACKED quest's objective (the pin, else the main quest) -- the same line the HUD shows.
+	var goal: String = String(QuestLog.tracked_entry(_state).get("objective", ""))
 	if not goal.is_empty():
 		lines.append("Objective: " + goal)
 	_status.text = "\n".join(lines)
@@ -945,17 +992,39 @@ func show_quests() -> void:
 		_toggle_quests()
 
 
-## Rebuild the Quests page from the flags: active quests (main first) then finished ones.
+## Rebuild the Quests page from the flags: the filter tabs, then active quests (main first) and
+## finished ones under COMPLETED.
 func refresh_quests() -> void:
 	_clear(_quest)
 	var head := ConquestTheme.title_ribbon("QUESTS", MenuTheme.GOLD_DK, MenuTheme.FS_BODY)
 	head.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_quest.add_child(head)
-	var entries: Array = QuestLog.entries(_state) if _state != null else []
+	var tabs := HFlowContainer.new()
+	tabs.name = "QuestFilters"
+	tabs.add_theme_constant_override("h_separation", MenuTheme.SP_S)
+	tabs.add_theme_constant_override("v_separation", MenuTheme.SP_XS)
+	_quest.add_child(tabs)
+	for f in QuestLog.FILTERS:
+		var on: bool = f == _quest_filter
+		var b := MenuKit.button(f.capitalize(), MenuKit.PRIMARY if on else MenuKit.GHOST, 0, 40)
+		b.name = "QuestFilter_" + f
+		b.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+		b.pressed.connect(set_quest_filter.bind(f))
+		tabs.add_child(b)
+	var entries: Array = QuestLog.filtered(_state, _quest_filter) if _state != null else []
 	if entries.is_empty():
-		var empty := MenuKit.label("No quests yet. Talk to people and explore.", &"DimLabel", true)
+		var msg: String = "No quests yet. Talk to people and explore."
+		match _quest_filter:
+			QuestLog.FILTER_MAIN:
+				msg = "No main quest is open."
+			QuestLog.FILTER_SIDE:
+				msg = "No side quests are open."
+			QuestLog.FILTER_COMPLETED:
+				msg = "Nothing finished yet."
+		var empty := MenuKit.label(msg, &"DimLabel", true)
 		empty.name = "EmptyQuests"
 		_quest.add_child(empty)
+	var tracked: String = String(QuestLog.tracked_entry(_state).get("id", "")) if _state != null else ""
 	var done_heading_added: bool = false
 	for e in entries:
 		if String(e["status"]) == QuestLog.STATUS_DONE and not done_heading_added:
@@ -964,11 +1033,30 @@ func refresh_quests() -> void:
 			dh.name = "CompletedHeading"
 			dh.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 			_quest.add_child(dh)
-		_quest.add_child(_quest_card(e))
+		_quest.add_child(_quest_card(e, String(e["id"]) == tracked))
 	_link_rows_to(_quest_scroll)
 
 
-func _quest_card(e: Dictionary) -> PanelContainer:
+## Journey -> Quests: show only [param filter] ([constant QuestLog.FILTERS]).
+func set_quest_filter(filter: String) -> void:
+	_quest_filter = filter if QuestLog.FILTERS.has(filter) else QuestLog.FILTER_ALL
+	if not _quest_scroll.visible:
+		_toggle_quests()
+	else:
+		refresh_quests()
+	_focus_in(_quest, "QuestFilter_" + _quest_filter)
+
+
+func quest_filter() -> String:
+	return _quest_filter
+
+
+## The quest card of [param quest_id] on the Quests page (null when not shown).
+func quest_card(quest_id: String) -> PanelContainer:
+	return _quest.find_child("Quest_" + quest_id, true, false) as PanelContainer
+
+
+func _quest_card(e: Dictionary, tracked: bool = false) -> PanelContainer:
 	var done: bool = String(e["status"]) == QuestLog.STATUS_DONE
 	var main: bool = String(e["category"]) == QuestLog.MAIN
 	var accent: Color = MenuTheme.TEXT_MUTED if done else (MenuTheme.GOLD if main else MenuTheme.SUCCESS)
@@ -985,11 +1073,18 @@ func _quest_card(e: Dictionary) -> PanelContainer:
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 8)
 	col.add_child(top)
-	var title := MenuKit.label(String(e["title"]), &"SubheadingLabel")
+	var title := MenuKit.label(String(e["title"]), &"SubheadingLabel", true)
 	title.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(title)
-	top.add_child(ConquestTheme.chip("Done" if done else ("Main" if main else "Side"), accent, MenuTheme.FS_CAPTION))
+	if tracked:
+		var tc := ConquestTheme.chip("Tracked", MenuTheme.GOLD_LITE, MenuTheme.FS_CAPTION)
+		tc.name = "TrackedChip"
+		tc.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		top.add_child(tc)
+	var kc := ConquestTheme.chip("Done" if done else ("Main" if main else "Side"), accent, MenuTheme.FS_CAPTION)
+	kc.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	top.add_child(kc)
 	if not String(e["summary"]).is_empty():
 		var s := MenuKit.label(String(e["summary"]), &"DimLabel", true)
 		s.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
@@ -1000,7 +1095,73 @@ func _quest_card(e: Dictionary) -> PanelContainer:
 			&"MutedLabel" if sd else &"", true)
 		l.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
 		col.add_child(l)
+	if done:
+		return card
+	var place: String = String(e.get("location", ""))
+	var atlas: WorldAtlas = QuestLog.atlas()
+	var l2: WorldLocation = atlas.location(place) if atlas != null and not place.is_empty() else null
+	if l2 != null:
+		var where := MenuKit.label("Where: " + l2.display_name, &"DimLabel")
+		where.name = "QuestWhere"
+		where.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+		col.add_child(where)
+	var actions := HFlowContainer.new()
+	actions.name = "QuestActions"
+	actions.add_theme_constant_override("h_separation", MenuTheme.SP_S)
+	actions.add_theme_constant_override("v_separation", MenuTheme.SP_XS)
+	col.add_child(actions)
+	var pinned: bool = _state != null and _state.tracked_quest == String(e["id"])
+	var track := MenuKit.button("Untrack" if pinned else "Track", MenuKit.GHOST, 110, 40)
+	track.name = "TrackButton"
+	track.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	track.tooltip_text = "Back to following the main quest on the HUD." if pinned \
+		else "Pin this quest to the HUD tracker."
+	track.pressed.connect(_on_track_pressed.bind(String(e["id"])))
+	actions.add_child(track)
+	var show := MenuKit.button("Show on map", MenuKit.GHOST, 140, 40)
+	show.name = "ShowOnMapButton"
+	show.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	show.disabled = l2 == null
+	show.pressed.connect(show_on_map.bind(place))
+	actions.add_child(show)
 	return card
+
+
+func _on_track_pressed(quest_id: String) -> void:
+	if _state == null:
+		return
+	var pin: String = "" if _state.tracked_quest == quest_id else quest_id
+	var ok: bool = false
+	if session != null and session.has_method(&"set_tracked_quest"):
+		ok = bool(session.set_tracked_quest(pin))
+	else:
+		ok = pin.is_empty() or QuestLog.is_active(_state, pin)
+		if ok:
+			_state.tracked_quest = pin
+	if ok:
+		var e: Dictionary = QuestLog.tracked_entry(_state)
+		set_status("Tracking: %s" % String(e.get("title", "")) if not e.is_empty() else "Nothing to track.")
+	refresh_quests()
+	var card := quest_card(quest_id)
+	var btn: Node = card.find_child("TrackButton", true, false) if card != null else null
+	if btn is Control:
+		(btn as Control).grab_focus()
+
+
+## Open the world map focused on [param location_id] (a quest's "Show on map").
+func show_on_map(location_id: String) -> void:
+	if not _map_scroll.visible:
+		_toggle_map()
+	if _map_mode != MAP_MODE_MAP:
+		set_map_mode(MAP_MODE_MAP)
+	if _map_view != null and _map_view.focus_location(location_id):
+		_map_view.grab_focus()
+
+
+func _focus_in(box: Node, node_name: String) -> void:
+	var found: Node = box.find_child(node_name, true, false)
+	if found is Control and (found as Control).is_visible_in_tree():
+		(found as Control).grab_focus()
 
 
 # =====================================================================================
@@ -1013,6 +1174,7 @@ func _toggle_map() -> void:
 	_map_scroll.visible = show
 	if show:
 		refresh_map()
+		_map_view.frame_default()
 	_link_rows_to(_map_scroll if show else null)
 
 
@@ -1025,14 +1187,81 @@ func show_map() -> void:
 		_toggle_map()
 
 
-## Rebuild the Map page: where you are, where a whiteout leads, every area visited and its Wayshrines.
+## The Map page's fixed parts: the toolbar (world map / places toggle, roads, zoom, Back), the
+## [WorldMapView], the places list and the controls hint. [method refresh_map] re-feeds them.
+func _build_map_page() -> void:
+	var bar := HFlowContainer.new()
+	bar.name = "MapToolbar"
+	bar.add_theme_constant_override("h_separation", MenuTheme.SP_S)
+	bar.add_theme_constant_override("v_separation", MenuTheme.SP_XS)
+	_map.add_child(bar)
+	var head := ConquestTheme.title_ribbon("WORLD MAP", MenuTheme.GOLD_DK, MenuTheme.FS_BODY)
+	head.name = "MapHeading"
+	head.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bar.add_child(head)
+	_map_back = _tool_button("Back", "MapBackButton", 84)
+	_map_back.visible = false
+	_map_back.pressed.connect(_on_map_back)
+	bar.add_child(_map_back)
+	_map_mode_button = _tool_button("Places", "MapModeButton", 104)
+	_map_mode_button.tooltip_text = "Switch between the world map and the list of places you know."
+	_map_mode_button.pressed.connect(func() -> void:
+		set_map_mode(MAP_MODE_LIST if _map_mode == MAP_MODE_MAP else MAP_MODE_MAP))
+	bar.add_child(_map_mode_button)
+	_map_roads = CheckButton.new()
+	_map_roads.name = "MapRoadsToggle"
+	_map_roads.text = "Roads"
+	_map_roads.focus_mode = Control.FOCUS_ALL
+	_map_roads.custom_minimum_size = Vector2(0, 40)
+	_map_roads.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	_map_roads.tooltip_text = "Overlay the roads: gold = main road, dashed = tracks, blue = sea routes."
+	_map_roads.toggled.connect(func(on: bool) -> void:
+		if _map_view != null:
+			_map_view.show_roads = on)
+	MenuNav.hover_focus(_map_roads)
+	bar.add_child(_map_roads)
+	var zoom_out := _tool_button("-", "MapZoomOut", 44)
+	zoom_out.tooltip_text = "Zoom out"
+	zoom_out.pressed.connect(func() -> void: _map_view.zoom_by(1.0 / 1.4))
+	bar.add_child(zoom_out)
+	var zoom_in := _tool_button("+", "MapZoomIn", 44)
+	zoom_in.tooltip_text = "Zoom in"
+	zoom_in.pressed.connect(func() -> void: _map_view.zoom_by(1.4))
+	bar.add_child(zoom_in)
+
+	_map_view = WorldMapView.new()
+	_map_view.name = "WorldMap"
+	_map_view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_map_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_map.add_child(_map_view)
+	_map_list = VBoxContainer.new()
+	_map_list.name = "PlaceList"
+	_map_list.add_theme_constant_override("separation", 8)
+	_map_list.visible = false
+	_map.add_child(_map_list)
+	_map_hint = MenuKit.label("Arrows: pick a place  ·  Confirm: zoom  ·  +/-, wheel or pinch: zoom  ·  drag: pan",
+		&"MutedLabel", true)
+	_map_hint.name = "MapHint"
+	_map_hint.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+	_map.add_child(_map_hint)
+
+
+func _tool_button(text: String, node_name: String, min_w: float) -> Button:
+	var b := MenuKit.button(text, MenuKit.GHOST, min_w, 40)
+	b.name = node_name
+	b.add_theme_font_size_override("font_size", MenuTheme.FS_SMALL)
+	return b
+
+
+## Rebuild the Map page: feed the world map (places, where you are, the Wayshrine, quest pins) and
+## rebuild the places list (where you are, where a whiteout leads, every area visited).
 func refresh_map() -> void:
-	_clear(_map)
-	var head := ConquestTheme.title_ribbon("MAP", MenuTheme.GOLD_DK, MenuTheme.FS_BODY)
-	head.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	_map.add_child(head)
+	_clear(_map_list)
 	if _state == null:
+		_link_rows_to(_map_scroll)
 		return
+	var pins: Array = QuestLog.map_pins(_state)
+	_map_view.setup(QuestLog.atlas(), _state, pins)
 	var here: String = _state.location_area()
 	var respawn_id: String = String(_state.respawn.get("area_id", ""))
 	var ids: Array[String] = []
@@ -1043,10 +1272,65 @@ func refresh_map() -> void:
 	if ids.is_empty():
 		var empty := MenuKit.label("You have not been anywhere yet.", &"DimLabel")
 		empty.name = "EmptyMap"
-		_map.add_child(empty)
+		_map_list.add_child(empty)
 	for id in ids:
-		_map.add_child(_place_card(id, id == here, id == respawn_id))
+		_map_list.add_child(_place_card(id, id == here, id == respawn_id))
+	_apply_map_mode()
 	_link_rows_to(_map_scroll)
+
+
+## "map" (the painting) or "list" (the place cards).
+func set_map_mode(mode: String) -> void:
+	_map_mode = MAP_MODE_LIST if mode == MAP_MODE_LIST else MAP_MODE_MAP
+	_apply_map_mode()
+	_link_rows_to(_map_scroll)
+	if _map_scroll.visible:
+		(_map_view if _map_mode == MAP_MODE_MAP else _map_mode_button).grab_focus()
+
+
+func map_mode() -> String:
+	return _map_mode
+
+
+func _apply_map_mode() -> void:
+	var on_map: bool = _map_mode == MAP_MODE_MAP
+	_map_view.visible = on_map
+	_map_hint.visible = on_map and get_viewport() != null and get_viewport().get_visible_rect().size.y >= 560.0
+	_map_list.visible = not on_map
+	_map_mode_button.text = "Places" if on_map else "World map"
+	for n in ["MapRoadsToggle", "MapZoomOut", "MapZoomIn"]:
+		var c: Node = _map.find_child(n, true, false)
+		if c is Control:
+			(c as Control).visible = on_map
+	_map_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if on_map \
+		else ScrollContainer.SCROLL_MODE_AUTO
+
+
+## The world map control (tests, "Show on map").
+func world_map() -> WorldMapView:
+	return _map_view
+
+
+func _is_compact() -> bool:
+	return get_viewport() != null and get_viewport().get_visible_rect().size.x < COMPACT_WIDTH
+
+
+## Phone width: hide the command card while focus is inside the map page, bring it back as soon
+## as focus returns to the rows (Esc / Back).
+func _on_gui_focus_changed(f: Control) -> void:
+	if not is_open() or f == null:
+		return
+	var in_map: bool = _map_scroll.visible and _map_scroll.is_ancestor_of(f)
+	var compact: bool = _is_compact() and in_map
+	_card.visible = not compact
+	_map_back.visible = compact
+
+
+func _on_map_back() -> void:
+	_card.visible = true
+	_map_back.visible = false
+	if _map_row != null:
+		_map_row.grab_focus()
 
 
 func _place_card(id: String, is_here: bool, is_rest: bool) -> PanelContainer:
