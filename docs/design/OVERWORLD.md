@@ -179,7 +179,7 @@ game/overworld/
 | Field | Type | Notes |
 |---|---|---|
 | `area_id` | StringName | stable key (saves, flags, warps) |
-| `display_name` | String | "Oakvale", shown in the area ribbon |
+| `display_name` | String | "Oakvale", shown in the location popup (small, top-right, non-blocking; see `PlaceAnnouncer`) |
 | `terrain` | MapResource | the painted board (Map Maker) |
 | `kind` | enum TOWN / ROUTE / INTERIOR / DUNGEON | HUD / music / map icon; interiors skip the skirt |
 | `region_id`, `world_map_pos` | StringName, Vector2 | world map screen (§4.9) |
@@ -467,7 +467,7 @@ duel = the lead healthy member (switching per DUEL.md). New members join via `Jo
 | Screen | Build from |
 |---|---|
 | Story start (slots: Continue / New Journey / Delete) | `MenuKit.build_page`, `option_card` per slot (area, play time, party crests) |
-| Overworld HUD: area ribbon, interaction prompt ("[Space] Talk" via `InputActions.hint`), quest toast, touch A / Menu buttons | `ConquestTheme.title_ribbon`, `chip`, `HudSafeArea` rules |
+| Overworld HUD: location popup, interaction prompt ("[Space] Talk" via `InputActions.hint`), quest toast, touch A / Menu buttons | `ConquestTheme.title_ribbon`, `chip`, `HudSafeArea` rules |
 | Journey menu (Party, Bag, Quests, Map, Save, Settings, Title) | `MapMenu` look (`row_box`, leaf marker) |
 | Party screen (order, swap lead, equip, HP bars, wounded) | `ConquestTheme.unit_card_box`, `portrait` crests, existing unit detail page |
 | Bag / Shop | `option_card`, `GroveGem`, `pill_box` prices |

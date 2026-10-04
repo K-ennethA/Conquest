@@ -133,7 +133,7 @@ func test_boots_on_the_tile_board_with_hero_and_actors() -> void:
 	assert_not_null(ow.actor("briony"), "NPC actors exist (your mother)")
 	assert_not_null(ow.actor("house_home"), "scenery props get actors too")
 	assert_not_null(ow.player.model(), "the hero has a model (the HeroResource placeholder)")
-	assert_eq(ow.hud.area_ribbon().get_node("Text").text, "OAKVALE", "the area ribbon names the town")
+	assert_eq(ow.hud.area_popup().get_node("Text").text, "OAKVALE", "the location popup names the town")
 
 
 func test_walk_turn_and_collide() -> void:

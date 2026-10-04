@@ -2,7 +2,7 @@ class_name OverworldHUD
 extends CanvasLayer
 
 ## The overworld's thin HUD (docs/design/OVERWORLD.md §4.10), all grove kit (docs/UI_STYLE.md):
-##   * the AREA RIBBON (top centre) -- a swallow-tailed title ribbon that fades in on arrival;
+##   * the LOCATION POPUP (top right) -- a small name chip that slides in on entering a new place;
 ##   * the INTERACTION PROMPT (bottom centre) -- "[Space] Talk" in the live binding's glyph,
 ##     shown while the hero faces something usable;
 ##   * TOASTS (top right) -- gold ribbons for quests, items and gold, stacked, self-dismissing;
@@ -13,7 +13,10 @@ extends CanvasLayer
 ## Presentation only: the controller tells it what to show.
 
 const LAYER_INDEX: int = 20
-const RIBBON_HOLD: float = 2.4
+const POPUP_HOLD: float = 2.0
+const POPUP_TOP: float = 22.0
+const POPUP_MARGIN: float = 22.0
+const POPUP_MIN_WIDTH: float = 150.0
 const TOAST_HOLD: float = 2.6
 const QUEST_TOAST_HOLD: float = 3.4
 const TRACKER_WIDTH: float = 280.0
@@ -55,31 +58,51 @@ func _is_touch() -> bool:
 	return DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")
 
 
-# --- Area ribbon ------------------------------------------------------------------
+# --- Location popup -----------------------------------------------------------------
 
+## The classic-Pokemon LOCATION POPUP: a small name chip that slides in at the top-right corner,
+## holds for [constant POPUP_HOLD] and slides out again. Pure presentation -- it never takes input
+## and never pauses the hero (mouse_filter IGNORE; no script, no overlay). WHEN to show it is
+## [PlaceAnnouncer]'s rule.
 func show_area_name(text: String) -> void:
 	if _ribbon != null and is_instance_valid(_ribbon):
 		_ribbon.queue_free()
-	_ribbon = ConquestTheme.title_ribbon(text.to_upper(), MenuTheme.GOLD_DK, MenuTheme.FS_HEADING)
-	_ribbon.name = "AreaRibbon"
-	_ribbon.custom_minimum_size = Vector2(320, 0)
-	_ribbon.anchor_left = 0.5
-	_ribbon.anchor_right = 0.5
-	_ribbon.offset_top = 22
-	_ribbon.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_ribbon = ConquestTheme.title_ribbon(text.to_upper(), MenuTheme.GOLD_DK, MenuTheme.FS_BODY)
+	_ribbon.name = "AreaPopup"
+	_ribbon.anchor_left = 1.0
+	_ribbon.anchor_right = 1.0
+	_ribbon.offset_top = POPUP_TOP
 	_root.add_child(_ribbon)
-	_ribbon.offset_left = -160
-	_ribbon.offset_right = 160
+	var w: float = maxf(_ribbon.get_combined_minimum_size().x, POPUP_MIN_WIDTH)
+	var shown_right: float = -POPUP_MARGIN
+	_ribbon.offset_left = shown_right - w
+	_ribbon.offset_right = shown_right
 	if not _anims_on():
+		# No slide: it simply stays for its hold, then goes.
+		get_tree().create_timer(POPUP_HOLD).timeout.connect(_ribbon.queue_free)
 		return
-	_ribbon.modulate.a = 0.0
+	var slide: float = w + POPUP_MARGIN + 8.0
+	_ribbon.offset_left += slide
+	_ribbon.offset_right += slide
 	var tw := _ribbon.create_tween()
-	tw.tween_property(_ribbon, "modulate:a", 1.0, 0.35)
-	tw.tween_interval(RIBBON_HOLD)
-	tw.tween_property(_ribbon, "modulate:a", 0.0, 0.6)
+	tw.tween_method(_set_popup_slide.bind(_ribbon, w, shown_right), slide, 0.0, 0.3) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(POPUP_HOLD)
+	tw.tween_method(_set_popup_slide.bind(_ribbon, w, shown_right), 0.0, slide, 0.3) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tw.tween_callback(_ribbon.queue_free)
 
 
-func area_ribbon() -> PanelContainer:
+## One frame of the popup's slide: [param slide] is the pixels still to travel off-screen.
+func _set_popup_slide(slide: float, chip: Control, w: float, shown_right: float) -> void:
+	if chip == null or not is_instance_valid(chip):
+		return
+	chip.offset_left = shown_right - w + slide
+	chip.offset_right = shown_right + slide
+
+
+## The location popup while it is showing, else null.
+func area_popup() -> PanelContainer:
 	return _ribbon if _ribbon != null and is_instance_valid(_ribbon) else null
 
 

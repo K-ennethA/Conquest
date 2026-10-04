@@ -4,13 +4,13 @@ extends GutTest
 ## from game/overworld/build/build_story_content.gd) through the real OverworldScene and a real
 ## booted GameWorld for the first fight:
 ##
-##   new journey -> Oakvale (home): the mother's send-off -> the Mossway (no creature: the grass
-##   hint, no encounters) -> Crownhaven: arrival -> through the Royal Workshop's door -> Professor
-##   Elias's ceremony inside (the starter joins,
-##   the bonding shard) -> the alarm: out to the yard -> the raid (raiders appear, Elias is taken, the Sergeant runs
-##   up) -> the chase to Oakvale's ruins -> the mother's fate + the Sergeant's offer -> the FIRST
-##   FIGHT (tactical; the Sergeant's creature as a guest ally) -> win -> Continue Journey -> the
-##   aftermath: opening.complete + the Act 1 hook, the cairn, the road open again.
+##   new journey -> Oakvale (home): the mother's send-off -> the Mossway (no creature: no
+##   encounters, no hint scene) -> River Crossing / Crownhaven (no arrival scenes) -> through the Royal
+##   Workshop's door -> Professor Elias's ceremony inside (the starter joins, the bonding shard) ->
+##   the KIDNAPPING in the same room (enemy soldiers appear, Elias is taken) -> the hero walks to
+##   Oakvale's ruins himself -> the General and the Warrior tell what happened and offer the fight ->
+##   the FIRST FIGHT (tactical; both as guest allies) -> win -> Continue Journey -> the aftermath:
+##   opening.complete, the cairn, the road open and nobody sending the hero anywhere.
 ##
 ## Scene changes are OFF on StoryController: every warp / battle hand-off records its target and
 ## the test boots the next scene itself. Animations off: walks, emotes and bubbles are instant.
@@ -22,7 +22,8 @@ const TEMP_DIR := "user://test_story_opening/"
 const TEMP_BATTLE_SAVE := "user://test_story_opening_battle.json"
 const FIRST_FIGHT_MAP := "res://game/overworld/content/battles/ow_oakvale_ashes.tres"
 const STARTER := "tree_grunt"
-const GUEST := "gem_knight"
+const GENERAL := "gem_knight"
+const WARRIOR := "vineweave"
 
 var _guard
 var _scene: Node = null
@@ -199,8 +200,7 @@ func test_the_opening_plays_end_to_end() -> void:
 	await _step(ow, Vector2i(1, 0))
 	await _step(ow, Vector2i(1, 0))
 	await _step(ow, Vector2i(1, 0))
-	assert_true(StoryController.is_script_running(), "the grass rustles (the no-partner hint)")
-	await _drain(ow)
+	assert_false(StoryController.is_script_running(), "no hint scene stops the walk through the grass")
 	s.grace_steps = 0
 	ow = await _boot("mossway", Vector3i(4, 2, 0), "east")
 	for i in range(12):
@@ -213,17 +213,19 @@ func test_the_opening_plays_end_to_end() -> void:
 	await _step(ow, Vector2i(1, 0))
 	assert_eq(s.location_area(), "river_crossing", "the Mossway's east end is River Crossing")
 	ow = await _boot()
-	await _drain(ow)
-	assert_true(s.has_flag("river_crossing.arrived"), "River Crossing's arrival narration plays")
+	assert_false(StoryController.is_script_running(), "arriving at River Crossing plays no scene")
+	assert_true(s.has_flag("river_crossing.arrived"), "the arrival is still recorded, silently")
 	ow = await _boot("river_crossing", Vector3i(11, 1, 0), "north")
 	await _step(ow, Vector2i(0, -1))
 	assert_eq(s.location_area(), "crownhaven", "the King's road north ends at Crownhaven's south gate")
 	ow = await _boot()
-	assert_eq(ow.hud.area_ribbon().get_node("Text").text, "CROWNHAVEN", "the ribbon names the town")
-	await _drain(ow)
-	assert_true(s.has_flag("opening.arrived_crownhaven"), "the arrival narration plays once")
+	assert_not_null(ow.hud.area_popup(), "a small popup names the new place")
+	assert_eq(ow.hud.area_popup().get_node("Text").text, "CROWNHAVEN", "the popup names the town")
+	assert_false(StoryController.is_script_running(), "and nothing stops the hero's walk")
+	assert_false(ow.is_input_blocked(), "the controls are free")
+	assert_true(s.has_flag("opening.arrived_crownhaven"), "the arrival is recorded, silently")
 
-	# 5. THE CEREMONY (inside the Royal Workshop) and THE RAID (out in its yard).
+	# 5. THE CEREMONY (inside the Royal Workshop) and THE KIDNAPPING (in the same room).
 	ow = await _boot("crownhaven", Vector3i(24, 7, 0), "north")
 	assert_eq(ow.entity_at(Vector3i(24, 6, 0)).kind(), &"door", "the Royal Workshop's door")
 	assert_false(ow.try_step(Vector2i(0, -1)), "the door is not a cell to stand on...")
@@ -231,15 +233,17 @@ func test_the_opening_plays_end_to_end() -> void:
 	assert_eq(s.location_area(), "crownhaven_workshop", "...stepping into it goes inside")
 	assert_eq(s.location_cell(), Vector3i(6, 6, 0), "onto the cell above the exit mat")
 	ow = await _boot("crownhaven_workshop", Vector3i(6, 3, 0), "north")
+	assert_false(StoryController.is_script_running(), "going inside plays nothing by itself")
 	assert_eq(ow.entity_at(Vector3i(6, 2, 0)).id, &"elias", "Professor Elias waits inside his workshop")
 	var seen := {"raiders": false, "starter": false}
+	var workshop_ow: OverworldController = ow
 	var watch := func() -> void:
-		if not is_instance_valid(ow):
+		if not is_instance_valid(workshop_ow):
 			return
-		var r: OverworldActor = ow.actor("raider_captain")
+		var r: OverworldActor = workshop_ow.actor("raider_captain")
 		if r != null and r.visible:
 			seen["raiders"] = true
-		var st: OverworldActor = ow.actor("starter")
+		var st: OverworldActor = workshop_ow.actor("starter")
 		if st != null and st.visible:
 			seen["starter"] = true
 	assert_true(ow.interact(), "talk to Professor Elias")
@@ -250,33 +254,26 @@ func test_the_opening_plays_end_to_end() -> void:
 		assert_eq(s.party[0].character_id, STARTER, "the starter (%s)" % STARTER)
 	for f in ["key.bonding_shard", "opening.starter_received", "opening.starter_pick"]:
 		assert_true(s.has_flag(f), "flag %s is set" % f)
-	assert_false(s.has_flag("opening.attack"), "the raid has not started inside")
-	assert_eq(s.location_area(), "crownhaven", "the alarm brings you out...")
-	assert_eq(s.location_cell(), Vector3i(24, 7, 0), "...into the workshop yard, in front of the door")
-	ow = await _boot()
-	assert_true(StoryController.is_script_running(), "the raid starts in the yard")
-	var yard_ow: OverworldController = ow
-	var watch_yard := func() -> void:
-		if not is_instance_valid(yard_ow):
-			return
-		var r: OverworldActor = yard_ow.actor("raider_captain")
-		if r != null and r.visible:
-			seen["raiders"] = true
-	await _drain(ow, 0, watch_yard)
-	assert_true(seen["raiders"], "raiders storm the workshop yard")
+	assert_true(seen["raiders"], "enemy soldiers appear in the room")
 	for f in ["opening.attack", "opening.researcher_taken", "opening.raiders_fled", "opening.chase"]:
 		assert_true(s.has_flag(f), "flag %s is set" % f)
-	assert_eq(s.location_area(), "oakvale_ruins", "the chase ends in Oakvale's ruins")
-	assert_eq(s.location_cell(), Vector3i(21, 9, 0), "on the east road")
+	assert_eq(s.location_area(), "crownhaven_workshop", "the kidnapping happens indoors: nothing warps the hero away")
+	assert_false(StoryController.is_script_running(), "and the hero is handed the controls")
 	assert_eq(s.respawn, {"area_id": "oakvale_ruins", "entry": "wayshrine"}, "a whiteout now wakes you in the ruins")
-	assert_true(StorySaveManager.has_save(1), "the warp autosaved")
+	assert_true(StorySaveManager.has_save(1), "the end of the kidnapping autosaved")
 
-	# 6. THE RUINS: your mother's fate, the Sergeant's offer -> the FIRST FIGHT.
+	# 6. THE HERO WALKS HOME HIMSELF: the Mossway's west end now leads to the burned village.
+	ow = await _boot("mossway", Vector3i(1, 6, 0), "west")
+	await _step(ow, Vector2i(-1, 0))
+	assert_eq(s.location_area(), "oakvale_ruins", "the Mossway's west end leads to the burned village")
+
+	# 7. THE RUINS: the General and the Warrior say what happened -> the offer of the FIRST FIGHT.
 	ow = await _boot()
 	assert_eq(ow.area.area_id, &"oakvale_ruins", "the burned village")
+	assert_true(ow.actor("general").visible and ow.actor("warrior").visible, "the General and the Warrior wait there")
 	await _drain(ow, 0)
-	assert_true(s.has_flag("opening.ruins_seen"), "the fate scene played")
-	assert_true(s.has_flag("opening.rowan_arrived"), "the Sergeant arrived")
+	assert_true(s.has_flag("opening.ruins_seen"), "the arrival scene played")
+	assert_true(s.has_flag("opening.allies_met"), "the allies were met")
 	var req: BattleRequest = StoryController.active_request()
 	assert_not_null(req, "choosing to fight stages the first battle")
 	if req == null:
@@ -287,7 +284,7 @@ func test_the_opening_plays_end_to_end() -> void:
 	assert_eq(GameSettings.selected_squad, [STARTER], "your creature fights")
 	assert_true(StoryController.is_battle_active(), "a story battle is armed")
 
-	# 7. THE BATTLE on a real GameWorld: win it.
+	# 8. THE BATTLE on a real GameWorld: win it.
 	_clear_globals()
 	_mount(WORLD_SCENE)
 	var up: bool = await _await_until(func() -> bool:
@@ -302,10 +299,11 @@ func test_the_opening_plays_end_to_end() -> void:
 			guests.append(u)
 		elif not _player_side(u):
 			foes.append(u)
-	assert_eq(guests.size(), 1, "the Sergeant's creature fights beside you as a guest")
-	if guests.size() == 1:
-		assert_eq(String(guests[0].character_resource.character_id), GUEST, "his Geode")
-	assert_eq(foes.size(), 3, "against the raiders' rear guard")
+	assert_eq(guests.size(), 2, "the General and the Warrior fight beside you as guests")
+	var guest_ids: Array = guests.map(func(u) -> String: return String(u.character_resource.character_id))
+	guest_ids.sort()
+	assert_eq(guest_ids, [GENERAL, WARRIOR], "(placeholder roster units)")
+	assert_eq(foes.size(), 4, "against enemy soldiers and their creatures")
 	for u in foes:
 		u.take_damage(99999)
 	var won: bool = await _await_until(func() -> bool: return _resolved.size() > 0)
@@ -323,29 +321,59 @@ func test_the_opening_plays_end_to_end() -> void:
 	assert_null(StoryController.active_request(), "the battle is disarmed")
 	assert_true(s.has_flag("opening.first_fight_won"), "the win is recorded")
 
-	# 8. THE AFTERMATH: back in the ruins, the paused script resumes on the victory.
+	# 9. THE AFTERMATH: back in the ruins, the paused script resumes on the victory.
 	_clear_globals()
 	ow = await _boot()
 	assert_eq(ow.area.area_id, &"oakvale_ruins", "back in the ruins where you stood")
 	await _drain(ow)
 	assert_true(s.has_flag("opening.complete"), "the opening is complete")
-	assert_true(s.has_flag("act1.find_rowan"), "and the Sergeant's hook sets up Act 1")
 	assert_false(StoryController.is_script_running(), "the aftermath ran to its end")
 	ow.refresh_world()
 	assert_true(ow.actor("cairn").visible, "a cairn stands for the hero's mother")
-	assert_false(ow.actor("rowan").visible, "the Sergeant has ridden for Crownhaven")
+	assert_false(ow.actor("general").visible, "the General has gone to prepare for war")
+	assert_false(ow.actor("warrior").visible, "and so has the Warrior")
 	assert_true((StorySaveManager.peek(1)["flags"] as Dictionary).has("opening.complete"), "and the journey saved it")
+	var tracked: Dictionary = QuestLog.tracked_entry(s)
+	assert_eq(String(tracked.get("id", "")), "grow_stronger", "the objective is the placeholder 'Grow stronger'")
+	assert_eq(String(tracked.get("area", "")), "", "which sends the hero nowhere in particular")
 
-	# 9. The road is open again, and the Mossway's trainer is out.
+	# 10. The road is open again, and the Mossway's trainer is out.
 	ow = await _boot("oakvale_ruins", Vector3i(22, 9, 0), "east")
 	await _step(ow, Vector2i(1, 0))
 	assert_eq(s.location_area(), "mossway", "the ruins' east road leads back to the Mossway")
 	ow = await _boot()
 	assert_true(ow.actor("bram").visible, "Bram now watches the road")
 
-	# 10. The Act 1 hook: the Sergeant waits at the Crownhaven barracks.
+	# 11. Optional: the Sergeant at the Crownhaven barracks still signs you onto his detail.
 	ow = await _boot("crownhaven", Vector3i(7, 10, 0), "north")
-	await _drain(ow)
+	assert_false(StoryController.is_script_running(), "he does not summon you: nothing plays on the way in")
 	assert_true(ow.interact(), "talk to the Sergeant at the barracks")
 	await _drain(ow)
 	assert_true(s.has_flag("act1.met_rowan"), "he signs you onto his detail")
+
+
+## "Not yet." in the burned village: no battle, the allies wait, and the hero is free to explore (the
+## village's east road is open) -- talking to either of them offers the fight again.
+func test_not_yet_lets_the_hero_explore_and_the_allies_wait() -> void:
+	assert_true(bool(StoryController.new_journey(1)["success"]), "a new journey")
+	var s: StoryState = StoryController.state()
+	for f in ["opening.sent_off", "opening.arrived_crownhaven", "opening.ceremony", "opening.starter_received",
+			"opening.attack", "opening.researcher_taken", "opening.raiders_fled", "opening.chase"]:
+		s.set_flag(f, 1)
+	s.add_member(STARTER)
+	var ow := await _boot("oakvale_ruins", Vector3i(22, 9, 0), "west")
+	assert_true(StoryController.is_script_running(), "arriving plays the short meeting")
+	await _drain(ow, 1)
+	assert_true(s.has_flag("opening.ruins_seen"), "the meeting happened")
+	assert_null(StoryController.active_request(), "'Not yet.' stages no battle")
+	assert_false(s.has_flag("opening.complete"), "the opening is not over")
+	assert_false(StoryController.is_script_running(), "and the hero is free")
+	assert_true(ow.actor("general").visible and ow.actor("warrior").visible, "the allies wait")
+	ow = await _boot("oakvale_ruins", Vector3i(22, 9, 0), "east")
+	assert_false(StoryController.is_script_running(), "coming back later replays no meeting")
+	await _step(ow, Vector2i(1, 0))
+	assert_eq(s.location_area(), "mossway", "the east road is open: go and explore first")
+	ow = await _boot("oakvale_ruins", Vector3i(19, 9, 0), "west")
+	assert_true(ow.interact(), "talk to the General again")
+	await _drain(ow, 0)
+	assert_not_null(StoryController.active_request(), "the offer stands: yes stages the fight")

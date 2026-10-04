@@ -20,30 +20,27 @@
 			"id": "smoke_over_oakvale",
 			"title": "Smoke Over Oakvale",
 			"category": "main",
-			"summary": "Cindral raiders struck Crownhaven and fled west with the researcher. Oakvale lies in their path.",
-			"giver": "rowan",
+			"summary": "Enemy soldiers took Professor Elias and burned Oakvale as a distraction.",
+			"giver": "general",
 			"location": "oakvale",
 			"area": "oakvale_ruins",
 			"start_flag": "opening.attack",
 			"complete_flag": "opening.complete",
 			"steps": [
-				{"flag": "opening.ruins_seen", "text": "Chase the raiders west to Oakvale and see what is left.", "location": "oakvale", "area": "oakvale_ruins"},
-				{"flag": "opening.first_fight_won", "text": "Stand with Sergeant Rowan against the raiders' rear guard.", "location": "oakvale", "area": "oakvale_ruins", "npc": "rowan"},
-				{"flag": "opening.complete", "text": "Speak with Rowan once the smoke clears.", "location": "oakvale", "area": "oakvale_ruins", "npc": "rowan"}
+				{"flag": "opening.ruins_seen", "text": "Make your way to Oakvale and see what is left.", "location": "oakvale", "area": "oakvale_ruins"},
+				{"flag": "opening.first_fight_won", "text": "Stand with the General and the Warrior against the enemy rear guard.", "location": "oakvale", "area": "oakvale_ruins", "npc": "general"},
+				{"flag": "opening.complete", "text": "Speak with the General once the smoke clears.", "location": "oakvale", "area": "oakvale_ruins", "npc": "general"}
 			]
 		},
 		{
-			"id": "rowans_charge",
-			"title": "Rowan's Charge",
+			"id": "grow_stronger",
+			"title": "Grow Stronger",
 			"category": "main",
-			"summary": "The raiders took Professor Elias. Sergeant Rowan has the next lead.",
-			"giver": "rowan",
-			"location": "crownhaven",
-			"area": "crownhaven",
-			"start_flag": "act1.find_rowan",
+			"summary": "Placeholder: the General and the Warrior are preparing for war. Grow stronger, for your mother's sake, and explore.",
+			"start_flag": "opening.complete",
 			"complete_flag": "act1.met_rowan",
 			"steps": [
-				{"flag": "act1.met_rowan", "text": "Find Sergeant Rowan at the Crownhaven barracks.", "location": "crownhaven", "area": "crownhaven", "npc": "rowan"}
+				{"flag": "act1.met_rowan", "text": "Grow stronger."}
 			]
 		},
 		{

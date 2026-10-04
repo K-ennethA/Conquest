@@ -95,6 +95,8 @@ var _pending_event: Dictionary = {}
 var _offering: bool = false
 ## Quest start / advance / complete detection ([method poll_quest_events]).
 var _quest_tracker: QuestTracker = QuestTracker.new()
+## Which places have been named by the location popup this session (not saved).
+var _places: PlaceAnnouncer = PlaceAnnouncer.new()
 
 ## Tests switch scene changes off and drive the round trip by hand.
 var scene_changes_enabled: bool = true
@@ -283,6 +285,7 @@ func _begin_session(s: StoryState, slot: int) -> void:
 	if s != null:
 		s.drain_changes()   # loading a save "sets" every flag: not news
 	_quest_tracker.reset(s)   # nor is any quest it already holds
+	_places.reset()
 	_runner = StoryScriptRunner.new()
 	session_changed.emit()
 
@@ -299,6 +302,14 @@ func end_session() -> void:
 	_quest_tracker.reset(null)
 	_runner = StoryScriptRunner.new()
 	session_changed.emit()
+
+
+## Should entering [param area] name it with the location popup now? (PlaceAnnouncer's rule: a
+## different named place, never a building's interior, never a quick hop back.) Records the answer.
+func announce_place(area: OverworldAreaResource) -> bool:
+	if area == null:
+		return false
+	return _places.announce(area.display_name, area.is_interior(), Time.get_ticks_msec())
 
 
 ## The journey's difficulty tier ("" without a session).

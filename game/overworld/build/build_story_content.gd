@@ -44,15 +44,22 @@ extends SceneTree
 ##      interior, see INTERIORS); he explains his new invention (the stones let a person bond with
 ##      a creature), the stone is yours and you CHOOSE a starter from STARTER_OPTIONS (placeholders)
 ##      ......................... opening.starter_received, opening.starter_pick, key.bonding_shard
-##   4. The raid: an alarm ends the ceremony -- Elias and the hero step out into the workshop yard,
-##      where Crownhaven's on_enter plays the raid: Cindral raiders seize Elias and flee out the
-##      south gate, down the road home; the Sergeant runs up; you give chase (a scripted warp)
-##      ........ opening.attack, opening.researcher_taken, opening.raiders_fled, opening.chase
-##   5. Oakvale in ashes (a second area, swapped in by the Mossway's flag-gated west warps):
-##      your mother's fate, and the Sergeant's offer to fight ...... opening.ruins_seen
-##   6. The FIRST FIGHT: a tactical battle on ow_oakvale_ashes vs the raiders' rear guard, the
-##      Sergeant's Geode fighting beside your starter as a guest .... opening.first_fight_won
-##   7. Aftermath: the Sergeant's hook into Act 1 ............... opening.complete, act1.find_rowan
+##   4. The kidnapping (INSIDE the Royal Workshop, right after the starter is chosen): placeholder
+##      enemy soldiers appear in the room and take Elias; enemies are attacking the city at the same
+##      time as a distraction, and the raiders run to escape (and burn Oakvale). The hero is then
+##      free -- nothing warps him anywhere; the Mossway's west end leads to the burned village
+##      ............................. opening.attack, opening.researcher_taken, opening.raiders_fled, opening.chase
+##   5. Oakvale in ashes (a second area, swapped in by the Mossway's flag-gated west warps): the
+##      General and the Warrior (PLACEHOLDERS) say what happened and ask you to fight; "Not yet."
+##      lets you explore first ...................................... opening.allies_met, opening.ruins_seen
+##   6. The FIRST FIGHT: a tactical battle on ow_oakvale_ashes vs enemy soldiers and their creatures,
+##      the General and the Warrior fighting beside your starter as guests ... opening.first_fight_won
+##   7. Aftermath: they task you with getting stronger, while they prepare for war; then the whole
+##      region is open ............................ opening.complete (+ legacy act1.find_rowan)
+##
+## NO INTERRUPTIONS: arriving somewhere never plays a scene -- the HUD's location popup
+## (PlaceAnnouncer) names a new place and the hero keeps walking; ambient NPC talk speaks only when
+## spoken to; the rival is an opt-in bout. Cutscenes are kept to the lines needed to follow them.
 ##
 ## DUELS IN STORY (DECISIONS.md #31 / #33 -- the section at the end of this file): a duel trainer
 ## (Tester Fenna, the Mossway), the rival (Lark: rival.*), the barracks' sparring roster (a cooldown
@@ -82,6 +89,11 @@ const NAMES := {
 	"ASSISTANT": "Tam",
 	"SOLDIER": "Rowan",                     # becomes the recurring general (DECISIONS.md #21)
 	"SOLDIER_TITLE": "Sergeant Rowan",
+	# TODO(story): PLACEHOLDER allies who meet the hero in burned Oakvale and fight beside him in the
+	# first fight (owner: "the general and another warrior"). Names, looks and roles are TBD -- rename
+	# them here, in one place. (Whether the General is Sergeant Rowan is an open question.)
+	"GENERAL": "General",
+	"WARRIOR": "Warrior",
 	"RAIDER_CAPTAIN": "Raider Captain",
 	"KINGDOM": "Aldermere",
 	"NATION": "Cindral",                    # the enemy nation (framed; the Gloam stays secret)
@@ -253,11 +265,16 @@ const STARTER_OPTIONS: Array[Dictionary] = [
 	{"character_id": &"petalfang", "label": "Petalfang", "placeholder": true},
 	{"character_id": &"blightcap", "label": "Blightcap", "placeholder": true},
 ]
-## The Sergeant's army-issued creature, fighting as a GUEST in the first fight (a player-0 turn-1
-## Reinforcement slot on the battle map: placed at load, never replaced by the squad pick).
+## Sergeant Rowan's army-issued creature: his sparring partner in the Crownhaven barracks.
 const GUEST_ID := "gem_knight"
-## PLACEHOLDER raider units (existing Dark roster creatures) until Cindral's own units exist.
-const RAIDER_UNITS: Array[String] = ["undead", "undead", "monster"]
+## TODO(story): PLACEHOLDER guest units for the General and the Warrior in the first fight (existing
+## roster units standing in: the knight and the "warrior grown rather than armed" -- no human
+## battle unit exists yet). They fight beside your starter as player-0 turn-1 Reinforcements.
+const GENERAL_UNIT := "gem_knight"
+const WARRIOR_UNIT := "vineweave"
+## PLACEHOLDER enemy units for the first fight (existing roster units): the soldiers first, then
+## their creatures. In map-spawn order (see [method _build_first_fight_map]).
+const RAIDER_UNITS: Array[String] = ["undead", "undead", "blightcap", "monster"]
 ## The hero's placeholder overworld model (DECISIONS.md #4): swap the model here.
 const HERO_MODEL := "res://game/characters/models/forest/wren_forge.glb"
 
@@ -277,7 +294,8 @@ const F_ATTACK := "opening.attack"
 const F_TAKEN := "opening.researcher_taken"
 const F_FLED := "opening.raiders_fled"
 const F_CHASE := "opening.chase"
-const F_ROWAN_ARRIVED := "opening.rowan_arrived"
+## The General and the Warrior have been met in the ruins (the arrival scene ran).
+const F_ALLIES_MET := "opening.allies_met"
 const F_RUINS_SEEN := "opening.ruins_seen"
 const F_FIGHT_WON := "opening.first_fight_won"
 const F_COMPLETE := "opening.complete"
@@ -833,6 +851,8 @@ func _warp_cmd(area_id: StringName, entry: StringName) -> WarpCommand:
 ## The Royal Workshop's prop id in Crownhaven. Its door's town entry ("door_workshop", the cell in
 ## front of the door) is where the ceremony's alarm brings the hero out, into the raid.
 const CH_WORKSHOP_PROP := "workshop"
+## The workshop interior's east-most floor column (it is 10 wide): where the kidnapping raiders come and go.
+const WORKSHOP_EAST_X := 10
 
 ## OPT-IN, per building: town area id -> {building prop id -> spec}. A building NOT listed here
 ## stays a plain solid block: no door, no marker, no room. Listed: the places the story uses now
@@ -1011,11 +1031,9 @@ func _interior_people(iid: String, size: Vector2i, door_x: int) -> Array:
 func _interior_on_enter(iid: String) -> Array:
 	match iid:
 		"crownhaven_workshop":
-			# A journey that stopped between the ceremony and the raid: back out to the yard (the
-			# raid resumes there -- Crownhaven's on_enter).
-			return [IfCommand.make("has(\"%s\") and not has(\"%s\")" % [F_STARTER, F_CHASE], [
-				_warp_cmd(&"crownhaven", StringName(DoorEntity.entry_id_for(CH_WORKSHOP_PROP))),
-			])]
+			# A journey that stopped between the ceremony and the end of the kidnapping resumes it here,
+			# in the room where it happens.
+			return [IfCommand.make("has(\"%s\") and not has(\"%s\")" % [F_STARTER, F_CHASE], _raid())]
 	return []
 
 
@@ -1052,9 +1070,9 @@ func _build_battle_map() -> void:
 
 
 ## THE FIRST FIGHT: the village road past the burned mill, where the raiders' rear guard holds.
-## West: your squad chairs + the Sergeant's GUEST creature (a player-0 Reinforcement due on
-## turn 1 = placed at load and never replaced by the squad pick). East: the raiders' chained
-## creatures (PLACEHOLDER Dark roster units -- RAIDER_UNITS).
+## West: your squad chairs + the General and the Warrior as GUESTS (player-0 Reinforcements due on
+## turn 1 = placed at load, never replaced by the squad pick). East: the enemy soldiers and their
+## creatures (PLACEHOLDER roster units -- RAIDER_UNITS).
 func _build_first_fight_map() -> void:
 	var m := _new_map("Oakvale Mill Road", 12, 8,
 		"The road past Oakvale's burned mill, where the raiders' rear guard holds the way to the border.")
@@ -1077,9 +1095,12 @@ func _build_first_fight_map() -> void:
 	m.unit_spawns.clear()
 	for c in [Vector2i(1, 3), Vector2i(1, 4), Vector2i(1, 5)]:
 		m.set_character_spawn_at_position(c, 0, String(STARTER_ID))
+	# The General and the Warrior (PLACEHOLDER roster units): guest allies, placed at load.
 	m.set_spawn_point_at_position(Vector2i(2, 2), 0, MapResource.SPAWN_KIND_REINFORCEMENT,
-		{"character_id": GUEST_ID, "spawn_turn": 1, "max_spawns": 1})
-	var foes := [Vector2i(9, 2), Vector2i(9, 6), Vector2i(10, 4)]
+		{"character_id": GENERAL_UNIT, "spawn_turn": 1, "max_spawns": 1})
+	m.set_spawn_point_at_position(Vector2i(2, 6), 0, MapResource.SPAWN_KIND_REINFORCEMENT,
+		{"character_id": WARRIOR_UNIT, "spawn_turn": 1, "max_spawns": 1})
+	var foes := [Vector2i(9, 2), Vector2i(9, 6), Vector2i(10, 3), Vector2i(10, 5)]
 	for i in range(foes.size()):
 		m.set_character_spawn_at_position(foes[i], 1, RAIDER_UNITS[i % RAIDER_UNITS.size()])
 	var vc: Array[String] = ["Eliminate All Enemies"]
@@ -1094,7 +1115,7 @@ func _first_fight_spec() -> BattleSpec:
 	spec.map_path = FIRST_FIGHT_MAP_PATH
 	spec.squad_size = 3
 	spec.ai_difficulty = 0
-	spec.opponent_name = _t("{NATION} Raiders")
+	spec.opponent_name = "Enemy Soldiers"  # TODO(story): placeholder
 	spec.opponent_speaker_id = &"npc_raider_captain"
 	var team: Array[Dictionary] = []
 	for cid in RAIDER_UNITS:
@@ -1103,7 +1124,7 @@ func _first_fight_spec() -> BattleSpec:
 	var flags: Array[String] = [F_FIGHT_WON]
 	spec.reward_flags = flags
 	# The story cannot go on without this win: a loss offers Try Again / the Wayshrine, and the
-	# Sergeant waits in the ruins to offer the fight again.
+	# General waits in the ruins to offer the fight again.
 	spec.defeat_policy = BattleSpec.DefeatPolicy.RETRY
 	spec.clash_intro = true
 	return spec
@@ -1141,6 +1162,10 @@ const OAK_INN := Rect2i(15, 6, 3, 2)
 const OAK_COTTAGE := Rect2i(1, 9, 2, 2)
 ## The mill lane runs out of the village here, west, toward Farm Hamlet.
 const OAK_WEST_Y := 12
+## Where the General and the Warrior wait in the burned village (the road from the east gate leads
+## to them; beside it, so neither stands in the one-cell gap of the tree line).
+const RUINS_GENERAL := Vector2i(18, 9)
+const RUINS_WARRIOR := Vector2i(18, 10)
 
 
 ## The buildings. The inn and the cottage have no ruined counterpart: the raid left only scorched
@@ -1251,10 +1276,9 @@ func _build_oakvale(ruined: bool) -> void:
 			"west_lane": {"cell": [1, OAK_WEST_Y, 0], "facing": "east"},
 		}
 		ents.append_array(_oak_ruins_people())
-		ents.append(_warp("east_exit", Rect2i(23, OAK_ROAD_Y, 1, 1), &"mossway", &"west", "",
-			"has(\"%s\")" % F_COMPLETE, _scene("oak_ruins_locked", [
-				_line("rowan", "SOLDIER", "Not that way -- the rear guard is dug in past the mill. Talk to me when you're ready."),
-			])))
+		# The east road is open: the hero may leave to explore ("Not yet.") and come back -- the
+		# General and the Warrior wait.
+		ents.append(_warp("east_exit", Rect2i(23, OAK_ROAD_Y, 1, 1), &"mossway", &"west"))
 		# The mill lane survived the fire: the cart track west to Farm Hamlet (its chapter is not
 		# built yet -- the warp answers until world.farm_hamlet_open).
 		ents.append(_closed_road("west_exit", Rect2i(0, OAK_WEST_Y, 1, 1), "farm_hamlet", &"oakvale_ruins", &"west_lane",
@@ -1393,19 +1417,13 @@ func _send_off() -> Array:
 	return [
 		_say([
 			_narr("Long ago, a star fell on this world. Its dust sank into the stone and the soil, and ever since, humans and creatures alike have called on the elements.", "Conquest"),
-			# TODO(story): the intro's lore is not decided -- a neutral placeholder line.
-			_narr("In the royal city, the King's researcher has made something new: a stone that lets a person bond with a creature."),
 		]),
 		_face("player", "toward:briony"),
 		_say([
-			# TODO(story): placeholder send-off. Owner facts only: Professor Elias is an old friend of
-			# the hero's mother (a family friend) and has asked to see the hero.
-			_line("briony", "MOTHER", "There you are! Today's the day, {hero}. {RESEARCHER_TITLE} is expecting you at his workshop in Crownhaven."),
-			_line("briony", "MOTHER", "He's an old friend of mine -- of the whole family. And he asked for you."),
-			_line("briony", "MOTHER", "A shard of your own, and a creature to go with it. Your father would have been so proud."),
-			_me("I'll be home before dark, Mother. I promise."),
-			_line("briony", "MOTHER", "Follow the Mossway east to River Crossing, and the road north over the bridge to Crownhaven. The wild ones in the grass leave a traveller alone -- until you walk with a partner of your own. Then mind yourself."),
-			_line("briony", "MOTHER", "Go on, then. And {hero} -- I love you. Bring your new friend home for supper."),
+			# TODO(story): placeholder send-off, cut to the bone. Owner facts only: Professor Elias is an
+			# old friend of the hero's mother (a family friend) and has asked to see the hero.
+			_line("briony", "MOTHER", "There you are, {hero}! {RESEARCHER_TITLE} is expecting you at his workshop in Crownhaven -- an old friend of the family."),
+			_line("briony", "MOTHER", "Follow the Mossway east, then the road north over the bridge. Go on -- I love you."),
 		]),
 		_flag(F_SENT_OFF),
 	]
@@ -1417,7 +1435,7 @@ func _oak_ruins_people() -> Array:
 	out.append(_npc("tobin", Vector2i(11, 11), "north", "TOBIN", Color(0.3, 0.36, 0.44)))
 	out.append(_npc("hessa", Vector2i(4, 9), "west", "HESSA", Color(0.45, 0.38, 0.26), "villager"))
 	out.append(_npc("pell", Vector2i(6, 10), "north", "PELL", Color(0.3, 0.45, 0.4), "child"))
-	out.append(_rowan_in_ruins())
+	out.append_array(_ruins_allies())
 	var cairn := _sign("cairn", Vector2i(OAK_GARDEN.position.x + 1, OAK_GARDEN.position.y), "A cairn",
 		"Stones piled with care beside a burned house, and wildflowers laid across them.\n\"{MOTHER} of Oakvale, who went back for the others.\"", "stone")
 	cairn.visible_if = "has(\"%s\")" % F_COMPLETE
@@ -1437,92 +1455,73 @@ func _oak_ruins_people() -> Array:
 	return out
 
 
-func _rowan_in_ruins() -> NpcEntity:
-	var rowan := _npc("rowan", Vector2i(13, OAK_ROAD_Y), "west", "SOLDIER", ALDERMERE_BLUE, "officer")
-	rowan.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_ROWAN_ARRIVED, F_COMPLETE]
-	rowan.on_interact = StoryCommand.list([
-		_say([_line("rowan", "SOLDIER", "The rear guard's still holding the mill road. Are you ready?")]),
-		_rowan_offer(),
-	])
-	return rowan
+## The General and the Warrior, waiting in the burned village from the moment the hero arrives until
+## the fight is won. TODO(story): PLACEHOLDER allies (NAMES: GENERAL / WARRIOR) -- who they are, and
+## whether the General is Sergeant Rowan, is the owner's to decide.
+func _ruins_allies() -> Array:
+	var vis: String = "has(\"%s\") and not has(\"%s\")" % [F_CHASE, F_COMPLETE]
+	var out: Array = []
+	var general := _npc("general", RUINS_GENERAL, "east", "GENERAL", ALDERMERE_BLUE, "officer")
+	var warrior := _npc("warrior", RUINS_WARRIOR, "east", "WARRIOR", Color(0.5, 0.3, 0.2), "guard")
+	for ally in [general, warrior]:
+		ally.visible_if = vis
+		ally.on_interact = StoryCommand.list([_allies_offer()])
+		out.append(ally)
+	return out
 
 
-## Arriving in the burned village: the survivors, your mother's fate, the Sergeant's offer.
+## Arriving in the burned village: the General and the Warrior say what happened (three short lines),
+## then the offer to join the fight. You walk the few steps to them; nothing else is forced.
+## TODO(story): neutral placeholder wording -- only the facts the owner gave.
 func _ruins_arrival() -> Array:
 	return [
+		_move("player", Vector2i(RUINS_GENERAL.x + 1, OAK_ROAD_Y)),
+		_face("player", "toward:general"),
 		_say([
-			_narr("Smoke hangs low over Oakvale. The raiders came through on their way to the border -- and did not slow down."),
+			_line("general", "GENERAL", "Enemy soldiers took the Professor, and they burned Oakvale as a distraction while they got away."),
+			_line("warrior", "WARRIOR", "Their rear guard is holding the road past the mill. We're going in."),
 		]),
-		_move("player", Vector2i(14, OAK_ROAD_Y)),
-		_emote("tobin", "!"),
-		_move("tobin", Vector2i(13, OAK_ROAD_Y)),
-		_face("player", "toward:tobin"),
-		_say([
-			_line("tobin", "TOBIN", "{hero}! Thank the stars you weren't here."),
-			_line("tobin", "TOBIN", "They came out of the Mossway at a run -- a dozen of them in {NATION} red, dragging a man in a scholar's coat. Anyone in their way, they just... went through."),
-			_me("A scholar's coat... {RESEARCHER_TITLE}. They've still got {RESEARCHER_TITLE}."),
-			_me("Where's my mother? Tobin -- where is she?"),
-			_line("tobin", "TOBIN", "...Hessa's with her. Come."),
-		]),
-		_move("tobin", Vector2i(11, 11)),
-		_move("player", Vector2i(3, OAK_ROAD_Y - 1)),
-		_face("player", "toward:hessa"),
-		_face("hessa", "toward:player"),
-		_say([
-			_line("hessa", "HESSA", "{hero}... I'm so sorry."),
-			_line("hessa", "HESSA", "When the fires started, your mother got Pell and the little ones down into the mill cellar. Then she went back for {MAUD}, who can't walk."),
-			_line("hessa", "HESSA", "The roof came down. She didn't come out."),
-			_narr("For a long moment, there is nothing to say at all."),
-			_me("She sent me to Crownhaven this morning. She told me to mind myself."),
-		]),
-		_flag(F_ROWAN_ARRIVED),
-		_move("rowan", Vector2i(4, OAK_ROAD_Y - 1)),
-		_face("player", "toward:rowan"),
-		_say([
-			_line("rowan", "SOLDIER", "{SOLDIER_TITLE}, Crownhaven Guard. We rode in on the raiders' heels. I heard -- I'm sorry. Truly."),
-			_line("rowan", "SOLDIER", "Your village wasn't their target. It was only in their way. To them, that's all this was."),
-			_line("rowan", "SOLDIER", "Their rear guard has dug in past the mill with chained beasts -- black chains, {STONE} links -- holding the road so the rest can get the Researcher over the border."),
-			_line("rowan", "SOLDIER", "I can't give her back to you. Nobody can. But my Geode and I are going in, and I won't pretend you haven't earned the right to stand with us. Will you fight?"),
-		]),
+		_flag(F_ALLIES_MET),
 		_flag(F_RUINS_SEEN),
-		_rowan_offer(),
+		_allies_offer(),
 	]
 
 
-## The Sergeant's offer (on arrival, and whenever you talk to him until the fight is won).
-func _rowan_offer() -> ChoiceCommand:
+## The offer (on arrival, and whenever you talk to either of them until the fight is won). "Not yet."
+## leaves the village to explore first -- they wait.
+func _allies_offer() -> ChoiceCommand:
 	var ask := ChoiceCommand.new()
-	ask.prompt = _line("rowan", "SOLDIER", "Well, {hero}?")
+	ask.prompt = _line("general", "GENERAL", "Will you fight with us, {hero}?")
 	var fight := StartBattleCommand.new()
 	fight.spec = _first_fight_spec()
 	fight.source = BattleRequest.SOURCE_SCRIPT
 	var yes := ChoiceOption.make(_t("I'll fight."), [
-		_say([_line("rowan", "SOLDIER", "Then keep your {lead} close, and stay on my shield side.")]),
-		# A loss sends you to this Wayshrine (the fight waits here with the Sergeant).
+		_say([_line("general", "GENERAL", "Stay close to your {lead}.")]),
+		# A loss sends you to this Wayshrine (the fight waits here with the General).
 		_respawn(&"oakvale_ruins", &"wayshrine"),
 		fight,
 		IfCommand.make("outcome() == \"victory\"", _aftermath()),
 	])
 	var no := ChoiceOption.make("Not yet.", [
-		_say([_line("rowan", "SOLDIER", "Take the moment you need. I'll hold here -- come and find me when you're ready.")]),
+		_say([_line("general", "GENERAL", "We'll wait here.")]),
 	], true)
 	ask.options = StoryCommand.list([yes, no])
 	return ask
 
 
-## After the first fight is won: the Sergeant's hook into Act 1.
+## After the first fight is won: the General and the Warrior task you with getting stronger (to avenge
+## your mother) while they prepare for war -- and then you are free to explore the whole region.
+## TODO(story): neutral placeholder wording -- only the facts the owner gave.
 func _aftermath() -> Array:
 	return [
 		_say([
-			_narr("The last chained beast falls. Beyond the mill, hoofbeats fade toward the border."),
-			_line("rowan", "SOLDIER", "That's the rear guard broken. The rest got away with the Researcher -- over the border by nightfall, I'd wager."),
-			_me("His name is {RESEARCHER_TITLE}. I'm going to bring him home."),
-			_line("rowan", "SOLDIER", "You fought like you had something to fight for. Your mother would have been proud of you -- and furious with me for letting you."),
-			_line("rowan", "SOLDIER", "The King will call this an act of war. {NATION} will swear it never sent a soul. And something about this whole raid stinks."),
-			_line("rowan", "SOLDIER", "Bury your mother, {hero}. Then come and find me at the barracks in Crownhaven. I could use someone with a shard -- and a reason."),
-			_narr("{SOLDIER_TITLE} mounts up and rides east. That evening, the village raises a cairn for {MOTHER} beside the house she built."),
+			_narr("The last enemy falls."),
+			_line("general", "GENERAL", "Get stronger, {hero}. Avenge your mother."),
+			_line("warrior", "WARRIOR", "We'll be preparing for war."),
+			_narr("That evening, the village raises a cairn for {MOTHER} beside the house she built."),
 		]),
 		_flag(F_COMPLETE),
+		# Legacy hook flag (kept for saves and ambient-talk gates); nothing sends the hero anywhere now.
 		_flag(F_ACT1),
 		SaveGameCommand.new(),
 	]
@@ -1601,16 +1600,7 @@ func _build_mossway() -> void:
 	ents.append(_prop("bridge_lamp_s", "lamp", Vector2i(22, 5), Vector2i.ONE, Color(1.0, 0.82, 0.45), true))
 	ents.append(_prop("bank_fence", "fence", Vector2i(20, 2), Vector2i(1, 3), Color(0.5, 0.36, 0.22), true))
 
-	# Before you have a partner, the grass rustles -- and lets you pass.
-	var hint := TriggerZone.new()
-	hint.id = &"grass_hint"
-	hint.area_rect = Rect2i(4, 6, 1, 1)
-	hint.once = true
-	hint.visible_if = "not has(\"%s\")" % F_STARTER
-	hint.on_step = StoryCommand.list([_say([
-		_narr("Something rustles in the tall grass and goes still. Wild creatures keep their distance from a traveller with no partner of their own."),
-	])])
-	ents.append(hint)
+	# (Before you have a partner the wild creatures leave you alone -- silently: no hint scene on the road.)
 
 	var bram := TrainerEntity.new()
 	bram.id = &"bram"
@@ -1624,7 +1614,7 @@ func _build_mossway() -> void:
 	# The Mossway's trainer only takes the road once the opening is over.
 	bram.visible_if = after_opening
 	bram.pre_scene = _scene("moss_bram_pre", [
-		_beat(&"self", "", "Hold it! You're the one from Oakvale -- the one who stood with the Sergeant. Show me you can keep a squad alive out here."),
+		_beat(&"self", "", "Hold it! You're the one from Oakvale. Show me you can keep a squad alive out here."),
 	])
 	bram.defeated_scene = _scene("moss_bram_after", [
 		_beat(&"self", "", "Hah... you'll do. Whatever you're chasing, I hope you catch it."),
@@ -1843,14 +1833,9 @@ func _build_river_crossing() -> void:
 		"The coast road east toward Beach Village and the sea dips into a ford -- and the ford has become a lake. A Warden's rope and a painted board: \"Road closed. Ferry suspended. Ask again after the rains.\""))
 	_add_doors(a, ents)
 	a.entities = _entities(ents)
+	# No arrival narration (the location popup names the village); the flag is set silently.
 	a.on_enter = StoryCommand.list([
-		IfCommand.make("not has(\"river_crossing.arrived\")", [
-			_say([
-				_narr("River Crossing. The river slides wide and green under the Old Bridge, and the toll-keeper's lantern swings from its stone rail."),
-				_narr("North over the bridge, the King's road climbs to Crownhaven's south gate."),
-			]),
-			_flag("river_crossing.arrived"),
-		]),
+		IfCommand.make("not has(\"river_crossing.arrived\")", [_flag("river_crossing.arrived")]),
 	])
 	_save(a, CONTENT + "areas/river_crossing/area.tres")
 
@@ -1887,8 +1872,6 @@ const CH_MARKET := Rect2i(10, 11, 11, 7)
 const CH_FOUNTAIN := Vector2i(15, 14)
 const CH_HOUSES := [Rect2i(5, 15, 3, 2), Rect2i(5, 19, 3, 2), Rect2i(17, 19, 3, 2), Rect2i(22, 15, 3, 2)]
 const CH_STALLS := [Rect2i(11, 12, 2, 1), Rect2i(18, 12, 2, 1), Rect2i(11, 16, 2, 1), Rect2i(18, 16, 2, 1)]
-## Where Professor Elias stands in the workshop yard during the raid (the ceremony is inside).
-const CH_RESEARCHER := Vector2i(24, 8)
 const CH_PYLON := Vector2i(22, 8)
 ## The capital's districts, built out: the Gilded Stag inn (by the market), the Merchants' Guildhall
 ## (the south quarter, west of the gate avenue), the Chapel of the Starfall (the east park), the
@@ -2033,7 +2016,7 @@ func _build_crownhaven() -> void:
 	# The west gate: the Sparse Forest road to Woodland Town (open once the opening is over).
 	ents.append(_warp("west_exit", Rect2i(0, CH_GATE.y, 1, 1), &"sparse_forest", &"east", "",
 		"has(\"%s\")" % F_COMPLETE, _scene("ch_west_locked", [
-			_narr("A Gate Warden bars the way. \"Orders from the keep: nobody takes the west road today. Woodland Town will keep -- the Sergeant will pass word when you can go.\""),
+			_narr("A Gate Warden bars the way. \"West road's closed for now.\""),
 		])))
 	# The roads the map shows but the story has not built yet: closed, each with its own excuse.
 	ents.append(_closed_road("north_exit", Rect2i(CH_NORTH_GATE.x, 0, 1, 1), "mountain_base", &"crownhaven", &"north_gate",
@@ -2044,17 +2027,10 @@ func _build_crownhaven() -> void:
 		"The coast road slopes south-east toward Beach Village and the harbour. The gate warden waves you back: \"Ford's flooded below the city. Nothing's getting to the coast this week.\""))
 	_add_doors(a, ents)
 	a.entities = _entities(ents)
+	# No arrival narration: the location popup names the city, and nothing stops the hero's walk. The flag
+	# is still set (quests and ambient talk key off "has been to Crownhaven"), silently.
 	a.on_enter = StoryCommand.list([
-		# Resume the raid if the journey was saved in the middle of it (a closed window).
-		IfCommand.make("has(\"%s\") and not has(\"%s\")" % [F_STARTER, F_CHASE], _raid(), [
-			IfCommand.make("not has(\"%s\")" % F_ARRIVED, [
-				_say([
-					_narr("Crownhaven, royal seat of {KINGDOM}: a walled city on its river. Banners snap on the walls, and the market is loud with every accent in the kingdom."),
-					_narr("{RESEARCHER_TITLE}'s workshop stands in the upper town, east of the keep."),
-				]),
-				_flag(F_ARRIVED),
-			]),
-		]),
+		IfCommand.make("not has(\"%s\")" % F_ARRIVED, [_flag(F_ARRIVED)]),
 	])
 	_save(a, CONTENT + "areas/crownhaven/area.tres")
 
@@ -2172,19 +2148,9 @@ func _ch_people() -> Array:
 	out.append(_npc("kit", Vector2i(16, 16), "north", "KIT", Color(0.7, 0.55, 0.3), "child"))
 	out.append(_npc("baker", Vector2i(14, 12), "south", "BAKER", Color(0.75, 0.62, 0.45)))
 
-	# The workshop yard: the assistant, and Professor Elias once the ceremony INSIDE is over (the
-	# alarm brings him out here, where the raid plays). Before that he waits inside the workshop
-	# (INTERIORS: crownhaven_workshop, _workshop_people).
-	out.append(_researcher_in_yard())
+	# The workshop yard: the assistant. Professor Elias waits INSIDE the workshop (INTERIORS:
+	# crownhaven_workshop, _workshop_people), where the ceremony and the kidnapping both happen.
 	out.append(_npc("tam", Vector2i(26, 8), "west", "ASSISTANT", Color(0.5, 0.42, 0.6), "scholar"))
-
-	# The raiders (only during the raid). PLACEHOLDER figures in Cindral red.
-	var raid_vis: String = "has(\"%s\") and not has(\"%s\")" % [F_ATTACK, F_FLED]
-	for spec in [["raider_captain", Vector2i(26, 6)], ["raider_a", Vector2i(26, 5)], ["raider_b", Vector2i(26, 4)]]:
-		var r := _npc(spec[0], spec[1], "west", "RAIDER_CAPTAIN" if spec[0] == "raider_captain" else "Raider",
-			CINDRAL_RED, "raider")
-		r.visible_if = raid_vis
-		out.append(r)
 	return out
 
 
@@ -2230,22 +2196,25 @@ func _ch_districts() -> Array:
 const ELIAS_TINT := Color(0.28, 0.42, 0.55)
 
 
-## Elias in the workshop YARD: only between the ceremony and the raid that takes him.
-func _researcher_in_yard() -> NpcEntity:
-	var r := _npc("elias", CH_RESEARCHER, "north", "RESEARCHER_TITLE", ELIAS_TINT, "elder")
-	r.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_STARTER, F_TAKEN]
-	return r
-
-
 ## The people inside the Royal Workshop (an interior): Elias waits there until the ceremony,
 ## with the starter options beside him during it.
 func _workshop_people(size: Vector2i, door_x: int) -> Array:
 	var out: Array = []
 	var elias_cell := Vector2i(door_x, 2)
 	var r := _npc("elias", elias_cell, "south", "RESEARCHER_TITLE", ELIAS_TINT, "elder")
-	r.visible_if = "not has(\"%s\")" % F_STARTER
+	# He is here until the raiders take him (the kidnapping plays in this room, right after the ceremony).
+	r.visible_if = "not has(\"%s\")" % F_TAKEN
 	r.on_interact = StoryCommand.list([IfCommand.make("not has(\"%s\")" % F_STARTER, _ceremony())])
 	out.append(r)
+	# The raiders (only during the kidnapping): PLACEHOLDER figures in Cindral red, who come in from the
+	# room's east side (see [method _raid]).
+	var raid_vis: String = "has(\"%s\") and not has(\"%s\")" % [F_ATTACK, F_FLED]
+	for spec in [["raider_captain", Vector2i(WORKSHOP_EAST_X, 3)], ["raider_a", Vector2i(WORKSHOP_EAST_X, 4)],
+			["raider_b", Vector2i(WORKSHOP_EAST_X, 5)]]:
+		var raider := _npc(spec[0], spec[1], "west", "RAIDER_CAPTAIN" if spec[0] == "raider_captain" else "Raider",
+			CINDRAL_RED, "raider")
+		raider.visible_if = raid_vis
+		out.append(raider)
 	# The starter options stand in a row either side of him (only during the ceremony).
 	for i in range(STARTER_OPTIONS.size()):
 		var k: int = i / 2 + 2
@@ -2277,15 +2246,13 @@ static func _starter_entity_id(i: int) -> StringName:
 ## THE CEREMONY (the owner's opening), INSIDE the Royal Workshop: Professor Elias explains his new
 ## invention -- the stones that let a person bond with a creature -- the stone is yours, and you
 ## CHOOSE a starter from STARTER_OPTIONS (the first is the default; one option = no question).
-## Then an ALARM ends it: Elias hurries out into the workshop yard and you follow (a warp to the
-## yard -- the script ends there); Crownhaven's on_enter plays THE RAID in the yard.
+## Then THE KIDNAPPING plays in the same room ([method _raid]) and the hero is handed the controls.
 ## TODO(story): every line here is a short neutral PLACEHOLDER -- the lore of the stones, the
 ## starters and the ceremony is not decided yet.
 func _ceremony() -> Array:
 	var out: Array = [
 		_say([
-			_line("elias", "RESEARCHER_TITLE", "Ah, {hero}. Welcome to the workshop."),
-			_line("elias", "RESEARCHER_TITLE", "This is my new invention: the bonding shards -- stones that let a person bond with a creature."),
+			_line("elias", "RESEARCHER_TITLE", "Ah, {hero}. This is my new invention: the bonding shards -- stones that let a person bond with a creature."),
 		]),
 		_flag(F_CEREMONY),
 	]
@@ -2315,58 +2282,43 @@ func _ceremony() -> Array:
 			opts.append(ChoiceOption.make(_starter_label(i), picks[i]))
 		ask.options = StoryCommand.list(opts)
 		out.append(ask)
-	out.append(_say([
-		_line("elias", "RESEARCHER_TITLE", "There. Look after each other."),
-		# The alarm: the raid itself plays outside, in the yard (Crownhaven's on_enter).
-		_narr("Shouting in the street outside. {RESEARCHER_TITLE} hurries out into the workshop yard, and you follow."),
-	]))
-	out.append(_warp_cmd(&"crownhaven", StringName(DoorEntity.entry_id_for(CH_WORKSHOP_PROP))))
+	out.append_array(_raid())
 	return out
 
 
-## THE RAID (in the workshop yard, after the ceremony inside): raiders vault the wall, seize Professor
-## Elias and flee out the south gate; the Sergeant runs up;
-## you give chase toward Oakvale (a scripted warp -- the script ends here).
+## THE KIDNAPPING (the owner's rework), in the Royal Workshop right after the ceremony: placeholder
+## enemy soldiers appear IN THE ROOM and take Professor Elias; at the same moment enemies are
+## attacking the city as a distraction, and the raiders then run to escape (to burn Oakvale, which
+## the ruins show). Short on purpose -- a couple of moves, an emote, two lines and one narration --
+## and then the hero has the controls: nothing forces him anywhere. The way to Oakvale is the open
+## road (the Mossway's west end leads to the burned village once `opening.attack` is set).
+## Also what the workshop's on_enter resumes for a journey saved between the ceremony and the end.
+## TODO(story): the lines are neutral PLACEHOLDERS.
 func _raid() -> Array:
 	return [
+		# The raiders (visible_if on this flag) are in the room, at its east side.
 		_flag(F_ATTACK),
-		_say([_narr("A horn blares from the east wall. Then another -- cut short.")]),
 		_emote("elias", "!"),
 		_emote("player", "!"),
-		_move("raider_captain", Vector2i(CH_RESEARCHER.x + 1, CH_RESEARCHER.y)),
-		_move("raider_a", Vector2i(CH_RESEARCHER.x - 1, CH_RESEARCHER.y - 1)),
-		_move("raider_b", Vector2i(26, 7)),
+		_move("raider_captain", Vector2i(7, 3)),
+		_move("raider_a", Vector2i(5, 3)),
+		_move("raider_b", Vector2i(5, 4)),
 		_face("elias", "toward:raider_captain"),
 		_face("player", "toward:raider_captain"),
 		_say([
-			_line("raider_captain", "RAIDER_CAPTAIN", "{RESEARCHER_TITLE}. You will come with us. Your shards belong to {NATION} now."),
-			_line("elias", "RESEARCHER_TITLE", "{hero} -- keep that shard hidden. Whatever happens, don't let them have it!"),
-			_narr("Behind the raiders, a hulking creature strains at black chains -- {STONE} links, glowing dully where they bite."),
+			_line("raider_captain", "RAIDER_CAPTAIN", "{RESEARCHER_TITLE}. You're coming with us."),
+			_line("elias", "RESEARCHER_TITLE", "{hero} -- keep that shard safe!"),
 		]),
+		# Elias is gone (his entity is hidden by this flag), and the raiders run for it.
 		_flag(F_TAKEN),
-		_say([
-			_me("{RESEARCHER_TITLE}!"),
-			_narr("They seize the Researcher and drag him toward the lower town, scattering townsfolk as they run for the south gate."),
-		]),
-		_move("raider_captain", Vector2i(23, 11)),
+		_move("raider_captain", Vector2i(WORKSHOP_EAST_X, 3)),
 		_flag(F_FLED),
 		_flag("act1.researcher_abducted"),
-		_emote("rowan", "!"),
-		# Beside the player, clear of the Chapel of the Starfall's wall south of the workshop.
-		_move("rowan", Vector2i(CH_RESEARCHER.x - 1, CH_RESEARCHER.y + 2)),
-		_face("player", "toward:rowan"),
-		_say([
-			_line("rowan", "SOLDIER", "Which way did they go?"),
-			_line("tam", "ASSISTANT", "South! Out the south gate -- over the river, on the road to River Crossing!"),
-			_line("rowan", "SOLDIER", "River Crossing, then the Mossway. It runs to Oakvale, and on to the border. They'll cut straight through the village."),
-			_me("Oakvale? My mother is in Oakvale!"),
-			_line("rowan", "SOLDIER", "Then we don't stand here talking. My riders are saddling now. Run, and don't stop until you're home."),
-		]),
+		_say([_narr("Bells are ringing across Crownhaven: enemy soldiers are attacking the city -- a distraction, so the raiders can slip away.")]),
 		_flag(F_CHASE),
-		_say([_narr("You run the King's road, the Old Bridge and the Mossway as fast as your legs will carry you, your {lead} crashing through the ferns at your side. Long before you reach home, you see the smoke.")]),
 		# Whiteouts from here wake you in the ruins (the first fight waits there).
 		_respawn(&"oakvale_ruins", &"wayshrine"),
-		_warp_cmd(&"oakvale_ruins", &"east_road"),
+		SaveGameCommand.new(),
 	]
 
 
@@ -2597,8 +2549,6 @@ const CH_LARK_START := Vector2i(CH_SOUTH_GATE.x + 2, CH_SOUTH_GATE.y - 2)
 ## By the arena: on the market street, reached from Harbour Lane behind them as well as the street.
 const CH_LARK_ARENA := Vector2i(23, 18)
 const CH_CHAMPION := Vector2i(25, 18)
-## Every traveller through the south gate steps here (the gate guards flank the cell before it).
-const CH_RIVAL_TRIGGER := Rect2i(CH_SOUTH_GATE.x, CH_SOUTH_GATE.y - 2, 1, 1)
 
 
 ## The RIVAL's duel spec: Lark's Blightcap, a FRIENDLY (DECISIONS.md #29: rival friendlies never
@@ -2633,17 +2583,9 @@ func _rival() -> Array:
 	# Her waiting line is in dialogue.json (areas.crownhaven.lark).
 	out.append(lark)
 
+	# OPT-IN, not an ambush: Lark waits by the gate and the bout starts only when you talk to her (her
+	# waiting line is the bank's, then this offer). The old meeting speeches are cut.
 	var first: Array = [
-		_emote("lark", "!"),
-		_move("lark", Vector2i(CH_RIVAL_TRIGGER.position.x + 1, CH_RIVAL_TRIGGER.position.y)),
-		_face("player", "toward:lark"),
-		_face("lark", "toward:player"),
-		_say([
-			_line("lark", "RIVAL", "So YOU'RE the one from Oakvale. The tester who rode with the Sergeant."),
-			_line("lark", "RIVAL", "I'm {RIVAL}. First batch -- the Researcher picked me months before he sent for you. Everyone in the barracks is talking about you, and I'm sick of it."),
-			_me("My village burned, {RIVAL}. I didn't do it to be talked about."),
-			_line("lark", "RIVAL", "...I know. I'm sorry about that. Truly. But a shard is a shard, and I want to see what yours can do. One bout -- a friendly. Nobody gets hurt."),
-		]),
 		_flag(F_RIVAL_MET),
 		_duel(_rival_spec()),
 	]
@@ -2662,13 +2604,10 @@ func _rival() -> Array:
 	], [
 		_say([_line("lark", "RIVAL", "Your partner can barely stand. Rest up -- I'm not beating you like THAT.")]),
 	]))
-	var zone := TriggerZone.new()
-	zone.id = &"rival_meet"
-	zone.area_rect = CH_RIVAL_TRIGGER
-	zone.once = false
-	zone.visible_if = lark.visible_if
-	zone.on_step = StoryCommand.list(first)
-	out.append(zone)
+	var offer := ChoiceCommand.new()
+	offer.prompt = _line("lark", "RIVAL", "I'm {RIVAL}, first batch. One friendly bout -- ready?")
+	offer.options = StoryCommand.list([ChoiceOption.make("Let's go.", first), ChoiceOption.make("Not now.", [], true)])
+	lark.on_interact = StoryCommand.list([offer])
 
 	# By the arena after the first duel: rematches, once per rest, stronger every time.
 	var lark2 := _npc("lark_arena", CH_LARK_ARENA, "south", "RIVAL", Color(0.78, 0.5, 0.2), "trainer")
@@ -3041,14 +2980,10 @@ func _build_woodland_town() -> void:
 		])))
 	_add_doors(a, ents)
 	a.entities = _entities(ents)
+	# No arrival narration (the location popup names the town); the flag is set silently (ambient
+	# talk keys off "rests since arriving").
 	a.on_enter = StoryCommand.list([
-		IfCommand.make("not has(\"woodland.arrived\")", [
-			_say([
-				_narr("Woodland Town. The air smells of pine resin and woodsmoke, and somewhere a saw sings through green timber. Lanterns still burn in the cabin windows against the morning mist."),
-				_narr("The Wardens' Lodge stands at the heart of the town, north of the boardwalk square. The lumber yard is east, past the inn; a trail climbs north toward the snowline, and another slips away south between the roots."),
-			]),
-			_flag("woodland.arrived"),
-		]),
+		IfCommand.make("not has(\"woodland.arrived\")", [_flag("woodland.arrived")]),
 	])
 	_save(a, CONTENT + "areas/woodland_town/area.tres")
 

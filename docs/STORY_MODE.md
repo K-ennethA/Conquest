@@ -10,22 +10,31 @@ This file records what M1 actually built, how to play it, and how it is wired to
 Solo → **Story** (card 7) → an empty slot. The opening (DECISIONS.md #12–#21 + "The researcher and
 the starter") is built by `game/overworld/build/build_story_content.gd` (run it with
 `godot --headless --path . -s res://game/overworld/build/run_builder.gd`); its names, the starters
-and the placeholders live in that file's `NAMES` / `STARTER_ID` / `STARTER_OPTIONS` / `GUEST_ID` /
+and the placeholders live in that file's `NAMES` / `STARTER_ID` / `STARTER_OPTIONS` / `GENERAL_UNIT` / `WARRIOR_UNIT` /
 `RAIDER_UNITS` / `HERO_MODEL` constants (rename there and rebuild); its flags are the `F_*`
 constants. What NPCs SAY outside cutscenes is the **dialogue bank** (see "Dialogue bank & editor").
 **Story text is placeholder** where the owner has not decided it (`TODO(story)` in the builder /
 the bank's `note` fields) -- don't invent lore there.
 
+**No interruptions.** Arriving somewhere never plays a scene or blocks the hero: entering a new named
+place shows a small **location popup** (`OverworldHUD.show_area_name`, top-right corner, slides in,
+holds ~2 s, slides out; pure presentation, no input, no pause). `PlaceAnnouncer` decides when: only
+for a *different* named place -- never inside a building, never again for the place you are already
+standing in, never for a place named in the last 20 s (hopping over an area edge and back). The old
+once-only arrival narrations (River Crossing, Crownhaven, Woodland Town), the Mossway's grass hint
+and the Crownhaven rival ambush are gone (the arrival flags are still set, silently; Lark is now an
+opt-in bout you start by talking to her). Ambient NPC talk speaks only when you talk to the NPC.
+
 1. **Oakvale (home)** — a new journey starts on your doorstep with **no creature**
-   (`story_ruleset.tres` `starting_party` is empty). The first boot plays the intro and your
-   mother **Briony**'s send-off → `opening.sent_off` (the east road is held until then):
-   **Professor Elias** — the Royal Researcher (he/him), an old friend of your mother's and of the
-   family — has asked to see you at his workshop in Crownhaven. Villagers Tobin / Hessa / Pell, the
-   village-hall notice, the **mill chest**, the Wayshrine; your **home** can be entered (see
-   "Interiors"), as can the inn, the village hall and the bakery.
+   (`story_ruleset.tres` `starting_party` is empty). The first boot plays the intro line and your
+   mother **Briony**'s two-line send-off → `opening.sent_off` (the east road is held until then):
+   **Professor Elias** — the Royal Researcher (he/him), an old friend of the family — is expecting
+   you at his workshop in Crownhaven. Villagers Tobin / Hessa / Pell, the village-hall notice, the
+   **mill chest**, the Wayshrine; your **home** can be entered (see "Interiors"), as can the inn,
+   the village hall and the bakery.
 2. **The Mossway** (east out of Oakvale) — with no partner the grass never rolls and trainers let
-   you pass (`OverworldController`: no healthy member → no encounter, no trainer); a one-time hint
-   says so. **Bram** and the **Lone Petalfang** only appear once `opening.complete`. Its east end
+   you pass (`OverworldController`: no healthy member → no encounter, no trainer), silently.
+   **Bram** and the **Lone Petalfang** only appear once `opening.complete`. Its east end
    is **River Crossing**: north over the Old Bridge, the King's road ends at Crownhaven's south gate.
 3. **Crownhaven** (in by the south gate) — the walled river city: keep, market, barracks
    (**Sergeant Rowan**), the Royal Workshop. Walk into the **Royal Workshop's door** (east of the
@@ -34,23 +43,32 @@ the bank's `note` fields) -- don't invent lore there.
    lines) — gives you one (`key.bonding_shard`), and you **choose your starter** from
    `STARTER_OPTIONS` (placeholders: **Barkling** — the default, the first option — Petalfang,
    Blightcap; `opening.starter_received`, and `opening.starter_pick` = the 1-based option).
-4. **The raid** — an alarm ends the ceremony: Elias hurries out and the hero follows (a scripted
-   warp to the workshop yard, the door's front cell). Crownhaven's `on_enter` then plays the
-   EXISTING raid script there: Cindral raiders vault the east wall, seize Elias and flee out the
-   south gate, down the road home; Rowan runs up; the chase is a scripted warp to **Ruined
-   Oakvale** (`opening.attack`, `opening.researcher_taken`, `opening.raiders_fled`,
-   `opening.chase`; the respawn moves to the ruins' Wayshrine). A journey saved mid-raid resumes it
-   on the next Crownhaven load (or the next workshop load: its `on_enter` sends you back out).
+4. **The kidnapping** — right after the choice, in the SAME room: placeholder enemy soldiers
+   (`raider_captain` / `raider_a` / `raider_b`, Cindral-red figures that exist only between
+   `opening.attack` and `opening.raiders_fled`) come in from the east side and take Elias; two lines
+   and one narration ("enemy soldiers are attacking the city -- a distraction, so the raiders can
+   slip away"). The raiders then run to escape (and burn Oakvale, which the ruins show). The hero is
+   then **free** -- no warp: the way to Oakvale is the open road (south gate → River Crossing → the
+   Mossway, whose west end now leads to Ruined Oakvale). Flags `opening.attack`,
+   `opening.researcher_taken`, `opening.raiders_fled`, `opening.chase`; the respawn moves to the
+   ruins' Wayshrine; the end autosaves. A journey saved between the ceremony and the end resumes the
+   kidnapping on the next workshop load (its `on_enter`).
 5. **Ruined Oakvale** (`oakvale_ruins`, a second area; the Mossway's west exit switches to it on
-   `opening.attack`) — night, smouldering ruins. The survivors tell you your mother went back
-   for the others; Rowan offers the chance to fight (`opening.ruins_seen`). "Not yet." leaves
-   him waiting in the square.
-6. **The first fight** — a TACTICAL battle on `ow_oakvale_ashes` (12x8) vs the raiders' rear
-   guard; your starter fights and Rowan's **Geode** joins as a **guest ally** (a player-0
-   Reinforcement due on turn 1: placed at load, never replaced by the squad pick). A loss →
-   Try Again / Return to Wayshrine (Rowan waits to offer it again).
-7. **Aftermath** — Rowan's hook (`opening.complete`, `act1.find_rowan`); a cairn for Briony; the
-   road opens. In Crownhaven, Rowan at the barracks starts the Act 1 hook (`act1.met_rowan`).
+   `opening.attack`) — night, smouldering ruins. You walk up to the **General** and the **Warrior**
+   (placeholder allies, `NAMES.GENERAL` / `NAMES.WARRIOR`): three short lines say what happened and
+   they ask you to fight (`opening.allies_met`, `opening.ruins_seen`). "Not yet." leaves them waiting
+   and you free to explore (the village's east road is open; they stay until the fight is won). Your
+   mother's fate is told by Hessa when you talk to her (the dialogue bank).
+6. **The first fight** — a TACTICAL battle on `ow_oakvale_ashes` (12x8) vs four placeholder enemies
+   (two soldiers, a creature, a Duskmaw); your starter fights and the **General** and the **Warrior**
+   join as **guest allies** (player-0 Reinforcements due on turn 1: placed at load, never replaced
+   by the squad pick; player-controlled). A loss → Try Again / Return to Wayshrine (they wait to
+   offer it again).
+7. **Aftermath** — the General and the Warrior task you with getting stronger (to avenge your mother)
+   while they prepare for war (`opening.complete`; `act1.find_rowan` is still set but nothing uses it
+   to send you anywhere); a cairn for Briony. The whole starting region is then open: the placeholder
+   main quest is **Grow Stronger** (no destination). Sergeant Rowan's barracks hook and spar remain as
+   optional talk (`act1.met_rowan`).
 
 Controls: arrows / WASD / d-pad / sticks step one cell (tap a new direction = turn; hold = walk;
 Shift / R3 = run; every step costs its walk / run time even with Animations off); click / tap
@@ -61,7 +79,7 @@ evolution offers, whiteouts to the Wayshrine.
 
 **Placeholders to replace:** the starter options (`STARTER_OPTIONS`, roster TBD); the opening's
 story lines (`TODO(story)`); the human hero is not a battle unit yet (the party fights); the
-raiders' units (Undead ×2 + Duskmaw, `RAIDER_UNITS`); people are procedural figures
+enemy units (`RAIDER_UNITS`: Undead ×2, Blightcap, Duskmaw) and the General's / Warrior's guest units (`GENERAL_UNIT` = Geode, `WARRIOR_UNIT` = Vineweave -- roster stand-ins; their names, `NAMES.GENERAL` / `NAMES.WARRIOR`, are placeholders and whether the General is Sergeant Rowan is open); people are procedural figures
 (`NpcEntity.figure` -- Professor Elias too, until his model exists) and buildings, door markers and
 interiors procedural props (`PropEntity.prop`: house, ruin, keep, tower, gate, windmill, stall,
 well, fence, crystal, mat, …). The hero's model is the Wren forge model (`HERO_MODEL`).
@@ -323,7 +341,7 @@ every duel here is the strict 1v1 creature duel — the people are trainers, the
 | What | Where | Kind | Flags / ids |
 |---|---|---|---|
 | **Tester Fenna** — a trainer whose battle is a DUEL (line of sight 3, like Bram; Petalfang 0.9, 90 gold) | the Mossway (11,7), facing the path; after `opening.complete` | real duel, WHITEOUT | `trainer.mossway.fenna.defeated` |
-| **Lark** — the RIVAL, a first-batch tester (Blightcap "Puck"). First duel: a trigger just inside Crownhaven's south gate (the road home) after the opening; then rematches by the arena | Crownhaven (17,21) → gate trigger (15,21) → (23,18) | spar (a rival FRIENDLY), CONTINUE, 60 gold on a win, `clash_intro` | `rival.met`, `rival.stage` (duels fought), `rival.wins`, `rival.duel1`; encounter `crownhaven.rival.lark` |
+| **Lark** — the RIVAL, a first-batch tester (Blightcap "Puck"). First duel: opt-in -- talk to her inside Crownhaven's south gate (the road home) after the opening; then rematches by the arena | Crownhaven (17,21) → (23,18) | spar (a rival FRIENDLY), CONTINUE, 60 gold on a win, `clash_intro` | `rival.met`, `rival.stage` (duels fought), `rival.wins`, `rival.duel1`; encounter `crownhaven.rival.lark` |
 | **Sparring roster** — Corporal Wynn (Blightcap 0.8) < Lieutenant Aldous (Petalfang 0.95) < Sergeant Rowan (Geode 0.8, the existing spar); a "Sparring Roster" sign | the barracks yard; after the opening (Rowan after the Act 1 hook) | spar, CONTINUE, no purse | `crownhaven.spar.wynn` / `.aldous` / `.rowan` |
 | **The ambush** — Cutpurse Nell and her footpad hold the Mossbrook's plank bridge (the only crossing: the brook runs tree line to tree line) once Rowan has signed you on | the Mossway, trigger at (21,6); after `act1.met_rowan` | TWO real duels back to back (HP carries), WHITEOUT; Classic permadeath applies | `mossway.ambush.sprung`, `.footpad_beaten` (a beaten footpad stays beaten after a loss), `.cleared`; 40 + 180 gold + a Dawnpetal Draught |
 | **The Crown Arena** — a new `arena` prop (elliptical stone drum, pennants, gate arch) where the SE house stood; **Arena Master Bex** runs **the Crown Cup**; **Champion Isolde** offers rematches once her title is yours | Crownhaven (22..26, 19..21); master at (22,22), champion (25,18) | 4 spars | `arena.crown_cup.run` / `.round` / `.wins` / `.champion` (the title); rematch `arena.crown_cup.champion_beaten` |
@@ -495,7 +513,7 @@ an NPC (it picks the nearest open bottom-row cell when no `door` is given).
 Tests: `tests/integration/test_interiors.gd` (the opt-in list and a default house with no door, doors
 ↔ interiors ↔ exits, reachable encounter-free rooms, a door step in and the mat out with the facing,
 Confirm on a door, save / load inside, the map's "You are here", the tracker, the workshop ceremony
-→ the raid in the yard); the collision audit treats a door as used from its front cell.
+→ the kidnapping in the same room); the collision audit treats a door as used from its front cell.
 
 ## Journey menu pages (Esc / Start)
 
@@ -787,7 +805,7 @@ clocks on each talk.
   phase variants: before the raid / after it (`opening.attack`) / after the first fight
   (`opening.complete`) / Act 1 (`act1.met_rowan`) and a few time-based ones ("3 rests after the
   opening": Crownhaven moves on, Oakvale rebuilds). Nobody mentions the raid before `opening.attack`.
-  Cutscenes (send-off, ceremony, raid, ruins arrival, Rowan's offer and hook, rival, ambush, arena,
+  Cutscenes (send-off, ceremony, raid, ruins arrival and the General's offer, Rowan's hook, the opt-in rival bout, ambush, arena,
   spars) stay in the builder.
 - **Story phases** — `StoryPhases` derives the timeline from the MAIN quests in `quests.json` (start
   flag, step flags, completion flag, in order): phase k = the first k milestones set. A new main quest
