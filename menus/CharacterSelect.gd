@@ -46,7 +46,8 @@ const DETAIL_CREST_PX := 96.0
 # PLACEHOLDER compendium-only units (artist 2026-10-04: surface in the compendium,
 # attach to nothing) stay excluded until they get real movesets and a rebalance.
 const EXCLUDED_IDS := ["undead",
-	"firefly", "firesprite", "magmoo", "supaoctto", "vampito", "vampwarrior", "elias"]
+	"firefly", "firesprite", "magmoo", "supaoctto", "vampito", "vampwarrior", "elias",
+	"varden"]
 
 ## Stats shown as bars in the detail pane: [key, label].
 const STAT_ROWS := [
