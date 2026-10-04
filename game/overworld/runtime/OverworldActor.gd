@@ -14,13 +14,16 @@ extends Node3D
 ## Feet height over a tile (MapLoader.UNIT_GROUND_Y).
 const GROUND_Y: float = 0.1
 const TURN_TIME: float = 0.08
+## Crossfade on a clip CHANGE (idle <-> walk <-> run). A loop wrap never blends: the locomotion
+## clips loop natively (see [method _loop_locomotion]).
 const CLIP_BLEND: float = 0.15
 
-## Locomotion clips (looped by this node: glTF imports them LOOP_NONE, which froze idle after its
-## 4 s and dropped walk out mid-streak every 1.125 s).
+## Locomotion clips. glTF imports them LOOP_NONE (idle froze after its 4 s, walk dropped out
+## mid-streak every 1.125 s); each actor wears a LOOP_LINEAR copy (see [method _loop_locomotion]).
 const CLIP_IDLE := "idle"
 const CLIP_WALK := "walk"
 const CLIP_RUN := "run"
+const LOCOMOTION_CLIPS: Array[String] = [CLIP_IDLE, CLIP_WALK, CLIP_RUN]
 ## Walk pace the run threshold derives from: StoryRuleset.walk_step_seconds (shipped 0.22 s/cell
 ## = 4.55 cells/s). The controller copies the live ruleset value into [member walk_step_seconds].
 const DEFAULT_WALK_STEP_SECONDS: float = 0.22
@@ -45,8 +48,10 @@ var settle_on_arrival: bool = true
 
 var _model: Node3D = null
 var _anim: AnimationPlayer = null
-## The looped locomotion clip currently wanted ("" = none); replayed on animation_finished.
-var _loop_clip: String = ""
+## Source AnimationLibrary -> its copy with the locomotion clips LOOP_LINEAR. One copy per model,
+## shared by every actor wearing it; the imported library itself is never touched (the battle
+## UnitAnimator plays the same glbs' walk ONE-SHOT and queues idle behind it).
+static var _looped_libraries: Dictionary = {}
 ## Bumped by every walk_to, so arrival can tell whether a listener chained another step.
 var _step_serial: int = 0
 var _move_tween: Tween = null
@@ -67,9 +72,8 @@ func set_model(model: Node3D, yaw_deg: float = 0.0, model_scale: float = 1.0) ->
 		model.scale = Vector3.ONE * model_scale
 	add_child(model)
 	_anim = _find_anim_player(model)
-	_loop_clip = ""
 	if _anim != null:
-		_anim.animation_finished.connect(_on_clip_finished)
+		_loop_locomotion(_anim)
 	_apply_facing_now()
 	play_clip(CLIP_IDLE)
 
@@ -228,33 +232,77 @@ func bubble_visible() -> bool:
 # --- Clips ------------------------------------------------------------------------
 
 ## Play the model's clip for [param base] (else [param fallback]); idle / walk / run loop.
-## Returns true when a clip resolved. Not gated on the animations switch (see the class doc).
+## Returns true when a clip resolved. Re-asking for the clip already playing is a no-op, so a
+## per-cell walk_to never restarts or re-blends the cycle. Not gated on the animations switch
+## (see the class doc).
 func play_clip(base: String, fallback: String = "") -> bool:
 	if _anim == null:
 		return false
 	var clip: String = _find_clip(base)
-	var resolved: String = base
 	if clip.is_empty() and not fallback.is_empty():
 		clip = _find_clip(fallback)
-		resolved = fallback
 	if clip.is_empty():
 		return false
-	_loop_clip = clip if resolved in [CLIP_IDLE, CLIP_WALK, CLIP_RUN] else ""
 	if _anim.current_animation == clip and _anim.is_playing():
 		return true
 	_anim.play(clip, CLIP_BLEND)
 	return true
 
 
-func _on_clip_finished(anim_name: StringName) -> void:
-	if _anim != null and not _loop_clip.is_empty() and String(anim_name) == _loop_clip:
-		_anim.play(_loop_clip)
+## Swap [param anim]'s libraries for copies whose idle / walk / run clips loop natively
+## (LOOP_LINEAR: the wrap is seamless inside the AnimationPlayer -- no animation_finished,
+## no replay, no dead frames at the seam). Copies are cached per source library.
+func _loop_locomotion(anim: AnimationPlayer) -> void:
+	var want: Dictionary = {}  # library name -> clip names in it to loop
+	for base in LOCOMOTION_CLIPS:
+		var full: String = _find_clip_in(anim, base)
+		if full.is_empty():
+			continue
+		var lib_name: String = full.get_slice("/", 0) if full.contains("/") else ""
+		var clip_name: String = full.get_slice("/", 1) if full.contains("/") else full
+		if not want.has(lib_name):
+			want[lib_name] = []
+		(want[lib_name] as Array).append(clip_name)
+	for lib_name in want:
+		var src: AnimationLibrary = anim.get_animation_library(lib_name)
+		if src == null:
+			continue
+		var looped: AnimationLibrary = _looped_libraries.get(src, null)
+		if looped == null:
+			looped = _looped_copy(src, want[lib_name])
+			_looped_libraries[src] = looped
+		if looped != src:
+			anim.remove_animation_library(lib_name)
+			anim.add_animation_library(lib_name, looped)
+
+
+## [param src] with [param clips] replaced by LOOP_LINEAR duplicates (the others shared), or
+## [param src] itself when every one of them already loops.
+static func _looped_copy(src: AnimationLibrary, clips: Array) -> AnimationLibrary:
+	var needs: bool = false
+	for n in clips:
+		if src.get_animation(n).loop_mode == Animation.LOOP_NONE:
+			needs = true
+	if not needs:
+		return src
+	var out := AnimationLibrary.new()
+	for n in src.get_animation_list():
+		var a: Animation = src.get_animation(n)
+		if String(n) in clips and a.loop_mode == Animation.LOOP_NONE:
+			a = a.duplicate() as Animation
+			a.loop_mode = Animation.LOOP_LINEAR
+		out.add_animation(n, a)
+	return out
 
 
 func _find_clip(base: String) -> String:
-	if _anim == null:
+	return _find_clip_in(_anim, base)
+
+
+static func _find_clip_in(anim: AnimationPlayer, base: String) -> String:
+	if anim == null:
 		return ""
-	var names: PackedStringArray = _anim.get_animation_list()
+	var names: PackedStringArray = anim.get_animation_list()
 	for n in names:
 		if String(n).to_lower() == base:
 			return String(n)

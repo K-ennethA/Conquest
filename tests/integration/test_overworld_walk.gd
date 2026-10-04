@@ -148,12 +148,20 @@ func test_walk_turn_and_collide() -> void:
 
 
 ## The SHIPPED hero model (hero.tres), mounted in the booted scene with animations ON (the rest of
-## this suite runs them off, which skipped every clip): a step plays its walk clip, the clip loops
-## past its end (glTF imports LOOP_NONE), and the streak's end settles to idle. A hero model whose
-## clips fail to resolve fails here.
+## this suite runs them off, which skipped every clip): a held-key streak plays its walk clip as
+## an unbroken cycle, and the streak's end settles to idle. A hero model whose clips fail to
+## resolve fails here.
+##
+## CONTINUITY (the artist's "the walk animation doesn't properly cycle"): every frame of the
+## streak the clip position must advance by exactly the frame's delta, modulo the clip length --
+## a sawtooth with period == the clip length. The old replay-on-animation_finished loop failed
+## this at every wrap (the tail clipped, then a dead frame held at position 0: measured periods
+## 1.15 s walk / 0.5667 s run against 1.125 / 0.5417 clips); so does any per-cell restart.
 func test_the_hero_model_plays_its_walk_and_idle_clips() -> void:
 	_guard.set_setting("animations_enabled", true)
-	var ow := await _boot("oakvale", Vector3i(10, 11, 0), "north")
+	# Oakvale's row 8 is open flagstone from x 1 to 12: an 8-cell streak (1.76 s at walk pace)
+	# spans at least one full 1.125 s walk cycle.
+	var ow := await _boot("oakvale", Vector3i(1, 8, 0), "east")
 	var players: Array[Node] = ow.player.model().find_children("*", "AnimationPlayer", true, false)
 	assert_false(players.is_empty(), "the hero model carries an AnimationPlayer")
 	if players.is_empty():
@@ -161,23 +169,73 @@ func test_the_hero_model_plays_its_walk_and_idle_clips() -> void:
 	var anim := players[0] as AnimationPlayer
 	assert_true(anim.current_animation.to_lower().contains("idle") and anim.is_playing(),
 		"standing: the idle clip plays (got '%s')" % anim.current_animation)
-	assert_true(ow.try_step(Vector2i(0, -1)), "a step onto flagstones")
-	await _frames(2)
-	assert_true(ow.player.is_walking, "gliding between cells (animations on)")
-	assert_true(anim.current_animation.to_lower().contains("walk") and anim.is_playing(),
-		"mid-step: the walk clip plays (got '%s')" % anim.current_animation)
-	var walk: String = anim.current_animation
-	anim.seek(anim.current_animation_length - 0.001, true)
-	await _frames(2)
-	assert_eq(anim.current_animation, walk, "the walk clip loops past its end")
-	assert_true(anim.is_playing(), "and keeps playing")
+	var walk_clip: Animation = anim.get_animation(&"walk")
+	assert_not_null(walk_clip, "the hero model has a walk clip")
+	if walk_clip == null:
+		return
+	assert_eq(walk_clip.loop_mode, Animation.LOOP_LINEAR, "the actor's walk loops natively")
+	var src: Node = (load("res://game/overworld/content/hero.tres").model_scene as PackedScene).instantiate()
+	var src_anim := src.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
+	assert_eq(src_anim.get_animation(&"walk").loop_mode, Animation.LOOP_NONE,
+		"the imported clip stays one-shot (the battle UnitAnimator queues idle behind its walk)")
+	src.free()
+	Input.action_press(InputActions.CURSOR_RIGHT)
+	var prev_pos: float = -1.0
+	var prev_delta: float = 0.0
+	var wraps: int = 0
+	var breaks: Array = []
 	var t0: int = Time.get_ticks_msec()
+	while ow.player.cell.x < 9 and Time.get_ticks_msec() - t0 < 5000:
+		await get_tree().process_frame
+		var playing_walk: bool = anim.current_animation == "walk" and anim.is_playing()
+		var pos: float = anim.current_animation_position
+		if playing_walk and prev_pos >= 0.0:
+			var advance: float = fposmod(pos - prev_pos, walk_clip.length)
+			if pos < prev_pos:
+				wraps += 1
+			if absf(advance - prev_delta) > 0.001:
+				breaks.append("pos %.4f -> %.4f over a %.4f s frame" % [prev_pos, pos, prev_delta])
+		prev_pos = pos if playing_walk else -1.0
+		prev_delta = get_process_delta_time()
+	Input.action_release(InputActions.CURSOR_RIGHT)
+	assert_eq(ow.player.cell, Vector3i(9, 8, 0), "an 8-cell held-key streak")
+	assert_gt(wraps, 0, "the streak spans a walk-cycle wrap")
+	assert_eq(breaks, [], "the walk cycle never stalls, restarts or skips across the streak")
+	t0 = Time.get_ticks_msec()
 	while (ow.player.is_walking or not anim.current_animation.to_lower().contains("idle")) \
 			and Time.get_ticks_msec() - t0 < 2000:
 		await get_tree().process_frame
-	assert_eq(ow.player.cell, Vector3i(10, 10, 0), "arrived")
 	assert_true(anim.current_animation.to_lower().contains("idle") and anim.is_playing(),
 		"the streak's end settles to idle (got '%s')" % anim.current_animation)
+
+
+## An NPC / wild actor (settle_on_arrival on) wearing the same looping clips: steps chained from
+## walk_finished keep walking, and the first unchained arrival settles to idle -- a native-loop
+## walk is never stranded playing forever.
+func test_an_actor_walk_settles_to_idle_on_arrival() -> void:
+	_guard.set_setting("animations_enabled", true)
+	var actor := OverworldActor.new()
+	add_child_autofree(actor)
+	var hero: Resource = load("res://game/overworld/content/hero.tres")
+	actor.set_model((hero.model_scene as PackedScene).instantiate() as Node3D)
+	var anim := actor.model().find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
+	actor.place(Vector3i(0, 0, 0))
+	var steps: Array[String] = []
+	var chain := func() -> void:
+		steps.append(anim.current_animation)
+		if actor.cell.x < 3:
+			actor.walk_to(actor.cell + Vector3i(1, 0, 0), actor.walk_step_seconds)
+	actor.walk_finished.connect(chain)
+	actor.walk_to(Vector3i(1, 0, 0), actor.walk_step_seconds)
+	var t0: int = Time.get_ticks_msec()
+	while actor.cell.x < 3 or actor.is_walking:
+		if Time.get_ticks_msec() - t0 > 2000:
+			break
+		await get_tree().process_frame
+	await _frames(2)
+	assert_eq(steps, ["walk", "walk", "walk"], "chained steps walk straight through (no idle between)")
+	assert_eq(anim.current_animation, "idle", "the unchained arrival settles to idle")
+	assert_true(anim.is_playing(), "and idle keeps playing")
 
 
 func test_sign_reads_in_the_text_box() -> void:
