@@ -153,15 +153,24 @@ func test_walk_turn_and_collide() -> void:
 ## resolve fails here.
 ##
 ## CONTINUITY (the artist's "the walk animation doesn't properly cycle"): every frame of the
-## streak the clip position must advance by exactly the frame's delta, modulo the clip length --
-## a sawtooth with period == the clip length. The old replay-on-animation_finished loop failed
-## this at every wrap (the tail clipped, then a dead frame held at position 0: measured periods
-## 1.15 s walk / 0.5667 s run against 1.125 / 0.5417 clips); so does any per-cell restart.
+## streak the clip position must advance by exactly the frame's delta x the clip's playback rate
+## (the feel's stride-matched walk rate), modulo the clip length -- a sawtooth with period ==
+## the clip length / rate. The old replay-on-animation_finished loop failed this at every wrap
+## (the tail clipped, then a dead frame held at position 0: measured periods 1.15 s walk /
+## 0.5667 s run against 1.125 / 0.5417 clips); so does any per-cell restart.
+##
+## GLIDE (the artist's "the walking doesn't match Sun/Moon", 2026-10-04): under the shipped
+## continuous feel the hero's ground speed is the same on every frame of the streak -- across
+## cell boundaries too (the old Tween idled a frame at every cell centre) -- and equals the
+## feel's stride-matched walk speed.
 func test_the_hero_model_plays_its_walk_and_idle_clips() -> void:
 	_guard.set_setting("animations_enabled", true)
-	# Oakvale's row 8 is open flagstone from x 1 to 12: an 8-cell streak (1.76 s at walk pace)
-	# spans at least one full 1.125 s walk cycle.
+	# Oakvale's row 8 is open flagstone from x 1 to 12: a 3-cell streak (~5.2 s at the shipped
+	# walk pace) spans several walk cycles and two cell boundaries.
 	var ow := await _boot("oakvale", Vector3i(1, 8, 0), "east")
+	var end_x: int = 4
+	var continuous: bool = String(ow.feel.get("glide", "")) == "continuous"
+	var walk_v: float = float(ow.feel["walk_speed_mps"])
 	var players: Array[Node] = ow.player.model().find_children("*", "AnimationPlayer", true, false)
 	assert_false(players.is_empty(), "the hero model carries an AnimationPlayer")
 	if players.is_empty():
@@ -184,23 +193,38 @@ func test_the_hero_model_plays_its_walk_and_idle_clips() -> void:
 	var prev_delta: float = 0.0
 	var wraps: int = 0
 	var breaks: Array = []
+	var speed_errs: Array = []
+	var prev_x: float = ow.player.global_position.x
 	var t0: int = Time.get_ticks_msec()
-	while ow.player.cell.x < 9 and Time.get_ticks_msec() - t0 < 5000:
+	var budget_ms: int = int((end_x - 1) * ow.walk_step_seconds() * 1000.0) + 2000
+	while ow.player.cell.x < end_x and Time.get_ticks_msec() - t0 < budget_ms:
 		await get_tree().process_frame
 		var playing_walk: bool = anim.current_animation == "walk" and anim.is_playing()
 		var pos: float = anim.current_animation_position
+		var rate: float = anim.get_playing_speed()
 		if playing_walk and prev_pos >= 0.0:
 			var advance: float = fposmod(pos - prev_pos, walk_clip.length)
 			if pos < prev_pos:
 				wraps += 1
-			if absf(advance - prev_delta) > 0.001:
-				breaks.append("pos %.4f -> %.4f over a %.4f s frame" % [prev_pos, pos, prev_delta])
+			if absf(advance - prev_delta * rate) > 0.001:
+				breaks.append("pos %.4f -> %.4f over a %.4f s frame at x%.2f" % [prev_pos, pos, prev_delta, rate])
+		# Ground speed over the frame just processed (prev_delta, read at its start, as the clip
+		# check above uses it; the walk runs due east). Frames before the first glide frame and
+		# after the streak's last chained cell are skipped (x does not advance there).
+		var x: float = ow.player.global_position.x
+		if continuous and ow.player.cell.x < end_x and x > prev_x and prev_delta > 0.0:
+			var v: float = (x - prev_x) / prev_delta
+			if absf(v - walk_v) > walk_v * 0.01:
+				speed_errs.append("%.4f m/s at x %.3f" % [v, x])
+		prev_x = x
 		prev_pos = pos if playing_walk else -1.0
 		prev_delta = get_process_delta_time()
 	Input.action_release(InputActions.CURSOR_RIGHT)
-	assert_eq(ow.player.cell, Vector3i(9, 8, 0), "an 8-cell held-key streak")
+	assert_eq(ow.player.cell, Vector3i(end_x, 8, 0), "a 3-cell held-key streak")
 	assert_gt(wraps, 0, "the streak spans a walk-cycle wrap")
 	assert_eq(breaks, [], "the walk cycle never stalls, restarts or skips across the streak")
+	if continuous:
+		assert_eq(speed_errs, [], "the glide holds the stride-matched walk speed (%.3f m/s) on every frame, cell boundaries included" % walk_v)
 	t0 = Time.get_ticks_msec()
 	while (ow.player.is_walking or not anim.current_animation.to_lower().contains("idle")) \
 			and Time.get_ticks_msec() - t0 < 2000:
@@ -468,9 +492,11 @@ func test_story_recruit_is_non_missable() -> void:
 func test_tap_walks_a_path() -> void:
 	var ow := await _boot("oakvale", Vector3i(10, 11, 0), "north")
 	ow.tap_cell(Vector3i(12, 11, 0))
-	# The path is paced a step's walk time per cell even with animations off (wall clock).
+	# The path is paced a step's walk time per cell even with animations off (wall clock; the
+	# active feel's pace, not a fixed 0.22 s).
 	var t0: int = Time.get_ticks_msec()
-	while ow.player.cell != Vector3i(12, 11, 0) and Time.get_ticks_msec() - t0 < 2000:
+	var budget_ms: int = int(2.0 * ow.walk_step_seconds() * 1000.0) + 1000
+	while ow.player.cell != Vector3i(12, 11, 0) and Time.get_ticks_msec() - t0 < budget_ms:
 		await get_tree().process_frame
 	assert_eq(ow.player.cell, Vector3i(12, 11, 0), "a tap walks there over the grid")
 	ow.tap_cell(Vector3i(13, 11, 0))

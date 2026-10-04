@@ -3,7 +3,8 @@ extends Node3D
 
 ## One thing standing on the overworld: the player's hero, an NPC, a sign, a chest, the
 ## Wayshrine. Logic lives in cells (the controller + [OverworldGrid]); this node is the VISUAL:
-## a model that tweens between cells (grid-locked with smooth interpolation, the Gen 3-5 read),
+## a model that tweens between cells (grid-locked with smooth interpolation, the Gen 3-5 read;
+## or one continuous glide across a chained streak under the shipped feel, [OverworldFeel]),
 ## turns via [UnitFacing] (+Z = south, model yaw composed with the facing), plays "idle" / "walk"
 ## clips when the model has them, and pops an emote bubble.
 ##
@@ -46,6 +47,22 @@ var walk_step_seconds: float = DEFAULT_WALK_STEP_SECONDS
 ## hero: the controller settles it when the walk STREAK ends (no idle flicker between steps).
 var settle_on_arrival: bool = true
 
+## OVERWORLD FEEL knobs ([OverworldFeel], applied by the controller; the defaults are the
+## "current" feel). continuous_glide: false = a Tween per cell (it ends on a frame boundary and
+## the next cell starts a frame later from the exact centre: a per-cell hitch); true = a
+## constant-speed integrator whose leftover time on the arrival frame carries into a step
+## chained from [signal walk_finished] (same frame), so a held streak moves at one speed.
+var continuous_glide: bool = false
+## Seconds of a turn's rotation blend, and whether it eases out (snappy start) or is linear.
+var turn_time: float = TURN_TIME
+var turn_ease_out: bool = false
+## Playback rate of the walk / run clips: the feel picks ground speed = stride / cycle x rate,
+## so the clip must play at the same rate for the planted foot to hold still.
+var walk_clip_rate: float = 1.0
+var run_clip_rate: float = 1.0
+## World velocity of the current continuous glide (zero otherwise) -- the camera's look-ahead.
+var glide_velocity: Vector3 = Vector3.ZERO
+
 var _model: Node3D = null
 var _anim: AnimationPlayer = null
 ## Source AnimationLibrary -> its copy with the locomotion clips LOOP_LINEAR. One copy per model,
@@ -57,6 +74,20 @@ var _step_serial: int = 0
 var _move_tween: Tween = null
 var _turn_tween: Tween = null
 var _bubble: Label3D = null
+## Continuous glide state (see [member continuous_glide]).
+var _gliding: bool = false
+var _glide_from: Vector3 = Vector3.ZERO
+var _glide_to: Vector3 = Vector3.ZERO
+var _glide_t: float = 0.0
+var _glide_dur: float = 0.0
+## Seconds of the arrival frame left over past the cell centre; only non-zero during the
+## arrival's walk_finished emit, where a chained walk_to consumes it.
+var _glide_carry: float = 0.0
+
+
+func _ready() -> void:
+	# Idle actors cost nothing per frame; walk_to switches processing on for a glide.
+	set_process(_gliding)
 
 
 ## Put [param model] (feet at origin, facing +Z after [param yaw_deg]) in this actor.
@@ -126,7 +157,9 @@ func turn_to(dir: Vector2i) -> void:
 	var from: float = _model.rotation.y
 	var delta: float = wrapf(target - from, -PI, PI)
 	_turn_tween = create_tween()
-	_turn_tween.tween_property(_model, "rotation:y", from + delta, TURN_TIME)
+	var tw: PropertyTweener = _turn_tween.tween_property(_model, "rotation:y", from + delta, turn_time)
+	if turn_ease_out:
+		tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 
 func face_cell(target: Vector3i) -> void:
@@ -150,6 +183,8 @@ func walk_to(to: Vector3i, seconds: float) -> void:
 	if dir != Vector2i.ZERO:
 		turn_to(dir)
 	cell = to
+	var carry: float = _glide_carry
+	_glide_carry = 0.0
 	_kill_move()
 	_step_serial += 1
 	play_clip(locomotion_clip(seconds), CLIP_WALK)
@@ -159,6 +194,16 @@ func walk_to(to: Vector3i, seconds: float) -> void:
 		call_deferred("_on_walk_done")
 		return
 	is_walking = true
+	if continuous_glide:
+		_glide_from = position
+		_glide_to = world_of(to)
+		_glide_dur = seconds
+		_glide_t = minf(carry, seconds)
+		glide_velocity = (_glide_to - _glide_from) / seconds
+		position = _glide_from.lerp(_glide_to, _glide_t / _glide_dur)
+		_gliding = true
+		set_process(true)
+		return
 	_move_tween = create_tween()
 	_move_tween.tween_property(self, "position", world_of(to), seconds)
 	_move_tween.finished.connect(_on_walk_done, CONNECT_ONE_SHOT)
@@ -192,6 +237,31 @@ func _kill_move() -> void:
 		_move_tween.kill()
 	_move_tween = null
 	is_walking = false
+	_gliding = false
+	glide_velocity = Vector3.ZERO
+
+
+## The continuous glide: constant speed from cell to cell. On the arrival frame the time past
+## the centre is kept in [member _glide_carry] while walk_finished fires; a step chained from
+## that signal (the controller's held key / tap path) starts already that far along, so the
+## streak's speed never dips at a cell boundary.
+func _process(delta: float) -> void:
+	if not _gliding:
+		set_process(false)
+		return
+	_glide_t += delta
+	if _glide_t < _glide_dur:
+		position = _glide_from.lerp(_glide_to, _glide_t / _glide_dur)
+		return
+	var carry: float = _glide_t - _glide_dur
+	position = _glide_to
+	_gliding = false
+	glide_velocity = Vector3.ZERO
+	_glide_carry = carry
+	_on_walk_done()
+	_glide_carry = 0.0
+	if not _gliding:
+		set_process(false)
 
 
 ## Pop [param glyph] ("!", "?", "...") above the actor for a moment. Awaitable: returns once
@@ -239,14 +309,25 @@ func play_clip(base: String, fallback: String = "") -> bool:
 	if _anim == null:
 		return false
 	var clip: String = _find_clip(base)
+	var resolved: String = base
 	if clip.is_empty() and not fallback.is_empty():
 		clip = _find_clip(fallback)
+		resolved = fallback
 	if clip.is_empty():
 		return false
 	if _anim.current_animation == clip and _anim.is_playing():
 		return true
-	_anim.play(clip, CLIP_BLEND)
+	_anim.play(clip, CLIP_BLEND, clip_rate(resolved))
 	return true
+
+
+## Playback rate for locomotion clip [param base] (the feel's stride-matched walk / run rate).
+func clip_rate(base: String) -> float:
+	if base == CLIP_WALK:
+		return walk_clip_rate
+	if base == CLIP_RUN:
+		return run_clip_rate
+	return 1.0
 
 
 ## Swap [param anim]'s libraries for copies whose idle / walk / run clips loop natively

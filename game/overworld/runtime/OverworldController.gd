@@ -13,7 +13,10 @@ extends Node3D
 ## arrows, WASD, d-pad, both sticks) steps the hero ONE CELL at a time -- a tap on a new
 ## direction turns in place, a hold walks, fast_forward (Shift / R3) runs. Each step costs its
 ## walk / run seconds even with animations off (the hero then snaps a cell per step instead of
-## gliding) -- never a cell per frame. On arrival:
+## gliding) -- never a cell per frame. The walk / run seconds, the glide model, turns and the
+## camera come from the active overworld feel preset ([OverworldFeel]; debug F8 cycles it):
+## the shipped "sunmoon" feel derives the pace from the hero clip's stride and chains a held
+## streak's next cell inside the arrival, so the glide never idles at a cell centre. On arrival:
 ## warps -> trigger zones -> trainer sight -> the VISIBLE wild creatures take their step (one may
 ## walk into you: contact) -> the HIDDEN grass roll (only if nothing above fired). Walking into a
 ## visible creature (a step, Confirm, a tap) is contact too ([WildSpawner], [method try_step]).
@@ -61,6 +64,9 @@ var _step_cooldown: float = 0.0
 ## A host-side dialogue (the whiteout line) holds input like a script does.
 var _busy: bool = false
 var _booted: bool = false
+## The active overworld feel ([method OverworldFeel.resolve]): walk / run seconds per cell, the
+## glide model, turns and the camera's presentation. Gameplay never reads anything else from it.
+var feel: Dictionary = {}
 
 
 func _ready() -> void:
@@ -105,6 +111,8 @@ func _exit_tree() -> void:
 # =====================================================================================
 
 func _build_world() -> void:
+	feel = OverworldFeel.resolve(OverworldFeel.active(), _ruleset)
+	add_to_group(OverworldFeel.GROUP)
 	var map_root := Node3D.new()
 	map_root.name = "Map"
 	add_child(map_root)
@@ -158,7 +166,7 @@ func _build_world() -> void:
 	player.entity_id = "player"
 	# The hero settles when its walk STREAK ends (_process / move_actor), not after every step.
 	player.settle_on_arrival = false
-	player.walk_step_seconds = _ruleset.walk_step_seconds
+	_feel_actor(player, true)
 	var hero: HeroResource = story.hero()
 	if hero != null and hero.model_scene != null:
 		var inst := hero.model_scene.instantiate() as Node3D
@@ -174,10 +182,10 @@ func _build_world() -> void:
 	camera.name = "OverworldCamera"
 	camera.target = player
 	camera.bounds = camera_bounds_for(area)
-	if area.is_interior():
-		camera.distance = OverworldCamera.INTERIOR_DISTANCE
+	camera.apply_feel(feel, area.is_interior())
 	add_child(camera)
 	camera.snap()
+	OverworldFeel.attach(self)
 
 	hud = OverworldHUD.new()
 	hud.name = "OverworldHUD"
@@ -236,7 +244,51 @@ func _make_entity_actor(e: OverworldEntity) -> OverworldActor:
 	var f: String = String(ov.get("facing", e.facing)) if not ov.is_empty() else e.facing
 	actor.place(c)
 	actor.set_facing(OverworldEntity.facing_vector(f))
+	_feel_actor(actor, false)
 	return actor
+
+
+## Give [param a] the active feel's glide / turn knobs and walk pace. Only the HERO plays its
+## clips at the feel's stride-matched rates (the strides are his clip's); NPC / wild models keep
+## 1.0x until they carry stride data of their own.
+func _feel_actor(a: OverworldActor, hero: bool) -> void:
+	if a == null or feel.is_empty():
+		return
+	a.walk_step_seconds = float(feel["walk_step_seconds"])
+	a.continuous_glide = String(feel["glide"]) == "continuous"
+	a.turn_time = float(feel["turn_time"])
+	a.turn_ease_out = bool(feel["turn_ease_out"])
+	if hero:
+		a.walk_clip_rate = float(feel["walk_clip_rate"])
+		a.run_clip_rate = float(feel["run_clip_rate"])
+
+
+## Switch to overworld feel [param preset] live (the F8 A/B cycler, the feel gate): the hero,
+## every actor and the camera take its knobs; cells, arrivals and triggers are untouched.
+## Returns the resolved feel.
+func apply_feel(preset: String) -> Dictionary:
+	OverworldFeel.set_active(preset)
+	feel = OverworldFeel.resolve(OverworldFeel.active(), _ruleset)
+	_feel_actor(player, true)
+	for a in _actors.values():
+		if is_instance_valid(a):
+			_feel_actor(a, false)
+	for a in _wild_actors.values():
+		if is_instance_valid(a):
+			_feel_actor(a, false)
+	if camera != null and area != null:
+		camera.apply_feel(feel, area.is_interior())
+		camera.snap()
+	return feel
+
+
+## Seconds per cell at walk / run pace under the active feel (tests pace their holds by these).
+func walk_step_seconds() -> float:
+	return float(feel.get("walk_step_seconds", _ruleset.walk_step_seconds if _ruleset != null else 0.22))
+
+
+func run_step_seconds() -> float:
+	return float(feel.get("run_step_seconds", _ruleset.run_step_seconds if _ruleset != null else 0.12))
 
 
 ## The camera's look-at clamp for [param a]. Outdoors: a few cells inside the edge, so the skirt
@@ -323,6 +375,7 @@ func _mount_wild(c: WildSpawner.WildCreature) -> OverworldActor:
 	_wild_root.add_child(actor)
 	actor.place(c.cell)
 	actor.set_facing(c.facing)
+	_feel_actor(actor, false)
 	_wild_actors[c.key] = actor
 	return actor
 
@@ -474,6 +527,13 @@ func _process(delta: float) -> void:
 	if _cursor != null and player != null:
 		_cursor.global_position = player.global_position
 	_step_cooldown = maxf(0.0, _step_cooldown - delta)
+	_drive(delta)
+
+
+## The held direction / tap path decides the hero's next move (turn, step, settle). Per frame
+## from [method _process]; under a continuous feel also straight from a glided ARRIVAL
+## ([method _chain_from_arrival]) with [param delta] 0, so the next cell starts on the same frame.
+func _drive(delta: float) -> void:
 	if _moving or is_input_blocked():
 		_held_dir = Vector2i.ZERO
 		return
@@ -534,7 +594,7 @@ func _held_direction() -> Vector2i:
 func _step_seconds() -> float:
 	var running: bool = InputMap.has_action(InputActions.FAST_FORWARD) \
 		and Input.is_action_pressed(InputActions.FAST_FORWARD)
-	return _ruleset.run_step_seconds if running else _ruleset.walk_step_seconds
+	return run_step_seconds() if running else walk_step_seconds()
 
 
 ## Step the hero one cell in [param dir]. Returns false (a bump: turn only) when blocked or
@@ -583,6 +643,21 @@ func _await_arrival(to: Vector3i) -> void:
 		return
 	_moving = false
 	_on_arrived(to)
+	if String(feel.get("glide", "")) == "continuous" and is_inside_tree():
+		_chain_from_arrival()
+
+
+## Continuous feel: decide the next move inside the arrival itself (the hero's walk_finished
+## emit, on the frame his glide reached the cell), so a chained step consumes the frame's
+## leftover time and the streak never idles a frame at a cell centre. Only a GLIDED step chains
+## here -- its glide already took the step's full time; a snapped step (animations off) still
+## waits out [member _step_cooldown] in _process: one cell per step time, never one per frame.
+## Arrivals that started a script / warp / battle block input, so _drive does nothing.
+func _chain_from_arrival() -> void:
+	if not _anims_on() or player == null:
+		return
+	_step_cooldown = 0.0
+	_drive(0.0)
 
 
 ## An overlay owns the input right now: the journey menu, or any screen of the overlay group.
@@ -917,7 +992,7 @@ func move_actor(actor_id: String, to: Vector3i, _persist: bool = false) -> void:
 	# Path over the grid, ignoring the actor's own blocker; fall back to a straight line.
 	var path: Array[Vector3i] = _path_for(actor.cell, to, ignore)
 	for c in path:
-		actor.walk_to(c, _ruleset.walk_step_seconds)
+		actor.walk_to(c, walk_step_seconds())
 		await actor.walk_finished
 		if actor_id != "player":
 			grid.move_blocker(actor_id, c)

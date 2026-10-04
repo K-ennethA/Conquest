@@ -17,9 +17,21 @@ const DEFAULT_PATH := "res://game/overworld/content/story_ruleset.tres"
 @export_range(1, 12) var party_cap: int = 6
 
 @export_group("Walking")
-## Seconds per cell walking / running (run = hold fast_forward: Shift / R3).
+## Seconds per cell walking / running (run = hold fast_forward: Shift / R3) -- the LEGACY grid
+## pace, used only by the "current" overworld feel preset ([OverworldFeel]). The shipped feel
+## derives its pace from the hero clip strides below (speed first, seconds per cell from it).
 @export var walk_step_seconds: float = 0.22
 @export var run_step_seconds: float = 0.12
+## The HERO's locomotion clips in game units (shipped wren_forge.glb): stride (metres per full
+## two-step cycle) and cycle length. Forge's zero-slip ball-contact report (forge
+## projects/conquest-units/rigged/wren.json: walk 0.8103 m / 1.0833 s, run 2.3333 m / 0.5 s)
+## times the export's cell fit 1.02823; the glb itself measures walk 0.833 m (flat-stance ankle
+## speed 0.7691 m/s x 1.0833 s). Ground speed = stride / cycle x the feel's clip rate: a hero
+## model with a different stride must update these or its feet slide.
+@export var hero_walk_stride_m: float = 0.8332
+@export var hero_walk_cycle_seconds: float = 1.0833
+@export var hero_run_stride_m: float = 2.3992
+@export var hero_run_cycle_seconds: float = 0.5
 ## A tap on a new direction only TURNS; holding longer than this walks.
 @export var turn_hold_seconds: float = 0.09
 

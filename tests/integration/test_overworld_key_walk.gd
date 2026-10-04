@@ -9,7 +9,8 @@ extends GutTest
 ## cell per step. Sampled every frame: no frame ever moves the hero more than one cell, and
 ## consecutive steps are never closer together than the step time.
 ##
-## Uses wall-clock holds (the step pace IS wall-clock), well under a second each.
+## Uses wall-clock holds (the step pace IS wall-clock), sized from the controller's active feel
+## pace (OverworldFeel: ~1.7 s per walk cell in the shipped "sunmoon" feel, so a few seconds each).
 
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
 const StoryFixture := preload("res://tests/helpers/story_fixture.gd")
@@ -142,6 +143,12 @@ func _ms(seconds: float) -> int:
 	return int(seconds * 1000.0)
 
 
+## A hold that spans at least two walk steps (three cell changes) at the active feel's pace --
+## the step time comes from the controller (OverworldFeel), never a fixed 0.22 s.
+func _hold_ms(step_ms: int) -> int:
+	return 2 * step_ms + 150
+
+
 # --- tests --------------------------------------------------------------------------------
 
 func test_a_tap_on_a_new_direction_only_turns() -> void:
@@ -167,13 +174,14 @@ func test_a_tap_the_way_he_faces_steps_exactly_one_cell() -> void:
 
 func test_holding_an_arrow_walks_one_cell_per_step_with_animations_off() -> void:
 	var ow := await _boot("west")
-	var step_ms: int = _ms(StoryController.ruleset().walk_step_seconds)
+	var step_ms: int = _ms(ow.walk_step_seconds())
+	var hold_ms: int = _hold_ms(step_ms)
 	_key(KEY_LEFT, true)
-	await _sample(ow, 600)
+	await _sample(ow, hold_ms)
 	_key(KEY_LEFT, false)
 	await _sample(ow, 100)
 	assert_gte(_changes.size(), 2, "holding keeps walking")
-	assert_lte(_changes.size(), 600 / step_ms + 1, "but only as fast as the walk pace allows")
+	assert_lte(_changes.size(), hold_ms / step_ms + 1, "but only as fast as the walk pace allows")
 	assert_eq(_max_cell_jump, 1, "no frame ever moves the hero more than one cell")
 	assert_gte(_min_interval_ms(), step_ms - SLACK_MS, "each step takes the walk time")
 	var end_x: int = START.x - _changes.size()
@@ -183,13 +191,14 @@ func test_holding_an_arrow_walks_one_cell_per_step_with_animations_off() -> void
 func test_holding_an_arrow_glides_one_cell_per_step_with_animations_on() -> void:
 	_guard.set_setting("animations_enabled", true)
 	var ow := await _boot("west")
-	var step_ms: int = _ms(StoryController.ruleset().walk_step_seconds)
+	var step_ms: int = _ms(ow.walk_step_seconds())
+	var hold_ms: int = _hold_ms(step_ms)
 	_key(KEY_LEFT, true)
-	await _sample(ow, 600)
+	await _sample(ow, hold_ms)
 	_key(KEY_LEFT, false)
 	await _sample(ow, 300)
 	assert_gte(_changes.size(), 2, "holding keeps walking")
-	assert_lte(_changes.size(), 600 / step_ms + 2, "at the walk pace")
+	assert_lte(_changes.size(), hold_ms / step_ms + 2, "at the walk pace")
 	assert_eq(_max_cell_jump, 1, "one cell per step")
 	assert_lt(_max_world_jump, Cells.CELL_SIZE, "the hero glides; his position never jumps a cell in a frame")
 	assert_gte(_min_interval_ms(), step_ms - SLACK_MS, "one step per walk tween")
@@ -197,28 +206,32 @@ func test_holding_an_arrow_glides_one_cell_per_step_with_animations_on() -> void
 
 func test_shift_runs_faster_but_still_cell_by_cell() -> void:
 	var ow := await _boot("west")
-	var run_ms: int = _ms(StoryController.ruleset().run_step_seconds)
-	var walk_ms: int = _ms(StoryController.ruleset().walk_step_seconds)
+	var run_ms: int = _ms(ow.run_step_seconds())
+	var walk_ms: int = _ms(ow.walk_step_seconds())
+	# Long enough for three run steps at any feel's pace (the old fixed 450 ms assumed 0.12 s).
+	var hold_ms: int = 2 * run_ms + 150
 	_key(KEY_SHIFT, true, true)
 	_key(KEY_LEFT, true, true)
-	await _sample(ow, 450)
+	await _sample(ow, hold_ms)
 	_key(KEY_LEFT, false, true)
 	_key(KEY_SHIFT, false)
 	await _sample(ow, 100)
 	assert_gte(_changes.size(), 3, "running keeps stepping")
-	assert_lte(_changes.size(), 450 / run_ms + 1, "at the run pace, not once per frame")
+	assert_lte(_changes.size(), hold_ms / run_ms + 1, "at the run pace, not once per frame")
 	assert_eq(_max_cell_jump, 1, "one cell per step")
 	assert_gte(_min_interval_ms(), run_ms - SLACK_MS, "each run step takes the run time")
 	assert_lt(_min_interval_ms(), walk_ms, "and that is quicker than walking")
 
 
 func test_wasd_dpad_and_stick_share_the_one_cell_pace() -> void:
-	var step_ms: int = _ms(StoryController.ruleset().walk_step_seconds)
 	var inputs: Array[String] = ["wasd", "dpad", "stick"]
 	for which in inputs:
 		_changes.clear()
 		_max_cell_jump = 0
 		var ow := await _boot("west")
+		var step_ms: int = _ms(ow.walk_step_seconds())
+		# Two steps' worth: the first at the press, the second one walk time later.
+		var hold_ms: int = step_ms + 300
 		match which:
 			"wasd":
 				_key(KEY_A, true)
@@ -226,11 +239,11 @@ func test_wasd_dpad_and_stick_share_the_one_cell_pace() -> void:
 				_dpad(JOY_BUTTON_DPAD_LEFT, true)
 			"stick":
 				_stick_x(-1.0)
-		await _sample(ow, 500)
+		await _sample(ow, hold_ms)
 		_release_everything()
 		await _sample(ow, 100)
 		assert_gte(_changes.size(), 2, "%s: holding walks" % which)
-		assert_lte(_changes.size(), 500 / step_ms + 1, "%s: at the walk pace" % which)
+		assert_lte(_changes.size(), hold_ms / step_ms + 1, "%s: at the walk pace" % which)
 		assert_eq(_max_cell_jump, 1, "%s: one cell per step" % which)
 		_teardown()
 		StoryController.end_session()
@@ -238,7 +251,7 @@ func test_wasd_dpad_and_stick_share_the_one_cell_pace() -> void:
 
 func test_tap_to_walk_paces_the_path_one_cell_per_step() -> void:
 	var ow := await _boot("south")
-	var step_ms: int = _ms(StoryController.ruleset().walk_step_seconds)
+	var step_ms: int = _ms(ow.walk_step_seconds())
 	ow.tap_cell(START + Vector3i(-3, 0, 0))
 	await _sample(ow, 3 * step_ms + 250)
 	assert_eq(ow.player.cell, START + Vector3i(-3, 0, 0), "the tap walks there")
