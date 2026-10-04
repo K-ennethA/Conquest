@@ -60,8 +60,14 @@ var turn_ease_out: bool = false
 ## so the clip must play at the same rate for the planted foot to hold still.
 var walk_clip_rate: float = 1.0
 var run_clip_rate: float = 1.0
-## World velocity of the current continuous glide (zero otherwise) -- the camera's look-ahead.
+## World velocity of the current continuous glide or free walk (zero otherwise) -- the camera's
+## look-ahead.
 var glide_velocity: Vector3 = Vector3.ZERO
+## FREE MOVEMENT clip matching ([method free_pose]): the walk / run clips' own ground speeds at
+## 1.0x (stride / cycle), and the ground speed above which the run clip replaces the walk clip.
+var walk_clip_native_mps: float = 0.0
+var run_clip_native_mps: float = 0.0
+var run_clip_above_mps: float = INF
 
 var _model: Node3D = null
 var _anim: AnimationPlayer = null
@@ -187,6 +193,7 @@ func walk_to(to: Vector3i, seconds: float) -> void:
 	_glide_carry = 0.0
 	_kill_move()
 	_step_serial += 1
+	_reset_clip_speed()
 	play_clip(locomotion_clip(seconds), CLIP_WALK)
 	if not _anims_on() or seconds <= 0.0:
 		position = world_of(to)
@@ -229,7 +236,47 @@ func _on_walk_done() -> void:
 
 ## Called by the controller when a walk streak ends (no key held) so the model settles.
 func settle() -> void:
+	_reset_clip_speed()
 	play_clip(CLIP_IDLE)
+
+
+## FREE MOVEMENT pose ([HeroMover], the hero under a "free" feel): the controller integrates
+## the position; the actor takes it, turns the model to [param heading] (world radians,
+## atan2(x, z) -- any angle, not just the four facings), records the cardinal [param facing_dir]
+## for Confirm / doors / trainers, and plays idle / walk / run with the clip speed matched to
+## the ground speed (rate = speed / the clip's own stride speed), so the planted foot holds at
+## every speed an analog stick or the ease-in passes through.
+func free_pose(pos: Vector3, heading: float, velocity: Vector3, facing_dir: Vector2i) -> void:
+	if _move_tween != null or _gliding:
+		_kill_move()
+	if _turn_tween != null and _turn_tween.is_valid():
+		_turn_tween.kill()
+	_turn_tween = null
+	position = pos
+	glide_velocity = velocity
+	if facing_dir != Vector2i.ZERO:
+		facing = facing_dir
+	if _model != null:
+		_model.rotation.y = deg_to_rad(model_yaw_deg) + heading
+	var s: float = Vector2(velocity.x, velocity.z).length()
+	if s < HeroMover.REST_SPEED:
+		settle()
+		return
+	var base: String = CLIP_RUN if s > run_clip_above_mps else CLIP_WALK
+	if not play_clip(base, CLIP_WALK) or _anim == null:
+		return
+	var resolved: String = base if not _find_clip(base).is_empty() else CLIP_WALK
+	var native: float = run_clip_native_mps if resolved == CLIP_RUN else walk_clip_native_mps
+	if native <= 0.0:
+		return
+	# play_clip started the clip at clip_rate(resolved); speed_scale scales that to this speed.
+	var started: float = clip_rate(resolved)
+	_anim.speed_scale = (s / native) / started if started > 0.0 else 1.0
+
+
+func _reset_clip_speed() -> void:
+	if _anim != null:
+		_anim.speed_scale = 1.0
 
 
 func _kill_move() -> void:

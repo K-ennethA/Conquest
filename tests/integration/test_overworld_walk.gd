@@ -165,7 +165,7 @@ func test_walk_turn_and_collide() -> void:
 ## feel's stride-matched walk speed.
 func test_the_hero_model_plays_its_walk_and_idle_clips() -> void:
 	_guard.set_setting("animations_enabled", true)
-	# Oakvale's row 8 is open flagstone from x 1 to 12: a 3-cell streak (~5.2 s at the shipped
+	# Oakvale's row 8 is open flagstone from x 1 to 12: a 3-cell streak (~3.5 s at the shipped
 	# walk pace) spans several walk cycles and two cell boundaries.
 	var ow := await _boot("oakvale", Vector3i(1, 8, 0), "east")
 	var end_x: int = 4
@@ -194,6 +194,10 @@ func test_the_hero_model_plays_its_walk_and_idle_clips() -> void:
 	var wraps: int = 0
 	var breaks: Array = []
 	var speed_errs: Array = []
+	var slips: Array = []
+	var free: bool = OverworldFeel.is_free(ow.feel)
+	var cruising: bool = false
+	var walk_native: float = float(ow.feel["walk_clip_native_mps"])
 	var prev_x: float = ow.player.global_position.x
 	var t0: int = Time.get_ticks_msec()
 	var budget_ms: int = int((end_x - 1) * ow.walk_step_seconds() * 1000.0) + 2000
@@ -210,12 +214,18 @@ func test_the_hero_model_plays_its_walk_and_idle_clips() -> void:
 				breaks.append("pos %.4f -> %.4f over a %.4f s frame at x%.2f" % [prev_pos, pos, prev_delta, rate])
 		# Ground speed over the frame just processed (prev_delta, read at its start, as the clip
 		# check above uses it; the walk runs due east). Frames before the first glide frame and
-		# after the streak's last chained cell are skipped (x does not advance there).
+		# after the streak's last chained cell are skipped (x does not advance there). FREE
+		# movement eases in: its check starts once he first reaches cruising speed, and from then
+		# the clip's rate x its own stride speed must equal the ground speed (no foot slide).
 		var x: float = ow.player.global_position.x
 		if continuous and ow.player.cell.x < end_x and x > prev_x and prev_delta > 0.0:
 			var v: float = (x - prev_x) / prev_delta
-			if absf(v - walk_v) > walk_v * 0.01:
+			if free and not cruising and v >= walk_v * 0.99:
+				cruising = true
+			if (cruising or not free) and absf(v - walk_v) > walk_v * 0.01:
 				speed_errs.append("%.4f m/s at x %.3f" % [v, x])
+			if free and playing_walk and absf(rate * walk_native - v) > walk_v * 0.01:
+				slips.append("clip x%.3f = %.4f m/s vs ground %.4f m/s at x %.3f" % [rate, rate * walk_native, v, x])
 		prev_x = x
 		prev_pos = pos if playing_walk else -1.0
 		prev_delta = get_process_delta_time()
@@ -225,6 +235,9 @@ func test_the_hero_model_plays_its_walk_and_idle_clips() -> void:
 	assert_eq(breaks, [], "the walk cycle never stalls, restarts or skips across the streak")
 	if continuous:
 		assert_eq(speed_errs, [], "the glide holds the stride-matched walk speed (%.3f m/s) on every frame, cell boundaries included" % walk_v)
+	if free:
+		assert_true(cruising, "the free walk reaches its walk speed")
+		assert_eq(slips, [], "the walk clip's rate follows the ground speed on every frame, the ease-in included")
 	t0 = Time.get_ticks_msec()
 	while (ow.player.is_walking or not anim.current_animation.to_lower().contains("idle")) \
 			and Time.get_ticks_msec() - t0 < 2000:

@@ -9,21 +9,36 @@ extends Node3D
 ## the terrain + present entities -> actors (hero, NPCs, props) -> HUD -> hand the controller
 ## this host (a script paused on a battle resumes here) -> on_enter scripts, trainer sight.
 ##
-## Per frame (no script running, no overlay up): the held direction (cursor_* or camera_pan_*:
-## arrows, WASD, d-pad, both sticks) steps the hero ONE CELL at a time -- a tap on a new
-## direction turns in place, a hold walks, fast_forward (Shift / R3) runs. Each step costs its
-## walk / run seconds even with animations off (the hero then snaps a cell per step instead of
-## gliding) -- never a cell per frame. The walk / run seconds, the glide model, turns and the
-## camera come from the active overworld feel preset ([OverworldFeel]; debug F8 cycles it):
-## the shipped "sunmoon" feel derives the pace from the hero clip's stride and chains a held
-## streak's next cell inside the arrival, so the glide never idles at a cell centre. On arrival:
-## warps -> trigger zones -> trainer sight -> the VISIBLE wild creatures take their step (one may
-## walk into you: contact) -> the HIDDEN grass roll (only if nothing above fired). Walking into a
-## visible creature (a step, Confirm, a tap) is contact too ([WildSpawner], [method try_step]).
-## Confirm uses what the hero faces; a tap / click walks there (A*), and a tap on an NPC walks
-## next to it and talks. map_menu / cancel opens the Journey menu.
+## Per frame (no script running, no overlay up), under the shipped "free" feel ([OverworldFeel],
+## Sun/Moon): the held direction (cursor_* + camera_pan_*: arrows, WASD, d-pad, both sticks --
+## 8-way on keys, analog on a stick) walks the hero FREELY ([HeroMover]): any angle, eased
+## speed, sliding along blocked cells; fast_forward (Shift / R3) runs. Not gated on the
+## Animations setting (moving is gameplay). Logic stays in cells: the moment his centre crosses
+## into a new cell, that cell's ARRIVAL fires. Pushing into a door from its front cell goes in;
+## pushing into a visible wild creature is contact. The debug "grid" feels (F8) keep the older
+## one-cell-per-held-step walk ([method _drive]): a tap on a new direction turns in place, a
+## hold walks, each step costs its walk / run seconds. On arrival: warps -> trigger zones ->
+## trainer sight -> the VISIBLE wild creatures take their step (one may walk into you: contact)
+## -> the HIDDEN grass roll (only if nothing above fired). Walking into a visible creature (a
+## push, a step, Confirm, a tap) is contact too ([WildSpawner], [method try_step]). Confirm uses
+## the cardinal the hero faces; a tap / click walks there (A* over cells, steered smoothly), and
+## a tap on an NPC walks next to it and talks. [method try_step] (tests, tools) still walks
+## exactly one cell. map_menu / cancel opens the Journey menu.
 
 const STEP_SOUND_EVENT := &"sfx_footstep"
+## FREE MOVEMENT: stick tilt below this reads as no input (keys are always full strength).
+const STICK_DEADZONE := 0.2
+## Metres past the body's edge a push probes for a door / a wild creature.
+const PUSH_REACH := 0.1
+## A tap path turns toward the next cell once within this of the current one's centre (the
+## last cell: [constant TAP_ARRIVE]), and slows into the last cell over [constant TAP_EASE].
+const TAP_CORNER := 0.45
+const TAP_ARRIVE := 0.1
+const TAP_EASE := 0.6
+## Seconds a tap path may make no headway (pressed against a moved NPC) before it gives up.
+const TAP_STALL_SECONDS := 0.4
+## Metres past a cell's edge before the hero counts as on the next one ([method _free_cell]).
+const CELL_HYSTERESIS := 0.2
 ## Metres the camera's look-at point sits SOUTH of an interior's middle ([method camera_bounds_for]).
 const INTERIOR_FOCUS_SOUTH := 1.2
 
@@ -67,6 +82,11 @@ var _booted: bool = false
 ## The active overworld feel ([method OverworldFeel.resolve]): walk / run seconds per cell, the
 ## glide model, turns and the camera's presentation. Gameplay never reads anything else from it.
 var feel: Dictionary = {}
+## FREE MOVEMENT (a "free" feel): the hero's velocity / heading integrator, whether he is
+## mid-walk (so a stop settles him once), and how long a tap path has made no headway.
+var _mover: HeroMover = HeroMover.new()
+var _free_walking: bool = false
+var _tap_stall: float = 0.0
 
 
 func _ready() -> void:
@@ -261,6 +281,10 @@ func _feel_actor(a: OverworldActor, hero: bool) -> void:
 	if hero:
 		a.walk_clip_rate = float(feel["walk_clip_rate"])
 		a.run_clip_rate = float(feel["run_clip_rate"])
+		a.walk_clip_native_mps = float(feel["walk_clip_native_mps"])
+		a.run_clip_native_mps = float(feel["run_clip_native_mps"])
+		a.run_clip_above_mps = float(feel["walk_speed_mps"]) * float(feel.get("run_clip_above", INF))
+		_mover.apply_feel(feel)
 
 
 ## Switch to overworld feel [param preset] live (the F8 A/B cycler, the feel gate): the hero,
@@ -268,6 +292,7 @@ func _feel_actor(a: OverworldActor, hero: bool) -> void:
 ## Returns the resolved feel.
 func apply_feel(preset: String) -> Dictionary:
 	OverworldFeel.set_active(preset)
+	_halt_free()
 	feel = OverworldFeel.resolve(OverworldFeel.active(), _ruleset)
 	_feel_actor(player, true)
 	for a in _actors.values():
@@ -527,7 +552,141 @@ func _process(delta: float) -> void:
 	if _cursor != null and player != null:
 		_cursor.global_position = player.global_position
 	_step_cooldown = maxf(0.0, _step_cooldown - delta)
-	_drive(delta)
+	if OverworldFeel.is_free(feel):
+		_drive_free(delta)
+	else:
+		_drive(delta)
+
+
+# =====================================================================================
+#  Free movement (the shipped "free" feel)
+# =====================================================================================
+
+## One frame of free movement: input (or the tap path) -> [HeroMover] -> the hero's pose; a new
+## cell fires its arrival; a push into a door / a wild creature fires that.
+func _drive_free(delta: float) -> void:
+	if _moving or is_input_blocked():
+		_halt_free()
+		return
+	var wish: Vector2 = _wish_vector()
+	if wish != Vector2.ZERO:
+		_tap_path.clear()
+		_tap_interact_cell = Cells.INVALID
+	elif not _tap_path.is_empty():
+		wish = _tap_wish(delta)
+	if wish == Vector2.ZERO and _mover.is_settled():
+		if _free_walking:
+			_halt_free()
+		return
+	if not _free_walking:
+		# Starting from rest: if a script / Confirm / a tap turned him, start from that facing.
+		if _mover.cardinal() != player.facing:
+			_mover.face(player.facing)
+		_free_walking = true
+	var running: bool = InputMap.has_action(InputActions.FAST_FORWARD) \
+		and Input.is_action_pressed(InputActions.FAST_FORWARD)
+	var to: Vector3 = _mover.advance(player.position, wish, running, delta, _free_blocked, player.cell.z)
+	var faced: Vector2i = _mover.cardinal()
+	var turned: bool = faced != player.facing
+	player.free_pose(to, _mover.heading, _mover.velocity, faced)
+	var c: Vector3i = _free_cell(to)
+	if c != player.cell:
+		player.cell = c
+		_on_arrived(c)
+		return
+	if wish != Vector2.ZERO and _free_push():
+		return
+	if turned:
+		_update_prompt()
+
+
+## Stop the free walk (input released, a script / menu / warp took over): zero speed, idle once.
+## A scripted walk already under way keeps its clip.
+func _halt_free() -> void:
+	_mover.stop()
+	_tap_stall = 0.0
+	if not _free_walking:
+		return
+	_free_walking = false
+	if player != null and not player.is_walking:
+		player.glide_velocity = Vector3.ZERO
+		player.settle()
+
+
+## The held direction on the ground (x = east, y = south), length 0..1: both direction sets
+## (cursor_* and camera_pan_*: arrows + d-pad + left stick, WASD + right stick) summed.
+func _wish_vector() -> Vector2:
+	var v: Vector2 = Input.get_vector(InputActions.CURSOR_LEFT, InputActions.CURSOR_RIGHT,
+		InputActions.CURSOR_UP, InputActions.CURSOR_DOWN, STICK_DEADZONE)
+	v += Input.get_vector(InputActions.CAMERA_PAN_LEFT, InputActions.CAMERA_PAN_RIGHT,
+		InputActions.CAMERA_PAN_UP, InputActions.CAMERA_PAN_DOWN, STICK_DEADZONE)
+	return v.limit_length(1.0)
+
+
+## The hero's logical cell at [param p]: the cell his centre is in, but the current one is kept
+## until he is [constant CELL_HYSTERESIS] past its edge, so wiggling on a boundary does not fire
+## an arrival (and a grass roll) per crossing.
+func _free_cell(p: Vector3) -> Vector3i:
+	var cs: float = Cells.CELL_SIZE
+	var cur: Vector3i = player.cell
+	var h: float = CELL_HYSTERESIS
+	if p.x >= cur.x * cs - h and p.x < (cur.x + 1) * cs + h \
+			and p.z >= cur.y * cs - h and p.z < (cur.y + 1) * cs + h:
+		return cur
+	return Vector3i(floori(p.x / cs), floori(p.z / cs), cur.z)
+
+
+## A cell the hero's body may not overlap ([HeroMover]'s collision rule).
+func _free_blocked(c: Vector3i) -> bool:
+	return not grid.is_walkable(c)
+
+
+## Pressing against the cell the hero faces: a door entered from its front cell goes in, a
+## visible wild creature is contact. True when one fired.
+func _free_push() -> bool:
+	var dir: Vector2i = player.facing
+	var reach: float = HeroMover.RADIUS + PUSH_REACH
+	var probe: Vector3 = player.position + Vector3(dir.x, 0.0, dir.y) * reach
+	var c := Vector3i(floori(probe.x / Cells.CELL_SIZE), floori(probe.z / Cells.CELL_SIZE), player.cell.z)
+	if c == player.cell:
+		return false
+	var creature: WildSpawner.WildCreature = wild.creature_at(c) if wild != null else null
+	if creature != null:
+		_halt_free()
+		start_wild_battle(creature, WildSpawner.contact_opening(creature, player.cell))
+		_update_prompt()
+		return true
+	var door: DoorEntity = door_at(c)
+	if door != null and door.accepts(player.cell, dir):
+		_halt_free()
+		enter_door(door)
+		return true
+	return false
+
+
+## Steer along the tap path: toward the next cell's centre, cornering early, easing into the
+## last one; there it stops and (a tap on an NPC / object) turns and uses it.
+func _tap_wish(delta: float) -> Vector2:
+	while not _tap_path.is_empty():
+		var next: Vector3i = _tap_path[0]
+		if not grid.is_walkable(next):
+			_tap_path.clear()
+			break
+		var target: Vector3 = OverworldActor.world_of(next)
+		var d := Vector2(target.x - player.position.x, target.z - player.position.z)
+		var last: bool = _tap_path.size() == 1
+		if d.length() > (TAP_ARRIVE if last else TAP_CORNER):
+			_tap_stall = _tap_stall + delta if _mover.speed() < 0.2 and _free_walking else 0.0
+			if _tap_stall > TAP_STALL_SECONDS:
+				_tap_path.clear()
+				break
+			var slow: float = clampf(d.length() / TAP_EASE, 0.3, 1.0) if last else 1.0
+			return d.normalized() * slow
+		_tap_path.remove_at(0)
+		if _tap_path.is_empty() and _tap_interact_cell != Cells.INVALID:
+			_finish_tap_interact.call_deferred()
+	_tap_stall = 0.0
+	return Vector2.ZERO
 
 
 ## The held direction / tap path decides the hero's next move (turn, step, settle). Per frame
@@ -603,6 +762,7 @@ func _step_seconds() -> float:
 func try_step(dir: Vector2i) -> bool:
 	if _moving or dir == Vector2i.ZERO or player == null:
 		return false
+	_halt_free()
 	player.turn_to(dir)
 	var to := Vector3i(player.cell.x + dir.x, player.cell.y + dir.y, player.cell.z)
 	# Walking into a visible wild creature is CONTACT (its back / side: an ambush), not a step.
@@ -643,7 +803,7 @@ func _await_arrival(to: Vector3i) -> void:
 		return
 	_moving = false
 	_on_arrived(to)
-	if String(feel.get("glide", "")) == "continuous" and is_inside_tree():
+	if String(feel.get("glide", "")) == "continuous" and not OverworldFeel.is_free(feel) and is_inside_tree():
 		_chain_from_arrival()
 
 
