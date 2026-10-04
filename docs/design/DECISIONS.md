@@ -350,3 +350,13 @@ asked about. An earlier decision stands unless the owner changes it.
     POWERFUL ones. Those people are usually NEW SHARD USERS, or CHAIN USERS if they are villains.
     (A per-species bond/catch rate on the creature data; it also guides which creatures ordinary
     trainers and grunts field.)
+
+### Progression (owner, 2026-10-04) -- spec: docs/design/PROGRESSION.md
+79. **Anti-grind XP:** less XP for beating enemies at a lower level than the member, or near it;
+    more for a stronger enemy. Max level: 50 (a tuning knob).
+80. **Chiefs SCALE** to the hero's progress (within their region's band), so they can be taken in
+    any order.
+81. **Legends do NOT scale:** they are stronger than the base levels around their area, to offer a
+    challenge.
+82. **Evolution may be triggered by different triggers** -- to be discussed later. Level is added as
+    one more trigger kind; nothing is migrated.
