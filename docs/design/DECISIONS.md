@@ -267,3 +267,22 @@ stones/shards that the enemy seeks, to create powerful chains to subjugate the o
   dropped? Is the enemy nation still framed?
 - 36 vs 21: is the General the soldier from the opening (Rowan), who becomes the recurring
   general?
+
+### More from the owner (2026-10-04, later)
+49. **Frostpeak Village -- the sleep:** the whole town can be made to SLEEP by two MYTHICAL
+    creatures -- one who causes NIGHTMARES and one who causes DREAMS -- who play and fight each
+    other. The hero must save the town. In the sleep the hero fights the DISORIENTED CHIEF, who
+    believes the hero may have caused it; after that, a TACTICAL battle against the two creatures.
+    (Frostpeak sits under the Snowy Peaks: this is the Snowy Peaks chief of decision 45.)
+50. **Chief battles are regular Pokemon-style battles** (duels), not tactical boards.
+51. **Shard testers:** the hero meets a few STRONGER people who battle with shards/stones, because
+    the professor had been passing them out as tests to see how people bond. They can be the
+    hero's RIVALS and ALLIES.
+52. **The ceremony has company:** others can also be there when the hero receives their creature
+    and stone (fellow testers -- see 51).
+
+**Open questions (later batch):**
+- 49: are the two mythical creatures legends under decision 39 (catchable, called upon in special
+  battles), and is either (or both) catchable after the tactical battle?
+- 51: is the existing rival (Lark, "a tester from the first batch") one of these testers? How many
+  testers, and which become allies (guests in battles? recruitable humans, decision 6)?
