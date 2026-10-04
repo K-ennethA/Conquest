@@ -199,3 +199,71 @@ doc's default differs from this file, THIS FILE WINS. Anything not listed: use t
 33. **Duels in story mode:** trainers / rivals who challenge you to duels, friendly SPARRING
     partners in towns (never permadeath; Rowan's spar exists), criminals / ambushes (scripted
     self-defence duels), and a TOURNAMENT / arena building in a city with a ladder of duels.
+
+## The opening, refined (owner, 2026-10-04)
+34. **Minimal dialogue, open to explore** (earlier Pokemon games): entering a town must not stop
+    the player with text telling them where they are; nothing should interrupt movement and
+    immersion unless the player asks (talks to someone) or a story beat genuinely needs it.
+35. **The abduction:** when the professor is taken, enemy units appear IN THE ROOM (the workshop)
+    and take him. At the same time other enemies attack the city as a DISTRACTION. Those enemies
+    then run to escape and burn the hero's village as a further distraction.
+36. **The burned village:** the hero meets **the General** and **another warrior** there (both
+    placeholders for now). They tell the hero what happened, and the hero joins the fight
+    alongside their creature, the General and his ally, against (placeholder) enemy soldiers and
+    their creatures.
+37. **After that win:** they task the hero with getting stronger to avenge their mother, and say
+    they will be preparing for war. From there the hero is free to explore the whole region.
+
+## Chiefs, legends and the road to war (owner, 2026-10-04)
+38. **Chiefs:** certain towns have a CHIEF -- exceptionally strong, bonded with their creatures
+    WITHOUT the need of the stones. With their main partner they ACTIVATE their stone to get
+    boosts. The boost works to its full potential depending on the BOND LEVEL with the creature.
+    Chiefs so far: **Beach Village**, **the Snowy Peaks**, **Mountain Base**, and the fourth
+    thief of the Hidden Thieves (decision 42).
+39. **Legendary beasts:** special encounters, some of them TACTICAL battles (the owner will say
+    where). A legend may be CAUGHT, but legends do not accompany the hero (not party members):
+    they can be called upon in SPECIAL BATTLES or in ONLINE play.
+40. **The Deep Woods -- Eldroot:** Eldroot is found by going to the deepest part of the forest.
+    To go through the forest the hero must first fight **Nyra** (placeholder name). Nyra teaches
+    an OUT-OF-COMBAT move that destroys trees, needed to find the hidden boss. Eldroot can be
+    caught (as a legend: decision 39).
+41. **Out-of-combat (field) moves:** abilities used on the overworld to open the world -- the
+    tree-destroying move (Nyra, decision 40) and the power to traverse the SEA (the Beach Village
+    chief, decision 43).
+42. **The Hidden Thieves:** the hero is lured into following someone who appears to need help.
+    Follow them far enough and the trap springs: the hero must fight **3 thieves in a row** who
+    use CHAINS to command their creatures. Then the **4th thief** (on the level of a chief)
+    honors the hero, HEALS them, and battles them with their BONDED ally -- no chains and, of
+    course, no shard.
+43. **Beach Village:** another chief; beating them grants the power to traverse the sea.
+44. **The Island of Tides:** reached by learning HINTS from the other island villages on how to
+    get there -- e.g. when it is RAINING and at NIGHT, going into a WHIRLPOOL brings the hero to
+    the island, to face another legend deep in its cave.
+45. **The Snowy Peaks** have another chief. **Mountain Base** has another chief.
+46. **The secret enemy base:** near the Redrock badlands and "Bedrock Village" the hero hears
+    rumors of weird sightings and a cave. Going to the cave reveals a secret base where the enemy
+    hides -- another TACTICAL battle.
+47. **Main quest:** ultimately to JOIN THE ARMY AT THE MOUNTAIN PASS. Before all-out war
+    escalates, the hero learns of a secret THIRD PARTY: a corrupt ADVISOR with mind-control powers
+    similar to the asteroid beast's, who wants to capture the beast to amplify his own powers. The
+    hero must CAPTURE the beast and defeat them to prevent an all-out war. (Refines 18-20.)
+48. **Side quests and more main quests** are still to be designed (owner: "there is still more we
+    want to explore").
+
+**Owner idea, not yet decided:** the legend beats could be about capturing EXCEPTIONAL
+stones/shards that the enemy seeks, to create powerful chains to subjugate the original beast.
+
+**Open questions (for the owner):**
+- 38: chiefs bond without stones, yet activate a stone for the boost -- is the stone a different
+  kind (a boost stone, not a bonding shard)? Can the HERO earn the same boost (scaled by the
+  hero's bond level), e.g. as a reward for beating a chief? How is bond level raised?
+- 39: in "special battles", is the legend a unit the hero summons onto the field, or one the hero
+  fields instead of the party? Online: a pickable unit once caught?
+- 46: "Bedrock Village" is not on the world map (Redrock Village is). A new place, or Redrock?
+  Is the cave the map's "Hidden Depths", or a new location in the badlands?
+- 47 vs 24: decision 24 offered an ending choice (capture / free / befriend the old way). Is
+  capture now THE ending, or still one of the choices?
+- 47 vs 19-20: is the advisor the head of the hidden dark organization, or is the organization
+  dropped? Is the enemy nation still framed?
+- 36 vs 21: is the General the soldier from the opening (Rowan), who becomes the recurring
+  general?

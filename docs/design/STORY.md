@@ -5,6 +5,16 @@ truth and wins over this file.** Companion docs: `OVERWORLD.md` (walking, script
 trip), `DUEL_BATTLE.md` (1v1 duels), `EVOLUTION.md` (Growth, forms), `docs/STORY_MODE.md` (what is
 built today).
 
+> **Superseded in part (owner, 2026-10-04): DECISIONS.md #34-#48** -- the refined opening (the
+> abduction in the workshop, the General and a warrior in the burned village, then the open
+> region), the **chiefs** and their bond-scaled stone boosts, **legendary beasts** (catchable,
+> not party members; Eldroot in the Depths of the Wood behind **Nyra**'s tree-breaking field
+> move), the **Hidden Thieves** gauntlet, sea travel from the Beach Village chief, the Island of
+> Tides, the secret enemy base, and the main quest (join the army at the Mountain Pass; a corrupt
+> advisor seeks the asteroid beast). Where the proposals below differ (Act structure, Eldroot as a
+> chained guardian, the Grovewardens, the finale), **those decisions win**; this file has not been
+> re-planned around them yet.
+
 **Legend.** **[D12]** = owner decision #12 (fixed). **(proposed)** = my suggestion where the
 decisions are silent; accept, change or drop it. **OPEN** = the owner still has to choose. Every name
 marked † is a working name and can be renamed freely. **Oakvale**, **Crownhaven** and **the
