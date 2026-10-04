@@ -89,7 +89,7 @@ const NAMES := {
 	"ASSISTANT": "Tam",
 	"SOLDIER": "Rowan",                     # becomes the recurring general (DECISIONS.md #21)
 	"SOLDIER_TITLE": "Sergeant Rowan",
-	# TODO(story): PLACEHOLDER allies who meet the hero in burned Oakvale and fight beside him in the
+	# TODO(story): PLACEHOLDER allies who meet the hero in burned Oakvale and fight beside the hero in the
 	# first fight (owner: "the general and another warrior"). Names, looks and roles are TBD -- rename
 	# them here, in one place. (Whether the General is Sergeant Rowan is an open question.)
 	"GENERAL": "General",
