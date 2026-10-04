@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/dark/vampito_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"vampito"
+element = &"dark"
+display_name = "Vampito"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Undead pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-04 (artist directive, review-log "Compendium import of the 6"): PLACEHOLDER FOR REBALANCE. Stats cloned from undead.tres (Undead); element is a family guess; moves, abilities, movement kind and scale are not designed yet. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). Model fit lives in vampito_forge.glb.import root_scale.
+base_health = 40
+base_attack = 16
+base_defense = 6
+base_magic = 0
+base_magic_defense = 4
+base_speed = 8
+base_movement = 4
+attack_range = 1

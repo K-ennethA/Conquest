@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/fire/magmoo_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"magmoo"
+element = &"fire"
+display_name = "Magmoo"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Barkling pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-04 (artist directive, review-log "Compendium import of the 6"): PLACEHOLDER FOR REBALANCE. Stats cloned from tree_grunt.tres (Barkling); element is a family guess; moves, abilities, movement kind and scale are not designed yet. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). Model fit lives in magmoo_forge.glb.import root_scale.
+base_health = 55
+base_attack = 14
+base_defense = 8
+base_magic = 2
+base_magic_defense = 6
+base_speed = 7
+base_movement = 3
+attack_range = 1

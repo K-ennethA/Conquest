@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/dark/vampwarrior_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"vampwarrior"
+element = &"dark"
+display_name = "Vampwarrior"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Geode pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-04 (artist directive, review-log "Compendium import of the 6"): PLACEHOLDER FOR REBALANCE. Stats cloned from gem_knight.tres (Geode); element is a family guess; moves, abilities, movement kind and scale are not designed yet. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). Model fit lives in vampwarrior_forge.glb.import root_scale.
+base_health = 120
+base_attack = 22
+base_defense = 20
+base_magic = 6
+base_magic_defense = 14
+base_speed = 8
+base_movement = 4
+attack_range = 2
