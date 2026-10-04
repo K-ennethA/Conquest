@@ -102,7 +102,7 @@ func test_crownhaven_west_gate_leads_through_the_sparse_forest_to_woodland_town_
 	assert_not_null(ow.actor("hale"), "the Warden is on his post")
 	assert_not_null(ow.actor("wardens_lodge"), "the Lodge stands")
 	await _drain(ow)
-	assert_true(s.has_flag("woodland.arrived"), "the first visit's arrival scene played")
+	assert_true(s.has_flag("woodland.arrived"), "the first visit is recorded (no arrival scene plays)")
 	# Back out the east end of the road, and through the forest to the city.
 	ow = await _boot("woodland_town", Vector3i(26, 12, 0), "east")
 	await _step(ow, Vector2i(1, 0))

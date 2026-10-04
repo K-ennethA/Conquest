@@ -311,7 +311,7 @@
 				]
 			},
 			"lark": {
-				"note": "Waiting by the south gate after the opening, until the first rival duel (the duel itself is a trigger zone in the builder).",
+				"note": "Waiting by the south gate after the opening, until the first rival duel (the duel itself is offered when you talk to her -- the builder's Lark script).",
 				"variants": [
 					{
 						"if": "",
@@ -878,7 +878,11 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "The little ones are safe in the mill cellar, thanks to her. Every one of them."
+								"text": "{hero}... I'm so sorry. Your mother got the little ones down into the mill cellar, then went back for Maud."
+							},
+							{
+								"speaker": "self",
+								"text": "The roof came down. She didn't come out."
 							}
 						]
 					}
@@ -995,7 +999,7 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "They went past the mill toward the border. The Sergeant's waiting on you."
+								"text": "They went past the mill toward the border. The General's waiting on you."
 							}
 						]
 					}

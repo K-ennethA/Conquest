@@ -341,32 +341,53 @@ func test_the_quest_tracker_counts_an_interior_as_its_town() -> void:
 	assert_eq(ow.hud.tracker_place(), "→ Crownhaven", "elsewhere it points the way")
 
 
-# --- the Royal Workshop: the ceremony inside, the raid outside ------------------------------------
+# --- the Royal Workshop: the ceremony and the kidnapping, both inside ------------------------------------
 
-func test_the_workshop_ceremony_gives_the_starter_and_the_shard_then_the_raid_in_the_yard() -> void:
+func test_the_workshop_ceremony_gives_the_starter_and_the_shard_then_the_kidnapping_in_the_room() -> void:
 	assert_true(bool(StoryController.new_journey(1)["success"]), "a journey")
 	var s: StoryState = StoryController.state()
 	StoryFixture.sent_off(s)
 	s.set_flag("opening.arrived_crownhaven", 1)
 	var ow := await _boot("crownhaven_workshop", Vector3i(6, 3, 0), "north")
 	assert_eq(ow.entity_at(Vector3i(6, 2, 0)).id, &"elias", "Professor Elias waits inside")
+	assert_false(ow.actor("raider_captain").visible, "no raiders yet")
 	assert_true(ow.interact(), "talk to him")
-	await _drain(ow)
+	var seen := {"raiders": false}
+	for i in range(1200):
+		await get_tree().process_frame
+		var r: OverworldActor = ow.actor("raider_captain") if is_instance_valid(ow) else null
+		if r != null and r.visible:
+			seen["raiders"] = true
+		var d: StoryDialogue = ow.dialogue()
+		if d != null and d.root_control().visible:
+			if d.is_choosing():
+				d.advance_clock(100.0)
+				if d.choices_visible():
+					d.choose(0)
+			else:
+				d.skip()
+			continue
+		if not StoryController.is_script_running():
+			break
 	assert_true(s.has_flag("opening.starter_received"), "the starter is received")
 	assert_true(s.has_flag("key.bonding_shard"), "and the bonding shard")
 	assert_eq(s.get_flag_int("opening.starter_pick"), 1, "the first option was picked")
 	assert_eq(s.party.size(), 1, "one creature")
-	assert_false(s.has_flag("opening.attack"), "the raid does not happen indoors")
-	assert_eq(s.location_area(), "crownhaven", "the alarm: out into the yard")
-	assert_eq(s.location_cell(), _door_of(_area("crownhaven"), "workshop").front_cell(), "in front of the workshop door")
-	# A journey stopped right here (saved in the workshop) is sent back out to the raid.
-	var inside := await _boot("crownhaven_workshop", Vector3i(6, 6, 0), "north")
-	await _frames(3)
-	assert_eq(s.location_area(), "crownhaven", "re-entering mid-opening puts you back in the yard")
-	assert_not_null(inside, "booted")
-	ow = await _boot()
-	assert_true(StoryController.is_script_running(), "the raid plays in the yard")
-	await _drain(ow)
+	assert_true(seen["raiders"], "enemy soldiers appear IN THE ROOM")
 	for f in ["opening.attack", "opening.researcher_taken", "opening.raiders_fled", "opening.chase"]:
-		assert_true(s.has_flag(f), "the raid sets %s" % f)
-	assert_eq(s.location_area(), "oakvale_ruins", "and the chase leads home")
+		assert_true(s.has_flag(f), "the kidnapping sets %s" % f)
+	assert_eq(s.location_area(), "crownhaven_workshop", "it happens in the workshop: nothing warps the hero away")
+	assert_false(StoryController.is_script_running(), "and the hero has the controls back")
+	ow.refresh_world()
+	assert_false(ow.actor("elias").visible, "Elias is gone")
+	assert_false(ow.actor("raider_captain").visible, "and so are the raiders")
+	assert_eq(s.respawn, {"area_id": "oakvale_ruins", "entry": "wayshrine"}, "a whiteout now wakes you in the ruins")
+	# A journey stopped between the ceremony and the end (saved in the workshop) resumes it in the room.
+	for f in ["opening.attack", "opening.researcher_taken", "opening.raiders_fled", "opening.chase"]:
+		s.clear_flag(f)
+	var again := await _boot("crownhaven_workshop", Vector3i(6, 6, 0), "north")
+	await _frames(3)
+	assert_true(StoryController.is_script_running(), "re-entering mid-opening resumes the kidnapping")
+	await _drain(again)
+	assert_true(s.has_flag("opening.chase"), "to its end")
+	assert_eq(s.location_area(), "crownhaven_workshop", "still in the room")

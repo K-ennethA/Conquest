@@ -100,7 +100,13 @@ func test_every_shipped_quest_points_at_a_real_place() -> void:
 	var atlas := WorldAtlas.load_default()
 	for d in QuestLog.definitions():
 		var loc: String = String(d.get("location", ""))
-		assert_ne(QuestLog.resolve_location(loc), "", "%s has a world-map location" % d["id"])
+		var steps_have_places: bool = false
+		for st0 in d["steps"]:
+			if not String(st0.get("location", "")).is_empty():
+				steps_have_places = true
+		# A destination-less objective ("Grow stronger") has no place on purpose: nothing to point at.
+		if not loc.is_empty() or steps_have_places:
+			assert_ne(QuestLog.resolve_location(loc), "", "%s has a world-map location" % d["id"])
 		for st in d["steps"]:
 			var sl: String = String(st.get("location", ""))
 			if not sl.is_empty():

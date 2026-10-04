@@ -1,112 +1,111 @@
 [gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
 
-[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_hd5qq"]
-[ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="2_qx6el"]
-[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_akgv5"]
-[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="4_wmbul"]
-[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="5_xh0mo"]
-[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="6_qpsqo"]
-[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="7_1x3i8"]
-[ext_resource type="Script" path="res://game/overworld/data/DoorEntity.gd" id="8_y55b1"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="9_oj0ws"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="10_0fgpi"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="11_al7v6"]
-[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="12_g0l7k"]
-[ext_resource type="Resource" path="res://game/overworld/content/areas/river_crossing/terrain.tres" id="13_474uf"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_7nbgp"]
+[ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="2_hd5qq"]
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_qx6el"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="4_akgv5"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="5_wmbul"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="6_xh0mo"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="7_qpsqo"]
+[ext_resource type="Script" path="res://game/overworld/data/DoorEntity.gd" id="8_1x3i8"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="9_y55b1"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="10_oj0ws"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="11_0fgpi"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/river_crossing/terrain.tres" id="12_al7v6"]
 
-[sub_resource type="Resource" id="Resource_b6dki"]
-script = ExtResource("1_hd5qq")
+[sub_resource type="Resource" id="Resource_g0l7k"]
+script = ExtResource("1_7nbgp")
 enterable = true
 door_offset = Vector2i(0, 1)
 id = &"toll_house"
 cell = Vector3i(13, 11, 0)
 tint = Color(0.324, 0.378, 0.45, 1)
 
-[sub_resource type="Resource" id="Resource_mtg3m"]
-script = ExtResource("1_hd5qq")
+[sub_resource type="Resource" id="Resource_474uf"]
+script = ExtResource("1_7nbgp")
 prop = "cabin"
 id = &"fisher_hut"
 cell = Vector3i(19, 11, 0)
 tint = Color(0.4, 0.36, 0.3, 1)
 
-[sub_resource type="Resource" id="Resource_5m0st"]
-script = ExtResource("1_hd5qq")
+[sub_resource type="Resource" id="Resource_b6dki"]
+script = ExtResource("1_7nbgp")
 footprint = Vector2i(3, 2)
 id = &"cottage_0"
 cell = Vector3i(3, 11, 0)
 tint = Color(0.36, 0.42, 0.5, 1)
 
-[sub_resource type="Resource" id="Resource_65pmo"]
-script = ExtResource("1_hd5qq")
+[sub_resource type="Resource" id="Resource_mtg3m"]
+script = ExtResource("1_7nbgp")
 footprint = Vector2i(3, 2)
 id = &"cottage_1"
 cell = Vector3i(5, 16, 0)
 tint = Color(0.3856, 0.4432, 0.52, 1)
 
-[sub_resource type="Resource" id="Resource_xeg3g"]
-script = ExtResource("1_hd5qq")
+[sub_resource type="Resource" id="Resource_5m0st"]
+script = ExtResource("1_7nbgp")
 footprint = Vector2i(3, 2)
 id = &"cottage_2"
 cell = Vector3i(16, 16, 0)
 tint = Color(0.41120002, 0.4664, 0.54, 1)
 
-[sub_resource type="Resource" id="Resource_o4rin"]
-script = ExtResource("1_hd5qq")
+[sub_resource type="Resource" id="Resource_65pmo"]
+script = ExtResource("1_7nbgp")
 prop = "lamp"
 footprint = Vector2i(1, 1)
 id = &"bridge_lamp_10_6"
 cell = Vector3i(10, 6, 0)
 tint = Color(1, 0.82, 0.45, 1)
 
-[sub_resource type="Resource" id="Resource_0d5hf"]
-script = ExtResource("1_hd5qq")
+[sub_resource type="Resource" id="Resource_xeg3g"]
+script = ExtResource("1_7nbgp")
 prop = "lamp"
 footprint = Vector2i(1, 1)
 id = &"bridge_lamp_13_6"
 cell = Vector3i(13, 6, 0)
 tint = Color(1, 0.82, 0.45, 1)
 
-[sub_resource type="Resource" id="Resource_u5mpc"]
-script = ExtResource("1_hd5qq")
+[sub_resource type="Resource" id="Resource_o4rin"]
+script = ExtResource("1_7nbgp")
 prop = "lamp"
 footprint = Vector2i(1, 1)
 id = &"bridge_lamp_10_10"
 cell = Vector3i(10, 10, 0)
 tint = Color(1, 0.82, 0.45, 1)
 
-[sub_resource type="Resource" id="Resource_om6bn"]
-script = ExtResource("1_hd5qq")
+[sub_resource type="Resource" id="Resource_0d5hf"]
+script = ExtResource("1_7nbgp")
 prop = "fence"
 footprint = Vector2i(6, 1)
 id = &"bank_fence"
 cell = Vector3i(3, 10, 0)
 tint = Color(0.5, 0.36, 0.22, 1)
 
-[sub_resource type="Resource" id="Resource_o4bd6"]
-script = ExtResource("1_hd5qq")
+[sub_resource type="Resource" id="Resource_u5mpc"]
+script = ExtResource("1_7nbgp")
 prop = "barrels"
 footprint = Vector2i(1, 1)
 id = &"toll_barrels"
 cell = Vector3i(15, 12, 0)
 tint = Color(1, 1, 1, 1)
 
-[sub_resource type="Resource" id="Resource_u4wfy"]
-script = ExtResource("1_hd5qq")
+[sub_resource type="Resource" id="Resource_om6bn"]
+script = ExtResource("1_7nbgp")
 prop = "cart"
 footprint = Vector2i(1, 1)
 id = &"coast_cart"
 cell = Vector3i(21, 13, 0)
 tint = Color(0.7, 0.58, 0.34, 1)
 
-[sub_resource type="Resource" id="Resource_5307s"]
-script = ExtResource("2_qx6el")
+[sub_resource type="Resource" id="Resource_o4bd6"]
+script = ExtResource("2_hd5qq")
 id = &"wayshrine"
 cell = Vector3i(8, 13, 0)
 display_name = "River Crossing Wayshrine"
 tint = Color(0.55, 0.92, 0.62, 1)
 
-[sub_resource type="Resource" id="Resource_wm3sh"]
-script = ExtResource("3_akgv5")
+[sub_resource type="Resource" id="Resource_u4wfy"]
+script = ExtResource("3_qx6el")
 text = "THE OLD BRIDGE
 Older than the kingdom; kept by the crown.
 North: Crownhaven.  West: the Mossway to Oakvale.
@@ -116,8 +115,8 @@ cell = Vector3i(10, 11, 0)
 display_name = "The Old Bridge"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_5ttts"]
-script = ExtResource("3_akgv5")
+[sub_resource type="Resource" id="Resource_5307s"]
+script = ExtResource("3_qx6el")
 text = "A worn milestone: \"CROWNHAVEN -- THE SOUTH GATE\". Someone has carved a little crown under the letters."
 look = "stone"
 id = &"milestone"
@@ -125,8 +124,8 @@ cell = Vector3i(13, 2, 0)
 display_name = "Milestone"
 tint = Color(0.55, 0.9, 0.6, 1)
 
-[sub_resource type="Resource" id="Resource_e7e26"]
-script = ExtResource("3_akgv5")
+[sub_resource type="Resource" id="Resource_wm3sh"]
+script = ExtResource("3_qx6el")
 text = "EAST: BEACH VILLAGE
 Road closed -- washed out at the ford. By order of the Wardens."
 id = &"coast_sign"
@@ -134,8 +133,8 @@ cell = Vector3i(21, 15, 0)
 display_name = "The Coast Road"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_unfpc"]
-script = ExtResource("4_wmbul")
+[sub_resource type="Resource" id="Resource_5ttts"]
+script = ExtResource("4_akgv5")
 speaker_id = &"npc_hobb"
 speaker_name = "Toll-keeper Hobb"
 figure = "elder"
@@ -145,8 +144,8 @@ facing = "west"
 display_name = "Toll-keeper Hobb"
 tint = Color(0.4, 0.4, 0.5, 1)
 
-[sub_resource type="Resource" id="Resource_4ffgr"]
-script = ExtResource("4_wmbul")
+[sub_resource type="Resource" id="Resource_e7e26"]
+script = ExtResource("4_akgv5")
 speaker_id = &"npc_nan"
 speaker_name = "Fisher Nan"
 figure = "villager"
@@ -156,8 +155,8 @@ facing = "north"
 display_name = "Fisher Nan"
 tint = Color(0.36, 0.5, 0.56, 1)
 
-[sub_resource type="Resource" id="Resource_gypw4"]
-script = ExtResource("4_wmbul")
+[sub_resource type="Resource" id="Resource_unfpc"]
+script = ExtResource("4_akgv5")
 speaker_id = &"npc_joss"
 speaker_name = "Carter Joss"
 figure = "villager"
@@ -167,8 +166,8 @@ facing = "east"
 display_name = "Carter Joss"
 tint = Color(0.55, 0.42, 0.26, 1)
 
-[sub_resource type="Resource" id="Resource_86bip"]
-script = ExtResource("4_wmbul")
+[sub_resource type="Resource" id="Resource_4ffgr"]
+script = ExtResource("4_akgv5")
 speaker_id = &"npc_rc_child"
 speaker_name = "Pip"
 figure = "child"
@@ -178,44 +177,44 @@ facing = "north"
 display_name = "Pip"
 tint = Color(0.6, 0.5, 0.36, 1)
 
-[sub_resource type="Resource" id="Resource_xdhhb"]
-script = ExtResource("5_xh0mo")
+[sub_resource type="Resource" id="Resource_gypw4"]
+script = ExtResource("5_wmbul")
 area_rect = Rect2i(0, 14, 1, 1)
 target_area = &"mossway"
 target_entry = &"east"
 id = &"west_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_83hwk"]
-script = ExtResource("5_xh0mo")
+[sub_resource type="Resource" id="Resource_86bip"]
+script = ExtResource("5_wmbul")
 area_rect = Rect2i(11, 0, 2, 1)
 target_area = &"crownhaven"
 target_entry = &"south_gate"
 id = &"north_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_hv65l"]
-script = ExtResource("6_qpsqo")
+[sub_resource type="Resource" id="Resource_xdhhb"]
+script = ExtResource("6_xh0mo")
 text = "The coast road east toward Beach Village and the sea dips into a ford -- and the ford has become a lake. A Warden's rope and a painted board: \"Road closed. Ferry suspended. Ask again after the rains.\""
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_owh4t"]
-script = ExtResource("7_1x3i8")
+[sub_resource type="Resource" id="Resource_83hwk"]
+script = ExtResource("7_qpsqo")
 scene_id = &"beach_village_road_locked_east_exit"
-beats = Array[Resource]([SubResource("Resource_hv65l")])
+beats = Array[Resource]([SubResource("Resource_xdhhb")])
 
-[sub_resource type="Resource" id="Resource_kdarp"]
-script = ExtResource("5_xh0mo")
+[sub_resource type="Resource" id="Resource_hv65l"]
+script = ExtResource("5_wmbul")
 area_rect = Rect2i(23, 14, 1, 1)
 target_area = &"river_crossing"
 target_entry = &"east_road"
 requires = "has(\"world.beach_road_open\")"
-locked_scene = SubResource("Resource_owh4t")
+locked_scene = SubResource("Resource_83hwk")
 id = &"east_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_n45xl"]
-script = ExtResource("8_y55b1")
+[sub_resource type="Resource" id="Resource_owh4t"]
+script = ExtResource("8_1x3i8")
 building = &"toll_house"
 area_rect = Rect2i(13, 12, 1, 1)
 target_area = &"river_crossing_toll_house"
@@ -226,34 +225,20 @@ display_name = "Toll House"
 tint = Color(0.324, 0.378, 0.45, 1)
 blocking = false
 
-[sub_resource type="Resource" id="Resource_lvt5j"]
-script = ExtResource("6_qpsqo")
-text = "River Crossing. The river slides wide and green under the Old Bridge, and the toll-keeper's lantern swings from its stone rail."
-clear_portraits = true
-
-[sub_resource type="Resource" id="Resource_qot7i"]
-script = ExtResource("6_qpsqo")
-text = "North over the bridge, the King's road climbs to Crownhaven's south gate."
-clear_portraits = true
-
-[sub_resource type="Resource" id="Resource_kv7q5"]
-script = ExtResource("10_0fgpi")
-beats = Array[Resource]([SubResource("Resource_lvt5j"), SubResource("Resource_qot7i")])
-
-[sub_resource type="Resource" id="Resource_u65qw"]
-script = ExtResource("11_al7v6")
+[sub_resource type="Resource" id="Resource_kdarp"]
+script = ExtResource("10_oj0ws")
 key = "river_crossing.arrived"
 
-[sub_resource type="Resource" id="Resource_se6pd"]
-script = ExtResource("9_oj0ws")
+[sub_resource type="Resource" id="Resource_n45xl"]
+script = ExtResource("9_y55b1")
 condition = "not has(\"river_crossing.arrived\")"
-then_commands = Array[Resource]([SubResource("Resource_kv7q5"), SubResource("Resource_u65qw")])
+then_commands = Array[Resource]([SubResource("Resource_kdarp")])
 
 [resource]
-script = ExtResource("12_g0l7k")
+script = ExtResource("11_0fgpi")
 area_id = &"river_crossing"
 display_name = "River Crossing"
-terrain = ExtResource("13_474uf")
+terrain = ExtResource("12_al7v6")
 region_id = &"heartlands"
 world_map_pos = Vector2(0.544, 0.655)
 entry_points = {
@@ -278,5 +263,5 @@ entry_points = {
 "facing": "east"
 }
 }
-entities = Array[Resource]([SubResource("Resource_b6dki"), SubResource("Resource_mtg3m"), SubResource("Resource_5m0st"), SubResource("Resource_65pmo"), SubResource("Resource_xeg3g"), SubResource("Resource_o4rin"), SubResource("Resource_0d5hf"), SubResource("Resource_u5mpc"), SubResource("Resource_om6bn"), SubResource("Resource_o4bd6"), SubResource("Resource_u4wfy"), SubResource("Resource_5307s"), SubResource("Resource_wm3sh"), SubResource("Resource_5ttts"), SubResource("Resource_e7e26"), SubResource("Resource_unfpc"), SubResource("Resource_4ffgr"), SubResource("Resource_gypw4"), SubResource("Resource_86bip"), SubResource("Resource_xdhhb"), SubResource("Resource_83hwk"), SubResource("Resource_kdarp"), SubResource("Resource_n45xl")])
-on_enter = Array[Resource]([SubResource("Resource_se6pd")])
+entities = Array[Resource]([SubResource("Resource_g0l7k"), SubResource("Resource_474uf"), SubResource("Resource_b6dki"), SubResource("Resource_mtg3m"), SubResource("Resource_5m0st"), SubResource("Resource_65pmo"), SubResource("Resource_xeg3g"), SubResource("Resource_o4rin"), SubResource("Resource_0d5hf"), SubResource("Resource_u5mpc"), SubResource("Resource_om6bn"), SubResource("Resource_o4bd6"), SubResource("Resource_u4wfy"), SubResource("Resource_5307s"), SubResource("Resource_wm3sh"), SubResource("Resource_5ttts"), SubResource("Resource_e7e26"), SubResource("Resource_unfpc"), SubResource("Resource_4ffgr"), SubResource("Resource_gypw4"), SubResource("Resource_86bip"), SubResource("Resource_hv65l"), SubResource("Resource_owh4t")])
+on_enter = Array[Resource]([SubResource("Resource_n45xl")])

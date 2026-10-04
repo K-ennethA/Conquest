@@ -134,8 +134,8 @@ func test_the_road_is_walkable_end_to_end() -> void:
 	var after := StoryFixture.past_opening(StoryState.new())
 	after.clear_flag("opening.complete")
 	var ruins := OverworldGrid.build(_area("oakvale_ruins"), after)
-	assert_false(TapPathfinder.path_to_adjacent(ruins, Vector3i(21, 9, 0), Vector3i(13, 9, 0)).is_empty(),
-		"in the ruins the Sergeant can be reached from the road")
+	assert_false(TapPathfinder.path_to_adjacent(ruins, Vector3i(21, 9, 0), Vector3i(18, 9, 0)).is_empty(),
+		"in the ruins the General can be reached from the road")
 
 
 func test_the_mossway_leads_home_to_whichever_oakvale_is_standing() -> void:
@@ -188,7 +188,7 @@ func test_the_ruins_mourn_offer_the_fight_and_hook_act_one() -> void:
 			battles.append(c)
 		if c is SetFlagCommand:
 			flags.append((c as SetFlagCommand).key)
-	assert_eq(battles.size(), 1, "arriving leads to the Sergeant's offer of the first fight")
+	assert_eq(battles.size(), 1, "arriving leads to the allies' offer of the first fight")
 	var spec: BattleSpec = (battles[0] as StartBattleCommand).spec
 	assert_eq(spec.kind, BattleSpec.Kind.TACTICAL, "the first fight is a TACTICAL battle")
 	assert_eq(spec.map_path, FIRST_FIGHT_MAP, "on the mill-road board")
@@ -220,11 +220,11 @@ func test_crownhaven_is_a_walled_castle_town() -> void:
 			walls += 1
 	assert_gt(walls, 80, "a stone wall rings the town")
 	assert_not_null(ch.entity("wayshrine"), "a Wayshrine in the market")
-	for id in ["elias", "tam", "rowan", "lisk", "orwin", "dalla", "fenwick", "brisa", "corin"]:
+	for id in ["tam", "rowan", "lisk", "orwin", "dalla", "fenwick", "brisa", "corin"]:
 		assert_true(ch.entity(id) is NpcEntity, "%s lives in Crownhaven" % id)
 
 
-func test_the_ceremony_gives_the_starter_and_the_shard_then_the_raid() -> void:
+func test_the_ceremony_gives_the_starter_and_the_shard_then_the_kidnapping() -> void:
 	# The ceremony happens INSIDE the Royal Workshop (an interior); the alarm brings the hero out
 	# to the workshop yard, where Crownhaven's on_enter plays the raid.
 	var ch := _area("crownhaven")
@@ -269,33 +269,35 @@ func test_the_ceremony_gives_the_starter_and_the_shard_then_the_raid() -> void:
 			assert_true(st.is_present(during), "%s shows during the ceremony" % id)
 			during.set_flag("opening.starter_received", 1)
 			assert_false(st.is_present(during), "%s is gone once you have chosen" % id)
-	assert_eq(warps.size(), 1, "the alarm ends the ceremony")
-	assert_eq(String((warps[0] as WarpCommand).area_id), "crownhaven", "out into Crownhaven")
-	assert_eq(String((warps[0] as WarpCommand).entry), "door_workshop", "the workshop yard, in front of its door")
-	# The raid (Crownhaven's on_enter, once the starter is received).
-	var raid_flags: Array = []
-	var raid_warps: Array = []
-	for c in _flatten(ch.on_enter):
-		if c is SetFlagCommand:
-			raid_flags.append((c as SetFlagCommand).key)
-		if c is WarpCommand:
-			raid_warps.append(c)
+	# THE KIDNAPPING plays in the same room, straight after the choice: no warp out to the yard.
+	assert_eq(warps.size(), 0, "nothing warps the hero away -- the kidnapping happens in the workshop")
 	for f in ["opening.attack", "opening.researcher_taken", "opening.raiders_fled", "opening.chase"]:
-		assert_true(raid_flags.has(f), "the raid sets %s" % f)
-	assert_eq(raid_warps.size(), 1, "the raid ends in the chase to Oakvale")
-	assert_eq(String((raid_warps[0] as WarpCommand).area_id), "oakvale_ruins", "to the burning village")
-	var yard := ch.entity("elias")
-	assert_not_null(yard, "Elias stands in the yard for the raid")
-	var after_ceremony := StoryState.new()
-	after_ceremony.set_flag("opening.starter_received", 1)
-	assert_true(yard.is_present(after_ceremony), "once the ceremony is over")
-	assert_false(yard.is_present(StoryState.new()), "not before (he waits inside)")
-	after_ceremony.set_flag("opening.researcher_taken", 1)
-	assert_false(yard.is_present(after_ceremony), "and gone once he is taken")
+		assert_true(flags.has(f), "the ceremony's kidnapping sets %s" % f)
+	assert_true(_flatten(ws.on_enter).any(func(c) -> bool: return c is SetFlagCommand and (c as SetFlagCommand).key == "opening.attack"),
+		"a journey saved between the ceremony and the end resumes it on re-entering the workshop")
+	assert_eq(_flatten(ws.on_enter).filter(func(c) -> bool: return c is WarpCommand).size(), 0, "without a warp")
+	# Crownhaven itself plays nothing: no yard Elias, no yard raiders, no raid script.
+	assert_null(ch.entity("elias"), "Elias is not in the yard any more")
+	assert_null(ch.entity("raider_captain"), "nor are the raiders")
+	for c in _flatten(ch.on_enter):
+		assert_false(c is SayCommand or c is WarpCommand, "Crownhaven's on_enter never interrupts")
+	# Elias leaves with the raiders; the raiders are in the room only while it happens.
 	var raided := StoryState.new()
 	raided.set_flag("opening.attack", 1)
-	assert_true(ch.entity("raider_captain").is_present(raided), "raiders appear when the raid begins")
-	assert_false(ch.entity("raider_captain").is_present(StoryState.new()), "and not before")
+	for id in ["raider_captain", "raider_a", "raider_b"]:
+		var r := ws.entity(id)
+		assert_not_null(r, "%s is in the workshop" % id)
+		assert_true(r.is_present(raided), "%s appears when it begins" % id)
+		assert_false(r.is_present(StoryState.new()), "and not before")
+		var fled := StoryState.new()
+		fled.set_flag("opening.attack", 1)
+		fled.set_flag("opening.raiders_fled", 1)
+		assert_false(r.is_present(fled), "and is gone once they flee")
+	var taken := StoryState.new()
+	taken.set_flag("opening.starter_received", 1)
+	assert_true(elias.is_present(taken), "Elias is still in the room until he is taken")
+	taken.set_flag("opening.researcher_taken", 1)
+	assert_false(elias.is_present(taken), "and gone once he is")
 
 
 func test_the_first_fight_board() -> void:
@@ -315,12 +317,12 @@ func test_the_first_fight_board() -> void:
 		else:
 			foes.append(String(sp.get("character_id", "")))
 	assert_gt(starts, 0, "squad chairs for the party")
-	assert_eq(guest.size(), 1, "one guest ally slot (the Sergeant's creature)")
-	if guest.size() == 1:
-		assert_true(m.is_initial_spawn(guest[0]), "placed at load, never replaced by the squad pick")
-		assert_not_null(CharacterLibrary.get_character(StringName(String(guest[0].get("character_id", "")))),
+	assert_eq(guest.size(), 2, "two guest ally slots (the General and the Warrior)")
+	for g in guest:
+		assert_true(m.is_initial_spawn(g), "placed at load, never replaced by the squad pick")
+		assert_not_null(CharacterLibrary.get_character(StringName(String(g.get("character_id", "")))),
 			"a real roster character")
-	assert_eq(foes.size(), 3, "three raider creatures (placeholders)")
+	assert_eq(foes.size(), 4, "four enemy soldiers and creatures (placeholders)")
 	for cid in foes:
 		assert_not_null(CharacterLibrary.get_character(StringName(cid)), "raider unit %s exists" % cid)
 
@@ -760,7 +762,10 @@ func test_everyone_can_be_reached_at_every_stage_of_the_story() -> void:
 		everything.set_flag(f, 1)
 	var raided := StoryFixture.sent_off(StoryState.new())
 	raided.set_flag("opening.attack", 1)
-	var stages := {"new": StoryState.new(), "sent_off": StoryFixture.sent_off(StoryState.new()), "raided": raided,
+	var chased := StoryFixture.sent_off(StoryState.new())
+	for f in ["opening.attack", "opening.researcher_taken", "opening.raiders_fled", "opening.chase", "opening.starter_received"]:
+		chased.set_flag(f, 1)
+	var stages := {"new": StoryState.new(), "sent_off": StoryFixture.sent_off(StoryState.new()), "raided": raided, "chased": chased,
 		"past_opening": StoryFixture.past_opening(StoryState.new()), "everything": everything}
 	for a in _areas():
 		for stage in stages:

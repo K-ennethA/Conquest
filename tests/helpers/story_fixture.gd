@@ -12,7 +12,7 @@ const LEGACY_PARTY: Array[String] = ["vineweave", "blightcap"]
 const OPENING_FLAGS: Array[String] = [
 	"opening.sent_off", "opening.arrived_crownhaven", "opening.ceremony", "opening.starter_received",
 	"key.bonding_shard", "opening.attack", "opening.researcher_taken", "opening.raiders_fled",
-	"opening.chase", "opening.rowan_arrived", "opening.ruins_seen", "opening.first_fight_won",
+	"opening.chase", "opening.allies_met", "opening.ruins_seen", "opening.first_fight_won",
 	"opening.complete", "act1.find_rowan",
 ]
 

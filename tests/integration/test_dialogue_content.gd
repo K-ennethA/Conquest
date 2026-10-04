@@ -189,10 +189,10 @@ func test_the_researcher_is_professor_elias_he_him_a_family_friend() -> void:
 
 
 func test_every_cutscene_line_is_indexed_with_its_gate() -> void:
-	var idx := StoryContentIndex.build(["crownhaven", "oakvale_ruins"])
+	var idx := StoryContentIndex.build(["crownhaven", "crownhaven_workshop", "oakvale_ruins"])
 	var gated: bool = false
 	var raid_flag: bool = false
-	for s in idx.scripts("crownhaven"):
+	for s in idx.scripts("crownhaven_workshop"):
 		for l in s["lines"]:
 			if String(l["cond"]).contains("opening.starter_received"):
 				gated = true
@@ -350,7 +350,7 @@ func test_the_editor_simulates_a_town_and_searches_everything() -> void:
 	for row in panel.simulate("crownhaven"):
 		if row["npc"] == "lisk":
 			assert_eq(String(row["label"]), "word from the border", "ticking a flag + 3 rests: Lisk's later line")
-	var hits: Array = panel.search("scholar's coat")
+	var hits: Array = panel.search("shard")
 	var kinds: Dictionary = {}
 	for h in hits:
 		kinds[String(h["kind"])] = true

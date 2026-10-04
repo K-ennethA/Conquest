@@ -394,9 +394,9 @@ func test_a_tactical_spar_shows_friendly_spar_on_the_banner() -> void:
 func test_losing_the_protected_guest_is_a_game_over_and_load_last_save_rewinds() -> void:
 	var s := _journey(StoryState.TIER_CLASSIC)
 	s.set_location("oakvale_ruins", Vector3i(12, 9, 0), "east")
-	var rowan = StoryController.load_area("oakvale_ruins").entity("rowan")
+	var rowan = StoryController.load_area("oakvale_ruins").entity("general")
 	var cmd := _find_battle(rowan.on_interact)
-	assert_not_null(cmd, "the first fight's spec (the Sergeant's Geode as a guest)")
+	assert_not_null(cmd, "the first fight's spec (the General's Geode as a guest)")
 	if cmd == null:
 		return
 	var req: BattleRequest = cmd.spec.to_request(BattleRequest.SOURCE_SCRIPT)
