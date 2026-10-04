@@ -272,6 +272,11 @@ const STARTER_OPTIONS: Array[Dictionary] = [
 ## TODO(story): PLACEHOLDER guest units for the General and the Warrior in the first fight (existing
 ## roster units standing in: the knight and the "warrior grown rather than armed" -- no human
 ## battle unit exists yet). They fight beside your starter as player-0 turn-1 Reinforcements.
+## The owner's character MODELS for people (roster entries used only for their look on the overworld):
+## General Varden and Professor Elias. Varden's roster entry has no moves yet, so in battle the
+## General still fights as GENERAL_UNIT until he does.
+const VARDEN_MODEL := &"varden"
+const ELIAS_MODEL := &"elias"
 const GENERAL_UNIT := "gem_knight"
 const WARRIOR_UNIT := "vineweave"
 ## PLACEHOLDER enemy units for the first fight (existing roster units): the soldiers first, then
@@ -1473,6 +1478,7 @@ func _ruins_allies() -> Array:
 	var vis: String = "has(\"%s\") and not has(\"%s\")" % [F_CHASE, F_COMPLETE]
 	var out: Array = []
 	var general := _npc("general", RUINS_GENERAL, "east", "GENERAL", ALDERMERE_BLUE, "officer")
+	general.visual_character = VARDEN_MODEL
 	var warrior := _npc("warrior", RUINS_WARRIOR, "east", "WARRIOR", Color(0.5, 0.3, 0.2), "guard")
 	for ally in [general, warrior]:
 		ally.visible_if = vis
@@ -2220,6 +2226,7 @@ func _workshop_people(size: Vector2i, door_x: int) -> Array:
 	var out: Array = []
 	var elias_cell := Vector2i(door_x, 2)
 	var r := _npc("elias", elias_cell, "south", "RESEARCHER_TITLE", ELIAS_TINT, "elder")
+	r.visual_character = ELIAS_MODEL
 	# He is here until the raiders take him (the kidnapping plays in this room, right after the ceremony).
 	r.visible_if = "not has(\"%s\")" % F_TAKEN
 	r.on_interact = StoryCommand.list([IfCommand.make("not has(\"%s\")" % F_STARTER, _ceremony())])
@@ -2365,6 +2372,7 @@ func _raid() -> Array:
 ## TODO(story): placeholder wording -- only the owner's facts (preparing for war; get stronger).
 func _general_in_crownhaven() -> NpcEntity:
 	var general := _npc("general", Vector2i(7, 9), "south", "GENERAL", ALDERMERE_BLUE, "officer")
+	general.visual_character = VARDEN_MODEL
 	general.visible_if = "has(\"%s\")" % F_COMPLETE
 	general.on_interact = StoryCommand.list([
 		IfCommand.make("not has(\"%s\")" % F_ACT1_MET, [

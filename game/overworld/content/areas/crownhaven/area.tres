@@ -735,6 +735,7 @@ figure = "officer"
 id = &"general"
 cell = Vector3i(7, 9, 0)
 display_name = "General Varden"
+visual_character = &"varden"
 tint = Color(0.2, 0.28, 0.5, 1)
 visible_if = "has(\"opening.complete\")"
 on_interact = Array[Resource]([SubResource("Resource_0rj34")])

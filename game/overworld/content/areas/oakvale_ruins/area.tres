@@ -358,6 +358,7 @@ id = &"general"
 cell = Vector3i(18, 9, 0)
 facing = "east"
 display_name = "General Varden"
+visual_character = &"varden"
 tint = Color(0.2, 0.28, 0.5, 1)
 visible_if = "has(\"opening.chase\") and not has(\"opening.complete\")"
 on_interact = Array[Resource]([SubResource("Resource_2ygqn")])
