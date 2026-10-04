@@ -300,3 +300,53 @@ stones/shards that the enemy seeks, to create powerful chains to subjugate the o
     becomes a SELECTABLE UNIT TO DEPLOY; another is in **Beach Village**.
 57. **The secret enemy base (46):** there the hero can encounter the General, or the General's
     SECOND IN COMMAND, who have been tracking the place down.
+
+### Owner answers to the open questions (2026-10-04) -- these close the lists above
+Not everything has to be decided: undecided things are built as flexible data / placeholders, not
+asked about. An earlier decision stands unless the owner changes it.
+
+58. **No separate Sergeant Rowan:** he is MERGED INTO General Varden (53). Varden is the recurring
+    general of 21 / 25.
+59. **The Warrior is Talyn** (placeholder name), female.
+60. **The two testers at the ceremony** (present during the kidnapping) are the main RIVALS and
+    ALLIES: friendly rivals who challenge the hero to test each other, not to harm. Other testers
+    may be spread across the region. The **Deepwood Village** and **Beach Village** testers of 56
+    are these two.
+61. **Joining:** the main rivals/allies are TEMPORARY joins, and they join for the FINAL BATTLES.
+    Other testers or characters can join the party PERMANENTLY.
+62. **The villain (unchanged, 19-20 / 47):** the corrupt advisor is ADVISOR TO THE KING of the
+    enemy nation, heads the hidden dark organization, and wants the all-out war.
+63. **Human weapons and classes, Fire Emblem style:** some characters can SWAP weapons / classes;
+    some have a natural TENDENCY toward one weapon or class.
+64. **Enhanced humans (54):** chiefs are enhanced by default; the hero becomes enhanced through
+    PROMOTION.
+65. **Human-creature bond (54):** a human bonded to a creature can ACTIVATE it for a stat bonus or
+    special bonuses (the bonuses are defined later).
+66. **Hero falls = game over;** the story resets to before that fight (as already decided, like
+    other games).
+67. **The chiefs' stone is the SAME stone** (38): chiefs were also asked to test it, but don't
+    really use it unless forced -- they use it with their FINAL creature in the battle against the
+    hero.
+68. **Bond level:** the hero bonds with creatures by FIGHTING ALONGSIDE them. Bond is a LEVEL
+    system with a MAX.
+69. **Frostpeak (49):** both mythical creatures can be caught.
+70. **Legend beats** are built around EXCEPTIONAL stones/shards the enemy seeks, to forge chains
+    strong enough to subjugate the original beast (the idea under 48, now adopted).
+71. **Field moves (41):** certain creatures can learn them, possibly the hero as well -- like HMs.
+72. **Time of day** (for the Island of Tides' night + rain, 44) is an IN-GAME clock.
+73. **"Bedrock Village" is Redrock Village;** the secret enemy base (46) is in a NEW location
+    near it (not the map's Hidden Depths).
+74. **Legend battles are the TACTICAL battles** (39): Eldroot's (40) is one, and the Deepwood
+    tester joins the hero for it as a deployable unit.
+75. **Catching legends is optional** -- as in Pokemon, the hero never has to capture one.
+76. **Progression:** some linear progression and some scaling, never forcing one path -- e.g. going
+    straight to Mountain Base meets creatures too powerful to get past. Needs a level-up / stat
+    system (design proposal in progress).
+77. **Starters stay placeholders;** build around them.
+- Still undecided by design (build flexibly, don't ask): which towns have chiefs beyond those
+  named; how legends are called upon in special battles and in online play (not implemented yet).
+78. **Bond / catch difficulty varies by species:** some creatures are EASIER to bond with / catch,
+    which is why more random characters have some creatures -- but they are less likely to have
+    POWERFUL ones. Those people are usually NEW SHARD USERS, or CHAIN USERS if they are villains.
+    (A per-species bond/catch rate on the creature data; it also guides which creatures ordinary
+    trainers and grunts field.)
