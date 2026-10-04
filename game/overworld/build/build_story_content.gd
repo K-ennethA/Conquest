@@ -87,13 +87,13 @@ const NAMES := {
 	"RESEARCHER": "Elias",
 	"RESEARCHER_TITLE": "Professor Elias",
 	"ASSISTANT": "Tam",
-	"SOLDIER": "Rowan",                     # becomes the recurring general (DECISIONS.md #21)
-	"SOLDIER_TITLE": "Sergeant Rowan",
 	# TODO(story): PLACEHOLDER allies who meet the hero in burned Oakvale and fight beside the hero in the
 	# first fight (owner: "the general and another warrior"). Names, looks and roles are TBD -- rename
-	# them here, in one place. Owner, 2026-10-04: the General is "General Varden" (placeholder name).
+	# them here, in one place. Owner, 2026-10-04: the General is "General Varden" (placeholder name;
+	# he is also the barracks' sparring partner -- there is no separate Sergeant Rowan any more) and
+	# the Warrior is "Talyn", female (she/her), also a placeholder name.
 	"GENERAL": "General Varden",
-	"WARRIOR": "Warrior",
+	"WARRIOR": "Talyn",
 	"RAIDER_CAPTAIN": "Raider Captain",
 	"KINGDOM": "Aldermere",
 	"NATION": "Cindral",                    # the enemy nation (framed; the Gloam stays secret)
@@ -269,8 +269,6 @@ const STARTER_OPTIONS: Array[Dictionary] = [
 	{"character_id": &"petalfang", "label": "Petalfang", "placeholder": true},
 	{"character_id": &"blightcap", "label": "Blightcap", "placeholder": true},
 ]
-## Sergeant Rowan's army-issued creature: his sparring partner in the Crownhaven barracks.
-const GUEST_ID := "gem_knight"
 ## TODO(story): PLACEHOLDER guest units for the General and the Warrior in the first fight (existing
 ## roster units standing in: the knight and the "warrior grown rather than armed" -- no human
 ## battle unit exists yet). They fight beside your starter as player-0 turn-1 Reinforcements.
@@ -309,14 +307,17 @@ const F_ALLIES_MET := "opening.allies_met"
 const F_RUINS_SEEN := "opening.ruins_seen"
 const F_FIGHT_WON := "opening.first_fight_won"
 const F_COMPLETE := "opening.complete"
+## LEGACY KEYS: "rowan" is a former character name (merged into General Varden). The flag and spar
+## ids below are persisted in saves and replays, so they keep their old spelling -- never rename.
 const F_ACT1 := "act1.find_rowan"
+## The hero has talked to the General at the Crownhaven barracks after the opening (legacy key).
 const F_ACT1_MET := "act1.met_rowan"
 const FIRST_FIGHT_ID := "story.opening.first_fight"
-## The example friendly SPAR (Sergeant Rowan's Geode, Crownhaven, after the opening).
-const SPAR_ROWAN_ID := "crownhaven.spar.rowan"
+## The example friendly SPAR (the General's Geode, Crownhaven, after the opening). Legacy id.
+const SPAR_GENERAL_ID := "crownhaven.spar.rowan"
 
 # --- Duels in story (DECISIONS.md #33): ids are save keys, never rename once shipped ---------
-## The barracks' sparring roster (rising strength: Wynn < Aldous < Rowan). Each is ready once per
+## The barracks' sparring roster (rising strength: Wynn < Aldous < the General). Each is ready once per
 ## rest (StoryRuleset.spar_cooldown_rests -- spars award Growth, so this stops the farm).
 const SPAR_WYNN_ID := "crownhaven.spar.wynn"
 const SPAR_ALDOUS_ID := "crownhaven.spar.aldous"
@@ -1466,8 +1467,8 @@ func _oak_ruins_people() -> Array:
 
 
 ## The General and the Warrior, waiting in the burned village from the moment the hero arrives until
-## the fight is won. TODO(story): PLACEHOLDER allies (NAMES: GENERAL / WARRIOR) -- who they are, and
-## whether the General is Sergeant Rowan, is the owner's to decide.
+## the fight is won. TODO(story): PLACEHOLDER allies (NAMES: GENERAL / WARRIOR) -- who they are is
+## the owner's to decide.
 func _ruins_allies() -> Array:
 	var vis: String = "has(\"%s\") and not has(\"%s\")" % [F_CHASE, F_COMPLETE]
 	var out: Array = []
@@ -2130,7 +2131,7 @@ func _ch_people() -> Array:
 		"By order of the crown: shards of bonding {STONE} are issued to chosen testers only. The sale, theft or copying of shards is forbidden.\nBelow, in smaller hand: \"Lost: one Petalfang. Answers to Biscuit.\""))
 
 	# EVERY townsperson's talk is in dialogue.json (DialogueBank): areas.crownhaven.<id> -- the
-	# entities here are their places and looks (and, for Rowan, the Act 1 hook + his spar).
+	# entities here are their places and looks (and, for the General, his barracks line + spar).
 	# The south gate's guards (the gate travellers from Oakvale use), flanking the avenue inside it.
 	out.append(_npc("orwin", Vector2i(CH_SOUTH_GATE.x - 1, CH_SOUTH_GATE.y - 1), "east", "ORWIN", ALDERMERE_BLUE, "guard"))
 	var gate2 := _npc("gate_guard", Vector2i(CH_SOUTH_GATE.x + 1, CH_SOUTH_GATE.y - 1), "west", "KEEP_GUARD", ALDERMERE_BLUE, "guard")
@@ -2142,8 +2143,8 @@ func _ch_people() -> Array:
 	for spec in [["keep_guard_w", Vector2i(13, 8)], ["keep_guard_e", Vector2i(16, 8)]]:
 		out.append(_npc(spec[0], spec[1], "south", "KEEP_GUARD", Color(0.45, 0.4, 0.6), "guard"))
 
-	# The barracks: the Sergeant and a recruit.
-	out.append(_rowan_in_crownhaven())
+	# The barracks: the General (only once the opening is over) and a recruit.
+	out.append(_general_in_crownhaven())
 	out.append(_npc("lisk", Vector2i(5, 9), "east", "LISK", ALDERMERE_BLUE.lightened(0.15), "guard"))
 
 	# The market.
@@ -2358,36 +2359,35 @@ func _raid() -> Array:
 	]
 
 
-## The Sergeant at the barracks. His ambient talk (before the opening is over) is in dialogue.json
-## (areas.crownhaven.rowan); after it, his SCRIPT: the Act 1 hook, then the sparring offer.
-func _rowan_in_crownhaven() -> NpcEntity:
-	var rowan := _npc("rowan", Vector2i(7, 9), "south", "SOLDIER", ALDERMERE_BLUE, "officer")
-	rowan.on_interact = StoryCommand.list([IfCommand.make("has(\"%s\")" % F_COMPLETE, [
+## General Varden at the barracks -- only once the opening is over (the hero first meets him in
+## burned Oakvale, so he is not standing here before that). His script: a short line (the first talk
+## also sets the legacy F_ACT1_MET flag), then the sparring offer.
+## TODO(story): placeholder wording -- only the owner's facts (preparing for war; get stronger).
+func _general_in_crownhaven() -> NpcEntity:
+	var general := _npc("general", Vector2i(7, 9), "south", "GENERAL", ALDERMERE_BLUE, "officer")
+	general.visible_if = "has(\"%s\")" % F_COMPLETE
+	general.on_interact = StoryCommand.list([
 		IfCommand.make("not has(\"%s\")" % F_ACT1_MET, [
 			_say([
-				_line("rowan", "SOLDIER", "You came. Good. I'm sorry about Oakvale -- I mean that."),
-				_line("rowan", "SOLDIER", "The council's been shouting since dawn. {NATION}'s envoy swears his people never sent a raider across the border. Half the lords want to march tomorrow."),
-				_line("rowan", "SOLDIER", "But those chains, {hero}. {NATION} doesn't forge {STONE}. Someone armed those raiders -- and I mean to find out who before this turns into a war."),
-				_line("rowan", "SOLDIER", "And {RESEARCHER_TITLE} is out there somewhere past that border. I'd sooner go after him with someone who knows what he's worth."),
-				_line("rowan", "SOLDIER", "I've asked for you on my detail. Rest up at the Wayshrine. When you're ready, we ride."),
+				_line("general", "GENERAL", "We're preparing for war, {hero}."),
+				_line("general", "GENERAL", "Get stronger. Talk to me again if you want a sparring bout."),
 			]),
 			_flag(F_ACT1_MET),
-			_toast("Act 1: The Borderlands (coming soon)", "quest"),
 		], [
-			_say([_line("rowan", "SOLDIER", "Rest while you can. We ride when the council stops shouting.")]),
-			_rowan_spar_offer(),
+			_say([_line("general", "GENERAL", "Keep getting stronger.")]),
+			_general_spar_offer(),
 		]),
-	])])
-	return rowan
+	])
+	return general
 
 
-## THE EXAMPLE SPAR (DECISIONS.md #29): a friendly bout with the Sergeant's Geode, repeatable -- once
+## THE EXAMPLE SPAR (DECISIONS.md #29): a friendly bout with the General's Geode, repeatable -- once
 ## per rest, like every sparring partner (DECISIONS.md #33). It is tagged `spar`, so nobody falls
 ## for good in it, even in a Classic journey -- a knocked-out partner just gets back up
 ## (StoryRuleset.spar_ko_recovers). He heads the barracks' roster (the strongest of the three).
-func _rowan_spar_offer() -> IfCommand:
-	return _spar_partner_offer(SPAR_ROWAN_ID, "rowan", "SOLDIER", "{SOLDIER_TITLE}",
-		[{"character_id": GUEST_ID, "strength": 0.8}],
+func _general_spar_offer() -> IfCommand:
+	return _spar_partner_offer(SPAR_GENERAL_ID, "general", "GENERAL", "{GENERAL}",
+		[{"character_id": GENERAL_UNIT, "strength": 0.8}],
 		"Want to keep your partner sharp? Geode could use the exercise. A friendly bout -- nobody gets hurt for real.",
 		"Ha! Geode felt that one. You're learning.",
 		"On your feet. That's what spars are for -- come back when you're ready.",
@@ -2506,8 +2506,8 @@ func _fenna() -> TrainerEntity:
 	return t
 
 
-## THE AMBUSH (DECISIONS.md #7 / #33 "attacked by criminals"): once the Sergeant has signed you on
-## (act1.met_rowan), bandits wait at the brook's plank bridge -- the only crossing, so the trigger
+## THE AMBUSH (DECISIONS.md #7 / #33 "attacked by criminals"): once you have spoken to the General at
+## the barracks (F_ACT1_MET, legacy key act1.met_rowan), bandits wait at the brook's plank bridge -- the only crossing, so the trigger
 ## cannot be walked round. Two self-defence duels back to back (HP carries between them), REAL
 ## battles: a loss whites out (the bandits wait for you again; a beaten footpad stays beaten) and a
 ## Classic partner knocked out in them falls. Winning pays a purse and a stolen draught.
@@ -2667,7 +2667,7 @@ func _rival() -> Array:
 
 
 ## The barracks' SPARRING ROSTER (rising strength): Corporal Wynn (warm-up), Lieutenant Aldous,
-## and the Sergeant himself (see [method _rowan_spar_offer]). Each ready once per rest.
+## and the General himself (see [method _general_spar_offer]). Each ready once per rest.
 func _spar_partners() -> Array:
 	var out: Array = []
 	var after: String = "has(\"%s\")" % F_COMPLETE
@@ -2684,13 +2684,13 @@ func _spar_partners() -> Array:
 	aldous.visible_if = after
 	aldous.on_interact = StoryCommand.list([_spar_partner_offer(SPAR_ALDOUS_ID, "aldous", "ALDOUS", "{ALDOUS}",
 		[{"character_id": "petalfang", "strength": 0.95}],
-		"The Sergeant says you're worth watching. Show me. A friendly bout, no quarter asked.",
+		"The General says you're worth watching. Show me. A friendly bout, no quarter asked.",
 		"Hm. He was right. Once more some other day.",
 		"Speed. You lack it. Come back when you've found some.",
 		"My Petalfang has had enough for today. Rest, and we'll go again.")])
 	out.append(aldous)
 	out.append(_sign("roster_sign", Vector2i(8, 7), "Sparring Roster",
-		"BARRACKS SPARRING ROSTER\nCpl. Wynn -- warm-up bouts.\nLt. Aldous -- for the sharp.\nSgt. Rowan -- ask if you dare.\nOne bout each per rest. Friendly: nobody is hurt for real."))
+		"BARRACKS SPARRING ROSTER\nCpl. Wynn -- warm-up bouts.\nLt. Aldous -- for the sharp.\nGen. Varden -- ask if you dare.\nOne bout each per rest. Friendly: nobody is hurt for real."))
 	return out
 
 

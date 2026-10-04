@@ -19,7 +19,7 @@ const MIGRATED := {
 	"oakvale_ruins": ["tobin", "hessa", "pell", "marra", "ned", "wick"],
 	"mossway": ["pedlar", "nell"],
 	"river_crossing": ["hobb", "nan", "joss", "rc_child"],
-	"crownhaven": ["orwin", "gate_guard", "keep_guard_w", "keep_guard_e", "rowan", "lisk", "dalla", "merchant", "fenwick",
+	"crownhaven": ["orwin", "gate_guard", "keep_guard_w", "keep_guard_e", "lisk", "dalla", "merchant", "fenwick",
 		"brisa", "biscuit", "corin", "kit", "baker", "tam", "north_guard", "gate_warden", "maribel", "veyra", "odalys",
 		"garrick", "merrow", "lark"],
 	"sparse_forest": ["alder"],

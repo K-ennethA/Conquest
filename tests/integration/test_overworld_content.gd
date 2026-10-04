@@ -220,7 +220,7 @@ func test_crownhaven_is_a_walled_castle_town() -> void:
 			walls += 1
 	assert_gt(walls, 80, "a stone wall rings the town")
 	assert_not_null(ch.entity("wayshrine"), "a Wayshrine in the market")
-	for id in ["tam", "rowan", "lisk", "orwin", "dalla", "fenwick", "brisa", "corin"]:
+	for id in ["tam", "general", "lisk", "orwin", "dalla", "fenwick", "brisa", "corin"]:
 		assert_true(ch.entity(id) is NpcEntity, "%s lives in Crownhaven" % id)
 
 
@@ -754,7 +754,7 @@ func _reach(a: OverworldAreaResource, s: StoryState) -> Dictionary:
 
 func test_everyone_can_be_reached_at_every_stage_of_the_story() -> void:
 	# The fullest stage: past the opening, the rival met and moved to the arena, the cup won (the
-	# champion out), the ambush cleared, the Sergeant's detail joined. (The forge's barrels and the
+	# champion out), the ambush cleared, the General's barracks talk done. (The forge's barrels and the
 	# arena's rival once sealed Smith Garrick and Champion Isolde into Crownhaven's south-east corner.)
 	var everything := StoryFixture.past_opening(StoryState.new())
 	for f in ["act1.met_rowan", "rival.met", "rival.duel1", "arena.crown_cup.champion", "mossway.ambush.sprung",

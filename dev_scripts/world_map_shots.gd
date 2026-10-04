@@ -136,7 +136,7 @@ func _hud() -> void:
 		"objective": "Cross the plank bridge on the Mossway."})
 	hud.quest_toast({"kind": QuestTracker.ADVANCED, "title": "A Fellow Tester", "category": "side",
 		"objective": "Win or lose, finish your first duel with Lark."})
-	hud.quest_toast({"kind": QuestTracker.COMPLETED, "title": "Rowan's Charge", "category": "main", "objective": ""})
+	hud.quest_toast({"kind": QuestTracker.COMPLETED, "title": "Grow Stronger", "category": "main", "objective": ""})
 	await _frames(30)
 	_shot("hud_tracker_toasts.png")
 

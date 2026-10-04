@@ -344,12 +344,12 @@ func test_the_opening_plays_end_to_end() -> void:
 	ow = await _boot()
 	assert_true(ow.actor("bram").visible, "Bram now watches the road")
 
-	# 11. Optional: the Sergeant at the Crownhaven barracks still signs you onto his detail.
+	# 11. Optional: General Varden at the Crownhaven barracks (he only appears now the opening is over).
 	ow = await _boot("crownhaven", Vector3i(7, 10, 0), "north")
 	assert_false(StoryController.is_script_running(), "he does not summon you: nothing plays on the way in")
-	assert_true(ow.interact(), "talk to the Sergeant at the barracks")
+	assert_true(ow.interact(), "talk to General Varden at the barracks")
 	await _drain(ow)
-	assert_true(s.has_flag("act1.met_rowan"), "he signs you onto his detail")
+	assert_true(s.has_flag("act1.met_rowan"), "he tells you to get stronger (legacy flag act1.met_rowan)")
 
 
 ## "Not yet." in the burned village: no battle, the allies wait, and the hero is free to explore (the

@@ -4,18 +4,18 @@
 [ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="2_hodus"]
 [ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_oa6o1"]
 [ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="4_dcd5c"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="5_sey8i"]
-[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="6_a6ah0"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="7_g17ua"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="5_sey8i"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="6_a6ah0"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="7_g17ua"]
 [ext_resource type="Script" path="res://game/overworld/script/commands/StartDuelCommand.gd" id="8_8ynx0"]
 [ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="9_hw06u"]
 [ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="10_yfdhc"]
 [ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="11_efaci"]
 [ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="12_vdhnd"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/ToastCommand.gd" id="13_ej8je"]
-[ext_resource type="Script" path="res://game/overworld/data/ShopEntity.gd" id="14_81lk1"]
-[ext_resource type="Resource" path="res://game/overworld/content/shops/crownhaven_general.tres" id="15_e608x"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/IncFlagCommand.gd" id="16_648o0"]
+[ext_resource type="Script" path="res://game/overworld/data/ShopEntity.gd" id="13_ej8je"]
+[ext_resource type="Resource" path="res://game/overworld/content/shops/crownhaven_general.tres" id="14_81lk1"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IncFlagCommand.gd" id="15_e608x"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ToastCommand.gd" id="16_648o0"]
 [ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="17_ustyd"]
 [ext_resource type="Script" path="res://game/overworld/script/commands/RunTournamentCommand.gd" id="18_fsv0l"]
 [ext_resource type="Resource" path="res://game/overworld/content/tournaments/crown_cup.tres" id="19_pgjny"]
@@ -600,33 +600,33 @@ display_name = "Royal Guard"
 tint = Color(0.45, 0.4, 0.6, 1)
 
 [sub_resource type="Resource" id="Resource_5g8t5"]
-script = ExtResource("6_a6ah0")
-speaker_id = &"npc_rowan"
-speaker_name = "Rowan"
+script = ExtResource("5_sey8i")
+speaker_id = &"npc_general"
+speaker_name = "General Varden"
 side = &"right"
-text = "Rest while you can. We ride when the council stops shouting."
+text = "Keep getting stronger."
 
 [sub_resource type="Resource" id="Resource_wio6u"]
-script = ExtResource("7_g17ua")
+script = ExtResource("6_a6ah0")
 beats = Array[Resource]([SubResource("Resource_5g8t5")])
 
 [sub_resource type="Resource" id="Resource_edvgs"]
-script = ExtResource("6_a6ah0")
-speaker_id = &"npc_rowan"
-speaker_name = "Rowan"
+script = ExtResource("5_sey8i")
+speaker_id = &"npc_general"
+speaker_name = "General Varden"
 side = &"right"
 text = "Geode's still shaking off the last bout. Rest up at the Wayshrine, then come and find me."
 
 [sub_resource type="Resource" id="Resource_nyo3i"]
-script = ExtResource("7_g17ua")
+script = ExtResource("6_a6ah0")
 beats = Array[Resource]([SubResource("Resource_edvgs")])
 
 [sub_resource type="Resource" id="Resource_t52w8"]
 script = ExtResource("9_hw06u")
 kind = 1
 encounter_id = "crownhaven.spar.rowan"
-opponent_name = "Sergeant Rowan"
-opponent_speaker_id = &"npc_rowan"
+opponent_name = "General Varden"
+opponent_speaker_id = &"npc_general"
 opponent_team = Array[Dictionary]([{
 "character_id": "gem_knight",
 "strength": 0.8
@@ -639,34 +639,34 @@ script = ExtResource("8_8ynx0")
 spec = SubResource("Resource_t52w8")
 
 [sub_resource type="Resource" id="Resource_agusx"]
-script = ExtResource("6_a6ah0")
-speaker_id = &"npc_rowan"
-speaker_name = "Rowan"
+script = ExtResource("5_sey8i")
+speaker_id = &"npc_general"
+speaker_name = "General Varden"
 side = &"right"
 text = "On your feet. That's what spars are for -- come back when you're ready."
 
 [sub_resource type="Resource" id="Resource_xp1ow"]
-script = ExtResource("7_g17ua")
+script = ExtResource("6_a6ah0")
 beats = Array[Resource]([SubResource("Resource_agusx")])
 
 [sub_resource type="Resource" id="Resource_jusve"]
-script = ExtResource("5_sey8i")
+script = ExtResource("7_g17ua")
 condition = "outcome() == \"defeat\""
 then_commands = Array[Resource]([SubResource("Resource_xp1ow")])
 
 [sub_resource type="Resource" id="Resource_4fsp6"]
-script = ExtResource("6_a6ah0")
-speaker_id = &"npc_rowan"
-speaker_name = "Rowan"
+script = ExtResource("5_sey8i")
+speaker_id = &"npc_general"
+speaker_name = "General Varden"
 side = &"right"
 text = "Ha! Geode felt that one. You're learning."
 
 [sub_resource type="Resource" id="Resource_fsimy"]
-script = ExtResource("7_g17ua")
+script = ExtResource("6_a6ah0")
 beats = Array[Resource]([SubResource("Resource_4fsp6")])
 
 [sub_resource type="Resource" id="Resource_d54lh"]
-script = ExtResource("5_sey8i")
+script = ExtResource("7_g17ua")
 condition = "outcome() == \"victory\""
 then_commands = Array[Resource]([SubResource("Resource_fsimy")])
 else_commands = Array[Resource]([SubResource("Resource_jusve")])
@@ -682,9 +682,9 @@ label = "Not now."
 is_cancel = true
 
 [sub_resource type="Resource" id="Resource_y6duq"]
-script = ExtResource("6_a6ah0")
-speaker_id = &"npc_rowan"
-speaker_name = "Rowan"
+script = ExtResource("5_sey8i")
+speaker_id = &"npc_general"
+speaker_name = "General Varden"
 side = &"right"
 text = "Want to keep your partner sharp? Geode could use the exercise. A friendly bout -- nobody gets hurt for real."
 
@@ -694,82 +694,52 @@ prompt = SubResource("Resource_y6duq")
 options = Array[Resource]([SubResource("Resource_8uuun"), SubResource("Resource_nck7i")])
 
 [sub_resource type="Resource" id="Resource_vasqq"]
-script = ExtResource("5_sey8i")
+script = ExtResource("7_g17ua")
 condition = "spar_ready(\"crownhaven.spar.rowan\")"
 then_commands = Array[Resource]([SubResource("Resource_128su")])
 else_commands = Array[Resource]([SubResource("Resource_nyo3i")])
 
 [sub_resource type="Resource" id="Resource_mn5fx"]
-script = ExtResource("6_a6ah0")
-speaker_id = &"npc_rowan"
-speaker_name = "Rowan"
+script = ExtResource("5_sey8i")
+speaker_id = &"npc_general"
+speaker_name = "General Varden"
 side = &"right"
-text = "You came. Good. I'm sorry about Oakvale -- I mean that."
+text = "We're preparing for war, {hero}."
 
 [sub_resource type="Resource" id="Resource_3asjm"]
-script = ExtResource("6_a6ah0")
-speaker_id = &"npc_rowan"
-speaker_name = "Rowan"
+script = ExtResource("5_sey8i")
+speaker_id = &"npc_general"
+speaker_name = "General Varden"
 side = &"right"
-text = "The council's been shouting since dawn. Cindral's envoy swears his people never sent a raider across the border. Half the lords want to march tomorrow."
+text = "Get stronger. Talk to me again if you want a sparring bout."
 
 [sub_resource type="Resource" id="Resource_gnlfm"]
 script = ExtResource("6_a6ah0")
-speaker_id = &"npc_rowan"
-speaker_name = "Rowan"
-side = &"right"
-text = "But those chains, {hero}. Cindral doesn't forge starstone. Someone armed those raiders -- and I mean to find out who before this turns into a war."
+beats = Array[Resource]([SubResource("Resource_mn5fx"), SubResource("Resource_3asjm")])
 
 [sub_resource type="Resource" id="Resource_6v1q5"]
-script = ExtResource("6_a6ah0")
-speaker_id = &"npc_rowan"
-speaker_name = "Rowan"
-side = &"right"
-text = "And Professor Elias is out there somewhere past that border. I'd sooner go after him with someone who knows what he's worth."
-
-[sub_resource type="Resource" id="Resource_0rj34"]
-script = ExtResource("6_a6ah0")
-speaker_id = &"npc_rowan"
-speaker_name = "Rowan"
-side = &"right"
-text = "I've asked for you on my detail. Rest up at the Wayshrine. When you're ready, we ride."
-
-[sub_resource type="Resource" id="Resource_8yqf3"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_mn5fx"), SubResource("Resource_3asjm"), SubResource("Resource_gnlfm"), SubResource("Resource_6v1q5"), SubResource("Resource_0rj34")])
-
-[sub_resource type="Resource" id="Resource_rdnpl"]
 script = ExtResource("12_vdhnd")
 key = "act1.met_rowan"
 
-[sub_resource type="Resource" id="Resource_v5tpv"]
-script = ExtResource("13_ej8je")
-text = "Act 1: The Borderlands (coming soon)"
-toast_kind = "quest"
-
-[sub_resource type="Resource" id="Resource_7i5op"]
-script = ExtResource("5_sey8i")
+[sub_resource type="Resource" id="Resource_0rj34"]
+script = ExtResource("7_g17ua")
 condition = "not has(\"act1.met_rowan\")"
-then_commands = Array[Resource]([SubResource("Resource_8yqf3"), SubResource("Resource_rdnpl"), SubResource("Resource_v5tpv")])
+then_commands = Array[Resource]([SubResource("Resource_gnlfm"), SubResource("Resource_6v1q5")])
 else_commands = Array[Resource]([SubResource("Resource_wio6u"), SubResource("Resource_vasqq")])
 
-[sub_resource type="Resource" id="Resource_emh7v"]
-script = ExtResource("5_sey8i")
-condition = "has(\"opening.complete\")"
-then_commands = Array[Resource]([SubResource("Resource_7i5op")])
-
-[sub_resource type="Resource" id="Resource_5wk2b"]
+[sub_resource type="Resource" id="Resource_8yqf3"]
 script = ExtResource("4_dcd5c")
-speaker_id = &"npc_rowan"
-speaker_name = "Rowan"
+speaker_id = &"npc_general"
+speaker_name = "General Varden"
 figure = "officer"
-id = &"rowan"
+id = &"general"
 cell = Vector3i(7, 9, 0)
-display_name = "Rowan"
+display_name = "General Varden"
 tint = Color(0.2, 0.28, 0.5, 1)
-on_interact = Array[Resource]([SubResource("Resource_emh7v")])
+visible_if = "has(\"opening.complete\")"
+on_interact = Array[Resource]([SubResource("Resource_0rj34")])
 
-[sub_resource type="Resource" id="Resource_remfb"]
+[sub_resource type="Resource" id="Resource_rdnpl"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_lisk"
 speaker_name = "Private Lisk"
@@ -780,7 +750,7 @@ facing = "east"
 display_name = "Private Lisk"
 tint = Color(0.32, 0.388, 0.575, 1)
 
-[sub_resource type="Resource" id="Resource_on1ni"]
+[sub_resource type="Resource" id="Resource_v5tpv"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_dalla"
 speaker_name = "Dalla"
@@ -789,9 +759,9 @@ cell = Vector3i(12, 11, 0)
 display_name = "Dalla"
 tint = Color(0.7, 0.45, 0.3, 1)
 
-[sub_resource type="Resource" id="Resource_aw8b8"]
-script = ExtResource("14_81lk1")
-shop = ExtResource("15_e608x")
+[sub_resource type="Resource" id="Resource_7i5op"]
+script = ExtResource("13_ej8je")
+shop = ExtResource("14_81lk1")
 speaker_id = &"npc_merchant"
 speaker_name = "Merchant Oda"
 figure = "villager"
@@ -800,7 +770,7 @@ cell = Vector3i(20, 12, 0)
 display_name = "Merchant Oda"
 tint = Color(0.3, 0.5, 0.36, 1)
 
-[sub_resource type="Resource" id="Resource_q8p5x"]
+[sub_resource type="Resource" id="Resource_emh7v"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_fenwick"
 speaker_name = "Old Fenwick"
@@ -811,7 +781,7 @@ facing = "west"
 display_name = "Old Fenwick"
 tint = Color(0.4, 0.42, 0.48, 1)
 
-[sub_resource type="Resource" id="Resource_6xbe1"]
+[sub_resource type="Resource" id="Resource_5wk2b"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_brisa"
 speaker_name = "Brisa"
@@ -822,7 +792,7 @@ facing = "east"
 display_name = "Brisa"
 tint = Color(0.45, 0.62, 0.4, 1)
 
-[sub_resource type="Resource" id="Resource_x0ep8"]
+[sub_resource type="Resource" id="Resource_remfb"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_biscuit"
 speaker_name = "Biscuit"
@@ -832,7 +802,7 @@ facing = "east"
 display_name = "Biscuit"
 visual_character = &"petalfang"
 
-[sub_resource type="Resource" id="Resource_qn6ff"]
+[sub_resource type="Resource" id="Resource_on1ni"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_corin"
 speaker_name = "Corin"
@@ -842,7 +812,7 @@ facing = "west"
 display_name = "Corin"
 tint = Color(0.55, 0.5, 0.4, 1)
 
-[sub_resource type="Resource" id="Resource_mwsjj"]
+[sub_resource type="Resource" id="Resource_aw8b8"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_kit"
 speaker_name = "Kit"
@@ -853,7 +823,7 @@ facing = "north"
 display_name = "Kit"
 tint = Color(0.7, 0.55, 0.3, 1)
 
-[sub_resource type="Resource" id="Resource_ai5cx"]
+[sub_resource type="Resource" id="Resource_q8p5x"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_baker"
 speaker_name = "Baker Gilly"
@@ -862,7 +832,7 @@ cell = Vector3i(14, 12, 0)
 display_name = "Baker Gilly"
 tint = Color(0.75, 0.62, 0.45, 1)
 
-[sub_resource type="Resource" id="Resource_vjobo"]
+[sub_resource type="Resource" id="Resource_6xbe1"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_tam"
 speaker_name = "Tam"
@@ -873,11 +843,11 @@ facing = "west"
 display_name = "Tam"
 tint = Color(0.5, 0.42, 0.6, 1)
 
-[sub_resource type="Resource" id="Resource_u5ktf"]
+[sub_resource type="Resource" id="Resource_x0ep8"]
 script = ExtResource("12_vdhnd")
 key = "rival.met"
 
-[sub_resource type="Resource" id="Resource_qk3ga"]
+[sub_resource type="Resource" id="Resource_qn6ff"]
 script = ExtResource("9_hw06u")
 kind = 1
 encounter_id = "crownhaven.rival.lark"
@@ -898,114 +868,114 @@ scale_flag = "rival.stage"
 scale_step = 0.08
 scale_max_steps = 6
 
-[sub_resource type="Resource" id="Resource_04cnw"]
+[sub_resource type="Resource" id="Resource_mwsjj"]
 script = ExtResource("8_8ynx0")
-spec = SubResource("Resource_qk3ga")
+spec = SubResource("Resource_qn6ff")
 
-[sub_resource type="Resource" id="Resource_2i6dx"]
-script = ExtResource("16_648o0")
+[sub_resource type="Resource" id="Resource_ai5cx"]
+script = ExtResource("15_e608x")
 key = "rival.stage"
 
-[sub_resource type="Resource" id="Resource_hnp4f"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_vjobo"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_lark"
 speaker_name = "Lark"
 side = &"right"
 text = "Ha! See? First batch. Don't feel bad, Oakvale -- you'll get there. Probably."
 
-[sub_resource type="Resource" id="Resource_lonme"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_hnp4f")])
+[sub_resource type="Resource" id="Resource_u5ktf"]
+script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_vjobo")])
 
-[sub_resource type="Resource" id="Resource_y0wn8"]
-script = ExtResource("16_648o0")
+[sub_resource type="Resource" id="Resource_qk3ga"]
+script = ExtResource("15_e608x")
 key = "rival.wins"
 
-[sub_resource type="Resource" id="Resource_ythva"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_04cnw"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_lark"
 speaker_name = "Lark"
 side = &"right"
 text = "...Huh. Fine. FINE. You got lucky, and Puck was still full from breakfast."
 
-[sub_resource type="Resource" id="Resource_havgg"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_ythva")])
-
-[sub_resource type="Resource" id="Resource_7jqxj"]
-script = ExtResource("5_sey8i")
-condition = "outcome() == \"victory\""
-then_commands = Array[Resource]([SubResource("Resource_y0wn8"), SubResource("Resource_havgg")])
-else_commands = Array[Resource]([SubResource("Resource_lonme")])
-
-[sub_resource type="Resource" id="Resource_edye5"]
-script = ExtResource("5_sey8i")
-condition = "outcome() == \"victory\" or outcome() == \"defeat\""
-then_commands = Array[Resource]([SubResource("Resource_2i6dx"), SubResource("Resource_7jqxj")])
-
-[sub_resource type="Resource" id="Resource_xrnt7"]
+[sub_resource type="Resource" id="Resource_2i6dx"]
 script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_04cnw")])
+
+[sub_resource type="Resource" id="Resource_hnp4f"]
+script = ExtResource("7_g17ua")
+condition = "outcome() == \"victory\""
+then_commands = Array[Resource]([SubResource("Resource_qk3ga"), SubResource("Resource_2i6dx")])
+else_commands = Array[Resource]([SubResource("Resource_u5ktf")])
+
+[sub_resource type="Resource" id="Resource_lonme"]
+script = ExtResource("7_g17ua")
+condition = "outcome() == \"victory\" or outcome() == \"defeat\""
+then_commands = Array[Resource]([SubResource("Resource_ai5cx"), SubResource("Resource_hnp4f")])
+
+[sub_resource type="Resource" id="Resource_y0wn8"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_lark"
 speaker_name = "Lark"
 side = &"right"
 text = "Your partner can barely stand. Rest up -- I'm not beating you like THAT."
 
-[sub_resource type="Resource" id="Resource_r2e53"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_xrnt7")])
-
-[sub_resource type="Resource" id="Resource_tuykd"]
+[sub_resource type="Resource" id="Resource_ythva"]
 script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_y0wn8")])
+
+[sub_resource type="Resource" id="Resource_havgg"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_lark"
 speaker_name = "Lark"
 side = &"right"
 text = "I'll be at the Crown Arena. Every tester worth their shard ends up there sooner or later -- come find me when you want a rematch."
 
-[sub_resource type="Resource" id="Resource_8fx3e"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_tuykd")])
+[sub_resource type="Resource" id="Resource_7jqxj"]
+script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_havgg")])
 
-[sub_resource type="Resource" id="Resource_obnvj"]
+[sub_resource type="Resource" id="Resource_edye5"]
 script = ExtResource("12_vdhnd")
 key = "rival.duel1"
 
-[sub_resource type="Resource" id="Resource_yocek"]
-script = ExtResource("13_ej8je")
+[sub_resource type="Resource" id="Resource_xrnt7"]
+script = ExtResource("16_648o0")
 text = "Rival: Lark"
 toast_kind = "quest"
 
-[sub_resource type="Resource" id="Resource_ebpx6"]
+[sub_resource type="Resource" id="Resource_r2e53"]
 script = ExtResource("17_ustyd")
 
-[sub_resource type="Resource" id="Resource_4qfn1"]
-script = ExtResource("5_sey8i")
+[sub_resource type="Resource" id="Resource_tuykd"]
+script = ExtResource("7_g17ua")
 condition = "outcome() == \"victory\" or outcome() == \"defeat\""
-then_commands = Array[Resource]([SubResource("Resource_8fx3e"), SubResource("Resource_obnvj"), SubResource("Resource_yocek"), SubResource("Resource_ebpx6")])
-else_commands = Array[Resource]([SubResource("Resource_r2e53")])
+then_commands = Array[Resource]([SubResource("Resource_7jqxj"), SubResource("Resource_edye5"), SubResource("Resource_xrnt7"), SubResource("Resource_r2e53")])
+else_commands = Array[Resource]([SubResource("Resource_ythva")])
 
-[sub_resource type="Resource" id="Resource_ceppj"]
+[sub_resource type="Resource" id="Resource_8fx3e"]
 script = ExtResource("10_yfdhc")
 label = "Let's go."
-commands = Array[Resource]([SubResource("Resource_u5ktf"), SubResource("Resource_04cnw"), SubResource("Resource_edye5"), SubResource("Resource_4qfn1")])
+commands = Array[Resource]([SubResource("Resource_x0ep8"), SubResource("Resource_mwsjj"), SubResource("Resource_lonme"), SubResource("Resource_tuykd")])
 
-[sub_resource type="Resource" id="Resource_ilrci"]
+[sub_resource type="Resource" id="Resource_obnvj"]
 script = ExtResource("10_yfdhc")
 label = "Not now."
 is_cancel = true
 
-[sub_resource type="Resource" id="Resource_pev8g"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_yocek"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_lark"
 speaker_name = "Lark"
 side = &"right"
 text = "I'm Lark, first batch. One friendly bout -- ready?"
 
-[sub_resource type="Resource" id="Resource_6mptf"]
+[sub_resource type="Resource" id="Resource_ebpx6"]
 script = ExtResource("11_efaci")
-prompt = SubResource("Resource_pev8g")
-options = Array[Resource]([SubResource("Resource_ceppj"), SubResource("Resource_ilrci")])
+prompt = SubResource("Resource_yocek")
+options = Array[Resource]([SubResource("Resource_8fx3e"), SubResource("Resource_obnvj")])
 
-[sub_resource type="Resource" id="Resource_wyoj8"]
+[sub_resource type="Resource" id="Resource_4qfn1"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_lark"
 speaker_name = "Lark"
@@ -1016,20 +986,20 @@ facing = "west"
 display_name = "Lark"
 tint = Color(0.78, 0.5, 0.2, 1)
 visible_if = "has(\"opening.complete\") and not has(\"rival.duel1\")"
-on_interact = Array[Resource]([SubResource("Resource_6mptf")])
+on_interact = Array[Resource]([SubResource("Resource_ebpx6")])
 
-[sub_resource type="Resource" id="Resource_qyah7"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_ceppj"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_lark_arena"
 speaker_name = "Lark"
 side = &"right"
 text = "Puck needs a nap after that. Go rest at the Wayshrine -- then we go again."
 
-[sub_resource type="Resource" id="Resource_owmq2"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_qyah7")])
+[sub_resource type="Resource" id="Resource_ilrci"]
+script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_ceppj")])
 
-[sub_resource type="Resource" id="Resource_iqppl"]
+[sub_resource type="Resource" id="Resource_pev8g"]
 script = ExtResource("9_hw06u")
 kind = 1
 encounter_id = "crownhaven.rival.lark"
@@ -1050,80 +1020,80 @@ scale_flag = "rival.stage"
 scale_step = 0.08
 scale_max_steps = 6
 
-[sub_resource type="Resource" id="Resource_qmkj0"]
+[sub_resource type="Resource" id="Resource_6mptf"]
 script = ExtResource("8_8ynx0")
-spec = SubResource("Resource_iqppl")
+spec = SubResource("Resource_pev8g")
 
-[sub_resource type="Resource" id="Resource_voxsa"]
-script = ExtResource("16_648o0")
+[sub_resource type="Resource" id="Resource_wyoj8"]
+script = ExtResource("15_e608x")
 key = "rival.stage"
 
-[sub_resource type="Resource" id="Resource_1xj2k"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_qyah7"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_lark_arena"
 speaker_name = "Lark"
 side = &"right"
 text = "That's more like it. First batch, remember?"
 
-[sub_resource type="Resource" id="Resource_wkvuj"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_1xj2k")])
+[sub_resource type="Resource" id="Resource_owmq2"]
+script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_qyah7")])
 
-[sub_resource type="Resource" id="Resource_ean4t"]
-script = ExtResource("16_648o0")
+[sub_resource type="Resource" id="Resource_iqppl"]
+script = ExtResource("15_e608x")
 key = "rival.wins"
 
-[sub_resource type="Resource" id="Resource_sspk2"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_qmkj0"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_lark_arena"
 speaker_name = "Lark"
 side = &"right"
 text = "Again?! ...Alright. You're good. Don't let it go to your head."
 
-[sub_resource type="Resource" id="Resource_ybw7y"]
+[sub_resource type="Resource" id="Resource_voxsa"]
+script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_qmkj0")])
+
+[sub_resource type="Resource" id="Resource_1xj2k"]
 script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_sspk2")])
-
-[sub_resource type="Resource" id="Resource_djkmn"]
-script = ExtResource("5_sey8i")
 condition = "outcome() == \"victory\""
-then_commands = Array[Resource]([SubResource("Resource_ean4t"), SubResource("Resource_ybw7y")])
-else_commands = Array[Resource]([SubResource("Resource_wkvuj")])
+then_commands = Array[Resource]([SubResource("Resource_iqppl"), SubResource("Resource_voxsa")])
+else_commands = Array[Resource]([SubResource("Resource_owmq2")])
 
-[sub_resource type="Resource" id="Resource_5fdwv"]
-script = ExtResource("5_sey8i")
+[sub_resource type="Resource" id="Resource_wkvuj"]
+script = ExtResource("7_g17ua")
 condition = "outcome() == \"victory\" or outcome() == \"defeat\""
-then_commands = Array[Resource]([SubResource("Resource_voxsa"), SubResource("Resource_djkmn")])
+then_commands = Array[Resource]([SubResource("Resource_wyoj8"), SubResource("Resource_1xj2k")])
 
-[sub_resource type="Resource" id="Resource_rca6i"]
+[sub_resource type="Resource" id="Resource_ean4t"]
 script = ExtResource("10_yfdhc")
 label = "Rematch!"
-commands = Array[Resource]([SubResource("Resource_qmkj0"), SubResource("Resource_5fdwv")])
+commands = Array[Resource]([SubResource("Resource_6mptf"), SubResource("Resource_wkvuj")])
 
-[sub_resource type="Resource" id="Resource_e4m5u"]
+[sub_resource type="Resource" id="Resource_sspk2"]
 script = ExtResource("10_yfdhc")
 label = "Not now."
 is_cancel = true
 
-[sub_resource type="Resource" id="Resource_2osbf"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_ybw7y"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_lark_arena"
 speaker_name = "Lark"
 side = &"right"
 text = "Back for more, Oakvale? Puck's been training. Rematch?"
 
-[sub_resource type="Resource" id="Resource_3akok"]
+[sub_resource type="Resource" id="Resource_djkmn"]
 script = ExtResource("11_efaci")
-prompt = SubResource("Resource_2osbf")
-options = Array[Resource]([SubResource("Resource_rca6i"), SubResource("Resource_e4m5u")])
+prompt = SubResource("Resource_ybw7y")
+options = Array[Resource]([SubResource("Resource_ean4t"), SubResource("Resource_sspk2")])
 
-[sub_resource type="Resource" id="Resource_w02te"]
-script = ExtResource("5_sey8i")
+[sub_resource type="Resource" id="Resource_5fdwv"]
+script = ExtResource("7_g17ua")
 condition = "spar_ready(\"crownhaven.rival.lark\")"
-then_commands = Array[Resource]([SubResource("Resource_3akok")])
-else_commands = Array[Resource]([SubResource("Resource_owmq2")])
+then_commands = Array[Resource]([SubResource("Resource_djkmn")])
+else_commands = Array[Resource]([SubResource("Resource_ilrci")])
 
-[sub_resource type="Resource" id="Resource_rw2g6"]
+[sub_resource type="Resource" id="Resource_rca6i"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_lark_arena"
 speaker_name = "Lark"
@@ -1133,20 +1103,20 @@ cell = Vector3i(23, 18, 0)
 display_name = "Lark"
 tint = Color(0.78, 0.5, 0.2, 1)
 visible_if = "has(\"rival.duel1\")"
-on_interact = Array[Resource]([SubResource("Resource_w02te")])
+on_interact = Array[Resource]([SubResource("Resource_5fdwv")])
 
-[sub_resource type="Resource" id="Resource_uagkb"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_e4m5u"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_wynn"
 speaker_name = "Corporal Wynn"
 side = &"right"
 text = "Blightcap's having a lie-down. Get some rest yourself and come back."
 
-[sub_resource type="Resource" id="Resource_edxim"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_uagkb")])
+[sub_resource type="Resource" id="Resource_2osbf"]
+script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_e4m5u")])
 
-[sub_resource type="Resource" id="Resource_yes86"]
+[sub_resource type="Resource" id="Resource_3akok"]
 script = ExtResource("9_hw06u")
 kind = 1
 encounter_id = "crownhaven.spar.wynn"
@@ -1159,72 +1129,72 @@ opponent_team = Array[Dictionary]([{
 defeat_policy = 1
 spar = true
 
-[sub_resource type="Resource" id="Resource_wynem"]
+[sub_resource type="Resource" id="Resource_w02te"]
 script = ExtResource("8_8ynx0")
-spec = SubResource("Resource_yes86")
+spec = SubResource("Resource_3akok")
 
-[sub_resource type="Resource" id="Resource_yiny5"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_rw2g6"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_wynn"
 speaker_name = "Corporal Wynn"
 side = &"right"
 text = "Don't sulk -- everyone loses to the Blightcap once. It's the spores."
 
-[sub_resource type="Resource" id="Resource_dna8y"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_yiny5")])
-
-[sub_resource type="Resource" id="Resource_nicha"]
-script = ExtResource("5_sey8i")
-condition = "outcome() == \"defeat\""
-then_commands = Array[Resource]([SubResource("Resource_dna8y")])
-
-[sub_resource type="Resource" id="Resource_vwxps"]
+[sub_resource type="Resource" id="Resource_uagkb"]
 script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_rw2g6")])
+
+[sub_resource type="Resource" id="Resource_edxim"]
+script = ExtResource("7_g17ua")
+condition = "outcome() == \"defeat\""
+then_commands = Array[Resource]([SubResource("Resource_uagkb")])
+
+[sub_resource type="Resource" id="Resource_yes86"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_wynn"
 speaker_name = "Corporal Wynn"
 side = &"right"
 text = "Good form! Now go and try the Lieutenant."
 
-[sub_resource type="Resource" id="Resource_q1713"]
+[sub_resource type="Resource" id="Resource_wynem"]
+script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_yes86")])
+
+[sub_resource type="Resource" id="Resource_yiny5"]
 script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_vwxps")])
-
-[sub_resource type="Resource" id="Resource_8abdv"]
-script = ExtResource("5_sey8i")
 condition = "outcome() == \"victory\""
-then_commands = Array[Resource]([SubResource("Resource_q1713")])
-else_commands = Array[Resource]([SubResource("Resource_nicha")])
+then_commands = Array[Resource]([SubResource("Resource_wynem")])
+else_commands = Array[Resource]([SubResource("Resource_edxim")])
 
-[sub_resource type="Resource" id="Resource_5th03"]
+[sub_resource type="Resource" id="Resource_dna8y"]
 script = ExtResource("10_yfdhc")
 label = "Let's spar."
-commands = Array[Resource]([SubResource("Resource_wynem"), SubResource("Resource_8abdv")])
+commands = Array[Resource]([SubResource("Resource_w02te"), SubResource("Resource_yiny5")])
 
-[sub_resource type="Resource" id="Resource_qyrue"]
+[sub_resource type="Resource" id="Resource_nicha"]
 script = ExtResource("10_yfdhc")
 label = "Not now."
 is_cancel = true
 
-[sub_resource type="Resource" id="Resource_mc6m6"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_vwxps"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_wynn"
 speaker_name = "Corporal Wynn"
 side = &"right"
 text = "Fancy a warm-up bout? My Blightcap's the gentlest thing in the barracks. Mostly."
 
-[sub_resource type="Resource" id="Resource_2ty2s"]
+[sub_resource type="Resource" id="Resource_q1713"]
 script = ExtResource("11_efaci")
-prompt = SubResource("Resource_mc6m6")
-options = Array[Resource]([SubResource("Resource_5th03"), SubResource("Resource_qyrue")])
+prompt = SubResource("Resource_vwxps")
+options = Array[Resource]([SubResource("Resource_dna8y"), SubResource("Resource_nicha")])
 
-[sub_resource type="Resource" id="Resource_y3u6u"]
-script = ExtResource("5_sey8i")
+[sub_resource type="Resource" id="Resource_8abdv"]
+script = ExtResource("7_g17ua")
 condition = "spar_ready(\"crownhaven.spar.wynn\")"
-then_commands = Array[Resource]([SubResource("Resource_2ty2s")])
-else_commands = Array[Resource]([SubResource("Resource_edxim")])
+then_commands = Array[Resource]([SubResource("Resource_q1713")])
+else_commands = Array[Resource]([SubResource("Resource_2osbf")])
 
-[sub_resource type="Resource" id="Resource_xbdn6"]
+[sub_resource type="Resource" id="Resource_5th03"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_wynn"
 speaker_name = "Corporal Wynn"
@@ -1235,20 +1205,20 @@ facing = "east"
 display_name = "Corporal Wynn"
 tint = Color(0.28, 0.352, 0.55, 1)
 visible_if = "has(\"opening.complete\")"
-on_interact = Array[Resource]([SubResource("Resource_y3u6u")])
+on_interact = Array[Resource]([SubResource("Resource_8abdv")])
 
-[sub_resource type="Resource" id="Resource_eowoj"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_qyrue"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_aldous"
 speaker_name = "Lieutenant Aldous"
 side = &"right"
 text = "My Petalfang has had enough for today. Rest, and we'll go again."
 
-[sub_resource type="Resource" id="Resource_7gi1e"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_eowoj")])
+[sub_resource type="Resource" id="Resource_mc6m6"]
+script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_qyrue")])
 
-[sub_resource type="Resource" id="Resource_lhpje"]
+[sub_resource type="Resource" id="Resource_2ty2s"]
 script = ExtResource("9_hw06u")
 kind = 1
 encounter_id = "crownhaven.spar.aldous"
@@ -1261,72 +1231,72 @@ opponent_team = Array[Dictionary]([{
 defeat_policy = 1
 spar = true
 
-[sub_resource type="Resource" id="Resource_qnb5i"]
+[sub_resource type="Resource" id="Resource_y3u6u"]
 script = ExtResource("8_8ynx0")
-spec = SubResource("Resource_lhpje")
+spec = SubResource("Resource_2ty2s")
 
-[sub_resource type="Resource" id="Resource_vr45j"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_xbdn6"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_aldous"
 speaker_name = "Lieutenant Aldous"
 side = &"right"
 text = "Speed. You lack it. Come back when you've found some."
 
-[sub_resource type="Resource" id="Resource_1nmxx"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_vr45j")])
-
-[sub_resource type="Resource" id="Resource_swf1r"]
-script = ExtResource("5_sey8i")
-condition = "outcome() == \"defeat\""
-then_commands = Array[Resource]([SubResource("Resource_1nmxx")])
-
-[sub_resource type="Resource" id="Resource_o231t"]
+[sub_resource type="Resource" id="Resource_eowoj"]
 script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_xbdn6")])
+
+[sub_resource type="Resource" id="Resource_7gi1e"]
+script = ExtResource("7_g17ua")
+condition = "outcome() == \"defeat\""
+then_commands = Array[Resource]([SubResource("Resource_eowoj")])
+
+[sub_resource type="Resource" id="Resource_lhpje"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_aldous"
 speaker_name = "Lieutenant Aldous"
 side = &"right"
 text = "Hm. He was right. Once more some other day."
 
-[sub_resource type="Resource" id="Resource_ybt3d"]
+[sub_resource type="Resource" id="Resource_qnb5i"]
+script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_lhpje")])
+
+[sub_resource type="Resource" id="Resource_vr45j"]
 script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_o231t")])
-
-[sub_resource type="Resource" id="Resource_pvqdr"]
-script = ExtResource("5_sey8i")
 condition = "outcome() == \"victory\""
-then_commands = Array[Resource]([SubResource("Resource_ybt3d")])
-else_commands = Array[Resource]([SubResource("Resource_swf1r")])
+then_commands = Array[Resource]([SubResource("Resource_qnb5i")])
+else_commands = Array[Resource]([SubResource("Resource_7gi1e")])
 
-[sub_resource type="Resource" id="Resource_oakxd"]
+[sub_resource type="Resource" id="Resource_1nmxx"]
 script = ExtResource("10_yfdhc")
 label = "Let's spar."
-commands = Array[Resource]([SubResource("Resource_qnb5i"), SubResource("Resource_pvqdr")])
+commands = Array[Resource]([SubResource("Resource_y3u6u"), SubResource("Resource_vr45j")])
 
-[sub_resource type="Resource" id="Resource_3ldux"]
+[sub_resource type="Resource" id="Resource_swf1r"]
 script = ExtResource("10_yfdhc")
 label = "Not now."
 is_cancel = true
 
-[sub_resource type="Resource" id="Resource_krr7l"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_o231t"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_aldous"
 speaker_name = "Lieutenant Aldous"
 side = &"right"
-text = "The Sergeant says you're worth watching. Show me. A friendly bout, no quarter asked."
+text = "The General says you're worth watching. Show me. A friendly bout, no quarter asked."
 
-[sub_resource type="Resource" id="Resource_d1uqq"]
+[sub_resource type="Resource" id="Resource_ybt3d"]
 script = ExtResource("11_efaci")
-prompt = SubResource("Resource_krr7l")
-options = Array[Resource]([SubResource("Resource_oakxd"), SubResource("Resource_3ldux")])
+prompt = SubResource("Resource_o231t")
+options = Array[Resource]([SubResource("Resource_1nmxx"), SubResource("Resource_swf1r")])
 
-[sub_resource type="Resource" id="Resource_7itsj"]
-script = ExtResource("5_sey8i")
+[sub_resource type="Resource" id="Resource_pvqdr"]
+script = ExtResource("7_g17ua")
 condition = "spar_ready(\"crownhaven.spar.aldous\")"
-then_commands = Array[Resource]([SubResource("Resource_d1uqq")])
-else_commands = Array[Resource]([SubResource("Resource_7gi1e")])
+then_commands = Array[Resource]([SubResource("Resource_ybt3d")])
+else_commands = Array[Resource]([SubResource("Resource_mc6m6")])
 
-[sub_resource type="Resource" id="Resource_u58jv"]
+[sub_resource type="Resource" id="Resource_oakxd"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_aldous"
 speaker_name = "Lieutenant Aldous"
@@ -1336,21 +1306,21 @@ cell = Vector3i(6, 7, 0)
 display_name = "Lieutenant Aldous"
 tint = Color(0.17999999, 0.252, 0.45, 1)
 visible_if = "has(\"opening.complete\")"
-on_interact = Array[Resource]([SubResource("Resource_7itsj")])
+on_interact = Array[Resource]([SubResource("Resource_pvqdr")])
 
-[sub_resource type="Resource" id="Resource_kgjr5"]
+[sub_resource type="Resource" id="Resource_3ldux"]
 script = ExtResource("3_oa6o1")
 text = "BARRACKS SPARRING ROSTER
 Cpl. Wynn -- warm-up bouts.
 Lt. Aldous -- for the sharp.
-Sgt. Rowan -- ask if you dare.
+Gen. Varden -- ask if you dare.
 One bout each per rest. Friendly: nobody is hurt for real."
 id = &"roster_sign"
 cell = Vector3i(8, 7, 0)
 display_name = "Sparring Roster"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_6h2y4"]
+[sub_resource type="Resource" id="Resource_krr7l"]
 script = ExtResource("1_bxhkq")
 prop = "arena"
 footprint = Vector2i(5, 3)
@@ -1358,7 +1328,7 @@ id = &"arena"
 cell = Vector3i(22, 19, 0)
 tint = Color(0.62, 0.18, 0.16, 1)
 
-[sub_resource type="Resource" id="Resource_ss1uq"]
+[sub_resource type="Resource" id="Resource_d1uqq"]
 script = ExtResource("3_oa6o1")
 text = "The Crown Arena
 The Crown Cup: four bouts, 100 gold to enter.
@@ -1368,56 +1338,56 @@ cell = Vector3i(20, 22, 0)
 display_name = "The Crown Arena"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_kkfud"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_7itsj"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_arena_master"
 speaker_name = "Arena Master Bex"
 side = &"right"
 text = "The Crown Cup is for bonded partners, friend. Come back when you've a creature at your side."
 
-[sub_resource type="Resource" id="Resource_dm5f6"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_kkfud")])
-
-[sub_resource type="Resource" id="Resource_owruj"]
+[sub_resource type="Resource" id="Resource_u58jv"]
 script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_7itsj")])
+
+[sub_resource type="Resource" id="Resource_kgjr5"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_arena_master"
 speaker_name = "Arena Master Bex"
 side = &"right"
 text = "Welcome to The Crown Arena! The Crown Cup: four bouts, the best partners in the city. Think yours is ready?"
 
-[sub_resource type="Resource" id="Resource_xr7ey"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_owruj")])
-
-[sub_resource type="Resource" id="Resource_nxfpy"]
+[sub_resource type="Resource" id="Resource_6h2y4"]
 script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_kgjr5")])
+
+[sub_resource type="Resource" id="Resource_ss1uq"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_arena_master"
 speaker_name = "Arena Master Bex"
 side = &"right"
 text = "The Crown Cup Champion returns! The crowd's been asking after you. Another run?"
 
-[sub_resource type="Resource" id="Resource_8s6ma"]
+[sub_resource type="Resource" id="Resource_kkfud"]
+script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_ss1uq")])
+
+[sub_resource type="Resource" id="Resource_dm5f6"]
 script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_nxfpy")])
-
-[sub_resource type="Resource" id="Resource_h5kul"]
-script = ExtResource("5_sey8i")
 condition = "has(\"arena.crown_cup.champion\")"
-then_commands = Array[Resource]([SubResource("Resource_8s6ma")])
-else_commands = Array[Resource]([SubResource("Resource_xr7ey")])
+then_commands = Array[Resource]([SubResource("Resource_kkfud")])
+else_commands = Array[Resource]([SubResource("Resource_6h2y4")])
 
-[sub_resource type="Resource" id="Resource_5827g"]
+[sub_resource type="Resource" id="Resource_owruj"]
 script = ExtResource("18_fsv0l")
 tournament = ExtResource("19_pgjny")
 
-[sub_resource type="Resource" id="Resource_ay4mc"]
-script = ExtResource("5_sey8i")
+[sub_resource type="Resource" id="Resource_xr7ey"]
+script = ExtResource("7_g17ua")
 condition = "has(\"opening.complete\")"
-then_commands = Array[Resource]([SubResource("Resource_h5kul"), SubResource("Resource_5827g")])
-else_commands = Array[Resource]([SubResource("Resource_dm5f6")])
+then_commands = Array[Resource]([SubResource("Resource_dm5f6"), SubResource("Resource_owruj")])
+else_commands = Array[Resource]([SubResource("Resource_u58jv")])
 
-[sub_resource type="Resource" id="Resource_v0ohc"]
+[sub_resource type="Resource" id="Resource_nxfpy"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_arena_master"
 speaker_name = "Arena Master Bex"
@@ -1427,20 +1397,20 @@ cell = Vector3i(22, 22, 0)
 facing = "west"
 display_name = "Arena Master Bex"
 tint = Color(0.62, 0.18, 0.16, 1)
-on_interact = Array[Resource]([SubResource("Resource_ay4mc")])
+on_interact = Array[Resource]([SubResource("Resource_xr7ey")])
 
-[sub_resource type="Resource" id="Resource_lf568"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_8s6ma"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_isolde"
 speaker_name = "Champion Isolde"
 side = &"right"
 text = "Oakheart's resting. So should you -- the Wayshrine, then back here."
 
-[sub_resource type="Resource" id="Resource_m4mhv"]
-script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_lf568")])
+[sub_resource type="Resource" id="Resource_h5kul"]
+script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_8s6ma")])
 
-[sub_resource type="Resource" id="Resource_5d701"]
+[sub_resource type="Resource" id="Resource_5827g"]
 script = ExtResource("9_hw06u")
 kind = 1
 encounter_id = "arena.crown_cup.champion_rematch"
@@ -1464,76 +1434,76 @@ scale_flag = "arena.crown_cup.champion_beaten"
 scale_step = 0.08
 scale_max_steps = 6
 
-[sub_resource type="Resource" id="Resource_sp2oj"]
+[sub_resource type="Resource" id="Resource_ay4mc"]
 script = ExtResource("8_8ynx0")
-spec = SubResource("Resource_5d701")
+spec = SubResource("Resource_5827g")
 
-[sub_resource type="Resource" id="Resource_8jsbd"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_v0ohc"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_isolde"
 speaker_name = "Champion Isolde"
 side = &"right"
 text = "There -- the old champion still has teeth. Come back stronger."
 
-[sub_resource type="Resource" id="Resource_nxdgc"]
+[sub_resource type="Resource" id="Resource_lf568"]
+script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_v0ohc")])
+
+[sub_resource type="Resource" id="Resource_m4mhv"]
 script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_8jsbd")])
-
-[sub_resource type="Resource" id="Resource_msm2a"]
-script = ExtResource("5_sey8i")
 condition = "outcome() == \"defeat\""
-then_commands = Array[Resource]([SubResource("Resource_nxdgc")])
+then_commands = Array[Resource]([SubResource("Resource_lf568")])
 
-[sub_resource type="Resource" id="Resource_qctqb"]
-script = ExtResource("16_648o0")
+[sub_resource type="Resource" id="Resource_5d701"]
+script = ExtResource("15_e608x")
 key = "arena.crown_cup.champion_beaten"
 
-[sub_resource type="Resource" id="Resource_4jo82"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_sp2oj"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_isolde"
 speaker_name = "Champion Isolde"
 side = &"right"
 text = "Again! My Oakheart will train twice as hard. Next time."
 
-[sub_resource type="Resource" id="Resource_qubt6"]
+[sub_resource type="Resource" id="Resource_8jsbd"]
+script = ExtResource("6_a6ah0")
+beats = Array[Resource]([SubResource("Resource_sp2oj")])
+
+[sub_resource type="Resource" id="Resource_nxdgc"]
 script = ExtResource("7_g17ua")
-beats = Array[Resource]([SubResource("Resource_4jo82")])
-
-[sub_resource type="Resource" id="Resource_geani"]
-script = ExtResource("5_sey8i")
 condition = "outcome() == \"victory\""
-then_commands = Array[Resource]([SubResource("Resource_qctqb"), SubResource("Resource_qubt6")])
-else_commands = Array[Resource]([SubResource("Resource_msm2a")])
+then_commands = Array[Resource]([SubResource("Resource_5d701"), SubResource("Resource_8jsbd")])
+else_commands = Array[Resource]([SubResource("Resource_m4mhv")])
 
-[sub_resource type="Resource" id="Resource_3yh0v"]
+[sub_resource type="Resource" id="Resource_msm2a"]
 script = ExtResource("10_yfdhc")
 label = "Rematch!"
-commands = Array[Resource]([SubResource("Resource_sp2oj"), SubResource("Resource_geani")])
+commands = Array[Resource]([SubResource("Resource_ay4mc"), SubResource("Resource_nxdgc")])
 
-[sub_resource type="Resource" id="Resource_pyrb1"]
+[sub_resource type="Resource" id="Resource_qctqb"]
 script = ExtResource("10_yfdhc")
 label = "Not now."
 is_cancel = true
 
-[sub_resource type="Resource" id="Resource_8qtku"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_4jo82"]
+script = ExtResource("5_sey8i")
 speaker_id = &"npc_isolde"
 speaker_name = "Champion Isolde"
 side = &"right"
 text = "You took my title fair and square. I want it back. A champion's rematch?"
 
-[sub_resource type="Resource" id="Resource_tvmc5"]
+[sub_resource type="Resource" id="Resource_qubt6"]
 script = ExtResource("11_efaci")
-prompt = SubResource("Resource_8qtku")
-options = Array[Resource]([SubResource("Resource_3yh0v"), SubResource("Resource_pyrb1")])
+prompt = SubResource("Resource_4jo82")
+options = Array[Resource]([SubResource("Resource_msm2a"), SubResource("Resource_qctqb")])
 
-[sub_resource type="Resource" id="Resource_e75s3"]
-script = ExtResource("5_sey8i")
+[sub_resource type="Resource" id="Resource_geani"]
+script = ExtResource("7_g17ua")
 condition = "spar_ready(\"arena.crown_cup.champion_rematch\")"
-then_commands = Array[Resource]([SubResource("Resource_tvmc5")])
-else_commands = Array[Resource]([SubResource("Resource_m4mhv")])
+then_commands = Array[Resource]([SubResource("Resource_qubt6")])
+else_commands = Array[Resource]([SubResource("Resource_h5kul")])
 
-[sub_resource type="Resource" id="Resource_bvh5s"]
+[sub_resource type="Resource" id="Resource_3yh0v"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_isolde"
 speaker_name = "Champion Isolde"
@@ -1543,9 +1513,9 @@ cell = Vector3i(25, 18, 0)
 display_name = "Champion Isolde"
 tint = Color(0.85, 0.7, 0.3, 1)
 visible_if = "has(\"arena.crown_cup.champion\")"
-on_interact = Array[Resource]([SubResource("Resource_e75s3")])
+on_interact = Array[Resource]([SubResource("Resource_geani")])
 
-[sub_resource type="Resource" id="Resource_6b13b"]
+[sub_resource type="Resource" id="Resource_pyrb1"]
 script = ExtResource("3_oa6o1")
 text = "THE NORTH GATE
 The Mountain Road: Mountain Base, and the Pass beyond it.
@@ -1555,7 +1525,7 @@ cell = Vector3i(8, 5, 0)
 display_name = "North Gate"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_6i17k"]
+[sub_resource type="Resource" id="Resource_8qtku"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_north_guard"
 speaker_name = "Royal Guard"
@@ -1566,7 +1536,7 @@ facing = "west"
 display_name = "Royal Guard"
 tint = Color(0.2, 0.28, 0.5, 1)
 
-[sub_resource type="Resource" id="Resource_17184"]
+[sub_resource type="Resource" id="Resource_tvmc5"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_gate_warden"
 speaker_name = "Gate Warden"
@@ -1576,7 +1546,7 @@ cell = Vector3i(4, 12, 0)
 display_name = "Gate Warden"
 tint = Color(0.2, 0.28, 0.5, 1)
 
-[sub_resource type="Resource" id="Resource_hwd5n"]
+[sub_resource type="Resource" id="Resource_e75s3"]
 script = ExtResource("3_oa6o1")
 text = "THE GILDED STAG
 Feather beds, hot baths, a locked stable. Guests of the crown drink free."
@@ -1585,7 +1555,7 @@ cell = Vector3i(10, 14, 0)
 display_name = "The Gilded Stag"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_dn4nx"]
+[sub_resource type="Resource" id="Resource_bvh5s"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_maribel"
 speaker_name = "Innkeeper Maribel"
@@ -1596,7 +1566,7 @@ facing = "west"
 display_name = "Innkeeper Maribel"
 tint = Color(0.66, 0.42, 0.3, 1)
 
-[sub_resource type="Resource" id="Resource_qnew0"]
+[sub_resource type="Resource" id="Resource_6b13b"]
 script = ExtResource("3_oa6o1")
 text = "MERCHANTS' GUILDHALL
 Charter of the Crown. Weights, measures and honest coin."
@@ -1605,7 +1575,7 @@ cell = Vector3i(10, 21, 0)
 display_name = "The Merchants' Guildhall"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_5vkd0"]
+[sub_resource type="Resource" id="Resource_6i17k"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_veyra"
 speaker_name = "Guildmaster Veyra"
@@ -1616,7 +1586,7 @@ facing = "north"
 display_name = "Guildmaster Veyra"
 tint = Color(0.72, 0.55, 0.15, 1)
 
-[sub_resource type="Resource" id="Resource_swmxg"]
+[sub_resource type="Resource" id="Resource_17184"]
 script = ExtResource("3_oa6o1")
 text = "THE CHAPEL OF THE STARFALL
 Where the old star's dust was first gathered. All are welcome; silence is kindly requested."
@@ -1625,7 +1595,7 @@ cell = Vector3i(22, 12, 0)
 display_name = "Chapel of the Starfall"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_d7fhi"]
+[sub_resource type="Resource" id="Resource_hwd5n"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_odalys"
 speaker_name = "Sister Odalys"
@@ -1636,7 +1606,7 @@ facing = "west"
 display_name = "Sister Odalys"
 tint = Color(0.78, 0.8, 0.9, 1)
 
-[sub_resource type="Resource" id="Resource_1h6hy"]
+[sub_resource type="Resource" id="Resource_dn4nx"]
 script = ExtResource("3_oa6o1")
 text = "THE ALDERMERE FORGE
 Arms for the Guard. Civilians: please don't touch the anvil. It bites."
@@ -1645,7 +1615,7 @@ cell = Vector3i(25, 14, 0)
 display_name = "The Aldermere Forge"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_r7vec"]
+[sub_resource type="Resource" id="Resource_qnew0"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_garrick"
 speaker_name = "Smith Garrick"
@@ -1656,7 +1626,7 @@ facing = "north"
 display_name = "Smith Garrick"
 tint = Color(0.4, 0.3, 0.26, 1)
 
-[sub_resource type="Resource" id="Resource_v11ew"]
+[sub_resource type="Resource" id="Resource_5vkd0"]
 script = ExtResource("4_dcd5c")
 speaker_id = &"npc_merrow"
 speaker_name = "Lady Merrow"
@@ -1667,7 +1637,7 @@ facing = "west"
 display_name = "Lady Merrow"
 tint = Color(0.52, 0.3, 0.5, 1)
 
-[sub_resource type="Resource" id="Resource_o45ck"]
+[sub_resource type="Resource" id="Resource_swmxg"]
 script = ExtResource("20_wk0yi")
 area_rect = Rect2i(14, 28, 3, 1)
 target_area = &"river_crossing"
@@ -1675,87 +1645,87 @@ target_entry = &"north"
 id = &"south_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_jfbyk"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_d7fhi"]
+script = ExtResource("5_sey8i")
 text = "A Gate Warden bars the way. \"West road's closed for now.\""
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_lqg36"]
+[sub_resource type="Resource" id="Resource_1h6hy"]
 script = ExtResource("21_2pfn5")
 scene_id = &"ch_west_locked"
-beats = Array[Resource]([SubResource("Resource_jfbyk")])
+beats = Array[Resource]([SubResource("Resource_d7fhi")])
 
-[sub_resource type="Resource" id="Resource_m2jp3"]
+[sub_resource type="Resource" id="Resource_r7vec"]
 script = ExtResource("20_wk0yi")
 area_rect = Rect2i(0, 13, 1, 1)
 target_area = &"sparse_forest"
 target_entry = &"east"
 requires = "has(\"opening.complete\")"
-locked_scene = SubResource("Resource_lqg36")
+locked_scene = SubResource("Resource_1h6hy")
 id = &"west_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_3d670"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_v11ew"]
+script = ExtResource("5_sey8i")
 text = "The Mountain Road climbs north toward Mountain Base and the Pass beyond. A Royal Guard shakes his head. \"Closed by order of the crown. Landslides, they say. Soldiers, I say.\""
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_dgkm8"]
+[sub_resource type="Resource" id="Resource_o45ck"]
 script = ExtResource("21_2pfn5")
 scene_id = &"mountain_base_road_locked_north_exit"
-beats = Array[Resource]([SubResource("Resource_3d670")])
+beats = Array[Resource]([SubResource("Resource_v11ew")])
 
-[sub_resource type="Resource" id="Resource_5dura"]
+[sub_resource type="Resource" id="Resource_jfbyk"]
 script = ExtResource("20_wk0yi")
 area_rect = Rect2i(9, 0, 1, 1)
 target_area = &"crownhaven"
 target_entry = &"north_gate"
 requires = "has(\"world.mountain_road_open\")"
-locked_scene = SubResource("Resource_dgkm8")
+locked_scene = SubResource("Resource_o45ck")
 id = &"north_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_aidpt"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_lqg36"]
+script = ExtResource("5_sey8i")
 text = "The Redrock road runs east into the red mesas of the Rocky Badlands. A chain hangs across it, and a notice: \"No caravans until the Badlands road is cleared of rockfalls. By order of the Guildhall.\""
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_v1dx8"]
+[sub_resource type="Resource" id="Resource_m2jp3"]
 script = ExtResource("21_2pfn5")
 scene_id = &"redrock_village_road_locked_east_exit"
-beats = Array[Resource]([SubResource("Resource_aidpt")])
+beats = Array[Resource]([SubResource("Resource_lqg36")])
 
-[sub_resource type="Resource" id="Resource_m66l0"]
+[sub_resource type="Resource" id="Resource_3d670"]
 script = ExtResource("20_wk0yi")
 area_rect = Rect2i(29, 13, 1, 1)
 target_area = &"crownhaven"
 target_entry = &"east_gate"
 requires = "has(\"world.badlands_open\")"
-locked_scene = SubResource("Resource_v1dx8")
+locked_scene = SubResource("Resource_m2jp3")
 id = &"east_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_f5x5x"]
-script = ExtResource("6_a6ah0")
+[sub_resource type="Resource" id="Resource_dgkm8"]
+script = ExtResource("5_sey8i")
 text = "The coast road slopes south-east toward Beach Village and the harbour. The gate warden waves you back: \"Ford's flooded below the city. Nothing's getting to the coast this week.\""
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_qgo10"]
+[sub_resource type="Resource" id="Resource_5dura"]
 script = ExtResource("21_2pfn5")
 scene_id = &"beach_village_road_locked_harbour_exit"
-beats = Array[Resource]([SubResource("Resource_f5x5x")])
+beats = Array[Resource]([SubResource("Resource_dgkm8")])
 
-[sub_resource type="Resource" id="Resource_2ug14"]
+[sub_resource type="Resource" id="Resource_aidpt"]
 script = ExtResource("20_wk0yi")
 area_rect = Rect2i(29, 17, 1, 1)
 target_area = &"crownhaven"
 target_entry = &"harbour_gate"
 requires = "has(\"world.beach_road_open\")"
-locked_scene = SubResource("Resource_qgo10")
+locked_scene = SubResource("Resource_5dura")
 id = &"harbour_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_ud0l8"]
+[sub_resource type="Resource" id="Resource_v1dx8"]
 script = ExtResource("22_5r7ax")
 building = &"barracks"
 area_rect = Rect2i(5, 6, 1, 1)
@@ -1767,7 +1737,7 @@ display_name = "The Barracks"
 tint = Color(0.55, 0.2, 0.16, 1)
 blocking = false
 
-[sub_resource type="Resource" id="Resource_1ihm4"]
+[sub_resource type="Resource" id="Resource_m66l0"]
 script = ExtResource("22_5r7ax")
 building = &"workshop"
 area_rect = Rect2i(24, 6, 1, 1)
@@ -1779,7 +1749,7 @@ display_name = "The Royal Workshop"
 tint = Color(0.3, 0.38, 0.52, 1)
 blocking = false
 
-[sub_resource type="Resource" id="Resource_spx57"]
+[sub_resource type="Resource" id="Resource_f5x5x"]
 script = ExtResource("22_5r7ax")
 building = &"gilded_stag"
 area_rect = Rect2i(9, 12, 1, 1)
@@ -1791,7 +1761,7 @@ display_name = "The Gilded Stag"
 tint = Color(0.62, 0.42, 0.16, 1)
 blocking = false
 
-[sub_resource type="Resource" id="Resource_me8o4"]
+[sub_resource type="Resource" id="Resource_qgo10"]
 script = ExtResource("22_5r7ax")
 building = &"guildhall"
 area_rect = Rect2i(13, 20, 1, 1)
@@ -1803,7 +1773,7 @@ display_name = "The Merchants' Guildhall"
 tint = Color(0.72, 0.55, 0.15, 1)
 blocking = false
 
-[sub_resource type="Resource" id="Resource_x6c4u"]
+[sub_resource type="Resource" id="Resource_2ug14"]
 script = ExtResource("22_5r7ax")
 building = &"chapel"
 area_rect = Rect2i(25, 11, 1, 1)
@@ -1815,7 +1785,7 @@ display_name = "Chapel of the Starfall"
 tint = Color(0.3, 0.38, 0.6, 1)
 blocking = false
 
-[sub_resource type="Resource" id="Resource_1auqt"]
+[sub_resource type="Resource" id="Resource_ud0l8"]
 script = ExtResource("22_5r7ax")
 building = &"forge"
 area_rect = Rect2i(26, 16, 1, 1)
@@ -1827,14 +1797,14 @@ display_name = "The Aldermere Forge"
 tint = Color(0.3, 0.28, 0.3, 1)
 blocking = false
 
-[sub_resource type="Resource" id="Resource_pcjyu"]
+[sub_resource type="Resource" id="Resource_1ihm4"]
 script = ExtResource("12_vdhnd")
 key = "opening.arrived_crownhaven"
 
-[sub_resource type="Resource" id="Resource_jraye"]
-script = ExtResource("5_sey8i")
+[sub_resource type="Resource" id="Resource_spx57"]
+script = ExtResource("7_g17ua")
 condition = "not has(\"opening.arrived_crownhaven\")"
-then_commands = Array[Resource]([SubResource("Resource_pcjyu")])
+then_commands = Array[Resource]([SubResource("Resource_1ihm4")])
 
 [resource]
 script = ExtResource("23_e6x5w")
@@ -1893,5 +1863,5 @@ entry_points = {
 "facing": "east"
 }
 }
-entities = Array[Resource]([SubResource("Resource_pmyhw"), SubResource("Resource_r7vwj"), SubResource("Resource_hvivg"), SubResource("Resource_4vw77"), SubResource("Resource_sluii"), SubResource("Resource_5bjpv"), SubResource("Resource_vynvb"), SubResource("Resource_mw047"), SubResource("Resource_aytkr"), SubResource("Resource_aom58"), SubResource("Resource_hrxdu"), SubResource("Resource_fumqp"), SubResource("Resource_4dv0k"), SubResource("Resource_5c2oy"), SubResource("Resource_au5o3"), SubResource("Resource_2t4np"), SubResource("Resource_vcca4"), SubResource("Resource_2a5pe"), SubResource("Resource_1odni"), SubResource("Resource_7yydd"), SubResource("Resource_piajy"), SubResource("Resource_yj5in"), SubResource("Resource_316jc"), SubResource("Resource_seaa5"), SubResource("Resource_my8bd"), SubResource("Resource_lonke"), SubResource("Resource_yoa27"), SubResource("Resource_g1u3g"), SubResource("Resource_g7kgp"), SubResource("Resource_axbua"), SubResource("Resource_sm0ew"), SubResource("Resource_b4rx3"), SubResource("Resource_i7tb6"), SubResource("Resource_t8r0m"), SubResource("Resource_qrhty"), SubResource("Resource_w8agy"), SubResource("Resource_pv5bd"), SubResource("Resource_f04l0"), SubResource("Resource_63blu"), SubResource("Resource_e6rsp"), SubResource("Resource_di53f"), SubResource("Resource_2847x"), SubResource("Resource_l7jte"), SubResource("Resource_22p7q"), SubResource("Resource_357ha"), SubResource("Resource_6br1e"), SubResource("Resource_jjpvh"), SubResource("Resource_l80i7"), SubResource("Resource_clal2"), SubResource("Resource_o1vm1"), SubResource("Resource_ud2c0"), SubResource("Resource_4jbs8"), SubResource("Resource_sb7di"), SubResource("Resource_ggcae"), SubResource("Resource_wwts4"), SubResource("Resource_pmwuy"), SubResource("Resource_6gggv"), SubResource("Resource_copmq"), SubResource("Resource_xbgox"), SubResource("Resource_1c7ks"), SubResource("Resource_62qyy"), SubResource("Resource_xb7nu"), SubResource("Resource_tdb81"), SubResource("Resource_w5rbo"), SubResource("Resource_751mc"), SubResource("Resource_u4em2"), SubResource("Resource_11qh5"), SubResource("Resource_o8ogv"), SubResource("Resource_tev24"), SubResource("Resource_5wk2b"), SubResource("Resource_remfb"), SubResource("Resource_on1ni"), SubResource("Resource_aw8b8"), SubResource("Resource_q8p5x"), SubResource("Resource_6xbe1"), SubResource("Resource_x0ep8"), SubResource("Resource_qn6ff"), SubResource("Resource_mwsjj"), SubResource("Resource_ai5cx"), SubResource("Resource_vjobo"), SubResource("Resource_wyoj8"), SubResource("Resource_rw2g6"), SubResource("Resource_xbdn6"), SubResource("Resource_u58jv"), SubResource("Resource_kgjr5"), SubResource("Resource_6h2y4"), SubResource("Resource_ss1uq"), SubResource("Resource_v0ohc"), SubResource("Resource_bvh5s"), SubResource("Resource_6b13b"), SubResource("Resource_6i17k"), SubResource("Resource_17184"), SubResource("Resource_hwd5n"), SubResource("Resource_dn4nx"), SubResource("Resource_qnew0"), SubResource("Resource_5vkd0"), SubResource("Resource_swmxg"), SubResource("Resource_d7fhi"), SubResource("Resource_1h6hy"), SubResource("Resource_r7vec"), SubResource("Resource_v11ew"), SubResource("Resource_o45ck"), SubResource("Resource_m2jp3"), SubResource("Resource_5dura"), SubResource("Resource_m66l0"), SubResource("Resource_2ug14"), SubResource("Resource_ud0l8"), SubResource("Resource_1ihm4"), SubResource("Resource_spx57"), SubResource("Resource_me8o4"), SubResource("Resource_x6c4u"), SubResource("Resource_1auqt")])
-on_enter = Array[Resource]([SubResource("Resource_jraye")])
+entities = Array[Resource]([SubResource("Resource_pmyhw"), SubResource("Resource_r7vwj"), SubResource("Resource_hvivg"), SubResource("Resource_4vw77"), SubResource("Resource_sluii"), SubResource("Resource_5bjpv"), SubResource("Resource_vynvb"), SubResource("Resource_mw047"), SubResource("Resource_aytkr"), SubResource("Resource_aom58"), SubResource("Resource_hrxdu"), SubResource("Resource_fumqp"), SubResource("Resource_4dv0k"), SubResource("Resource_5c2oy"), SubResource("Resource_au5o3"), SubResource("Resource_2t4np"), SubResource("Resource_vcca4"), SubResource("Resource_2a5pe"), SubResource("Resource_1odni"), SubResource("Resource_7yydd"), SubResource("Resource_piajy"), SubResource("Resource_yj5in"), SubResource("Resource_316jc"), SubResource("Resource_seaa5"), SubResource("Resource_my8bd"), SubResource("Resource_lonke"), SubResource("Resource_yoa27"), SubResource("Resource_g1u3g"), SubResource("Resource_g7kgp"), SubResource("Resource_axbua"), SubResource("Resource_sm0ew"), SubResource("Resource_b4rx3"), SubResource("Resource_i7tb6"), SubResource("Resource_t8r0m"), SubResource("Resource_qrhty"), SubResource("Resource_w8agy"), SubResource("Resource_pv5bd"), SubResource("Resource_f04l0"), SubResource("Resource_63blu"), SubResource("Resource_e6rsp"), SubResource("Resource_di53f"), SubResource("Resource_2847x"), SubResource("Resource_l7jte"), SubResource("Resource_22p7q"), SubResource("Resource_357ha"), SubResource("Resource_6br1e"), SubResource("Resource_jjpvh"), SubResource("Resource_l80i7"), SubResource("Resource_clal2"), SubResource("Resource_o1vm1"), SubResource("Resource_ud2c0"), SubResource("Resource_4jbs8"), SubResource("Resource_sb7di"), SubResource("Resource_ggcae"), SubResource("Resource_wwts4"), SubResource("Resource_pmwuy"), SubResource("Resource_6gggv"), SubResource("Resource_copmq"), SubResource("Resource_xbgox"), SubResource("Resource_1c7ks"), SubResource("Resource_62qyy"), SubResource("Resource_xb7nu"), SubResource("Resource_tdb81"), SubResource("Resource_w5rbo"), SubResource("Resource_751mc"), SubResource("Resource_u4em2"), SubResource("Resource_11qh5"), SubResource("Resource_o8ogv"), SubResource("Resource_tev24"), SubResource("Resource_8yqf3"), SubResource("Resource_rdnpl"), SubResource("Resource_v5tpv"), SubResource("Resource_7i5op"), SubResource("Resource_emh7v"), SubResource("Resource_5wk2b"), SubResource("Resource_remfb"), SubResource("Resource_on1ni"), SubResource("Resource_aw8b8"), SubResource("Resource_q8p5x"), SubResource("Resource_6xbe1"), SubResource("Resource_4qfn1"), SubResource("Resource_rca6i"), SubResource("Resource_5th03"), SubResource("Resource_oakxd"), SubResource("Resource_3ldux"), SubResource("Resource_krr7l"), SubResource("Resource_d1uqq"), SubResource("Resource_nxfpy"), SubResource("Resource_3yh0v"), SubResource("Resource_pyrb1"), SubResource("Resource_8qtku"), SubResource("Resource_tvmc5"), SubResource("Resource_e75s3"), SubResource("Resource_bvh5s"), SubResource("Resource_6b13b"), SubResource("Resource_6i17k"), SubResource("Resource_17184"), SubResource("Resource_hwd5n"), SubResource("Resource_dn4nx"), SubResource("Resource_qnew0"), SubResource("Resource_5vkd0"), SubResource("Resource_swmxg"), SubResource("Resource_r7vec"), SubResource("Resource_jfbyk"), SubResource("Resource_3d670"), SubResource("Resource_aidpt"), SubResource("Resource_v1dx8"), SubResource("Resource_m66l0"), SubResource("Resource_f5x5x"), SubResource("Resource_qgo10"), SubResource("Resource_2ug14"), SubResource("Resource_ud0l8")])
+on_enter = Array[Resource]([SubResource("Resource_spx57")])

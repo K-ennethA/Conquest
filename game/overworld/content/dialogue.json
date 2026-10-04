@@ -179,7 +179,7 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "Forged half the spears on those walls. The other half I'm still forging. Ask the Sergeant -- the Guard never has enough spears."
+								"text": "Forged half the spears on those walls. The other half I'm still forging. Ask the Guard -- they never have enough spears."
 							}
 						]
 					}
@@ -304,7 +304,7 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "I saw the Sergeant's Geode this morning! It was THIS big. Bigger! When I'm a tester I'm getting two."
+								"text": "I saw an officer's Geode this morning! It was THIS big. Bigger! When I'm a tester I'm getting two."
 							}
 						]
 					}
@@ -332,7 +332,7 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "Word from the border: Cindral's mustering too. The Sergeant doesn't say much. He sharpens his sword a lot, though."
+								"text": "Word from the border: Cindral's mustering too. Everyone's preparing for war."
 							}
 						]
 					},
@@ -342,7 +342,7 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "The Sergeant says we're on alert till the King decides what this raid means. I think it means war."
+								"text": "The Guard's on alert till the King decides what this raid means. I think it means war."
 							}
 						]
 					},
@@ -351,7 +351,7 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "The army got a crate of the Researcher's shards last month. Only the officers carry them. The Sergeant's Geode could flatten this dummy with one arm."
+								"text": "The army got a crate of the Researcher's shards last month. Only the officers carry them. An officer's Geode could flatten this dummy with one arm."
 							}
 						]
 					}
@@ -485,16 +485,6 @@
 			"orwin": {
 				"variants": [
 					{
-						"if": "after('act1.met_rowan')",
-						"label": "on Rowan's detail",
-						"lines": [
-							{
-								"speaker": "self",
-								"text": "The Sergeant's detail rides soon, I hear -- with you in it. Stay on his shield side. It's the safest place in the kingdom."
-							}
-						]
-					},
-					{
 						"if": "after('opening.attack')",
 						"label": "after the raid",
 						"lines": [
@@ -511,25 +501,6 @@
 							{
 								"speaker": "self",
 								"text": "A shard tester, from Oakvale? The Researcher's workshop is in the upper town -- east of the keep. Mind the market crowd."
-							}
-						]
-					}
-				]
-			},
-			"rowan": {
-				"note": "Before the opening is over only: after it, his SCRIPT runs (the Act 1 hook, then the spar offer -- in the builder).",
-				"variants": [
-					{
-						"if": "before('opening.complete')",
-						"label": "meeting the Sergeant",
-						"lines": [
-							{
-								"speaker": "self",
-								"text": "Sergeant Rowan, Crownhaven Guard. You'll be the tester from Oakvale."
-							},
-							{
-								"speaker": "self",
-								"text": "The army got a crate of his shards. Mine's bonded to a Geode that could hold a bridge by itself. Takes the recruits a month to stop flinching at it."
 							}
 						]
 					}
@@ -597,11 +568,11 @@
 				"variants": [
 					{
 						"if": "after('act1.met_rowan')",
-						"label": "you ride with Rowan",
+						"label": "getting stronger",
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "Signed on with the Sergeant, I hear. Then I'll keep the grass honest while you're gone. Somebody has to."
+								"text": "Off to get stronger before the war, I hear. Then I'll keep the grass honest while you're gone. Somebody has to."
 							}
 						]
 					},
@@ -1160,7 +1131,7 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "Soldiers on the west road, heading for the woods. The Sergeant's lot? Tell them to keep their boots off my saplings."
+								"text": "Soldiers on the west road, heading for the woods. Tell them to keep their boots off my saplings."
 							}
 						]
 					},
@@ -1261,11 +1232,11 @@
 				"variants": [
 					{
 						"if": "after('act1.met_rowan')",
-						"label": "riding with Rowan",
+						"label": "preparing for war",
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "Crownhaven's Sergeant sends word you ride with him now. Then you're welcome at this Lodge at any hour."
+								"text": "Word is Crownhaven's preparing for war, and you with it. Then you're welcome at this Lodge at any hour."
 							},
 							{
 								"speaker": "self",
@@ -1344,7 +1315,7 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "Riding with the Crown's soldiers now? Pity. You had a face for doors and exits."
+								"text": "Taking up with the Crown's soldiers now? Pity. You had a face for doors and exits."
 							}
 						]
 					},

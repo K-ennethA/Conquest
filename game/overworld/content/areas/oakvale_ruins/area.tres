@@ -286,7 +286,7 @@ text = "Get stronger, {hero}. Avenge your mother."
 [sub_resource type="Resource" id="Resource_f8x42"]
 script = ExtResource("4_0h2dx")
 speaker_id = &"npc_warrior"
-speaker_name = "Warrior"
+speaker_name = "Talyn"
 side = &"right"
 text = "We'll be preparing for war."
 
@@ -421,7 +421,7 @@ text = "Get stronger, {hero}. Avenge your mother."
 [sub_resource type="Resource" id="Resource_mwkau"]
 script = ExtResource("4_0h2dx")
 speaker_id = &"npc_warrior"
-speaker_name = "Warrior"
+speaker_name = "Talyn"
 side = &"right"
 text = "We'll be preparing for war."
 
@@ -487,12 +487,12 @@ options = Array[Resource]([SubResource("Resource_qd6cx"), SubResource("Resource_
 [sub_resource type="Resource" id="Resource_pd3xu"]
 script = ExtResource("3_nn4f3")
 speaker_id = &"npc_warrior"
-speaker_name = "Warrior"
+speaker_name = "Talyn"
 figure = "guard"
 id = &"warrior"
 cell = Vector3i(18, 10, 0)
 facing = "east"
-display_name = "Warrior"
+display_name = "Talyn"
 tint = Color(0.5, 0.3, 0.2, 1)
 visible_if = "has(\"opening.chase\") and not has(\"opening.complete\")"
 on_interact = Array[Resource]([SubResource("Resource_sv22m")])
@@ -585,7 +585,7 @@ text = "Get stronger, {hero}. Avenge your mother."
 [sub_resource type="Resource" id="Resource_iwwan"]
 script = ExtResource("4_0h2dx")
 speaker_id = &"npc_warrior"
-speaker_name = "Warrior"
+speaker_name = "Talyn"
 side = &"right"
 text = "We'll be preparing for war."
 
@@ -666,7 +666,7 @@ text = "Enemy soldiers took the Professor, and they burned Oakvale as a distract
 [sub_resource type="Resource" id="Resource_ji73d"]
 script = ExtResource("4_0h2dx")
 speaker_id = &"npc_warrior"
-speaker_name = "Warrior"
+speaker_name = "Talyn"
 side = &"right"
 text = "Their rear guard is holding the road past the mill. We're going in."
 
@@ -741,7 +741,7 @@ text = "Get stronger, {hero}. Avenge your mother."
 [sub_resource type="Resource" id="Resource_u2674"]
 script = ExtResource("4_0h2dx")
 speaker_id = &"npc_warrior"
-speaker_name = "Warrior"
+speaker_name = "Talyn"
 side = &"right"
 text = "We'll be preparing for war."
 
