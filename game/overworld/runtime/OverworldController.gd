@@ -110,7 +110,9 @@ func _ready() -> void:
 	if not story.runner().finished.is_connected(_on_script_finished):
 		story.runner().finished.connect(_on_script_finished)
 	var msg: String = story.overworld_ready(self)
-	hud.show_area_name(area.display_name)
+	# Classic-Pokemon location popup: small, in a corner, never blocks (PlaceAnnouncer decides when).
+	if story.announce_place(area):
+		hud.show_area_name(area.display_name)
 	if not msg.is_empty():
 		_show_system_message(msg)
 	elif not story.is_script_running():
