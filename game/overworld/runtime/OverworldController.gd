@@ -810,8 +810,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_input_blocked():
 		return
 	if event.is_action_pressed(InputActions.CONFIRM) or event.is_action_pressed(&"ui_accept"):
+		# interact() can change scene (enter a building), after which this node is out of
+		# the tree and get_viewport() is null -- so grab the viewport first.
+		var vp := get_viewport()
 		if interact():
-			get_viewport().set_input_as_handled()
+			vp.set_input_as_handled()
 		return
 	if event.is_action_pressed(InputActions.MAP_MENU) or event.is_action_pressed(InputActions.CANCEL):
 		get_viewport().set_input_as_handled()
