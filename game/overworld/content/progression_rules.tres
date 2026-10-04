@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="ProgressionRules" format=3]
+
+[ext_resource type="Script" path="res://game/characters/progression/ProgressionRules.gd" id="1_prog"]
+
+[resource]
+script = ExtResource("1_prog")
+max_level = 50
+xp_curve_k = 1.0
+xp_curve_pow = 3.0
+starter_level = 5
+legacy_level = 5
+xp_level_divisor = 7.0
+xp_level_exp = 2.5
+xp_grey_gap = 5
+xp_grey_mult = 0.1
+xp_min = 1
+xp_yield_per_budget = 0.5
+xp_yield_min = 10
+battle_mult_wild = 1.0
+battle_mult_trainer = 1.5
+battle_mult_boss = 2.0
+xp_share_fought = 1.0
+xp_share_fallen = 0.5
+xp_share_bench = 0.0
+xp_on_loss_mult = 0.0
+xp_spar_mult = 0.0
+default_growth = 0.04
+speed_growth_mult = 0.5
+legend_over_band = 5
+bond_max = 10
+bond_xp_per_level = 5
+bond_per_battle = 1
+bond_per_win = 2
+catch_budget_easy = 110
+catch_budget_hard = 260
+catch_rate_max = 1.0
+catch_rate_min = 0.2
+low_catch_rate = 0.5
