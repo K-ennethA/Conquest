@@ -42,11 +42,11 @@ const CARD_CREST_PX := 46.0
 const DETAIL_CREST_PX := 96.0
 
 # Characters excluded from the pickable roster regardless of is_boss: the neutral
-# beast and the summon-only undead body are never player squad picks. The six
+# beast and the summon-only undead body are never player squad picks. The
 # PLACEHOLDER compendium-only units (artist 2026-10-04: surface in the compendium,
 # attach to nothing) stay excluded until they get real movesets and a rebalance.
 const EXCLUDED_IDS := ["undead",
-	"firefly", "firesprite", "magmoo", "supaoctto", "vampito", "vampwarrior"]
+	"firefly", "firesprite", "magmoo", "supaoctto", "vampito", "vampwarrior", "elias"]
 
 ## Stats shown as bars in the detail pane: [key, label].
 const STAT_ROWS := [

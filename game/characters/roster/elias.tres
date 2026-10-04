@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/elias_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"elias"
+display_name = "Elias"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Mortis pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-04 (compendium placeholder, same pattern as the 6 creatures): PLACEHOLDER FOR REBALANCE. Stats cloned from necromancer.tres (Mortis, the closest mage silhouette); element left NEUTRAL (human royal researcher, no family); moves, abilities, movement kind and scale are not designed yet; the glb has no idle/walk clips (bind pose holds the staff). Referenced by nothing (no encounters, spawns, story, shops, AI rosters). Model fit lives in elias_forge.glb.import root_scale.
+base_health = 90
+base_attack = 8
+base_defense = 10
+base_magic = 30
+base_magic_defense = 18
+base_speed = 11
+base_movement = 4
+attack_range = 3
