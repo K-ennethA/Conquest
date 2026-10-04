@@ -331,6 +331,72 @@ tint = Color(0.62, 0.16, 0.12, 1)
 visible_if = "has(\"opening.attack\") and not has(\"opening.raiders_fled\")"
 
 [sub_resource type="Resource" id="Resource_hx1j3"]
+script = ExtResource("4_egi2v")
+speaker_id = &"npc_tester_a"
+speaker_name = "Tester"
+side = &"right"
+text = "Professor Elias has been handing out shards to a few of us, to see how people bond."
+
+[sub_resource type="Resource" id="Resource_7phog"]
+script = ExtResource("5_sdfid")
+beats = Array[Resource]([SubResource("Resource_hx1j3")])
+
+[sub_resource type="Resource" id="Resource_awlbg"]
+script = ExtResource("16_ef6in")
+speaker_id = &"npc_tester_a"
+speaker_name = "Tester"
+figure = "villager"
+id = &"tester_a"
+cell = Vector3i(2, 4, 0)
+facing = "east"
+display_name = "Tester"
+tint = Color(0.42, 0.46, 0.36, 1)
+visible_if = "not has(\"opening.complete\")"
+on_interact = Array[Resource]([SubResource("Resource_7phog")])
+
+[sub_resource type="Resource" id="Resource_pibb0"]
+script = ExtResource("16_ef6in")
+id = &"tester_a_creature"
+cell = Vector3i(3, 4, 0)
+facing = "east"
+display_name = "Geode"
+visual_character = &"gem_knight"
+visible_if = "not has(\"opening.complete\")"
+
+[sub_resource type="Resource" id="Resource_spl8c"]
+script = ExtResource("4_egi2v")
+speaker_id = &"npc_tester_b"
+speaker_name = "Tester"
+side = &"right"
+text = "Professor Elias has been handing out shards to a few of us, to see how people bond."
+
+[sub_resource type="Resource" id="Resource_e8dm6"]
+script = ExtResource("5_sdfid")
+beats = Array[Resource]([SubResource("Resource_spl8c")])
+
+[sub_resource type="Resource" id="Resource_738ck"]
+script = ExtResource("16_ef6in")
+speaker_id = &"npc_tester_b"
+speaker_name = "Tester"
+figure = "villager"
+id = &"tester_b"
+cell = Vector3i(2, 5, 0)
+facing = "east"
+display_name = "Tester"
+tint = Color(0.42, 0.46, 0.36, 1)
+visible_if = "not has(\"opening.complete\")"
+on_interact = Array[Resource]([SubResource("Resource_e8dm6")])
+
+[sub_resource type="Resource" id="Resource_0cjoj"]
+script = ExtResource("16_ef6in")
+id = &"tester_b_creature"
+cell = Vector3i(3, 5, 0)
+facing = "east"
+display_name = "Mycothrall"
+visual_character = &"mycothrall"
+visible_if = "not has(\"opening.complete\")"
+
+[sub_resource type="Resource" id="Resource_q34bc"]
 script = ExtResource("16_ef6in")
 id = &"starter"
 cell = Vector3i(4, 2, 0)
@@ -338,7 +404,7 @@ display_name = "Barkling"
 visual_character = &"tree_grunt"
 visible_if = "has(\"opening.ceremony\") and not has(\"opening.starter_received\")"
 
-[sub_resource type="Resource" id="Resource_7phog"]
+[sub_resource type="Resource" id="Resource_5ojbn"]
 script = ExtResource("16_ef6in")
 id = &"starter_2"
 cell = Vector3i(8, 2, 0)
@@ -346,7 +412,7 @@ display_name = "Petalfang"
 visual_character = &"petalfang"
 visible_if = "has(\"opening.ceremony\") and not has(\"opening.starter_received\")"
 
-[sub_resource type="Resource" id="Resource_awlbg"]
+[sub_resource type="Resource" id="Resource_07d2l"]
 script = ExtResource("16_ef6in")
 id = &"starter_3"
 cell = Vector3i(3, 2, 0)
@@ -354,103 +420,103 @@ display_name = "Blightcap"
 visual_character = &"blightcap"
 visible_if = "has(\"opening.ceremony\") and not has(\"opening.starter_received\")"
 
-[sub_resource type="Resource" id="Resource_pibb0"]
+[sub_resource type="Resource" id="Resource_k3ho4"]
 script = ExtResource("6_oay4x")
 key = "opening.attack"
 
-[sub_resource type="Resource" id="Resource_spl8c"]
+[sub_resource type="Resource" id="Resource_rxrcc"]
 script = ExtResource("7_4nnv6")
 actor = "elias"
 
-[sub_resource type="Resource" id="Resource_e8dm6"]
+[sub_resource type="Resource" id="Resource_rpke0"]
 script = ExtResource("7_4nnv6")
 actor = "player"
 
-[sub_resource type="Resource" id="Resource_738ck"]
+[sub_resource type="Resource" id="Resource_kl6v1"]
 script = ExtResource("12_1tpvl")
 actor = "raider_captain"
 to = Vector3i(7, 3, 0)
 
-[sub_resource type="Resource" id="Resource_0cjoj"]
+[sub_resource type="Resource" id="Resource_4ejgh"]
 script = ExtResource("12_1tpvl")
 actor = "raider_a"
 to = Vector3i(5, 3, 0)
 
-[sub_resource type="Resource" id="Resource_q34bc"]
+[sub_resource type="Resource" id="Resource_xgvdv"]
 script = ExtResource("12_1tpvl")
 actor = "raider_b"
 to = Vector3i(5, 4, 0)
 
-[sub_resource type="Resource" id="Resource_5ojbn"]
+[sub_resource type="Resource" id="Resource_1jwb8"]
 script = ExtResource("13_pfr12")
 actor = "elias"
 facing = "toward:raider_captain"
 
-[sub_resource type="Resource" id="Resource_07d2l"]
+[sub_resource type="Resource" id="Resource_gim8m"]
 script = ExtResource("13_pfr12")
 actor = "player"
 facing = "toward:raider_captain"
 
-[sub_resource type="Resource" id="Resource_k3ho4"]
+[sub_resource type="Resource" id="Resource_nqqpp"]
 script = ExtResource("4_egi2v")
 speaker_id = &"npc_raider_captain"
 speaker_name = "Raider Captain"
 side = &"right"
 text = "Professor Elias. You're coming with us."
 
-[sub_resource type="Resource" id="Resource_rxrcc"]
+[sub_resource type="Resource" id="Resource_6ik4u"]
 script = ExtResource("4_egi2v")
 speaker_id = &"npc_elias"
 speaker_name = "Professor Elias"
 side = &"right"
 text = "{hero} -- keep that shard safe!"
 
-[sub_resource type="Resource" id="Resource_rpke0"]
+[sub_resource type="Resource" id="Resource_tgnbw"]
 script = ExtResource("5_sdfid")
-beats = Array[Resource]([SubResource("Resource_k3ho4"), SubResource("Resource_rxrcc")])
+beats = Array[Resource]([SubResource("Resource_nqqpp"), SubResource("Resource_6ik4u")])
 
-[sub_resource type="Resource" id="Resource_kl6v1"]
+[sub_resource type="Resource" id="Resource_lqgfv"]
 script = ExtResource("6_oay4x")
 key = "opening.researcher_taken"
 
-[sub_resource type="Resource" id="Resource_4ejgh"]
+[sub_resource type="Resource" id="Resource_dkf0p"]
 script = ExtResource("12_1tpvl")
 actor = "raider_captain"
 to = Vector3i(10, 3, 0)
 
-[sub_resource type="Resource" id="Resource_xgvdv"]
+[sub_resource type="Resource" id="Resource_yrj22"]
 script = ExtResource("6_oay4x")
 key = "opening.raiders_fled"
 
-[sub_resource type="Resource" id="Resource_1jwb8"]
+[sub_resource type="Resource" id="Resource_u1lfv"]
 script = ExtResource("6_oay4x")
 key = "act1.researcher_abducted"
 
-[sub_resource type="Resource" id="Resource_gim8m"]
+[sub_resource type="Resource" id="Resource_plinl"]
 script = ExtResource("4_egi2v")
 text = "Bells are ringing across Crownhaven: enemy soldiers are attacking the city -- a distraction, so the raiders can slip away."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_nqqpp"]
+[sub_resource type="Resource" id="Resource_b80v2"]
 script = ExtResource("5_sdfid")
-beats = Array[Resource]([SubResource("Resource_gim8m")])
+beats = Array[Resource]([SubResource("Resource_plinl")])
 
-[sub_resource type="Resource" id="Resource_6ik4u"]
+[sub_resource type="Resource" id="Resource_uqiab"]
 script = ExtResource("6_oay4x")
 key = "opening.chase"
 
-[sub_resource type="Resource" id="Resource_tgnbw"]
+[sub_resource type="Resource" id="Resource_l7btw"]
 script = ExtResource("14_k2ruf")
 area_id = &"oakvale_ruins"
 entry = &"wayshrine"
 
-[sub_resource type="Resource" id="Resource_lqgfv"]
+[sub_resource type="Resource" id="Resource_b3de1"]
 script = ExtResource("15_vvdos")
 
-[sub_resource type="Resource" id="Resource_dkf0p"]
+[sub_resource type="Resource" id="Resource_pw1xy"]
 script = ExtResource("3_lvgi7")
 condition = "has(\"opening.starter_received\") and not has(\"opening.chase\")"
-then_commands = Array[Resource]([SubResource("Resource_pibb0"), SubResource("Resource_spl8c"), SubResource("Resource_e8dm6"), SubResource("Resource_738ck"), SubResource("Resource_0cjoj"), SubResource("Resource_q34bc"), SubResource("Resource_5ojbn"), SubResource("Resource_07d2l"), SubResource("Resource_rpke0"), SubResource("Resource_kl6v1"), SubResource("Resource_4ejgh"), SubResource("Resource_xgvdv"), SubResource("Resource_1jwb8"), SubResource("Resource_nqqpp"), SubResource("Resource_6ik4u"), SubResource("Resource_tgnbw"), SubResource("Resource_lqgfv")])
+then_commands = Array[Resource]([SubResource("Resource_k3ho4"), SubResource("Resource_rxrcc"), SubResource("Resource_rpke0"), SubResource("Resource_kl6v1"), SubResource("Resource_4ejgh"), SubResource("Resource_xgvdv"), SubResource("Resource_1jwb8"), SubResource("Resource_gim8m"), SubResource("Resource_tgnbw"), SubResource("Resource_lqgfv"), SubResource("Resource_dkf0p"), SubResource("Resource_yrj22"), SubResource("Resource_u1lfv"), SubResource("Resource_b80v2"), SubResource("Resource_uqiab"), SubResource("Resource_l7btw"), SubResource("Resource_b3de1")])
 
 [resource]
 script = ExtResource("17_mkabd")
@@ -466,6 +532,6 @@ entry_points = {
 "facing": "north"
 }
 }
-entities = Array[Resource]([SubResource("Resource_tdlmb"), SubResource("Resource_x0f7x"), SubResource("Resource_2dnr6"), SubResource("Resource_5gus7"), SubResource("Resource_cv78y"), SubResource("Resource_nwff1"), SubResource("Resource_bc3yb"), SubResource("Resource_vgws8"), SubResource("Resource_hx1j3"), SubResource("Resource_7phog"), SubResource("Resource_awlbg")])
-on_enter = Array[Resource]([SubResource("Resource_dkf0p")])
+entities = Array[Resource]([SubResource("Resource_tdlmb"), SubResource("Resource_x0f7x"), SubResource("Resource_2dnr6"), SubResource("Resource_5gus7"), SubResource("Resource_cv78y"), SubResource("Resource_nwff1"), SubResource("Resource_bc3yb"), SubResource("Resource_vgws8"), SubResource("Resource_awlbg"), SubResource("Resource_pibb0"), SubResource("Resource_738ck"), SubResource("Resource_0cjoj"), SubResource("Resource_q34bc"), SubResource("Resource_5ojbn"), SubResource("Resource_07d2l")])
+on_enter = Array[Resource]([SubResource("Resource_pw1xy")])
 parent_area = &"crownhaven"

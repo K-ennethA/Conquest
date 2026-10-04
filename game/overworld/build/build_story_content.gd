@@ -117,6 +117,10 @@ const NAMES := {
 	"SHOP_PEDLAR": "Jory's Travelling Cart",
 	# --- Duels in story (DECISIONS.md #33) ---
 	"RIVAL": "Lark",                        # the RIVAL: a fellow tester from the first batch
+	# DECISIONS.md #51/#52: fellow shard TESTERS at the ceremony. TODO(story): PLACEHOLDERS -- who
+	# they are (and whether they become rivals / allies) is not decided.
+	"TESTER_A": "Tester",
+	"TESTER_B": "Tester",
 	"FENNA": "Tester Fenna",                # a duel trainer on the Mossway
 	"WYNN": "Corporal Wynn",                # barracks sparring partner (warm-up)
 	"ALDOUS": "Lieutenant Aldous",          # barracks sparring partner (sharp)
@@ -275,6 +279,12 @@ const WARRIOR_UNIT := "vineweave"
 ## PLACEHOLDER enemy units for the first fight (existing roster units): the soldiers first, then
 ## their creatures. In map-spawn order (see [method _build_first_fight_map]).
 const RAIDER_UNITS: Array[String] = ["undead", "undead", "blightcap", "monster"]
+## PLACEHOLDER creatures beside the fellow testers at the ceremony (DECISIONS.md #52): existing
+## roster units, purely visual. [tester entity id, cell, its creature's entity id, cell, character_id]
+const CEREMONY_TESTERS: Array = [
+	["tester_a", Vector2i(2, 4), "tester_a_creature", Vector2i(3, 4), "gem_knight"],
+	["tester_b", Vector2i(2, 5), "tester_b_creature", Vector2i(3, 5), "mycothrall"],
+]
 ## The hero's placeholder overworld model (DECISIONS.md #4): swap the model here.
 const HERO_MODEL := "res://game/characters/models/forest/wren_forge.glb"
 
@@ -2215,6 +2225,25 @@ func _workshop_people(size: Vector2i, door_x: int) -> Array:
 			CINDRAL_RED, "raider")
 		raider.visible_if = raid_vis
 		out.append(raider)
+	# Fellow shard testers (DECISIONS.md #51/#52), each with the creature they bonded: here for the
+	# ceremony, still here after the kidnapping, gone once the opening is over. PLACEHOLDERS.
+	var testers_vis: String = "not has(\"%s\")" % F_COMPLETE
+	for t in CEREMONY_TESTERS:
+		var key: String = "TESTER_A" if t[0] == "tester_a" else "TESTER_B"
+		var tester := _npc(t[0], t[1], "east", key, Color(0.42, 0.46, 0.36), "villager")
+		tester.visible_if = testers_vis
+		# TODO(story): a neutral placeholder line (owner: the professor hands shards out as tests).
+		tester.on_interact = StoryCommand.list([_say([_line(t[0], key,
+			"{RESEARCHER_TITLE} has been handing out shards to a few of us, to see how people bond.")])])
+		out.append(tester)
+		var partner := NpcEntity.new()
+		partner.id = StringName(t[2])
+		partner.cell = Vector3i(t[3].x, t[3].y, 0)
+		partner.facing = "east"
+		partner.display_name = _species_name(StringName(t[4]))
+		partner.visual_character = StringName(t[4])
+		partner.visible_if = testers_vis
+		out.append(partner)
 	# The starter options stand in a row either side of him (only during the ceremony).
 	for i in range(STARTER_OPTIONS.size()):
 		var k: int = i / 2 + 2

@@ -786,3 +786,20 @@ func test_everyone_can_be_reached_at_every_stage_of_the_story() -> void:
 	for id in ["garrick", "isolde", "lark_arena", "arena_master"]:
 		assert_false(TapPathfinder.path_to_adjacent(g, ch.entry("south_gate")["cell"], ch.entity(id).cell).is_empty(),
 			"%s is reachable from the south gate with every flag set" % id)
+
+
+func test_fellow_testers_attend_the_ceremony() -> void:
+	# DECISIONS.md #52: others are there when the hero receives a creature and a shard -- placeholder
+	# testers, each with a creature beside them, until the opening is over.
+	var ws := _area("crownhaven_workshop")
+	var before := StoryFixture.sent_off(StoryState.new())
+	var after := StoryFixture.past_opening(StoryState.new())
+	for id in ["tester_a", "tester_b"]:
+		var tester := ws.entity(id) as NpcEntity
+		assert_not_null(tester, "%s is in the workshop" % id)
+		assert_true(tester.is_present(before), "%s is there for the ceremony" % id)
+		assert_false(tester.is_present(after), "%s has gone once the opening is over" % id)
+		var partner := ws.entity(id + "_creature") as NpcEntity
+		assert_not_null(partner, "%s has a creature beside them" % id)
+		assert_not_null(CharacterLibrary.get_character(partner.visual_character), "a real roster creature")
+		assert_true(partner.is_present(before), "the creature is there too")
