@@ -878,11 +878,7 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "{hero}... I'm so sorry. Your mother got the little ones down into the mill cellar, then went back for Maud."
-							},
-							{
-								"speaker": "self",
-								"text": "The roof came down. She didn't come out."
+								"text": "I'm so sorry, {hero}."
 							}
 						]
 					}

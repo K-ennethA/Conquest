@@ -803,3 +803,17 @@ func test_fellow_testers_attend_the_ceremony() -> void:
 		assert_not_null(partner, "%s has a creature beside them" % id)
 		assert_not_null(CharacterLibrary.get_character(partner.visual_character), "a real roster creature")
 		assert_true(partner.is_present(before), "the creature is there too")
+
+
+func test_arriving_in_the_ruins_always_tells_you_your_mother_died() -> void:
+	# Owner, 2026-10-04: learning of the mother's death is a FORCED story beat (Hessa, on arrival),
+	# not a line the player might miss by not talking to her.
+	var ruins := _area("oakvale_ruins")
+	var told := false
+	for c in _flatten(ruins.on_enter):
+		if c is SayCommand:
+			for b in (c as SayCommand).beats:
+				var beat := b as StoryBeat
+				if beat != null and String(beat.speaker_id) == "npc_hessa" and beat.text.contains("She didn't come out"):
+					told = true
+	assert_true(told, "the ruins' arrival script has Hessa tell you")

@@ -91,8 +91,8 @@ const NAMES := {
 	"SOLDIER_TITLE": "Sergeant Rowan",
 	# TODO(story): PLACEHOLDER allies who meet the hero in burned Oakvale and fight beside the hero in the
 	# first fight (owner: "the general and another warrior"). Names, looks and roles are TBD -- rename
-	# them here, in one place. (Whether the General is Sergeant Rowan is an open question.)
-	"GENERAL": "General",
+	# them here, in one place. Owner, 2026-10-04: the General is "General Varden" (placeholder name).
+	"GENERAL": "General Varden",
 	"WARRIOR": "Warrior",
 	"RAIDER_CAPTAIN": "Raider Captain",
 	"KINGDOM": "Aldermere",
@@ -1480,12 +1480,19 @@ func _ruins_allies() -> Array:
 	return out
 
 
-## Arriving in the burned village: the General and the Warrior say what happened (three short lines),
-## then the offer to join the fight. You walk the few steps to them; nothing else is forced.
+## Arriving in the burned village: Hessa tells you your mother is dead (owner: a FORCED story beat),
+## then the General and the Warrior say what happened, then the offer to join the fight.
 ## TODO(story): neutral placeholder wording -- only the facts the owner gave.
 func _ruins_arrival() -> Array:
 	return [
 		_move("player", Vector2i(RUINS_GENERAL.x + 1, OAK_ROAD_Y)),
+		_emote("hessa", "!"),
+		_move("hessa", Vector2i(RUINS_GENERAL.x + 1, OAK_ROAD_Y + 1)),
+		_face("player", "toward:hessa"),
+		_say([
+			_line("hessa", "HESSA", "{hero}... I'm so sorry. Your mother got the little ones down into the mill cellar, then went back for {MAUD}."),
+			_line("hessa", "HESSA", "The roof came down. She didn't come out."),
+		]),
 		_face("player", "toward:general"),
 		_say([
 			_line("general", "GENERAL", "Enemy soldiers took the Professor, and they burned Oakvale as a distraction while they got away."),

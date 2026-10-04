@@ -286,3 +286,17 @@ stones/shards that the enemy seeks, to create powerful chains to subjugate the o
   battles), and is either (or both) catchable after the tactical battle?
 - 51: is the existing rival (Lark, "a tester from the first batch") one of these testers? How many
   testers, and which become allies (guests in battles? recruitable humans, decision 6)?
+
+### Owner answers (2026-10-04, later still)
+53. **The General is General Varden** (placeholder name): the General the hero meets in burned
+    Oakvale (decision 36).
+54. **Humans are playable units**, the hero and other humans alike, working like creatures do but
+    with a more traditional Fire Emblem moveset: an ATTACK WITH A WEAPON. Some characters are
+    ENHANCED and have more special moves. HUMANS CAN BOND TO CREATURES. (Builds on 5-8.)
+55. **The mother's death is a forced story beat**: the hero must learn of it as part of the story
+    (it plays on arrival in burned Oakvale, not only if the player talks to someone).
+56. **The testers (51) become RIVALS and ALLIES** the hero runs into across the region and can
+    battle. E.g. one in **Deepwood Village** accompanies the hero for the tactical battle there and
+    becomes a SELECTABLE UNIT TO DEPLOY; another is in **Beach Village**.
+57. **The secret enemy base (46):** there the hero can encounter the General, or the General's
+    SECOND IN COMMAND, who have been tracking the place down.
