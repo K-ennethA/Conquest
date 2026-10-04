@@ -8,7 +8,7 @@ extends RefCounted
 ##   flag("quest.blight_road") >= 1 and not has("oakvale.guard.moved")
 ##   party_has("petalfang") or item("sagebloom_poultice") > 0
 ##   outcome() == "victory"
-##   spar_ready("crownhaven.spar.rowan")
+##   spar_ready("crownhaven.spar.rowan")   (legacy id: the General's spar)
 ##   after('opening.attack') and rests_since('opening.complete') >= 3   (story time: flag_times)
 ##
 ## Zero parser to write, and [method check] lets a content test parse + dry-run every condition

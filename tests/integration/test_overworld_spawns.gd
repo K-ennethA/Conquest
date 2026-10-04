@@ -132,7 +132,7 @@ func test_wayshrines_and_scripts_respawn_and_warp_to_real_entries() -> void:
 
 func test_scripted_moves_end_on_open_ground() -> void:
 	# A move to an impassable cell falls back to a straight line THROUGH walls (cutscene staging):
-	# Rowan once ran into the Chapel of the Starfall during the raid.
+	# A character once ran into the Chapel of the Starfall during the raid.
 	for a in _areas():
 		var g := OverworldGrid.from_map(a.terrain)
 		var cmds: Array = _flatten(a.on_enter)

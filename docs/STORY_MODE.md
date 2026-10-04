@@ -37,7 +37,7 @@ opt-in bout you start by talking to her). Ambient NPC talk speaks only when you 
    **Bram** and the **Lone Petalfang** only appear once `opening.complete`. Its east end
    is **River Crossing**: north over the Old Bridge, the King's road ends at Crownhaven's south gate.
 3. **Crownhaven** (in by the south gate) — the walled river city: keep, market, barracks
-   (**Sergeant Rowan**), the Royal Workshop. Walk into the **Royal Workshop's door** (east of the
+   (**General Varden** once the opening is over), the Royal Workshop. Walk into the **Royal Workshop's door** (east of the
    keep): **Professor Elias** waits INSIDE (`crownhaven_workshop`). Talk to him: he explains his new
    invention — the bonding shards, stones that let a person bond with a creature (placeholder
    lines) — gives you one (`key.bonding_shard`), and you **choose your starter** from
@@ -67,8 +67,8 @@ opt-in bout you start by talking to her). Ambient NPC talk speaks only when you 
 7. **Aftermath** — the General and the Warrior task you with getting stronger (to avenge your mother)
    while they prepare for war (`opening.complete`; `act1.find_rowan` is still set but nothing uses it
    to send you anywhere); a cairn for Briony. The whole starting region is then open: the placeholder
-   main quest is **Grow Stronger** (no destination). Sergeant Rowan's barracks hook and spar remain as
-   optional talk (`act1.met_rowan`).
+   main quest is **Grow Stronger** (no destination). General Varden's barracks line (he only stands there after `opening.complete`) and spar remain as
+   optional talk (`act1.met_rowan` is a LEGACY save key from when he was a separate Sergeant Rowan, now merged into the General; kept so saves stay valid).
 
 Controls: arrows / WASD / d-pad / sticks step one cell (tap a new direction = turn; hold = walk;
 Shift / R3 = run; every step costs its walk / run time even with Animations off); click / tap
@@ -79,7 +79,7 @@ evolution offers, whiteouts to the Wayshrine.
 
 **Placeholders to replace:** the starter options (`STARTER_OPTIONS`, roster TBD); the opening's
 story lines (`TODO(story)`); the human hero is not a battle unit yet (the party fights); the
-enemy units (`RAIDER_UNITS`: Undead ×2, Blightcap, Duskmaw) and the General's / Warrior's guest units (`GENERAL_UNIT` = Geode, `WARRIOR_UNIT` = Vineweave -- roster stand-ins; their names, `NAMES.GENERAL` / `NAMES.WARRIOR`, are placeholders and whether the General is Sergeant Rowan is open); people are procedural figures
+enemy units (`RAIDER_UNITS`: Undead ×2, Blightcap, Duskmaw) and the General's / Warrior's guest units (`GENERAL_UNIT` = Geode, `WARRIOR_UNIT` = Vineweave -- roster stand-ins; their names, `NAMES.GENERAL` / `NAMES.WARRIOR` = Talyn, female (she/her), are placeholders); people are procedural figures
 (`NpcEntity.figure` -- Professor Elias too, until his model exists) and buildings, door markers and
 interiors procedural props (`PropEntity.prop`: house, ruin, keep, tower, gate, windmill, stall,
 well, fence, crystal, mat, …). The hero's model is the Wren forge model (`HERO_MODEL`).
@@ -300,8 +300,8 @@ board, the duel and their replays know nothing about tiers.
   battle never marks anyone fallen and never ends the journey through the hero rule; with
   `spar_ko_recovers` its knocked-out leave it at 1 HP. The tactical objective banner shows a green
   "Friendly spar" tag; the duel's intro reads "Friendly spar: X squares up!". Shipped example:
-  **Sergeant Rowan** at the Crownhaven barracks, after the Act 1 hook, offers a repeatable duel
-  spar with his Geode (`crownhaven.spar.rowan`, built by `_rowan_spar_offer`).
+  **General Varden** at the Crownhaven barracks (after the opening) offers a repeatable duel
+  spar with his Geode (`crownhaven.spar.rowan` -- legacy id, kept for saves; built by `_general_spar_offer`).
 - **Protect objectives** — `ProtectUnit` is now a GUARD (`WinCondition.is_guard`): listed as a
   LOSE condition, its FAILED is a defeat (`GameModeRules`). A map authors it as a victory string,
   `"Protect Elias"` / `"Protect: Elias"` (`WinConditionLibrary` puts it on the lose side, matched
@@ -342,8 +342,8 @@ every duel here is the strict 1v1 creature duel — the people are trainers, the
 |---|---|---|---|
 | **Tester Fenna** — a trainer whose battle is a DUEL (line of sight 3, like Bram; Petalfang 0.9, 90 gold) | the Mossway (11,7), facing the path; after `opening.complete` | real duel, WHITEOUT | `trainer.mossway.fenna.defeated` |
 | **Lark** — the RIVAL, a first-batch tester (Blightcap "Puck"). First duel: opt-in -- talk to her inside Crownhaven's south gate (the road home) after the opening; then rematches by the arena | Crownhaven (17,21) → (23,18) | spar (a rival FRIENDLY), CONTINUE, 60 gold on a win, `clash_intro` | `rival.met`, `rival.stage` (duels fought), `rival.wins`, `rival.duel1`; encounter `crownhaven.rival.lark` |
-| **Sparring roster** — Corporal Wynn (Blightcap 0.8) < Lieutenant Aldous (Petalfang 0.95) < Sergeant Rowan (Geode 0.8, the existing spar); a "Sparring Roster" sign | the barracks yard; after the opening (Rowan after the Act 1 hook) | spar, CONTINUE, no purse | `crownhaven.spar.wynn` / `.aldous` / `.rowan` |
-| **The ambush** — Cutpurse Nell and her footpad hold the Mossbrook's plank bridge (the only crossing: the brook runs tree line to tree line) once Rowan has signed you on | the Mossway, trigger at (21,6); after `act1.met_rowan` | TWO real duels back to back (HP carries), WHITEOUT; Classic permadeath applies | `mossway.ambush.sprung`, `.footpad_beaten` (a beaten footpad stays beaten after a loss), `.cleared`; 40 + 180 gold + a Dawnpetal Draught |
+| **Sparring roster** — Corporal Wynn (Blightcap 0.8) < Lieutenant Aldous (Petalfang 0.95) < General Varden (Geode 0.8, the existing spar); a "Sparring Roster" sign | the barracks yard; after the opening (the General after his first line) | spar, CONTINUE, no purse | `crownhaven.spar.wynn` / `.aldous` / `.rowan` |
+| **The ambush** — Cutpurse Nell and her footpad hold the Mossbrook's plank bridge (the only crossing: the brook runs tree line to tree line) once you have spoken to the General at the barracks | the Mossway, trigger at (21,6); after `act1.met_rowan` | TWO real duels back to back (HP carries), WHITEOUT; Classic permadeath applies | `mossway.ambush.sprung`, `.footpad_beaten` (a beaten footpad stays beaten after a loss), `.cleared`; 40 + 180 gold + a Dawnpetal Draught |
 | **The Crown Arena** — a new `arena` prop (elliptical stone drum, pennants, gate arch) where the SE house stood; **Arena Master Bex** runs **the Crown Cup**; **Champion Isolde** offers rematches once her title is yours | Crownhaven (22..26, 19..21); master at (22,22), champion (25,18) | 4 spars | `arena.crown_cup.run` / `.round` / `.wins` / `.champion` (the title); rematch `arena.crown_cup.champion_beaten` |
 
 **Rematch scaling** — `BattleSpec.scale_flag` / `scale_step` / `scale_max_steps`: every opponent's
@@ -360,7 +360,7 @@ farm is a **cooldown per partner**, not a Growth gate: `StorySparring` stamps ev
 (`sparred.<encounter id>.rest` / `.step`, so nothing new in the save format), and the partner is
 ready again once the journey has rested `StoryRuleset.spar_cooldown_rests` times (default **1**:
 a Wayshrine / healer / whiteout rest) and walked `spar_cooldown_steps` (default 0). Content opts in
-with the new condition `spar_ready("<encounter id>")` (the roster, Rowan, Lark's and Isolde's
+with the new condition `spar_ready("<encounter id>")` (the roster, the General, Lark's and Isolde's
 rematches); a partner who is not ready says so ("rest up at the Wayshrine"). Spars never cause
 permadeath (#29): `BattleSpec.spar` as before.
 
@@ -805,7 +805,7 @@ clocks on each talk.
   phase variants: before the raid / after it (`opening.attack`) / after the first fight
   (`opening.complete`) / Act 1 (`act1.met_rowan`) and a few time-based ones ("3 rests after the
   opening": Crownhaven moves on, Oakvale rebuilds). Nobody mentions the raid before `opening.attack`.
-  Cutscenes (send-off, ceremony, raid, ruins arrival and the General's offer, Rowan's hook, the opt-in rival bout, ambush, arena,
+  Cutscenes (send-off, ceremony, raid, ruins arrival and the General's offer, the General's barracks line, the opt-in rival bout, ambush, arena,
   spars) stay in the builder.
 - **Story phases** — `StoryPhases` derives the timeline from the MAIN quests in `quests.json` (start
   flag, step flags, completion flag, in order): phase k = the first k milestones set. A new main quest

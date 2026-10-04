@@ -9,8 +9,8 @@ const DEFS: Array = [
 	{"id": "old", "title": "Old", "category": "side", "summary": "", "start_flag": "", "complete_flag": "",
 		"steps": [{"flag": "o.1", "text": "old step"}]},
 	{"id": "m", "title": "Main", "category": "main", "summary": "", "start_flag": "m.start", "complete_flag": "m.done",
-		"giver": "rowan", "location": "crownhaven",
-		"steps": [{"flag": "m.1", "text": "go to the ruins", "area": "oakvale_ruins", "npc": "rowan"},
+		"giver": "general", "location": "crownhaven",
+		"steps": [{"flag": "m.1", "text": "go to the ruins", "area": "oakvale_ruins", "npc": "general"},
 			{"flag": "m.done", "text": "report back"}]},
 	{"id": "s", "title": "Side", "category": "side", "summary": "", "start_flag": "", "complete_flag": "s.done",
 		"steps": [{"flag": "s.1", "text": "side one", "location": "mossway"}, {"flag": "s.done", "text": "side two"}]},
@@ -31,10 +31,10 @@ func test_old_entries_load_unchanged_and_new_pointers_resolve() -> void:
 	assert_eq(int(old["step_index"]), 0)
 	s.set_flag("m.start")
 	var m: Dictionary = QuestLog.entry_for(DEFS[1], s)
-	assert_eq(String(m["giver"]), "rowan", "giver")
+	assert_eq(String(m["giver"]), "general", "giver")
 	assert_eq(String(m["area"]), "oakvale_ruins", "the step's area wins")
 	assert_eq(String(m["location"]), "oakvale", "an area id resolves to its world place")
-	assert_eq(String(m["npc"]), "rowan", "the step's npc")
+	assert_eq(String(m["npc"]), "general", "the step's npc")
 	s.set_flag("m.1")
 	m = QuestLog.entry_for(DEFS[1], s)
 	assert_eq(int(m["step_index"]), 1, "the next step")

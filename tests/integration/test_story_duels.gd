@@ -217,7 +217,7 @@ func test_the_duel_content_ships_and_appears_on_its_flags() -> void:
 	assert_eq(fenna.battle.kind, BattleSpec.Kind.DUEL, "whose battle is a DUEL")
 	assert_false(fenna.battle.spar, "a real battle")
 	assert_true(moss.entity("bandit_ambush") is TriggerZone, "the ambush trigger")
-	for id in ["lark", "lark_arena", "wynn", "aldous", "rowan", "arena_master", "isolde", "arena"]:
+	for id in ["lark", "lark_arena", "wynn", "aldous", "general", "arena_master", "isolde", "arena"]:
 		assert_not_null(ch.entity(id), "Crownhaven has %s" % id)
 	assert_eq((ch.entity("arena") as PropEntity).prop, "arena", "the arena building")
 	var runs: Array = []
