@@ -794,7 +794,7 @@ func test_fellow_testers_attend_the_ceremony() -> void:
 	var ws := _area("crownhaven_workshop")
 	var before := StoryFixture.sent_off(StoryState.new())
 	var after := StoryFixture.past_opening(StoryState.new())
-	for id in ["tester_a", "tester_b"]:
+	for id in ["lyra", "cael"]:
 		var tester := ws.entity(id) as NpcEntity
 		assert_not_null(tester, "%s is in the workshop" % id)
 		assert_true(tester.is_present(before), "%s is there for the ceremony" % id)

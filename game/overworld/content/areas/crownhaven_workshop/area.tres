@@ -333,8 +333,8 @@ visible_if = "has(\"opening.attack\") and not has(\"opening.raiders_fled\")"
 
 [sub_resource type="Resource" id="Resource_hx1j3"]
 script = ExtResource("4_egi2v")
-speaker_id = &"npc_tester_a"
-speaker_name = "Tester"
+speaker_id = &"npc_lyra"
+speaker_name = "Lyra"
 side = &"right"
 text = "Professor Elias has been handing out shards to a few of us, to see how people bond."
 
@@ -344,20 +344,20 @@ beats = Array[Resource]([SubResource("Resource_hx1j3")])
 
 [sub_resource type="Resource" id="Resource_awlbg"]
 script = ExtResource("16_ef6in")
-speaker_id = &"npc_tester_a"
-speaker_name = "Tester"
+speaker_id = &"npc_lyra"
+speaker_name = "Lyra"
 figure = "villager"
-id = &"tester_a"
+id = &"lyra"
 cell = Vector3i(2, 4, 0)
 facing = "east"
-display_name = "Tester"
+display_name = "Lyra"
 tint = Color(0.42, 0.46, 0.36, 1)
 visible_if = "not has(\"opening.complete\")"
 on_interact = Array[Resource]([SubResource("Resource_7phog")])
 
 [sub_resource type="Resource" id="Resource_pibb0"]
 script = ExtResource("16_ef6in")
-id = &"tester_a_creature"
+id = &"lyra_creature"
 cell = Vector3i(3, 4, 0)
 facing = "east"
 display_name = "Geode"
@@ -366,8 +366,8 @@ visible_if = "not has(\"opening.complete\")"
 
 [sub_resource type="Resource" id="Resource_spl8c"]
 script = ExtResource("4_egi2v")
-speaker_id = &"npc_tester_b"
-speaker_name = "Tester"
+speaker_id = &"npc_cael"
+speaker_name = "Cael"
 side = &"right"
 text = "Professor Elias has been handing out shards to a few of us, to see how people bond."
 
@@ -377,20 +377,20 @@ beats = Array[Resource]([SubResource("Resource_spl8c")])
 
 [sub_resource type="Resource" id="Resource_738ck"]
 script = ExtResource("16_ef6in")
-speaker_id = &"npc_tester_b"
-speaker_name = "Tester"
+speaker_id = &"npc_cael"
+speaker_name = "Cael"
 figure = "villager"
-id = &"tester_b"
+id = &"cael"
 cell = Vector3i(2, 5, 0)
 facing = "east"
-display_name = "Tester"
+display_name = "Cael"
 tint = Color(0.42, 0.46, 0.36, 1)
 visible_if = "not has(\"opening.complete\")"
 on_interact = Array[Resource]([SubResource("Resource_e8dm6")])
 
 [sub_resource type="Resource" id="Resource_0cjoj"]
 script = ExtResource("16_ef6in")
-id = &"tester_b_creature"
+id = &"cael_creature"
 cell = Vector3i(3, 5, 0)
 facing = "east"
 display_name = "Mycothrall"

@@ -106,6 +106,9 @@ func _ready() -> void:
 ## never touches disk, never triggers a capture. Null when nothing has resolved it yet (or
 ## there is no live instance at all); callers keep showing their fallback in that case.
 static func get_cached(character_id) -> Texture2D:
+	var authored: Texture2D = PortraitLibrary.authored(character_id)
+	if authored != null:
+		return authored
 	var inst: PortraitCache = _find_instance()
 	if inst == null:
 		return null
@@ -115,7 +118,8 @@ static func get_cached(character_id) -> Texture2D:
 	return inst._memory_cache.get(key, null)
 
 
-## Resolve the portrait for [param character_id] (memory -> disk -> live capture, in that
+## Resolve the portrait for [param character_id] (authored art [PortraitLibrary] -> memory -> disk ->
+## live capture, in that
 ## order) and invoke [param cb] with the result EXACTLY once. [param cb] receives null when
 ## the id is empty, no live scene tree is reachable, rendering is unavailable (headless), the
 ## character has no model_scene, or the model failed to instantiate -- callers keep their
@@ -126,6 +130,12 @@ static func get_portrait(character_id, cb: Callable) -> void:
 	var key: StringName = _key_of(character_id)
 	if String(key).is_empty():
 		cb.call(null)
+		return
+
+	# Authored art (the owner's character sheets) wins over a capture, and needs no rig.
+	var authored: Texture2D = PortraitLibrary.authored(key)
+	if authored != null:
+		cb.call(authored)
 		return
 
 	var inst: PortraitCache = _find_or_create_instance()

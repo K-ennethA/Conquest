@@ -360,3 +360,14 @@ asked about. An earlier decision stands unless the owner changes it.
     challenge.
 82. **Evolution may be triggered by different triggers** -- to be discussed later. Level is added as
     one more trigger kind; nothing is migrated.
+
+### The cast, from the owner's reference sheets (2026-10-04) -- docs/design/characters/README.md
+83. **The villains:** **Varrick Silas** is the enemy advisor (#62). The **Shadow Assassin** and
+    **Kellan** are two of Varrick's main enforcers.
+84. **Varden's side:** **Talyn** is General Varden's ally.
+85. **The chiefs:** **Nyra** is the Deepwood chief (forest); **Eloi** the sea chief (Beach Village);
+    **Saevi** the winter chief (Frostpeak); **Kazren** the mountain chief (Mountain Base).
+86. **The rivals / allies:** **Lyra** is a rival and ally; **Cael** is the other, a friend and ally
+    -- the two testers of #60 (Professor Elias' students, per their sheets).
+- The sheets are the characters' profile art (cropped portraits in game/ui/portraits/) and the
+  reference for their models.
