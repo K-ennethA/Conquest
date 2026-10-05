@@ -18,6 +18,7 @@ const SHEETS := {
 	"lyra": ["lyra.webp", Rect2i(1024, 20, 242, 214)],
 	"cael": ["cael.webp", Rect2i(1024, 20, 242, 227)],
 	"vayne": ["vayne.webp", Rect2i(1045, 29, 245, 212)],
+	"thief": ["thief.webp", Rect2i(1003, 25, 240, 247)],
 }
 
 func _initialize() -> void:

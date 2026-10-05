@@ -374,3 +374,8 @@ asked about. An earlier decision stands unless the owner changes it.
 87. **Vayne, the King of Thieves,** is the chief of the Hidden Thieves: the 4th thief of #42 (on the
     level of a chief; honors and heals the hero, then battles with his bonded ally, no chains, no
     shard). Sheet: docs/design/characters/vayne.webp.
+88. **Lyra is met in Deepwood Village** (she joins the hero for the Eldroot legend battle as a
+    deployable unit, #56 / #74); **Cael is met in Beach Village.**
+89. **Lark is merged into Lyra:** no separate rival named Lark.
+90. **The generic thief** (docs/design/characters/thief.webp): the look of ordinary thieves, e.g. the
+    Hidden Thieves gang; variations can indicate region or faction.
