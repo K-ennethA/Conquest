@@ -329,15 +329,19 @@ static func from_battle_request(br) -> Dictionary:
 		if m is Dictionary:
 			party.append({"member_id": _str(m.get("member_id", "")),
 				"character_id": m.get("character_id", ""), "current_hp": m.get("current_hp", -1),
-				"item_ids": [m.get("item_id")] if _str(m.get("item_id", "")) != "" else []})
+				"item_ids": [m.get("item_id")] if _str(m.get("item_id", "")) != "" else [],
+				"level": _level_of(m.get("level", 0))})
 	var source := _str(br.get("source", "wild"))
 	var foes: Array = []
 	var opponent = br.get("opponent", {})
+	# STORY LEVELS (PROGRESSION.md): a row's own "level", else the request's enemy_level.
+	var enemy_level: int = _level_of(br.get("enemy_level", 0))
 	if opponent is Dictionary:
 		for t in opponent.get("team", []):
 			if t is Dictionary:
+				var lv: int = _level_of(t.get("level", 0))
 				foes.append({"character_id": t.get("character_id", ""),
-					"strength": t.get("strength", 1.0)})
+					"strength": t.get("strength", 1.0), "level": lv if lv > 0 else enemy_level})
 	# A wild encounter is ONE foe (DECISIONS.md #3), whatever the table authored.
 	if source == "wild" and foes.size() > 1:
 		foes = foes.slice(0, 1)
@@ -391,3 +395,8 @@ static func _fail(reason: String) -> Dictionary:
 
 static func _str(v) -> String:
 	return String(v) if (typeof(v) == TYPE_STRING or typeof(v) == TYPE_STRING_NAME) else ""
+
+
+## A story level from untrusted JSON: a non-negative int, 0 for anything else.
+static func _level_of(v) -> int:
+	return clampi(int(v), 0, 200) if (typeof(v) == TYPE_INT or typeof(v) == TYPE_FLOAT) else 0

@@ -6,6 +6,12 @@ extends Resource
 
 enum Kind { TACTICAL, DUEL }
 enum DefeatPolicy { WHITEOUT, CONTINUE, RETRY }
+## How the foes' story level is decided (docs/design/PROGRESSION.md §3):
+## FIXED -- the authored level ([member enemy_level] / each row's "level"): trainers, main-line
+## bosses (the linear spine) and LEGENDS ([method make_legend], DECISIONS.md #81).
+## SCALED -- clamp(party top level + [member scale_offset], [member scale_min], [member scale_max]):
+## CHIEFS ([method make_chief], DECISIONS.md #80), so they can be taken in any order.
+enum LevelMode { FIXED, SCALED }
 
 @export var kind: Kind = Kind.TACTICAL
 ## Stable id; empty = derived by the caller (trainer.<area>.<id>, ...).
@@ -19,7 +25,9 @@ enum DefeatPolicy { WHITEOUT, CONTINUE, RETRY }
 @export_enum("Easy", "Normal", "Hard", "Brutal") var ai_difficulty: int = 1
 @export var opponent_name: String = ""
 @export var opponent_speaker_id: StringName = &""
-## Duel: [{character_id, strength}] -- strength is opaque upstream (EVOLUTION decides levels).
+## Duel: [{character_id, strength, level?}] -- `level` = that foe's STORY LEVEL
+## (docs/design/PROGRESSION.md; missing = [member enemy_level]); strength stays a stat multiplier on
+## top of it (rematch scaling, DuelScaling).
 @export var opponent_team: Array[Dictionary] = []
 @export var intro_scene: StoryScene
 @export var outro_scene: StoryScene
@@ -41,6 +49,23 @@ enum DefeatPolicy { WHITEOUT, CONTINUE, RETRY }
 ## in a duel, a matching party member fainting. Either way the journey is over: GAME OVER, back
 ## to the last save (both tiers).
 @export var protect: Array[String] = []
+
+@export_group("Level")
+## The FOES' story level (docs/design/PROGRESSION.md §3): every tactical enemy unit (a map spawn may
+## carry its own "level") and every [member opponent_team] row without a "level". 0 = no level
+## (roster base stats).
+@export_range(0, 200) var enemy_level: int = 0
+## A CHIEF or LEGEND battle: XP uses [member ProgressionRules.battle_mult_boss], and the content
+## validator does not hold it to the easy-species rule ([method catch_warnings]).
+@export var boss_battle: bool = false
+## FIXED (the authored levels) or SCALED to the party ([enum LevelMode]).
+@export var level_mode: LevelMode = LevelMode.FIXED
+## SCALED: levels above (+) or below (-) the party's top level.
+@export_range(-50, 50) var scale_offset: int = 0
+## SCALED: never below this level (a chief: its region band's min).
+@export_range(1, 200) var scale_min: int = 1
+## SCALED: never above this level (a chief: its region band's max); 0 = only the level cap.
+@export_range(0, 200) var scale_max: int = 0
 
 @export_group("Scaling")
 ## REMATCH SCALING (a rival, a champion, a repeat cup -- DECISIONS.md #33): every opponent's
@@ -88,6 +113,9 @@ func to_request(source: String, fallback_id: String = "") -> BattleRequest:
 		"spar": spar,
 		"protect": protect.duplicate(),
 	}
+	if boss_battle:
+		r.rules["boss"] = true
+	r.enemy_level = maxi(0, enemy_level)
 	var items: Array = []
 	for i in reward_items:
 		items.append(String(i))
@@ -113,9 +141,50 @@ func scale_factor(state: StoryState) -> float:
 	return 1.0 + scale_step * float(n)
 
 
-## Scale [param request]'s opponent strengths for [param state] ([method scale_factor]); a no-op
-## for an unscaled spec.
+## The foes' level this spec resolves to for [param state]: FIXED = [member enemy_level]; SCALED =
+## [method Progression.scaled_level] of the party's top level (no state = scale_min).
+func resolved_enemy_level(state: StoryState) -> int:
+	if level_mode != LevelMode.SCALED:
+		return maxi(0, enemy_level)
+	var top: int = state.party_top_level() if state != null else maxi(1, scale_min)
+	return Progression.scaled_level(top, scale_offset, scale_min, scale_max)
+
+
+## Make [param spec] a CHIEF battle (DECISIONS.md #80): SCALED inside [param band] (its region's)
+## at [param offset] from the party's top level; a boss battle for XP. Returns the spec.
+static func make_chief(spec: BattleSpec, band: Vector2i, offset: int = 0) -> BattleSpec:
+	var b: Vector2i = Progression.normalize_band(band)
+	spec.level_mode = LevelMode.SCALED
+	spec.scale_offset = offset
+	spec.scale_min = maxi(1, b.x)
+	spec.scale_max = maxi(0, b.y)
+	spec.boss_battle = true
+	return spec
+
+
+## Make [param spec] a LEGEND battle (DECISIONS.md #81): FIXED at its area band's max +
+## [member ProgressionRules.legend_over_band] -- NEVER scaled; a boss battle for XP. Returns the spec.
+static func make_legend(spec: BattleSpec, band: Vector2i, rules: ProgressionRules = null) -> BattleSpec:
+	spec.level_mode = LevelMode.FIXED
+	spec.enemy_level = Progression.legend_level(Progression.normalize_band(band), rules)
+	for t in spec.opponent_team:
+		(t as Dictionary).erase("level")
+	spec.boss_battle = true
+	return spec
+
+
+## Scale [param request] for [param state]: a SCALED spec sets every foe to
+## [method resolved_enemy_level] (rows' own levels are overridden); then the rematch STRENGTH
+## ([method scale_factor]). A FIXED spec without a rematch flag is left alone.
 func apply_scaling(request: BattleRequest, state: StoryState) -> void:
+	if request != null and level_mode == LevelMode.SCALED:
+		var lv: int = resolved_enemy_level(state)
+		request.enemy_level = lv
+		var rows = request.opponent.get("team", [])
+		if rows is Array:
+			for t in rows:
+				if t is Dictionary:
+					(t as Dictionary)["level"] = lv
 	var f: float = scale_factor(state)
 	if request == null or is_equal_approx(f, 1.0):
 		return
@@ -160,11 +229,40 @@ func validate(issues: Array[String]) -> void:
 		elif kind == Kind.DUEL and not DuelMoveCompiler.is_duel_eligible(chr):
 			# The duel refuses a kit with no offensive move (DuelSetup lists only eligible units).
 			issues.append("duel opponent '%s' is not duel-eligible" % cid)
+	var cap: int = ProgressionRules.current().max_level
+	if enemy_level > cap:
+		issues.append("enemy_level %d is above the level cap %d" % [enemy_level, cap])
+	for t in opponent_team:
+		if int((t as Dictionary).get("level", 0)) > cap:
+			issues.append("opponent '%s' level %d is above the level cap" % [String(t.get("character_id", "")), int(t.get("level", 0))])
+	if level_mode == LevelMode.SCALED and scale_max > 0 and scale_min > scale_max:
+		issues.append("SCALED level: scale_min %d is above scale_max %d" % [scale_min, scale_max])
 	if not scale_flag.strip_edges().is_empty() and (scale_step <= 0.0 or scale_max_steps <= 0):
 		issues.append("scale_flag '%s' set but scale_step / scale_max_steps are zero" % scale_flag)
 	for i in reward_items:
 		if not ItemLibrary.has_item(i):
 			issues.append("reward item '%s' does not exist" % i)
+
+
+## CONTENT GUIDANCE (DECISIONS.md #78, PROGRESSION.md §5): ordinary trainers, new shard users and
+## chain-using grunts field mostly EASY (high catch rate) species. One warning per opponent row of a
+## NON-BOSS battle whose species' catch rate is below [member ProgressionRules.low_catch_rate].
+## Advisory only -- returned for a content test to report, never logged at runtime.
+func catch_warnings(rules: ProgressionRules = null) -> Array[String]:
+	var out: Array[String] = []
+	if boss_battle:
+		return out
+	var r: ProgressionRules = rules if rules != null else ProgressionRules.current()
+	for t in opponent_team:
+		var cid: String = String((t as Dictionary).get("character_id", ""))
+		var chr: CharacterResource = CharacterLibrary.get_character(StringName(cid))
+		if chr == null:
+			continue
+		var rate: float = Progression.catch_rate_of(chr, r)
+		if rate < r.low_catch_rate:
+			out.append("%s fields '%s' (catch rate %.2f < %.2f) but is not a boss battle"
+				% [opponent_name if not opponent_name.is_empty() else encounter_id, cid, rate, r.low_catch_rate])
+	return out
 
 
 func _to_string() -> String:

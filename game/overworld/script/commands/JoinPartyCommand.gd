@@ -10,13 +10,21 @@ extends StoryCommand
 ## EVOLUTION Growth the recruit joins with (a companion who has already been growing), written
 ## once into its member record. 0 = a fresh recruit.
 @export var growth: int = 0
+## The STORY LEVEL the recruit joins at (docs/design/PROGRESSION.md). 0 = the progression rules'
+## [member ProgressionRules.starter_level] (the starter joins this way).
+@export_range(0, 200) var level: int = 0
+
+
+## The level this command's recruit joins at ([member level], else the starter level).
+func join_level() -> int:
+	return level if level > 0 else ProgressionRules.current().starter_level
 
 
 func run(ctx: ScriptContext) -> void:
 	var cap: int = 6
 	if ctx.has_session_method(&"party_cap"):
 		cap = int(ctx.session.party_cap())
-	var m: StoryPartyMember = ctx.state.add_member(String(character_id), nickname, cap)
+	var m: StoryPartyMember = ctx.state.add_member(String(character_id), nickname, cap, join_level())
 	if m == null:
 		ctx.vars["joined"] = false
 		return
@@ -30,9 +38,11 @@ func run(ctx: ScriptContext) -> void:
 
 
 func describe() -> String:
-	return "Join party: %s" % character_id
+	return "Join party: %s (Lv %d)" % [character_id, join_level()]
 
 
 func validate(issues: Array[String]) -> void:
 	if CharacterLibrary.get_character(character_id) == null:
 		issues.append("character '%s' does not exist" % character_id)
+	if level > ProgressionRules.current().max_level:
+		issues.append("join level %d is above the level cap" % level)

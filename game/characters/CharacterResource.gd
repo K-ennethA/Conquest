@@ -115,6 +115,25 @@ const MAX_MOVES: int = 4
 ## (turn start, kill, …) or reads it as a standing rule modifier. Unbounded.
 @export var abilities: Array[AbilityResource] = []
 
+@export_group("Progression (story)")
+## STORY levels only (docs/design/PROGRESSION.md, [Progression]); open modes never read these.
+## Per-stat GROWTH per level: stat(L) = round(base * (1 + growth * (L - 1))). A negative value
+## (the default) = [member ProgressionRules.default_growth]. Speed's growth is further scaled by
+## [member ProgressionRules.speed_growth_mult]; movement never scales.
+@export var health_growth: float = -1.0
+@export var attack_growth: float = -1.0
+@export var defense_growth: float = -1.0
+@export var magic_growth: float = -1.0
+@export var magic_defense_growth: float = -1.0
+@export var speed_growth: float = -1.0
+## Base XP this species yields when defeated. 0 (the default) = derived from its
+## [method power_budget] ([method Progression.xp_yield_of]): stronger species give more.
+@export var xp_yield: int = 0
+## How easy this species is to bond with / catch, 0..1 (DECISIONS.md #78): it MULTIPLIES the
+## befriend chance. Negative (the default) = derived from its power budget
+## ([method Progression.catch_rate_of]): strong species are hard.
+@export var catch_rate: float = -1.0
+
 
 func move_count() -> int:
 	return mini(moveset.size(), MAX_MOVES)

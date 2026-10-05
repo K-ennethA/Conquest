@@ -53,3 +53,4 @@ entry_points = {
 }
 entities = Array[Resource]([SubResource("Resource_v7yho"), SubResource("Resource_qpupg"), SubResource("Resource_q41sn"), SubResource("Resource_kcl5c")])
 parent_area = &"river_crossing"
+level_band = Vector2i(2, 8)

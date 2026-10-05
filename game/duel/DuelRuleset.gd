@@ -128,8 +128,10 @@ func join_chance(subdued: bool) -> float:
 ## Roll the join offer from [param rng] (the battle's seeded stream -- see
 ## [method DuelBattle.befriend_rng]). Returns { chance, roll, offered, subdued }. A chance of
 ## 0 never draws, and 1 always offers, so an authored certainty never shifts the stream.
-func roll_join(rng: RandomNumberGenerator, subdued: bool) -> Dictionary:
-	var chance: float = join_chance(subdued)
+## [param catch_mult]: the species' catch / bond rate ([method Progression.catch_rate_of], story only;
+## 1.0 = the plain chance, as every open-mode duel rolls).
+func roll_join(rng: RandomNumberGenerator, subdued: bool, catch_mult: float = 1.0) -> Dictionary:
+	var chance: float = clampf(join_chance(subdued) * clampf(catch_mult, 0.0, 1.0), 0.0, 1.0)
 	var roll: float = -1.0
 	var offered: bool = false
 	if chance >= 1.0:

@@ -38,10 +38,12 @@ var source: String = SOURCE_SCRIPT
 ## The battle's RNG root. Filled by StoryController with FRESH ENTROPY per battle
 ## (DECISIONS.md: every battle starts from fresh entropy; retrying re-rolls).
 var seed: int = 0
-## Ordered snapshot of the fielded party: [{member_id, character_id, current_hp, item_id, growth, hero}]
-## (`hero` = the main character as a battle unit: its fall is always a game over).
+## Ordered snapshot of the fielded party: [{member_id, character_id, current_hp, item_id, growth, hero,
+## level}] (`hero` = the main character as a battle unit: its fall is always a game over; `level` =
+## the member's story level -- its stats in this battle).
 var party: Array = []
-## {name, speaker_id, portrait, team: [{character_id, strength, moves?}]}.
+## {name, speaker_id, portrait, team: [{character_id, strength, level?, moves?}]} (`level`: the
+## foe's story level; missing = [member enemy_level]).
 var opponent: Dictionary = {}
 ## {area_id, tile_id, environment_preset, lighting_preset, weather}.
 var backdrop: Dictionary = {}
@@ -65,6 +67,30 @@ var ai_difficulty: int = 1
 var clash_intro: bool = false
 ## {area_id, cell: [c, r, f], facing} -- where the player walks back in (StoryController fills it).
 var return_to: Dictionary = {}
+# --- story levels (docs/design/PROGRESSION.md) ---
+## The level of every FOE without one of its own: a tactical board's enemy units (player 1+, a map
+## spawn may still carry its own "level"), and any opponent team row with no "level". 0 = no level
+## (roster base stats -- reads as level 1).
+var enemy_level: int = 0
+## The level of a tactical board's player-side units that are NOT party members (a guest ally the
+## map places). StoryController fills it with the party's top level. 0 = roster base.
+var ally_level: int = 0
+
+
+## The story level of the foe [param index] in the opponent team (its row's "level", else
+## [member enemy_level]; 0 = none).
+func foe_level(index: int = 0) -> int:
+	var team = opponent.get("team", [])
+	if team is Array and index >= 0 and index < (team as Array).size() and team[index] is Dictionary:
+		var lv: int = int((team[index] as Dictionary).get("level", 0))
+		if lv > 0:
+			return lv
+	return maxi(0, enemy_level)
+
+
+## A chief / legend battle (rules["boss"]): XP uses [member ProgressionRules.battle_mult_boss].
+func is_boss_battle() -> bool:
+	return bool(rules.get("boss", false))
 
 
 func is_duel() -> bool:
@@ -172,6 +198,8 @@ func to_dict() -> Dictionary:
 		"ai_difficulty": ai_difficulty,
 		"clash_intro": clash_intro,
 		"return": return_to.duplicate(true),
+		"enemy_level": enemy_level,
+		"ally_level": ally_level,
 	}
 
 
@@ -207,6 +235,8 @@ static func from_dict(d) -> BattleRequest:
 	r.ai_difficulty = int(d.get("ai_difficulty", 1))
 	r.clash_intro = bool(d.get("clash_intro", false))
 	r.return_to = _dict(d.get("return", {}))
+	r.enemy_level = maxi(0, int(d.get("enemy_level", 0)))
+	r.ally_level = maxi(0, int(d.get("ally_level", 0)))
 	return r
 
 

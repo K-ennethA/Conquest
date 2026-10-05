@@ -40,12 +40,16 @@ enum Behaviour {
 ## The runtime request for this wild encounter. [param id_kind] names how it started ("grass" =
 ## a hidden roll, "wild" = a visible creature); [param opening] is the contact's
 ## [constant BattleRequest.OPENING_AMBUSH] / [constant BattleRequest.OPENING_AMBUSHED] /
-## [constant BattleRequest.OPENING_NEUTRAL] ("" = none: a hidden roll).
-func to_request(area_id: String, id_kind: String = "grass", opening: String = "") -> BattleRequest:
+## [constant BattleRequest.OPENING_NEUTRAL] ("" = none: a hidden roll). [param level]: the wild
+## creature's STORY LEVEL, rolled from its zone's band ([method EncounterRoller.roll_level]); 0 = no
+## level (roster base).
+func to_request(area_id: String, id_kind: String = "grass", opening: String = "", level: int = 0) -> BattleRequest:
 	var r: BattleRequest
 	var eid: String = "%s.%s.%s" % [area_id, id_kind, character_id]
 	if kind == Kind.TACTICAL and battle != null:
 		r = battle.to_request(BattleRequest.SOURCE_WILD, eid)
+		if level > 0:
+			r.enemy_level = level
 	else:
 		r = BattleRequest.new()
 		r.kind = BattleRequest.KIND_DUEL
@@ -61,6 +65,9 @@ func to_request(area_id: String, id_kind: String = "grass", opening: String = ""
 		r.rules = {"can_flee": true, "can_befriend": can_befriend,
 			"defeat_policy": BattleRequest.DEFEAT_WHITEOUT, "story_critical": false}
 		r.rewards = {"gold": 0, "items": [], "points": 0, "flags": []}
+		if level > 0:
+			r.enemy_level = level
+			(r.opponent["team"][0] as Dictionary)["level"] = level
 	if BattleRequest.OPENINGS.has(opening):
 		r.rules[BattleRequest.RULE_OPENING] = opening
 	return r

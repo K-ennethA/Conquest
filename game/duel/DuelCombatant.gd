@@ -15,6 +15,10 @@ var strength: float = 1.0
 var current_hp: int = -1
 var item_ids: Array[String] = []
 var skin_id: String = ""
+## STORY LEVEL (docs/design/PROGRESSION.md): the duel compiles this member's stats AT this level
+## ([method Progression.apply_level], then [member strength] on top). 0 = no level (roster base): every
+## open-mode duel, so their requests and replays are unchanged.
+var level: int = 0
 
 
 static func make(p_character_id: StringName, p_member_id: String = "") -> DuelCombatant:
@@ -25,7 +29,7 @@ static func make(p_character_id: StringName, p_member_id: String = "") -> DuelCo
 
 
 func to_dict() -> Dictionary:
-	return {
+	var d := {
 		"member_id": member_id,
 		"character_id": String(character_id),
 		"moveset_override": moveset_override.duplicate(),
@@ -34,6 +38,10 @@ func to_dict() -> Dictionary:
 		"item_ids": item_ids.duplicate(),
 		"skin_id": skin_id,
 	}
+	# Only a levelled (story) combatant carries the key: open-mode replay headers stay byte-identical.
+	if level > 0:
+		d["level"] = level
+	return d
 
 
 ## STRICT importer (CONQUEST.md rule 8): types checked, the character id must be a known
@@ -62,6 +70,10 @@ static func from_dict(d) -> Dictionary:
 	c.moveset_override = _strings(d.get("moveset_override", []))
 	c.item_ids = _strings(d.get("item_ids", []))
 	c.skin_id = _str(d.get("skin_id", ""))
+	var lv = d.get("level", 0)
+	if typeof(lv) != TYPE_FLOAT and typeof(lv) != TYPE_INT:
+		return _fail("bad_level")
+	c.level = clampi(int(lv), 0, 200)
 	return {"success": true, "reason": "", "combatant": c}
 
 

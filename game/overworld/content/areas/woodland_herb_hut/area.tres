@@ -53,3 +53,4 @@ entry_points = {
 }
 entities = Array[Resource]([SubResource("Resource_poj3c"), SubResource("Resource_e8hal"), SubResource("Resource_yhn7o"), SubResource("Resource_qlqb5")])
 parent_area = &"woodland_town"
+level_band = Vector2i(8, 15)

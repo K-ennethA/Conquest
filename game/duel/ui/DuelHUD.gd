@@ -636,6 +636,13 @@ func show_results(result: DuelResult, standalone: bool = true) -> void:
 		growth_box.alignment = BoxContainer.ALIGNMENT_CENTER
 		col.add_child(growth_box)
 		GrowthGems.fill_result_rows(growth_box, result.growth, ConquestTheme.FS_BODY)
+	if not result.progress.is_empty():
+		# STORY: the XP / level-ups Continue will award (PROGRESSION.md).
+		var progress_box := VBoxContainer.new()
+		progress_box.name = "ProgressRows"
+		progress_box.alignment = BoxContainer.ALIGNMENT_CENTER
+		col.add_child(progress_box)
+		ProgressRows.fill_result_rows(progress_box, result.progress, ConquestTheme.FS_BODY)
 	var seed_line := Label.new()
 	seed_line.text = "Seed %d" % result.seed
 	seed_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

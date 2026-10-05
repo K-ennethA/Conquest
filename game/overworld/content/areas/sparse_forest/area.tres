@@ -106,3 +106,4 @@ entry_points = {
 }
 entities = Array[Resource]([SubResource("Resource_lxepw"), SubResource("Resource_hjhvd"), SubResource("Resource_ae2hf"), SubResource("Resource_imohw"), SubResource("Resource_56w5p"), SubResource("Resource_ap5xq")])
 encounter_zones = Array[Resource]([SubResource("Resource_k0fs6")])
+level_band = Vector2i(8, 15)

@@ -14,6 +14,7 @@ opponent_team = Array[Dictionary]([{
 }])
 defeat_policy = 1
 spar = true
+enemy_level = 6
 scale_flag = "arena.crown_cup.wins"
 scale_step = 0.05
 scale_max_steps = 4
@@ -32,6 +33,7 @@ opponent_team = Array[Dictionary]([{
 }])
 defeat_policy = 1
 spar = true
+enemy_level = 7
 scale_flag = "arena.crown_cup.wins"
 scale_step = 0.05
 scale_max_steps = 4
@@ -50,6 +52,7 @@ opponent_team = Array[Dictionary]([{
 }])
 defeat_policy = 1
 spar = true
+enemy_level = 8
 scale_flag = "arena.crown_cup.wins"
 scale_step = 0.05
 scale_max_steps = 4
@@ -71,6 +74,7 @@ opponent_team = Array[Dictionary]([{
 }])
 defeat_policy = 1
 spar = true
+enemy_level = 10
 scale_flag = "arena.crown_cup.wins"
 scale_step = 0.05
 scale_max_steps = 4

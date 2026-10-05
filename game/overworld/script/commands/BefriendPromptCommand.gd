@@ -36,7 +36,9 @@ func run(ctx: ScriptContext) -> void:
 	var cap: int = 6
 	if ctx.has_session_method(&"party_cap"):
 		cap = int(ctx.session.party_cap())
-	var m: StoryPartyMember = ctx.state.add_member(cid, "", cap)
+	# A befriended creature keeps the level it was met at (PROGRESSION.md §1); unknown = level 1.
+	var met_level: int = maxi(1, int(result.befriend_offer.get("level", 0)))
+	var m: StoryPartyMember = ctx.state.add_member(cid, "", cap, met_level)
 	if m == null:
 		if ctx.has_host_method(&"show_dialogue"):
 			var full := StoryScene.new()

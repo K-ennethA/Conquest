@@ -130,7 +130,11 @@ func refresh(snap: bool = false, delta: float = 0.0) -> void:
 	var alive: bool = _alive()
 	var ch = unit.character_resource if alive and "character_resource" in unit else null
 	var display: String = unit.get_display_name() if alive else _name.text
-	_name.text = display
+	# A STORY duel's units carry their level (PROGRESSION.md): "Barkling  Lv 7".
+	if alive and unit is Node and (unit as Node).has_meta(StoryBattleBridge.LEVEL_META):
+		_name.text = "%s  Lv %d" % [display, int((unit as Node).get_meta(StoryBattleBridge.LEVEL_META))]
+	elif alive:
+		_name.text = display
 	if alive:
 		var colors: Array = ConquestTheme.unit_portrait_colors(unit)
 		ConquestTheme.set_portrait(_crest, display, colors[0], colors[1])

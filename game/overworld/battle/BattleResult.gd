@@ -27,8 +27,13 @@ var outcome: String = OUTCOME_ABORTED
 var party_after: Array = []
 ## Character ids of defeated foes (growth / evolution input).
 var defeated: Array = []
+## The STORY LEVEL of each defeated foe, parallel to [member defeated] (XP input,
+## [StoryProgression]). May be empty (a result that does not know them): the XP maths then reads
+## the request's opponent rows / enemy level instead.
+var defeated_levels: Array = []
 var befriended: String = ""
-## {character_id, accepted} or {} when no offer.
+## {character_id, accepted, level} or {} when no offer (`level`: the foe's story level -- a
+## befriended creature joins at it; 0 / missing = unknown).
 var befriend_offer: Dictionary = {}
 var turns: int = 0
 ## Battle items the player USED ({item_id: count}) -- taken from the story bag by
@@ -74,6 +79,7 @@ func to_dict() -> Dictionary:
 		"outcome": outcome,
 		"party_after": party_after.duplicate(true),
 		"defeated": defeated.duplicate(),
+		"defeated_levels": defeated_levels.duplicate(),
 		"befriended": befriended,
 		"befriend_offer": befriend_offer.duplicate(true),
 		"turns": turns,
@@ -108,6 +114,10 @@ static func from_dict(d) -> BattleResult:
 	if df is Array:
 		for e in df:
 			r.defeated.append(String(e))
+	var dl = d.get("defeated_levels", [])
+	if dl is Array:
+		for e in dl:
+			r.defeated_levels.append(maxi(0, int(e)) if (e is int or e is float) else 0)
 	r.befriended = String(d.get("befriended", ""))
 	var off = d.get("befriend_offer", {})
 	if off is Dictionary and not off.is_empty():
@@ -115,6 +125,10 @@ static func from_dict(d) -> BattleResult:
 			"character_id": String(off.get("character_id", "")),
 			"accepted": bool(off.get("accepted", false)),
 		}
+		# The level it was met at -- only when the battle knew one (a level-less offer keeps its shape).
+		var lv = off.get("level", 0)
+		if (lv is int or lv is float) and int(lv) > 0:
+			r.befriend_offer["level"] = int(lv)
 	r.turns = maxi(0, int(d.get("turns", 0)))
 	r.items_used = _count_map(d.get("items_used", {}))
 	r.spar = bool(d.get("spar", false))

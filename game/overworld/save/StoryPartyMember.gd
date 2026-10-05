@@ -57,15 +57,89 @@ var fallen_info: Dictionary = {}
 ## The MAIN CHARACTER as a battle unit (the hero is not one yet -- this is the hook): falling in
 ## any real battle is always a GAME OVER ([StoryPermadeath]). Saved as "hero".
 var is_hero: bool = false
+## STORY LEVEL (docs/design/PROGRESSION.md, [Progression]): 1 .. max_level. Stats in every story
+## battle are this level's ([method Progression.apply_level]). Saved as "level"; an older save
+## loads every member at [member ProgressionRules.legacy_level].
+var level: int = 1
+## Cumulative XP (never below the XP its [member level] needs). Saved as "xp".
+var xp: int = 0
+## BOND XP (DECISIONS.md #68): earned by fighting alongside the hero; [method bond_level] reads it.
+## Saved as "bond_xp"; an older save loads 0.
+var bond_xp: int = 0
 
 
-static func create(p_member_id: String, p_character_id: String, p_nickname: String = "") -> StoryPartyMember:
+static func create(p_member_id: String, p_character_id: String, p_nickname: String = "",
+		p_level: int = 1) -> StoryPartyMember:
 	var m := StoryPartyMember.new()
 	m.member_id = p_member_id
 	m.character_id = p_character_id
 	m.line = line_of(p_character_id)
 	m.nickname = p_nickname
+	m.set_level(p_level)
 	return m
+
+
+# --- Level / XP / bond (PROGRESSION.md) ---------------------------------------------------
+
+## Put this member at [param p_level] (clamped to 1 .. max_level) with exactly that level's XP.
+## HP keeps its RATIO (a full member stays full).
+func set_level(p_level: int, rules: ProgressionRules = null) -> void:
+	var old_max: int = max_hp()
+	level = Progression.clamp_level(p_level, rules)
+	xp = Progression.xp_for_level(level, rules)
+	_keep_hp_ratio(old_max)
+
+
+## Add [param gained] XP (the cap discards the excess) and level up as far as it reaches -- stats
+## follow the new level and current HP keeps its ratio. Returns [method Progression.add_xp]'s
+## {xp, level_before, level_after, gained}.
+func add_xp(gained: int, rules: ProgressionRules = null) -> Dictionary:
+	var old_max: int = max_hp()
+	var out: Dictionary = Progression.add_xp(xp, gained, rules)
+	xp = int(out["xp"])
+	level = maxi(level, int(out["level_after"]))
+	_keep_hp_ratio(old_max)
+	return out
+
+
+## XP still needed to the next level (0 at the cap).
+func xp_to_next(rules: ProgressionRules = null) -> int:
+	return Progression.xp_to_next(xp, rules)
+
+
+## Progress through the current level, 0..1 (the party page's XP bar).
+func level_progress(rules: ProgressionRules = null) -> float:
+	return Progression.level_progress(xp, rules)
+
+
+## Bond level 0 .. bond_max ([method Progression.bond_level]).
+func bond_level(rules: ProgressionRules = null) -> int:
+	return Progression.bond_level(bond_xp, rules)
+
+
+## Add [param n] bond XP (non-positive = no-op); returns the new bond level.
+func add_bond(n: int, rules: ProgressionRules = null) -> int:
+	if n > 0:
+		bond_xp += n
+	return bond_level(rules)
+
+
+## The member's current form AT ITS LEVEL -- a private copy for display (the party page's stat
+## table); the roster resource is never touched. Null for an unknown character.
+func leveled_character() -> CharacterResource:
+	return Progression.leveled_copy(character(), level)
+
+
+## A max-HP change (level up, legacy load) keeps the member's HP ratio; full stays full, a
+## knocked-out member stays at 0.
+func _keep_hp_ratio(old_max: int) -> void:
+	if current_hp == HP_FULL or current_hp <= 0:
+		return
+	var new_max: int = max_hp()
+	if new_max == old_max:
+		return
+	var hp: int = clampi(roundi(float(current_hp) / float(maxi(1, old_max)) * float(new_max)), 1, new_max)
+	current_hp = HP_FULL if hp >= new_max else hp
 
 
 ## The evolution LINE [param p_character_id] belongs to (its root form; itself outside any line).
@@ -168,10 +242,11 @@ func display_name() -> String:
 	return character_id.capitalize()
 
 
-## Max HP from the roster (the unit's base_health), or 1 when the character is unknown.
+## Max HP at this member's LEVEL (the roster's base_health grown by [method Progression.max_hp_at];
+## level 1 = the base), or 1 when the character is unknown.
 func max_hp() -> int:
 	var c: CharacterResource = character()
-	return maxi(1, c.base_health) if c != null else 1
+	return maxi(1, Progression.max_hp_at(c, level)) if c != null else 1
 
 
 ## The HP this member would enter a battle with (the HP_FULL sentinel resolved).
@@ -213,6 +288,9 @@ func to_dict() -> Dictionary:
 		"growth": growth.duplicate(true),
 		"fallen": fallen_info.duplicate(true),
 		"hero": is_hero,
+		"level": level,
+		"xp": xp,
+		"bond_xp": bond_xp,
 	}
 
 
@@ -242,6 +320,18 @@ static func from_dict(d) -> StoryPartyMember:
 	m.growth = (g as Dictionary).duplicate(true) if g is Dictionary else {}
 	m.fallen_info = sanitize_fallen(d.get("fallen", {}))
 	m.is_hero = bool(d.get("hero", false))
+	# PROGRESSION (format_version stays 2): a save written before levels existed loads the member
+	# at the rules' legacy_level with that level's XP and no bond.
+	var rules: ProgressionRules = ProgressionRules.current()
+	if d.has("level"):
+		m.level = Progression.clamp_level(int(d.get("level", 1)), rules)
+		m.xp = clampi(int(d.get("xp", 0)), Progression.xp_for_level(m.level, rules), Progression.max_xp(rules))
+		# The saved XP decides when it says more than the level (never a level DOWN).
+		m.level = maxi(m.level, Progression.level_for_xp(m.xp, rules))
+	else:
+		# The saved HP was out of the old (level-less = level 1) max: keep its ratio.
+		m.set_level(rules.legacy_level, rules)
+	m.bond_xp = maxi(0, int(d.get("bond_xp", 0)))
 	return m
 
 

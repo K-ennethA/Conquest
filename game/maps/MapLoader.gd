@@ -157,6 +157,9 @@ static func resolve_player0_squad(local_squad: Array, host_squad: Array, local_s
 ## AI-difficulty gate); [method MapResource.normalize_spawn] rebuilds a fixed key set, so it
 ## never reaches spawn data anyone else consumes.
 const SQUAD_PICK_KEY: String = "_from_squad_pick"
+## Private marker beside [constant SQUAD_PICK_KEY]: WHICH squad slot (0-based) filled the spawn --
+## a story battle reads it to give the unit its party member's level ([method _story_level_for]).
+const SQUAD_SLOT_KEY: String = "_squad_slot"
 
 
 ## The squad that fills [param player_id]'s START slots, with the replicated half looked up
@@ -913,6 +916,7 @@ func _load_units() -> bool:
 				# Marks this unit as a DELIBERATE PICK, exempting it from the AI-difficulty
 				# gate in _create_unit_from_spawn (see there).
 				sd[SQUAD_PICK_KEY] = true
+				sd[SQUAD_SLOT_KEY] = pick
 				next_slot[spawn_player_id] = pick + 1
 
 		if _create_unit_from_spawn(sd, units_created):
@@ -982,10 +986,20 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 			and not _difficulty_allows(character_resource):
 		return null
 
+	# STORY LEVELS (docs/design/PROGRESSION.md): in a story battle the unit spawns AT its level --
+	# a DUPLICATED character with its stats grown ([method Progression.leveled_copy], rule 7: the
+	# roster resource is shared). 0 everywhere else (skirmish, versus, arena, online, replays), so
+	# those boards are untouched.
+	var story_level: int = _story_level_for(spawn_data, player_id)
+	if story_level > 1:
+		character_resource = Progression.leveled_copy(character_resource, story_level)
+
 	# Every unit is a CharacterUnit.tscn instance backed by a CharacterResource.
 	var unit_instance = character_unit_scene.instantiate()
 	if not unit_instance:
 		return null
+	if story_level > 0:
+		unit_instance.set_meta(StoryBattleBridge.LEVEL_META, story_level)
 
 	# Must be assigned BEFORE add_child: Unit._ready() (tile_objects/units/unit.gd)
 	# derives its UnitStats + combat components from character_resource only
@@ -1047,6 +1061,18 @@ func _create_unit_from_spawn(spawn_data: Dictionary, units_created: int, runtime
 		GameEvents.unit_spawned.emit(unit_instance, runtime)
 
 	return unit_instance
+
+
+## The STORY LEVEL for this spawn: asked of the StoryController autoload, which answers only while a
+## story tactical battle is live ([method StoryController.level_for_spawn]); 0 otherwise -- and
+## always 0 off the tree (tests that drive a bare MapLoader).
+func _story_level_for(spawn_data: Dictionary, player_id: int) -> int:
+	if not is_inside_tree():
+		return 0
+	var story := get_node_or_null("/root/StoryController")
+	if story == null or not story.has_method("level_for_spawn"):
+		return 0
+	return maxi(0, int(story.level_for_spawn(player_id, spawn_data)))
 
 
 ## World-facing yaw (radians) a unit spawned on [param grid_pos] should take so it faces

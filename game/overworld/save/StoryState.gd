@@ -243,8 +243,9 @@ func party_has(character_id: String) -> bool:
 
 
 ## Add a new individual of [param character_id] and return it; null when the party is at
-## [param cap] (the Grove storage is M2) or the id is blank.
-func add_member(character_id: String, nickname: String = "", cap: int = 6) -> StoryPartyMember:
+## [param cap] (the Grove storage is M2) or the id is blank. It joins at [param level] with that
+## level's XP (PROGRESSION.md: a recruit at its authored level, a caught creature at the level met).
+func add_member(character_id: String, nickname: String = "", cap: int = 6, level: int = 1) -> StoryPartyMember:
 	if character_id.strip_edges().is_empty():
 		return null
 	if cap > 0 and party.size() >= cap:
@@ -256,10 +257,19 @@ func add_member(character_id: String, nickname: String = "", cap: int = 6) -> St
 	for f in fallen:
 		taken.append(f.member_id)
 	var uid: String = StoryPartyMember.uid_for(StoryPartyMember.line_of(character_id), taken)
-	var m := StoryPartyMember.create(uid, character_id, nickname)
+	var m := StoryPartyMember.create(uid, character_id, nickname, level)
 	party.append(m)
 	_party_changed = true
 	return m
+
+
+## The highest LEVEL in the party (1 for an empty party) -- what a SCALED battle
+## ([member BattleSpec.level_mode]) reads.
+func party_top_level() -> int:
+	var top: int = 1
+	for m in party:
+		top = maxi(top, m.level)
+	return top
 
 
 ## Members that may be fielded, in party order.

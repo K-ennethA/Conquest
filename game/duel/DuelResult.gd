@@ -41,6 +41,10 @@ var replay_path: String = ""
 ## results card. Empty in story (the story party's growth is StoryController's) and whenever
 ## "duel" is not in EvolutionRules.growth_modes.
 var growth: Array = []
+## STORY duels: the XP / level-up rows Continue will award ([StoryProgression] preview rows), for
+## the results card. Filled by the stage from StoryController before the card shows; empty in every
+## open-mode duel.
+var progress: Array = []
 ## Battle items the player used ({item_id: count}); the story takes them from the bag.
 var items_used: Dictionary = {}
 
@@ -57,6 +61,9 @@ func to_battle_result() -> Dictionary:
 	if bool(befriend_offer.get("offered", false)):
 		offer = {"character_id": String(befriend_offer.get("character_id", "")),
 			"accepted": bool(befriend_offer.get("accepted", false))}
+		# A story foe's level (a befriended creature joins at it); level-less duels keep the old shape.
+		if int(befriend_offer.get("level", 0)) > 0:
+			offer["level"] = int(befriend_offer.get("level", 0))
 	return {
 		"encounter_id": encounter_id,
 		"outcome": outcome,

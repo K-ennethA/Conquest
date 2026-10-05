@@ -60,6 +60,13 @@ static func roll(seed_value: int, area_id: String, step: int, zone: EncounterZon
 	return {"hit": true, "entry": pool[pool.size() - 1], "roll": r}
 
 
+## A wild creature's STORY LEVEL inside [param band] (docs/design/PROGRESSION.md §3), hashed from
+## ([param seed_value], [param key]) -- deterministic like every other roll here. An unset band = 0
+## (no level: roster base stats).
+static func roll_level(seed_value: int, key: String, band: Vector2i) -> int:
+	return Progression.level_in_band(band, unit_float(seed_value, key + "|level"))
+
+
 ## The befriend-offer roll for a won wild battle: deterministic off the BATTLE's seed (so a
 ## replay reproduces it), never randf(). True when the unit offers to join.
 static func befriend_offered(battle_seed: int, chance: float) -> bool:

@@ -18,6 +18,26 @@ const MEMBER_META := &"story_member_id"
 ## Meta on the unit that is the MAIN CHARACTER (a party entry flagged hero): its fall is always a
 ## game over ([StoryPermadeath]).
 const HERO_META := &"story_hero"
+## Meta on every unit a STORY battle spawned at a level (MapLoader, from
+## [method StoryController.level_for_spawn]): its story level -- the HUD's "Lv N" and the XP input
+## of a defeated foe ([member BattleResult.defeated_levels]).
+const LEVEL_META := &"story_level"
+
+
+## The story level a tactical spawn gets ([method StoryController.level_for_spawn]'s pure core):
+## a player-0 SQUAD pick is that party entry's level (by its slot in the squad, which is the party
+## snapshot's order); any other player-0 unit (a guest ally) the request's ally_level; a foe its
+## spawn's own "level" when it has one, else the request's enemy_level. 0 = no level.
+static func level_for_spawn(request: BattleRequest, player_id: int, spawn_data: Dictionary) -> int:
+	if request == null:
+		return 0
+	if player_id == 0:
+		var slot: int = int(spawn_data.get(MapLoader.SQUAD_SLOT_KEY, -1))
+		if slot >= 0 and slot < request.party.size() and request.party[slot] is Dictionary:
+			return maxi(0, int((request.party[slot] as Dictionary).get("level", 0)))
+		return maxi(0, request.ally_level)
+	var own: int = int(spawn_data.get("level", 0))
+	return own if own > 0 else maxi(0, request.enemy_level)
 
 
 ## The members sent into a TACTICAL battle: healthy, in party order, up to [param squad_size].
@@ -44,6 +64,7 @@ static func party_snapshot(members: Array) -> Array:
 			"item_id": sm.item_id,
 			"growth": sm.growth.duplicate(true),
 			"hero": sm.is_hero,
+			"level": sm.level,
 		})
 	return out
 
@@ -68,7 +89,8 @@ static func prepare_board(map_loader, request: BattleRequest) -> Dictionary:
 		for u in c.get_children():
 			if u is Unit:
 				var ecid: String = String(u.character_resource.character_id) if u.character_resource != null else ""
-				tracking["enemies"].append({"unit": u, "character_id": ecid})
+				tracking["enemies"].append({"unit": u, "character_id": ecid,
+					"level": int(u.get_meta(LEVEL_META, 0))})
 
 	var claimed: Array = []
 	for p in request.party:
@@ -125,6 +147,7 @@ static func build_result(outcome: String, request: BattleRequest, tracking: Dict
 			var cid: String = String(rec.get("character_id", ""))
 			if not cid.is_empty():
 				result.defeated.append(cid)
+				result.defeated_levels.append(maxi(0, int(rec.get("level", 0))))
 	return result
 
 

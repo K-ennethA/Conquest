@@ -207,6 +207,74 @@ wired (`DuelController.award_standalone_growth`, same gates; the results card sh
 opens the Evolution screen for a member that became ready), so turning it on is a one-line data
 change. Story duels always follow `"story"`.
 
+## Progression: levels, XP, bands, bond, catch rate (DECISIONS.md #65, #68, #76, #78-#82)
+Spec: `docs/design/PROGRESSION.md`. **Levels exist only in story battles** — Skirmish, Versus,
+Arena, online and their replays never read any of this.
+
+**Where the knobs live:** `game/overworld/content/progression_rules.tres` (`ProgressionRules`,
+`game/characters/progression/`): `max_level` 50, the XP curve (`xp_curve_k` 1 × L^`xp_curve_pow` 3),
+`starter_level` 5, `legacy_level` 5, the XP formula (`xp_level_divisor` 7, `xp_level_exp` 2.5,
+`xp_grey_gap` 5 / `xp_grey_mult` 0.1, `xp_min` 1, `xp_yield_per_budget` 0.5 / `xp_yield_min` 10),
+battle multipliers (wild 1.0 / trainer 1.5 / boss 2.0), shares (fought 1.0 / fell 0.5 / bench 0.0),
+`xp_on_loss_mult` 0, `xp_spar_mult` 0, stats (`default_growth` 0.04, `speed_growth_mult` 0.5),
+`legend_over_band` 5, bond (`bond_max` 10, `bond_xp_per_level` 5, `bond_per_battle` 1,
+`bond_per_win` 2) and catch rates (`catch_budget_easy` 130 → 1.0, `catch_budget_hard` 240 → 0.2,
+`low_catch_rate` 0.5 for the content advisory). Per species (CharacterResource "Progression (story)"
+group): `health_growth` … `speed_growth` (negative = the default), `xp_yield` (0 = from the power
+budget), `catch_rate` (negative = from the power budget).
+
+**What is built:**
+- **Maths** — `Progression` (pure, static): curve, level from XP, the anti-grind XP for a foe,
+  stat at level, scaled / legend levels, bands, bond, catch rate. Pinned by
+  `tests/unit/test_progression_math.gd`.
+- **Members** — `StoryPartyMember.level / xp / bond_xp` (saved as `level`, `xp`, `bond_xp`;
+  format_version stays 2: an older save loads every member at `legacy_level`, its HP kept by ratio).
+  `max_hp()` is the level's. Joins: `JoinPartyCommand.level` (0 = `starter_level`; the starter joins
+  this way), the ruleset's starting party at `starter_level`, a befriended creature at the level it
+  was met (`befriend_offer.level`).
+- **Stats at level, both battle types, ONE function** (`Progression.apply_level`, on a private
+  copy, rule 7): the DUEL applies it to the compiled `DuelCharacter` (then `strength` on top) from
+  `DuelCombatant.level` (serialised only when > 0, so open-mode replay headers are byte-identical);
+  the TACTICAL board levels at spawn — `MapLoader._create_unit_from_spawn` asks
+  `StoryController.level_for_spawn` (0 unless a story tactical battle is live) and swaps in
+  `Progression.leveled_copy`. Party members fight at their own level (by squad slot), a guest ally
+  at the party's top level (`BattleRequest.ally_level`), foes at a spawn's own `"level"` key or the
+  request's `enemy_level`. Leveled units carry meta `story_level` ("Lv N" on the duel unit cards and
+  the tactical unit info panel).
+- **Enemy levels** — `BattleSpec.enemy_level` (+ an opponent row's own `"level"`), `boss_battle`
+  (XP ×2, exempt from the catch advisory), `level_mode` FIXED / SCALED (`scale_offset`, `scale_min`,
+  `scale_max`; resolved in `apply_scaling`, so every script / trainer / tournament launch gets it),
+  `BattleSpec.make_chief(spec, band, offset)` and `make_legend(spec, band)` (band max +
+  `legend_over_band`, never scaled). Wild: `OverworldAreaResource.level_band`, narrowed per zone by
+  `EncounterZone.level_band`; a hidden roll hashes the level from (seed, area, step), a visible
+  creature rolls it at spawn and saves it (`"lv"` in its slot) — `EncounterRoller.roll_level`.
+- **XP after every story battle** — `StoryProgression` (pure) via `StoryResultApplier` under the
+  Growth gates (never replay / network / arena; only mode "story"), after the battle's HP is in
+  (a level-up keeps the HP ratio). Per defeated foe, per member, with the member's own level:
+  stronger foes pay more, weaker less, grey (5+ below) a tenth. Foe levels come from
+  `BattleResult.defeated_levels` (the tactical board reports them), else the request's rows /
+  `enemy_level`. End screens: the tactical GameOverScreen's "EXPERIENCE" rows
+  (`StoryController.battle_progress_rows`) and the duel results card (`DuelResult.progress`, filled
+  from `StoryController.preview_duel_progress`) — `ProgressRows`. Party page: Lv, XP bar, XP to next,
+  bond, and the stat table at the member's level; the party list shows "Lv N".
+- **Bond** — every member fielded earns bond XP (`StoryProgression.bond_for`: win 2, else 1, never
+  a flee); shown on the party page; nothing reads it yet (the stone boost, #65, comes later).
+- **Catch rate** — multiplies the befriend chance in story duels (`DuelRuleset.roll_join(...,
+  catch_mult)`; open modes pass 1.0) and in the debug stub. `BattleSpec.catch_warnings()` is the
+  content advisory (non-boss battles fielding a species under `low_catch_rate`); the report is
+  printed by `tests/unit/test_story_bond_catch.gd`, never logged at runtime.
+- **LevelTrigger** — one more evolution requirement kind ("Reach Lv N"), reading `level` from the
+  story member context (`StoryGrowth.member_context`); unmet in open modes. No edge uses it yet and
+  no Growth edge was migrated (#82).
+- **Content** (builder `REGION_BANDS` / `LV_*` constants): Heartlands areas 2-8 (the Mossway grass
+  2-5), Sparse Forest / Woodland Town 8-15, the other listed regions' bands ready for their areas;
+  first fight 4, the lone Petalfang 4, Bram 5, Fenna 6, the footpad 7, the bandit boss 8, Lark 7,
+  sparring Wynn 5 / Aldous 7 / the General 10, the Crown Cup 6 → 7 → 8 → 10, the champion's rematch 12.
+
+**Known gaps:** a replay of a story TACTICAL battle spawns at roster base (replays are not a story
+battle — the same gap carried HP already has); runtime reinforcements of a story map are levelled
+but not counted in `defeated_levels` (they fall back to `enemy_level`, which is what they spawn at).
+
 ## Shops, consumables and gold (DECISIONS.md #28 + its revision)
 
 Scope now: healing items, status cures, revives and the existing equipment. Bonding shards and
@@ -407,7 +475,7 @@ Classic costs the partner, a full Cup run → prize + title + the champion, save
 - Tactical battle items (no Items action on the tactical HUD); the duel AI never uses items.
 - Flee is not a net command (the duel is offline-only); a replay of a fled duel ends at the last
   command. Duel replays (`ReplayLog.MODE_DUEL`) and mid-duel suspend are not built yet.
-- `DuelScaling` treats `strength` as a stat scale; levels (EVOLUTION Q2) are undecided.
+- `DuelScaling` treats `strength` as a stat scale; story LEVELS are applied first (see "Progression") and `strength` multiplies on top.
 - Mid-battle `EvolveEffect` PERMANENT commits in story, and the duel's `unit_evolved` move
   re-compile, are not wired (no shipped edge uses them yet).
 - No CharacterSelect story branch: a tactical squad is still the first `squad_size` healthy
@@ -525,8 +593,8 @@ card footer is the journey summary (place, gold, play time, the TRACKED quest's 
   `{flag, text}` + the optional pointers below); only the pin is saved. All / Main / Side /
   Completed filters, **Track** / Untrack and **Show on map** per open quest (see "Quest tracking").
   Edit quests with the Quest Editor plugin (or the JSON).
-- **Party → Details** — `PartyDetailPage`: portrait, form / element / role chips, HP, Growth
-  (there are no levels), the shared `UnitPageContent` stat table, equipment and move / ability
+- **Party → Details** — `PartyDetailPage`: portrait, form / element / role chips, HP, Lv + XP bar + bond, Growth
+  (the evolution currency), the shared `UnitPageContent` stat table (at the member's level), equipment and move / ability
   cards. Equip / Unequip move a unit-scope item between the member and the bag
   (`StoryState.equip_item` / `unequip_item`, `StoryController.equip_from_menu`).
 - **Map** — the WORLD MAP (see "World map" below); its **Places** toggle keeps the old list (the

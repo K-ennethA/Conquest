@@ -43,6 +43,7 @@ character_id = &"tree_grunt"
 [sub_resource type="Resource" id="Resource_frbyr"]
 script = ExtResource("1_dl3pe")
 table = Array[Resource]([SubResource("Resource_f6bed"), SubResource("Resource_5xqpn"), SubResource("Resource_6idsj")])
+level_band = Vector2i(2, 5)
 rate = 0.14
 
 [sub_resource type="Resource" id="Resource_52mfd"]
@@ -111,6 +112,7 @@ opponent_team = Array[Dictionary]([{
 }])
 reward_gold = 120
 clash_intro = true
+enemy_level = 5
 
 [sub_resource type="Resource" id="Resource_1yi6f"]
 script = ExtResource("6_7qlx6")
@@ -170,6 +172,7 @@ defeat_policy = 1
 can_flee = true
 can_befriend = true
 story_critical = true
+enemy_level = 4
 
 [sub_resource type="Resource" id="Resource_mh6q7"]
 script = ExtResource("10_c6ene")
@@ -239,6 +242,7 @@ opponent_team = Array[Dictionary]([{
 }])
 reward_gold = 90
 clash_intro = true
+enemy_level = 6
 
 [sub_resource type="Resource" id="Resource_misl4"]
 script = ExtResource("6_7qlx6")
@@ -379,6 +383,7 @@ opponent_team = Array[Dictionary]([{
 }])
 reward_gold = 180
 reward_items = Array[StringName]([&"dawnpetal_draught"])
+enemy_level = 8
 
 [sub_resource type="Resource" id="Resource_1m6mn"]
 script = ExtResource("10_c6ene")
@@ -451,6 +456,7 @@ opponent_team = Array[Dictionary]([{
 }])
 reward_gold = 40
 reward_flags = Array[String](["mossway.ambush.footpad_beaten"])
+enemy_level = 7
 
 [sub_resource type="Resource" id="Resource_sapng"]
 script = ExtResource("10_c6ene")
@@ -538,3 +544,4 @@ entry_points = {
 }
 entities = Array[Resource]([SubResource("Resource_52mfd"), SubResource("Resource_rqklu"), SubResource("Resource_dodhr"), SubResource("Resource_8keq5"), SubResource("Resource_piryq"), SubResource("Resource_wavax"), SubResource("Resource_j14yk"), SubResource("Resource_2ok4j"), SubResource("Resource_7vvgc"), SubResource("Resource_t646g"), SubResource("Resource_y7878"), SubResource("Resource_n2t71"), SubResource("Resource_4lfaw"), SubResource("Resource_ply6k"), SubResource("Resource_h7hys"), SubResource("Resource_f73af"), SubResource("Resource_mga0o")])
 encounter_zones = Array[Resource]([SubResource("Resource_frbyr")])
+level_band = Vector2i(2, 8)

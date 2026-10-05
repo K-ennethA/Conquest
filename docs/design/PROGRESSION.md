@@ -82,3 +82,30 @@ evolves is decided later (#82).
 ## 7. Saves
 `StoryPartyMember` gains `level`, `xp`, `bond_xp` (format_version stays 2: a save without them
 loads every member at `legacy_level` (default 5) with 0 XP and 0 bond).
+
+## 8. As built (2026-10-04) -- choices the spec left open, and where the build differs
+Implementation map: docs/STORY_MODE.md "Progression". Knobs: `game/overworld/content/progression_rules.tres`.
+- **Numbers the spec did not fix:** `xp_level_divisor` 7 and `xp_yield_per_budget` 0.5 (a level-5
+  Barkling-class foe pays ~38 XP wild; level 5 -> 6 needs 91), `xp_yield_min` 10. Bond levels are
+  linear: bond level = bond_xp / `bond_xp_per_level` (5), capped at `bond_max`.
+- **Catch-rate default:** 1.0 at or below power budget `catch_budget_easy` (130), `catch_rate_min`
+  (0.2) at or above `catch_budget_hard` (240), linear between -- every current base form is 1.0
+  (easy), evolved / knight-class forms land around 0.4-0.7, Eldroot 0.2. The content check
+  (`BattleSpec.catch_warnings`, threshold `low_catch_rate` 0.5) is an advisory a test PRINTS; it does
+  not fail the build, since several existing (placeholder) trainers field strong forms.
+- **Spar XP** has its own multiplier, `xp_spar_mult` (0), instead of sharing `xp_on_loss_mult`; a
+  flee / abort always pays 0. Spars still build BOND (fighting alongside, #68).
+- **No XP split:** each member that fought earns the full per-foe formula with its own level and
+  share (the spec's formula has no participant divisor).
+- **Per-species growth** lives on `CharacterResource` (`health_growth` ... `speed_growth`, negative =
+  `default_growth`). The old `UnitStatsResource.*_growth` fields (default 1.0, a different meaning)
+  are left unused.
+- **SCALED** sets EVERY foe of the battle to the one scaled level (rows' own levels are overridden);
+  `BattleSpec.make_chief(spec, band, offset)` scales inside the region band. `make_legend(spec,
+  band)` sets the band max + `legend_over_band` on every foe and marks it a boss battle.
+- **Boss multiplier** is opt-in per battle (`BattleSpec.boss_battle`), set by the chief / legend helpers.
+- **Guest allies** on a story tactical board (map units that are not party members) fight at the
+  party's top level.
+- **The Mossway's grass** is narrowed to 2-5 inside the Heartlands' 2-8 (the first route).
+- **Tactical replays** of a story battle spawn at roster base (a replay is not a live story battle),
+  the same existing gap as carried HP. Duel replays carry the levels (`DuelCombatant.level`).

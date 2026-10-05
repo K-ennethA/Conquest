@@ -450,6 +450,7 @@ func start_wild_battle(c: WildSpawner.WildCreature, opening: String) -> bool:
 	duel.area_id = aid
 	duel.id_kind = "wild"
 	duel.opening = opening
+	duel.level = c.level
 	var outcome := WildOutcomeCommand.new()
 	outcome.area_id = aid
 	outcome.creature_key = c.key
@@ -939,6 +940,9 @@ func _roll_encounter(cell: Vector3i) -> bool:
 		var duel := StartDuelCommand.new()
 		duel.entry = entry
 		duel.area_id = String(area.area_id)
+		# Its story level, rolled in the zone's band off the same seed + step as the encounter.
+		duel.level = EncounterRoller.roll_level(_state.rng_seed, "%s|%d" % [String(area.area_id), _state.steps],
+			z.band_in(area))
 		var prompt := BefriendPromptCommand.new()
 		_state.grace_steps = z.grace_steps
 		return story.run_script([duel, prompt], "")

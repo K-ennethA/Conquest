@@ -553,9 +553,21 @@ func _show_results(result: DuelResult, standalone: bool) -> void:
 	await _beat(BEAT_AFTER * 2.0)
 	if not is_inside_tree():
 		return
+	if not standalone:
+		result.progress = _story_progress_rows(result)
 	hud.show_results(result, standalone)
 	if standalone:
 		await _offer_standalone_evolutions(result)
+
+
+## STORY: the XP / level-up rows the story will award for [param result] (PROGRESSION.md), asked of
+## the StoryController before the card shows; [] without one.
+func _story_progress_rows(result: DuelResult) -> Array:
+	var story := get_node_or_null("/root/StoryController")
+	if story == null or not story.has_method("preview_duel_progress"):
+		return []
+	var rows = story.preview_duel_progress(result.to_battle_result())
+	return rows if rows is Array else []
 
 
 ## Standalone (DUEL_BATTLE.md §8.4): a member the duel's growth made ready is offered the

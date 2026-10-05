@@ -65,7 +65,7 @@ static func build_result(p_request: BattleRequest, outcome: String, force_offer:
 			entry["fought"] = true
 			entry["kos"] = 1 if outcome == BattleResult.OUTCOME_VICTORY else 0
 			var c: CharacterResource = CharacterLibrary.get_character(StringName(String(p.get("character_id", ""))))
-			var max_hp: int = c.base_health if c != null else 100
+			var max_hp: int = Progression.max_hp_at(c, int(p.get("level", 1))) if c != null else 100
 			var cur: int = max_hp if hp == StoryPartyMember.HP_FULL else hp
 			match outcome:
 				BattleResult.OUTCOME_VICTORY:
@@ -78,12 +78,17 @@ static func build_result(p_request: BattleRequest, outcome: String, force_offer:
 		var foe: String = p_request.lead_foe_id()
 		if not foe.is_empty():
 			r.defeated.append(foe)
+			r.defeated_levels.append(p_request.foe_level(0))
 		# A crit KO never forfeits a befriend: the offer is rolled on VICTORY (DECISIONS.md).
 		# A STORY-CRITICAL recruit always offers (it must be non-missable).
 		if not foe.is_empty() and p_request.can_befriend():
+			# The species' catch rate multiplies the chance (DECISIONS.md #78).
+			var chance: float = p_join_chance * Progression.catch_rate_of(CharacterLibrary.get_character(StringName(foe)))
 			if force_offer or p_request.is_story_critical() \
-					or EncounterRoller.befriend_offered(p_request.seed, p_join_chance):
+					or EncounterRoller.befriend_offered(p_request.seed, chance):
 				r.befriend_offer = {"character_id": foe, "accepted": false}
+				if p_request.foe_level(0) > 0:
+					r.befriend_offer["level"] = p_request.foe_level(0)
 	return r
 
 
