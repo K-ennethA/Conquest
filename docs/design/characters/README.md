@@ -3,7 +3,7 @@
 Each sheet here is the owner's reference for that character's look (and the base for their Blender
 model). Its HEAD DETAIL panel is cropped into the in-game portrait at `game/ui/portraits/<id>.png`
 by `tools/crop_portraits.gd` (re-run it after replacing a sheet). Roles are the owner's
-(DECISIONS.md #83-#89); the notes are copied from the sheets, nothing added.
+(DECISIONS.md #83-#90); the notes are copied from the sheets, nothing added.
 
 | Portrait id | Sheet | Who | From the sheet |
 |---|---|---|---|
