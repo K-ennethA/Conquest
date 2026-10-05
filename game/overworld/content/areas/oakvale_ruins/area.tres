@@ -266,6 +266,7 @@ opponent_team = Array[Dictionary]([{
 reward_flags = Array[String](["opening.first_fight_won"])
 defeat_policy = 2
 clash_intro = true
+enemy_level = 4
 
 [sub_resource type="Resource" id="Resource_qqk4e"]
 script = ExtResource("7_icv5d")
@@ -402,6 +403,7 @@ opponent_team = Array[Dictionary]([{
 reward_flags = Array[String](["opening.first_fight_won"])
 defeat_policy = 2
 clash_intro = true
+enemy_level = 4
 
 [sub_resource type="Resource" id="Resource_28wou"]
 script = ExtResource("7_icv5d")
@@ -722,6 +724,7 @@ opponent_team = Array[Dictionary]([{
 reward_flags = Array[String](["opening.first_fight_won"])
 defeat_policy = 2
 clash_intro = true
+enemy_level = 4
 
 [sub_resource type="Resource" id="Resource_40o20"]
 script = ExtResource("7_icv5d")
@@ -838,3 +841,4 @@ entry_points = {
 }
 entities = Array[Resource]([SubResource("Resource_i1lrf"), SubResource("Resource_w37dv"), SubResource("Resource_3h3fl"), SubResource("Resource_yj2uu"), SubResource("Resource_51q05"), SubResource("Resource_mnat3"), SubResource("Resource_61ixc"), SubResource("Resource_yyqan"), SubResource("Resource_rdnxe"), SubResource("Resource_7k4s7"), SubResource("Resource_q3wg7"), SubResource("Resource_1dxlu"), SubResource("Resource_lt0vh"), SubResource("Resource_gp022"), SubResource("Resource_ou81t"), SubResource("Resource_glcco"), SubResource("Resource_x573u"), SubResource("Resource_cp2h0"), SubResource("Resource_136u7"), SubResource("Resource_4gk17"), SubResource("Resource_ow3tw"), SubResource("Resource_ohq2f"), SubResource("Resource_qajkb"), SubResource("Resource_bxpff"), SubResource("Resource_2w5dy"), SubResource("Resource_pd3xu"), SubResource("Resource_ckkua"), SubResource("Resource_5eihl"), SubResource("Resource_0v2ic"), SubResource("Resource_vmykq"), SubResource("Resource_6qr5y"), SubResource("Resource_xpli3")])
 on_enter = Array[Resource]([SubResource("Resource_f6hqt")])
+level_band = Vector2i(2, 8)

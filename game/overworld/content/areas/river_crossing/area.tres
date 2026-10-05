@@ -265,3 +265,4 @@ entry_points = {
 }
 entities = Array[Resource]([SubResource("Resource_g0l7k"), SubResource("Resource_474uf"), SubResource("Resource_b6dki"), SubResource("Resource_mtg3m"), SubResource("Resource_5m0st"), SubResource("Resource_65pmo"), SubResource("Resource_xeg3g"), SubResource("Resource_o4rin"), SubResource("Resource_0d5hf"), SubResource("Resource_u5mpc"), SubResource("Resource_om6bn"), SubResource("Resource_o4bd6"), SubResource("Resource_u4wfy"), SubResource("Resource_5307s"), SubResource("Resource_wm3sh"), SubResource("Resource_5ttts"), SubResource("Resource_e7e26"), SubResource("Resource_unfpc"), SubResource("Resource_4ffgr"), SubResource("Resource_gypw4"), SubResource("Resource_86bip"), SubResource("Resource_hv65l"), SubResource("Resource_owh4t")])
 on_enter = Array[Resource]([SubResource("Resource_n45xl")])
+level_band = Vector2i(2, 8)

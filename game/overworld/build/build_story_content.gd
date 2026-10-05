@@ -291,6 +291,36 @@ const CEREMONY_TESTERS: Array = [
 ## The hero's placeholder overworld model (DECISIONS.md #4): swap the model here.
 const HERO_MODEL := "res://game/characters/models/forest/wren_forge.glb"
 
+# --- Story levels (docs/design/PROGRESSION.md §3; DECISIONS.md #76, #80, #81) ------------
+## REGIONAL LEVEL BANDS: every area of a region gets its region's band ([method _place]); wild
+## creatures roll inside it (a zone may narrow it), a SCALED chief clamps into it, a LEGEND is authored
+## above it. Regions not listed have no band yet (no area built there).
+const REGION_BANDS := {
+	"heartlands": Vector2i(2, 8),
+	"woodlands": Vector2i(8, 15),
+	"sunlit_coast": Vector2i(12, 20),
+	"open_ocean": Vector2i(12, 20),
+	"snowy_peaks": Vector2i(18, 26),
+	"rocky_badlands": Vector2i(22, 30),
+	"northern_mountains": Vector2i(25, 35),
+}
+## The Mossway's grass is the first route: its creatures stay at the bottom of the Heartlands band.
+const BAND_MOSSWAY_GRASS := Vector2i(2, 5)
+## AUTHORED BATTLE LEVELS (FIXED). The starter joins at ProgressionRules.starter_level (5).
+const LV_FIRST_FIGHT := 4
+const LV_LONE_PETALFANG := 4
+const LV_BRAM := 5
+const LV_FENNA := 6
+const LV_FOOTPAD := 7
+const LV_BANDIT_BOSS := 8
+const LV_RIVAL := 7
+const LV_SPAR_WYNN := 5
+const LV_SPAR_ALDOUS := 7
+const LV_SPAR_GENERAL := 10
+## The Crown Cup ladder, round by round (rising), and the champion's rematch.
+const LV_CUP_ROUNDS: Array[int] = [6, 7, 8, 10]
+const LV_CHAMPION_REMATCH := 12
+
 ## Tints (the raiders' Cindral colours, the kingdom's blue).
 const CINDRAL_RED := Color(0.62, 0.16, 0.12)
 const ALDERMERE_BLUE := Color(0.2, 0.28, 0.5)
@@ -446,6 +476,7 @@ func _place(a: OverworldAreaResource, location_id: String) -> void:
 		return
 	a.world_map_pos = row[4]
 	a.region_id = StringName(row[3])
+	a.level_band = REGION_BANDS.get(String(row[3]), Vector2i.ZERO)
 
 
 ## The closed road toward [param location_id]: a warp held by that place's open flag, answering
@@ -1021,6 +1052,7 @@ func _build_interior(town: OverworldAreaResource, p: PropEntity, spec: Dictionar
 	a.parent_area = town.area_id
 	a.world_map_pos = town.world_map_pos
 	a.region_id = town.region_id
+	a.level_band = town.level_band
 	a.terrain = load(CONTENT + "areas/%s/terrain.tres" % iid)
 	a.entry_points = {"door": {"cell": [door_x, h - 2, 0], "facing": "north"}}
 	var ents: Array = []
@@ -1137,6 +1169,7 @@ func _first_fight_spec() -> BattleSpec:
 	for cid in RAIDER_UNITS:
 		team.append({"character_id": cid, "strength": 1.0})
 	spec.opponent_team = team
+	spec.enemy_level = LV_FIRST_FIGHT
 	var flags: Array[String] = [F_FIGHT_WON]
 	spec.reward_flags = flags
 	# The story cannot go on without this win: a loss offers Try Again / the Wayshrine, and the
@@ -1653,6 +1686,7 @@ func _build_mossway() -> void:
 	var team: Array[Dictionary] = [{"character_id": "tree_grunt", "strength": 1.0},
 		{"character_id": "petalfang", "strength": 1.0}]
 	spec.opponent_team = team
+	spec.enemy_level = LV_BRAM
 	spec.reward_gold = 120
 	spec.defeat_policy = BattleSpec.DefeatPolicy.WHITEOUT
 	spec.clash_intro = true
@@ -1675,6 +1709,7 @@ func _build_mossway() -> void:
 	duel_spec.opponent_speaker_id = &"petalfang"
 	var foe: Array[Dictionary] = [{"character_id": "petalfang", "strength": 1.0}]
 	duel_spec.opponent_team = foe
+	duel_spec.enemy_level = LV_LONE_PETALFANG
 	duel_spec.can_flee = true
 	duel_spec.can_befriend = true
 	duel_spec.story_critical = true
@@ -1728,6 +1763,7 @@ func _build_mossway() -> void:
 		e.can_befriend = true
 		table.append(e)
 	zone.table = table
+	zone.level_band = BAND_MOSSWAY_GRASS
 	var zones: Array[Resource] = [zone]
 	a.encounter_zones = zones
 	_save(a, CONTENT + "areas/mossway/area.tres")
@@ -2395,7 +2431,7 @@ func _general_in_crownhaven() -> NpcEntity:
 ## (StoryRuleset.spar_ko_recovers). He heads the barracks' roster (the strongest of the three).
 func _general_spar_offer() -> IfCommand:
 	return _spar_partner_offer(SPAR_GENERAL_ID, "general", "GENERAL", "{GENERAL}",
-		[{"character_id": GENERAL_UNIT, "strength": 0.8}],
+		[{"character_id": GENERAL_UNIT, "strength": 0.8, "level": LV_SPAR_GENERAL}],
 		"Want to keep your partner sharp? Geode could use the exercise. A friendly bout -- nobody gets hurt for real.",
 		"Ha! Geode felt that one. You're learning.",
 		"On your feet. That's what spars are for -- come back when you're ready.",
@@ -2509,6 +2545,7 @@ func _fenna() -> TrainerEntity:
 	var spec := _duel_spec("", "{FENNA}", &"npc_fenna", [{"character_id": "petalfang", "strength": 0.85},
 			{"character_id": "undead", "strength": 0.7}],
 		false, BattleSpec.DefeatPolicy.WHITEOUT, 90)
+	spec.enemy_level = LV_FENNA
 	spec.clash_intro = true
 	t.battle = spec
 	return t
@@ -2533,9 +2570,11 @@ func _ambush() -> Array:
 	var footpad_spec := _duel_spec("mossway.ambush.footpad", "{FOOTPAD}", &"npc_footpad",
 		[{"character_id": "mycothrall", "strength": 0.9}], false, BattleSpec.DefeatPolicy.WHITEOUT,
 		40, [], [F_AMBUSH_FOOTPAD])
+	footpad_spec.enemy_level = LV_FOOTPAD
 	var nell_spec := _duel_spec("mossway.ambush.nell", "{BANDIT_BOSS}", &"npc_nell",
 		[{"character_id": "petalfang", "strength": 1.0}], false, BattleSpec.DefeatPolicy.WHITEOUT,
 		180, ["dawnpetal_draught"])
+	nell_spec.enemy_level = LV_BANDIT_BOSS
 	var boss_bout: Array = [
 		_say([_line("nell", "BANDIT_BOSS", "Useless! Fine -- I'll take it off you myself.")]),
 		_duel(nell_spec),
@@ -2602,6 +2641,7 @@ func _rival_spec() -> BattleSpec:
 	var spec := _duel_spec(RIVAL_DUEL_ID, "{RIVAL}", &"npc_lark",
 		[{"character_id": "blightcap", "strength": 0.9}, {"character_id": "petalfang", "strength": 0.75}],
 		true, BattleSpec.DefeatPolicy.CONTINUE, 60)
+	spec.enemy_level = LV_RIVAL
 	spec.clash_intro = true
 	spec.scale_flag = F_RIVAL_STAGE
 	spec.scale_step = 0.08
@@ -2682,7 +2722,7 @@ func _spar_partners() -> Array:
 	var wynn := _npc("wynn", Vector2i(4, 10), "east", "WYNN", ALDERMERE_BLUE.lightened(0.1), "guard")
 	wynn.visible_if = after
 	wynn.on_interact = StoryCommand.list([_spar_partner_offer(SPAR_WYNN_ID, "wynn", "WYNN", "{WYNN}",
-		[{"character_id": "blightcap", "strength": 0.8}],
+		[{"character_id": "blightcap", "strength": 0.8, "level": LV_SPAR_WYNN}],
 		"Fancy a warm-up bout? My Blightcap's the gentlest thing in the barracks. Mostly.",
 		"Good form! Now go and try the Lieutenant.",
 		"Don't sulk -- everyone loses to the Blightcap once. It's the spores.",
@@ -2691,7 +2731,7 @@ func _spar_partners() -> Array:
 	var aldous := _npc("aldous", Vector2i(6, 7), "south", "ALDOUS", ALDERMERE_BLUE.darkened(0.1), "officer")
 	aldous.visible_if = after
 	aldous.on_interact = StoryCommand.list([_spar_partner_offer(SPAR_ALDOUS_ID, "aldous", "ALDOUS", "{ALDOUS}",
-		[{"character_id": "petalfang", "strength": 0.95}],
+		[{"character_id": "petalfang", "strength": 0.95, "level": LV_SPAR_ALDOUS}],
 		"The General says you're worth watching. Show me. A friendly bout, no quarter asked.",
 		"Hm. He was right. Once more some other day.",
 		"Speed. You lack it. Come back when you've found some.",
@@ -2736,6 +2776,7 @@ func _build_tournaments() -> void:
 			team.append({"character_id": String(m[0]), "strength": float(m[1])})
 		var spec := _duel_spec("", String(e[0]), StringName(String(e[1])), team, true,
 			BattleSpec.DefeatPolicy.CONTINUE)
+		spec.enemy_level = LV_CUP_ROUNDS[mini(i, LV_CUP_ROUNDS.size() - 1)]
 		spec.scale_flag = CUP_WINS_FLAG
 		spec.scale_step = 0.05
 		spec.scale_max_steps = 4
@@ -2771,6 +2812,7 @@ func _arena() -> Array:
 	var spec := _duel_spec(CHAMPION_REMATCH_ID, "{CHAMPION}", &"npc_isolde",
 		[{"character_id": "oakheart", "strength": 0.9}, {"character_id": "monster", "strength": 0.85},
 			{"character_id": "petalfang", "strength": 0.85}], true, BattleSpec.DefeatPolicy.CONTINUE, 120)
+	spec.enemy_level = LV_CHAMPION_REMATCH
 	spec.clash_intro = true
 	spec.scale_flag = F_CHAMPION_BEATEN
 	spec.scale_step = 0.08

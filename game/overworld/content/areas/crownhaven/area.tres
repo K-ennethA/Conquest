@@ -629,6 +629,7 @@ opponent_name = "General Varden"
 opponent_speaker_id = &"npc_general"
 opponent_team = Array[Dictionary]([{
 "character_id": "gem_knight",
+"level": 10,
 "strength": 0.8
 }])
 defeat_policy = 1
@@ -865,6 +866,7 @@ reward_gold = 60
 defeat_policy = 1
 clash_intro = true
 spar = true
+enemy_level = 7
 scale_flag = "rival.stage"
 scale_step = 0.08
 scale_max_steps = 6
@@ -1017,6 +1019,7 @@ reward_gold = 60
 defeat_policy = 1
 clash_intro = true
 spar = true
+enemy_level = 7
 scale_flag = "rival.stage"
 scale_step = 0.08
 scale_max_steps = 6
@@ -1125,6 +1128,7 @@ opponent_name = "Corporal Wynn"
 opponent_speaker_id = &"npc_wynn"
 opponent_team = Array[Dictionary]([{
 "character_id": "blightcap",
+"level": 5,
 "strength": 0.8
 }])
 defeat_policy = 1
@@ -1227,6 +1231,7 @@ opponent_name = "Lieutenant Aldous"
 opponent_speaker_id = &"npc_aldous"
 opponent_team = Array[Dictionary]([{
 "character_id": "petalfang",
+"level": 7,
 "strength": 0.95
 }])
 defeat_policy = 1
@@ -1431,6 +1436,7 @@ reward_gold = 120
 defeat_policy = 1
 clash_intro = true
 spar = true
+enemy_level = 12
 scale_flag = "arena.crown_cup.champion_beaten"
 scale_step = 0.08
 scale_max_steps = 6
@@ -1866,3 +1872,4 @@ entry_points = {
 }
 entities = Array[Resource]([SubResource("Resource_pmyhw"), SubResource("Resource_r7vwj"), SubResource("Resource_hvivg"), SubResource("Resource_4vw77"), SubResource("Resource_sluii"), SubResource("Resource_5bjpv"), SubResource("Resource_vynvb"), SubResource("Resource_mw047"), SubResource("Resource_aytkr"), SubResource("Resource_aom58"), SubResource("Resource_hrxdu"), SubResource("Resource_fumqp"), SubResource("Resource_4dv0k"), SubResource("Resource_5c2oy"), SubResource("Resource_au5o3"), SubResource("Resource_2t4np"), SubResource("Resource_vcca4"), SubResource("Resource_2a5pe"), SubResource("Resource_1odni"), SubResource("Resource_7yydd"), SubResource("Resource_piajy"), SubResource("Resource_yj5in"), SubResource("Resource_316jc"), SubResource("Resource_seaa5"), SubResource("Resource_my8bd"), SubResource("Resource_lonke"), SubResource("Resource_yoa27"), SubResource("Resource_g1u3g"), SubResource("Resource_g7kgp"), SubResource("Resource_axbua"), SubResource("Resource_sm0ew"), SubResource("Resource_b4rx3"), SubResource("Resource_i7tb6"), SubResource("Resource_t8r0m"), SubResource("Resource_qrhty"), SubResource("Resource_w8agy"), SubResource("Resource_pv5bd"), SubResource("Resource_f04l0"), SubResource("Resource_63blu"), SubResource("Resource_e6rsp"), SubResource("Resource_di53f"), SubResource("Resource_2847x"), SubResource("Resource_l7jte"), SubResource("Resource_22p7q"), SubResource("Resource_357ha"), SubResource("Resource_6br1e"), SubResource("Resource_jjpvh"), SubResource("Resource_l80i7"), SubResource("Resource_clal2"), SubResource("Resource_o1vm1"), SubResource("Resource_ud2c0"), SubResource("Resource_4jbs8"), SubResource("Resource_sb7di"), SubResource("Resource_ggcae"), SubResource("Resource_wwts4"), SubResource("Resource_pmwuy"), SubResource("Resource_6gggv"), SubResource("Resource_copmq"), SubResource("Resource_xbgox"), SubResource("Resource_1c7ks"), SubResource("Resource_62qyy"), SubResource("Resource_xb7nu"), SubResource("Resource_tdb81"), SubResource("Resource_w5rbo"), SubResource("Resource_751mc"), SubResource("Resource_u4em2"), SubResource("Resource_11qh5"), SubResource("Resource_o8ogv"), SubResource("Resource_tev24"), SubResource("Resource_8yqf3"), SubResource("Resource_rdnpl"), SubResource("Resource_v5tpv"), SubResource("Resource_7i5op"), SubResource("Resource_emh7v"), SubResource("Resource_5wk2b"), SubResource("Resource_remfb"), SubResource("Resource_on1ni"), SubResource("Resource_aw8b8"), SubResource("Resource_q8p5x"), SubResource("Resource_6xbe1"), SubResource("Resource_4qfn1"), SubResource("Resource_rca6i"), SubResource("Resource_5th03"), SubResource("Resource_oakxd"), SubResource("Resource_3ldux"), SubResource("Resource_krr7l"), SubResource("Resource_d1uqq"), SubResource("Resource_nxfpy"), SubResource("Resource_3yh0v"), SubResource("Resource_pyrb1"), SubResource("Resource_8qtku"), SubResource("Resource_tvmc5"), SubResource("Resource_e75s3"), SubResource("Resource_bvh5s"), SubResource("Resource_6b13b"), SubResource("Resource_6i17k"), SubResource("Resource_17184"), SubResource("Resource_hwd5n"), SubResource("Resource_dn4nx"), SubResource("Resource_qnew0"), SubResource("Resource_5vkd0"), SubResource("Resource_swmxg"), SubResource("Resource_r7vec"), SubResource("Resource_jfbyk"), SubResource("Resource_3d670"), SubResource("Resource_aidpt"), SubResource("Resource_v1dx8"), SubResource("Resource_m66l0"), SubResource("Resource_f5x5x"), SubResource("Resource_qgo10"), SubResource("Resource_2ug14"), SubResource("Resource_ud0l8")])
 on_enter = Array[Resource]([SubResource("Resource_spx57")])
+level_band = Vector2i(2, 8)

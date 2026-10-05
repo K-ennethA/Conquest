@@ -536,3 +536,4 @@ entry_points = {
 entities = Array[Resource]([SubResource("Resource_tdlmb"), SubResource("Resource_x0f7x"), SubResource("Resource_2dnr6"), SubResource("Resource_5gus7"), SubResource("Resource_cv78y"), SubResource("Resource_nwff1"), SubResource("Resource_bc3yb"), SubResource("Resource_vgws8"), SubResource("Resource_awlbg"), SubResource("Resource_pibb0"), SubResource("Resource_738ck"), SubResource("Resource_0cjoj"), SubResource("Resource_q34bc"), SubResource("Resource_5ojbn"), SubResource("Resource_07d2l")])
 on_enter = Array[Resource]([SubResource("Resource_pw1xy")])
 parent_area = &"crownhaven"
+level_band = Vector2i(2, 8)
