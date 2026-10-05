@@ -21,7 +21,7 @@ const MIGRATED := {
 	"river_crossing": ["hobb", "nan", "joss", "rc_child"],
 	"crownhaven": ["orwin", "gate_guard", "keep_guard_w", "keep_guard_e", "lisk", "dalla", "merchant", "fenwick",
 		"brisa", "biscuit", "corin", "kit", "baker", "tam", "north_guard", "gate_warden", "maribel", "veyra", "odalys",
-		"garrick", "merrow", "lark"],
+		"garrick", "merrow", "lyra"],
 	"sparse_forest": ["alder"],
 	"woodland_town": ["hale", "bryn", "sedge", "burr", "torvald", "road_warden", "fern", "ilse", "ferra", "wicke", "stranger"],
 }

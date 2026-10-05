@@ -310,20 +310,6 @@
 					}
 				]
 			},
-			"lark": {
-				"note": "Waiting by the south gate after the opening, until the first rival duel (the duel itself is offered when you talk to her -- the builder's Lark script).",
-				"variants": [
-					{
-						"if": "",
-						"lines": [
-							{
-								"speaker": "self",
-								"text": "Well? Come on, Oakvale -- I haven't got all day."
-							}
-						]
-					}
-				]
-			},
 			"lisk": {
 				"variants": [
 					{
@@ -352,6 +338,20 @@
 							{
 								"speaker": "self",
 								"text": "The army got a crate of the Researcher's shards last month. Only the officers carry them. An officer's Geode could flatten this dummy with one arm."
+							}
+						]
+					}
+				]
+			},
+			"lyra": {
+				"note": "Waiting by the south gate after the opening, until the first rival duel (the duel itself is offered when you talk to her -- the builder's Lyra script). TODO(story): rewritten when Lark was merged into Lyra.",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Well? Ready to test each other?"
 							}
 						]
 					}
@@ -592,11 +592,11 @@
 				"variants": [
 					{
 						"if": "after('rival.duel1')",
-						"label": "you've met Lark",
+						"label": "you've met Lyra",
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "You've duelled Lark? First batch, and doesn't she let everyone know it. My Petalfang wants a rematch with you first, mind."
+								"text": "You've duelled Lyra? Professor Elias' student, that one. My Petalfang wants a rematch with you first, mind."
 							}
 						]
 					},

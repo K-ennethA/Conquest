@@ -61,15 +61,15 @@
 			"id": "rival_lark",
 			"title": "A Fellow Tester",
 			"category": "side",
-			"summary": "Lark, another first-batch tester, wants to measure herself against you.",
-			"giver": "lark",
+			"summary": "Lyra, a fellow tester, wants to test herself against you.",
+			"giver": "lyra",
 			"location": "crownhaven",
 			"area": "crownhaven",
 			"start_flag": "opening.complete",
 			"complete_flag": "rival.duel1",
 			"steps": [
-				{"flag": "rival.met", "text": "Look for Lark just inside Crownhaven's south gate.", "location": "crownhaven", "area": "crownhaven", "npc": "lark"},
-				{"flag": "rival.duel1", "text": "Win or lose, finish your first duel with Lark.", "location": "crownhaven", "area": "crownhaven", "npc": "lark"}
+				{"flag": "rival.met", "text": "Look for Lyra just inside Crownhaven's south gate.", "location": "crownhaven", "area": "crownhaven", "npc": "lyra"},
+				{"flag": "rival.duel1", "text": "Win or lose, finish your first duel with Lyra.", "location": "crownhaven", "area": "crownhaven", "npc": "lyra"}
 			]
 		},
 		{

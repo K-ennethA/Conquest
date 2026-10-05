@@ -853,8 +853,8 @@ key = "rival.met"
 script = ExtResource("9_hw06u")
 kind = 1
 encounter_id = "crownhaven.rival.lark"
-opponent_name = "Lark"
-opponent_speaker_id = &"npc_lark"
+opponent_name = "Lyra"
+opponent_speaker_id = &"npc_lyra"
 opponent_team = Array[Dictionary]([{
 "character_id": "blightcap",
 "strength": 0.9
@@ -881,10 +881,10 @@ key = "rival.stage"
 
 [sub_resource type="Resource" id="Resource_vjobo"]
 script = ExtResource("5_sey8i")
-speaker_id = &"npc_lark"
-speaker_name = "Lark"
+speaker_id = &"npc_lyra"
+speaker_name = "Lyra"
 side = &"right"
-text = "Ha! See? First batch. Don't feel bad, Oakvale -- you'll get there. Probably."
+text = "That was a good test. We'll both be better for it."
 
 [sub_resource type="Resource" id="Resource_u5ktf"]
 script = ExtResource("6_a6ah0")
@@ -896,10 +896,10 @@ key = "rival.wins"
 
 [sub_resource type="Resource" id="Resource_04cnw"]
 script = ExtResource("5_sey8i")
-speaker_id = &"npc_lark"
-speaker_name = "Lark"
+speaker_id = &"npc_lyra"
+speaker_name = "Lyra"
 side = &"right"
-text = "...Huh. Fine. FINE. You got lucky, and Puck was still full from breakfast."
+text = "...Huh. You got me. That was a good test."
 
 [sub_resource type="Resource" id="Resource_2i6dx"]
 script = ExtResource("6_a6ah0")
@@ -918,10 +918,10 @@ then_commands = Array[Resource]([SubResource("Resource_ai5cx"), SubResource("Res
 
 [sub_resource type="Resource" id="Resource_y0wn8"]
 script = ExtResource("5_sey8i")
-speaker_id = &"npc_lark"
-speaker_name = "Lark"
+speaker_id = &"npc_lyra"
+speaker_name = "Lyra"
 side = &"right"
-text = "Your partner can barely stand. Rest up -- I'm not beating you like THAT."
+text = "Your partner can barely stand. Rest up first -- we'll test each other after."
 
 [sub_resource type="Resource" id="Resource_ythva"]
 script = ExtResource("6_a6ah0")
@@ -929,10 +929,10 @@ beats = Array[Resource]([SubResource("Resource_y0wn8")])
 
 [sub_resource type="Resource" id="Resource_havgg"]
 script = ExtResource("5_sey8i")
-speaker_id = &"npc_lark"
-speaker_name = "Lark"
+speaker_id = &"npc_lyra"
+speaker_name = "Lyra"
 side = &"right"
-text = "I'll be at the Crown Arena. Every tester worth their shard ends up there sooner or later -- come find me when you want a rematch."
+text = "I'll be at the Crown Arena. Come find me when you want to test each other again."
 
 [sub_resource type="Resource" id="Resource_7jqxj"]
 script = ExtResource("6_a6ah0")
@@ -944,7 +944,7 @@ key = "rival.duel1"
 
 [sub_resource type="Resource" id="Resource_xrnt7"]
 script = ExtResource("16_648o0")
-text = "Rival: Lark"
+text = "Rival: Lyra"
 toast_kind = "quest"
 
 [sub_resource type="Resource" id="Resource_r2e53"]
@@ -968,10 +968,10 @@ is_cancel = true
 
 [sub_resource type="Resource" id="Resource_yocek"]
 script = ExtResource("5_sey8i")
-speaker_id = &"npc_lark"
-speaker_name = "Lark"
+speaker_id = &"npc_lyra"
+speaker_name = "Lyra"
 side = &"right"
-text = "I'm Lark, first batch. One friendly bout -- ready?"
+text = "I'm Lyra. One friendly bout, to test each other -- ready?"
 
 [sub_resource type="Resource" id="Resource_ebpx6"]
 script = ExtResource("11_efaci")
@@ -980,23 +980,23 @@ options = Array[Resource]([SubResource("Resource_8fx3e"), SubResource("Resource_
 
 [sub_resource type="Resource" id="Resource_4qfn1"]
 script = ExtResource("4_dcd5c")
-speaker_id = &"npc_lark"
-speaker_name = "Lark"
+speaker_id = &"npc_lyra"
+speaker_name = "Lyra"
 figure = "trainer"
-id = &"lark"
+id = &"lyra"
 cell = Vector3i(17, 21, 0)
 facing = "west"
-display_name = "Lark"
+display_name = "Lyra"
 tint = Color(0.78, 0.5, 0.2, 1)
 visible_if = "has(\"opening.complete\") and not has(\"rival.duel1\")"
 on_interact = Array[Resource]([SubResource("Resource_ebpx6")])
 
 [sub_resource type="Resource" id="Resource_ceppj"]
 script = ExtResource("5_sey8i")
-speaker_id = &"npc_lark_arena"
-speaker_name = "Lark"
+speaker_id = &"npc_lyra_arena"
+speaker_name = "Lyra"
 side = &"right"
-text = "Puck needs a nap after that. Go rest at the Wayshrine -- then we go again."
+text = "My partner needs a rest. Go to the Wayshrine -- then we go again."
 
 [sub_resource type="Resource" id="Resource_ilrci"]
 script = ExtResource("6_a6ah0")
@@ -1006,8 +1006,8 @@ beats = Array[Resource]([SubResource("Resource_ceppj")])
 script = ExtResource("9_hw06u")
 kind = 1
 encounter_id = "crownhaven.rival.lark"
-opponent_name = "Lark"
-opponent_speaker_id = &"npc_lark"
+opponent_name = "Lyra"
+opponent_speaker_id = &"npc_lyra"
 opponent_team = Array[Dictionary]([{
 "character_id": "blightcap",
 "strength": 0.9
@@ -1034,10 +1034,10 @@ key = "rival.stage"
 
 [sub_resource type="Resource" id="Resource_qyah7"]
 script = ExtResource("5_sey8i")
-speaker_id = &"npc_lark_arena"
-speaker_name = "Lark"
+speaker_id = &"npc_lyra_arena"
+speaker_name = "Lyra"
 side = &"right"
-text = "That's more like it. First batch, remember?"
+text = "Good bout. We both learned something."
 
 [sub_resource type="Resource" id="Resource_owmq2"]
 script = ExtResource("6_a6ah0")
@@ -1049,10 +1049,10 @@ key = "rival.wins"
 
 [sub_resource type="Resource" id="Resource_qmkj0"]
 script = ExtResource("5_sey8i")
-speaker_id = &"npc_lark_arena"
-speaker_name = "Lark"
+speaker_id = &"npc_lyra_arena"
+speaker_name = "Lyra"
 side = &"right"
-text = "Again?! ...Alright. You're good. Don't let it go to your head."
+text = "Good bout. You're getting strong."
 
 [sub_resource type="Resource" id="Resource_voxsa"]
 script = ExtResource("6_a6ah0")
@@ -1081,10 +1081,10 @@ is_cancel = true
 
 [sub_resource type="Resource" id="Resource_ybw7y"]
 script = ExtResource("5_sey8i")
-speaker_id = &"npc_lark_arena"
-speaker_name = "Lark"
+speaker_id = &"npc_lyra_arena"
+speaker_name = "Lyra"
 side = &"right"
-text = "Back for more, Oakvale? Puck's been training. Rematch?"
+text = "Ready to test each other again? Rematch?"
 
 [sub_resource type="Resource" id="Resource_djkmn"]
 script = ExtResource("11_efaci")
@@ -1099,12 +1099,12 @@ else_commands = Array[Resource]([SubResource("Resource_ilrci")])
 
 [sub_resource type="Resource" id="Resource_rca6i"]
 script = ExtResource("4_dcd5c")
-speaker_id = &"npc_lark_arena"
-speaker_name = "Lark"
+speaker_id = &"npc_lyra_arena"
+speaker_name = "Lyra"
 figure = "trainer"
-id = &"lark_arena"
+id = &"lyra_arena"
 cell = Vector3i(23, 18, 0)
-display_name = "Lark"
+display_name = "Lyra"
 tint = Color(0.78, 0.5, 0.2, 1)
 visible_if = "has(\"rival.duel1\")"
 on_interact = Array[Resource]([SubResource("Resource_5fdwv")])

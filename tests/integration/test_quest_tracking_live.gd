@@ -116,13 +116,13 @@ func test_hud_tracker_toasts_and_objective_marker() -> void:
 	var tracked: Dictionary = QuestLog.tracked_entry(s)
 	assert_eq(ow.hud.tracked_quest_id(), String(tracked["id"]))
 	assert_eq(ow.hud.tracker_objective(), String(tracked["objective"]))
-	# Pin the rival quest: its objective is in Crownhaven, so the HUD says "Here" and Lark wears
+	# Pin the rival quest: its objective is in Crownhaven, so the HUD says "Here" and Lyra wears
 	# the objective marker.
 	s.tracked_quest = "rival_lark"
 	ow.refresh_quest_tracker()
 	assert_eq(ow.hud.tracked_quest_id(), "rival_lark")
 	assert_eq(ow.hud.tracker_place(), "Here", "the objective is in this area")
-	assert_eq(ow.objective_marker_actor(), "lark", "Lark is marked")
+	assert_eq(ow.objective_marker_actor(), "lyra", "Lyra is marked")
 	s.set_flag("rival.met")
 	await _frames(2)
 	assert_eq(ow.hud.toast_count(), 1, "the new objective is toasted")

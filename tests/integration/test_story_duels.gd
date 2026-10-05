@@ -217,7 +217,7 @@ func test_the_duel_content_ships_and_appears_on_its_flags() -> void:
 	assert_eq(fenna.battle.kind, BattleSpec.Kind.DUEL, "whose battle is a DUEL")
 	assert_false(fenna.battle.spar, "a real battle")
 	assert_true(moss.entity("bandit_ambush") is TriggerZone, "the ambush trigger")
-	for id in ["lark", "lark_arena", "wynn", "aldous", "general", "arena_master", "isolde", "arena"]:
+	for id in ["lyra", "lyra_arena", "wynn", "aldous", "general", "arena_master", "isolde", "arena"]:
 		assert_not_null(ch.entity(id), "Crownhaven has %s" % id)
 	assert_eq((ch.entity("arena") as PropEntity).prop, "arena", "the arena building")
 	var runs: Array = []
@@ -231,9 +231,9 @@ func test_the_duel_content_ships_and_appears_on_its_flags() -> void:
 	var past := StoryFixture.past_opening(StoryState.new())
 	assert_false(fenna.is_present(fresh), "Fenna waits until the opening is over")
 	assert_true(fenna.is_present(past), "then takes the road")
-	assert_true(ch.entity("lark").is_present(past), "the rival waits inside the gate after the opening")
+	assert_true(ch.entity("lyra").is_present(past), "the rival waits inside the gate after the opening")
 	assert_null(ch.entity("rival_meet"), "and does not ambush you: no trigger zone")
-	assert_false(ch.entity("lark_arena").is_present(past), "and moves to the arena only after the first duel")
+	assert_false(ch.entity("lyra_arena").is_present(past), "and moves to the arena only after the first duel")
 	assert_true(ch.entity("wynn").is_present(past), "the sparring roster is in the yard")
 	assert_false(moss.entity("bandit_ambush").is_present(past), "the ambush waits for the Act 1 hook")
 	past.set_flag("act1.met_rowan", 1)
@@ -295,7 +295,7 @@ func test_the_rival_duel_after_the_opening_sets_rival_flags_and_rematches_scale(
 	await _step(ow, Vector2i(0, -1))
 	assert_false(StoryController.is_script_running(), "walking in through the gate is never stopped")
 	ow = await _boot("crownhaven", Vector3i(18, 21, 0), "west")
-	assert_true(ow.interact(), "talk to Lark, who waits inside the gate")
+	assert_true(ow.interact(), "talk to Lyra, who waits inside the gate")
 	assert_eq(await _drive(ow), "duel", "and challenges you to a duel")
 	var br: BattleRequest = StoryController.active_request()
 	assert_eq(br.encounter_id, "crownhaven.rival.lark", "the rival's encounter")
@@ -305,7 +305,7 @@ func test_the_rival_duel_after_the_opening_sets_rival_flags_and_rematches_scale(
 	assert_almost_eq(dr.foe_party[0].strength, 0.9, 0.001, "stage 0: her Blightcap at 0.9")
 	await _fight(true)
 	var ow2 := await _boot()
-	assert_eq(await _drive(ow2), "done", "Lark's parting words")
+	assert_eq(await _drive(ow2), "done", "Lyra's parting words")
 	assert_eq(s.get_flag_int("rival.stage"), 1, "one rival duel fought")
 	assert_eq(s.get_flag_int("rival.wins"), 1, "and won")
 	assert_true(s.has_flag("rival.duel1"), "the first rival duel is behind you")
@@ -316,7 +316,7 @@ func test_the_rival_duel_after_the_opening_sets_rival_flags_and_rematches_scale(
 
 	# The rematch by the arena: tired until a rest, then stronger.
 	var ow3 := await _boot("crownhaven", Vector3i(22, 18, 0), "east")
-	assert_true(ow3.actor("lark_arena").visible, "Lark waits by the arena")
+	assert_true(ow3.actor("lyra_arena").visible, "Lyra waits by the arena")
 	assert_true(ow3.interact(), "talk to her")
 	assert_eq(await _drive(ow3), "done", "no rematch before a rest")
 	s.heal_party()
