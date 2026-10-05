@@ -187,11 +187,14 @@ static func evolution_context(state: StoryState, extra: Dictionary = {}) -> Dict
 	return ctx
 
 
-## [param ctx] plus what [param member] itself brings: the item it wears ([HeldItemTrigger]).
+## [param ctx] plus what [param member] itself brings: the item it wears ([HeldItemTrigger]) and its
+## story level ([LevelTrigger]).
 static func member_context(member: StoryPartyMember, ctx: Dictionary) -> Dictionary:
 	var out: Dictionary = ctx.duplicate()
 	if member != null and not out.has("held_item"):
 		out["held_item"] = member.item_id
+	if member != null and not out.has("level"):
+		out["level"] = member.level
 	return out
 
 

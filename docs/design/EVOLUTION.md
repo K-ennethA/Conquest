@@ -207,6 +207,7 @@ subclass with `is_met(ctx)`, `describe()` (checklist text), `progress(ctx)` ("2/
 | `WeatherTrigger` | `weathers` | `weather` (the area terrain's weather) | story | area, battle |
 | `StoryFlagTrigger` | `flag`, `min_value`, `label` | `story_flags` | story | flag (that key) |
 | `PartyHasTrigger` | `character_id` (a form or a line) | `party_members` (others only) | story | party |
+| `LevelTrigger` | `level_required` | `level` (the story member's level, PROGRESSION.md) | story | battle |
 
 **Battle feats** are counters on the member record (`feats: {wins, kos, clutch_wins,
 element_kos: {element: n}}`), recorded **after** a battle from what the Growth path already sees
@@ -216,7 +217,7 @@ single fighter), under the same gates as Growth. Wins count a won battle the mem
 (fallen or not); a clutch win is a won battle it finished alive at or under
 `EvolutionRules.clutch_hp_ratio` (0.25). Never read by the simulation.
 
-**Open modes** have no story context. A story requirement (`needs_story()`: UseItem, Location,
+**Open modes** have no story context. A story requirement (`needs_story()`: UseItem, Location, Level,
 Weather, StoryFlag, PartyHas) is simply **unmet** there, so a story-gated promotion cannot be
 farmed in Skirmish. An edge may opt out with `skip_story_requirements_outside_story = true`:
 those requirements are then **ignored** outside story (the checklist shows them as "story only").

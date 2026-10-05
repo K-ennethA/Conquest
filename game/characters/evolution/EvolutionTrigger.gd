@@ -25,9 +25,10 @@ class_name EvolutionTrigger
 ##   party_members  Array        [{member_id, character_id, line}]           (story)
 ##   bag            Dictionary   item_id -> count, the story bag             (story)
 ##   used_item      String       the bag item being used on the member NOW   (story)
+##   level          int          the member's story level                    (story)
 ##
 ## OPEN MODES (no story context): a requirement whose [method needs_story] is true (Location,
-## StoryFlag, PartyHas, Weather, UseItem) reads a key only story supplies, so it is simply
+## StoryFlag, PartyHas, Weather, UseItem, Level) reads a key only story supplies, so it is simply
 ## UNMET there -- a story-gated promotion can never be farmed in Skirmish. An edge may opt out
 ## with [member EvolutionResource.skip_story_requirements_outside_story]: those requirements
 ## are then IGNORED (neither met nor unmet) outside story.
