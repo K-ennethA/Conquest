@@ -3,7 +3,7 @@
 Each sheet here is the owner's reference for that character's look (and the base for their Blender
 model). Its HEAD DETAIL panel is cropped into the in-game portrait at `game/ui/portraits/<id>.png`
 by `tools/crop_portraits.gd` (re-run it after replacing a sheet). Roles are the owner's
-(DECISIONS.md #83-#86); the notes are copied from the sheets, nothing added.
+(DECISIONS.md #83-#87); the notes are copied from the sheets, nothing added.
 
 | Portrait id | Sheet | Who | From the sheet |
 |---|---|---|---|
@@ -20,6 +20,7 @@ by `tools/crop_portraits.gd` (re-run it after replacing a sheet). Roles are the 
 | `kazren` | `kazren.webp` | **Kazren**, the mountain chief (Mountain Base) | 33; Cliffborn tribe; explorer and scout; protects mountain passes; warm, arid mountains (desert edge) |
 | `lyra` | `lyra.webp` | **Lyra**, rival and ally | 17; student researcher, Professor Elias' student; peer to Wren |
 | `cael` | `cael.webp` | **Cael**, friend and ally | 17; student researcher, Professor Elias' student; peer to Wren; light armor; field work |
+| `vayne` | `vayne.webp` | **Vayne**, the King of Thieves -- the chief of the Hidden Thieves (the 4th thief, #42) | 32; master thief / rogue; charismatic, resourceful, burly and strong; an honorable scoundrel with a good heart; respected by locals; works alone or with a small crew |
 
 Lyra and Cael are the two testers with the hero at the ceremony and the kidnapping (#60). Which of
 them turns up in Deepwood Village and which in Beach Village (#56) is not set yet.

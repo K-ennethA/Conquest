@@ -17,7 +17,7 @@ func test_ids_resolve_through_the_npc_prefix_and_aliases() -> void:
 
 func test_every_sheet_has_a_portrait() -> void:
 	for id in ["wren", "elias", "varden", "varrick", "shadow_assassin", "kellan", "eloi", "nyra",
-			"saevi", "kazren", "lyra", "cael"]:
+			"saevi", "kazren", "lyra", "cael", "vayne"]:
 		assert_not_null(PortraitLibrary.authored(id), "%s has authored art" % id)
 
 

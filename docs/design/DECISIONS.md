@@ -371,3 +371,6 @@ asked about. An earlier decision stands unless the owner changes it.
     -- the two testers of #60 (Professor Elias' students, per their sheets).
 - The sheets are the characters' profile art (cropped portraits in game/ui/portraits/) and the
   reference for their models.
+87. **Vayne, the King of Thieves,** is the chief of the Hidden Thieves: the 4th thief of #42 (on the
+    level of a chief; honors and heals the hero, then battles with his bonded ally, no chains, no
+    shard). Sheet: docs/design/characters/vayne.webp.
