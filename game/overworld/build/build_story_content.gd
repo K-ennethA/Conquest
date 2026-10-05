@@ -62,7 +62,7 @@ extends SceneTree
 ## spoken to; the rival is an opt-in bout. Cutscenes are kept to the lines needed to follow them.
 ##
 ## DUELS IN STORY (DECISIONS.md #31 / #33 -- the section at the end of this file): a duel trainer
-## (Tester Fenna, the Mossway), the rival (Lark: rival.*), the barracks' sparring roster (a cooldown
+## (Tester Fenna, the Mossway), the friendly rival (Lyra: rival.*), the barracks' sparring roster (a cooldown
 ## per partner: spar_ready()), the Mossway ambush (mossway.ambush.*) and the Crown Arena's tournament
 ## ladder + champion rematch (arena.crown_cup.*).
 ##
@@ -116,7 +116,6 @@ const NAMES := {
 	"PEDLAR": "Pedlar Jory",                # the travelling merchant on the Mossway (after the opening)
 	"SHOP_PEDLAR": "Jory's Travelling Cart",
 	# --- Duels in story (DECISIONS.md #33) ---
-	"RIVAL": "Lark",                        # the RIVAL: a fellow tester from the first batch
 	# DECISIONS.md #51/#52/#60/#61: the two fellow shard TESTERS at the ceremony -- the main friendly
 	# rivals and allies (temporary joins; they join for the final battles).
 	"LYRA": "Lyra",                         # owner: rival + ally, Professor Elias' student (docs/design/characters/lyra.webp)
@@ -356,9 +355,11 @@ const SPAR_GENERAL_ID := "crownhaven.spar.rowan"
 ## rest (StoryRuleset.spar_cooldown_rests -- spars award Growth, so this stops the farm).
 const SPAR_WYNN_ID := "crownhaven.spar.wynn"
 const SPAR_ALDOUS_ID := "crownhaven.spar.aldous"
-## THE RIVAL: the first duel (a trigger inside Crownhaven's south gate, after the opening), then
+## THE FRIENDLY RIVAL (Lyra): the first duel (a trigger inside Crownhaven's south gate, after the opening), then
 ## rematches by the arena (once per rest). Progress lives in flags so later rematches scale:
-const RIVAL_DUEL_ID := "crownhaven.rival.lark"
+## LEGACY KEYS (the owner merged the old rival "Lark" into Lyra, 2026-10-05): the encounter id below and the
+## rival.* flags keep their old spelling so saves and the sparred.<id>.* cooldown flags stay valid.
+const RIVAL_DUEL_ID := "crownhaven.rival.lark"  # legacy id (Lark -> Lyra)
 const F_RIVAL_MET := "rival.met"
 ## Rival duels FOUGHT (int) -- the rematch spec scales on it (BattleSpec.scale_flag).
 const F_RIVAL_STAGE := "rival.stage"
@@ -2445,7 +2446,7 @@ func _general_spar_offer() -> IfCommand:
 #  (BattleSpec.validate checks), their strength the duel's stat scale (DuelScaling).
 #  DECISION 7 (humans fight alongside creatures) is NOT built yet: the people are the trainers;
 #  their creatures fight. PARTY DUELS: a duel fields your lead plus up to two bench members (the
-#  duel ruleset's story format) against the opponent's TEAM -- Fenna, Lark, the Cup's later
+#  duel ruleset's story format) against the opponent's TEAM -- Fenna, Lyra, the Cup's later
 #  rounds and the champion bring two or three; wild encounters and the ambush stay one foe.
 # =====================================================================================
 
@@ -2627,18 +2628,18 @@ func _ambush() -> Array:
 
 const CH_ARENA := Rect2i(22, 19, 5, 3)
 const CH_ARENA_MASTER := Vector2i(22, 22)
-## Lark waits beside the south gate's avenue (the road home to Oakvale comes in there now).
-const CH_LARK_START := Vector2i(CH_SOUTH_GATE.x + 2, CH_SOUTH_GATE.y - 2)
+## Lyra waits beside the south gate's avenue (the road home to Oakvale comes in there now).
+const CH_LYRA_START := Vector2i(CH_SOUTH_GATE.x + 2, CH_SOUTH_GATE.y - 2)
 ## By the arena: on the market street, reached from Harbour Lane behind them as well as the street.
-const CH_LARK_ARENA := Vector2i(23, 18)
+const CH_LYRA_ARENA := Vector2i(23, 18)
 const CH_CHAMPION := Vector2i(25, 18)
 
 
-## The RIVAL's duel spec: Lark's Blightcap, a FRIENDLY (DECISIONS.md #29: rival friendlies never
+## The friendly RIVAL's duel spec: Lyra's Blightcap, a FRIENDLY (DECISIONS.md #29: rival friendlies never
 ## cost a life), scaling +8% per rival duel fought (rival.stage, up to 6) -- the first duel is
 ## stage 0.
 func _rival_spec() -> BattleSpec:
-	var spec := _duel_spec(RIVAL_DUEL_ID, "{RIVAL}", &"npc_lark",
+	var spec := _duel_spec(RIVAL_DUEL_ID, "{LYRA}", &"npc_lyra",
 		[{"character_id": "blightcap", "strength": 0.9}, {"character_id": "petalfang", "strength": 0.75}],
 		true, BattleSpec.DefeatPolicy.CONTINUE, 60)
 	spec.enemy_level = LV_RIVAL
@@ -2650,7 +2651,7 @@ func _rival_spec() -> BattleSpec:
 
 
 ## After any rival duel that was FOUGHT: the stage counter (the next rematch is stronger), the win
-## counter, and Lark's line.
+## counter, and Lyra's line.
 func _rival_after(win: Array, lose: Array) -> Array:
 	return [
 		IfCommand.make(FOUGHT, [
@@ -2662,55 +2663,57 @@ func _rival_after(win: Array, lose: Array) -> Array:
 
 func _rival() -> Array:
 	var out: Array = []
-	var lark := _npc("lark", CH_LARK_START, "west", "RIVAL", Color(0.78, 0.5, 0.2), "trainer")
-	lark.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_COMPLETE, F_RIVAL_DUEL1]
-	# Her waiting line is in dialogue.json (areas.crownhaven.lark).
-	out.append(lark)
+	var lyra := _npc("lyra", CH_LYRA_START, "west", "LYRA", Color(0.78, 0.5, 0.2), "trainer")
+	lyra.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_COMPLETE, F_RIVAL_DUEL1]
+	# Her waiting line is in dialogue.json (areas.crownhaven.lyra).
+	out.append(lyra)
 
-	# OPT-IN, not an ambush: Lark waits by the gate and the bout starts only when you talk to her (her
+	# OPT-IN, not an ambush: Lyra waits by the gate and the bout starts only when you talk to her (her
 	# waiting line is the bank's, then this offer). The old meeting speeches are cut.
 	var first: Array = [
 		_flag(F_RIVAL_MET),
 		_duel(_rival_spec()),
 	]
 	first.append_array(_rival_after([
-		_line("lark", "RIVAL", "...Huh. Fine. FINE. You got lucky, and Puck was still full from breakfast."),
+		_line("lyra", "LYRA", "...Huh. You got me. That was a good test."),  # TODO(story)
 	], [
-		_line("lark", "RIVAL", "Ha! See? First batch. Don't feel bad, Oakvale -- you'll get there. Probably."),
+		_line("lyra", "LYRA", "That was a good test. We'll both be better for it."),  # TODO(story)
 	]))
 	first.append(IfCommand.make(FOUGHT, [
 		_say([
-			_line("lark", "RIVAL", "I'll be at the Crown Arena. Every tester worth their shard ends up there sooner or later -- come find me when you want a rematch."),
+			_line("lyra", "LYRA", "I'll be at the Crown Arena. Come find me when you want to test each other again."),  # TODO(story)
 		]),
 		_flag(F_RIVAL_DUEL1),
-		_toast("Rival: {RIVAL}"),
+		_toast("Rival: {LYRA}"),
 		SaveGameCommand.new(),
 	], [
-		_say([_line("lark", "RIVAL", "Your partner can barely stand. Rest up -- I'm not beating you like THAT.")]),
+		# TODO(story)
+		_say([_line("lyra", "LYRA", "Your partner can barely stand. Rest up first -- we'll test each other after.")]),
 	]))
 	var offer := ChoiceCommand.new()
-	offer.prompt = _line("lark", "RIVAL", "I'm {RIVAL}, first batch. One friendly bout -- ready?")
+	offer.prompt = _line("lyra", "LYRA", "I'm {LYRA}. One friendly bout, to test each other -- ready?")  # TODO(story)
 	offer.options = StoryCommand.list([ChoiceOption.make("Let's go.", first), ChoiceOption.make("Not now.", [], true)])
-	lark.on_interact = StoryCommand.list([offer])
+	lyra.on_interact = StoryCommand.list([offer])
 
 	# By the arena after the first duel: rematches, once per rest, stronger every time.
-	var lark2 := _npc("lark_arena", CH_LARK_ARENA, "south", "RIVAL", Color(0.78, 0.5, 0.2), "trainer")
-	lark2.visible_if = "has(\"%s\")" % F_RIVAL_DUEL1
+	var lyra2 := _npc("lyra_arena", CH_LYRA_ARENA, "south", "LYRA", Color(0.78, 0.5, 0.2), "trainer")
+	lyra2.visible_if = "has(\"%s\")" % F_RIVAL_DUEL1
 	var ask := ChoiceCommand.new()
-	ask.prompt = _line("lark_arena", "RIVAL", "Back for more, Oakvale? Puck's been training. Rematch?")
+	ask.prompt = _line("lyra_arena", "LYRA", "Ready to test each other again? Rematch?")  # TODO(story)
 	var yes_cmds: Array = [_duel(_rival_spec())]
 	yes_cmds.append_array(_rival_after([
-		_line("lark_arena", "RIVAL", "Again?! ...Alright. You're good. Don't let it go to your head."),
+		_line("lyra_arena", "LYRA", "Good bout. You're getting strong."),  # TODO(story)
 	], [
-		_line("lark_arena", "RIVAL", "That's more like it. First batch, remember?"),
+		_line("lyra_arena", "LYRA", "Good bout. We both learned something."),  # TODO(story)
 	]))
 	ask.options = StoryCommand.list([ChoiceOption.make("Rematch!", yes_cmds), ChoiceOption.make("Not now.", [], true)])
-	lark2.on_interact = StoryCommand.list([
+	lyra2.on_interact = StoryCommand.list([
 		IfCommand.make("spar_ready(\"%s\")" % RIVAL_DUEL_ID, [ask], [
-			_say([_line("lark_arena", "RIVAL", "Puck needs a nap after that. Go rest at the Wayshrine -- then we go again.")]),
+			# TODO(story)
+			_say([_line("lyra_arena", "LYRA", "My partner needs a rest. Go to the Wayshrine -- then we go again.")]),
 		]),
 	])
-	out.append(lark2)
+	out.append(lyra2)
 	return out
 
 

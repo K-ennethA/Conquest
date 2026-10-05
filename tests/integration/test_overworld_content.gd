@@ -783,7 +783,7 @@ func test_everyone_can_be_reached_at_every_stage_of_the_story() -> void:
 	# The bug itself, by name: Garrick, Isolde and the rival by the arena.
 	var ch := _area("crownhaven")
 	var g := OverworldGrid.build(ch, everything)
-	for id in ["garrick", "isolde", "lark_arena", "arena_master"]:
+	for id in ["garrick", "isolde", "lyra_arena", "arena_master"]:
 		assert_false(TapPathfinder.path_to_adjacent(g, ch.entry("south_gate")["cell"], ch.entity(id).cell).is_empty(),
 			"%s is reachable from the south gate with every flag set" % id)
 

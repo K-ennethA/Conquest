@@ -22,7 +22,7 @@ holds ~2 s, slides out; pure presentation, no input, no pause). `PlaceAnnouncer`
 for a *different* named place -- never inside a building, never again for the place you are already
 standing in, never for a place named in the last 20 s (hopping over an area edge and back). The old
 once-only arrival narrations (River Crossing, Crownhaven, Woodland Town), the Mossway's grass hint
-and the Crownhaven rival ambush are gone (the arrival flags are still set, silently; Lark is now an
+and the Crownhaven rival ambush are gone (the arrival flags are still set, silently; Lyra -- the old rival Lark, merged into her -- is now an
 opt-in bout you start by talking to her). Ambient NPC talk speaks only when you talk to the NPC.
 
 1. **Oakvale (home)** — a new journey starts on your doorstep with **no creature**
@@ -268,7 +268,7 @@ budget), `catch_rate` (negative = from the power budget).
   no Growth edge was migrated (#82).
 - **Content** (builder `REGION_BANDS` / `LV_*` constants): Heartlands areas 2-8 (the Mossway grass
   2-5), Sparse Forest / Woodland Town 8-15, the other listed regions' bands ready for their areas;
-  first fight 4, the lone Petalfang 4, Bram 5, Fenna 6, the footpad 7, the bandit boss 8, Lark 7,
+  first fight 4, the lone Petalfang 4, Bram 5, Fenna 6, the footpad 7, the bandit boss 8, Lyra 7,
   sparring Wynn 5 / Aldous 7 / the General 10, the Crown Cup 6 → 7 → 8 → 10, the champion's rematch 12.
 
 **Known gaps:** a replay of a story TACTICAL battle spawns at roster base (replays are not a story
@@ -409,14 +409,14 @@ every duel here is the strict 1v1 creature duel — the people are trainers, the
 | What | Where | Kind | Flags / ids |
 |---|---|---|---|
 | **Tester Fenna** — a trainer whose battle is a DUEL (line of sight 3, like Bram; Petalfang 0.9, 90 gold) | the Mossway (11,7), facing the path; after `opening.complete` | real duel, WHITEOUT | `trainer.mossway.fenna.defeated` |
-| **Lark** — the RIVAL, a first-batch tester (Blightcap "Puck"). First duel: opt-in -- talk to her inside Crownhaven's south gate (the road home) after the opening; then rematches by the arena | Crownhaven (17,21) → (23,18) | spar (a rival FRIENDLY), CONTINUE, 60 gold on a win, `clash_intro` | `rival.met`, `rival.stage` (duels fought), `rival.wins`, `rival.duel1`; encounter `crownhaven.rival.lark` |
+| **Lyra** — the friendly RIVAL, a fellow tester and Professor Elias' student (Blightcap; the old rival Lark was merged into her -- the `rival.*` flags, quest `rival_lark` and encounter `crownhaven.rival.lark` keep their legacy spelling for saves). First duel: opt-in -- talk to her inside Crownhaven's south gate (the road home) after the opening; then rematches by the arena | Crownhaven (17,21) → (23,18) | spar (a rival FRIENDLY), CONTINUE, 60 gold on a win, `clash_intro` | `rival.met`, `rival.stage` (duels fought), `rival.wins`, `rival.duel1`; encounter `crownhaven.rival.lark` |
 | **Sparring roster** — Corporal Wynn (Blightcap 0.8) < Lieutenant Aldous (Petalfang 0.95) < General Varden (Geode 0.8, the existing spar); a "Sparring Roster" sign | the barracks yard; after the opening (the General after his first line) | spar, CONTINUE, no purse | `crownhaven.spar.wynn` / `.aldous` / `.rowan` |
 | **The ambush** — Cutpurse Nell and her footpad hold the Mossbrook's plank bridge (the only crossing: the brook runs tree line to tree line) once you have spoken to the General at the barracks | the Mossway, trigger at (21,6); after `act1.met_rowan` | TWO real duels back to back (HP carries), WHITEOUT; Classic permadeath applies | `mossway.ambush.sprung`, `.footpad_beaten` (a beaten footpad stays beaten after a loss), `.cleared`; 40 + 180 gold + a Dawnpetal Draught |
 | **The Crown Arena** — a new `arena` prop (elliptical stone drum, pennants, gate arch) where the SE house stood; **Arena Master Bex** runs **the Crown Cup**; **Champion Isolde** offers rematches once her title is yours | Crownhaven (22..26, 19..21); master at (22,22), champion (25,18) | 4 spars | `arena.crown_cup.run` / `.round` / `.wins` / `.champion` (the title); rematch `arena.crown_cup.champion_beaten` |
 
 **Rematch scaling** — `BattleSpec.scale_flag` / `scale_step` / `scale_max_steps`: every opponent's
 strength is multiplied by `1 + step × min(flag, max)` when a script starts the battle
-(`StartBattleCommand` → `BattleSpec.apply_scaling`; the authored spec is never mutated). Lark +8% per
+(`StartBattleCommand` → `BattleSpec.apply_scaling`; the authored spec is never mutated). Lyra +8% per
 rival duel fought (max 6), Isolde +8% per win over her (max 6), every Cup round +5% per cup already
 won (max 4).
 
@@ -428,7 +428,7 @@ farm is a **cooldown per partner**, not a Growth gate: `StorySparring` stamps ev
 (`sparred.<encounter id>.rest` / `.step`, so nothing new in the save format), and the partner is
 ready again once the journey has rested `StoryRuleset.spar_cooldown_rests` times (default **1**:
 a Wayshrine / healer / whiteout rest) and walked `spar_cooldown_steps` (default 0). Content opts in
-with the new condition `spar_ready("<encounter id>")` (the roster, the General, Lark's and Isolde's
+with the new condition `spar_ready("<encounter id>")` (the roster, the General, Lyra's and Isolde's
 rematches); a partner who is not ready says so ("rest up at the Wayshrine"). Spars never cause
 permadeath (#29): `BattleSpec.spar` as before.
 
