@@ -87,8 +87,8 @@ const RULES_PATH: String = "res://game/overworld/content/progression_rules.tres"
 ## A species' catch rate when its [member CharacterResource.catch_rate] is unset (< 0): 1.0 at
 ## or below [member catch_budget_easy] power budget, [member catch_rate_min] at or above
 ## [member catch_budget_hard], linear between -- strong species are hard to bond with (#78).
-@export var catch_budget_easy: int = 110
-@export var catch_budget_hard: int = 260
+@export var catch_budget_easy: int = 130
+@export var catch_budget_hard: int = 240
 @export_range(0.0, 1.0, 0.01) var catch_rate_max: float = 1.0
 @export_range(0.0, 1.0, 0.01) var catch_rate_min: float = 0.2
 ## The content validator flags a NON-BOSS story trainer fielding a species below this rate

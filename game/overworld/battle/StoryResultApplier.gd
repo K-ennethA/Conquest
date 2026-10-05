@@ -34,13 +34,16 @@ extends RefCounted
 ##
 ## Returns {whiteout: bool, rewarded: bool, gold: int, items: Array, flags: Array,
 ## growth: Array (the end-screen rows), feats: Dictionary ({member_id: feat deltas}),
-## items_used: Dictionary, fallen: Array (member ids that fell), spar_recovered: Array}.
+## items_used: Dictionary, fallen: Array (member ids that fell), spar_recovered: Array,
+## xp: Array (the XP / level-up rows, [StoryProgression]), bond: Dictionary ({member_id: {gained, level}})}.
+##   * XP / LEVELS ([StoryProgression], docs/design/PROGRESSION.md) under the same gates as Growth
+##     (only with a [param growth_ctx]), once the battle's HP is in: a level-up keeps HP's ratio.
 
 
 static func apply(state: StoryState, request: BattleRequest, result: BattleResult,
 		ruleset: StoryRuleset = null, growth_ctx: Dictionary = {}) -> Dictionary:
 	var out: Dictionary = {"whiteout": false, "rewarded": false, "gold": 0, "items": [], "flags": [],
-		"growth": [], "feats": {}, "items_used": {}, "fallen": [], "spar_recovered": []}
+		"growth": [], "feats": {}, "items_used": {}, "fallen": [], "spar_recovered": [], "xp": [], "bond": {}}
 	if state == null or result == null or result.is_game_over():
 		return out
 
@@ -83,6 +86,14 @@ static func apply(state: StoryState, request: BattleRequest, result: BattleResul
 			StorySparring.note_bout(state, sid)
 	else:
 		out["fallen"] = StoryPermadeath.apply_fallen(state, request, result)
+
+	# PROGRESSION (StoryProgression, PROGRESSION.md): XP under the same gates as Growth, AFTER the
+	# battle's HP is in (a level-up keeps that HP's ratio) and BEFORE a whiteout heals the party.
+	if not growth_ctx.is_empty():
+		var xp_awards: Dictionary = StoryProgression.awards_for(state, request, result, null, growth_ctx)
+		out["xp"] = StoryProgression.apply_awards(state, xp_awards)
+		# BOND (DECISIONS.md #68): every fielded member, any fought outcome.
+		out["bond"] = StoryProgression.apply_bond(state, StoryProgression.bond_for(state, result, null, growth_ctx))
 
 	if result.is_victory() and request != null:
 		var rw: Dictionary = request.rewards

@@ -31,6 +31,10 @@ enum Kind { TOWN, ROUTE, INTERIOR, DUNGEON }
 ## An INTERIOR's town: the area whose building door leads here (docs/STORY_MODE.md "Interiors").
 ## The world map lists the interior under the town's place, so "You are here" stays the town.
 @export var parent_area: StringName = &""
+## The area's STORY LEVEL BAND (min, max -- docs/design/PROGRESSION.md §3, DECISIONS.md #76): what
+## its wild creatures roll ([member EncounterZone.level_band] may narrow it per zone), what a
+## SCALED chief clamps into and what a LEGEND is authored above. (0, 0) = unset (no levels).
+@export var level_band: Vector2i = Vector2i.ZERO
 
 
 func is_interior() -> bool:

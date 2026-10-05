@@ -402,6 +402,9 @@ func _update_unit_info(unit: Unit) -> void:
 
 	if unit_name_label:
 		unit_name_label.text = unit.get_display_name()
+		# A STORY battle's unit carries its level (PROGRESSION.md): "Barkling  Lv 7".
+		if unit is Node and (unit as Node).has_meta(StoryBattleBridge.LEVEL_META):
+			unit_name_label.text += "  Lv %d" % int((unit as Node).get_meta(StoryBattleBridge.LEVEL_META))
 
 	if unit_type_label:
 		# The CLASS line: the humanized character id, plus the owning player -- who a unit

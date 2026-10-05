@@ -14,12 +14,15 @@ extends StartBattleCommand
 ## Wild only: the CONTACT opening ([constant BattleRequest.OPENING_AMBUSH] / ..._AMBUSHED /
 ## ..._NEUTRAL; "" = none) written to the request's rules.
 @export var opening: String = ""
+## Wild only: the creature's STORY LEVEL (rolled from its zone's band by the overworld,
+## [method EncounterRoller.roll_level]); 0 = no level.
+@export_range(0, 200) var level: int = 0
 
 
 func build_request(ctx: ScriptContext) -> BattleRequest:
 	var r: BattleRequest = null
 	if entry != null:
-		r = entry.to_request(area_id if not area_id.is_empty() else ctx.area_id, id_kind, opening)
+		r = entry.to_request(area_id if not area_id.is_empty() else ctx.area_id, id_kind, opening, level)
 	elif spec != null:
 		r = spec.to_request(source, encounter_id)
 	# A TACTICAL encounter row (an authored board) stays tactical: only everything else is a duel.

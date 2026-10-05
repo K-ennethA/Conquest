@@ -80,6 +80,8 @@ var _active_request: BattleRequest = null
 var _reported: bool = false
 var _last_result: BattleResult = null
 var _tracking: Dictionary = {}
+## The XP rows the tactical end screen shows (preview of what Continue awards -- [StoryProgression]).
+var _progress_preview: Array = []
 ## The journey as it stood before the battle (Try Again restores it).
 var _pre_battle: Dictionary = {}
 var _resume_pending: bool = false
@@ -197,7 +199,7 @@ func new_journey(slot: int = 0, tier: String = "") -> Dictionary:
 	s.rng_seed = _fresh_seed()
 	s.gold = rs.starting_gold
 	for cid in rs.starting_party:
-		s.add_member(String(cid), "", rs.party_cap)
+		s.add_member(String(cid), "", rs.party_cap, ProgressionRules.current().starter_level)
 	var area: OverworldAreaResource = load_area(String(rs.start_area))
 	if area == null:
 		return {"success": false, "reason": "no_start_area"}
@@ -771,6 +773,9 @@ func begin_battle(request: BattleRequest, launch: bool = true) -> Dictionary:
 			return {"success": false, "reason": "no_battle_map"}
 
 	request.party = StoryBattleBridge.party_snapshot(members)
+	# A guest ally the board places (not a party member) fights at the party's top level.
+	if request.ally_level <= 0:
+		request.ally_level = _state.party_top_level()
 	# The duel's Items action draws on the story bag's battle consumables (tactical battles have no
 	# item action yet).
 	request.items = battle_items() if request.is_duel() else {}
@@ -797,6 +802,7 @@ func begin_battle(request: BattleRequest, launch: bool = true) -> Dictionary:
 	_reported = false
 	_last_result = null
 	_tracking = {}
+	_progress_preview = []
 
 	if request.is_duel():
 		var r: Dictionary = DuelLauncher.launch(request)
@@ -854,6 +860,7 @@ func _disarm_battle() -> void:
 	_active_request = null
 	_reported = false
 	_tracking = {}
+	_progress_preview = []
 
 
 ## The live story battle request (null when none).
@@ -894,6 +901,45 @@ func mode_id() -> String:
 
 func mode_name() -> String:
 	return "Story"
+
+
+## MapLoader's spawn hook (docs/design/PROGRESSION.md): the STORY LEVEL a tactical unit spawns at --
+## a party member's own, a guest ally's (the party's top), a foe's (its spawn's "level", else the
+## request's enemy_level). 0 unless a story tactical battle is live, so every other mode's board,
+## and every replay, spawns at roster base exactly as before.
+func level_for_spawn(player_id: int, spawn_data: Dictionary) -> int:
+	if not is_battle_active():
+		return 0
+	return StoryBattleBridge.level_for_spawn(_active_request, player_id, spawn_data)
+
+
+## The XP / level-up rows Continue will award for [param result] (the end screens' preview;
+## [StoryProgression]). Empty with no live battle or when the battle is gated off.
+func preview_progress(result: BattleResult) -> Array[Dictionary]:
+	if _state == null or _active_request == null or result == null or result.is_game_over():
+		var none: Array[Dictionary] = []
+		return none
+	var awards: Dictionary = StoryProgression.awards_for(_state, _active_request, result, null, _growth_context())
+	return StoryProgression.preview_rows(_state, awards)
+
+
+## The tactical end screen's XP rows (GameOverScreen asks while this battle is active).
+func battle_progress_rows() -> Array:
+	return _progress_preview.duplicate(true) if is_battle_active() else []
+
+
+## A story DUEL's results card: the XP rows of the duel result [param duel_result] (a
+## [method DuelResult.to_battle_result] dictionary) -- the stage asks before the card shows.
+func preview_duel_progress(duel_result: Dictionary) -> Array:
+	if _active_request == null or not _active_request.is_duel():
+		return []
+	var r: BattleResult = BattleResult.from_dict(duel_result)
+	if r == null:
+		return []
+	if r.encounter_id.is_empty():
+		r.encounter_id = _active_request.encounter_id
+	r.spar = r.spar or _active_request.is_spar()
+	return preview_progress(r)
 
 
 ## GameWorldManager._setup_local_game's one hook: tag the fielded members + carried HP.
@@ -971,6 +1017,8 @@ func _on_battle_resolved(outcome, _context = {}) -> void:
 	var awards: Dictionary = StoryGrowth.awards_for(result, EvolutionRules.current(), _growth_context())
 	var feats: Dictionary = StoryGrowth.feats_for(_state, result, EvolutionRules.current(), _growth_context())
 	GrowthTracker.seed_growth_this_battle(StoryGrowth.preview_rows(_state, awards, {}, feats))
+	# ...and the XP / level-ups (PROGRESSION.md) the same way.
+	_progress_preview = preview_progress(result)
 
 
 ## Enemy KOs per member this battle, from the battle's GrowthTracker roll call ({} without one).
@@ -1243,6 +1291,7 @@ func _retry() -> void:
 	_reported = false
 	_last_result = null
 	_tracking = {}
+	_progress_preview = []
 	_stage_tactical(request)
 	_change_scene(GAME_WORLD_SCENE)
 

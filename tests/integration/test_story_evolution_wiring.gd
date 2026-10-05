@@ -192,7 +192,8 @@ func test_growth_evolution_offer_and_the_evolved_form_fights_next() -> void:
 	assert_eq(bark.growth_points(), 3, "Continue awarded the Growth into the journey's member record")
 	assert_eq(s.member("vineweave").growth_points(), 1, "every surviving fielded member earns")
 	_teardown_world()
-	bark.current_hp = 27  # of Barkling's 55: about half
+	var bark_max_before: int = bark.max_hp()  # its level's max (55 at level 1; the win paid XP)
+	bark.current_hp = 27  # about half
 	# Back on the overworld (the host boot is simulated): the offer chain runs, then the script.
 	StoryController.overworld_ready(null)
 	assert_true(await _await_until(func() -> bool: return not _screens.is_empty(), 60), "the Evolution screen is offered")
@@ -209,7 +210,8 @@ func test_growth_evolution_offer_and_the_evolved_form_fights_next() -> void:
 	assert_eq(bark.character_id, "oakheart", "the party member BECAME Oakheart")
 	assert_eq(bark.member_id, "tree_grunt", "same individual (member id kept)")
 	assert_eq(bark.item_id, "heartwood_charm", "its item stays on")
-	assert_eq(bark.current_hp, roundi(27.0 / 55.0 * 96.0), "HP kept by ratio (55 -> 96 max)")
+	assert_eq(bark.current_hp, roundi(27.0 / float(bark_max_before) * float(bark.max_hp())),
+		"HP kept by ratio (Barkling max -> Oakheart max at the same level)")
 	assert_eq(bark.evolution_history().size(), 1, "the evolution is in its history")
 	assert_true(RosterLedger.is_form_unlocked("oakheart"), "Oakheart is unlocked for the open modes too")
 	assert_eq(RosterLedger.form_of("tree_grunt"), &"tree_grunt", "the open-mode Barkling is untouched")

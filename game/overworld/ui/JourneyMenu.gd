@@ -358,7 +358,7 @@ func _member_card(m: StoryPartyMember, is_lead: bool, ctx: Dictionary) -> PanelC
 	bar.value = m.hp_value()
 	ConquestTheme.tint_hp_bar(bar, float(m.hp_value()) / float(maxi(1, m.max_hp())))
 	col.add_child(bar)
-	var hp := MenuKit.label("HP %d / %d%s" % [m.hp_value(), m.max_hp(), "  ·  Wounded" if m.wounded else ""], &"DimLabel")
+	var hp := MenuKit.label("Lv %d  ·  HP %d / %d%s" % [m.level, m.hp_value(), m.max_hp(), "  ·  Wounded" if m.wounded else ""], &"DimLabel")
 	hp.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	col.add_child(hp)
 	var worn: ItemResource = ItemLibrary.get_item(m.item_id) if not m.item_id.is_empty() else null

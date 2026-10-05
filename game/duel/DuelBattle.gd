@@ -242,6 +242,9 @@ func _spawn_member(side: int, index: int, combatant: DuelCombatant) -> Dictionar
 	if not bool(compiled["success"]):
 		return compiled
 	var dc: DuelCharacter = compiled["character"]
+	# STORY LEVEL first (the one stat-at-level function, on this private copy -- rule 7), then the
+	# opaque strength multiplier on top. A level of 0 (every open-mode duel) changes nothing.
+	Progression.apply_level(dc, combatant.level)
 	DuelScaling.apply(dc, rules.clamp_strength(combatant.strength))
 	var lead := index == 0
 
@@ -254,6 +257,8 @@ func _spawn_member(side: int, index: int, combatant: DuelCombatant) -> Dictionar
 	map_root.get_node(FIELD_NODES[side] if lead else BENCH_NODES[side]).add_child(unit)
 	unit.set_meta(&"duel_side", side)
 	unit.set_meta(&"duel_member", index)
+	if combatant.level > 0:
+		unit.set_meta(StoryBattleBridge.LEVEL_META, combatant.level)
 	# Stable ids from the TEAM, not the board: "<side>:<member>" (a lead is "<side>:0", exactly
 	# what NetUnitIds.assign would have named it), identical on every peer and replay.
 	unit.set_meta(NetUnitIds.META, "%d:%d" % [side, index])
@@ -1016,9 +1021,15 @@ func _finish(aborted: bool = false) -> void:
 			result.defeated.append(String(teams[1][int(entry[1])]["combatant"].character_id))
 	if result.winner_side == 0 and request.can_befriend():
 		var foe_id := String(request.foe_party[0].character_id)
-		var roll := rules.roll_join(befriend_rng(), _subdued[1])
+		# STORY: the species' catch rate multiplies the chance (DECISIONS.md #78); open modes roll 1.0.
+		var catch_mult: float = 1.0
+		if request.origin == DuelRequest.ORIGIN_STORY:
+			catch_mult = Progression.catch_rate_of(CharacterLibrary.get_character(StringName(foe_id)))
+		var roll := rules.roll_join(befriend_rng(), _subdued[1], catch_mult)
 		result.befriend_offer = {
 			"character_id": foe_id,
+			# The level it was met at: a befriended creature joins at it (PROGRESSION.md §1).
+			"level": request.foe_party[0].level,
 			# A story-critical recruit is never missable: a win always offers.
 			"offered": bool(roll["offered"]) or request.is_story_critical(),
 			"accepted": false,

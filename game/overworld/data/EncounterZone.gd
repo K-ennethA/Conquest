@@ -39,6 +39,9 @@ enum Respawn {
 ## Steps after a battle or area entry with no wild battle: HIDDEN zones never roll, VISIBLE
 ## creatures never walk INTO you (you may still walk into them).
 @export_range(0, 20) var grace_steps: int = 3
+## The STORY LEVELS its creatures roll in (min, max; docs/design/PROGRESSION.md §3). Unset
+## (0, 0) = the area's [member OverworldAreaResource.level_band].
+@export var level_band: Vector2i = Vector2i.ZERO
 
 @export_group("Hidden (grass rolls)")
 ## HIDDEN: the per-step encounter chance.
@@ -65,6 +68,15 @@ func is_hidden_mode() -> bool:
 ## The save key of this zone, given its [param index] in the area's list.
 func key(index: int) -> String:
 	return String(zone_id) if not String(zone_id).is_empty() else "z%d" % index
+
+
+## The level band this zone's creatures roll in: its own [member level_band], else
+## [param area]'s; Vector2i.ZERO when neither is set (no levels).
+func band_in(area: OverworldAreaResource) -> Vector2i:
+	var own: Vector2i = Progression.normalize_band(level_band)
+	if own != Vector2i.ZERO:
+		return own
+	return Progression.normalize_band(area.level_band) if area != null else Vector2i.ZERO
 
 
 ## Is [param cell] (whose tile is [param tile_id]) part of this zone?

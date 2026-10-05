@@ -51,6 +51,8 @@ class WildCreature:
 	var waypoint: int = 0
 	## AGGRESSIVE: it has spotted the hero (this tick).
 	var alerted: bool = false
+	## Its STORY LEVEL (rolled from the zone's band at spawn, saved as "lv"); 0 = no level.
+	var level: int = 0
 
 	func character_id() -> String:
 		return String(entry.character_id) if entry != null else ""
@@ -509,6 +511,7 @@ func _roll_slot(zk: String, zone: EncounterZone, epoch: int, slot: int, player_c
 	c.cell = at
 	c.facing = DIRS[int(_spawn_float(zk, epoch, slot, "facing") * 4.0) % 4]
 	c.waypoint = 0
+	c.level = Progression.level_in_band(zone.band_in(area), _spawn_float(zk, epoch, slot, "level"))
 	return c
 
 
@@ -528,6 +531,11 @@ func _restore_slot(zk: String, zone: EncounterZone, slot: int, raw) -> WildCreat
 	c.cell = cell if cell != Cells.INVALID else Vector3i(-1, -1, 0)
 	c.facing = OverworldEntity.facing_vector(String(raw.get("facing", "south")))
 	c.waypoint = maxi(0, int(raw.get("wp", 0)))
+	c.level = maxi(0, int(raw.get("lv", 0)))
+	if c.level <= 0:
+		# A save from before levels: roll one for the creature already standing there.
+		c.level = EncounterRoller.roll_level(state.rng_seed if state != null else 0,
+			"%s|wild|%s|s%d|restored" % [area_id, zk, slot], zone.band_in(area))
 	return c
 
 
@@ -600,6 +608,8 @@ func _persist_all() -> void:
 			"facing": OverworldEntity.facing_name(c.facing),
 			"wp": c.waypoint,
 		}
+		if c.level > 0:
+			(by_zone[c.zone_key] as Dictionary)[str(c.slot)]["lv"] = c.level
 	for zk in _zone_order:
 		var rkey: String = record_key(area_id, zk)
 		var rec: Dictionary = state.wild.get(rkey, {})
@@ -651,6 +661,8 @@ static func sanitize_saved(raw) -> Dictionary:
 					"facing": f if StoryState.FACING_NAMES.has(f) else "south",
 					"wp": maxi(0, int(v.get("wp", 0))),
 				}
+				if int(v.get("lv", 0)) > 0:
+					slots_out[str(int(s))]["lv"] = int(v.get("lv", 0))
 		out[key] = {
 			"epoch": maxi(0, int(rec.get("epoch", 0))),
 			"mark": int(rec.get("mark", 0)),

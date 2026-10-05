@@ -178,6 +178,9 @@ var _drop_rows_box: VBoxContainer
 ## EVOLUTION growth rows ("Barkling +1 Growth (3/3)"), filled at reveal from
 ## GrowthTracker.growth_this_battle(); hidden when the battle awarded none.
 var _growth_rows_box: VBoxContainer
+## STORY XP / level-up rows ("Barkling +86 XP  Lv 5 -> 6"), filled at reveal from the live story
+## battle's controller ([method StoryController.battle_progress_rows]); hidden in every other mode.
+var _progress_rows_box: VBoxContainer
 
 var _versus_box: VBoxContainer
 var _opponent_name_label: Label
@@ -500,6 +503,12 @@ func _build_rewards_section(col: VBoxContainer) -> void:
 	_growth_rows_box.add_theme_constant_override("separation", 4)
 	_growth_rows_box.visible = false
 	col.add_child(_growth_rows_box)
+
+	_progress_rows_box = VBoxContainer.new()
+	_progress_rows_box.name = "ProgressRows"
+	_progress_rows_box.add_theme_constant_override("separation", 4)
+	_progress_rows_box.visible = false
+	col.add_child(_progress_rows_box)
 
 
 ## VERSUS: built ALWAYS (so the node references are never null) but hidden unless
@@ -1001,6 +1010,16 @@ func _end_actions_controller():
 	return null
 
 
+## The live mode controller's story XP rows ([method StoryController.battle_progress_rows]); [] when
+## the active mode has none (every non-story battle).
+func _story_progress_rows() -> Array:
+	var ctrl = _end_actions_controller()
+	if ctrl == null or not ctrl.has_method("battle_progress_rows"):
+		return []
+	var rows = ctrl.battle_progress_rows()
+	return rows if rows is Array else []
+
+
 ## The mode's own end buttons, when a mode supplies them. True when they replaced the defaults.
 func _apply_mode_end_actions(outcome: StringName) -> bool:
 	var ctrl = _end_actions_controller()
@@ -1167,6 +1186,7 @@ func _populate_rewards() -> void:
 
 	_populate_drop_rows()
 	GrowthGems.fill_result_rows(_growth_rows_box, GrowthTracker.growth_this_battle(), ROW_FONT_SIZE)
+	ProgressRows.fill_result_rows(_progress_rows_box, _story_progress_rows(), ROW_FONT_SIZE)
 
 	if _challenge_row == null:
 		return

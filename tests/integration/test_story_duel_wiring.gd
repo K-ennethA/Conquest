@@ -244,6 +244,7 @@ func test_grass_encounter_runs_the_real_duel_and_a_befriend_grows_the_party() ->
 	assert_eq(stage.battle.result.outcome, DuelResult.OUTCOME_VICTORY, "a win")
 	assert_null(StoryController.last_result(), "nothing is reported before the card's Continue")
 	var final_hp: int = int(stage.battle.result.party_after[0]["current_hp"])
+	var lead_max_before: int = lead.max_hp()
 	await _press_continue()
 	var br: BattleResult = StoryController.last_result()
 	assert_not_null(br, "Continue reported the result to StoryController")
@@ -253,7 +254,9 @@ func test_grass_encounter_runs_the_real_duel_and_a_befriend_grows_the_party() ->
 	assert_true(br.has_open_offer(), "the wild foe offers to join")
 	assert_null(StoryController.active_request(), "the battle concluded")
 	assert_eq(s.location_cell(), stood, "back exactly where the hero stood")
-	assert_eq(lead.current_hp, final_hp, "the lead's duel HP carried back out")
+	# The win paid XP: a level-up keeps the HP's RATIO (PROGRESSION.md), else it is the same HP.
+	var expected_hp: int = final_hp if lead.max_hp() == lead_max_before else roundi(float(final_hp) / float(lead_max_before) * float(lead.max_hp()))
+	assert_eq(lead.current_hp, expected_hp, "the lead's duel HP carried back out")
 	assert_eq(s.member("blightcap").current_hp, 20, "the bench keeps its HP")
 	assert_eq(lead.growth_points(), 1, "the lead fought and survived: +1 Growth")
 	assert_eq(s.member("blightcap").growth_points(), 0, "the bench never fought: no Growth")

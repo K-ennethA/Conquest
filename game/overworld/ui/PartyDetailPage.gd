@@ -7,8 +7,9 @@ extends RefCounted
 ## the stat table and the move / ability cards, so a creature reads the same here as in the
 ## Compendium -- and [JourneyMenu] owns the buttons' effects (the page only emits Callables).
 ##
-## There are no levels in this game (docs/design/EVOLUTION.md: GROWTH is the progression number), so
-## the "level" line is the member's Growth and the number of forms it has taken.
+## LEVEL + XP bar (docs/design/PROGRESSION.md) sit under HP and the stat table shows the member's stats
+## AT its level; GROWTH (docs/design/EVOLUTION.md) is still the evolution currency, shown with the
+## number of forms it has taken.
 
 const PORTRAIT_PX: float = 96.0
 
@@ -71,6 +72,26 @@ static func build(m: StoryPartyMember, state: StoryState, is_lead: bool, on_back
 	var hp := _caption("HP %d / %d" % [m.hp_value(), m.max_hp()])
 	hp.name = "HpText"
 	page.add_child(hp)
+
+	# --- Level + XP (PROGRESSION.md) ------------------------------------------------
+	var lv := MenuKit.label(level_line(m), &"SubheadingLabel")
+	lv.name = "LevelText"
+	lv.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
+	page.add_child(lv)
+	var xp_bar := ProgressBar.new()
+	xp_bar.name = "XpBar"
+	xp_bar.show_percentage = false
+	xp_bar.min_value = 0.0
+	xp_bar.max_value = 1.0
+	xp_bar.value = m.level_progress()
+	xp_bar.custom_minimum_size = Vector2(0, 6)
+	page.add_child(xp_bar)
+	var xp := _caption(xp_line(m))
+	xp.name = "XpText"
+	page.add_child(xp)
+	var bond := _caption(bond_line(m))
+	bond.name = "BondText"
+	page.add_child(bond)
 	if c != null and not c.description.strip_edges().is_empty():
 		var d := UnitPageContent.wrapped_label(c.description.strip_edges())
 		d.name = "Description"
@@ -86,7 +107,7 @@ static func build(m: StoryPartyMember, state: StoryState, is_lead: bool, on_back
 	# --- Stats ----------------------------------------------------------------------
 	if c != null:
 		page.add_child(UnitPageContent.section_header("Stats"))
-		page.add_child(UnitPageContent.build_stat_table(c))
+		page.add_child(UnitPageContent.build_stat_table(m.leveled_character()))
 
 	# --- Equipment ------------------------------------------------------------------
 	page.add_child(UnitPageContent.section_header("Equipment"))
@@ -105,6 +126,24 @@ static func build(m: StoryPartyMember, state: StoryState, is_lead: bool, on_back
 				if ab != null:
 					page.add_child(UnitPageContent.build_ability_card(ab))
 	return page
+
+
+## "Lv 7" (the party page's level line).
+static func level_line(m: StoryPartyMember) -> String:
+	return "Lv %d" % m.level
+
+
+## "XP 412  ·  100 to next level" ("Max level" at the cap).
+static func xp_line(m: StoryPartyMember) -> String:
+	var to_next: int = m.xp_to_next()
+	if to_next <= 0:
+		return "XP %d  ·  Max level" % m.xp
+	return "XP %d  ·  %d to next level" % [m.xp, to_next]
+
+
+## "Bond 2 / 10" (DECISIONS.md #68: it grows by fighting alongside the hero; nothing reads it yet).
+static func bond_line(m: StoryPartyMember) -> String:
+	return "Bond %d / %d" % [m.bond_level(), ProgressionRules.current().bond_max]
 
 
 ## "Growth 3  ·  1 evolution" -- the progression summary.
