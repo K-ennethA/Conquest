@@ -65,6 +65,7 @@ static func to_dict(state: StoryState) -> Dictionary:
 		"tier": state.tier,
 		"fallen": fallen,
 		"tracked_quest": state.tracked_quest,
+		"legends": state.legends.duplicate(),
 		"pending": {},
 	}
 
@@ -179,6 +180,14 @@ static func from_dict(data) -> Dictionary:
 	# (QuestLog.tracked_entry), so no quest list is consulted here.
 	var pin = data.get("tracked_quest", "")
 	state.tracked_quest = String(pin).strip_edges() if pin is String else ""
+
+	# Bonded LEGENDS (added within format 2 -- an older save has none). Never party members; an id
+	# this build does not ship is skipped, like a party member's.
+	var legends = data.get("legends", [])
+	if legends is Array:
+		for v in legends:
+			if (v is String or v is StringName) and CharacterLibrary.get_character(StringName(v)) != null:
+				state.add_legend(String(v))
 
 	return {"success": true, "state": state, "reason": ""}
 

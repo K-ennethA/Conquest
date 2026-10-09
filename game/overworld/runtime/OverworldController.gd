@@ -252,6 +252,8 @@ func _make_entity_actor(e: OverworldEntity) -> OverworldActor:
 				body = OverworldProps.wayshrine(e.tint)
 			&"door":
 				body = OverworldProps.door_marker(e.tint)
+			&"obstacle":
+				body = OverworldProps.field_obstacle((e as FieldObstacleEntity).look, e.tint)
 			&"prop":
 				var p := e as PropEntity
 				body = OverworldProps.prop(p.prop, p.footprint, e.tint, _prop_seed(p))

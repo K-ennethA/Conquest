@@ -93,6 +93,8 @@ id = &"deepwood_village"
 display_name = "Deepwood Village"
 region_id = &"woodlands"
 map_pos = Vector2(0.098, 0.474)
+status = 0
+area_ids = Array[StringName]([&"deepwood_village"])
 open_flag = "world.deepwood_open"
 description = "A village deep in the old forest, west of Woodland Town."
 
@@ -103,6 +105,8 @@ display_name = "Depths of the Wood"
 kind = "special"
 region_id = &"woodlands"
 map_pos = Vector2(0.114, 0.337)
+status = 0
+area_ids = Array[StringName]([&"depths_of_the_wood"])
 open_flag = "world.depths_of_the_wood_open"
 description = "A glowing glade at the forest's heart. A special encounter."
 

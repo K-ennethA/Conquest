@@ -562,6 +562,74 @@
 				]
 			}
 		},
+		"deepwood_village": {
+			"dv_child": {
+				"note": "TODO(story): placeholder line.",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "You came all the way from Woodland Town? Through the trees?"
+							}
+						]
+					}
+				]
+			},
+			"dv_elder": {
+				"note": "TODO(story): placeholder line.",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Welcome to Deepwood. Our chief lives in the lodge to the north-east."
+							}
+						]
+					}
+				]
+			},
+			"dv_hunter": {
+				"note": "TODO(story): placeholder line.",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The forest gets thicker the deeper you go. Watch the grass."
+							}
+						]
+					}
+				]
+			},
+			"lyra": {
+				"note": "TODO(story): placeholder lines (DECISIONS.md #88: Lyra is met here and joins the Eldroot battle).",
+				"variants": [
+					{
+						"if": "after('deepwood.nyra_beaten')",
+						"label": "the way is open",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The trail north is open. When you face what's in the deepest part of the wood, I'll fight beside you."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "{hero}! You came to Deepwood too. Something waits in the deepest part of the forest -- when you go, I'm coming with you."
+							}
+						]
+					}
+				]
+			}
+		},
 		"mossway": {
 			"bram": {
 				"note": "A trainer: the bank is only consulted once he is BEATEN (his challenge stays in the builder).",
@@ -1231,16 +1299,22 @@
 			"hale": {
 				"variants": [
 					{
+						"if": "after('world.deepwood_open')",
+						"label": "the Deepwood road is open",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The Deepwood road's open to you. Keep to the track, and mind the wood."
+							}
+						]
+					},
+					{
 						"if": "after('act1.met_rowan')",
 						"label": "preparing for war",
 						"lines": [
 							{
 								"speaker": "self",
 								"text": "Word is Crownhaven's preparing for war, and you with it. Then you're welcome at this Lodge at any hour."
-							},
-							{
-								"speaker": "self",
-								"text": "The Deepwood road stays shut all the same. The wood doesn't read the King's letters."
 							}
 						]
 					},

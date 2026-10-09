@@ -536,7 +536,8 @@ func test_the_future_roads_stay_closed_for_now() -> void:
 	var s := StoryFixture.past_opening(StoryState.new())
 	var atlas := WorldAtlas.load_default()
 	# [area, exit, the closed place it leads toward]
-	for spec in [["woodland_town", "west_exit", "deepwood_village"], ["woodland_town", "south_exit", "thieves_guild"],
+	# (Woodland Town's west road to Deepwood Village is BUILT now -- test_deep_woods.gd covers it.)
+	for spec in [["woodland_town", "south_exit", "thieves_guild"],
 			["woodland_town", "north_exit", "frostpeak_village"], ["crownhaven", "north_exit", "mountain_base"],
 			["crownhaven", "east_exit", "redrock_village"], ["crownhaven", "harbour_exit", "beach_village"],
 			["river_crossing", "east_exit", "beach_village"], ["oakvale", "west_exit", "farm_hamlet"],

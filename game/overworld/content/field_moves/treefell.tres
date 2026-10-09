@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="FieldMoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/FieldMoveResource.gd" id="1_qycsr"]
+
+[resource]
+script = ExtResource("1_qycsr")
+id = &"treefell"
+display_name = "Treefell"
+unlock_flag = "fieldmove.treefell"
+species = Array[StringName]([&"tree_grunt", &"oakheart", &"vineweave", &"petalfang", &"blightcap"])
+locked_hint = "A gnarled tree grows across the way. It could be felled -- if you knew how."
+no_user_hint = "You know {move}, but nobody in your party can use it."
+prompt_text = "This tree could be felled. Use {move}?"

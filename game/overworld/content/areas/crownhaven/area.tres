@@ -988,7 +988,7 @@ cell = Vector3i(17, 21, 0)
 facing = "west"
 display_name = "Lyra"
 tint = Color(0.78, 0.5, 0.2, 1)
-visible_if = "has(\"opening.complete\") and not has(\"rival.duel1\")"
+visible_if = "has(\"opening.complete\") and not has(\"rival.duel1\") and not (has(\"opening.complete\") and has(\"world.deepwood_open\") and not has(\"deepwood.eldroot_beaten\"))"
 on_interact = Array[Resource]([SubResource("Resource_ebpx6")])
 
 [sub_resource type="Resource" id="Resource_ceppj"]
@@ -1106,7 +1106,7 @@ id = &"lyra_arena"
 cell = Vector3i(23, 18, 0)
 display_name = "Lyra"
 tint = Color(0.78, 0.5, 0.2, 1)
-visible_if = "has(\"rival.duel1\")"
+visible_if = "has(\"opening.complete\") and has(\"rival.duel1\") and not (has(\"opening.complete\") and has(\"world.deepwood_open\") and not has(\"deepwood.eldroot_beaten\"))"
 on_interact = Array[Resource]([SubResource("Resource_5fdwv")])
 
 [sub_resource type="Resource" id="Resource_e4m5u"]

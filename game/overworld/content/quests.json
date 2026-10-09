@@ -44,6 +44,21 @@
 			]
 		},
 		{
+			"id": "deep_woods",
+			"title": "The Deep Woods",
+			"category": "main",
+			"summary": "Placeholder: something waits in the deepest part of the forest west of Woodland Town. To go through the forest, you must first battle Nyra, the Deepwood chief.",
+			"location": "deepwood_village",
+			"area": "deepwood_village",
+			"start_flag": "opening.complete",
+			"complete_flag": "deepwood.eldroot_beaten",
+			"steps": [
+				{"flag": "world.deepwood_open", "text": "Ask Warden Hale at Woodland Town's Lodge about the road west.", "location": "woodland_town", "area": "woodland_town", "npc": "hale"},
+				{"flag": "deepwood.nyra_beaten", "text": "Find Nyra, the chief of Deepwood Village, and battle her.", "location": "deepwood_village", "area": "deepwood_village", "npc": "nyra"},
+				{"flag": "deepwood.eldroot_beaten", "text": "Find the way to the deepest part of the wood.", "location": "depths_of_the_wood", "area": "depths_of_the_wood"}
+			]
+		},
+		{
 			"id": "mossway_ambush",
 			"title": "Trouble on the Mossway",
 			"category": "side",

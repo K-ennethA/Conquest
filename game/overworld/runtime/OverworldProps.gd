@@ -991,6 +991,22 @@ static func scarecrow(tint: Color = Color(0.5, 0.36, 0.2)) -> Node3D:
 	return _wrap(pm, "Scarecrow")
 
 
+## A FIELD OBSTACLE ([FieldObstacleEntity]) by [param look]. "tree" = a BREAKABLE TREE: a squat,
+## gnarled trunk with a pale split scored down its face and a lopsided crown in [param tint] -- a
+## tree that reads as different from the forest's (PLACEHOLDER: the real model comes from Blender).
+## (Only "tree" exists yet; a new look adds a branch here.)
+static func field_obstacle(_look: String = "tree", tint: Color = Color(0.3, 0.42, 0.22)) -> Node3D:
+	var pm := ProcMesh.new()
+	pm.box(Vector3(-0.42, 0.0, -0.42), Vector3(0.42, 0.18, 0.42), WOOD_DARK.darkened(0.2))
+	pm.box(Vector3(-0.28, 0.18, -0.28), Vector3(0.28, 1.5, 0.28), WOOD_DARK)
+	pm.box(Vector3(-0.05, 0.3, 0.28), Vector3(0.05, 1.3, 0.31), Color(0.86, 0.78, 0.6))
+	pm.box(Vector3(-0.5, 1.1, -0.1), Vector3(-0.2, 1.25, 0.1), WOOD_DARK)
+	pm.box(Vector3(0.2, 1.25, -0.1), Vector3(0.55, 1.4, 0.1), WOOD_DARK)
+	pm.box(Vector3(-0.75, 1.4, -0.7), Vector3(0.65, 2.2, 0.6), tint, tint.lightened(0.12))
+	pm.box(Vector3(-0.45, 2.2, -0.45), Vector3(0.4, 2.65, 0.35), tint.darkened(0.08), tint.lightened(0.18))
+	return _wrap(pm, "BreakableTree")
+
+
 ## The Wayshrine's standing stone: a carved pillar with a glowing leaf-green orb, set in the
 ## fountain. The orb brightens once the shrine is lit.
 static func wayshrine(tint: Color = Color(0.55, 0.9, 0.6)) -> Node3D:

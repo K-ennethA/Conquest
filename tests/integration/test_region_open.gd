@@ -85,6 +85,51 @@ func test_the_only_shut_exits_are_roads_to_places_that_are_not_built_yet() -> vo
 			assert_true(loc.area_ids.is_empty(), "%s has no area built" % loc.id)
 
 
+## Every area reachable from [param from] through warps and doors open under [param s].
+func _reachable(s: StoryState, from: String = "oakvale_ruins") -> Dictionary:
+	var seen: Dictionary = {from: true}
+	var queue: Array[String] = [from]
+	while not queue.is_empty():
+		var a := _area(queue.pop_front())
+		if a == null:
+			continue
+		for e in a.present_entities(s):
+			var target: String = ""
+			if e is WarpEntity and (e as WarpEntity).is_open(s):
+				target = String((e as WarpEntity).target_area)
+			elif e is DoorEntity:
+				target = String((e as DoorEntity).target_area)
+			if not target.is_empty() and not seen.has(target):
+				seen[target] = true
+				queue.append(target)
+	return seen
+
+
+func test_the_deep_woods_open_with_the_warden_then_the_chief() -> void:
+	# THE DEEP WOODS (DECISIONS.md #40): Woodland Town's west road opens when Warden Hale is asked
+	# (world.deepwood_open); the trail north into the Depths once Nyra is beaten
+	# (world.depths_of_the_wood_open) -- and nothing else gates either.
+	var s := StoryFixture.past_opening(StoryState.new())
+	assert_false(_reachable(s).has("deepwood_village"), "Deepwood Village waits on the Wardens' road")
+	s.set_flag("world.deepwood_open", 1)
+	var reach := _reachable(s)
+	assert_true(reach.has("deepwood_village"), "the west road reaches Deepwood Village")
+	assert_false(reach.has("depths_of_the_wood"), "the Depths wait on Nyra")
+	# In the village, the only shut exit is the trail north, on its own world flag.
+	var shut: Array[String] = []
+	for e in _area("deepwood_village").present_entities(s):
+		if e is WarpEntity and not (e as WarpEntity).is_open(s):
+			shut.append(String(e.id))
+			assert_eq((e as WarpEntity).requires, "has(\"world.depths_of_the_wood_open\")", "the trail waits on its flag")
+	assert_eq(shut, ["north_exit"] as Array[String], "only the trail north is shut")
+	s.set_flag("world.depths_of_the_wood_open", 1)
+	reach = _reachable(s)
+	for id in ["deepwood_village", "depths_of_the_wood", "woodland_town"]:
+		assert_true(reach.has(id), "%s is reachable once Nyra is beaten" % id)
+	# And the way back: the Depths lead to the village, the village to Woodland Town.
+	assert_true(_reachable(s, "depths_of_the_wood").has("oakvale_ruins"), "the road home runs back the same way")
+
+
 func test_the_edge_exits_between_built_areas_are_open_throughout_the_opening() -> void:
 	# Leaving the burned village for the Mossway is never locked, so "Not yet." can mean "go exploring".
 	var mid := StoryFixture.sent_off(StoryState.new())
