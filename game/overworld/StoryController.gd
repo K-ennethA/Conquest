@@ -200,6 +200,8 @@ func new_journey(slot: int = 0, tier: String = "") -> Dictionary:
 	s.gold = rs.starting_gold
 	for cid in rs.starting_party:
 		s.add_member(String(cid), "", rs.party_cap, ProgressionRules.current().starter_level)
+	# THE HERO joins as a battle unit at the starter level (docs/design/HUMANS.md).
+	ensure_hero(s, rs)
 	var area: OverworldAreaResource = load_area(String(rs.start_area))
 	if area == null:
 		return {"success": false, "reason": "no_start_area"}
@@ -218,6 +220,28 @@ func new_journey(slot: int = 0, tier: String = "") -> Dictionary:
 	return {"success": true, "reason": ""}
 
 
+## Put THE HERO in [param s]'s party when [param rs] says he joins ([member StoryRuleset.hero_joins_party])
+## and he is not there yet: [member HeroResource.battle_character_id], named as the hero, at the
+## starter level -- or, [param catch_up] (an older save), the party's top level. Returns the hero's
+## record (null when none joins).
+func ensure_hero(s: StoryState, rs: StoryRuleset = null, catch_up: bool = false) -> StoryPartyMember:
+	if s == null:
+		return null
+	if s.has_hero():
+		return s.hero_member()
+	if rs != null and not rs.hero_joins_party:
+		return null
+	var hero_res: HeroResource = _hero if _hero != null else HeroResource.load_default()
+	var cid: String = String(hero_res.battle_character_id) if hero_res != null else ""
+	if cid.is_empty():
+		return null
+	var lv: int = ProgressionRules.current().starter_level
+	if catch_up and not s.party.is_empty():
+		lv = maxi(lv, s.party_top_level())
+	var shown: String = hero_res.display_name if hero_res != null else ""
+	return s.add_hero(cid, shown, lv)
+
+
 ## Load [param slot]. {success, reason}.
 func continue_journey(slot: int) -> Dictionary:
 	var loaded: Dictionary = StorySaveManager.load_state(slot)
@@ -227,6 +251,9 @@ func continue_journey(slot: int) -> Dictionary:
 	var area: OverworldAreaResource = load_area(s.location_area())
 	if area == null:
 		return {"success": false, "reason": "unknown_area"}
+	# A journey saved before the hero was a battle unit: he joins now (at the party's top level, so
+	# an old save's hero is not left behind).
+	ensure_hero(s, _ruleset, true)
 	settle_location(s, area)
 	_begin_session(s, slot)
 	return {"success": true, "reason": ""}
@@ -744,12 +771,54 @@ func detach_host(host) -> void:
 
 ## Coroutine for StartBattle / StartDuel: begin the battle and wait for its concluded result.
 func run_battle(request: BattleRequest) -> BattleResult:
+	# DEPLOY (docs/design/HUMANS.md): a story tactical battle opens the picker first when there is a
+	# real choice (more candidates than chairs, or an offered guest).
+	if request != null and not request.is_duel() and should_pick_squad(request):
+		var picks: Array = await pick_squad(request)
+		if not picks.is_empty():
+			request.rules["deploy"] = picks
 	var began: Dictionary = begin_battle(request)
 	if not bool(began.get("success", false)):
 		var r := BattleResult.make(request.encounter_id if request != null else "", BattleResult.OUTCOME_ABORTED)
 		return r
 	var result = await battle_concluded
 	return result
+
+
+## Does [param request] get the DEPLOY PICKER? A tactical battle, the picker knob on, a display
+## (never headless), and a real choice: more deployable units than chairs, or a guest on offer.
+func should_pick_squad(request: BattleRequest) -> bool:
+	if request == null or request.is_duel() or _state == null:
+		return false
+	if _ruleset != null and not _ruleset.squad_picker_enabled:
+		return false
+	if DisplayServer.get_name() == "headless" or not is_inside_tree():
+		return false
+	var cands: Array[Dictionary] = SquadPick.candidates(_state, request)
+	if cands.size() > maxi(1, request.squad_size):
+		return true
+	for c in cands:
+		if not bool(c.get("member", true)):
+			return true
+	return false
+
+
+## Open the [SquadPickScreen] for [param request] and wait for the picks (member ids /
+## "guest:<id>", in pick order).
+func pick_squad(request: BattleRequest) -> Array:
+	var cands: Array[Dictionary] = SquadPick.candidates(_state, request)
+	var screen := SquadPickScreen.open(self, cands, request.squad_size, request.opponent_name())
+	var picks: Array = await screen.confirmed
+	screen.queue_free()
+	return picks
+
+
+## Can the party start a fight right now (the overworld's wild / trainer gates)? A healthy partner
+## creature, or the hero alone when [member StoryRuleset.hero_alone_can_battle].
+func can_battle() -> bool:
+	if _state == null:
+		return false
+	return _state.can_battle(_ruleset != null and _ruleset.hero_alone_can_battle)
 
 
 ## Arm and launch [param request]. {success, reason}. [param launch] false stages everything
@@ -762,17 +831,33 @@ func begin_battle(request: BattleRequest, launch: bool = true) -> Dictionary:
 	if _active_request != null:
 		return {"success": false, "reason": "battle_in_progress"}
 	var members: Array = []
+	# A tactical battle's DEPLOY picks (the picker, [method run_battle]) -- party member ids and
+	# "guest:<id>" offered guests; none = the default squad (hero first).
+	var picks: Array = request.rules.get("deploy", []) if request.rules.get("deploy", []) is Array else []
 	if request.is_duel():
-		members = _state.healthy_members()
+		# The duel LINEUP: the creatures' fight unless the battle requires the hero (or the ruleset
+		# puts him in every duel); then the partner leads and he stands right behind (a knob).
+		var with_hero: bool = SquadPick.hero_rule(request) == SquadPick.HERO_REQUIRED \
+			or (_ruleset != null and _ruleset.hero_joins_duels)
+		members = _state.duel_lineup(_ruleset.hero_duel_slot if _ruleset != null else 1, with_hero)
+	elif not picks.is_empty():
+		var cands: Array[Dictionary] = SquadPick.candidates(_state, request)
+		var check: Dictionary = SquadPick.validate(picks, cands, request.squad_size)
+		if not bool(check["ok"]):
+			return {"success": false, "reason": "bad_deploy:%s" % check["reason"]}
+		members = picks
 	else:
-		members = StoryBattleBridge.fielded_members(_state, request.squad_size)
+		members = StoryBattleBridge.fielded_members(_state, request.squad_size, request)
 	if members.is_empty():
 		return {"success": false, "reason": "no_fieldable_members"}
 	if not request.is_duel():
 		if request.map_path.is_empty() or not ResourceLoader.exists(request.map_path):
 			return {"success": false, "reason": "no_battle_map"}
 
-	request.party = StoryBattleBridge.party_snapshot(members)
+	if not request.is_duel() and not picks.is_empty():
+		request.party = SquadPick.snapshot(_state, picks, SquadPick.candidates(_state, request))
+	else:
+		request.party = StoryBattleBridge.party_snapshot(members)
 	# A guest ally the board places (not a party member) fights at the party's top level.
 	if request.ally_level <= 0:
 		request.ally_level = _state.party_top_level()
@@ -948,6 +1033,20 @@ func prepare_battle_board(map_loader) -> void:
 		return
 	_tracking = StoryBattleBridge.prepare_board(map_loader, _active_request)
 	_install_guards()
+
+
+## BOND ACTIVATION placeholder hook ([StoryBond]; DECISIONS.md #65): HUMAN member
+## [param human_id], fielded in the live tactical battle, activates its bonded creature (also
+## fielded) for the placeholder stat bonus. {success, reason, bonus}. No UI / command calls it yet.
+func activate_bond(human_id: String) -> Dictionary:
+	var can: Dictionary = StoryBond.can_activate(_state, human_id, _ruleset)
+	if not bool(can["ok"]):
+		return {"success": false, "reason": String(can["reason"]), "bonus": {}}
+	var partner: StoryPartyMember = _state.member(_state.member(human_id).bond_partner)
+	var units: Dictionary = _tracking.get("members", {})
+	if not units.has(human_id) or not units.has(partner.member_id):
+		return {"success": false, "reason": "not_fielded", "bonus": {}}
+	return StoryBond.activate(units[partner.member_id], partner.bond_level(), _ruleset)
 
 
 ## The battle's GUARDS ("Protect Elias", the hero -- [method StoryBattleBridge.guards_for]) join

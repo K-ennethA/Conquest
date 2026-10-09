@@ -60,6 +60,21 @@ static func build(m: StoryPartyMember, state: StoryState, is_lead: bool, on_back
 	chips.add_child(ConquestTheme.chip(role_of(c), MenuTheme.GOLD_DK, MenuTheme.FS_CAPTION))
 	if is_lead:
 		chips.add_child(ConquestTheme.chip("Lead", MenuTheme.GOLD, MenuTheme.FS_CAPTION))
+	# HUMANS (docs/design/HUMANS.md): kind / hero / guest chips and the weapon.
+	if m.is_hero:
+		chips.add_child(ConquestTheme.chip("Hero", MenuTheme.GOLD, MenuTheme.FS_CAPTION))
+	if c != null and c.is_human():
+		chips.add_child(ConquestTheme.chip("Human", MenuTheme.GOLD_DK, MenuTheme.FS_CAPTION))
+	if m.is_temporary():
+		chips.add_child(ConquestTheme.chip("Guest", MenuTheme.GOLD_DK, MenuTheme.FS_CAPTION))
+	var w: WeaponResource = m.weapon()
+	if w != null:
+		var reach: Vector2i = w.reach()
+		var wl := _caption("Weapon: %s (%s)  ·  Might %d  ·  Hit %d%%  ·  Range %s" % [w.display_name,
+			String(w.weapon_type).capitalize() if w.weapon_type != &"" else "none", w.might,
+			roundi(w.hit * 100.0), str(reach.x) if reach.x == reach.y else "%d-%d" % [reach.x, reach.y]])
+		wl.name = "WeaponText"
+		col.add_child(wl)
 	if m.wounded:
 		chips.add_child(ConquestTheme.chip("Wounded", MenuTheme.TEAM_RED, MenuTheme.FS_CAPTION))
 

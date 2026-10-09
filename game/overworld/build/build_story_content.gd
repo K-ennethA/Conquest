@@ -268,15 +268,15 @@ const STARTER_OPTIONS: Array[Dictionary] = [
 	{"character_id": &"petalfang", "label": "Petalfang", "placeholder": true},
 	{"character_id": &"blightcap", "label": "Blightcap", "placeholder": true},
 ]
-## TODO(story): PLACEHOLDER guest units for the General and the Warrior in the first fight (existing
-## roster units standing in: the knight and the "warrior grown rather than armed" -- no human
-## battle unit exists yet). They fight beside your starter as player-0 turn-1 Reinforcements.
-## The owner's character MODELS for people (roster entries used only for their look on the overworld):
-## General Varden and Professor Elias. Varden's roster entry has no moves yet, so in battle the
-## General still fights as GENERAL_UNIT until he does.
+## The General and the Warrior in the first fight: guests beside the hero and your starter as
+## player-0 turn-1 Reinforcements. General Varden is a HUMAN battle unit (docs/design/HUMANS.md) and
+## fights as HIMSELF; TODO(story): Talyn (the Warrior) has no model / roster entry yet -- the
+## "warrior grown rather than armed" stands in for her.
+## The owner's character MODELS for people (roster entries also used for their look on the overworld):
+## General Varden and Professor Elias.
 const VARDEN_MODEL := &"varden"
 const ELIAS_MODEL := &"elias"
-const GENERAL_UNIT := "gem_knight"
+const GENERAL_UNIT := "varden"
 const WARRIOR_UNIT := "vineweave"
 ## PLACEHOLDER enemy units for the first fight (existing roster units): the soldiers first, then
 ## their creatures. In map-spawn order (see [method _build_first_fight_map]).
@@ -543,8 +543,9 @@ func _build_hero() -> void:
 	hero.display_name = String(NAMES["HERO"])
 	# DECISIONS.md owner decision 4: the Wren forge model (HERO_MODEL; it replaced the Vineweave
 	# placeholder in 7f8ac62 -- kept here so a rebuild no longer reverts it). Swapping it is this
-	# block (model + yaw + scale): data, not code. The human
-	# hero as a BATTLE unit does not exist yet (planned): the party fights, the hero does not.
+	# block (model + yaw + scale): data, not code. The hero is also a BATTLE unit
+	# (docs/design/HUMANS.md): the "wren" roster entry, his party record flagged hero.
+	hero.battle_character_id = &"wren"
 	hero.model_scene = load(HERO_MODEL)
 	hero.model_yaw_deg = 0.0
 	hero.model_scale = 1.0
@@ -1163,6 +1164,8 @@ func _first_fight_spec() -> BattleSpec:
 	spec.encounter_id = FIRST_FIGHT_ID
 	spec.map_path = FIRST_FIGHT_MAP_PATH
 	spec.squad_size = 3
+	# The hero fights in it himself, beside his starter (docs/design/HUMANS.md).
+	spec.hero_deploy = BattleSpec.HeroDeploy.REQUIRED
 	spec.ai_difficulty = 0
 	spec.opponent_name = "Enemy Soldiers"  # TODO(story): placeholder
 	spec.opponent_speaker_id = &"npc_raider_captain"

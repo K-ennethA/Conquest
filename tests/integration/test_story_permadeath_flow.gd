@@ -9,7 +9,7 @@ extends GutTest
 ##     tactical spar shows "Friendly spar" on the objective banner;
 ##   * PROTECT: a story battle naming a guest ally to protect -- it falls -> defeat -> GAME OVER on
 ##     the end screen -> Load Last Save rewinds to the pre-battle autosave;
-##   * the HERO rule with a stub hero party member: tactical (end screen) and duel (the grove
+##   * the HERO rule with the real hero party member: tactical (end screen) and duel (the grove
 ##     StoryGameOverScreen -> Return to Title keeps the last save);
 ##   * the New Journey tier picker and lowering the tier from Journey -> Difficulty.
 ## Scene changes are off on both controllers; the suite mounts the scenes itself.
@@ -247,7 +247,7 @@ func test_classic_tactical_fall_shows_in_party_returns_the_item_and_sits_out_nex
 	s.set_location("mossway", Vector3i(19, 6, 0), "north")
 	s.member("vineweave").item_id = "heartwood_charm"
 	assert_true(bool(StoryController.begin_battle(_bram_request(), false)["success"]), "Bram's battle stages")
-	var up: bool = await _boot_battle(2)
+	var up: bool = await _boot_battle(3)
 	assert_true(up, "both members on the board")
 	if not up:
 		return
@@ -290,8 +290,8 @@ func test_classic_tactical_fall_shows_in_party_returns_the_item_and_sits_out_nex
 	# The next battle leaves it out.
 	_teardown()
 	assert_true(bool(StoryController.begin_battle(_bram_request(), false)["success"]), "the next battle stages")
-	assert_eq(StoryController.active_request().party_member_ids(), ["blightcap"], "only the living are fielded")
-	assert_eq(GameSettings.selected_squad, ["blightcap"], "the squad leaves the fallen out")
+	assert_eq(StoryController.active_request().party_member_ids(), ["wren", "blightcap"], "only the living are fielded (the hero first)")
+	assert_eq(GameSettings.selected_squad, ["wren", "blightcap"], "the squad leaves the fallen out")
 
 
 # =====================================================================================
@@ -364,7 +364,7 @@ func test_a_tactical_spar_shows_friendly_spar_on_the_banner() -> void:
 	var req := _bram_request()
 	req.rules["spar"] = true
 	StoryController.begin_battle(req, false)
-	var up: bool = await _boot_battle(2)
+	var up: bool = await _boot_battle(3)
 	assert_true(up, "boots")
 	if not up:
 		return
@@ -396,26 +396,26 @@ func test_losing_the_protected_guest_is_a_game_over_and_load_last_save_rewinds()
 	s.set_location("oakvale_ruins", Vector3i(12, 9, 0), "east")
 	var general = StoryController.load_area("oakvale_ruins").entity("general")
 	var cmd := _find_battle(general.on_interact)
-	assert_not_null(cmd, "the first fight's spec (the General's Geode as a guest)")
+	assert_not_null(cmd, "the first fight's spec (General Varden himself as a guest)")
 	if cmd == null:
 		return
 	var req: BattleRequest = cmd.spec.to_request(BattleRequest.SOURCE_SCRIPT)
-	req.rules["protect"] = ["gem_knight"]
+	req.rules["protect"] = ["varden"]
 	var gold_before: int = s.gold
 	assert_true(bool(StoryController.begin_battle(req, false)["success"]), "stages (and autosaves)")
 	s.gold = 1   # changed AFTER the pre-battle autosave: a reload must undo it
-	var up: bool = await _boot_battle(2)
+	var up: bool = await _boot_battle(3)
 	assert_true(up, "boots")
 	if not up:
 		return
 	var banner := _world.find_children("*", "ObjectiveBanner", true, false)[0] as ObjectiveBanner
-	assert_eq(banner.guard_text(), "Protect Geode", "the banner names who to protect")
+	assert_eq(banner.guard_text(), "Protect General Varden, Wren", "the banner names who to protect (and the hero)")
 	var guest = null
 	for u in CombatServices.board().all_units():
 		if _player_side(u) and not u.has_meta(StoryBattleBridge.MEMBER_META) \
-				and String(u.character_resource.character_id) == "gem_knight":
+				and String(u.character_resource.character_id) == "varden":
 			guest = u
-	assert_not_null(guest, "the guest Geode is on the board")
+	assert_not_null(guest, "the guest General is on the board")
 	if guest == null:
 		return
 	guest.take_damage(99999)
@@ -424,10 +424,10 @@ func test_losing_the_protected_guest_is_a_game_over_and_load_last_save_rewinds()
 	await _frames(1)
 	var br: BattleResult = StoryController.last_result()
 	assert_true(br.is_game_over(), "a game over")
-	assert_eq(br.game_over_reason, "protect:Geode", "because the protected guest fell")
+	assert_eq(br.game_over_reason, "protect:General Varden", "because the protected guest fell")
 	var screen := _end_screen()
 	assert_eq(screen._banner_label.text, "GAME OVER", "the card says GAME OVER")
-	assert_true(screen._subtitle_label.text.begins_with("Geode has fallen"), "and why")
+	assert_true(screen._subtitle_label.text.begins_with("General Varden has fallen"), "and why")
 	var buttons: Array[Button] = screen.mode_action_buttons()
 	assert_eq(buttons.size(), 2, "two ways on")
 	assert_eq(buttons[0].text, "Load Last Save", "Load Last Save")
@@ -443,19 +443,19 @@ func test_losing_the_protected_guest_is_a_game_over_and_load_last_save_rewinds()
 
 
 # =====================================================================================
-#  THE HERO rule (a stub hero party member)
+#  THE HERO rule (the real hero party member)
 # =====================================================================================
 
 func test_a_stub_hero_falling_on_the_board_is_a_game_over() -> void:
 	var s := _journey(StoryState.TIER_CASUAL)
 	s.set_location("mossway", Vector3i(19, 6, 0), "north")
-	s.member("vineweave").is_hero = true
+	# The real HERO (docs/design/HUMANS.md): his party record is fielded first.
 	StoryController.begin_battle(_bram_request(), false)
-	var up: bool = await _boot_battle(2)
+	var up: bool = await _boot_battle(3)
 	assert_true(up, "boots")
 	if not up:
 		return
-	var hero = _unit_of("vineweave")
+	var hero = _unit_of("wren")
 	assert_true(hero.has_meta(StoryBattleBridge.HERO_META), "the hero unit is tagged")
 	hero.take_damage(99999)
 	assert_true(await _until(func() -> bool: return _resolved.size() > 0), "the hero's fall decides it")
@@ -470,10 +470,13 @@ func test_a_stub_hero_falling_on_the_board_is_a_game_over() -> void:
 func test_a_stub_hero_fainting_in_a_duel_opens_the_game_over_card() -> void:
 	var s := _journey(StoryState.TIER_CASUAL)
 	s.set_location("mossway", Vector3i(6, 3, 0), "east")
-	s.member("vineweave").is_hero = true
 	var entry := EncounterEntry.new()
 	entry.character_id = &"petalfang"
-	assert_true(bool(StoryController.begin_battle(entry.to_request("mossway"))["success"]), "a wild duel")
+	# The real HERO steps into this duel (a battle that requires him -- docs/design/HUMANS.md).
+	var wild_req: BattleRequest = entry.to_request("mossway")
+	wild_req.rules["hero_deploy"] = SquadPick.HERO_REQUIRED
+	assert_true(bool(StoryController.begin_battle(wild_req)["success"]), "a wild duel")
+	assert_true(StoryController.active_request().hero_member_ids().has("wren"), "the hero is in the lineup")
 	var dr: DuelRequest = DuelController.active_request()
 	dr.player_is_ai = true
 	dr.player_party[0].strength = 0.1

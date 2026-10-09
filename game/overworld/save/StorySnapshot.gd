@@ -30,6 +30,9 @@ static func to_dict(state: StoryState) -> Dictionary:
 	var fallen: Array = []
 	for m in state.fallen:
 		fallen.append(m.to_dict())
+	var away: Array = []
+	for m in state.guests_away:
+		away.append(m.to_dict())
 	var positions: Dictionary = {}
 	for key in state.actor_positions:
 		var rec: Dictionary = state.actor_positions[key]
@@ -64,6 +67,7 @@ static func to_dict(state: StoryState) -> Dictionary:
 		"wild": {"visit": state.visit_serial, "zones": state.wild.duplicate(true)},
 		"tier": state.tier,
 		"fallen": fallen,
+		"guests_away": away,
 		"tracked_quest": state.tracked_quest,
 		"pending": {},
 	}
@@ -173,6 +177,16 @@ static func from_dict(data) -> Dictionary:
 			if f.fallen_info.is_empty():
 				f.fallen_info = StoryPartyMember.sanitize_fallen({"kind": "battle"})
 			state.fallen.append(f)
+	# Temporary guests who left (humans, added within format 2 -- an older save has none).
+	var away = data.get("guests_away", [])
+	if away is Array:
+		for raw in away:
+			var g: StoryPartyMember = StoryPartyMember.from_dict(raw)
+			if g == null or CharacterLibrary.get_character(StringName(g.character_id)) == null:
+				continue
+			if state.member(g.member_id) != null or state.fallen_member(g.member_id) != null:
+				continue
+			state.guests_away.append(g)
 
 	# The quest pinned to the HUD tracker (added within format 2 -- an older save has none: the main
 	# quest is tracked). Kept as written: an id this build does not ship just falls back

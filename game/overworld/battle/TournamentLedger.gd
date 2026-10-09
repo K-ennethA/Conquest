@@ -52,7 +52,7 @@ static func can_enter(state: StoryState, t: TournamentResource) -> Dictionary:
 		return {"ok": false, "reason": REASON_NO_ROUNDS}
 	if is_running(state, t):
 		return {"ok": false, "reason": REASON_RUNNING}
-	if state.healthy_members().is_empty():
+	if not state.can_battle():
 		return {"ok": false, "reason": REASON_NO_PARTY}
 	if state.gold < t.entry_fee:
 		return {"ok": false, "reason": REASON_GOLD}

@@ -129,8 +129,8 @@ func test_round_trip_victory() -> void:
 	assert_true(StoryController.is_battle_active(), "armed")
 	_boot_world()
 	var up: bool = await _await_until(func() -> bool:
-		return TurnSystemManager.has_active_turn_system() and _party_units().size() == 2)
-	assert_true(up, "the battle boots with both party members tagged")
+		return TurnSystemManager.has_active_turn_system() and _party_units().size() == 3)
+	assert_true(up, "the battle boots with the hero and both party members tagged")
 	if not up:
 		return
 	var vine = null

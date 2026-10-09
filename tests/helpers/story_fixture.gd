@@ -17,11 +17,12 @@ const OPENING_FLAGS: Array[String] = [
 ]
 
 
-## Mark [param s] as past the opening and give it [param party] when it has no members yet.
+## Mark [param s] as past the opening and give it [param party] when it has no members yet (the
+## HERO's own record -- a new journey's, docs/design/HUMANS.md -- does not count: he is no partner).
 static func past_opening(s: StoryState, party: Array[String] = LEGACY_PARTY) -> StoryState:
 	for f in OPENING_FLAGS:
 		s.set_flag(f, 1)
-	if s.party.is_empty():
+	if s.capped_count() == 0:
 		for cid in party:
 			s.add_member(cid)
 	return s

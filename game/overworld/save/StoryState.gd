@@ -26,9 +26,14 @@ var flags: Dictionary = {}
 ## Saved as "flag_times" (additive, format_version unchanged): a save from before stamps loads
 ## with none, and a set flag with no stamp counts as set at the journey's START (clock 0).
 var flag_times: Dictionary = {}
-## Ordered: index 0 is the party LEAD (the member a duel sends first). The overworld avatar is
-## the HERO (see [HeroResource]), never a party member.
+## Ordered party. The HERO is also a member (docs/design/HUMANS.md: a record flagged
+## [member StoryPartyMember.is_hero], the battle unit of [HeroResource.battle_character_id]); the
+## LEAD ([method lead]) is the first NON-hero member -- the partner creature a duel sends first.
+## The overworld avatar is still drawn from [HeroResource].
 var party: Array[StoryPartyMember] = []
+## TEMPORARY joins that LEFT (DECISIONS.md #61): kept as records, so the same guest re-joining
+## later comes back with its level, XP and growth. Saved as "guests_away".
+var guests_away: Array[StoryPartyMember] = []
 ## item_id -> count (the story bag; item DEFINITIONS are ItemLibrary's).
 var bag: Dictionary = {}
 var gold: int = 0
@@ -101,6 +106,8 @@ func set_flag(key: String, value = true) -> void:
 		flag_times.erase(key)
 	elif not was_set:
 		flag_times[key] = clock_stamp()
+		# A temporary guest whose stay ends with this flag leaves now (DECISIONS.md #61).
+		depart_guests_for(key)
 
 
 func clear_flag(key: String) -> void:
@@ -231,8 +238,227 @@ func member(member_id: String) -> StoryPartyMember:
 	return null
 
 
+## The party LEAD: the first NON-hero member (the partner creature), else the hero alone, else
+## null.
 func lead() -> StoryPartyMember:
+	for m in party:
+		if not m.is_hero:
+			return m
 	return party[0] if not party.is_empty() else null
+
+
+# --- The hero and the humans (docs/design/HUMANS.md) -----------------------------------
+
+## The party record flagged as the HERO (null when the journey has none yet).
+func hero_member() -> StoryPartyMember:
+	for m in party:
+		if m.is_hero:
+			return m
+	return null
+
+
+func has_hero() -> bool:
+	return hero_member() != null
+
+
+## Add THE HERO as a party member: [param character_id] (his roster battle unit) at [param level],
+## named [param nickname]. Never counts toward the party cap and can never leave. Returns the
+## record (the existing one when the hero is already in), or null for a blank / unknown id.
+func add_hero(character_id: String, nickname: String = "", level: int = 1) -> StoryPartyMember:
+	var existing: StoryPartyMember = hero_member()
+	if existing != null:
+		return existing
+	if character_id.strip_edges().is_empty() or CharacterLibrary.get_character(StringName(character_id)) == null:
+		return null
+	var m: StoryPartyMember = add_member(character_id, nickname, 0, level)
+	if m == null:
+		return null
+	m.is_hero = true
+	# The hero stands at the head of the record list (the deploy picker and tactical squads put him
+	# first); the duel lineup and the lead skip him (see [method lead], [method duel_lineup]).
+	party.erase(m)
+	party.push_front(m)
+	return m
+
+
+## Members that count toward the party cap: everyone but the hero.
+func capped_count() -> int:
+	var n: int = 0
+	for m in party:
+		if not m.is_hero:
+			n += 1
+	return n
+
+
+## Can the party start a fight (wild contact, a trainer's challenge, a tournament)? A healthy
+## NON-hero member is needed -- the hero alone (the opening, before the starter) walks past --
+## unless [param hero_alone_ok] ([member StoryRuleset.hero_alone_can_battle]).
+func can_battle(hero_alone_ok: bool = false) -> bool:
+	for m in healthy_members():
+		if not m.is_hero or hero_alone_ok:
+			return true
+	return false
+
+
+## The DUEL lineup (the party a duel sends, lead first): the healthy members in party order with
+## the hero moved to index [param hero_slot] (clamped; 0 = he leads; < 0 = plain party order), or
+## left out entirely when [param with_hero] is false (a creatures-only duel).
+func duel_lineup(hero_slot: int = 1, with_hero: bool = true) -> Array[StoryPartyMember]:
+	var healthy: Array[StoryPartyMember] = healthy_members()
+	if not with_hero:
+		var creatures: Array[StoryPartyMember] = []
+		for m in healthy:
+			if not m.is_hero:
+				creatures.append(m)
+		return creatures
+	if hero_slot < 0:
+		return healthy
+	var hero: StoryPartyMember = null
+	var out: Array[StoryPartyMember] = []
+	for m in healthy:
+		if m.is_hero and hero == null:
+			hero = m
+		else:
+			out.append(m)
+	if hero != null:
+		out.insert(clampi(hero_slot, 0, out.size()), hero)
+	return out
+
+
+## Remove [param member_id] from the party (a temporary guest leaving, a scripted departure).
+## {ok, reason}: "no_member", "hero_cannot_leave" (the hero is never released). A temporary
+## guest's record goes to [member guests_away] (a later re-join restores it); its held item
+## returns to the bag; a creature it bonded with is unbonded.
+func remove_member(member_id: String) -> Dictionary:
+	var m: StoryPartyMember = member(member_id)
+	if m == null:
+		return {"ok": false, "reason": "no_member"}
+	if m.is_hero:
+		return {"ok": false, "reason": "hero_cannot_leave"}
+	if not m.item_id.is_empty():
+		add_item(m.item_id)
+		m.item_id = ""
+	for other in party:
+		if other.bond_partner == member_id:
+			other.bond_partner = ""
+	m.bond_partner = ""
+	party.erase(m)
+	if m.temporary:
+		var old: StoryPartyMember = _away(m.member_id)
+		if old != null:
+			guests_away.erase(old)
+		guests_away.append(m)
+	_party_changed = true
+	return {"ok": true, "reason": ""}
+
+
+## Every temporary guest whose [member StoryPartyMember.guest_until] is [param key] leaves. Returns
+## the member ids that left.
+func depart_guests_for(key: String) -> Array[String]:
+	var out: Array[String] = []
+	if key.is_empty():
+		return out
+	for m in party.duplicate():
+		if m.temporary and m.guest_until == key and bool(remove_member(m.member_id)["ok"]):
+			out.append(m.member_id)
+	return out
+
+
+## JOIN a recruit (JoinPartyCommand's rules): {member, reason}. A HUMAN is a unique individual
+## (DECISIONS.md #6): one already in the party is not added twice ("already_in_party"), and a
+## temporary guest who left before RETURNS as its old record. [param temporary] / [param guest_until]
+## make it a temporary join (#61). Reasons: "blank", "unknown_character", "party_full",
+## "already_in_party", "fallen" (a fallen human never re-joins).
+func join(character_id: String, nickname: String = "", cap: int = 6, level: int = 1,
+		temporary: bool = false, guest_until: String = "") -> Dictionary:
+	var cid: String = character_id.strip_edges()
+	if cid.is_empty():
+		return {"member": null, "reason": "blank"}
+	var chr: CharacterResource = CharacterLibrary.get_character(StringName(cid))
+	if chr == null:
+		return {"member": null, "reason": "unknown_character"}
+	if chr.is_human():
+		for m in party:
+			if m.character_id == cid or m.line == cid:
+				return {"member": null, "reason": "already_in_party"}
+		for f in fallen:
+			if f.character_id == cid or f.line == cid:
+				return {"member": null, "reason": "fallen"}
+	if cap > 0 and capped_count() >= cap:
+		return {"member": null, "reason": "party_full"}
+	var back: StoryPartyMember = null
+	for g in guests_away:
+		if g.character_id == cid or g.line == cid:
+			back = g
+			break
+	var m: StoryPartyMember = null
+	if back != null:
+		guests_away.erase(back)
+		back.level = maxi(back.level, Progression.clamp_level(level))
+		back.xp = maxi(back.xp, Progression.xp_for_level(back.level))
+		party.append(back)
+		_party_changed = true
+		m = back
+	else:
+		m = add_member(cid, nickname, 0, level)
+	if m == null:
+		return {"member": null, "reason": "party_full"}
+	m.temporary = temporary
+	m.guest_until = guest_until if temporary else ""
+	return {"member": m, "reason": ""}
+
+
+func _away(member_id: String) -> StoryPartyMember:
+	for g in guests_away:
+		if g.member_id == member_id:
+			return g
+	return null
+
+
+## Arm HUMAN member [param member_id] with weapon [param weapon_id] ("" = back to its own). {ok,
+## reason}: "no_member", "not_human", "unknown_weapon", "cannot_wield". (Weapon OWNERSHIP is not
+## tracked yet -- any weapon the human can wield; docs/design/HUMANS.md.)
+func equip_weapon(member_id: String, weapon_id: String) -> Dictionary:
+	var m: StoryPartyMember = member(member_id)
+	if m == null:
+		return {"ok": false, "reason": "no_member"}
+	var c: CharacterResource = m.character()
+	if c == null or not c.is_human():
+		return {"ok": false, "reason": "not_human"}
+	if weapon_id.is_empty():
+		m.weapon_id = ""
+		return {"ok": true, "reason": ""}
+	var w: WeaponResource = WeaponLibrary.get_weapon(weapon_id)
+	if w == null:
+		return {"ok": false, "reason": "unknown_weapon"}
+	if not c.can_wield(w):
+		return {"ok": false, "reason": "cannot_wield"}
+	m.weapon_id = "" if w == c.weapon else weapon_id
+	return {"ok": true, "reason": ""}
+
+
+## BOND a human to a creature (DECISIONS.md #54, #65): [param human_id]'s partner becomes
+## [param creature_id] ("" = unbond). One creature per human and one human per creature (a creature
+## bonded elsewhere moves). {ok, reason}: "no_member", "not_human", "no_partner", "not_creature".
+func set_bond_partner(human_id: String, creature_id: String) -> Dictionary:
+	var h: StoryPartyMember = member(human_id)
+	if h == null:
+		return {"ok": false, "reason": "no_member"}
+	if not h.is_human():
+		return {"ok": false, "reason": "not_human"}
+	if creature_id.is_empty():
+		h.bond_partner = ""
+		return {"ok": true, "reason": ""}
+	var c: StoryPartyMember = member(creature_id)
+	if c == null:
+		return {"ok": false, "reason": "no_partner"}
+	if c.is_human():
+		return {"ok": false, "reason": "not_creature"}
+	for other in party:
+		if other != h and other.bond_partner == creature_id:
+			other.bond_partner = ""
+	h.bond_partner = creature_id
+	return {"ok": true, "reason": ""}
 
 
 func party_has(character_id: String) -> bool:
@@ -248,7 +474,8 @@ func party_has(character_id: String) -> bool:
 func add_member(character_id: String, nickname: String = "", cap: int = 6, level: int = 1) -> StoryPartyMember:
 	if character_id.strip_edges().is_empty():
 		return null
-	if cap > 0 and party.size() >= cap:
+	# The hero never takes a party slot (docs/design/HUMANS.md).
+	if cap > 0 and capped_count() >= cap:
 		return null
 	# The RosterLedger uid scheme keys an individual by its LINE ("tree_grunt", "tree_grunt#2"),
 	# so a recruit that joins as an evolved form still belongs to its line. A FALLEN member's uid
@@ -256,6 +483,8 @@ func add_member(character_id: String, nickname: String = "", cap: int = 6, level
 	var taken: Array = member_ids()
 	for f in fallen:
 		taken.append(f.member_id)
+	for g in guests_away:
+		taken.append(g.member_id)
 	var uid: String = StoryPartyMember.uid_for(StoryPartyMember.line_of(character_id), taken)
 	var m := StoryPartyMember.create(uid, character_id, nickname, level)
 	party.append(m)
@@ -319,7 +548,8 @@ func fallen_member(member_id: String) -> StoryPartyMember:
 ## when there is no such party member.
 func mark_fallen(member_id: String, info: Dictionary) -> StoryPartyMember:
 	var m: StoryPartyMember = member(member_id)
-	if m == null:
+	# The hero never FALLS: his fall is a game over, rewound -- never applied (DECISIONS.md #66).
+	if m == null or m.is_hero:
 		return null
 	var rec: Dictionary = StoryPartyMember.sanitize_fallen(info)
 	if rec.is_empty():

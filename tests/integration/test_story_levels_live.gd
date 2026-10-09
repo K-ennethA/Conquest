@@ -177,8 +177,8 @@ func test_tactical_story_battle_spawns_both_sides_at_their_levels_and_pays_xp() 
 	assert_true(bool(began["success"]), "Bram's battle stages")
 	_boot_world()
 	var up: bool = await _await_until(func() -> bool:
-		return TurnSystemManager.has_active_turn_system() and _party_units().size() == 2)
-	assert_true(up, "the battle boots with both party members tagged")
+		return TurnSystemManager.has_active_turn_system() and _party_units().size() == 3)
+	assert_true(up, "the battle boots with the hero and both party members tagged")
 	if not up:
 		return
 	for u in _party_units():

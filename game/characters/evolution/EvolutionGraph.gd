@@ -118,6 +118,17 @@ func in_any_line(id) -> bool:
 	return _parent.has(key) or _from.has(key)
 
 
+## Does [param e] require an ITEM (held or used) or a LOCATION -- the extra a human class
+## promotion needs on top of Growth (DECISIONS.md #16)?
+static func promotion_requirement_met(e: EvolutionResource) -> bool:
+	if e == null:
+		return false
+	for t in e.triggers:
+		if t is HeldItemTrigger or t is UseItemTrigger or t is LocationTrigger:
+			return true
+	return false
+
+
 ## Audit the edges; returns human-readable problems (empty == clean).
 ##
 ## [param lookup] resolves a character id to its [CharacterResource] (null when unknown) --
@@ -163,6 +174,15 @@ func validate(lookup: Callable, max_budget_growth: float) -> Array[String]:
 
 		if from_c == null or to_c == null:
 			continue
+		# HUMANS (DECISIONS.md #8, #16; docs/design/HUMANS.md): a human changes CLASS, never species --
+		# a "Promote" edge to another human, needing an ITEM (held / used) or a LOCATION as well.
+		if from_c.is_human() != to_c.is_human():
+			problems.append("edge '%s' crosses kinds (%s -> %s)." % [eid, from_c.kind_label(), to_c.kind_label()])
+		elif from_c.is_human():
+			if not e.is_promotion():
+				problems.append("edge '%s' is a human's: its kind_label must be Promote." % eid)
+			if not promotion_requirement_met(e):
+				problems.append("edge '%s' promotes a human without an item or location requirement (#16)." % eid)
 		# Bosses are never a player's evolution, except as an in-battle boss phase change.
 		if (from_c.is_boss or to_c.is_boss) and not (e.allowed_in_battle and to_c.is_boss):
 			problems.append("edge '%s' involves a boss; only an in-battle edge INTO a boss form (a phase change) may." % eid)

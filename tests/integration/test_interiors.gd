@@ -372,7 +372,7 @@ func test_the_workshop_ceremony_gives_the_starter_and_the_shard_then_the_kidnapp
 	assert_true(s.has_flag("opening.starter_received"), "the starter is received")
 	assert_true(s.has_flag("key.bonding_shard"), "and the bonding shard")
 	assert_eq(s.get_flag_int("opening.starter_pick"), 1, "the first option was picked")
-	assert_eq(s.party.size(), 1, "one creature")
+	assert_eq(s.capped_count(), 1, "one creature (beside the hero)")
 	assert_true(seen["raiders"], "enemy soldiers appear IN THE ROOM")
 	for f in ["opening.attack", "opening.researcher_taken", "opening.raiders_fled", "opening.chase"]:
 		assert_true(s.has_flag(f), "the kidnapping sets %s" % f)

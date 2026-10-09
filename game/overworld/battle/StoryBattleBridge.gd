@@ -40,13 +40,17 @@ static func level_for_spawn(request: BattleRequest, player_id: int, spawn_data: 
 	return own if own > 0 else maxi(0, request.enemy_level)
 
 
-## The members sent into a TACTICAL battle: healthy, in party order, up to [param squad_size].
-static func fielded_members(state: StoryState, squad_size: int) -> Array[StoryPartyMember]:
+## The members sent into a TACTICAL battle with NO pick made: healthy, THE HERO FIRST (when he is in
+## the party), then party order, up to [param squad_size] ([method SquadPick.default_picks]; a
+## battle that requires the hero always has him). Without a hero this is the old "first N healthy".
+static func fielded_members(state: StoryState, squad_size: int, request: BattleRequest = null) -> Array[StoryPartyMember]:
 	var out: Array[StoryPartyMember] = []
-	for m in state.healthy_members():
-		if out.size() >= maxi(1, squad_size):
-			break
-		out.append(m)
+	if state == null:
+		return out
+	for id in SquadPick.default_picks(SquadPick.candidates(state, request), squad_size):
+		var m: StoryPartyMember = state.member(id)
+		if m != null:
+			out.append(m)
 	return out
 
 
@@ -66,6 +70,10 @@ static func party_snapshot(members: Array) -> Array:
 			"hero": sm.is_hero,
 			"level": sm.level,
 		})
+		# A human's weapon override (docs/design/HUMANS.md): only when set, so a creature party's
+		# snapshot is exactly what it was.
+		if not sm.weapon_id.is_empty():
+			(out[out.size() - 1] as Dictionary)["weapon_id"] = sm.weapon_id
 	return out
 
 
@@ -108,6 +116,11 @@ static func prepare_board(map_loader, request: BattleRequest) -> Dictionary:
 			u.set_meta(MEMBER_META, mid)
 			if bool(p.get("hero", false)):
 				u.set_meta(HERO_META, true)
+			# A human member's weapon override (docs/design/HUMANS.md); refused quietly when the
+			# unit cannot wield it (the roster weapon stays).
+			var wid: String = String(p.get("weapon_id", ""))
+			if not wid.is_empty() and u.has_method("equip_weapon"):
+				u.equip_weapon(WeaponLibrary.get_weapon(wid))
 			var hp: int = int(p.get("current_hp", StoryPartyMember.HP_FULL))
 			if hp != StoryPartyMember.HP_FULL and hp > 0 and u.unit_stats != null:
 				u.unit_stats.set_stat("health", mini(hp, u.max_health))

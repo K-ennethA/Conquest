@@ -332,11 +332,12 @@ func _lead_power() -> float:
 	if state == null:
 		return 0.0
 	var lead: StoryPartyMember = null
-	var healthy: Array[StoryPartyMember] = state.healthy_members()
+	# The duel LINEUP's lead (the partner creature, not the hero -- docs/design/HUMANS.md).
+	var healthy: Array[StoryPartyMember] = state.duel_lineup()
 	if not healthy.is_empty():
 		lead = healthy[0]
 	elif not state.party.is_empty():
-		lead = state.party[0]
+		lead = state.lead()
 	if lead == null:
 		return 0.0
 	return power_of(CharacterLibrary.get_character(StringName(lead.character_id)), 1.0)

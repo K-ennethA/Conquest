@@ -66,6 +66,18 @@ var xp: int = 0
 ## BOND XP (DECISIONS.md #68): earned by fighting alongside the hero; [method bond_level] reads it.
 ## Saved as "bond_xp"; an older save loads 0.
 var bond_xp: int = 0
+## HUMANS (docs/design/HUMANS.md). A TEMPORARY join (DECISIONS.md #61: the main rivals / allies):
+## shown as a Guest, deployable like anyone, and it LEAVES the party when the story flag
+## [member guest_until] is set ("" = only an explicit LeaveParty). Saved as "temporary" /
+## "guest_until"; an older save loads a permanent member.
+var temporary: bool = false
+var guest_until: String = ""
+## A HUMAN's weapon override (a [WeaponLibrary] id it can wield -- #63's weapon swap); "" = the
+## roster entry's own weapon. Saved as "weapon_id".
+var weapon_id: String = ""
+## A HUMAN's BONDED creature (#54, #65): that creature member's member_id, "" = none. Saved as
+## "bond_partner".
+var bond_partner: String = ""
 
 
 static func create(p_member_id: String, p_character_id: String, p_nickname: String = "",
@@ -233,6 +245,29 @@ func character() -> CharacterResource:
 	return CharacterLibrary.get_character(StringName(character_id))
 
 
+## True when this member's current form is a HUMAN.
+func is_human() -> bool:
+	var c: CharacterResource = character()
+	return c != null and c.is_human()
+
+
+## A temporary join (a Guest) -- see [member temporary].
+func is_temporary() -> bool:
+	return temporary
+
+
+## The weapon this member fights with: the override, else its form's own (null for a creature).
+func weapon() -> WeaponResource:
+	var c: CharacterResource = character()
+	if c == null or not c.is_human():
+		return null
+	if not weapon_id.is_empty():
+		var w: WeaponResource = WeaponLibrary.get_weapon(weapon_id)
+		if w != null and c.can_wield(w):
+			return w
+	return c.equipped_weapon()
+
+
 func display_name() -> String:
 	if not nickname.strip_edges().is_empty():
 		return nickname
@@ -291,6 +326,10 @@ func to_dict() -> Dictionary:
 		"level": level,
 		"xp": xp,
 		"bond_xp": bond_xp,
+		"temporary": temporary,
+		"guest_until": guest_until,
+		"weapon_id": weapon_id,
+		"bond_partner": bond_partner,
 	}
 
 
@@ -332,6 +371,10 @@ static func from_dict(d) -> StoryPartyMember:
 		# The saved HP was out of the old (level-less = level 1) max: keep its ratio.
 		m.set_level(rules.legacy_level, rules)
 	m.bond_xp = maxi(0, int(d.get("bond_xp", 0)))
+	m.temporary = bool(d.get("temporary", false))
+	m.guest_until = String(d.get("guest_until", "")) if (d.get("guest_until", "") is String) else ""
+	m.weapon_id = String(d.get("weapon_id", "")) if (d.get("weapon_id", "") is String) else ""
+	m.bond_partner = String(d.get("bond_partner", "")) if (d.get("bond_partner", "") is String) else ""
 	return m
 
 

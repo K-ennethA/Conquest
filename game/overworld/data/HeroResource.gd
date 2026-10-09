@@ -19,6 +19,9 @@ const DEFAULT_PATH := "res://game/overworld/content/hero.tres"
 ## Dialogue portrait id (a CharacterLibrary id renders a captured portrait; anything else shows
 ## the monogram crest).
 @export var speaker_id: StringName = &"hero"
+## THE HERO AS A BATTLE UNIT (docs/design/HUMANS.md; DECISIONS.md #54): the HUMAN roster entry the
+## hero's party record fights as (stats, weapon, battle model). "" = no battle unit.
+@export var battle_character_id: StringName = &"wren"
 
 
 static func load_default() -> HeroResource:
