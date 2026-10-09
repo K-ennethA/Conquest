@@ -300,6 +300,8 @@ func capped_count() -> int:
 ## unless [param hero_alone_ok] ([member StoryRuleset.hero_alone_can_battle]).
 func can_battle(hero_alone_ok: bool = false) -> bool:
 	for m in healthy_members():
+		if m.temporary:
+			continue  # a guest is along for its story battle, never the party's duels (duel_lineup)
 		if not m.is_hero or hero_alone_ok:
 			return true
 	return false
@@ -307,9 +309,14 @@ func can_battle(hero_alone_ok: bool = false) -> bool:
 
 ## The DUEL lineup (the party a duel sends, lead first): the healthy members in party order with
 ## the hero moved to index [param hero_slot] (clamped; 0 = he leads; < 0 = plain party order), or
-## left out entirely when [param with_hero] is false (a creatures-only duel).
+## left out entirely when [param with_hero] is false (a creatures-only duel). TEMPORARY guests
+## (DECISIONS.md #61 / #94: a rival keeping the hero company for a story battle) are never in a
+## duel lineup -- they deploy in the tactical battle they came for, through the squad pick.
 func duel_lineup(hero_slot: int = 1, with_hero: bool = true) -> Array[StoryPartyMember]:
-	var healthy: Array[StoryPartyMember] = healthy_members()
+	var healthy: Array[StoryPartyMember] = []
+	for m in healthy_members():
+		if not m.temporary:
+			healthy.append(m)
 	if not with_hero:
 		var creatures: Array[StoryPartyMember] = []
 		for m in healthy:

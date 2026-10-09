@@ -60,6 +60,25 @@ func test_duel_lineup_puts_the_hero_behind_the_partner() -> void:
 	assert_eq(ids.call(s.duel_lineup(-1)), ["wren", "tree_grunt", "petalfang"], "plain party order")
 
 
+func test_a_temporary_guest_never_fights_the_partys_duels() -> void:
+	# DECISIONS.md #61 / #94: a rival keeping the hero company (Lyra in the Deep Woods) deploys in the
+	# tactical battle she came for -- never in a wild / trainer / chief duel's lineup.
+	var s := _state_with_hero()
+	s.add_member("tree_grunt", "", 6, 5)
+	s.join("lyra", "", 6, 5, true, "deepwood.eldroot_beaten")
+	var ids := func(arr: Array) -> Array:
+		return arr.map(func(m): return m.character_id)
+	assert_eq(ids.call(s.duel_lineup(1, false)), ["tree_grunt"], "a creatures' duel: no guest")
+	assert_eq(ids.call(s.duel_lineup(1, true)), ["tree_grunt", "wren"], "a hero-required duel: still no guest")
+	s.member("tree_grunt").wounded = true
+	assert_false(s.can_battle(), "the guest alone does not carry the party into a fight")
+	s.member("tree_grunt").wounded = false
+	var cands: Array[Dictionary] = SquadPick.candidates(s, BattleRequest.new())
+	var lyra: Dictionary = SquadPick.find(cands, s.member("lyra").member_id)
+	assert_false(lyra.is_empty(), "she is a candidate in a tactical battle's squad pick")
+	assert_true(bool(lyra["guest"]), "shown as a guest")
+
+
 # --- Joins, guests, uniqueness -----------------------------------------------------------
 
 func test_humans_are_unique_and_guests_leave_on_their_flag() -> void:
