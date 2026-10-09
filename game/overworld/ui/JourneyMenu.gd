@@ -324,6 +324,20 @@ func refresh_party() -> void:
 		_party.add_child(fh)
 		for f in _state.fallen:
 			_party.add_child(_fallen_card(f))
+	# LEGENDS (DECISIONS.md #39 / #75): bonded, never party members -- listed read-only. Calling one
+	# upon in special battles / online is not built yet.
+	if not _state.legends.is_empty():
+		var lh := ConquestTheme.title_ribbon("LEGENDS", MenuTheme.GOLD_DK, MenuTheme.FS_BODY)
+		lh.name = "LegendsHeading"
+		lh.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		_party.add_child(lh)
+		for cid in _state.legends:
+			var lc: CharacterResource = CharacterLibrary.get_character(StringName(cid))
+			var line := MenuKit.label("%s  ·  Bonded legend (not in the party)" % (lc.display_name if lc != null else cid),
+				&"DimLabel", true)
+			line.name = "Legend_" + cid
+			line.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+			_party.add_child(line)
 	_link_rows_to(_party_scroll)
 
 

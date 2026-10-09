@@ -77,6 +77,11 @@ var fallen: Array[StoryPartyMember] = []
 ## quest ([method QuestLog.tracked_entry] falls back while the pin is finished / unknown). Saved as
 ## "tracked_quest" (an older save has none: the main quest is tracked).
 var tracked_quest: String = ""
+## The LEGENDS the hero has bonded with (DECISIONS.md #39 / #74 / #75): character ids, in the order
+## bonded. Catching a legend is OPTIONAL, and a legend is NOT a party member -- it never joins
+## [member party], never fights in a squad or a duel; it "can be called upon in special battles or
+## online" (not implemented yet). Saved as "legends" (an older save has none).
+var legends: Array[String] = []
 ## Bumped on every flag change (set / changed / cleared), never reset, never saved: a cheap "did
 ## anything change?" test for views that re-derive from flags ([QuestTracker]'s diff) without
 ## competing for [method drain_changes].
@@ -301,6 +306,22 @@ func knocked_out_members() -> Array[StoryPartyMember]:
 		if ConsumableEffect.member_is_down(m):
 			out.append(m)
 	return out
+
+
+# --- Legends (bonded, never in the party) -------------------------------------------------
+
+## Record a bond with legend [param character_id] ([member legends]). False when the id is blank or
+## it is already bonded (a legend is unique: one of each). The party is untouched.
+func add_legend(character_id: String) -> bool:
+	var cid: String = character_id.strip_edges()
+	if cid.is_empty() or legends.has(cid):
+		return false
+	legends.append(cid)
+	return true
+
+
+func has_legend(character_id: String) -> bool:
+	return legends.has(character_id)
 
 
 # --- Fallen (Classic permadeath) ------------------------------------------------------
