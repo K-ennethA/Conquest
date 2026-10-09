@@ -599,31 +599,21 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "The forest gets thicker the deeper you go. Watch the grass."
+								"text": "The deep forest turns travellers round. Follow the lights, or it walks you right back out."
 							}
 						]
 					}
 				]
 			},
 			"lyra": {
-				"note": "TODO(story): placeholder lines (DECISIONS.md #88: Lyra is met here and joins the Eldroot battle).",
+				"note": "TODO(story): placeholder greeting (DECISIONS.md #88 / #94: Lyra is met here, challenges you -- the builder's offer follows this line -- then keeps you company through the Deep Woods).",
 				"variants": [
-					{
-						"if": "after('deepwood.nyra_beaten')",
-						"label": "the way is open",
-						"lines": [
-							{
-								"speaker": "self",
-								"text": "The trail north is open. When you face what's in the deepest part of the wood, I'll fight beside you."
-							}
-						]
-					},
 					{
 						"if": "",
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "{hero}! You came to Deepwood too. Something waits in the deepest part of the forest -- when you go, I'm coming with you."
+								"text": "{hero}! You came to Deepwood too."
 							}
 						]
 					}

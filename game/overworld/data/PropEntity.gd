@@ -42,10 +42,10 @@ extends OverworldEntity
 
 const KINDS: Array[String] = ["house", "ruin", "keep", "tower", "gate", "windmill", "stall", "well",
 	"fence", "haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena",
-	"cabin", "logs", "lamp", "chapel", "smithy", "scarecrow", "mat"]
+	"cabin", "logs", "lamp", "chapel", "smithy", "scarecrow", "mat", "thicket"]
 
 @export_enum("house", "ruin", "keep", "tower", "gate", "windmill", "stall", "well", "fence",
-	"haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena", "cabin", "logs", "lamp", "chapel", "smithy", "scarecrow", "mat")
+	"haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena", "cabin", "logs", "lamp", "chapel", "smithy", "scarecrow", "mat", "thicket")
 var prop: String = "house"
 @export var footprint: Vector2i = Vector2i(2, 2)
 ## "auto" = the kind's default ([constant SOLID_KINDS]); "solid" / "walkable" override it.
@@ -57,6 +57,10 @@ var prop: String = "house"
 ## The door's cell inside the footprint (offset from [member OverworldEntity.cell]); (-1, -1) =
 ## the bottom row's centre column (the south facade, toward the camera).
 @export var door_offset: Vector2i = Vector2i(-1, -1)
+## A LIT prop (a lantern burning, a glowing marker): 0 = unlit (the default); above 0 its light
+## part glows in [member OverworldEntity.tint] -- an emissive head plus a light of this energy
+## ([method OverworldProps.add_glow]). A look, never collision. E.g. the Deep Woods' maze lanterns.
+@export_range(0.0, 8.0, 0.1) var glow: float = 0.0
 
 ## Kinds that block their whole footprint unless [member collision] says "walkable". Walk-over
 ## decor (crops) and arches the player walks under (gate) are deliberately absent.

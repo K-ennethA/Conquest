@@ -90,6 +90,46 @@ func rebuild_blockers(area: OverworldAreaResource, state: StoryState) -> void:
 			_blockers[c] = String(e.id)
 
 
+## WHERE THE HERO STARTS on an area boot: [param cell] / [param facing] (a save's location, a warp's
+## arrival) when the hero can stand there; otherwise -- out of the area's bounds (an area that
+## shrank since the save), impassable terrain or a blocking entity -- the area's DEFAULT ENTRY: the
+## first entry point (authored order) he can stand on, with that entry's facing, exactly as a normal
+## arrival. No standable entry: the nearest standable cell to the first entry (else to the area's
+## middle), keeping [param facing]. Nothing standable at all: [param cell] unchanged (never a crash).
+## Returns {cell: Vector3i, facing: String, moved: bool, reason: "" / "out_of_bounds" / "blocked"}.
+func resolve_start(area: OverworldAreaResource, cell: Vector3i, facing: String) -> Dictionary:
+	if is_walkable(cell):
+		return {"cell": cell, "facing": facing, "moved": false, "reason": ""}
+	var reason: String = "out_of_bounds" if not in_bounds(cell) else "blocked"
+	var anchor := Vector3i(width / 2, height / 2, 0)
+	var anchored: bool = false
+	if area != null:
+		for eid in area.entry_ids():
+			var e: Dictionary = area.entry(eid)
+			if e.is_empty():
+				continue
+			if is_walkable(e["cell"]):
+				return {"cell": e["cell"], "facing": String(e["facing"]), "moved": true, "reason": reason}
+			if not anchored:
+				anchor = e["cell"]
+				anchored = true
+	# No entry is standable: the nearest standable cell (deterministic: scan order breaks ties).
+	var best := Cells.INVALID
+	var best_d: int = 1 << 30
+	for y in range(height):
+		for x in range(width):
+			var c := Vector3i(x, y, 0)
+			if not is_walkable(c):
+				continue
+			var d: int = absi(c.x - anchor.x) + absi(c.y - anchor.y)
+			if d < best_d:
+				best_d = d
+				best = c
+	if best == Cells.INVALID:
+		return {"cell": cell, "facing": facing, "moved": false, "reason": reason}
+	return {"cell": best, "facing": facing, "moved": true, "reason": reason}
+
+
 func set_blocker(cell: Vector3i, entity_id: String) -> void:
 	_blockers[cell] = entity_id
 

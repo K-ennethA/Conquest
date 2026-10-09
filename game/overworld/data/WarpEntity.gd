@@ -15,6 +15,9 @@ extends OverworldEntity
 @export_enum("none", "row", "col") var preserve_axis: String = "none"
 @export var requires: String = ""
 @export var locked_scene: StoryScene
+## A short, NON-BLOCKING toast shown once the target area is up ("" = none) -- e.g. a maze's wrong
+## way turning you back to its entrance ("You feel turned around..."). Never a dialogue box.
+@export var arrival_toast: String = ""
 
 
 func kind() -> StringName:

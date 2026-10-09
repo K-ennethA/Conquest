@@ -1,0 +1,132 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="1_7ymh8"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/BondLegendCommand.gd" id="2_bksgv"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="3_5fuj2"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="4_rwdy3"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="5_vd8hk"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="6_bh261"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="7_pjda6"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="8_ydxqk"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/StartBattleCommand.gd" id="9_glfw5"]
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="10_u8ca4"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="11_615kq"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="12_6ayft"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/depths_of_the_wood_heart/terrain.tres" id="13_06msk"]
+
+[sub_resource type="Resource" id="Resource_5sc24"]
+script = ExtResource("1_7ymh8")
+area_rect = Rect2i(9, 13, 1, 1)
+target_area = &"depths_of_the_wood_4"
+target_entry = &"back"
+id = &"south_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_0lnry"]
+script = ExtResource("2_bksgv")
+character_id = &"eldroot"
+
+[sub_resource type="Resource" id="Resource_kjl87"]
+script = ExtResource("3_5fuj2")
+key = "legend.eldroot.bonded"
+
+[sub_resource type="Resource" id="Resource_052yg"]
+script = ExtResource("4_rwdy3")
+
+[sub_resource type="Resource" id="Resource_2d72p"]
+script = ExtResource("5_vd8hk")
+label = "Bond"
+commands = Array[Resource]([SubResource("Resource_0lnry"), SubResource("Resource_kjl87"), SubResource("Resource_052yg")])
+
+[sub_resource type="Resource" id="Resource_d8muf"]
+script = ExtResource("5_vd8hk")
+label = "Not now"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_w35dy"]
+script = ExtResource("6_bh261")
+text = "Eldroot, the Hollow Crown watches you, still. Bond with it?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_yhrts"]
+script = ExtResource("7_pjda6")
+prompt = SubResource("Resource_w35dy")
+options = Array[Resource]([SubResource("Resource_2d72p"), SubResource("Resource_d8muf")])
+
+[sub_resource type="Resource" id="Resource_peb1w"]
+script = ExtResource("10_u8ca4")
+encounter_id = "deepwood.legend.eldroot"
+map_path = "res://game/overworld/content/battles/ow_deepwood_glade.tres"
+squad_size = 4
+opponent_name = "Eldroot, the Hollow Crown"
+opponent_team = Array[Dictionary]([{
+"character_id": "eldroot",
+"strength": 1.0
+}])
+reward_flags = Array[String](["deepwood.eldroot_beaten"])
+defeat_policy = 2
+clash_intro = true
+enemy_level = 20
+boss_battle = true
+
+[sub_resource type="Resource" id="Resource_7k8tk"]
+script = ExtResource("9_glfw5")
+spec = SubResource("Resource_peb1w")
+
+[sub_resource type="Resource" id="Resource_f5swk"]
+script = ExtResource("8_ydxqk")
+condition = "outcome() == \"victory\""
+then_commands = Array[Resource]([SubResource("Resource_yhrts")])
+
+[sub_resource type="Resource" id="Resource_2oe8t"]
+script = ExtResource("5_vd8hk")
+label = "Face it"
+commands = Array[Resource]([SubResource("Resource_7k8tk"), SubResource("Resource_f5swk")])
+
+[sub_resource type="Resource" id="Resource_60x5t"]
+script = ExtResource("5_vd8hk")
+label = "Not yet"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_vw2ep"]
+script = ExtResource("6_bh261")
+text = "Something ancient stirs among the roots of the glade. Face it?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_sag6g"]
+script = ExtResource("7_pjda6")
+prompt = SubResource("Resource_vw2ep")
+options = Array[Resource]([SubResource("Resource_2oe8t"), SubResource("Resource_60x5t")])
+
+[sub_resource type="Resource" id="Resource_kwlvr"]
+script = ExtResource("8_ydxqk")
+condition = "not has(\"deepwood.eldroot_beaten\")"
+then_commands = Array[Resource]([SubResource("Resource_sag6g")])
+else_commands = Array[Resource]([SubResource("Resource_yhrts")])
+
+[sub_resource type="Resource" id="Resource_mdubu"]
+script = ExtResource("11_615kq")
+speaker_name = "Eldroot, the Hollow Crown"
+id = &"eldroot"
+cell = Vector3i(9, 4, 0)
+display_name = "Eldroot, the Hollow Crown"
+visual_character = &"eldroot"
+visible_if = "not has(\"legend.eldroot.bonded\")"
+on_interact = Array[Resource]([SubResource("Resource_kwlvr")])
+
+[resource]
+script = ExtResource("12_6ayft")
+area_id = &"depths_of_the_wood_heart"
+display_name = "Heart of the Wood"
+terrain = ExtResource("13_06msk")
+kind = 1
+region_id = &"woodlands"
+world_map_pos = Vector2(0.114, 0.337)
+entry_points = {
+"south": {
+"cell": [9, 12, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_5sc24"), SubResource("Resource_mdubu")])
+level_band = Vector2i(8, 15)

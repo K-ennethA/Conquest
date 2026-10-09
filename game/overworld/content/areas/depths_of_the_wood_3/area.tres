@@ -1,0 +1,413 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_sw4r0"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_so57g"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="3_nqind"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="4_be3qq"]
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="5_fgu6g"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="6_idqch"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="7_gflwm"]
+[ext_resource type="Script" path="res://game/overworld/data/TrainerEntity.gd" id="8_8w08v"]
+[ext_resource type="Script" path="res://game/overworld/data/FieldObstacleEntity.gd" id="9_lgia5"]
+[ext_resource type="Script" path="res://game/overworld/data/ChestEntity.gd" id="10_kgvfa"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="11_bvyx2"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/depths_of_the_wood_3/terrain.tres" id="12_0ieq6"]
+
+[sub_resource type="Resource" id="Resource_o85jm"]
+script = ExtResource("2_so57g")
+character_id = &"petalfang"
+weight = 2.0
+
+[sub_resource type="Resource" id="Resource_rdg2j"]
+script = ExtResource("2_so57g")
+character_id = &"blightcap"
+weight = 2.0
+
+[sub_resource type="Resource" id="Resource_yolt1"]
+script = ExtResource("2_so57g")
+character_id = &"tree_grunt"
+weight = 1.5
+
+[sub_resource type="Resource" id="Resource_hoioq"]
+script = ExtResource("2_so57g")
+character_id = &"vineweave"
+
+[sub_resource type="Resource" id="Resource_igajd"]
+script = ExtResource("2_so57g")
+character_id = &"oakheart"
+weight = 0.5
+
+[sub_resource type="Resource" id="Resource_1okhq"]
+script = ExtResource("1_sw4r0")
+table = Array[Resource]([SubResource("Resource_o85jm"), SubResource("Resource_rdg2j"), SubResource("Resource_yolt1"), SubResource("Resource_hoioq"), SubResource("Resource_igajd")])
+rate = 0.12
+
+[sub_resource type="Resource" id="Resource_f5a43"]
+script = ExtResource("3_nqind")
+area_rect = Rect2i(9, 0, 1, 1)
+target_area = &"depths_of_the_wood"
+target_entry = &"south"
+arrival_toast = "You feel turned around..."
+id = &"north_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_t8e22"]
+script = ExtResource("3_nqind")
+area_rect = Rect2i(9, 16, 1, 1)
+target_area = &"depths_of_the_wood_2"
+target_entry = &"back"
+id = &"south_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_8i0rj"]
+script = ExtResource("3_nqind")
+area_rect = Rect2i(0, 8, 1, 1)
+target_area = &"depths_of_the_wood_4"
+target_entry = &"south"
+id = &"west_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_dhfjt"]
+script = ExtResource("3_nqind")
+area_rect = Rect2i(18, 8, 1, 1)
+target_area = &"depths_of_the_wood"
+target_entry = &"south"
+arrival_toast = "You feel turned around..."
+id = &"east_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_hhu4j"]
+script = ExtResource("4_be3qq")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"light_8_2"
+cell = Vector3i(8, 2, 0)
+tint = Color(0.24, 0.24, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_d1dgv"]
+script = ExtResource("4_be3qq")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"light_10_2"
+cell = Vector3i(10, 2, 0)
+tint = Color(0.24, 0.24, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_3rev8"]
+script = ExtResource("4_be3qq")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+glow = 3.0
+id = &"light_2_7"
+cell = Vector3i(2, 7, 0)
+tint = Color(0.85, 1, 0.55, 1)
+
+[sub_resource type="Resource" id="Resource_cohgi"]
+script = ExtResource("4_be3qq")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+glow = 3.0
+id = &"light_2_9"
+cell = Vector3i(2, 9, 0)
+tint = Color(0.85, 1, 0.55, 1)
+
+[sub_resource type="Resource" id="Resource_i03if"]
+script = ExtResource("4_be3qq")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"light_16_7"
+cell = Vector3i(16, 7, 0)
+tint = Color(0.24, 0.24, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_f657b"]
+script = ExtResource("4_be3qq")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"light_16_9"
+cell = Vector3i(16, 9, 0)
+tint = Color(0.24, 0.24, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_d4qw8"]
+script = ExtResource("5_fgu6g")
+kind = 1
+opponent_name = "Trapper"
+opponent_speaker_id = &"npc_trapper"
+opponent_team = Array[Dictionary]([{
+"character_id": "vineweave",
+"strength": 0.9
+}, {
+"character_id": "tree_grunt",
+"strength": 0.85
+}])
+reward_gold = 180
+clash_intro = true
+enemy_level = 12
+
+[sub_resource type="Resource" id="Resource_fxl5x"]
+script = ExtResource("6_idqch")
+speaker_id = &"self"
+side = &"right"
+text = "All right, all right. Go on, then."
+
+[sub_resource type="Resource" id="Resource_yhspl"]
+script = ExtResource("7_gflwm")
+scene_id = &"depths_trapper_after"
+beats = Array[Resource]([SubResource("Resource_fxl5x")])
+
+[sub_resource type="Resource" id="Resource_keu7e"]
+script = ExtResource("6_idqch")
+speaker_id = &"self"
+side = &"right"
+text = "Quiet! You'll scare off-- oh, it's a battle you want? Fine!"
+
+[sub_resource type="Resource" id="Resource_h0sp8"]
+script = ExtResource("7_gflwm")
+scene_id = &"depths_trapper_pre"
+beats = Array[Resource]([SubResource("Resource_keu7e")])
+
+[sub_resource type="Resource" id="Resource_hrh3a"]
+script = ExtResource("8_8w08v")
+sight_range = 2
+battle = SubResource("Resource_d4qw8")
+pre_scene = SubResource("Resource_h0sp8")
+defeated_scene = SubResource("Resource_yhspl")
+speaker_id = &"npc_trapper"
+speaker_name = "Trapper"
+figure = "trainer"
+id = &"trapper"
+cell = Vector3i(16, 13, 0)
+facing = "west"
+display_name = "Trapper"
+tint = Color(0.4, 0.34, 0.26, 1)
+
+[sub_resource type="Resource" id="Resource_l7wqb"]
+script = ExtResource("9_lgia5")
+field_move = &"treefell"
+id = &"nook_tree"
+cell = Vector3i(13, 4, 0)
+display_name = "Gnarled Tree"
+tint = Color(0.3, 0.4, 0.2, 1)
+visible_if = "not has(\"depths_of_the_wood_3.nook_tree.cleared\")"
+
+[sub_resource type="Resource" id="Resource_rj4cv"]
+script = ExtResource("10_kgvfa")
+loot_items = Array[StringName]([&"heartwood_tonic", &"clearwater_draught"])
+loot_gold = 60
+id = &"nook_chest"
+cell = Vector3i(16, 3, 0)
+facing = "west"
+display_name = "Chest"
+tint = Color(0.42, 0.3, 0.18, 1)
+visible_if = "has(\"depths_of_the_wood_3.nook_tree.cleared\")"
+
+[sub_resource type="Resource" id="Resource_lhhpw"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(9, 2)
+id = &"thicket_0_0"
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_5qo3d"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(9, 2)
+id = &"thicket_10_0"
+cell = Vector3i(10, 0, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_vlur2"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(2, 6)
+id = &"thicket_0_2"
+cell = Vector3i(0, 2, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_0ph60"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(3, 4)
+id = &"thicket_5_2"
+cell = Vector3i(5, 2, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_4sgud"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(8, 1)
+id = &"thicket_11_2"
+cell = Vector3i(11, 2, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_onwyr"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(3, 1)
+id = &"thicket_11_3"
+cell = Vector3i(11, 3, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_7wn6x"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(2, 5)
+id = &"thicket_17_3"
+cell = Vector3i(17, 3, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_c14vj"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(1, 2)
+id = &"thicket_8_4"
+cell = Vector3i(8, 4, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_2yu23"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(1, 1)
+id = &"thicket_2_6"
+cell = Vector3i(2, 6, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_cn0m0"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(3, 1)
+id = &"thicket_4_6"
+cell = Vector3i(4, 6, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_bsg2d"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(2, 1)
+id = &"thicket_12_6"
+cell = Vector3i(12, 6, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_teth0"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(2, 1)
+id = &"thicket_4_7"
+cell = Vector3i(4, 7, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_kuvis"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(3, 1)
+id = &"thicket_13_7"
+cell = Vector3i(13, 7, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_gcumn"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(2, 7)
+id = &"thicket_0_10"
+cell = Vector3i(0, 10, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_mwrxo"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(3, 7)
+id = &"thicket_3_10"
+cell = Vector3i(3, 10, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_q2p01"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(1, 1)
+id = &"thicket_13_10"
+cell = Vector3i(13, 10, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_4yk7v"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(1, 1)
+id = &"thicket_15_10"
+cell = Vector3i(15, 10, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_u7r7h"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(2, 7)
+id = &"thicket_17_10"
+cell = Vector3i(17, 10, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_we15v"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(1, 6)
+id = &"thicket_2_11"
+cell = Vector3i(2, 11, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_fdsnt"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(1, 6)
+id = &"thicket_6_11"
+cell = Vector3i(6, 11, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_vrno2"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(1, 6)
+id = &"thicket_12_11"
+cell = Vector3i(12, 11, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_6g8uq"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(2, 5)
+id = &"thicket_7_12"
+cell = Vector3i(7, 12, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_7rtr3"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(2, 5)
+id = &"thicket_10_12"
+cell = Vector3i(10, 12, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_7lmjt"]
+script = ExtResource("4_be3qq")
+prop = "thicket"
+footprint = Vector2i(4, 2)
+id = &"thicket_13_15"
+cell = Vector3i(13, 15, 0)
+tint = Color(1, 1, 1, 1)
+
+[resource]
+script = ExtResource("11_bvyx2")
+area_id = &"depths_of_the_wood_3"
+display_name = "Depths of the Wood"
+terrain = ExtResource("12_0ieq6")
+kind = 1
+region_id = &"woodlands"
+world_map_pos = Vector2(0.114, 0.337)
+entry_points = {
+"back": {
+"cell": [1, 8, 0],
+"facing": "east"
+},
+"south": {
+"cell": [9, 15, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_f5a43"), SubResource("Resource_t8e22"), SubResource("Resource_8i0rj"), SubResource("Resource_dhfjt"), SubResource("Resource_hhu4j"), SubResource("Resource_d1dgv"), SubResource("Resource_3rev8"), SubResource("Resource_cohgi"), SubResource("Resource_i03if"), SubResource("Resource_f657b"), SubResource("Resource_hrh3a"), SubResource("Resource_l7wqb"), SubResource("Resource_rj4cv"), SubResource("Resource_lhhpw"), SubResource("Resource_5qo3d"), SubResource("Resource_vlur2"), SubResource("Resource_0ph60"), SubResource("Resource_4sgud"), SubResource("Resource_onwyr"), SubResource("Resource_7wn6x"), SubResource("Resource_c14vj"), SubResource("Resource_2yu23"), SubResource("Resource_cn0m0"), SubResource("Resource_bsg2d"), SubResource("Resource_teth0"), SubResource("Resource_kuvis"), SubResource("Resource_gcumn"), SubResource("Resource_mwrxo"), SubResource("Resource_q2p01"), SubResource("Resource_4yk7v"), SubResource("Resource_u7r7h"), SubResource("Resource_we15v"), SubResource("Resource_fdsnt"), SubResource("Resource_vrno2"), SubResource("Resource_6g8uq"), SubResource("Resource_7rtr3"), SubResource("Resource_7lmjt")])
+encounter_zones = Array[Resource]([SubResource("Resource_1okhq")])
+level_band = Vector2i(8, 15)

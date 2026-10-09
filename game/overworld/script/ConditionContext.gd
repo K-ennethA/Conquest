@@ -80,6 +80,18 @@ func party_has(character_id: String) -> bool:
 	return _state.party_has(character_id)
 
 
+## FIELD MOVES (DECISIONS.md #92): has a party member LEARNED [param move_id]?
+func knows_field_move(move_id: String) -> bool:
+	return _state.party_knows_field_move(move_id)
+
+
+## Could a party member learn [param move_id] now (eligible and not knowing it yet)? False for a
+## move this build does not ship.
+func can_learn_field_move(move_id: String) -> bool:
+	var fm: FieldMoveResource = FieldMoveResource.load_by_id(move_id)
+	return fm != null and not fm.teachable_members(_state).is_empty()
+
+
 func item(item_id: String) -> int:
 	return _state.item_count(item_id)
 

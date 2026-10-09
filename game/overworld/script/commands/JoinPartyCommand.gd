@@ -24,6 +24,9 @@ extends StoryCommand
 @export var temporary: bool = false
 ## The story flag that ends a temporary stay ("" = only a LeaveParty command ends it).
 @export var guest_until: String = ""
+## Join at the PARTY'S TOP LEVEL instead of [member level] (a companion who keeps pace with the
+## hero, e.g. the Deepwood rival: never above the party, so scaled battles do not jump).
+@export var match_party_level: bool = false
 
 
 ## The level this command's recruit joins at ([member level], else the starter level).
@@ -31,11 +34,18 @@ func join_level() -> int:
 	return level if level > 0 else ProgressionRules.current().starter_level
 
 
+## The level the recruit joins at for [param state] ([member match_party_level] reads its party).
+func level_for(state: StoryState) -> int:
+	if match_party_level and state != null:
+		return maxi(1, state.party_top_level())
+	return join_level()
+
+
 func run(ctx: ScriptContext) -> void:
 	var cap: int = 6
 	if ctx.has_session_method(&"party_cap"):
 		cap = int(ctx.session.party_cap())
-	var res: Dictionary = ctx.state.join(String(character_id), nickname, cap, join_level(), temporary, guest_until)
+	var res: Dictionary = ctx.state.join(String(character_id), nickname, cap, level_for(ctx.state), temporary, guest_until)
 	var m: StoryPartyMember = res.get("member", null)
 	ctx.vars["join_reason"] = String(res.get("reason", ""))
 	if m == null:
@@ -51,7 +61,8 @@ func run(ctx: ScriptContext) -> void:
 
 
 func describe() -> String:
-	return "Join party: %s (Lv %d%s)" % [character_id, join_level(), ", guest" if temporary else ""]
+	return "Join party: %s (Lv %s%s)" % [character_id, "party" if match_party_level else str(join_level()),
+		", guest" if temporary else ""]
 
 
 func validate(issues: Array[String]) -> void:

@@ -855,7 +855,7 @@ drawn from the procedural prop kit in `OverworldProps` (placeholders until the B
 **Built route:** Oakvale → (east) the Mossway → River Crossing → (north over the Old Bridge)
 Crownhaven's south gate → (west gate, after the opening) the Sparse Forest → Woodland Town →
 (west road, once Warden Hale opens it) Deepwood Village → (north trail, once Nyra is beaten) the
-Depths of the Wood. See "The Deep Woods" below.
+Depths of the Wood (a maze) → the Heart of the Wood. See "The Deep Woods" below.
 
 | Area | Character | Layout |
 |---|---|---|
@@ -867,7 +867,8 @@ Depths of the Wood. See "The Deep Woods" below.
 | The Sparse Forest 28x12 (route) | open woodland | a winding cart track, four thickets of wild grass (its own table: Petalfang, Blightcap, Mycothrall, Barkling), Woodsman Alder's clearing |
 | Woodland Town 28x24 | rustic timber town in a forest clearing, dawn light | stream with a plank bridge; east bank: Wardens' Lodge, boardwalk square + Wayshrine, Stumped Hart inn, Timber Row (trading post `woodland_trader`, forge), lumber yard + sawmill, camp; west bank: herbalist, archery range, the Starfall Stone glade; roads: east (the Sparse Forest), west (Deepwood Village -- held by the Wardens' rope until Warden Hale is asked), the north trail (Frostpeak Village, closed), the unmarked south trail (closed -- the Thieves Guild is never named in town) |
 | Deepwood Village 26x20 | clan village in a clearing of the old forest | Nyra's lodge + three tree-houses (PLACEHOLDER cabins), the Deepwood Wayshrine, Nyra, Lyra (while she is in Deepwood), three generic villagers; east: the road to Woodland Town; north: the trail into the Depths (shut until Nyra is beaten) |
-| Depths of the Wood 24x30 (route) | old forest at dusk | a winding track through tall grass (Petalfang, Blightcap, Barkling, Vineweave, Oakheart in the 8-15 band); a wall of old trees with one BREAKABLE TREE in its only gap -- behind it the sacred glade where Eldroot waits; a second breakable tree hides a nook with a chest, a third is a shortcut |
+| Depths of the Wood: 4 rooms, 19x17 each (route) | old forest at dusk, every room alike | a MAZE (Lost Woods meets a Pokemon forest), each room enclosed by thick forest walls: a small clearing, 1-wide corridors to four exits and side passages; LIT lanterns mark the right exit (dark ones at the wrong exits, which lead back to the entrance); BREAKABLE TREES block the right way in rooms 2 and 4 (and a nook in room 3); tall grass (Petalfang, Blightcap, Barkling, Vineweave, Oakheart in the 8-15 band), two optional trainers, two chests |
+| Heart of the Wood 19x14 (route) | the sacred glade at the maze's end | Eldroot waits in the clearing |
 
 ### The world registry (`content/world.tres`)
 
@@ -891,7 +892,7 @@ area's `world_map_pos` / `region_id` come from its place (`_place()` in the buil
 | The Sparse Forest | woodlands | built | Crownhaven, Woodland Town |
 | Woodland Town (0.301, 0.384) | woodlands | built | Sparse Forest, Deepwood, Thieves Guild, Frostpeak |
 | Hidden Thieves Guild | woodlands | closed `world.thieves_guild_open`, **secret** | Woodland Town's south trail |
-| Deepwood Village (0.098, 0.474) / Depths of the Wood (0.114, 0.337) | woodlands | built (`deepwood_village` / `depths_of_the_wood`); their roads open with `world.deepwood_open` (Warden Hale) / `world.depths_of_the_wood_open` (Nyra's win) | Woodland Town's west road / Deepwood's north trail |
+| Deepwood Village (0.098, 0.474) / Depths of the Wood (0.114, 0.337) | woodlands | built (`deepwood_village` / `depths_of_the_wood`, `_2`, `_3`, `_4`, `_heart`); their roads open with `world.deepwood_open` (Warden Hale) / `world.depths_of_the_wood_open` (Nyra's win) | Woodland Town's west road / Deepwood's north trail |
 | Frostpeak Village | snowy_peaks | closed `world.frostpeak_open` | Woodland Town's north trail |
 | Mountain Base / Mountain Pass / Hidden Depths | northern_mountains | closed `world.mountain_road_open` / `world.mountain_pass_open` / `world.hidden_depths_open` | Crownhaven's north gate / Mountain Base |
 | Cindral (the Other Nation) | cindral | closed `world.cindral_open` | the Mountain Pass |
@@ -906,7 +907,7 @@ flag. Tests: `test_overworld_content.gd` (layouts, the atlas and positions, the 
 bridges, the three towns' looks, every NPC reachable at every story stage) and
 `test_story_towns_travel.gd` (real warps between the towns, every closed road turning you back).
 
-### The Deep Woods (DECISIONS.md #38-#41, #50, #56, #67, #71, #74, #75, #80, #81, #85, #88)
+### The Deep Woods (DECISIONS.md #38-#41, #50, #56, #67, #71, #74, #75, #80, #81, #85, #88, #92-#94)
 
 Built by the builder's "THE DEEP WOODS" section (knobs are its constants). How to play it:
 
@@ -915,32 +916,87 @@ Built by the builder's "THE DEEP WOODS" section (knobs are its constants). How t
 2. Take the west road to **Deepwood Village**. Touch the Wayshrine. **Lyra** is here (she stays from
    the moment the road opens until the Eldroot battle is won; Crownhaven's Lyras hide meanwhile --
    `LYRA_IN_DEEPWOOD`, one Lyra at a time).
-3. Talk to **Nyra** (the Deepwood chief, by her lodge): a chief **duel**, `BattleSpec.make_chief` --
+3. Talk to **Lyra**: she **challenges** you (#94) -- a friendly rival **duel** (`deepwood.rival.lyra`,
+   a spar: never permadeath, a loss costs nothing), SCALED with the party inside the 8-15 band
+   (`LYRA_DEEPWOOD_SCALE_OFFSET`, `LYRA_DEEPWOOD_TEAM`). "Not now" is fine: she blocks nothing. Once
+   the bout is FOUGHT, win or lose (`deepwood.lyra_challenged`), she **joins** as a TEMPORARY member
+   at the party's top level (`JoinPartyCommand.match_party_level`, `guest_until` =
+   `deepwood.eldroot_beaten`). While she follows you she is **not an overworld character** (her village
+   NPC hides, there is no follower actor); she is a human unit you deploy in the Eldroot battle's squad
+   pick. A full party: she says so and joins when you talk to her again. Skip her entirely and the
+   Eldroot battle still works -- she is simply not offered.
+4. Talk to **Nyra** (the Deepwood chief, by her lodge): a chief **duel**, `BattleSpec.make_chief` --
    SCALED to the party's top level + `NYRA_SCALE_OFFSET` inside the 8-15 band. Her final creature
    carries `NYRA_STONE_BOOST` (TODO(bond): the stone boost placeholder). A loss whites out (a story
-   duel has no Try Again screen); she waits. Winning sets `deepwood.nyra_beaten`, grants the field
-   move (`fieldmove.treefell`) and opens the trail north (`world.depths_of_the_wood_open`); **Lyra joins** the party (temporary).
-4. In the **Depths of the Wood**, face a **gnarled tree** and press Confirm: "Use Treefell?" Yes fells
-   it for good. The tree in the gap of the old-tree wall leads to the glade, where **Eldroot** waits.
-5. Talk to Eldroot: a **tactical legend battle** (`ow_deepwood_glade.tres`, squad of 4 picked in the squad pick --
-   Lyra among them; `BattleSpec.make_legend`: FIXED at band max + `legend_over_band` = 20, never scaled; Try
-   Again on a loss). Win -> the OPTIONAL bond: "Bond" records Eldroot in `StoryState.legends` (saved
-   as `legends`, format 2 unchanged), never the party; "Not now" leaves it in the glade to ask again.
-   Journey -> Party lists bonded legends read-only.
+   duel has no Try Again screen); she waits. Winning sets `deepwood.nyra_beaten` and
+   `fieldmove.treefell` (the move is now TEACHABLE) and opens the trail north
+   (`world.depths_of_the_wood_open`; only Nyra gates it). She then **teaches the field move** (#92):
+   pick which eligible party member learns it (one eligible member and nobody knowing it yet = no
+   question; nobody eligible = "come back with one who can", and she teaches it whenever you return).
+   Talk to her again to teach it to another eligible member. `deepwood.treefell_learned` marks the
+   quest step.
+5. **The Depths of the Wood -- the maze** (#93): four look-alike rooms (`depths_of_the_wood`, `_2`,
+   `_3`, `_4`; one name, one size, one painter), each ENCLOSED by walls of old forest several cells
+   thick (tree terrain, made dense by `thicket` props -- the tree tile's own art, extra trees per cell;
+   the row just south of open ground keeps a single tree so the path stays visible). The walkable
+   space is a small central clearing, four 1-wide corridors out to the exits, and each room's side
+   passages cut into the walls (tall-grass pockets, dead ends). You always come in from the south;
+   the three other exits are reachable only along their corridors: the RIGHT one leads on, the two
+   WRONG ones send you back to the maze's entrance (`WarpEntity.arrival_toast`: a short "You feel
+   turned around..." toast, nothing blocks); south goes back a room. **The clue:** every choice exit
+   has a pair of lantern posts at its mouth (`DM_LIGHT_PROP`, PLACEHOLDER look); at the right one they
+   are LIT (`PropEntity.glow` = `DM_LIGHT_GLOW`: an emissive lantern head and a light, in
+   `DM_LIGHT_TINT`), at the wrong ones they stay dark (`DM_DARK_TINT`, no glow), and fireflies drift
+   over the right corridor (`DM_CLUE_TILE`: sacred-meadow ground, the tile's own glow) -- the old
+   signpost at the entrance, the Deepwood hunter and Nyra all say "follow the lights". The way
+   through: room 1 **north**, room 2 **east**, room 3 **west**, room 4 **north**. In rooms 2 and 4 a
+   **gnarled tree** stands between the lit lanterns: face it, Confirm, "Use Treefell?" -- Yes fells it
+   for good (a saved flag) -- so without a member who LEARNED the move you cannot get through. Also:
+   tall-grass pockets in every room (the Deep Woods' creatures, 8-15), two OPTIONAL trainers (a
+   Forager in room 2, a Trapper in room 3: generic placeholders in side pockets, looking into them,
+   away from the paths), a chest in a nook behind a breakable tree (room 3) and one at the end of a
+   dead-end passage (room 4).
+6. **The Heart of the Wood** (`depths_of_the_wood_heart`): the clearing at the end, where **Eldroot**
+   waits. Talk to it: a **tactical legend battle** (`ow_deepwood_glade.tres`, squad of 4 picked in the
+   squad pick -- Lyra among them if she came along; `BattleSpec.make_legend`: FIXED at band max +
+   `legend_over_band` = 20, never scaled; Try Again on a loss). Win -> the OPTIONAL bond: "Bond"
+   records Eldroot in `StoryState.legends` (saved as `legends`, format 2 unchanged), never the party;
+   "Not now" leaves it in the glade to ask again. Journey -> Party lists bonded legends read-only.
 
-**Field moves** (`FieldMoveResource`, `content/field_moves/<id>.tres`): `unlock_flag`, `species` (a
-member's form or evolution line), `hero_can_use`, and the hint / prompt / toast texts. A move is
-LOCKED until its flag, then needs a USER (the hero when `hero_can_use`, or a fieldable party member of
-a listed species). **`FieldObstacleEntity`** (kind `obstacle`, look `tree`) blocks its cell; Confirm
-on it gives one hint line while locked or unusable, else "Use <move>?" -- Yes sets
+**Maze knobs** (`DM_*`): `DM_ROOMS` (the rooms in order: each one's `right` exit, `gate` -- a breakable
+tree in its mouth -- and `carve`: the side passages cut into the walls, `[Rect2i, tile]`), the
+clearing's size (`DM_RX` / `DM_RY`), the lanterns (prop, lit / dark tints, glow), the clue tile, the
+wrong-way toast (`DM_LOST_TOAST`), the signpost / trainers' cells and levels (`LV_DM_*`), the nook /
+pocket chests. `PropEntity.glow` and the `thicket` prop kind are generic (any area can use them).
+Deterministic: no RNG. Add a room = add a row (and its area folder in `_initialize`'s list and the
+Depths' `area_ids` in `WORLD_LOCATIONS`).
+
+**Field moves are LEARNED** (#71 / #92; `FieldMoveResource`, `content/field_moves/<id>.tres`):
+`unlock_flag` (the move becomes TEACHABLE), who CAN LEARN it -- `species` (a creature's current form
+or evolution line) and `humans` (human character ids: the hero's `wren`; add `lyra` to the builder's
+`FIELD_MOVE_TREES_HUMANS` to let the Deepwood rival learn it -- left out, since a guest leaves) -- and
+the hint / prompt / toast texts. A member LEARNS it through **`TeachFieldMoveCommand`** (the chief's
+script; a choice of the eligible members, paged when long, "Not now" declines) and keeps it on its
+record (`StoryPartyMember.field_moves`, saved as `field_moves`, format 2 unchanged; an older save loads
+none). The move is USABLE when a FIT (fieldable) party member has learned it; the party page shows a
+"Field moves: ..." line. Conditions: `knows_field_move("<id>")`, `can_learn_field_move("<id>")`.
+**`FieldObstacleEntity`** (kind `obstacle`, look `tree`) blocks its cell; Confirm on it gives one hint
+line while locked or while no fit member knows the move, else "Use <move>?" -- Yes sets
 `<area>.<id>.cleared` (its `visible_if` hides it, so the actor and the blocker go, across a reload).
-The sea move (Beach Village, #43) can reuse both as data: a new move .tres and a new obstacle look.
+The sea move (Beach Village, #43) reuses all of it as data: a new move .tres, a chief's
+`TeachFieldMoveCommand`, a new obstacle look.
 
-**Lyra** joins the party as a TEMPORARY member when Nyra is beaten (`F_LYRA_JOINED`, `guest_until`
-= `deepwood.eldroot_beaten`): a human unit you deploy in the Eldroot battle's squad pick (squad 4), gone again once
-it is won. Placeholders: Nyra's team (`NYRA_TEAM`), the move's name ("Treefell"), the tree-houses
-(cabin props), every Deepwood line (TODO(story)). Tests: `tests/integration/test_deep_woods.gd`,
-`tests/unit/test_field_moves.gd`, `test_region_open.gd` (the Deep Woods open step by step).
+**Guests stay out of duels:** a TEMPORARY member (Lyra here) is never in a duel lineup
+(`StoryState.duel_lineup`) and never counts as the partner that lets a fight start (`can_battle`):
+wild, trainer and chief duels stay the creatures'. She deploys in tactical battles through the squad
+pick (default picks put party order first, so she is last).
+
+Placeholders: Nyra's team (`NYRA_TEAM`), Lyra's team, the move's name ("Treefell"), the tree-houses
+(cabin props), the lights (lamp props), the maze trainers ("Forager", "Trapper"), every Deepwood line
+(TODO(story)). Tests: `tests/integration/test_deep_woods.gd` (+ `_live`: the Eldroot board, the
+wrong-way toast), `tests/unit/test_field_moves.gd`, `test_story_humans.gd` (guests and duels),
+`test_region_open.gd` (the Deep Woods open step by step). Screenshots: `docs/screenshots/deep_woods/`
+(`dev_scripts/deep_woods_shots.tscn`).
 
 ## Dialogue bank & editor
 

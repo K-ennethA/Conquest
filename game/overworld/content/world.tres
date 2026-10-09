@@ -106,9 +106,9 @@ kind = "special"
 region_id = &"woodlands"
 map_pos = Vector2(0.114, 0.337)
 status = 0
-area_ids = Array[StringName]([&"depths_of_the_wood"])
+area_ids = Array[StringName]([&"depths_of_the_wood", &"depths_of_the_wood_2", &"depths_of_the_wood_3", &"depths_of_the_wood_4", &"depths_of_the_wood_heart"])
 open_flag = "world.depths_of_the_wood_open"
-description = "A glowing glade at the forest's heart. A special encounter."
+description = "A maze of old forest north of Deepwood, with a glowing glade at its heart. A special encounter."
 
 [sub_resource type="Resource" id="Resource_ecw1r"]
 script = ExtResource("1_s3x8b")

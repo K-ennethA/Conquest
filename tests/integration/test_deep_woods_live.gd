@@ -110,7 +110,7 @@ func _party_units() -> Array:
 
 
 func _eldroot_spec() -> BattleSpec:
-	var depths := load(StoryController.area_path("depths_of_the_wood")) as OverworldAreaResource
+	var depths := load(StoryController.area_path("depths_of_the_wood_heart")) as OverworldAreaResource
 	var stack: Array = depths.entity("eldroot").on_interact.duplicate()
 	while not stack.is_empty():
 		var c = stack.pop_front()
@@ -126,10 +126,10 @@ func test_the_legend_board_fields_the_squad_lyra_and_a_fixed_level_eldroot() -> 
 	StoryController.new_journey(1)
 	StoryFixture.past_opening(StoryController.state())
 	var s: StoryState = StoryController.state()
-	s.set_location("depths_of_the_wood", Vector3i(12, 6, 0), "north")
+	s.set_location("depths_of_the_wood_heart", Vector3i(9, 6, 0), "north")
 	s.member("vineweave").set_level(11)
 	s.member("blightcap").set_level(9)
-	assert_not_null(s.join("lyra", "", 6, 10, true, "deepwood.eldroot_beaten")["member"], "Lyra joins after Nyra (temporary)")
+	assert_not_null(s.join("lyra", "", 6, 10, true, "deepwood.eldroot_beaten")["member"], "Lyra joins after her challenge (temporary)")
 	var spec := _eldroot_spec()
 	assert_not_null(spec, "Eldroot's battle ships")
 	if spec == null:
@@ -183,3 +183,28 @@ func test_the_legend_board_fields_the_squad_lyra_and_a_fixed_level_eldroot() -> 
 	buttons[0].pressed.emit()
 	assert_true(s.has_flag("deepwood.eldroot_beaten"), "winning sets the legend battle's flag")
 	assert_false(s.party_has("eldroot"), "a beaten legend does not join the party by itself")
+
+
+func test_a_wrong_way_in_the_maze_turns_you_back_with_a_toast() -> void:
+	# DECISIONS.md #93: a WRONG exit warps back to the maze's entrance and hands the next overworld a
+	# short toast (never a dialogue box); a right exit hands it nothing.
+	StoryController.new_journey(1)
+	StoryFixture.past_opening(StoryController.state())
+	var s: StoryState = StoryController.state()
+	s.set_flag("world.depths_of_the_wood_open", 1)
+	var room := load(StoryController.area_path("depths_of_the_wood_2")) as OverworldAreaResource
+	s.set_location("depths_of_the_wood_2", room.entry("south")["cell"], "north")
+	var wrong := room.entity("west_exit") as WarpEntity
+	var right := room.entity("east_exit") as WarpEntity
+	assert_eq(String(wrong.target_area), "depths_of_the_wood", "the west way is wrong in room 2")
+	var r: Dictionary = StoryController.warp_to(String(wrong.target_area), String(wrong.target_entry), wrong.cells()[0], wrong)
+	assert_true(bool(r["success"]), "the warp goes through")
+	assert_eq(s.location_area(), "depths_of_the_wood", "back at the entrance")
+	assert_eq(s.location_cell(), (load(StoryController.area_path("depths_of_the_wood")) as OverworldAreaResource).entry("south")["cell"],
+		"at its start")
+	assert_eq(StoryController.take_arrival_toast(), wrong.arrival_toast, "the next overworld toasts it")
+	assert_eq(StoryController.take_arrival_toast(), "", "once")
+	s.set_location("depths_of_the_wood_2", room.entry("south")["cell"], "north")
+	StoryController.warp_to(String(right.target_area), String(right.target_entry), right.cells()[0], right)
+	assert_eq(s.location_area(), "depths_of_the_wood_3", "the right way leads on")
+	assert_eq(StoryController.take_arrival_toast(), "", "with no toast")

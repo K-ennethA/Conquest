@@ -116,6 +116,10 @@ func _ready() -> void:
 	# Classic-Pokemon location popup: small, in a corner, never blocks (PlaceAnnouncer decides when).
 	if story.announce_place(area):
 		hud.show_area_name(area.display_name)
+	# A warp's arrival toast (a maze turning you back): small, never blocks.
+	var arrival: String = story.take_arrival_toast() if story.has_method(&"take_arrival_toast") else ""
+	if not arrival.is_empty():
+		hud.toast(arrival, "info")
 	if not msg.is_empty():
 		_show_system_message(msg)
 	elif not story.is_script_running():
@@ -167,6 +171,11 @@ func _build_world() -> void:
 		map_root.add_child(_interior_backdrop())
 
 	grid = OverworldGrid.build(area, _state)
+	# A saved / arrival cell the hero cannot stand on (an area that changed since the save, a cell
+	# now blocked) boots him at the area's default entry instead -- never off the map or in a wall.
+	var start: Dictionary = grid.resolve_start(area, _state.location_cell(), _state.location_facing())
+	if bool(start["moved"]):
+		_state.set_location(String(area.area_id), start["cell"], String(start["facing"]))
 
 	var entities_root := Node3D.new()
 	entities_root.name = "Entities"
@@ -271,6 +280,8 @@ func _make_entity_actor(e: OverworldEntity) -> OverworldActor:
 			&"prop":
 				var p := e as PropEntity
 				body = OverworldProps.prop(p.prop, p.footprint, e.tint, _prop_seed(p))
+				if p.glow > 0.0:
+					OverworldProps.add_glow(body, p.prop, e.tint, p.glow)
 			&"trainer":
 				var tf: String = (e as NpcEntity).figure
 				body = OverworldProps.figure(e.tint, tf if not tf.is_empty() else "trainer")

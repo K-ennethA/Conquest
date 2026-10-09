@@ -247,6 +247,8 @@ func _walk(commands, where: String, aid: String) -> void:
 			_note(String(c.get("key")), where)
 		elif c is JoinPartyCommand or c is BefriendPromptCommand:
 			_note(String(c.get("flag_on_join")), where)
+		elif c is TeachFieldMoveCommand:
+			_note(String(c.get("learned_flag")), where)
 		elif c is StartBattleCommand or c is StartDuelCommand:
 			_note_spec(c.get("spec"), where)
 		elif c is RunTournamentCommand:
@@ -387,6 +389,11 @@ func _collect(commands, cond: String, lines: Array) -> void:
 			lines.append(_marker(cond, "sets %s" % String(c.get("key"))))
 		elif c is JoinPartyCommand:
 			lines.append(_marker(cond, "%s joins the party" % String(c.get("character_id"))))
+		elif c is TeachFieldMoveCommand:
+			var tp: Resource = c.get("prompt")
+			if tp != null:
+				lines.append(_line_row(tp, cond))
+			lines.append(_marker(cond, "teaches field move %s" % String(c.get("move_id"))))
 		elif c is StartBattleCommand or c is StartDuelCommand:
 			var spec: Resource = c.get("spec")
 			var foe: String = String(spec.get("opponent_name")) if spec != null else "?"

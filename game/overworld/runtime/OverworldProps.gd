@@ -175,6 +175,8 @@ static func prop(kind: String, footprint: Vector2i, tint: Color, seed: int = 0) 
 			return logs(fp, tint, seed)
 		"lamp":
 			return lamp(tint)
+		"thicket":
+			return thicket(fp, seed)
 		"chapel":
 			return chapel(fp, tint)
 		"smithy":
@@ -902,6 +904,102 @@ static func logs(footprint: Vector2i, tint: Color = Color(0.62, 0.45, 0.26), see
 			# The pale cut face on the south end.
 			pm.box(Vector3(cx - 0.15, 0.08 + float(t) * 0.36, e[3] - 0.1), Vector3(cx + 0.15, 0.36 + float(t) * 0.36, e[3] - 0.07), Color(0.82, 0.7, 0.45))
 	return _wrap(pm, "Logs")
+
+
+## A THICKET over the footprint: the forest tile's OWN tree art ([TreeBuilder]'s cached trunk /
+## canopy meshes -- no new model), [constant THICKET_PER_CELL] extra trees per cell at jittered,
+## deterministic offsets, batched into one MultiMesh per mesh. Laid over tree terrain it turns a
+## row of single trees into a dense wall of forest (the Deep Woods' maze). Walk-over by kind: the
+## terrain under it decides collision.
+static func thicket(footprint: Vector2i, seed: int = 0) -> Node3D:
+	var root := Node3D.new()
+	root.name = "Thicket"
+	var cs: float = Cells.CELL_SIZE
+	# mesh -> {material, transforms}
+	var groups: Dictionary = {}
+	for cy in range(footprint.y):
+		for cx in range(footprint.x):
+			for k in range(THICKET_PER_CELL):
+				var jx: float = (ProcMesh.hash01(cx + seed * 7, cy, 40 + k) - 0.5) * cs * 0.5
+				var jz: float = (ProcMesh.hash01(cx, cy + seed * 7, 60 + k) - 0.5) * cs * 0.5
+				var pos := Vector3(cx * cs + jx, 0.1, cy * cs + jz)
+				var pick: Dictionary = TreeBuilder.pick_variant(pos.x + seed * 3.1, pos.z + k * 1.7)
+				var sp: int = pick["species"]
+				var v: int = 0  # one variant per species: few draw calls (yaw / scale vary the silhouette)
+				var basis := Basis(Vector3.UP, float(pick["yaw"])).scaled(
+					Vector3.ONE * float(pick["scale"]) * lerpf(1.0, 1.15, ProcMesh.hash01(cx, cy, 80 + k)))
+				var xf := Transform3D(basis, pos)
+				var trunk: Mesh = TreeBuilder.trunk_mesh_for(sp, v)
+				if trunk != null:
+					_thicket_add(groups, trunk, TreeBuilder.decor_material(), xf)
+				var canopy: Mesh = TreeBuilder.canopy_mesh_for(sp, v)
+				if canopy != null:
+					_thicket_add(groups, canopy, TreeBuilder.foliage_material(sp == TreeBuilder.Species.SNOW_PINE), xf)
+	var i: int = 0
+	for mesh in groups:
+		var xfs: Array = groups[mesh]["xforms"]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = xfs.size()
+		for j in range(xfs.size()):
+			mm.set_instance_transform(j, xfs[j])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.name = "Trees%d" % i
+		mmi.multimesh = mm
+		mmi.material_override = groups[mesh]["material"]
+		root.add_child(mmi)
+		i += 1
+	return root
+
+
+## Extra trees per cell of a [method thicket].
+const THICKET_PER_CELL := 2
+
+
+static func _thicket_add(groups: Dictionary, mesh: Mesh, material: Material, xf: Transform3D) -> void:
+	if not groups.has(mesh):
+		groups[mesh] = {"material": material, "xforms": []}
+	(groups[mesh]["xforms"] as Array).append(xf)
+
+
+## LIGHT a prop ([member PropEntity.glow]): an emissive orb over its light part (the lamp's lantern
+## head; a plain height elsewhere) and an OmniLight3D of [param energy] in [param tint]. Placeholder
+## props keep their shapes -- only the glow is added. Returns [param root].
+static func add_glow(root: Node3D, kind: String, tint: Color, energy: float) -> Node3D:
+	if root == null or energy <= 0.0:
+		return root
+	var h: float = GLOW_HEIGHTS.get(kind, 1.0)
+	var orb := MeshInstance3D.new()
+	orb.name = "GlowHead"
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.32
+	sphere.height = 0.64
+	sphere.radial_segments = 12
+	sphere.rings = 6
+	orb.mesh = sphere
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = tint
+	mat.emission_enabled = true
+	mat.emission = tint
+	mat.emission_energy_multiplier = 1.2 + energy
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	orb.material_override = mat
+	orb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	orb.position = Vector3(0, h, 0)
+	root.add_child(orb)
+	var light := OmniLight3D.new()
+	light.name = "Glow"
+	light.light_color = tint
+	light.light_energy = energy
+	light.omni_range = 3.5 + energy
+	light.position = Vector3(0, h, 0)
+	root.add_child(light)
+	return root
+
+
+## Where a lit prop's light sits (its lantern head), by kind.
+const GLOW_HEIGHTS := {"lamp": 2.22, "crystal": 1.8, "banner": 2.4}
 
 
 ## A street lamp: an iron-capped post with a warm glass lantern in [param tint].

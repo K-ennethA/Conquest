@@ -107,6 +107,11 @@ static func build(m: StoryPartyMember, state: StoryState, is_lead: bool, on_back
 	var bond := _caption(bond_line(m))
 	bond.name = "BondText"
 	page.add_child(bond)
+	# FIELD MOVES it has learned (DECISIONS.md #92), one line -- none, no line.
+	if not m.field_moves.is_empty():
+		var fml := _caption(field_moves_line(m))
+		fml.name = "FieldMovesText"
+		page.add_child(fml)
 	if c != null and not c.description.strip_edges().is_empty():
 		var d := UnitPageContent.wrapped_label(c.description.strip_edges())
 		d.name = "Description"
@@ -159,6 +164,16 @@ static func xp_line(m: StoryPartyMember) -> String:
 ## "Bond 2 / 10" (DECISIONS.md #68: it grows by fighting alongside the hero; nothing reads it yet).
 static func bond_line(m: StoryPartyMember) -> String:
 	return "Bond %d / %d" % [m.bond_level(), ProgressionRules.current().bond_max]
+
+
+## "Field moves: Treefell" -- the field moves [param m] has learned (their shipped names; an id this
+## build does not ship shows as the id).
+static func field_moves_line(m: StoryPartyMember) -> String:
+	var names: Array[String] = []
+	for id in m.field_moves:
+		var fm: FieldMoveResource = FieldMoveResource.load_by_id(id)
+		names.append(fm.display_name if fm != null and not fm.display_name.is_empty() else id.capitalize())
+	return "Field moves: %s" % ", ".join(names)
 
 
 ## "Growth 3  ·  1 evolution" -- the progression summary.

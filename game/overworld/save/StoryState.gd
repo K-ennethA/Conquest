@@ -300,6 +300,8 @@ func capped_count() -> int:
 ## unless [param hero_alone_ok] ([member StoryRuleset.hero_alone_can_battle]).
 func can_battle(hero_alone_ok: bool = false) -> bool:
 	for m in healthy_members():
+		if m.temporary:
+			continue  # a guest is along for its story battle, never the party's duels (duel_lineup)
 		if not m.is_hero or hero_alone_ok:
 			return true
 	return false
@@ -307,9 +309,14 @@ func can_battle(hero_alone_ok: bool = false) -> bool:
 
 ## The DUEL lineup (the party a duel sends, lead first): the healthy members in party order with
 ## the hero moved to index [param hero_slot] (clamped; 0 = he leads; < 0 = plain party order), or
-## left out entirely when [param with_hero] is false (a creatures-only duel).
+## left out entirely when [param with_hero] is false (a creatures-only duel). TEMPORARY guests
+## (DECISIONS.md #61 / #94: a rival keeping the hero company for a story battle) are never in a
+## duel lineup -- they deploy in the tactical battle they came for, through the squad pick.
 func duel_lineup(hero_slot: int = 1, with_hero: bool = true) -> Array[StoryPartyMember]:
-	var healthy: Array[StoryPartyMember] = healthy_members()
+	var healthy: Array[StoryPartyMember] = []
+	for m in healthy_members():
+		if not m.temporary:
+			healthy.append(m)
 	if not with_hero:
 		var creatures: Array[StoryPartyMember] = []
 		for m in healthy:
@@ -464,6 +471,31 @@ func set_bond_partner(human_id: String, creature_id: String) -> Dictionary:
 			other.bond_partner = ""
 	h.bond_partner = creature_id
 	return {"ok": true, "reason": ""}
+
+
+## TEACH the field move [param move] to party member [param member_id] (DECISIONS.md #92).
+## {ok, reason}: "no_member", "no_move", "cannot_learn" (not listed by the move), "already_known".
+func teach_field_move(member_id: String, move: FieldMoveResource) -> Dictionary:
+	var m: StoryPartyMember = member(member_id)
+	if m == null:
+		return {"ok": false, "reason": "no_member"}
+	if move == null or String(move.id).is_empty():
+		return {"ok": false, "reason": "no_move"}
+	if m.knows_field_move(String(move.id)):
+		return {"ok": false, "reason": "already_known"}
+	if not move.can_learn(m):
+		return {"ok": false, "reason": "cannot_learn"}
+	m.learn_field_move(String(move.id))
+	_party_changed = true
+	return {"ok": true, "reason": ""}
+
+
+## Does any party member know the field move [param move_id]?
+func party_knows_field_move(move_id: String) -> bool:
+	for m in party:
+		if m.knows_field_move(move_id):
+			return true
+	return false
 
 
 func party_has(character_id: String) -> bool:

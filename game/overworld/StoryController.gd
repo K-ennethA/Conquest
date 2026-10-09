@@ -88,6 +88,9 @@ var _resume_pending: bool = false
 var _resume_result: BattleResult = null
 ## A line shown on the next overworld boot ("You retreat to the Wayshrine...").
 var _pending_message: String = ""
+## The warp just taken's [member WarpEntity.arrival_toast], toasted once the next overworld is up
+## ([method take_arrival_toast]).
+var _arrival_toast: String = ""
 ## Offer pending evolutions once the overworld is back (set by _conclude, not after a whiteout).
 var _offer_after_battle: bool = false
 ## Evolution auto-offer events not offered yet: {kinds: Array[String], flags: Array[String]}
@@ -308,6 +311,7 @@ func _begin_session(s: StoryState, slot: int) -> void:
 	_resume_pending = false
 	_resume_result = null
 	_pending_message = ""
+	_arrival_toast = ""
 	_offer_after_battle = false
 	_pending_event = {}
 	_offering = false
@@ -474,6 +478,7 @@ func warp_to(area_id: String, entry_id: String, from_cell: Vector3i = Cells.INVA
 		# A new place may meet a Location / Weather requirement: offered once the area is up.
 		note_evolution_event("area")
 	_state.set_location(area_id, cell, String(e["facing"]))
+	_arrival_toast = warp.arrival_toast if warp != null else ""
 	_state.mark_visited(area_id)
 	_state.grace_steps = _ruleset.grace_steps if _ruleset != null else 3
 	save_game()
@@ -522,6 +527,13 @@ func overworld_ready(host) -> String:
 		_resume_pending = false
 		call_deferred("_emit_concluded", _resume_result)
 	return msg
+
+
+## The arrival toast of the warp just taken ("" = none), handed out ONCE.
+func take_arrival_toast() -> String:
+	var t: String = _arrival_toast
+	_arrival_toast = ""
+	return t
 
 
 func _emit_concluded(result) -> void:
