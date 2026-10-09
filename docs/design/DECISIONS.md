@@ -379,3 +379,7 @@ asked about. An earlier decision stands unless the owner changes it.
 89. **Lark is merged into Lyra:** no separate rival named Lark.
 90. **The generic thief** (docs/design/characters/thief.webp): the look of ordinary thieves, e.g. the
     Hidden Thieves gang; variations can indicate region or faction.
+91. **"Enhanced" is design flavor, not a mechanic** (clarifies #54 / #64): no flag or rule -- an
+    "enhanced" character is one whose authored moveset includes special moves beyond the weapon
+    attack (chiefs are authored that way; the hero gets them through promotion, i.e. the promoted
+    form's moveset).
