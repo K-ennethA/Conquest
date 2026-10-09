@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="CharacterResource" format=3]
 
 [ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
-[ext_resource type="PackedScene" path="res://game/characters/models/forest/elias_forge.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/lyra_forge.glb" id="2_model"]
 [ext_resource type="Resource" path="res://game/characters/weapons/library/study_tome.tres" id="3_weapon"]
 
 [resource]
@@ -9,9 +9,9 @@ script = ExtResource("1_char")
 character_id = &"lyra"
 kind = 1
 display_name = "Lyra"
-description = "PLACEHOLDER -- Lyra, rival and ally (Professor Elias' student). Fights with a tome (weapon attack). Model, weapon and stats are placeholders."
+description = "PLACEHOLDER -- Lyra, rival and ally (Professor Elias' student). Fights with a tome (weapon attack). Weapon and stats are placeholders."
 model_scene = ExtResource("2_model")
-; humans 2026-10-08 (docs/design/HUMANS.md): kind HUMAN. PLACEHOLDER MODEL: elias_forge.glb stands in (no Lyra model yet; swap model_scene when it is imported). PLACEHOLDER weapon study_tome (the books on her sheet). A TEMPORARY join (DECISIONS.md #61, #88): JoinPartyCommand temporary = true.
+; humans 2026-10-08 (docs/design/HUMANS.md): kind HUMAN. MODEL: lyra_forge.glb (forge import 2026-10-08). PLACEHOLDER weapon study_tome (the books on her sheet). A TEMPORARY join (DECISIONS.md #61, #88): JoinPartyCommand temporary = true.
 base_health = 85
 base_attack = 9
 base_defense = 9

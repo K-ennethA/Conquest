@@ -896,11 +896,11 @@ Built by the builder's "THE DEEP WOODS" section (knobs are its constants). How t
    SCALED to the party's top level + `NYRA_SCALE_OFFSET` inside the 8-15 band. Her final creature
    carries `NYRA_STONE_BOOST` (TODO(bond): the stone boost placeholder). A loss whites out (a story
    duel has no Try Again screen); she waits. Winning sets `deepwood.nyra_beaten`, grants the field
-   move (`fieldmove.treefell`) and opens the trail north (`world.depths_of_the_wood_open`).
+   move (`fieldmove.treefell`) and opens the trail north (`world.depths_of_the_wood_open`); **Lyra joins** the party (temporary).
 4. In the **Depths of the Wood**, face a **gnarled tree** and press Confirm: "Use Treefell?" Yes fells
    it for good. The tree in the gap of the old-tree wall leads to the glade, where **Eldroot** waits.
-5. Talk to Eldroot: a **tactical legend battle** (`ow_deepwood_glade.tres`, squad of 3 + Lyra as a
-   guest, `BattleSpec.make_legend`: FIXED at band max + `legend_over_band` = 20, never scaled; Try
+5. Talk to Eldroot: a **tactical legend battle** (`ow_deepwood_glade.tres`, squad of 4 picked in the squad pick --
+   Lyra among them; `BattleSpec.make_legend`: FIXED at band max + `legend_over_band` = 20, never scaled; Try
    Again on a loss). Win -> the OPTIONAL bond: "Bond" records Eldroot in `StoryState.legends` (saved
    as `legends`, format 2 unchanged), never the party; "Not now" leaves it in the glade to ask again.
    Journey -> Party lists bonded legends read-only.
@@ -913,8 +913,9 @@ on it gives one hint line while locked or unusable, else "Use <move>?" -- Yes se
 `<area>.<id>.cleared` (its `visible_if` hides it, so the actor and the blocker go, across a reload).
 The sea move (Beach Village, #43) can reuse both as data: a new move .tres and a new obstacle look.
 
-Placeholders: `LYRA_UNIT = "gem_knight"` (TODO(humans): swap to `"lyra"` + the deploy picker once
-humans are battle units), Nyra's team (`NYRA_TEAM`), the move's name ("Treefell"), the tree-houses
+**Lyra** joins the party as a TEMPORARY member when Nyra is beaten (`F_LYRA_JOINED`, `guest_until`
+= `deepwood.eldroot_beaten`): a human unit you deploy in the Eldroot battle's squad pick (squad 4), gone again once
+it is won. Placeholders: Nyra's team (`NYRA_TEAM`), the move's name ("Treefell"), the tree-houses
 (cabin props), every Deepwood line (TODO(story)). Tests: `tests/integration/test_deep_woods.gd`,
 `tests/unit/test_field_moves.gd`, `test_region_open.gd` (the Deep Woods open step by step).
 

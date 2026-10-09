@@ -3227,6 +3227,9 @@ func _wt_people() -> Array:
 const F_DEEPWOOD_OPEN := "world.deepwood_open"
 const F_DEPTHS_OPEN := "world.depths_of_the_wood_open"
 const F_NYRA_BEATEN := "deepwood.nyra_beaten"
+## Lyra joins the party TEMPORARILY once Nyra is beaten (DECISIONS.md #56 / #61 / #88): deployable in
+## the Eldroot battle's squad pick, she leaves again when Eldroot is beaten (guest_until).
+const F_LYRA_JOINED := "deepwood.lyra_joined"
 ## The tree-felling field move is granted (FieldMoveResource.unlock_flag).
 const F_TREEFELL := "fieldmove.treefell"
 const F_ELDROOT_BEATEN := "deepwood.eldroot_beaten"
@@ -3257,14 +3260,9 @@ const NYRA_STONE_BOOST := 1.15
 const NYRA_PURSE := 400
 
 ## ELDROOT: the legend's TACTICAL board (a forest glade). The party fields up to ELDROOT_SQUAD_SIZE;
-## Lyra joins as a GUEST (a player-0 turn-1 Reinforcement, like the first fight's allies).
+## Lyra fights in it as a TEMPORARY party member (joined after Nyra; deploy her in the squad pick).
 const ELDROOT_MAP_PATH := CONTENT + "battles/ow_deepwood_glade.tres"
-const ELDROOT_SQUAD_SIZE := 3
-## TODO(humans): swap to "lyra" + deploy picker -- Lyra as a real battle unit and a deployable squad
-## pick (#56 / #74) come with the humans-as-units work. Until then an existing roster unit stands in
-## (the same placeholder as her ceremony partner); not a catchable species, so the squad hand-off
-## can never mistake her for a party member.
-const LYRA_UNIT := "gem_knight"
+const ELDROOT_SQUAD_SIZE := 4
 ## The two Barklings screening Eldroot fight at this level (map-spawn "level"); Eldroot itself is
 ## the legend level (BattleSpec.make_legend: band max + legend_over_band).
 const LV_ELDROOT_SCREEN := 13
@@ -3420,7 +3418,7 @@ func _dv_people() -> Array:
 	# Lyra (DECISIONS.md #88): met here; she fights beside you against Eldroot (the guest on its board).
 	# Her line is in dialogue.json (areas.deepwood_village.lyra).
 	var lyra := _npc("lyra", DV_LYRA, "north", "LYRA", Color(0.78, 0.5, 0.2), "trainer")
-	lyra.visible_if = LYRA_IN_DEEPWOOD
+	lyra.visible_if = "(%s) and not has(\"%s\")" % [LYRA_IN_DEEPWOOD, F_LYRA_JOINED]  # in the party while joined
 	out.append(lyra)
 	# Villagers: one placeholder line each in dialogue.json (areas.deepwood_village.<id>).
 	var cloak := Color(0.3, 0.42, 0.28)
@@ -3456,6 +3454,7 @@ func _nyra() -> NpcEntity:
 	var won: Array = [
 		_say([_line("nyra", "NYRA", "You've earned the way through. Take this with you -- it will clear the trees.")]),
 		_toast("New field move: {FIELD_MOVE_TREES}"),
+		_lyra_joins(),
 		SaveGameCommand.new(),
 	]
 	var ask := ChoiceCommand.new()
@@ -3470,6 +3469,14 @@ func _nyra() -> NpcEntity:
 		]),
 	])
 	return nyra
+
+
+## Lyra joins for the Depths: a TEMPORARY party member (a human unit) until Eldroot is beaten.
+func _lyra_joins() -> JoinPartyCommand:
+	var j := _join(&"lyra", "", 0, F_LYRA_JOINED)
+	j.temporary = true
+	j.guest_until = F_ELDROOT_BEATEN
+	return j
 
 
 # --- The Depths of the Wood ------------------------------------------------------------
@@ -3669,8 +3676,8 @@ func _eldroot(aid: String) -> NpcEntity:
 
 
 ## The legend's board: a forest glade, Eldroot (2x2, the boss) on the sacred ground at its heart with
-## two Barklings screening it; your squad chairs at the south edge and Lyra (the GUEST, LYRA_UNIT)
-## beside them.
+## two Barklings screening it; your squad chairs at the south edge (the squad pick fills them: the hero, your
+## creatures and Lyra, a temporary party member).
 func _build_eldroot_map() -> void:
 	var m := _new_map("Heart of the Wood", 12, 10,
 		"The glade at the heart of the Deep Woods, where Eldroot waits.")
@@ -3692,12 +3699,8 @@ func _build_eldroot_map() -> void:
 		return "grass_plains")
 	m.unit_spawns.clear()
 	# Squad chairs (filled from the fielded party; a placeholder id is required).
-	for c in [Vector2i(4, 8), Vector2i(6, 8), Vector2i(8, 8)]:
+	for c in [Vector2i(4, 8), Vector2i(6, 8), Vector2i(8, 8), Vector2i(5, 9)]:
 		m.set_character_spawn_at_position(c, 0, String(STARTER_ID))
-	# Lyra: a guest ally, placed at load (never replaced by the squad pick).
-	# TODO(humans): swap to "lyra" + deploy picker
-	m.set_spawn_point_at_position(Vector2i(5, 9), 0, MapResource.SPAWN_KIND_REINFORCEMENT,
-		{"character_id": LYRA_UNIT, "spawn_turn": 1, "max_spawns": 1})
 	m.set_character_spawn_at_position(anchor, 1, "eldroot", "BOSS")
 	for c in [Vector2i(3, 3), Vector2i(8, 3)]:
 		m.set_character_spawn_at_position(c, 1, "tree_grunt")

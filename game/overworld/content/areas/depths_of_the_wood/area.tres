@@ -128,6 +128,7 @@ options = Array[Resource]([SubResource("Resource_4dhsq"), SubResource("Resource_
 script = ExtResource("14_i2tdm")
 encounter_id = "deepwood.legend.eldroot"
 map_path = "res://game/overworld/content/battles/ow_deepwood_glade.tres"
+squad_size = 4
 opponent_name = "Eldroot, the Hollow Crown"
 opponent_team = Array[Dictionary]([{
 "character_id": "eldroot",

@@ -182,11 +182,39 @@ func test_eldroot_is_a_fixed_tactical_legend_above_the_band() -> void:
 			chairs += 1
 	assert_eq(boss, 1, "Eldroot stands on its board")
 	assert_eq(chairs, spec.squad_size, "a chair per squad slot")
-	assert_eq(guests.size(), 1, "Lyra fights beside you as a guest (#56 / #74)")
-	if guests.size() == 1:
-		assert_eq(int(guests[0].get("spawn_turn", 0)), 1, "placed at load, like the first fight's allies")
-		assert_not_null(CharacterLibrary.get_character(String(guests[0].get("character_id", ""))),
-			"her placeholder unit is a real roster entry")
+	assert_eq(guests.size(), 0, "no stand-in: Lyra is deployed from the party through the squad pick")
+
+
+func test_lyra_joins_after_nyra_until_eldroot_is_beaten() -> void:
+	# DECISIONS.md #56 / #61 / #88: Lyra accompanies the hero for the Eldroot battle as a TEMPORARY
+	# party member (a human unit, deployable in the squad pick) and leaves when it is won.
+	var village := load(StoryController.area_path("deepwood_village")) as OverworldAreaResource
+	var joins: Array = []
+	var stack: Array = village.entity("nyra").on_interact.duplicate()
+	while not stack.is_empty():
+		var c = stack.pop_front()
+		if c is JoinPartyCommand:
+			joins.append(c)
+		if c is StoryCommand:
+			for l in (c as StoryCommand).child_lists():
+				stack.append_array(l)
+	assert_eq(joins.size(), 1, "beating Nyra brings Lyra along")
+	if joins.size() != 1:
+		return
+	var j := joins[0] as JoinPartyCommand
+	assert_eq(String(j.character_id), "lyra")
+	assert_true(j.temporary, "a temporary join (#61)")
+	assert_eq(j.guest_until, "deepwood.eldroot_beaten", "she leaves once Eldroot is beaten")
+	var lyra := CharacterLibrary.get_character(&"lyra")
+	assert_not_null(lyra, "Lyra is a roster unit")
+	if lyra != null:
+		assert_eq(lyra.kind, CharacterResource.Kind.HUMAN, "a human battle unit")
+	var s := StoryState.new()
+	StoryFixture.past_opening(s)
+	assert_not_null(s.join("lyra", "", 6, 10, true, "deepwood.eldroot_beaten")["member"], "she joins")
+	assert_true(s.party_has("lyra"))
+	s.set_flag("deepwood.eldroot_beaten", 1)
+	assert_false(s.party_has("lyra"), "and departs when the legend battle is won")
 
 
 func test_a_breakable_tree_hides_the_glade_until_it_is_felled() -> void:

@@ -654,13 +654,13 @@ unit_spawns = Array[Dictionary]([{
 }, {
 "aggro_range": -1,
 "ai_stance": "",
-"character_id": "gem_knight",
+"character_id": "tree_grunt",
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 0,
 "position": Vector2i(5, 9),
 "respawn_interval": 1,
-"spawn_kind": "Reinforcement",
+"spawn_kind": "Start",
 "spawn_turn": 1,
 "unit_resource_path": "",
 "unit_type": ""

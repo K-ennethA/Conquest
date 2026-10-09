@@ -1,105 +1,106 @@
 [gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
 
-[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_td72a"]
-[ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="2_hfxce"]
-[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_4mdnq"]
-[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="4_sy3p5"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="5_e6kcc"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="6_ylcjc"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/StartDuelCommand.gd" id="7_jpj3n"]
-[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="8_ewm05"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/ToastCommand.gd" id="9_wpdyk"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="10_35x0l"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="11_5uu0v"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="12_2f2j7"]
-[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="13_xlpyh"]
-[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="14_nuclk"]
-[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="15_joh0k"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="16_rhquy"]
-[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="17_52c3k"]
-[ext_resource type="Resource" path="res://game/overworld/content/areas/deepwood_village/terrain.tres" id="18_6d1o3"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_hfxce"]
+[ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="2_4mdnq"]
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_sy3p5"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="4_e6kcc"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="5_ylcjc"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="6_jpj3n"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/StartDuelCommand.gd" id="7_ewm05"]
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="8_wpdyk"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ToastCommand.gd" id="9_35x0l"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/JoinPartyCommand.gd" id="10_5uu0v"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="11_2f2j7"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="12_xlpyh"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="13_nuclk"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="14_joh0k"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="15_rhquy"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="16_52c3k"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="17_6d1o3"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="18_775u0"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/deepwood_village/terrain.tres" id="19_85pi1"]
 
-[sub_resource type="Resource" id="Resource_775u0"]
-script = ExtResource("1_td72a")
+[sub_resource type="Resource" id="Resource_il4w0"]
+script = ExtResource("1_hfxce")
 prop = "cabin"
 footprint = Vector2i(4, 3)
 id = &"nyra_lodge"
 cell = Vector3i(15, 3, 0)
 tint = Color(0.22, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_85pi1"]
-script = ExtResource("1_td72a")
+[sub_resource type="Resource" id="Resource_3k2po"]
+script = ExtResource("1_hfxce")
 prop = "cabin"
 footprint = Vector2i(3, 2)
 id = &"treehouse_0"
 cell = Vector3i(4, 5, 0)
 tint = Color(0.26, 0.4, 0.22, 1)
 
-[sub_resource type="Resource" id="Resource_il4w0"]
-script = ExtResource("1_td72a")
+[sub_resource type="Resource" id="Resource_ptqk4"]
+script = ExtResource("1_hfxce")
 prop = "cabin"
 footprint = Vector2i(3, 2)
 id = &"treehouse_1"
 cell = Vector3i(5, 14, 0)
 tint = Color(0.36, 0.3, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_3k2po"]
-script = ExtResource("1_td72a")
+[sub_resource type="Resource" id="Resource_xip0h"]
+script = ExtResource("1_hfxce")
 prop = "cabin"
 footprint = Vector2i(3, 2)
 id = &"treehouse_2"
 cell = Vector3i(18, 14, 0)
 tint = Color(0.26, 0.4, 0.22, 1)
 
-[sub_resource type="Resource" id="Resource_ptqk4"]
-script = ExtResource("1_td72a")
+[sub_resource type="Resource" id="Resource_mn7h7"]
+script = ExtResource("1_hfxce")
 prop = "fire"
 footprint = Vector2i(1, 1)
 id = &"campfire"
 cell = Vector3i(13, 15, 0)
 tint = Color(1, 1, 1, 1)
 
-[sub_resource type="Resource" id="Resource_xip0h"]
-script = ExtResource("1_td72a")
+[sub_resource type="Resource" id="Resource_3hefr"]
+script = ExtResource("1_hfxce")
 prop = "logs"
 footprint = Vector2i(2, 1)
 id = &"woodpile"
 cell = Vector3i(9, 16, 0)
 tint = Color(0.58, 0.42, 0.24, 1)
 
-[sub_resource type="Resource" id="Resource_mn7h7"]
-script = ExtResource("1_td72a")
+[sub_resource type="Resource" id="Resource_5j8ra"]
+script = ExtResource("1_hfxce")
 prop = "banner"
 footprint = Vector2i(1, 1)
 id = &"banner_lodge"
 cell = Vector3i(14, 6, 0)
 tint = Color(0.24, 0.42, 0.26, 1)
 
-[sub_resource type="Resource" id="Resource_3hefr"]
-script = ExtResource("1_td72a")
+[sub_resource type="Resource" id="Resource_8fv6d"]
+script = ExtResource("1_hfxce")
 prop = "lamp"
 footprint = Vector2i(1, 1)
 id = &"lamp_9_8"
 cell = Vector3i(9, 8, 0)
 tint = Color(1, 0.78, 0.4, 1)
 
-[sub_resource type="Resource" id="Resource_5j8ra"]
-script = ExtResource("1_td72a")
+[sub_resource type="Resource" id="Resource_krnxw"]
+script = ExtResource("1_hfxce")
 prop = "lamp"
 footprint = Vector2i(1, 1)
 id = &"lamp_11_8"
 cell = Vector3i(11, 8, 0)
 tint = Color(1, 0.78, 0.4, 1)
 
-[sub_resource type="Resource" id="Resource_8fv6d"]
-script = ExtResource("2_hfxce")
+[sub_resource type="Resource" id="Resource_fto7m"]
+script = ExtResource("2_4mdnq")
 id = &"wayshrine"
 cell = Vector3i(10, 9, 0)
 display_name = "Deepwood Wayshrine"
 tint = Color(0.55, 0.92, 0.62, 1)
 
-[sub_resource type="Resource" id="Resource_krnxw"]
-script = ExtResource("3_4mdnq")
+[sub_resource type="Resource" id="Resource_oute7"]
+script = ExtResource("3_sy3p5")
 text = "DEEPWOOD VILLAGE
 East: Woodland Town.  North: the deep forest."
 id = &"village_sign"
@@ -107,27 +108,27 @@ cell = Vector3i(23, 12, 0)
 display_name = "Deepwood Village"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_fto7m"]
-script = ExtResource("3_4mdnq")
+[sub_resource type="Resource" id="Resource_7sdty"]
+script = ExtResource("3_sy3p5")
 text = "NORTH: THE DEEP FOREST"
 id = &"trail_sign"
 cell = Vector3i(13, 3, 0)
 display_name = "The North Trail"
 tint = Color(0.52, 0.36, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_oute7"]
-script = ExtResource("4_sy3p5")
+[sub_resource type="Resource" id="Resource_42h1f"]
+script = ExtResource("4_e6kcc")
 speaker_id = &"npc_nyra"
 speaker_name = "Nyra"
 side = &"right"
 text = "The deep forest is open to you. Mind the trees."
 
-[sub_resource type="Resource" id="Resource_7sdty"]
-script = ExtResource("5_e6kcc")
-beats = Array[Resource]([SubResource("Resource_oute7")])
+[sub_resource type="Resource" id="Resource_em82t"]
+script = ExtResource("5_ylcjc")
+beats = Array[Resource]([SubResource("Resource_42h1f")])
 
-[sub_resource type="Resource" id="Resource_42h1f"]
-script = ExtResource("8_ewm05")
+[sub_resource type="Resource" id="Resource_yj0j0"]
+script = ExtResource("8_wpdyk")
 kind = 1
 encounter_id = "deepwood.chief.nyra"
 opponent_name = "Nyra"
@@ -151,64 +152,71 @@ scale_offset = 1
 scale_min = 8
 scale_max = 15
 
-[sub_resource type="Resource" id="Resource_em82t"]
-script = ExtResource("7_jpj3n")
-spec = SubResource("Resource_42h1f")
+[sub_resource type="Resource" id="Resource_hyboc"]
+script = ExtResource("7_ewm05")
+spec = SubResource("Resource_yj0j0")
 
-[sub_resource type="Resource" id="Resource_yj0j0"]
-script = ExtResource("4_sy3p5")
+[sub_resource type="Resource" id="Resource_1ke81"]
+script = ExtResource("4_e6kcc")
 speaker_id = &"npc_nyra"
 speaker_name = "Nyra"
 side = &"right"
 text = "You've earned the way through. Take this with you -- it will clear the trees."
 
-[sub_resource type="Resource" id="Resource_hyboc"]
-script = ExtResource("5_e6kcc")
-beats = Array[Resource]([SubResource("Resource_yj0j0")])
+[sub_resource type="Resource" id="Resource_k4it4"]
+script = ExtResource("5_ylcjc")
+beats = Array[Resource]([SubResource("Resource_1ke81")])
 
-[sub_resource type="Resource" id="Resource_1ke81"]
-script = ExtResource("9_wpdyk")
+[sub_resource type="Resource" id="Resource_5o8wi"]
+script = ExtResource("9_35x0l")
 text = "New field move: Treefell"
 toast_kind = "quest"
 
-[sub_resource type="Resource" id="Resource_k4it4"]
-script = ExtResource("10_35x0l")
-
-[sub_resource type="Resource" id="Resource_5o8wi"]
-script = ExtResource("6_ylcjc")
-condition = "outcome() == \"victory\""
-then_commands = Array[Resource]([SubResource("Resource_hyboc"), SubResource("Resource_1ke81"), SubResource("Resource_k4it4")])
-
 [sub_resource type="Resource" id="Resource_jxwjn"]
-script = ExtResource("11_5uu0v")
-label = "Battle!"
-commands = Array[Resource]([SubResource("Resource_em82t"), SubResource("Resource_5o8wi")])
+script = ExtResource("10_5uu0v")
+character_id = &"lyra"
+flag_on_join = "deepwood.lyra_joined"
+temporary = true
+guest_until = "deepwood.eldroot_beaten"
 
 [sub_resource type="Resource" id="Resource_v6p35"]
-script = ExtResource("11_5uu0v")
+script = ExtResource("11_2f2j7")
+
+[sub_resource type="Resource" id="Resource_a7rrh"]
+script = ExtResource("6_jpj3n")
+condition = "outcome() == \"victory\""
+then_commands = Array[Resource]([SubResource("Resource_k4it4"), SubResource("Resource_5o8wi"), SubResource("Resource_jxwjn"), SubResource("Resource_v6p35")])
+
+[sub_resource type="Resource" id="Resource_jmend"]
+script = ExtResource("12_xlpyh")
+label = "Battle!"
+commands = Array[Resource]([SubResource("Resource_hyboc"), SubResource("Resource_a7rrh")])
+
+[sub_resource type="Resource" id="Resource_pn3d7"]
+script = ExtResource("12_xlpyh")
 label = "Not yet."
 is_cancel = true
 
-[sub_resource type="Resource" id="Resource_a7rrh"]
-script = ExtResource("4_sy3p5")
+[sub_resource type="Resource" id="Resource_vagiw"]
+script = ExtResource("4_e6kcc")
 speaker_id = &"npc_nyra"
 speaker_name = "Nyra"
 side = &"right"
 text = "I'm Nyra, chief of Deepwood. To go through the forest, you battle me first. Ready?"
 
-[sub_resource type="Resource" id="Resource_jmend"]
-script = ExtResource("12_2f2j7")
-prompt = SubResource("Resource_a7rrh")
-options = Array[Resource]([SubResource("Resource_jxwjn"), SubResource("Resource_v6p35")])
+[sub_resource type="Resource" id="Resource_nfw60"]
+script = ExtResource("13_nuclk")
+prompt = SubResource("Resource_vagiw")
+options = Array[Resource]([SubResource("Resource_jmend"), SubResource("Resource_pn3d7")])
 
-[sub_resource type="Resource" id="Resource_pn3d7"]
-script = ExtResource("6_ylcjc")
+[sub_resource type="Resource" id="Resource_rg8ny"]
+script = ExtResource("6_jpj3n")
 condition = "not has(\"deepwood.nyra_beaten\")"
-then_commands = Array[Resource]([SubResource("Resource_jmend")])
-else_commands = Array[Resource]([SubResource("Resource_7sdty")])
+then_commands = Array[Resource]([SubResource("Resource_nfw60")])
+else_commands = Array[Resource]([SubResource("Resource_em82t")])
 
-[sub_resource type="Resource" id="Resource_vagiw"]
-script = ExtResource("13_xlpyh")
+[sub_resource type="Resource" id="Resource_a3utq"]
+script = ExtResource("14_joh0k")
 speaker_id = &"npc_nyra"
 speaker_name = "Nyra"
 figure = "trainer"
@@ -216,10 +224,10 @@ id = &"nyra"
 cell = Vector3i(16, 6, 0)
 display_name = "Nyra"
 tint = Color(0.3, 0.48, 0.3, 1)
-on_interact = Array[Resource]([SubResource("Resource_pn3d7")])
+on_interact = Array[Resource]([SubResource("Resource_rg8ny")])
 
-[sub_resource type="Resource" id="Resource_nfw60"]
-script = ExtResource("13_xlpyh")
+[sub_resource type="Resource" id="Resource_3rqna"]
+script = ExtResource("14_joh0k")
 speaker_id = &"npc_lyra"
 speaker_name = "Lyra"
 figure = "trainer"
@@ -228,10 +236,10 @@ cell = Vector3i(14, 12, 0)
 facing = "north"
 display_name = "Lyra"
 tint = Color(0.78, 0.5, 0.2, 1)
-visible_if = "has(\"opening.complete\") and has(\"world.deepwood_open\") and not has(\"deepwood.eldroot_beaten\")"
+visible_if = "(has(\"opening.complete\") and has(\"world.deepwood_open\") and not has(\"deepwood.eldroot_beaten\")) and not has(\"deepwood.lyra_joined\")"
 
-[sub_resource type="Resource" id="Resource_rg8ny"]
-script = ExtResource("13_xlpyh")
+[sub_resource type="Resource" id="Resource_8gfih"]
+script = ExtResource("14_joh0k")
 speaker_id = &"npc_dv_elder"
 speaker_name = "Deepwood Elder"
 figure = "elder"
@@ -240,8 +248,8 @@ cell = Vector3i(6, 8, 0)
 display_name = "Deepwood Elder"
 tint = Color(0.40500003, 0.50699997, 0.388, 1)
 
-[sub_resource type="Resource" id="Resource_a3utq"]
-script = ExtResource("13_xlpyh")
+[sub_resource type="Resource" id="Resource_2ebsi"]
+script = ExtResource("14_joh0k")
 speaker_id = &"npc_dv_hunter"
 speaker_name = "Deepwood Hunter"
 figure = "trainer"
@@ -251,8 +259,8 @@ facing = "west"
 display_name = "Deepwood Hunter"
 tint = Color(0.3, 0.42, 0.28, 1)
 
-[sub_resource type="Resource" id="Resource_3rqna"]
-script = ExtResource("13_xlpyh")
+[sub_resource type="Resource" id="Resource_sqx5s"]
+script = ExtResource("14_joh0k")
 speaker_id = &"npc_dv_child"
 speaker_name = "Deepwood Child"
 figure = "child"
@@ -262,48 +270,48 @@ facing = "east"
 display_name = "Deepwood Child"
 tint = Color(0.5, 0.6, 0.35, 1)
 
-[sub_resource type="Resource" id="Resource_8gfih"]
-script = ExtResource("14_nuclk")
+[sub_resource type="Resource" id="Resource_7d41m"]
+script = ExtResource("15_rhquy")
 area_rect = Rect2i(25, 11, 1, 1)
 target_area = &"woodland_town"
 target_entry = &"west_road"
 id = &"east_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_2ebsi"]
-script = ExtResource("4_sy3p5")
+[sub_resource type="Resource" id="Resource_ceu1a"]
+script = ExtResource("4_e6kcc")
 text = "The trail north leads into the deep forest. To go on, you must first battle Nyra, the chief of Deepwood."
 clear_portraits = true
 
-[sub_resource type="Resource" id="Resource_sqx5s"]
-script = ExtResource("15_joh0k")
+[sub_resource type="Resource" id="Resource_eovmj"]
+script = ExtResource("16_52c3k")
 scene_id = &"dv_north_locked"
-beats = Array[Resource]([SubResource("Resource_2ebsi")])
+beats = Array[Resource]([SubResource("Resource_ceu1a")])
 
-[sub_resource type="Resource" id="Resource_7d41m"]
-script = ExtResource("14_nuclk")
+[sub_resource type="Resource" id="Resource_vrkc3"]
+script = ExtResource("15_rhquy")
 area_rect = Rect2i(12, 0, 1, 1)
 target_area = &"depths_of_the_wood"
 target_entry = &"south"
 requires = "has(\"world.depths_of_the_wood_open\")"
-locked_scene = SubResource("Resource_sqx5s")
+locked_scene = SubResource("Resource_eovmj")
 id = &"north_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_ceu1a"]
-script = ExtResource("16_rhquy")
+[sub_resource type="Resource" id="Resource_6x47h"]
+script = ExtResource("17_6d1o3")
 key = "deepwood.arrived"
 
-[sub_resource type="Resource" id="Resource_eovmj"]
-script = ExtResource("6_ylcjc")
+[sub_resource type="Resource" id="Resource_tvqea"]
+script = ExtResource("6_jpj3n")
 condition = "not has(\"deepwood.arrived\")"
-then_commands = Array[Resource]([SubResource("Resource_ceu1a")])
+then_commands = Array[Resource]([SubResource("Resource_6x47h")])
 
 [resource]
-script = ExtResource("17_52c3k")
+script = ExtResource("18_775u0")
 area_id = &"deepwood_village"
 display_name = "Deepwood Village"
-terrain = ExtResource("18_6d1o3")
+terrain = ExtResource("19_85pi1")
 region_id = &"woodlands"
 world_map_pos = Vector2(0.098, 0.474)
 entry_points = {
@@ -320,6 +328,6 @@ entry_points = {
 "facing": "north"
 }
 }
-entities = Array[Resource]([SubResource("Resource_775u0"), SubResource("Resource_85pi1"), SubResource("Resource_il4w0"), SubResource("Resource_3k2po"), SubResource("Resource_ptqk4"), SubResource("Resource_xip0h"), SubResource("Resource_mn7h7"), SubResource("Resource_3hefr"), SubResource("Resource_5j8ra"), SubResource("Resource_8fv6d"), SubResource("Resource_krnxw"), SubResource("Resource_fto7m"), SubResource("Resource_vagiw"), SubResource("Resource_nfw60"), SubResource("Resource_rg8ny"), SubResource("Resource_a3utq"), SubResource("Resource_3rqna"), SubResource("Resource_8gfih"), SubResource("Resource_7d41m")])
-on_enter = Array[Resource]([SubResource("Resource_eovmj")])
+entities = Array[Resource]([SubResource("Resource_il4w0"), SubResource("Resource_3k2po"), SubResource("Resource_ptqk4"), SubResource("Resource_xip0h"), SubResource("Resource_mn7h7"), SubResource("Resource_3hefr"), SubResource("Resource_5j8ra"), SubResource("Resource_8fv6d"), SubResource("Resource_krnxw"), SubResource("Resource_fto7m"), SubResource("Resource_oute7"), SubResource("Resource_7sdty"), SubResource("Resource_a3utq"), SubResource("Resource_3rqna"), SubResource("Resource_8gfih"), SubResource("Resource_2ebsi"), SubResource("Resource_sqx5s"), SubResource("Resource_7d41m"), SubResource("Resource_vrkc3")])
+on_enter = Array[Resource]([SubResource("Resource_tvqea")])
 level_band = Vector2i(8, 15)

@@ -1,8 +1,8 @@
 extends GutTest
 
 ## ELDROOT'S LEGEND BATTLE, LIVE (docs/design/DECISIONS.md #74 / #81): the shipped spec staged through
-## StoryController on a real booted GameWorld -- the squad fields, Lyra's GUEST placeholder stands on
-## the player's side (not a party member), Eldroot (the 2x2 boss) spawns at the FIXED legend level
+## StoryController on a real booted GameWorld -- the squad fields (the hero, the creatures and Lyra, a
+## temporary party member: a human unit), Eldroot (the 2x2 boss) spawns at the FIXED legend level
 ## and its Barkling screen at their own map level; winning sets the battle's reward flag.
 
 const WORLD_SCENE := preload("res://game/world/GameWorld.tscn")
@@ -129,6 +129,7 @@ func test_the_legend_board_fields_the_squad_lyra_and_a_fixed_level_eldroot() -> 
 	s.set_location("depths_of_the_wood", Vector3i(12, 6, 0), "north")
 	s.member("vineweave").set_level(11)
 	s.member("blightcap").set_level(9)
+	assert_not_null(s.join("lyra", "", 6, 10, true, "deepwood.eldroot_beaten")["member"], "Lyra joins after Nyra (temporary)")
 	var spec := _eldroot_spec()
 	assert_not_null(spec, "Eldroot's battle ships")
 	if spec == null:
@@ -139,31 +140,33 @@ func test_the_legend_board_fields_the_squad_lyra_and_a_fixed_level_eldroot() -> 
 	assert_true(bool(began["success"]), "the legend battle stages")
 	_boot_world()
 	var up: bool = await _await_until(func() -> bool:
-		return TurnSystemManager.has_active_turn_system() and _party_units().size() == 2)
+		return TurnSystemManager.has_active_turn_system() and _party_units().size() == 4)
 	assert_true(up, "the board boots with the party tagged")
 	if not up:
 		return
 	var legend_lv: int = 15 + ProgressionRules.current().legend_over_band
 	var mine: Player = (_party_units()[0] as Unit).get_owner_player()
 	var eldroot: Unit = null
-	var guest: Unit = null
+	var lyra: Unit = null
 	var screens: int = 0
 	for u in CombatServices.board().all_units():
-		if u.has_meta(StoryBattleBridge.MEMBER_META):
-			continue
 		var cid: String = String(u.character_resource.character_id)
+		if u.has_meta(StoryBattleBridge.MEMBER_META):
+			if cid == "lyra":
+				lyra = u
+			continue
 		if u.get_owner_player() == mine:
-			if cid == "gem_knight":  # LYRA_UNIT (TODO(humans): "lyra")
-				guest = u
+			continue
 		elif cid == "eldroot":
 			eldroot = u
 		elif cid == "tree_grunt":
 			screens += 1
 			assert_eq(int(u.get_meta(StoryBattleBridge.LEVEL_META, 0)), 13, "a Barkling screen fights at its map level")
-	assert_not_null(guest, "Lyra's guest placeholder fights on the player's side")
-	if guest != null:
-		assert_false(guest.has_meta(StoryBattleBridge.MEMBER_META), "and is not a party member")
-		assert_eq(int(guest.get_meta(StoryBattleBridge.LEVEL_META, 0)), 11, "a guest fights at the party's top level")
+	assert_not_null(lyra, "Lyra fights on the player's side, deployed from the party")
+	if lyra != null:
+		assert_eq(lyra.get_owner_player(), mine, "on the hero's side")
+		assert_eq(lyra.character_resource.kind, CharacterResource.Kind.HUMAN, "as her own human unit")
+		assert_eq(int(lyra.get_meta(StoryBattleBridge.LEVEL_META, 0)), 10, "at her own level")
 	assert_not_null(eldroot, "Eldroot stands on its board")
 	if eldroot != null:
 		assert_eq(int(eldroot.get_meta(StoryBattleBridge.LEVEL_META, 0)), legend_lv, "at the FIXED legend level")
