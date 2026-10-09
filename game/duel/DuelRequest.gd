@@ -330,7 +330,7 @@ static func from_battle_request(br) -> Dictionary:
 			party.append({"member_id": _str(m.get("member_id", "")),
 				"character_id": m.get("character_id", ""), "current_hp": m.get("current_hp", -1),
 				"item_ids": [m.get("item_id")] if _str(m.get("item_id", "")) != "" else [],
-				"level": _level_of(m.get("level", 0))})
+				"level": _level_of(m.get("level", 0)), "weapon_id": _str(m.get("weapon_id", ""))})
 	var source := _str(br.get("source", "wild"))
 	var foes: Array = []
 	var opponent = br.get("opponent", {})

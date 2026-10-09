@@ -19,6 +19,11 @@ var skin_id: String = ""
 ## ([method Progression.apply_level], then [member strength] on top). 0 = no level (roster base): every
 ## open-mode duel, so their requests and replays are unchanged.
 var level: int = 0
+## HUMANS (docs/design/HUMANS.md): a story member's WEAPON OVERRIDE (a [WeaponLibrary] id the
+## human can wield); "" = the roster entry's own weapon (every open-mode duel). Like [member level]
+## it is written only when set, so open-mode requests, net configs and replay headers are
+## byte-identical and the wire protocol is unchanged.
+var weapon_id: String = ""
 
 
 static func make(p_character_id: StringName, p_member_id: String = "") -> DuelCombatant:
@@ -41,6 +46,8 @@ func to_dict() -> Dictionary:
 	# Only a levelled (story) combatant carries the key: open-mode replay headers stay byte-identical.
 	if level > 0:
 		d["level"] = level
+	if not weapon_id.is_empty():
+		d["weapon_id"] = weapon_id
 	return d
 
 
@@ -74,6 +81,16 @@ static func from_dict(d) -> Dictionary:
 	if typeof(lv) != TYPE_FLOAT and typeof(lv) != TYPE_INT:
 		return _fail("bad_level")
 	c.level = clampi(int(lv), 0, 200)
+	var wid = d.get("weapon_id", "")
+	if typeof(wid) != TYPE_STRING and typeof(wid) != TYPE_STRING_NAME:
+		return _fail("bad_weapon_id")
+	c.weapon_id = String(wid)
+	if not c.weapon_id.is_empty():
+		# Resolved through the library (never a path), and only a weapon this human can wield.
+		var w: WeaponResource = WeaponLibrary.get_weapon(c.weapon_id)
+		var chr: CharacterResource = CharacterLibrary.get_character(cid)
+		if w == null or chr == null or not chr.can_wield(w):
+			return _fail("bad_weapon:%s" % c.weapon_id)
 	return {"success": true, "reason": "", "combatant": c}
 
 

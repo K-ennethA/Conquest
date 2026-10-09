@@ -238,6 +238,9 @@ func _spawn_member(side: int, index: int, combatant: DuelCombatant) -> Dictionar
 	var roster := CharacterLibrary.get_character(combatant.character_id)
 	if roster == null:
 		return _fail("unknown_character")
+	# A human's story weapon override (validated on import); the roster entry is never touched.
+	if not combatant.weapon_id.is_empty():
+		roster = roster.with_weapon(WeaponLibrary.get_weapon(combatant.weapon_id))
 	var compiled := DuelMoveCompiler.compile(roster, rules)
 	if not bool(compiled["success"]):
 		return compiled
