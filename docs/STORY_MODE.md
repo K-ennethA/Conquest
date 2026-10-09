@@ -79,8 +79,8 @@ evolution offers, whiteouts to the Wayshrine.
 
 **Placeholders to replace:** the starter options (`STARTER_OPTIONS`, roster TBD); the opening's
 story lines (`TODO(story)`); the human hero is not a battle unit yet (the party fights); the
-enemy units (`RAIDER_UNITS`: Undead ×2, Blightcap, Duskmaw) and the General's / Warrior's guest units (`GENERAL_UNIT` = Geode, `WARRIOR_UNIT` = Vineweave -- roster stand-ins; their names, `NAMES.GENERAL` / `NAMES.WARRIOR` = Talyn, female (she/her), are placeholders); people are procedural figures
-(`NpcEntity.figure` -- Professor Elias too, until his model exists) and buildings, door markers and
+enemy units (`RAIDER_UNITS`: Undead ×2, Blightcap, Duskmaw) and the General's / Warrior's guest units (`GENERAL_UNIT` = Geode, `WARRIOR_UNIT` = Vineweave -- roster stand-ins; their names, `NAMES.GENERAL` / `NAMES.WARRIOR` = Talyn, female (she/her), are placeholders); people wear placeholder human models -- clones of Wren's and Lyra's (see
+[NPC looks](#npc-looks-placeholder-human-models)) -- and buildings, door markers and
 interiors procedural props (`PropEntity.prop`: house, ruin, keep, tower, gate, windmill, stall,
 well, fence, crystal, mat, …). The hero's model is the Wren forge model (`HERO_MODEL`).
 
@@ -516,6 +516,29 @@ The full as-built spec is docs/design/HUMANS.md. In short:
 - **Bonds.** A human's `bond_partner` is the creature it is bonded to. `StoryBond` /
   `StoryController.activate_bond` is the activation hook, with a placeholder stat bonus scaled
   by the creature's bond level. It is behind `StoryRuleset.bond_activation_enabled` (OFF).
+
+## NPC looks (placeholder human models)
+
+Owner, 2026-10-08: every PERSON on the overworld -- an `NpcEntity` (villager, trainer, merchant)
+with no `visual_character` -- wears a clone of **Wren's** model by default and a clone of
+**Lyra's** for a woman, instead of the procedural "chonky" figure (`OverworldProps.figure`).
+`game/overworld/runtime/NpcLooks.gd` resolves and dresses it; `OverworldController._make_entity_actor`
+calls it. Unchanged: NPCs with a `visual_character` (Varden, Elias, creatures), the hero, props.
+
+- **The knobs** -- `StoryRuleset` "NPC looks" group (`game/overworld/content/story_ruleset.tres`):
+  `npc_models_enabled` (off = the procedural figures again), `npc_default_model` = `wren` and
+  `npc_female_model` = `lyra` (roster ids: a real model later is a data change), `npc_child_scale`
+  (a `child` figure's clone, 0.72), `npc_tinted_figures` / `npc_tint_strength` (the `raider` figures
+  keep their cloak colour as a multiply overlay, so the raiders and thieves read apart).
+- **Who is a woman** -- `NpcEntity.body = "female"`, set by the builder from `FEMALE_NPCS` (in
+  `build_story_content.gd`, next to `NAMES`) only where the story establishes it: an owner fact, a
+  gendered title, or she / her about that person. Everyone else wears the default.
+- **Fallbacks** -- a roster id with no model: the female look falls back to the default, the default
+  to the figure. Each clone instances the roster's one shared `PackedScene`.
+- **Animation** -- a Wren clone idles / walks with the hero's clips at his stride-matched rates
+  (`OverworldController.HERO_STRIDES_META`), each NPC's idle offset so a crowd is not in lockstep;
+  Lyra's model has no clips yet (bind pose).
+- Screenshots: `docs/screenshots/npc_models/` (`dev_scripts/npc_models_shots.tscn`).
 
 ## Collision
 
@@ -985,7 +1008,9 @@ clocks on each talk.
   exceed Bram's squad of 3; the later members sit that battle out).
 - The Story card is appended as card 7 after Duel (existing number keys unchanged).
 - The Wayshrine stands on a sacred-ground basin (the plain fountain tile has no geometry).
-- Placeholder houses get procedural roofs (`PropEntity`), people are procedural figures.
+- Placeholder houses get procedural roofs (`PropEntity`); people wear placeholder human models
+  (clones of Wren's / Lyra's -- [NPC looks](#npc-looks-placeholder-human-models)), the procedural
+  figures their fallback.
 - Journey menu ships Resume / Party (with evolution checklists, EVOLVE, Hold, and the Fallen) / Bag
   (evolution items and consumables: Use on) / Difficulty / Save / Title; `pending` script resume across an app
   restart is M3 (the pre-battle autosave puts you in front of the trainer instead).

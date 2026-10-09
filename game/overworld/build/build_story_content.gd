@@ -173,6 +173,27 @@ const NAMES := {
 	"FIELD_MOVE_TREES": "Treefell",
 }
 
+## WOMEN among the NPCs (NAMES keys, or the literal name an _npc call passes): they wear the FEMALE
+## placeholder model (NpcEntity.body "female" -> StoryRuleset.npc_female_model, a clone of Lyra's;
+## everyone else wears the default, a clone of Wren's -- owner, 2026-10-08). ONLY where the story
+## already establishes it -- an owner fact, a gendered title, or she / her about that person; never
+## guessed from a first name. Add a key here (and rebuild) when the owner says so.
+const FEMALE_NPCS := {
+	"MOTHER": "the hero's mother (DECISIONS.md #55)",
+	"WARRIOR": "Talyn, female (owner 2026-10-04; DECISIONS.md #59)",
+	"LYRA": "she / her (Lyra's scripts here; dialogue.json areas.crownhaven.lyra note)",
+	"NYRA": "she is the Deepwood chief (Nyra's lodge, below)",
+	"MARRA": "title Goodwife; 'the Hearth & Hen's landlady on her scorched plot'",
+	"ODALYS": "title Sister",
+	"FERRA": "title Huntress",
+	"WICKE": "title Gran",
+	"Lady Merrow": "title Lady",
+	"MERCHANT": "Merchant Oda: 'this is her greeting' (dialogue.json areas.crownhaven.merchant note)",
+	"FENNA": "'she is the first trainer on the road'; dialogue.json areas.mossway.fenna note",
+	"BANDIT_BOSS": "Cutpurse Nell: 'Her idle line is in dialogue.json'",
+	"CHAMPION": "Champion Isolde: 'once you've taken her title'",
+}
+
 # =====================================================================================
 #  THE WORLD MAP (the owner's map: docs/design/world_map/world_map.webp) -- the ONE place for geography
 # =====================================================================================
@@ -670,7 +691,8 @@ func _merchant(id: String, cell: Vector2i, facing: String, name_key: String, tin
 	m.speaker_id = StringName("npc_" + id)
 	m.tint = tint
 	m.figure = figure
-	m.shop = load(ShopResource.path_for(shop_id)) as ShopResource
+	m.body = _body_of(name_key)
+	m.shop =load(ShopResource.path_for(shop_id)) as ShopResource
 	return m
 
 
@@ -790,8 +812,14 @@ func _npc(id: String, cell: Vector2i, facing: String, name_key: String, tint: Co
 	n.speaker_id = StringName("npc_" + id)
 	n.tint = tint
 	n.figure = figure
+	n.body = _body_of(name_key)
 	n.dialogue = dialogue
 	return n
+
+
+## The placeholder body an NPC named by [param name_key] wears ([constant FEMALE_NPCS]).
+static func _body_of(name_key: String) -> String:
+	return NpcLooks.BODY_FEMALE if FEMALE_NPCS.has(name_key) else ""
 
 
 func _sign(id: String, cell: Vector2i, title: String, text: String, look: String = "post") -> SignEntity:
@@ -2553,6 +2581,7 @@ func _fenna() -> TrainerEntity:
 	t.speaker_id = &"npc_fenna"
 	t.tint = Color(0.62, 0.4, 0.56)
 	t.figure = "trainer"
+	t.body = _body_of("FENNA")
 	t.sight_range = 3
 	t.visible_if = "has(\"%s\")" % F_COMPLETE
 	t.pre_scene = _scene("moss_fenna_pre", [

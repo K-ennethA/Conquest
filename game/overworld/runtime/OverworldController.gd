@@ -41,6 +41,9 @@ const TAP_STALL_SECONDS := 0.4
 const CELL_HYSTERESIS := 0.2
 ## Metres the camera's look-at point sits SOUTH of an interior's middle ([method camera_bounds_for]).
 const INTERIOR_FOCUS_SOUTH := 1.2
+## Actor meta: this NPC wears a clone of the hero's model ([NpcLooks]), so it plays its walk / run
+## clips at the hero's stride-matched rates ([method _feel_actor]).
+const HERO_STRIDES_META := &"hero_strides"
 
 var story = null
 var area: OverworldAreaResource = null
@@ -239,6 +242,17 @@ func _make_entity_actor(e: OverworldEntity) -> OverworldActor:
 	var used_character: bool = false
 	if not String(e.visual_character).is_empty():
 		used_character = actor.set_character_model(CharacterLibrary.get_character(e.visual_character))
+	elif NpcLooks.is_person(e):
+		# A person with no roster model: the placeholder human model (NpcLooks; the ruleset's
+		# "NPC looks" knobs), else the procedural figure below.
+		var kind: String = _figure_kind(e)
+		var worn: CharacterResource = NpcLooks.dress(actor, e, kind, _ruleset)
+		used_character = worn != null
+		# A full-size clone of the HERO's model carries the hero's stride: it walks at his clip
+		# rates (a scaled-down child keeps 1.0x).
+		if worn != null and story != null and story.hero() != null \
+				and worn.model_scene == story.hero().model_scene and NpcLooks.scale_for(kind, _ruleset) == 1.0:
+			actor.set_meta(HERO_STRIDES_META, true)
 	if not used_character:
 		match e.kind():
 			&"sign":
@@ -273,8 +287,9 @@ func _make_entity_actor(e: OverworldEntity) -> OverworldActor:
 
 
 ## Give [param a] the active feel's glide / turn knobs and walk pace. Only the HERO plays its
-## clips at the feel's stride-matched rates (the strides are his clip's); NPC / wild models keep
-## 1.0x until they carry stride data of their own.
+## clips at the feel's stride-matched rates (the strides are his clip's) -- and an NPC wearing a
+## clone of his model ([constant HERO_STRIDES_META]); other NPC / wild models keep 1.0x until they
+## carry stride data of their own.
 func _feel_actor(a: OverworldActor, hero: bool) -> void:
 	if a == null or feel.is_empty():
 		return
@@ -282,9 +297,10 @@ func _feel_actor(a: OverworldActor, hero: bool) -> void:
 	a.continuous_glide = String(feel["glide"]) == "continuous"
 	a.turn_time = float(feel["turn_time"])
 	a.turn_ease_out = bool(feel["turn_ease_out"])
-	if hero:
+	if hero or bool(a.get_meta(HERO_STRIDES_META, false)):
 		a.walk_clip_rate = float(feel["walk_clip_rate"])
 		a.run_clip_rate = float(feel["run_clip_rate"])
+	if hero:
 		a.walk_clip_native_mps = float(feel["walk_clip_native_mps"])
 		a.run_clip_native_mps = float(feel["run_clip_native_mps"])
 		a.run_clip_above_mps = float(feel["walk_speed_mps"]) * float(feel.get("run_clip_above", INF))

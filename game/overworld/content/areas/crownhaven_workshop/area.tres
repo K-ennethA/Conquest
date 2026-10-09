@@ -347,6 +347,7 @@ script = ExtResource("16_ef6in")
 speaker_id = &"npc_lyra"
 speaker_name = "Lyra"
 figure = "villager"
+body = "female"
 id = &"lyra"
 cell = Vector3i(2, 4, 0)
 facing = "east"

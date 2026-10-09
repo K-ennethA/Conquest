@@ -67,6 +67,24 @@ const DEFAULT_PATH := "res://game/overworld/content/story_ruleset.tres"
 ## A tap on a new direction only TURNS; holding longer than this walks.
 @export var turn_hold_seconds: float = 0.09
 
+@export_group("NPC looks")
+## PEOPLE on the overworld -- an NpcEntity (villager, trainer, merchant) with no visual_character --
+## wear a PLACEHOLDER HUMAN MODEL ([NpcLooks]; owner 2026-10-08: clones of Wren, and of Lyra for
+## women) instead of the procedural "chonky" figure. Off = the figures again. An NPC with a
+## visual_character (Varden, Elias, creatures) and the hero are untouched either way.
+@export var npc_models_enabled: bool = true
+## Roster id whose model every person wears by default (a model-less id falls back to the figure).
+@export var npc_default_model: StringName = &"wren"
+## Roster id a woman wears ([member NpcEntity.body] "female"); falls back to the default model.
+@export var npc_female_model: StringName = &"lyra"
+## A "child" figure wears its model at this scale (the figures' child is ~0.71 of an adult).
+@export_range(0.3, 1.0, 0.01) var npc_child_scale: float = 0.72
+## Figure kinds whose cloak tint is laid over the model as a multiply overlay, so they read apart
+## from the villagers (the raiders / thieves: Cindral red, dark cloaks). Empty = nobody tinted.
+@export var npc_tinted_figures: PackedStringArray = PackedStringArray(["raider"])
+## How far toward the cloak colour that overlay dyes the model (0 = no tint, 1 = the full colour).
+@export_range(0.0, 1.0, 0.01) var npc_tint_strength: float = 0.6
+
 @export_group("Encounters")
 ## Steps after an area entry / a battle before grass may roll again.
 @export var grace_steps: int = 3
