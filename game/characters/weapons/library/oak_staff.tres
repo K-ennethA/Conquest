@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="WeaponResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/weapons/WeaponResource.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+weapon_id = &"oak_staff"
+display_name = "Oak Staff"
+description = "PLACEHOLDER: a researcher's focus staff (Elias). Numbers pending design."
+weapon_type = &"staff"
+might = 12
+hit = 0.95
+crit = 0.0
+min_range = 1
+max_range = 2
+attack_name = "Channel"
+placeholder = true

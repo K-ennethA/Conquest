@@ -115,9 +115,9 @@ static func build(m: StoryPartyMember, state: StoryState, is_lead: bool, on_back
 
 	# --- Moves + abilities -----------------------------------------------------------
 	if c != null:
-		if not c.moveset.is_empty():
+		if not c.get_moveset().is_empty():
 			page.add_child(UnitPageContent.section_header("Moves"))
-			for mv in c.moveset:
+			for mv in c.get_moveset():
 				if mv != null:
 					page.add_child(UnitPageContent.build_move_card(mv))
 		if not c.abilities.is_empty():

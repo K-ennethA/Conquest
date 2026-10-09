@@ -17,7 +17,7 @@ func is_met(ctx: Dictionary) -> bool:
 	var chr: CharacterResource = CharacterLibrary.get_character(StringName(String(ctx.get("form", ""))))
 	if chr == null:
 		return false
-	for m in chr.moveset:
+	for m in chr.get_moveset():
 		if m != null and m.move_id == move_id:
 			return true
 	return false
@@ -40,7 +40,7 @@ static func move_name(id: StringName) -> String:
 		var chr: CharacterResource = CharacterLibrary.get_character(cid)
 		if chr == null:
 			continue
-		for m in chr.moveset:
+		for m in chr.get_moveset():
 			if m != null and m.move_id == id and not m.display_name.is_empty():
 				_names[id] = m.display_name
 				return m.display_name

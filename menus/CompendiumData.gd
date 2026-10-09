@@ -189,7 +189,7 @@ static func maps() -> Array:
 static func all_moves() -> Array:
 	var out: Array = []
 	for c in roster():
-		for m in c.moveset:
+		for m in c.get_moveset():
 			if m != null and m not in out:
 				out.append(m)
 	for path in _tres_in(MOVES_DIR):
@@ -323,7 +323,7 @@ static func weather_unit_lines(id: StringName) -> Array:
 		for a in c.abilities:
 			if a != null and id in weathers_in_condition(a.condition):
 				lines.append("[url=units:%s]%s[/url] -- %s: %s" % [c.character_id, _char_name(c), a.display_name, a.description])
-		for m in c.moveset:
+		for m in c.get_moveset():
 			if m == null:
 				continue
 			for e in m.effects:
@@ -706,6 +706,8 @@ static func unit_entry(c: CharacterResource) -> Dictionary:
 	var blocks: Array = []
 	var profile = c.get_movement_profile()
 	var fields: Array = [
+		# DECISIONS.md #5: the HUMAN / CREATURE badge.
+		["Kind", c.kind_label()],
 		["Element", element_link(c.element) if c.element != &"" else "None"],
 		["Movement", movement_text(c)],
 		["Tags", ", ".join(PackedStringArray(c.tags.map(func(t): return String(t)))) if not c.tags.is_empty() else "None"],
@@ -713,9 +715,19 @@ static func unit_entry(c: CharacterResource) -> Dictionary:
 			c.base_health, c.base_attack, c.base_defense, c.base_magic, c.base_magic_defense,
 			c.base_speed, c.base_movement]],
 	]
+	if c.is_human():
+		var w: WeaponResource = c.equipped_weapon()
+		var r: Vector2i = w.reach()
+		fields.append(["Weapon", "%s (%s) · Might %d · Hit %d%% · Range %s" % [w.display_name,
+			String(w.weapon_type).capitalize() if w.weapon_type != &"" else "None", w.might,
+			roundi(w.hit * 100.0), str(r.x) if r.x == r.y else "%d-%d" % [r.x, r.y]]])
+		var prof: PackedStringArray = []
+		for t in c.wieldable_types():
+			prof.append(String(t).capitalize())
+		fields.append(["Wields", ", ".join(prof) if not prof.is_empty() else "None"])
 	blocks.append({ "type": "fields", "rows": fields })
 	var move_items: Array = []
-	for m in c.moveset:
+	for m in c.get_moveset():
 		if m != null:
 			move_items.append(move_line(m))
 	blocks.append({ "type": "heading", "text": "Moves" })
@@ -727,10 +739,10 @@ static func unit_entry(c: CharacterResource) -> Dictionary:
 	blocks.append({ "type": "heading", "text": "Abilities" })
 	blocks.append({ "type": "bullets", "items": ab_items if not ab_items.is_empty() else ["No abilities"] })
 	blocks.append_array(evolution_blocks(c))
-	var kw := "%s %s %s %s" % [_char_name(c), c.character_id, c.element, " ".join(PackedStringArray(c.tags.map(func(t): return String(t))))]
+	var kw := "%s %s %s %s %s" % [_char_name(c), c.character_id, c.element, " ".join(PackedStringArray(c.tags.map(func(t): return String(t)))), c.kind_label().to_lower()]
 	if EvolutionLibrary.in_any_line(c.character_id):
 		kw += " evolve evolution growth"
-	for m in c.moveset:
+	for m in c.get_moveset():
 		if m != null:
 			kw += " " + m.display_name
 	for a in c.abilities:
@@ -869,7 +881,7 @@ static func _move_power(m: MoveResource) -> int:
 static func _move_owner_suffix(m: MoveResource) -> String:
 	var owners: Array[String] = []
 	for c in roster():
-		if m in c.moveset:
+		if m in c.get_moveset():
 			owners.append(_char_name(c))
 	return " (%s)" % ", ".join(owners) if not owners.is_empty() else ""
 

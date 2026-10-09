@@ -232,7 +232,7 @@ func _build_stats_resource_from_character(character: CharacterResource) -> UnitS
 	derived.base_magic = character.base_magic
 	derived.base_speed = character.base_speed
 	derived.movement_range = character.base_movement
-	derived.attack_range = character.attack_range
+	derived.attack_range = character.effective_attack_range()
 	return derived
 
 
@@ -246,7 +246,7 @@ func _setup_character_components() -> void:
 		var moveset_controller := MovesetController.new()
 		moveset_controller.name = "MovesetController"
 		if moveset_controller.has_method("seed_from_moveset"):
-			moveset_controller.call("seed_from_moveset", character_resource.moveset)
+			moveset_controller.call("seed_from_moveset", character_resource.get_moveset())
 		add_child(moveset_controller)
 
 	# Active status-condition tracker.
@@ -1228,9 +1228,28 @@ func get_movement_profile():
 func get_moveset() -> Array[MoveResource]:
 	"""The unit's moves, or an empty list when no character is assigned."""
 	if character_resource:
-		return character_resource.moveset
+		# A creature's authored list; a human's kit (weapon attack + its listed special moves).
+		return character_resource.get_moveset()
 	var empty: Array[MoveResource] = []
 	return empty
+
+## HUMANS (docs/design/HUMANS.md): wield [param weapon] for the rest of this battle -- the unit's
+## character becomes a PRIVATE copy holding it (rule 7), so slot 0's weapon attack follows. Only a
+## weapon of a type the human can wield. {success, reason}: "not_human", "no_weapon",
+## "cannot_wield"; "same_weapon" is a success no-op.
+func equip_weapon(weapon: WeaponResource) -> Dictionary:
+	if character_resource == null or not character_resource.is_human():
+		return {"success": false, "reason": "not_human"}
+	if weapon == null:
+		return {"success": false, "reason": "no_weapon"}
+	if not character_resource.can_wield(weapon):
+		return {"success": false, "reason": "cannot_wield"}
+	if character_resource.weapon == weapon:
+		return {"success": true, "reason": "same_weapon"}
+	character_resource = character_resource.with_weapon(weapon)
+	if unit_stats != null and unit_stats.stats_resource != null:
+		unit_stats.stats_resource.attack_range = character_resource.effective_attack_range()
+	return {"success": true, "reason": ""}
 
 func get_move(slot: int) -> MoveResource:
 	"""Move in the given slot (0..3), or null when empty/out of range."""

@@ -41,7 +41,8 @@ static func compile(character: CharacterResource, ruleset: DuelRuleset = null) -
 
 	var moves: Array[MoveResource] = []
 	var slot := 0
-	for original in character.moveset:
+	# The FIELDED kit: a creature's authored moves, a human's weapon attack + specials.
+	for original in character.get_moveset():
 		var was_ultimate: bool = MoveResource.is_ultimate_move(original, slot)
 		slot += 1
 		if original == null:

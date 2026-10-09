@@ -10,8 +10,17 @@ class_name CharacterResource
 
 const MAX_MOVES: int = 4
 
+## WHAT a character is (docs/design/DECISIONS.md #5): a CREATURE (a species -- caught, evolves,
+## fights with its four authored moves) or a HUMAN (a unique named individual -- recruited, never
+## wild; promotes by class; fights with a WEAPON ATTACK, plus special moves when ENHANCED).
+## docs/design/HUMANS.md is the as-built spec.
+enum Kind { CREATURE, HUMAN }
+
 @export_group("Identity")
 @export var character_id: StringName = &""
+## CREATURE (the default -- every roster entry that predates kinds) or HUMAN. The Compendium and
+## the squad / party screens badge it; acquisition and progression key off it.
+@export var kind: Kind = Kind.CREATURE
 @export var display_name: String = "New Character"
 @export_multiline var description: String = ""
 @export var portrait: Texture2D
@@ -106,7 +115,24 @@ const MAX_MOVES: int = 4
 
 @export_group("Moveset")
 ## Up to [constant MAX_MOVES] moves. Extra entries are ignored by [method get_move].
+## A HUMAN's list is its SPECIAL moves (possibly none), fielded after the weapon attack
+## ([method get_moveset] builds the kit). Read moves through [method get_moveset] /
+## [method get_move], never this field, so a human's kit is the one every system sees.
 @export var moveset: Array[MoveResource] = []
+
+@export_group("Human")
+## HUMANS ONLY (ignored for a creature). The equipped weapon: its WEAPON ATTACK
+## ([method WeaponResource.attack_move]) is slot 0 of the kit. Null = [method WeaponLibrary.unarmed].
+@export var weapon: WeaponResource
+## Weapon TYPES this human can wield ([WeaponRules] type ids). More than one = the human can SWAP
+## weapons (DECISIONS.md #63); empty = only its own [member weapon]'s type.
+@export var weapon_proficiencies: Array[StringName] = []
+## The weapon type this human naturally leans toward (#63's "tendency"); "" = none. Data only for
+## now -- shown on the party page; no bonus is attached yet.
+@export var weapon_tendency: StringName = &""
+## ("ENHANCED" humans -- #54 / #64 -- are design flavour, not a mechanic: an enhanced character is
+## simply one whose [member moveset] lists special moves. Chiefs are authored that way; the hero
+## gains them by PROMOTION -- the promoted form's moveset lists them.)
 
 @export_group("Abilities")
 ## Always-on / triggered passives the character owns for free. Distinct from
@@ -136,7 +162,7 @@ const MAX_MOVES: int = 4
 
 
 func move_count() -> int:
-	return mini(moveset.size(), MAX_MOVES)
+	return mini(get_moveset().size(), MAX_MOVES)
 
 
 func ability_count() -> int:
@@ -147,7 +173,84 @@ func ability_count() -> int:
 func get_move(slot: int) -> MoveResource:
 	if slot < 0 or slot >= move_count():
 		return null
-	return moveset[slot]
+	return get_moveset()[slot]
+
+
+## THE moves this character fields, in slot order -- what the board, the AI, the duel compiler
+## and every screen read. A CREATURE: its authored [member moveset], exactly as before. A HUMAN:
+## its WEAPON ATTACK in slot 0, then whatever special moves its [member moveset] lists (an
+## "enhanced" human is just one that lists some), up to [constant MAX_MOVES] in all.
+func get_moveset() -> Array[MoveResource]:
+	if not is_human():
+		return moveset
+	var out: Array[MoveResource] = [equipped_weapon().attack_move()]
+	for m in moveset:
+		if out.size() >= MAX_MOVES:
+			break
+		out.append(m)
+	return out
+
+
+# --- Humans (docs/design/HUMANS.md) --------------------------------------------------------
+
+func is_human() -> bool:
+	return kind == Kind.HUMAN
+
+
+func is_creature() -> bool:
+	return kind == Kind.CREATURE
+
+
+## "Human" / "Creature" -- the badge text.
+func kind_label() -> String:
+	return "Human" if is_human() else "Creature"
+
+
+## The weapon this human strikes with ([member weapon], else the unarmed fallback). Null for a
+## creature.
+func equipped_weapon() -> WeaponResource:
+	if not is_human():
+		return null
+	return weapon if weapon != null else WeaponLibrary.unarmed()
+
+
+## The equipped weapon's type ("" for a creature / an unarmed human).
+func weapon_type() -> StringName:
+	var w: WeaponResource = equipped_weapon()
+	return w.weapon_type if w != null else &""
+
+
+## The weapon types this human may wield: [member weapon_proficiencies], else its own weapon's.
+func wieldable_types() -> Array[StringName]:
+	var out: Array[StringName] = []
+	if not is_human():
+		return out
+	for t in weapon_proficiencies:
+		if not out.has(t):
+			out.append(t)
+	if out.is_empty() and weapon != null and weapon.weapon_type != &"":
+		out.append(weapon.weapon_type)
+	return out
+
+
+## True when this human may equip [param w] (its type is one it wields).
+func can_wield(w: WeaponResource) -> bool:
+	return is_human() and w != null and wieldable_types().has(w.weapon_type)
+
+
+## Can this human SWAP weapons at all (#63)? More than one wieldable type.
+func can_swap_weapons() -> bool:
+	return wieldable_types().size() > 1
+
+
+## A PRIVATE COPY of this character wielding [param w] (rule 7: the roster entry is shared).
+## Returns self unchanged for a creature, a null weapon or the weapon it already holds.
+func with_weapon(w: WeaponResource) -> CharacterResource:
+	if not is_human() or w == null or w == weapon:
+		return self
+	var copy := duplicate(false) as CharacterResource
+	copy.weapon = w
+	return copy
 
 
 ## Returns [member movement_profile] if authored, else synthesizes a
@@ -220,8 +323,15 @@ func get_stat(stat_name: String) -> int:
 		"magic_defense", "mdef": return base_magic_defense
 		"speed", "spd": return base_speed
 		"movement", "move": return base_movement
-		"range": return attack_range
+		"range": return effective_attack_range()
 		_: return 0
+
+
+## The basic attack reach: a creature's authored [member attack_range]; a human's weapon reach.
+func effective_attack_range() -> int:
+	if is_human():
+		return equipped_weapon().reach().y
+	return attack_range
 
 
 ## A quick balance heuristic (sum of offensive/defensive stats).
@@ -239,10 +349,27 @@ func validate() -> Dictionary:
 		issues.append("display_name is required")
 	if moveset.size() > MAX_MOVES:
 		issues.append("moveset has %d moves; max is %d" % [moveset.size(), MAX_MOVES])
-	for i in range(move_count()):
+	for i in range(mini(moveset.size(), MAX_MOVES)):
 		if moveset[i] == null:
 			issues.append("move slot %d is empty" % i)
 	for i in range(abilities.size()):
 		if abilities[i] == null:
 			issues.append("ability slot %d is empty" % i)
+	if is_human():
+		if weapon == null:
+			issues.append("human has no weapon")
+		else:
+			issues.append_array(weapon.validate())
+			if not weapon_proficiencies.is_empty() and not weapon_proficiencies.has(weapon.weapon_type):
+				issues.append("human's weapon type '%s' is not one of its proficiencies" % weapon.weapon_type)
+		var rules: WeaponRules = WeaponRules.current()
+		for t in weapon_proficiencies:
+			if not rules.has_type(t):
+				issues.append("unknown weapon proficiency '%s'" % t)
+		if weapon_tendency != &"" and not wieldable_types().has(weapon_tendency):
+			issues.append("weapon tendency '%s' is not a wieldable type" % weapon_tendency)
+		if moveset.size() > MAX_MOVES - 1:
+			issues.append("human has %d special moves; max is %d (slot 0 is the weapon attack)" % [moveset.size(), MAX_MOVES - 1])
+	elif weapon != null:
+		issues.append("a creature has a weapon (weapons are for humans)")
 	return { "valid": issues.is_empty(), "issues": issues }

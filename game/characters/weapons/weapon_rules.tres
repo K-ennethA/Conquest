@@ -1,0 +1,75 @@
+[gd_resource type="Resource" script_class="WeaponRules" load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://game/characters/weapons/WeaponRules.gd" id="1_rules"]
+[ext_resource type="Script" path="res://game/characters/weapons/WeaponTypeResource.gd" id="2_type"]
+
+[sub_resource type="Resource" id="T_sword"]
+script = ExtResource("2_type")
+type_id = &"sword"
+display_name = "Sword"
+category = 0
+scaling_stat = "attack"
+default_min_range = 1
+default_max_range = 1
+verb = "Slash"
+
+[sub_resource type="Resource" id="T_lance"]
+script = ExtResource("2_type")
+type_id = &"lance"
+display_name = "Lance"
+category = 0
+scaling_stat = "attack"
+default_min_range = 1
+default_max_range = 1
+verb = "Thrust"
+
+[sub_resource type="Resource" id="T_axe"]
+script = ExtResource("2_type")
+type_id = &"axe"
+display_name = "Axe"
+category = 0
+scaling_stat = "attack"
+default_min_range = 1
+default_max_range = 1
+verb = "Chop"
+
+[sub_resource type="Resource" id="T_bow"]
+script = ExtResource("2_type")
+type_id = &"bow"
+display_name = "Bow"
+category = 0
+scaling_stat = "attack"
+default_min_range = 2
+default_max_range = 3
+verb = "Shoot"
+
+[sub_resource type="Resource" id="T_staff"]
+script = ExtResource("2_type")
+type_id = &"staff"
+display_name = "Staff"
+category = 1
+scaling_stat = "magic"
+default_min_range = 1
+default_max_range = 2
+verb = "Channel"
+
+[sub_resource type="Resource" id="T_tome"]
+script = ExtResource("2_type")
+type_id = &"tome"
+display_name = "Tome"
+category = 1
+scaling_stat = "magic"
+default_min_range = 1
+default_max_range = 2
+verb = "Cast"
+
+[resource]
+script = ExtResource("1_rules")
+weapon_types = Array[ExtResource("2_type")]([SubResource("T_sword"), SubResource("T_lance"), SubResource("T_axe"), SubResource("T_bow"), SubResource("T_staff"), SubResource("T_tome")])
+triangle_enabled = true
+triangle_beats = {
+"axe": "lance",
+"lance": "sword",
+"sword": "axe"
+}
+triangle_damage_bonus = 0.15

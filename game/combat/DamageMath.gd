@@ -26,6 +26,8 @@ class_name DamageMath
 ##      matchup-only rule above, exactly as before weather existed.
 ##   6. HEIGHT ADVANTAGE — attacker above / below the target ([Elevation]); exactly 1.0
 ##      on a shared floor.
+##   7. WEAPON TRIANGLE — a human's weapon strike vs a human wielder ([WeaponRules]);
+##      exactly 1.0 for any other move or target.
 ##
 ## Category mitigation ([method mitigate]) also folds in the weather's combat-time
 ## defense bonus (Desert Storm: earth units), for hits and environmental damage alike.
@@ -112,6 +114,13 @@ static func apply_scales(mitigated: int, caster, target, move, board = null) -> 
 	if not is_equal_approx(height_mult, NEUTRAL):
 		dealt = maxi(1, roundi(float(dealt) * height_mult))
 
+	# 7. Weapon triangle (humans, docs/design/HUMANS.md): a WEAPON STRIKE against a human wielder
+	#    of a related type. Exactly 1.0 for every move that is not a weapon strike and every
+	#    target that is not an armed human -- i.e. for everything that existed before humans.
+	var triangle_mult: float = weapon_triangle_scale_for(move, target)
+	if not is_equal_approx(triangle_mult, NEUTRAL):
+		dealt = maxi(1, roundi(float(dealt) * triangle_mult))
+
 	return {
 		"total": dealt,
 		"element_mult": element_mult,
@@ -121,7 +130,22 @@ static func apply_scales(mitigated: int, caster, target, move, board = null) -> 
 		"defender_scale": taken,
 		"weather_mult": weather_mult,
 		"height_mult": height_mult,
+		"triangle_mult": triangle_mult,
 	}
+
+
+## The WEAPON TRIANGLE multiplier ([WeaponRules]) for [param move] hitting [param target]: the
+## move's [WeaponStrikeEffect] type against the weapon type the target (a HUMAN) wields. 1.0 when
+## the move is no weapon strike, the target holds no weapon, or the rules' triangle is off.
+## Deterministic (data only), so the forecast and the hit agree.
+static func weapon_triangle_scale_for(move, target) -> float:
+	var attacker_type: StringName = WeaponResource.strike_type_of(move)
+	if attacker_type == &"" or target == null or not (target is Object):
+		return NEUTRAL
+	var chr = target.get("character_resource") if "character_resource" in target else null
+	if chr == null or not (chr is CharacterResource) or not (chr as CharacterResource).is_human():
+		return NEUTRAL
+	return WeaponRules.current().triangle_scale(attacker_type, (chr as CharacterResource).weapon_type())
 
 
 # --- The ENVIRONMENT's own chain ---------------------------------------------

@@ -526,7 +526,10 @@ func _make_unit_cell(entry: Dictionary) -> Control:
 	name_lbl.clip_text = true
 	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	text.add_child(name_lbl)
-	var kind := MenuKit.label("%s  ·  %s" % [entry["element"], entry["role"]], &"")
+	# DECISIONS.md #5: a HUMAN gets the kind badge in front of its element / role line.
+	var chr_k: CharacterResource = entry.get("chr", null)
+	var kind_prefix: String = "Human  ·  " if chr_k != null and chr_k.is_human() else ""
+	var kind := MenuKit.label("%s%s  ·  %s" % [kind_prefix, entry["element"], entry["role"]], &"")
 	kind.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
 	kind.add_theme_color_override("font_color", ecol.lightened(0.35))
 	kind.clip_text = true

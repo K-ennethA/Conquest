@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="WeaponResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/weapons/WeaponResource.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+weapon_id = &"unarmed"
+display_name = "Unarmed"
+description = "Bare hands: the fallback for a human with no weapon."
+weapon_type = &""
+might = 4
+hit = 0.9
+crit = 0.0
+min_range = 1
+max_range = 1
+attack_name = "Strike"
+placeholder = false
