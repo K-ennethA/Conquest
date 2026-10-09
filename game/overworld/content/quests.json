@@ -55,7 +55,8 @@
 			"steps": [
 				{"flag": "world.deepwood_open", "text": "Ask Warden Hale at Woodland Town's Lodge about the road west.", "location": "woodland_town", "area": "woodland_town", "npc": "hale"},
 				{"flag": "deepwood.nyra_beaten", "text": "Find Nyra, the chief of Deepwood Village, and battle her.", "location": "deepwood_village", "area": "deepwood_village", "npc": "nyra"},
-				{"flag": "deepwood.eldroot_beaten", "text": "Find the way to the deepest part of the wood.", "location": "depths_of_the_wood", "area": "depths_of_the_wood"}
+				{"flag": "deepwood.treefell_learned", "text": "Have Nyra teach the tree-felling move to one of your party.", "location": "deepwood_village", "area": "deepwood_village", "npc": "nyra"},
+				{"flag": "deepwood.eldroot_beaten", "text": "Find the way through the Deep Woods to the clearing at their heart.", "location": "depths_of_the_wood", "area": "depths_of_the_wood"}
 			]
 		},
 		{

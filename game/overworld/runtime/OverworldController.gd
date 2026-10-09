@@ -116,6 +116,10 @@ func _ready() -> void:
 	# Classic-Pokemon location popup: small, in a corner, never blocks (PlaceAnnouncer decides when).
 	if story.announce_place(area):
 		hud.show_area_name(area.display_name)
+	# A warp's arrival toast (a maze turning you back): small, never blocks.
+	var arrival: String = story.take_arrival_toast() if story.has_method(&"take_arrival_toast") else ""
+	if not arrival.is_empty():
+		hud.toast(arrival, "info")
 	if not msg.is_empty():
 		_show_system_message(msg)
 	elif not story.is_script_running():

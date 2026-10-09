@@ -1,204 +1,119 @@
 [gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
 
-[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_mp020"]
-[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_q3ure"]
-[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="3_y7shi"]
-[ext_resource type="Script" path="res://game/overworld/data/FieldObstacleEntity.gd" id="4_4017s"]
-[ext_resource type="Script" path="res://game/overworld/data/ChestEntity.gd" id="5_rmtcs"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/BondLegendCommand.gd" id="6_w6ytb"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="7_hayd6"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="8_yn2yu"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="9_42ao1"]
-[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="10_rdnk7"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="11_ye1i1"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="12_tbcor"]
-[ext_resource type="Script" path="res://game/overworld/script/commands/StartBattleCommand.gd" id="13_ujm3a"]
-[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="14_i2tdm"]
-[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="15_igpvp"]
-[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="16_bvb2d"]
-[ext_resource type="Resource" path="res://game/overworld/content/areas/depths_of_the_wood/terrain.tres" id="17_n0uyo"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_37knh"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_6i3e1"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="3_l8xkv"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="4_7ovge"]
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="5_eta22"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="6_nasl3"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/depths_of_the_wood/terrain.tres" id="7_qo482"]
 
-[sub_resource type="Resource" id="Resource_pvxch"]
-script = ExtResource("2_q3ure")
+[sub_resource type="Resource" id="Resource_pvsto"]
+script = ExtResource("2_6i3e1")
 character_id = &"petalfang"
 weight = 2.0
 
-[sub_resource type="Resource" id="Resource_y3v6c"]
-script = ExtResource("2_q3ure")
+[sub_resource type="Resource" id="Resource_thrtg"]
+script = ExtResource("2_6i3e1")
 character_id = &"blightcap"
 weight = 2.0
 
-[sub_resource type="Resource" id="Resource_ifp4u"]
-script = ExtResource("2_q3ure")
+[sub_resource type="Resource" id="Resource_n55m7"]
+script = ExtResource("2_6i3e1")
 character_id = &"tree_grunt"
 weight = 1.5
 
-[sub_resource type="Resource" id="Resource_hpcan"]
-script = ExtResource("2_q3ure")
+[sub_resource type="Resource" id="Resource_mp020"]
+script = ExtResource("2_6i3e1")
 character_id = &"vineweave"
 
-[sub_resource type="Resource" id="Resource_8aq45"]
-script = ExtResource("2_q3ure")
+[sub_resource type="Resource" id="Resource_q3ure"]
+script = ExtResource("2_6i3e1")
 character_id = &"oakheart"
 weight = 0.5
 
-[sub_resource type="Resource" id="Resource_wkvrq"]
-script = ExtResource("1_mp020")
-table = Array[Resource]([SubResource("Resource_pvxch"), SubResource("Resource_y3v6c"), SubResource("Resource_ifp4u"), SubResource("Resource_hpcan"), SubResource("Resource_8aq45")])
+[sub_resource type="Resource" id="Resource_y7shi"]
+script = ExtResource("1_37knh")
+table = Array[Resource]([SubResource("Resource_pvsto"), SubResource("Resource_thrtg"), SubResource("Resource_n55m7"), SubResource("Resource_mp020"), SubResource("Resource_q3ure")])
 rate = 0.12
 
-[sub_resource type="Resource" id="Resource_04058"]
-script = ExtResource("3_y7shi")
-area_rect = Rect2i(12, 29, 1, 1)
+[sub_resource type="Resource" id="Resource_4017s"]
+script = ExtResource("3_l8xkv")
+area_rect = Rect2i(9, 0, 1, 1)
+target_area = &"depths_of_the_wood_2"
+target_entry = &"south"
+id = &"north_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_rmtcs"]
+script = ExtResource("3_l8xkv")
+area_rect = Rect2i(9, 16, 1, 1)
 target_area = &"deepwood_village"
 target_entry = &"north_trail"
 id = &"south_exit"
 blocking = false
 
-[sub_resource type="Resource" id="Resource_pgbi8"]
-script = ExtResource("4_4017s")
-field_move = &"treefell"
-id = &"gate_tree"
-cell = Vector3i(12, 10, 0)
-display_name = "Gnarled Tree"
-tint = Color(0.3, 0.4, 0.2, 1)
-visible_if = "not has(\"depths_of_the_wood.gate_tree.cleared\")"
+[sub_resource type="Resource" id="Resource_w6ytb"]
+script = ExtResource("3_l8xkv")
+area_rect = Rect2i(0, 8, 1, 1)
+target_area = &"depths_of_the_wood"
+target_entry = &"south"
+arrival_toast = "You feel turned around..."
+id = &"west_exit"
+blocking = false
 
-[sub_resource type="Resource" id="Resource_kc5ar"]
-script = ExtResource("4_4017s")
-field_move = &"treefell"
-id = &"nook_tree"
-cell = Vector3i(18, 16, 0)
-display_name = "Gnarled Tree"
-tint = Color(0.3, 0.4, 0.2, 1)
-visible_if = "not has(\"depths_of_the_wood.nook_tree.cleared\")"
+[sub_resource type="Resource" id="Resource_hayd6"]
+script = ExtResource("3_l8xkv")
+area_rect = Rect2i(18, 8, 1, 1)
+target_area = &"depths_of_the_wood"
+target_entry = &"south"
+arrival_toast = "You feel turned around..."
+id = &"east_exit"
+blocking = false
 
-[sub_resource type="Resource" id="Resource_f55kq"]
-script = ExtResource("4_4017s")
-field_move = &"treefell"
-id = &"thicket_tree"
-cell = Vector3i(16, 21, 0)
-display_name = "Gnarled Tree"
-tint = Color(0.3, 0.4, 0.2, 1)
-visible_if = "not has(\"depths_of_the_wood.thicket_tree.cleared\")"
+[sub_resource type="Resource" id="Resource_yn2yu"]
+script = ExtResource("4_7ovge")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"light_8_2"
+cell = Vector3i(8, 2, 0)
+tint = Color(0.78, 1, 0.5, 1)
 
-[sub_resource type="Resource" id="Resource_ftihn"]
-script = ExtResource("5_rmtcs")
-loot_items = Array[StringName]([&"heartwood_tonic", &"clearwater_draught"])
-loot_gold = 60
-id = &"nook_chest"
-cell = Vector3i(21, 16, 0)
-facing = "west"
-display_name = "Chest"
-tint = Color(0.42, 0.3, 0.18, 1)
-visible_if = "has(\"depths_of_the_wood.nook_tree.cleared\")"
+[sub_resource type="Resource" id="Resource_42ao1"]
+script = ExtResource("4_7ovge")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"light_10_2"
+cell = Vector3i(10, 2, 0)
+tint = Color(0.78, 1, 0.5, 1)
 
-[sub_resource type="Resource" id="Resource_h7kvd"]
-script = ExtResource("6_w6ytb")
-character_id = &"eldroot"
-
-[sub_resource type="Resource" id="Resource_g5fty"]
-script = ExtResource("7_hayd6")
-key = "legend.eldroot.bonded"
-
-[sub_resource type="Resource" id="Resource_73v7e"]
-script = ExtResource("8_yn2yu")
-
-[sub_resource type="Resource" id="Resource_4dhsq"]
-script = ExtResource("9_42ao1")
-label = "Bond"
-commands = Array[Resource]([SubResource("Resource_h7kvd"), SubResource("Resource_g5fty"), SubResource("Resource_73v7e")])
-
-[sub_resource type="Resource" id="Resource_4e8b7"]
-script = ExtResource("9_42ao1")
-label = "Not now"
-is_cancel = true
-
-[sub_resource type="Resource" id="Resource_6k12o"]
-script = ExtResource("10_rdnk7")
-text = "Eldroot, the Hollow Crown watches you, still. Bond with it?"
-clear_portraits = true
-
-[sub_resource type="Resource" id="Resource_47887"]
-script = ExtResource("11_ye1i1")
-prompt = SubResource("Resource_6k12o")
-options = Array[Resource]([SubResource("Resource_4dhsq"), SubResource("Resource_4e8b7")])
-
-[sub_resource type="Resource" id="Resource_tpceh"]
-script = ExtResource("14_i2tdm")
-encounter_id = "deepwood.legend.eldroot"
-map_path = "res://game/overworld/content/battles/ow_deepwood_glade.tres"
-squad_size = 4
-opponent_name = "Eldroot, the Hollow Crown"
-opponent_team = Array[Dictionary]([{
-"character_id": "eldroot",
-"strength": 1.0
-}])
-reward_flags = Array[String](["deepwood.eldroot_beaten"])
-defeat_policy = 2
-clash_intro = true
-enemy_level = 20
-boss_battle = true
-
-[sub_resource type="Resource" id="Resource_wkbdw"]
-script = ExtResource("13_ujm3a")
-spec = SubResource("Resource_tpceh")
-
-[sub_resource type="Resource" id="Resource_joxg3"]
-script = ExtResource("12_tbcor")
-condition = "outcome() == \"victory\""
-then_commands = Array[Resource]([SubResource("Resource_47887")])
-
-[sub_resource type="Resource" id="Resource_gptar"]
-script = ExtResource("9_42ao1")
-label = "Face it"
-commands = Array[Resource]([SubResource("Resource_wkbdw"), SubResource("Resource_joxg3")])
-
-[sub_resource type="Resource" id="Resource_lj3hh"]
-script = ExtResource("9_42ao1")
-label = "Not yet"
-is_cancel = true
-
-[sub_resource type="Resource" id="Resource_rhfe4"]
-script = ExtResource("10_rdnk7")
-text = "Something ancient stirs among the roots of the glade. Face it?"
-clear_portraits = true
-
-[sub_resource type="Resource" id="Resource_lgxwn"]
-script = ExtResource("11_ye1i1")
-prompt = SubResource("Resource_rhfe4")
-options = Array[Resource]([SubResource("Resource_gptar"), SubResource("Resource_lj3hh")])
-
-[sub_resource type="Resource" id="Resource_n6q15"]
-script = ExtResource("12_tbcor")
-condition = "not has(\"deepwood.eldroot_beaten\")"
-then_commands = Array[Resource]([SubResource("Resource_lgxwn")])
-else_commands = Array[Resource]([SubResource("Resource_47887")])
-
-[sub_resource type="Resource" id="Resource_xf8pe"]
-script = ExtResource("15_igpvp")
-speaker_name = "Eldroot, the Hollow Crown"
-id = &"eldroot"
-cell = Vector3i(12, 4, 0)
-display_name = "Eldroot, the Hollow Crown"
-visual_character = &"eldroot"
-visible_if = "has(\"depths_of_the_wood.gate_tree.cleared\") and not has(\"legend.eldroot.bonded\")"
-on_interact = Array[Resource]([SubResource("Resource_n6q15")])
+[sub_resource type="Resource" id="Resource_rdnk7"]
+script = ExtResource("5_eta22")
+text = "The deep forest turns travellers round.
+Follow the lights."
+id = &"maze_sign"
+cell = Vector3i(10, 13, 0)
+display_name = "Old Signpost"
+tint = Color(0.52, 0.36, 0.2, 1)
 
 [resource]
-script = ExtResource("16_bvb2d")
+script = ExtResource("6_nasl3")
 area_id = &"depths_of_the_wood"
 display_name = "Depths of the Wood"
-terrain = ExtResource("17_n0uyo")
+terrain = ExtResource("7_qo482")
 kind = 1
 region_id = &"woodlands"
 world_map_pos = Vector2(0.114, 0.337)
 entry_points = {
+"back": {
+"cell": [9, 1, 0],
+"facing": "south"
+},
 "south": {
-"cell": [12, 28, 0],
+"cell": [9, 15, 0],
 "facing": "north"
 }
 }
-entities = Array[Resource]([SubResource("Resource_04058"), SubResource("Resource_pgbi8"), SubResource("Resource_kc5ar"), SubResource("Resource_f55kq"), SubResource("Resource_ftihn"), SubResource("Resource_xf8pe")])
-encounter_zones = Array[Resource]([SubResource("Resource_wkvrq")])
+entities = Array[Resource]([SubResource("Resource_4017s"), SubResource("Resource_rmtcs"), SubResource("Resource_w6ytb"), SubResource("Resource_hayd6"), SubResource("Resource_yn2yu"), SubResource("Resource_42ao1"), SubResource("Resource_rdnk7")])
+encounter_zones = Array[Resource]([SubResource("Resource_y7shi")])
 level_band = Vector2i(8, 15)

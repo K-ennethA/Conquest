@@ -124,10 +124,19 @@ func test_the_deep_woods_open_with_the_warden_then_the_chief() -> void:
 	assert_eq(shut, ["north_exit"] as Array[String], "only the trail north is shut")
 	s.set_flag("world.depths_of_the_wood_open", 1)
 	reach = _reachable(s)
-	for id in ["deepwood_village", "depths_of_the_wood", "woodland_town"]:
+	# The Depths are a MAZE of rooms (#93) ending in the heart of the wood; its warps are never locked
+	# (the breakable trees, not the warps, hold the way -- test_deep_woods.gd walks it).
+	for id in ["deepwood_village", "depths_of_the_wood", "depths_of_the_wood_2", "depths_of_the_wood_3",
+			"depths_of_the_wood_4", "depths_of_the_wood_heart", "woodland_town"]:
 		assert_true(reach.has(id), "%s is reachable once Nyra is beaten" % id)
-	# And the way back: the Depths lead to the village, the village to Woodland Town.
+	for id in ["depths_of_the_wood", "depths_of_the_wood_2", "depths_of_the_wood_3", "depths_of_the_wood_4",
+			"depths_of_the_wood_heart"]:
+		for e in _area(id).present_entities(s):
+			if e is WarpEntity:
+				assert_true((e as WarpEntity).is_open(s), "%s/%s is open" % [id, e.id])
+	# And the way back: the Depths lead to the village, the village to Woodland Town -- from anywhere.
 	assert_true(_reachable(s, "depths_of_the_wood").has("oakvale_ruins"), "the road home runs back the same way")
+	assert_true(_reachable(s, "depths_of_the_wood_heart").has("oakvale_ruins"), "even from the heart of the wood")
 
 
 func test_the_edge_exits_between_built_areas_are_open_throughout_the_opening() -> void:

@@ -11,7 +11,8 @@ extends SceneTree
 ##   game/overworld/content/areas/sparse_forest/   -- the road west from Crownhaven to Woodland Town
 ##   game/overworld/content/areas/woodland_town/   -- the timber town at the edge of the Deep Woods
 ##   game/overworld/content/areas/deepwood_village/    -- THE DEEP WOODS: Nyra's clan village
-##   game/overworld/content/areas/depths_of_the_wood/  -- the forest north of it and Eldroot's glade
+##   game/overworld/content/areas/depths_of_the_wood{,_2,_3,_4}/ -- the MAZE north of it (Lost Woods rooms)
+##   game/overworld/content/areas/depths_of_the_wood_heart/  -- the clearing at its end: Eldroot
 ##   game/overworld/content/world.tres                       -- the WORLD MAP registry (WorldAtlas)
 ##   game/overworld/content/battles/ow_oakvale_ashes.tres    -- the FIRST FIGHT (tactical)
 ##   game/overworld/content/battles/ow_deepwood_glade.tres   -- Eldroot's legend battle (tactical)
@@ -169,6 +170,9 @@ const NAMES := {
 	"DEEPWOOD_ELDER": "Deepwood Elder",
 	"DEEPWOOD_HUNTER": "Deepwood Hunter",
 	"DEEPWOOD_CHILD": "Deepwood Child",
+	# Generic trainers in the Deep Woods' maze (optional duels; no named cast).
+	"FORAGER": "Forager",
+	"TRAPPER": "Trapper",
 	# TODO(story): PLACEHOLDER name of the tree-felling field move Nyra teaches (DECISIONS.md #40/#41).
 	"FIELD_MOVE_TREES": "Treefell",
 }
@@ -234,8 +238,8 @@ const WORLD_LOCATIONS := [
 		"A cave below Woodland Town that nobody admits to knowing."],
 	["deepwood_village", "Deepwood Village", "village", "woodlands", Vector2(0.098, 0.474), ["deepwood_village"], "world.deepwood_open", false,
 		"A village deep in the old forest, west of Woodland Town."],
-	["depths_of_the_wood", "Depths of the Wood", "special", "woodlands", Vector2(0.114, 0.337), ["depths_of_the_wood"], "world.depths_of_the_wood_open", false,
-		"A glowing glade at the forest's heart. A special encounter."],
+	["depths_of_the_wood", "Depths of the Wood", "special", "woodlands", Vector2(0.114, 0.337), ["depths_of_the_wood", "depths_of_the_wood_2", "depths_of_the_wood_3", "depths_of_the_wood_4", "depths_of_the_wood_heart"], "world.depths_of_the_wood_open", false,
+		"A maze of old forest north of Deepwood, with a glowing glade at its heart. A special encounter."],
 	["frostpeak_village", "Frostpeak Village", "village", "snowy_peaks", Vector2(0.231, 0.166), [], "world.frostpeak_open", false,
 		"A village under the Snowy Peaks, up the north trail from Woodland Town."],
 	["mountain_base", "Mountain Base", "town", "northern_mountains", Vector2(0.693, 0.188), [], "world.mountain_road_open", false,
@@ -434,6 +438,7 @@ var _ok: bool = true
 func _initialize() -> void:
 	for d in ["areas/oakvale", "areas/oakvale_ruins", "areas/mossway", "areas/river_crossing", "areas/crownhaven",
 			"areas/sparse_forest", "areas/woodland_town", "areas/deepwood_village", "areas/depths_of_the_wood",
+			"areas/depths_of_the_wood_2", "areas/depths_of_the_wood_3", "areas/depths_of_the_wood_4", "areas/depths_of_the_wood_heart",
 			"battles", "shops", "tournaments", "field_moves"]:
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CONTENT + d))
 	_build_world()
@@ -3241,14 +3246,17 @@ func _wt_people() -> Array:
 #     -> DEEPWOOD VILLAGE: Nyra's tree-house clan village (#85) -- a Wayshrine, Nyra (the Deepwood
 #        CHIEF: a scaled DUEL, #50 / #80), a few villagers (one bank line each), and Lyra (#88), here
 #        from the moment the road opens until the Eldroot battle is won.
-#     -> beating NYRA grants the tree-felling FIELD MOVE (#40 / #41: fieldmove.treefell) and opens
-#        the trail north (world.depths_of_the_wood_open: "to go through the forest the hero must first
-#        fight Nyra").
-#     -> THE DEPTHS OF THE WOOD: forest, tall grass (the Deep Woods' creatures), and BREAKABLE TREES
-#        (FieldObstacleEntity) -- one hides the way to the glade at the forest's heart, where ELDROOT
-#        waits: a TACTICAL legend battle (#74), FIXED above the band (#81), with Lyra fighting beside
-#        you as a guest (#56 / #74). Win -> the OPTIONAL bond (#75): a legend goes into the journey's
-#        legend list (StoryState.legends), never the party (#39).
+#     -> LYRA CHALLENGES the hero (a friendly rival duel, #94); once it is fought, whatever the
+#        outcome, she keeps the hero company: a TEMPORARY party member, no overworld follower.
+#     -> beating NYRA opens the trail north (world.depths_of_the_wood_open: "to go through the forest
+#        the hero must first fight Nyra") and she TEACHES the tree-felling FIELD MOVE (#40 / #92): one
+#        eligible party member LEARNS it (fieldmove.treefell = teachable; the member record keeps it).
+#     -> THE DEPTHS OF THE WOOD: a MAZE (#93) of look-alike rooms -- follow the lights; the wrong ways
+#        turn you back to the entrance; BREAKABLE TREES (FieldObstacleEntity) block the right way, so
+#        the move is required. Tall grass, optional trainers, chests.
+#     -> THE HEART OF THE WOOD: the clearing where ELDROOT waits: a TACTICAL legend battle (#74), FIXED
+#        above the band (#81), Lyra deployable in its squad pick (#56 / #74 / #94). Win -> the OPTIONAL
+#        bond (#75): a legend goes into the journey's legend list (StoryState.legends), never the party.
 #
 # All lines here are short neutral PLACEHOLDERS (TODO(story)) -- the owner's facts only.
 
@@ -3256,8 +3264,11 @@ func _wt_people() -> Array:
 const F_DEEPWOOD_OPEN := "world.deepwood_open"
 const F_DEPTHS_OPEN := "world.depths_of_the_wood_open"
 const F_NYRA_BEATEN := "deepwood.nyra_beaten"
-## Lyra joins the party TEMPORARILY once Nyra is beaten (DECISIONS.md #56 / #61 / #88): deployable in
-## the Eldroot battle's squad pick, she leaves again when Eldroot is beaten (guest_until).
+## Lyra CHALLENGES the hero in Deepwood Village (DECISIONS.md #94): set once that bout is fought,
+## whatever its outcome.
+const F_LYRA_CHALLENGED := "deepwood.lyra_challenged"
+## ...then joins the party TEMPORARILY (#56 / #61 / #88 / #94): no overworld follower, deployable in
+## the Eldroot battle's squad pick; she leaves again when Eldroot is beaten (guest_until).
 const F_LYRA_JOINED := "deepwood.lyra_joined"
 ## The tree-felling field move is granted (FieldMoveResource.unlock_flag).
 const F_TREEFELL := "fieldmove.treefell"
@@ -3265,18 +3276,24 @@ const F_ELDROOT_BEATEN := "deepwood.eldroot_beaten"
 const F_ELDROOT_BONDED := "legend.eldroot.bonded"
 ## Encounter ids (save keys).
 const NYRA_DUEL_ID := "deepwood.chief.nyra"
+const LYRA_DEEPWOOD_DUEL_ID := "deepwood.rival.lyra"
 const ELDROOT_BATTLE_ID := "deepwood.legend.eldroot"
 ## Lyra is IN DEEPWOOD from the moment the road opens until the Eldroot battle is won; every other
 ## Lyra (Crownhaven's south gate and arena) hides meanwhile -- one Lyra at a time. (The workshop's
 ## ceremony Lyra is gone once the opening is over, and the road only opens after it.)
 const LYRA_IN_DEEPWOOD := "has(\"opening.complete\") and has(\"world.deepwood_open\") and not has(\"deepwood.eldroot_beaten\")"
 
-## THE FIELD MOVE (DECISIONS.md #41 / #71): id (its .tres under content/field_moves/), and who can use
-## it. KNOBS: the species list (forms or evolution lines; the starter options are all here, so every
-## journey has a user) and whether the hero can use it himself (#71: "possibly").
+## Set once a party member has LEARNED the field move from Nyra (the quest step reads it).
+const F_TREEFELL_LEARNED := "deepwood.treefell_learned"
+
+## THE FIELD MOVE (DECISIONS.md #41 / #71 / #92): id (its .tres under content/field_moves/), and who can
+## LEARN it -- a member learns it from Nyra, HM-style, and only a member who knows it can fell a tree.
+## KNOBS: the creature species (forms or evolution lines; the starter options are all here, so every
+## journey has a learner) and the humans (character ids: the hero's unit "wren"; add "lyra" to let the
+## Deepwood rival learn it too -- left out, since a guest leaves the party after the Eldroot battle).
 const FIELD_MOVE_TREES_ID := "treefell"
 const FIELD_MOVE_TREES_SPECIES: Array[String] = ["tree_grunt", "oakheart", "vineweave", "petalfang", "blightcap"]
-const FIELD_MOVE_TREES_HERO := false
+const FIELD_MOVE_TREES_HUMANS: Array[String] = ["wren"]
 
 ## NYRA, the Deepwood chief (DECISIONS.md #85): a DUEL (#50), SCALED inside the Deep Woods band (#80)
 ## at this offset from the party's top level. PLACEHOLDER team (nature roster creatures; Eldroot is
@@ -3288,8 +3305,16 @@ const NYRA_TEAM: Array[String] = ["petalfang", "vineweave", "oakheart"]
 const NYRA_STONE_BOOST := 1.15
 const NYRA_PURSE := 400
 
+## LYRA'S DEEPWOOD CHALLENGE (DECISIONS.md #94): a friendly spar SCALED with the party inside the Deep
+## Woods band at this offset (a rival, not a chief: no boss XP). PLACEHOLDER team -- her Crownhaven
+## partners (the rival duel's species).
+const LYRA_DEEPWOOD_SCALE_OFFSET := 0
+const LYRA_DEEPWOOD_TEAM := [{"character_id": "blightcap", "strength": 0.95}, {"character_id": "petalfang", "strength": 0.85}]
+const LYRA_DEEPWOOD_PURSE := 150
+
 ## ELDROOT: the legend's TACTICAL board (a forest glade). The party fields up to ELDROOT_SQUAD_SIZE;
-## Lyra fights in it as a TEMPORARY party member (joined after Nyra; deploy her in the squad pick).
+## Lyra fights in it as a TEMPORARY party member (joined after her Deepwood challenge; deploy her in
+## the squad pick -- challenge skipped, she is simply not offered).
 const ELDROOT_MAP_PATH := CONTENT + "battles/ow_deepwood_glade.tres"
 const ELDROOT_SQUAD_SIZE := 4
 ## The two Barklings screening Eldroot fight at this level (map-spawn "level"); Eldroot itself is
@@ -3308,12 +3333,16 @@ func _build_field_moves() -> void:
 	for s in FIELD_MOVE_TREES_SPECIES:
 		sp.append(StringName(s))
 	fm.species = sp
-	fm.hero_can_use = FIELD_MOVE_TREES_HERO
+	var hu: Array[StringName] = []
+	for h in FIELD_MOVE_TREES_HUMANS:
+		hu.append(StringName(h))
+	fm.humans = hu
 	# TODO(story): placeholder wording.
 	fm.locked_hint = "A gnarled tree grows across the way. It could be felled -- if you knew how."
-	fm.no_user_hint = "You know {move}, but nobody in your party can use it."
+	fm.no_user_hint = "This tree could be felled with {move} -- but nobody fit in your party has learned it."
 	fm.prompt_text = "This tree could be felled. Use {move}?"
 	fm.used_text = "{user} used {move}!"
+	fm.learned_text = "{user} learned {move}!"
 	_save(fm, FieldMoveResource.path_for(FIELD_MOVE_TREES_ID))
 
 
@@ -3444,11 +3473,10 @@ func _dv_people() -> Array:
 	out.append(_sign("trail_sign", Vector2i(DV_NORTH_X + 1, 3), "The North Trail",
 		"NORTH: THE DEEP FOREST"))
 	out.append(_nyra())
-	# Lyra (DECISIONS.md #88): met here; she fights beside you against Eldroot (the guest on its board).
-	# Her line is in dialogue.json (areas.deepwood_village.lyra).
-	var lyra := _npc("lyra", DV_LYRA, "north", "LYRA", Color(0.78, 0.5, 0.2), "trainer")
-	lyra.visible_if = "(%s) and not has(\"%s\")" % [LYRA_IN_DEEPWOOD, F_LYRA_JOINED]  # in the party while joined
-	out.append(lyra)
+	# Lyra (DECISIONS.md #88 / #94): met here; she challenges you, then keeps you company through the
+	# Deep Woods (a temporary party member) and fights beside you against Eldroot. Her greeting is in
+	# dialogue.json (areas.deepwood_village.lyra); the challenge is below.
+	out.append(_lyra_deepwood())
 	# Villagers: one placeholder line each in dialogue.json (areas.deepwood_village.<id>).
 	var cloak := Color(0.3, 0.42, 0.28)
 	out.append(_npc("dv_elder", Vector2i(6, 8), "south", "DEEPWOOD_ELDER", cloak.lightened(0.15), "elder"))
@@ -3477,165 +3505,388 @@ func _nyra_spec() -> BattleSpec:
 
 
 ## Nyra at her lodge. TODO(story): placeholder lines -- owner facts only (she is the Deepwood chief;
-## the hero must battle her to go through the forest; she teaches the tree-felling move).
+## the hero must battle her to go through the forest; she then TEACHES the tree-felling move, #92).
+## The duel comes first (#40); winning it makes the move teachable, and she teaches it to ONE eligible
+## member the player picks ([method _nyra_teach]). Talking to her again teaches it to another.
 func _nyra() -> NpcEntity:
 	var nyra := _npc("nyra", DV_NYRA, "south", "NYRA", Color(0.3, 0.48, 0.3), "trainer")
 	var won: Array = [
-		_say([_line("nyra", "NYRA", "You've earned the way through. Take this with you -- it will clear the trees.")]),
-		_toast("New field move: {FIELD_MOVE_TREES}"),
-		_lyra_joins(),
-		SaveGameCommand.new(),
+		_say([_line("nyra", "NYRA", "You've earned the way through. Now learn how we clear the old trees.")]),
 	]
+	won.append_array(_nyra_teach(false))
+	won.append(SaveGameCommand.new())
 	var ask := ChoiceCommand.new()
 	ask.prompt = _line("nyra", "NYRA", "I'm {NYRA}, chief of Deepwood. To go through the forest, you battle me first. Ready?")
 	ask.options = StoryCommand.list([
 		ChoiceOption.make("Battle!", [_duel(_nyra_spec()), IfCommand.make("outcome() == \"victory\"", won)]),
 		ChoiceOption.make("Not yet.", [], true),
 	])
+	var later: Array = _nyra_teach(true)
+	later.append(SaveGameCommand.new())
 	nyra.on_interact = StoryCommand.list([
-		IfCommand.make("not has(\"%s\")" % F_NYRA_BEATEN, [ask], [
-			_say([_line("nyra", "NYRA", "The deep forest is open to you. Mind the trees.")]),
-		]),
+		IfCommand.make("not has(\"%s\")" % F_NYRA_BEATEN, [ask], later),
 	])
 	return nyra
 
 
-## Lyra joins for the Depths: a TEMPORARY party member (a human unit) until Eldroot is beaten.
-func _lyra_joins() -> JoinPartyCommand:
+## NYRA TEACHES the field move (DECISIONS.md #92): to an eligible party member who does not know it
+## yet (the player picks; one candidate and nobody knowing it = no question). Nobody eligible: she
+## says to come back with one who can -- the move stays teachable. [param again] = a later visit
+## (she offers it to another member, or just says her idle line). TODO(story): placeholder lines.
+func _nyra_teach(again: bool) -> Array:
+	var cond_can: String = "can_learn_field_move(\"%s\")" % FIELD_MOVE_TREES_ID
+	var cond_knows: String = "knows_field_move(\"%s\")" % FIELD_MOVE_TREES_ID
+	var teach := TeachFieldMoveCommand.new()
+	teach.move_id = StringName(FIELD_MOVE_TREES_ID)
+	teach.learned_flag = F_TREEFELL_LEARNED
+	var first_q := _line("nyra", "NYRA", "Who will learn {move}?")
+	var again_q := _line("nyra", "NYRA", "Shall I teach {move} to another of yours?")
+	# The maze's clue (#93): the lights mark the right way.
+	var idle := _say([_line("nyra", "NYRA", "The deep forest turns travellers round. Follow the lights -- every other way leads you back.")])
+	var none := _say([_line("nyra", "NYRA", "None of yours can learn {FIELD_MOVE_TREES} yet. Come back with one who can.")])
+	if not again:
+		teach.prompt = first_q
+		return [IfCommand.make(cond_can, [teach, IfCommand.make(cond_knows, [idle])], [none])]
+	var teach_again := teach.duplicate() as TeachFieldMoveCommand
+	teach_again.prompt = again_q
+	return [
+		IfCommand.make(cond_can, [
+			IfCommand.make(cond_knows, [teach_again], [teach]),
+		], [
+			IfCommand.make(cond_knows, [idle], [none]),
+		]),
+	]
+
+
+## LYRA'S CHALLENGE (DECISIONS.md #60 / #94): a friendly rival DUEL -- a spar (never permadeath, a
+## loss costs nothing: CONTINUE), SCALED with the party inside the Deep Woods band (not a boss).
+## Her own encounter id; the Crownhaven rival's stage counter is not touched.
+func _lyra_deepwood_spec() -> BattleSpec:
+	var team: Array = []
+	for row in LYRA_DEEPWOOD_TEAM:
+		team.append((row as Dictionary).duplicate())
+	var spec := _duel_spec(LYRA_DEEPWOOD_DUEL_ID, "{LYRA}", &"npc_lyra", team, true,
+		BattleSpec.DefeatPolicy.CONTINUE, LYRA_DEEPWOOD_PURSE)
+	BattleSpec.make_chief(spec, REGION_BANDS["woodlands"], LYRA_DEEPWOOD_SCALE_OFFSET)
+	spec.boss_battle = false
+	spec.clash_intro = true
+	return spec
+
+
+## Lyra in Deepwood Village (#88 / #94): talk -> she CHALLENGES you ("Not now" is fine: she blocks
+## nothing -- only Nyra gates the trail). Once the bout is FOUGHT, whatever its outcome, she JOINS as
+## a TEMPORARY member until Eldroot is beaten: no overworld follower (her village NPC hides while she
+## is in the party), deployable in the Eldroot battle's squad pick. If the party is full she says so
+## and joins when you talk to her again. TODO(story): placeholder lines.
+func _lyra_deepwood() -> NpcEntity:
+	var lyra := _npc("lyra", DV_LYRA, "north", "LYRA", Color(0.78, 0.5, 0.2), "trainer")
+	# Here from the road opening until the Eldroot battle; hidden while she is in the party.
+	lyra.visible_if = "(%s) and not has(\"%s\")" % [LYRA_IN_DEEPWOOD, F_LYRA_JOINED]
+	var bout: Array = [_duel(_lyra_deepwood_spec())]
+	bout.append(IfCommand.make(FOUGHT, [
+		IfCommand.make("outcome() == \"victory\"", [
+			_say([_line("lyra", "LYRA", "Good test. I'm coming with you into the deep forest.")]),  # TODO(story)
+		], [
+			_say([_line("lyra", "LYRA", "Good test. Let's go into the deep forest together.")]),  # TODO(story)
+		]),
+		_flag(F_LYRA_CHALLENGED),
+	] + _lyra_comes_along(), [
+		_say([_line("lyra", "LYRA", "Your partner can barely stand. Rest up first -- then we test each other.")]),  # TODO(story)
+	]))
+	var offer := ChoiceCommand.new()
+	offer.prompt = _line("lyra", "LYRA", "Before the deep forest -- one bout, to test each other?")  # TODO(story)
+	offer.options = StoryCommand.list([ChoiceOption.make("Let's go.", bout), ChoiceOption.make("Not now.", [], true)])
+	lyra.on_interact = StoryCommand.list([
+		IfCommand.make("not has(\"%s\")" % F_LYRA_CHALLENGED, [offer], _lyra_comes_along()),
+	])
+	return lyra
+
+
+## Lyra JOINS: a TEMPORARY member (a human unit) at the party's level until Eldroot is beaten.
+func _lyra_comes_along() -> Array:
 	var j := _join(&"lyra", "", 0, F_LYRA_JOINED)
 	j.temporary = true
 	j.guest_until = F_ELDROOT_BEATEN
-	return j
+	j.match_party_level = true
+	return [
+		j,
+		IfCommand.make("has(\"%s\")" % F_LYRA_JOINED, [SaveGameCommand.new()], [
+			_say([_line("lyra", "LYRA", "Your party's full. Make room and I'll come along.")]),  # TODO(story)
+		]),
+	]
 
 
-# --- The Depths of the Wood ------------------------------------------------------------
+# --- The Depths of the Wood: THE MAZE (DECISIONS.md #93) -------------------------------
 #
-# The forest north of the village: a winding track through tall grass (the Deep Woods' creatures,
-# in the region band), and BREAKABLE TREES. One closes the only gap in a wall of old trees -- the way
-# to the glade at the forest's heart, where Eldroot waits; another hides a nook with a chest; a third
-# is a shortcut. South: the trail back to Deepwood Village.
+# Zelda's Lost Woods meets a Pokemon forest. A chain of LOOK-ALIKE forest rooms (one painter, one
+# base: a clearing ringed by old forest, a cross of paths to FOUR exits). You always come in from
+# the south; of the other three exits ONE is RIGHT (on to the next room) and the two WRONG ones send
+# you back to the maze's entrance (a short toast, nothing blocks). The south exit goes back a room.
+#
+# THE CLUE (no dialogue needed): a pair of LIGHTS (lantern props, PLACEHOLDER until the Blender
+# models) flanks the mouth of the right exit in every room, and fireflies drift over its corridor
+# (sacred-meadow ground). The hunter in Deepwood Village, Nyra and a sign at the maze's entrance say
+# "follow the lights".
+#
+# THE SKILL IS REQUIRED: in rooms 2 and 4 a BREAKABLE TREE stands in the right exit's mouth, between
+# the lights (FieldObstacleEntity: felled for good, a saved flag). Room 3 has an optional nook behind
+# another one (a chest). Tall grass (the Deep Woods' creatures, band 8-15) in every room, two optional
+# trainers off the paths, a chest in a dead-end pocket.
+#
+#   room 1 depths_of_the_wood    right: NORTH  (south: back to Deepwood Village; sign: the clue)
+#   room 2 depths_of_the_wood_2  right: EAST   (gate tree; a trainer)
+#   room 3 depths_of_the_wood_3  right: WEST   (a nook tree + chest; a trainer)
+#   room 4 depths_of_the_wood_4  right: NORTH  (gate tree; a dead-end pocket with a chest)
+#   -> the HEART of the wood (depths_of_the_wood_heart): the clearing where ELDROOT waits.
+#
+# Deterministic: no RNG anywhere. KNOBS: DM_ROOMS (order, right exits, gates, grass, pockets), the
+# light prop / tint, the wrong-way toast.
 
-const DW_W := 24
-const DW_H := 30
-const DW_ENTRY_X := 12
-## The wall of old trees across the forest, and its one gap (the gate tree).
-const DW_WALL_Y := 10
-const DW_GATE := Vector2i(12, DW_WALL_Y)
-## The glade at the forest's heart (north of the wall) and Eldroot in it.
-const DW_GLADE_C := Vector2i(12, 5)
-const DW_ELDROOT := Vector2i(12, 4)
-## The nook (a pocket behind a breakable tree) and its chest.
-const DW_NOOK := Rect2i(19, 15, 3, 3)
-const DW_NOOK_TREE := Vector2i(18, 16)
-const DW_NOOK_CHEST := Vector2i(21, 16)
-## The shortcut: a line of trees across the east side with one breakable tree in it.
-const DW_THICKET_Y := 21
-const DW_THICKET_TREE := Vector2i(16, DW_THICKET_Y)
-const DW_GRASS := [Rect2i(13, 23, 5, 4), Rect2i(3, 16, 3, 5), Rect2i(9, 16, 4, 4), Rect2i(14, 11, 4, 3)]
+## The maze rooms' size (all alike), and the clearing at their middle.
+const DM_W := 19
+const DM_H := 17
+const DM_C := Vector2i(9, 8)
+const DM_RX := 6.5
+const DM_RY := 5.5
+## Each exit's edge cell (the warp), keyed by its side.
+const DM_EXITS := {"north": Vector2i(9, 0), "south": Vector2i(9, 16), "west": Vector2i(0, 8), "east": Vector2i(18, 8)}
+## Each exit's MOUTH: the corridor cell where the forest closes in (a gate tree stands here) ...
+const DM_MOUTH := {"north": Vector2i(9, 2), "south": Vector2i(9, 14), "west": Vector2i(2, 8), "east": Vector2i(16, 8)}
+## ... and the two cells flanking it (open ground at every exit; the LIGHTS stand there at the right one).
+const DM_FLANKS := {"north": [Vector2i(8, 2), Vector2i(10, 2)], "south": [Vector2i(8, 14), Vector2i(10, 14)],
+	"west": [Vector2i(2, 7), Vector2i(2, 9)], "east": [Vector2i(16, 7), Vector2i(16, 9)]}
+## Where you stand arriving through each exit (just inside it), and the way you face.
+const DM_INSIDE := {"north": [Vector2i(9, 1), "south"], "south": [Vector2i(9, 15), "north"],
+	"west": [Vector2i(1, 8), "east"], "east": [Vector2i(17, 8), "west"]}
+## Old trees standing in every room's clearing (the same in all of them: the rooms look alike).
+const DM_OLD_TREES := [Vector2i(4, 5), Vector2i(14, 5), Vector2i(4, 11), Vector2i(14, 11)]
+## THE MAZE, in order. "right" = the exit that advances; "gate" = a breakable tree in its mouth (the
+## field move is REQUIRED); "grass" = tall grass; "pockets" = extra open ground (a nook / a dead end).
+const DM_ROOMS := [
+	{"id": "depths_of_the_wood", "right": "north", "gate": false,
+		"grass": [Rect2i(5, 4, 3, 3), Rect2i(11, 10, 3, 3)], "pockets": []},
+	{"id": "depths_of_the_wood_2", "right": "east", "gate": true,
+		"grass": [Rect2i(11, 4, 3, 3), Rect2i(5, 10, 3, 3)], "pockets": []},
+	{"id": "depths_of_the_wood_3", "right": "west", "gate": false,
+		"grass": [Rect2i(5, 4, 3, 3), Rect2i(5, 10, 3, 3), Rect2i(11, 10, 3, 3)], "pockets": [Rect2i(13, 1, 3, 2)]},
+	{"id": "depths_of_the_wood_4", "right": "north", "gate": true,
+		"grass": [Rect2i(11, 4, 3, 3), Rect2i(11, 10, 3, 3)], "pockets": [Rect2i(2, 12, 3, 2)]},
+]
+## Room 3's nook: walled round, open only through its breakable tree; a chest at the back.
+const DM_NOOK_TREE := Vector2i(13, 3)
+const DM_NOOK_CHEST := Vector2i(15, 1)
+## Room 4's dead-end pocket chest.
+const DM_POCKET_CHEST := Vector2i(2, 13)
+## The trainers (optional: standing off the paths, looking away from them).
+const DM_FORAGER := Vector2i(4, 9)
+const DM_TRAPPER := Vector2i(14, 9)
+const LV_DM_FORAGER := 10
+const LV_DM_TRAPPER := 12
+## THE CLUE: the light prop and its tint (PLACEHOLDER look).
+const DM_LIGHT_PROP := "lamp"
+const DM_LIGHT_TINT := Color(0.78, 1.0, 0.5)
+## ...and the ground of the right exit's corridor: sacred meadow, whose tile carries drifting
+## fireflies ("forest_dirt" = a plain path: the lights alone).
+const DM_CLUE_TILE := "sacred_meadow"
+## The toast when a wrong exit turns you back to the entrance (TODO(story): placeholder wording).
+const DM_LOST_TOAST := "You feel turned around..."
+## The heart of the wood: the clearing at the end of the maze, where Eldroot waits.
+const DM_HEART_ID := "depths_of_the_wood_heart"
+const DH_W := 19
+const DH_H := 14
+const DH_GLADE_C := Vector2i(9, 5)
+const DH_ELDROOT := Vector2i(9, 4)
 
 
-## The winding track (the cells the scatter keeps off).
-func _dw_on_track(x: int, y: int) -> bool:
-	if x == DW_ENTRY_X and y >= 22:
-		return true
-	if y == 22 and x >= 7 and x <= DW_ENTRY_X:
-		return true
-	if x == 7 and y >= 14 and y <= 22:
-		return true
-	if y == 14 and x >= 7 and x <= DW_ENTRY_X:
-		return true
-	return x == DW_ENTRY_X and y > DW_WALL_Y and y <= 14
+## The corridor cells of exit [param side]: from its mouth out to the edge.
+func _dm_right_corridor(side: String) -> Array:
+	var out: Array = []
+	var mouth: Vector2i = DM_MOUTH[side]
+	var edge: Vector2i = DM_EXITS[side]
+	var step := Vector2i(signi(edge.x - mouth.x), signi(edge.y - mouth.y))
+	var c: Vector2i = mouth
+	out.append(c)
+	while c != edge:
+		c += step
+		out.append(c)
+	return out
 
 
-func _dw_terrain(x: int, y: int) -> String:
+func _dm_in_clearing(x: int, y: int) -> bool:
+	var dx: float = (float(x) - float(DM_C.x)) / DM_RX
+	var dy: float = (float(y) - float(DM_C.y)) / DM_RY
+	return dx * dx + dy * dy <= 1.0
+
+
+func _dm_terrain(room: Dictionary, x: int, y: int) -> String:
 	var c := Vector2i(x, y)
-	if x == DW_ENTRY_X and y == DW_H - 1:
-		return "forest_dirt"
-	if x == 0 or y == 0 or x == DW_W - 1 or y == DW_H - 1:
-		return "tree"
-	# North of the wall: the glade (sacred meadow), its path up from the gate, old forest round it.
-	if y < DW_WALL_Y:
-		if x == DW_ENTRY_X and y > DW_GLADE_C.y:
+	# THE CLUE, on the ground: the right exit's corridor (mouth to edge) is old sacred ground, where
+	# fireflies drift (the tile's own glow) -- the lights' companions.
+	if _dm_right_corridor(String(room["right"])).has(c):
+		return DM_CLUE_TILE
+	for d in DM_EXITS:
+		if c == DM_EXITS[d]:
 			return "forest_dirt"
-		var gx: float = (float(x) - float(DW_GLADE_C.x)) / 6.0
-		var gy: float = (float(y) - float(DW_GLADE_C.y)) / 3.6
-		if gx * gx + gy * gy <= 1.0:
-			return "sacred_meadow"
+	if x == 0 or y == 0 or x == DM_W - 1 or y == DM_H - 1:
 		return "tree"
-	# The wall of old trees and its one gap (the gate tree stands in it).
-	if y == DW_WALL_Y:
-		return "forest_dirt" if c == DW_GATE else "tree"
-	# The nook: walled round, open only through its tree.
-	if c == DW_NOOK_TREE:
+	for d in DM_FLANKS:
+		if (DM_FLANKS[d] as Array).has(c):
+			return "grass_plains"
+	# The cross of paths: the corridors out to the four exits, and on through the clearing.
+	if x == DM_C.x or y == DM_C.y:
 		return "forest_dirt"
-	if DW_NOOK.grow(1).has_point(c) and not DW_NOOK.has_point(c):
-		return "tree"
-	if DW_NOOK.has_point(c):
+	if _in(room["pockets"], c):
 		return "grass_plains"
-	# The shortcut's thicket line (east of the track), broken only by its tree.
-	if y == DW_THICKET_Y and x >= 13 and x <= DW_W - 2:
-		return "forest_dirt" if c == DW_THICKET_TREE else "tree"
-	if _dw_on_track(x, y):
+	if String(room["id"]) == "depths_of_the_wood_3" and c == DM_NOOK_TREE:
 		return "forest_dirt"
-	if _in(DW_GRASS, c):
-		return "tall_grass"
-	# Old forest: scattered trees, never beside the track or the trees you can fell.
-	var near: bool = false
-	for d in [Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0)]:
-		var n: Vector2i = c + d
-		if _dw_on_track(n.x, n.y) or n == DW_NOOK_TREE or n == DW_THICKET_TREE or n == DW_GATE:
-			near = true
-	if not near and _h(x, y, 71) < 0.16:
+	if not _dm_in_clearing(x, y):
 		return "tree"
+	if c in DM_OLD_TREES:
+		return "tree"
+	if _in(room["grass"], c):
+		return "tall_grass"
 	return "grass_plains"
 
 
 func _build_depths_of_the_wood() -> void:
-	var aid := "depths_of_the_wood"
-	var t := _new_map("Depths of the Wood", DW_W, DW_H,
-		"The Depths of the Wood: the old forest north of Deepwood Village, and the glade at its heart. Story-mode terrain.")
+	for i in range(DM_ROOMS.size()):
+		_build_depths_room(i)
+	_build_depths_heart()
+
+
+func _build_depths_room(i: int) -> void:
+	var room: Dictionary = DM_ROOMS[i]
+	var aid: String = String(room["id"])
+	var right: String = String(room["right"])
+	var t := _new_map("Depths of the Wood", DM_W, DM_H,
+		"The Depths of the Wood (room %d of the maze): old forest north of Deepwood Village. Story-mode terrain." % (i + 1))
 	t.lighting_preset = "Dusk"
-	_paint(t, _dw_terrain)
-	_add_validator_anchors(t, Vector2i(DW_ENTRY_X, DW_H - 2), Vector2i(DW_ENTRY_X, DW_WALL_Y + 2))
+	_paint(t, func(x: int, y: int) -> String: return _dm_terrain(room, x, y))
+	_add_validator_anchors(t, DM_INSIDE["south"][0], DM_C)
 	_save(t, CONTENT + "areas/%s/terrain.tres" % aid)
 
 	var a := OverworldAreaResource.new()
 	a.area_id = StringName(aid)
+	# Every room has the same name: the location popup never tells you which one you are in.
 	a.display_name = "Depths of the Wood"
 	a.kind = OverworldAreaResource.Kind.ROUTE
-	_place(a, aid)
+	_place(a, "depths_of_the_wood")
 	a.terrain = load(CONTENT + "areas/%s/terrain.tres" % aid)
+	var south_in: Array = DM_INSIDE["south"]
+	var back_in: Array = DM_INSIDE[right]
 	a.entry_points = {
-		"south": {"cell": [DW_ENTRY_X, DW_H - 2, 0], "facing": "north"},
+		"south": {"cell": [south_in[0].x, south_in[0].y, 0], "facing": south_in[1]},
+		"back": {"cell": [back_in[0].x, back_in[0].y, 0], "facing": back_in[1]},
 	}
 	var ents: Array = []
-	ents.append(_warp("south_exit", Rect2i(DW_ENTRY_X, DW_H - 1, 1, 1), &"deepwood_village", &"north_trail"))
-	ents.append(_breakable_tree(aid, "gate_tree", DW_GATE))
-	ents.append(_breakable_tree(aid, "nook_tree", DW_NOOK_TREE))
-	ents.append(_breakable_tree(aid, "thicket_tree", DW_THICKET_TREE))
-	var chest := ChestEntity.new()
-	chest.id = &"nook_chest"
-	chest.cell = Vector3i(DW_NOOK_CHEST.x, DW_NOOK_CHEST.y, 0)
-	chest.facing = "west"
-	chest.display_name = "Chest"
-	chest.tint = Color(0.42, 0.3, 0.18)
-	var loot: Array[StringName] = [&"heartwood_tonic", &"clearwater_draught"]
-	chest.loot_items = loot
-	chest.loot_gold = 60
-	# Out of reach (and out of sight) until its tree is felled.
-	chest.visible_if = "has(\"%s\")" % FieldObstacleEntity.flag_for(aid, "nook_tree")
-	ents.append(chest)
-	ents.append(_eldroot(aid))
+	var entrance: StringName = StringName(String(DM_ROOMS[0]["id"]))
+	for d in DM_EXITS:
+		var cell: Vector2i = DM_EXITS[d]
+		var rect := Rect2i(cell.x, cell.y, 1, 1)
+		if d == "south":
+			if i == 0:
+				ents.append(_warp("south_exit", rect, &"deepwood_village", &"north_trail"))
+			else:
+				ents.append(_warp("south_exit", rect, StringName(String(DM_ROOMS[i - 1]["id"])), &"back"))
+		elif d == right:
+			var next: String = String(DM_ROOMS[i + 1]["id"]) if i + 1 < DM_ROOMS.size() else DM_HEART_ID
+			ents.append(_warp("%s_exit" % d, rect, StringName(next), &"south"))
+		else:
+			# A WRONG way: back to the maze's entrance.
+			var lost := _warp("%s_exit" % d, rect, entrance, &"south")
+			lost.arrival_toast = DM_LOST_TOAST
+			ents.append(lost)
+	# THE CLUE: the lights at the right exit's mouth.
+	for f in DM_FLANKS[right]:
+		var fc: Vector2i = f
+		ents.append(_prop("light_%d_%d" % [fc.x, fc.y], DM_LIGHT_PROP, fc, Vector2i.ONE, DM_LIGHT_TINT, true))
+	if bool(room["gate"]):
+		ents.append(_breakable_tree(aid, "gate_tree", DM_MOUTH[right]))
+	ents.append_array(_depths_room_extras(i, aid))
 	_add_doors(a, ents)
 	a.entities = _entities(ents)
+	a.encounter_zones = _depths_grass_zones()
+	_save(a, CONTENT + "areas/%s/area.tres" % aid)
 
+
+## Each room's own things: the entrance sign, the trainers, the nook and the pocket chests.
+## TODO(story): placeholder lines and generic placeholder trainers (no named cast).
+func _depths_room_extras(i: int, aid: String) -> Array:
+	var out: Array = []
+	match i:
+		0:
+			out.append(_sign("maze_sign", Vector2i(10, 13), "Old Signpost",
+				"The deep forest turns travellers round.\nFollow the lights."))
+		1:
+			out.append(_depths_trainer("forager", DM_FORAGER, "east", "FORAGER", Color(0.46, 0.5, 0.3),
+				[{"character_id": "blightcap", "strength": 0.9}, {"character_id": "petalfang", "strength": 0.8}],
+				LV_DM_FORAGER, 140,
+				"You're lost too? Then let's battle while we're at it!",
+				"Ha. Well, at least one of us knows where they're going."))
+		2:
+			out.append(_depths_trainer("trapper", DM_TRAPPER, "west", "TRAPPER", Color(0.4, 0.34, 0.26),
+				[{"character_id": "vineweave", "strength": 0.9}, {"character_id": "tree_grunt", "strength": 0.85}],
+				LV_DM_TRAPPER, 180,
+				"Quiet! You'll scare off-- oh, it's a battle you want? Fine!",
+				"All right, all right. Go on, then."))
+			out.append(_breakable_tree(aid, "nook_tree", DM_NOOK_TREE))
+			var nook := _depths_chest("nook_chest", DM_NOOK_CHEST, "south", [&"heartwood_tonic", &"clearwater_draught"], 60)
+			# Out of reach (and out of sight) until its tree is felled.
+			nook.visible_if = "has(\"%s\")" % FieldObstacleEntity.flag_for(aid, "nook_tree")
+			out.append(nook)
+		3:
+			out.append(_depths_chest("pocket_chest", DM_POCKET_CHEST, "east", [&"heartwood_tonic"], 40))
+	return out
+
+
+func _depths_chest(id: String, cell: Vector2i, facing: String, items: Array, gold: int) -> ChestEntity:
+	var chest := ChestEntity.new()
+	chest.id = StringName(id)
+	chest.cell = Vector3i(cell.x, cell.y, 0)
+	chest.facing = facing
+	chest.display_name = "Chest"
+	chest.tint = Color(0.42, 0.3, 0.18)
+	var loot: Array[StringName] = []
+	for it in items:
+		loot.append(StringName(it))
+	chest.loot_items = loot
+	chest.loot_gold = gold
+	return chest
+
+
+## An OPTIONAL trainer in the maze: a DUEL (a real battle: a loss whites out), a short sight line
+## pointed AWAY from the paths, so walking the right way never forces the fight.
+func _depths_trainer(id: String, cell: Vector2i, facing: String, name_key: String, tint: Color, team: Array,
+		level: int, purse: int, pre: String, after: String) -> TrainerEntity:
+	var t := TrainerEntity.new()
+	t.id = StringName(id)
+	t.cell = Vector3i(cell.x, cell.y, 0)
+	t.facing = facing
+	t.display_name = _t("{%s}" % name_key)
+	t.speaker_name = t.display_name
+	t.speaker_id = StringName("npc_" + id)
+	t.tint = tint
+	t.figure = "trainer"
+	t.body = _body_of(name_key)
+	t.sight_range = 2
+	t.pre_scene = _scene("depths_%s_pre" % id, [_beat(&"self", "", pre)])
+	t.defeated_scene = _scene("depths_%s_after" % id, [_beat(&"self", "", after)])
+	var spec := _duel_spec("", "{%s}" % name_key, StringName("npc_" + id), team, false,
+		BattleSpec.DefeatPolicy.WHITEOUT, purse)
+	spec.enemy_level = level
+	spec.clash_intro = true
+	t.battle = spec
+	return t
+
+
+## The Deep Woods' wild grass (every maze room): the nature roster placeholders, in the band (8-15).
+func _depths_grass_zones() -> Array[Resource]:
 	var zone := EncounterZone.new()
 	var ids: Array[StringName] = [&"tall_grass"]
 	zone.tile_ids = ids
 	zone.rate = 0.12
 	zone.grace_steps = 3
 	var table: Array[Resource] = []
-	# The Deep Woods' creatures (nature roster placeholders), rolling in the region band (8-15).
 	for pair in [["petalfang", 2.0], ["blightcap", 2.0], ["tree_grunt", 1.5], ["vineweave", 1.0], ["oakheart", 0.5]]:
 		var e := EncounterEntry.new()
 		e.character_id = StringName(pair[0])
@@ -3645,7 +3896,55 @@ func _build_depths_of_the_wood() -> void:
 		table.append(e)
 	zone.table = table
 	var zones: Array[Resource] = [zone]
-	a.encounter_zones = zones
+	return zones
+
+
+# --- The heart of the wood: the clearing where Eldroot waits ---------------------------
+
+func _dh_terrain(x: int, y: int) -> String:
+	if x == DH_GLADE_C.x and y == DH_H - 1:
+		return "forest_dirt"
+	if x == 0 or y == 0 or x == DH_W - 1 or y == DH_H - 1:
+		return "tree"
+	var gx: float = (float(x) - float(DH_GLADE_C.x)) / 6.0
+	var gy: float = (float(y) - float(DH_GLADE_C.y)) / 3.6
+	if gx * gx + gy * gy <= 1.0:
+		return "sacred_meadow"
+	# The path up from the south into the glade.
+	if x == DH_GLADE_C.x and y > DH_GLADE_C.y:
+		return "forest_dirt"
+	var ox: float = (float(x) - float(DH_GLADE_C.x)) / 8.0
+	var oy: float = (float(y) - float(DH_GLADE_C.y)) / 5.6
+	if ox * ox + oy * oy <= 1.0:
+		return "grass_plains"
+	return "tree"
+
+
+func _build_depths_heart() -> void:
+	var aid: String = DM_HEART_ID
+	var t := _new_map("Heart of the Wood", DH_W, DH_H,
+		"The heart of the Deep Woods: the clearing at the end of the maze, where Eldroot waits. Story-mode terrain.")
+	t.lighting_preset = "Dusk"
+	_paint(t, _dh_terrain)
+	_add_validator_anchors(t, Vector2i(DH_GLADE_C.x, DH_H - 2), Vector2i(DH_GLADE_C.x, DH_GLADE_C.y + 2))
+	_save(t, CONTENT + "areas/%s/terrain.tres" % aid)
+
+	var a := OverworldAreaResource.new()
+	a.area_id = StringName(aid)
+	a.display_name = "Heart of the Wood"
+	a.kind = OverworldAreaResource.Kind.ROUTE
+	_place(a, "depths_of_the_wood")
+	a.terrain = load(CONTENT + "areas/%s/terrain.tres" % aid)
+	a.entry_points = {
+		"south": {"cell": [DH_GLADE_C.x, DH_H - 2, 0], "facing": "north"},
+	}
+	var ents: Array = []
+	# Back into the maze: the last room, just inside its right exit.
+	ents.append(_warp("south_exit", Rect2i(DH_GLADE_C.x, DH_H - 1, 1, 1),
+		StringName(String(DM_ROOMS[DM_ROOMS.size() - 1]["id"])), &"back"))
+	ents.append(_eldroot())
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
 	_save(a, CONTENT + "areas/%s/area.tres" % aid)
 
 
@@ -3669,18 +3968,18 @@ func _eldroot_spec() -> BattleSpec:
 	return spec
 
 
-## Eldroot in the glade: there once the gate tree is felled, until the hero bonds with it. Talk: face
-## it (the legend battle) -> on a win, the OPTIONAL bond (#75). Declined: it stays, and talking to it
-## again offers the bond again. TODO(story): placeholder narration.
-func _eldroot(aid: String) -> NpcEntity:
+## Eldroot in the clearing at the heart of the wood (the end of the maze), until the hero bonds with
+## it. Talk: face it (the legend battle) -> on a win, the OPTIONAL bond (#75). Declined: it stays, and
+## talking to it again offers the bond again. TODO(story): placeholder narration.
+func _eldroot() -> NpcEntity:
 	var e := NpcEntity.new()
 	e.id = &"eldroot"
-	e.cell = Vector3i(DW_ELDROOT.x, DW_ELDROOT.y, 0)
+	e.cell = Vector3i(DH_ELDROOT.x, DH_ELDROOT.y, 0)
 	e.facing = "south"
 	e.display_name = _species_name(&"eldroot")
 	e.speaker_name = e.display_name
 	e.visual_character = &"eldroot"
-	e.visible_if = "has(\"%s\") and not has(\"%s\")" % [FieldObstacleEntity.flag_for(aid, "gate_tree"), F_ELDROOT_BONDED]
+	e.visible_if = "not has(\"%s\")" % F_ELDROOT_BONDED
 	var bond_cmd := BondLegendCommand.new()
 	bond_cmd.character_id = &"eldroot"
 	var bond := ChoiceCommand.new()

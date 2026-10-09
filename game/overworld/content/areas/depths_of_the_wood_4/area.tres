@@ -1,0 +1,130 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_hpejx"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_k1lch"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="3_74j72"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="4_5b3wp"]
+[ext_resource type="Script" path="res://game/overworld/data/FieldObstacleEntity.gd" id="5_bn0t0"]
+[ext_resource type="Script" path="res://game/overworld/data/ChestEntity.gd" id="6_2hr6q"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="7_gnxjy"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/depths_of_the_wood_4/terrain.tres" id="8_bpdjm"]
+
+[sub_resource type="Resource" id="Resource_ucxa6"]
+script = ExtResource("2_k1lch")
+character_id = &"petalfang"
+weight = 2.0
+
+[sub_resource type="Resource" id="Resource_lvde6"]
+script = ExtResource("2_k1lch")
+character_id = &"blightcap"
+weight = 2.0
+
+[sub_resource type="Resource" id="Resource_nv378"]
+script = ExtResource("2_k1lch")
+character_id = &"tree_grunt"
+weight = 1.5
+
+[sub_resource type="Resource" id="Resource_vqs37"]
+script = ExtResource("2_k1lch")
+character_id = &"vineweave"
+
+[sub_resource type="Resource" id="Resource_4i732"]
+script = ExtResource("2_k1lch")
+character_id = &"oakheart"
+weight = 0.5
+
+[sub_resource type="Resource" id="Resource_h0ucu"]
+script = ExtResource("1_hpejx")
+table = Array[Resource]([SubResource("Resource_ucxa6"), SubResource("Resource_lvde6"), SubResource("Resource_nv378"), SubResource("Resource_vqs37"), SubResource("Resource_4i732")])
+rate = 0.12
+
+[sub_resource type="Resource" id="Resource_jmboh"]
+script = ExtResource("3_74j72")
+area_rect = Rect2i(9, 0, 1, 1)
+target_area = &"depths_of_the_wood_heart"
+target_entry = &"south"
+id = &"north_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_57pcj"]
+script = ExtResource("3_74j72")
+area_rect = Rect2i(9, 16, 1, 1)
+target_area = &"depths_of_the_wood_3"
+target_entry = &"back"
+id = &"south_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_kagw7"]
+script = ExtResource("3_74j72")
+area_rect = Rect2i(0, 8, 1, 1)
+target_area = &"depths_of_the_wood"
+target_entry = &"south"
+arrival_toast = "You feel turned around..."
+id = &"west_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_8v35c"]
+script = ExtResource("3_74j72")
+area_rect = Rect2i(18, 8, 1, 1)
+target_area = &"depths_of_the_wood"
+target_entry = &"south"
+arrival_toast = "You feel turned around..."
+id = &"east_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_4dghy"]
+script = ExtResource("4_5b3wp")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"light_8_2"
+cell = Vector3i(8, 2, 0)
+tint = Color(0.78, 1, 0.5, 1)
+
+[sub_resource type="Resource" id="Resource_3thhn"]
+script = ExtResource("4_5b3wp")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"light_10_2"
+cell = Vector3i(10, 2, 0)
+tint = Color(0.78, 1, 0.5, 1)
+
+[sub_resource type="Resource" id="Resource_lxegl"]
+script = ExtResource("5_bn0t0")
+field_move = &"treefell"
+id = &"gate_tree"
+cell = Vector3i(9, 2, 0)
+display_name = "Gnarled Tree"
+tint = Color(0.3, 0.4, 0.2, 1)
+visible_if = "not has(\"depths_of_the_wood_4.gate_tree.cleared\")"
+
+[sub_resource type="Resource" id="Resource_rpv5c"]
+script = ExtResource("6_2hr6q")
+loot_items = Array[StringName]([&"heartwood_tonic"])
+loot_gold = 40
+id = &"pocket_chest"
+cell = Vector3i(2, 13, 0)
+facing = "east"
+display_name = "Chest"
+tint = Color(0.42, 0.3, 0.18, 1)
+
+[resource]
+script = ExtResource("7_gnxjy")
+area_id = &"depths_of_the_wood_4"
+display_name = "Depths of the Wood"
+terrain = ExtResource("8_bpdjm")
+kind = 1
+region_id = &"woodlands"
+world_map_pos = Vector2(0.114, 0.337)
+entry_points = {
+"back": {
+"cell": [9, 1, 0],
+"facing": "south"
+},
+"south": {
+"cell": [9, 15, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_jmboh"), SubResource("Resource_57pcj"), SubResource("Resource_kagw7"), SubResource("Resource_8v35c"), SubResource("Resource_4dghy"), SubResource("Resource_3thhn"), SubResource("Resource_lxegl"), SubResource("Resource_rpv5c")])
+encounter_zones = Array[Resource]([SubResource("Resource_h0ucu")])
+level_band = Vector2i(8, 15)
