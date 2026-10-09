@@ -466,6 +466,31 @@ func set_bond_partner(human_id: String, creature_id: String) -> Dictionary:
 	return {"ok": true, "reason": ""}
 
 
+## TEACH the field move [param move] to party member [param member_id] (DECISIONS.md #92).
+## {ok, reason}: "no_member", "no_move", "cannot_learn" (not listed by the move), "already_known".
+func teach_field_move(member_id: String, move: FieldMoveResource) -> Dictionary:
+	var m: StoryPartyMember = member(member_id)
+	if m == null:
+		return {"ok": false, "reason": "no_member"}
+	if move == null or String(move.id).is_empty():
+		return {"ok": false, "reason": "no_move"}
+	if m.knows_field_move(String(move.id)):
+		return {"ok": false, "reason": "already_known"}
+	if not move.can_learn(m):
+		return {"ok": false, "reason": "cannot_learn"}
+	m.learn_field_move(String(move.id))
+	_party_changed = true
+	return {"ok": true, "reason": ""}
+
+
+## Does any party member know the field move [param move_id]?
+func party_knows_field_move(move_id: String) -> bool:
+	for m in party:
+		if m.knows_field_move(move_id):
+			return true
+	return false
+
+
 func party_has(character_id: String) -> bool:
 	for m in party:
 		if m.character_id == character_id or m.line == character_id:

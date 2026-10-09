@@ -78,6 +78,11 @@ var weapon_id: String = ""
 ## A HUMAN's BONDED creature (#54, #65): that creature member's member_id, "" = none. Saved as
 ## "bond_partner".
 var bond_partner: String = ""
+## FIELD MOVES this member has LEARNED (DECISIONS.md #71 / #92: HM-style -- a chief teaches it, a
+## member who can learn it learns it, and only a member who knows it can use it on the overworld).
+## [FieldMoveResource] ids, in the order learned. Saved as "field_moves"; an older save loads none
+## (format_version unchanged).
+var field_moves: Array[String] = []
 
 
 static func create(p_member_id: String, p_character_id: String, p_nickname: String = "",
@@ -256,6 +261,21 @@ func is_temporary() -> bool:
 	return temporary
 
 
+## Has this member learned the field move [param move_id] ([member field_moves])?
+func knows_field_move(move_id: String) -> bool:
+	return field_moves.has(move_id)
+
+
+## Learn the field move [param move_id]. False when blank or already known. (Who MAY learn it is
+## the move's rule: [method FieldMoveResource.can_learn].)
+func learn_field_move(move_id: String) -> bool:
+	var mid: String = move_id.strip_edges()
+	if mid.is_empty() or field_moves.has(mid):
+		return false
+	field_moves.append(mid)
+	return true
+
+
 ## The weapon this member fights with: the override, else its form's own (null for a creature).
 func weapon() -> WeaponResource:
 	var c: CharacterResource = character()
@@ -330,6 +350,7 @@ func to_dict() -> Dictionary:
 		"guest_until": guest_until,
 		"weapon_id": weapon_id,
 		"bond_partner": bond_partner,
+		"field_moves": field_moves.duplicate(),
 	}
 
 
@@ -375,7 +396,23 @@ static func from_dict(d) -> StoryPartyMember:
 	m.guest_until = String(d.get("guest_until", "")) if (d.get("guest_until", "") is String) else ""
 	m.weapon_id = String(d.get("weapon_id", "")) if (d.get("weapon_id", "") is String) else ""
 	m.bond_partner = String(d.get("bond_partner", "")) if (d.get("bond_partner", "") is String) else ""
+	m.field_moves = sanitize_field_moves(d.get("field_moves", []))
 	return m
+
+
+## A saved field-move list, coerced (CONQUEST.md rule 3): the non-blank strings, each once; [] for
+## anything that is not an array. Ids this build does not ship are KEPT (a later build may).
+static func sanitize_field_moves(raw) -> Array[String]:
+	var out: Array[String] = []
+	if not (raw is Array):
+		return out
+	for v in raw:
+		if not (v is String or v is StringName):
+			continue
+		var s: String = String(v).strip_edges()
+		if not s.is_empty() and not out.has(s):
+			out.append(s)
+	return out
 
 
 ## A saved fall record, coerced key by key (CONQUEST.md rule 3); {} for anything that is not one.

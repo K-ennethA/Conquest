@@ -10,8 +10,9 @@ extends RefCounted
 ##
 ## A flag is KNOWN when the builder or any content resource mentions it (an F_* constant, a quoted
 ## "a.b" literal, a has("a.b") condition); it is SET when content can actually set it: a SetFlag /
-## IncFlag command's key, a join's flag_on_join, a battle reward's flags, a trainer encounter's
-## "<encounter_id>.defeated", a tournament's arena.<id>.run / round / wins / champion.
+## IncFlag command's key, a join's flag_on_join, a field-move teach's learned_flag, a battle
+## reward's flags, a trainer encounter's "<encounter_id>.defeated", a tournament's
+## arena.<id>.run / round / wins / champion.
 
 const BUILDER_PATH := "res://game/overworld/build/build_story_content.gd"
 const CONTENT_DIR := "res://game/overworld/content/"
@@ -97,7 +98,7 @@ static func collect_flags(builder_text: String, tres_texts: Array, tournament_id
 		known[f] = true
 		if not ranks.has(f):
 			ranks[f] = m.get_start()
-	var key_re := RegEx.create_from_string("(?m)^(?:key|flag_on_join) = \"([^\"]+)\"")
+	var key_re := RegEx.create_from_string("(?m)^(?:key|flag_on_join|learned_flag) = \"([^\"]+)\"")
 	var enc_re := RegEx.create_from_string("(?m)^encounter_id = \"([^\"]+)\"")
 	# Battle rewards: a BattleSpec's reward_flags = Array[String]([...]), a request's {"flags": [...]}.
 	var rewards_re := RegEx.create_from_string("(?m)(?:\"flags\": |^[a-z_]*flags = Array\\[String\\]\\()\\[([^\\]]*)\\]")
