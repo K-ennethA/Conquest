@@ -171,6 +171,11 @@ func _build_world() -> void:
 		map_root.add_child(_interior_backdrop())
 
 	grid = OverworldGrid.build(area, _state)
+	# A saved / arrival cell the hero cannot stand on (an area that changed since the save, a cell
+	# now blocked) boots him at the area's default entry instead -- never off the map or in a wall.
+	var start: Dictionary = grid.resolve_start(area, _state.location_cell(), _state.location_facing())
+	if bool(start["moved"]):
+		_state.set_location(String(area.area_id), start["cell"], String(start["facing"]))
 
 	var entities_root := Node3D.new()
 	entities_root.name = "Entities"
