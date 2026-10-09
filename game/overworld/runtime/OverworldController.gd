@@ -438,7 +438,7 @@ func _refresh_wild_spawns() -> void:
 ## Can a wild creature start a battle with the hero right now? (A duel launcher exists and the
 ## party has someone to field -- the opening walks the grass with no partner.)
 func _can_fight_wild() -> bool:
-	return DuelLauncher.has_launcher() and not _state.healthy_members().is_empty()
+	return DuelLauncher.has_launcher() and story.can_battle()
 
 
 ## Battle wild creature [param c] with the contact [param opening]: the duel, then its despawn on
@@ -904,7 +904,7 @@ func _check_trainers() -> bool:
 	if story.is_script_running():
 		return false
 	# No creature to fight with (the opening, before the shard ceremony): trainers let you pass.
-	if _state.healthy_members().is_empty():
+	if not story.can_battle():
 		return false
 	var aid: String = String(area.area_id)
 	for e in area.present_entities(_state):

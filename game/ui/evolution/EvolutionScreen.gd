@@ -671,10 +671,10 @@ static func _moves_missing(have: CharacterResource, other: CharacterResource) ->
 	if have == null or other == null:
 		return out
 	var ids: Dictionary = {}
-	for m in other.moveset:
+	for m in other.get_moveset():
 		if m != null:
 			ids[m.move_id] = true
-	for m in have.moveset:
+	for m in have.get_moveset():
 		if m != null and not ids.has(m.move_id):
 			out.append(m)
 	return out

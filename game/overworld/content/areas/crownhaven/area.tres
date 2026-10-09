@@ -628,7 +628,7 @@ encounter_id = "crownhaven.spar.rowan"
 opponent_name = "General Varden"
 opponent_speaker_id = &"npc_general"
 opponent_team = Array[Dictionary]([{
-"character_id": "gem_knight",
+"character_id": "varden",
 "level": 10,
 "strength": 0.8
 }])

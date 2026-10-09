@@ -12,6 +12,8 @@ enum DefeatPolicy { WHITEOUT, CONTINUE, RETRY }
 ## SCALED -- clamp(party top level + [member scale_offset], [member scale_min], [member scale_max]):
 ## CHIEFS ([method make_chief], DECISIONS.md #80), so they can be taken in any order.
 enum LevelMode { FIXED, SCALED }
+## Is the HERO deployed in a tactical battle? (docs/design/HUMANS.md "Deploying")
+enum HeroDeploy { OPTIONAL, REQUIRED }
 
 @export var kind: Kind = Kind.TACTICAL
 ## Stable id; empty = derived by the caller (trainer.<area>.<id>, ...).
@@ -49,6 +51,18 @@ enum LevelMode { FIXED, SCALED }
 ## in a duel, a matching party member fainting. Either way the journey is over: GAME OVER, back
 ## to the last save (both tiers).
 @export var protect: Array[String] = []
+
+@export_group("Deploy (tactical)")
+## The HERO in this battle (docs/design/HUMANS.md "Deploying"). TACTICAL: OPTIONAL (the default --
+## deployed first by default, but the player may leave him out in the picker) or REQUIRED (always
+## deployed, locked in the picker). DUEL: REQUIRED puts him in the lineup (a self-defence duel,
+## DECISIONS.md #7); OPTIONAL leaves the duel to the creatures unless
+## [member StoryRuleset.hero_joins_duels].
+@export var hero_deploy: HeroDeploy = HeroDeploy.OPTIONAL
+## GUESTS this battle OFFERS to deploy (character ids that are NOT party members -- e.g. a tester
+## who fights beside the hero this once). Shown in the picker; deployed only when picked, at the
+## party's top level. A temporary PARTY join (JoinPartyCommand temporary) needs no entry here.
+@export var offered_guests: Array[StringName] = []
 
 @export_group("Level")
 ## The FOES' story level (docs/design/PROGRESSION.md §3): every tactical enemy unit (a map spawn may
@@ -115,6 +129,14 @@ func to_request(source: String, fallback_id: String = "") -> BattleRequest:
 	}
 	if boss_battle:
 		r.rules["boss"] = true
+	# Deploy rules: written only when not the default, so every existing request is unchanged.
+	if hero_deploy == HeroDeploy.REQUIRED:
+		r.rules["hero_deploy"] = SquadPick.HERO_REQUIRED
+	if not offered_guests.is_empty():
+		var guests: Array = []
+		for g in offered_guests:
+			guests.append(String(g))
+		r.rules["offered_guests"] = guests
 	r.enemy_level = maxi(0, enemy_level)
 	var items: Array = []
 	for i in reward_items:
@@ -242,6 +264,11 @@ func validate(issues: Array[String]) -> void:
 	for i in reward_items:
 		if not ItemLibrary.has_item(i):
 			issues.append("reward item '%s' does not exist" % i)
+	for g in offered_guests:
+		if CharacterLibrary.get_character(g) == null:
+			issues.append("offered guest '%s' does not exist" % g)
+	if kind == Kind.DUEL and not offered_guests.is_empty():
+		issues.append("offered_guests are tactical-only")
 
 
 ## CONTENT GUIDANCE (DECISIONS.md #78, PROGRESSION.md §5): ordinary trainers, new shard users and

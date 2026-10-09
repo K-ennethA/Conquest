@@ -486,7 +486,7 @@ func _character_matches(character: CharacterResource, search_text: String) -> bo
 		return true
 	if character.description.to_lower().contains(search_text):
 		return true
-	for move in character.moveset:
+	for move in character.get_moveset():
 		if move != null and move.display_name.to_lower().contains(search_text):
 			return true
 	for ability in character.abilities:

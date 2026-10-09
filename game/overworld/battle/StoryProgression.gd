@@ -174,7 +174,9 @@ static func bond_for(state: StoryState, result: BattleResult, rules: Progression
 		if not (e is Dictionary):
 			continue
 		var mid: String = String(e.get("member_id", ""))
-		if state.member(mid) == null:
+		var bm: StoryPartyMember = state.member(mid)
+		# Bond is a CREATURE's bond with the hero (#68): humans (the hero himself, recruits) earn none.
+		if bm == null or bm.is_human():
 			continue
 		var n: int = Progression.bond_for_battle(bool(e.get("fought", true)), result.outcome, rules)
 		if n > 0:

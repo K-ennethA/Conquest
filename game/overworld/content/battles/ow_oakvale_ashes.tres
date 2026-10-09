@@ -534,7 +534,7 @@ unit_spawns = Array[Dictionary]([{
 }, {
 "aggro_range": -1,
 "ai_stance": "",
-"character_id": "gem_knight",
+"character_id": "varden",
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 0,

@@ -32,3 +32,9 @@ func get_move(slot: int) -> MoveResource:
 	if slot == STRUGGLE_SLOT:
 		return struggle_move
 	return super(slot)
+
+
+## The COMPILED moveset as-is. [DuelMoveCompiler] already built a human's kit (weapon attack +
+## specials) into [member moveset], so the human kit must not be prepended a second time.
+func get_moveset() -> Array[MoveResource]:
+	return moveset

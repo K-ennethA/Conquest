@@ -2,14 +2,17 @@
 
 [ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
 [ext_resource type="PackedScene" path="res://game/characters/models/forest/varden_forge.glb" id="2_model"]
+[ext_resource type="Resource" path="res://game/characters/weapons/library/iron_sword.tres" id="3_weapon"]
 
 [resource]
 script = ExtResource("1_char")
 character_id = &"varden"
+kind = 1
 display_name = "General Varden"
-description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Geode pending rebalance; no moves or abilities yet."
+description = "PLACEHOLDER -- a HUMAN battle unit: fights with his sword (weapon attack); no special moves or abilities yet. Default stats cloned from Geode pending rebalance."
 model_scene = ExtResource("2_model")
-; forge import 2026-10-04 (compendium placeholder, same pattern as the 6 creatures and Elias): PLACEHOLDER FOR REBALANCE. Stats cloned from gem_knight.tres (Geode, the armored-melee silhouette; also his story spar unit); element left NEUTRAL (human kingdom general, no family); moves, abilities, movement kind and scale are not designed yet; the glb has no idle/walk clips (bind pose, sword sheathed at the left hip). Referenced by nothing (no encounters, spawns, story, shops, AI rosters). Model fit lives in varden_forge.glb.import root_scale.
+; forge import 2026-10-04 (compendium placeholder, same pattern as the 6 creatures and Elias): PLACEHOLDER FOR REBALANCE. Stats cloned from gem_knight.tres (Geode, the armored-melee silhouette; also his story spar unit); element left NEUTRAL (human kingdom general, no family); movement kind and scale are not designed yet; the glb has no idle/walk clips (bind pose, sword sheathed at the left hip). Model fit lives in varden_forge.glb.import root_scale.
+; humans 2026-10-08 (docs/design/HUMANS.md): kind HUMAN, PLACEHOLDER weapon iron_sword (the sheet's sword); proficiencies sword + lance, tendency sword. Not enhanced: no special moves listed (no decision makes the general a chief-level unit). Fights as himself in the opening's first fight.
 base_health = 120
 base_attack = 22
 base_defense = 20
@@ -17,4 +20,7 @@ base_magic = 6
 base_magic_defense = 14
 base_speed = 8
 base_movement = 4
-attack_range = 2
+attack_range = 1
+weapon = ExtResource("3_weapon")
+weapon_proficiencies = Array[StringName]([&"sword", &"lance"])
+weapon_tendency = &"sword"

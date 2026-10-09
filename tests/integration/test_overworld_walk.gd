@@ -385,7 +385,7 @@ func test_trainer_spots_you_and_the_battle_is_staged() -> void:
 	assert_eq(req.map_path, "res://game/overworld/content/battles/ow_mossway_clearing.tres", "on his board")
 	assert_eq(req.return_to["cell"], [19, 6, 0], "the return point is where the hero stood")
 	assert_eq(GameSettings.selected_map_path, req.map_path, "GameSettings is staged like a campaign chapter")
-	assert_eq(GameSettings.selected_squad, ["vineweave", "blightcap"], "with the fielded party")
+	assert_eq(GameSettings.selected_squad, ["wren", "vineweave", "blightcap"], "with the fielded party (the hero first)")
 	assert_true(StoryController.is_battle_active(), "a story battle is active")
 	# The round trip without GameWorld (the tactical integration suite boots the real board):
 	var win := BattleResult.make("", BattleResult.OUTCOME_VICTORY)

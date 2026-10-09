@@ -22,7 +22,7 @@ const TEMP_DIR := "user://test_story_opening/"
 const TEMP_BATTLE_SAVE := "user://test_story_opening_battle.json"
 const FIRST_FIGHT_MAP := "res://game/overworld/content/battles/ow_oakvale_ashes.tres"
 const STARTER := "tree_grunt"
-const GENERAL := "gem_knight"
+const GENERAL := "varden"
 const WARRIOR := "vineweave"
 
 var _guard
@@ -183,7 +183,8 @@ func test_the_opening_plays_end_to_end() -> void:
 	var s: StoryState = StoryController.state()
 	assert_eq(s.location_area(), "oakvale", "in Oakvale")
 	assert_eq(s.location_cell(), Vector3i(3, 6, 0), "on the hero's doorstep")
-	assert_eq(s.party.size(), 0, "with no creature of your own")
+	assert_eq(s.capped_count(), 0, "with no creature of your own")
+	assert_true(s.has_hero(), "the hero himself is in the party (docs/design/HUMANS.md)")
 
 	# 2. THE SEND-OFF plays on the first boot.
 	var ow := await _boot()
@@ -249,9 +250,9 @@ func test_the_opening_plays_end_to_end() -> void:
 	assert_true(ow.interact(), "talk to Professor Elias")
 	await _drain(ow, 0, watch)
 	assert_true(seen["starter"], "the starter appears at the ceremony")
-	assert_eq(s.party.size(), 1, "the ceremony gives you your FIRST CREATURE")
-	if s.party.size() == 1:
-		assert_eq(s.party[0].character_id, STARTER, "the starter (%s)" % STARTER)
+	assert_eq(s.capped_count(), 1, "the ceremony gives you your FIRST CREATURE")
+	if s.capped_count() == 1:
+		assert_eq(s.lead().character_id, STARTER, "the starter (%s)" % STARTER)
 	for f in ["key.bonding_shard", "opening.starter_received", "opening.starter_pick"]:
 		assert_true(s.has_flag(f), "flag %s is set" % f)
 	assert_true(seen["raiders"], "enemy soldiers appear in the room")
@@ -281,15 +282,15 @@ func test_the_opening_plays_end_to_end() -> void:
 	assert_eq(req.kind, BattleRequest.KIND_TACTICAL, "a TACTICAL battle")
 	assert_eq(req.encounter_id, "story.opening.first_fight", "the first fight")
 	assert_eq(req.map_path, FIRST_FIGHT_MAP, "on the mill-road board")
-	assert_eq(GameSettings.selected_squad, [STARTER], "your creature fights")
+	assert_eq(GameSettings.selected_squad, ["wren", STARTER], "the hero and your creature fight")
 	assert_true(StoryController.is_battle_active(), "a story battle is armed")
 
 	# 8. THE BATTLE on a real GameWorld: win it.
 	_clear_globals()
 	_mount(WORLD_SCENE)
 	var up: bool = await _await_until(func() -> bool:
-		return TurnSystemManager.has_active_turn_system() and _party_units().size() == 1)
-	assert_true(up, "the first fight boots with your starter tagged")
+		return TurnSystemManager.has_active_turn_system() and _party_units().size() == 2)
+	assert_true(up, "the first fight boots with the hero and your starter tagged")
 	if not up:
 		return
 	var guests: Array = []
@@ -302,7 +303,7 @@ func test_the_opening_plays_end_to_end() -> void:
 	assert_eq(guests.size(), 2, "the General and the Warrior fight beside you as guests")
 	var guest_ids: Array = guests.map(func(u) -> String: return String(u.character_resource.character_id))
 	guest_ids.sort()
-	assert_eq(guest_ids, [GENERAL, WARRIOR], "(placeholder roster units)")
+	assert_eq(guest_ids, [GENERAL, WARRIOR], "(General Varden himself; the Warrior is still a placeholder)")
 	assert_eq(foes.size(), 4, "against enemy soldiers and their creatures")
 	for u in foes:
 		u.take_damage(99999)

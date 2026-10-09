@@ -478,9 +478,44 @@ Classic costs the partner, a full Cup run → prize + title + the champion, save
 - `DuelScaling` treats `strength` as a stat scale; story LEVELS are applied first (see "Progression") and `strength` multiplies on top.
 - Mid-battle `EvolveEffect` PERMANENT commits in story, and the duel's `unit_evolved` move
   re-compile, are not wired (no shipped edge uses them yet).
-- No CharacterSelect story branch: a tactical squad is still the first `squad_size` healthy
-  members; party > squad needs the picker (and a Party-screen reorder) in M2.
+- No CharacterSelect story branch. A tactical squad comes from the deploy picker (see Humans,
+  below), or, with no UI, from the default: the hero first, then the first healthy members. There
+  is no Party-screen reorder yet.
 - Profile points still accrue on the story tactical end screen (existing behaviour).
+
+## Humans: the hero, recruits and guests (DECISIONS.md #5-#8, #54, #61, #63-#66)
+
+The full as-built spec is docs/design/HUMANS.md. In short:
+
+- **The hero is a battle unit.** A new journey adds the hero's party record (`is_hero`; roster
+  entry `wren`, from `HeroResource.battle_character_id`) at the starter level. An older save gets
+  him on load.
+  - He never counts toward the party cap and can never leave or fall. If he falls in a real
+    battle, it is a **game over** and the journey loads the pre-battle save.
+  - The **lead** is the first partner creature.
+  - Duels are the creatures' (`StoryRuleset.hero_joins_duels` = false), so a lost wild duel is
+    still a whiteout. A duel spec with `hero_deploy = REQUIRED` (self-defence) adds the hero
+    right behind the lead (`hero_duel_slot`).
+  - Wild contact and trainer challenges still need a healthy partner creature
+    (`hero_alone_can_battle` = false), so the opening walks past them.
+- **Humans fight with a weapon.** The weapon attack fills slot 0, followed by any special moves
+  the character lists. Weapon types (sword / lance / axe / bow / staff / tome) and the weapon
+  triangle are data on `game/characters/weapons/weapon_rules.tres`. A member can swap weapons
+  within its proficiencies (`StoryState.equip_weapon`).
+- **Recruits are unique.** A human already in the party is not added twice, and humans are never
+  in wild tables (the validator rejects them).
+- **Temporary joins.** `JoinPartyCommand.temporary` / `guest_until` add a guest who leaves when
+  that flag is set, or through `LeavePartyCommand`. A returning guest comes back as its old
+  record. The party cards show Hero, Human and Guest badges and the weapon.
+- **Deploying.** Before a story tactical battle with a real choice, the **deploy picker**
+  (`SquadPickScreen` over the pure `SquadPick`) lets the player choose up to `squad_size` units:
+  party members, temporary guests, and any `BattleSpec.offered_guests`.
+  - `BattleSpec.hero_deploy` = REQUIRED locks the hero in. The opening's first fight uses it:
+    the hero and his starter fight, and General Varden fights as himself.
+  - Headless runs, tests and a direct `begin_battle` use the default squad.
+- **Bonds.** A human's `bond_partner` is the creature it is bonded to. `StoryBond` /
+  `StoryController.activate_bond` is the activation hook, with a placeholder stat bonus scaled
+  by the creature's bond level. It is behind `StoryRuleset.bond_activation_enabled` (OFF).
 
 ## Collision
 

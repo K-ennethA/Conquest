@@ -98,7 +98,9 @@ func apply_to_unit(unit, _run) -> void:
 ## Resolve the indices into [param character]'s moveset that [member which] selects.
 func _resolve_target_indices(character: CharacterResource) -> Array[int]:
 	var out: Array[int] = []
-	var count: int = character.move_count()
+	# The AUTHORED list (a human's weapon attack is built from its weapon, not stored here, so an
+	# arena mod indexes only its listed special moves -- same as a creature's whole kit).
+	var count: int = mini(character.moveset.size(), CharacterResource.MAX_MOVES)
 	match which:
 		Which.BY_SLOT:
 			if slot >= 0 and slot < count and character.moveset[slot] != null:

@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="WeaponResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/weapons/WeaponResource.gd" id="1_w"]
+
+[resource]
+script = ExtResource("1_w")
+weapon_id = &"pitchfork"
+display_name = "Pitchfork"
+description = "PLACEHOLDER: a farm pitchfork (Wren's sheet). Numbers pending design."
+weapon_type = &"lance"
+might = 11
+hit = 0.9
+crit = 0.0
+min_range = 1
+max_range = 1
+attack_name = "Thrust"
+placeholder = true

@@ -316,7 +316,7 @@ func refresh_party() -> void:
 	_party.add_child(head)
 	var ctx: Dictionary = StoryGrowth.evolution_context(_state, {"trigger": "menu"})
 	for i in range(_state.party.size()):
-		_party.add_child(_member_card(_state.party[i], i == 0, ctx))
+		_party.add_child(_member_card(_state.party[i], _state.party[i] == _state.lead(), ctx))
 	if not _state.fallen.is_empty():
 		var fh := ConquestTheme.title_ribbon("FALLEN", MenuTheme.TEAM_RED, MenuTheme.FS_BODY)
 		fh.name = "FallenHeading"
@@ -367,6 +367,14 @@ func _member_card(m: StoryPartyMember, is_lead: bool, ctx: Dictionary) -> PanelC
 	var name_l := MenuKit.label(title + ("  ·  Lead" if is_lead else ""), &"SubheadingLabel")
 	name_l.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
 	col.add_child(name_l)
+	# HUMANS (docs/design/HUMANS.md): the kind badge, the hero, a temporary guest.
+	var badges: PackedStringArray = member_badges(m)
+	if not badges.is_empty():
+		var bl := MenuKit.label("  ·  ".join(badges), &"DimLabel")
+		bl.name = "Badges"
+		bl.add_theme_font_size_override("font_size", MenuTheme.FS_CAPTION)
+		bl.add_theme_color_override("font_color", MenuTheme.GOLD)
+		col.add_child(bl)
 	var bar := ConquestTheme.hp_bar(10.0)
 	bar.max_value = m.max_hp()
 	bar.value = m.hp_value()
@@ -389,6 +397,24 @@ func _member_card(m: StoryPartyMember, is_lead: bool, ctx: Dictionary) -> PanelC
 	col.add_child(details)
 	_add_evolution_section(col, m, ctx)
 	return card
+
+
+## The party-card badges of [param m]: "Human" (+ "Hero" / "Guest") for a human, and the weapon it
+## fights with; "Guest" for a temporary creature join; nothing for an ordinary creature.
+static func member_badges(m: StoryPartyMember) -> PackedStringArray:
+	var out: PackedStringArray = []
+	if m == null:
+		return out
+	if m.is_hero:
+		out.append("Hero")
+	if m.is_human():
+		out.append("Human")
+	if m.is_temporary():
+		out.append("Guest")
+	var w: WeaponResource = m.weapon()
+	if w != null:
+		out.append(w.display_name)
+	return out
 
 
 ## A FALLEN member's card: muted, no actions -- its name and form, and where / when it fell.

@@ -118,8 +118,12 @@ func validate(issues: Array[String], where: String) -> void:
 	if entries().is_empty():
 		issues.append("%s: encounter zone has an empty table" % where)
 	for e in entries():
-		if CharacterLibrary.get_character(e.character_id) == null:
+		var chr: CharacterResource = CharacterLibrary.get_character(e.character_id)
+		if chr == null:
 			issues.append("%s: encounter character '%s' does not exist" % [where, e.character_id])
+		elif chr.is_human():
+			# DECISIONS.md #6: humans are recruited individuals, never wild.
+			issues.append("%s: '%s' is a HUMAN -- humans never appear in wild encounter tables" % [where, e.character_id])
 		StoryCommand.check_condition(e.condition, issues, "%s encounter condition" % where)
 		if e.kind == EncounterEntry.Kind.TACTICAL:
 			if e.battle == null:

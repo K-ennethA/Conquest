@@ -16,6 +16,38 @@ const DEFAULT_PATH := "res://game/overworld/content/story_ruleset.tres"
 @export var starting_gold: int = 100
 @export_range(1, 12) var party_cap: int = 6
 
+@export_group("Hero and humans")
+## The HERO joins the party as a battle unit at journey start (docs/design/HUMANS.md;
+## DECISIONS.md #54): [member HeroResource.battle_character_id] at the starter level, a record
+## flagged hero that never leaves and never counts toward [member party_cap]. Off = the old
+## hero-less party (the avatar only).
+@export var hero_joins_party: bool = true
+## May the hero ALONE (no healthy partner creature) start fights -- wild contact, a trainer's
+## challenge? Off (default): as before the starter, he walks past.
+@export var hero_alone_can_battle: bool = false
+## Does the hero fight in EVERY story duel? Off (default): duels are the creatures' (a lost wild
+## duel is a whiteout, as before), and the hero steps in only when the battle asks
+## ([member BattleSpec.hero_deploy] REQUIRED -- a self-defence duel, #7). On: he is always in the
+## lineup -- and since his fall is a game over (#66), every lost duel ends the journey.
+@export var hero_joins_duels: bool = false
+## Where the hero stands in a DUEL lineup when he is in it (index; 0 = he leads, 1 = right behind
+## the partner creature, -1 = plain party order). A duel team takes the first N of the lineup.
+@export_range(-1, 6) var hero_duel_slot: int = 1
+## Show the DEPLOY PICKER before a story tactical battle ([SquadPickScreen]). Off, or headless,
+## or a battle launched without a host: the default squad ([method SquadPick.default_picks]).
+@export var squad_picker_enabled: bool = true
+
+@export_group("Bond activation")
+## THE BOND ACTIVATION hook (DECISIONS.md #65 -- a human bonded to a creature activates it for a
+## bonus; the bonuses are defined later). OFF by default: it would change balance. On = the
+## activation API ([StoryBond]) grants the placeholder stat bonus below.
+@export var bond_activation_enabled: bool = false
+## PLACEHOLDER bonus: +this fraction of the bonded creature's attack / defense / magic /
+## magic_defense per BOND LEVEL of that creature ([method StoryPartyMember.bond_level]).
+@export_range(0.0, 0.5, 0.005) var bond_bonus_per_level: float = 0.02
+## Turns the activation lasts (-1 = the rest of the battle).
+@export_range(-1, 20) var bond_bonus_turns: int = 3
+
 @export_group("Walking")
 ## Seconds per cell walking / running (run = hold fast_forward: Shift / R3) -- the LEGACY grid
 ## pace, used only by the "current" overworld feel preset ([OverworldFeel]). The shipped feel

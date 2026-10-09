@@ -266,6 +266,7 @@ opponent_team = Array[Dictionary]([{
 reward_flags = Array[String](["opening.first_fight_won"])
 defeat_policy = 2
 clash_intro = true
+hero_deploy = 1
 enemy_level = 4
 
 [sub_resource type="Resource" id="Resource_qqk4e"]
@@ -403,6 +404,7 @@ opponent_team = Array[Dictionary]([{
 reward_flags = Array[String](["opening.first_fight_won"])
 defeat_policy = 2
 clash_intro = true
+hero_deploy = 1
 enemy_level = 4
 
 [sub_resource type="Resource" id="Resource_28wou"]
@@ -724,6 +726,7 @@ opponent_team = Array[Dictionary]([{
 reward_flags = Array[String](["opening.first_fight_won"])
 defeat_policy = 2
 clash_intro = true
+hero_deploy = 1
 enemy_level = 4
 
 [sub_resource type="Resource" id="Resource_40o20"]
