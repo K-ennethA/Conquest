@@ -13,8 +13,13 @@ extends OverworldEntity
 @export var dialogue: StoryScene
 ## The procedural figure's silhouette ([method OverworldProps.figure] kind) when no
 ## visual_character is set: villager, elder, guard, officer, trainer, raider, scholar, noble or
-## child. "" = guessed from the id (elder / guard / villager).
+## child. "" = guessed from the id (elder / guard / villager). Under the placeholder human models
+## ([NpcLooks]) it still scales a "child" down and tints a "raider"; the figure is the fallback.
 @export var figure: String = ""
+## Which PLACEHOLDER human model this person wears ([NpcLooks], when no visual_character is set):
+## "" = the default ([member StoryRuleset.npc_default_model]), "female" = the female default
+## ([member StoryRuleset.npc_female_model]). Set only where the story establishes it.
+@export var body: String = ""
 
 
 func kind() -> StringName:

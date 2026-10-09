@@ -368,6 +368,16 @@ func play_clip(base: String, fallback: String = "") -> bool:
 	return true
 
 
+## Jump the clip now playing to [param fraction] (0..1) of its length -- so a crowd wearing the
+## same model does not idle in lockstep. No-op without a playing clip.
+func offset_clip(fraction: float) -> void:
+	if _anim == null or not _anim.is_playing():
+		return
+	var length: float = _anim.current_animation_length
+	if length > 0.0:
+		_anim.seek(fposmod(fraction, 1.0) * length, true)
+
+
 ## Playback rate for locomotion clip [param base] (the feel's stride-matched walk / run rate).
 func clip_rate(base: String) -> float:
 	if base == CLIP_WALK:
