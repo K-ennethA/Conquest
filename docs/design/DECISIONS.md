@@ -383,3 +383,11 @@ asked about. An earlier decision stands unless the owner changes it.
     "enhanced" character is one whose authored moveset includes special moves beyond the weapon
     attack (chiefs are authored that way; the hero gets them through promotion, i.e. the promoted
     form's moveset).
+
+### The Deep Woods, refined (owner, 2026-10-09)
+92. **Nyra teaches a special move** (not used in battle) that cuts down trees outside battle. It is
+    LEARNED by specific creatures or humans (refines #40 / #71: a member learns it, like an HM).
+93. **The Deep Woods are a MAZE** that requires the new skill -- think Zelda's Lost Woods and a
+    Pokemon forest. At the end, in the clearing, is the battle: Eldroot is there.
+94. **The rival in Deepwood Village challenges the hero**, then ACCOMPANIES the hero through the Deep
+    Woods: not an overworld character while following, but selectable in the Eldroot battle (#88).
