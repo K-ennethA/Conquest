@@ -280,6 +280,8 @@ func _make_entity_actor(e: OverworldEntity) -> OverworldActor:
 			&"prop":
 				var p := e as PropEntity
 				body = OverworldProps.prop(p.prop, p.footprint, e.tint, _prop_seed(p))
+				if p.glow > 0.0:
+					OverworldProps.add_glow(body, p.prop, e.tint, p.glow)
 			&"trainer":
 				var tf: String = (e as NpcEntity).figure
 				body = OverworldProps.figure(e.tint, tf if not tf.is_empty() else "trainer")

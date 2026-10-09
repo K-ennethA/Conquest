@@ -867,7 +867,7 @@ Depths of the Wood (a maze) → the Heart of the Wood. See "The Deep Woods" belo
 | The Sparse Forest 28x12 (route) | open woodland | a winding cart track, four thickets of wild grass (its own table: Petalfang, Blightcap, Mycothrall, Barkling), Woodsman Alder's clearing |
 | Woodland Town 28x24 | rustic timber town in a forest clearing, dawn light | stream with a plank bridge; east bank: Wardens' Lodge, boardwalk square + Wayshrine, Stumped Hart inn, Timber Row (trading post `woodland_trader`, forge), lumber yard + sawmill, camp; west bank: herbalist, archery range, the Starfall Stone glade; roads: east (the Sparse Forest), west (Deepwood Village -- held by the Wardens' rope until Warden Hale is asked), the north trail (Frostpeak Village, closed), the unmarked south trail (closed -- the Thieves Guild is never named in town) |
 | Deepwood Village 26x20 | clan village in a clearing of the old forest | Nyra's lodge + three tree-houses (PLACEHOLDER cabins), the Deepwood Wayshrine, Nyra, Lyra (while she is in Deepwood), three generic villagers; east: the road to Woodland Town; north: the trail into the Depths (shut until Nyra is beaten) |
-| Depths of the Wood: 4 rooms, 19x17 each (route) | old forest at dusk, every room alike | a MAZE (Lost Woods meets a Pokemon forest): a clearing with a cross of paths to four exits; LIGHTS mark the right one, the wrong ones lead back to the entrance; BREAKABLE TREES block the right way in rooms 2 and 4 (and a nook in room 3); tall grass (Petalfang, Blightcap, Barkling, Vineweave, Oakheart in the 8-15 band), two optional trainers, two chests |
+| Depths of the Wood: 4 rooms, 19x17 each (route) | old forest at dusk, every room alike | a MAZE (Lost Woods meets a Pokemon forest), each room enclosed by thick forest walls: a small clearing, 1-wide corridors to four exits and side passages; LIT lanterns mark the right exit (dark ones at the wrong exits, which lead back to the entrance); BREAKABLE TREES block the right way in rooms 2 and 4 (and a nook in room 3); tall grass (Petalfang, Blightcap, Barkling, Vineweave, Oakheart in the 8-15 band), two optional trainers, two chests |
 | Heart of the Wood 19x14 (route) | the sacred glade at the maze's end | Eldroot waits in the clearing |
 
 ### The world registry (`content/world.tres`)
@@ -936,19 +936,26 @@ Built by the builder's "THE DEEP WOODS" section (knobs are its constants). How t
    Talk to her again to teach it to another eligible member. `deepwood.treefell_learned` marks the
    quest step.
 5. **The Depths of the Wood -- the maze** (#93): four look-alike rooms (`depths_of_the_wood`, `_2`,
-   `_3`, `_4`; one name, one size, one painter). You always come in from the south; each room has
-   three other exits: the RIGHT one leads on, the two WRONG ones send you back to the maze's entrance
-   (`WarpEntity.arrival_toast`: a short "You feel turned around..." toast, nothing blocks); south goes
-   back a room. **The clue:** a pair of LIGHTS (lantern props, `DM_LIGHT_PROP` / `DM_LIGHT_TINT`,
-   PLACEHOLDER look) flanks the mouth of the right exit in every room, and fireflies drift over its
-   corridor (`DM_CLUE_TILE`: sacred-meadow ground, the tile's own glow) -- the old signpost at the
-   entrance, the Deepwood hunter and Nyra all say "follow the lights". The way through: room 1
-   **north**, room 2 **east**, room 3 **west**, room 4 **north**. In rooms 2 and 4 a **gnarled tree**
-   stands between the lights: face it, Confirm, "Use Treefell?" -- Yes fells it for good (a saved flag)
-   -- so without a member who LEARNED the move you cannot get through. Also: tall grass in every room
-   (the Deep Woods' creatures, 8-15), two OPTIONAL trainers (a Forager in room 2, a Trapper in room 3:
-   generic placeholders standing off the paths, looking away from them), a chest in a nook behind a
-   breakable tree (room 3) and one in a dead-end pocket (room 4).
+   `_3`, `_4`; one name, one size, one painter), each ENCLOSED by walls of old forest several cells
+   thick (tree terrain, made dense by `thicket` props -- the tree tile's own art, extra trees per cell;
+   the row just south of open ground keeps a single tree so the path stays visible). The walkable
+   space is a small central clearing, four 1-wide corridors out to the exits, and each room's side
+   passages cut into the walls (tall-grass pockets, dead ends). You always come in from the south;
+   the three other exits are reachable only along their corridors: the RIGHT one leads on, the two
+   WRONG ones send you back to the maze's entrance (`WarpEntity.arrival_toast`: a short "You feel
+   turned around..." toast, nothing blocks); south goes back a room. **The clue:** every choice exit
+   has a pair of lantern posts at its mouth (`DM_LIGHT_PROP`, PLACEHOLDER look); at the right one they
+   are LIT (`PropEntity.glow` = `DM_LIGHT_GLOW`: an emissive lantern head and a light, in
+   `DM_LIGHT_TINT`), at the wrong ones they stay dark (`DM_DARK_TINT`, no glow), and fireflies drift
+   over the right corridor (`DM_CLUE_TILE`: sacred-meadow ground, the tile's own glow) -- the old
+   signpost at the entrance, the Deepwood hunter and Nyra all say "follow the lights". The way
+   through: room 1 **north**, room 2 **east**, room 3 **west**, room 4 **north**. In rooms 2 and 4 a
+   **gnarled tree** stands between the lit lanterns: face it, Confirm, "Use Treefell?" -- Yes fells it
+   for good (a saved flag) -- so without a member who LEARNED the move you cannot get through. Also:
+   tall-grass pockets in every room (the Deep Woods' creatures, 8-15), two OPTIONAL trainers (a
+   Forager in room 2, a Trapper in room 3: generic placeholders in side pockets, looking into them,
+   away from the paths), a chest in a nook behind a breakable tree (room 3) and one at the end of a
+   dead-end passage (room 4).
 6. **The Heart of the Wood** (`depths_of_the_wood_heart`): the clearing at the end, where **Eldroot**
    waits. Talk to it: a **tactical legend battle** (`ow_deepwood_glade.tres`, squad of 4 picked in the
    squad pick -- Lyra among them if she came along; `BattleSpec.make_legend`: FIXED at band max +
@@ -957,8 +964,10 @@ Built by the builder's "THE DEEP WOODS" section (knobs are its constants). How t
    "Not now" leaves it in the glade to ask again. Journey -> Party lists bonded legends read-only.
 
 **Maze knobs** (`DM_*`): `DM_ROOMS` (the rooms in order: each one's `right` exit, `gate` -- a breakable
-tree in its mouth --, tall-grass rects and extra open `pockets`), the light prop and tint, the clue tile, the
-wrong-way toast (`DM_LOST_TOAST`), the trainers' cells / levels (`LV_DM_*`), the nook / pocket chests.
+tree in its mouth -- and `carve`: the side passages cut into the walls, `[Rect2i, tile]`), the
+clearing's size (`DM_RX` / `DM_RY`), the lanterns (prop, lit / dark tints, glow), the clue tile, the
+wrong-way toast (`DM_LOST_TOAST`), the signpost / trainers' cells and levels (`LV_DM_*`), the nook /
+pocket chests. `PropEntity.glow` and the `thicket` prop kind are generic (any area can use them).
 Deterministic: no RNG. Add a room = add a row (and its area folder in `_initialize`'s list and the
 Depths' `area_ids` in `WORLD_LOCATIONS`).
 

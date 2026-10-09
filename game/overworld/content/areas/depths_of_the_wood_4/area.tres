@@ -76,19 +76,53 @@ blocking = false
 script = ExtResource("4_5b3wp")
 prop = "lamp"
 footprint = Vector2i(1, 1)
+glow = 3.0
 id = &"light_8_2"
 cell = Vector3i(8, 2, 0)
-tint = Color(0.78, 1, 0.5, 1)
+tint = Color(0.85, 1, 0.55, 1)
 
 [sub_resource type="Resource" id="Resource_3thhn"]
 script = ExtResource("4_5b3wp")
 prop = "lamp"
 footprint = Vector2i(1, 1)
+glow = 3.0
 id = &"light_10_2"
 cell = Vector3i(10, 2, 0)
-tint = Color(0.78, 1, 0.5, 1)
+tint = Color(0.85, 1, 0.55, 1)
 
 [sub_resource type="Resource" id="Resource_lxegl"]
+script = ExtResource("4_5b3wp")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"light_2_7"
+cell = Vector3i(2, 7, 0)
+tint = Color(0.24, 0.24, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_rpv5c"]
+script = ExtResource("4_5b3wp")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"light_2_9"
+cell = Vector3i(2, 9, 0)
+tint = Color(0.24, 0.24, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_s640c"]
+script = ExtResource("4_5b3wp")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"light_16_7"
+cell = Vector3i(16, 7, 0)
+tint = Color(0.24, 0.24, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_swyci"]
+script = ExtResource("4_5b3wp")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"light_16_9"
+cell = Vector3i(16, 9, 0)
+tint = Color(0.24, 0.24, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_qsk6p"]
 script = ExtResource("5_bn0t0")
 field_move = &"treefell"
 id = &"gate_tree"
@@ -97,7 +131,7 @@ display_name = "Gnarled Tree"
 tint = Color(0.3, 0.4, 0.2, 1)
 visible_if = "not has(\"depths_of_the_wood_4.gate_tree.cleared\")"
 
-[sub_resource type="Resource" id="Resource_rpv5c"]
+[sub_resource type="Resource" id="Resource_ssa5w"]
 script = ExtResource("6_2hr6q")
 loot_items = Array[StringName]([&"heartwood_tonic"])
 loot_gold = 40
@@ -106,6 +140,189 @@ cell = Vector3i(2, 13, 0)
 facing = "east"
 display_name = "Chest"
 tint = Color(0.42, 0.3, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_c81ef"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(9, 2)
+id = &"thicket_0_0"
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_hjp2o"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(9, 2)
+id = &"thicket_10_0"
+cell = Vector3i(10, 0, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_rq120"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(8, 4)
+id = &"thicket_0_2"
+cell = Vector3i(0, 2, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_4s126"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(2, 4)
+id = &"thicket_11_2"
+cell = Vector3i(11, 2, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_prtrs"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(3, 5)
+id = &"thicket_16_2"
+cell = Vector3i(16, 2, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_dmdg0"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(1, 2)
+id = &"thicket_8_4"
+cell = Vector3i(8, 4, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_ek644"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(1, 2)
+id = &"thicket_10_4"
+cell = Vector3i(10, 4, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_02oet"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(7, 1)
+id = &"thicket_0_6"
+cell = Vector3i(0, 6, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_u6jye"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(2, 1)
+id = &"thicket_12_6"
+cell = Vector3i(12, 6, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_uvfg0"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(1, 2)
+id = &"thicket_15_6"
+cell = Vector3i(15, 6, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_dpxle"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(2, 1)
+id = &"thicket_0_7"
+cell = Vector3i(0, 7, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_80op0"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(3, 1)
+id = &"thicket_3_7"
+cell = Vector3i(3, 7, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_hlk4y"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(1, 1)
+id = &"thicket_13_7"
+cell = Vector3i(13, 7, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_uqlsw"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(2, 1)
+id = &"thicket_17_7"
+cell = Vector3i(17, 7, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_aedoy"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(2, 7)
+id = &"thicket_0_10"
+cell = Vector3i(0, 10, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_3q20d"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(3, 1)
+id = &"thicket_13_10"
+cell = Vector3i(13, 10, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_c5buk"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(2, 7)
+id = &"thicket_17_10"
+cell = Vector3i(17, 10, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_1u2ai"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(1, 1)
+id = &"thicket_2_11"
+cell = Vector3i(2, 11, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_kq02m"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(1, 6)
+id = &"thicket_16_11"
+cell = Vector3i(16, 11, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_8fjwk"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(4, 5)
+id = &"thicket_5_12"
+cell = Vector3i(5, 12, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_fehcd"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(2, 5)
+id = &"thicket_10_12"
+cell = Vector3i(10, 12, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_g0bec"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(3, 2)
+id = &"thicket_2_15"
+cell = Vector3i(2, 15, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_fbjo3"]
+script = ExtResource("4_5b3wp")
+prop = "thicket"
+footprint = Vector2i(4, 2)
+id = &"thicket_12_15"
+cell = Vector3i(12, 15, 0)
+tint = Color(1, 1, 1, 1)
 
 [resource]
 script = ExtResource("7_gnxjy")
@@ -125,6 +342,6 @@ entry_points = {
 "facing": "north"
 }
 }
-entities = Array[Resource]([SubResource("Resource_jmboh"), SubResource("Resource_57pcj"), SubResource("Resource_kagw7"), SubResource("Resource_8v35c"), SubResource("Resource_4dghy"), SubResource("Resource_3thhn"), SubResource("Resource_lxegl"), SubResource("Resource_rpv5c")])
+entities = Array[Resource]([SubResource("Resource_jmboh"), SubResource("Resource_57pcj"), SubResource("Resource_kagw7"), SubResource("Resource_8v35c"), SubResource("Resource_4dghy"), SubResource("Resource_3thhn"), SubResource("Resource_lxegl"), SubResource("Resource_rpv5c"), SubResource("Resource_s640c"), SubResource("Resource_swyci"), SubResource("Resource_qsk6p"), SubResource("Resource_ssa5w"), SubResource("Resource_c81ef"), SubResource("Resource_hjp2o"), SubResource("Resource_rq120"), SubResource("Resource_4s126"), SubResource("Resource_prtrs"), SubResource("Resource_dmdg0"), SubResource("Resource_ek644"), SubResource("Resource_02oet"), SubResource("Resource_u6jye"), SubResource("Resource_uvfg0"), SubResource("Resource_dpxle"), SubResource("Resource_80op0"), SubResource("Resource_hlk4y"), SubResource("Resource_uqlsw"), SubResource("Resource_aedoy"), SubResource("Resource_3q20d"), SubResource("Resource_c5buk"), SubResource("Resource_1u2ai"), SubResource("Resource_kq02m"), SubResource("Resource_8fjwk"), SubResource("Resource_fehcd"), SubResource("Resource_g0bec"), SubResource("Resource_fbjo3")])
 encounter_zones = Array[Resource]([SubResource("Resource_h0ucu")])
 level_band = Vector2i(8, 15)

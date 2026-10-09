@@ -213,22 +213,22 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(2, 2),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(3, 2),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(4, 2),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(5, 2),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
@@ -308,37 +308,37 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(2, 3),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(3, 3),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(4, 3),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(5, 3),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(6, 3),
-"tile_id": "tree",
+"tile_id": "forest_dirt",
 "tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
+"tile_type": "NORMAL"
 }, {
 "position": Vector2i(7, 3),
-"tile_id": "grass_plains",
+"tile_id": "forest_dirt",
 "tile_resource_path": "",
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(8, 3),
-"tile_id": "grass_plains",
+"tile_id": "forest_dirt",
 "tile_resource_path": "",
 "tile_type": "NORMAL"
 }, {
@@ -348,14 +348,14 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(10, 3),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(11, 3),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(12, 3),
 "tile_id": "tree",
@@ -403,17 +403,17 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(2, 4),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(3, 4),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(4, 4),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
@@ -423,19 +423,19 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(6, 4),
-"tile_id": "tall_grass",
+"tile_id": "tree",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(7, 4),
-"tile_id": "tall_grass",
+"tile_id": "tree",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(8, 4),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(9, 4),
 "tile_id": "forest_dirt",
@@ -443,24 +443,24 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(10, 4),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(11, 4),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(12, 4),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(13, 4),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(14, 4),
 "tile_id": "tree",
@@ -513,24 +513,24 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(5, 5),
-"tile_id": "tall_grass",
+"tile_id": "tree",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(6, 5),
-"tile_id": "tall_grass",
+"tile_id": "tree",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(7, 5),
-"tile_id": "tall_grass",
+"tile_id": "tree",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(8, 5),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(9, 5),
 "tile_id": "forest_dirt",
@@ -538,24 +538,24 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(10, 5),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(11, 5),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(12, 5),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(13, 5),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(14, 5),
 "tile_id": "tree",
@@ -598,29 +598,29 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(3, 6),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(4, 6),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(5, 6),
-"tile_id": "tall_grass",
+"tile_id": "tree",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(6, 6),
-"tile_id": "tall_grass",
+"tile_id": "tree",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(7, 6),
-"tile_id": "tall_grass",
+"tile_id": "grass_plains",
 "tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
+"tile_type": "NORMAL"
 }, {
 "position": Vector2i(8, 6),
 "tile_id": "grass_plains",
@@ -643,24 +643,24 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(12, 6),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(13, 6),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(14, 6),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(15, 6),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(16, 6),
 "tile_id": "tree",
@@ -693,19 +693,19 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(3, 7),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(4, 7),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(5, 7),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(6, 7),
 "tile_id": "grass_plains",
@@ -743,19 +743,19 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(13, 7),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(14, 7),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(15, 7),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(16, 7),
 "tile_id": "grass_plains",
@@ -883,19 +883,19 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(3, 9),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(4, 9),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(5, 9),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(6, 9),
 "tile_id": "grass_plains",
@@ -933,19 +933,19 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(13, 9),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(14, 9),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(15, 9),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(16, 9),
 "tile_id": "grass_plains",
@@ -978,24 +978,24 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(3, 10),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(4, 10),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(5, 10),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(6, 10),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(7, 10),
 "tile_id": "grass_plains",
@@ -1018,29 +1018,29 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(11, 10),
-"tile_id": "tall_grass",
+"tile_id": "grass_plains",
 "tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
+"tile_type": "NORMAL"
 }, {
 "position": Vector2i(12, 10),
-"tile_id": "tall_grass",
+"tile_id": "tree",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(13, 10),
-"tile_id": "tall_grass",
+"tile_id": "tree",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(14, 10),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(15, 10),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(16, 10),
 "tile_id": "tree",
@@ -1083,24 +1083,24 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(5, 11),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(6, 11),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(7, 11),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(8, 11),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(9, 11),
 "tile_id": "forest_dirt",
@@ -1108,17 +1108,17 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(10, 11),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(11, 11),
-"tile_id": "tall_grass",
+"tile_id": "tree",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(12, 11),
-"tile_id": "tall_grass",
+"tile_id": "tree",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
@@ -1128,17 +1128,17 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(14, 11),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(15, 11),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(16, 11),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
@@ -1178,24 +1178,24 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(5, 12),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(6, 12),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(7, 12),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(8, 12),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(9, 12),
 "tile_id": "forest_dirt",
@@ -1203,19 +1203,19 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(10, 12),
-"tile_id": "grass_plains",
+"tile_id": "forest_dirt",
 "tile_resource_path": "",
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(11, 12),
-"tile_id": "tall_grass",
+"tile_id": "forest_dirt",
 "tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
+"tile_type": "NORMAL"
 }, {
 "position": Vector2i(12, 12),
-"tile_id": "tall_grass",
+"tile_id": "forest_dirt",
 "tile_resource_path": "",
-"tile_type": "DIFFICULT_TERRAIN"
+"tile_type": "NORMAL"
 }, {
 "position": Vector2i(13, 12),
 "tile_id": "tall_grass",
@@ -1223,17 +1223,17 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(14, 12),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(15, 12),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(16, 12),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
@@ -1283,14 +1283,14 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(7, 13),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(8, 13),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(9, 13),
 "tile_id": "forest_dirt",
@@ -1298,14 +1298,14 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(10, 13),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(11, 13),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(12, 13),
 "tile_id": "tree",
@@ -1313,22 +1313,22 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(13, 13),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(14, 13),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(15, 13),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(16, 13),
-"tile_id": "tree",
+"tile_id": "tall_grass",
 "tile_resource_path": "",
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
@@ -1383,9 +1383,9 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(8, 14),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(9, 14),
 "tile_id": "forest_dirt",
@@ -1393,9 +1393,9 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(10, 14),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(11, 14),
 "tile_id": "tree",

@@ -3619,74 +3619,91 @@ func _lyra_comes_along() -> Array:
 # --- The Depths of the Wood: THE MAZE (DECISIONS.md #93) -------------------------------
 #
 # Zelda's Lost Woods meets a Pokemon forest. A chain of LOOK-ALIKE forest rooms (one painter, one
-# base: a clearing ringed by old forest, a cross of paths to FOUR exits). You always come in from
-# the south; of the other three exits ONE is RIGHT (on to the next room) and the two WRONG ones send
-# you back to the maze's entrance (a short toast, nothing blocks). The south exit goes back a room.
+# base), each ENCLOSED by walls of old trees several cells thick: the only walkable ground is a small
+# central clearing, four 1-wide corridors out to the four exits, and the room's own side passages --
+# tall-grass pockets and dead ends cut into the walls. You always come in from the south; of the other
+# three exits ONE is RIGHT (on to the next room) and the two WRONG ones send you back to the maze's
+# entrance (a short toast, nothing blocks). The south exit goes back a room.
 #
-# THE CLUE (no dialogue needed): a pair of LIGHTS (lantern props, PLACEHOLDER until the Blender
-# models) flanks the mouth of the right exit in every room, and fireflies drift over its corridor
-# (sacred-meadow ground). The hunter in Deepwood Village, Nyra and a sign at the maze's entrance say
-# "follow the lights".
+# THE CLUE (no dialogue needed): every choice exit has a pair of lantern posts at its mouth; at the
+# RIGHT one they are LIT (PropEntity.glow: an emissive lantern head and a light), the wrong ones stay
+# dark, and fireflies drift over the right corridor (sacred-meadow ground). The hunter in Deepwood
+# Village, Nyra and a sign at the maze's entrance say "follow the lights". (Lantern posts are
+# PLACEHOLDER props until the Blender models.)
 #
 # THE SKILL IS REQUIRED: in rooms 2 and 4 a BREAKABLE TREE stands in the right exit's mouth, between
-# the lights (FieldObstacleEntity: felled for good, a saved flag). Room 3 has an optional nook behind
-# another one (a chest). Tall grass (the Deep Woods' creatures, band 8-15) in every room, two optional
-# trainers off the paths, a chest in a dead-end pocket.
+# the lit lanterns (FieldObstacleEntity: felled for good, a saved flag). Room 3 has an optional nook
+# behind another one (a chest). Tall-grass pockets (the Deep Woods' creatures, band 8-15) in every
+# room, two optional trainers in side pockets, a chest at the end of a dead-end passage.
 #
 #   room 1 depths_of_the_wood    right: NORTH  (south: back to Deepwood Village; sign: the clue)
 #   room 2 depths_of_the_wood_2  right: EAST   (gate tree; a trainer)
 #   room 3 depths_of_the_wood_3  right: WEST   (a nook tree + chest; a trainer)
-#   room 4 depths_of_the_wood_4  right: NORTH  (gate tree; a dead-end pocket with a chest)
+#   room 4 depths_of_the_wood_4  right: NORTH  (gate tree; a dead-end passage with a chest)
 #   -> the HEART of the wood (depths_of_the_wood_heart): the clearing where ELDROOT waits.
 #
-# Deterministic: no RNG anywhere. KNOBS: DM_ROOMS (order, right exits, gates, grass, pockets), the
-# light prop / tint, the wrong-way toast.
+# Deterministic: no RNG anywhere. KNOBS: DM_ROOMS (order, right exits, gates, carved side passages),
+# the clearing's size, the lantern prop / tints / glow, the clue tile, the wrong-way toast.
 
-## The maze rooms' size (all alike), and the clearing at their middle.
+## The maze rooms' size (all alike), and the clearing at their middle (everything else is forest
+## wall unless a corridor or a room's carve opens it).
 const DM_W := 19
 const DM_H := 17
 const DM_C := Vector2i(9, 8)
-const DM_RX := 6.5
-const DM_RY := 5.5
+const DM_RX := 3.5
+const DM_RY := 2.5
 ## Each exit's edge cell (the warp), keyed by its side.
 const DM_EXITS := {"north": Vector2i(9, 0), "south": Vector2i(9, 16), "west": Vector2i(0, 8), "east": Vector2i(18, 8)}
-## Each exit's MOUTH: the corridor cell where the forest closes in (a gate tree stands here) ...
+## The three CHOICE exits (south is the way back).
+const DM_CHOICES := ["north", "west", "east"]
+## Each exit's MOUTH: the corridor cell where a gate tree stands ...
 const DM_MOUTH := {"north": Vector2i(9, 2), "south": Vector2i(9, 14), "west": Vector2i(2, 8), "east": Vector2i(16, 8)}
-## ... and the two cells flanking it (open ground at every exit; the LIGHTS stand there at the right one).
-const DM_FLANKS := {"north": [Vector2i(8, 2), Vector2i(10, 2)], "south": [Vector2i(8, 14), Vector2i(10, 14)],
-	"west": [Vector2i(2, 7), Vector2i(2, 9)], "east": [Vector2i(16, 7), Vector2i(16, 9)]}
+## ... and the two cells flanking it, where the lantern posts stand (choice exits only).
+const DM_FLANKS := {"north": [Vector2i(8, 2), Vector2i(10, 2)], "west": [Vector2i(2, 7), Vector2i(2, 9)],
+	"east": [Vector2i(16, 7), Vector2i(16, 9)]}
 ## Where you stand arriving through each exit (just inside it), and the way you face.
 const DM_INSIDE := {"north": [Vector2i(9, 1), "south"], "south": [Vector2i(9, 15), "north"],
 	"west": [Vector2i(1, 8), "east"], "east": [Vector2i(17, 8), "west"]}
-## Old trees standing in every room's clearing (the same in all of them: the rooms look alike).
-const DM_OLD_TREES := [Vector2i(4, 5), Vector2i(14, 5), Vector2i(4, 11), Vector2i(14, 11)]
 ## THE MAZE, in order. "right" = the exit that advances; "gate" = a breakable tree in its mouth (the
-## field move is REQUIRED); "grass" = tall grass; "pockets" = extra open ground (a nook / a dead end).
+## field move is REQUIRED); "carve" = the room's side passages cut into the walls: [Rect2i, tile]
+## ("tall_grass" pockets, "forest_dirt" passages, "grass_plains" nooks), each joined to a corridor or
+## the clearing.
 const DM_ROOMS := [
-	{"id": "depths_of_the_wood", "right": "north", "gate": false,
-		"grass": [Rect2i(5, 4, 3, 3), Rect2i(11, 10, 3, 3)], "pockets": []},
-	{"id": "depths_of_the_wood_2", "right": "east", "gate": true,
-		"grass": [Rect2i(11, 4, 3, 3), Rect2i(5, 10, 3, 3)], "pockets": []},
-	{"id": "depths_of_the_wood_3", "right": "west", "gate": false,
-		"grass": [Rect2i(5, 4, 3, 3), Rect2i(5, 10, 3, 3), Rect2i(11, 10, 3, 3)], "pockets": [Rect2i(13, 1, 3, 2)]},
-	{"id": "depths_of_the_wood_4", "right": "north", "gate": true,
-		"grass": [Rect2i(11, 4, 3, 3), Rect2i(11, 10, 3, 3)], "pockets": [Rect2i(2, 12, 3, 2)]},
+	{"id": "depths_of_the_wood", "right": "north", "gate": false, "carve": [
+		[Rect2i(2, 2, 4, 3), "tall_grass"], [Rect2i(6, 3, 3, 1), "forest_dirt"],
+		[Rect2i(13, 11, 4, 3), "tall_grass"], [Rect2i(10, 12, 3, 1), "forest_dirt"]]},
+	{"id": "depths_of_the_wood_2", "right": "east", "gate": true, "carve": [
+		[Rect2i(2, 11, 4, 3), "tall_grass"], [Rect2i(3, 9, 1, 2), "forest_dirt"],
+		[Rect2i(12, 2, 4, 3), "tall_grass"], [Rect2i(10, 3, 2, 1), "forest_dirt"]]},
+	{"id": "depths_of_the_wood_3", "right": "west", "gate": false, "carve": [
+		[Rect2i(10, 4, 3, 1), "forest_dirt"], [Rect2i(13, 4, 1, 1), "forest_dirt"], [Rect2i(14, 3, 3, 3), "grass_plains"],
+		[Rect2i(13, 11, 4, 3), "tall_grass"], [Rect2i(14, 9, 1, 2), "forest_dirt"],
+		[Rect2i(2, 2, 3, 3), "tall_grass"], [Rect2i(3, 5, 1, 3), "forest_dirt"]]},
+	{"id": "depths_of_the_wood_4", "right": "north", "gate": true, "carve": [
+		[Rect2i(3, 10, 4, 1), "forest_dirt"], [Rect2i(3, 11, 1, 1), "forest_dirt"], [Rect2i(2, 12, 3, 2), "grass_plains"],
+		[Rect2i(12, 11, 4, 3), "tall_grass"], [Rect2i(12, 10, 1, 1), "forest_dirt"],
+		[Rect2i(13, 2, 3, 3), "tall_grass"], [Rect2i(14, 5, 1, 3), "forest_dirt"]]},
 ]
 ## Room 3's nook: walled round, open only through its breakable tree; a chest at the back.
-const DM_NOOK_TREE := Vector2i(13, 3)
-const DM_NOOK_CHEST := Vector2i(15, 1)
-## Room 4's dead-end pocket chest.
+const DM_NOOK_TREE := Vector2i(13, 4)
+const DM_NOOK_CHEST := Vector2i(16, 3)
+## Room 4's dead-end passage chest.
 const DM_POCKET_CHEST := Vector2i(2, 13)
-## The trainers (optional: standing off the paths, looking away from them).
-const DM_FORAGER := Vector2i(4, 9)
-const DM_TRAPPER := Vector2i(14, 9)
+## The entrance's signpost (room 1, in the clearing beside the path in).
+const DM_SIGN := Vector2i(8, 10)
+## The trainers (optional: in side pockets, looking into them, away from the paths).
+const DM_FORAGER := Vector2i(5, 11)
+const DM_TRAPPER := Vector2i(16, 13)
 const LV_DM_FORAGER := 10
 const LV_DM_TRAPPER := 12
-## THE CLUE: the light prop and its tint (PLACEHOLDER look).
+## THE CLUE: the lantern prop (PLACEHOLDER look), the lit tint and glow at the right exit, the dark
+## tint at the wrong ones.
 const DM_LIGHT_PROP := "lamp"
-const DM_LIGHT_TINT := Color(0.78, 1.0, 0.5)
+const DM_LIGHT_TINT := Color(0.85, 1.0, 0.55)
+const DM_LIGHT_GLOW := 3.0
+const DM_DARK_TINT := Color(0.24, 0.24, 0.2)
 ## ...and the ground of the right exit's corridor: sacred meadow, whose tile carries drifting
-## fireflies ("forest_dirt" = a plain path: the lights alone).
+## fireflies ("forest_dirt" = a plain path: the lanterns alone).
 const DM_CLUE_TILE := "sacred_meadow"
 ## The toast when a wrong exit turns you back to the entrance (TODO(story): placeholder wording).
 const DM_LOST_TOAST := "You feel turned around..."
@@ -3718,10 +3735,12 @@ func _dm_in_clearing(x: int, y: int) -> bool:
 	return dx * dx + dy * dy <= 1.0
 
 
+## A room's ground: forest WALL everywhere except the clearing, the four corridors (the cross of
+## paths through the middle), the lantern posts' cells and the room's carves.
 func _dm_terrain(room: Dictionary, x: int, y: int) -> String:
 	var c := Vector2i(x, y)
 	# THE CLUE, on the ground: the right exit's corridor (mouth to edge) is old sacred ground, where
-	# fireflies drift (the tile's own glow) -- the lights' companions.
+	# fireflies drift (the tile's own glow) -- the lit lanterns' companions.
 	if _dm_right_corridor(String(room["right"])).has(c):
 		return DM_CLUE_TILE
 	for d in DM_EXITS:
@@ -3731,22 +3750,16 @@ func _dm_terrain(room: Dictionary, x: int, y: int) -> String:
 		return "tree"
 	for d in DM_FLANKS:
 		if (DM_FLANKS[d] as Array).has(c):
-			return "grass_plains"
+			return "grass_plains"  # under a lantern post (solid): the corridor stays 1 wide
 	# The cross of paths: the corridors out to the four exits, and on through the clearing.
 	if x == DM_C.x or y == DM_C.y:
 		return "forest_dirt"
-	if _in(room["pockets"], c):
+	for cv in room["carve"]:
+		if (cv[0] as Rect2i).has_point(c):
+			return String(cv[1])
+	if _dm_in_clearing(x, y):
 		return "grass_plains"
-	if String(room["id"]) == "depths_of_the_wood_3" and c == DM_NOOK_TREE:
-		return "forest_dirt"
-	if not _dm_in_clearing(x, y):
-		return "tree"
-	if c in DM_OLD_TREES:
-		return "tree"
-	if _in(room["grass"], c):
-		return "tall_grass"
-	return "grass_plains"
-
+	return "tree"
 
 func _build_depths_of_the_wood() -> void:
 	for i in range(DM_ROOMS.size()):
@@ -3796,17 +3809,57 @@ func _build_depths_room(i: int) -> void:
 			var lost := _warp("%s_exit" % d, rect, entrance, &"south")
 			lost.arrival_toast = DM_LOST_TOAST
 			ents.append(lost)
-	# THE CLUE: the lights at the right exit's mouth.
-	for f in DM_FLANKS[right]:
-		var fc: Vector2i = f
-		ents.append(_prop("light_%d_%d" % [fc.x, fc.y], DM_LIGHT_PROP, fc, Vector2i.ONE, DM_LIGHT_TINT, true))
+	# THE CLUE: lantern posts at every choice exit's mouth -- LIT at the right one, dark at the others.
+	for d in DM_CHOICES:
+		for f in DM_FLANKS[d]:
+			var fc: Vector2i = f
+			var lit: bool = d == right
+			var post := _prop("light_%d_%d" % [fc.x, fc.y], DM_LIGHT_PROP, fc, Vector2i.ONE,
+				DM_LIGHT_TINT if lit else DM_DARK_TINT, true)
+			post.glow = DM_LIGHT_GLOW if lit else 0.0
+			ents.append(post)
 	if bool(room["gate"]):
 		ents.append(_breakable_tree(aid, "gate_tree", DM_MOUTH[right]))
 	ents.append_array(_depths_room_extras(i, aid))
+	ents.append_array(_dm_thickets(room))
 	_add_doors(a, ents)
 	a.entities = _entities(ents)
 	a.encounter_zones = _depths_grass_zones()
 	_save(a, CONTENT + "areas/%s/area.tres" % aid)
+
+
+## The forest WALL made dense: THICKET props (the tree tile's own art, extra trees per cell) laid
+## over every block of the room's tree terrain -- walk-over props, the terrain blocks. The wall cells
+## are cut into rectangles greedily (row by row, deterministic).
+func _dm_thickets(room: Dictionary) -> Array:
+	var out: Array = []
+	var taken: Dictionary = {}
+	# The row just SOUTH of open ground keeps its single tile tree: the camera looks from the south,
+	# so a thicket there would hide the path (and the hero) behind it.
+	var wall := func(x: int, y: int) -> bool:
+		return x >= 0 and y >= 0 and x < DM_W and y < DM_H and not taken.has(Vector2i(x, y)) \
+			and _dm_terrain(room, x, y) == "tree" and (y == 0 or _dm_terrain(room, x, y - 1) == "tree")
+	for y in range(DM_H):
+		for x in range(DM_W):
+			if not wall.call(x, y):
+				continue
+			var w: int = 1
+			while wall.call(x + w, y):
+				w += 1
+			var h: int = 1
+			var grow: bool = true
+			while grow:
+				for xx in range(x, x + w):
+					if not wall.call(xx, y + h):
+						grow = false
+						break
+				if grow:
+					h += 1
+			for yy in range(y, y + h):
+				for xx in range(x, x + w):
+					taken[Vector2i(xx, yy)] = true
+			out.append(_prop("thicket_%d_%d" % [x, y], "thicket", Vector2i(x, y), Vector2i(w, h), Color.WHITE))
+	return out
 
 
 ## Each room's own things: the entrance sign, the trainers, the nook and the pocket chests.
@@ -3815,10 +3868,10 @@ func _depths_room_extras(i: int, aid: String) -> Array:
 	var out: Array = []
 	match i:
 		0:
-			out.append(_sign("maze_sign", Vector2i(10, 13), "Old Signpost",
+			out.append(_sign("maze_sign", DM_SIGN, "Old Signpost",
 				"The deep forest turns travellers round.\nFollow the lights."))
 		1:
-			out.append(_depths_trainer("forager", DM_FORAGER, "east", "FORAGER", Color(0.46, 0.5, 0.3),
+			out.append(_depths_trainer("forager", DM_FORAGER, "west", "FORAGER", Color(0.46, 0.5, 0.3),
 				[{"character_id": "blightcap", "strength": 0.9}, {"character_id": "petalfang", "strength": 0.8}],
 				LV_DM_FORAGER, 140,
 				"You're lost too? Then let's battle while we're at it!",
@@ -3830,7 +3883,7 @@ func _depths_room_extras(i: int, aid: String) -> Array:
 				"Quiet! You'll scare off-- oh, it's a battle you want? Fine!",
 				"All right, all right. Go on, then."))
 			out.append(_breakable_tree(aid, "nook_tree", DM_NOOK_TREE))
-			var nook := _depths_chest("nook_chest", DM_NOOK_CHEST, "south", [&"heartwood_tonic", &"clearwater_draught"], 60)
+			var nook := _depths_chest("nook_chest", DM_NOOK_CHEST, "west", [&"heartwood_tonic", &"clearwater_draught"], 60)
 			# Out of reach (and out of sight) until its tree is felled.
 			nook.visible_if = "has(\"%s\")" % FieldObstacleEntity.flag_for(aid, "nook_tree")
 			out.append(nook)

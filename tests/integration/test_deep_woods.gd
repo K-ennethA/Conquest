@@ -350,16 +350,29 @@ func test_the_maze_rooms_chain_and_the_wrong_ways_lead_back_to_the_entrance() ->
 	assert_eq(String(_warp(HEART, "south_exit").target_area), ROOMS[ROOMS.size() - 1])
 
 
-func test_lights_mark_the_right_exit_in_every_room() -> void:
+func test_lit_lanterns_mark_the_right_exit_in_every_room() -> void:
+	# Every CHOICE exit (north / west / east) has a pair of lantern posts at its mouth, so the exits
+	# look alike; only the RIGHT one's are lit (PropEntity.glow), the wrong ones stay dark.
 	for i in range(ROOMS.size()):
 		var a := _area(ROOMS[i])
 		var right := _right_exit(i)
 		var exit_cell: Vector3i = right.cells()[0]
-		var lights: Array = []
+		var lit: Array = []
+		var dark: Array = []
 		for e in a.entity_list():
 			if e is PropEntity and String(e.id).begins_with("light_"):
-				lights.append(e)
-		assert_eq(lights.size(), 2, "%s: a pair of lights" % ROOMS[i])
+				if (e as PropEntity).glow > 0.0:
+					lit.append(e)
+				else:
+					dark.append(e)
+		assert_eq(lit.size(), 2, "%s: a pair of LIT lanterns" % ROOMS[i])
+		assert_eq(dark.size(), 4, "%s: dark pairs at the two wrong exits" % ROOMS[i])
+		for l in lit:
+			var d: Vector3i = (l as PropEntity).cell - exit_cell
+			assert_lte(absi(d.x) + absi(d.y), 3, "%s/%s stands at the right exit's mouth" % [ROOMS[i], l.id])
+		for l in dark:
+			var d: Vector3i = (l as PropEntity).cell - exit_cell
+			assert_gt(absi(d.x) + absi(d.y), 3, "%s/%s (dark) is not at the right exit" % [ROOMS[i], l.id])
 		# ... and fireflies over the right corridor's ground (sacred meadow), never at a wrong exit.
 		for eid in EXIT_IDS:
 			var w := _warp(ROOMS[i], eid)
@@ -368,15 +381,53 @@ func test_lights_mark_the_right_exit_in_every_room() -> void:
 				assert_eq(tid, "sacred_meadow", "%s: the right way glows" % ROOMS[i])
 			else:
 				assert_ne(tid, "sacred_meadow", "%s/%s: a wrong way does not" % [ROOMS[i], eid])
-		for l in lights:
-			var d: Vector3i = (l as PropEntity).cell - exit_cell
-			assert_lte(absi(d.x) + absi(d.y), 3, "%s/%s stands at the right exit's mouth" % [ROOMS[i], l.id])
-			for eid in EXIT_IDS:
-				var w := _warp(ROOMS[i], eid)
-				if w == right:
-					continue
-				var dw: Vector3i = (l as PropEntity).cell - w.cells()[0]
-				assert_gt(absi(dw.x) + absi(dw.y), 3, "%s/%s is nowhere near a wrong exit (%s)" % [ROOMS[i], l.id, eid])
+
+
+func test_a_lit_lantern_gets_a_glowing_head_and_a_light() -> void:
+	var n: Node3D = OverworldProps.prop("lamp", Vector2i.ONE, Color(0.85, 1.0, 0.55), 0)
+	assert_null(n.find_child("Glow", true, false), "an unlit lantern has no light")
+	OverworldProps.add_glow(n, "lamp", Color(0.85, 1.0, 0.55), 2.4)
+	var light := n.find_child("Glow", true, false) as OmniLight3D
+	assert_not_null(light, "a lit one does")
+	if light != null:
+		assert_almost_eq(light.light_energy, 2.4, 0.001)
+		assert_gt(light.position.y, 2.0, "at the lantern head")
+	var head := n.find_child("GlowHead", true, false) as MeshInstance3D
+	assert_not_null(head, "and an emissive head")
+	if head != null:
+		assert_true((head.material_override as StandardMaterial3D).emission_enabled)
+	n.free()
+
+
+func test_each_room_is_enclosed_by_forest() -> void:
+	# A Lost-Woods room: walls of old trees; the walkable ground is a small share of the room, and
+	# every exit is reached only along its 1-wide corridor (the cells beside it are wall or a post).
+	for id in ROOMS:
+		var a := _area(id)
+		var g := OverworldGrid.from_map(a.terrain)
+		var open: int = 0
+		for y in range(a.height()):
+			for x in range(a.width()):
+				if g.is_terrain_passable(Vector3i(x, y, 0)):
+					open += 1
+		assert_lt(float(open) / float(a.width() * a.height()), 0.45, "%s: mostly forest wall (%d open cells)" % [id, open])
+		var full := OverworldGrid.build(a, _past())
+		for eid in EXIT_IDS:
+			var c: Vector3i = _warp(id, eid).cells()[0]
+			var along := Vector3i.ZERO
+			if c.y == 0:
+				along = Vector3i(0, 1, 0)
+			elif c.y == a.height() - 1:
+				along = Vector3i(0, -1, 0)
+			elif c.x == 0:
+				along = Vector3i(1, 0, 0)
+			else:
+				along = Vector3i(-1, 0, 0)
+			var side := Vector3i(along.y, along.x, 0)
+			for k in range(0, 3):
+				var cc: Vector3i = c + along * k
+				for s in [side, -side]:
+					assert_false(full.is_walkable(cc + s), "%s/%s: the corridor is walled at %s" % [id, eid, str(cc + s)])
 
 
 func test_breakable_trees_block_the_right_way_until_felled() -> void:

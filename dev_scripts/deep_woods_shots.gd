@@ -28,9 +28,10 @@ func _ready() -> void:
 	await _shot_at(open, "deepwood_village", Vector3i(15, 12, 0), "east", "deepwood_lyra.png")
 	var depths: Array = open + ["deepwood.nyra_beaten", "fieldmove.treefell", "world.depths_of_the_wood_open",
 		"deepwood.treefell_learned"]
-	await _shot_at(depths, "depths_of_the_wood", Vector3i(9, 5, 0), "north", "maze_room1_lights.png")
-	await _shot_at(depths, "depths_of_the_wood_2", Vector3i(14, 9, 0), "east", "maze_room2_gate_tree.png")
-	await _shot_at(depths, "depths_of_the_wood_3", Vector3i(12, 7, 0), "north", "maze_room3_forest.png")
+	await _shot_at(depths, "depths_of_the_wood", Vector3i(9, 4, 0), "north", "maze_room1_lights.png")
+	await _shot_at(depths, "depths_of_the_wood_2", Vector3i(13, 8, 0), "east", "maze_room2_gate_tree.png")
+	await _shot_at(depths, "depths_of_the_wood_2", Vector3i(5, 8, 0), "west", "maze_room2_dark_wrong_way.png")
+	await _shot_at(depths, "depths_of_the_wood_3", Vector3i(9, 12, 0), "north", "maze_room3_forest.png")
 	await _shot_at(depths, "depths_of_the_wood_heart", Vector3i(9, 6, 0), "north", "heart_eldroot.png")
 	StoryController.end_session()
 	StoryController.scene_changes_enabled = true
