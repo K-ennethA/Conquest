@@ -10,8 +10,12 @@ extends SceneTree
 ##   game/overworld/content/areas/crownhaven/      -- the walled river city (the shard ceremony)
 ##   game/overworld/content/areas/sparse_forest/   -- the road west from Crownhaven to Woodland Town
 ##   game/overworld/content/areas/woodland_town/   -- the timber town at the edge of the Deep Woods
+##   game/overworld/content/areas/deepwood_village/    -- THE DEEP WOODS: Nyra's clan village
+##   game/overworld/content/areas/depths_of_the_wood/  -- the forest north of it and Eldroot's glade
 ##   game/overworld/content/world.tres                       -- the WORLD MAP registry (WorldAtlas)
 ##   game/overworld/content/battles/ow_oakvale_ashes.tres    -- the FIRST FIGHT (tactical)
+##   game/overworld/content/battles/ow_deepwood_glade.tres   -- Eldroot's legend battle (tactical)
+##   game/overworld/content/field_moves/*.tres               -- FIELD MOVES (DECISIONS.md #41 / #71)
 ##   game/overworld/content/battles/ow_mossway_clearing.tres -- Bram's board (post-opening)
 ##   game/overworld/content/hero.tres                        -- the avatar (placeholder model)
 ##   game/overworld/content/story_ruleset.tres               -- story tuning
@@ -159,6 +163,14 @@ const NAMES := {
 	"FISHER": "Fisher Nan",                 # River Crossing: the south bank
 	"CARTER": "Carter Joss",                # River Crossing: stuck on the coast road
 	"WOODSMAN": "Woodsman Alder",           # the Sparse Forest
+	# --- The Deep Woods (DECISIONS.md #40 / #85 / #88) ---
+	"NYRA": "Nyra",                         # owner: the Deepwood chief (docs/design/characters/nyra.webp)
+	# Generic villagers (no named cast -- one short placeholder line each in dialogue.json).
+	"DEEPWOOD_ELDER": "Deepwood Elder",
+	"DEEPWOOD_HUNTER": "Deepwood Hunter",
+	"DEEPWOOD_CHILD": "Deepwood Child",
+	# TODO(story): PLACEHOLDER name of the tree-felling field move Nyra teaches (DECISIONS.md #40/#41).
+	"FIELD_MOVE_TREES": "Treefell",
 }
 
 # =====================================================================================
@@ -199,9 +211,9 @@ const WORLD_LOCATIONS := [
 		"A timber town in a forest clearing at the edge of the Deep Woods."],
 	["thieves_guild", "Hidden Thieves Guild", "dungeon", "woodlands", Vector2(0.275, 0.478), [], "world.thieves_guild_open", true,
 		"A cave below Woodland Town that nobody admits to knowing."],
-	["deepwood_village", "Deepwood Village", "village", "woodlands", Vector2(0.098, 0.474), [], "world.deepwood_open", false,
+	["deepwood_village", "Deepwood Village", "village", "woodlands", Vector2(0.098, 0.474), ["deepwood_village"], "world.deepwood_open", false,
 		"A village deep in the old forest, west of Woodland Town."],
-	["depths_of_the_wood", "Depths of the Wood", "special", "woodlands", Vector2(0.114, 0.337), [], "world.depths_of_the_wood_open", false,
+	["depths_of_the_wood", "Depths of the Wood", "special", "woodlands", Vector2(0.114, 0.337), ["depths_of_the_wood"], "world.depths_of_the_wood_open", false,
 		"A glowing glade at the forest's heart. A special encounter."],
 	["frostpeak_village", "Frostpeak Village", "village", "snowy_peaks", Vector2(0.231, 0.166), [], "world.frostpeak_open", false,
 		"A village under the Snowy Peaks, up the north trail from Woodland Town."],
@@ -400,15 +412,18 @@ var _ok: bool = true
 
 func _initialize() -> void:
 	for d in ["areas/oakvale", "areas/oakvale_ruins", "areas/mossway", "areas/river_crossing", "areas/crownhaven",
-			"areas/sparse_forest", "areas/woodland_town", "battles", "shops", "tournaments"]:
+			"areas/sparse_forest", "areas/woodland_town", "areas/deepwood_village", "areas/depths_of_the_wood",
+			"battles", "shops", "tournaments", "field_moves"]:
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CONTENT + d))
 	_build_world()
 	_build_hero()
 	_build_ruleset()
 	_build_shops()
 	_build_tournaments()
+	_build_field_moves()
 	_build_battle_map()
 	_build_first_fight_map()
+	_build_eldroot_map()
 	_build_oakvale(false)
 	_build_oakvale(true)
 	_build_mossway()
@@ -416,6 +431,8 @@ func _initialize() -> void:
 	_build_crownhaven()
 	_build_sparse_forest()
 	_build_woodland_town()
+	_build_deepwood_village()
+	_build_depths_of_the_wood()
 	print("[build_story_content] %s" % ("done" if _ok else "FAILED"))
 	quit(0 if _ok else 1)
 
@@ -2664,7 +2681,8 @@ func _rival_after(win: Array, lose: Array) -> Array:
 func _rival() -> Array:
 	var out: Array = []
 	var lyra := _npc("lyra", CH_LYRA_START, "west", "LYRA", Color(0.78, 0.5, 0.2), "trainer")
-	lyra.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_COMPLETE, F_RIVAL_DUEL1]
+	# Never while she is away in Deepwood Village (LYRA_IN_DEEPWOOD: one Lyra at a time).
+	lyra.visible_if = "has(\"%s\") and not has(\"%s\") and not (%s)" % [F_COMPLETE, F_RIVAL_DUEL1, LYRA_IN_DEEPWOOD]
 	# Her waiting line is in dialogue.json (areas.crownhaven.lyra).
 	out.append(lyra)
 
@@ -2697,7 +2715,7 @@ func _rival() -> Array:
 
 	# By the arena after the first duel: rematches, once per rest, stronger every time.
 	var lyra2 := _npc("lyra_arena", CH_LYRA_ARENA, "south", "LYRA", Color(0.78, 0.5, 0.2), "trainer")
-	lyra2.visible_if = "has(\"%s\")" % F_RIVAL_DUEL1
+	lyra2.visible_if = "has(\"%s\") and has(\"%s\") and not (%s)" % [F_COMPLETE, F_RIVAL_DUEL1, LYRA_IN_DEEPWOOD]
 	var ask := ChoiceCommand.new()
 	ask.prompt = _line("lyra_arena", "LYRA", "Ready to test each other again? Rematch?")  # TODO(story)
 	var yes_cmds: Array = [_duel(_rival_spec())]
@@ -2953,9 +2971,10 @@ func _build_sparse_forest() -> void:
 # Deepwood Village) from the busy EAST BANK (the Wardens' Lodge, the Stumped Hart inn, Timber Row's
 # trading post and forge, the lumber yard and the sawmill). It sits in a clearing: dense woods close
 # in on every side but the roads. Reached from the Sparse Forest (the east end, entry `east_road`);
-# the west road (Deepwood Village), the north trail (Frostpeak Village, under the Snowy Peaks) and
-# the south trail (the Hidden Thieves Guild -- never named in town) are placeholders for the later
-# regions (their warps target this town and never open yet).
+# the west road leads to Deepwood Village (THE DEEP WOODS, below -- held until Warden Hale opens it);
+# the north trail (Frostpeak Village, under the Snowy Peaks) and the south trail (the Hidden Thieves
+# Guild -- never named in town) are placeholders for the later regions (their warps target this town
+# and never open yet).
 
 const WT_W := 28
 const WT_H := 24
@@ -3053,14 +3072,16 @@ func _build_woodland_town() -> void:
 	ents.append_array(_wt_scenery())
 	ents.append(_shrine(WT_SHRINE, "Woodland Wayshrine"))
 	ents.append_array(_wt_people())
-	# Roads: east through the Sparse Forest to Crownhaven; west (Deepwood Village), the north trail
-	# (Frostpeak Village) and the south trail (the Hidden Thieves Guild) are the next chapters --
+	# Roads: east through the Sparse Forest to Crownhaven; west to Deepwood Village (below); the north
+	# trail (Frostpeak Village) and the south trail (the Hidden Thieves Guild) are the next chapters --
 	# their warps target this town and never open yet.
 	ents.append(_warp("east_exit", Rect2i(WT_W - 1, WT_ROAD_Y, 1, 1), &"sparse_forest", &"west"))
 	ents.append(_closed_road("north_exit", Rect2i(WT_NORTH_X, 0, 1, 1), "frostpeak_village", &"woodland_town", &"north_trail",
 		"The trail north climbs out of the pines toward the snowline, where Frostpeak Village sits under the Snowy Peaks. A Warden's chain is drawn across it, hung with a frosted board: \"High trail closed -- snow. Open at the thaw.\""))
-	ents.append(_warp("west_exit", Rect2i(0, WT_ROAD_Y, 1, 1), &"woodland_town", &"west_road", "",
-		"has(\"world.deepwood_open\")", _scene("wt_west_locked", [
+	# The west road to Deepwood Village (the Deep Woods, built below): held by the Wardens' rope until
+	# Warden Hale opens it ([method _wt_people]: talk to him at the Lodge).
+	ents.append(_warp("west_exit", Rect2i(0, WT_ROAD_Y, 1, 1), &"deepwood_village", &"east_road", "",
+		"has(\"%s\")" % F_DEEPWOOD_OPEN, _scene("wt_west_locked", [
 			_narr("The road west thins to a deer track and then to nothing. Somewhere beyond the thorns lies Deepwood Village -- but the Wardens have strung a rope across the track with a painted warning: \"No travellers. Ask at the Lodge.\""),
 		])))
 	ents.append(_warp("south_exit", Rect2i(4, WT_H - 1, 1, 1), &"woodland_town", &"wayshrine", "",
@@ -3139,7 +3160,18 @@ func _wt_people() -> Array:
 
 	# EVERY townsperson's talk is in dialogue.json (DialogueBank): areas.woodland_town.<id>.
 	# --- East bank: the Lodge, the inn, Timber Row, the lumber yard --------------------------
-	out.append(_npc("hale", Vector2i(12, 9), "south", "HALE", cloak_green, "officer"))
+	var hale := _npc("hale", Vector2i(12, 9), "south", "HALE", cloak_green, "officer")
+	# The Deepwood road (DECISIONS.md #40): the sign says "Ask at the Lodge" -- asking him (after the
+	# opening) opens it. His talk is the bank's; this runs after it.
+	# TODO(story): placeholder narration -- the owner has not said why the road opens.
+	hale.on_interact = StoryCommand.list([
+		IfCommand.make("has(\"%s\") and not has(\"%s\")" % [F_COMPLETE, F_DEEPWOOD_OPEN], [
+			_say([_narr("{HALE} writes your name in the Lodge's ledger and sends a Warden to take down the rope across the west road.")]),
+			_flag(F_DEEPWOOD_OPEN),
+			_toast("The road to Deepwood Village is open"),
+		]),
+	])
+	out.append(hale)
 	out.append(_npc("bryn", Vector2i(19, 11), "south", "BRYN", Color(0.6, 0.38, 0.28), "villager"))
 	out.append(_merchant("sedge", Vector2i(23, 11), "south", "SEDGE", Color(0.4, 0.34, 0.2), SHOP_WOODLAND))
 	out.append(_npc("burr", Vector2i(26, 11), "west", "BURR", Color(0.36, 0.28, 0.24), "trainer"))
@@ -3167,3 +3199,506 @@ func _wt_people() -> Array:
 	chest.loot_gold = 40
 	out.append(chest)
 	return out
+
+
+# =====================================================================================
+#  THE DEEP WOODS (DECISIONS.md #38-#41, #50, #56, #67, #71, #74, #75, #80, #81, #85, #88)
+# =====================================================================================
+#
+#   Woodland Town's west road (opened by Warden Hale at the Lodge: world.deepwood_open)
+#     -> DEEPWOOD VILLAGE: Nyra's tree-house clan village (#85) -- a Wayshrine, Nyra (the Deepwood
+#        CHIEF: a scaled DUEL, #50 / #80), a few villagers (one bank line each), and Lyra (#88), here
+#        from the moment the road opens until the Eldroot battle is won.
+#     -> beating NYRA grants the tree-felling FIELD MOVE (#40 / #41: fieldmove.treefell) and opens
+#        the trail north (world.depths_of_the_wood_open: "to go through the forest the hero must first
+#        fight Nyra").
+#     -> THE DEPTHS OF THE WOOD: forest, tall grass (the Deep Woods' creatures), and BREAKABLE TREES
+#        (FieldObstacleEntity) -- one hides the way to the glade at the forest's heart, where ELDROOT
+#        waits: a TACTICAL legend battle (#74), FIXED above the band (#81), with Lyra fighting beside
+#        you as a guest (#56 / #74). Win -> the OPTIONAL bond (#75): a legend goes into the journey's
+#        legend list (StoryState.legends), never the party (#39).
+#
+# All lines here are short neutral PLACEHOLDERS (TODO(story)) -- the owner's facts only.
+
+## Flags (save keys -- never rename once shipped).
+const F_DEEPWOOD_OPEN := "world.deepwood_open"
+const F_DEPTHS_OPEN := "world.depths_of_the_wood_open"
+const F_NYRA_BEATEN := "deepwood.nyra_beaten"
+## The tree-felling field move is granted (FieldMoveResource.unlock_flag).
+const F_TREEFELL := "fieldmove.treefell"
+const F_ELDROOT_BEATEN := "deepwood.eldroot_beaten"
+const F_ELDROOT_BONDED := "legend.eldroot.bonded"
+## Encounter ids (save keys).
+const NYRA_DUEL_ID := "deepwood.chief.nyra"
+const ELDROOT_BATTLE_ID := "deepwood.legend.eldroot"
+## Lyra is IN DEEPWOOD from the moment the road opens until the Eldroot battle is won; every other
+## Lyra (Crownhaven's south gate and arena) hides meanwhile -- one Lyra at a time. (The workshop's
+## ceremony Lyra is gone once the opening is over, and the road only opens after it.)
+const LYRA_IN_DEEPWOOD := "has(\"opening.complete\") and has(\"world.deepwood_open\") and not has(\"deepwood.eldroot_beaten\")"
+
+## THE FIELD MOVE (DECISIONS.md #41 / #71): id (its .tres under content/field_moves/), and who can use
+## it. KNOBS: the species list (forms or evolution lines; the starter options are all here, so every
+## journey has a user) and whether the hero can use it himself (#71: "possibly").
+const FIELD_MOVE_TREES_ID := "treefell"
+const FIELD_MOVE_TREES_SPECIES: Array[String] = ["tree_grunt", "oakheart", "vineweave", "petalfang", "blightcap"]
+const FIELD_MOVE_TREES_HERO := false
+
+## NYRA, the Deepwood chief (DECISIONS.md #85): a DUEL (#50), SCALED inside the Deep Woods band (#80)
+## at this offset from the party's top level. PLACEHOLDER team (nature roster creatures; Eldroot is
+## the legend, never hers) -- her FINAL creature is the one she uses the stone with (#38 / #67).
+const NYRA_SCALE_OFFSET := 1
+const NYRA_TEAM: Array[String] = ["petalfang", "vineweave", "oakheart"]
+## TODO(bond): stone boost -- the bond / stone system is not built (#38 / #65 / #67). Until it is, her
+## FINAL creature gets this small authored strength bump (the duel's stat multiplier).
+const NYRA_STONE_BOOST := 1.15
+const NYRA_PURSE := 400
+
+## ELDROOT: the legend's TACTICAL board (a forest glade). The party fields up to ELDROOT_SQUAD_SIZE;
+## Lyra joins as a GUEST (a player-0 turn-1 Reinforcement, like the first fight's allies).
+const ELDROOT_MAP_PATH := CONTENT + "battles/ow_deepwood_glade.tres"
+const ELDROOT_SQUAD_SIZE := 3
+## TODO(humans): swap to "lyra" + deploy picker -- Lyra as a real battle unit and a deployable squad
+## pick (#56 / #74) come with the humans-as-units work. Until then an existing roster unit stands in
+## (the same placeholder as her ceremony partner); not a catchable species, so the squad hand-off
+## can never mistake her for a party member.
+const LYRA_UNIT := "gem_knight"
+## The two Barklings screening Eldroot fight at this level (map-spawn "level"); Eldroot itself is
+## the legend level (BattleSpec.make_legend: band max + legend_over_band).
+const LV_ELDROOT_SCREEN := 13
+
+
+# --- The field move ------------------------------------------------------------------
+
+func _build_field_moves() -> void:
+	var fm := FieldMoveResource.new()
+	fm.id = StringName(FIELD_MOVE_TREES_ID)
+	fm.display_name = _t("{FIELD_MOVE_TREES}")
+	fm.unlock_flag = F_TREEFELL
+	var sp: Array[StringName] = []
+	for s in FIELD_MOVE_TREES_SPECIES:
+		sp.append(StringName(s))
+	fm.species = sp
+	fm.hero_can_use = FIELD_MOVE_TREES_HERO
+	# TODO(story): placeholder wording.
+	fm.locked_hint = "A gnarled tree grows across the way. It could be felled -- if you knew how."
+	fm.no_user_hint = "You know {move}, but nobody in your party can use it."
+	fm.prompt_text = "This tree could be felled. Use {move}?"
+	fm.used_text = "{user} used {move}!"
+	_save(fm, FieldMoveResource.path_for(FIELD_MOVE_TREES_ID))
+
+
+## A BREAKABLE TREE at [param cell] of area [param area_id] (DECISIONS.md #40): gone for good once felled.
+func _breakable_tree(area_id: String, id: String, cell: Vector2i) -> FieldObstacleEntity:
+	var t := FieldObstacleEntity.new()
+	t.id = StringName(id)
+	t.cell = Vector3i(cell.x, cell.y, 0)
+	t.display_name = "Gnarled Tree"
+	t.field_move = StringName(FIELD_MOVE_TREES_ID)
+	t.look = "tree"
+	t.tint = Color(0.3, 0.4, 0.2)
+	t.visible_if = FieldObstacleEntity.presence_condition(area_id, id)
+	return t
+
+
+# --- Deepwood Village ------------------------------------------------------------------
+#
+# A small clan village in a clearing of the old forest (Nyra's sheet: a tree-house village). The
+# tree-houses are PLACEHOLDER cabin props (the real models come from Blender). East: the road back
+# to Woodland Town. North: the trail into the deep forest, held until Nyra is beaten.
+
+const DV_W := 26
+const DV_H := 20
+const DV_ROAD_Y := 11
+const DV_NORTH_X := 12
+## Nyra's lodge (the chief's tree-house) and the clan's houses.
+const DV_LODGE := Rect2i(15, 3, 4, 3)
+const DV_HOUSES := [Rect2i(4, 5, 3, 2), Rect2i(5, 14, 3, 2), Rect2i(18, 14, 3, 2)]
+const DV_SHRINE := Vector2i(10, 9)
+const DV_NYRA := Vector2i(16, 6)
+const DV_LYRA := Vector2i(14, 12)
+
+
+func _dv_buildings() -> Array:
+	return [DV_LODGE] + DV_HOUSES
+
+
+func _dv_terrain(x: int, y: int) -> String:
+	var c := Vector2i(x, y)
+	# The two ways out: the road east (Woodland Town) and the trail north (the Depths).
+	if x == DV_W - 1 and y == DV_ROAD_Y:
+		return "forest_dirt"
+	if x == DV_NORTH_X and y <= DV_ROAD_Y:
+		return "forest_dirt"
+	if x == 0 or y == 0 or x == DV_W - 1 or y == DV_H - 1:
+		return "tree"
+	# The trail's mouth: a little open ground either side of it at the forest edge.
+	if absi(x - DV_NORTH_X) == 1 and y <= 3:
+		return "grass_plains"
+	if _in(_dv_buildings(), c):
+		return "stone_wall"
+	if c == DV_SHRINE:
+		return "sacred_ground"
+	# The road in from the east, and the lane down from the chief's lodge.
+	if y == DV_ROAD_Y and x >= 8:
+		return "forest_dirt"
+	if x == DV_LODGE.position.x + 2 and y >= DV_LODGE.end.y and y < DV_ROAD_Y:
+		return "forest_dirt"
+	# The clearing; the old forest closes in all round it.
+	var dx: float = (float(x) - 13.0) / 11.5
+	var dy: float = (float(y) - 10.0) / 8.0
+	if dx * dx + dy * dy > 1.0:
+		return "tree" if _h(x, y, 61) < 0.85 else "grass_plains"
+	return "grass_plains"
+
+
+func _build_deepwood_village() -> void:
+	var t := _new_map("Deepwood Village", DV_W, DV_H,
+		"Deepwood Village: a clan village in a clearing of the old forest, west of Woodland Town. Story-mode terrain.")
+	t.lighting_preset = "Day"
+	_paint(t, _dv_terrain)
+	_add_validator_anchors(t, Vector2i(DV_W - 2, DV_ROAD_Y), Vector2i(DV_SHRINE.x, DV_SHRINE.y + 1))
+	_save(t, CONTENT + "areas/deepwood_village/terrain.tres")
+
+	var a := OverworldAreaResource.new()
+	a.area_id = &"deepwood_village"
+	a.display_name = "Deepwood Village"
+	a.kind = OverworldAreaResource.Kind.TOWN
+	_place(a, "deepwood_village")
+	a.terrain = load(CONTENT + "areas/deepwood_village/terrain.tres")
+	a.entry_points = {
+		"east_road": {"cell": [DV_W - 2, DV_ROAD_Y, 0], "facing": "west"},
+		"north_trail": {"cell": [DV_NORTH_X, 1, 0], "facing": "south"},
+		"wayshrine": {"cell": [DV_SHRINE.x, DV_SHRINE.y + 1, 0], "facing": "north"},
+	}
+	var ents: Array = []
+	ents.append_array(_dv_scenery())
+	ents.append(_shrine(DV_SHRINE, "Deepwood Wayshrine"))
+	ents.append_array(_dv_people())
+	ents.append(_warp("east_exit", Rect2i(DV_W - 1, DV_ROAD_Y, 1, 1), &"woodland_town", &"west_road"))
+	# DECISIONS.md #40: to go through the forest the hero must first fight Nyra.
+	ents.append(_warp("north_exit", Rect2i(DV_NORTH_X, 0, 1, 1), &"depths_of_the_wood", &"south", "",
+		"has(\"%s\")" % F_DEPTHS_OPEN, _scene("dv_north_locked", [
+			# TODO(story): placeholder wording.
+			_narr("The trail north leads into the deep forest. To go on, you must first battle {NYRA}, the chief of Deepwood."),
+		])))
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	# No arrival scene (the location popup names the village); the flag is set silently.
+	a.on_enter = StoryCommand.list([
+		IfCommand.make("not has(\"deepwood.arrived\")", [_flag("deepwood.arrived")]),
+	])
+	_save(a, CONTENT + "areas/deepwood_village/area.tres")
+
+
+func _dv_scenery() -> Array:
+	var out: Array = []
+	var moss := Color(0.26, 0.4, 0.22)
+	# PLACEHOLDER tree-houses (cabins until the Blender models arrive).
+	out.append(_prop("nyra_lodge", "cabin", DV_LODGE.position, DV_LODGE.size, Color(0.22, 0.36, 0.2)))
+	for i in range(DV_HOUSES.size()):
+		var r: Rect2i = DV_HOUSES[i]
+		out.append(_prop("treehouse_%d" % i, "cabin", r.position, r.size, [moss, Color(0.36, 0.3, 0.2)][i % 2]))
+	out.append(_prop("campfire", "fire", Vector2i(13, 15), Vector2i.ONE, Color.WHITE, true))
+	out.append(_prop("woodpile", "logs", Vector2i(9, 16), Vector2i(2, 1), Color(0.58, 0.42, 0.24), true))
+	out.append(_prop("banner_lodge", "banner", Vector2i(DV_LODGE.position.x - 1, DV_LODGE.end.y), Vector2i.ONE,
+		Color(0.24, 0.42, 0.26), true))
+	for lc in [Vector2i(9, 8), Vector2i(11, 8)]:
+		out.append(_prop("lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(1.0, 0.78, 0.4), true))
+	return out
+
+
+func _dv_people() -> Array:
+	var out: Array = []
+	out.append(_sign("village_sign", Vector2i(DV_W - 3, DV_ROAD_Y + 1), "Deepwood Village",
+		"DEEPWOOD VILLAGE\nEast: Woodland Town.  North: the deep forest."))
+	out.append(_sign("trail_sign", Vector2i(DV_NORTH_X + 1, 3), "The North Trail",
+		"NORTH: THE DEEP FOREST"))
+	out.append(_nyra())
+	# Lyra (DECISIONS.md #88): met here; she fights beside you against Eldroot (the guest on its board).
+	# Her line is in dialogue.json (areas.deepwood_village.lyra).
+	var lyra := _npc("lyra", DV_LYRA, "north", "LYRA", Color(0.78, 0.5, 0.2), "trainer")
+	lyra.visible_if = LYRA_IN_DEEPWOOD
+	out.append(lyra)
+	# Villagers: one placeholder line each in dialogue.json (areas.deepwood_village.<id>).
+	var cloak := Color(0.3, 0.42, 0.28)
+	out.append(_npc("dv_elder", Vector2i(6, 8), "south", "DEEPWOOD_ELDER", cloak.lightened(0.15), "elder"))
+	out.append(_npc("dv_hunter", Vector2i(21, 9), "west", "DEEPWOOD_HUNTER", cloak, "trainer"))
+	out.append(_npc("dv_child", Vector2i(9, 13), "east", "DEEPWOOD_CHILD", Color(0.5, 0.6, 0.35), "child"))
+	return out
+
+
+## NYRA'S CHIEF DUEL (DECISIONS.md #50 / #80): SCALED inside the Deep Woods band, a boss battle for XP.
+## A loss WHITES OUT (a story duel concludes at once -- the Try Again screen is the tactical board's):
+## you wake at the Wayshrine and she waits, so it is never missable. Winning grants the field move
+## and opens the trail north.
+func _nyra_spec() -> BattleSpec:
+	var team: Array = []
+	for i in range(NYRA_TEAM.size()):
+		var row: Dictionary = {"character_id": NYRA_TEAM[i], "strength": 1.0}
+		if i == NYRA_TEAM.size() - 1:
+			# TODO(bond): stone boost -- she uses the stone with her FINAL creature (#38 / #67).
+			row["strength"] = NYRA_STONE_BOOST
+		team.append(row)
+	var spec := _duel_spec(NYRA_DUEL_ID, "{NYRA}", &"npc_nyra", team, false, BattleSpec.DefeatPolicy.WHITEOUT,
+		NYRA_PURSE, [], [F_NYRA_BEATEN, F_TREEFELL, F_DEPTHS_OPEN])
+	BattleSpec.make_chief(spec, REGION_BANDS["woodlands"], NYRA_SCALE_OFFSET)
+	spec.clash_intro = true
+	return spec
+
+
+## Nyra at her lodge. TODO(story): placeholder lines -- owner facts only (she is the Deepwood chief;
+## the hero must battle her to go through the forest; she teaches the tree-felling move).
+func _nyra() -> NpcEntity:
+	var nyra := _npc("nyra", DV_NYRA, "south", "NYRA", Color(0.3, 0.48, 0.3), "trainer")
+	var won: Array = [
+		_say([_line("nyra", "NYRA", "You've earned the way through. Take this with you -- it will clear the trees.")]),
+		_toast("New field move: {FIELD_MOVE_TREES}"),
+		SaveGameCommand.new(),
+	]
+	var ask := ChoiceCommand.new()
+	ask.prompt = _line("nyra", "NYRA", "I'm {NYRA}, chief of Deepwood. To go through the forest, you battle me first. Ready?")
+	ask.options = StoryCommand.list([
+		ChoiceOption.make("Battle!", [_duel(_nyra_spec()), IfCommand.make("outcome() == \"victory\"", won)]),
+		ChoiceOption.make("Not yet.", [], true),
+	])
+	nyra.on_interact = StoryCommand.list([
+		IfCommand.make("not has(\"%s\")" % F_NYRA_BEATEN, [ask], [
+			_say([_line("nyra", "NYRA", "The deep forest is open to you. Mind the trees.")]),
+		]),
+	])
+	return nyra
+
+
+# --- The Depths of the Wood ------------------------------------------------------------
+#
+# The forest north of the village: a winding track through tall grass (the Deep Woods' creatures,
+# in the region band), and BREAKABLE TREES. One closes the only gap in a wall of old trees -- the way
+# to the glade at the forest's heart, where Eldroot waits; another hides a nook with a chest; a third
+# is a shortcut. South: the trail back to Deepwood Village.
+
+const DW_W := 24
+const DW_H := 30
+const DW_ENTRY_X := 12
+## The wall of old trees across the forest, and its one gap (the gate tree).
+const DW_WALL_Y := 10
+const DW_GATE := Vector2i(12, DW_WALL_Y)
+## The glade at the forest's heart (north of the wall) and Eldroot in it.
+const DW_GLADE_C := Vector2i(12, 5)
+const DW_ELDROOT := Vector2i(12, 4)
+## The nook (a pocket behind a breakable tree) and its chest.
+const DW_NOOK := Rect2i(19, 15, 3, 3)
+const DW_NOOK_TREE := Vector2i(18, 16)
+const DW_NOOK_CHEST := Vector2i(21, 16)
+## The shortcut: a line of trees across the east side with one breakable tree in it.
+const DW_THICKET_Y := 21
+const DW_THICKET_TREE := Vector2i(16, DW_THICKET_Y)
+const DW_GRASS := [Rect2i(13, 23, 5, 4), Rect2i(3, 16, 3, 5), Rect2i(9, 16, 4, 4), Rect2i(14, 11, 4, 3)]
+
+
+## The winding track (the cells the scatter keeps off).
+func _dw_on_track(x: int, y: int) -> bool:
+	if x == DW_ENTRY_X and y >= 22:
+		return true
+	if y == 22 and x >= 7 and x <= DW_ENTRY_X:
+		return true
+	if x == 7 and y >= 14 and y <= 22:
+		return true
+	if y == 14 and x >= 7 and x <= DW_ENTRY_X:
+		return true
+	return x == DW_ENTRY_X and y > DW_WALL_Y and y <= 14
+
+
+func _dw_terrain(x: int, y: int) -> String:
+	var c := Vector2i(x, y)
+	if x == DW_ENTRY_X and y == DW_H - 1:
+		return "forest_dirt"
+	if x == 0 or y == 0 or x == DW_W - 1 or y == DW_H - 1:
+		return "tree"
+	# North of the wall: the glade (sacred meadow), its path up from the gate, old forest round it.
+	if y < DW_WALL_Y:
+		if x == DW_ENTRY_X and y > DW_GLADE_C.y:
+			return "forest_dirt"
+		var gx: float = (float(x) - float(DW_GLADE_C.x)) / 6.0
+		var gy: float = (float(y) - float(DW_GLADE_C.y)) / 3.6
+		if gx * gx + gy * gy <= 1.0:
+			return "sacred_meadow"
+		return "tree"
+	# The wall of old trees and its one gap (the gate tree stands in it).
+	if y == DW_WALL_Y:
+		return "forest_dirt" if c == DW_GATE else "tree"
+	# The nook: walled round, open only through its tree.
+	if c == DW_NOOK_TREE:
+		return "forest_dirt"
+	if DW_NOOK.grow(1).has_point(c) and not DW_NOOK.has_point(c):
+		return "tree"
+	if DW_NOOK.has_point(c):
+		return "grass_plains"
+	# The shortcut's thicket line (east of the track), broken only by its tree.
+	if y == DW_THICKET_Y and x >= 13 and x <= DW_W - 2:
+		return "forest_dirt" if c == DW_THICKET_TREE else "tree"
+	if _dw_on_track(x, y):
+		return "forest_dirt"
+	if _in(DW_GRASS, c):
+		return "tall_grass"
+	# Old forest: scattered trees, never beside the track or the trees you can fell.
+	var near: bool = false
+	for d in [Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0)]:
+		var n: Vector2i = c + d
+		if _dw_on_track(n.x, n.y) or n == DW_NOOK_TREE or n == DW_THICKET_TREE or n == DW_GATE:
+			near = true
+	if not near and _h(x, y, 71) < 0.16:
+		return "tree"
+	return "grass_plains"
+
+
+func _build_depths_of_the_wood() -> void:
+	var aid := "depths_of_the_wood"
+	var t := _new_map("Depths of the Wood", DW_W, DW_H,
+		"The Depths of the Wood: the old forest north of Deepwood Village, and the glade at its heart. Story-mode terrain.")
+	t.lighting_preset = "Dusk"
+	_paint(t, _dw_terrain)
+	_add_validator_anchors(t, Vector2i(DW_ENTRY_X, DW_H - 2), Vector2i(DW_ENTRY_X, DW_WALL_Y + 2))
+	_save(t, CONTENT + "areas/%s/terrain.tres" % aid)
+
+	var a := OverworldAreaResource.new()
+	a.area_id = StringName(aid)
+	a.display_name = "Depths of the Wood"
+	a.kind = OverworldAreaResource.Kind.ROUTE
+	_place(a, aid)
+	a.terrain = load(CONTENT + "areas/%s/terrain.tres" % aid)
+	a.entry_points = {
+		"south": {"cell": [DW_ENTRY_X, DW_H - 2, 0], "facing": "north"},
+	}
+	var ents: Array = []
+	ents.append(_warp("south_exit", Rect2i(DW_ENTRY_X, DW_H - 1, 1, 1), &"deepwood_village", &"north_trail"))
+	ents.append(_breakable_tree(aid, "gate_tree", DW_GATE))
+	ents.append(_breakable_tree(aid, "nook_tree", DW_NOOK_TREE))
+	ents.append(_breakable_tree(aid, "thicket_tree", DW_THICKET_TREE))
+	var chest := ChestEntity.new()
+	chest.id = &"nook_chest"
+	chest.cell = Vector3i(DW_NOOK_CHEST.x, DW_NOOK_CHEST.y, 0)
+	chest.facing = "west"
+	chest.display_name = "Chest"
+	chest.tint = Color(0.42, 0.3, 0.18)
+	var loot: Array[StringName] = [&"heartwood_tonic", &"clearwater_draught"]
+	chest.loot_items = loot
+	chest.loot_gold = 60
+	# Out of reach (and out of sight) until its tree is felled.
+	chest.visible_if = "has(\"%s\")" % FieldObstacleEntity.flag_for(aid, "nook_tree")
+	ents.append(chest)
+	ents.append(_eldroot(aid))
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+
+	var zone := EncounterZone.new()
+	var ids: Array[StringName] = [&"tall_grass"]
+	zone.tile_ids = ids
+	zone.rate = 0.12
+	zone.grace_steps = 3
+	var table: Array[Resource] = []
+	# The Deep Woods' creatures (nature roster placeholders), rolling in the region band (8-15).
+	for pair in [["petalfang", 2.0], ["blightcap", 2.0], ["tree_grunt", 1.5], ["vineweave", 1.0], ["oakheart", 0.5]]:
+		var e := EncounterEntry.new()
+		e.character_id = StringName(pair[0])
+		e.weight = pair[1]
+		e.kind = EncounterEntry.Kind.DUEL
+		e.can_befriend = true
+		table.append(e)
+	zone.table = table
+	var zones: Array[Resource] = [zone]
+	a.encounter_zones = zones
+	_save(a, CONTENT + "areas/%s/area.tres" % aid)
+
+
+## ELDROOT'S LEGEND BATTLE (DECISIONS.md #39 / #74 / #81): TACTICAL, FIXED at the band max +
+## legend_over_band (never scaled), Lyra on your side as a guest; a loss offers Try Again.
+func _eldroot_spec() -> BattleSpec:
+	var spec := BattleSpec.new()
+	spec.kind = BattleSpec.Kind.TACTICAL
+	spec.encounter_id = ELDROOT_BATTLE_ID
+	spec.map_path = ELDROOT_MAP_PATH
+	spec.squad_size = ELDROOT_SQUAD_SIZE
+	spec.ai_difficulty = 1
+	spec.opponent_name = _species_name(&"eldroot")
+	var team: Array[Dictionary] = [{"character_id": "eldroot", "strength": 1.0}]
+	spec.opponent_team = team
+	BattleSpec.make_legend(spec, REGION_BANDS["woodlands"])
+	var flags: Array[String] = [F_ELDROOT_BEATEN]
+	spec.reward_flags = flags
+	spec.defeat_policy = BattleSpec.DefeatPolicy.RETRY
+	spec.clash_intro = true
+	return spec
+
+
+## Eldroot in the glade: there once the gate tree is felled, until the hero bonds with it. Talk: face
+## it (the legend battle) -> on a win, the OPTIONAL bond (#75). Declined: it stays, and talking to it
+## again offers the bond again. TODO(story): placeholder narration.
+func _eldroot(aid: String) -> NpcEntity:
+	var e := NpcEntity.new()
+	e.id = &"eldroot"
+	e.cell = Vector3i(DW_ELDROOT.x, DW_ELDROOT.y, 0)
+	e.facing = "south"
+	e.display_name = _species_name(&"eldroot")
+	e.speaker_name = e.display_name
+	e.visual_character = &"eldroot"
+	e.visible_if = "has(\"%s\") and not has(\"%s\")" % [FieldObstacleEntity.flag_for(aid, "gate_tree"), F_ELDROOT_BONDED]
+	var bond_cmd := BondLegendCommand.new()
+	bond_cmd.character_id = &"eldroot"
+	var bond := ChoiceCommand.new()
+	bond.prompt = _narr("%s watches you, still. Bond with it?" % e.display_name)
+	bond.options = StoryCommand.list([
+		ChoiceOption.make("Bond", [bond_cmd, _flag(F_ELDROOT_BONDED), SaveGameCommand.new()]),
+		ChoiceOption.make("Not now", [], true),
+	])
+	var fight := StartBattleCommand.new()
+	fight.spec = _eldroot_spec()
+	fight.source = BattleRequest.SOURCE_SCRIPT
+	var face := ChoiceCommand.new()
+	face.prompt = _narr("Something ancient stirs among the roots of the glade. Face it?")
+	face.options = StoryCommand.list([
+		ChoiceOption.make("Face it", [fight, IfCommand.make("outcome() == \"victory\"", [bond])]),
+		ChoiceOption.make("Not yet", [], true),
+	])
+	e.on_interact = StoryCommand.list([
+		IfCommand.make("not has(\"%s\")" % F_ELDROOT_BEATEN, [face], [bond]),
+	])
+	return e
+
+
+## The legend's board: a forest glade, Eldroot (2x2, the boss) on the sacred ground at its heart with
+## two Barklings screening it; your squad chairs at the south edge and Lyra (the GUEST, LYRA_UNIT)
+## beside them.
+func _build_eldroot_map() -> void:
+	var m := _new_map("Heart of the Wood", 12, 10,
+		"The glade at the heart of the Deep Woods, where Eldroot waits.")
+	m.lighting_preset = "Dusk"
+	var anchor := Vector2i(5, 1)
+	var trees := [Vector2i(0, 0), Vector2i(1, 0), Vector2i(10, 0), Vector2i(11, 0), Vector2i(0, 1), Vector2i(11, 1),
+		Vector2i(0, 9), Vector2i(11, 9), Vector2i(2, 5), Vector2i(9, 5)]
+	var grass := [Vector2i(3, 6), Vector2i(4, 6), Vector2i(7, 6), Vector2i(8, 6), Vector2i(2, 3), Vector2i(9, 3)]
+	_paint(m, func(x: int, y: int) -> String:
+		var c := Vector2i(x, y)
+		if c in trees:
+			return "tree"
+		if x >= anchor.x and x <= anchor.x + 1 and y >= anchor.y and y <= anchor.y + 1:
+			return "sacred_meadow"
+		if c in grass:
+			return "tall_grass"
+		if x == 6 and y >= 3:
+			return "forest_dirt"
+		return "grass_plains")
+	m.unit_spawns.clear()
+	# Squad chairs (filled from the fielded party; a placeholder id is required).
+	for c in [Vector2i(4, 8), Vector2i(6, 8), Vector2i(8, 8)]:
+		m.set_character_spawn_at_position(c, 0, String(STARTER_ID))
+	# Lyra: a guest ally, placed at load (never replaced by the squad pick).
+	# TODO(humans): swap to "lyra" + deploy picker
+	m.set_spawn_point_at_position(Vector2i(5, 9), 0, MapResource.SPAWN_KIND_REINFORCEMENT,
+		{"character_id": LYRA_UNIT, "spawn_turn": 1, "max_spawns": 1})
+	m.set_character_spawn_at_position(anchor, 1, "eldroot", "BOSS")
+	for c in [Vector2i(3, 3), Vector2i(8, 3)]:
+		m.set_character_spawn_at_position(c, 1, "tree_grunt")
+		m.unit_spawns[m.unit_spawns.size() - 1]["level"] = LV_ELDROOT_SCREEN
+	var vc: Array[String] = ["Eliminate All Enemies"]
+	m.victory_conditions = vc
+	_save(m, ELDROOT_MAP_PATH)
