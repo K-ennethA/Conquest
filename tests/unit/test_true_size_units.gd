@@ -10,7 +10,7 @@ const ROSTER := "res://game/characters/roster/"
 ## carries each. A drifted model_scale or a re-exported model shows up here.
 const DESIGN_HEIGHTS := {
 	"tree_grunt": 2.4384,   # Barkling, 8 ft 0 in -- wider than a tile, still one tile
-	# magmoo: 8 ft tall but ~8.5 m nose-to-tail at that height -- size pending the owner.
+	# magmoo: 8 ft (2.4384 m) since 6ba132b, ~8.4 m nose-to-tail, still ONE tile (overhangs).
 	"petalfang": 1.2192,    # 4 ft 0 in
 	"blightcap": 0.6096,    # 2 ft 0 in
 	"firesprite": 1.3716,   # 4 ft 6 in
@@ -21,6 +21,13 @@ const DESIGN_HEIGHTS := {
 	"vampwarrior": 1.8796,
 	"varden": 1.9304,       # 6 ft 4 in
 	"eldroot": 4.552,       # 14 ft 11 in, the 2x2 giant
+	# forge compendium placeholders (cc72d3f): size-table targets, NO artist size yet.
+	"bombee": 1.826,        # idle body extent; the idle hover lifts it off the floor
+	"aquaoct": 1.798,
+	"canine_bat": 1.806,
+	"raven_rogue": 1.799,
+	"pangolin_knight": 1.803,
+	"shadow_mole": 1.809,
 }
 
 func _unit(id: String) -> Unit:

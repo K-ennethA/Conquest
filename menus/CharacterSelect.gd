@@ -48,7 +48,8 @@ const DETAIL_CREST_PX := 96.0
 const EXCLUDED_IDS := ["undead",
 	"firefly", "firesprite", "magmoo", "supaoctto", "vampito", "vampwarrior", "elias",
 	"varden", "lyra", "wren", "cael",
-	"seedant", "shadowbun", "shadow_assassin"]
+	"seedant", "shadowbun", "shadow_assassin",
+	"bombee", "aquaoct", "canine_bat", "raven_rogue", "pangolin_knight", "shadow_mole"]
 
 ## Stats shown as bars in the detail pane: [key, label].
 const STAT_ROWS := [
