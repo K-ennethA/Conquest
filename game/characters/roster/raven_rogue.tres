@@ -10,7 +10,7 @@ element = &"dark"
 display_name = "Raven Rogue"
 description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Wren pending rebalance; no moves or abilities yet."
 model_scene = ExtResource("2_model")
-; forge import 2026-10-09 (compendium placeholder, 287ff9f / 6ba132b pattern; forge rigged/raven_rogue.glb v1.1 @ cc72d3f): PLACEHOLDER FOR REBALANCE. Stats cloned from wren.tres (Wren, the fast single-weapon physical line, range 1 / speed 12, the same donor Shadow Assassin uses; element dark (purple-navy raven, shadow family); kind left at the default creature); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): raven_rogue_forge.glb.import root_scale 0.33793 normalises the glb to 1.80 m; model_scale = 1.799 m (forge size-table target; NO artist size yet) / the measured imported height (idle, first frame).
+; forge import 2026-10-09 (compendium placeholder, 287ff9f / 6ba132b pattern; forge rigged/raven_rogue.glb v1.1 @ cc72d3f): PLACEHOLDER FOR REBALANCE. Stats cloned from wren.tres (Wren, the fast single-weapon physical line, range 1 / speed 12, the same donor Shadow Assassin uses; element dark (purple-navy raven, shadow family); kind left at the default creature); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): raven_rogue_forge.glb.import root_scale 0.33793 normalises the glb to 1.80 m; model_scale = target (ARTIST SIZE 2026-10-09: 3 ft = 0.9144 m) / the measured imported height (idle, first frame).
 base_health = 95
 base_attack = 15
 base_defense = 12
@@ -19,4 +19,4 @@ base_magic_defense = 10
 base_speed = 12
 base_movement = 4
 attack_range = 1
-model_scale = 1.00026
+model_scale = 0.50842

@@ -21,13 +21,13 @@ const DESIGN_HEIGHTS := {
 	"vampwarrior": 1.8796,
 	"varden": 1.9304,       # 6 ft 4 in
 	"eldroot": 4.552,       # 14 ft 11 in, the 2x2 giant
-	# forge compendium placeholders (cc72d3f): size-table targets, NO artist size yet.
-	"bombee": 1.826,        # idle body extent; the idle hover lifts it off the floor
-	"aquaoct": 1.798,
-	"canine_bat": 1.806,
-	"raven_rogue": 1.799,
-	"pangolin_knight": 1.803,
-	"shadow_mole": 1.809,
+	# forge compendium placeholders (cc72d3f): ARTIST SIZES 2026-10-09.
+	"bombee": 0.9144,  # about 3 ft, floats (body extent; the idle hover lifts it) (artist 2026-10-09)
+	"aquaoct": 0.9144,  # around 3 ft (artist 2026-10-09)
+	"canine_bat": 1.0414,  # 3 ft 5 in (artist 2026-10-09)
+	"raven_rogue": 0.9144,  # 3 ft (artist 2026-10-09)
+	"pangolin_knight": 0.9144,  # 3 ft (artist 2026-10-09)
+	"shadow_mole": 0.762,  # sticks out of the ground ~2 ft 6 in (artist 2026-10-09)
 }
 
 func _unit(id: String) -> Unit:

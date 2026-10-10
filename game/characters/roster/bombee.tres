@@ -10,7 +10,7 @@ element = &"nature"
 display_name = "Bombee"
 description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Firefly pending rebalance; no moves or abilities yet."
 model_scene = ExtResource("2_model")
-; forge import 2026-10-09 (compendium placeholder, 287ff9f / 6ba132b pattern; forge rigged/bombee.glb v1.2 @ cc72d3f): PLACEHOLDER FOR REBALANCE. Stats cloned from firefly.tres (Firefly, the small flying bug placeholder, itself cloned from Blightcap; element nature (bumblebee, forest / flower family)); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): bombee_forge.glb.import root_scale 0.38772 normalises the glb to 1.80 m; model_scale = 1.826 m (forge size-table target; NO artist size yet) / the measured imported idle extent (first frame, top - bottom, as the size table measures it: the idle hover lifts the body 0.17 m off the floor, so its top is ~1.99 m).
+; forge import 2026-10-09 (compendium placeholder, 287ff9f / 6ba132b pattern; forge rigged/bombee.glb v1.2 @ cc72d3f): PLACEHOLDER FOR REBALANCE. Stats cloned from firefly.tres (Firefly, the small flying bug placeholder, itself cloned from Blightcap; element nature (bumblebee, forest / flower family)); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): bombee_forge.glb.import root_scale 0.38772 normalises the glb to 1.80 m; model_scale = target (ARTIST SIZE 2026-10-09: about 3 ft, floats (body extent; the idle hover lifts it) = 0.9144 m) / the measured imported idle extent (first frame, top - bottom, as the size table measures it: the idle hover lifts the body 0.17 m off the floor, so its top is ~1.99 m).
 base_health = 52
 base_attack = 14
 base_defense = 9
@@ -19,4 +19,4 @@ base_magic_defense = 11
 base_speed = 6
 base_movement = 6
 attack_range = 1
-model_scale = 0.99981
+model_scale = 0.50067
