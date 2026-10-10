@@ -19,3 +19,4 @@ base_magic_defense = 6
 base_speed = 7
 base_movement = 3
 attack_range = 1
+model_scale = 4.23699

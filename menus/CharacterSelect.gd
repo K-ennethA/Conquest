@@ -47,7 +47,8 @@ const DETAIL_CREST_PX := 96.0
 # attach to nothing) stay excluded until they get real movesets and a rebalance.
 const EXCLUDED_IDS := ["undead",
 	"firefly", "firesprite", "magmoo", "supaoctto", "vampito", "vampwarrior", "elias",
-	"varden", "lyra", "wren", "cael"]
+	"varden", "lyra", "wren", "cael",
+	"seedant", "shadowbun", "shadow_assassin"]
 
 ## Stats shown as bars in the detail pane: [key, label].
 const STAT_ROWS := [

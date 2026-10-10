@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/shadow_assassin_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"shadow_assassin"
+display_name = "Shadow Assassin"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Wren pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-09 (compendium placeholder, Elias/Varden pattern 9a90d02 / 01b5b2e; forge rigged/shadow_assassin.glb v1 draft @ 5ecd3af): PLACEHOLDER FOR REBALANCE. Stats cloned from wren.tres (Wren, the one humanoid with a fast single-weapon physical line: range 1, speed 12; Varden is the armoured tank, Elias / Lyra / Cael are casters); element left NEUTRAL (human, like Elias / Varden); kind left at the default (making him HUMAN needs a weapon + tests/unit/test_human_units.gd, a design pass); moves, abilities, AI and movement kind are not designed yet; the glb has no clips (bind pose, one blade in the right hand). Referenced by nothing as a unit (no encounters, spawns, story, shops, AI rosters; the shadow_assassin portrait id is separate). TRUE SIZE (CONQUEST.md "Size"): shadow_assassin_forge.glb.import root_scale 0.97122 normalises the glb to 1.80 m; model_scale = 6 ft (1.8288 m, forge size-table) / the measured imported height (bind pose).
+base_health = 95
+base_attack = 15
+base_defense = 12
+base_magic = 6
+base_magic_defense = 10
+base_speed = 12
+base_movement = 4
+attack_range = 1
+model_scale = 1.016
