@@ -437,8 +437,10 @@ func test_duskmaws_movement_fields_match_a_known_good_roster_entry() -> void:
 		"one cell (CONQUEST.md: multi-cell is the deliberate exception)")
 	assert_eq(duskmaw.get_footprint(), mortis.get_footprint(), "same as the known-good entry")
 	assert_eq(duskmaw.base_movement, 5, "a 5 stride, as authored")
-	assert_eq(duskmaw.model_scale, mortis.model_scale,
-		"and no per-model scale override, exactly like the static roster sculpts")
+	# Mortis now carries a true-size model_scale (CONQUEST.md "Size"); Duskmaw's
+	# design height equals its fitted height, so it has no override at all.
+	assert_eq(duskmaw.model_scale, 1.0,
+		"no per-model scale override -- its true size is its fitted size")
 	assert_eq(duskmaw.is_boss, false, "not a boss, so nothing gives it boss movement rules")
 
 

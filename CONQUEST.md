@@ -8,6 +8,17 @@ is decided, record it here so units, moves, and maps stay consistent.
 - **Footprint:** every unit occupies **1 cell (1×1)** unless explicitly specified
   otherwise. Multi-cell units (e.g. a 2×2 boss) are the deliberate exception and must
   set their footprint on purpose.
+- **Size — true size on a fixed grid:** cells stay **2.0 m**. Every unit is shown at
+  its **design height** (1 world unit = 1 m; the owner's size table), never shrunk
+  to fit its cell: a Blightcap is 2 ft, a Barkling 8 ft. A model wider than its cell
+  (Barkling's arms, Petalfang's vines) **overhangs its neighbours** and stays ONE
+  tile; a **multi-cell footprint is for giants only** (Eldroot, 2×2) and is a design
+  call, not a way to make a model fit. The roster `model_scale` carries the size.
+  Two things keep overhang readable (`UnitVisualManager`): a soft team-coloured
+  **tile plate** fills exactly the tile(s) each unit owns, and the **health bar**
+  sits on the measured model top (`Unit.get_visual_height()`). Clicks pick the
+  ground cell, never the mesh, so an overhanging arm can't steal a click. Check a
+  size change with `dev_scripts/true_size_shots.tscn`.
 - **Names:** a unit's name is **one word** — unless it is a **boss**, which may use a
   multi-word name/title.
   - Examples (heroes / non-boss): Vineweave, Blightcap, Petalfang, Geode, Mycothrall.

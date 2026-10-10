@@ -29,3 +29,4 @@ attack_range = 3
 movement_profile = ExtResource("10_mvprof")
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_wither"), ExtResource("5_grasp"), ExtResource("6_drain"), ExtResource("7_legion")])
 abilities = Array[ExtResource("8_abres")]([ExtResource("9_reanimate")])
+model_scale = 1.04405

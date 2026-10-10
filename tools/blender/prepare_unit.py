@@ -8,7 +8,7 @@ Run headless:
 
     blender --background <input.blend> --factory-startup \
         --python tools/blender/prepare_unit.py -- \
-        --output <out.glb> [--target-height 1.8] [--max-footprint 1.9] \
+        --output <out.glb> [--target-height 1.8] [--max-footprint 0] \
         [--target-faces 10000] [--thorns 0] [--name Foo]
 
 What it does, in order:
@@ -22,11 +22,11 @@ What it does, in order:
      because decimating destroys the old UV layout.
   5. Adds a simple Principled material when the sculpt has none, so it imports as
      something deliberate rather than default grey.
-  6. Normalises SCALE against BOTH height and footprint. Every unit occupies one
-     2.0-unit cell, so scaling by height alone breaks for sprawling creatures: a
-     wide, low flower scaled to 1.8 tall can end up 4+ cells across. The factor is
-     therefore min(target_height/height, max_footprint/max(width, depth)), and the
-     binding constraint is reported so the artist knows why a model came out small.
+  6. Scales to the unit's TRUE design height (--target-height, metres; CONQUEST.md
+     "Size"). A model wider than its 2.0 cell overhangs it and stays one tile -- it
+     is NOT shrunk to fit. --max-footprint N (> 0) opts back into the old clamp,
+     min(target_height/height, N/max(width, depth)); legacy assets.conf rows and the
+     2x2 Eldroot use it. The binding constraint and any overhang are reported.
   7. Moves the ORIGIN to the feet, centred in X/Y -- units sit at y=0 on a cell
      centre, so a hip-centred origin makes them float or sink.
   8. Applies all transforms and exports .glb with +Y up (Blender is Z-up, Godot is
@@ -54,7 +54,7 @@ def parse_args() -> dict:
         "output": "",
         "name": "unit",
         "target_height": 1.8,
-        "max_footprint": 1.9,
+        "max_footprint": 0.0,  # 0 = off: true size, overhang allowed
         "target_faces": 10000,
         "thorns": 0,
     }
@@ -320,14 +320,11 @@ def main() -> None:
         ob.data.materials.append(mat)
         log("added default material '%s'" % mat.name)
 
-    # 6. Normalise scale against BOTH height and footprint (Blender is Z-up, so
-    #    height is Z and the footprint is the X/Y extent).
-    #
-    #    Height alone is wrong for anything that sprawls: a 12.4 x 8.8 x 4.98 flower
-    #    scaled to 1.8 tall comes out 4.5 metres wide -- more than two cells -- and
-    #    every unit occupies exactly ONE 2.0-unit cell. Taking the smaller of the two
-    #    factors means the model always fits, and whichever constraint bound it is
-    #    reported so a model that comes out unexpectedly short is self-explaining.
+    # 6. Scale to the TRUE design height (Blender is Z-up, so height is Z and the
+    #    footprint is the X/Y extent). Units are shown at their real size and a wide
+    #    one overhangs its cell (CONQUEST.md "Size"), so by default only height binds.
+    #    --max-footprint N > 0 re-enables the old fit-in-a-cell clamp for the assets
+    #    that were built under it, taking the smaller factor and reporting which bound.
     mn, mx = world_bounds(ob)
     size = mx - mn
     src_height = size.z
@@ -336,7 +333,8 @@ def main() -> None:
         log("ERROR degenerate bounds w=%.4f d=%.4f h=%.4f" % (size.x, size.y, size.z))
         return
     height_factor = float(opts["target_height"]) / src_height
-    footprint_factor = float(opts["max_footprint"]) / src_footprint
+    max_fp = float(opts["max_footprint"])
+    footprint_factor = max_fp / src_footprint if max_fp > 0.0 else float("inf")
     factor = min(height_factor, footprint_factor)
     bound_by = "height" if height_factor <= footprint_factor else "footprint"
     # MULTIPLY into the object's existing scale, never overwrite it. A sculpt may
@@ -351,9 +349,12 @@ def main() -> None:
         ob.scale.y * factor,
         ob.scale.z * factor))
     bpy.context.view_layer.update()
-    log("scale candidates: height %.5f (%.3f -> %.3f), footprint %.5f (%.3f -> %.3f)" % (
-        height_factor, src_height, float(opts["target_height"]),
-        footprint_factor, src_footprint, float(opts["max_footprint"])))
+    if max_fp > 0.0:
+        log("scale candidates: height %.5f (%.3f -> %.3f), footprint %.5f (%.3f -> %.3f)" % (
+            height_factor, src_height, float(opts["target_height"]),
+            footprint_factor, src_footprint, max_fp))
+    else:
+        log("true size: height %.3f -> %.3f (no footprint clamp)" % (src_height, float(opts["target_height"])))
     log("BOUND BY %s -- scaled by %.5f" % (bound_by.upper(), factor))
 
     # 6. Origin to the feet, centred in X/Y.
@@ -382,13 +383,15 @@ def main() -> None:
     log("final faces=%d verts=%d uv_layers=%d materials=%d" % (
         len(ob.data.polygons), len(ob.data.vertices), len(ob.data.uv_layers), len(ob.data.materials)))
 
-    # Kept as a backstop. Now that scale is clamped by --max-footprint this should
-    # never fire; if it does, something upstream is wrong (a stray object dragging
-    # the bounds out, or --max-footprint raised above the cell size).
+    # Overhang is allowed (CONQUEST.md "Size") -- report it so it is a choice, not a
+    # surprise. Past 2 cells either way, check the sculpt for a stray object dragging
+    # the bounds out, or whether this is a giant that should get a multi-cell footprint.
     CELL = 2.0
     if size.x > CELL or size.y > CELL:
-        log("NOTE footprint %.2f x %.2f exceeds one %.1f cell -- consider a multi-cell footprint" % (
-            size.x, size.y, CELL))
+        log("NOTE %.2f x %.2f overhangs one %.1f cell -- fine for a one-tile unit; %s" % (
+            size.x, size.y, CELL,
+            "over 2 cells: a giant (multi-cell footprint) or a stray object?" if max(size.x, size.y) > 2 * CELL
+            else "the tile plate shows which tile it owns"))
 
     # 9. Export. +Y up converts Blender's Z-up to Godot's Y-up; a model facing -Y
     #    here therefore faces Godot's +Z (the game's model-forward convention).

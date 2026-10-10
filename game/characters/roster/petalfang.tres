@@ -27,3 +27,4 @@ base_speed = 10
 attack_range = 3
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_thorn"), ExtResource("5_trap"), ExtResource("6_vines"), ExtResource("7_ingrained")])
 abilities = Array[ExtResource("8_abres")]([ExtResource("9_thornlust"), ExtResource("20_sunlit")])
+model_scale = 1.42461

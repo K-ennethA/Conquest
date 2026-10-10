@@ -1,6 +1,6 @@
 ---
 name: blender-unit-import
-description: Import a Blender-sculpted character/creature into Conquest as a playable/enemy unit — run the tools/blender/prepare_unit.py pipeline to turn a .blend into a cell-fitted .glb, then wire it into a CharacterResource .tres. Use whenever the user says they have a new model/character/unit in Blender to add, references a .blend file, or asks to import/replace a unit's model.
+description: Import a Blender-sculpted character/creature into Conquest as a playable/enemy unit — run the tools/blender/prepare_unit.py pipeline to turn a .blend into a true-size .glb, then wire it into a CharacterResource .tres. Use whenever the user says they have a new model/character/unit in Blender to add, references a .blend file, or asks to import/replace a unit's model.
 ---
 
 # Blender → Conquest unit import
@@ -21,17 +21,21 @@ Run (from the project root; the .blend is opened read-only, never saved over):
   "<ABS_PATH_TO>.blend" --factory-startup \
   --python tools/blender/prepare_unit.py -- \
   --output "game/characters/models/<biome>/<name>.glb" \
-  --name <name> --target-height 1.8 --target-faces 5000
+  --name <name> --target-height <design height, metres> --target-faces 5000
 ```
 
 - `<biome>` = a folder under `game/characters/models/` (e.g. `forest`).
 - `<name>` = the unit id (lowercase, matches the .tres filename).
 - Add `--thorns N` ONLY for spiky creatures (petalfang uses 40); off by default — a
   clean hero sculpt needs none.
-- The pipeline joins meshes, decimates, smart-UVs, scales to fit ONE 2.0-unit cell
-  (bound by height OR footprint — read the `BOUND BY ...` line if it looks small),
-  moves the origin to the feet, and exports +Y up. It prints a report; check for a
-  "overhangs a single cell" warning.
+- `--target-height` is the unit's TRUE design height in metres (1 unit = 1 m; ask
+  the owner if unknown — e.g. 8 ft = 2.44). Units are shown at true size and a
+  wide one overhangs its 2.0 cell and stays ONE tile (CONQUEST.md "Size"); never
+  shrink to fit. Only a giant gets a multi-cell `footprint`, and that is the
+  owner's call.
+- The pipeline joins meshes, decimates, smart-UVs, scales to that height, moves
+  the origin to the feet, and exports +Y up. It prints a report; a "NOTE ...
+  overhangs" line is expected for wide units — only "over 2 cells" needs a look.
 
 Conventions baked into the sculpt (the pipeline can't fix these): face **−Y in
 Blender** (→ Godot −Z forward); name animation clips `idle`/`walk`/`attack`/`hit`/`death`.
@@ -62,7 +66,9 @@ memory — batch into one run). Then commit the `.glb`, the roster `.tres`, and 
 `.tres`.
 
 ## Gotchas
-- If the model comes out tiny, it's BOUND BY FOOTPRINT (wide sculpt) — raising
-  `--target-height` does nothing; the sculpt must be more compact or the character
-  needs a multi-cell `footprint`.
+- A model built with `--max-footprint` (legacy `assets.conf` rows, Eldroot) is
+  clamped to its cell; set its true size with the roster `model_scale` (design
+  height / imported height) instead of re-exporting.
+- A forge-delivered `*_forge.glb` is sized the same way: `model_scale` = design
+  height / imported height. Check with `dev_scripts/true_size_shots.tscn`.
 - `.blend1` backups next to the `.blend` are Blender autosaves — ignore them.

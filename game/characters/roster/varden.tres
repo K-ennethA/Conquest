@@ -24,3 +24,4 @@ attack_range = 1
 weapon = ExtResource("3_weapon")
 weapon_proficiencies = Array[StringName]([&"sword", &"lance"])
 weapon_tendency = &"sword"
+model_scale = 1.07244

@@ -18,8 +18,8 @@ never saved over.
 |---|---|
 | `--output` | Where the `.glb` lands (inside the project) |
 | `--name` | Object/mesh name in the export |
-| `--target-height` | Height ceiling in world units (default `1.8`) — see scale below |
-| `--max-footprint` | Width/depth ceiling in world units (default `1.9`) — see scale below |
+| `--target-height` | The unit's TRUE design height in metres (default `1.8`) — see scale below |
+| `--max-footprint` | Optional width/depth clamp in world units (default `0` = off) — see scale below |
 | `--target-faces` | Decimation budget. Note the result is in TRIANGLES, so a quad-based sculpt lands near 2x this |
 | `--thorns` | Scatter N procedural spikes over the surface. Default `0` (off) |
 
@@ -31,42 +31,44 @@ never saved over.
 4. Shades smooth, then Smart-UV-unwraps — **after** decimating, since decimation
    destroys any earlier UV layout.
 5. Adds a simple Principled material when the sculpt has none.
-6. Scales to fit one cell (both height *and* footprint).
+6. Scales to the true design height (a wide model overhangs its cell).
 7. Moves the origin to the **feet**, centred in X/Y.
 8. Applies transforms and exports `.glb` with +Y up.
 
-It prints a report and warns when the model overhangs a single cell.
+It prints a report and notes when the model overhangs a single cell.
 
-## Scale — one unit, one cell
+## Scale — true size, one tile
 
-Every unit occupies exactly **one 2.0-unit cell**, so the pipeline satisfies two
-constraints at once and takes whichever is tighter:
-
-```
-scale = min( target_height / height , max_footprint / max(width, depth) )
-```
-
-Scaling by height alone breaks on anything that sprawls. The `petalfang` sculpt is
-12.4 × 8.8 × 5.0 — only 5 units *tall*, so height-scaling it to 1.8 would have made
-it **4.5 units wide**, over two cells, overlapping its neighbours on the board.
-
-`--max-footprint` defaults to **1.9**, deliberately just under the 2.0 cell so
-adjacent units never visually touch.
-
-**A sprawling model will come out shorter than `--target-height`, and that is
-correct.** The run tells you which constraint bound it:
+Units are shown at their **true design height** (CONQUEST.md "Size"): 1 world unit =
+1 m and cells are **2.0**, so pass the owner's size straight in — a 2 ft Blightcap is
+`--target-height 0.61`, an 8 ft Barkling `2.44`. Only height binds:
 
 ```
-scale candidates: height 0.34739 (5.181 -> 1.800), footprint 0.15352 (12.376 -> 1.900)
-BOUND BY FOOTPRINT -- scaled by 0.15352
+scale = target_height / height
 ```
 
-So if a model looks unexpectedly small, read that line: `BOUND BY FOOTPRINT` means
-the sculpt is wide relative to its height, and raising `--target-height` will do
-**nothing**. Sculpt it more compact, or give the character a multi-cell `footprint`.
+A model wider than its cell — Barkling's arms, Petalfang's vines — **overhangs its
+neighbours and stays one tile**. That is intended, not a bug: the game draws a
+team-coloured tile plate under every unit so the tile it owns is always clear, and
+puts the health bar on the measured model top. The run notes the overhang:
 
-The old "exceeds one cell" NOTE is still there as a backstop, but it should no
-longer ever fire.
+```
+true size: height 5.181 -> 1.219 (no footprint clamp)
+NOTE 2.91 x 2.07 overhangs one 2.0 cell -- fine for a one-tile unit; the tile plate shows which tile it owns
+```
+
+Over **two cells** either way it says so: either a stray object is dragging the
+bounds out, or this is a giant that should get a multi-cell `footprint` (a design
+call — Eldroot is the 2×2 one). Never shrink a unit to make it fit.
+
+`--max-footprint N` (> 0) re-enables the old fit-in-a-cell clamp,
+`min(target_height / height, N / max(width, depth))`, reporting which bound. The
+assets built before the true-size rule pin it in `assets.conf` so a rebuild never
+changes them, and the 2×2 Eldroot uses `--max-footprint 3.8`. Their in-game size is
+set by the roster `model_scale` instead.
+
+Forge-delivered `*_forge.glb` models skip this script; their size is likewise
+`model_scale` = design height / imported height.
 
 ## Thorns (`--thorns N`)
 
@@ -91,7 +93,7 @@ Tune `N` by eye and re-render. `petalfang` uses `--thorns 40`.
 ## The conventions that matter
 
 - **Scale** — board cells are **2.0 world units**. A regular humanoid is ~1.8.
-  You don't need to sculpt at that size; the pipeline rescales to fit the cell.
+  You don't need to sculpt at that size; the pipeline rescales to `--target-height`.
 - **Origin at the feet** — units sit at `y = 0` on a cell centre. Handled for you.
 - **Facing** — face **−Y in Blender**. The +Y-up export turns that into Godot's
   **+Z** (toward the battle camera), which is the game's model-forward convention:
@@ -111,10 +113,14 @@ Tune `N` by eye and re-render. `petalfang` uses `--thorns 40`.
    unit's origin and hides the placeholder capsule. Because the export is already
    origin-at-feet and correctly scaled, no runtime correction is needed.
 
-Set `footprint` on the character when the model is wider than one cell (the
-pipeline tells you when it is) — see `game/characters/CharacterResource.gd`.
+Set `footprint` only for a giant (a design call — see "Scale" above); a model
+that merely overhangs its cell stays one tile. See `game/characters/CharacterResource.gd`.
 
 ## Worked example — `tree_grunt`
+
+> Both worked examples predate the true-size rule: they were built with the old
+> fit-in-a-cell clamp (`--max-footprint 1.9`, now pinned in `assets.conf`). Their
+> output still reads this way; a new unit's run reports `true size:` instead.
 
 ```
 source faces=240562

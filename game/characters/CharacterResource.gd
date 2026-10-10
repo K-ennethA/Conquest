@@ -85,9 +85,11 @@ enum Kind { CREATURE, HUMAN }
 ## pipeline exports facing +Z, so 0 is normal; use 180 for a sculpt that faces
 ## away. Verify with dev_scripts/render_unit_facing.gd.
 @export var model_yaw_deg: float = 0.0
-## Uniform scale multiplier on the model (1.0 = the pipeline-fit size). Scales about
-## the feet-at-origin, so the unit stays grounded. Use < 1 for a small creature
-## (e.g. a mushroom) that should read smaller than the others.
+## Uniform scale multiplier on the model (1.0 = the size the .glb imports at). Scales
+## about the feet-at-origin, so the unit stays grounded. This is what puts a unit at
+## its TRUE design height (CONQUEST.md "Size"): design height / imported height, e.g.
+## a 2 ft Blightcap < 1, an 8 ft Barkling > 1. A model wider than its cell overhangs
+## it and stays one tile -- never shrink a unit to fit; only giants get a [member footprint].
 @export var model_scale: float = 1.0
 
 @export_group("AI Behavior")
