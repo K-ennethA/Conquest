@@ -1093,6 +1093,39 @@ func get_footprint_offset() -> Vector3:
 		0.0,
 		float(fp.y - 1) * CELL_SIZE * 0.5)
 
+## Height of the unit as the board shows it, in world units (metres): the top of the
+## CharacterModel's rest-pose mesh bounds times the authored [code]model_scale[/code].
+## Measured, never assumed -- units are shown at their TRUE size (an 8 ft Barkling, a
+## 2 ft Blightcap), so anything that hangs over a head (the health bar) asks here
+## rather than using one human height. Uses the authored scale, not the live one, so a
+## death-shrink or squash tween in flight never skews it. Falls back to
+## [constant DEFAULT_VISUAL_HEIGHT] for a capsule placeholder / model-less unit.
+const DEFAULT_VISUAL_HEIGHT: float = 1.8
+func get_visual_height() -> float:
+	var model := get_node_or_null("CharacterModel") as Node3D
+	if model == null:
+		return DEFAULT_VISUAL_HEIGHT
+	var top: float = _mesh_top(model, Transform3D())
+	if top <= 0.0:
+		return DEFAULT_VISUAL_HEIGHT
+	var s: float = 1.0
+	if character_resource != null and "model_scale" in character_resource:
+		s = maxf(0.05, character_resource.model_scale)
+	return top * s
+
+## Highest Y of any VisualInstance3D's bounds under [param node], in the space
+## [param xf] maps [param node]'s children into (the CharacterModel's own local space
+## at the top call, so its scale/facing never enter). 0 when there are no meshes.
+func _mesh_top(node: Node, xf: Transform3D) -> float:
+	var top: float = 0.0
+	for c in node.get_children():
+		var cxf: Transform3D = xf * (c as Node3D).transform if c is Node3D else xf
+		if c is VisualInstance3D:
+			var box: AABB = cxf * (c as VisualInstance3D).get_aabb()
+			top = maxf(top, box.position.y + box.size.y)
+		top = maxf(top, _mesh_top(c, cxf))
+	return top
+
 ## Scale the unit's MeshInstance3D to fill its footprint and slide it so the model
 ## centers over the whole covered block instead of sitting on the anchor cell.
 ##

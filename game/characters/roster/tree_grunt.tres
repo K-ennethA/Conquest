@@ -24,3 +24,4 @@ base_magic_defense = 6
 base_speed = 7
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_bash"), ExtResource("5_rooted"), ExtResource("20_verdant")])
 abilities = Array[ExtResource("6_abres")]([ExtResource("7_blessing")])
+model_scale = 1.75355

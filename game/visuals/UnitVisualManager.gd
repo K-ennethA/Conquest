@@ -18,6 +18,8 @@ enum OutlineSide { NONE, ALLY, ENEMY }
 ## here is allocated per-unit or per-frame. Declared before the exports below so a
 ## setter firing during scene load always has a valid dictionary to clear.
 var _overlay_materials: Dictionary = {}
+## Shared tile-plate materials, one per OutlineSide (see refresh_tile_plate).
+var _tile_plate_materials: Dictionary = {}
 
 ## Silhouette colour for units HOSTILE to the local human player (AI-owned, or owned
 ## by any player that is not the local one). Red so enemies read instantly.
@@ -46,6 +48,29 @@ var _overlay_materials: Dictionary = {}
 	set(value):
 		team_outlines_enabled = value
 		_invalidate_overlay_materials()
+
+# --- True size on a fixed grid ------------------------------------------------
+# Units are shown at their TRUE size (CONQUEST.md "Size"): a sprout is knee
+# high, a Barkling is 8 ft with arms wider than a tile, Eldroot is a 2x2 giant. Only
+# giants get a multi-cell footprint; everyone else owns ONE tile and may overhang its
+# neighbours. These two knobs keep that readable.
+
+## Lowest the health bar ever sits (metres above the unit's feet). The bar otherwise
+## tracks the measured model top, so a 2 ft creature's bar would graze the ground.
+@export var health_bar_min_height: float = 0.9
+
+## Draw a soft team-coloured plate filling the tile(s) each unit owns, so a model
+## that overhangs its neighbours still reads as standing on exactly one tile (2x2 for
+## Eldroot). Ally / enemy use the outline colours; a third party is neutral.
+@export var tile_plates_enabled: bool = true:
+	set(value):
+		tile_plates_enabled = value
+		_tile_plate_materials.clear()
+## Opacity of the plate's interior wash and of its rounded edge band.
+@export_range(0.0, 1.0) var tile_plate_fill_alpha: float = 0.16
+@export_range(0.0, 1.0) var tile_plate_edge_alpha: float = 0.65
+## Plate side as a fraction of the tile (leaves a gutter so adjacent plates separate).
+@export_range(0.5, 1.0) var tile_plate_inset: float = 0.9
 
 # Shared "spent turn" GREYSCALE wash (Fire Emblem style drained-of-colour). One
 # material is reused across every unit and every frame -- never allocate per unit --
@@ -214,26 +239,15 @@ func _create_health_bar(unit: Unit) -> void:
 	if _unit_health_bars.has(unit):
 		var existing = _unit_health_bars[unit]
 		if existing != null and is_instance_valid(existing):
+			_position_health_bar(unit, existing)
 			_update_health_bar(unit)
 			return
 		_unit_health_bars.erase(unit)
 
 	var health_bar = _health_bar_scene.instantiate()
 	unit.add_child(health_bar)
-	
-	# Position health bar higher to avoid clipping with taller units (Archers are 1.2x height).
-	# A multi-cell unit is scaled up by its footprint, so lift the bar to clear the
-	# bigger model and slide it over the center of the covered block. Both offsets
-	# are zero for a normal 1x1 unit, leaving the classic (0, 1.8, 0) placement.
-	var bar_offset: Vector3 = Vector3.ZERO
-	var bar_height: float = 1.8
-	if unit and unit.has_method("get_footprint_offset"):
-		bar_offset = unit.get_footprint_offset()
-	if unit and unit.has_method("get_footprint"):
-		var fp: Vector2i = unit.get_footprint()
-		bar_height += 1.2 * float(maxi(fp.x, fp.y) - 1)
-	health_bar.position = Vector3(bar_offset.x, bar_height, bar_offset.z)
-	
+	_position_health_bar(unit, health_bar)
+
 	# Normal scale for good readability
 	health_bar.scale = Vector3(1.0, 1.0, 1.0)
 	
@@ -248,6 +262,21 @@ func _create_health_bar(unit: Unit) -> void:
 	# path; the older visual_manager indirection could silently miss updates.
 	if health_bar.has_method("bind_unit"):
 		health_bar.bind_unit(unit)
+
+## Place [param health_bar] at the top of [param unit]'s MEASURED model -- units are
+## shown at true size (an 8 ft Barkling, a 2 ft Blightcap, a 15 ft Eldroot) -- never
+## below [member health_bar_min_height] so a tiny creature's bar stays clear of the
+## ground. A 1.8 m human keeps the classic (0, 1.8, 0). A multi-cell unit's bar also
+## slides over the center of its covered block. Re-run on every refresh, so a model
+## swapped after the bar was built (a skin override) still gets a bar at its head.
+func _position_health_bar(unit: Unit, health_bar: Node3D) -> void:
+	var bar_offset: Vector3 = Vector3.ZERO
+	var bar_height: float = 1.8
+	if unit and unit.has_method("get_footprint_offset"):
+		bar_offset = unit.get_footprint_offset()
+	if unit and unit.has_method("get_visual_height"):
+		bar_height = maxf(unit.get_visual_height(), health_bar_min_height)
+	health_bar.position = Vector3(bar_offset.x, bar_height, bar_offset.z)
 
 func _update_health_bar(unit: Unit) -> void:
 	"""Update health bar display"""
@@ -443,6 +472,85 @@ func refresh_unit_outline(unit: Unit) -> void:
 	if hb != null and is_instance_valid(hb) and hb.has_method("_refresh_team_frame"):
 		hb._refresh_team_frame()
 	apply_acted_visual(unit, _unit_has_acted(unit))
+	refresh_tile_plate(unit)
+
+# --- Tile plate: which tile a (possibly oversized) unit owns -----------------
+
+## Name of the team-coloured tile plate child under every unit.
+const TILE_PLATE_NAME := "TilePlate"
+
+## (Re)build [param unit]'s tile plate for its CURRENT side. A child of the unit, so
+## it moves with it and fog of war (which hides the unit node) takes it too. Sized to
+## the whole footprint; never rotates with facing. Null-safe.
+func refresh_tile_plate(unit: Unit) -> void:
+	if not is_instance_valid(unit):
+		return
+	var plate := unit.get_node_or_null(TILE_PLATE_NAME) as MeshInstance3D
+	if not tile_plates_enabled:
+		if plate != null:
+			unit.remove_child(plate)
+			plate.queue_free()
+		return
+	if plate == null:
+		plate = MeshInstance3D.new()
+		plate.name = TILE_PLATE_NAME
+		plate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		unit.add_child(plate)
+	var fp: Vector2i = unit.get_footprint() if unit.has_method("get_footprint") else Vector2i.ONE
+	var quad := PlaneMesh.new()
+	# Each axis spans its cells; the inset gutter is the same absolute width either way.
+	var gutter: float = Unit.CELL_SIZE * (1.0 - tile_plate_inset)
+	quad.size = Vector2(float(fp.x) * Unit.CELL_SIZE - gutter, float(fp.y) * Unit.CELL_SIZE - gutter)
+	plate.mesh = quad
+	plate.material_override = _get_tile_plate_material(_outline_side_for_unit(unit))
+	var offset: Vector3 = unit.get_footprint_offset() if unit.has_method("get_footprint_offset") else Vector3.ZERO
+	# Under the selection ring (0.06), just above the tile top.
+	plate.position = offset + Vector3(0.0, 0.025, 0.0)
+
+## One shared plate material per side: an unshaded rounded-square with a faint wash
+## and a brighter rim, drawn without depth writes so board highlights layer over it.
+func _get_tile_plate_material(side: OutlineSide) -> ShaderMaterial:
+	if _tile_plate_materials.has(side):
+		return _tile_plate_materials[side]
+	var color: Color = Color(0.92, 0.9, 0.82)
+	if side == OutlineSide.ALLY:
+		color = ally_outline_color
+	elif side == OutlineSide.ENEMY:
+		color = enemy_outline_color
+	var mat := ShaderMaterial.new()
+	mat.shader = _tile_plate_shader()
+	mat.set_shader_parameter("plate_color", color)
+	mat.set_shader_parameter("fill_alpha", tile_plate_fill_alpha)
+	mat.set_shader_parameter("edge_alpha", tile_plate_edge_alpha)
+	_tile_plate_materials[side] = mat
+	return mat
+
+static var _plate_shader: Shader = null
+static func _tile_plate_shader() -> Shader:
+	if _plate_shader != null:
+		return _plate_shader
+	_plate_shader = Shader.new()
+	_plate_shader.code = """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+uniform vec4 plate_color : source_color = vec4(1.0);
+uniform float fill_alpha = 0.16;
+uniform float edge_alpha = 0.65;
+uniform float corner = 0.18;   // corner radius, fraction of the half-size
+uniform float edge = 0.07;     // rim band width, fraction of the half-size
+void fragment() {
+	// Rounded-box SDF in [-1,1] UV space: < 0 inside, 0 on the border.
+	vec2 p = abs(UV * 2.0 - 1.0);
+	vec2 q = p - vec2(1.0 - corner);
+	float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - corner;
+	float aa = fwidth(d);
+	float inside = 1.0 - smoothstep(-aa, aa, d);
+	float rim = smoothstep(-edge - aa, -edge + aa, d);
+	ALBEDO = plate_color.rgb;
+	ALPHA = inside * mix(fill_alpha, edge_alpha, rim);
+}
+"""
+	return _plate_shader
 
 ## The unit's authoritative "already spent its turn" flag, defaulting to false for a
 ## stub/mock unit that does not expose it (headless tests).
@@ -584,6 +692,7 @@ func _perspective_player_id() -> int:
 ## every live unit so the change is visible immediately.
 func _invalidate_overlay_materials() -> void:
 	_overlay_materials.clear()
+	_tile_plate_materials.clear()
 	if is_inside_tree():
 		update_all_unit_visuals()
 
