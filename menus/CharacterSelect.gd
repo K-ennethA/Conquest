@@ -53,7 +53,8 @@ const EXCLUDED_IDS := ["undead",
 	"soot_puff", "winged_cat", "phoenix_hatchling", "chest_monster", "petal_cobra", "crystal_canine",
 	"leaf_bird", "eye_totem", "ember_eye", "ember_stump", "shield_rodent", "storm_vessel",
 	"volcano_turtle", "goo_shield", "fogeist", "lava_komodo", "spectormn", "halo_sentinel",
-	"eclipse_wolf", "gemwing_dragon", "mystic_snow_spirit", "holly_snowman"]
+	"eclipse_wolf", "gemwing_dragon", "mystic_snow_spirit", "holly_snowman",
+	"vulture_creature"]
 
 ## Stats shown as bars in the detail pane: [key, label].
 const STAT_ROWS := [

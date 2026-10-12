@@ -51,6 +51,7 @@ const DESIGN_HEIGHTS := {
 	"gemwing_dragon": 3.9624,      # 13 ft -- boss-tier mesh, still ONE tile (overhangs)
 	"mystic_snow_spirit": 1.7272,  # 5 ft 8 in
 	"holly_snowman": 1.524,        # 5 ft
+	"vulture_creature": 1.524,     # 5 ft (artist 2026-10-12)
 }
 
 func _unit(id: String) -> Unit:
