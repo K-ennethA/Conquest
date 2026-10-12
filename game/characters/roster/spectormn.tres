@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/dark/spectormn_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"spectormn"
+element = &"dark"
+display_name = "Spectormn"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Mortis pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-11 (compendium placeholder, 287ff9f / 6ba132b / cb0a8ca pattern; forge rigged/spectormn.glb @ 586f2ce): PLACEHOLDER FOR REBALANCE. Stats cloned from necromancer.tres (Mortis / necromancer, the dark caster of the undead family (chained ghost); element dark); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): spectormn_forge.glb.import root_scale 0.26746 normalises the glb to 1.80 m; model_scale = target (lineup placeholder height (no artist size; artist: if i did not give height then those heights ae fine) = 1.809 m; floats; rest-pose lowest point at z 0) / the measured imported idle extent (first frame, top - bottom, as the size table measures it).
+base_health = 90
+base_attack = 8
+base_defense = 10
+base_magic = 30
+base_magic_defense = 18
+base_speed = 11
+base_movement = 4
+attack_range = 3
+model_scale = 1.00005

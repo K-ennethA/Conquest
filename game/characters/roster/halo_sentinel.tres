@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/halo_sentinel_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"halo_sentinel"
+element = &"holy"
+display_name = "Halo Sentinel"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from General Varden pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-11 (compendium placeholder, 287ff9f / 6ba132b / cb0a8ca pattern; forge rigged/halo_sentinel.glb @ 586f2ce): PLACEHOLDER FOR REBALANCE. Stats cloned from varden.tres (Varden, the armoured guard tank (a sentinel); element holy (halo); folder forest, the default folder of the biome-less units (Elias / Lyra / Varden / Wren) as no holy folder exists); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): halo_sentinel_forge.glb.import root_scale 0.29674 normalises the glb to 1.80 m; model_scale = target (ARTIST SIZE 2026-10-11: 6 ft 3 in = 1.905 m; floats; rest-pose lowest point at z 0) / the measured imported idle extent (first frame, top - bottom, as the size table measures it).
+base_health = 120
+base_attack = 22
+base_defense = 20
+base_magic = 6
+base_magic_defense = 14
+base_speed = 8
+base_movement = 4
+attack_range = 1
+model_scale = 1.06317

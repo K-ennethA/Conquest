@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/forest/petal_cobra_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"petal_cobra"
+element = &"nature"
+display_name = "Petal Cobra"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Petalfang pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-11 (compendium placeholder, 287ff9f / 6ba132b / cb0a8ca pattern; forge rigged/petal_cobra.glb @ 586f2ce): PLACEHOLDER FOR REBALANCE. Stats cloned from petalfang.tres (Petalfang, the flower-hooded serpent; element nature (forest / flower family)); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): petal_cobra_forge.glb.import root_scale 0.30603 normalises the glb to 1.80 m; model_scale = target (lineup placeholder height (no artist size; artist: if i did not give height then those heights ae fine) = 1.803 m) / the measured imported idle extent (first frame, top - bottom, as the size table measures it).
+base_health = 42
+base_attack = 13
+base_defense = 5
+base_magic = 17
+base_magic_defense = 9
+base_speed = 10
+base_movement = 3
+attack_range = 3
+model_scale = 1.00004

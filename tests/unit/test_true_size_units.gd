@@ -28,6 +28,29 @@ const DESIGN_HEIGHTS := {
 	"raven_rogue": 0.9144,  # 3 ft (artist 2026-10-09)
 	"pangolin_knight": 0.9144,  # 3 ft (artist 2026-10-09)
 	"shadow_mole": 0.762,  # sticks out of the ground ~2 ft 6 in (artist 2026-10-09)
+	# forge compendium placeholders (586f2ce): ARTIST SIZES 2026-10-11 (floaters: body extent).
+	"soot_puff": 0.6096,           # 2 ft, floats
+	"winged_cat": 0.9144,          # 3 ft
+	"phoenix_hatchling": 0.9144,   # 3 ft
+	"chest_monster": 1.2192,       # 4 ft
+	"petal_cobra": 1.803,          # lineup height (no artist size; kept by the artist's say-so)
+	"crystal_canine": 1.524,       # 5 ft
+	"leaf_bird": 0.1524,           # 6 in tall, ~1 ft long
+	"eye_totem": 1.0668,           # 3 ft 6 in, floats
+	"ember_eye": 1.3462,           # 4 ft 5 in, floats
+	"ember_stump": 2.4384,         # 8 ft -- wider than a tile, still one tile
+	"shield_rodent": 0.819,        # lineup height (no artist size; kept by the artist's say-so)
+	"storm_vessel": 1.905,         # 6 ft 3 in, floats
+	"volcano_turtle": 2.1336,      # 7 ft -- wider than a tile, still one tile
+	"goo_shield": 1.651,           # 5 ft 5 in
+	"fogeist": 1.4224,             # 4 ft 8 in (rest pose ~4% over the idle extent)
+	"lava_komodo": 1.2954,         # 4 ft 3 in
+	"spectormn": 1.809,            # lineup height (no artist size; kept by the artist's say-so), floats
+	"halo_sentinel": 1.905,        # 6 ft 3 in, floats
+	"eclipse_wolf": 1.2192,        # 4 ft
+	"gemwing_dragon": 3.9624,      # 13 ft -- boss-tier mesh, still ONE tile (overhangs)
+	"mystic_snow_spirit": 1.7272,  # 5 ft 8 in
+	"holly_snowman": 1.524,        # 5 ft
 }
 
 func _unit(id: String) -> Unit:

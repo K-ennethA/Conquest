@@ -49,7 +49,11 @@ const EXCLUDED_IDS := ["undead",
 	"firefly", "firesprite", "magmoo", "supaoctto", "vampito", "vampwarrior", "elias",
 	"varden", "lyra", "wren", "cael",
 	"seedant", "shadowbun", "shadow_assassin",
-	"bombee", "aquaoct", "canine_bat", "raven_rogue", "pangolin_knight", "shadow_mole"]
+	"bombee", "aquaoct", "canine_bat", "raven_rogue", "pangolin_knight", "shadow_mole",
+	"soot_puff", "winged_cat", "phoenix_hatchling", "chest_monster", "petal_cobra", "crystal_canine",
+	"leaf_bird", "eye_totem", "ember_eye", "ember_stump", "shield_rodent", "storm_vessel",
+	"volcano_turtle", "goo_shield", "fogeist", "lava_komodo", "spectormn", "halo_sentinel",
+	"eclipse_wolf", "gemwing_dragon", "mystic_snow_spirit", "holly_snowman"]
 
 ## Stats shown as bars in the detail pane: [key, label].
 const STAT_ROWS := [
