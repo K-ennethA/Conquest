@@ -10,7 +10,7 @@ element = &"earth"
 display_name = "Gemwing Dragon"
 description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Geode pending rebalance; no moves or abilities yet."
 model_scene = ExtResource("2_model")
-; forge import 2026-10-11 (compendium placeholder, 287ff9f / 6ba132b / cb0a8ca pattern; forge rigged/gemwing_dragon.glb @ 586f2ce): PLACEHOLDER FOR REBALANCE. Stats cloned from gem_knight.tres (Geode / gem_knight, the crystal unit (an all-crystal dragon); element earth (crystal family). BOSS-tier mesh (28k tris) but is_boss / footprint are left at the defaults: a giant footprint is a design call, so it stays ONE tile and overhangs); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): gemwing_dragon_forge.glb.import root_scale 0.27766 normalises the glb to 1.80 m; model_scale = target (ARTIST SIZE 2026-10-11: 13 ft = 3.9624 m; wide: overhangs its tile, still ONE tile) / the measured imported idle extent (first frame, top - bottom, as the size table measures it).
+; forge import 2026-10-11 (compendium placeholder, 287ff9f / 6ba132b / cb0a8ca pattern; forge rigged/gemwing_dragon.glb @ 586f2ce; RE-IMPORTED 2026-10-12 from forge 3af4555: the Pixal3D-based proxy_finish mesh the artist picked, colour now in the albedo texture (basecolor = albedo x AO), same target height): PLACEHOLDER FOR REBALANCE. Stats cloned from gem_knight.tres (Geode / gem_knight, the crystal unit (an all-crystal dragon); element earth (crystal family). BOSS-tier mesh (26k tris) but is_boss / footprint are left at the defaults: a giant footprint is a design call, so it stays ONE tile and overhangs); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): gemwing_dragon_forge.glb.import root_scale 0.28957 (= 1.8 / the 3af4555 glb rest height 6.21609) normalises the glb to 1.80 m; model_scale = target (ARTIST SIZE 2026-10-11: 13 ft = 3.9624 m; wide: overhangs its tile, still ONE tile) / the measured imported idle extent (first frame, top - bottom, as the size table measures it).
 base_health = 120
 base_attack = 22
 base_defense = 20
@@ -19,4 +19,4 @@ base_magic_defense = 14
 base_speed = 8
 base_movement = 4
 attack_range = 2
-model_scale = 2.24003
+model_scale = 2.2134

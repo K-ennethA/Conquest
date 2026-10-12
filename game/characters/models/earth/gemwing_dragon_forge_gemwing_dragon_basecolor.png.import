@@ -2,16 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ddol6ghev4gna"
-path="res://.godot/imported/gemwing_dragon_forge_gemwing_dragon_ao.png-7420d4dbf7723207602e2aaf3c9441c9.ctex"
+uid="uid://daju8sqgpagql"
+path="res://.godot/imported/gemwing_dragon_forge_gemwing_dragon_basecolor.png-97b30171a93a3fb57c0a9a7d789c0d67.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "75f20b92dce5078940cef883ebd3bba0"
 }
 
 [deps]
 
-source_file="res://game/characters/models/earth/gemwing_dragon_forge_gemwing_dragon_ao.png"
-dest_files=["res://.godot/imported/gemwing_dragon_forge_gemwing_dragon_ao.png-7420d4dbf7723207602e2aaf3c9441c9.ctex"]
+source_file="res://game/characters/models/earth/gemwing_dragon_forge_gemwing_dragon_basecolor.png"
+dest_files=["res://.godot/imported/gemwing_dragon_forge_gemwing_dragon_basecolor.png-97b30171a93a3fb57c0a9a7d789c0d67.ctex"]
 
 [params]
 
